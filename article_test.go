@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 )
 
@@ -12,10 +14,22 @@ func TestGetArticles(t *testing.T) {
 
 	GetArticles(response, request)
 
-	got := response.Body.String()
-	want := "test articles"
+	var got, want []Article
 
-	if got != want {
-		t.Errorf("got %q, want %q", got, want)
+	json.NewDecoder(response.Body).Decode(&got)
+	want = []Article{
+		{
+			Title: "Lorem Ipsum 1",
+		},
+		{
+			Title: "Lorem Ipsum 1",
+		},
+		{
+			Title: "Lorem Ipsum 1",
+		},
+	}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %#v, want %#v", got, want)
 	}
 }
