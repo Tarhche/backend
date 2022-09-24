@@ -6,7 +6,5 @@ import (
 )
 
 func main() {
-	handler := http.HandlerFunc(GetArticles)
-
-	log.Fatal(http.ListenAndServe(":8000", handler))
+	log.Fatal(http.ListenAndServe(":8000", &ArticleServer{InMemoryRepository{}}))
 }

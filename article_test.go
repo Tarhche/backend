@@ -8,28 +8,53 @@ import (
 	"testing"
 )
 
+type StubArticleRepositoy struct{}
+
+func (s *StubArticleRepositoy) Articles() ([]Article, error) {
+	articles := []Article{
+		{
+			Title: "Lorem Ipsum 1",
+		},
+		{
+			Title: "Lorem Ipsum 2",
+		},
+		{
+			Title: "Lorem Ipsum 3",
+		},
+	}
+
+	return articles, nil
+}
+
 func TestGetArticles(t *testing.T) {
-	request, _ := http.NewRequest(http.MethodGet, "/articles", nil)
-	response := httptest.NewRecorder()
-
-	GetArticles(response, request)
-
-	var got, want []Article
-
-	json.NewDecoder(response.Body).Decode(&got)
-	want = []Article{
-		{
-			Title: "Lorem Ipsum 1",
-		},
-		{
-			Title: "Lorem Ipsum 1",
-		},
-		{
-			Title: "Lorem Ipsum 1",
-		},
+	articleServer := ArticleServer{
+		repository: &StubArticleRepositoy{},
 	}
 
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("got %#v, want %#v", got, want)
-	}
+	t.Run("get a list of articles", func(t *testing.T) {
+		request, _ := http.NewRequest(http.MethodGet, "/articles", nil)
+		response := httptest.NewRecorder()
+
+		articleServer.ServeHTTP(response, request)
+
+		var got, want []Article
+
+		json.NewDecoder(response.Body).Decode(&got)
+
+		want = []Article{
+			{
+				Title: "Lorem Ipsum 1",
+			},
+			{
+				Title: "Lorem Ipsum 2",
+			},
+			{
+				Title: "Lorem Ipsum 3",
+			},
+		}
+
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("got %#v, want %#v", got, want)
+		}
+	})
 }
