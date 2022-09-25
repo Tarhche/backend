@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -23,6 +25,16 @@ func (s *StubArticleRepositoy) CreateArticle(article *Article) error {
 	return nil
 }
 
+func (s *StubArticleRepositoy) Article(id string) (*Article, error) {
+	for j := range s.articles {
+		if s.articles[j].ID == id {
+			return &s.articles[j], nil
+		}
+	}
+
+	return nil, errors.New("article not found")
+}
+
 func TestGetArticles(t *testing.T) {
 	t.Run("returns a list of articles", func(t *testing.T) {
 		articles := []Article{
@@ -37,7 +49,7 @@ func TestGetArticles(t *testing.T) {
 			},
 		}
 
-		articleServer := ArticleServer{
+		server := ArticleServer{
 			repository: &StubArticleRepositoy{
 				articles: articles,
 			},
@@ -46,7 +58,7 @@ func TestGetArticles(t *testing.T) {
 		request, _ := http.NewRequest(http.MethodGet, "/articles", nil)
 		response := httptest.NewRecorder()
 
-		articleServer.ServeHTTP(response, request)
+		server.ServeHTTP(response, request)
 
 		got := []Article{}
 		json.NewDecoder(response.Body).Decode(&got)
@@ -56,8 +68,28 @@ func TestGetArticles(t *testing.T) {
 		}
 	})
 
+	t.Run("returns 404 on wrong http method", func(t *testing.T) {
+		server := ArticleServer{
+			repository: &StubArticleRepositoy{},
+		}
+
+		request, _ := http.NewRequest(http.MethodPatch, "/articles", nil)
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		got := response.Code
+		want := http.StatusNotFound
+
+		if got != want {
+			t.Errorf("got HTTP status code %d, want %d", got, want)
+		}
+	})
+}
+
+func TestCreateArticle(t *testing.T) {
 	t.Run("creates new article", func(t *testing.T) {
-		articleServer := ArticleServer{
+		server := ArticleServer{
 			repository: &StubArticleRepositoy{
 				articles: []Article{},
 			},
@@ -73,7 +105,7 @@ func TestGetArticles(t *testing.T) {
 		request, _ := http.NewRequest(http.MethodPost, "/articles", bytes.NewReader(body))
 		response := httptest.NewRecorder()
 
-		articleServer.ServeHTTP(response, request)
+		server.ServeHTTP(response, request)
 
 		if response.Code != http.StatusCreated {
 			t.Errorf("got HTTP status code %d, want %d", response.Code, http.StatusCreated)
@@ -82,7 +114,7 @@ func TestGetArticles(t *testing.T) {
 		request, _ = http.NewRequest(http.MethodGet, "/articles", bytes.NewReader(body))
 		response = httptest.NewRecorder()
 
-		articleServer.ServeHTTP(response, request)
+		server.ServeHTTP(response, request)
 
 		var got, want []Article
 
@@ -93,22 +125,45 @@ func TestGetArticles(t *testing.T) {
 			t.Errorf("got %#v, want %#v", got, want)
 		}
 	})
+}
 
-	t.Run("returns 404 on wrong http method", func(t *testing.T) {
-		articleServer := ArticleServer{
-			repository: &StubArticleRepositoy{},
-		}
+func TestGetArticle(t *testing.T) {
+	article := Article{
+		ID:    "id",
+		Title: "title",
+		Body:  "body",
+	}
 
-		request, _ := http.NewRequest(http.MethodPatch, "/articles", nil)
+	server := ArticleServer{
+		repository: &StubArticleRepositoy{
+			articles: []Article{article},
+		},
+	}
+
+	t.Run("gets an existance article", func(t *testing.T) {
+		request, _ := http.NewRequest(http.MethodGet, fmt.Sprintf("/articles/%v", article.ID), nil)
 		response := httptest.NewRecorder()
 
-		articleServer.ServeHTTP(response, request)
+		server.ServeHTTP(response, request)
 
-		got := response.Code
-		want := http.StatusNotFound
+		if response.Code != http.StatusNotFound {
+			t.Errorf("got HTTP status code %d, want %d", response.Code, http.StatusNotFound)
+		}
 
-		if got != want {
-			t.Errorf("got HTTP status code %d, want %d", got, want)
+		if response.Body.Len() != 0 {
+			t.Errorf("got HTTP response with length %d, wanted %d", response.Body.Len(), 0)
+		}
+	})
+
+	t.Run("gets an non-existance article", func(t *testing.T) {
+		id := "non-existance-id"
+		request, _ := http.NewRequest(http.MethodGet, fmt.Sprintf("/articles/%v", id), nil)
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		if response.Code != http.StatusNotFound {
+			t.Errorf("got HTTP status code %d, want %d", response.Code, http.StatusNotFound)
 		}
 	})
 }
