@@ -37,7 +37,14 @@ type ArticleServer struct {
 }
 
 func (a *ArticleServer) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
-	articles, _ := a.repository.Articles()
+	if r.Method == http.MethodGet {
+		articles, _ := a.repository.Articles()
+		json.NewEncoder(rw).Encode(articles)
+	}
 
-	json.NewEncoder(rw).Encode(articles)
+	if r.Method == http.MethodPost {
+		rw.WriteHeader(http.StatusCreated)
+	}
+
+	rw.WriteHeader(http.StatusNotFound)
 }

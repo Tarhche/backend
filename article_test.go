@@ -31,7 +31,7 @@ func TestGetArticles(t *testing.T) {
 		repository: &StubArticleRepositoy{},
 	}
 
-	t.Run("get a list of articles", func(t *testing.T) {
+	t.Run("returns a list of articles", func(t *testing.T) {
 		request, _ := http.NewRequest(http.MethodGet, "/articles", nil)
 		response := httptest.NewRecorder()
 
@@ -55,6 +55,34 @@ func TestGetArticles(t *testing.T) {
 
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("got %#v, want %#v", got, want)
+		}
+	})
+
+	t.Run("creates new article", func(t *testing.T) {
+		request, _ := http.NewRequest(http.MethodPost, "/articles", nil)
+		response := httptest.NewRecorder()
+
+		articleServer.ServeHTTP(response, request)
+
+		got := response.Code
+		want := http.StatusCreated
+
+		if got != want {
+			t.Errorf("got HTTP status code %d, want %d", got, want)
+		}
+	})
+
+	t.Run("returns 404 on wrong http method", func(t *testing.T) {
+		request, _ := http.NewRequest(http.MethodPatch, "/articles", nil)
+		response := httptest.NewRecorder()
+
+		articleServer.ServeHTTP(response, request)
+
+		got := response.Code
+		want := http.StatusNotFound
+
+		if got != want {
+			t.Errorf("got HTTP status code %d, want %d", got, want)
 		}
 	})
 }
