@@ -6,30 +6,29 @@ import (
 )
 
 type Article struct {
-	Title string `json:"title"`
+	ID     string `json:"id"`
+	Title  string `json:"title"`
+	Body   string `json:"body"`
+	Status string `json:"status"`
 }
 
 type ArticleRepository interface {
 	Articles() ([]Article, error)
+	CreateArticle(*Article) error
 }
 
 type InMemoryRepository struct {
+	articles []Article
 }
 
-func (i InMemoryRepository) Articles() ([]Article, error) {
-	articles := []Article{
-		{
-			Title: "Lorem Ipsum 1",
-		},
-		{
-			Title: "Lorem Ipsum 2",
-		},
-		{
-			Title: "Lorem Ipsum 3",
-		},
-	}
+func (i *InMemoryRepository) Articles() ([]Article, error) {
+	return i.articles, nil
+}
 
-	return articles, nil
+func (i *InMemoryRepository) CreateArticle(article *Article) error {
+	i.articles = append(i.articles, *article)
+
+	return nil
 }
 
 type ArticleServer struct {
@@ -53,5 +52,10 @@ func (a *ArticleServer) articles(rw http.ResponseWriter, r *http.Request) {
 }
 
 func (a *ArticleServer) createArticle(rw http.ResponseWriter, r *http.Request) {
+	var article Article
+
+	_ = json.NewDecoder(r.Body).Decode(&article)
+	_ = a.repository.CreateArticle(&article)
+
 	rw.WriteHeader(http.StatusCreated)
 }

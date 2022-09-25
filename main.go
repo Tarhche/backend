@@ -6,5 +6,5 @@ import (
 )
 
 func main() {
-	log.Fatal(http.ListenAndServe(":8000", &ArticleServer{InMemoryRepository{}}))
+	log.Fatal(http.ListenAndServe(":8000", &ArticleServer{&InMemoryRepository{}}))
 }
