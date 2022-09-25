@@ -17,6 +17,12 @@ type ArticleRepository interface {
 	CreateArticle(*Article) error
 }
 
+func NewInMemoryRepository() *InMemoryRepository {
+	return &InMemoryRepository{
+		articles: []Article{},
+	}
+}
+
 type InMemoryRepository struct {
 	articles []Article
 }
