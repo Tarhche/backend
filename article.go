@@ -18,6 +18,7 @@ type ArticleRepository interface {
 	Articles() ([]Article, error)
 	CreateArticle(*Article) error
 	Article(id string) (*Article, error)
+	UpdateArticle(*Article) error
 }
 
 func NewInMemoryRepository() *InMemoryRepository {
@@ -50,21 +51,36 @@ func (i *InMemoryRepository) Article(id string) (*Article, error) {
 	return nil, errors.New("article not found")
 }
 
+func (i *InMemoryRepository) UpdateArticle(article *Article) error {
+	for j := range i.articles {
+		if i.articles[j].ID == article.ID {
+			i.articles[j] = *article
+
+			return nil
+		}
+	}
+
+	return errors.New("article not found")
+}
+
 type ArticleServer struct {
 	repository ArticleRepository
 }
 
 func (a *ArticleServer) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
-	id := strings.TrimPrefix(r.URL.Path, "/articles")
-
 	if r.Method == http.MethodPost {
 		a.createArticle(rw, r)
 	} else if r.Method == http.MethodGet {
+		id := strings.TrimPrefix(r.URL.Path, "/articles")
+
 		if len(id) == 0 {
 			a.articles(rw, r)
 		} else {
+			id := strings.TrimPrefix(id, "/")
 			a.article(rw, id)
 		}
+	} else if r.Method == http.MethodPut {
+		a.update(rw, r)
 	} else {
 		rw.WriteHeader(http.StatusNotFound)
 	}
@@ -85,11 +101,20 @@ func (a *ArticleServer) createArticle(rw http.ResponseWriter, r *http.Request) {
 }
 
 func (a *ArticleServer) article(rw http.ResponseWriter, id string) {
-	article, _ := a.repository.Article(id)
-	if article == nil {
+	article, err := a.repository.Article(id)
+	if err != nil {
 		rw.WriteHeader(http.StatusNotFound)
 		return
 	}
 
 	_ = json.NewEncoder(rw).Encode(article)
+}
+
+func (a *ArticleServer) update(rw http.ResponseWriter, r *http.Request) {
+	article := Article{}
+
+	_ = json.NewDecoder(r.Body).Decode(&article)
+	a.repository.UpdateArticle(&article)
+
+	rw.WriteHeader(http.StatusNoContent)
 }

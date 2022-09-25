@@ -35,6 +35,17 @@ func (s *StubArticleRepositoy) Article(id string) (*Article, error) {
 	return nil, errors.New("article not found")
 }
 
+func (s *StubArticleRepositoy) UpdateArticle(article *Article) error {
+	for j := range s.articles {
+		if s.articles[j].ID == article.ID {
+			s.articles[j] = *article
+			return nil
+		}
+	}
+
+	return errors.New("article not found")
+}
+
 func TestGetArticles(t *testing.T) {
 	t.Run("returns a list of articles", func(t *testing.T) {
 		articles := []Article{
@@ -146,12 +157,15 @@ func TestGetArticle(t *testing.T) {
 
 		server.ServeHTTP(response, request)
 
-		if response.Code != http.StatusNotFound {
-			t.Errorf("got HTTP status code %d, want %d", response.Code, http.StatusNotFound)
+		got := Article{}
+		json.NewDecoder(response.Body).Decode(&got)
+
+		if response.Code != http.StatusOK {
+			t.Errorf("got HTTP status code %d, want %d", response.Code, http.StatusOK)
 		}
 
-		if response.Body.Len() != 0 {
-			t.Errorf("got HTTP response with length %d, wanted %d", response.Body.Len(), 0)
+		if !reflect.DeepEqual(got, article) {
+			t.Errorf("got %#v, want %#v", got, article)
 		}
 	})
 
@@ -164,6 +178,46 @@ func TestGetArticle(t *testing.T) {
 
 		if response.Code != http.StatusNotFound {
 			t.Errorf("got HTTP status code %d, want %d", response.Code, http.StatusNotFound)
+		}
+	})
+}
+
+func TestUpdateArticle(t *testing.T) {
+	t.Run("updates an article", func(t *testing.T) {
+		article := Article{
+			ID:    "id",
+			Title: "title",
+			Body:  "body",
+		}
+
+		server := ArticleServer{
+			repository: &StubArticleRepositoy{
+				articles: []Article{article},
+			},
+		}
+
+		article.Title = "test title"
+		article.Body = "test body"
+
+		body, _ := json.Marshal(article)
+		request, _ := http.NewRequest(http.MethodPut, fmt.Sprintf("/articles/%s", article.ID), bytes.NewReader(body))
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+		if response.Code != http.StatusNoContent {
+			t.Errorf("got HTTP status code %d, want %d", response.Code, http.StatusNoContent)
+		}
+
+		request, _ = http.NewRequest(http.MethodGet, fmt.Sprintf("/articles/%s", article.ID), bytes.NewReader(body))
+		response = httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		got := Article{}
+		json.NewDecoder(response.Body).Decode(&got)
+
+		if !reflect.DeepEqual(got, article) {
+			t.Errorf("got %#v, want %#v", got, article)
 		}
 	})
 }
