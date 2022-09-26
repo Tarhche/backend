@@ -9,8 +9,8 @@ import (
 )
 
 func TestCreatingAndRetrievingThem(t *testing.T) {
-	repositoy := NewInMemoryRepository()
-	server := ArticleServer{repository: repositoy}
+	repository := NewInMemoryRepository()
+	server := ArticleServer{repository: repository}
 	article := Article{
 		Title:  "title",
 		Body:   "body",
