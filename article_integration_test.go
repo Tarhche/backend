@@ -35,7 +35,7 @@ func TestCreatingAndRetrievingThem(t *testing.T) {
 		t.Errorf("got %d, want %d", response.Code, http.StatusOK)
 	}
 
-	articles := []Article{}
+	var articles []Article
 	json.NewDecoder(response.Body).Decode(&articles)
 
 	if len(articles) != 3 {

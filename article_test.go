@@ -11,21 +11,21 @@ import (
 	"testing"
 )
 
-type StubArticleRepositoy struct {
+type StubArticleRepository struct {
 	articles []Article
 }
 
-func (s *StubArticleRepositoy) Articles() ([]Article, error) {
+func (s *StubArticleRepository) Articles() ([]Article, error) {
 	return s.articles, nil
 }
 
-func (s *StubArticleRepositoy) CreateArticle(article *Article) error {
+func (s *StubArticleRepository) CreateArticle(article *Article) error {
 	s.articles = append(s.articles, *article)
 
 	return nil
 }
 
-func (s *StubArticleRepositoy) Article(id string) (*Article, error) {
+func (s *StubArticleRepository) Article(id string) (*Article, error) {
 	for j := range s.articles {
 		if s.articles[j].ID == id {
 			return &s.articles[j], nil
@@ -35,10 +35,23 @@ func (s *StubArticleRepositoy) Article(id string) (*Article, error) {
 	return nil, errors.New("article not found")
 }
 
-func (s *StubArticleRepositoy) UpdateArticle(article *Article) error {
+func (s *StubArticleRepository) UpdateArticle(article *Article) error {
 	for j := range s.articles {
 		if s.articles[j].ID == article.ID {
 			s.articles[j] = *article
+			return nil
+		}
+	}
+
+	return errors.New("article not found")
+}
+
+func (s *StubArticleRepository) DeleteArticle(ID string) error {
+	for j := range s.articles {
+		if s.articles[j].ID == ID {
+			s.articles[j] = s.articles[len(s.articles)-1]
+			s.articles = s.articles[:len(s.articles)-1]
+
 			return nil
 		}
 	}
@@ -61,7 +74,7 @@ func TestGetArticles(t *testing.T) {
 		}
 
 		server := ArticleServer{
-			repository: &StubArticleRepositoy{
+			repository: &StubArticleRepository{
 				articles: articles,
 			},
 		}
@@ -81,7 +94,7 @@ func TestGetArticles(t *testing.T) {
 
 	t.Run("returns 404 on wrong http method", func(t *testing.T) {
 		server := ArticleServer{
-			repository: &StubArticleRepositoy{},
+			repository: &StubArticleRepository{},
 		}
 
 		request, _ := http.NewRequest(http.MethodPatch, "/articles", nil)
@@ -101,7 +114,7 @@ func TestGetArticles(t *testing.T) {
 func TestCreateArticle(t *testing.T) {
 	t.Run("creates new article", func(t *testing.T) {
 		server := ArticleServer{
-			repository: &StubArticleRepositoy{
+			repository: &StubArticleRepository{
 				articles: []Article{},
 			},
 		}
@@ -146,7 +159,7 @@ func TestGetArticle(t *testing.T) {
 	}
 
 	server := ArticleServer{
-		repository: &StubArticleRepositoy{
+		repository: &StubArticleRepository{
 			articles: []Article{article},
 		},
 	}
@@ -191,7 +204,7 @@ func TestUpdateArticle(t *testing.T) {
 		}
 
 		server := ArticleServer{
-			repository: &StubArticleRepositoy{
+			repository: &StubArticleRepository{
 				articles: []Article{article},
 			},
 		}
@@ -218,6 +231,40 @@ func TestUpdateArticle(t *testing.T) {
 
 		if !reflect.DeepEqual(got, article) {
 			t.Errorf("got %#v, want %#v", got, article)
+		}
+	})
+}
+
+func TestDeleteArticle(t *testing.T) {
+	t.Run("deletes an article", func(t *testing.T) {
+		article := Article{
+			ID:    "id",
+			Title: "title",
+			Body:  "body",
+		}
+
+		server := ArticleServer{
+			repository: &StubArticleRepository{
+				articles: []Article{article},
+			},
+		}
+
+		request, _ := http.NewRequest(http.MethodDelete, fmt.Sprintf("/articles/%s", article.ID), nil)
+		response := httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		if response.Code != http.StatusNoContent {
+			t.Errorf("got status %d, wanted %d", response.Code, http.StatusNoContent)
+		}
+
+		request, _ = http.NewRequest(http.MethodGet, fmt.Sprintf("/articles/%s", article.ID), nil)
+		response = httptest.NewRecorder()
+
+		server.ServeHTTP(response, request)
+
+		if response.Code != http.StatusNotFound {
+			t.Errorf("got %d, want %d", response.Code, http.StatusNotFound)
 		}
 	})
 }
