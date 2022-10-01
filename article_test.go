@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/google/uuid"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -20,6 +21,7 @@ func (s *StubArticleRepository) Articles() ([]Article, error) {
 }
 
 func (s *StubArticleRepository) CreateArticle(article *Article) error {
+	article.ID = uuid.NewString()
 	s.articles = append(s.articles, *article)
 
 	return nil
@@ -145,6 +147,7 @@ func TestCreateArticle(t *testing.T) {
 		json.NewDecoder(response.Body).Decode(&got)
 		want = append(want, article)
 
+		got[0].ID = want[0].ID // don't check if ID equality
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("got %#v, want %#v", got, want)
 		}

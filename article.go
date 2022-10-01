@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"github.com/google/uuid"
 	"net/http"
 	"strings"
 )
@@ -37,6 +38,7 @@ func (i *InMemoryRepository) Articles() ([]Article, error) {
 }
 
 func (i *InMemoryRepository) CreateArticle(article *Article) error {
+	article.ID = uuid.NewString()
 	i.articles = append(i.articles, *article)
 
 	return nil
