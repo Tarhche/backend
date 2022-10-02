@@ -84,12 +84,16 @@ type ArticleServer struct {
 	router     *http.ServeMux
 }
 
+const (
+	routingPath = "/articles"
+)
+
 func NewArticleServer(articleRepository ArticleRepository) *ArticleServer {
 	server := new(ArticleServer)
 	server.repository = articleRepository
 	server.router = http.NewServeMux()
 
-	server.router.HandleFunc("/articles", func(rw http.ResponseWriter, r *http.Request) {
+	server.router.HandleFunc(routingPath, func(rw http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			server.articles(rw, r)
@@ -100,8 +104,8 @@ func NewArticleServer(articleRepository ArticleRepository) *ArticleServer {
 		}
 	})
 
-	server.router.HandleFunc("/articles/", func(rw http.ResponseWriter, r *http.Request) {
-		id := strings.TrimPrefix(r.URL.Path, "/articles/")
+	server.router.HandleFunc(routingPath+"/", func(rw http.ResponseWriter, r *http.Request) {
+		id := strings.TrimPrefix(r.URL.Path, routingPath+"/")
 		if len(id) == 0 {
 			http.NotFound(rw, r)
 		}

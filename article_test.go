@@ -77,7 +77,7 @@ func TestGetArticles(t *testing.T) {
 
 		server := NewArticleServer(&StubArticleRepository{articles: articles})
 
-		request, _ := http.NewRequest(http.MethodGet, "/articles", nil)
+		request, _ := http.NewRequest(http.MethodGet, routingPath, nil)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -93,7 +93,7 @@ func TestGetArticles(t *testing.T) {
 	t.Run("returns 404 on wrong http method", func(t *testing.T) {
 		server := NewArticleServer(&StubArticleRepository{articles: []Article{}})
 
-		request, _ := http.NewRequest(http.MethodPatch, "/articles", nil)
+		request, _ := http.NewRequest(http.MethodPatch, routingPath, nil)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -118,7 +118,7 @@ func TestCreateArticle(t *testing.T) {
 		}
 
 		body, _ := json.Marshal(article)
-		request, _ := http.NewRequest(http.MethodPost, "/articles", bytes.NewReader(body))
+		request, _ := http.NewRequest(http.MethodPost, routingPath, bytes.NewReader(body))
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -127,7 +127,7 @@ func TestCreateArticle(t *testing.T) {
 			t.Errorf("got HTTP status code %d, want %d", response.Code, http.StatusCreated)
 		}
 
-		request, _ = http.NewRequest(http.MethodGet, "/articles", bytes.NewReader(body))
+		request, _ = http.NewRequest(http.MethodGet, routingPath, bytes.NewReader(body))
 		response = httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -154,7 +154,7 @@ func TestGetArticle(t *testing.T) {
 	server := NewArticleServer(&StubArticleRepository{articles: []Article{article}})
 
 	t.Run("gets an existance article", func(t *testing.T) {
-		request, _ := http.NewRequest(http.MethodGet, fmt.Sprintf("/articles/%v", article.ID), nil)
+		request, _ := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/%v", routingPath, article.ID), nil)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -198,7 +198,7 @@ func TestUpdateArticle(t *testing.T) {
 		article.Body = "test body"
 
 		body, _ := json.Marshal(article)
-		request, _ := http.NewRequest(http.MethodPut, fmt.Sprintf("/articles/%s", article.ID), bytes.NewReader(body))
+		request, _ := http.NewRequest(http.MethodPut, fmt.Sprintf("%s/%s", routingPath, article.ID), bytes.NewReader(body))
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -206,7 +206,7 @@ func TestUpdateArticle(t *testing.T) {
 			t.Errorf("got HTTP status code %d, want %d", response.Code, http.StatusNoContent)
 		}
 
-		request, _ = http.NewRequest(http.MethodGet, fmt.Sprintf("/articles/%s", article.ID), bytes.NewReader(body))
+		request, _ = http.NewRequest(http.MethodGet, fmt.Sprintf("%s/%s", routingPath, article.ID), bytes.NewReader(body))
 		response = httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -230,7 +230,7 @@ func TestDeleteArticle(t *testing.T) {
 
 		server := NewArticleServer(&StubArticleRepository{articles: []Article{article}})
 
-		request, _ := http.NewRequest(http.MethodDelete, fmt.Sprintf("/articles/%s", article.ID), nil)
+		request, _ := http.NewRequest(http.MethodDelete, fmt.Sprintf("%s/%s", routingPath, article.ID), nil)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -239,7 +239,7 @@ func TestDeleteArticle(t *testing.T) {
 			t.Errorf("got status %d, wanted %d", response.Code, http.StatusNoContent)
 		}
 
-		request, _ = http.NewRequest(http.MethodGet, fmt.Sprintf("/articles/%s", article.ID), nil)
+		request, _ = http.NewRequest(http.MethodGet, fmt.Sprintf("%s/%s", routingPath, article.ID), nil)
 		response = httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)

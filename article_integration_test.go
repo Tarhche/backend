@@ -22,15 +22,15 @@ func TestCreatingAndRetrievingThem(t *testing.T) {
 
 	body, _ := json.Marshal(article)
 
-	request1, _ := http.NewRequest(http.MethodPost, "/articles", bytes.NewReader(body))
-	request2, _ := http.NewRequest(http.MethodPost, "/articles", bytes.NewReader(body))
-	request3, _ := http.NewRequest(http.MethodPost, "/articles", bytes.NewReader(body))
+	request1, _ := http.NewRequest(http.MethodPost, routingPath, bytes.NewReader(body))
+	request2, _ := http.NewRequest(http.MethodPost, routingPath, bytes.NewReader(body))
+	request3, _ := http.NewRequest(http.MethodPost, routingPath, bytes.NewReader(body))
 
 	server.ServeHTTP(httptest.NewRecorder(), request1)
 	server.ServeHTTP(httptest.NewRecorder(), request2)
 	server.ServeHTTP(httptest.NewRecorder(), request3)
 
-	request, _ := http.NewRequest(http.MethodGet, "/articles", nil)
+	request, _ := http.NewRequest(http.MethodGet, routingPath, nil)
 	response := httptest.NewRecorder()
 	server.ServeHTTP(response, request)
 
@@ -51,11 +51,11 @@ func TestCreatingAndRetrievingThem(t *testing.T) {
 
 	body, _ = json.Marshal(article)
 
-	request, _ = http.NewRequest(http.MethodPut, fmt.Sprintf("/articles/%s", articles[0].ID), bytes.NewReader(body))
+	request, _ = http.NewRequest(http.MethodPut, fmt.Sprintf("%s/%s", routingPath, articles[0].ID), bytes.NewReader(body))
 	response = httptest.NewRecorder()
 	server.ServeHTTP(response, request)
 
-	request, _ = http.NewRequest(http.MethodGet, fmt.Sprintf("/articles/%s", articles[0].ID), nil)
+	request, _ = http.NewRequest(http.MethodGet, fmt.Sprintf("%s/%s", routingPath, articles[0].ID), nil)
 	response = httptest.NewRecorder()
 	server.ServeHTTP(response, request)
 
@@ -67,11 +67,11 @@ func TestCreatingAndRetrievingThem(t *testing.T) {
 	}
 
 	// delete
-	request, _ = http.NewRequest(http.MethodDelete, fmt.Sprintf("/articles/%s", articles[0].ID), nil)
+	request, _ = http.NewRequest(http.MethodDelete, fmt.Sprintf("%s/%s", routingPath, articles[0].ID), nil)
 	response = httptest.NewRecorder()
 	server.ServeHTTP(response, request)
 
-	request, _ = http.NewRequest(http.MethodGet, fmt.Sprintf("/articles/%s", articles[0].ID), nil)
+	request, _ = http.NewRequest(http.MethodGet, fmt.Sprintf("%s/%s", routingPath, articles[0].ID), nil)
 	response = httptest.NewRecorder()
 	server.ServeHTTP(response, request)
 
