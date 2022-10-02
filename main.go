@@ -6,7 +6,10 @@ import (
 )
 
 func main() {
-	server := &ArticleServer{NewInMemoryRepository()}
+	server := &ArticleServer{
+		repository: NewInMemoryRepository(),
+		router:     http.NewServeMux(),
+	}
 
 	log.Fatal(http.ListenAndServe(":8000", server))
 }

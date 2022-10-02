@@ -81,34 +81,48 @@ func (i *InMemoryRepository) DeleteArticle(ID string) error {
 
 type ArticleServer struct {
 	repository ArticleRepository
+	router     *http.ServeMux
+}
+
+func NewArticleServer(articleRepository ArticleRepository) *ArticleServer {
+	server := new(ArticleServer)
+	server.repository = articleRepository
+	server.router = http.NewServeMux()
+
+	server.router.HandleFunc("/articles", func(rw http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			server.articles(rw, r)
+		case http.MethodPost:
+			server.createArticle(rw, r)
+		default:
+			http.NotFound(rw, r)
+		}
+	})
+
+	server.router.HandleFunc("/articles/", func(rw http.ResponseWriter, r *http.Request) {
+		id := strings.TrimPrefix(r.URL.Path, "/articles/")
+		if len(id) == 0 {
+			http.NotFound(rw, r)
+		}
+
+		switch r.Method {
+		case http.MethodGet:
+			server.article(rw, id)
+		case http.MethodPut:
+			server.update(rw, r)
+		case http.MethodDelete:
+			server.delete(rw, id)
+		default:
+			http.NotFound(rw, r)
+		}
+	})
+
+	return server
 }
 
 func (a *ArticleServer) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodPost {
-		a.createArticle(rw, r)
-	} else if r.Method == http.MethodGet {
-		id := strings.TrimPrefix(r.URL.Path, "/articles")
-
-		if len(id) == 0 {
-			a.articles(rw, r)
-		} else {
-			id := strings.TrimPrefix(id, "/")
-			a.article(rw, id)
-		}
-	} else if r.Method == http.MethodPut {
-		a.update(rw, r)
-	} else if r.Method == http.MethodDelete {
-		id := strings.TrimPrefix(r.URL.Path, "/articles")
-		if len(id) == 0 {
-			rw.WriteHeader(http.StatusNotFound)
-		} else {
-			id := strings.TrimPrefix(id, "/")
-			a.delete(rw, id)
-		}
-
-	} else {
-		rw.WriteHeader(http.StatusNotFound)
-	}
+	a.router.ServeHTTP(rw, r)
 }
 
 func (a *ArticleServer) articles(rw http.ResponseWriter, r *http.Request) {

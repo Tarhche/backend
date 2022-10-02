@@ -75,18 +75,14 @@ func TestGetArticles(t *testing.T) {
 			},
 		}
 
-		server := ArticleServer{
-			repository: &StubArticleRepository{
-				articles: articles,
-			},
-		}
+		server := NewArticleServer(&StubArticleRepository{articles: articles})
 
 		request, _ := http.NewRequest(http.MethodGet, "/articles", nil)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
 
-		got := []Article{}
+		var got []Article
 		json.NewDecoder(response.Body).Decode(&got)
 
 		if !reflect.DeepEqual(got, articles) {
@@ -95,9 +91,7 @@ func TestGetArticles(t *testing.T) {
 	})
 
 	t.Run("returns 404 on wrong http method", func(t *testing.T) {
-		server := ArticleServer{
-			repository: &StubArticleRepository{},
-		}
+		server := NewArticleServer(&StubArticleRepository{articles: []Article{}})
 
 		request, _ := http.NewRequest(http.MethodPatch, "/articles", nil)
 		response := httptest.NewRecorder()
@@ -115,11 +109,7 @@ func TestGetArticles(t *testing.T) {
 
 func TestCreateArticle(t *testing.T) {
 	t.Run("creates new article", func(t *testing.T) {
-		server := ArticleServer{
-			repository: &StubArticleRepository{
-				articles: []Article{},
-			},
-		}
+		server := NewArticleServer(&StubArticleRepository{articles: []Article{}})
 
 		article := Article{
 			Title:  "title",
@@ -161,11 +151,7 @@ func TestGetArticle(t *testing.T) {
 		Body:  "body",
 	}
 
-	server := ArticleServer{
-		repository: &StubArticleRepository{
-			articles: []Article{article},
-		},
-	}
+	server := NewArticleServer(&StubArticleRepository{articles: []Article{article}})
 
 	t.Run("gets an existance article", func(t *testing.T) {
 		request, _ := http.NewRequest(http.MethodGet, fmt.Sprintf("/articles/%v", article.ID), nil)
@@ -173,7 +159,7 @@ func TestGetArticle(t *testing.T) {
 
 		server.ServeHTTP(response, request)
 
-		got := Article{}
+		var got Article
 		json.NewDecoder(response.Body).Decode(&got)
 
 		if response.Code != http.StatusOK {
@@ -206,11 +192,7 @@ func TestUpdateArticle(t *testing.T) {
 			Body:  "body",
 		}
 
-		server := ArticleServer{
-			repository: &StubArticleRepository{
-				articles: []Article{article},
-			},
-		}
+		server := NewArticleServer(&StubArticleRepository{articles: []Article{article}})
 
 		article.Title = "test title"
 		article.Body = "test body"
@@ -246,11 +228,7 @@ func TestDeleteArticle(t *testing.T) {
 			Body:  "body",
 		}
 
-		server := ArticleServer{
-			repository: &StubArticleRepository{
-				articles: []Article{article},
-			},
-		}
+		server := NewArticleServer(&StubArticleRepository{articles: []Article{article}})
 
 		request, _ := http.NewRequest(http.MethodDelete, fmt.Sprintf("/articles/%s", article.ID), nil)
 		response := httptest.NewRecorder()
