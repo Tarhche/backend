@@ -14,14 +14,14 @@ func TestRender(t *testing.T) {
 
 	t.Run("converts a single article to HTML", func(t *testing.T) {
 		buf := bytes.Buffer{}
-		articleRenderer := ArticleRenderer{}
+		renderer := SingleArticleRenderer{}
 
-		if err := articleRenderer.Render(&buf, article); err != nil {
+		if err := renderer.Render(&buf, article); err != nil {
 			t.Fatal(err)
 		}
 
 		got := buf.String()
-		want := "<h2>test-title<h2><p>test-body</p>"
+		want := "<h2>test-title</h2><p>test-body</p>"
 		if got != want {
 			t.Errorf("got '%s' want '%s'", got, want)
 		}
