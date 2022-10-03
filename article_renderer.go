@@ -1,14 +1,21 @@
 package main
 
 import (
-	"fmt"
+	"html/template"
 	"io"
+)
+
+const (
+	postTemplate = "<h2>{{.Title}}<h2><p>{{.Body}}</p>"
 )
 
 type ArticleRenderer struct{}
 
 func (a ArticleRenderer) Render(buf io.Writer, article Article) error {
-	_, err := fmt.Fprintf(buf, "<h2>%s<h2><p>%s</p>", article.Title, article.Body)
+	tmpl, err := template.New("article").Parse(postTemplate)
+	if err != nil {
+		return err
+	}
 
-	return err
+	return tmpl.Execute(buf, article)
 }
