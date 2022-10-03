@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	approvals "github.com/approvals/go-approval-tests"
 	"testing"
 )
 
@@ -20,10 +21,6 @@ func TestRender(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		got := buf.String()
-		want := "<h2>test-title</h2><p>test-body</p>"
-		if got != want {
-			t.Errorf("got '%s' want '%s'", got, want)
-		}
+		approvals.VerifyString(t, buf.String())
 	})
 }
