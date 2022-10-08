@@ -23,4 +23,28 @@ func TestRender(t *testing.T) {
 
 		approvals.VerifyString(t, buf.String())
 	})
+
+	t.Run("it renders an index of articles to HTML", func(t *testing.T) {
+		buf := bytes.Buffer{}
+		renderer := SingleArticleRenderer{}
+
+		articles := []Article{
+			{
+				ID:    "test-id",
+				Title: "test-title",
+				Body:  "test-body",
+			},
+			{
+				ID:    "test-id",
+				Title: "test-title",
+				Body:  "test-body",
+			},
+		}
+
+		if err := renderer.RenderIndex(&buf, articles); err != nil {
+			t.Fatal(err)
+		}
+
+		approvals.VerifyString(t, buf.String())
+	})
 }

@@ -8,6 +8,7 @@ import (
 
 const (
 	singleArticleTemplate = "single-article.tmpl"
+	articleTemplate       = "articles.tmpl"
 )
 
 var (
@@ -24,4 +25,13 @@ func (a SingleArticleRenderer) Render(buf io.Writer, article Article) error {
 	}
 
 	return tmpl.Execute(buf, article)
+}
+
+func (a SingleArticleRenderer) RenderIndex(buf io.Writer, articles []Article) error {
+	tmpl, err := template.New(articleTemplate).ParseFS(articleTemplates, "template/*.tmpl")
+	if err != nil {
+		return err
+	}
+
+	return tmpl.Execute(buf, articles)
 }
