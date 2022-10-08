@@ -98,6 +98,13 @@ func TestGetArticles(t *testing.T) {
 
 		server.ServeHTTP(response, request)
 
+		gotContentType := response.Header().Get("content-type")
+		wantContentType := "text/html"
+
+		if gotContentType != wantContentType {
+			t.Errorf("got content-type %s want %s", gotContentType, wantContentType)
+		}
+
 		if renderer.CallRenderIndexCounter != 1 {
 			t.Errorf("got %d wanted %d", renderer.CallRenderIndexCounter, 1)
 		}
@@ -167,6 +174,13 @@ func TestGetArticle(t *testing.T) {
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
+
+		gotContentType := response.Header().Get("content-type")
+		wantContentType := "text/html"
+
+		if gotContentType != wantContentType {
+			t.Errorf("got content-type %s want %s", gotContentType, wantContentType)
+		}
 
 		if renderer.CallRenderCounter != 1 {
 			t.Errorf("got %d wanted %d", renderer.CallRenderCounter, 1)
