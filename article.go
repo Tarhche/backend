@@ -90,10 +90,11 @@ const (
 )
 
 func NewArticleServer(articleRepository ArticleRepository, renderer ArticleRenderer) *ArticleServer {
-	server := new(ArticleServer)
-	server.repository = articleRepository
-	server.renderer = renderer
-	server.router = http.NewServeMux()
+	server := &ArticleServer{
+		repository: articleRepository,
+		renderer:   renderer,
+		router:     http.NewServeMux(),
+	}
 
 	server.router.HandleFunc(routingPath, func(rw http.ResponseWriter, r *http.Request) {
 		switch r.Method {
@@ -134,7 +135,7 @@ func (a *ArticleServer) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 func (a *ArticleServer) articles(rw http.ResponseWriter, r *http.Request) {
 	articles, _ := a.repository.Articles()
 
-	rw.Header().Set("content-type", "text/html")
+	rw.Header().Set("content-type", "text/html; charset=UTF-8")
 	_ = a.renderer.RenderIndex(rw, articles)
 }
 
@@ -154,7 +155,7 @@ func (a *ArticleServer) article(rw http.ResponseWriter, id string) {
 		return
 	}
 
-	rw.Header().Set("content-type", "text/html")
+	rw.Header().Set("content-type", "text/html; charset=UTF-8")
 	_ = a.renderer.Render(rw, *article)
 }
 
