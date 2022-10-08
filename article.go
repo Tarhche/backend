@@ -9,10 +9,11 @@ import (
 )
 
 type Article struct {
-	ID     string `json:"id"`
-	Title  string `json:"title"`
-	Body   string `json:"body"`
-	Status string `json:"status"`
+	ID      string `json:"id"`
+	Title   string `json:"title"`
+	Summery string `json:"summery"`
+	Body    string `json:"body"`
+	Status  string `json:"status"`
 }
 
 type ArticleRepository interface {

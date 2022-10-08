@@ -99,7 +99,7 @@ func TestGetArticles(t *testing.T) {
 		server.ServeHTTP(response, request)
 
 		gotContentType := response.Header().Get("content-type")
-		wantContentType := "text/html"
+		wantContentType := "text/html; charset=UTF-8"
 
 		if gotContentType != wantContentType {
 			t.Errorf("got content-type %s want %s", gotContentType, wantContentType)
@@ -176,7 +176,7 @@ func TestGetArticle(t *testing.T) {
 		server.ServeHTTP(response, request)
 
 		gotContentType := response.Header().Get("content-type")
-		wantContentType := "text/html"
+		wantContentType := "text/html; charset=UTF-8"
 
 		if gotContentType != wantContentType {
 			t.Errorf("got content-type %s want %s", gotContentType, wantContentType)
