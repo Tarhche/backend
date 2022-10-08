@@ -159,23 +159,17 @@ func TestGetArticle(t *testing.T) {
 		Body:  "body",
 	}
 
-	server := NewArticleServer(&StubArticleRepository{articles: []Article{article}}, &SpyArticleRenderer{})
+	renderer := &SpyArticleRenderer{}
+	server := NewArticleServer(&StubArticleRepository{articles: []Article{article}}, renderer)
 
-	t.Run("gets an existance article", func(t *testing.T) {
+	t.Run("gets an existence article", func(t *testing.T) {
 		request, _ := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/%v", routingPath, article.ID), nil)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
 
-		var got Article
-		json.NewDecoder(response.Body).Decode(&got)
-
-		if response.Code != http.StatusOK {
-			t.Errorf("got HTTP status code %d, want %d", response.Code, http.StatusOK)
-		}
-
-		if !reflect.DeepEqual(got, article) {
-			t.Errorf("got %#v, want %#v", got, article)
+		if renderer.CallRenderCounter != 1 {
+			t.Errorf("got %d wanted %d", renderer.CallRenderCounter, 1)
 		}
 	})
 
@@ -200,7 +194,10 @@ func TestUpdateArticle(t *testing.T) {
 			Body:  "body",
 		}
 
-		server := NewArticleServer(&StubArticleRepository{articles: []Article{article}}, &SpyArticleRenderer{})
+		renderer := &SpyArticleRenderer{}
+		articleRepository := &StubArticleRepository{articles: []Article{article}}
+
+		server := NewArticleServer(articleRepository, renderer)
 
 		article.Title = "test title"
 		article.Body = "test body"
@@ -214,17 +211,15 @@ func TestUpdateArticle(t *testing.T) {
 			t.Errorf("got HTTP status code %d, want %d", response.Code, http.StatusNoContent)
 		}
 
-		request, _ = http.NewRequest(http.MethodGet, fmt.Sprintf("%s/%s", routingPath, article.ID), bytes.NewReader(body))
-		response = httptest.NewRecorder()
+		got, err := articleRepository.Article(article.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
 
-		server.ServeHTTP(response, request)
-
-		got := Article{}
-		json.NewDecoder(response.Body).Decode(&got)
-
-		if !reflect.DeepEqual(got, article) {
+		if reflect.DeepEqual(got, article) {
 			t.Errorf("got %#v, want %#v", got, article)
 		}
+
 	})
 }
 
@@ -236,7 +231,10 @@ func TestDeleteArticle(t *testing.T) {
 			Body:  "body",
 		}
 
-		server := NewArticleServer(&StubArticleRepository{articles: []Article{article}}, &SpyArticleRenderer{})
+		renderer := &SpyArticleRenderer{}
+		articleRepository := &StubArticleRepository{articles: []Article{article}}
+
+		server := NewArticleServer(articleRepository, renderer)
 
 		request, _ := http.NewRequest(http.MethodDelete, fmt.Sprintf("%s/%s", routingPath, article.ID), nil)
 		response := httptest.NewRecorder()

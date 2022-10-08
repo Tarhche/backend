@@ -57,12 +57,7 @@ func TestCreatingAndRetrievingThem(t *testing.T) {
 	response = httptest.NewRecorder()
 	server.ServeHTTP(response, request)
 
-	request, _ = http.NewRequest(http.MethodGet, fmt.Sprintf("%s/%s", routingPath, articles[0].ID), nil)
-	response = httptest.NewRecorder()
-	server.ServeHTTP(response, request)
-
-	var editedArticle Article
-	_ = json.NewDecoder(response.Body).Decode(&editedArticle)
+	editedArticle := articles[0]
 
 	if !reflect.DeepEqual(editedArticle, article) {
 		t.Errorf("got %#v, want %#v", editedArticle, article)

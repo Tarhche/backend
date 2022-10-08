@@ -152,7 +152,7 @@ func (a *ArticleServer) article(rw http.ResponseWriter, id string) {
 		return
 	}
 
-	_ = json.NewEncoder(rw).Encode(article)
+	_ = a.renderer.Render(rw, *article)
 }
 
 func (a *ArticleServer) update(rw http.ResponseWriter, r *http.Request) {
