@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	approvals "github.com/approvals/go-approval-tests"
+	"io"
 	"testing"
 )
 
@@ -46,5 +47,39 @@ func TestRender(t *testing.T) {
 		}
 
 		approvals.VerifyString(t, buf.String())
+	})
+}
+
+func BenchmarkRender(b *testing.B) {
+	b.Run("it renders an article", func(b *testing.B) {
+		renderer := SingleArticleRenderer{}
+
+		article := Article{
+			ID:    "test-id",
+			Title: "test-title",
+			Body:  "test-body",
+		}
+
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			renderer.Render(io.Discard, article)
+		}
+	})
+
+	b.Run("it renders an index of articles", func(b *testing.B) {
+		renderer := SingleArticleRenderer{}
+
+		articles := []Article{
+			{
+				ID:    "test-id",
+				Title: "test-title",
+				Body:  "test-body",
+			},
+		}
+
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			renderer.RenderIndex(io.Discard, articles)
+		}
 	})
 }
