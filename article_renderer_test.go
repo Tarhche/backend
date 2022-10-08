@@ -14,7 +14,7 @@ func TestRender(t *testing.T) {
 		Body:  "test-body",
 	}
 
-	t.Run("converts a single article to HTML", func(t *testing.T) {
+	t.Run("it renders a single article to HTML", func(t *testing.T) {
 		buf := bytes.Buffer{}
 		renderer := NewArticleRenderer()
 
@@ -51,7 +51,7 @@ func TestRender(t *testing.T) {
 }
 
 func BenchmarkRender(b *testing.B) {
-	b.Run("it renders an article", func(b *testing.B) {
+	b.Run("it renders a single article", func(b *testing.B) {
 		renderer := NewArticleRenderer()
 
 		article := Article{
