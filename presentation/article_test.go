@@ -1,10 +1,11 @@
-package main
+package presentation
 
 import (
 	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Tarhche/backend/domain/article"
 	"github.com/google/uuid"
 	"io"
 	"net/http"
@@ -14,21 +15,21 @@ import (
 )
 
 type StubArticleRepository struct {
-	articles []Article
+	articles []article.Entity
 }
 
-func (s *StubArticleRepository) Articles() ([]Article, error) {
+func (s *StubArticleRepository) Articles() ([]article.Entity, error) {
 	return s.articles, nil
 }
 
-func (s *StubArticleRepository) CreateArticle(article *Article) error {
+func (s *StubArticleRepository) CreateArticle(article *article.Entity) error {
 	article.ID = uuid.NewString()
 	s.articles = append(s.articles, *article)
 
 	return nil
 }
 
-func (s *StubArticleRepository) Article(id string) (*Article, error) {
+func (s *StubArticleRepository) Article(id string) (*article.Entity, error) {
 	for j := range s.articles {
 		if s.articles[j].ID == id {
 			return &s.articles[j], nil
@@ -38,7 +39,7 @@ func (s *StubArticleRepository) Article(id string) (*Article, error) {
 	return nil, errors.New("article not found")
 }
 
-func (s *StubArticleRepository) UpdateArticle(article *Article) error {
+func (s *StubArticleRepository) UpdateArticle(article *article.Entity) error {
 	for j := range s.articles {
 		if s.articles[j].ID == article.ID {
 			s.articles[j] = *article
@@ -66,19 +67,19 @@ type SpyArticleRenderer struct {
 	CallRenderCounter, CallRenderIndexCounter int
 }
 
-func (s *SpyArticleRenderer) Render(w io.Writer, article Article) error {
+func (s *SpyArticleRenderer) Render(w io.Writer, article article.Entity) error {
 	s.CallRenderCounter++
 	return nil
 }
 
-func (s *SpyArticleRenderer) RenderIndex(w io.Writer, articles []Article) error {
+func (s *SpyArticleRenderer) RenderIndex(w io.Writer, articles []article.Entity) error {
 	s.CallRenderIndexCounter++
 	return nil
 }
 
 func TestGetArticles(t *testing.T) {
 	t.Run("returns a list of articles", func(t *testing.T) {
-		articles := []Article{
+		articles := []article.Entity{
 			{
 				Title: "Lorem Ipsum 1",
 			},
@@ -93,7 +94,7 @@ func TestGetArticles(t *testing.T) {
 		renderer := &SpyArticleRenderer{}
 		server := NewArticleServer(&StubArticleRepository{articles: articles}, renderer)
 
-		request, _ := http.NewRequest(http.MethodGet, routingPath, nil)
+		request, _ := http.NewRequest(http.MethodGet, RoutingPath, nil)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -111,9 +112,9 @@ func TestGetArticles(t *testing.T) {
 	})
 
 	t.Run("returns 404 on wrong http method", func(t *testing.T) {
-		server := NewArticleServer(&StubArticleRepository{articles: []Article{}}, &SpyArticleRenderer{})
+		server := NewArticleServer(&StubArticleRepository{articles: []article.Entity{}}, &SpyArticleRenderer{})
 
-		request, _ := http.NewRequest(http.MethodPatch, routingPath, nil)
+		request, _ := http.NewRequest(http.MethodPatch, RoutingPath, nil)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -130,16 +131,16 @@ func TestGetArticles(t *testing.T) {
 func TestCreateArticle(t *testing.T) {
 	t.Run("creates new article", func(t *testing.T) {
 		renderer := &SpyArticleRenderer{}
-		server := NewArticleServer(&StubArticleRepository{articles: []Article{}}, renderer)
+		server := NewArticleServer(&StubArticleRepository{articles: []article.Entity{}}, renderer)
 
-		article := Article{
+		article := article.Entity{
 			Title:  "title",
 			Body:   "body",
 			Status: "draft",
 		}
 
 		body, _ := json.Marshal(article)
-		request, _ := http.NewRequest(http.MethodPost, routingPath, bytes.NewReader(body))
+		request, _ := http.NewRequest(http.MethodPost, RoutingPath, bytes.NewReader(body))
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -148,7 +149,7 @@ func TestCreateArticle(t *testing.T) {
 			t.Errorf("got HTTP status code %d, want %d", response.Code, http.StatusCreated)
 		}
 
-		request, _ = http.NewRequest(http.MethodGet, routingPath, bytes.NewReader(body))
+		request, _ = http.NewRequest(http.MethodGet, RoutingPath, bytes.NewReader(body))
 		response = httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -160,17 +161,17 @@ func TestCreateArticle(t *testing.T) {
 }
 
 func TestGetArticle(t *testing.T) {
-	article := Article{
+	anArticle := article.Entity{
 		ID:    "id",
 		Title: "title",
 		Body:  "body",
 	}
 
 	renderer := &SpyArticleRenderer{}
-	server := NewArticleServer(&StubArticleRepository{articles: []Article{article}}, renderer)
+	server := NewArticleServer(&StubArticleRepository{articles: []article.Entity{anArticle}}, renderer)
 
 	t.Run("gets an existence article", func(t *testing.T) {
-		request, _ := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/%v", routingPath, article.ID), nil)
+		request, _ := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/%v", RoutingPath, anArticle.ID), nil)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -202,22 +203,22 @@ func TestGetArticle(t *testing.T) {
 
 func TestUpdateArticle(t *testing.T) {
 	t.Run("updates an article", func(t *testing.T) {
-		article := Article{
+		anArticle := article.Entity{
 			ID:    "id",
 			Title: "title",
 			Body:  "body",
 		}
 
 		renderer := &SpyArticleRenderer{}
-		articleRepository := &StubArticleRepository{articles: []Article{article}}
+		articleRepository := &StubArticleRepository{articles: []article.Entity{anArticle}}
 
 		server := NewArticleServer(articleRepository, renderer)
 
-		article.Title = "test title"
-		article.Body = "test body"
+		anArticle.Title = "test title"
+		anArticle.Body = "test body"
 
-		body, _ := json.Marshal(article)
-		request, _ := http.NewRequest(http.MethodPut, fmt.Sprintf("%s/%s", routingPath, article.ID), bytes.NewReader(body))
+		body, _ := json.Marshal(anArticle)
+		request, _ := http.NewRequest(http.MethodPut, fmt.Sprintf("%s/%s", RoutingPath, anArticle.ID), bytes.NewReader(body))
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -225,13 +226,13 @@ func TestUpdateArticle(t *testing.T) {
 			t.Errorf("got HTTP status code %d, want %d", response.Code, http.StatusNoContent)
 		}
 
-		got, err := articleRepository.Article(article.ID)
+		got, err := articleRepository.Article(anArticle.ID)
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		if reflect.DeepEqual(got, article) {
-			t.Errorf("got %#v, want %#v", got, article)
+		if reflect.DeepEqual(got, anArticle) {
+			t.Errorf("got %#v, want %#v", got, anArticle)
 		}
 
 	})
@@ -239,18 +240,18 @@ func TestUpdateArticle(t *testing.T) {
 
 func TestDeleteArticle(t *testing.T) {
 	t.Run("deletes an article", func(t *testing.T) {
-		article := Article{
+		anArticle := article.Entity{
 			ID:    "id",
 			Title: "title",
 			Body:  "body",
 		}
 
 		renderer := &SpyArticleRenderer{}
-		articleRepository := &StubArticleRepository{articles: []Article{article}}
+		articleRepository := &StubArticleRepository{articles: []article.Entity{anArticle}}
 
 		server := NewArticleServer(articleRepository, renderer)
 
-		request, _ := http.NewRequest(http.MethodDelete, fmt.Sprintf("%s/%s", routingPath, article.ID), nil)
+		request, _ := http.NewRequest(http.MethodDelete, fmt.Sprintf("%s/%s", RoutingPath, anArticle.ID), nil)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
@@ -259,7 +260,7 @@ func TestDeleteArticle(t *testing.T) {
 			t.Errorf("got status %d, wanted %d", response.Code, http.StatusNoContent)
 		}
 
-		request, _ = http.NewRequest(http.MethodGet, fmt.Sprintf("%s/%s", routingPath, article.ID), nil)
+		request, _ = http.NewRequest(http.MethodGet, fmt.Sprintf("%s/%s", RoutingPath, anArticle.ID), nil)
 		response = httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)

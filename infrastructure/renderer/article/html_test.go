@@ -1,14 +1,15 @@
-package main
+package article
 
 import (
 	"bytes"
+	"github.com/Tarhche/backend/domain/article"
 	approvals "github.com/approvals/go-approval-tests"
 	"io"
 	"testing"
 )
 
 func TestRender(t *testing.T) {
-	article := Article{
+	anArticle := article.Entity{
 		ID:    "test-id",
 		Title: "test-title",
 		Body:  "test-body",
@@ -18,7 +19,7 @@ func TestRender(t *testing.T) {
 		buf := bytes.Buffer{}
 		renderer := NewHTMLArticleRenderer()
 
-		if err := renderer.Render(&buf, article); err != nil {
+		if err := renderer.Render(&buf, anArticle); err != nil {
 			t.Fatal(err)
 		}
 
@@ -29,7 +30,7 @@ func TestRender(t *testing.T) {
 		buf := bytes.Buffer{}
 		renderer := NewHTMLArticleRenderer()
 
-		articles := []Article{
+		articles := []article.Entity{
 			{
 				ID:    "test-id",
 				Title: "test-title",
@@ -54,7 +55,7 @@ func BenchmarkRender(b *testing.B) {
 	b.Run("it renders a single article", func(b *testing.B) {
 		renderer := NewHTMLArticleRenderer()
 
-		article := Article{
+		article := article.Entity{
 			ID:    "test-id",
 			Title: "test-title",
 			Body:  "test-body",
@@ -69,7 +70,7 @@ func BenchmarkRender(b *testing.B) {
 	b.Run("it renders an index of articles", func(b *testing.B) {
 		renderer := NewHTMLArticleRenderer()
 
-		articles := []Article{
+		articles := []article.Entity{
 			{
 				ID:    "test-id",
 				Title: "test-title",

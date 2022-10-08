@@ -1,9 +1,13 @@
-package main
+package integration
 
 import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/Tarhche/backend/domain/article"
+	renderer "github.com/Tarhche/backend/infrastructure/renderer/article"
+	repository "github.com/Tarhche/backend/infrastructure/repository/article"
+	"github.com/Tarhche/backend/presentation"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -11,10 +15,10 @@ import (
 )
 
 func TestCreatingAndRetrievingThem(t *testing.T) {
-	articlesRepository := NewInMemoryRepository()
-	server := NewArticleServer(articlesRepository, NewHTMLArticleRenderer())
+	articlesRepository := repository.NewInMemoryRepository()
+	server := presentation.NewArticleServer(articlesRepository, renderer.NewHTMLArticleRenderer())
 
-	article := Article{
+	article := article.Entity{
 		Title:  "title",
 		Body:   "body",
 		Status: "draft",
@@ -22,15 +26,15 @@ func TestCreatingAndRetrievingThem(t *testing.T) {
 
 	body, _ := json.Marshal(article)
 
-	request1, _ := http.NewRequest(http.MethodPost, routingPath, bytes.NewReader(body))
-	request2, _ := http.NewRequest(http.MethodPost, routingPath, bytes.NewReader(body))
-	request3, _ := http.NewRequest(http.MethodPost, routingPath, bytes.NewReader(body))
+	request1, _ := http.NewRequest(http.MethodPost, presentation.RoutingPath, bytes.NewReader(body))
+	request2, _ := http.NewRequest(http.MethodPost, presentation.RoutingPath, bytes.NewReader(body))
+	request3, _ := http.NewRequest(http.MethodPost, presentation.RoutingPath, bytes.NewReader(body))
 
 	server.ServeHTTP(httptest.NewRecorder(), request1)
 	server.ServeHTTP(httptest.NewRecorder(), request2)
 	server.ServeHTTP(httptest.NewRecorder(), request3)
 
-	request, _ := http.NewRequest(http.MethodGet, routingPath, nil)
+	request, _ := http.NewRequest(http.MethodGet, presentation.RoutingPath, nil)
 	response := httptest.NewRecorder()
 	server.ServeHTTP(response, request)
 
@@ -53,7 +57,7 @@ func TestCreatingAndRetrievingThem(t *testing.T) {
 
 	body, _ = json.Marshal(article)
 
-	request, _ = http.NewRequest(http.MethodPut, fmt.Sprintf("%s/%s", routingPath, articles[0].ID), bytes.NewReader(body))
+	request, _ = http.NewRequest(http.MethodPut, fmt.Sprintf("%s/%s", presentation.RoutingPath, articles[0].ID), bytes.NewReader(body))
 	response = httptest.NewRecorder()
 	server.ServeHTTP(response, request)
 
@@ -65,11 +69,11 @@ func TestCreatingAndRetrievingThem(t *testing.T) {
 
 	// delete
 	ID := articles[0].ID
-	request, _ = http.NewRequest(http.MethodDelete, fmt.Sprintf("%s/%s", routingPath, ID), nil)
+	request, _ = http.NewRequest(http.MethodDelete, fmt.Sprintf("%s/%s", presentation.RoutingPath, ID), nil)
 	response = httptest.NewRecorder()
 	server.ServeHTTP(response, request)
 
-	request, _ = http.NewRequest(http.MethodGet, fmt.Sprintf("%s/%s", routingPath, ID), nil)
+	request, _ = http.NewRequest(http.MethodGet, fmt.Sprintf("%s/%s", presentation.RoutingPath, ID), nil)
 	response = httptest.NewRecorder()
 	server.ServeHTTP(response, request)
 
