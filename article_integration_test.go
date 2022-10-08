@@ -11,8 +11,8 @@ import (
 )
 
 func TestCreatingAndRetrievingThem(t *testing.T) {
-	repository := NewInMemoryRepository()
-	server := NewArticleServer(repository)
+	articlesRepository := NewInMemoryRepository()
+	server := NewArticleServer(articlesRepository, NewHTMLArticleRenderer())
 
 	article := Article{
 		Title:  "title",
@@ -38,11 +38,13 @@ func TestCreatingAndRetrievingThem(t *testing.T) {
 		t.Errorf("got %d, want %d", response.Code, http.StatusOK)
 	}
 
-	var articles []Article
-	json.NewDecoder(response.Body).Decode(&articles)
+	if response.Body.Len() == 0 {
+		t.Errorf("got empty response")
+	}
 
-	if len(articles) != 3 {
-		t.Errorf("got %d articles, wanted %d", len(articles), 3)
+	articles, err := articlesRepository.Articles()
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	// update
@@ -67,15 +69,14 @@ func TestCreatingAndRetrievingThem(t *testing.T) {
 	}
 
 	// delete
-	request, _ = http.NewRequest(http.MethodDelete, fmt.Sprintf("%s/%s", routingPath, articles[0].ID), nil)
+	ID := articles[0].ID
+	request, _ = http.NewRequest(http.MethodDelete, fmt.Sprintf("%s/%s", routingPath, ID), nil)
 	response = httptest.NewRecorder()
 	server.ServeHTTP(response, request)
 
-	request, _ = http.NewRequest(http.MethodGet, fmt.Sprintf("%s/%s", routingPath, articles[0].ID), nil)
+	request, _ = http.NewRequest(http.MethodGet, fmt.Sprintf("%s/%s", routingPath, ID), nil)
 	response = httptest.NewRecorder()
 	server.ServeHTTP(response, request)
-
-	t.Log(response.Body.String(), articles)
 
 	if response.Code != http.StatusNotFound {
 		t.Errorf("got status %d, want %d", response.Code, http.StatusNotFound)

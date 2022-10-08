@@ -16,7 +16,7 @@ func TestRender(t *testing.T) {
 
 	t.Run("it renders a single article to HTML", func(t *testing.T) {
 		buf := bytes.Buffer{}
-		renderer := NewArticleRenderer()
+		renderer := NewHTMLArticleRenderer()
 
 		if err := renderer.Render(&buf, article); err != nil {
 			t.Fatal(err)
@@ -27,7 +27,7 @@ func TestRender(t *testing.T) {
 
 	t.Run("it renders an index of articles to HTML", func(t *testing.T) {
 		buf := bytes.Buffer{}
-		renderer := NewArticleRenderer()
+		renderer := NewHTMLArticleRenderer()
 
 		articles := []Article{
 			{
@@ -52,7 +52,7 @@ func TestRender(t *testing.T) {
 
 func BenchmarkRender(b *testing.B) {
 	b.Run("it renders a single article", func(b *testing.B) {
-		renderer := NewArticleRenderer()
+		renderer := NewHTMLArticleRenderer()
 
 		article := Article{
 			ID:    "test-id",
@@ -67,7 +67,7 @@ func BenchmarkRender(b *testing.B) {
 	})
 
 	b.Run("it renders an index of articles", func(b *testing.B) {
-		renderer := NewArticleRenderer()
+		renderer := NewHTMLArticleRenderer()
 
 		articles := []Article{
 			{

@@ -81,6 +81,7 @@ func (i *InMemoryRepository) DeleteArticle(ID string) error {
 
 type ArticleServer struct {
 	repository ArticleRepository
+	renderer   ArticleRenderer
 	router     *http.ServeMux
 }
 
@@ -88,9 +89,10 @@ const (
 	routingPath = "/articles"
 )
 
-func NewArticleServer(articleRepository ArticleRepository) *ArticleServer {
+func NewArticleServer(articleRepository ArticleRepository, renderer ArticleRenderer) *ArticleServer {
 	server := new(ArticleServer)
 	server.repository = articleRepository
+	server.renderer = renderer
 	server.router = http.NewServeMux()
 
 	server.router.HandleFunc(routingPath, func(rw http.ResponseWriter, r *http.Request) {
@@ -131,7 +133,7 @@ func (a *ArticleServer) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 func (a *ArticleServer) articles(rw http.ResponseWriter, r *http.Request) {
 	articles, _ := a.repository.Articles()
-	_ = json.NewEncoder(rw).Encode(articles)
+	_ = a.renderer.RenderIndex(rw, articles)
 }
 
 func (a *ArticleServer) createArticle(rw http.ResponseWriter, r *http.Request) {

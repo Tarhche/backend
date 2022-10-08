@@ -16,20 +16,25 @@ var (
 	articleTemplates embed.FS
 )
 
-type ArticleRenderer struct {
+type ArticleRenderer interface {
+	Render(io.Writer, Article) error
+	RenderIndex(io.Writer, []Article) error
+}
+
+type HTMLArticleRenderer struct {
 	tmpl *template.Template
 }
 
-func NewArticleRenderer() *ArticleRenderer {
-	return &ArticleRenderer{
+func NewHTMLArticleRenderer() *HTMLArticleRenderer {
+	return &HTMLArticleRenderer{
 		tmpl: template.Must(template.ParseFS(articleTemplates, "template/*.tmpl")),
 	}
 }
 
-func (a ArticleRenderer) Render(buf io.Writer, article Article) error {
+func (a HTMLArticleRenderer) Render(buf io.Writer, article Article) error {
 	return a.tmpl.ExecuteTemplate(buf, articleTemplate, article)
 }
 
-func (a ArticleRenderer) RenderIndex(buf io.Writer, articles []Article) error {
+func (a HTMLArticleRenderer) RenderIndex(buf io.Writer, articles []Article) error {
 	return a.tmpl.ExecuteTemplate(buf, articlesTemplate, articles)
 }

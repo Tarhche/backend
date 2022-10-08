@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/google/uuid"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -61,6 +62,20 @@ func (s *StubArticleRepository) DeleteArticle(ID string) error {
 	return errors.New("article not found")
 }
 
+type SpyArticleRenderer struct {
+	CallRenderCounter, CallRenderIndexCounter int
+}
+
+func (s *SpyArticleRenderer) Render(w io.Writer, article Article) error {
+	s.CallRenderCounter++
+	return nil
+}
+
+func (s *SpyArticleRenderer) RenderIndex(w io.Writer, articles []Article) error {
+	s.CallRenderIndexCounter++
+	return nil
+}
+
 func TestGetArticles(t *testing.T) {
 	t.Run("returns a list of articles", func(t *testing.T) {
 		articles := []Article{
@@ -75,23 +90,21 @@ func TestGetArticles(t *testing.T) {
 			},
 		}
 
-		server := NewArticleServer(&StubArticleRepository{articles: articles})
+		renderer := &SpyArticleRenderer{}
+		server := NewArticleServer(&StubArticleRepository{articles: articles}, renderer)
 
 		request, _ := http.NewRequest(http.MethodGet, routingPath, nil)
 		response := httptest.NewRecorder()
 
 		server.ServeHTTP(response, request)
 
-		var got []Article
-		json.NewDecoder(response.Body).Decode(&got)
-
-		if !reflect.DeepEqual(got, articles) {
-			t.Errorf("got %#v, want %#v", got, articles)
+		if renderer.CallRenderIndexCounter != 1 {
+			t.Errorf("got %d wanted %d", renderer.CallRenderIndexCounter, 1)
 		}
 	})
 
 	t.Run("returns 404 on wrong http method", func(t *testing.T) {
-		server := NewArticleServer(&StubArticleRepository{articles: []Article{}})
+		server := NewArticleServer(&StubArticleRepository{articles: []Article{}}, &SpyArticleRenderer{})
 
 		request, _ := http.NewRequest(http.MethodPatch, routingPath, nil)
 		response := httptest.NewRecorder()
@@ -109,7 +122,8 @@ func TestGetArticles(t *testing.T) {
 
 func TestCreateArticle(t *testing.T) {
 	t.Run("creates new article", func(t *testing.T) {
-		server := NewArticleServer(&StubArticleRepository{articles: []Article{}})
+		renderer := &SpyArticleRenderer{}
+		server := NewArticleServer(&StubArticleRepository{articles: []Article{}}, renderer)
 
 		article := Article{
 			Title:  "title",
@@ -132,14 +146,8 @@ func TestCreateArticle(t *testing.T) {
 
 		server.ServeHTTP(response, request)
 
-		var got, want []Article
-
-		json.NewDecoder(response.Body).Decode(&got)
-		want = append(want, article)
-
-		got[0].ID = want[0].ID // don't check if ID equality
-		if !reflect.DeepEqual(got, want) {
-			t.Errorf("got %#v, want %#v", got, want)
+		if renderer.CallRenderIndexCounter != 1 {
+			t.Errorf("got %d wanted %d", renderer.CallRenderIndexCounter, 1)
 		}
 	})
 }
@@ -151,7 +159,7 @@ func TestGetArticle(t *testing.T) {
 		Body:  "body",
 	}
 
-	server := NewArticleServer(&StubArticleRepository{articles: []Article{article}})
+	server := NewArticleServer(&StubArticleRepository{articles: []Article{article}}, &SpyArticleRenderer{})
 
 	t.Run("gets an existance article", func(t *testing.T) {
 		request, _ := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/%v", routingPath, article.ID), nil)
@@ -192,7 +200,7 @@ func TestUpdateArticle(t *testing.T) {
 			Body:  "body",
 		}
 
-		server := NewArticleServer(&StubArticleRepository{articles: []Article{article}})
+		server := NewArticleServer(&StubArticleRepository{articles: []Article{article}}, &SpyArticleRenderer{})
 
 		article.Title = "test title"
 		article.Body = "test body"
@@ -228,7 +236,7 @@ func TestDeleteArticle(t *testing.T) {
 			Body:  "body",
 		}
 
-		server := NewArticleServer(&StubArticleRepository{articles: []Article{article}})
+		server := NewArticleServer(&StubArticleRepository{articles: []Article{article}}, &SpyArticleRenderer{})
 
 		request, _ := http.NewRequest(http.MethodDelete, fmt.Sprintf("%s/%s", routingPath, article.ID), nil)
 		response := httptest.NewRecorder()
