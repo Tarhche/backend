@@ -7,8 +7,8 @@ import (
 )
 
 const (
-	singleArticleTemplate = "single-article.tmpl"
-	articleTemplate       = "articles.tmpl"
+	articleTemplate  = "article.tmpl"
+	articlesTemplate = "articles.tmpl"
 )
 
 var (
@@ -16,22 +16,20 @@ var (
 	articleTemplates embed.FS
 )
 
-type SingleArticleRenderer struct{}
-
-func (a SingleArticleRenderer) Render(buf io.Writer, article Article) error {
-	tmpl, err := template.New(singleArticleTemplate).ParseFS(articleTemplates, "template/*.tmpl")
-	if err != nil {
-		return err
-	}
-
-	return tmpl.Execute(buf, article)
+type ArticleRenderer struct {
+	tmpl *template.Template
 }
 
-func (a SingleArticleRenderer) RenderIndex(buf io.Writer, articles []Article) error {
-	tmpl, err := template.New(articleTemplate).ParseFS(articleTemplates, "template/*.tmpl")
-	if err != nil {
-		return err
+func NewArticleRenderer() *ArticleRenderer {
+	return &ArticleRenderer{
+		tmpl: template.Must(template.ParseFS(articleTemplates, "template/*.tmpl")),
 	}
+}
 
-	return tmpl.Execute(buf, articles)
+func (a ArticleRenderer) Render(buf io.Writer, article Article) error {
+	return a.tmpl.ExecuteTemplate(buf, articleTemplate, article)
+}
+
+func (a ArticleRenderer) RenderIndex(buf io.Writer, articles []Article) error {
+	return a.tmpl.ExecuteTemplate(buf, articlesTemplate, articles)
 }
