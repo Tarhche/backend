@@ -18,13 +18,13 @@ func TestCreatingAndRetrievingThem(t *testing.T) {
 	articlesRepository := repository.NewInMemoryRepository()
 	server := presentation.NewArticleServer(articlesRepository, renderer.NewHTMLArticleRenderer())
 
-	article := article.Entity{
+	anArticle := article.Entity{
 		Title:  "title",
 		Body:   "body",
 		Status: "draft",
 	}
 
-	body, _ := json.Marshal(article)
+	body, _ := json.Marshal(anArticle)
 
 	request1, _ := http.NewRequest(http.MethodPost, presentation.RoutingPath, bytes.NewReader(body))
 	request2, _ := http.NewRequest(http.MethodPost, presentation.RoutingPath, bytes.NewReader(body))
@@ -52,10 +52,10 @@ func TestCreatingAndRetrievingThem(t *testing.T) {
 	}
 
 	// update
-	article.ID = articles[0].ID
-	article.Status = "published"
+	anArticle.ID = articles[0].ID
+	anArticle.Status = "published"
 
-	body, _ = json.Marshal(article)
+	body, _ = json.Marshal(anArticle)
 
 	request, _ = http.NewRequest(http.MethodPut, fmt.Sprintf("%s/%s", presentation.RoutingPath, articles[0].ID), bytes.NewReader(body))
 	response = httptest.NewRecorder()
@@ -63,8 +63,8 @@ func TestCreatingAndRetrievingThem(t *testing.T) {
 
 	editedArticle := articles[0]
 
-	if !reflect.DeepEqual(editedArticle, article) {
-		t.Errorf("got %#v, want %#v", editedArticle, article)
+	if !reflect.DeepEqual(editedArticle, anArticle) {
+		t.Errorf("got %#v, want %#v", editedArticle, anArticle)
 	}
 
 	// delete
