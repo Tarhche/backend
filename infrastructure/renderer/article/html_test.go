@@ -55,7 +55,7 @@ func BenchmarkRender(b *testing.B) {
 	b.Run("it renders a single article", func(b *testing.B) {
 		renderer := NewHTMLArticleRenderer()
 
-		article := article.Entity{
+		anArticle := article.Entity{
 			ID:    "test-id",
 			Title: "test-title",
 			Body:  "test-body",
@@ -63,7 +63,9 @@ func BenchmarkRender(b *testing.B) {
 
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			renderer.Render(io.Discard, article)
+			if err := renderer.Render(io.Discard, anArticle); err != nil {
+				b.Fatal(err)
+			}
 		}
 	})
 
@@ -80,7 +82,9 @@ func BenchmarkRender(b *testing.B) {
 
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			renderer.RenderIndex(io.Discard, articles)
+			if err := renderer.RenderIndex(io.Discard, articles); err != nil {
+				b.Fatal(err)
+			}
 		}
 	})
 }
