@@ -3,79 +3,14 @@ package presentation
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"github.com/Tarhche/backend/domain/article"
-	"github.com/google/uuid"
-	"io"
+	"github.com/Tarhche/backend/tests/doubles"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
 	"testing"
 )
-
-type StubArticleRepository struct {
-	articles []article.Entity
-}
-
-func (s *StubArticleRepository) Articles() ([]article.Entity, error) {
-	return s.articles, nil
-}
-
-func (s *StubArticleRepository) CreateArticle(article *article.Entity) error {
-	article.ID = uuid.NewString()
-	s.articles = append(s.articles, *article)
-
-	return nil
-}
-
-func (s *StubArticleRepository) Article(id string) (*article.Entity, error) {
-	for j := range s.articles {
-		if s.articles[j].ID == id {
-			return &s.articles[j], nil
-		}
-	}
-
-	return nil, errors.New("article not found")
-}
-
-func (s *StubArticleRepository) UpdateArticle(article *article.Entity) error {
-	for j := range s.articles {
-		if s.articles[j].ID == article.ID {
-			s.articles[j] = *article
-			return nil
-		}
-	}
-
-	return errors.New("article not found")
-}
-
-func (s *StubArticleRepository) DeleteArticle(ID string) error {
-	for j := range s.articles {
-		if s.articles[j].ID == ID {
-			s.articles[j] = s.articles[len(s.articles)-1]
-			s.articles = s.articles[:len(s.articles)-1]
-
-			return nil
-		}
-	}
-
-	return errors.New("article not found")
-}
-
-type SpyArticleRenderer struct {
-	CallRenderCounter, CallRenderIndexCounter int
-}
-
-func (s *SpyArticleRenderer) Render(w io.Writer, article article.Entity) error {
-	s.CallRenderCounter++
-	return nil
-}
-
-func (s *SpyArticleRenderer) RenderIndex(w io.Writer, articles []article.Entity) error {
-	s.CallRenderIndexCounter++
-	return nil
-}
 
 func TestGetArticles(t *testing.T) {
 	t.Run("returns a list of articles", func(t *testing.T) {
@@ -91,8 +26,8 @@ func TestGetArticles(t *testing.T) {
 			},
 		}
 
-		renderer := &SpyArticleRenderer{}
-		server := NewArticleServer(&StubArticleRepository{articles: articles}, renderer)
+		renderer := &doubles.SpyArticleRenderer{}
+		server := NewArticleServer(&doubles.StubArticleRepository{Entities: articles}, renderer)
 
 		request, _ := http.NewRequest(http.MethodGet, RoutingPath, nil)
 		response := httptest.NewRecorder()
@@ -112,7 +47,7 @@ func TestGetArticles(t *testing.T) {
 	})
 
 	t.Run("returns 404 on wrong http method", func(t *testing.T) {
-		server := NewArticleServer(&StubArticleRepository{articles: []article.Entity{}}, &SpyArticleRenderer{})
+		server := NewArticleServer(&doubles.StubArticleRepository{Entities: []article.Entity{}}, &doubles.SpyArticleRenderer{})
 
 		request, _ := http.NewRequest(http.MethodPatch, RoutingPath, nil)
 		response := httptest.NewRecorder()
@@ -130,16 +65,16 @@ func TestGetArticles(t *testing.T) {
 
 func TestCreateArticle(t *testing.T) {
 	t.Run("creates new article", func(t *testing.T) {
-		renderer := &SpyArticleRenderer{}
-		server := NewArticleServer(&StubArticleRepository{articles: []article.Entity{}}, renderer)
+		renderer := &doubles.SpyArticleRenderer{}
+		server := NewArticleServer(&doubles.StubArticleRepository{Entities: []article.Entity{}}, renderer)
 
-		article := article.Entity{
+		anArticle := article.Entity{
 			Title:  "title",
 			Body:   "body",
 			Status: "draft",
 		}
 
-		body, _ := json.Marshal(article)
+		body, _ := json.Marshal(anArticle)
 		request, _ := http.NewRequest(http.MethodPost, RoutingPath, bytes.NewReader(body))
 		response := httptest.NewRecorder()
 
@@ -167,8 +102,8 @@ func TestGetArticle(t *testing.T) {
 		Body:  "body",
 	}
 
-	renderer := &SpyArticleRenderer{}
-	server := NewArticleServer(&StubArticleRepository{articles: []article.Entity{anArticle}}, renderer)
+	renderer := &doubles.SpyArticleRenderer{}
+	server := NewArticleServer(&doubles.StubArticleRepository{Entities: []article.Entity{anArticle}}, renderer)
 
 	t.Run("gets an existence article", func(t *testing.T) {
 		request, _ := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/%v", RoutingPath, anArticle.ID), nil)
@@ -209,8 +144,8 @@ func TestUpdateArticle(t *testing.T) {
 			Body:  "body",
 		}
 
-		renderer := &SpyArticleRenderer{}
-		articleRepository := &StubArticleRepository{articles: []article.Entity{anArticle}}
+		renderer := &doubles.SpyArticleRenderer{}
+		articleRepository := &doubles.StubArticleRepository{Entities: []article.Entity{anArticle}}
 
 		server := NewArticleServer(articleRepository, renderer)
 
@@ -246,8 +181,8 @@ func TestDeleteArticle(t *testing.T) {
 			Body:  "body",
 		}
 
-		renderer := &SpyArticleRenderer{}
-		articleRepository := &StubArticleRepository{articles: []article.Entity{anArticle}}
+		renderer := &doubles.SpyArticleRenderer{}
+		articleRepository := &doubles.StubArticleRepository{Entities: []article.Entity{anArticle}}
 
 		server := NewArticleServer(articleRepository, renderer)
 
