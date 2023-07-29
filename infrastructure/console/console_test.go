@@ -2,7 +2,6 @@ package console
 
 import (
 	"context"
-	"log"
 	"testing"
 )
 
@@ -57,14 +56,13 @@ func TestConsole(t *testing.T) {
 
 		for i := range commands {
 			cmd := commands[i].(*MockCommand)
-			log.Println("in test", i, cmd.Name(), cmdName, cmd.Name() == cmdName, cmd.count != 1)
 
-			if cmd.Name() == cmdName && cmd.count != 1 {
-				t.Errorf("command at index %d should be invoked exactly 1 but invoked %d", i, cmd.count)
+			if cmd.Name() == cmdName && cmd.runCount != 1 {
+				t.Errorf("command at index %d should be invoked exactly 1 but invoked %d", i, cmd.runCount)
 			}
 
-			if cmd.Name() != cmdName && cmd.count > 0 {
-				t.Errorf("command at index %d should not be invoked but invoked %d", i, cmd.count)
+			if cmd.Name() != cmdName && cmd.runCount > 0 {
+				t.Errorf("command at index %d should not be invoked but invoked %d", i, cmd.runCount)
 			}
 		}
 	})
@@ -89,32 +87,62 @@ func TestConsole(t *testing.T) {
 			t.Error("unexpected exit code")
 		}
 
-		if commands[0].(*MockCommand).count != 1 {
+		if commands[0].(*MockCommand).runCount != 1 {
 			t.Error("command at index 0 not invoked")
 		}
 
-		if commands[1].(*MockCommand).count != 1 {
+		if commands[1].(*MockCommand).runCount != 1 {
 			t.Error("command at index 1 not invoked")
 		}
 
-		if commands[2].(*MockCommand).count != 0 {
+		if commands[2].(*MockCommand).runCount != 0 {
 			t.Errorf("command at index 2 should not be invoked")
+		}
+	})
+
+	t.Run("configure", func(t *testing.T) {
+		console := NewConsole()
+		ctx := context.Background()
+
+		commands := []Command{
+			&MockCommand{},
+			&MockCommand{},
+		}
+
+		for i := range commands {
+			console.Register(commands[i])
+		}
+
+		if exitCode := console.Run(ctx, []string{""}); exitCode != 0 {
+			t.Errorf("unexpected exit code %d", exitCode)
+		}
+
+		for i := range commands {
+			cmd := commands[i].(*MockCommand)
+			if cmd.configureCount != 1 {
+				t.Errorf("command at index %d configure method should be called 1 but is called %d", i, cmd.configureCount)
+			}
 		}
 	})
 }
 
 type MockCommand struct {
-	name     string
-	exitCode int
-	count    int
+	name           string
+	exitCode       int
+	runCount       int
+	configureCount int
 }
 
 func (c *MockCommand) Name() string {
 	return c.name
 }
 
+func (c *MockCommand) Configure() {
+	c.configureCount++
+}
+
 func (c *MockCommand) Run(ctx context.Context) int {
-	c.count++
+	c.runCount++
 
 	return c.exitCode
 }

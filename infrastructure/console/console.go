@@ -19,6 +19,9 @@ type Command interface {
 	// Name returns the command's name
 	Name() string
 
+	// Configure configures this command.
+	Configure()
+
 	// Run attems to run the command
 	Run(context.Context) ExitStatus
 }
@@ -55,6 +58,8 @@ func (c *Console) Run(ctx context.Context, arguments []string) ExitStatus {
 		if cmd.Name() != commandName {
 			continue
 		}
+
+		cmd.Configure()
 
 		if status = cmd.Run(ctx); status != ExitSuccess {
 			break
