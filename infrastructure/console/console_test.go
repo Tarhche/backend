@@ -18,6 +18,15 @@ func TestConsole(t *testing.T) {
 		}
 	})
 
+	t.Run("run with no arguments", func(t *testing.T) {
+		console := NewConsole()
+		ctx := context.Background()
+
+		if exitCode := console.Run(ctx, []string{}); exitCode != 2 {
+			t.Error("unexpected exit code")
+		}
+	})
+
 	t.Run("register commands", func(t *testing.T) {
 		console := NewConsole()
 		ctx := context.Background()
@@ -60,7 +69,7 @@ func TestConsole(t *testing.T) {
 		}
 	})
 
-	t.Run("non zero status code", func(t *testing.T) {
+	t.Run("will stop if a command returns non zero code", func(t *testing.T) {
 		console := NewConsole()
 		ctx := context.Background()
 
@@ -74,10 +83,6 @@ func TestConsole(t *testing.T) {
 
 		for i := range commands {
 			console.Register(commands[i])
-		}
-
-		if exitCode := console.Run(ctx, []string{}); exitCode != 2 {
-			t.Error("unexpected exit code")
 		}
 
 		if exitCode := console.Run(ctx, []string{""}); exitCode != 1 {
