@@ -4,34 +4,48 @@ import (
 	"context"
 )
 
+// ExitStatus represents a Posix exit status that a command
+// expects to be returned to the shell.
+type ExitStatus = int
+
+const (
+	ExitSuccess ExitStatus = 0
+	ExitFailure ExitStatus = 1
+)
+
+// Command represents a single command.
 type Command interface {
-	Run(context.Context) int
+	// Run attems to run the command
+	Run(context.Context) ExitStatus
 }
 
+// Console represents a set of commands.
 type Console struct {
 	commands []Command
 }
 
+// NewConsole returns a new Console.
 func NewConsole() *Console {
 	return &Console{}
 }
 
+// Register registers a command.
 func (c *Console) Register(command Command) {
 	c.commands = append(c.commands, command)
 }
 
-func (c *Console) Run(ctx context.Context) int {
+// Run attempts to invoke registered commands.
+func (c *Console) Run(ctx context.Context) ExitStatus {
 	if len(c.commands) == 0 {
-		return 0
+		return ExitSuccess
 	}
 
-	var exitCode int
+	var status int
 	for i := range c.commands {
-		exitCode = c.commands[i].Run(ctx)
-		if exitCode != 0 {
+		if status = c.commands[i].Run(ctx); status != ExitSuccess {
 			break
 		}
 	}
 
-	return exitCode
+	return status
 }
