@@ -2,7 +2,6 @@ package console
 
 import (
 	"context"
-	"reflect"
 )
 
 type Command interface {
@@ -10,7 +9,7 @@ type Command interface {
 }
 
 type Console struct {
-	command Command
+	commands []Command
 }
 
 func NewConsole() *Console {
@@ -18,13 +17,21 @@ func NewConsole() *Console {
 }
 
 func (c *Console) Register(command Command) {
-	c.command = command
+	c.commands = append(c.commands, command)
 }
 
 func (c *Console) Run(ctx context.Context) int {
-	if c.command == nil || reflect.ValueOf(c.command).IsNil() {
+	if len(c.commands) == 0 {
 		return 0
 	}
 
-	return c.command.Run(ctx)
+	var exitCode int
+	for i := range c.commands {
+		exitCode = c.commands[i].Run(ctx)
+		if exitCode != 0 {
+			break
+		}
+	}
+
+	return exitCode
 }
