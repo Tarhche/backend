@@ -9,12 +9,16 @@ import (
 type ExitStatus = int
 
 const (
-	ExitSuccess ExitStatus = 0
-	ExitFailure ExitStatus = 1
+	ExitSuccess    ExitStatus = 0
+	ExitFailure    ExitStatus = 1
+	ExitUsageError            = 2
 )
 
 // Command represents a single command.
 type Command interface {
+	// Name returns the command's name
+	Name() string
+
 	// Run attems to run the command
 	Run(context.Context) ExitStatus
 }
@@ -35,14 +39,24 @@ func (c *Console) Register(command Command) {
 }
 
 // Run attempts to invoke registered commands.
-func (c *Console) Run(ctx context.Context) ExitStatus {
+func (c *Console) Run(ctx context.Context, arguments []string) ExitStatus {
+	if len(arguments) == 0 {
+		return ExitUsageError
+	}
+
 	if len(c.commands) == 0 {
 		return ExitSuccess
 	}
 
+	commandName := arguments[0]
+
 	var status int
-	for i := range c.commands {
-		if status = c.commands[i].Run(ctx); status != ExitSuccess {
+	for _, cmd := range c.commands {
+		if cmd.Name() != commandName {
+			continue
+		}
+
+		if status = cmd.Run(ctx); status != ExitSuccess {
 			break
 		}
 	}
