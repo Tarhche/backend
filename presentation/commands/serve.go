@@ -4,6 +4,8 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log"
+	"net/http"
 
 	"github.com/khanzadimahdi/testproject.git/infrastructure/console"
 )
@@ -13,14 +15,17 @@ const (
 )
 
 type ServeCommand struct {
-	port int
+	port    int
+	handler http.Handler
 }
 
 // insures it implements console.Command
-var _ console.Command = NewServeCommand()
+var _ console.Command = NewServeCommand(nil)
 
-func NewServeCommand() *ServeCommand {
-	return &ServeCommand{}
+func NewServeCommand(handler http.Handler) *ServeCommand {
+	return &ServeCommand{
+		handler: handler,
+	}
 }
 
 func (c *ServeCommand) Name() string {
@@ -43,10 +48,20 @@ func (c *ServeCommand) Configure(flagSet *flag.FlagSet) {
 }
 
 func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
-	// if err := http.ListenAndServe(fmt.Sprintf("0.0.0.0:%d", c.port), articles.NewArticlesMux()); err != nil {
-	// 	log.Println(err)
-	// 	return 1
-	// }
+	server := http.Server{
+		Addr:    fmt.Sprintf("0.0.0.0:%d", c.port),
+		Handler: c.handler,
+	}
+
+	go func() {
+		<-ctx.Done()
+
+		_ = server.Shutdown(context.Background())
+	}()
+
+	if err := server.ListenAndServe(); err != nil {
+		log.Println(err)
+	}
 
 	return 0
 }

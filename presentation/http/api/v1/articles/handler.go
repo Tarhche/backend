@@ -3,99 +3,51 @@ package articles
 import (
 	"encoding/json"
 	"net/http"
-	"time"
 
-	"github.com/gofrs/uuid"
+	getarticle "github.com/khanzadimahdi/testproject.git/application/article/getArticle"
+	getarticles "github.com/khanzadimahdi/testproject.git/application/article/getArticles"
 )
 
-type Author struct {
-	Name   string
-	Avatar string
-}
+func NewArticlesMux(
+	getArticle *getarticle.UseCase,
+	getArticles *getarticles.UseCase,
+) *http.ServeMux {
+	h := &handler{
+		getArticleUseCase:  getArticle,
+		getArticlesUseCase: getArticles,
+	}
 
-type Article struct {
-	UUID        string
-	Cover       string
-	Title       string
-	Body        string
-	PublishedAt time.Time
-	Author      Author
-}
-
-type Pagination struct {
-	TotalPages  int
-	CurrentPage int
-}
-
-type Articles struct {
-	Items      []Article
-	Pagination Pagination
-}
-
-func NewArticlesMux() *http.ServeMux {
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("/articles", getArticles)
-	mux.HandleFunc("/articles/", getArticle)
+	mux.HandleFunc("/articles", h.articles)
+	mux.HandleFunc("/article/", h.article)
 
 	return mux
 }
 
-func getArticle(rw http.ResponseWriter, r *http.Request) {
-	u, _ := uuid.NewV7()
+type handler struct {
+	getArticleUseCase  *getarticle.UseCase
+	getArticlesUseCase *getarticles.UseCase
+}
 
-	response := Article{
-		UUID:        u.String(),
-		Cover:       "https://dummyimage.com/640x360/fff/aaa",
-		Title:       "this is a test title 3",
-		Body:        "</p>this is a paragraph</p>",
-		PublishedAt: time.Now(),
-		Author: Author{
-			Name:   "John Doe",
-			Avatar: "https://i.pravatar.cc/150",
-		},
-	}
-
+func (h *handler) article(rw http.ResponseWriter, r *http.Request) {
 	rw.Header().Add("Content-Type", "application/json")
+
+	response, _ := h.getArticleUseCase.GetArticle("")
+
 	rw.WriteHeader(http.StatusOK)
 	json.NewEncoder(rw).Encode(response)
 }
 
-func getArticles(rw http.ResponseWriter, r *http.Request) {
-	u, _ := uuid.NewV7()
+func (h *handler) articles(rw http.ResponseWriter, r *http.Request) {
+	rw.Header().Add("Content-Type", "application/json")
 
-	response := Articles{
-		Items: []Article{
-			{
-				UUID:        u.String(),
-				Cover:       "https://dummyimage.com/640x360/fff/aaa",
-				Title:       "this is a test title 3",
-				Body:        "</p>this is a paragraph</p>",
-				PublishedAt: time.Now(),
-				Author: Author{
-					Name:   "John Doe",
-					Avatar: "https://i.pravatar.cc/150",
-				},
-			},
-			{
-				UUID:        u.String(),
-				Cover:       "https://dummyimage.com/640x360/fff/aaa",
-				Title:       "this is a test title 3",
-				Body:        "</p>this is a paragraph</p>",
-				PublishedAt: time.Now(),
-				Author: Author{
-					Name:   "John Doe",
-					Avatar: "https://i.pravatar.cc/150",
-				},
-			},
-		},
-		Pagination: Pagination{
-			TotalPages:  2,
-			CurrentPage: 1,
-		},
+	request := &getarticles.Request{
+		Page: 1,
 	}
 
-	rw.Header().Add("Content-Type", "application/json")
+	response, _ := h.getArticlesUseCase.GetArticles(request)
+
 	rw.WriteHeader(http.StatusOK)
 	json.NewEncoder(rw).Encode(response)
 }
