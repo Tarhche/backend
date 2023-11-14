@@ -2,10 +2,13 @@ package articles
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
+	"strings"
 
 	getarticle "github.com/khanzadimahdi/testproject.git/application/article/getArticle"
 	getarticles "github.com/khanzadimahdi/testproject.git/application/article/getArticles"
+	"github.com/khanzadimahdi/testproject.git/domain"
 )
 
 func NewArticlesMux(
@@ -20,7 +23,7 @@ func NewArticlesMux(
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/articles", h.articles)
-	mux.HandleFunc("/article/", h.article)
+	mux.HandleFunc("/articles/", h.article)
 
 	return mux
 }
@@ -31,12 +34,25 @@ type handler struct {
 }
 
 func (h *handler) article(rw http.ResponseWriter, r *http.Request) {
-	rw.Header().Add("Content-Type", "application/json")
+	url := strings.TrimPrefix(r.URL.EscapedPath(), "/articles/")
+	url = strings.TrimSuffix(url, "/")
+	segments := strings.Split(url, "/")
 
-	response, _ := h.getArticleUseCase.GetArticle("")
+	var UUID string
+	if len(segments) > 0 {
+		UUID = segments[0]
+	}
 
-	rw.WriteHeader(http.StatusOK)
-	json.NewEncoder(rw).Encode(response)
+	response, err := h.getArticleUseCase.GetArticle(UUID)
+
+	switch true {
+	case errors.Is(err, domain.ErrNotExists):
+		rw.WriteHeader(http.StatusNotFound)
+	default:
+		rw.Header().Add("Content-Type", "application/json")
+		rw.WriteHeader(http.StatusOK)
+		json.NewEncoder(rw).Encode(response)
+	}
 }
 
 func (h *handler) articles(rw http.ResponseWriter, r *http.Request) {

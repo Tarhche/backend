@@ -2,15 +2,19 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
 	"path"
 	"sync"
 	"syscall"
+	"time"
 
+	"github.com/gofrs/uuid/v5"
 	getarticle "github.com/khanzadimahdi/testproject.git/application/article/getArticle"
 	getarticles "github.com/khanzadimahdi/testproject.git/application/article/getArticles"
+	"github.com/khanzadimahdi/testproject.git/domain/article"
 	"github.com/khanzadimahdi/testproject.git/infrastructure/console"
 	repository "github.com/khanzadimahdi/testproject.git/infrastructure/repository/memory"
 	"github.com/khanzadimahdi/testproject.git/presentation/commands"
@@ -30,9 +34,23 @@ func main() {
 }
 
 func httpHandler() http.Handler {
-	var datastore sync.Map
+	datastore := &sync.Map{}
 
-	articlesRepository := repository.NewArticlesRepository(&datastore)
+	// TODO: fake data provider. this loop should be removed.
+	for i := 0; i <= 10; i++ {
+		u, _ := uuid.NewV7()
+
+		datastore.Store(u.String(), article.Article{
+			UUID:  u.String(),
+			Cover: fmt.Sprintf("https://picsum.photos/536/354?rand=%d", time.Now().Nanosecond()),
+			Title: fmt.Sprintf("post title [%s]", u),
+			Body: fmt.Sprintf(`
+				Lorem ipsum is placeholder text commonly used in the graphic, print,
+				and publishing industries for previewing layouts and visual mockups. [%s]`, u),
+		})
+	}
+
+	articlesRepository := repository.NewArticlesRepository(datastore)
 
 	handler := articles.NewArticlesMux(
 		getarticle.NewUseCase(articlesRepository),

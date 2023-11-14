@@ -21,7 +21,10 @@ func (uc *UseCase) GetArticles(request *Request) (*GetArticlesResponse, error) {
 	}
 
 	currentPage := request.Page
-	offset := currentPage * limit
+	var offset uint = 0
+	if currentPage > 1 {
+		offset = currentPage * limit
+	}
 	totalPages := totalArticles / limit
 
 	a, err := uc.articlesRepository.GetAll(offset, limit)
