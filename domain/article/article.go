@@ -19,4 +19,6 @@ type Repository interface {
 	GetAll(offset uint, limit uint) ([]Article, error)
 	GetOne(UUID string) (Article, error)
 	Count() (uint, error)
+	Save(*Article) error
+	Delete(UUID string) (bool, error)
 }

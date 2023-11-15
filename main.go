@@ -37,7 +37,7 @@ func httpHandler() http.Handler {
 	datastore := &sync.Map{}
 
 	// TODO: fake data provider. this loop should be removed.
-	for i := 0; i <= 10; i++ {
+	for i := 0; i <= 1000; i++ {
 		u, _ := uuid.NewV7()
 
 		datastore.Store(u.String(), article.Article{

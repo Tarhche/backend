@@ -32,5 +32,5 @@ func (uc *UseCase) GetArticles(request *Request) (*GetArticlesResponse, error) {
 		return nil, err
 	}
 
-	return NewGetArticlesReponse(a, currentPage, totalPages), nil
+	return NewGetArticlesReponse(a, totalPages, currentPage), nil
 }
