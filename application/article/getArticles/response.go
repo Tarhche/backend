@@ -7,23 +7,27 @@ import (
 )
 
 type articleResponse struct {
-	UUID        string
-	Cover       string
-	Title       string
-	Body        string
-	PublishedAt time.Time
-	Author      struct {
-		Name   string
-		Avatar string
-	}
+	UUID        string    `json:"uuid"`
+	Cover       string    `json:"cover"`
+	Title       string    `json:"title"`
+	Body        string    `json:"body"`
+	PublishedAt time.Time `json:"published_at"`
+	Author      author    `json:"author"`
 }
 
 type GetArticlesResponse struct {
-	Items      []articleResponse
-	Pagination struct {
-		TotalPages  uint
-		CurrentPage uint
-	}
+	Items      []articleResponse `json:"items"`
+	Pagination pagination        `json:"pagination"`
+}
+
+type author struct {
+	Name   string `json:"name"`
+	Avatar string `json:"avatar"`
+}
+
+type pagination struct {
+	TotalPages  uint `json:"total_pages"`
+	CurrentPage uint `json:"current_page"`
 }
 
 func NewGetArticlesReponse(a []article.Article, totalPages, currentPage uint) *GetArticlesResponse {
@@ -42,10 +46,7 @@ func NewGetArticlesReponse(a []article.Article, totalPages, currentPage uint) *G
 
 	return &GetArticlesResponse{
 		Items: items,
-		Pagination: struct {
-			TotalPages  uint
-			CurrentPage uint
-		}{
+		Pagination: pagination{
 			TotalPages:  totalPages,
 			CurrentPage: currentPage,
 		},

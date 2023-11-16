@@ -20,5 +20,5 @@ type Repository interface {
 	GetOne(UUID string) (Article, error)
 	Count() (uint, error)
 	Save(*Article) error
-	Delete(UUID string) (bool, error)
+	Delete(UUID string) error
 }

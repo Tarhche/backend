@@ -15,7 +15,5 @@ func NewUseCase(articlesRepository article.Repository) *UseCase {
 }
 
 func (uc *UseCase) DeleteArticle(request Request) error {
-	_, err := uc.articlesRepository.Delete(request.ArticleUUID)
-
-	return err
+	return uc.articlesRepository.Delete(request.ArticleUUID)
 }

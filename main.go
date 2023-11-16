@@ -12,13 +12,17 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid/v5"
+	"github.com/julienschmidt/httprouter"
+	createarticle "github.com/khanzadimahdi/testproject.git/application/article/createArticle"
+	deletearticle "github.com/khanzadimahdi/testproject.git/application/article/deleteArticle"
 	getarticle "github.com/khanzadimahdi/testproject.git/application/article/getArticle"
 	getarticles "github.com/khanzadimahdi/testproject.git/application/article/getArticles"
-	"github.com/khanzadimahdi/testproject.git/domain/article"
+	updatearticle "github.com/khanzadimahdi/testproject.git/application/article/updateArticle"
+	domainarticle "github.com/khanzadimahdi/testproject.git/domain/article"
 	"github.com/khanzadimahdi/testproject.git/infrastructure/console"
 	repository "github.com/khanzadimahdi/testproject.git/infrastructure/repository/memory"
 	"github.com/khanzadimahdi/testproject.git/presentation/commands"
-	"github.com/khanzadimahdi/testproject.git/presentation/http/api/v1/articles"
+	articleapi "github.com/khanzadimahdi/testproject.git/presentation/http/api/article"
 )
 
 func main() {
@@ -40,7 +44,7 @@ func httpHandler() http.Handler {
 	for i := 0; i <= 1000; i++ {
 		u, _ := uuid.NewV7()
 
-		datastore.Store(u.String(), article.Article{
+		datastore.Store(u.String(), domainarticle.Article{
 			UUID:  u.String(),
 			Cover: fmt.Sprintf("https://picsum.photos/536/354?rand=%d", time.Now().Nanosecond()),
 			Title: fmt.Sprintf("post title [%s]", u),
@@ -52,10 +56,18 @@ func httpHandler() http.Handler {
 
 	articlesRepository := repository.NewArticlesRepository(datastore)
 
-	handler := articles.NewArticlesMux(
-		getarticle.NewUseCase(articlesRepository),
-		getarticles.NewUseCase(articlesRepository),
-	)
+	createArticleUsecase := createarticle.NewUseCase(articlesRepository)
+	deleteArticleUsecase := deletearticle.NewUseCase(articlesRepository)
+	getArticleUsecase := getarticle.NewUseCase(articlesRepository)
+	getArticlesUsecase := getarticles.NewUseCase(articlesRepository)
+	updateArticleUsecase := updatearticle.NewUseCase(articlesRepository)
 
-	return handler
+	router := httprouter.New()
+	router.Handler(http.MethodPost, "/api/articles", articleapi.NewCreateHandler(createArticleUsecase))
+	router.Handler(http.MethodDelete, "/api/articles/:uuid", articleapi.NewDeleteHandler(deleteArticleUsecase))
+	router.Handler(http.MethodGet, "/api/articles", articleapi.NewIndexHandler(getArticlesUsecase))
+	router.Handler(http.MethodGet, "/api/articles/:uuid", articleapi.NewShowHandler(getArticleUsecase))
+	router.Handler(http.MethodPut, "/api/articles", articleapi.NewUpdateHandler(updateArticleUsecase))
+
+	return router
 }
