@@ -1,4 +1,4 @@
-package updatearticle
+package updatefile
 
 import (
 	"github.com/khanzadimahdi/testproject.git/domain/article"
@@ -23,6 +23,7 @@ func (uc *UseCase) UpdateArticle(request Request) (*UpdateArticleResponse, error
 	}
 
 	article := article.Article{
+		UUID:  request.UUID,
 		Cover: request.Cover,
 		Title: request.Title,
 		Body:  request.Body,

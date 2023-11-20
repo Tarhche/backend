@@ -30,6 +30,8 @@ func (h *updateHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	switch true {
 	case errors.Is(err, domain.ErrNotExists):
 		rw.WriteHeader(http.StatusNotFound)
+	case err != nil:
+		rw.WriteHeader(http.StatusInternalServerError)
 	case len(validationErrors.ValidationErrors) > 0:
 		rw.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(rw).Encode(validationErrors)

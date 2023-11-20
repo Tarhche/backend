@@ -1,4 +1,4 @@
-package updatearticle
+package updatefile
 
 import (
 	"time"
@@ -7,6 +7,7 @@ import (
 type validationErrors map[string]string
 
 type Request struct {
+	UUID        string    `json:"uuid"`
 	Cover       string    `json:"cover"`
 	Title       string    `json:"title"`
 	Body        string    `json:"body"`

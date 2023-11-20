@@ -30,6 +30,8 @@ func (h *deleteHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	switch true {
 	case errors.Is(err, domain.ErrNotExists):
 		rw.WriteHeader(http.StatusNotFound)
+	case err != nil:
+		rw.WriteHeader(http.StatusInternalServerError)
 	default:
 		rw.WriteHeader(http.StatusOK)
 	}

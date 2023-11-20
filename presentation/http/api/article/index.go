@@ -2,6 +2,7 @@ package article
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
 	"unsafe"
@@ -20,8 +21,6 @@ func NewIndexHandler(getArticlesUseCase *getarticles.UseCase) *indexHandler {
 }
 
 func (h *indexHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
-	rw.Header().Add("Content-Type", "application/json")
-
 	var page uint = 1
 	if r.URL.Query().Has("page") {
 		parsedPage, err := strconv.ParseUint(r.URL.Query().Get("page"), 10, int(unsafe.Sizeof(page)))
@@ -34,8 +33,14 @@ func (h *indexHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		Page: page,
 	}
 
-	response, _ := h.getArticlesUseCase.GetArticles(request)
-
-	rw.WriteHeader(http.StatusOK)
-	json.NewEncoder(rw).Encode(response)
+	response, err := h.getArticlesUseCase.GetArticles(request)
+	switch true {
+	case err != nil:
+		rw.WriteHeader(http.StatusInternalServerError)
+	default:
+		rw.Header().Add("Content-Type", "application/json")
+		rw.WriteHeader(http.StatusOK)
+		log.Println(response)
+		json.NewEncoder(rw).Encode(response)
+	}
 }

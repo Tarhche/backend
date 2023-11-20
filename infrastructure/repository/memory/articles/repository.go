@@ -1,7 +1,6 @@
 package repository
 
 import (
-	"log"
 	"sync"
 
 	"github.com/gofrs/uuid/v5"
@@ -43,8 +42,6 @@ func (r *ArticlesRepository) GetAll(offset uint, limit uint) ([]article.Article,
 
 		return j < limit
 	})
-
-	log.Println(i, offset, j, limit)
 
 	return a, nil
 }

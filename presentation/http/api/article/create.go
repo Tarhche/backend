@@ -3,6 +3,7 @@ package article
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 
 	createarticle "github.com/khanzadimahdi/testproject.git/application/article/createArticle"
@@ -28,9 +29,13 @@ func (h *createHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 	validationErrors, err := h.createArticleUseCase.CreateArticle(request)
 
+	log.Println(err)
+
 	switch true {
 	case errors.Is(err, domain.ErrNotExists):
 		rw.WriteHeader(http.StatusNotFound)
+	case err != nil:
+		rw.WriteHeader(http.StatusInternalServerError)
 	case len(validationErrors.ValidationErrors) > 0:
 		rw.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(rw).Encode(validationErrors)

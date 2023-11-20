@@ -1,8 +1,6 @@
 package getarticles
 
 import (
-	"log"
-
 	"github.com/khanzadimahdi/testproject.git/domain/article"
 )
 
@@ -27,11 +25,10 @@ func (uc *UseCase) GetArticles(request *Request) (*GetArticlesResponse, error) {
 	currentPage := request.Page
 	var offset uint = 0
 	if currentPage > 0 {
-		offset = (currentPage-1) * limit
+		offset = (currentPage - 1) * limit
 	}
 
 	totalPages := totalArticles / limit
-	log.Println(totalArticles, limit, totalPages, offset)
 
 	if (totalPages * limit) != totalArticles {
 		totalPages++

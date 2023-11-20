@@ -28,6 +28,8 @@ func (h *showHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	switch true {
 	case errors.Is(err, domain.ErrNotExists):
 		rw.WriteHeader(http.StatusNotFound)
+	case err != nil:
+		rw.WriteHeader(http.StatusInternalServerError)
 	default:
 		rw.Header().Add("Content-Type", "application/json")
 		rw.WriteHeader(http.StatusOK)
