@@ -8,6 +8,7 @@ type Request struct {
 	Name       string
 	UserUUID   string
 	FileReader io.Reader
+	Size       int64
 }
 
 func (r *Request) Validate() (bool, validationErrors) {

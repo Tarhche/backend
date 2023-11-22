@@ -23,6 +23,7 @@ func (uc *UseCase) UpdateArticle(request Request) (*UpdateArticleResponse, error
 	}
 
 	article := article.Article{
+		UUID:  request.UUID,
 		Cover: request.Cover,
 		Title: request.Title,
 		Body:  request.Body,

@@ -3,7 +3,6 @@ package article
 import (
 	"encoding/json"
 	"errors"
-	"log"
 	"net/http"
 
 	createarticle "github.com/khanzadimahdi/testproject.git/application/article/createArticle"
@@ -28,8 +27,6 @@ func (h *createHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	}
 
 	validationErrors, err := h.createArticleUseCase.CreateArticle(request)
-
-	log.Println(err)
 
 	switch true {
 	case errors.Is(err, domain.ErrNotExists):

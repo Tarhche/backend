@@ -3,7 +3,6 @@ package files
 import (
 	"context"
 	"errors"
-	"log"
 	"time"
 
 	"github.com/gofrs/uuid/v5"
@@ -68,19 +67,17 @@ func (r *FilesRepository) Save(a *file.File) error {
 	}
 
 	update := FileBson{
-		UUID: a.UUID,
+		UUID:      a.UUID,
+		Name:      a.Name,
+		Size:      a.Size,
+		OwnerUUID: a.OwnerUUID,
+		CreatedAt: time.Now(),
 	}
 
 	upsert := true
-	result, err := r.collection.UpdateOne(ctx, bson.D{{Key: "_id", Value: a.UUID}}, SetWrapper{Set: update}, &options.UpdateOptions{
+	_, err := r.collection.UpdateOne(ctx, bson.D{{Key: "_id", Value: a.UUID}}, SetWrapper{Set: update}, &options.UpdateOptions{
 		Upsert: &upsert,
 	})
-
-	if err != nil {
-		log.Println(err)
-	} else {
-		log.Println(result.UpsertedCount)
-	}
 
 	return err
 }

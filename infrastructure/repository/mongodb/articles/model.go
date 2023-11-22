@@ -11,6 +11,8 @@ type ArticleBson struct {
 	Body        string    `bson:"body,omitempty"`
 	PublishedAt time.Time `bson:"published_at,omitempty"`
 	AuthorUUID  string    `bson:"author_uuid,omitempty"`
+	CreatedAt   time.Time `bson:"created_at"`
+	UpdatedAt   time.Time `bson:"updated_at"`
 }
 
 type SetWrapper struct {

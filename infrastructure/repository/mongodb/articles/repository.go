@@ -3,7 +3,6 @@ package articles
 import (
 	"context"
 	"errors"
-	"log"
 	"time"
 
 	"github.com/gofrs/uuid/v5"
@@ -133,18 +132,14 @@ func (r *ArticlesRepository) Save(a *article.Article) error {
 		Body:        a.Body,
 		PublishedAt: a.PublishedAt,
 		AuthorUUID:  a.Author.UUID,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
 	}
 
 	upsert := true
-	result, err := r.collection.UpdateOne(ctx, bson.D{{Key: "_id", Value: a.UUID}}, SetWrapper{Set: update}, &options.UpdateOptions{
+	_, err := r.collection.UpdateOne(ctx, bson.D{{Key: "_id", Value: a.UUID}}, SetWrapper{Set: update}, &options.UpdateOptions{
 		Upsert: &upsert,
 	})
-
-	if err != nil {
-		log.Println(err)
-	} else {
-		log.Println(result.UpsertedCount)
-	}
 
 	return err
 }

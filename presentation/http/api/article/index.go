@@ -2,7 +2,6 @@ package article
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 	"strconv"
 	"unsafe"
@@ -40,7 +39,6 @@ func (h *indexHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	default:
 		rw.Header().Add("Content-Type", "application/json")
 		rw.WriteHeader(http.StatusOK)
-		log.Println(response)
 		json.NewEncoder(rw).Encode(response)
 	}
 }

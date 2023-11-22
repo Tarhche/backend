@@ -1,19 +1,32 @@
 package deletefile
 
 import (
-	"github.com/khanzadimahdi/testproject.git/domain/article"
+	"context"
+
+	"github.com/khanzadimahdi/testproject.git/domain/file"
 )
 
 type UseCase struct {
-	articlesRepository article.Repository
+	filesRepository file.Repository
+	storage         file.Storage
 }
 
-func NewUseCase(articlesRepository article.Repository) *UseCase {
+func NewUseCase(filesRepository file.Repository, storage file.Storage) *UseCase {
 	return &UseCase{
-		articlesRepository: articlesRepository,
+		filesRepository: filesRepository,
+		storage:         storage,
 	}
 }
 
-func (uc *UseCase) DeleteArticle(request Request) error {
-	return uc.articlesRepository.Delete(request.ArticleUUID)
+func (uc *UseCase) DeleteFile(request Request) error {
+	file, err := uc.filesRepository.GetOne(request.FileUUID)
+	if err != nil {
+		return err
+	}
+
+	if err := uc.storage.Delete(context.Background(), file.Name); err != nil {
+		return err
+	}
+
+	return uc.filesRepository.Delete(file.UUID)
 }

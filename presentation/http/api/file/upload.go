@@ -2,6 +2,7 @@ package file
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 
 	uploadfile "github.com/khanzadimahdi/testproject.git/application/file/uploadFile"
@@ -33,9 +34,12 @@ func (h *createHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 	validationErrors, err := h.uploadFileUseCase.UploadFile(uploadfile.Request{
 		Name:       header.Filename,
-		FileReader: file,
 		UserUUID:   "018bd8ce-d886-777d-822d-e8ceeab26aff",
+		Size:       header.Size,
+		FileReader: file,
 	})
+
+	log.Println(validationErrors)
 
 	switch true {
 	case err != nil:
