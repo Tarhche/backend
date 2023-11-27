@@ -1,22 +1,36 @@
 package getfile
 
-import "github.com/khanzadimahdi/testproject.git/domain/article"
+import (
+	"context"
+	"io"
+
+	"github.com/khanzadimahdi/testproject.git/domain/file"
+)
 
 type UseCase struct {
-	articlesRepository article.Repository
+	filesRepository file.Repository
+	storage         file.Storage
 }
 
-func NewUseCase(articlesRepository article.Repository) *UseCase {
+func NewUseCase(filesRepository file.Repository, storage file.Storage) *UseCase {
 	return &UseCase{
-		articlesRepository: articlesRepository,
+		filesRepository: filesRepository,
+		storage:         storage,
 	}
 }
 
-func (uc *UseCase) GetArticle(UUID string) (*GetArticleResponse, error) {
-	a, err := uc.articlesRepository.GetOne(UUID)
+func (uc *UseCase) GetFile(UUID string, writer io.Writer) error {
+	file, err := uc.filesRepository.GetOne(UUID)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return NewGetArticleReponse(a), nil
+	reader, err := uc.storage.Read(context.Background(), file.Name)
+	if err != nil {
+		return err
+	}
+
+	_, err = io.Copy(writer, reader)
+
+	return err
 }

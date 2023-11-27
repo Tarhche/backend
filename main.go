@@ -17,8 +17,9 @@ import (
 	getarticle "github.com/khanzadimahdi/testproject.git/application/article/getArticle"
 	getarticles "github.com/khanzadimahdi/testproject.git/application/article/getArticles"
 	updatearticle "github.com/khanzadimahdi/testproject.git/application/article/updateArticle"
-	uploadfile "github.com/khanzadimahdi/testproject.git/application/file/uploadFile"
 	deletefile "github.com/khanzadimahdi/testproject.git/application/file/deleteFile"
+	getfile "github.com/khanzadimahdi/testproject.git/application/file/getFile"
+	uploadfile "github.com/khanzadimahdi/testproject.git/application/file/uploadFile"
 	"github.com/khanzadimahdi/testproject.git/domain/article"
 	"github.com/khanzadimahdi/testproject.git/infrastructure/console"
 	articlesrepository "github.com/khanzadimahdi/testproject.git/infrastructure/repository/mongodb/articles"
@@ -83,6 +84,7 @@ func httpHandler() http.Handler {
 	getArticleUsecase := getarticle.NewUseCase(articlesRepository)
 	getArticlesUsecase := getarticles.NewUseCase(articlesRepository)
 	updateArticleUsecase := updatearticle.NewUseCase(articlesRepository)
+	getFileUseCase := getfile.NewUseCase(filesRepository, fileStorage)
 	uploadFileUseCase := uploadfile.NewUseCase(filesRepository, fileStorage)
 	deleteFileUseCase := deletefile.NewUseCase(filesRepository, fileStorage)
 
@@ -98,7 +100,7 @@ func httpHandler() http.Handler {
 	// files
 	router.Handler(http.MethodPost, "/api/files", fileapi.NewUploadHandler(uploadFileUseCase))
 	router.Handler(http.MethodDelete, "/api/files/:uuid", fileapi.NewDeleteHandler(deleteFileUseCase))
-	// router.Handler(http.MethodGet, "/api/files/:uuid", fileapi.NewShowHandler(getArticleUsecase))
+	router.Handler(http.MethodGet, "/api/files/:uuid", fileapi.NewShowHandler(getFileUseCase))
 
 	return router
 }
