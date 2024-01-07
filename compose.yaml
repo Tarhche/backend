@@ -6,6 +6,9 @@ services:
       context: .
       dockerfile: Dockerfile
       target: production
+    depends_on:
+      - mongodb
+      - minio
     ports:
       - "8000:80"
     volumes:
@@ -22,6 +25,8 @@ services:
 
   mongodashboard:
     image: mongo-express
+    depends_on:
+      - mongodb
     ports:
       - "8081:8081"
     environment:
