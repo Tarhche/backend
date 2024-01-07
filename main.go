@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"os/signal"
@@ -17,16 +18,22 @@ import (
 	getarticle "github.com/khanzadimahdi/testproject.git/application/article/getArticle"
 	getarticles "github.com/khanzadimahdi/testproject.git/application/article/getArticles"
 	updatearticle "github.com/khanzadimahdi/testproject.git/application/article/updateArticle"
+	"github.com/khanzadimahdi/testproject.git/application/auth/login"
 	deletefile "github.com/khanzadimahdi/testproject.git/application/file/deleteFile"
 	getfile "github.com/khanzadimahdi/testproject.git/application/file/getFile"
 	uploadfile "github.com/khanzadimahdi/testproject.git/application/file/uploadFile"
 	"github.com/khanzadimahdi/testproject.git/domain/article"
+	"github.com/khanzadimahdi/testproject.git/domain/user"
 	"github.com/khanzadimahdi/testproject.git/infrastructure/console"
+	"github.com/khanzadimahdi/testproject.git/infrastructure/crypto/ecdsa"
+	"github.com/khanzadimahdi/testproject.git/infrastructure/jwt"
 	articlesrepository "github.com/khanzadimahdi/testproject.git/infrastructure/repository/mongodb/articles"
 	filesrepository "github.com/khanzadimahdi/testproject.git/infrastructure/repository/mongodb/files"
+	userrepository "github.com/khanzadimahdi/testproject.git/infrastructure/repository/mongodb/users"
 	"github.com/khanzadimahdi/testproject.git/infrastructure/storage/minio"
 	"github.com/khanzadimahdi/testproject.git/presentation/commands"
 	articleapi "github.com/khanzadimahdi/testproject.git/presentation/http/api/article"
+	"github.com/khanzadimahdi/testproject.git/presentation/http/api/auth"
 	fileapi "github.com/khanzadimahdi/testproject.git/presentation/http/api/file"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -79,6 +86,39 @@ func httpHandler() http.Handler {
 		})
 	}
 
+	userRepository := userrepository.NewUsersRepository(database)
+
+	u, _ := uuid.NewV7()
+	userRepository.Save(&user.User{
+		UUID:     u.String(),
+		Name:     "Mahdi Khanzadi",
+		Username: "mahdi.khanzadi",
+		Password: "123",
+	})
+
+	privateKeyData, err := ioutil.ReadFile("/app/key.pem")
+	if err != nil {
+		panic(err)
+	}
+
+	publicKeyData, err := ioutil.ReadFile("/app/key.pem.pub")
+	if err != nil {
+		panic(err)
+	}
+
+	privateKey, err := ecdsa.ParsePrivateKey(privateKeyData)
+	if err != nil {
+		panic(err)
+	}
+
+	publicKey, err := ecdsa.ParsePublicKey(publicKeyData)
+	if err != nil {
+		panic(err)
+	}
+
+	j := jwt.NewJWT(privateKey, publicKey)
+
+	loginUseCase := login.NewUseCase(userRepository, j)
 	createArticleUsecase := createarticle.NewUseCase(articlesRepository)
 	deleteArticleUsecase := deletearticle.NewUseCase(articlesRepository)
 	getArticleUsecase := getarticle.NewUseCase(articlesRepository)
@@ -89,6 +129,9 @@ func httpHandler() http.Handler {
 	deleteFileUseCase := deletefile.NewUseCase(filesRepository, fileStorage)
 
 	router := httprouter.New()
+
+	// auth
+	router.Handler(http.MethodPost, "/api/auth/login", auth.NewLoginHandler(loginUseCase))
 
 	// articles
 	router.Handler(http.MethodPost, "/api/articles", articleapi.NewCreateHandler(createArticleUsecase))

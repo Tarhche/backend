@@ -8,6 +8,8 @@ services:
       target: production
     ports:
       - "8000:80"
+    volumes:
+      - ./:/app
 
   mongodb:
     image: mongo
@@ -35,3 +37,8 @@ services:
       - MINIO_ROOT_USER=test_minio_username
       - MINIO_ROOT_PASSWORD=test_minio_password
     command: ["server", "/data", "--console-address", ":9001"]
+    volumes:
+      - minio:/data
+
+volumes:
+  minio:

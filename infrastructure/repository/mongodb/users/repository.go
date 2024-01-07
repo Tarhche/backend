@@ -38,8 +38,29 @@ func (r *UsersRepository) GetOne(UUID string) (user.User, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
 	defer cancel()
 
-	var a FileBson
+	var a UserBson
 	if err := r.collection.FindOne(ctx, bson.D{{Key: "_id", Value: UUID}}, nil).Decode(&a); err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			err = domain.ErrNotExists
+		}
+		return user.User{}, err
+	}
+
+	return user.User{
+		UUID:     a.UUID,
+		Name:     a.Name,
+		Avatar:   a.Avatar,
+		Username: a.Username,
+		Password: a.Password,
+	}, nil
+}
+
+func (r *UsersRepository) GetOneByUsername(username string) (user.User, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+	defer cancel()
+
+	var a UserBson
+	if err := r.collection.FindOne(ctx, bson.D{{Key: "username", Value: username}}, nil).Decode(&a); err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			err = domain.ErrNotExists
 		}

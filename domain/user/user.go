@@ -10,5 +10,6 @@ type User struct {
 
 type Repository interface {
 	GetOne(UUID string) (User, error)
+	GetOneByUsername(username string) (User, error)
 	Save(*User) error
 }

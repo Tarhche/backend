@@ -23,7 +23,7 @@ func TestUseCase_GetArticle(t *testing.T) {
 		}
 
 		if err != nil {
-			t.Error("expects an error")
+			t.Error("unexpected error")
 		}
 	})
 
