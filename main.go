@@ -35,6 +35,7 @@ import (
 	articleapi "github.com/khanzadimahdi/testproject.git/presentation/http/api/article"
 	"github.com/khanzadimahdi/testproject.git/presentation/http/api/auth"
 	fileapi "github.com/khanzadimahdi/testproject.git/presentation/http/api/file"
+	"github.com/khanzadimahdi/testproject.git/presentation/http/middleware"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -134,16 +135,16 @@ func httpHandler() http.Handler {
 	router.Handler(http.MethodPost, "/api/auth/login", auth.NewLoginHandler(loginUseCase))
 
 	// articles
-	router.Handler(http.MethodPost, "/api/articles", articleapi.NewCreateHandler(createArticleUsecase))
-	router.Handler(http.MethodDelete, "/api/articles/:uuid", articleapi.NewDeleteHandler(deleteArticleUsecase))
+	router.Handler(http.MethodPost, "/api/articles", middleware.NewAuthoriseMiddleware(articleapi.NewCreateHandler(createArticleUsecase), j, userRepository))
+	router.Handler(http.MethodDelete, "/api/articles/:uuid", middleware.NewAuthoriseMiddleware(articleapi.NewDeleteHandler(deleteArticleUsecase), j, userRepository))
 	router.Handler(http.MethodGet, "/api/articles", articleapi.NewIndexHandler(getArticlesUsecase))
 	router.Handler(http.MethodGet, "/api/articles/:uuid", articleapi.NewShowHandler(getArticleUsecase))
-	router.Handler(http.MethodPut, "/api/articles", articleapi.NewUpdateHandler(updateArticleUsecase))
+	router.Handler(http.MethodPut, "/api/articles", middleware.NewAuthoriseMiddleware(articleapi.NewUpdateHandler(updateArticleUsecase), j, userRepository))
 
 	// files
-	router.Handler(http.MethodPost, "/api/files", fileapi.NewUploadHandler(uploadFileUseCase))
-	router.Handler(http.MethodDelete, "/api/files/:uuid", fileapi.NewDeleteHandler(deleteFileUseCase))
+	router.Handler(http.MethodPost, "/api/files", middleware.NewAuthoriseMiddleware(fileapi.NewUploadHandler(uploadFileUseCase), j, userRepository))
+	router.Handler(http.MethodDelete, "/api/files/:uuid", middleware.NewAuthoriseMiddleware(fileapi.NewDeleteHandler(deleteFileUseCase), j, userRepository))
 	router.Handler(http.MethodGet, "/api/files/:uuid", fileapi.NewShowHandler(getFileUseCase))
 
-	return router
+	return middleware.NewRateLimitMiddleware(router, 60, 1*time.Minute)
 }

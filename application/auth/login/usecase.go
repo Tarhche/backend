@@ -3,6 +3,7 @@ package login
 import (
 	"time"
 
+	"github.com/khanzadimahdi/testproject.git/application/auth"
 	"github.com/khanzadimahdi/testproject.git/domain/user"
 	"github.com/khanzadimahdi/testproject.git/infrastructure/jwt"
 )
@@ -65,7 +66,7 @@ func (uc *UseCase) generateAccessToken(u user.User) (string, error) {
 	b.SetNotBefore(time.Now())
 	b.SetExpirationTime(time.Now().Add(15 * time.Minute))
 	b.SetIssuedAt(time.Now())
-	b.SetAudience([]string{"access"})
+	b.SetAudience([]string{auth.AccessToken})
 
 	return uc.JWT.Generate(b.Build())
 }
@@ -76,7 +77,7 @@ func (uc *UseCase) generateRefreshToken(u user.User) (string, error) {
 	b.SetNotBefore(time.Now())
 	b.SetExpirationTime(time.Now().Add(2 * 24 * time.Hour))
 	b.SetIssuedAt(time.Now())
-	b.SetAudience([]string{"refresh"})
+	b.SetAudience([]string{auth.RefreshToken})
 
 	return uc.JWT.Generate(b.Build())
 }

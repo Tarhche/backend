@@ -2,7 +2,6 @@ package file
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 
 	uploadfile "github.com/khanzadimahdi/testproject.git/application/file/uploadFile"
@@ -38,8 +37,6 @@ func (h *createHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		Size:       header.Size,
 		FileReader: file,
 	})
-
-	log.Println(validationErrors)
 
 	switch true {
 	case err != nil:

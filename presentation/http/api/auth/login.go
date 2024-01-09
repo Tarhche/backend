@@ -3,7 +3,6 @@ package auth
 import (
 	"encoding/json"
 	"errors"
-	"log"
 	"net/http"
 
 	"github.com/khanzadimahdi/testproject.git/application/auth/login"
@@ -28,7 +27,6 @@ func (h *loginHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	}
 
 	response, err := h.loginUseCase.Login(request)
-	log.Println("auth", response, err)
 	switch true {
 	case errors.Is(err, domain.ErrNotExists):
 		rw.WriteHeader(http.StatusNotFound)

@@ -2,17 +2,62 @@ package middleware
 
 import (
 	"net/http"
+
+	"github.com/khanzadimahdi/testproject.git/application/auth"
+	"github.com/khanzadimahdi/testproject.git/domain/user"
+	"github.com/khanzadimahdi/testproject.git/infrastructure/jwt"
 )
 
-type Authorize struct {
+type Authorise struct {
+	next           http.Handler
+	j              *jwt.JWT
+	userRepository user.Repository
 }
 
-var _ http.Handler = &Authorize{}
+var _ http.Handler = &Authorise{}
 
-func NewAuthorizeMiddleware() *Authorize {
-	return &Authorize{}
+func NewAuthoriseMiddleware(next http.Handler, j *jwt.JWT, userRepository user.Repository) *Authorise {
+	return &Authorise{
+		j:              j,
+		userRepository: userRepository,
+		next:           next,
+	}
 }
 
-func (a *Authorize) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
+func (a *Authorise) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
+	token := a.bearerToken(r)
+	claims, err := a.j.Verify(token)
+	if err != nil {
+		rw.WriteHeader(http.StatusUnauthorized)
+		return
+	}
 
+	if audiences, err := claims.GetAudience(); err != nil || len(audiences) == 0 || audiences[0] != auth.AccessToken {
+		rw.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	userUUID, err := claims.GetSubject()
+	if err != nil {
+		rw.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	user, err := a.userRepository.GetOne(userUUID)
+	if err != nil {
+		rw.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	a.next.ServeHTTP(rw, r.WithContext(auth.ToContext(r.Context(), &user)))
+}
+
+func (a *Authorise) bearerToken(r *http.Request) string {
+	offset := len("bearer ")
+	h := r.Header.Get("authorization")
+	if len(h) <= offset {
+		return ""
+	}
+
+	return (" " + h[offset:])[1:]
 }
