@@ -24,4 +24,5 @@ type Repository interface {
 	Count() (uint, error)
 	Save(*Article) (string, error)
 	Delete(UUID string) error
+	IncreaseView(uuid string, inc uint) error
 }

@@ -165,3 +165,16 @@ func (r *ArticlesRepository) Delete(UUID string) error {
 
 	return err
 }
+
+func (r *ArticlesRepository) IncreaseView(uuid string, inc uint) error {
+	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+	defer cancel()
+
+	_, err := r.collection.UpdateOne(
+		ctx,
+		bson.D{{Key: "_id", Value: uuid}},
+		bson.D{{Key: "$inc", Value: bson.D{{Key: "view_count", Value: inc}}}},
+	)
+
+	return err
+}

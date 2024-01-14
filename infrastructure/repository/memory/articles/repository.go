@@ -86,3 +86,8 @@ func (r *ArticlesRepository) Delete(UUID string) error {
 
 	return nil
 }
+
+func (r *ArticlesRepository) IncreaseView(uuid string, inc uint) error {
+
+	return nil
+}

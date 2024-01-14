@@ -18,5 +18,7 @@ func (uc *UseCase) GetArticle(UUID string) (*GetArticleResponse, error) {
 		return nil, err
 	}
 
+	defer uc.articleRepository.IncreaseView(a.UUID, 1)
+
 	return NewGetArticleReponse(a), nil
 }
