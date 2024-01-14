@@ -1,7 +1,7 @@
 package ecdsa
 
 import (
-	"io/ioutil"
+	"os"
 	"testing"
 )
 
@@ -10,12 +10,12 @@ func TestECDSA(t *testing.T) {
 	// - private key: openssl ecparam -name secp521r1 -genkey -noout -out key.pem
 	// - public key: openssl ec -in key.pem -pubout -out key.pem.pub
 
-	privKeyData, err := ioutil.ReadFile("testdata/key.pem")
+	privKeyData, err := os.ReadFile("testdata/key.pem")
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
 
-	pubKeyData, err := ioutil.ReadFile("testdata/key.pem.pub")
+	pubKeyData, err := os.ReadFile("testdata/key.pem.pub")
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}

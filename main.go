@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -105,12 +104,12 @@ func httpHandler() http.Handler {
 		Password: "123",
 	})
 
-	privateKeyData, err := ioutil.ReadFile("/app/key.pem")
+	privateKeyData, err := os.ReadFile("/app/key.pem")
 	if err != nil {
 		panic(err)
 	}
 
-	publicKeyData, err := ioutil.ReadFile("/app/key.pem.pub")
+	publicKeyData, err := os.ReadFile("/app/key.pem.pub")
 	if err != nil {
 		panic(err)
 	}
