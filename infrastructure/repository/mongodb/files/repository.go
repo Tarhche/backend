@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid/v5"
-	"github.com/khanzadimahdi/testproject.git/domain"
-	"github.com/khanzadimahdi/testproject.git/domain/file"
+	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/file"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -54,14 +54,14 @@ func (r *FilesRepository) GetOne(UUID string) (file.File, error) {
 	}, nil
 }
 
-func (r *FilesRepository) Save(a *file.File) error {
+func (r *FilesRepository) Save(a *file.File) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
 	defer cancel()
 
 	if len(a.UUID) == 0 {
 		UUID, err := uuid.NewV7()
 		if err != nil {
-			return err
+			return "", err
 		}
 		a.UUID = UUID.String()
 	}
@@ -75,11 +75,17 @@ func (r *FilesRepository) Save(a *file.File) error {
 	}
 
 	upsert := true
-	_, err := r.collection.UpdateOne(ctx, bson.D{{Key: "_id", Value: a.UUID}}, SetWrapper{Set: update}, &options.UpdateOptions{
-		Upsert: &upsert,
-	})
+	_, err := r.collection.UpdateOne(
+		ctx,
+		bson.D{{Key: "_id", Value: a.UUID}},
+		SetWrapper{Set: update},
+		&options.UpdateOptions{Upsert: &upsert},
+	)
+	if err != nil {
+		return "", err
+	}
 
-	return err
+	return a.UUID, nil
 }
 
 func (r *FilesRepository) Delete(UUID string) error {

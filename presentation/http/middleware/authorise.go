@@ -3,9 +3,9 @@ package middleware
 import (
 	"net/http"
 
-	"github.com/khanzadimahdi/testproject.git/application/auth"
-	"github.com/khanzadimahdi/testproject.git/domain/user"
-	"github.com/khanzadimahdi/testproject.git/infrastructure/jwt"
+	"github.com/khanzadimahdi/testproject/application/auth"
+	"github.com/khanzadimahdi/testproject/domain/user"
+	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
 )
 
 type Authorise struct {

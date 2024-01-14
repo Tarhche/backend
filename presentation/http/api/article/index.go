@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"unsafe"
 
-	getarticles "github.com/khanzadimahdi/testproject.git/application/article/getArticles"
+	getarticles "github.com/khanzadimahdi/testproject/application/article/getArticles"
 )
 
 type indexHandler struct {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -13,29 +14,36 @@ import (
 
 	"github.com/gofrs/uuid"
 	"github.com/julienschmidt/httprouter"
-	createarticle "github.com/khanzadimahdi/testproject.git/application/article/createArticle"
-	deletearticle "github.com/khanzadimahdi/testproject.git/application/article/deleteArticle"
-	getarticle "github.com/khanzadimahdi/testproject.git/application/article/getArticle"
-	getarticles "github.com/khanzadimahdi/testproject.git/application/article/getArticles"
-	updatearticle "github.com/khanzadimahdi/testproject.git/application/article/updateArticle"
-	"github.com/khanzadimahdi/testproject.git/application/auth/login"
-	deletefile "github.com/khanzadimahdi/testproject.git/application/file/deleteFile"
-	getfile "github.com/khanzadimahdi/testproject.git/application/file/getFile"
-	uploadfile "github.com/khanzadimahdi/testproject.git/application/file/uploadFile"
-	"github.com/khanzadimahdi/testproject.git/domain/article"
-	"github.com/khanzadimahdi/testproject.git/domain/user"
-	"github.com/khanzadimahdi/testproject.git/infrastructure/console"
-	"github.com/khanzadimahdi/testproject.git/infrastructure/crypto/ecdsa"
-	"github.com/khanzadimahdi/testproject.git/infrastructure/jwt"
-	articlesrepository "github.com/khanzadimahdi/testproject.git/infrastructure/repository/mongodb/articles"
-	filesrepository "github.com/khanzadimahdi/testproject.git/infrastructure/repository/mongodb/files"
-	userrepository "github.com/khanzadimahdi/testproject.git/infrastructure/repository/mongodb/users"
-	"github.com/khanzadimahdi/testproject.git/infrastructure/storage/minio"
-	"github.com/khanzadimahdi/testproject.git/presentation/commands"
-	articleapi "github.com/khanzadimahdi/testproject.git/presentation/http/api/article"
-	"github.com/khanzadimahdi/testproject.git/presentation/http/api/auth"
-	fileapi "github.com/khanzadimahdi/testproject.git/presentation/http/api/file"
-	"github.com/khanzadimahdi/testproject.git/presentation/http/middleware"
+	getArticle "github.com/khanzadimahdi/testproject/application/article/getArticle"
+	getArticles "github.com/khanzadimahdi/testproject/application/article/getArticles"
+	"github.com/khanzadimahdi/testproject/application/auth/login"
+	dashboardCreateArticle "github.com/khanzadimahdi/testproject/application/dashboard/article/createArticle"
+	dashboardDeleteArticle "github.com/khanzadimahdi/testproject/application/dashboard/article/deleteArticle"
+	dashboardGetArticle "github.com/khanzadimahdi/testproject/application/dashboard/article/getArticle"
+	dashboardGetArticles "github.com/khanzadimahdi/testproject/application/dashboard/article/getArticles"
+	dashboardUpdateArticle "github.com/khanzadimahdi/testproject/application/dashboard/article/updateArticle"
+	dashboardDeleteFile "github.com/khanzadimahdi/testproject/application/dashboard/file/deleteFile"
+	dashboardGetFile "github.com/khanzadimahdi/testproject/application/dashboard/file/getFile"
+	dashboardUploadFile "github.com/khanzadimahdi/testproject/application/dashboard/file/uploadFile"
+	getFile "github.com/khanzadimahdi/testproject/application/file/getFile"
+	"github.com/khanzadimahdi/testproject/application/home"
+	"github.com/khanzadimahdi/testproject/domain/article"
+	"github.com/khanzadimahdi/testproject/domain/user"
+	"github.com/khanzadimahdi/testproject/infrastructure/console"
+	"github.com/khanzadimahdi/testproject/infrastructure/crypto/ecdsa"
+	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
+	articlesrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/articles"
+	filesrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/files"
+	userrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/users"
+	"github.com/khanzadimahdi/testproject/infrastructure/storage/minio"
+	"github.com/khanzadimahdi/testproject/presentation/commands"
+	articleAPI "github.com/khanzadimahdi/testproject/presentation/http/api/article"
+	"github.com/khanzadimahdi/testproject/presentation/http/api/auth"
+	dashboardArticleAPI "github.com/khanzadimahdi/testproject/presentation/http/api/dashboard/article"
+	dashboardFileAPI "github.com/khanzadimahdi/testproject/presentation/http/api/dashboard/file"
+	fileAPI "github.com/khanzadimahdi/testproject/presentation/http/api/file"
+	homeapi "github.com/khanzadimahdi/testproject/presentation/http/api/home"
+	"github.com/khanzadimahdi/testproject/presentation/http/middleware"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -119,32 +127,49 @@ func httpHandler() http.Handler {
 
 	j := jwt.NewJWT(privateKey, publicKey)
 
-	loginUseCase := login.NewUseCase(userRepository, j)
-	createArticleUsecase := createarticle.NewUseCase(articlesRepository)
-	deleteArticleUsecase := deletearticle.NewUseCase(articlesRepository)
-	getArticleUsecase := getarticle.NewUseCase(articlesRepository)
-	getArticlesUsecase := getarticles.NewUseCase(articlesRepository)
-	updateArticleUsecase := updatearticle.NewUseCase(articlesRepository)
-	getFileUseCase := getfile.NewUseCase(filesRepository, fileStorage)
-	uploadFileUseCase := uploadfile.NewUseCase(filesRepository, fileStorage)
-	deleteFileUseCase := deletefile.NewUseCase(filesRepository, fileStorage)
+	homeUseCase := home.NewUseCase(articlesRepository)
 
 	router := httprouter.New()
+	log.SetFlags(log.LstdFlags | log.Llongfile)
+	loginUseCase := login.NewUseCase(userRepository, j)
+	getArticleUsecase := getArticle.NewUseCase(articlesRepository)
+	getArticlesUsecase := getArticles.NewUseCase(articlesRepository)
+	getFileUseCase := getFile.NewUseCase(filesRepository, fileStorage)
+
+	// home
+	router.Handler(http.MethodGet, "/api/home", homeapi.NewHomeHandler(homeUseCase))
 
 	// auth
 	router.Handler(http.MethodPost, "/api/auth/login", auth.NewLoginHandler(loginUseCase))
 
 	// articles
-	router.Handler(http.MethodPost, "/api/articles", middleware.NewAuthoriseMiddleware(articleapi.NewCreateHandler(createArticleUsecase), j, userRepository))
-	router.Handler(http.MethodDelete, "/api/articles/:uuid", middleware.NewAuthoriseMiddleware(articleapi.NewDeleteHandler(deleteArticleUsecase), j, userRepository))
-	router.Handler(http.MethodGet, "/api/articles", articleapi.NewIndexHandler(getArticlesUsecase))
-	router.Handler(http.MethodGet, "/api/articles/:uuid", articleapi.NewShowHandler(getArticleUsecase))
-	router.Handler(http.MethodPut, "/api/articles", middleware.NewAuthoriseMiddleware(articleapi.NewUpdateHandler(updateArticleUsecase), j, userRepository))
+	router.Handler(http.MethodGet, "/api/articles", articleAPI.NewIndexHandler(getArticlesUsecase))
+	router.Handler(http.MethodGet, "/api/articles/:uuid", articleAPI.NewShowHandler(getArticleUsecase))
 
 	// files
-	router.Handler(http.MethodPost, "/api/files", middleware.NewAuthoriseMiddleware(fileapi.NewUploadHandler(uploadFileUseCase), j, userRepository))
-	router.Handler(http.MethodDelete, "/api/files/:uuid", middleware.NewAuthoriseMiddleware(fileapi.NewDeleteHandler(deleteFileUseCase), j, userRepository))
-	router.Handler(http.MethodGet, "/api/files/:uuid", fileapi.NewShowHandler(getFileUseCase))
+	router.Handler(http.MethodGet, "/api/files/:uuid", fileAPI.NewShowHandler(getFileUseCase))
+
+	// -------------------- dashboard -------------------- //
+	dashboardCreateArticleUsecase := dashboardCreateArticle.NewUseCase(articlesRepository)
+	dashboardDeleteArticleUsecase := dashboardDeleteArticle.NewUseCase(articlesRepository)
+	dashboardGetArticleUsecase := dashboardGetArticle.NewUseCase(articlesRepository)
+	dashboardGetArticlesUsecase := dashboardGetArticles.NewUseCase(articlesRepository)
+	dashboardUpdateArticleUsecase := dashboardUpdateArticle.NewUseCase(articlesRepository)
+	dashboardGetFileUseCase := dashboardGetFile.NewUseCase(filesRepository, fileStorage)
+	dashboardUploadFileUseCase := dashboardUploadFile.NewUseCase(filesRepository, fileStorage)
+	dashboardDeleteFileUseCase := dashboardDeleteFile.NewUseCase(filesRepository, fileStorage)
+
+	// articles
+	router.Handler(http.MethodPost, "/api/dashboard/articles", middleware.NewAuthoriseMiddleware(dashboardArticleAPI.NewCreateHandler(dashboardCreateArticleUsecase), j, userRepository))
+	router.Handler(http.MethodDelete, "/api/dashboard/articles/:uuid", middleware.NewAuthoriseMiddleware(dashboardArticleAPI.NewDeleteHandler(dashboardDeleteArticleUsecase), j, userRepository))
+	router.Handler(http.MethodGet, "/api/dashboard/articles", middleware.NewAuthoriseMiddleware(dashboardArticleAPI.NewIndexHandler(dashboardGetArticlesUsecase), j, userRepository))
+	router.Handler(http.MethodGet, "/api/dashboard/articles/:uuid", middleware.NewAuthoriseMiddleware(dashboardArticleAPI.NewShowHandler(dashboardGetArticleUsecase), j, userRepository))
+	router.Handler(http.MethodPut, "/api/dashboard/articles/:uuid", middleware.NewAuthoriseMiddleware(dashboardArticleAPI.NewUpdateHandler(dashboardUpdateArticleUsecase), j, userRepository))
+
+	// files
+	router.Handler(http.MethodPost, "/api/dashboard/files", middleware.NewAuthoriseMiddleware(dashboardFileAPI.NewUploadHandler(dashboardUploadFileUseCase), j, userRepository))
+	router.Handler(http.MethodDelete, "/api/dashboard/files/:uuid", middleware.NewAuthoriseMiddleware(dashboardFileAPI.NewDeleteHandler(dashboardDeleteFileUseCase), j, userRepository))
+	router.Handler(http.MethodGet, "/api/dashboard/files/:uuid", middleware.NewAuthoriseMiddleware(dashboardFileAPI.NewShowHandler(dashboardGetFileUseCase), j, userRepository))
 
 	return middleware.NewRateLimitMiddleware(router, 60, 1*time.Minute)
 }

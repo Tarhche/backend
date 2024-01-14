@@ -4,9 +4,9 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/khanzadimahdi/testproject.git/domain/user"
-	"github.com/khanzadimahdi/testproject.git/infrastructure/crypto/ecdsa"
-	"github.com/khanzadimahdi/testproject.git/infrastructure/jwt"
+	"github.com/khanzadimahdi/testproject/domain/user"
+	"github.com/khanzadimahdi/testproject/infrastructure/crypto/ecdsa"
+	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
 )
 
 func TestUseCase_GetArticle(t *testing.T) {

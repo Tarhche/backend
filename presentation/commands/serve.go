@@ -7,7 +7,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/khanzadimahdi/testproject.git/infrastructure/console"
+	"github.com/khanzadimahdi/testproject/infrastructure/console"
 )
 
 const (

@@ -3,8 +3,8 @@ package repository
 import (
 	"sync"
 
-	"github.com/khanzadimahdi/testproject.git/domain"
-	"github.com/khanzadimahdi/testproject.git/domain/author"
+	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/author"
 )
 
 type AuthorsRepository struct {

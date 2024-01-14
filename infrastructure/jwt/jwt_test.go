@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/khanzadimahdi/testproject.git/infrastructure/crypto/ecdsa"
+	"github.com/khanzadimahdi/testproject/infrastructure/crypto/ecdsa"
 	"golang.org/x/exp/maps"
 )
 

@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/gofrs/uuid/v5"
-	"github.com/khanzadimahdi/testproject.git/domain/article"
+	"github.com/khanzadimahdi/testproject/domain/article"
 )
 
 func TestNewArticlesRepository(t *testing.T) {

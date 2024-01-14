@@ -3,14 +3,14 @@ package getarticles
 import (
 	"time"
 
-	"github.com/khanzadimahdi/testproject.git/domain/article"
+	"github.com/khanzadimahdi/testproject/domain/article"
 )
 
 type articleResponse struct {
 	UUID        string    `json:"uuid"`
 	Cover       string    `json:"cover"`
 	Title       string    `json:"title"`
-	Body        string    `json:"body"`
+	Excerpt     string    `json:"excerpt"`
 	PublishedAt time.Time `json:"published_at"`
 	Author      author    `json:"author"`
 }
@@ -37,7 +37,7 @@ func NewGetArticlesReponse(a []article.Article, totalPages, currentPage uint) *G
 		items[i].UUID = a[i].UUID
 		items[i].Cover = a[i].Cover
 		items[i].Title = a[i].Title
-		items[i].Body = a[i].Body
+		items[i].Excerpt = a[i].Excerpt
 		items[i].PublishedAt = a[i].PublishedAt
 
 		items[i].Author.Name = a[i].Author.Name

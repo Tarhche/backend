@@ -4,8 +4,8 @@ import (
 	"sync"
 
 	"github.com/gofrs/uuid/v5"
-	"github.com/khanzadimahdi/testproject.git/domain"
-	"github.com/khanzadimahdi/testproject.git/domain/article"
+	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/article"
 )
 
 type ArticlesRepository struct {
@@ -67,18 +67,18 @@ func (r *ArticlesRepository) Count() (uint, error) {
 	return c, nil
 }
 
-func (r *ArticlesRepository) Save(a *article.Article) error {
+func (r *ArticlesRepository) Save(a *article.Article) (string, error) {
 	if len(a.UUID) == 0 {
 		UUID, err := uuid.NewV7()
 		if err != nil {
-			return err
+			return "", err
 		}
 		a.UUID = UUID.String()
 	}
 
 	r.datastore.Store(a.UUID, *a)
 
-	return nil
+	return a.UUID, nil
 }
 
 func (r *ArticlesRepository) Delete(UUID string) error {

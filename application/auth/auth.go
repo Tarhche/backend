@@ -3,7 +3,7 @@ package auth
 import (
 	"context"
 
-	"github.com/khanzadimahdi/testproject.git/domain/user"
+	"github.com/khanzadimahdi/testproject/domain/user"
 )
 
 const (

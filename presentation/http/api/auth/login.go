@@ -5,8 +5,8 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/khanzadimahdi/testproject.git/application/auth/login"
-	"github.com/khanzadimahdi/testproject.git/domain"
+	"github.com/khanzadimahdi/testproject/application/auth/login"
+	"github.com/khanzadimahdi/testproject/domain"
 )
 
 type loginHandler struct {

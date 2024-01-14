@@ -16,7 +16,7 @@ type File struct {
 
 type Repository interface {
 	GetOne(UUID string) (File, error)
-	Save(*File) error
+	Save(*File) (string, error)
 	Delete(UUID string) error
 }
 

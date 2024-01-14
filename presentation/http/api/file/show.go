@@ -5,8 +5,8 @@ import (
 	"net/http"
 
 	"github.com/julienschmidt/httprouter"
-	"github.com/khanzadimahdi/testproject.git/application/file/getFile"
-	"github.com/khanzadimahdi/testproject.git/domain"
+	getfile "github.com/khanzadimahdi/testproject/application/file/getFile"
+	"github.com/khanzadimahdi/testproject/domain"
 )
 
 type showHandler struct {
