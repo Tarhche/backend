@@ -1,10 +1,21 @@
 version: "3.7"
 
 services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    depends_on:
+      - app
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+
   app:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.backend
       target: production
     depends_on:
       - mongodb

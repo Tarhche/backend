@@ -1,0 +1,9 @@
+FROM node:21.6-alpine3.18
+
+WORKDIR /app
+
+COPY frontend .
+
+RUN npm install
+
+CMD ["npm", "run", "dev", "--host"]

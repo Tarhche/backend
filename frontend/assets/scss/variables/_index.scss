@@ -1,0 +1,170 @@
+// Variables
+//
+// Variables should follow the `$component-state-property-size` formula for
+// consistent naming. Ex: $nav-link-disabled-color and $modal-content-box-shadow-xs.
+
+$white:    #fff !default;
+$gray-100: #f8f9fa !default;
+$gray-200: #e9ecef !default;
+$gray-300: #dee2e6 !default;
+$gray-400: #ced4da !default;
+$gray-500: #adb5bd !default;
+$gray-600: #6c757d !default;
+$gray-700: #495057 !default;
+$gray-800: #343a40 !default;
+$gray-900: #212529 !default;
+$black:    #000 !default;
+
+$grays: () !default;
+$grays: map-merge(
+(
+"100": $gray-100,
+"200": $gray-200,
+"300": $gray-300,
+"400": $gray-400,
+"500": $gray-500,
+"600": $gray-600,
+"700": $gray-700,
+"800": $gray-800,
+"900": $gray-900
+),
+ $grays
+);
+
+$blue:    #7832e2 !default;
+$indigo:  #502c6c !default;
+$purple:  #ad6edd !default;
+$pink:    #ff0266 !default;
+$red:     #ea2f65 !default;
+$orange:  #fbb500 !default;
+$yellow:  #ffde03 !default;
+$green:   #03a87c !default;
+$teal:    #09ebaf !default;
+$cyan:    #35bdff !default;
+$lila:    #b2a5e4 !default;
+$salmon:  #ff977a !default;
+$lightblue: #e8f3ec !default;
+
+
+$colors: () !default;
+$colors: map-merge(
+(
+"blue":       $blue,
+"indigo":     $indigo,
+"purple":     $purple,
+"pink":       $pink,
+"red":        $red,
+"orange":     $orange,
+"yellow":     $yellow,
+"green":      $green,
+"teal":       $teal,
+"cyan":       $cyan,
+"white":      $white,
+"gray":       $gray-600,
+"gray-dark":  $gray-800,
+"light-blue": $lightblue
+),
+$colors
+);
+
+$primary:       $green !default;
+$secondary:     $blue !default;
+$success:       $green !default;
+$info:          $teal !default;
+$warning:       $yellow !default;
+$danger:        $red !default;
+$light:         $gray-100 !default;
+$dark:          $gray-900 !default;
+$white:         $white !default;
+$lightblue:     $lightblue !default;
+
+
+$theme-colors: () !default;
+$theme-colors: map-merge(
+   (
+     "primary":    $primary,
+     "secondary":  $secondary,
+     "success":    $success,
+     "info":       $info,
+     "warning":    $warning,
+     "danger":     $danger,
+     "light":      $light,
+     "dark":       $dark,
+     "white":      $white,
+     "purple":     $purple,
+     "salmon":     $salmon,
+     "cyan":       $cyan,
+     "gray":       $gray-400,
+     "indigo":     $indigo,
+     "orange":     $orange,
+     "lightblue":  $lightblue
+   ),
+   $theme-colors
+ );
+
+$spacer: 1rem !default;
+$spacers: () !default;
+$spacers: map-merge(
+   (
+      0: 0,
+      1: ($spacer * .25),
+      2: ($spacer * .5),
+      3: $spacer,
+      4: ($spacer * 1.5),
+      5: ($spacer * 3),
+      6: ($spacer * 5),
+   ),
+   $spacers
+);
+
+$border-color:                $lightblue !default;
+$box-shadow-lg:               0 10px 25px 0 rgba($black,.3) !default;
+
+$font-family-sans-serif:      "Source Sans Pro", "Segoe UI", "Helvetica Neue", "Arial" !default;
+$font-secondary:              "Playfair Display", "Segoe UI", "Helvetica Neue", "Arial" !default;
+$font-size-base:              1rem !default; // Assumes the browser default, typically `16px`
+$font-size-lg:                ($font-size-base * 1.15) !default;
+$font-size-smaller:           ($font-size-base * 1) !default;
+$font-weight-light:           300 !default;
+$font-weight-normal:          400 !default;
+$font-weight-base:            $font-weight-normal !default;
+$line-height-base:            1.6 !default;
+$headings-font-family:        inherit !default;
+$headings-font-weight:        500 !default;
+$headings-line-height:        1.2 !default;
+$small-font-size:             85% !default;
+
+$input-btn-padding-y:         .45rem !default;
+$input-btn-padding-x:         1.2rem !default;
+$input-btn-padding-x-sm:       1rem !default;
+$input-btn-padding-y-lg:      .65rem !default;
+$input-btn-padding-x-lg:      2rem !default;
+
+$dropdown-item-padding-y:           .45rem !default;
+
+$nav-link-padding-y:                .8rem !default;
+$navbar-nav-link-padding-x:         .9rem !default;
+$navbar-dark-color:                 rgba($white, .85) !default;
+$navbar-dark-hover-color:           rgba($white, 1) !default;
+
+$pagination-padding-y:              .75rem !default;
+$pagination-padding-x:              1rem !default;
+
+$jumbotron-padding:                 2rem !default;
+$jumbotron-bg:                      $gray-200 !default;
+
+$card-border-color:                 $lightblue !default;
+
+$badge-font-size:                   84% !default;
+
+$alert-bg-level:                    0 !default;
+$alert-border-level:                0 !default;
+$alert-color-level:                 0 !default;
+
+// --------------------------------------- !!
+// Additional theme variables
+// --------------------------------------- !!
+
+// Buttons
+
+$round-radius:          30px !default;
