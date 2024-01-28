@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"path"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -60,18 +61,32 @@ func main() {
 }
 
 func httpHandler() http.Handler {
-	client, err := mongo.Connect(context.Background(), options.Client().ApplyURI("mongodb://test:test@mongodb:27017"))
+	uri := fmt.Sprintf(
+		"%s://%s:%s@%s:%s",
+		os.Getenv("MONGO_SCHEME"),
+		os.Getenv("MONGO_USERNAME"),
+		os.Getenv("MONGO_PASSWORD"),
+		os.Getenv("MONGO_HOST"),
+		os.Getenv("MONGO_PORT"),
+	)
+
+	client, err := mongo.Connect(context.Background(), options.Client().ApplyURI(uri))
 	if err != nil {
 		panic(err)
 	}
-	database := client.Database("blog")
+	database := client.Database(os.Getenv("MONGO_DATABASE_NAME"))
+
+	useSSL, err := strconv.ParseBool(os.Getenv("S3_USE_SSL"))
+	if err != nil {
+		panic(err)
+	}
 
 	fileStorage, err := minio.New(minio.Options{
 		Endpoint:   "minio:9000",
-		AccessKey:  "A0o5qAgFQ80j8B18ZvD2",
-		SecretKey:  "7RM2qqzBvmpQR78euAHt5k0UIOnNb9y5L9DtJaYT",
-		UseSSL:     false,
-		BucketName: "blog",
+		AccessKey:  os.Getenv("S3_ACCESS_KEY"),
+		SecretKey:  os.Getenv("S3_SECRET_KEY"),
+		UseSSL:     useSSL,
+		BucketName: os.Getenv("S3_BUCKET_NAME"),
 	})
 
 	if err != nil {
@@ -104,27 +119,14 @@ func httpHandler() http.Handler {
 		Password: "123",
 	})
 
-	privateKeyData, err := os.ReadFile("/app/key.pem")
-	if err != nil {
-		panic(err)
-	}
-
-	publicKeyData, err := os.ReadFile("/app/key.pem.pub")
-	if err != nil {
-		panic(err)
-	}
+	privateKeyData := []byte(os.Getenv("PRIVATE_KEY"))
 
 	privateKey, err := ecdsa.ParsePrivateKey(privateKeyData)
 	if err != nil {
 		panic(err)
 	}
 
-	publicKey, err := ecdsa.ParsePublicKey(publicKeyData)
-	if err != nil {
-		panic(err)
-	}
-
-	j := jwt.NewJWT(privateKey, publicKey)
+	j := jwt.NewJWT(privateKey, privateKey.Public())
 
 	homeUseCase := home.NewUseCase(articlesRepository)
 

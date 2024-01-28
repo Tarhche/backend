@@ -15,4 +15,6 @@ FROM alpine:latest as production
 
 COPY --from=build /dist /usr/bin
 
+EXPOSE 80
+
 CMD ["app", "serve", "-port=80"]
