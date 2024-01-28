@@ -42,7 +42,7 @@
     </div>
 </template>
 
-<style>
+<style scoped>
     .img, .login-wrap {
         width: 50%;
     }
