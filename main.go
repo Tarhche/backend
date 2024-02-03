@@ -16,6 +16,7 @@ import (
 	"github.com/julienschmidt/httprouter"
 	getArticle "github.com/khanzadimahdi/testproject/application/article/getArticle"
 	getArticles "github.com/khanzadimahdi/testproject/application/article/getArticles"
+	"github.com/khanzadimahdi/testproject/application/article/getArticlesByHashtag"
 	"github.com/khanzadimahdi/testproject/application/auth/login"
 	dashboardCreateArticle "github.com/khanzadimahdi/testproject/application/dashboard/article/createArticle"
 	dashboardDeleteArticle "github.com/khanzadimahdi/testproject/application/dashboard/article/deleteArticle"
@@ -49,6 +50,7 @@ import (
 	dashboardElementAPI "github.com/khanzadimahdi/testproject/presentation/http/api/dashboard/element"
 	dashboardFileAPI "github.com/khanzadimahdi/testproject/presentation/http/api/dashboard/file"
 	fileAPI "github.com/khanzadimahdi/testproject/presentation/http/api/file"
+	hashtagAPI "github.com/khanzadimahdi/testproject/presentation/http/api/hashtag"
 	homeapi "github.com/khanzadimahdi/testproject/presentation/http/api/home"
 	"github.com/khanzadimahdi/testproject/presentation/http/middleware"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -143,6 +145,7 @@ func httpHandler() http.Handler {
 	loginUseCase := login.NewUseCase(userRepository, j)
 	getArticleUsecase := getArticle.NewUseCase(articlesRepository)
 	getArticlesUsecase := getArticles.NewUseCase(articlesRepository)
+	getArticlesByHashtagUseCase := getArticlesByHashtag.NewUseCase(articlesRepository)
 	getFileUseCase := getFile.NewUseCase(filesRepository, fileStorage)
 
 	// home
@@ -154,6 +157,9 @@ func httpHandler() http.Handler {
 	// articles
 	router.Handler(http.MethodGet, "/api/articles", articleAPI.NewIndexHandler(getArticlesUsecase))
 	router.Handler(http.MethodGet, "/api/articles/:uuid", articleAPI.NewShowHandler(getArticleUsecase))
+
+	// hashtags
+	router.Handler(http.MethodGet, "/api/hashtags/:hashtag", hashtagAPI.NewShowHandler(getArticlesByHashtagUseCase))
 
 	// files
 	router.Handler(http.MethodGet, "/api/files/:uuid", fileAPI.NewShowHandler(getFileUseCase))

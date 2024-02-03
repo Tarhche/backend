@@ -46,6 +46,10 @@ func (r *ArticlesRepository) GetAll(offset uint, limit uint) ([]article.Article,
 	return a, nil
 }
 
+func (r *ArticlesRepository) GetByHashtag(hashtags []string, offset uint, limit uint) ([]article.Article, error) {
+	return nil, nil
+}
+
 func (r *ArticlesRepository) GetOne(UUID string) (article.Article, error) {
 	a, ok := r.datastore.Load(UUID)
 	if !ok {

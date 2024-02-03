@@ -24,6 +24,9 @@ type author struct {
 }
 
 func NewGetArticleReponse(a article.Article) *GetArticleResponse {
+	tags := make([]string, len(a.Tags))
+	copy(tags, a.Tags)
+
 	return &GetArticleResponse{
 		UUID:        a.UUID,
 		Cover:       a.Cover,
@@ -35,7 +38,7 @@ func NewGetArticleReponse(a article.Article) *GetArticleResponse {
 			Name:   a.Author.Name,
 			Avatar: a.Author.Avatar,
 		},
-		Tags:      a.Tags,
+		Tags:      tags,
 		ViewCount: a.ViewCount,
 	}
 }

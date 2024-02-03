@@ -79,6 +79,52 @@ func (r *ArticlesRepository) GetAll(offset uint, limit uint) ([]article.Article,
 	return items, nil
 }
 
+func (r *ArticlesRepository) GetByHashtag(hashtags []string, offset uint, limit uint) ([]article.Article, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+	defer cancel()
+
+	o := int64(offset)
+	l := int64(limit)
+	desc := bson.D{{Key: "_id", Value: -1}}
+
+	filter := bson.M{"tags": bson.M{"$in": hashtags}}
+
+	cur, err := r.collection.Find(ctx, filter, &options.FindOptions{
+		Skip:  &o,
+		Limit: &l,
+		Sort:  desc,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	items := make([]article.Article, 0, limit)
+	for cur.Next(ctx) {
+		var a ArticleBson
+
+		if err := cur.Decode(&a); err != nil {
+			return nil, err
+		}
+		items = append(items, article.Article{
+			UUID:        a.UUID,
+			Cover:       a.Cover,
+			Title:       a.Title,
+			Body:        a.Body,
+			PublishedAt: a.PublishedAt,
+			Author: author.Author{
+				UUID: a.AuthorUUID,
+			},
+		})
+	}
+
+	if err := cur.Err(); err != nil {
+		return nil, err
+	}
+
+	return items, nil
+}
+
 func (r *ArticlesRepository) GetOne(UUID string) (article.Article, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
 	defer cancel()

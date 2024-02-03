@@ -21,6 +21,7 @@ type Article struct {
 type Repository interface {
 	GetAll(offset uint, limit uint) ([]Article, error)
 	GetOne(UUID string) (Article, error)
+	GetByHashtag(hashtags []string, offset uint, limit uint) ([]Article, error)
 	Count() (uint, error)
 	Save(*Article) (string, error)
 	Delete(UUID string) error
