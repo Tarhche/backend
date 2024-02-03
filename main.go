@@ -22,6 +22,11 @@ import (
 	dashboardGetArticle "github.com/khanzadimahdi/testproject/application/dashboard/article/getArticle"
 	dashboardGetArticles "github.com/khanzadimahdi/testproject/application/dashboard/article/getArticles"
 	dashboardUpdateArticle "github.com/khanzadimahdi/testproject/application/dashboard/article/updateArticle"
+	dashboardCreateElement "github.com/khanzadimahdi/testproject/application/dashboard/element/createElement"
+	dashboardDeleteElement "github.com/khanzadimahdi/testproject/application/dashboard/element/deleteElement"
+	dashboardGetElement "github.com/khanzadimahdi/testproject/application/dashboard/element/getElement"
+	dashboardGetElements "github.com/khanzadimahdi/testproject/application/dashboard/element/getElements"
+	dashboardUpdateElement "github.com/khanzadimahdi/testproject/application/dashboard/element/updateElement"
 	dashboardDeleteFile "github.com/khanzadimahdi/testproject/application/dashboard/file/deleteFile"
 	dashboardGetFile "github.com/khanzadimahdi/testproject/application/dashboard/file/getFile"
 	dashboardUploadFile "github.com/khanzadimahdi/testproject/application/dashboard/file/uploadFile"
@@ -33,6 +38,7 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/ecdsa"
 	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
 	articlesrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/articles"
+	elementsrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/elements"
 	filesrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/files"
 	userrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/users"
 	"github.com/khanzadimahdi/testproject/infrastructure/storage/minio"
@@ -40,6 +46,7 @@ import (
 	articleAPI "github.com/khanzadimahdi/testproject/presentation/http/api/article"
 	"github.com/khanzadimahdi/testproject/presentation/http/api/auth"
 	dashboardArticleAPI "github.com/khanzadimahdi/testproject/presentation/http/api/dashboard/article"
+	dashboardElementAPI "github.com/khanzadimahdi/testproject/presentation/http/api/dashboard/element"
 	dashboardFileAPI "github.com/khanzadimahdi/testproject/presentation/http/api/dashboard/file"
 	fileAPI "github.com/khanzadimahdi/testproject/presentation/http/api/file"
 	homeapi "github.com/khanzadimahdi/testproject/presentation/http/api/home"
@@ -95,6 +102,7 @@ func httpHandler() http.Handler {
 
 	articlesRepository := articlesrepository.NewArticlesRepository(database)
 	filesRepository := filesrepository.NewFilesRepository(database)
+	elementsRepository := elementsrepository.NewElementsRepository(database)
 
 	for i := 0; i <= 1000; i++ {
 		u, _ := uuid.NewV7()
@@ -160,6 +168,12 @@ func httpHandler() http.Handler {
 	dashboardUploadFileUseCase := dashboardUploadFile.NewUseCase(filesRepository, fileStorage)
 	dashboardDeleteFileUseCase := dashboardDeleteFile.NewUseCase(filesRepository, fileStorage)
 
+	dashboardCreateElementUsecase := dashboardCreateElement.NewUseCase(elementsRepository)
+	dashboardDeleteElementUsecase := dashboardDeleteElement.NewUseCase(elementsRepository)
+	dashboardGetElementUsecase := dashboardGetElement.NewUseCase(elementsRepository)
+	dashboardGetElementsUsecase := dashboardGetElements.NewUseCase(elementsRepository)
+	dashboardUpdateElementUsecase := dashboardUpdateElement.NewUseCase(elementsRepository)
+
 	// articles
 	router.Handler(http.MethodPost, "/api/dashboard/articles", middleware.NewAuthoriseMiddleware(dashboardArticleAPI.NewCreateHandler(dashboardCreateArticleUsecase), j, userRepository))
 	router.Handler(http.MethodDelete, "/api/dashboard/articles/:uuid", middleware.NewAuthoriseMiddleware(dashboardArticleAPI.NewDeleteHandler(dashboardDeleteArticleUsecase), j, userRepository))
@@ -171,6 +185,13 @@ func httpHandler() http.Handler {
 	router.Handler(http.MethodPost, "/api/dashboard/files", middleware.NewAuthoriseMiddleware(dashboardFileAPI.NewUploadHandler(dashboardUploadFileUseCase), j, userRepository))
 	router.Handler(http.MethodDelete, "/api/dashboard/files/:uuid", middleware.NewAuthoriseMiddleware(dashboardFileAPI.NewDeleteHandler(dashboardDeleteFileUseCase), j, userRepository))
 	router.Handler(http.MethodGet, "/api/dashboard/files/:uuid", middleware.NewAuthoriseMiddleware(dashboardFileAPI.NewShowHandler(dashboardGetFileUseCase), j, userRepository))
+
+	// elements
+	router.Handler(http.MethodPost, "/api/dashboard/elements", middleware.NewAuthoriseMiddleware(dashboardElementAPI.NewCreateHandler(dashboardCreateElementUsecase), j, userRepository))
+	router.Handler(http.MethodDelete, "/api/dashboard/elements/:uuid", middleware.NewAuthoriseMiddleware(dashboardElementAPI.NewDeleteHandler(dashboardDeleteElementUsecase), j, userRepository))
+	router.Handler(http.MethodGet, "/api/dashboard/elements", middleware.NewAuthoriseMiddleware(dashboardElementAPI.NewIndexHandler(dashboardGetElementsUsecase), j, userRepository))
+	router.Handler(http.MethodGet, "/api/dashboard/elements/:uuid", middleware.NewAuthoriseMiddleware(dashboardElementAPI.NewShowHandler(dashboardGetElementUsecase), j, userRepository))
+	router.Handler(http.MethodPut, "/api/dashboard/elements/:uuid", middleware.NewAuthoriseMiddleware(dashboardElementAPI.NewUpdateHandler(dashboardUpdateElementUsecase), j, userRepository))
 
 	return middleware.NewCORSMiddleware(middleware.NewRateLimitMiddleware(router, 60, 1*time.Minute))
 }

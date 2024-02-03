@@ -1,7 +1,7 @@
 <script setup>
     const url = useApiUrlResolver().resolve(`api/home`)
     const { pending, data } = await useFetch(url, {
-        pick: ['featured', 'all', 'popular']        
+        pick: ['featured', 'all', 'popular']
     });
 </script>
 
