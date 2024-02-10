@@ -143,7 +143,7 @@ func httpHandler() http.Handler {
 	router := httprouter.New()
 	log.SetFlags(log.LstdFlags | log.Llongfile)
 	loginUseCase := login.NewUseCase(userRepository, j)
-	getArticleUsecase := getArticle.NewUseCase(articlesRepository)
+	getArticleUsecase := getArticle.NewUseCase(articlesRepository, elementsRepository)
 	getArticlesUsecase := getArticles.NewUseCase(articlesRepository)
 	getArticlesByHashtagUseCase := getArticlesByHashtag.NewUseCase(articlesRepository)
 	getFileUseCase := getFile.NewUseCase(filesRepository, fileStorage)

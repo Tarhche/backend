@@ -5,16 +5,18 @@ import (
 	"testing"
 
 	"github.com/khanzadimahdi/testproject/domain/article"
+	"github.com/khanzadimahdi/testproject/domain/element"
 )
 
 func TestUseCase_GetArticle(t *testing.T) {
 	t.Run("returns an article", func(t *testing.T) {
-		repository := MockArticlesRepository{}
+		articlesRepository := MockArticlesRepository{}
+		elementsRepository := MockElementsRepository{}
 
-		usecase := NewUseCase(&repository)
+		usecase := NewUseCase(&articlesRepository, &elementsRepository)
 		response, err := usecase.GetArticle("test-uuid")
 
-		if repository.GetOneCount != 1 {
+		if articlesRepository.GetOneCount != 1 {
 			t.Error("unexpected number of calls")
 		}
 
@@ -28,14 +30,16 @@ func TestUseCase_GetArticle(t *testing.T) {
 	})
 
 	t.Run("returns an error", func(t *testing.T) {
-		repository := MockArticlesRepository{
+		articlesRepository := MockArticlesRepository{
 			GetOneErr: errors.New("article not found"),
 		}
 
-		usecase := NewUseCase(&repository)
+		elementsRepository := MockElementsRepository{}
+
+		usecase := NewUseCase(&articlesRepository, &elementsRepository)
 		response, err := usecase.GetArticle("test-uuid")
 
-		if repository.GetOneCount != 1 {
+		if articlesRepository.GetOneCount != 1 {
 			t.Error("unexpected number of calls")
 		}
 
@@ -64,4 +68,21 @@ func (r *MockArticlesRepository) GetOne(UUID string) (article.Article, error) {
 	}
 
 	return article.Article{}, nil
+}
+
+type MockElementsRepository struct {
+	element.Repository
+
+	GetByVenuesCount uint
+	GetByVenuesErr   error
+}
+
+func (r *MockElementsRepository) GetByVenues(venues []string) ([]element.Element, error) {
+	r.GetByVenuesCount++
+
+	if r.GetByVenuesErr != nil {
+		return nil, r.GetByVenuesErr
+	}
+
+	return []element.Element{}, nil
 }

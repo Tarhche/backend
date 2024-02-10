@@ -80,7 +80,7 @@ func (r *ElementsRepository) GetByVenues(venues []string) ([]element.Element, er
 	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
 	defer cancel()
 
-	filter := bson.M{"tags": bson.M{"$in": venues}}
+	filter := bson.M{"venues": bson.M{"$in": venues}}
 	cur, err := r.collection.Find(ctx, filter, &options.FindOptions{})
 
 	if err != nil {
