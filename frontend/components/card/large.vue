@@ -1,12 +1,12 @@
-<script>
-    export default {
-        props: ['cover', 'href', 'title', 'excerpt', 'publishedAt']
-    }
+<script setup>
+    const props = defineProps(["cover", "href", "title", "excerpt", "publishedAt"])
+    const {cover, href, title, excerpt, publishedAt} = props
+    const coverUrl = cover ? filesUrlResolver().resolve(cover) : null
 </script>
 
 <template>
     <div class="card border-0 mb-4 box-shadow h-xl-300">              
-        <div :style="{backgroundImage: cover, height: '150px', backgroundSize: 'cover', backgroundRepeat: 'no-repeat'}"></div>               
+        <div :style="{backgroundImage: `url(${coverUrl})`, height: '150px', backgroundSize: 'cover', backgroundRepeat: 'no-repeat'}"></div>               
         <div class="card-body px-0 pb-0 d-flex flex-column align-items-start">
             <h2 class="h4 fw-bold">
                 <a class="text-dark" :href="href">{{ title }}</a>

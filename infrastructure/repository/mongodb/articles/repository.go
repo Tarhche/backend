@@ -53,6 +53,8 @@ func (r *ArticlesRepository) GetAll(offset uint, limit uint) ([]article.Article,
 		return nil, err
 	}
 
+	defer cur.Close(ctx)
+
 	items := make([]article.Article, 0, limit)
 	for cur.Next(ctx) {
 		var a ArticleBson
@@ -64,7 +66,98 @@ func (r *ArticlesRepository) GetAll(offset uint, limit uint) ([]article.Article,
 			UUID:        a.UUID,
 			Cover:       a.Cover,
 			Title:       a.Title,
+			Excerpt:     a.Excerpt,
+			Tags:        a.Tags,
+			PublishedAt: a.PublishedAt,
+			Author: author.Author{
+				UUID: a.AuthorUUID,
+			},
+		})
+	}
+
+	if err := cur.Err(); err != nil {
+		return nil, err
+	}
+
+	return items, nil
+}
+
+func (r *ArticlesRepository) GetByUUIDs(UUIDs []string) ([]article.Article, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+	defer cancel()
+
+	desc := bson.D{{Key: "_id", Value: -1}}
+	filter := bson.M{"_id": bson.M{"$in": UUIDs}}
+
+	cur, err := r.collection.Find(ctx, filter, &options.FindOptions{
+		Sort: desc,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	defer cur.Close(ctx)
+
+	items := make([]article.Article, 0, len(UUIDs))
+	for cur.Next(ctx) {
+		var a ArticleBson
+
+		if err := cur.Decode(&a); err != nil {
+			return nil, err
+		}
+		items = append(items, article.Article{
+			UUID:        a.UUID,
+			Cover:       a.Cover,
+			Title:       a.Title,
 			Body:        a.Body,
+			Excerpt:     a.Excerpt,
+			Tags:        a.Tags,
+			PublishedAt: a.PublishedAt,
+			Author: author.Author{
+				UUID: a.AuthorUUID,
+			},
+		})
+	}
+
+	if err := cur.Err(); err != nil {
+		return nil, err
+	}
+
+	return items, nil
+}
+
+func (r *ArticlesRepository) GetMostViewed(limit uint) ([]article.Article, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+	defer cancel()
+
+	l := int64(limit)
+	desc := bson.D{{Key: "view_count", Value: -1}}
+
+	cur, err := r.collection.Find(ctx, bson.D{}, &options.FindOptions{
+		Limit: &l,
+		Sort:  desc,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	defer cur.Close(ctx)
+
+	items := make([]article.Article, 0, limit)
+	for cur.Next(ctx) {
+		var a ArticleBson
+
+		if err := cur.Decode(&a); err != nil {
+			return nil, err
+		}
+		items = append(items, article.Article{
+			UUID:        a.UUID,
+			Cover:       a.Cover,
+			Title:       a.Title,
+			Excerpt:     a.Excerpt,
+			Tags:        a.Tags,
 			PublishedAt: a.PublishedAt,
 			Author: author.Author{
 				UUID: a.AuthorUUID,
@@ -99,6 +192,8 @@ func (r *ArticlesRepository) GetByHashtag(hashtags []string, offset uint, limit 
 		return nil, err
 	}
 
+	defer cur.Close(ctx)
+
 	items := make([]article.Article, 0, limit)
 	for cur.Next(ctx) {
 		var a ArticleBson
@@ -110,7 +205,8 @@ func (r *ArticlesRepository) GetByHashtag(hashtags []string, offset uint, limit 
 			UUID:        a.UUID,
 			Cover:       a.Cover,
 			Title:       a.Title,
-			Body:        a.Body,
+			Excerpt:     a.Excerpt,
+			Tags:        a.Tags,
 			PublishedAt: a.PublishedAt,
 			Author: author.Author{
 				UUID: a.AuthorUUID,

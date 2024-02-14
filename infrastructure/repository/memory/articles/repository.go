@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"slices"
 	"sync"
 
 	"github.com/gofrs/uuid/v5"
@@ -44,6 +45,24 @@ func (r *ArticlesRepository) GetAll(offset uint, limit uint) ([]article.Article,
 	})
 
 	return a, nil
+}
+
+func (r *ArticlesRepository) GetByUUIDs(UUIDs []string) ([]article.Article, error) {
+	a := make([]article.Article, 0, len(UUIDs))
+
+	r.datastore.Range(func(key, value any) bool {
+		if v := value.(article.Article); slices.Contains(UUIDs, v.UUID) {
+			a = append(a, value.(article.Article))
+		}
+
+		return true
+	})
+
+	return a, nil
+}
+
+func (r *ArticlesRepository) GetMostViewed(limit uint) ([]article.Article, error) {
+	return nil, nil
 }
 
 func (r *ArticlesRepository) GetByHashtag(hashtags []string, offset uint, limit uint) ([]article.Article, error) {

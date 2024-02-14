@@ -3,7 +3,6 @@ package minio
 import (
 	"context"
 	"io"
-	"log"
 	"time"
 
 	"github.com/minio/minio-go/v7"
@@ -47,12 +46,11 @@ func New(opt Options) (*MinIO, error) {
 }
 
 func (storage *MinIO) Store(ctx context.Context, objectName string, reader io.Reader, objectSize int64) error {
-	info, err := storage.client.PutObject(ctx, storage.bucketName, objectName, reader, objectSize, minio.PutObjectOptions{})
+	_, err := storage.client.PutObject(ctx, storage.bucketName, objectName, reader, objectSize, minio.PutObjectOptions{})
 	if err != nil {
 		return err
 	}
 
-	log.Printf("%#v", info.ETag)
 	return nil
 }
 

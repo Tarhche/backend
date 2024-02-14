@@ -1,12 +1,12 @@
-<script>
-    export default {
-        props: ['cover', 'href', 'title', 'excerpt', 'publishedAt']
-    }
+<script setup>
+    const props = defineProps(["cover", "href", "title", "excerpt", "publishedAt"])
+    const resolveFileUrl = filesUrlResolver().resolve
+    const {cover, href, title, excerpt, publishedAt} = props
 </script>
 
 <template>
     <div class="mb-3 d-flex align-items-center">
-        <img :style="{height: '80px'}" :src="cover">
+        <img :style="{height: '80px'}" :src="resolveFileUrl(cover)">
         <div class="ps-3">
             <h2 class="mb-2 h6 fw-bold">
             <a class="text-dark" :href="href">{{ title }}</a>

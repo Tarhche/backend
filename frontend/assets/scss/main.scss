@@ -277,6 +277,19 @@ a.text-dark:hover {
   @include fill-variant(".bg-#{$color}", $value);
 }
 
+// hashtag
+
+.hashtag {
+    color: $purple;
+    text-decoration: none;
+}
+
+.hashtag::before {
+    font-size: 1.1em;
+    font-weight: bold;
+    content: "#";
+}
+
 // Cards
 .card {
     .date {
