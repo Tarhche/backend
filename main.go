@@ -91,7 +91,7 @@ func httpHandler() http.Handler {
 	}
 
 	fileStorage, err := minio.New(minio.Options{
-		Endpoint:   "minio:9000",
+		Endpoint:   os.Getenv("S3_ENDPOINT"),
 		AccessKey:  os.Getenv("S3_ACCESS_KEY"),
 		SecretKey:  os.Getenv("S3_SECRET_KEY"),
 		UseSSL:     useSSL,
