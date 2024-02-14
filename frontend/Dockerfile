@@ -2,7 +2,7 @@ FROM node:21.6-alpine3.18
 
 WORKDIR /app
 
-COPY frontend .
+COPY . .
 
 EXPOSE 3000
 
