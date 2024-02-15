@@ -12,7 +12,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gofrs/uuid"
 	"github.com/julienschmidt/httprouter"
 	getArticle "github.com/khanzadimahdi/testproject/application/article/getArticle"
 	getArticles "github.com/khanzadimahdi/testproject/application/article/getArticles"
@@ -33,8 +32,6 @@ import (
 	dashboardUploadFile "github.com/khanzadimahdi/testproject/application/dashboard/file/uploadFile"
 	getFile "github.com/khanzadimahdi/testproject/application/file/getFile"
 	"github.com/khanzadimahdi/testproject/application/home"
-	"github.com/khanzadimahdi/testproject/domain/article"
-	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/console"
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/ecdsa"
 	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
@@ -105,32 +102,9 @@ func httpHandler() http.Handler {
 	articlesRepository := articlesrepository.NewArticlesRepository(database)
 	filesRepository := filesrepository.NewFilesRepository(database)
 	elementsRepository := elementsrepository.NewElementsRepository(database)
-
-	for i := 0; i <= 1000; i++ {
-		u, _ := uuid.NewV7()
-
-		articlesRepository.Save(&article.Article{
-			UUID:  u.String(),
-			Cover: fmt.Sprintf("https://picsum.photos/536/354?rand=%d", time.Now().Nanosecond()),
-			Title: fmt.Sprintf("post title [%s]", u),
-			Body: fmt.Sprintf(`
-				Lorem ipsum is placeholder text commonly used in the graphic, print,
-				and publishing industries for previewing layouts and visual mockups. [%s]`, u),
-		})
-	}
-
 	userRepository := userrepository.NewUsersRepository(database)
 
-	u, _ := uuid.NewV7()
-	userRepository.Save(&user.User{
-		UUID:     u.String(),
-		Name:     "Mahdi Khanzadi",
-		Username: "mahdi.khanzadi",
-		Password: "123",
-	})
-
 	privateKeyData := []byte(os.Getenv("PRIVATE_KEY"))
-
 	privateKey, err := ecdsa.ParsePrivateKey(privateKeyData)
 	if err != nil {
 		panic(err)

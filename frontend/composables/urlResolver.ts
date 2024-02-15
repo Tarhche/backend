@@ -1,22 +1,24 @@
-function baseUrl(): string {
-    const publicBaseURL = 'http://127.0.0.1:8000/';
-    const internalBaseURL = 'http://app/';
+function baseUrl() {
+    const {internalApiBaseUrl, public: p} = useRuntimeConfig()
+    const url = process.client ? p.publicApiBaseUrl : internalApiBaseUrl;
 
-    let url = process.client ? publicBaseURL : internalBaseURL;
-
-    return url.replace(/\/$/, "");
+    return {
+        publicApiBaseUrl: p.publicApiBaseUrl.replace(/\/$/, ""),
+        internalApiBaseUrl: internalApiBaseUrl?.replace(/\/$/, ""),
+        apiBaseUrl: url.replace(/\/$/, "")
+    };
 }
 
 export function filesUrlResolver() {
-    const url = "http://127.0.0.1:8000/api/files/".replace(/\/$/, "")
+    const url = baseUrl().publicApiBaseUrl
 
     return {
-        resolve: (uuid: string): string => `${url}/${uuid}`
+        resolve: (uuid: string): string => `${url}/files/${uuid}`
     }
 }
 
 export function useApiUrlResolver() {
-    const url = baseUrl();
+    const url = baseUrl().apiBaseUrl;
 
     return {
         resolve: (path: string): string => `${url}/${path}`

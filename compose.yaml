@@ -11,6 +11,11 @@ services:
       - "3000:3000"
     volumes:
       - ./frontend:/app
+    environment:
+      API_BASE_URL: ${API_BASE_URL}
+      INTERNAL_API_BASE_URL: ${INTERNAL_API_BASE_URL}
+    command: >
+      sh -c "npm install; npm run dev --host"
 
   app:
     build:
