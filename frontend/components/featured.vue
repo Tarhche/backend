@@ -5,7 +5,7 @@
 
 <template>
     <div class="container">
-        <div class="row py-4">
+        <div class="row my-4">
             <div class="col-lg-6">
                 <CardLarge :cover="main.body.cover" :href="`/articles/${main.body.uuid}`" :title="main.body.title" :excerpt="main.body.excerpt" :publishedAt="main.body.published_at" />
             </div>
