@@ -4,12 +4,8 @@
 </script>
 
 <template>
-    <div class="pt-4 pb-4">
-        <!--
-            <h5 class="font-weight-bold spanborder"><span>Read next</span></h5>
-        -->
-
-        <div class="row">
+    <div class="container">
+        <div class="row py-4">
             <div class="col-lg-6">
                 <CardLarge :cover="main.body.cover" :href="`/articles/${main.body.uuid}`" :title="main.body.title" :excerpt="main.body.excerpt" :publishedAt="main.body.published_at" />
             </div>

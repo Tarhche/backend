@@ -5,8 +5,8 @@
 </script>
 
 <template>
-    <div class="mb-3 d-flex align-items-center">
-        <img :style="{height: '80px'}" :src="resolveFileUrl(cover)">
+    <div class="mb-3 d-flex gap-3 align-items-center">
+        <img :style="{height: '100px'}" :src="resolveFileUrl(cover)">
         <div>
             <h2 class="mb-2 h6 fw-bold">
             <a class="text-dark" :href="href">{{ title }}</a>

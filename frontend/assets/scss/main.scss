@@ -9,7 +9,7 @@
 @import 'variables/index';
 
 // Import dashboard styles
-@import 'dashboard/index';
+//@import 'dashboard/index';
 
 // Import fonts
 @import '../../node_modules/@fortawesome/fontawesome-free/css/all.min.css';
@@ -41,8 +41,20 @@
 
 // General
 body {
-    overflow-x: hidden;
+    font-family: $font-family-sans-serif;
+    font-size: 1rem;
+    font-weight: 400;
+    line-height: 1.6;
+    color: $gray-900;
+    background-color: $white;
+    margin: 0;
+    padding: 0;
 }
+
+[dir="rtl"] body {
+    font-family: $font-family-IRANSansDN;
+}
+
 .sticky-top {
     top: 69.75px;
 }
@@ -87,6 +99,7 @@ img {
 a, a:hover {transition: all .2s;}
 a {
     color: $success;
+    text-decoration: none;
 }
 a.text-dark:hover {
     color: $success !important;
@@ -163,7 +176,7 @@ a.text-dark:hover {
     border-color: transparent;
   } 
 }
-.btn-white {background-color:#fff;}
+.btn-white {background-color:$white;}
 // Inputs
 .input-round {
     border-radius: $round-radius !important;    
@@ -180,7 +193,7 @@ a.text-dark:hover {
     transition: all .08s;
     font-weight: $font-weight-normal;
     .highlight .nav-link {color: $primary !important; border:1px solid $success; padding: 0.3rem 1rem;  border-radius: 3px;font-size:.93rem;}
-    .highlight .nav-link:hover {background: $success; color:#fff !important;}
+    .highlight .nav-link:hover {background: $success; color:$white !important;}
 }
 .navbar-brand {
     font-size:1.25rem;
@@ -198,8 +211,8 @@ a.text-dark:hover {
             top: -8px;
             position: absolute;
             left: 50px;
-            border-top: 16px solid #fff;
-            border-left: 16px solid #fff;
+            border-top: 16px solid $white;
+            border-left: 16px solid $white;
             transform: rotate(45deg);
         }
     }
@@ -242,25 +255,6 @@ a.text-dark:hover {
     a {
       color: $navbar-light-active-color;
     }
-  }
-}
-
-
-// Jumbotron
-.jumbotron {
-    background-size:cover; 
-}
-@include media-breakpoint-up(lg) {
-  .jumbotron-lg-withnav {padding-bottom: calc(10rem - 69.75px);}
-  .jumbotron-lg { padding:10rem 0;}
-  .jumbotron-xl { padding:15rem 0;}
-  .jumbotron-xl {min-height:100vh;}
-  .bottom-align-text-absolute {
-    position: absolute;
-    bottom: 30px;
-      margin:auto;
-       left: 0;
-      right:0;
   }
 }
 
@@ -320,6 +314,9 @@ a.text-dark:hover {
 .hashtag {
     color: $purple;
     padding-right: .25rem;
+    text-decoration: underline;
+    display: inline-block;
+    direction: ltr;
 }
 
 .hashtag::before {
@@ -347,7 +344,7 @@ a.text-dark:hover {
         -webkit-border-radius: 100%;
         -moz-border-radius: 100%;
         border-radius: 100%;
-        color: #FFFFFF;
+        color: $white;
         font-weight: 700;
         text-align: center;
         -webkti-box-sizing: border-box;
@@ -401,6 +398,7 @@ ol.list-featured {
     counter-reset: my-awesome-counter;
     list-style: none;
     padding-left:0;
+    padding-right: 0;
 }
 ol.list-featured li {
   counter-increment: my-awesome-counter;

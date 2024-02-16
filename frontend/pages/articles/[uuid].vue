@@ -8,25 +8,23 @@
 </script>
 
 <template>
-    <div class="container">
-        <div v-if="!pending">
-            <div class="pt-4 pb-4">
-                <div class="row justify-content-center">
-                    <section class="col-md-12 col-lg-8">
-                        <img class="w-100 pb-4 image-zoomable" :src="resolveFileUrl(data.cover)" alt="">
-                        <h1 class="pb-4">{{ data.title }}</h1>
-                        <article class="article-post" v-html="data.body"></article>
-                        <div v-if="data.tags" class="card-text">
-                            <a class="hashtag" :href="`/hashtags/${tag}`" v-for="tag in data.tags">{{ tag }}</a>
-                        </div>
-                    </section>
-                </div>
+    <div v-if="!pending">
+        <div class="container">
+            <div class="row justify-content-center py-4">
+                <section class="col-md-12 col-lg-8">
+                    <img class="w-100 pb-4 image-zoomable" :src="resolveFileUrl(data.cover)" alt="">
+                    <h1 class="pb-4">{{ data.title }}</h1>
+                    <article class="article-post" v-html="data.body"></article>
+                    <div v-if="data.tags" class="card-text">
+                        <a class="hashtag" :href="`/hashtags/${tag}`" v-for="tag in data.tags">{{ tag }}</a>
+                    </div>
+                </section>
             </div>
-
-            <template v-for="element in data.elements">
-                <Jumbotron v-if="element.type=='jumbotron'" :body="element.body" />
-                <Featured v-if="element.type=='featured'" :body="element.body" />
-            </template>
         </div>
+
+        <template v-for="element in data.elements">
+            <Jumbotron v-if="element.type=='jumbotron'" :body="element.body" />
+            <Featured v-if="element.type=='featured'" :body="element.body" />
+        </template>
     </div>
 </template>

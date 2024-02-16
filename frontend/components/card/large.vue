@@ -9,7 +9,7 @@
         <div :style="{backgroundImage: `url(${coverUrl})`, height: '150px', backgroundSize: 'cover', backgroundRepeat: 'no-repeat'}"></div>               
         <div class="card-body px-0 pb-0 d-flex flex-column align-items-start">
             <h2 class="h4 fw-bold">
-                <a class="text-dark text-decoration-none" :href="href">{{ title }}</a>
+                <a class="text-dark" :href="href">{{ title }}</a>
             </h2>
             <p class="card-text">{{ excerpt }}</p>
             <div>
