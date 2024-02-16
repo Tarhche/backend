@@ -16,8 +16,8 @@
                         <img class="w-100 pb-4 image-zoomable" :src="resolveFileUrl(data.cover)" alt="">
                         <h1 class="pb-4">{{ data.title }}</h1>
                         <article class="article-post" v-html="data.body"></article>
-                        <div v-if="data.tags" class="card-text mb-1">
-                            <a class="pe-1 hashtag" :href="`/hashtags/${tag}`" v-for="tag in data.tags">{{ tag }}</a>
+                        <div v-if="data.tags" class="card-text">
+                            <a class="hashtag" :href="`/hashtags/${tag}`" v-for="tag in data.tags">{{ tag }}</a>
                         </div>
                     </section>
                 </div>

@@ -7,7 +7,7 @@
 <template>
     <div class="mb-3 d-flex align-items-center">
         <img :style="{height: '80px'}" :src="resolveFileUrl(cover)">
-        <div class="ps-3">
+        <div>
             <h2 class="mb-2 h6 fw-bold">
             <a class="text-dark" :href="href">{{ title }}</a>
             </h2>

@@ -14,6 +14,27 @@
 // Import fonts
 @import '../../node_modules/@fortawesome/fontawesome-free/css/all.min.css';
 
+@font-face {
+    font-family: 'IRANSansDN';
+    font-style: normal;
+    font-weight: 400;
+    src: local('IRANSansDN'), url('https://fonts.cdnfonts.com/s/61730/iransansdn.woff') format('woff');
+}
+
+@font-face {
+    font-family: 'IRANSansDN';
+    font-style: normal;
+    font-weight: 300;
+    src: local('IRANSansDN'), url('https://fonts.cdnfonts.com/s/61730/Dastnevis IRSANS.woff') format('woff');
+}
+
+@font-face {
+    font-family: 'IRANSansDN';
+    font-style: normal;
+    font-weight: 700;
+    src: local('IRANSansDN'), url('https://fonts.cdnfonts.com/s/61730/iransansdnbold.woff') format('woff');
+}
+
 //====================================
 // Additional theme classes
 //====================================
@@ -21,7 +42,6 @@
 // General
 body {
     overflow-x: hidden;
-    padding-top: 69.75px;
 }
 .sticky-top {
     top: 69.75px;
@@ -29,6 +49,28 @@ body {
 .secondfont, .navbar-brand {
     font-family: $font-secondary;
 }
+
+.navbar-brand {
+    display: inline-block;
+    padding-top: 0.68rem;
+    padding-bottom: 0.68rem;
+    margin-right: 1rem;
+    font-size: 1.15rem;
+    line-height: inherit;
+    white-space: nowrap;
+}
+
+[dir="rtl"] {
+    .secondfont, .navbar-brand {
+        font-family: $font-family-IRANSansDN;
+    }
+
+    .navbar-brand {
+        margin-right: 0;
+        margin-left: var(--bs-navbar-brand-margin-end);
+    }
+}
+
 img {
     max-width:100%;
 }
@@ -141,11 +183,7 @@ a.text-dark:hover {
     .highlight .nav-link:hover {background: $success; color:#fff !important;}
 }
 .navbar-brand {
-    margin-right:2rem;
     font-size:1.25rem;
-}
-.scrollednav {
-   
 }
 .dropdown-item {
     font-weight: $font-weight-base;
@@ -281,13 +319,18 @@ a.text-dark:hover {
 
 .hashtag {
     color: $purple;
-    text-decoration: none;
+    padding-right: .25rem;
 }
 
 .hashtag::before {
     font-size: 1.1em;
     font-weight: bold;
     content: "#";
+}
+
+[dir="rtl"] .hashtag {
+    padding-right: 0 !important;
+    padding-left: .25rem;
 }
 
 // Cards
@@ -311,11 +354,11 @@ a.text-dark:hover {
         -moz-box-sizing: border-box;
         box-sizing: border-box; 
        .day {
-            font-size: 16px;
+            font-size: 1rem;
             line-height:1;
             }
             .month {
-            font-size: 11px;
+            font-size: .6875rem;
             text-transform: uppercase;
             }
         }
@@ -367,10 +410,17 @@ ol.list-featured li {
 ol.list-featured li:before {
   content: "0" counter(my-awesome-counter);
   font-weight: bold;
-  font-size: 3rem;
+  font-size: 2.7rem;
   margin-right: 0.5rem;
   font-family: 'Abril Fatface', serif;
   line-height: 1;
+}
+
+[dir="rtl"] ol.list-featured li:before {
+    content: "۰" counter(my-awesome-counter, persian);
+    font-family: $font-family-IRANSansDN;
+    margin-right: 0;
+    margin-left: .5rem;
 }
 
 // Login
@@ -383,9 +433,6 @@ ol.list-featured li:before {
 
 // Article
 article {
-    font-family: "sans-serif", "Georgia";
-    font-size:20px;
-    line-height:1.7;
     p, pre, figure, img, blockquote, iframed, embed {
         margin-bottom:2rem;
     } 
@@ -405,9 +452,14 @@ article {
         float: left;
         line-height: 1;
     }
-    &:first-letter {float: left;
-  font-size: 5em;line-height:1;
-  margin: 0 .2em 0 0;vertical-align: top;}
+}
+
+[dir="rtl"] article {
+    font-family: $font-family-IRANSansDN;
+
+    blockquote:before {
+        font-family: $font-family-IRANSansDN;
+    }
 }
 
 .spanborder {    

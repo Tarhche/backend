@@ -101,11 +101,15 @@ p {
 body {
     font-family: "Poppins", sans-serif;
     font-weight: 400;
-    font-size: 16px;
+    font-size: 1rem;
     line-height: 1.625;
     color: #666;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+}
+
+[dir="rtl"] body {
+    font-family: $font-family-IRANSansDN;
 }
 
 h1,
@@ -121,27 +125,27 @@ h6 {
 }
 
 h1 {
-    font-size: 36px;
+    font-size: 2rem;
 }
 
 h2 {
-    font-size: 30px;
+    font-size: 2rem;
 }
 
 h3 {
-    font-size: 24px;
+    font-size: 1.5rem;
 }
 
 h4 {
-    font-size: 18px;
+    font-size: 1.3rem;
 }
 
 h5 {
-    font-size: 15px;
+    font-size: 1.1rem;
 }
 
 h6 {
-    font-size: 13px;
+    font-size: 1rem;
 }
 
 blockquote {
@@ -163,49 +167,49 @@ strong {
 .title-1 {
     text-transform: capitalize;
     font-weight: 400;
-    font-size: 30px;
+    font-size: 2.25rem;
 }
 
 .title-2 {
     text-transform: capitalize;
     font-weight: 400;
-    font-size: 24px;
+    font-size: 2rem;
     line-height: 1;
 }
 
 .title-3 {
     text-transform: capitalize;
     font-weight: 400;
-    font-size: 24px;
+    font-size: 2rem;
     color: #333;
 }
 
 .title-3 i {
-    margin-right: 13px;
+    margin-right: .8125rem;
     vertical-align: baseline;
 }
 
 .title-4 {
     font-weight: 500;
-    font-size: 30px;
+    font-size: 1.875;
     color: #393939;
 }
 
 .title-5 {
     text-transform: capitalize;
-    font-size: 22px;
+    font-size: 1.375rem;
     font-weight: 500;
     color: #393939;
 }
 
 .title-6 {
-    font-size: 24px;
+    font-size: 1.5rem;
     font-weight: 500;
     color: #fff;
 }
 
 .heading-title {
-    font-size: 24px;
+    font-size: 1.5rem;
     font-weight: 500;
     color: #333;
     text-transform: capitalize;
@@ -399,7 +403,7 @@ section {
 .register-link {
     padding-top: 15px;
     text-align: center;
-    font-size: 14px;
+    font-size: .875rem;
 }
 
 .register-link > p > a {
@@ -424,7 +428,7 @@ section {
 
 .fa-hover a {
     color: #666;
-    font-size: 15px;
+    font-size: .9375rem;
 }
 
 .fa-hover a i {
@@ -519,7 +523,7 @@ section {
     -ms-transform: translate(-50%, -50%);
     -o-transform: translate(-50%, -50%);
     transform: translate(-50%, -50%);
-    font-size: 15px;
+    font-size: .9375rem;
     font-weight: 500;
     color: #fff;
 }
@@ -531,7 +535,7 @@ section {
 .au-btn-load {
     background: #808080;
     padding: 0 40px;
-    font-size: 15px;
+    font-size: .9375rem;
     color: #fff;
 }
 
@@ -540,7 +544,7 @@ section {
 }
 
 .au-btn-filter {
-    font-size: 14px;
+    font-size: .875rem;
     color: #808080;
     background: #fff;
     -webkit-border-radius: 3px;
@@ -561,7 +565,7 @@ section {
 .au-btn--small {
     padding: 0 20px;
     line-height: 40px;
-    font-size: 14px;
+    font-size: .875rem;
 }
 
 /*Page Loader*/
@@ -712,7 +716,7 @@ section {
 .au-input {
     line-height: 43px;
     border: 1px solid #e5e5e5;
-    font-size: 14px;
+    font-size: .875rem;
     color: #666;
     padding: 0 17px;
     -webkit-border-radius: 3px;
@@ -728,7 +732,7 @@ section {
     color: #808080;
     line-height: 43px;
     border: 1px solid #e5e5e5;
-    font-size: 14px;
+    font-size: .875rem;
     padding: 0 17px;
     -webkit-border-radius: 3px;
     -moz-border-radius: 3px;
@@ -745,7 +749,7 @@ section {
 
 .au-input--h65 {
     line-height: 63px;
-    font-size: 16px;
+    font-size: 1rem;
     color: #808080;
 }
 
@@ -791,7 +795,7 @@ section {
 }
 
 .au-input-icon i {
-    font-size: 30px;
+    font-size: 1.875rem;
     color: #808080;
     position: absolute;
     top: 50%;
@@ -843,7 +847,7 @@ section {
 }
 
 .au-btn--submit > i {
-    font-size: 20px;
+    font-size: 1.25rem;
     color: #fff;
     position: absolute;
     top: 50%;
@@ -873,7 +877,7 @@ section {
     -o-transform: translate(-50%, -50%);
     transform: translate(-50%, -50%);
     color: #4c4c4c;
-    font-size: 20px;
+    font-size: 1.25rem;
 }
 
 .rs-select2--sm {
@@ -926,7 +930,7 @@ section {
 
 .rs-select2--dark .select2-container--default .select2-selection--single .select2-selection__rendered {
     color: #fff;
-    font-size: 14px;
+    font-size: .875rem;
 }
 
 .rs-select2--dark .select2-container .select2-selection--single .select2-selection__rendered {
@@ -951,7 +955,7 @@ section {
 .rs-select2--trans .select2-container--open .select2-dropdown,
 .rs-select2--light .select2-container--open .select2-dropdown,
 .rs-select2--trans .select2-container--open .select2-dropdown {
-    font-size: 14px;
+    font-size: .875rem;
     box-shadow: 0px 2px 15px 3px rgba(0,0,0,0.1);
     border-radius: 4px;
     border-top-left-radius: 4px;
@@ -1021,7 +1025,7 @@ section {
 
 .rs-select2--light .select2-container--default .select2-selection--single .select2-selection__rendered {
     color: #808080;
-    font-size: 14px;
+    font-size: .875rem;
 }
 
 .rs-select2--light .select2-container .select2-selection--single .select2-selection__rendered {
@@ -1043,7 +1047,7 @@ section {
 }
 
 .rs-select2--light v .select2-container--open .select2-dropdown {
-    font-size: 14px;
+    font-size: .875rem;
 }
 
 .rs-select2--border .select2-container--default .select2-selection--single {
@@ -1070,19 +1074,19 @@ section {
 
 .rs-select2--trans .select2-container--default .select2-selection--single .select2-selection__rendered {
     color: #808080;
-    font-size: 14px;
+    font-size: .875rem;
     padding-left: 0;
 }
 
 .rs-select2--trans .select2-container--open .select2-dropdown {
-    font-size: 14px;
+    font-size: .875rem;
 }
 
 .au-checkbox {
     display: block;
     position: relative;
     cursor: pointer;
-    font-size: 22px;
+    font-size: 1.375rem;
     -webkit-user-select: none;
     -moz-user-select: none;
     -ms-user-select: none;
@@ -1363,7 +1367,7 @@ section {
 }
 
 .noti__item i {
-    font-size: 30px;
+    font-size: 1.875rem;
     color: #a9b3c9;
     -webkit-transition: all 0.5s ease;
     -o-transition: all 0.5s ease;
@@ -1374,7 +1378,7 @@ section {
 
 @media (max-width: 767px) {
     .noti__item i {
-        font-size: 24px;
+        font-size: 1.5rem;
     }
 }
 
@@ -1392,7 +1396,7 @@ section {
     -webkit-border-radius: 100%;
     -moz-border-radius: 100%;
     border-radius: 100%;
-    font-size: 12px;
+    font-size: .75rem;
 }
 
 .account-wrap {
@@ -1434,7 +1438,7 @@ section {
     font-weight: 500;
     content: '\f2f9';
     display: inline-block;
-    font-size: 16px;
+    font-size: 1rem;
     margin-left: 5px;
 }
 
@@ -1507,7 +1511,7 @@ section {
 }
 
 .account-dropdown .info .content .email {
-    font-size: 13px;
+    font-size: .8125rem;
     color: #999;
     line-height: -webkit-calc(20/13);
     line-height: -moz-calc(20/13);
@@ -1532,7 +1536,7 @@ section {
     display: block;
     color: #333;
     padding: 15px 25px;
-    font-size: 14px;
+    font-size: .875rem;
 }
 
 .account-dropdown__item a:hover {
@@ -1543,7 +1547,7 @@ section {
 .account-dropdown__item a i {
     line-height: 1;
     margin-right: 20px;
-    font-size: 18px;
+    font-size: 1.125rem;
     vertical-align: middle;
 }
 
@@ -1559,7 +1563,7 @@ section {
     display: block;
     color: #333;
     padding: 15px 25px;
-    font-size: 14px;
+    font-size: .875rem;
 }
 
 .account-dropdown__footer a:hover {
@@ -1570,7 +1574,7 @@ section {
 .account-dropdown__footer a i {
     line-height: 1;
     margin-right: 20px;
-    font-size: 18px;
+    font-size: 1.125rem;
     vertical-align: middle;
 }
 
@@ -1630,7 +1634,7 @@ section {
 .navbar-sidebar .navbar__list li a {
     display: block;
     color: #555;
-    font-size: 16px;
+    font-size: 1rem;
     padding: 15px 0;
 }
 
@@ -1767,7 +1771,7 @@ section {
     content: '\f105';
     font-family: FontAwesome, cursive;
     float: right;
-    font-size: 16px;
+    font-size: 1rem;
     line-height: 22px;
     -webkit-transition: all 0.3s ease;
     -o-transition: all 0.3s ease;
@@ -1910,7 +1914,7 @@ section {
     line-height: -webkit-calc(29/14);
     line-height: -moz-calc(29/14);
     line-height: calc(29/14);
-    font-size: 14px;
+    font-size: .875rem;
     color: #808080;
 }
 
@@ -1918,7 +1922,7 @@ section {
     display: block;
     text-transform: capitalize;
     text-align: center;
-    font-size: 14px;
+    font-size: .875rem;
     color: #4272d7;
     padding: 24px 0;
 }
@@ -1963,13 +1967,13 @@ section {
 }
 
 .mess__item .content h6 {
-    font-size: 14px;
+    font-size: .875rem;
     font-weight: 600;
     padding-top: 4px;
 }
 
 .mess__item .content p {
-    font-size: 14px;
+    font-size: .875rem;
     color: #555;
     line-height: -webkit-calc(24/14);
     line-height: -moz-calc(24/14);
@@ -1978,7 +1982,7 @@ section {
 }
 
 .mess__item .content .time {
-    font-size: 12px;
+    font-size: .75rem;
     color: #999;
 }
 
@@ -2015,7 +2019,7 @@ section {
     width: -moz-calc(100% - 55px);
     width: calc(100% - 55px);
     text-align: left;
-    font-size: 14px;
+    font-size: .875rem;
 }
 
 .email__item .content p {
@@ -2026,7 +2030,7 @@ section {
 }
 
 .email__item .content span {
-    font-size: 12px;
+    font-size: .75rem;
     color: #999;
 }
 
@@ -2064,7 +2068,7 @@ section {
 }
 
 .notifi__item .img-cir i {
-    font-size: 22px;
+    font-size: 1.375rem;
     color: #fff;
     position: absolute;
     top: 50%;
@@ -2081,7 +2085,7 @@ section {
     width: -moz-calc(100% - 55px);
     width: calc(100% - 55px);
     text-align: left;
-    font-size: 14px;
+    font-size: .875rem;
 }
 
 .notifi__item .content p {
@@ -2092,7 +2096,7 @@ section {
 }
 
 .notifi__item .content .date {
-    font-size: 12px;
+    font-size: .75rem;
     color: #999;
 }
 
@@ -2188,13 +2192,13 @@ section {
 .account2 .name {
     text-transform: capitalize;
     font-weight: 500;
-    font-size: 20px;
+    font-size: 1.25rem;
     margin-top: 20px;
     margin-bottom: 5px;
 }
 
 .account2 > a {
-    font-size: 14px;
+    font-size: .875rem;
     color: #999;
 }
 
@@ -2239,7 +2243,7 @@ section {
 }
 
 .navbar-sidebar2 .navbar__list li .arrow i {
-    font-size: 16px;
+    font-size: 1rem;
     color: #999;
 }
 
@@ -2248,7 +2252,7 @@ section {
 }
 
 .navbar-sidebar2 .navbar__list li a {
-    font-size: 16px;
+    font-size: 1rem;
     color: #555;
     display: block;
     padding: 18px 35px;
@@ -2289,7 +2293,7 @@ section {
     background: #ff4b5a;
     text-align: center;
     line-height: 30px;
-    font-size: 14px;
+    font-size: .875rem;
     color: #fff;
     -webkit-border-radius: 3px;
     -moz-border-radius: 3px;
@@ -2425,7 +2429,7 @@ section {
 }
 
 .header-button-item {
-    font-size: 30px;
+    font-size: 1.875rem;
     color: #fff;
     margin-right: 34px;
     position: relative;
@@ -2443,7 +2447,7 @@ section {
 
 @media (max-width: 767px) {
     .header-button-item {
-        font-size: 22px;
+        font-size: 1.375rem;
         margin-right: 15px;
     }
 }
@@ -2510,7 +2514,7 @@ section {
 
 .search-dropdown form .au-input {
     padding-left: 53px;
-    font-size: 14px;
+    font-size: .875rem;
     border: none;
     color: #666;
 }
@@ -2519,7 +2523,7 @@ section {
     position: absolute;
     top: 0;
     left: 26px;
-    font-size: 24px;
+    font-size: 1.5rem;
     color: #c9c9c9;
     height: 63px;
     line-height: 63px;
@@ -2687,7 +2691,7 @@ section {
 
 .header__navbar ul li a {
     display: block;
-    font-size: 16px;
+    font-size: 1rem;
     color: #ccc;
     padding: 25px 30px;
     border-left: 1px solid rgba(255, 255, 255, 0.102);
@@ -2722,7 +2726,7 @@ section {
 
 @media (max-width: 1315px) and (min-width: 992px) {
     .header__navbar ul li a {
-        font-size: 13px;
+        font-size: .8125rem;
         padding: 27px 15px;
     }
 
@@ -2791,7 +2795,7 @@ section {
 }
 
 .header__navbar .header3-sub-list li a {
-    font-size: 15px;
+    font-size: .9375rem;
     color: #777777;
     padding: 10px 22px;
     border: none;
@@ -2838,7 +2842,7 @@ section {
 @media (max-width: 1315px) and (min-width: 992px) {
     .header__tool .header-button-item {
         margin-right: 20px;
-        font-size: 24px;
+        font-size: 1.5rem;
     }
 }
 
@@ -2918,7 +2922,7 @@ section {
 }
 
 .account-item--style2 .content a {
-    font-size: 16px;
+    font-size: 1rem;
     color: #ccc;
     font-weight: 500;
 }
@@ -3190,7 +3194,7 @@ section {
     }
 
     .overview-box .icon i {
-        font-size: 30px;
+        font-size: 1.875rem;
     }
 }
 
@@ -3208,13 +3212,13 @@ section {
 .overview-box .text h2 {
     font-weight: 300;
     color: #fff;
-    font-size: 36px;
+    font-size: 2.25rem;
     line-height: 1;
     margin-bottom: 5px;
 }
 
 .overview-box .text span {
-    font-size: 18px;
+    font-size: 1.125rem;
     color: rgba(255, 255, 255, 0.6);
 }
 
@@ -3224,22 +3228,22 @@ section {
     }
 
     .overview-box .text h2 {
-        font-size: 20px;
+        font-size: 1.25rem;
         margin-bottom: 0;
     }
 
     .overview-box .text span {
-        font-size: 14px;
+        font-size: .875rem;
     }
 }
 
 @media (max-width: 991px) {
     .overview-box .text h2 {
-        font-size: 26px;
+        font-size: 1.625rem;
     }
 
     .overview-box .text span {
-        font-size: 15px;
+        font-size: .9375rem;
     }
 }
 
@@ -3361,7 +3365,7 @@ section {
 
 .au-card-title h3 i {
     color: #fff;
-    font-size: 24px;
+    font-size: 1.5rem;
     margin-right: 12px;
 }
 
@@ -3389,7 +3393,7 @@ section {
     padding-left: 40px;
     padding-bottom: 22px;
     border-bottom: 1px solid #f2f2f2;
-    font-size: 14px;
+    font-size: .875rem;
 }
 
 .au-task-list {
@@ -3416,12 +3420,12 @@ section {
 }
 
 .au-task__item-inner .task {
-    font-size: 16px;
+    font-size: 1rem;
     margin-bottom: 6px;
 }
 
 .au-task__item-inner .task a {
-    font-size: 16px;
+    font-size: 1rem;
     color: #808080;
     font-weight: 400;
 }
@@ -3431,7 +3435,7 @@ section {
 }
 
 .au-task__item-inner .time {
-    font-size: 14px;
+    font-size: .875rem;
     color: #555;
     text-transform: uppercase;
     font-weight: 600;
@@ -3483,7 +3487,7 @@ section {
 }
 
 .au-message__noti p {
-    font-size: 14px;
+    font-size: .875rem;
 }
 
 .au-message__noti p span {
@@ -3557,7 +3561,7 @@ section {
 }
 
 .au-message__item-time span {
-    font-size: 14px;
+    font-size: .875rem;
     color: #808080;
 }
 
@@ -3568,7 +3572,7 @@ section {
 }
 
 .au-message__item-text .text .name {
-    font-size: 16px;
+    font-size: 1rem;
     font-weight: 600;
     color: #666;
     margin-bottom: 2px;
@@ -3697,7 +3701,7 @@ section {
 
 .au-chat-info .nick a {
     font-weight: 600;
-    font-size: 16px;
+    font-size: 1rem;
     color: #333;
 }
 
@@ -3746,7 +3750,7 @@ section {
 }
 
 .mess-time {
-    font-size: 14px;
+    font-size: .875rem;
     color: #999;
 }
 
@@ -4005,7 +4009,7 @@ section {
 }
 
 .recent-report3 .title-wrap .chart-note {
-    font-size: 14px;
+    font-size: .875rem;
     margin-right: 30px;
 }
 
@@ -4015,7 +4019,7 @@ section {
 
 .chart-percent-3 .chart-note {
     display: block;
-    font-size: 14px;
+    font-size: .875rem;
 }
 
 /* ----- Charts ----- */
@@ -4061,14 +4065,14 @@ section {
     -ms-flex-align: baseline;
     align-items: baseline;
     margin-bottom: 30px;
-    font-size: 14px;
+    font-size: .875rem;
 }
 
 .chart-note {
     text-transform: capitalize;
     display: inline-block;
     margin-right: 12px;
-    font-size: 14px;
+    font-size: .875rem;
 }
 
 .chart-note .dot {
@@ -4081,7 +4085,7 @@ section {
 }
 
 .chart-statis i {
-    font-size: 18px;
+    font-size: 1.125rem;
     margin-right: 5px;
 }
 
@@ -4092,7 +4096,7 @@ section {
 }
 
 .chart-statis .index {
-    font-size: 18px;
+    font-size: 1.125rem;
     color: #333;
 }
 
@@ -4183,12 +4187,12 @@ section {
 }
 
 .statistic-chart-1-note span {
-    font-size: 14px;
+    font-size: .875rem;
     color: #808080;
 }
 
 .statistic-chart-1-note .big {
-    font-size: 18px;
+    font-size: 1.125rem;
     color: #393939;
 }
 
@@ -4236,7 +4240,7 @@ section {
 
 .table-earning thead th {
     background: #333;
-    font-size: 16px;
+    font-size: 1rem;
     color: #fff;
     vertical-align: middle;
     font-weight: 400;
@@ -4277,7 +4281,7 @@ section {
 
 .table-top-countries tbody td {
     white-space: nowrap;
-    font-size: 14px;
+    font-size: .875rem;
     color: #fff;
     padding: 14px 5px;
     border-top: none;
@@ -4339,7 +4343,7 @@ section {
 }
 
 .table-style1 .table td {
-    font-size: 14px;
+    font-size: .875rem;
     color: #808080;
     border-top: none;
     border-bottom: 1px solid #f2f2f2;
@@ -4353,7 +4357,7 @@ section {
 }
 
 .table-data thead tr td {
-    font-size: 12px;
+    font-size: .75rem;
     font-weight: 600;
     color: #808080;
     text-transform: uppercase;
@@ -4381,14 +4385,14 @@ section {
 }
 
 .table-data__info h6 {
-    font-size: 14px;
+    font-size: .875rem;
     color: #808080;
     text-transform: capitalize;
     font-weight: 400;
 }
 
 .table-data__info span a {
-    font-size: 12px;
+    font-size: .75rem;
     color: #999;
 }
 
@@ -4418,7 +4422,7 @@ section {
 }
 
 .more i {
-    font-size: 20px;
+    font-size: 1.25rem;
     color: #808080;
     position: absolute;
     top: 50%;
@@ -4433,7 +4437,7 @@ section {
 .role {
     display: inline-block;
     line-height: 30px;
-    font-size: 14px;
+    font-size: .875rem;
     color: #fff;
     padding: 0 15px;
     -webkit-border-radius: 3px;
@@ -4457,7 +4461,7 @@ section {
 .table-top-campaign.table td {
     border-top: none;
     border-bottom: 1px solid #e5e5e5;
-    font-size: 14px;
+    font-size: .875rem;
     padding: 12px 6px;
 }
 
@@ -4486,7 +4490,7 @@ section {
 }
 
 .table-data2.table thead th {
-    font-size: 12px;
+    font-size: .75rem;
     color: #555;
     text-transform: uppercase;
     border: none;
@@ -4539,7 +4543,7 @@ section {
 }
 
 .table-data2.table tbody td {
-    font-size: 14px;
+    font-size: .875rem;
     color: #808080;
     vertical-align: middle;
     padding: 25px 40px;
@@ -4635,7 +4639,7 @@ section {
 }
 
 .table-data-feature .item i {
-    font-size: 20px;
+    font-size: 1.25rem;
     color: #808080;
     position: absolute;
     top: 50%;
@@ -4648,7 +4652,7 @@ section {
 }
 
 .block-email {
-    font-size: 14px;
+    font-size: .875rem;
     color: #808080;
     display: inline-block;
     background: #f2f2f2;
@@ -4672,7 +4676,7 @@ section {
 }
 
 .table-data3 thead tr th {
-    font-size: 16px;
+    font-size: 1rem;
     color: #fff;
     font-weight: 400;
     text-transform: capitalize;
@@ -4722,7 +4726,7 @@ section {
 .table-data3 tbody td {
     border-bottom: 1px solid #f5f5f5;
     background: #fff;
-    font-size: 14px;
+    font-size: .875rem;
     color: #808080;
     padding: 12px 40px;
     padding-right: 10px;
@@ -4744,7 +4748,7 @@ section {
 }
 
 .copyright p {
-    font-size: 14px;
+    font-size: .875rem;
     color: #666;
     line-height: -webkit-calc(24/14);
     line-height: -moz-calc(24/14);
@@ -4826,7 +4830,7 @@ section {
 }
 
 .au-breadcrumb-span {
-    font-size: 14px;
+    font-size: .875rem;
     color: #999;
     display: inline-block;
 }
@@ -4837,7 +4841,7 @@ section {
 }
 
 .au-breadcrumb__list li {
-    font-size: 14px;
+    font-size: .875rem;
     color: #999;
 }
 
@@ -4953,7 +4957,7 @@ section {
 }
 
 .welcome2-greeting p {
-    font-size: 14px;
+    font-size: .875rem;
     color: #808080;
 }
 
@@ -4979,19 +4983,19 @@ section {
 }
 
 .statistic__item h2 {
-    font-size: 36px;
+    font-size: 2.25rem;
     font-weight: 300;
     color: #4272d7;
 }
 
 @media (min-width: 992px) and (max-width: 1199px) {
     .statistic__item h2 {
-        font-size: 22px;
+        font-size: 1.375rem;
     }
 }
 
 .statistic__item .desc {
-    font-size: 18px;
+    font-size: 1.125rem;
     text-transform: uppercase;
     font-weight: 300;
     color: rgba(128, 128, 128, 0.6);
@@ -4999,7 +5003,7 @@ section {
 
 @media (min-width: 992px) and (max-width: 1199px) {
     .statistic__item .desc {
-        font-size: 13px;
+        font-size: .8125rem;
     }
 }
 
@@ -5085,14 +5089,14 @@ section {
 }
 
 .au-progress__title {
-    font-size: 14px;
+    font-size: .875rem;
     color: #808080;
     display: inline-block;
     margin-bottom: 9px;
 }
 
 .au-progress__value {
-    font-size: 14px;
+    font-size: .875rem;
     color: #808080;
     position: absolute;
     top: -28px;
@@ -5119,7 +5123,7 @@ section {
 }
 
 .au-alert.alert-dismissible .close {
-    font-size: 16px;
+    font-size: 1rem;
     color: black;
     opacity: 0.2;
     padding: 0 23px;
@@ -5128,14 +5132,14 @@ section {
 }
 
 .au-alert > i {
-    font-size: 30px;
+    font-size: 1.875rem;
     color: #00ad5f;
     vertical-align: middle;
     margin-right: 10px;
 }
 
 .au-alert .content {
-    font-size: 16px;
+    font-size: 1rem;
     color: #808080;
 }
 
@@ -5178,7 +5182,7 @@ section {
     position: relative;
     display: block;
     height: inherit;
-    font-size: 10px;
+    font-size: .625rem;
     font-weight: 600;
     text-transform: uppercase;
     background-color: #fff;
@@ -5227,7 +5231,7 @@ section {
 }
 
 .switch.switch-default.switch-lg .switch-label {
-    font-size: 12px;
+    font-size: .75rem;
 }
 
 .switch.switch-default.switch-lg .switch-handle {
@@ -5245,7 +5249,7 @@ section {
 }
 
 .switch.switch-default.switch-sm .switch-label {
-    font-size: 8px;
+    font-size: .5rem;
 }
 
 .switch.switch-default.switch-sm .switch-handle {
@@ -5263,7 +5267,7 @@ section {
 }
 
 .switch.switch-default.switch-xs .switch-label {
-    font-size: 7px;
+    font-size: .4375rem;
 }
 
 .switch.switch-default.switch-xs .switch-handle {
@@ -5296,7 +5300,7 @@ section {
     position: relative;
     display: block;
     height: inherit;
-    font-size: 10px;
+    font-size: .625rem;
     font-weight: 600;
     text-transform: uppercase;
     background-color: #fff;
@@ -5372,7 +5376,7 @@ section {
 }
 
 .switch.switch-text.switch-lg .switch-label {
-    font-size: 12px;
+    font-size: .75rem;
 }
 
 .switch.switch-text.switch-lg .switch-handle {
@@ -5390,7 +5394,7 @@ section {
 }
 
 .switch.switch-text.switch-sm .switch-label {
-    font-size: 8px;
+    font-size: .5rem;
 }
 
 .switch.switch-text.switch-sm .switch-handle {
@@ -5408,7 +5412,7 @@ section {
 }
 
 .switch.switch-text.switch-xs .switch-label {
-    font-size: 7px;
+    font-size: .4375rem;
 }
 
 .switch.switch-text.switch-xs .switch-handle {
@@ -5442,7 +5446,7 @@ section {
     display: block;
     height: inherit;
     font-family: FontAwesome;
-    font-size: 10px;
+    font-size: .625rem;
     font-weight: 600;
     text-transform: uppercase;
     background-color: #fff;
@@ -5518,7 +5522,7 @@ section {
 }
 
 .switch.switch-icon.switch-lg .switch-label {
-    font-size: 12px;
+    font-size: .75rem;
 }
 
 .switch.switch-icon.switch-lg .switch-handle {
@@ -5536,7 +5540,7 @@ section {
 }
 
 .switch.switch-icon.switch-sm .switch-label {
-    font-size: 8px;
+    font-size: .5rem;
 }
 
 .switch.switch-icon.switch-sm .switch-handle {
@@ -5554,7 +5558,7 @@ section {
 }
 
 .switch.switch-icon.switch-xs .switch-label {
-    font-size: 7px;
+    font-size: .4375rem;
 }
 
 .switch.switch-icon.switch-xs .switch-handle {
@@ -5587,7 +5591,7 @@ section {
     position: relative;
     display: block;
     height: inherit;
-    font-size: 10px;
+    font-size: .625rem;
     font-weight: 600;
     text-transform: uppercase;
     background-color: #f8f9fa;
@@ -5640,7 +5644,7 @@ section {
 }
 
 .switch.switch-3d.switch-lg .switch-label {
-    font-size: 12px;
+    font-size: .75rem;
 }
 
 .switch.switch-3d.switch-lg .switch-handle {
@@ -5658,7 +5662,7 @@ section {
 }
 
 .switch.switch-3d.switch-sm .switch-label {
-    font-size: 8px;
+    font-size: .5rem;
 }
 
 .switch.switch-3d.switch-sm .switch-handle {
@@ -5676,7 +5680,7 @@ section {
 }
 
 .switch.switch-3d.switch-xs .switch-label {
-    font-size: 7px;
+    font-size: .4375rem;
 }
 
 .switch.switch-3d.switch-xs .switch-handle {

@@ -15,7 +15,7 @@
           </p>
           <a :href="`/articles/${uuid}`" class="btn btn-dark">Read More</a>
         </div>
-        <div class="col-md-6 d-none d-md-block pe-0" :style="{backgroundSize: 'cover', backgroundImage: `url(${coverUrl})`}"></div>
+        <div class="col-md-6 d-none d-md-block" :style="{backgroundSize: 'cover', backgroundImage: `url(${coverUrl})`}"></div>
       </div>
     </div>
   </div>

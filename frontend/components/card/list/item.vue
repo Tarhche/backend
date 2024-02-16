@@ -6,11 +6,11 @@
 <template>
     <li>
         <span class="py-1">
-            <h6 class="fw-bold mb-1">
-                <a :href="href" class="text-dark">{{ title }}</a>
+            <h6 class="fw-bold">
+                <a :href="href" class="text-dark text-decoration-none">{{ title }}</a>
             </h6>
-            <div v-if="tags" class="card-text mb-1">
-                <a class="pe-1 hashtag" :href="`/hashtags/${tag}`" v-for="tag in tags">{{ tag }}</a>
+            <div v-if="tags" class="card-text">
+                <a class="hashtag" :href="`/hashtags/${tag}`" v-for="tag in tags">{{ tag }}</a>
             </div>
             <small class="text-muted">{{ publishedAt }}</small>
         </span>
