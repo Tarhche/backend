@@ -1,6 +1,7 @@
 package file
 
 import (
+	"bytes"
 	"errors"
 	"net/http"
 
@@ -22,7 +23,8 @@ func NewShowHandler(showFileUseCase *getfile.UseCase) *showHandler {
 func (h *showHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	UUID := httprouter.ParamsFromContext(r.Context()).ByName("uuid")
 
-	err := h.showFileUseCase.GetFile(UUID, rw)
+	var buffer bytes.Buffer
+	err := h.showFileUseCase.GetFile(UUID, &buffer)
 
 	switch true {
 	case errors.Is(err, domain.ErrNotExists):
@@ -31,5 +33,6 @@ func (h *showHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		rw.WriteHeader(http.StatusInternalServerError)
 	default:
 		rw.WriteHeader(http.StatusOK)
+		buffer.WriteTo(rw)
 	}
 }
