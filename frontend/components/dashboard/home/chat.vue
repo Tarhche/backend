@@ -36,7 +36,7 @@ const data = ref({
               </div>
             </div>
             <span class="nick">
-              <nuxt-link class="text-decoration-none" to="#">{{data.userName}}</nuxt-link>
+              <nuxt-link class="text-decoration-none" to="">{{data.userName}}</nuxt-link>
             </span>
           </div>
         </div>

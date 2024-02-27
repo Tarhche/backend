@@ -8,6 +8,17 @@
     box-sizing: border-box;
 }
 
+/* ckEditor */
+
+.ck-content{
+ min-height: 200px;
+}
+
+
+/* ckEditor */
+
+
+
 ul {
     margin: 0;
 }

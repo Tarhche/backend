@@ -1,99 +1,99 @@
 <script setup lang="ts">
 import {list} from "postcss";
 
-const data =ref({
-  Features:[
+const data = ref({
+  Features: [
     {
-      name:"جداول",
-      path:""
+      name: "جداول",
+      path: ""
     },
     {
-      name:"فرم ها",
-      path:""
+      name: "فرم ها",
+      path: ""
     },
     {
-      name:"تفویم",
-      path:""
+      name: "تفویم",
+      path: ""
     },
     {
-      name:"نقشه",
-      path:""
-    },
-  ],
-  pages:[
-    {
-      name:"ورود",
-      path:"/auth/login"
-    },
-    {
-      name:"ثبتنام",
-      path:""
-    },
-    {
-      name:"فراموشی رمز عبور",
-      path:"/auth/forgot-password"
-    },
-    {
-      name:"مقالات",
-      path:"/dashboard/articles"
+      name: "نقشه",
+      path: ""
     },
   ],
-  UIElements:[
+  pages: [
     {
-      name:"Button",
-      path:""
+      name: "ورود",
+      path: "/auth/login"
     },
     {
-      name:"Badges",
-      path:""
+      name: "ثبتنام",
+      path: ""
     },
     {
-      name:"Tabs",
-      path:""
+      name: "فراموشی رمز عبور",
+      path: "/auth/forgot-password"
     },
     {
-      name:"Cards",
-      path:""
+      name: "مقالات",
+      path: "/dashboard/articles"
+    },
+  ],
+  UIElements: [
+    {
+      name: "Button",
+      path: ""
     },
     {
-      name:"Alerts",
-      path:""
+      name: "Badges",
+      path: ""
     },
     {
-      name:"Progress Bars",
-      path:""
+      name: "Tabs",
+      path: ""
     },
     {
-      name:"Modals",
-      path:""
+      name: "Cards",
+      path: ""
     },
     {
-      name:"Switchs",
-      path:""
+      name: "Alerts",
+      path: ""
     },
     {
-      name:"Grids",
-      path:""
+      name: "Progress Bars",
+      path: ""
     },
     {
-      name:"FontAwesome",
-      path:""
+      name: "Modals",
+      path: ""
     },
     {
-      name:"Typography",
-      path:""
+      name: "Switchs",
+      path: ""
+    },
+    {
+      name: "Grids",
+      path: ""
+    },
+    {
+      name: "FontAwesome",
+      path: ""
+    },
+    {
+      name: "Typography",
+      path: ""
     },
   ]
 })
-onMounted(()=>{
+onMounted(() => {
   const listMenu = document.querySelectorAll('a.js-arrow')
   const show = document.querySelectorAll('.navbar__sub-list.js-sub-list')
-    for(let i = 0 ; i < listMenu.length ; i++ ){
-      console.log(i)
-      listMenu[i].addEventListener("click" , ()=>{
-        console.log(show[i])
-        show[i-1].classList.toggle("show")
-      })
+  for (let i = 0; i < listMenu.length; i++) {
+    console.log(i)
+    listMenu[i].addEventListener("click", () => {
+      console.log(show[i])
+      show[i - 1].classList.toggle("show")
+    })
   }
 })
 </script>
@@ -107,7 +107,7 @@ onMounted(()=>{
         </nuxt-link>
       </li>
       <li>
-        <nuxt-link class="text-decoration-none" to="inbox.html">
+        <nuxt-link class="text-decoration-none" to="">
           <i class="fas fa-chart-bar"></i>پیام ها
         </nuxt-link>
         <span class="inbox-num">3</span>
@@ -118,7 +118,7 @@ onMounted(()=>{
         </nuxt-link>
       </li>
       <li class="has-sub">
-        <nuxt-link  class="js-arrow text-decoration-none" to="">
+        <nuxt-link class="js-arrow text-decoration-none" to="">
           <i class="fas fa-trophy"></i>ویژگی ها
           <span class="arrow">
             <i class="fas fa-angle-down"></i>
@@ -131,7 +131,7 @@ onMounted(()=>{
         </ul>
       </li>
       <li class="has-sub">
-        <nuxt-link  class="js-arrow text-decoration-none  " to="">
+        <nuxt-link class="js-arrow text-decoration-none" to="">
           <i class="fas fa-copy"></i>صفحات
           <span class="arrow">
             <i class="fas fa-angle-down"></i>
@@ -139,12 +139,12 @@ onMounted(()=>{
         </nuxt-link>
         <ul class="list-unstyled navbar__sub-list js-sub-list">
           <li v-for="(item,index) in data.pages" :key="index">
-            <nuxt-link class="text-decoration-none" :to="item.path">{{item.name}}</nuxt-link>
+            <nuxt-link class="text-decoration-none" :to="item.path">{{ item.name }}</nuxt-link>
           </li>
         </ul>
       </li>
       <li class="has-sub">
-        <nuxt-link  class="js-arrow text-decoration-none" to="">
+        <nuxt-link class="js-arrow text-decoration-none" to="">
           <i class="fas fa-desktop"></i>عناصر نمایشی
           <span class="arrow">
             <i class="fas fa-angle-down"></i>
@@ -152,7 +152,7 @@ onMounted(()=>{
         </nuxt-link>
         <ul class="list-unstyled navbar__sub-list js-sub-list">
           <li v-for="(item , index) in data.UIElements" :key="index">
-            <nuxt-link class="text-decoration-none" :to="item.path">{{item.name}}</nuxt-link>
+            <nuxt-link class="text-decoration-none" :to="item.path">{{ item.name }}</nuxt-link>
           </li>
         </ul>
       </li>
@@ -161,7 +161,7 @@ onMounted(()=>{
 </template>
 
 <style scoped>
-.show{
-  display: block!important;
+.show {
+  display: block !important;
 }
 </style>

@@ -56,7 +56,7 @@ const data = ref({
         <div class="au-task__item au-task__item--danger" v-for="(item,index) in data.tasks" :key="index">
           <div class="au-task__item-inner "  >
             <h5 class="task">
-              <nuxt-link to="#">{{item.info}}</nuxt-link>
+              <nuxt-link to="">{{item.info}}</nuxt-link>
             </h5>
             <span class="time">{{item.time}}</span>
           </div>

@@ -9,7 +9,7 @@ import img from "~/assets/images/icon/avatar-01.jpg"
     <div class="container">
       <div class="header4-wrap flex ">
         <div class="header__logo">
-          <nuxt-link to="#">
+          <nuxt-link class="text-dark " to="/">
             <span>طرح چه</span>
           </nuxt-link>
         </div>
@@ -57,29 +57,29 @@ import img from "~/assets/images/icon/avatar-01.jpg"
             <div class="setting-dropdown js-dropdown">
               <div class="account-dropdown__body">
                 <div class="account-dropdown__item">
-                  <nuxt-link to="#">
+                  <nuxt-link to="">
                     <i class="zmdi zmdi-account"></i>Account</nuxt-link>
                 </div>
                 <div class="account-dropdown__item">
-                  <nuxt-link to="#">
+                  <nuxt-link to="">
                     <i class="zmdi zmdi-settings"></i>Setting</nuxt-link>
                 </div>
                 <div class="account-dropdown__item">
-                  <nuxt-link to="#">
+                  <nuxt-link to="">
                     <i class="zmdi zmdi-money-box"></i>Billing</nuxt-link>
                 </div>
               </div>
               <div class="account-dropdown__body">
                 <div class="account-dropdown__item">
-                  <nuxt-link to="#">
+                  <nuxt-link to="">
                     <i class="zmdi zmdi-globe"></i>Language</nuxt-link>
                 </div>
                 <div class="account-dropdown__item">
-                  <nuxt-link to="#">
+                  <nuxt-link to="">
                     <i class="zmdi zmdi-pin"></i>Location</nuxt-link>
                 </div>
                 <div class="account-dropdown__item">
-                  <nuxt-link to="#">
+                  <nuxt-link to="">
                     <i class="zmdi zmdi-email"></i>Email</nuxt-link>
                 </div>
                 <div class="account-dropdown__item">
@@ -95,38 +95,38 @@ import img from "~/assets/images/icon/avatar-01.jpg"
                 <img :src="img" alt="John Doe" />
               </div>
               <div class="content">
-                <nuxt-link class="js-acc-btn" to="#">owner</nuxt-link>
+                <nuxt-link class="js-acc-btn" to="">owner</nuxt-link>
               </div>
               <div class="account-dropdown js-dropdown">
                 <div class="info clearfix">
                   <div class="image">
-                    <nuxt-link to="#">
+                    <nuxt-link to="">
                       <img :src="img" alt="John Doe" />
                     </nuxt-link>
                   </div>
                   <div class="content">
                     <h5 class="name">
-                      <nuxt-link to="#">john doe</nuxt-link>
+                      <nuxt-link to="">john doe</nuxt-link>
                     </h5>
                     <span class="email">johndoe@example.com</span>
                   </div>
                 </div>
                 <div class="account-dropdown__body">
                   <div class="account-dropdown__item">
-                    <nuxt-link to="#">
+                    <nuxt-link to="">
                       <i class="zmdi zmdi-account"></i>Account</nuxt-link>
                   </div>
                   <div class="account-dropdown__item">
-                    <nuxt-link to="#">
+                    <nuxt-link to="">
                       <i class="zmdi zmdi-settings"></i>Setting</nuxt-link>
                   </div>
                   <div class="account-dropdown__item">
-                    <nuxt-link to="#">
+                    <nuxt-link to="">
                       <i class="zmdi zmdi-money-box"></i>Billing</nuxt-link>
                   </div>
                 </div>
                 <div class="account-dropdown__footer">
-                  <nuxt-link to="#">
+                  <nuxt-link to="">
                     <i class="zmdi zmdi-power"></i>Logout</nuxt-link>
                 </div>
               </div>

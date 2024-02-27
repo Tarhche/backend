@@ -11,7 +11,7 @@
             <span class="au-breadcrumb-span">مکان شما : </span>
             <ul class="list-unstyled list-inline au-breadcrumb__list">
               <li class="list-inline-item active">
-                <nuxt-link class="text-decoration-none" to="#">  خانه </nuxt-link>
+                <nuxt-link class="text-decoration-none" to="">  خانه </nuxt-link>
               </li>
               <li class="list-inline-item seprate mx-1">
                 <span> / </span>
