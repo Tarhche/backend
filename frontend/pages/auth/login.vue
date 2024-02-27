@@ -32,6 +32,9 @@
                     من رو به خاطر بسپار.
                   </label>
                 </div>
+                <div class=" ">
+                  <nuxt-link to="/auth/remember-password" class="btn btn-outline-danger w-100 btn-sm ">فراموشی رمز عبور</nuxt-link>
+                </div>
               </div>
             </form>
             <!--                         <p class="text-center">Not a member? <a data-toggle="tab" href="#signup">Sign Up</a></p>-->
