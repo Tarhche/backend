@@ -8,9 +8,9 @@ export default defineNuxtConfig({
     '@vueuse/nuxt',
   ],
   runtimeConfig: {
-    internalApiBaseUrl: process.env.INTERNAL_API_BASE_URL,
+    internalApiBaseUrl: 'http://127.0.0.1:8000',
     public: {
-      publicApiBaseUrl: process.env.API_BASE_URL,
+      publicApiBaseUrl: 'http://127.0.0.1:8000',
     }
   }
 })

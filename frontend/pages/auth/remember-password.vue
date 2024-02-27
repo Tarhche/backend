@@ -7,7 +7,7 @@
           <div class="login-wrap mt-3 mt-md-0  p-md-4">
             <div class="d-flex">
               <div class="w-100 ">
-                <h3 class="mb-4 text-center ">ورود</h3>
+                <h3 class="mb-4 text-center ">فراموشی رمز عبور</h3>
               </div>
             </div>
             <form action="#" class="signin-form d-flex flex-column " @submit.prevent="handleSubmit">
@@ -17,20 +17,17 @@
                 <span class="error" ref="userNameError">لطفا کادر بالا را پر کنید .</span>
               </div>
               <div class="form-group my-4  position-relative">
-                <label class="label" for="password"> کلمه عبور :</label>
-                <input type="password" class=" input form-control py-2 " @keyup="removeError" v-model="password">
+                <label class="label" for="password"> شماره تماس :</label>
+                <input type="tel" class=" input form-control py-2  " @keyup="removeError" @keydown="justNumber"
+                       v-model="password">
                 <span class="error" ref="passwordError">لطفا کادر بالا را پر کنید .</span>
               </div>
               <div class="form-group">
-                <button type="submit" class="form-control btn btn-primary rounded submit px-3">ورود</button>
+                <button type="submit" class="form-control btn btn-primary rounded submit px-3">ارسال</button>
               </div>
-              <div class="form-group d-flex  flex-sm-row  mt-2 pt-2 justify-content-between align-items-center">
-                <div class=" text-left">
-                  <label class="checkbox-wrap d-flex align-items-center gap-1 checkbox-primary mb-0 ">
-                    <input type="checkbox" checked>
-                    <span class="checkmark"></span>
-                    من رو به خاطر بسپار.
-                  </label>
+              <div class="form-group  mt-2 pt-2 ">
+                <div class=" ">
+                  <nuxt-link to="/auth/login" class="btn btn-outline-danger w-100 ">ورود</nuxt-link>
                 </div>
               </div>
             </form>
@@ -69,6 +66,12 @@ const removeError = () => {
   }
   if (password.value.length) {
     passwordError.value.style.display = "none"
+  }
+}
+
+const justNumber = (e) => {
+  if (e.keyCode !== 46 && e.keyCode !== 8 && e.keyCode !== 96 && e.keyCode !== 48 && e.keyCode !== 97 && e.keyCode !== 98 && e.keyCode !== 99 && e.keyCode !== 100 && e.keyCode !== 101 && e.keyCode !== 102 && e.keyCode !== 103 && e.keyCode !== 104 && e.keyCode !== 105 && e.keyCode !== 49 && e.keyCode !== 50 && e.keyCode !== 51 && e.keyCode !== 52 && e.keyCode !== 53 && e.keyCode !== 54 && e.keyCode !== 55 && e.keyCode !== 56 && e.keyCode !== 57) {
+    e.preventDefault()
   }
 }
 
@@ -147,6 +150,7 @@ h3 {
 input:not([type="checkbox"]) {
   padding: 0.7rem !important;
   font-size: 0.9rem;
+  text-align: right;
 }
 
 input:focus {
