@@ -33,7 +33,7 @@
                   </label>
                 </div>
                 <div class=" ">
-                  <nuxt-link to="/auth/remember-password" class="btn btn-outline-danger w-100 btn-sm ">فراموشی رمز عبور</nuxt-link>
+                  <nuxt-link to="/auth/forgot-password" class="btn btn-outline-danger w-100 btn-sm ">فراموشی رمز عبور</nuxt-link>
                 </div>
               </div>
             </form>
