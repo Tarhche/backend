@@ -1,4 +1,5 @@
 <script setup lang="ts">
+
 const data =ref({
   Features:[
     {
@@ -113,7 +114,7 @@ const data =ref({
           <li class="has-sub">
             <a class="js-arrow" href="#">
               <i class=" ms-2 fas fa-copy"></i>Pages</a>
-            <ul class="list-unstyled navbar__sub-list js-sub-list">
+            <ul class="list-unstyled navbar__sub-list js-sub-list ">
               <li v-for="(item , index) in data.pages" :key="index">
                 <nuxt-link to="login.html">{{item.name}}}</nuxt-link>
               </li>
@@ -122,7 +123,7 @@ const data =ref({
           <li class="has-sub">
             <nuxt-link class="js-arrow" to="#">
               <i class=" ms-2 fas fa-desktop"></i>UI Elements</nuxt-link>
-            <ul class="list-unstyled navbar__sub-list js-sub-list">
+            <ul class="list-unstyled navbar__sub-list js-sub-list ">
               <li v-for="(item , index) in data.UIElements" :key="index">
                 <nuxt-link :to="item.path">{{item.name}}</nuxt-link>
               </li>

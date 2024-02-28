@@ -1,0 +1,9 @@
+.ck-content{
+    min-height: 200px ;
+}
+.ck .ck-editor__main{
+    min-height: 200px ;
+}
+/* .ck.ck-balloon-panel.ck-balloon-panel_position_border-side_right.ck-powered-by-balloon{*/
+/*    display: none !important;*/
+/*}*/

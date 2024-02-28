@@ -1,4 +1,6 @@
 <script setup lang="ts">
+const {data:response , pending , error } = await useFetch('https://tarhche-backend.liara.run/dashboard/articles')
+console.log(response.value)
 const data = ref({
   row: [
     {

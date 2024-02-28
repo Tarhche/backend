@@ -89,9 +89,7 @@ onMounted(() => {
   const listMenu = document.querySelectorAll('a.js-arrow')
   const show = document.querySelectorAll('.navbar__sub-list.js-sub-list')
   for (let i = 0; i < listMenu.length; i++) {
-    console.log(i)
     listMenu[i].addEventListener("click", () => {
-      console.log(show[i])
       show[i - 1].classList.toggle("show")
     })
   }

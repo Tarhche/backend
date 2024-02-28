@@ -5,7 +5,7 @@
 <template>
   <div class="search" dir="rtl">
     <div class="row">
-      <div class="card mt-5 rounded py-3">
+      <div class="card rounded py-3">
         <div class="card-header bg-white border-0">
           <div class="title mt-4"><h1 class="search-title text-center">جستوجوی پیشرفته</h1></div>
         </div>
