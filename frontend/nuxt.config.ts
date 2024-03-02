@@ -5,7 +5,7 @@ export default defineNuxtConfig({
     "~/assets/scss/main.scss",
   ],
   modules: [
-    '@vueuse/nuxt',
+    '@vueuse/nuxt','@pinia/nuxt'
   ],
   runtimeConfig: {
     internalApiBaseUrl: 'http://127.0.0.1:8000',

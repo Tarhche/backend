@@ -12,17 +12,17 @@
             </div>
             <form action="#" class="signin-form d-flex flex-column " @submit.prevent="handleSubmit">
               <div class="form-group mt-2  position-relative">
-                <label class="label" for="name">نام کاربری :</label>
+                <label class="label user-select-none" for="name">نام کاربری :</label>
                 <input type="text" class=" input form-control py-2 " @keyup="removeError" v-model="userName">
                 <span class="error" ref="userNameError">لطفا کادر بالا را پر کنید .</span>
               </div>
               <div class="form-group my-4  position-relative">
-                <label class="label" for="password"> کلمه عبور :</label>
+                <label class="label user-select-none" for="password"> کلمه عبور :</label>
                 <input type="password" class=" input form-control py-2 " @keyup="removeError" v-model="password">
                 <span class="error" ref="passwordError">لطفا کادر بالا را پر کنید .</span>
               </div>
               <div class="form-group">
-                <button type="submit" class="form-control btn btn-primary rounded submit px-3">ورود</button>
+                <button type="submit" class="form-control btn btn-primary rounded submit px-3"> ورود</button>
               </div>
               <div class="form-group d-flex  flex-sm-row  mt-2 pt-2 justify-content-between align-items-center">
                 <div class=" text-left">
@@ -46,13 +46,14 @@
 </template>
 <script setup>
 import {onMounted} from "vue";
-
+import {useTarcheApi} from '~/store/tarche.js'
+import axios from "axios";
+const store = useTarcheApi()
 const userName = ref("")
 const password = ref("")
 const userNameError = ref(null)
 const passwordError = ref(null)
-
-const handleSubmit = () => {
+ const handleSubmit = async() => {
   if (!userName.value.length && !password.value.length) {
     userNameError.value.style.display = "block"
     passwordError.value.style.display = "block"
@@ -61,6 +62,15 @@ const handleSubmit = () => {
   } else if (!password.value.length) {
     passwordError.value.style.display = "block"
   } else {
+    const {data:data , error} = await useFetch( "https://tarhche-backend.liara.run/api/auth/login", {
+      method:"POST" ,
+      body:{
+        "username": "mahdi.khanzadi",
+        "password": "123"
+      }
+
+    })
+    console.log(data ,error)
     userNameError.value.style.display = "none"
     passwordError.value.style.display = "none"
   }
@@ -98,6 +108,62 @@ onMounted(() => {
     })
   })
 })
+
+/*
+  function handleCreateProfile() {
+  if(internationalCode.value.length !== 10){
+  errorInternationalCode.value=true
+  } else if(lastName.value.length === 0){
+  errorLastName.value=true
+  } else if(lastName.value.length === 0 ){
+  errorDate.value=true
+  }
+  else{
+    errorInternationalCode.value=false
+    errorLastName.value=false
+    errorDate.value=false
+    setCookie(token)
+    Toast.success(   'ثبت نام با موفقیت انجام شد 😘' , {
+      timeout: 1400,
+
+    })
+    setTimeout(()=>    router.go(-1)
+    , 1500)
+  }
+}
+function setCookie(token){
+  let time = new Date();
+  document.cookie = `sheLife=${token} ; expires=${time.setTime(
+      time.getTime() + 60 * 60 * 24 * 365 * 1000
+  )};path=/ `
+}
+
+function getCookie(fullName) {
+  const name = `${fullName}=`;
+  let getCookie = document.cookie.split(";");
+  for (let i = 0; i < getCookie.length; i++) {
+    let string = getCookie[i].trim();
+    string.indexOf(name);
+    if (string.indexOf(name) != -1) {
+      let cookie = string.split('=');
+      if(cookie[0]===fullName){
+        login.value.status = true
+        return cookie[1];
+      }
+    else {
+        login.value.status = false
+      }
+    }
+  }
+}
+
+getCookie(token)
+ */
+
+
+
+
+
 </script>
 <style scoped>
 .container {
@@ -218,6 +284,9 @@ input[type="checkbox"]:checked + .checkmark::after {
 @media (max-width: 767.98px) {
   .wrap .img {
     height: 250px;
+  }
+  .login-wrap{
+    padding-top: 0;
   }
 }
 

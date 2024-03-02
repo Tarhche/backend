@@ -12,7 +12,7 @@ const data = ref({
       path: ""
     },
     {
-      name: "تفویم",
+      name: "تقویم",
       path: ""
     },
     {
@@ -122,9 +122,9 @@ onMounted(() => {
             <i class="fas fa-angle-down"></i>
           </span>
         </nuxt-link>
-        <ul class="list-unstyled navbar__sub-list js-sub-list">
+        <ul class="list-unstyled navbar__sub-list js-sub-list ">
           <li v-for="(item , index) in data.Features" :key="index">
-            <nuxt-link class="text-decoration-none" :to="item.path">{{ item.name }}</nuxt-link>
+            <nuxt-link class="text-decoration-none " :to="item.path">{{ item.name }}</nuxt-link>
           </li>
         </ul>
       </li>
@@ -135,7 +135,7 @@ onMounted(() => {
             <i class="fas fa-angle-down"></i>
           </span>
         </nuxt-link>
-        <ul class="list-unstyled navbar__sub-list js-sub-list">
+        <ul class="list-unstyled navbar__sub-list js-sub-list px-4">
           <li v-for="(item,index) in data.pages" :key="index">
             <nuxt-link class="text-decoration-none" :to="item.path">{{ item.name }}</nuxt-link>
           </li>
@@ -148,7 +148,7 @@ onMounted(() => {
             <i class="fas fa-angle-down"></i>
           </span>
         </nuxt-link>
-        <ul class="list-unstyled navbar__sub-list js-sub-list">
+        <ul class="list-unstyled navbar__sub-list js-sub-list px-4">
           <li v-for="(item , index) in data.UIElements" :key="index">
             <nuxt-link class="text-decoration-none" :to="item.path">{{ item.name }}</nuxt-link>
           </li>
@@ -161,5 +161,9 @@ onMounted(() => {
 <style scoped>
 .show {
   display: block !important;
+}
+.navbar__sub-list {
+  padding: 0 27px;
+
 }
 </style>

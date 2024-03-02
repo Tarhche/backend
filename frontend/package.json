@@ -26,9 +26,12 @@
     "@ckeditor/ckeditor5-theme-lark": "^41.1.0",
     "@ckeditor/ckeditor5-vue": "^5.1.0",
     "@fortawesome/fontawesome-free": "^6.5.1",
+    "@pinia/nuxt": "^0.5.1",
     "@vueform/multiselect": "^2.6.6",
+    "axios": "^1.6.7",
     "bootstrap": "^5.3.2",
     "medium-zoom": "^1.1.0",
+    "pinia": "^2.1.7",
     "sass": "^1.70.0"
   }
 }

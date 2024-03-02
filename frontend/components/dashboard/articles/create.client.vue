@@ -28,7 +28,8 @@ import "~/assets/css/ckEditorStyle.css"
 //   }
 // })
 
-
+const token = ref('eyJhbGciOiJFUzUxMiIsInR5cCI6IkpXVCJ9.eyJhdWQiOlsiYWNjZXNzIl0sImV4cCI6MTcwOTE1MzE5MywiaWF0IjoxNzA5MTUyMjkzLCJuYmYiOjE3MDkxNTIyOTMsInN1YiI6IjAxOGRlMTBkLWI3YTctNzg4ZS05NGMzLWIzYjlmMDZiZTVjYSJ9.AXJBPnZUgo3gYtCv6RplPtyaJiHYQS6FvHlQVLL5TAsp4tjglYzYsWf-oZjD7lNJjguZzNqf-5MZJ957UYyXXVl-AVuX8NZ3UBZU8HQH-mzdPX4sVhQADunjzGJ_lSFdv_xB-pR74D-2X9xG6hjDnFCkgwL4GBd8t5ilPtlWgltdjJZn')
+// const url = useApiUrlResolver().resolve(`api/dashboard/articles`)
 
 
 const title = ref("")
@@ -43,7 +44,7 @@ const file = ref(null)
 const editor = ref(ClassicEditor);
 
 const getFile = ()=>{
-   image.value = file.value.files[0]
+   // image.value = file.value.files[0]
 }
 const formData = ref({
   title:title.value,
@@ -52,18 +53,35 @@ const formData = ref({
   summary:summary.value,
   body:editorData.value
 })
-const sendArticle = async ()=>{
-  const {data:response} = await useFetch('http://127.0.0.1:8000/dashboard/articles',{
-    method:"post" ,
+async function sendArticle(){
+  const {data:response , error} = await useFetch(url,{
+    method:"get" ,
+    headers:{
+      // Authorization: `Bearer ${token.value}`,
+      Authorization: `Bearer ${token.value}`,
+
+    },
     body:{
-      cover :formData.value.image,
-      title:formData.value.title,
-      body:formData.value.body,
-      excerpt:formData.value.summary
+      // cover :formData.value.image,
+      // title:formData.value.title,
+      // body:formData.value.body,
+      // excerpt:formData.value.summary
     }
   })
-  console.log(response.value)
+  // console.log(response , error)
+  // console.log( "data" , formData.value)
 }
+ // async function send() {
+ //  const {data: response, error} = await useFetch('api/home', {
+ //    method:"get",
+    // headers:{
+    //   Authorization: `Bearer ${token.value}`,
+    // },
+  // })
+
+// }
+
+
 </script>
 
 <template>
@@ -92,7 +110,7 @@ const sendArticle = async ()=>{
               <label class="form-label mt-2 " for="editor">توضیحات :</label>
               <ckeditor :editor="editor" v-model="editorData" class="text-start"  /> {{editorData}}
               <div class="input-group ">
-                <button class="btn w-100 btn-primary mt-4">ارسال</button>
+                <button class="btn w-100 btn-primary mt-4" @click="send">ارسال</button>
               </div>
             </div>
           </div>
