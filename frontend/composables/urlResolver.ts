@@ -1,9 +1,9 @@
 function baseUrl() {
     const {internalApiBaseUrl, public: p} = useRuntimeConfig()
-    const url = process.client ? p.publicApiBaseUrl : internalApiBaseUrl;
+    const url = process.client ? p.apiBaseUrl : internalApiBaseUrl;
 
     return {
-        publicApiBaseUrl: p.publicApiBaseUrl.replace(/\/$/, ""),
+        publicApiBaseUrl: p.apiBaseUrl.replace(/\/$/, ""),
         internalApiBaseUrl: internalApiBaseUrl?.replace(/\/$/, ""),
         apiBaseUrl: url.replace(/\/$/, "")
     };

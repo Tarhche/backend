@@ -5,15 +5,16 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      target: develop
     depends_on:
       - app
     ports:
       - "3000:3000"
     volumes:
-      - ./frontend:/app
+      - ./frontend:/opt/app
     environment:
-      API_BASE_URL: ${API_BASE_URL}
-      INTERNAL_API_BASE_URL: ${INTERNAL_API_BASE_URL}
+      NUXT_PUBLIC_API_BASE_URL: ${NUXT_PUBLIC_API_BASE_URL}
+      NUXT_INTERNAL_API_BASE_URL: ${NUXT_INTERNAL_API_BASE_URL}
     command: >
       sh -c "npm install; npm run dev --host"
 
