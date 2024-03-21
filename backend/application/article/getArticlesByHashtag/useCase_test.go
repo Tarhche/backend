@@ -16,36 +16,9 @@ func TestUseCase_GetArticles(t *testing.T) {
 		request := Request{Page: 1, Hashtag: "test"}
 		response, err := usecase.GetArticlesByHashtag(&request)
 
-		if repository.GetCountCount != 1 {
-			t.Errorf("unexpected number of calls %d", repository.GetCountCount)
-		}
-
-		if repository.GetByHashtagCount != 1 {
-			t.Errorf("unexpected number of calls %d", repository.GetByHashtagCount)
-		}
-
-		if response == nil {
-			t.Error("unexpected response")
-		}
-
 		if err != nil {
 			t.Error("unexpected error")
 		}
-	})
-
-	t.Run("returns an error on counting items", func(t *testing.T) {
-		repository := MockArticlesRepository{
-			GetCountErr: errors.New("error on counting"),
-		}
-
-		usecase := NewUseCase(&repository)
-
-		request := Request{Page: 1, Hashtag: "test"}
-		response, err := usecase.GetArticlesByHashtag(&request)
-
-		if repository.GetCountCount != 1 {
-			t.Errorf("unexpected number of calls %d", repository.GetCountCount)
-		}
 
 		if repository.GetByHashtagCount != 1 {
 			t.Errorf("unexpected number of calls %d", repository.GetByHashtagCount)
@@ -53,10 +26,6 @@ func TestUseCase_GetArticles(t *testing.T) {
 
 		if response == nil {
 			t.Error("unexpected response")
-		}
-
-		if err != nil {
-			t.Error("expects an error")
 		}
 	})
 
@@ -70,20 +39,16 @@ func TestUseCase_GetArticles(t *testing.T) {
 		request := Request{Page: 1, Hashtag: "test"}
 		response, err := usecase.GetArticlesByHashtag(&request)
 
-		if repository.GetCountCount != 1 {
-			t.Errorf("unexpected number of calls %d", repository.GetCountCount)
+		if err == nil {
+			t.Error("expects an error")
 		}
 
-		if repository.GetByHashtagCount != 0 {
+		if repository.GetByHashtagCount != 1 {
 			t.Errorf("unexpected number of calls %d", repository.GetByHashtagCount)
 		}
 
 		if response != nil {
 			t.Error("unexpected response")
-		}
-
-		if err == nil {
-			t.Error("expects an error")
 		}
 	})
 }
@@ -93,9 +58,6 @@ type MockArticlesRepository struct {
 
 	GetByHashtagCount uint
 	GetByHashtagErr   error
-
-	GetCountCount uint
-	GetCountErr   error
 }
 
 func (r *MockArticlesRepository) GetByHashtag(hashtags []string, offset uint, limit uint) ([]article.Article, error) {

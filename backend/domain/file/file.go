@@ -15,9 +15,11 @@ type File struct {
 }
 
 type Repository interface {
+	GetAll(offset uint, limit uint) ([]File, error)
 	GetOne(UUID string) (File, error)
 	Save(*File) (string, error)
 	Delete(UUID string) error
+	Count() (uint, error)
 }
 
 type Storage interface {
