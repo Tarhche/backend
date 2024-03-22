@@ -30,35 +30,38 @@ watch(response, () => {
     postData.value = response.value.items
   }
 })
-async function putData(value){
-    const cookie = useCookie("tarche")
-    const {status, error}  = await useFetch( ()=>`${baseURL}/api/dashboard/articles` , {
-      method:"put",
-      headers:{
-        Authorization: `Bearer ${cookie.value}`,
-      },
-      body:value
-    })
-    if (status.value == "success"){
-      showModal.value = false
-      await refreshNuxtData()
-    }
-    console.log(error.value , "error")
+
+async function putData(value) {
+  const cookie = useCookie("tarche")
+  const {status, error} = await useFetch(() => `${baseURL}/api/dashboard/articles`, {
+    method: "put",
+    headers: {
+      Authorization: `Bearer ${cookie.value}`,
+    },
+    body: value
+  })
+  if (status.value == "success") {
+    showModal.value = false
+    await refreshNuxtData()
   }
-async  function deletePost(id){
-  const {status, error}  = await useFetch( `${baseURL}/api/dashboard/articles/${id}` , {
-    method:"delete",
-    headers:{
+  console.log(error.value, "error")
+}
+
+async function deletePost(id) {
+  const {status, error} = await useFetch(`${baseURL}/api/dashboard/articles/${id}`, {
+    method: "delete",
+    headers: {
       Authorization: `Bearer ${cookie.value}`
     }
   })
-  if (status.value == "success"){
+  if (status.value == "success") {
     alert("آیتم مورد نظر با موفقیت حذف شد ")
     await refreshNuxtData()
   }
-  if (error.value){
+  if (error.value) {
     console.log(error.value)
   }
+
 }
 </script>
 
@@ -90,14 +93,16 @@ async  function deletePost(id){
           <tbody class="text-center " v-if="postData.length">
           <tr v-for="(item,index) in postData" :key="index">
             <th>{{ index + 1 }}</th>
-            <td class=""><img class="img-thumbnail rounded-circle w-50" src="" alt=""></td>
+            <td class=""><img class="img-fluid rounded m-auto w-100" :src="`${baseURL}/files/${item.cover}`" :alt="item.title"></td>
             <td>{{ item.author.name }}</td>
             <td><span class="limited" v-if="item.uuid">{{ item.uuid }}</span></td>
             <td class="list-header" v-if="item.title"><span class="limited">{{ item.title }}</span></td>
             <td><span class="limited" v-if="item.published_at">{{ item.published_at }}</span></td>
             <td class="action ">
-              <span class="mx-md-2 d-block d-md-inline-block " @click="deletePost(item.uuid)"><i class="fa-solid fa-trash text-danger"></i></span>
-              <span class="mx-md-2 d-block d-md-inline-block " @click="changePost(item.uuid)"><i class="fa-solid fa-pen text-warning"></i></span>
+              <span class="mx-md-2 d-block d-md-inline-block " @click="deletePost(item.uuid)"><i
+                  class="fa-solid fa-trash text-danger"></i></span>
+              <span class="mx-md-2 d-block d-md-inline-block " @click="changePost(item.uuid)"><i
+                  class="fa-solid fa-pen text-warning"></i></span>
             </td>
           </tr>
           </tbody>
@@ -136,7 +141,9 @@ tbody tr {
   white-space: nowrap;
 }
 
-
+td > img {
+  max-width: 70px;
+}
 .limited {
   overflow: hidden;
   text-overflow: ellipsis;
