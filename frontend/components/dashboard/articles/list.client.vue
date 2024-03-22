@@ -1,5 +1,9 @@
 <script setup lang="ts">
 import Loader from "~/components/loading/loader.vue";
+import Confirm from "~/components/modal/confirm.vue";
+
+const showConfirm = ref(false)
+const confirmDelete = ref(false)
 
 const showModal = ref(false)
 const {public: {baseURL}} = useRuntimeConfig()
@@ -47,26 +51,46 @@ async function putData(value) {
   console.log(error.value, "error")
 }
 
-async function deletePost(id) {
-  const {status, error} = await useFetch(`${baseURL}/api/dashboard/articles/${id}`, {
-    method: "delete",
-    headers: {
-      Authorization: `Bearer ${cookie.value}`
+ function deletePost(id) {
+  showConfirm.value = true
+  watch(confirmDelete, async () => {
+    if (confirmDelete.value) {
+      const {status, error} = await useFetch(`${baseURL}/api/dashboard/articles/${id}`, {
+        method: "delete",
+        headers: {
+          Authorization: `Bearer ${cookie.value}`
+        }
+      })
+      if (status.value == "success") {
+        await refreshNuxtData()
+      }
+      if (error.value) {
+        console.log(error.value)
+      }
+
     }
   })
-  if (status.value == "success") {
-    alert("آیتم مورد نظر با موفقیت حذف شد ")
-    await refreshNuxtData()
-  }
-  if (error.value) {
-    console.log(error.value)
-  }
-
+  confirmDelete.value = false
 }
+
+function confirm() {
+  confirmDelete.value = true
+  showConfirm.value = false
+}
+
+function close() {
+  showConfirm.value = false
+}
+
 </script>
 
 <template>
   <div class="articles-list" dir="rtl">
+    <div class="row">
+      <transition name="transition">
+        <modal-confirm @close="close" @confirm="confirm" v-if="showConfirm"/>
+      </transition>
+    </div>
     <div class="loading-container" v-if="pending">
       <loader/>
     </div>
@@ -93,7 +117,8 @@ async function deletePost(id) {
           <tbody class="text-center " v-if="postData.length">
           <tr v-for="(item,index) in postData" :key="index">
             <th>{{ index + 1 }}</th>
-            <td class="col"><img class="img-fluid rounded m-auto w-100 h-100" :src="`${baseURL}/files/${item.cover}`" :alt="item.title"></td>
+            <td class="col"><img class="img-fluid rounded m-auto w-100 h-100" :src="`${baseURL}/files/${item.cover}`"
+                                 :alt="item.title"></td>
             <td class="col">{{ item.author.name }}</td>
             <td class="col"><span class="limited" v-if="item.uuid">{{ item.uuid }}</span></td>
             <td class="list-headercol" v-if="item.title"><span class="limited">{{ item.title }}</span></td>
@@ -145,6 +170,7 @@ td > img {
   max-width: 70px;
   max-height: 35px;
 }
+
 .limited {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -155,7 +181,7 @@ td > img {
   height: 100%;
 }
 
-.fa-trash , .fa-pen {
+.fa-trash, .fa-pen {
   cursor: pointer;
 }
 
