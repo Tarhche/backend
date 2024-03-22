@@ -76,7 +76,7 @@ function sendArticle() {
 
 if (props.data) {
   console.log(props.data)
-  const {data:data, error} = await useFetch(() => `https://tarhche-backend.liara.run/api/articles/${props.data}`)
+  const {data:data, error} = await useFetch(() => `${baseURL}/api/articles/${props.data}`)
 if (error.value){
   console.log( "error" , error.value)
 

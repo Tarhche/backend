@@ -12,10 +12,10 @@ const router = useRouter()
 definePageMeta({
   layout:"dashboard"
 })
-
+const {public: {baseURL}} = useRuntimeConfig()
  const  sendData = async (value)=>{
    const cookie = useCookie("tarche")
-   const {data:data , error}  = await useFetch( "https://tarhche-backend.liara.run/api/dashboard/articles" , {
+   const {data:data ,status, error}  = await useFetch( ()=>`${baseURL}/api/dashboard/articles` , {
     method:"post",
     headers:{
       Authorization: `Bearer ${cookie.value}`,
@@ -23,7 +23,7 @@ definePageMeta({
     body:value
   })
   console.log(data.value , "data create")
-   if (data.value){
+   if (status.value === "success"){
      router.go(-1)
      await refreshNuxtData()
    }

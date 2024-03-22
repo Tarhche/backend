@@ -10,7 +10,7 @@ const {
   data: response,
   pending,
   error
-} = await useFetch(() => 'https://tarhche-backend.liara.run/api/dashboard/articles', {
+} = await useFetch(() => `${baseURL}/api/dashboard/articles`, {
   headers: {
     authorization: `Bearer ${cookie.value}`
   },
@@ -19,21 +19,7 @@ const {
 if (error) {
   console.log(error)
 }
-// async function removePost(uuid){
-//  const {data , pending , error , refresh } = await useFetch( ()=>`https://tarhche-backend.liara.run/api/dashboard/articles/${uuid}` , {
-//    headers:{
-//      authorization:`Bearer ${cookie.value}`
-//    }
-//  })
-//   if (!error){
-//     alert("success")
-//     await refreshNuxtData()
-//   }
-//   console.log(error)
-//   console.log(uuid)
-//   await refreshNuxtData()
-//
-// }
+
 function changePost(id) {
   showModal.value = true
   uuid.value = id
@@ -46,7 +32,7 @@ watch(response, () => {
 })
 async function putData(value){
     const cookie = useCookie("tarche")
-    const {status, error}  = await useFetch( "https://tarhche-backend.liara.run/api/dashboard/articles" , {
+    const {status, error}  = await useFetch( ()=>`${baseURL}/api/dashboard/articles` , {
       method:"put",
       headers:{
         Authorization: `Bearer ${cookie.value}`,
@@ -60,7 +46,7 @@ async function putData(value){
     console.log(error.value , "error")
   }
 async  function deletePost(id){
-  const {status, error}  = await useFetch( `https://tarhche-backend.liara.run/api/dashboard/articles/${id}` , {
+  const {status, error}  = await useFetch( `${baseURL}/api/dashboard/articles/${id}` , {
     method:"delete",
     headers:{
       Authorization: `Bearer ${cookie.value}`
