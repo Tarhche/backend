@@ -93,12 +93,12 @@ async function deletePost(id) {
           <tbody class="text-center " v-if="postData.length">
           <tr v-for="(item,index) in postData" :key="index">
             <th>{{ index + 1 }}</th>
-            <td class=""><img class="img-fluid rounded m-auto w-100" :src="`${baseURL}/files/${item.cover}`" :alt="item.title"></td>
-            <td>{{ item.author.name }}</td>
-            <td><span class="limited" v-if="item.uuid">{{ item.uuid }}</span></td>
-            <td class="list-header" v-if="item.title"><span class="limited">{{ item.title }}</span></td>
-            <td><span class="limited" v-if="item.published_at">{{ item.published_at }}</span></td>
-            <td class="action ">
+            <td class="col"><img class="img-fluid rounded m-auto w-100 h-100" :src="`${baseURL}/files/${item.cover}`" :alt="item.title"></td>
+            <td class="col">{{ item.author.name }}</td>
+            <td class="col"><span class="limited" v-if="item.uuid">{{ item.uuid }}</span></td>
+            <td class="list-headercol" v-if="item.title"><span class="limited">{{ item.title }}</span></td>
+            <td class="col"><span class="limited" v-if="item.published_at">{{ item.published_at }}</span></td>
+            <td class="action col">
               <span class="mx-md-2 d-block d-md-inline-block " @click="deletePost(item.uuid)"><i
                   class="fa-solid fa-trash text-danger"></i></span>
               <span class="mx-md-2 d-block d-md-inline-block " @click="changePost(item.uuid)"><i
@@ -143,6 +143,7 @@ tbody tr {
 
 td > img {
   max-width: 70px;
+  max-height: 35px;
 }
 .limited {
   overflow: hidden;
@@ -154,7 +155,7 @@ td > img {
   height: 100%;
 }
 
-.fa-trash {
+.fa-trash , .fa-pen {
   cursor: pointer;
 }
 
