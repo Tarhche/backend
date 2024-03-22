@@ -1,6 +1,6 @@
 <script setup>
     const url = useApiUrlResolver().resolve(`api/home`)
-
+    const {public:{baseURL}} = useRuntimeConfig()
     const { pending, data, error } = await useFetch(url, {
         pick: ['all', 'popular', 'elements']
     });

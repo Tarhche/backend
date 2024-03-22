@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { useToggle } from '@vueuse/core'
-
+const cookie = useCookie("tarche")
 const [value, toggle] = useToggle()
+
 </script>
 
 <template>
@@ -16,7 +17,10 @@ const [value, toggle] = useToggle()
             <div :class="{show: value}" class="navbar-collapse collapse flex-row-reverse" id="navbarColor02" style="">
                 <ul class="navbar-nav d-flex align-items-center">
                     <li class="nav-item highlight">
-                        <NuxtLink class="nav-link" to="/auth/login">ورود</NuxtLink>
+                        <NuxtLink class="nav-link"  :to="cookie ?'/dashboard' : '/auth/login' ">
+                          <span v-if="cookie">داشبورد</span>
+                          <span v-else>ورود</span>
+                        </NuxtLink>
                     </li>
                 </ul>
             </div>

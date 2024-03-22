@@ -11,6 +11,7 @@ export default defineNuxtConfig({
     internalApiBaseUrl: 'http://127.0.0.1:8000',
     public: {
       publicApiBaseUrl: 'http://127.0.0.1:8000',
+      baseURL:'https://tarhche-backend.liara.run'
     }
   }
 })

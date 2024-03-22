@@ -22,7 +22,7 @@
                 <span class="error" ref="passwordError">لطفا کادر بالا را پر کنید .</span>
               </div>
               <div class="form-group">
-                <button type="submit" class="form-control btn btn-primary rounded submit px-3"> ورود</button>
+                <button type="submit" class="form-control btn btn-primary rounded submit px-3" > ورود</button>
               </div>
               <div class="form-group d-flex  flex-sm-row  mt-2 pt-2 justify-content-between align-items-center">
                 <div class=" text-left">
@@ -47,12 +47,13 @@
 <script setup>
 import {onMounted} from "vue";
 import {useTarcheApi} from '~/store/tarche.js'
-import axios from "axios";
 const store = useTarcheApi()
 const userName = ref("")
 const password = ref("")
 const userNameError = ref(null)
 const passwordError = ref(null)
+
+const {public:{baseURL}} = useRuntimeConfig()
  const handleSubmit = async() => {
   if (!userName.value.length && !password.value.length) {
     userNameError.value.style.display = "block"
@@ -62,15 +63,21 @@ const passwordError = ref(null)
   } else if (!password.value.length) {
     passwordError.value.style.display = "block"
   } else {
-    const {data:data , error} = await useFetch( "https://tarhche-backend.liara.run/api/auth/login", {
+    const {data:data , error} = await useFetch( `${baseURL}/api/auth/login`, {
       method:"POST" ,
       body:{
-        "username": "mahdi.khanzadi",
-        "password": "123"
+        "username": userName.value,
+        "password": password.value
       }
 
     })
-    console.log(data ,error)
+    if (error.value){
+      console.log(error.value)
+    }
+    if (data.value.access_token){
+    setCookie(data.value.access_token)
+      navigateTo('/dashboard')
+    }
     userNameError.value.style.display = "none"
     passwordError.value.style.display = "none"
   }
@@ -89,7 +96,7 @@ onMounted(() => {
   const inputs = document.querySelectorAll(".input")
   const placeholders = document.querySelectorAll(".label")
   inputs.forEach((input, index) => {
-    input.addEventListener('click', () => {
+    input.addEventListener('focus', () => {
       placeholders[index].classList.add('transform')
     })
   })
@@ -130,35 +137,14 @@ onMounted(() => {
     setTimeout(()=>    router.go(-1)
     , 1500)
   }
-}
+}*/
 function setCookie(token){
   let time = new Date();
-  document.cookie = `sheLife=${token} ; expires=${time.setTime(
-      time.getTime() + 60 * 60 * 24 * 365 * 1000
+  document.cookie = `tarche=${token} ; expires=${time.setTime(
+      time.getTime() + (60 * 15 * 1000)
   )};path=/ `
 }
 
-function getCookie(fullName) {
-  const name = `${fullName}=`;
-  let getCookie = document.cookie.split(";");
-  for (let i = 0; i < getCookie.length; i++) {
-    let string = getCookie[i].trim();
-    string.indexOf(name);
-    if (string.indexOf(name) != -1) {
-      let cookie = string.split('=');
-      if(cookie[0]===fullName){
-        login.value.status = true
-        return cookie[1];
-      }
-    else {
-        login.value.status = false
-      }
-    }
-  }
-}
-
-getCookie(token)
- */
 
 
 

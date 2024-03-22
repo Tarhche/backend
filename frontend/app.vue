@@ -5,6 +5,9 @@
       lang: "fa",
     },
   });
+if (useCookie("tarche")){
+  const cookie = useState('cookie' , ()=>useCookie("tarche"))
+}
 </script>
 
 <template>
