@@ -1,7 +1,4 @@
 <script setup lang="ts">
-import Loader from "~/components/loading/loader.vue";
-import Confirm from "~/components/modal/confirm.vue";
-
 const showConfirm = ref(false)
 const confirmDelete = ref(false)
 
@@ -12,38 +9,35 @@ const postData = ref("")
 const uuid = ref("")
 const {
   data: response,
+    status ,
   pending,
   error
-} = await useFetch(() => `${baseURL}/api/dashboard/articles`, {
+} = await useAsyncData('articles' , () => $fetch(`${baseURL}/api/dashboard/articles`, {
   headers: {
     authorization: `Bearer ${cookie.value}`
   },
-})
-
-if (error) {
-  console.log(error)
+}))
+if (status.value = "success"){
+  postData.value = response.value.items
 }
+  console.log(response.value.items)
+  console.log(error.value?.message)
+
 
 function changePost(id) {
   showModal.value = true
   uuid.value = id
 }
 
-watch(response, () => {
-  if (response.value) {
-    postData.value = response.value.items
-  }
-})
-
 async function putData(value) {
   const cookie = useCookie("tarche")
-  const {status, error} = await useFetch(() => `${baseURL}/api/dashboard/articles`, {
+  const {status, error} = await useAsyncData('change',() => $fetch(`${baseURL}/api/dashboard/articles`, {
     method: "put",
     headers: {
       Authorization: `Bearer ${cookie.value}`,
     },
     body: value
-  })
+  }))
   if (status.value == "success") {
     showModal.value = false
     await refreshNuxtData()
@@ -55,12 +49,12 @@ async function putData(value) {
   showConfirm.value = true
   watch(confirmDelete, async () => {
     if (confirmDelete.value) {
-      const {status, error} = await useFetch(`${baseURL}/api/dashboard/articles/${id}`, {
+      const {status, error} = await useAsyncData('delete' , ()=>$fetch(`${baseURL}/api/dashboard/articles/${id}`, {
         method: "delete",
         headers: {
           Authorization: `Bearer ${cookie.value}`
         }
-      })
+      }))
       if (status.value == "success") {
         await refreshNuxtData()
       }

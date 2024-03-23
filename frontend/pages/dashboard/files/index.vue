@@ -4,20 +4,20 @@ const cookie = useCookie("tarche")
 const showConfirm = ref(false)
 const confirmDelete = ref(false)
 const files = ref("")
-if (process.client) {
-  const {data: response, status, error} = await useFetch(() => `${baseURL}/api/dashboard/files`, {
+
+  const {data: response, status, error} = await useAsyncData('files' ,()=>$fetch( `${baseURL}/api/dashboard/files`, {
     lazy: true,
     headers: {
       authorization: `Bearer ${cookie.value}`
     }
-  })
-  if (status.value === "success") {
+  }))
+  if (response.value.items.length) {
     files.value = response.value.items
   }
   if (error.value) {
     console.log(error)
   }
-}
+
 
 
 
