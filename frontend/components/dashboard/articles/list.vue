@@ -11,7 +11,7 @@ const {
   data: response,
     status ,
   pending,
-  error
+  error,
 } = await useAsyncData('articles' , () => $fetch(`${baseURL}/api/dashboard/articles`, {
   headers: {
     authorization: `Bearer ${cookie.value}`
@@ -31,7 +31,7 @@ function changePost(id) {
 
 async function putData(value) {
   const cookie = useCookie("tarche")
-  const {status, error} = await useAsyncData('change',() => $fetch(`${baseURL}/api/dashboard/articles`, {
+  const {status, error } = await useAsyncData('change',() => $fetch(`${baseURL}/api/dashboard/articles`, {
     method: "PUT",
     headers: {
       Authorization: `Bearer ${cookie.value}`,
@@ -119,9 +119,9 @@ function close() {
             <td class="col"><span class="limited" v-if="item.published_at">{{ item.published_at }}</span></td>
             <td class="action col">
               <span class="mx-md-2 d-block d-md-inline-block " @click="deletePost(item.uuid)"><i
-                  class="fa-solid fa-trash text-danger"></i></span>
+                  class="fa-solid fa-trash fa-xl text-danger"></i></span>
               <span class="mx-md-2 d-block d-md-inline-block " @click="changePost(item.uuid)"><i
-                  class="fa-solid fa-pen text-warning"></i></span>
+                  class="fa-solid fa-pen fa-xl text-warning"></i></span>
             </td>
           </tr>
           </tbody>

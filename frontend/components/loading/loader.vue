@@ -21,6 +21,7 @@
   justify-content: center;
   align-items: center;
   color: white;
+  z-index: 10;
 }
 
 .loading-backdrop {
