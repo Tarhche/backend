@@ -16,7 +16,7 @@ const {
   headers: {
     authorization: `Bearer ${cookie.value}`
   },
-}))
+}),{ lazy:true})
 if (status.value = "success"){
   postData.value = response.value.items
 }
@@ -32,7 +32,7 @@ function changePost(id) {
 async function putData(value) {
   const cookie = useCookie("tarche")
   const {status, error} = await useAsyncData('change',() => $fetch(`${baseURL}/api/dashboard/articles`, {
-    method: "put",
+    method: "PUT",
     headers: {
       Authorization: `Bearer ${cookie.value}`,
     },
@@ -50,7 +50,7 @@ async function putData(value) {
   watch(confirmDelete, async () => {
     if (confirmDelete.value) {
       const {status, error} = await useAsyncData('delete' , ()=>$fetch(`${baseURL}/api/dashboard/articles/${id}`, {
-        method: "delete",
+        method: "DELETE",
         headers: {
           Authorization: `Bearer ${cookie.value}`
         }
@@ -85,8 +85,8 @@ function close() {
         <modal-confirm @close="close" @confirm="confirm" v-if="showConfirm"/>
       </transition>
     </div>
-    <div class="loading-container" v-if="pending">
-      <loader/>
+    <div class="loading-container" >
+      <loading-loader v-if="pending"/>
     </div>
     <div class="header-list d-flex justify-content-between align-items-center mb-2">
       <div class="title-list">لیست اطلاعیه ها</div>
