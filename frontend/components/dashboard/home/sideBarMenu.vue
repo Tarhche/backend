@@ -37,6 +37,10 @@ const data = ref({
       name: "مقالات",
       path: "/dashboard/articles"
     },
+    {
+      name: "فایل ها",
+      path: "/dashboard/files"
+    },
   ],
   UIElements: [
     {

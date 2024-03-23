@@ -199,18 +199,12 @@ td > img {
   margin-top: 10vh;
   margin-bottom: 5vh !important;
 }
-
 .transition-enter-active {
   transition: all 0.7s ease;
-
 }
-
 .transition-leave-active {
   transition: all 0.5s ease;
-
 }
-
-
 .transition-enter-from, .transition-leave-to {
   opacity: 0;
   transform: translatey(-100%);
