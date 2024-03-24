@@ -17,6 +17,7 @@ import (
 	getArticles "github.com/khanzadimahdi/testproject/application/article/getArticles"
 	"github.com/khanzadimahdi/testproject/application/article/getArticlesByHashtag"
 	"github.com/khanzadimahdi/testproject/application/auth/login"
+	"github.com/khanzadimahdi/testproject/application/auth/refresh"
 	dashboardCreateArticle "github.com/khanzadimahdi/testproject/application/dashboard/article/createArticle"
 	dashboardDeleteArticle "github.com/khanzadimahdi/testproject/application/dashboard/article/deleteArticle"
 	dashboardGetArticle "github.com/khanzadimahdi/testproject/application/dashboard/article/getArticle"
@@ -118,6 +119,7 @@ func httpHandler() http.Handler {
 	router := httprouter.New()
 	log.SetFlags(log.LstdFlags | log.Llongfile)
 	loginUseCase := login.NewUseCase(userRepository, j)
+	refreshUseCase := refresh.NewUseCase(userRepository, j)
 	getArticleUsecase := getArticle.NewUseCase(articlesRepository, elementsRepository)
 	getArticlesUsecase := getArticles.NewUseCase(articlesRepository)
 	getArticlesByHashtagUseCase := getArticlesByHashtag.NewUseCase(articlesRepository)
@@ -128,6 +130,7 @@ func httpHandler() http.Handler {
 
 	// auth
 	router.Handler(http.MethodPost, "/api/auth/login", auth.NewLoginHandler(loginUseCase))
+	router.Handler(http.MethodPost, "/api/auth/token/refresh", auth.NewRefreshHandler(refreshUseCase))
 
 	// articles
 	router.Handler(http.MethodGet, "/api/articles", articleAPI.NewIndexHandler(getArticlesUsecase))
