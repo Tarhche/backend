@@ -4,6 +4,9 @@
     const { pending, data, error } = await useFetch(url, {
         pick: ['all', 'popular', 'elements']
     });
+  if (error.value){
+    console.log(error.value.message , error.value.statusCode)
+  }
 </script>
 
 <template>
