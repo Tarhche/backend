@@ -4,8 +4,11 @@
     state (){
         return {
                 homeAll: "",
+<<<<<<< HEAD
                 homePopular:"",
                 homeElements:""
+=======
+>>>>>>> home
         }
     },
      getters:{
@@ -17,7 +20,10 @@
         async fetchHomeData() {
             const data = await $fetch( 'https://tarhche-backend.liara.run/api/home')
             this.homeAll = data
+<<<<<<< HEAD
 
+=======
+>>>>>>> home
         }
     }
 })
