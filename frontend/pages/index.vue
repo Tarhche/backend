@@ -26,6 +26,7 @@ const responses = computed(()=> store.getHome)
           <template v-if="responses.all.length" v-for="{uuid, cover, title, excerpt, published_at} in responses.all">
             <CardMedium :cover="cover" :href="`/articles/${uuid}`" :title="title" :excerpt="excerpt"
                         :publishedAt="published_at"/>
+
           </template>
           <p v-else class="alert alert-info">No data!</p>
         </div>
