@@ -4,11 +4,8 @@
     state (){
         return {
                 homeAll: "",
-<<<<<<< HEAD
                 homePopular:"",
                 homeElements:""
-=======
->>>>>>> home
         }
     },
      getters:{
