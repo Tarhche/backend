@@ -1,5 +1,5 @@
 <script setup lang="ts">
-const cookie = useCookie("tarche")
+const cookie = useCookie("jwt")
 </script>
 
 <template>
@@ -18,7 +18,7 @@ const cookie = useCookie("tarche")
 </template>
 
 <style scoped>
-.navbar-backdrop{
+.navbar-backdrop {
   position: fixed;
   top: 70PX;
   right: 0;
@@ -28,7 +28,8 @@ const cookie = useCookie("tarche")
   background-color: rgba(255 , 255 , 255 , 0.59);
   backdrop-filter: blur(10px);
 }
-ul li a{
+
+ul li a {
   font-size: 1.2rem;
   font-weight: bolder;
   animation: show 1s forwards ease 1 0.7s ;
@@ -36,8 +37,9 @@ ul li a{
   transition: 0.5s;
   position: relative;
 }
-ul li a:after{
-  content:"";
+
+ul li a:after {
+  content: "";
   background-color: #00a2e3;
   position: absolute;
   bottom: 0;
@@ -46,15 +48,18 @@ ul li a:after{
   width: 0;
   transition: 0.5s;
 }
-ul li:hover a:after{
+
+ul li:hover a:after {
 width: 100%;
 }
+
 @keyframes show {
-  from{
+  from {
     transform: translateX(300px);
     opacity: 0;
   }
-  to{
+
+  to {
     transform: translate(0);
     opacity: 1;
   }

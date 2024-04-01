@@ -1,5 +1,3 @@
-
-
 <template>
   <div class="loading">
     <div class="loading-backdrop"><span>طرحچه...</span>
@@ -9,7 +7,6 @@
 </template>
 
 <style scoped>
-
 .loading {
   position: fixed;
   background-color: rgba(238, 234, 234, 0.82);
@@ -46,6 +43,7 @@
   -webkit-text-stroke: 0.5px #b95b7b;
   position: relative;
 }
+
 .loader {
   width: 15px;
   aspect-ratio: 1;
@@ -54,12 +52,14 @@
   opacity: 0.5;
   scale: 0.8;
 }
+
 @keyframes l5 {
   0%  {box-shadow: 20px 0 #000, -20px 0 #0002;background: #000 }
   33% {box-shadow: 20px 0 #000, -20px 0 #0002;background: #0002}
   66% {box-shadow: 20px 0 #0002,-20px 0 #000; background: #0002}
   100%{box-shadow: 20px 0 #0002,-20px 0 #000; background: #000 }
 }
+
 .loading-backdrop > span::after {
   font-size: 1.5rem;
   content: 'طرحچه...';
@@ -82,5 +82,4 @@
     width: 100%;
   }
 }
-
 </style>

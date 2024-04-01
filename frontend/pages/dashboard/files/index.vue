@@ -1,48 +1,45 @@
 <script setup lang="ts">
-const {public: {baseURL}} = useRuntimeConfig()
-const cookie = useCookie("tarche")
+const resolveUrl = useApiUrlResolver().resolve
+const cookie = useCookie("jwt")
+
 const showConfirm = ref(false)
 const confirmDelete = ref(false)
 const files = ref("")
 const inputFile = ref(null)
 const fileData = ref("")
-const {data: response, pending, error , refresh} = await useAsyncData('files', () => $fetch(`${baseURL}/api/dashboard/files`, {
+
+const filesUrl = resolveUrl("api/dashboard/files")
+const {data: response, pending, error , refresh} = await useAsyncData('files', () => $fetch(filesUrl, {
   lazy: true,
-  headers: {
-    authorization: `Bearer ${cookie.value}`
-  }
+  headers: {authorization: `Bearer ${cookie.value}`}
 }))
+
 if (response.value.items.length) {
   files.value = response.value.items
-}
-if (error.value) {
-  console.log(error)
 }
 
 function deletePost(id) {
   showConfirm.value = true
-  console.log(id)
-  watch(confirmDelete, async () => {
-    if (confirmDelete.value) {
-      const {status, error} = await useAsyncData('delete', () => $fetch(`${baseURL}/api/dashboard/articles/${id}`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${cookie.value}`
-        }
-      }))
-      if (status.value == "success") {
-        console.log(status)
-        await refreshNuxtData()
-      }
-      if (error.value) {
-        console.log(error.value)
-      }
 
+  watch(confirmDelete, async () => {    
+    if(!confirmDelete.value) {
+      return
+    }
+
+    const url = resolveUrl(`api/dashboard/articles/${id}`)
+    const {status, error} = await useAsyncData('delete', () => $fetch(url, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${cookie.value}`
+      }
+    }))
+
+    if (status.value == "success") {
+      await refreshNuxtData()
     }
   })
   confirmDelete.value = false
 }
-
 
 function confirm() {
   confirmDelete.value = true
@@ -54,26 +51,26 @@ function close() {
 }
 
 function change() {
-watch(inputFile , async ()=>{
-  if (inputFile.value.files[0].length){
-    const {status, error } = await useAsyncData('delete', () => $fetch(`${baseURL}/api/dashboard/articles`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${cookie.value}`
-      },
-      body: {
-        file: inputFile.value.files[0]
-      }
-    }))
+  watch(inputFile , async () => {
+    if (! inputFile.value.files[0].length) {
+      return
+    }
 
-  if (status.value === "success") {
-   await refresh()
-  }
+    const url = resolveUrl(`api/dashboard/articles`)
+    const {status, error } = await useAsyncData('delete', () => $fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${cookie.value}`
+        },
+        body: {
+          file: inputFile.value.files[0]
+        }
+      }))
 
-  console.log(error.value?.message)
-  }
-})
-
+      if (status.value === "success") {
+        await refresh()
+      }    
+  })
 }
 </script>
 
@@ -94,7 +91,7 @@ watch(inputFile , async ()=>{
             <div class="card mb-0 " v-for="(item , index) in files" :key="index">
               <div class="card-header bg-white overflow-hidden p-0 h-75">
                 <img class="w-100 h-100 "
-                     :src="`${baseURL}/files/${item.uuid}`"
+                     :src="resolveUrl(`files/${item.uuid}`)"
                      :alt="item.Name"></div>
               <div class="card-body ">
                 <ul class="list-unstyled d-flex flex-column">

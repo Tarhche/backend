@@ -20,7 +20,7 @@ function confirm() {
           <p class="card-title text-muted"> ( با حذف آن دیگر قابل دسترس نیست ) </p>
         </div>
         <div class="card-footer d-flex flex-column flex-md-row gap-2 justify-content-between border-0 bg-white">
-          <button class="btn btn-outline-success btn-sm w-100" @click="cancel"> نه پشمون شدم</button>
+          <button class="btn btn-outline-success btn-sm w-100" @click="cancel"> نه پشیمون شدم</button>
           <button class="btn btn-outline-danger btn-sm w-100" @click="confirm">بله حذف کن</button>
         </div>
       </div>
@@ -51,6 +51,7 @@ function confirm() {
   scale: 0;
   animation:scale ease 0.5s forwards 1s ;
 }
+
 @keyframes scale {
   from{
     scale: 0;
@@ -62,9 +63,11 @@ function confirm() {
   }
 
 }
+
 .text-muted {
   font-size: 0.8rem;
 }
+
 .close{
   cursor: pointer;
 }

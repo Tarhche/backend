@@ -1,28 +1,23 @@
 <script setup lang="ts">
 const showConfirm = ref(false)
 const confirmDelete = ref(false)
-
 const showModal = ref(false)
-const {public: {baseURL}} = useRuntimeConfig()
 const cookie = useState("cookie")
 const postData = ref("")
 const uuid = ref("")
+
 const {
   data: response,
-    status ,
+  status,
   pending,
   error,
 } = await useAsyncData('articles' , () => $fetch(`${baseURL}/api/dashboard/articles`, {
-  headers: {
-    authorization: `Bearer ${cookie.value}`
-  },
+  headers: {authorization: `Bearer ${cookie.value}`}
 }),{ lazy:true})
-if (status.value = "success"){
+
+if (status.value = "success") {
   postData.value = response.value.items
 }
-  console.log(response.value.items)
-  console.log(error.value?.message)
-
 
 function changePost(id) {
   showModal.value = true
@@ -30,23 +25,26 @@ function changePost(id) {
 }
 
 async function putData(value) {
-  const cookie = useCookie("tarche")
-  const {status, error } = await useAsyncData('change',() => $fetch(`${baseURL}/api/dashboard/articles`, {
+  const cookie = useCookie("jwt")
+  const url = useApiUrlResolver().resolve(`api/dashboard/articles`)
+
+  const {status, error } = await useAsyncData('change',() => $fetch(url, {
     method: "PUT",
     headers: {
       Authorization: `Bearer ${cookie.value}`,
     },
     body: value
   }))
+
   if (status.value == "success") {
     showModal.value = false
     await refreshNuxtData()
   }
-  console.log(error.value, "error")
 }
 
  function deletePost(id) {
   showConfirm.value = true
+
   watch(confirmDelete, async () => {
     if (confirmDelete.value) {
       const {status, error} = await useAsyncData('delete' , ()=>$fetch(`${baseURL}/api/dashboard/articles/${id}`, {
@@ -64,6 +62,7 @@ async function putData(value) {
 
     }
   })
+
   confirmDelete.value = false
 }
 
@@ -75,7 +74,6 @@ function confirm() {
 function close() {
   showConfirm.value = false
 }
-
 </script>
 
 <template>
@@ -193,12 +191,15 @@ td > img {
   margin-top: 10vh;
   margin-bottom: 5vh !important;
 }
+
 .transition-enter-active {
   transition: all 0.7s ease;
 }
+
 .transition-leave-active {
   transition: all 0.5s ease;
 }
+
 .transition-enter-from, .transition-leave-to {
   opacity: 0;
   transform: translatey(-100%);

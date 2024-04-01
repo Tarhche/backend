@@ -1,6 +1,6 @@
 <script setup>
 const error = useError()
-console.log(error.value)
+
 function redirect(){
   clearError({redirect:"/"})
 }
@@ -32,12 +32,15 @@ function redirect(){
 h1 {
   background-color: rgb(52, 152, 219);
 }
+
 h1 span:last-child{
   font-weight: lighter;
 }
+
 h1 span:first-child{
   font-weight: bolder;
 }
+
 p {
   color: rgb(52, 152, 219);
   font-size:30px;

@@ -1,11 +1,9 @@
 <script setup lang="ts">
 import {ref} from 'vue';
 import ClassicEditor from '@ckeditor/ckeditor5-build-classic';
-import {useTarcheApi} from "~/store/tarche";
 import "~/assets/css/ckEditorStyle.css"
-const {public:{baseURL}} = useRuntimeConfig()
+
 const emit = defineEmits(["send"])
-const store = useTarcheApi()
 const tagsElement = ref(null)
 const props = defineProps(['data'])
 const tags = ref("")
@@ -16,12 +14,7 @@ const fileData = reactive({
   tags: [],
   excerpt: "",
   body: "",
-
 })
-
-
-
-
 
 const file = ref(null)
 let form = new FormData()
@@ -32,27 +25,29 @@ const getFile = async () => {
   console.log(file.value.files[0])
   form.append("file" ,file.value.files[0] )
 }
-async function sendFile(){
-  console.log()
-  const cookie = useCookie("tarche")
-  const {data:data, error} = await useFetch(`${baseURL}/api/dashboard/files`,{
+
+async function sendFile() {
+  const url = useApiUrlResolver().resolve(`api/dashboard/files`)
+  const cookie = useCookie("jwt")
+
+  const {data:data, error} = await useFetch(url, {
     method:"POST" ,
     headers:{
       Authorization: `Bearer ${cookie.value}`,
     },
     body:form
   })
-  console.log(error , "error")
-  fileData.cover =JSON.parse(data.value).uuid
+
+  fileData.cover = JSON.parse(data.value).uuid
 }
-function pushTags() {
+
+function pushTags() {  
   tags.value = tags.value.trim()
-  if (!fileData.tags.includes(tags.value) && tags.value.length ) {
+  if (!fileData.tags.includes(tags.value) && tags.value.length) {
     fileData.tags.push(tags.value)
     tags.value = ""
     tagsElement.value.focus()
-  }
-  else {
+  } else {
     tags.value = ""
     tagsElement.value.focus()
   }
@@ -63,33 +58,23 @@ function deleteTags(index) {
 }
 
 function sendArticle() {
-
   if (fileData.tags.length && fileData.title && fileData.body && fileData.excerpt && fileData.cover.length) {
     emit("send", fileData)
   }
-  else {
-    console.log(fileData)
-  }
 }
-
-/* get data for edite and show post */
 
 if (props.data) {
-  console.log(props.data)
-  const {data:data, error} = await useFetch(() => `${baseURL}/api/articles/${props.data}`)
-if (error.value){
-  console.log( "error" , error.value)
+  const url = useApiUrlResolver().resolve(`api/articles/${props.data}`)
+  const {data:data, error} = await useFetch(url)
 
+  if (data.value) {
+    fileData.title = data.value.title
+    fileData.tags = data.value.tags
+    fileData.excerpt = data.value.excerpt
+    fileData.body = data.value.body
+    fileData.cover = data.value.cover
+  }
 }
-if (data.value){
-  fileData.title = data.value.title
-  fileData.tags = data.value.tags
-  fileData.excerpt = data.value.excerpt
-  fileData.body = data.value.body
-  fileData.cover = data.value.cover
-}
-}
-
 </script>
 
 <template>
@@ -139,8 +124,6 @@ if (data.value){
       </div>
     </div>
   </div>
-
-
 </template>
 
 <style scoped>
@@ -148,9 +131,11 @@ form label {
   cursor: pointer;
   font-weight: 600;
 }
-input[type="file"]:focus{
+
+input[type="file"]:focus {
   box-shadow: none !important;
 }
+
 #summary {
   height: 100px;
 }

@@ -1,13 +1,11 @@
 <script setup lang="ts">
-// import {useToggle} from '@vueuse/core'
 import {useRoute} from "vue-router";
 
 const route = useRoute()
-const cookie = useCookie("tarche")
+const cookie = useCookie("jwt")
 const overflow = ref(false)
 const navbarMobile = ref(null)
 const showNavbarMobile = ref(false)
-/* const [value, toggle] = useToggle()*/
 
 function navbarActive() {
   navbarMobile.value.classList.toggle('active')
@@ -24,6 +22,7 @@ onMounted(() => {
     }
   })
 })
+
 watch(route , ()=>{
   showNavbarMobile.value=false
   overflow.value=false

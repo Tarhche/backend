@@ -1,3 +1,25 @@
+<script setup>
+definePageMeta({layout:"dashboard"})
+
+const  sendData = async (value) => {
+  const cookie = useCookie("jwt")
+  const url = useApiUrlResolver().resolve("api/dashboard/articles")
+
+  const {data:data ,status, error}  = await useFetch(url, {
+    method:"post",
+    headers: {
+      Authorization: `Bearer ${cookie.value}`,
+    },
+    body:value
+  })
+
+  if (status.value === "success") {
+    useRouter().go(-1)
+    await refreshNuxtData()
+  }
+}
+</script>
+
 <template>
   <div class="container">
     <div class="row mt-4">
@@ -7,32 +29,9 @@
     </div>
   </div>
 </template>
-<script setup>
-const router = useRouter()
-definePageMeta({
-  layout:"dashboard"
-})
-const {public: {baseURL}} = useRuntimeConfig()
- const  sendData = async (value)=>{
-   const cookie = useCookie("tarche")
-   const {data:data ,status, error}  = await useFetch( ()=>`${baseURL}/api/dashboard/articles` , {
-    method:"post",
-    headers:{
-      Authorization: `Bearer ${cookie.value}`,
-    },
-    body:value
-  })
-  console.log(data.value , "data create")
-   if (status.value === "success"){
-     router.go(-1)
-     await refreshNuxtData()
-   }
-  console.log(error.value , "error")
-}
 
-</script>
 <style scoped>
-.article{
+.article {
   margin-top: 10vh;
 }
 </style>

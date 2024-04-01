@@ -8,16 +8,16 @@ export default defineNuxtConfig({
     '@vueuse/nuxt','@pinia/nuxt'
   ],
   runtimeConfig: {
-    internalApiBaseUrl: 'http://127.0.0.1:8000',
+    internalApiBaseUrl: '',
     public: {
-      publicApiBaseUrl: 'http://127.0.0.1:8000',
-      baseURL:'https://tarhche-backend.liara.run'
+      apiBaseUrl: '',
     }
   },
   app:{
     head:{
       htmlAttrs:{
-        dir:"rtl"
+        dir: "rtl",
+        lang: "fa",
       }
     }
   }

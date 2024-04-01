@@ -89,6 +89,7 @@ const data = ref({
     },
   ]
 })
+
 onMounted(() => {
   const listMenu = document.querySelectorAll('a.js-arrow')
   const show = document.querySelectorAll('.navbar__sub-list.js-sub-list')
