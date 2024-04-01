@@ -1,46 +1,91 @@
 <script setup lang="ts">
-const {data:response , pending , error } = await useFetch('https://tarhche-backend.liara.run/dashboard/articles')
-console.log(response.value)
-const data = ref({
-  row: [
-    {
-      row_number: 1,
-      image: "",
-      author: "مدیر ارشد",
-      id: "1",
-      header: "هوش مصنوعی",
-      date: "1402.2.5",
-      status: "فعال",
-      action: "",
-    },
-    {
-      row_number: 2,
-      image: "",
-      author: "مدیر ارشد",
-      id: "1",
-      header: "هوش مصنوعی",
-      date: "1402.2.5",
-      status: "فعال",
-      action: "",
-    },
-    {
-      row_number: 3,
-      image: "",
-      author: "مدیر ارشد",
-      id: "1",
-      header: "هوش مصنوعی",
-      date: "1402.2.5",
-      status: "فعال",
-      action: "",
-    },
-  ]
+const showConfirm = ref(false)
+const confirmDelete = ref(false)
+const showModal = ref(false)
+const cookie = useState("cookie")
+const postData = ref("")
+const uuid = ref("")
 
+const {
+  data: response,
+  status,
+  pending,
+  error,
+} = await useAsyncData('articles' , () => $fetch(`${baseURL}/api/dashboard/articles`, {
+  headers: {authorization: `Bearer ${cookie.value}`}
+}),{ lazy:true})
 
-})
+if (status.value = "success") {
+  postData.value = response.value.items
+}
+
+function changePost(id) {
+  showModal.value = true
+  uuid.value = id
+}
+
+async function putData(value) {
+  const cookie = useCookie("jwt")
+  const url = useApiUrlResolver().resolve(`api/dashboard/articles`)
+
+  const {status, error } = await useAsyncData('change',() => $fetch(url, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${cookie.value}`,
+    },
+    body: value
+  }))
+
+  if (status.value == "success") {
+    showModal.value = false
+    await refreshNuxtData()
+  }
+}
+
+ function deletePost(id) {
+  showConfirm.value = true
+
+  watch(confirmDelete, async () => {
+    if (confirmDelete.value) {
+      const {status, error} = await useAsyncData('delete' , ()=>$fetch(`${baseURL}/api/dashboard/articles/${id}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${cookie.value}`
+        }
+      }))
+      if (status.value == "success") {
+        await refreshNuxtData()
+      }
+      if (error.value) {
+        console.log(error.value)
+      }
+
+    }
+  })
+
+  confirmDelete.value = false
+}
+
+function confirm() {
+  confirmDelete.value = true
+  showConfirm.value = false
+}
+
+function close() {
+  showConfirm.value = false
+}
 </script>
 
 <template>
   <div class="articles-list" dir="rtl">
+    <div class="row">
+      <transition name="transition">
+        <modal-confirm @close="close" @confirm="confirm" v-if="showConfirm"/>
+      </transition>
+    </div>
+    <div class="loading-container" >
+      <loading-loader v-if="pending"/>
+    </div>
     <div class="header-list d-flex justify-content-between align-items-center mb-2">
       <div class="title-list">لیست اطلاعیه ها</div>
       <div class="create-list px-3 py-1">
@@ -57,29 +102,41 @@ const data = ref({
             <th>ناشر</th>
             <th>شناسه</th>
             <th>عنوان</th>
-            <th>تاریخ انتشار</th>
-            <th>وضعیت</th>
+            <th> تاریخ انتشار</th>
             <th>عملیات</th>
           </tr>
           </thead>
-          <tbody class="text-center ">
-          <tr v-for="(item,index) in data.row" :key="index"  >
-            <th>{{ item.row_number }}</th>
-            <td class="" ><img class="img-thumbnail rounded-circle w-50" :src="item.image" :alt="item.header"></td>
-            <td>{{ item.author }}</td>
-            <td>{{ item.id }}</td>
-            <td class="list-header">{{ item.header }}</td>
-            <td>{{ item.date }}</td>
-            <td><span class="px-3 py-1"> {{ item.status }}</span></td>
-            <td class="">
-              <span class="mx-md-1 d-block d-lg-inline-block "><i class="fa-solid fa-trash text-danger"></i></span>
-              <span class="mx-md-1 d-block d-lg-inline-block "><i class="fa-solid fa-pen text-warning"></i></span>
-              <span class="mx-md-1 d-block d-lg-inline-block "><i class="fa-solid fa-eye text-success"></i></span>
+          <tbody class="text-center " v-if="postData.length">
+          <tr v-for="(item,index) in postData" :key="index">
+            <th>{{ index + 1 }}</th>
+            <td class="col"><img class="img-fluid rounded m-auto w-100 h-100" :src="`${baseURL}/files/${item.cover}`"
+                                 :alt="item.title"></td>
+            <td class="col">{{ item.author.name }}</td>
+            <td class="col"><span class="limited" v-if="item.uuid">{{ item.uuid }}</span></td>
+            <td class="list-headercol" v-if="item.title"><span class="limited">{{ item.title }}</span></td>
+            <td class="col"><span class="limited" v-if="item.published_at">{{ item.published_at }}</span></td>
+            <td class="action col">
+              <span class="mx-md-2 d-block d-md-inline-block " @click="deletePost(item.uuid)"><i
+                  class="fa-solid fa-trash fa-xl text-danger"></i></span>
+              <span class="mx-md-2 d-block d-md-inline-block " @click="changePost(item.uuid)"><i
+                  class="fa-solid fa-pen fa-xl text-warning"></i></span>
             </td>
           </tr>
           </tbody>
         </table>
       </div>
+    </div>
+    <div class="row">
+      <section>
+        <transition name="transition">
+          <div class="show-modal d-flex justify-content-center overflow-scroll" v-if="showModal"
+               @click.self="showModal=false">
+            <div class="inner-modal" v-if="response">
+              <dashboard-articles-create :data="uuid" v-if="showModal" @send="putData"/>
+            </div>
+          </div>
+        </transition>
+      </section>
     </div>
   </div>
 </template>
@@ -89,13 +146,66 @@ thead tr {
   color: #817d7d;
   font-size: 0.9rem;
 }
+
 tbody tr {
   color: #817d7d;
   font-size: 0.8rem;
 }
-.list-header{
+
+.list-header {
   text-overflow: ellipsis;
   overflow: hidden;
   white-space: nowrap;
+}
+
+td > img {
+  max-width: 70px;
+  max-height: 35px;
+}
+
+.limited {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  line-clamp: 1;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  height: 100%;
+}
+
+.fa-trash, .fa-pen {
+  cursor: pointer;
+}
+
+.show-modal {
+  position: fixed;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(232, 232, 232, 0.82);
+  inset: 0px;
+  backdrop-filter: blur(10px);
+  z-index: 10;
+}
+
+.inner-modal {
+  margin-top: 10vh;
+  margin-bottom: 5vh !important;
+}
+
+.transition-enter-active {
+  transition: all 0.7s ease;
+}
+
+.transition-leave-active {
+  transition: all 0.5s ease;
+}
+
+.transition-enter-from, .transition-leave-to {
+  opacity: 0;
+  transform: translatey(-100%);
+}
+
+.transition-enter-to, .transition-leave-from {
+  opacity: 1;
 }
 </style>

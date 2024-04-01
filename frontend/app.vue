@@ -1,10 +1,7 @@
 <script lang="ts" setup>
-  useHead({
-    htmlAttrs: {
-      dir: "rtl",
-      lang: "fa",
-    },
-  });
+if (useCookie("jwt")) {
+  const cookie = useState('cookie' , () => useCookie("jwt"))
+}
 </script>
 
 <template>

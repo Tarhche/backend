@@ -12,5 +12,13 @@ export default defineNuxtConfig({
     public: {
       apiBaseUrl: '',
     }
+  },
+  app:{
+    head:{
+      htmlAttrs:{
+        dir: "rtl",
+        lang: "fa",
+      }
+    }
   }
 })

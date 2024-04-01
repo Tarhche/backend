@@ -8,10 +8,10 @@ import (
 
 type fileResponse struct {
 	UUID      string    `json:"uuid"`
-	Name      string    `bson:"name"`
-	Size      int64     `bson:"size"`
-	OwnerUUID string    `bson:"owner_uuid"`
-	CreatedAt time.Time `bson:"created_at"`
+	Name      string    `json:"name"`
+	Size      int64     `json:"size"`
+	OwnerUUID string    `json:"owner_uuid"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 type GetFilesReponse struct {
