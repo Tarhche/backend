@@ -1,4 +1,10 @@
 export default defineNuxtRouteMiddleware((to, from) => {
-    //console.log(to);
-    //console.log(from);
+    if (! to.path.startsWith("/dashboard")) {
+        return
+    }
+
+    const cookie = useCookie("jwt")
+    if (!cookie.value) {
+        navigateTo("/auth/login")
+    }
 });

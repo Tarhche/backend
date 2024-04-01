@@ -2,20 +2,10 @@
       <div class="animsition">
         <div class="page-wrapper">
 
-          <!-- WELCOME-->
-          <section class="welcome2 p-t-40 p-b-55">
-            <DashboardHomeWelcome/>
-          </section>
-          <!-- END WELCOME-->
-
           <!-- PAGE CONTENT-->
           <div class="page-container3">
             <section class="alert-wrap p-t-70 p-b-70">
-              <div class="container">
-                <!-- ALERT-->
-                                  <DashboardHomeAlert />
-                <!-- END ALERT-->
-              </div>
+              <DashboardHomeAlert />
             </section>
             <section>
               <div class="container">

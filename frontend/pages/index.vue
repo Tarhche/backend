@@ -8,8 +8,8 @@ const data = computed(()=> store.getData)
 </script>
 
 <template>
-  <div v-if="responses">
-    <template v-if="responses?.elements" v-for="element in responses.elements">
+  <div v-if="data">
+    <template v-if="data?.elements" v-for="element in data.elements">
       <Jumbotron v-if="element.type=='jumbotron'" :body="element.body"/>
       <Featured v-if="element.type=='featured'" :body="element.body"/>
     </template>

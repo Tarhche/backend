@@ -2,18 +2,20 @@
 const showConfirm = ref(false)
 const confirmDelete = ref(false)
 const showModal = ref(false)
-const cookie = useState("cookie")
+const cookie = useCookie("jwt")
 const postData = ref("")
 const uuid = ref("")
+const resolveUrl = useApiUrlResolver().resolve
 
 const {
   data: response,
   status,
   pending,
   error,
-} = await useAsyncData('articles' , () => $fetch(`${baseURL}/api/dashboard/articles`, {
-  headers: {authorization: `Bearer ${cookie.value}`}
-}),{ lazy:true})
+} = await useAsyncData('articles' , () => $fetch(resolveUrl(`api/dashboard/articles`), {
+    lazy:true,
+    headers: {authorization: `Bearer ${cookie.value}`}
+  }))
 
 if (status.value = "success") {
   postData.value = response.value.items
@@ -25,8 +27,7 @@ function changePost(id) {
 }
 
 async function putData(value) {
-  const cookie = useCookie("jwt")
-  const url = useApiUrlResolver().resolve(`api/dashboard/articles`)
+  const url = resolveUrl(`api/dashboard/articles`)
 
   const {status, error } = await useAsyncData('change',() => $fetch(url, {
     method: "PUT",
@@ -47,7 +48,7 @@ async function putData(value) {
 
   watch(confirmDelete, async () => {
     if (confirmDelete.value) {
-      const {status, error} = await useAsyncData('delete' , ()=>$fetch(`${baseURL}/api/dashboard/articles/${id}`, {
+      const {status, error} = await useAsyncData('delete' , ()=>$fetch(resolveUrl(`api/dashboard/articles/${id}`), {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${cookie.value}`
@@ -109,7 +110,7 @@ function close() {
           <tbody class="text-center " v-if="postData.length">
           <tr v-for="(item,index) in postData" :key="index">
             <th>{{ index + 1 }}</th>
-            <td class="col"><img class="img-fluid rounded m-auto w-100 h-100" :src="`${baseURL}/files/${item.cover}`"
+            <td class="col"><img class="img-fluid rounded m-auto w-100 h-100" :src="resolveUrl(`files/${item.cover}`)"
                                  :alt="item.title"></td>
             <td class="col">{{ item.author.name }}</td>
             <td class="col"><span class="limited" v-if="item.uuid">{{ item.uuid }}</span></td>

@@ -14,7 +14,7 @@
     actions: {
         async fetchData() {
             const data = await $fetch(useApiUrlResolver().resolve("api/home"))
-            this.homeAll = data
+            this.data = data
         }
     }
 })

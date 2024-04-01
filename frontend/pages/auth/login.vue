@@ -72,7 +72,8 @@ onMounted(() => {
 })
 
 function setCookie(token) {
-  const expiresAt = (new Date()).setTime(time.getTime() + (60 * 15 * 1000))
+  const time = new Date()
+  const expiresAt = time.setTime(time.getTime() + (60 * 15 * 1000))
 
   document.cookie = `jwt=${token};expires=${expiresAt};path=/`
 }
