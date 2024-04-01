@@ -70,6 +70,14 @@ func (r *MockArticlesRepository) GetOne(UUID string) (article.Article, error) {
 	return article.Article{}, nil
 }
 
+func (r *MockArticlesRepository) IncreaseView(UUID string, inc uint) error {
+	return nil
+}
+
+func (r *MockArticlesRepository) GetByUUIDs(UUIDS []string) ([]article.Article, error) {
+	return nil, nil
+}
+
 type MockElementsRepository struct {
 	element.Repository
 

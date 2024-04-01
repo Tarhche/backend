@@ -17,6 +17,7 @@ import (
 	getArticles "github.com/khanzadimahdi/testproject/application/article/getArticles"
 	"github.com/khanzadimahdi/testproject/application/article/getArticlesByHashtag"
 	"github.com/khanzadimahdi/testproject/application/auth/login"
+	"github.com/khanzadimahdi/testproject/application/auth/refresh"
 	dashboardCreateArticle "github.com/khanzadimahdi/testproject/application/dashboard/article/createArticle"
 	dashboardDeleteArticle "github.com/khanzadimahdi/testproject/application/dashboard/article/deleteArticle"
 	dashboardGetArticle "github.com/khanzadimahdi/testproject/application/dashboard/article/getArticle"
@@ -29,6 +30,7 @@ import (
 	dashboardUpdateElement "github.com/khanzadimahdi/testproject/application/dashboard/element/updateElement"
 	dashboardDeleteFile "github.com/khanzadimahdi/testproject/application/dashboard/file/deleteFile"
 	dashboardGetFile "github.com/khanzadimahdi/testproject/application/dashboard/file/getFile"
+	dashboardGetFiles "github.com/khanzadimahdi/testproject/application/dashboard/file/getFiles"
 	dashboardUploadFile "github.com/khanzadimahdi/testproject/application/dashboard/file/uploadFile"
 	getFile "github.com/khanzadimahdi/testproject/application/file/getFile"
 	"github.com/khanzadimahdi/testproject/application/home"
@@ -117,6 +119,7 @@ func httpHandler() http.Handler {
 	router := httprouter.New()
 	log.SetFlags(log.LstdFlags | log.Llongfile)
 	loginUseCase := login.NewUseCase(userRepository, j)
+	refreshUseCase := refresh.NewUseCase(userRepository, j)
 	getArticleUsecase := getArticle.NewUseCase(articlesRepository, elementsRepository)
 	getArticlesUsecase := getArticles.NewUseCase(articlesRepository)
 	getArticlesByHashtagUseCase := getArticlesByHashtag.NewUseCase(articlesRepository)
@@ -127,6 +130,7 @@ func httpHandler() http.Handler {
 
 	// auth
 	router.Handler(http.MethodPost, "/api/auth/login", auth.NewLoginHandler(loginUseCase))
+	router.Handler(http.MethodPost, "/api/auth/token/refresh", auth.NewRefreshHandler(refreshUseCase))
 
 	// articles
 	router.Handler(http.MethodGet, "/api/articles", articleAPI.NewIndexHandler(getArticlesUsecase))
@@ -144,6 +148,7 @@ func httpHandler() http.Handler {
 	dashboardGetArticleUsecase := dashboardGetArticle.NewUseCase(articlesRepository)
 	dashboardGetArticlesUsecase := dashboardGetArticles.NewUseCase(articlesRepository)
 	dashboardUpdateArticleUsecase := dashboardUpdateArticle.NewUseCase(articlesRepository)
+	dashboardGetFilesUseCase := dashboardGetFiles.NewUseCase(filesRepository)
 	dashboardGetFileUseCase := dashboardGetFile.NewUseCase(filesRepository, fileStorage)
 	dashboardUploadFileUseCase := dashboardUploadFile.NewUseCase(filesRepository, fileStorage)
 	dashboardDeleteFileUseCase := dashboardDeleteFile.NewUseCase(filesRepository, fileStorage)
@@ -164,6 +169,7 @@ func httpHandler() http.Handler {
 	// files
 	router.Handler(http.MethodPost, "/api/dashboard/files", middleware.NewAuthoriseMiddleware(dashboardFileAPI.NewUploadHandler(dashboardUploadFileUseCase), j, userRepository))
 	router.Handler(http.MethodDelete, "/api/dashboard/files/:uuid", middleware.NewAuthoriseMiddleware(dashboardFileAPI.NewDeleteHandler(dashboardDeleteFileUseCase), j, userRepository))
+	router.Handler(http.MethodGet, "/api/dashboard/files", middleware.NewAuthoriseMiddleware(dashboardFileAPI.NewIndexHandler(dashboardGetFilesUseCase), j, userRepository))
 	router.Handler(http.MethodGet, "/dashboard/files/:uuid", middleware.NewAuthoriseMiddleware(dashboardFileAPI.NewShowHandler(dashboardGetFileUseCase), j, userRepository))
 
 	// elements

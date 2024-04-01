@@ -19,8 +19,8 @@ func NewCORSMiddleware(next http.Handler) *CORS {
 func (a *CORS) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	rw.Header().Set("Access-Control-Allow-Origin", "*")
 	rw.Header().Set("Access-Control-Allow-Credentials", "true")
-	rw.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-	rw.Header().Set("Access-Control-Allow-Headers", "Origin, Content-Type, Accept")
+	rw.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
+	rw.Header().Set("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization")
 
 	a.next.ServeHTTP(rw, r)
 }

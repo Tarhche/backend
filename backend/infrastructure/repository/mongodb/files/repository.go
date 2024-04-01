@@ -34,6 +34,47 @@ func NewFilesRepository(database *mongo.Database) *FilesRepository {
 	}
 }
 
+func (r *FilesRepository) GetAll(offset uint, limit uint) ([]file.File, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+	defer cancel()
+
+	o := int64(offset)
+	l := int64(limit)
+	desc := bson.D{{Key: "_id", Value: -1}}
+	cur, err := r.collection.Find(ctx, bson.D{}, &options.FindOptions{
+		Skip:  &o,
+		Limit: &l,
+		Sort:  desc,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	defer cur.Close(ctx)
+
+	items := make([]file.File, 0, limit)
+	for cur.Next(ctx) {
+		var a FileBson
+
+		if err := cur.Decode(&a); err != nil {
+			return nil, err
+		}
+		items = append(items, file.File{
+			UUID:      a.UUID,
+			Name:      a.Name,
+			Size:      a.Size,
+			OwnerUUID: a.OwnerUUID,
+		})
+	}
+
+	if err := cur.Err(); err != nil {
+		return nil, err
+	}
+
+	return items, nil
+}
+
 func (r *FilesRepository) GetOne(UUID string) (file.File, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
 	defer cancel()
@@ -95,4 +136,16 @@ func (r *FilesRepository) Delete(UUID string) error {
 	_, err := r.collection.DeleteOne(ctx, bson.D{{Key: "_id", Value: UUID}}, nil)
 
 	return err
+}
+
+func (r *FilesRepository) Count() (uint, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+	defer cancel()
+
+	c, err := r.collection.CountDocuments(ctx, bson.D{}, nil)
+	if err != nil {
+		return uint(c), err
+	}
+
+	return uint(c), nil
 }
