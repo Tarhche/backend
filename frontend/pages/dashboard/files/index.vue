@@ -90,13 +90,12 @@ function change() {
           <div class="files ">
             <div class="card mb-0 " v-for="(item , index) in files" :key="index">
               <div class="card-header bg-white overflow-hidden p-0 h-75">
-                <img class="w-100 h-100 "
-                     :src="resolveUrl(`files/${item.uuid}`)"
-                     :alt="item.Name"></div>
+                <img class="w-100 h-100 " :src="resolveUrl(`files/${item.uuid}`)" :alt="item.name">
+              </div>
               <div class="card-body ">
                 <ul class="list-unstyled d-flex flex-column">
-                  <li><span class="name card-title text-muted">نام : {{ item.Name }} </span></li>
-                  <li><span class="size card-title text-muted"> سایز عکس : {{ item.Size }}</span></li>
+                  <li><span class="name card-title text-muted">نام : {{ item.name }} </span></li>
+                  <li><span class="size card-title text-muted"> سایز عکس : {{ item.size }}</span></li>
                 </ul>
               </div>
               <div class="card-footer bg-white border-0 px-1">
