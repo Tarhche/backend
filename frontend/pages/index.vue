@@ -3,8 +3,10 @@ import {useHomePage} from "~/store/homePage";
 
 const store = useHomePage()
 store.fetchData()
-
-const data = computed(()=> store.getData)
+const data = computed(() => store.getData)
+useHead({
+  title: "صفحه اصلی"
+})
 </script>
 
 <template>
@@ -18,7 +20,8 @@ const data = computed(()=> store.getData)
         <div class="col-md-8">
           <h5 class="fw-bold spanborder"><span>جدیدترین‌ ها</span></h5>
           <template v-if="data.all.length" v-for="{uuid, cover, title, excerpt, published_at} in data.all">
-            <CardMedium :cover="cover" :href="`/articles/${uuid}`" :title="title" :excerpt="excerpt" :publishedAt="published_at"/>
+            <CardMedium :cover="cover" :href="`/articles/${uuid}`" :title="title" :excerpt="excerpt"
+                        :publishedAt="published_at"/>
           </template>
           <p v-else class="alert alert-info">No data!</p>
         </div>
