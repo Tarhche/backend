@@ -1,9 +1,9 @@
-package login
+package resetpassword
 
 type validationErrors map[string]string
 
 type Request struct {
-	Identity string `json:"identity"`
+	Token    string `json:"token"`
 	Password string `json:"password"`
 }
 

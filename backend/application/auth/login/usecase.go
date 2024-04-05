@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
+	"github.com/khanzadimahdi/testproject/domain/password"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
 )
@@ -11,12 +12,14 @@ import (
 type UseCase struct {
 	userRepository user.Repository
 	JWT            *jwt.JWT
+	Hasher         password.Hasher
 }
 
-func NewUseCase(userRepository user.Repository, JWT *jwt.JWT) *UseCase {
+func NewUseCase(userRepository user.Repository, JWT *jwt.JWT, hasher password.Hasher) *UseCase {
 	return &UseCase{
 		userRepository: userRepository,
 		JWT:            JWT,
+		Hasher:         hasher,
 	}
 }
 
@@ -27,15 +30,15 @@ func (uc *UseCase) Login(request Request) (*LoginResponse, error) {
 		}, nil
 	}
 
-	u, err := uc.userRepository.GetOneByUsername(request.Username)
+	u, err := uc.userRepository.GetOneByIdentity(request.Identity)
 	if err != nil {
 		return nil, err
 	}
 
-	if !uc.passwordIsValid(u, request.Password) {
+	if !uc.passwordIsValid(u, []byte(request.Password)) {
 		return &LoginResponse{
 			ValidationErrors: validationErrors{
-				"username": "username or password is not wrong",
+				"identity": "your identity or password is wrong",
 			},
 		}, nil
 	}
@@ -56,8 +59,8 @@ func (uc *UseCase) Login(request Request) (*LoginResponse, error) {
 	}, nil
 }
 
-func (uc *UseCase) passwordIsValid(u user.User, password string) bool {
-	return u.Password == password
+func (uc *UseCase) passwordIsValid(u user.User, password []byte) bool {
+	return uc.Hasher.Equal(password, u.PasswordHash.Value, u.PasswordHash.Salt)
 }
 
 func (uc *UseCase) generateAccessToken(u user.User) (string, error) {

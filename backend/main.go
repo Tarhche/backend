@@ -16,8 +16,10 @@ import (
 	getArticle "github.com/khanzadimahdi/testproject/application/article/getArticle"
 	getArticles "github.com/khanzadimahdi/testproject/application/article/getArticles"
 	"github.com/khanzadimahdi/testproject/application/article/getArticlesByHashtag"
+	"github.com/khanzadimahdi/testproject/application/auth/forgetpassword"
 	"github.com/khanzadimahdi/testproject/application/auth/login"
 	"github.com/khanzadimahdi/testproject/application/auth/refresh"
+	"github.com/khanzadimahdi/testproject/application/auth/resetpassword"
 	dashboardCreateArticle "github.com/khanzadimahdi/testproject/application/dashboard/article/createArticle"
 	dashboardDeleteArticle "github.com/khanzadimahdi/testproject/application/dashboard/article/deleteArticle"
 	dashboardGetArticle "github.com/khanzadimahdi/testproject/application/dashboard/article/getArticle"
@@ -35,7 +37,9 @@ import (
 	getFile "github.com/khanzadimahdi/testproject/application/file/getFile"
 	"github.com/khanzadimahdi/testproject/application/home"
 	"github.com/khanzadimahdi/testproject/infrastructure/console"
+	"github.com/khanzadimahdi/testproject/infrastructure/crypto/argon2"
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/ecdsa"
+	"github.com/khanzadimahdi/testproject/infrastructure/email"
 	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
 	articlesrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/articles"
 	elementsrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/elements"
@@ -113,13 +117,27 @@ func httpHandler() http.Handler {
 	}
 
 	j := jwt.NewJWT(privateKey, privateKey.Public())
+	hasher := argon2.NewArgon2id(2, 64*1024, 2, 64)
+
+	mailFromAddress := os.Getenv("MAIL_SMTP_FROM")
+	mailer := email.NewSMTP(email.Config{
+		Auth: email.Auth{
+			Username: os.Getenv("MAIL_SMTP_USERNAME"),
+			Password: os.Getenv("MAIL_SMTP_PASSWORD"),
+		},
+		Host: os.Getenv("MAIL_SMTP_HOST"),
+		Port: os.Getenv("MAIL_SMTP_PORT"),
+	})
 
 	homeUseCase := home.NewUseCase(articlesRepository, elementsRepository)
 
 	router := httprouter.New()
 	log.SetFlags(log.LstdFlags | log.Llongfile)
-	loginUseCase := login.NewUseCase(userRepository, j)
+	loginUseCase := login.NewUseCase(userRepository, j, hasher)
 	refreshUseCase := refresh.NewUseCase(userRepository, j)
+	forgetPasswordUseCase := forgetpassword.NewUseCase(userRepository, j, mailer, mailFromAddress)
+	resetPasswordUseCase := resetpassword.NewUseCase(userRepository, hasher, j)
+
 	getArticleUsecase := getArticle.NewUseCase(articlesRepository, elementsRepository)
 	getArticlesUsecase := getArticles.NewUseCase(articlesRepository)
 	getArticlesByHashtagUseCase := getArticlesByHashtag.NewUseCase(articlesRepository)
@@ -131,6 +149,8 @@ func httpHandler() http.Handler {
 	// auth
 	router.Handler(http.MethodPost, "/api/auth/login", auth.NewLoginHandler(loginUseCase))
 	router.Handler(http.MethodPost, "/api/auth/token/refresh", auth.NewRefreshHandler(refreshUseCase))
+	router.Handler(http.MethodPost, "/api/auth/password/forget", auth.NewForgetPasswordHandler(forgetPasswordUseCase))
+	router.Handler(http.MethodPost, "/api/auth/password/reset", auth.NewResetPasswordHandler(resetPasswordUseCase))
 
 	// articles
 	router.Handler(http.MethodGet, "/api/articles", articleAPI.NewIndexHandler(getArticlesUsecase))

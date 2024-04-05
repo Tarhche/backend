@@ -1,7 +1,6 @@
 package jwt
 
 import (
-	"fmt"
 	"testing"
 	"time"
 
@@ -13,8 +12,7 @@ import (
 func TestJWT(t *testing.T) {
 	privateKey, err := ecdsa.Generate()
 	if err != nil {
-		fmt.Println("Error generating private key:", err)
-		return
+		t.Error("unexpected error", err)
 	}
 
 	// For demonstration purposes, in a real scenario, you would typically use the public key from the corresponding private key.
@@ -33,15 +31,13 @@ func TestJWT(t *testing.T) {
 
 	tokenString, err := JWTToken.Generate(claims)
 	if err != nil {
-		fmt.Println("Error generating token:", err)
-		return
+		t.Error("unexpected error", err)
 	}
 
 	// Verify the JWT token
 	tokenClaims, err := JWTToken.Verify(tokenString)
 	if err != nil {
-		fmt.Println("Error verifying token:", err)
-		return
+		t.Error("unexpected error", err)
 	}
 
 	// Access the claims

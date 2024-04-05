@@ -4,32 +4,34 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/khanzadimahdi/testproject/domain/password"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/ecdsa"
 	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
 )
 
-func TestUseCase_GetArticle(t *testing.T) {
+func TestUseCase_Login(t *testing.T) {
 	privateKey, err := ecdsa.Generate()
 	if err != nil {
 		t.Error("unexpected error")
 	}
 
 	j := jwt.NewJWT(privateKey, privateKey.Public())
+	h := &MockHasher{}
 
 	t.Run("returns jwt tokens", func(t *testing.T) {
 		repository := MockUserRepository{}
 
-		usecase := NewUseCase(&repository, j)
+		usecase := NewUseCase(&repository, j, h)
 
 		request := Request{
-			Username: "test-username",
+			Identity: "test-username",
 			Password: "test-password",
 		}
 
 		response, err := usecase.Login(request)
 
-		if repository.GetOneByUsernameCount != 1 {
+		if repository.GetOneByIdentityCount != 1 {
 			t.Error("unexpected number of calls")
 		}
 
@@ -74,16 +76,16 @@ func TestUseCase_GetArticle(t *testing.T) {
 			GetOneErr: errors.New("user with given username found"),
 		}
 
-		usecase := NewUseCase(&repository, j)
+		usecase := NewUseCase(&repository, j, h)
 
 		request := Request{
-			Username: "test-username",
+			Identity: "test-username",
 			Password: "test-password",
 		}
 
 		response, err := usecase.Login(request)
 
-		if repository.GetOneByUsernameCount != 1 {
+		if repository.GetOneByIdentityCount != 1 {
 			t.Error("unexpected number of calls")
 		}
 
@@ -100,12 +102,12 @@ func TestUseCase_GetArticle(t *testing.T) {
 type MockUserRepository struct {
 	user.Repository
 
-	GetOneByUsernameCount uint
+	GetOneByIdentityCount uint
 	GetOneErr             error
 }
 
-func (r *MockUserRepository) GetOneByUsername(username string) (user.User, error) {
-	r.GetOneByUsernameCount++
+func (r *MockUserRepository) GetOneByIdentity(username string) (user.User, error) {
+	r.GetOneByIdentityCount++
 
 	if r.GetOneErr != nil {
 		return user.User{}, r.GetOneErr
@@ -113,6 +115,20 @@ func (r *MockUserRepository) GetOneByUsername(username string) (user.User, error
 
 	return user.User{
 		Username: username,
-		Password: "test-password",
+		PasswordHash: password.Hash{
+			Value: []byte("test-password"),
+			Salt:  []byte("test-salt"),
+		},
 	}, nil
+}
+
+type MockHasher struct {
+}
+
+func (m *MockHasher) Hash(value, salt []byte) []byte {
+	return []byte("random hash")
+}
+
+func (m *MockHasher) Equal(value, hash, salt []byte) bool {
+	return true
 }

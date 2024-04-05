@@ -7,8 +7,9 @@ import (
 )
 
 const (
-	AccessToken  = "access"
-	RefreshToken = "refresh"
+	AccessToken        = "access"
+	RefreshToken       = "refresh"
+	ResetPasswordToken = "reset-password"
 )
 
 type authKey struct{}

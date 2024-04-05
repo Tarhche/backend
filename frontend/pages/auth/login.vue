@@ -1,24 +1,24 @@
 <script setup>
 import {onMounted} from "vue";
 
-const userName = ref("")
+const identity = ref("")
 const password = ref("")
-const userNameError = ref(null)
+const identityError = ref(null)
 const passwordError = ref(null)
 
 const handleSubmit = async() => {
-  userNameError.value.style.display = "none"
+  identityError.value.style.display = "none"
   passwordError.value.style.display = "none"
 
-  if (!userName.value.length) {
-    userNameError.value.style.display = "block"
+  if (!identity.value.length) {
+    identityError.value.style.display = "block"
   }
 
   if (!password.value.length) {
     passwordError.value.style.display = "block"
   }
 
-  if (!userName.value.length || !password.value.length) {
+  if (!identity.value.length || !password.value.length) {
     return
   }
 
@@ -27,7 +27,7 @@ const handleSubmit = async() => {
   const {data:data , error} = await useFetch(url, {
       method:"POST" ,
       body:{
-        "username": userName.value,
+        "identity": identity.value,
         "password": password.value
       }
   })
@@ -39,8 +39,8 @@ const handleSubmit = async() => {
 }
 
 const removeError = () => {
-  if (userName.value.length) {
-    userNameError.value.style.display = "none"
+  if (identity.value.length) {
+    identityError.value.style.display = "none"
   }
   if (password.value.length) {
     passwordError.value.style.display = "none"
@@ -93,9 +93,9 @@ function setCookie(token) {
             </div>
             <form action="#" class="signin-form d-flex flex-column " @submit.prevent="handleSubmit">
               <div class="form-group mt-2  position-relative">
-                <label class="label user-select-none" for="name">نام کاربری :</label>
-                <input type="text" class=" input form-control py-2 " @keyup="removeError" v-model="userName">
-                <span class="error" ref="userNameError">لطفا کادر بالا را پر کنید .</span>
+                <label class="label user-select-none" for="name">ایمیل یا نام کاربری :</label>
+                <input type="text" class=" input form-control py-2 " @keyup="removeError" v-model="identity">
+                <span class="error" ref="identityError">لطفا کادر بالا را پر کنید .</span>
               </div>
               <div class="form-group my-4  position-relative">
                 <label class="label user-select-none" for="password"> کلمه عبور :</label>
