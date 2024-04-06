@@ -34,6 +34,9 @@ import (
 	dashboardGetFile "github.com/khanzadimahdi/testproject/application/dashboard/file/getFile"
 	dashboardGetFiles "github.com/khanzadimahdi/testproject/application/dashboard/file/getFiles"
 	dashboardUploadFile "github.com/khanzadimahdi/testproject/application/dashboard/file/uploadFile"
+	"github.com/khanzadimahdi/testproject/application/dashboard/profile/changepassword"
+	"github.com/khanzadimahdi/testproject/application/dashboard/profile/getprofile"
+	"github.com/khanzadimahdi/testproject/application/dashboard/profile/updateprofile"
 	getFile "github.com/khanzadimahdi/testproject/application/file/getFile"
 	"github.com/khanzadimahdi/testproject/application/home"
 	"github.com/khanzadimahdi/testproject/infrastructure/console"
@@ -52,6 +55,7 @@ import (
 	dashboardArticleAPI "github.com/khanzadimahdi/testproject/presentation/http/api/dashboard/article"
 	dashboardElementAPI "github.com/khanzadimahdi/testproject/presentation/http/api/dashboard/element"
 	dashboardFileAPI "github.com/khanzadimahdi/testproject/presentation/http/api/dashboard/file"
+	"github.com/khanzadimahdi/testproject/presentation/http/api/dashboard/profile"
 	fileAPI "github.com/khanzadimahdi/testproject/presentation/http/api/file"
 	hashtagAPI "github.com/khanzadimahdi/testproject/presentation/http/api/hashtag"
 	homeapi "github.com/khanzadimahdi/testproject/presentation/http/api/home"
@@ -163,6 +167,10 @@ func httpHandler() http.Handler {
 	router.Handler(http.MethodGet, "/files/:uuid", fileAPI.NewShowHandler(getFileUseCase))
 
 	// -------------------- dashboard -------------------- //
+	getProfile := getprofile.NewUseCase(userRepository)
+	updateProfile := updateprofile.NewUseCase(userRepository)
+	dashboardChangePassword := changepassword.NewUseCase(userRepository, hasher)
+
 	dashboardCreateArticleUsecase := dashboardCreateArticle.NewUseCase(articlesRepository)
 	dashboardDeleteArticleUsecase := dashboardDeleteArticle.NewUseCase(articlesRepository)
 	dashboardGetArticleUsecase := dashboardGetArticle.NewUseCase(articlesRepository)
@@ -178,6 +186,11 @@ func httpHandler() http.Handler {
 	dashboardGetElementUsecase := dashboardGetElement.NewUseCase(elementsRepository)
 	dashboardGetElementsUsecase := dashboardGetElements.NewUseCase(elementsRepository)
 	dashboardUpdateElementUsecase := dashboardUpdateElement.NewUseCase(elementsRepository)
+
+	// profile
+	router.Handler(http.MethodGet, "/api/dashboard/profile", middleware.NewAuthoriseMiddleware(profile.NewGetProfileHandler(getProfile), j, userRepository))
+	router.Handler(http.MethodPut, "/api/dashboard/profile", middleware.NewAuthoriseMiddleware(profile.NewUpdateProfileHandler(updateProfile), j, userRepository))
+	router.Handler(http.MethodPut, "/api/dashboard/password", middleware.NewAuthoriseMiddleware(profile.NewChangePasswordHandler(dashboardChangePassword), j, userRepository))
 
 	// articles
 	router.Handler(http.MethodPost, "/api/dashboard/articles", middleware.NewAuthoriseMiddleware(dashboardArticleAPI.NewCreateHandler(dashboardCreateArticleUsecase), j, userRepository))

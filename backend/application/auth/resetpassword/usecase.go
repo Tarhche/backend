@@ -57,7 +57,7 @@ func (uc *UseCase) ResetPassword(request Request) (*Response, error) {
 		return nil, err
 	}
 
-	salt := make([]byte, 1024)
+	salt := make([]byte, 64)
 	if _, err := rand.Read(salt); err != nil {
 		return nil, err
 	}
