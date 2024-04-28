@@ -1,14 +1,15 @@
-<script setup lang="ts">
-
-</script>
-
 <template>
-  <div>
-    <dashboardHeaderDashboardNavbar></dashboardHeaderDashboardNavbar>
-    <slot/>
-  </div>
+    <div>
+        <dashboardNavbar />
+        <slot />
+        <Footer />
+    </div>
 </template>
 
-<style scoped>
+<script setup>
+import "~/assets/scss/dashboard/main.scss"
 
-</style>
+useHead({
+  titleTemplate: (title) => title ? `داشبورد | ${ title }` : "داشبورد"
+})
+</script>

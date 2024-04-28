@@ -1,9 +1,3 @@
-<script setup>
-    const props = defineProps(["cover", "href", "title", "excerpt", "publishedAt"])
-    const resolveFileUrl = filesUrlResolver().resolve
-    const {cover, href, title, excerpt, publishedAt} = props
-</script>
-
 <template>
   <div class="mb-3 d-flex  flex-column flex-md-row justify-content-md-between card border-0 rounded-2  overflow-hidden">
     <div class="card-header col-md-5 col-lg-4 col-xl-3 bg-transparent p-0 border-0 overflow-hidden rounded-0">
@@ -23,6 +17,13 @@
     </div>
   </div>
 </template>
+
+<script setup>
+    const props = defineProps(["cover", "href", "title", "excerpt", "publishedAt"])
+    const resolveFileUrl = useFilesUrlResolver().resolve
+    const {cover, href, title, excerpt, publishedAt} = props
+</script>
+
 <style scoped>
   p {
     overflow: hidden;

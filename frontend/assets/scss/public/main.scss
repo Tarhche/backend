@@ -1,18 +1,11 @@
-//====================================
-// Global Imports
-//====================================
-
 // Import bootstrap framework
-@import '../../node_modules/bootstrap/scss/bootstrap.scss';
+@import '../../../node_modules/bootstrap/scss/bootstrap.scss';
 
 // Import variables
 @import 'variables/index';
 
-// Import dashboard styles
-//@import 'dashboard/index';
-
 // Import fonts
-@import '../../node_modules/@fortawesome/fontawesome-free/css/all.min.css';
+@import '../../../node_modules/@fortawesome/fontawesome-free/css/all.min.css';
 
 @font-face {
     font-family: 'IRANSansDN';
@@ -256,45 +249,6 @@ a.text-dark:hover {
       color: $navbar-light-active-color;
     }
   }
-}
-
-// Backgrounds
-.bg-black { background-color: $black; }
-.bg-lightblue { background-color: $lightblue }
-.overlay {
-	position: relative;
-	.container {
-		position: relative;
-	}
-	&:before {
-		content: "";
-		display: block;
-		height: 100%;
-		left: 0;
-		top: 0;
-		position: absolute;
-		width: 100%;
-	}
-}
-.overlay-black {
-	&:before {
-		background-color: rgba(0, 0, 0, 0.5);
-	}
-}
-.overlay-blue {
-	&:before {
-		background-color: rgba(23, 29, 90, 0.5);
-	}
-}
-.overlay-red {
-	&:before {
-		background:linear-gradient(0deg,rgba(44,44,44,.2),rgba(224,23,3,.6));
-	}
-}
-.overlay-blue {
-	&:before {
-		background-color: rgba(23, 29, 90, 0.5);
-	}
 }
 
 // SVG fills

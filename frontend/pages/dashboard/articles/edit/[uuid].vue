@@ -11,15 +11,14 @@
 						<li class="breadcrumb-item">
 							<NuxtLink to="/dashboard/articles">مقاله ها</NuxtLink>
 						</li>
-						<li class="breadcrumb-item active" aria-current="page">افزودن</li>
+						<li class="breadcrumb-item active" aria-current="page">ویرایش</li>
 					</ol>
 				</nav>
 
                 <div class="row">
                     <div class="col-12 mb-4 mb-lg-0">
-
-                        <form class="card" action="#" @submit.prevent="createArticle()">
-                            <div class="card-header">افزودن مقاله</div>
+                        <form class="card" action="#" @submit.prevent="updateArticle()">
+                            <div class="card-header">ویرایش مقاله</div>
                             <div class="card-body">
 								<div class="form-floating mb-3">
 									<input :class="{ 'is-invalid': errors.title }" id="title" class="form-control" type="text" placeholder="عنوان مقاله" aria-label="title" v-model="params.title" required>
@@ -28,7 +27,6 @@
 										{{ errors.title }}
 									</div>
 								</div>
-
 								<div class="form-floating mb-3">
 									<textarea :class="{ 'is-invalid': errors.excerpt }" id="excerpt" class="form-control" placeholder="خلاصه مقاله به صورت متن ساده" v-model="params.excerpt" required></textarea>
 									<label for="excerpt">خلاصه محتوا</label>
@@ -88,14 +86,17 @@ useHead({
     title: "افزودن مقاله"
 })
 
+// article uuid
+const { uuid } = useRoute().params
+
 // reflects form parameters
 const params = reactive({
-  title: null,
-  body: null,
-  tags: null,
-  cover: null,
-  loading: false,
-  showFilePicker: false,
+    title: null,
+    body: null,
+    tags: null,
+    cover: null,
+    loading: false,
+	showFilePicker: false,
 })
 
 // reflects the validation errors to corresponding html input.
@@ -105,6 +106,8 @@ const errors = reactive({
 	tags: null,
 	cover: null,
 })
+
+await showArticle()
 
 function tags() {
 	if ((typeof params.tags === 'string' || params.tags instanceof String) && (params.tags.length > 0)) {
@@ -124,19 +127,32 @@ function selectFile(uuids:string[]) {
 	params.cover = uuids[0]
 }
 
-async function createArticle() {
+async function showArticle() {
+    try {
+        const data = await useDashboardArticles().show(uuid)
+
+        params.title = data.title
+        params.excerpt = data.excerpt
+        params.body = data.body
+        params.tags = data.tags.join(',')
+        params.cover = data.cover
+    } catch(error) {
+        console.log(error)
+    }
+}
+
+async function updateArticle() {
 	params.loading = true
 
 	try {
-		await useDashboardArticles().create(
+		await useDashboardArticles().update(
+            uuid,
 			params.title,
             params.excerpt,
 			params.body,
 			tags(),
 			params.cover || null,
 		)
-
-		await navigateTo("/dashboard/articles")
 	} catch (error) {
 		console.log(error)
 	}

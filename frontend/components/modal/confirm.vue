@@ -1,15 +1,3 @@
-<script setup lang="ts">
-const emit = defineEmits(['close' , 'confirm'])
-
-function cancel() {
-  emit("close")
-}
-
-function confirm() {
-  emit("confirm")
-}
-</script>
-
 <template>
   <div class="backdrop-confirm-modal" @click.self="cancel">
     <div class="confirm-modal mx-auto">
@@ -27,6 +15,18 @@ function confirm() {
     </div>
   </div>
 </template>
+
+<script setup lang="ts">
+const emit = defineEmits(['close' , 'confirm'])
+
+function cancel() {
+  emit("close")
+}
+
+function confirm() {
+  emit("confirm")
+}
+</script>
 
 <style scoped>
 .backdrop-confirm-modal {

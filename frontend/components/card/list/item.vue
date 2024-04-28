@@ -1,8 +1,3 @@
-<script setup>
-    const props = defineProps(["href", "title", "tags", "publishedAt"])
-    const {href, title, tags, publishedAt} = props
-</script>
-
 <template>
     <li>
         <span class="py-1">
@@ -16,3 +11,8 @@
         </span>
     </li>
 </template>
+
+<script setup>
+    const props = defineProps(["href", "title", "tags", "publishedAt"])
+    const {href, title, tags, publishedAt} = props
+</script>

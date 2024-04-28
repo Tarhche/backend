@@ -1,13 +1,3 @@
-<script setup>
-    const route = useRoute();
-    const { hashtag } = route.params;
-
-    const url = useApiUrlResolver().resolve(`api/hashtags/${hashtag}`)
-    const { pending, data } = await useFetch(url, {
-        pick: ['items', 'pagination']
-    });
-</script>
-
 <template>
     <div v-if="!pending">
         <div class="container mt-5 mb-5">
@@ -23,3 +13,12 @@
         </div>
     </div>
 </template>
+
+<script setup>
+    const { hashtag } = useRoute().params;
+
+    const url = useApiUrlResolver().resolve(`api/hashtags/${hashtag}`)
+    const { pending, data } = await useFetch(url, {
+        pick: ['items', 'pagination']
+    });
+</script>

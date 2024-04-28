@@ -1,9 +1,3 @@
-<script setup>
-    const props = defineProps(["cover", "href", "title", "excerpt", "publishedAt"])
-    const {cover, href, title, excerpt, publishedAt} = props
-    const coverUrl = cover ? filesUrlResolver().resolve(cover) : null
-</script>
-
 <template>
     <div class="card border-0 mb-4 box-shadow h-xl-300">              
         <div :style="{backgroundImage: `url(${coverUrl})`, height: '150px', backgroundSize: 'cover', backgroundRepeat: 'no-repeat'}"></div>               
@@ -21,3 +15,9 @@
         </div>
     </div>
 </template>
+
+<script setup>
+    const props = defineProps(["cover", "href", "title", "excerpt", "publishedAt"])
+    const {cover, href, title, excerpt, publishedAt} = props
+    const coverUrl = cover ? useFilesUrlResolver().resolve(cover) : null
+</script>

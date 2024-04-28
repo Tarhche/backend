@@ -3,13 +3,17 @@ function baseUrl() {
     const url = process.client ? p.apiBaseUrl : internalApiBaseUrl;
 
     return {
-        publicApiBaseUrl: p.apiBaseUrl.replace(/\/$/, ""),
-        internalApiBaseUrl: internalApiBaseUrl?.replace(/\/$/, ""),
-        apiBaseUrl: url.replace(/\/$/, "")
+        publicApiBaseUrl: p.apiBaseUrl && removeTrailingSlash(p.apiBaseUrl),
+        internalApiBaseUrl: internalApiBaseUrl && removeTrailingSlash(internalApiBaseUrl),
+        apiBaseUrl: url && removeTrailingSlash(url)
     };
 }
 
-export function filesUrlResolver() {
+function removeTrailingSlash(url: string): string {
+    return url.replace(/\/$/, "")
+}
+
+export function useFilesUrlResolver() {
     const url = baseUrl().publicApiBaseUrl
 
     return {

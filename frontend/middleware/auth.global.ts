@@ -3,8 +3,7 @@ export default defineNuxtRouteMiddleware((to, from) => {
         return
     }
 
-    const cookie = useCookie("jwt")
-    if (!cookie.value) {
+    if (! useAuth().isLogin()) {
         return navigateTo("/auth/login")
     }
 });

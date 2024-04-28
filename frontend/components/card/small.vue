@@ -1,9 +1,3 @@
-<script setup>
-    const props = defineProps(["cover", "href", "title", "excerpt", "publishedAt"])
-    const resolveFileUrl = filesUrlResolver().resolve
-    const {cover, href, title, excerpt, publishedAt} = props
-</script>
-
 <template>
     <div class="mb-3 d-flex gap-3 align-items-center">
         <img :style="{height: '100px'}" :src="resolveFileUrl(cover)">
@@ -16,3 +10,9 @@
         </div>
     </div>
 </template>
+
+<script setup>
+    const props = defineProps(["cover", "href", "title", "excerpt", "publishedAt"])
+    const resolveFileUrl = useFilesUrlResolver().resolve
+    const {cover, href, title, excerpt, publishedAt} = props
+</script>

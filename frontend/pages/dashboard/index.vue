@@ -1,121 +1,78 @@
 <template>
-      <div class="animsition">
-        <div class="page-wrapper">
 
-          <!-- PAGE CONTENT-->
-          <div class="page-container3">
-            <section class="alert-wrap p-t-70 p-b-70">
-              <DashboardHomeAlert />
-            </section>
-            <section>
-              <div class="container">
+<div class="container">
+        <div class="row">
+            <dashboardSidebar class="col-md-3 ml-sm-auto"/>
+            <main class="col-md-9 ml-sm-auto">
+                <!-- 
+                  <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb">
+						<li class="breadcrumb-item"><a href="#">Home</a></li>
+						<li class="breadcrumb-item active" aria-current="page">Overview</li>
+                    </ol>
+                  </nav>
+                  <h1 class="h2">Dashboard</h1>
+                  <p>This is the homepage of a simple admin interface which is part of a tutorial written on Themesberg</p> 
+                -->
+
                 <div class="row">
-                  <div class="col-xl-3">
-                    <!-- MENU SIDEBAR-->
-                    <aside class="menu-sidebar3 js-spe-sidebar">
-                      <dashboard-home-side-bar-menu/>
-                    </aside>
-                    <!-- END MENU SIDEBAR-->
-                  </div>
-                  <div class="col-xl-9">
-                    <!-- PAGE CONTENT-->
-                    <div class="page-content">
-                      <div class="row">
-                        <div class="col-lg-8">
+                    <div class="col-12 mb-4 mb-lg-0">
+                        <div class="card">
+							<div class="card-header">جدیدترین مقالات</div>
+                            <div class="card-body">
+                                <div class="table-responsive">
+                                    <table class="table table-striped table-borderless table-hover align-middle">
+                                        <thead class="border-bottom">
+                                          <tr>
+                                            <th scope="col">#</th>
+                                            <th scope="col">عنوان</th>
+                                            <th scope="col">تاریخ انتشار</th>
+                                            <th scope="col">#</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody v-if="!pending">
+                                          <tr v-for="(article, index) in data.items" :key="index">
+                                            <th scope="row">{{ index + 1 }}</th>
+                                            <td>{{ article.title }}</td>
+                                            <td>{{ article.published_at }}</td>
+                                            <td>
+												<NuxtLink :to="`/articles/${article.uuid}`" class="btn mx-1 btn-sm btn-primary">
+													<span class="fa fa-eye"></span>
+												</NuxtLink>
+												<NuxtLink :to="`/dashboard/articles/edit/${article.uuid}`" class="btn mx-1 btn-sm btn-primary">
+													<span class="fa fa-pen"></span>
+												</NuxtLink>
+												<button type="button" class="btn mx-1 btn-sm btn-danger">
+													<span class="fa fa-trash"></span>
+												</button>
+											</td>
+                                          </tr>
+										  <tr v-if="data.items.length == 0">
+											<td colspan="5">
+												<p>هیچ مقاله ای وجود ندارد</p>
+											</td>
+										  </tr>
+                                        </tbody>
+                                      </table>
+                                </div>
+								<NuxtLink v-if="!pending && data.pagination.total_pages > 1" to="/dashboard/articles">مشاهده بیشتر</NuxtLink>
+                            </div>
                         </div>
-                      </div>
-                      <div class="row">
-                        <div class="col-md-12">
-                          <!-- DATA TABLE-->
-                          <DashboardHomeDataTable :data="data"/>
-                          <!-- END DATA TABLE                  -->
-                        </div>
-                      </div>
-                      <div class="row">
-                        <div class="col-lg-6">
-                          <DashboardHomeTasksCalenders/>
-                        </div>
-                        <div class="col-lg-6">
-                          <DashboardHomeChat/>
-                        </div>
-                      </div>
                     </div>
-                    <!-- END PAGE CONTENT-->
-                  </div>
                 </div>
-              </div>
-            </section>
-          </div>
-          <!-- END PAGE CONTENT  -->
-
+            </main>
         </div>
-      </div>
+    </div>
 </template>
-<script setup>
-import Dashboard from "~/layouts/dashboard.vue";
 
+<script setup>
 definePageMeta({
-  layout: "dashboard"
+  layout: 'dashboard',
 })
-const data = ref({
-  dataTable: [
-    {
-      date: "2018-09-29 05:57",
-      device: "Mobile",
-      deviceName: "iPhone X 64Gb Grey",
-      success: "Processed",
-      price: "$999.00"
-    },
-    {
-      date: "2018-09-28 01:22",
-      device: "Mobile",
-      deviceName: "Samsung S8 Black",
-      success: "Processed",
-      price: "$756.00"
-    },
-    {
-      date: "2018-09-27 02:12",
-      device: "Game",
-      deviceName: "Game Console Controller",
-      success: "Denied",
-      price: "$22.00"
-    },
-    {
-      date: "2018-09-26 23:06",
-      device: "Mobile",
-      deviceName: "iPhone X 256Gb Black",
-      success: "Denied",
-      price: "$1199.00"
-    },
-    {
-      date: "2018-09-25 19:03",
-      device: "Accessories",
-      deviceName: "USB 3.0 Cable",
-      success: "Processed",
-      price: "$10.00"
-    },
-    {
-      date: "2018-09-29 05:57",
-      device: "Accesories",
-      deviceName: "Smartwatch 4.0 LTE Wifi",
-      success: "Denied",
-      price: "$199.00"
-    },
-    {
-      date: "2018-09-24 19:10",
-      device: "Camera",
-      deviceName: "Camera C430W 4k",
-      success: "Processed",
-      price: "$699.00"
-    },
-    {
-      date: "2018-09-22 00:43",
-      device: "Computer",
-      deviceName: "Macbook Pro Retina 2017",
-      success: "Processed",
-      price: "$10.00"
-    },
-  ]
-})
+
+const { data, pending, error } = await useAsyncData(
+	'dashboard.articles.index',
+	useDashboardArticles().index
+)
 
 </script>
