@@ -42,7 +42,7 @@
 												<NuxtLink :to="`/dashboard/articles/edit/${article.uuid}`" class="btn mx-1 btn-sm btn-primary">
 													<span class="fa fa-pen"></span>
 												</NuxtLink>
-												<button type="button" class="btn mx-1 btn-sm btn-danger">
+												<button @click.prevent="deleteArticle(article.uuid)" type="button" class="btn mx-1 btn-sm btn-danger">
 													<span class="fa fa-trash"></span>
 												</button>
 											</td>
@@ -65,7 +65,7 @@
     </div>
 </template>
 
-<script setup>
+<script lang="ts" setup>
 definePageMeta({
   layout: 'dashboard',
 })
@@ -75,4 +75,13 @@ const { data, pending, error } = await useAsyncData(
 	useDashboardArticles().index
 )
 
+async function deleteArticle(uuid:string) {
+	if (!confirm('آیا میخواهید این مقاله را حذف کنید؟')) {
+		return
+	}
+
+	await useDashboardArticles().delete(uuid)
+
+	data.value.items = data.value.items.filter((article) => article.uuid != uuid)
+}
 </script>

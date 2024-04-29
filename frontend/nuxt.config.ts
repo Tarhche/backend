@@ -1,9 +1,6 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
   devtools: { enabled: true },
-  build: {
-    
-  },
   vite: {
     build: {
       cssCodeSplit: false,
@@ -24,7 +21,7 @@ export default defineNuxtConfig({
       }
     }
   },
-  modules: ['@vueuse/nuxt', "nuxt-tiptap-editor"],
+  modules: ['@vueuse/nuxt'],
   runtimeConfig: {
     internalApiBaseUrl: '',
     public: {

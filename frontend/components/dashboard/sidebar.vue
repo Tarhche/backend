@@ -21,7 +21,7 @@
 			</li>
 			<li class="border-top my-3"></li>
 			<li class="my-2">
-				<NuxtLink to="/dashboard" class="btn align-items-center rounded collapsed">
+				<NuxtLink to="/dashboard/profile" class="btn align-items-center rounded collapsed">
 					<span class="bi ms-2 fa fa-user"></span>
 					<span>پروفایل</span>
 				</NuxtLink>

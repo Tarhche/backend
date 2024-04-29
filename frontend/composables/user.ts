@@ -28,16 +28,47 @@ function userFetch<T> (url: string, options: UseFetchOptions<T> = {}) {
     return $fetch(url, defu(options, defaults))
 }
 
-function profile() {
-
+async function profile() {
+    return useUser().$fetch(
+		useApiUrlResolver().resolve("api/dashboard/profile"),
+		{
+            method: "GET",
+	    	lazy: true,
+    		headers: {authorization: `Bearer ${useAuth().accessToken()}`}
+  		}
+	)
 }
 
-function updateProfile() {
-    
+async function updateProfile(email:string, name?:string, username?:string, avatar?:string) {
+    return useUser().$fetch(
+		useApiUrlResolver().resolve("api/dashboard/profile"),
+		{
+            method: "PUT",
+	    	lazy: true,
+    		headers: {authorization: `Bearer ${useAuth().accessToken()}`},
+            body: {
+                email: email,
+                name: name,
+                username: username,
+                avatar: avatar,
+            }
+  		}
+	)
 }
 
-function updatePassword() {
-
+async function updatePassword(currentPassword:string, newPassword:string) {
+    return useUser().$fetch(
+		useApiUrlResolver().resolve("api/dashboard/password"),
+		{
+            method: "PUT",
+	    	lazy: true,
+    		headers: {authorization: `Bearer ${useAuth().accessToken()}`},
+            body: {
+                current_password: currentPassword,
+                new_password: newPassword,
+            }
+  		}
+	)
 }
 
 export function useUser() {

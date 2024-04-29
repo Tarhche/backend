@@ -28,7 +28,3 @@ useHead({
 	title: "فایل ها"
 })
 </script>
-
-<style scoped lang="scss">
-
-</style>

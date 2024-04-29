@@ -16,6 +16,10 @@
 				<div class="row">
 					<div class="col-12 mb-4 mb-lg-0">
 						<div class="card">
+							<div class="card-header d-flex justify-content-between">
+								<h4>مقاله ها</h4>
+								<NuxtLink class="btn btn-primary" to="/dashboard/articles/create">مقاله جدید</NuxtLink>
+							</div>
 							<div class="card-body">
 								<div class="table-responsive">
 									<table class="table table-striped table-borderless table-hover align-middle">
@@ -29,28 +33,28 @@
 										</thead>
 										<tbody v-if="!pending">
 											<tr v-for="(article, index) in data.items" :key="index">
-											<th scope="row">{{ index + 1 }}</th>
-											<td>{{ article.title }}</td>
-											<td>{{ article.published_at }}</td>
-											<td>
-												<NuxtLink :to="`/articles/${article.uuid}`" class="btn mx-1 btn-sm btn-primary">
-													<span class="fa fa-eye"></span>
-												</NuxtLink>
-												<NuxtLink :to="`/dashboard/articles/edit/${article.uuid}`" class="btn mx-1 btn-sm btn-primary">
-													<span class="fa fa-pen"></span>
-												</NuxtLink>
-												<button @click.prevent="deleteArticle(article.uuid)" type="button" class="btn mx-1 btn-sm btn-danger">
-													<span class="fa fa-trash"></span>
-												</button>
-											</td>
+												<th scope="row">{{ index + 1 }}</th>
+												<td>{{ article.title }}</td>
+												<td>{{ article.published_at }}</td>
+												<td>
+													<NuxtLink :to="`/articles/${article.uuid}`" class="btn mx-1 btn-sm btn-primary">
+														<span class="fa fa-eye"></span>
+													</NuxtLink>
+													<NuxtLink :to="`/dashboard/articles/edit/${article.uuid}`" class="btn mx-1 btn-sm btn-primary">
+														<span class="fa fa-pen"></span>
+													</NuxtLink>
+													<button @click.prevent="deleteArticle(article.uuid)" type="button" class="btn mx-1 btn-sm btn-danger">
+														<span class="fa fa-trash"></span>
+													</button>
+												</td>
 											</tr>
 											<tr v-if="data.items.length == 0">
-											<td colspan="5">
-												<p>هیچ مقاله ای وجود ندارد</p>
-											</td>
+												<td colspan="5">
+													<p>هیچ مقاله ای وجود ندارد</p>
+												</td>
 											</tr>
 										</tbody>
-										</table>
+									</table>
 								</div>
 								<nav v-if="!pending && data.pagination.total_pages > 1" aria-label="Page navigation example">
 									<ul class="pagination">

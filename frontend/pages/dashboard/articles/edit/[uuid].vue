@@ -35,9 +35,8 @@
 									</div>
 								</div>
 
-								<div class="form-floating mb-3">
-									<textarea :class="{ 'is-invalid': errors.body }" id="body" class="form-control" placeholder="متن اصلی مقاله" v-model="params.body" required></textarea>
-									<label for="body">متن اصلی مقاله</label>
+								<div class="mb-3">
+									<rich-editor :class="{ 'is-invalid': errors.body }" v-model="params.body" id="body" class="form-control" placeholder="متن اصلی مقاله" />
 									<div v-if="errors.body" class="invalid-feedback">
 										{{ errors.body }}
 									</div>
