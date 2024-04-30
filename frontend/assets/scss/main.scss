@@ -1,11 +1,11 @@
 // Import bootstrap framework
-@import '../../../node_modules/bootstrap/scss/bootstrap.scss';
+@import '~/node_modules/bootstrap/scss/bootstrap.scss';
 
 // Import variables
 @import 'variables/index';
 
 // Import fonts
-@import '../../../node_modules/@fortawesome/fontawesome-free/css/all.min.css';
+@import '~/node_modules/@fortawesome/fontawesome-free/css/all.min.css';
 
 @font-face {
     font-family: 'IRANSansDN';
@@ -44,9 +44,174 @@ body {
     padding: 0;
 }
 
-[dir="rtl"] body {
-    font-family: $font-family-IRANSansDN;
-}
+// support rtl
+[dir="rtl"] {
+    body {
+        font-family: $font-family-IRANSansDN;
+    }
+
+    // breadcrumbs
+    .breadcrumb-item {
+      // The separator between breadcrumbs (by default, a forward-slash: "/")
+      + .breadcrumb-item {
+        padding-right: var(--#{$prefix}breadcrumb-item-padding-x);
+        padding-left: 0;
+    
+        &::before {
+          float: right; // Suppress inline spacings and underlining of the separator
+          padding-left: var(--#{$prefix}breadcrumb-item-padding-x);
+          padding-right: 0;
+          color: var(--#{$prefix}breadcrumb-divider-color);
+          content: var(--#{$prefix}breadcrumb-divider, escape-svg($breadcrumb-divider)) #{"/* rtl:"} var(--#{$prefix}breadcrumb-divider, escape-svg($breadcrumb-divider-flipped)) #{"*/"};
+        }
+      }
+    
+      &.active {
+        color: var(--#{$prefix}breadcrumb-item-active-color);
+      }
+    }
+  
+    // floating form
+    .form-floating {
+      > label {
+        right: 0;
+      }
+  
+      > .form-control:focus,
+      > .form-control:not(:placeholder-shown),
+      > .form-control-plaintext,
+      > .form-select {
+        ~ label {
+          right: 0;
+          transform: scale(0.85) translateY(-0.5rem) translateX(8.70rem)
+        }
+      }  
+    }
+  }
+
+  .image-picker {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100px;
+    height: 100px;
+    position: relative;
+    cursor: pointer;
+    background-color: #eaeaea;
+    background-position: center center;
+    background-size: cover;
+    box-shadow: inset 0 0 10px rgba(0, 0, 0, .1);
+    outline: 2px solid #fff;
+    outline-offset: -3px;
+    border: var(--bs-border-width) solid var(--bs-border-color);
+    border-radius: var(--bs-border-radius);
+  
+    .body {
+      display: flex;
+      flex-direction: column;
+      align-items: center
+    }
+  
+    .title {
+      position: absolute;
+      top: 0px;
+      padding-top: 5px;
+    }
+  }
+  
+  
+  .brick {
+    display: block;
+    width:100px; 
+    height:100px; 
+    background:#f2f2f2;
+    position: relative;
+    float: left;
+    margin: 5px;
+  
+    img {
+      display: block;
+      font-family: sans-serif;
+      font-weight: 300;
+      height: auto;
+      line-height: 2;
+      position: relative;
+      text-align: center;
+      width: 100%;
+    }
+  
+    .overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(255, 255, 255, .5);
+      display: none;
+    }
+  
+    .actions {
+      display: flex;
+      justify-content: center;
+      height: 100%;
+      align-items: center;
+    }
+  
+    &:hover {
+      scale: 1.1;
+  
+      .overlay {
+        display: block;	
+      }
+    }
+  }
+  
+  .tile-picker {
+    position:relative;
+    cursor:pointer;
+    background-color:#eaeaea;
+    background-position: center center;
+    background-size: cover;
+    box-shadow:inset 0 0 10px rgba(0,0,0,.1);
+    outline: 2px solid #fff;
+    outline-offset: -3px;
+    border:1px solid #bbb;
+  
+    &.active {
+        outline-color: #33a7d2;
+    }
+  
+    .tile-checked {
+      display:block;
+      font-style:normal;
+      width:20px; height:20px;
+      position:absolute;
+      top:-2px;
+      right:-4px;
+      z-index: 99;
+  
+      &:after {
+        content:'\2713';
+        display:block;
+        line-height:18px; width:18px; height:18px;
+        background-color:#1481b8; color:#fff;
+        border-radius:2px;
+        font-size:13px;
+        text-align:center; font-weight:bold;
+        opacity:0;
+      }
+    }
+  
+    input[type=checkbox], input[type=radio] {
+      opacity:0;
+      position:absolute; 
+      left:-80px;
+  
+      &:checked ~ .tile-checked:after {
+          opacity:1;
+      }
+    }
+  }
 
 .sticky-top {
     top: 69.75px;

@@ -1,25 +1,11 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
   devtools: { enabled: true },
-  vite: {
-    build: {
-      cssCodeSplit: false,
-   },
-  },
-  webpack: {
-    extractCSS: true,
-    optimization: {
-      splitChunks: {
-        cacheGroups: {
-          styles: {
-            name: 'styles',
-            test: /\.(css|vue)$/,
-            chunks: 'all',
-            enforce: true
-          }
-        }
-      }
-    }
+  css: [
+    '~/assets/scss/main.scss',
+  ],
+  features: {
+    inlineStyles: false,
   },
   modules: ['@vueuse/nuxt'],
   runtimeConfig: {
