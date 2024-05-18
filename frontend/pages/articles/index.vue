@@ -15,8 +15,18 @@
 </template>
 
 <script setup>
+    useHead({
+        title: `مقاله ها`,
+        meta: [
+            { name: 'description', content: `مقاله ها` },
+        ],
+        link: [
+            { rel: 'canonical', href: '/articles' }
+        ]
+    })
+
     const url = useApiUrlResolver().resolve("api/articles")
     const { pending, data } = await useFetch(url, {
         pick: ['items', 'pagination']
-    });
+    })
 </script>

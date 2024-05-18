@@ -47,6 +47,16 @@
 </template>
 
 <script setup>
+useHead({
+	title: 'ورود به پنل کاربری',
+	meta: [
+		{ name: 'description', content: 'ورود به پنل کاربری' },
+	],
+	link: [
+		{ rel: 'canonical', href: `/auth/login` }
+	]
+})
+
 // reflects form parameters
 const params = reactive({
 	identity: null,

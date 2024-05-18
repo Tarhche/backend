@@ -31,6 +31,16 @@
 </template>
 
 <script setup>
+useHead({
+	title: 'بازیابی کلمه عبور',
+	meta: [
+		{ name: 'description', content: 'بازیابی کلمه عبور' },
+	],
+	link: [
+		{ rel: 'canonical', href: `/auth/forgot-password` }
+	]
+})
+
 // reflects form parameters
 const params = reactive({
 	identity: null,
@@ -57,7 +67,6 @@ async function forgotPassword() {
 	params.loading = false
 }
 </script>
-
 
 <style scoped>
 #login-cover {

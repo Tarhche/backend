@@ -17,6 +17,16 @@
 <script setup>
     const { hashtag } = useRoute().params;
 
+    useHead({
+        title: `هشتک|${hashtag}`,
+        meta: [
+            { name: 'description', content: `هشتک|${hashtag}` },
+        ],
+        link: [
+            { rel: 'canonical', href: '/hashtag' }
+        ]
+    })
+
     const url = useApiUrlResolver().resolve(`api/hashtags/${hashtag}`)
     const { pending, data } = await useFetch(url, {
         pick: ['items', 'pagination']

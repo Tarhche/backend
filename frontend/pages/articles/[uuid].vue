@@ -26,7 +26,18 @@
 
 <script setup>
     const {uuid} = useRoute().params;
+
     const resolveFileUrl = useFilesUrlResolver().resolve
 
     const data = await $fetch(useApiUrlResolver().resolve(`api/articles/${uuid}`))
+
+    useHead({
+        title: data.title,
+        meta: [
+            { name: 'description', content: data.excerpt },
+        ],
+        link: [
+            { rel: 'canonical', href: `/articles/${uuid}` }
+        ]
+    })
 </script>

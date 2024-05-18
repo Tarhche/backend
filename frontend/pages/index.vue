@@ -31,7 +31,13 @@
 
 <script setup>
 useHead({
-  title: "صفحه اصلی"
+  title: "صفحه اصلی",
+  meta: [
+	{ name: 'description', content: 'طرح‌چه' },
+  ],
+  link: [
+	{ rel: 'canonical', href: '/' }
+  ]
 })
 
 const { data, pending, error } = await useAsyncData(

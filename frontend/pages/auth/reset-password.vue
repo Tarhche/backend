@@ -44,6 +44,16 @@
 </template>
 
 <script setup>
+useHead({
+	title: 'تغییر کلمه عبور',
+	meta: [
+		{ name: 'description', content: 'تغییر کلمه عبور' },
+	],
+	link: [
+		{ rel: 'canonical', href: `/auth/reset-password` }
+	]
+})
+
 // reflects form parameters
 const params = reactive({
 	token: null,
