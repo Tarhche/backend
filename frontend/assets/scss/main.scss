@@ -550,25 +550,44 @@ ol.list-featured li:before {
 
 // Article
 article {
-    p, pre, figure, img, blockquote, iframed, embed {
-        margin-bottom:2rem;
-    } 
-    blockquote {        
-        padding-left:40px;
-        margin-left:0px;
-        font-style:italic;
-        position:relative;
+  line-height: 2rem;
+
+  p, pre, figure, img, blockquote, iframed, embed {
+    margin-bottom: 1rem;
+  }
+
+  blockquote {        
+    padding-left:40px;
+    margin-left:0px;
+    font-style:italic;
+    position:relative;
+  }
+  
+  blockquote:before {
+    content: "“";
+    font-family: Georgia;
+    font-size: 8rem;
+    margin: -1rem 2rem 0 -3.9rem;
+    position: absolute;
+    opacity: 1;
+    float: left;
+    line-height: 1;
+  }
+
+  .image {
+    text-align: center;
+
+    figcaption {
+      background-color: #f7f7f7;
+      caption-side: bottom;
+      color: #333;
+      display: block;
+      font-size: .75em;
+      outline-offset: -1px;
+      padding: .6em;
+      word-break: break-word;
     }
-    blockquote:before {
-        content: "“";
-        font-family: Georgia;
-        font-size: 8rem;
-        margin: -1rem 2rem 0 -3.9rem;
-        position: absolute;
-        opacity: 1;
-        float: left;
-        line-height: 1;
-    }
+  }
 }
 
 [dir="rtl"] article {

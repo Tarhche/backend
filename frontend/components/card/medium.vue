@@ -1,8 +1,8 @@
 <template>
   <div class="mb-3 d-flex  flex-column flex-md-row justify-content-md-between card border-0 rounded-2  overflow-hidden">
     <div class="card-header col-md-5 col-lg-4 col-xl-3 bg-transparent p-0 border-0 overflow-hidden rounded-0">
-      <figure class=" w-100 h-100">
-        <img class="w-100 h-100" :src="resolveFileUrl(cover)" :alt="title">
+      <figure>
+        <img class="h-100" :src="resolveFileUrl(cover)" :alt="title">
       </figure>
     </div>
     <div class=" card-body px-1 px-md-3 py-2 py-md-1  col-md-6 col-lg-7 col-xl-8  ">
@@ -38,6 +38,7 @@
 
   figure img {
     transition: 0.3s;
+    object-fit: cover;
   }
 
   figure img:hover {

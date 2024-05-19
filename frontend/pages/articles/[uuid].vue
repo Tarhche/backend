@@ -41,9 +41,3 @@
         ]
     })
 </script>
-
-<style scoped>
-.article-post {
-  line-height: 2rem;
-}
-</style>
