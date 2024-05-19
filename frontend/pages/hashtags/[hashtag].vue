@@ -18,12 +18,12 @@
     const { hashtag } = useRoute().params;
 
     useHead({
-        title: `هشتک|${hashtag}`,
+        title: `هشتک - ${hashtag}`,
         meta: [
-            { name: 'description', content: `هشتک|${hashtag}` },
+            { name: 'description', content: `هشتک - ${hashtag}` },
         ],
         link: [
-            { rel: 'canonical', href: '/hashtag' }
+            { rel: 'canonical', href: `/hashtags/${hashtag}` }
         ]
     })
 

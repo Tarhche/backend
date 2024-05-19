@@ -4,7 +4,7 @@
         <div class="row justify-content-center py-4" >
             <section class="col-md-12 col-lg-8">
               <figure v-if="data.cover">
-                <img class="w-100 pb-4 image-zoomable" :src="resolveFileUrl(data.cover)" :alt="data.title">
+                <img class="pb-4 image-zoomable" :src="resolveFileUrl(data.cover)" :alt="data.title">
               </figure>
               <h1 class="pb-4">{{ data.title }}</h1>
                 <article class="article-post" v-html="data.body"></article>
@@ -41,3 +41,9 @@
         ]
     })
 </script>
+
+<style scoped>
+.article-post {
+  line-height: 2rem;
+}
+</style>

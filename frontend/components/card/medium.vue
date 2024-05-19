@@ -33,6 +33,7 @@
     line-clamp: 2;
     -webkit-line-clamp: 2;
     text-align: justify;
+    line-height: normal;
   }
 
   figure img {
@@ -50,6 +51,7 @@
     -webkit-box-orient: vertical;
     line-clamp: 1;
     -webkit-line-clamp: 1;
+    line-height: normal;
   }
 
   @media screen and (max-width: 995.9px) {
