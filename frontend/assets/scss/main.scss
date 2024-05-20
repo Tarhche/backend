@@ -4,6 +4,9 @@
 // Import variables
 @import 'variables/index';
 
+// Syntax highlight
+@import '~/node_modules/highlight.js/scss/vs.scss';
+
 // Import fonts
 @import '~/node_modules/@fortawesome/fontawesome-free/css/all.min.css';
 
@@ -42,6 +45,22 @@ body {
     background-color: $white;
     margin: 0;
     padding: 0;
+}
+
+pre {
+  code {
+    line-height: 1.2rem;
+
+    &.hljs {
+      border: solid 2px #EEE;
+      border-radius: 1px;
+    }  
+  }
+}
+
+code {
+  display: inline-block;
+  direction: ltr;
 }
 
 // support rtl

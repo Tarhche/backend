@@ -66,21 +66,24 @@ const config = {
 	codeBlock: {
 		languages: [
 			{ language: 'plaintext', label: 'Plain text' },
-			{ language: 'go', label: 'Golang' },
+			{ language: 'bash', label: '‌Bash' },
 			{ language: 'c', label: 'C' },
 			{ language: 'cs', label: 'C#' },
 			{ language: 'cpp', label: 'C++' },
 			{ language: 'css', label: 'CSS' },
 			{ language: 'diff', label: 'Diff' },
+			{ language: 'go', label: 'Golang' },
 			{ language: 'html', label: 'HTML' },
 			{ language: 'java', label: 'Java' },
 			{ language: 'javascript', label: 'JavaScript' },
+			{ language: 'json', label: 'JSON' },
+			{ language: 'makefile', label: 'Makefile' },
 			{ language: 'php', label: 'PHP' },
 			{ language: 'python', label: 'Python' },
 			{ language: 'ruby', label: 'Ruby' },
 			{ language: 'typescript', label: 'TypeScript' },
-			{ language: 'json', label: 'JSON' },
-			{ language: 'xml', label: 'XML' }
+			{ language: 'xml', label: 'XML' },
+			{ language: 'yaml', label: 'YAML' }
 		]
 	}
 }

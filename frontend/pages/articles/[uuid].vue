@@ -25,19 +25,23 @@
 </template>
 
 <script setup>
-    const {uuid} = useRoute().params;
+	import hljs from 'highlight.js'
 
-    const resolveFileUrl = useFilesUrlResolver().resolve
+	const {uuid} = useRoute().params;
 
-    const data = await $fetch(useApiUrlResolver().resolve(`api/articles/${uuid}`))
+	const resolveFileUrl = useFilesUrlResolver().resolve
 
-    useHead({
-        title: data.title,
-        meta: [
-            { name: 'description', content: data.excerpt },
-        ],
-        link: [
-            { rel: 'canonical', href: `/articles/${uuid}` }
-        ]
+	const data = await $fetch(useApiUrlResolver().resolve(`api/articles/${uuid}`))
+
+	useHead({
+		title: data.title,
+		meta: [
+			{ name: 'description', content: data.excerpt },
+		],
+		link: [
+			{ rel: 'canonical', href: `/articles/${uuid}` }
+		]
     })
+
+	onMounted(hljs.highlightAll)
 </script>
