@@ -63,6 +63,26 @@ const config = {
 			'tableProperties'
 		]
 	},
+	link: {
+		decorators: {
+			toggleDownloadable: {
+				mode: 'manual',
+				label: 'Downloadable',
+				attributes: {
+					download: 'file'
+				}
+			},
+			openInNewTab: {
+				mode: 'manual',
+				label: 'Open in a new tab',
+				defaultValue: false, // This option won't be selected by default.
+				attributes: {
+					target: '_blank',
+					rel: 'noopener noreferrer'
+				}
+			}
+		}
+	},
 	codeBlock: {
 		languages: [
 			{ language: 'plaintext', label: 'Plain text' },
