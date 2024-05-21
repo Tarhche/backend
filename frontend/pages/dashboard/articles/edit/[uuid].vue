@@ -48,7 +48,7 @@
                 <div class="mb-3">
                   <input :class="{ 'is-invalid': errors.tags }" class="form-control" type="text" placeholder="تگ ها (برای ثبت  بعد نوشتن هر تگ ctrl + Enter را فشار دهید) "
                          v-model="params.tags" aria-label="tags"  @keydown.ctrl.enter="storeTags">
-                  <div class="tags d-flex gap-2 mt-2"><span class="px-3 py-1 bg-primary text-white rounded rounded-pill"
+                  <div class="tags d-flex gap-2 mt-2"><span class="px-3  bg-primary text-white rounded rounded-pill "
                                                            v-for="(item , index) in params.storeTags" :key="index"
                                                            @click="removeTag(index)">{{ item }}</span></div>
                   <div v-if="errors.tags" class="invalid-feedback">
@@ -182,11 +182,14 @@ async function updateArticle() {
 .tags {
   span {
     display: flex;
+    align-items: center;
     gap: 10px;
     font-size: 13px;
+    cursor: pointer;
     &:after {
       content: "+";
       rotate: 45deg;
+      font-size: 18px;
     }
   }
 }
