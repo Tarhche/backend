@@ -12,7 +12,7 @@
         <p class="card-text-summary">{{ excerpt }}</p>
       <div class="card-info d-flex flex-column gap-1 mt-2">
         <div class="card-text text-muted small">Jake Bittle in SCIENCE</div>
-        <small class="text-muted">{{ publishedAt }} &middot; 5 min read</small>
+        <small class="text-muted">{{ useTime().toAgo(publishedAt) }} &middot; 5 min read</small>
       </div>
     </div>
   </div>

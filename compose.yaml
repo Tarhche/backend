@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   frontend:
     build:
@@ -88,3 +86,11 @@ services:
       /bin/sh -c "
       mc config host add minio http://minio:9000 ${S3_ACCESS_KEY} ${S3_SECRET_KEY};
       mc mb minio/blog;"
+
+  nats:
+    image: nats:2.10-alpine
+    # command: "--config /etc/nats/nats-server.conf --jetstream"
+    ports:
+      - 4222:4222 # client port
+      - 6222:6222 # cluster post
+      - 8222:8222 # HTTP monitoring port

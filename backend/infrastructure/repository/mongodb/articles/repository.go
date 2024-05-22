@@ -89,7 +89,7 @@ func (r *ArticlesRepository) GetAllPublished(offset uint, limit uint) ([]article
 
 	o := int64(offset)
 	l := int64(limit)
-	desc := bson.D{{Key: "_id", Value: -1}}
+	desc := bson.D{{Key: "published_at", Value: -1}}
 
 	filter := bson.M{
 		"published_at": bson.M{
@@ -140,7 +140,7 @@ func (r *ArticlesRepository) GetByUUIDs(UUIDs []string) ([]article.Article, erro
 	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
 	defer cancel()
 
-	desc := bson.D{{Key: "_id", Value: -1}}
+	desc := bson.D{{Key: "published_at", Value: -1}}
 	filter := bson.M{"_id": bson.M{"$in": UUIDs}}
 
 	cur, err := r.collection.Find(ctx, filter, &options.FindOptions{
@@ -238,7 +238,7 @@ func (r *ArticlesRepository) GetByHashtag(hashtags []string, offset uint, limit 
 
 	o := int64(offset)
 	l := int64(limit)
-	desc := bson.D{{Key: "_id", Value: -1}}
+	desc := bson.D{{Key: "published_at", Value: -1}}
 
 	filter := bson.M{
 		"tags": bson.M{

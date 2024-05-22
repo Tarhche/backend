@@ -49,6 +49,13 @@
 									</div>
 								</div>
 
+								<div class="mb-3">
+									<input :class="{ 'is-invalid': errors.publishedAt }" class="form-control" type="datetime-local" placeholder="تاریخ انتشار" v-model="params.publishedAt" aria-label="publishment date"/>
+									<div v-if="errors.publishedAt" class="invalid-feedback">
+										{{ errors.publishedAt }}
+									</div>
+								</div>
+
 								<div>
 									<div @click.prevent="params.showFilePicker=true" class="image-picker" :style="{ backgroundImage: `url('${ useFilesUrlResolver().resolve(params.cover) }')` }">
 										<small class="title">تصویر اصلی</small>
@@ -93,6 +100,7 @@ const params = reactive({
     title: null,
     body: null,
     tags: null,
+	publishedAt: null,
     cover: null,
     loading: false,
 	showFilePicker: false,
@@ -103,6 +111,7 @@ const errors = reactive({
 	title: null,
 	body: null,
 	tags: null,
+	publishedAt: null,
 	cover: null,
 })
 
@@ -127,6 +136,8 @@ function selectFile(uuids:string[]) {
 }
 
 async function showArticle() {
+	const ut = useTime()
+
     try {
         const data = await useDashboardArticles().show(uuid)
 
@@ -135,6 +146,10 @@ async function showArticle() {
         params.body = data.body
         params.tags = data.tags.join(',')
         params.cover = data.cover
+
+		if (! ut.isZeroDate(data.published_at)) {
+			params.publishedAt = ut.toFormat(data.published_at, 'YYYY-MM-DD HH:mm:ss')
+		}
     } catch(error) {
         console.log(error)
     }
@@ -150,6 +165,7 @@ async function updateArticle() {
             params.excerpt,
 			params.body,
 			tags(),
+			params.publishedAt ? useTime().toISOString(params.publishedAt) : null,
 			params.cover || null,
 		)
 	} catch (error) {

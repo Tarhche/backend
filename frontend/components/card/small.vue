@@ -6,7 +6,7 @@
             <a class="text-dark" :href="href">{{ title }}</a>
             </h2>
             <div class="card-text text-muted small">{{ excerpt }}</div>
-            <small class="text-muted"> {{ publishedAt }} &middot; 5 min read</small>
+            <small class="text-muted"> {{ useTime().toAgo(publishedAt) }} &middot; 5 min read</small>
         </div>
     </div>
 </template>

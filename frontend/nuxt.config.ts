@@ -7,13 +7,21 @@ export default defineNuxtConfig({
   features: {
     inlineStyles: false,
   },
-  modules: ['@vueuse/nuxt'],
+  modules: [
+    '@vueuse/nuxt',
+    'dayjs-nuxt',
+  ],
   runtimeConfig: {
     internalApiBaseUrl: '',
     public: {
       apiBaseUrl: '',
     }
   },
+  dayjs: {
+    locales: ['en', 'fa'],
+    plugins: ['relativeTime', 'utc', 'timezone'],
+    defaultLocale: 'fa',
+  },  
   app:{
     head:{
       htmlAttrs:{

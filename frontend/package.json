@@ -12,6 +12,7 @@
   "devDependencies": {
     "@vueuse/core": "^10.7.2",
     "@vueuse/nuxt": "^10.7.2",
+    "dayjs-nuxt": "^2.1.9",
     "nuxt": "^3.8.2",
     "vue": "^3.4.14",
     "vue-router": "^4.2.5"

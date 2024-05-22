@@ -35,7 +35,10 @@
 											<tr v-for="(article, index) in data.items" :key="index">
 												<th scope="row">{{ index + 1 }}</th>
 												<td>{{ article.title }}</td>
-												<td>{{ article.published_at }}</td>
+												<td>
+													<span v-if="useTime().isZeroDate(article.published_at)" class="fa fa-times text-danger"></span>
+													<span v-else>{{ useTime().toAgo(article.published_at) }}</span>
+												</td>
 												<td>
 													<NuxtLink :to="`/articles/${article.uuid}`" class="btn mx-1 btn-sm btn-primary">
 														<span class="fa fa-eye"></span>

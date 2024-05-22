@@ -10,7 +10,7 @@
                 <small class="d-block">
                     <a class="text-muted" href="./author.html">Favid Rick</a>
                 </small>
-                <small class="text-muted">{{ publishedAt }} &middot; 5 min read</small>
+                <small class="text-muted">{{ useTime().toAgo(publishedAt) }} &middot; 5 min read</small>
             </div>
         </div>
     </div>

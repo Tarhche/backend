@@ -51,6 +51,13 @@
 									</div>
 								</div>
 
+								<div class="mb-3">
+									<input :class="{ 'is-invalid': errors.publishedAt }" class="form-control" type="datetime-local" placeholder="تاریخ انتشار" v-model="params.publishedAt" aria-label="publishment date"/>
+									<div v-if="errors.publishedAt" class="invalid-feedback">
+										{{ errors.publishedAt }}
+									</div>
+								</div>
+
 								<div>
 									<div @click.prevent="params.showFilePicker=true" class="image-picker" :style="{ backgroundImage: `url('${ useFilesUrlResolver().resolve(params.cover) }')` }">
 										<small class="title">تصویر اصلی</small>
@@ -92,6 +99,7 @@ const params = reactive({
   title: null,
   body: null,
   tags: null,
+  publishedAt: null,
   cover: null,
   loading: false,
   showFilePicker: false,
@@ -102,6 +110,7 @@ const errors = reactive({
 	title: null,
 	body: null,
 	tags: null,
+	publishedAt: null,
 	cover: null,
 })
 
@@ -132,6 +141,7 @@ async function createArticle() {
             params.excerpt,
 			params.body,
 			tags(),
+			params.publishedAt ? useTime().toISOString(params.publishedAt) : null,
 			params.cover || null,
 		)
 
