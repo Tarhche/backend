@@ -27,7 +27,7 @@ func (uc *UseCase) Execute() (*Response, error) {
 		return nil, err
 	}
 
-	all, err := uc.articleRepository.GetAll(0, 3)
+	all, err := uc.articleRepository.GetAllPublished(0, 3)
 	if err != nil {
 		return nil, err
 	}

@@ -23,10 +23,11 @@ func (uc *UseCase) CreateArticle(request Request) (*CreateArticleResponse, error
 	}
 
 	article := article.Article{
-		Cover:   request.Cover,
-		Title:   request.Title,
-		Excerpt: request.Excerpt,
-		Body:    request.Body,
+		Cover:       request.Cover,
+		Title:       request.Title,
+		Excerpt:     request.Excerpt,
+		Body:        request.Body,
+		PublishedAt: request.PublishedAt,
 		Author: author.Author{
 			UUID: request.AuthorUUID,
 		},

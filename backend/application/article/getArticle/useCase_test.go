@@ -60,7 +60,7 @@ type MockArticlesRepository struct {
 	GetOneErr   error
 }
 
-func (r *MockArticlesRepository) GetOne(UUID string) (article.Article, error) {
+func (r *MockArticlesRepository) GetOnePublished(UUID string) (article.Article, error) {
 	r.GetOneCount++
 
 	if r.GetOneErr != nil {
