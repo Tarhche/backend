@@ -1,12 +1,12 @@
 <template>
     <div class="mb-3 d-flex gap-3 align-items-center">
-        <img :style="{height: '100px'}" :src="resolveFileUrl(cover)">
+        <img :style="{height: '100px'}" :src="resolveFileUrl(cover)" v-if="cover">
         <div>
             <h2 class="mb-2 h6 fw-bold">
-            <a class="text-dark" :href="href">{{ title }}</a>
+            <a class="text-dark" v-if="cover && href"  :href="href">{{ cover }}</a>
             </h2>
-            <div class="card-text text-muted small">{{ excerpt }}</div>
-            <small class="text-muted"> {{ publishedAt }} &middot; 5 min read</small>
+            <div class="card-text text-muted small" v-if="excerpt" >{{ excerpt }}</div>
+            <small class="text-muted" v-if="publishedAt" > {{ publishedAt }} &middot; 5 min read</small>
         </div>
     </div>
 </template>
