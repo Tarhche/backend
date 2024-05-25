@@ -58,7 +58,9 @@
 										</tbody>
 									  </table>
 								</div>
-								<NuxtLink v-if="!pending && data.pagination.total_pages > 1" to="/dashboard/articles">مشاهده بیشتر</NuxtLink>
+								<p class="text-center">
+									<NuxtLink v-if="!pending && data.pagination.total_pages > 1" to="/dashboard/articles">مشاهده بیشتر</NuxtLink>
+								</p>
 							</div>
 						</div>
 					</div>
@@ -75,7 +77,7 @@ definePageMeta({
 
 const { data, pending, error } = await useAsyncData(
 	'dashboard.articles.index',
-	useDashboardArticles().index
+	() => useDashboardArticles().index(1)
 )
 
 async function deleteArticle(uuid:string) {

@@ -27,7 +27,7 @@
     "highlight.js": "^11.9.0",
     "jwt-decode": "^4.0.0",
     "medium-zoom": "^1.1.0",
-    "sass": "^1.75.0",
+    "sass": "^1.77.2",
     "vue-toastification": "^2.0.0-rc.5"
   }
 }

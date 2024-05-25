@@ -31,8 +31,8 @@
 											<th scope="col">#</th>
 											</tr>
 										</thead>
-										<tbody v-if="!pending">
-											<tr v-for="(article, index) in data.items" :key="index">
+										<tbody v-if="!params.pending">
+											<tr v-for="(article, index) in params.data.items" :key="index">
 												<th scope="row">{{ index + 1 }}</th>
 												<td>{{ article.title }}</td>
 												<td>
@@ -51,7 +51,7 @@
 													</button>
 												</td>
 											</tr>
-											<tr v-if="data.items.length == 0">
+											<tr v-if="params.data.items.length == 0">
 												<td colspan="5">
 													<p>هیچ مقاله ای وجود ندارد</p>
 												</td>
@@ -59,22 +59,8 @@
 										</tbody>
 									</table>
 								</div>
-								<nav v-if="!pending && data.pagination.total_pages > 1" aria-label="Page navigation example">
-									<ul class="pagination justify-content-center">
-										<li class="page-item">
-											<a class="page-link" href="#" aria-label="Previous">
-												<span aria-hidden="true">&laquo;</span>
-											</a>
-										</li>
-										<li v-for="i of data.pagination.total_pages" class="page-item">
-											<a class="page-link" href="#">{{ i }}</a>
-										</li>
-										<li class="page-item">
-											<a class="page-link" href="#" aria-label="Next">
-												<span aria-hidden="true">&raquo;</span>
-											</a>
-										</li>
-									</ul>
+								<nav v-if="!params.pending" aria-label="Page navigation example">
+									<Pagination @paginate="load" :current="params.data.pagination.current_page" :pages="params.data.pagination.total_pages" />
 								</nav>
 							</div>
 						</div>
@@ -94,10 +80,24 @@ useHead({
 	title: "مقاله ها"
 })
 
-const { data, pending, error } = await useAsyncData(
-	'dashboard.articles.index',
-	useDashboardArticles().index
-)
+const params = reactive({
+	data: [],
+	pending: true,
+	error: null,
+})
+
+await load((useRoute().query.page) || 1)
+
+async function load(page:number) {
+	const { data, pending, error } = await useAsyncData(
+		'dashboard.articles.index',
+		() => useDashboardArticles().index(page)
+	)
+
+	params.data = data
+	params.pending = pending
+	params.error = error
+}
 
 async function deleteArticle(uuid:string) {
 	if (!confirm('آیا میخواهید این مقاله را حذف کنید؟')) {

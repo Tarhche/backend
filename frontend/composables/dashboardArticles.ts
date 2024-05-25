@@ -1,9 +1,12 @@
 
-async function index() {
+async function index(page:number) {
     return useUser().$fetch(
 		useApiUrlResolver().resolve("api/dashboard/articles"),
 		{
             method: "GET",
+			params: {
+				page: page,
+			},
 	    	lazy: true,
     		headers: {authorization: `Bearer ${useAuth().accessToken()}`}
   		}
