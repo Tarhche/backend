@@ -6,13 +6,15 @@
       </figure>
     </div>
     <div class=" card-body px-1 px-md-3 py-2 py-md-1  col-md-6 col-lg-7 col-xl-8  ">
-        <h2 class="mb-2 h4 fw-bold">
-            <a class="text-dark" :href="href">{{ title }}</a>
-        </h2>
-        <p class="card-text-summary">{{ excerpt }}</p>
-      <div class="card-info d-flex flex-column gap-1 mt-2">
-        <div class="card-text text-muted small">Jake Bittle in SCIENCE</div>
-        <small class="text-muted">{{ useTime().toAgo(publishedAt) }} &middot; 5 min read</small>
+      <h2 class="mb-2 h4 fw-bold">
+        <a class="text-dark" :href="href">{{ title }}</a>
+      </h2>
+      <p class="card-text-summary">{{ excerpt }}</p>
+      <div class="card-info d-flex flex-column">
+        <span class="text-muted small">
+          <span class="fa-regular fa-clock mx-1"></span>
+          <time :datetime="publishedAt">{{ useTime().toAgo(publishedAt) }}</time>
+        </span>
       </div>
     </div>
   </div>

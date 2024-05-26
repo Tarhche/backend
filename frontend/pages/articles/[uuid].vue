@@ -3,14 +3,25 @@
     <div class="container">
         <div class="row justify-content-center py-4" >
             <section class="col-md-12 col-lg-8">
+              <h1 class="pb-3">{{ data.title }}</h1>
+              <div class="my-3">
+                <span class="small">
+                  <span class="fa-regular fa-clock"></span>
+                  <span class="mx-1">تاریخ انتشار:</span>
+                  <time class="text-muted" :datetime="data.published_at">{{ useTime().toAgo(data.published_at) }}</time>
+                </span>
+              </div>
               <figure v-if="data.cover">
-                <img class="pb-4 image-zoomable" :src="resolveFileUrl(data.cover)" :alt="data.title">
+                <img class="image-zoomable" :src="resolveFileUrl(data.cover)" :alt="data.title">
+                <figcaption class="alert alert-secondary my-3 text-wrap">
+                  <span class="fa-solid fa-book fa-flip-horizontal fa-xl"></span>
+                  {{ data.excerpt }}
+                </figcaption>
               </figure>
-              <h1 class="pb-4">{{ data.title }}</h1>
-                <article class="article-post" v-html="data.body"></article>
-                <div v-if="data.tags" class="card-text">
-                    <a class="hashtag" :href="`/hashtags/${tag}`" :key="index" v-for="(tag, index) in data.tags">{{ tag }}</a>
-                </div>
+              <article class="article-post" v-html="data.body"></article>
+              <div v-if="data.tags" class="card-text">
+                <a class="hashtag" :href="`/hashtags/${tag}`" :key="index" v-for="(tag, index) in data.tags">{{ tag }}</a>
+              </div>
             </section>
         </div>
     </div>
@@ -41,7 +52,7 @@
 		link: [
 			{ rel: 'canonical', href: `/articles/${uuid}` }
 		]
-    })
+  })
 
 	onMounted(hljs.highlightAll)
 </script>

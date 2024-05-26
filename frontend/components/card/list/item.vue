@@ -7,7 +7,6 @@
             <div v-if="tags" class="card-text">
                 <a class="hashtag" :href="`/hashtags/${tag}`" v-for="tag in tags">{{ tag }}</a>
             </div>
-            <small class="text-muted">{{ useTime().toAgo(publishedAt) }}</small>
         </span>
     </li>
 </template>

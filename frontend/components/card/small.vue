@@ -3,10 +3,10 @@
         <img :style="{height: '100px'}" :src="resolveFileUrl(cover)">
         <div>
             <h2 class="mb-2 h6 fw-bold">
-            <a class="text-dark" :href="href">{{ title }}</a>
+                <a class="text-dark" :href="href">{{ title }}</a>
             </h2>
             <div class="card-text text-muted small">{{ excerpt }}</div>
-            <small class="text-muted"> {{ useTime().toAgo(publishedAt) }} &middot; 5 min read</small>
+            <time :datetime="publishedAt" class="text-muted small">{{ useTime().toAgo(publishedAt) }}</time>
         </div>
     </div>
 </template>
