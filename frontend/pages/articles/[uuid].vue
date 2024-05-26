@@ -22,6 +22,10 @@
               <div v-if="data.tags" class="card-text">
                 <a class="hashtag" :href="`/hashtags/${tag}`" :key="index" v-for="(tag, index) in data.tags">{{ tag }}</a>
               </div>
+
+              <aside v-if="false" class="mt-5">
+                <Comments />
+              </aside>
             </section>
         </div>
     </div>
