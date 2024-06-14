@@ -1,11 +1,11 @@
 <template>
 	<div v-if="!pending">
 		<template v-if="data?.elements" v-for="element in data.elements">
-			<Jumbotron v-if="element.type == 'jumbotron'" :body="element.body"/>
-			<Featured v-if="element.type == 'featured'" :body="element.body"/>
+			<Jumbotron v-if="element.type === 'jumbotron'" :body="element.body"/>
+			<Featured v-if="element.type === 'featured'" :body="element.body"/>
 		</template>
 
-`		<div class="container">
+		<div class="container">
 			<div class="row justify-content-between">
 				<div class="col-md-8">
 					<h5 class="fw-bold spanborder"><span>جدیدترین‌ ها</span></h5>
@@ -26,7 +26,7 @@
 				</div>
 			</div>
 		</div>
-`	</div>
+	</div>
 </template>
 
 <script setup>
