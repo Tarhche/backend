@@ -1,14 +1,14 @@
 <template>
     <li>
-        <span class="py-1">
+        <div class="py-1">
             <h6 class="fw-bold">
                 <a :href="href" class="text-dark">{{ title }}</a>
             </h6>
             <div v-if="tags" class="card-text">
-                <a class="hashtag" :href="`/hashtags/${tag}`" v-for="tag in tags">{{ tag }}</a>
+                <a class="hashtag" :href="`/hashtags/${tag}`" v-for="(tag , index) in tags" :key="index">{{ tag }}</a>
             </div>
             <small class="text-muted">{{ publishedAt }}</small>
-        </span>
+        </div>
     </li>
 </template>
 
