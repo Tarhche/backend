@@ -31,7 +31,7 @@
     </div>
 
     <div v-if="data.elements">
-      <template v-for="(element, index) in data.elements">
+      <template v-for="(element, index) in data.elements" :key="index">
         <Jumbotron :key="index" v-if="element.type === 'jumbotron'" :body="element.body" />
         <Featured :key="index" v-if="element.type === 'featured'" :body="element.body" />
       </template>

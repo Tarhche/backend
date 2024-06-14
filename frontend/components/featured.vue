@@ -6,7 +6,7 @@
             </div>
             <div class="col-lg-6">
                 <div class="flex-md-row mb-4 box-shadow h-xl-300">
-                    <template v-for="item in aside">
+                    <template v-for="(item , index) in aside" :key="index">
                         <CardSmall :cover="item.body.cover" :href="`/articles/${item.body.uuid}`" :title="item.body.title" :excerpt="item.body.excerpt" :publishedAt="item.body.published_at" />
                     </template>
                 </div>

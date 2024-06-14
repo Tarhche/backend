@@ -6,7 +6,7 @@
                     <h1 class="fw-bold spanborder">
                         <span>مقاله ها</span>
                     </h1>
-                    <template v-if="data.items.length > 0" v-for="{uuid, cover, title, excerpt, published_at} in data.items">
+                    <template v-if="data.items.length > 0" v-for="({uuid, cover, title, excerpt, published_at}, index) in data.items" :key="index">
                         <CardMedium :cover="cover" :href="`/articles/${uuid}`" :title="title" :excerpt="excerpt" :publishedAt="published_at" />
                     </template>
                     <p v-else class="alert alert-info">No data!</p>
