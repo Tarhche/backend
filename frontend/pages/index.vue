@@ -1,8 +1,8 @@
 <template>
 	<div v-if="!pending">
 		<template v-if="data?.elements" v-for="(element,index) in data.elements" :key="index">
-			<Jumbotron v-if="element.type == 'jumbotron'" :body="element.body"/>
-			<Featured v-if="element.type == 'featured'" :body="element.body"/>
+			<Jumbotron v-if="element.type === 'jumbotron'" :body="element.body"/>
+			<Featured v-if="element.type === 'featured'" :body="element.body"/>
 		</template>
 
 `		<div class="container">
