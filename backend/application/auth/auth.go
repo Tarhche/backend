@@ -10,6 +10,7 @@ const (
 	AccessToken        = "access"
 	RefreshToken       = "refresh"
 	ResetPasswordToken = "reset-password"
+	RegistrationToken  = "registration"
 )
 
 type authKey struct{}
