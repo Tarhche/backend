@@ -8,6 +8,7 @@
                         <CardMedium :cover="cover" :href="`/articles/${uuid}`" :title="title" :excerpt="excerpt" :publishedAt="published_at" />
                     </template>
                     <p v-else class="alert alert-info">No data!</p>
+                    <skeleton-loader-medium v-if="pending" v-for="item in 10" :key="item"/>
                 </div>
             </div>
         </div>

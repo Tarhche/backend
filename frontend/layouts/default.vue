@@ -1,7 +1,9 @@
 <template>
     <div>
         <Navbar></Navbar>
-        <slot />
+        <div id="main">
+          <slot />
+        </div>
         <Footer></Footer>
     </div>
 </template>
@@ -11,3 +13,8 @@ useHead({
   titleTemplate:(title) => title ? ` طرح چه | ${ title } ` : "طرح چه"
 })
 </script>
+<style scoped>
+#main{
+min-height: calc(100vh - 180px);
+}
+</style>
