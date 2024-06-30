@@ -1,6 +1,8 @@
 package user
 
-import "github.com/khanzadimahdi/testproject/domain/password"
+import (
+	"github.com/khanzadimahdi/testproject/domain/password"
+)
 
 type User struct {
 	UUID         string
@@ -12,7 +14,10 @@ type User struct {
 }
 
 type Repository interface {
+	GetAll(offset uint, limit uint) ([]User, error)
 	GetOne(UUID string) (User, error)
 	GetOneByIdentity(username string) (User, error)
-	Save(*User) error
+	Save(*User) (uuid string, err error)
+	Delete(UUID string) error
+	Count() (uint, error)
 }

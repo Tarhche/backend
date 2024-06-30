@@ -1,4 +1,4 @@
-package changepassword
+package userchangepassword
 
 import (
 	"crypto/rand"
@@ -31,14 +31,6 @@ func (uc *UseCase) ChangePassword(request Request) (*ChangePasswordResponse, err
 		return nil, err
 	}
 
-	if !uc.passwordIsValid(u, []byte(request.CurrentPassword)) {
-		return &ChangePasswordResponse{
-			ValidationErrors: validationErrors{
-				"current_password": "current password is not valid",
-			},
-		}, nil
-	}
-
 	salt := make([]byte, 64)
 	if _, err := rand.Read(salt); err != nil {
 		return nil, err
@@ -54,8 +46,4 @@ func (uc *UseCase) ChangePassword(request Request) (*ChangePasswordResponse, err
 	}
 
 	return &ChangePasswordResponse{}, err
-}
-
-func (uc *UseCase) passwordIsValid(u user.User, password []byte) bool {
-	return uc.hasher.Equal(password, u.PasswordHash.Value, u.PasswordHash.Salt)
 }

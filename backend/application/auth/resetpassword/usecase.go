@@ -67,7 +67,7 @@ func (uc *UseCase) ResetPassword(request Request) (*Response, error) {
 		Salt:  salt,
 	}
 
-	if err := uc.userRepository.Save(&u); err != nil {
+	if _, err := uc.userRepository.Save(&u); err != nil {
 		return nil, err
 	}
 

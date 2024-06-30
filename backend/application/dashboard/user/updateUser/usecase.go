@@ -1,24 +1,27 @@
-package updateprofile
+package updateuser
 
 import (
 	"errors"
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/password"
 	"github.com/khanzadimahdi/testproject/domain/user"
 )
 
 type UseCase struct {
 	userRepository user.Repository
+	hasher         password.Hasher
 }
 
-func NewUseCase(userRepository user.Repository) *UseCase {
+func NewUseCase(userRepository user.Repository, hasher password.Hasher) *UseCase {
 	return &UseCase{
 		userRepository: userRepository,
+		hasher:         hasher,
 	}
 }
 
-func (uc *UseCase) UpdateProfile(request Request) (*UpdateProfileResponse, error) {
+func (uc *UseCase) UpdateUser(request Request) (*Response, error) {
 	if ok, validation := request.Validate(); !ok {
-		return &UpdateProfileResponse{
+		return &Response{
 			ValidationErrors: validation,
 		}, nil
 	}
@@ -28,7 +31,7 @@ func (uc *UseCase) UpdateProfile(request Request) (*UpdateProfileResponse, error
 	if err != nil {
 		return nil, err
 	} else if exists {
-		return &UpdateProfileResponse{
+		return &Response{
 			ValidationErrors: map[string]string{
 				"email": "another user with this email already exists",
 			},
@@ -40,7 +43,7 @@ func (uc *UseCase) UpdateProfile(request Request) (*UpdateProfileResponse, error
 	if err != nil {
 		return nil, err
 	} else if exists {
-		return &UpdateProfileResponse{
+		return &Response{
 			ValidationErrors: map[string]string{
 				"username": "another user with this email already exists",
 			},
@@ -62,10 +65,10 @@ func (uc *UseCase) UpdateProfile(request Request) (*UpdateProfileResponse, error
 		return nil, err
 	}
 
-	return &UpdateProfileResponse{}, err
+	return &Response{}, err
 }
 
-func (uc *UseCase) anotherUserExists(identity string, currentUserUUID string) (bool, error) {
+func (uc *UseCase) anotherUserExists(identity string, userUUID string) (bool, error) {
 	u, err := uc.userRepository.GetOneByIdentity(identity)
 	if errors.Is(err, domain.ErrNotExists) {
 		return false, nil
@@ -73,5 +76,5 @@ func (uc *UseCase) anotherUserExists(identity string, currentUserUUID string) (b
 		return false, err
 	}
 
-	return u.UUID != currentUserUUID, nil
+	return u.UUID != userUUID, nil
 }

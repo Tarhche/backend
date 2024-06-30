@@ -93,7 +93,7 @@ func (uc *UseCase) Verify(request Request) (*Response, error) {
 		},
 	}
 
-	if err := uc.userRepository.Save(&u); err != nil {
+	if _, err := uc.userRepository.Save(&u); err != nil {
 		return nil, err
 	}
 
