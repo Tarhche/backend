@@ -1,4 +1,4 @@
-FROM golang:1.21 as build
+FROM golang:1.22 as build
 WORKDIR /dist
 COPY . .
 ENV GOARCH=amd64 CGO_ENABLED=0

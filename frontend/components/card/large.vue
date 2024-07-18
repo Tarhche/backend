@@ -3,14 +3,14 @@
         <div :style="{backgroundImage: `url(${coverUrl})`, height: '150px', backgroundSize: 'cover', backgroundRepeat: 'no-repeat'}"></div>               
         <div class="card-body px-0 pb-0 d-flex flex-column align-items-start">
             <h2 class="h4 fw-bold">
-                <a class="text-dark" :href="href" v-if="href && title">{{ title }}</a>
+                <a class="text-dark" :href="href">{{ title }}</a>
             </h2>
-            <p class="card-text" v-if="excerpt">{{ excerpt }}</p>
+            <p class="card-text">{{ excerpt }}</p>
             <div>
                 <small class="d-block">
-                    <a class="text-muted" href="./author.html">Favid Rick</a>
+                    <a class="text-muted" href="#">Favid Rick</a>
                 </small>
-                <small class="text-muted" v-if="publishedAt" >{{ publishedAt }} &middot; 5 min read</small>
+                <time :datetime="publishedAt" class="text-muted small">{{ useTime().toAgo(publishedAt) }}</time>
             </div>
         </div>
     </div>

@@ -3,6 +3,7 @@ package repository
 import (
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/gofrs/uuid/v5"
 	"github.com/khanzadimahdi/testproject/domain"
@@ -47,6 +48,30 @@ func (r *ArticlesRepository) GetAll(offset uint, limit uint) ([]article.Article,
 	return a, nil
 }
 
+func (r *ArticlesRepository) GetAllPublished(offset uint, limit uint) ([]article.Article, error) {
+	var (
+		a []article.Article
+		i uint
+		j uint
+	)
+
+	r.datastore.Range(func(key, value any) bool {
+		if i < offset {
+			i++
+			return true
+		}
+
+		if article := value.(article.Article); article.PublishedAt.Before(time.Now()) {
+			a = append(a, article)
+			j++
+		}
+
+		return j < limit
+	})
+
+	return a, nil
+}
+
 func (r *ArticlesRepository) GetByUUIDs(UUIDs []string) ([]article.Article, error) {
 	a := make([]article.Article, 0, len(UUIDs))
 
@@ -78,11 +103,39 @@ func (r *ArticlesRepository) GetOne(UUID string) (article.Article, error) {
 	return a.(article.Article), nil
 }
 
+func (r *ArticlesRepository) GetOnePublished(UUID string) (article.Article, error) {
+	a, ok := r.datastore.Load(UUID)
+	if !ok {
+		return article.Article{}, domain.ErrNotExists
+	}
+
+	item := a.(article.Article)
+	if item.PublishedAt.After(time.Now()) {
+		return article.Article{}, domain.ErrNotExists
+	}
+
+	return item, nil
+}
+
 func (r *ArticlesRepository) Count() (uint, error) {
 	var c uint
 
 	r.datastore.Range(func(_, _ any) bool {
 		c++
+
+		return true
+	})
+
+	return c, nil
+}
+
+func (r *ArticlesRepository) CountPublished() (uint, error) {
+	var c uint
+
+	r.datastore.Range(func(_, value any) bool {
+		if article := value.(article.Article); article.PublishedAt.Before(time.Now()) {
+			c++
+		}
 
 		return true
 	})

@@ -2,17 +2,19 @@
   <div class="mb-3 d-flex  flex-column flex-md-row justify-content-md-between card border-0 rounded-2  overflow-hidden">
     <div class="card-header col-md-5 col-lg-4 col-xl-3 bg-transparent p-0 border-0 overflow-hidden rounded-0">
       <figure>
-        <img class="h-100" :src="resolveFileUrl(cover)" v-if="cover" :alt="title">
+        <img class="h-100" :src="resolveFileUrl(cover)" :alt="title">
       </figure>
     </div>
     <div class=" card-body px-1 px-md-3 py-2 py-md-1  col-md-6 col-lg-7 col-xl-8  ">
-        <h2 class="mb-2 h4 fw-bold">
-            <a class="text-dark" :href="href" v-if="href && title">{{ title }}</a>
-        </h2>
-        <p class="card-text-summary" v-if="excerpt">{{ excerpt }}</p>
-      <div class="card-info d-flex flex-column gap-1 mt-2">
-        <div class="card-text text-muted small" v-if="author">Jake Bittle in SCIENCE</div>
-        <small class="text-muted" v-if="publishedAt" >{{ publishedAt }} &middot; 5 min read</small>
+      <h2 class="mb-2 h4 fw-bold">
+        <a class="text-dark" :href="href">{{ title }}</a>
+      </h2>
+      <p class="card-text-summary">{{ excerpt }}</p>
+      <div class="card-info d-flex flex-column">
+        <span class="text-muted small">
+          <span class="fa-regular fa-clock mx-1"></span>
+          <time :datetime="publishedAt">{{ useTime().toAgo(publishedAt) }}</time>
+        </span>
       </div>
     </div>
   </div>

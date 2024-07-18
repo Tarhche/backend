@@ -617,6 +617,10 @@ article {
     }
 }
 
+.pagination {
+  direction: ltr;
+}
+
 .spanborder {    
     border-bottom: 1px solid $lightblue;
     margin-bottom:2rem;
@@ -659,6 +663,7 @@ article {
         width: 40px !important;
     }
 }
+
 // Footer
 footer.bg-black {
     color: $gray-600;

@@ -1,16 +1,19 @@
 
-async function index() {
+async function index(page:number) {
     return useUser().$fetch(
 		useApiUrlResolver().resolve("api/dashboard/articles"),
 		{
             method: "GET",
+			params: {
+				page: page,
+			},
 	    	lazy: true,
     		headers: {authorization: `Bearer ${useAuth().accessToken()}`}
   		}
 	)
 }
 
-async function create(title:string, excerpt:string, body:string, tags:string[], cover?:string) {
+async function create(title:string, excerpt:string, body:string, tags:string[], publishedAt?:string, cover?:string) {
     return useUser().$fetch(
 		useApiUrlResolver().resolve("api/dashboard/articles"),
 		{
@@ -22,6 +25,7 @@ async function create(title:string, excerpt:string, body:string, tags:string[], 
 				excerpt: excerpt,
 				body: body,
 				tags: tags,
+				published_at: publishedAt,
 				cover: cover,
 			}
   		}
@@ -39,7 +43,7 @@ async function show(uuid:string) {
 	)
 }
 
-async function update(uuid:string, title:string, excerpt:string, body:string, tags:string[], cover?:string) {
+async function update(uuid:string, title:string, excerpt:string, body:string, tags:string[], publishedAt?:string, cover?:string) {
     return useUser().$fetch(
 		useApiUrlResolver().resolve(`api/dashboard/articles`),
 		{
@@ -52,6 +56,7 @@ async function update(uuid:string, title:string, excerpt:string, body:string, ta
 				excerpt: excerpt,
 				body: body,
 				tags: tags,
+				published_at: publishedAt,
 				cover: cover,
 			}
   		}

@@ -17,7 +17,7 @@ func NewUseCase(articleRepository article.Repository) *UseCase {
 }
 
 func (uc *UseCase) GetArticles(request *Request) (*GetArticlesResponse, error) {
-	totalArticles, err := uc.articleRepository.Count()
+	totalArticles, err := uc.articleRepository.CountPublished()
 	if err != nil {
 		return nil, err
 	}
@@ -34,7 +34,7 @@ func (uc *UseCase) GetArticles(request *Request) (*GetArticlesResponse, error) {
 		totalPages++
 	}
 
-	a, err := uc.articleRepository.GetAll(offset, limit)
+	a, err := uc.articleRepository.GetAllPublished(offset, limit)
 	if err != nil {
 		return nil, err
 	}

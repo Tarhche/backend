@@ -98,7 +98,7 @@ type MockArticlesRepository struct {
 	GetCountErr   error
 }
 
-func (r *MockArticlesRepository) GetAll(offset uint, limit uint) ([]article.Article, error) {
+func (r *MockArticlesRepository) GetAllPublished(offset uint, limit uint) ([]article.Article, error) {
 	r.GetAllCount++
 
 	if r.GetAllErr != nil {
@@ -108,7 +108,7 @@ func (r *MockArticlesRepository) GetAll(offset uint, limit uint) ([]article.Arti
 	return []article.Article{}, nil
 }
 
-func (r *MockArticlesRepository) Count() (uint, error) {
+func (r *MockArticlesRepository) CountPublished() (uint, error) {
 	r.GetCountCount++
 
 	if r.GetAllErr != nil {
