@@ -1,5 +1,5 @@
 <template>
-    <div>
+  <section>
         <h5 class="mb-3">
             <span class="fa-regular fa-comment"></span>
             <span class="mx-1">دیدگاه ها</span>
@@ -17,42 +17,60 @@
             <span>یا</span>
             <NuxtLink class="mx-1" to="/auth/login">وارد شوید</NuxtLink>
         </div>
-
-        <section class="card mb-3">
-            <div class="card-body d-flex flex-start">
-                <img class="rounded-circle shadow-1-strong ms-3" src="https://mdbcdn.b-cdn.net/img/Photos/Avatars/img%20(3).webp" alt="avatar" width="65" height="65">
-                <div class="flex-grow-1 flex-shrink-1">
-                    <div class="d-flex justify-content-between align-items-center">
-                    <p class="mb-1">
-                        <span>افشار زند</span>
-                        <span class="text-muted small">
-                        <span class="fa-regular fa-clock mx-1"></span>
-                        <time datetime="">{{ useTime().toAgo('2024/05/20') }}</time>
-                        </span>
-                    </p>
-                    <div v-if="params.isLogin" class="text-nowrap">
-                        <button class="btn text-danger btn-sm">
-                            <i class="fas fa-trash fa-xs"></i>
-                        </button>
-                        <span>|</span>
-                        <button class="btn btn-sm">
-                        <i class="fas fa-reply fa-xs"></i>
-                        </button>
-                    </div>
-                    </div>
-                    <p class="small mb-0 pt-2 border-top">
-                        طراحان معمولا از لورم ایپسوم
-                         استفاده میکنند تا فقط به مشتری یا کار فرما نشان دهند که قالب طراحی شده بعد از اینکه متن
-                         در آن قرار میگرد چگونه خواهد بود و فونت ها و اندازه ها چگونه در نظر گرفته شده است.
-                    </p>
-                </div>
-            </div>
-        </section>
-    </div>
+    <comments-item v-for="(item , index) in comments" :key="index" :data="item"  v-if="comments && comments.length && params.isLogin"/>
+  </section>
 </template>
 
 <script lang="ts" setup>
-    const params = reactive({
+const comments = [
+  {
+    img: 'https://mdbcdn.b-cdn.net/img/Photos/Avatars/img%20(3).webp',
+    name: "افشار زند",
+    time: "'2024/05/20'",
+    text: "طراحان معمولا از لورم ایپسوم استفاده میکنند تا فقط به مشتری یا کار فرما نشان دهند که قالب طراحی شده بعد از اینکه متن در آن قرار میگرد چگونه خواهد بود و فونت ها و اندازه ها چگونه در نظر گرفته شده است.",
+    sub:[
+      {
+        img: 'https://mdbcdn.b-cdn.net/img/Photos/Avatars/img%20(3).webp',
+        name: "افشار زند",
+        time: "'2024/05/20'",
+        text: "طراحان معمولا از لورم ایپسوم استفاده میکنند تا فقط به مشتری یا کار فرما نشان دهند که قالب طراحی شده بعد از اینکه متن در آن قرار میگرد چگونه خواهد بود و فونت ها و اندازه ها چگونه در نظر گرفته شده است.",
+        sub:[
+          {
+            img: 'https://mdbcdn.b-cdn.net/img/Photos/Avatars/img%20(3).webp',
+            name: "عیسی خانزادی",
+            time: "'2024/05/20'",
+            text: "طراحان معمولا از لورم ایپسوم استفاده میکنند تا فقط به مشتری یا کار فرما نشان دهند که قالب طراحی شده بعد از اینکه متن در آن قرار میگرد چگونه خواهد بود و فونت ها و اندازه ها چگونه در نظر گرفته شده است."
+          },
+        ]
+      },
+      {
+        img: 'https://mdbcdn.b-cdn.net/img/Photos/Avatars/img%20(3).webp',
+        name: "افشار زند",
+        time: "'2024/05/20'",
+        text: "طراحان معمولا از لورم ایپسوم استفاده میکنند تا فقط به مشتری یا کار فرما نشان دهند که قالب طراحی شده بعد از اینکه متن در آن قرار میگرد چگونه خواهد بود و فونت ها و اندازه ها چگونه در نظر گرفته شده است."
+      },
+    ]
+  },
+  {
+    img: 'https://mdbcdn.b-cdn.net/img/Photos/Avatars/img%20(3).webp',
+    name: "عیسی خانزادی",
+    time: "'2024/05/20'",
+    text: "طراحان معمولا از لورم ایپسوم استفاده میکنند تا فقط به مشتری یا کار فرما نشان دهند که قالب طراحی شده بعد از اینکه متن در آن قرار میگرد چگونه خواهد بود و فونت ها و اندازه ها چگونه در نظر گرفته شده است."
+  },
+  {
+    img: 'https://mdbcdn.b-cdn.net/img/Photos/Avatars/img%20(3).webp',
+    name: "مهدی خانزادی",
+    time: "'2024/05/20'",
+    text: "طراحان معمولا از لورم ایپسوم استفاده میکنند تا فقط به مشتری یا کار فرما نشان دهند که قالب طراحی شده بعد از اینکه متن در آن قرار میگرد چگونه خواهد بود و فونت ها و اندازه ها چگونه در نظر گرفته شده است."
+  },
+  {
+    img: 'https://mdbcdn.b-cdn.net/img/Photos/Avatars/img%20(3).webp',
+    name: "صادق خانزادی",
+    time: "'2024/05/20'",
+    text: "طراحان معمولا از لورم ایپسوم استفاده میکنند تا فقط به مشتری یا کار فرما نشان دهند که قالب طراحی شده بعد از اینکه متن در آن قرار میگرد چگونه خواهد بود و فونت ها و اندازه ها چگونه در نظر گرفته شده است."
+  },
+]
+const params = reactive({
         isLogin: useAuth().isLogin(),
-    })
+})
 </script>
