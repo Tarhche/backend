@@ -22,11 +22,18 @@ import (
 	"github.com/khanzadimahdi/testproject/application/auth/register"
 	"github.com/khanzadimahdi/testproject/application/auth/resetpassword"
 	"github.com/khanzadimahdi/testproject/application/auth/verify"
+	"github.com/khanzadimahdi/testproject/application/comment/createComment"
+	"github.com/khanzadimahdi/testproject/application/comment/getComments"
 	dashboardCreateArticle "github.com/khanzadimahdi/testproject/application/dashboard/article/createArticle"
 	dashboardDeleteArticle "github.com/khanzadimahdi/testproject/application/dashboard/article/deleteArticle"
 	dashboardGetArticle "github.com/khanzadimahdi/testproject/application/dashboard/article/getArticle"
 	dashboardGetArticles "github.com/khanzadimahdi/testproject/application/dashboard/article/getArticles"
 	dashboardUpdateArticle "github.com/khanzadimahdi/testproject/application/dashboard/article/updateArticle"
+	dashboardCreateComment "github.com/khanzadimahdi/testproject/application/dashboard/comment/createComment"
+	dashboardDeleteComment "github.com/khanzadimahdi/testproject/application/dashboard/comment/deleteComment"
+	dashboardGetComment "github.com/khanzadimahdi/testproject/application/dashboard/comment/getComment"
+	dashboardGetComments "github.com/khanzadimahdi/testproject/application/dashboard/comment/getComments"
+	dashboardUpdateComment "github.com/khanzadimahdi/testproject/application/dashboard/comment/updateComment"
 	dashboardCreateElement "github.com/khanzadimahdi/testproject/application/dashboard/element/createElement"
 	dashboardDeleteElement "github.com/khanzadimahdi/testproject/application/dashboard/element/deleteElement"
 	dashboardGetElement "github.com/khanzadimahdi/testproject/application/dashboard/element/getElement"
@@ -60,6 +67,7 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/email"
 	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
 	articlesrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/articles"
+	commentsrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/comments"
 	elementsrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/elements"
 	filesrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/files"
 	permissionsrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/permissions"
@@ -69,7 +77,9 @@ import (
 	"github.com/khanzadimahdi/testproject/presentation/commands"
 	articleAPI "github.com/khanzadimahdi/testproject/presentation/http/api/article"
 	"github.com/khanzadimahdi/testproject/presentation/http/api/auth"
+	commentAPI "github.com/khanzadimahdi/testproject/presentation/http/api/comment"
 	dashboardArticleAPI "github.com/khanzadimahdi/testproject/presentation/http/api/dashboard/article"
+	dashboardCommentAPI "github.com/khanzadimahdi/testproject/presentation/http/api/dashboard/comment"
 	dashboardElementAPI "github.com/khanzadimahdi/testproject/presentation/http/api/dashboard/element"
 	dashboardFileAPI "github.com/khanzadimahdi/testproject/presentation/http/api/dashboard/file"
 	dashboardPermissionAPI "github.com/khanzadimahdi/testproject/presentation/http/api/dashboard/permission"
@@ -130,6 +140,7 @@ func httpHandler() http.Handler {
 	}
 
 	articlesRepository := articlesrepository.NewRepository(database)
+	commentsRepository := commentsrepository.NewRepository(database)
 	filesRepository := filesrepository.NewRepository(database)
 	elementsRepository := elementsrepository.NewRepository(database)
 	userRepository := userrepository.NewRepository(database)
@@ -172,6 +183,8 @@ func httpHandler() http.Handler {
 	getArticlesUsecase := getArticles.NewUseCase(articlesRepository)
 	getArticlesByHashtagUseCase := getArticlesByHashtag.NewUseCase(articlesRepository)
 	getFileUseCase := getFile.NewUseCase(filesRepository, fileStorage)
+	getCommentsUseCase := getComments.NewUseCase(commentsRepository)
+	createCommentUseCase := createComment.NewUseCase(commentsRepository)
 
 	// home
 	router.Handler(http.MethodGet, "/api/home", homeapi.NewHomeHandler(homeUseCase))
@@ -187,6 +200,10 @@ func httpHandler() http.Handler {
 	// articles
 	router.Handler(http.MethodGet, "/api/articles", articleAPI.NewIndexHandler(getArticlesUsecase))
 	router.Handler(http.MethodGet, "/api/articles/:uuid", articleAPI.NewShowHandler(getArticleUsecase))
+
+	// comments
+	router.Handler(http.MethodPost, "/api/comments", middleware.NewAuthoriseMiddleware(commentAPI.NewCreateHandler(createCommentUseCase), j, userRepository))
+	router.Handler(http.MethodGet, "/api/comments", commentAPI.NewIndexHandler(getCommentsUseCase))
 
 	// hashtags
 	router.Handler(http.MethodGet, "/api/hashtags/:hashtag", hashtagAPI.NewShowHandler(getArticlesByHashtagUseCase))
@@ -204,6 +221,12 @@ func httpHandler() http.Handler {
 	dashboardGetArticleUsecase := dashboardGetArticle.NewUseCase(articlesRepository)
 	dashboardGetArticlesUsecase := dashboardGetArticles.NewUseCase(articlesRepository)
 	dashboardUpdateArticleUsecase := dashboardUpdateArticle.NewUseCase(articlesRepository)
+
+	dashboardCreateCommentUsecase := dashboardCreateComment.NewUseCase(commentsRepository)
+	dashboardDeleteCommentUsecase := dashboardDeleteComment.NewUseCase(commentsRepository)
+	dashboardGetCommentUsecase := dashboardGetComment.NewUseCase(commentsRepository)
+	dashboardGetCommentsUsecase := dashboardGetComments.NewUseCase(commentsRepository)
+	dashboardUpdateCommentUsecase := dashboardUpdateComment.NewUseCase(commentsRepository)
 
 	dashboardCreateUserUsecase := createuser.NewUseCase(userRepository, hasher)
 	dashboardDeleteUserUsecase := deleteuser.NewUseCase(userRepository)
@@ -260,6 +283,13 @@ func httpHandler() http.Handler {
 	router.Handler(http.MethodGet, "/api/dashboard/articles", middleware.NewAuthoriseMiddleware(dashboardArticleAPI.NewIndexHandler(dashboardGetArticlesUsecase, authorization), j, userRepository))
 	router.Handler(http.MethodGet, "/api/dashboard/articles/:uuid", middleware.NewAuthoriseMiddleware(dashboardArticleAPI.NewShowHandler(dashboardGetArticleUsecase, authorization), j, userRepository))
 	router.Handler(http.MethodPut, "/api/dashboard/articles", middleware.NewAuthoriseMiddleware(dashboardArticleAPI.NewUpdateHandler(dashboardUpdateArticleUsecase, authorization), j, userRepository))
+
+	// comments
+	router.Handler(http.MethodPost, "/api/dashboard/comments", middleware.NewAuthoriseMiddleware(dashboardCommentAPI.NewCreateHandler(dashboardCreateCommentUsecase, authorization), j, userRepository))
+	router.Handler(http.MethodDelete, "/api/dashboard/comments/:uuid", middleware.NewAuthoriseMiddleware(dashboardCommentAPI.NewDeleteHandler(dashboardDeleteCommentUsecase, authorization), j, userRepository))
+	router.Handler(http.MethodGet, "/api/dashboard/comments", middleware.NewAuthoriseMiddleware(dashboardCommentAPI.NewIndexHandler(dashboardGetCommentsUsecase, authorization), j, userRepository))
+	router.Handler(http.MethodGet, "/api/dashboard/comments/:uuid", middleware.NewAuthoriseMiddleware(dashboardCommentAPI.NewShowHandler(dashboardGetCommentUsecase, authorization), j, userRepository))
+	router.Handler(http.MethodPut, "/api/dashboard/comments", middleware.NewAuthoriseMiddleware(dashboardCommentAPI.NewUpdateHandler(dashboardUpdateCommentUsecase, authorization), j, userRepository))
 
 	// files
 	router.Handler(http.MethodPost, "/api/dashboard/files", middleware.NewAuthoriseMiddleware(dashboardFileAPI.NewUploadHandler(dashboardUploadFileUseCase, authorization), j, userRepository))
