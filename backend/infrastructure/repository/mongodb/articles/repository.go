@@ -26,7 +26,7 @@ type ArticlesRepository struct {
 
 var _ article.Repository = &ArticlesRepository{}
 
-func NewArticlesRepository(database *mongo.Database) *ArticlesRepository {
+func NewRepository(database *mongo.Database) *ArticlesRepository {
 	if database == nil {
 		panic("database should not be nil")
 	}

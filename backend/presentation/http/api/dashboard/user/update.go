@@ -3,30 +3,41 @@ package user
 import (
 	"encoding/json"
 	"errors"
-	updateuser "github.com/khanzadimahdi/testproject/application/dashboard/user/updateUser"
 	"net/http"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
+	updateuser "github.com/khanzadimahdi/testproject/application/dashboard/user/updateUser"
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/permission"
 )
 
 type updateHandler struct {
-	useCase *updateuser.UseCase
+	useCase    *updateuser.UseCase
+	authorizer domain.Authorizer
 }
 
-func NewUpdateHandler(useCase *updateuser.UseCase) *updateHandler {
+func NewUpdateHandler(useCase *updateuser.UseCase, a domain.Authorizer) *updateHandler {
 	return &updateHandler{
-		useCase: useCase,
+		useCase:    useCase,
+		authorizer: a,
 	}
 }
 
 func (h *updateHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
+	currentUserUUID := auth.FromContext(r.Context()).UUID
+	if ok, err := h.authorizer.Authorize(currentUserUUID, permission.UsersUpdate); err != nil {
+		rw.WriteHeader(http.StatusInternalServerError)
+		return
+	} else if !ok {
+		rw.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
 	var request updateuser.Request
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		rw.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	request.UserUUID = auth.FromContext(r.Context()).UUID
 
 	response, err := h.useCase.UpdateUser(request)
 

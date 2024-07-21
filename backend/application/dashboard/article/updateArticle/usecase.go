@@ -22,7 +22,7 @@ func (uc *UseCase) UpdateArticle(request Request) (*UpdateArticleResponse, error
 		}, nil
 	}
 
-	article := article.Article{
+	a := article.Article{
 		UUID:        request.UUID,
 		Cover:       request.Cover,
 		Title:       request.Title,
@@ -35,7 +35,7 @@ func (uc *UseCase) UpdateArticle(request Request) (*UpdateArticleResponse, error
 		Tags: request.Tags,
 	}
 
-	if _, err := uc.articleRepository.Save(&article); err != nil {
+	if _, err := uc.articleRepository.Save(&a); err != nil {
 		return nil, err
 	}
 

@@ -29,7 +29,7 @@ type pagination struct {
 	CurrentPage uint `json:"current_page"`
 }
 
-func NewGetArticlesReponse(a []article.Article, totalPages, currentPage uint) *GetArticlesResponse {
+func NewGetArticlesResponse(a []article.Article, totalPages, currentPage uint) *GetArticlesResponse {
 	items := make([]articleResponse, len(a))
 
 	for i := range a {

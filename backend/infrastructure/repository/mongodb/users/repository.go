@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	collectionName = "user"
+	collectionName = "users"
 	queryTimeout   = 3 * time.Second
 )
 
@@ -25,7 +25,7 @@ type UsersRepository struct {
 
 var _ user.Repository = &UsersRepository{}
 
-func NewUsersRepository(database *mongo.Database) *UsersRepository {
+func NewRepository(database *mongo.Database) *UsersRepository {
 	if database == nil {
 		panic("database should not be nil")
 	}
