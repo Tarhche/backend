@@ -19,7 +19,7 @@ func TestJWT(t *testing.T) {
 	// Here, we extract the public key from the private key just for demonstration purposes.
 	publicKey := privateKey.Public()
 
-	// Generate a JWT token
+	// Generate a jwt token
 	claims := jwt.MapClaims{
 		"sub":  "1234567890",
 		"name": "John Doe",
@@ -34,7 +34,7 @@ func TestJWT(t *testing.T) {
 		t.Error("unexpected error", err)
 	}
 
-	// Verify the JWT token
+	// Verify the jwt token
 	tokenClaims, err := JWTToken.Verify(tokenString)
 	if err != nil {
 		t.Error("unexpected error", err)

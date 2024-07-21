@@ -53,7 +53,7 @@ func TestUseCase_Login(t *testing.T) {
 		if err != nil {
 			t.Error("unexpected an error")
 		}
-		if audience[0] != "access" {
+		if audience[0] != "permission" {
 			t.Error("invalid audience")
 		}
 

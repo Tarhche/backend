@@ -19,7 +19,9 @@ import (
 	"github.com/khanzadimahdi/testproject/application/auth/forgetpassword"
 	"github.com/khanzadimahdi/testproject/application/auth/login"
 	"github.com/khanzadimahdi/testproject/application/auth/refresh"
+	"github.com/khanzadimahdi/testproject/application/auth/register"
 	"github.com/khanzadimahdi/testproject/application/auth/resetpassword"
+	"github.com/khanzadimahdi/testproject/application/auth/verify"
 	dashboardCreateArticle "github.com/khanzadimahdi/testproject/application/dashboard/article/createArticle"
 	dashboardDeleteArticle "github.com/khanzadimahdi/testproject/application/dashboard/article/deleteArticle"
 	dashboardGetArticle "github.com/khanzadimahdi/testproject/application/dashboard/article/getArticle"
@@ -34,11 +36,24 @@ import (
 	dashboardGetFile "github.com/khanzadimahdi/testproject/application/dashboard/file/getFile"
 	dashboardGetFiles "github.com/khanzadimahdi/testproject/application/dashboard/file/getFiles"
 	dashboardUploadFile "github.com/khanzadimahdi/testproject/application/dashboard/file/uploadFile"
+	dashboardGetPermissions "github.com/khanzadimahdi/testproject/application/dashboard/permission/getPermissions"
 	"github.com/khanzadimahdi/testproject/application/dashboard/profile/changepassword"
 	"github.com/khanzadimahdi/testproject/application/dashboard/profile/getprofile"
 	"github.com/khanzadimahdi/testproject/application/dashboard/profile/updateprofile"
+	dashboardCreateRole "github.com/khanzadimahdi/testproject/application/dashboard/role/createRole"
+	dashboardDeleteRole "github.com/khanzadimahdi/testproject/application/dashboard/role/deleteRole"
+	dashboardGetRole "github.com/khanzadimahdi/testproject/application/dashboard/role/getRole"
+	dashboardGetRoles "github.com/khanzadimahdi/testproject/application/dashboard/role/getRoles"
+	dashboardUpdateRole "github.com/khanzadimahdi/testproject/application/dashboard/role/updateRole"
+	createuser "github.com/khanzadimahdi/testproject/application/dashboard/user/createUser"
+	deleteuser "github.com/khanzadimahdi/testproject/application/dashboard/user/deleteUser"
+	getuser "github.com/khanzadimahdi/testproject/application/dashboard/user/getUser"
+	getusers "github.com/khanzadimahdi/testproject/application/dashboard/user/getUsers"
+	updateuser "github.com/khanzadimahdi/testproject/application/dashboard/user/updateUser"
+	"github.com/khanzadimahdi/testproject/application/dashboard/user/userchangepassword"
 	getFile "github.com/khanzadimahdi/testproject/application/file/getFile"
 	"github.com/khanzadimahdi/testproject/application/home"
+	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/infrastructure/console"
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/argon2"
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/ecdsa"
@@ -47,6 +62,8 @@ import (
 	articlesrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/articles"
 	elementsrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/elements"
 	filesrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/files"
+	permissionsrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/permissions"
+	rolesrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/roles"
 	userrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/users"
 	"github.com/khanzadimahdi/testproject/infrastructure/storage/minio"
 	"github.com/khanzadimahdi/testproject/presentation/commands"
@@ -55,7 +72,10 @@ import (
 	dashboardArticleAPI "github.com/khanzadimahdi/testproject/presentation/http/api/dashboard/article"
 	dashboardElementAPI "github.com/khanzadimahdi/testproject/presentation/http/api/dashboard/element"
 	dashboardFileAPI "github.com/khanzadimahdi/testproject/presentation/http/api/dashboard/file"
+	dashboardPermissionAPI "github.com/khanzadimahdi/testproject/presentation/http/api/dashboard/permission"
 	"github.com/khanzadimahdi/testproject/presentation/http/api/dashboard/profile"
+	dashboardRoleAPI "github.com/khanzadimahdi/testproject/presentation/http/api/dashboard/role"
+	dashboardUserAPI "github.com/khanzadimahdi/testproject/presentation/http/api/dashboard/user"
 	fileAPI "github.com/khanzadimahdi/testproject/presentation/http/api/file"
 	hashtagAPI "github.com/khanzadimahdi/testproject/presentation/http/api/hashtag"
 	homeapi "github.com/khanzadimahdi/testproject/presentation/http/api/home"
@@ -109,10 +129,12 @@ func httpHandler() http.Handler {
 		panic(err)
 	}
 
-	articlesRepository := articlesrepository.NewArticlesRepository(database)
-	filesRepository := filesrepository.NewFilesRepository(database)
-	elementsRepository := elementsrepository.NewElementsRepository(database)
-	userRepository := userrepository.NewUsersRepository(database)
+	articlesRepository := articlesrepository.NewRepository(database)
+	filesRepository := filesrepository.NewRepository(database)
+	elementsRepository := elementsrepository.NewRepository(database)
+	userRepository := userrepository.NewRepository(database)
+	permissionRepository := permissionsrepository.NewRepository()
+	roleRepository := rolesrepository.NewRepository(database)
 
 	privateKeyData := []byte(os.Getenv("PRIVATE_KEY"))
 	privateKey, err := ecdsa.ParsePrivateKey(privateKeyData)
@@ -133,6 +155,8 @@ func httpHandler() http.Handler {
 		Port: os.Getenv("MAIL_SMTP_PORT"),
 	})
 
+	authorization := domain.NewRoleBasedAccessControl(roleRepository)
+
 	homeUseCase := home.NewUseCase(articlesRepository, elementsRepository)
 
 	router := httprouter.New()
@@ -141,6 +165,8 @@ func httpHandler() http.Handler {
 	refreshUseCase := refresh.NewUseCase(userRepository, j)
 	forgetPasswordUseCase := forgetpassword.NewUseCase(userRepository, j, mailer, mailFromAddress)
 	resetPasswordUseCase := resetpassword.NewUseCase(userRepository, hasher, j)
+	registerUseCase := register.NewUseCase(userRepository, j, mailer, mailFromAddress)
+	verifyUseCase := verify.NewUseCase(userRepository, hasher, j)
 
 	getArticleUsecase := getArticle.NewUseCase(articlesRepository, elementsRepository)
 	getArticlesUsecase := getArticles.NewUseCase(articlesRepository)
@@ -155,6 +181,8 @@ func httpHandler() http.Handler {
 	router.Handler(http.MethodPost, "/api/auth/token/refresh", auth.NewRefreshHandler(refreshUseCase))
 	router.Handler(http.MethodPost, "/api/auth/password/forget", auth.NewForgetPasswordHandler(forgetPasswordUseCase))
 	router.Handler(http.MethodPost, "/api/auth/password/reset", auth.NewResetPasswordHandler(resetPasswordUseCase))
+	router.Handler(http.MethodPost, "/api/auth/register", auth.NewRegisterHandler(registerUseCase))
+	router.Handler(http.MethodPost, "/api/auth/verify", auth.NewVerifyHandler(verifyUseCase))
 
 	// articles
 	router.Handler(http.MethodGet, "/api/articles", articleAPI.NewIndexHandler(getArticlesUsecase))
@@ -176,6 +204,22 @@ func httpHandler() http.Handler {
 	dashboardGetArticleUsecase := dashboardGetArticle.NewUseCase(articlesRepository)
 	dashboardGetArticlesUsecase := dashboardGetArticles.NewUseCase(articlesRepository)
 	dashboardUpdateArticleUsecase := dashboardUpdateArticle.NewUseCase(articlesRepository)
+
+	dashboardCreateUserUsecase := createuser.NewUseCase(userRepository, hasher)
+	dashboardDeleteUserUsecase := deleteuser.NewUseCase(userRepository)
+	dashboardGetUserUsecase := getuser.NewUseCase(userRepository)
+	dashboardGetUsersUsecase := getusers.NewUseCase(userRepository)
+	dashboardUpdateUserUsecase := updateuser.NewUseCase(userRepository, hasher)
+	dashboardUpdateUserChangePasswordUsecase := userchangepassword.NewUseCase(userRepository, hasher)
+
+	dashboardGetPermissionsUseCase := dashboardGetPermissions.NewUseCase(permissionRepository)
+
+	dashboardCreateRoleUsecase := dashboardCreateRole.NewUseCase(roleRepository, permissionRepository)
+	dashboardDeleteRoleUsecase := dashboardDeleteRole.NewUseCase(roleRepository)
+	dashboardGetRoleUsecase := dashboardGetRole.NewUseCase(roleRepository)
+	dashboardGetRolesUsecase := dashboardGetRoles.NewUseCase(roleRepository)
+	dashboardUpdateRoleUsecase := dashboardUpdateRole.NewUseCase(roleRepository, permissionRepository)
+
 	dashboardGetFilesUseCase := dashboardGetFiles.NewUseCase(filesRepository)
 	dashboardGetFileUseCase := dashboardGetFile.NewUseCase(filesRepository, fileStorage)
 	dashboardUploadFileUseCase := dashboardUploadFile.NewUseCase(filesRepository, fileStorage)
@@ -192,25 +236,43 @@ func httpHandler() http.Handler {
 	router.Handler(http.MethodPut, "/api/dashboard/profile", middleware.NewAuthoriseMiddleware(profile.NewUpdateProfileHandler(updateProfile), j, userRepository))
 	router.Handler(http.MethodPut, "/api/dashboard/password", middleware.NewAuthoriseMiddleware(profile.NewChangePasswordHandler(dashboardChangePassword), j, userRepository))
 
+	// user
+	router.Handler(http.MethodPost, "/api/dashboard/users", middleware.NewAuthoriseMiddleware(dashboardUserAPI.NewCreateHandler(dashboardCreateUserUsecase, authorization), j, userRepository))
+	router.Handler(http.MethodDelete, "/api/dashboard/users/:uuid", middleware.NewAuthoriseMiddleware(dashboardUserAPI.NewDeleteHandler(dashboardDeleteUserUsecase, authorization), j, userRepository))
+	router.Handler(http.MethodGet, "/api/dashboard/users", middleware.NewAuthoriseMiddleware(dashboardUserAPI.NewIndexHandler(dashboardGetUsersUsecase, authorization), j, userRepository))
+	router.Handler(http.MethodGet, "/api/dashboard/users/:uuid", middleware.NewAuthoriseMiddleware(dashboardUserAPI.NewShowHandler(dashboardGetUserUsecase, authorization), j, userRepository))
+	router.Handler(http.MethodPut, "/api/dashboard/users", middleware.NewAuthoriseMiddleware(dashboardUserAPI.NewUpdateHandler(dashboardUpdateUserUsecase, authorization), j, userRepository))
+	router.Handler(http.MethodPut, "/api/dashboard/users/password", middleware.NewAuthoriseMiddleware(dashboardUserAPI.NewChangePasswordHandler(dashboardUpdateUserChangePasswordUsecase, authorization), j, userRepository))
+
+	// permissions
+	router.Handler(http.MethodGet, "/api/dashboard/permissions", middleware.NewAuthoriseMiddleware(dashboardPermissionAPI.NewIndexHandler(dashboardGetPermissionsUseCase, authorization), j, userRepository))
+
+	// roles
+	router.Handler(http.MethodPost, "/api/dashboard/roles", middleware.NewAuthoriseMiddleware(dashboardRoleAPI.NewCreateHandler(dashboardCreateRoleUsecase, authorization), j, userRepository))
+	router.Handler(http.MethodDelete, "/api/dashboard/roles/:uuid", middleware.NewAuthoriseMiddleware(dashboardRoleAPI.NewDeleteHandler(dashboardDeleteRoleUsecase, authorization), j, userRepository))
+	router.Handler(http.MethodGet, "/api/dashboard/roles", middleware.NewAuthoriseMiddleware(dashboardRoleAPI.NewIndexHandler(dashboardGetRolesUsecase, authorization), j, userRepository))
+	router.Handler(http.MethodGet, "/api/dashboard/roles/:uuid", middleware.NewAuthoriseMiddleware(dashboardRoleAPI.NewShowHandler(dashboardGetRoleUsecase, authorization), j, userRepository))
+	router.Handler(http.MethodPut, "/api/dashboard/roles", middleware.NewAuthoriseMiddleware(dashboardRoleAPI.NewUpdateHandler(dashboardUpdateRoleUsecase, authorization), j, userRepository))
+
 	// articles
-	router.Handler(http.MethodPost, "/api/dashboard/articles", middleware.NewAuthoriseMiddleware(dashboardArticleAPI.NewCreateHandler(dashboardCreateArticleUsecase), j, userRepository))
-	router.Handler(http.MethodDelete, "/api/dashboard/articles/:uuid", middleware.NewAuthoriseMiddleware(dashboardArticleAPI.NewDeleteHandler(dashboardDeleteArticleUsecase), j, userRepository))
-	router.Handler(http.MethodGet, "/api/dashboard/articles", middleware.NewAuthoriseMiddleware(dashboardArticleAPI.NewIndexHandler(dashboardGetArticlesUsecase), j, userRepository))
-	router.Handler(http.MethodGet, "/api/dashboard/articles/:uuid", middleware.NewAuthoriseMiddleware(dashboardArticleAPI.NewShowHandler(dashboardGetArticleUsecase), j, userRepository))
-	router.Handler(http.MethodPut, "/api/dashboard/articles", middleware.NewAuthoriseMiddleware(dashboardArticleAPI.NewUpdateHandler(dashboardUpdateArticleUsecase), j, userRepository))
+	router.Handler(http.MethodPost, "/api/dashboard/articles", middleware.NewAuthoriseMiddleware(dashboardArticleAPI.NewCreateHandler(dashboardCreateArticleUsecase, authorization), j, userRepository))
+	router.Handler(http.MethodDelete, "/api/dashboard/articles/:uuid", middleware.NewAuthoriseMiddleware(dashboardArticleAPI.NewDeleteHandler(dashboardDeleteArticleUsecase, authorization), j, userRepository))
+	router.Handler(http.MethodGet, "/api/dashboard/articles", middleware.NewAuthoriseMiddleware(dashboardArticleAPI.NewIndexHandler(dashboardGetArticlesUsecase, authorization), j, userRepository))
+	router.Handler(http.MethodGet, "/api/dashboard/articles/:uuid", middleware.NewAuthoriseMiddleware(dashboardArticleAPI.NewShowHandler(dashboardGetArticleUsecase, authorization), j, userRepository))
+	router.Handler(http.MethodPut, "/api/dashboard/articles", middleware.NewAuthoriseMiddleware(dashboardArticleAPI.NewUpdateHandler(dashboardUpdateArticleUsecase, authorization), j, userRepository))
 
 	// files
-	router.Handler(http.MethodPost, "/api/dashboard/files", middleware.NewAuthoriseMiddleware(dashboardFileAPI.NewUploadHandler(dashboardUploadFileUseCase), j, userRepository))
-	router.Handler(http.MethodDelete, "/api/dashboard/files/:uuid", middleware.NewAuthoriseMiddleware(dashboardFileAPI.NewDeleteHandler(dashboardDeleteFileUseCase), j, userRepository))
-	router.Handler(http.MethodGet, "/api/dashboard/files", middleware.NewAuthoriseMiddleware(dashboardFileAPI.NewIndexHandler(dashboardGetFilesUseCase), j, userRepository))
-	router.Handler(http.MethodGet, "/dashboard/files/:uuid", middleware.NewAuthoriseMiddleware(dashboardFileAPI.NewShowHandler(dashboardGetFileUseCase), j, userRepository))
+	router.Handler(http.MethodPost, "/api/dashboard/files", middleware.NewAuthoriseMiddleware(dashboardFileAPI.NewUploadHandler(dashboardUploadFileUseCase, authorization), j, userRepository))
+	router.Handler(http.MethodDelete, "/api/dashboard/files/:uuid", middleware.NewAuthoriseMiddleware(dashboardFileAPI.NewDeleteHandler(dashboardDeleteFileUseCase, authorization), j, userRepository))
+	router.Handler(http.MethodGet, "/api/dashboard/files", middleware.NewAuthoriseMiddleware(dashboardFileAPI.NewIndexHandler(dashboardGetFilesUseCase, authorization), j, userRepository))
+	router.Handler(http.MethodGet, "/dashboard/files/:uuid", middleware.NewAuthoriseMiddleware(dashboardFileAPI.NewShowHandler(dashboardGetFileUseCase, authorization), j, userRepository))
 
 	// elements
-	router.Handler(http.MethodPost, "/api/dashboard/elements", middleware.NewAuthoriseMiddleware(dashboardElementAPI.NewCreateHandler(dashboardCreateElementUsecase), j, userRepository))
-	router.Handler(http.MethodDelete, "/api/dashboard/elements/:uuid", middleware.NewAuthoriseMiddleware(dashboardElementAPI.NewDeleteHandler(dashboardDeleteElementUsecase), j, userRepository))
-	router.Handler(http.MethodGet, "/api/dashboard/elements", middleware.NewAuthoriseMiddleware(dashboardElementAPI.NewIndexHandler(dashboardGetElementsUsecase), j, userRepository))
-	router.Handler(http.MethodGet, "/api/dashboard/elements/:uuid", middleware.NewAuthoriseMiddleware(dashboardElementAPI.NewShowHandler(dashboardGetElementUsecase), j, userRepository))
-	router.Handler(http.MethodPut, "/api/dashboard/elements", middleware.NewAuthoriseMiddleware(dashboardElementAPI.NewUpdateHandler(dashboardUpdateElementUsecase), j, userRepository))
+	router.Handler(http.MethodPost, "/api/dashboard/elements", middleware.NewAuthoriseMiddleware(dashboardElementAPI.NewCreateHandler(dashboardCreateElementUsecase, authorization), j, userRepository))
+	router.Handler(http.MethodDelete, "/api/dashboard/elements/:uuid", middleware.NewAuthoriseMiddleware(dashboardElementAPI.NewDeleteHandler(dashboardDeleteElementUsecase, authorization), j, userRepository))
+	router.Handler(http.MethodGet, "/api/dashboard/elements", middleware.NewAuthoriseMiddleware(dashboardElementAPI.NewIndexHandler(dashboardGetElementsUsecase, authorization), j, userRepository))
+	router.Handler(http.MethodGet, "/api/dashboard/elements/:uuid", middleware.NewAuthoriseMiddleware(dashboardElementAPI.NewShowHandler(dashboardGetElementUsecase, authorization), j, userRepository))
+	router.Handler(http.MethodPut, "/api/dashboard/elements", middleware.NewAuthoriseMiddleware(dashboardElementAPI.NewUpdateHandler(dashboardUpdateElementUsecase, authorization), j, userRepository))
 
 	return middleware.NewCORSMiddleware(middleware.NewRateLimitMiddleware(router, 60, 1*time.Minute))
 }
