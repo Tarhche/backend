@@ -18,6 +18,12 @@ const (
 	ArticlesUpdate = "articles.update"
 	ArticlesDelete = "articles.delete"
 
+	CommentsIndex  = "comments.index"
+	CommentsCreate = "comments.create"
+	CommentsShow   = "comments.show"
+	CommentsUpdate = "comments.update"
+	CommentsDelete = "comments.delete"
+
 	ElementsIndex  = "elements.index"
 	ElementsCreate = "elements.create"
 	ElementsShow   = "elements.show"
