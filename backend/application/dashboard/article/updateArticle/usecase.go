@@ -25,6 +25,7 @@ func (uc *UseCase) UpdateArticle(request Request) (*UpdateArticleResponse, error
 	a := article.Article{
 		UUID:        request.UUID,
 		Cover:       request.Cover,
+		Video:       request.Video,
 		Title:       request.Title,
 		Excerpt:     request.Excerpt,
 		Body:        request.Body,

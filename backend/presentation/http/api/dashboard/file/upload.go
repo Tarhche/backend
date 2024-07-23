@@ -32,9 +32,7 @@ func (h *createHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	const maxFileSize int64 = 5 << 20 // 5MB
-
-	if err := r.ParseMultipartForm(maxFileSize); err != nil {
+	if err := r.ParseMultipartForm(uploadfile.MaxFileSize); err != nil {
 		rw.WriteHeader(http.StatusInternalServerError)
 		return
 	}

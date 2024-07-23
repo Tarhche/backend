@@ -1,7 +1,6 @@
 package login
 
 import (
-	"log"
 	"time"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
@@ -30,7 +29,7 @@ func (uc *UseCase) Login(request Request) (*LoginResponse, error) {
 			ValidationErrors: validation,
 		}, nil
 	}
-	log.Printf("%#v", request)
+
 	u, err := uc.userRepository.GetOneByIdentity(request.Identity)
 	if err != nil {
 		return nil, err

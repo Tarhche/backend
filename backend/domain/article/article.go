@@ -9,6 +9,7 @@ import (
 type Article struct {
 	UUID        string
 	Cover       string
+	Video       string
 	Title       string
 	Excerpt     string
 	Body        string
