@@ -24,6 +24,7 @@ func (uc *UseCase) CreateArticle(request Request) (*CreateArticleResponse, error
 
 	a := article.Article{
 		Cover:       request.Cover,
+		Video:       request.Video,
 		Title:       request.Title,
 		Excerpt:     request.Excerpt,
 		Body:        request.Body,

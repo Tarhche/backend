@@ -11,6 +11,7 @@ import (
 type GetArticleResponse struct {
 	UUID        string            `json:"uuid"`
 	Cover       string            `json:"cover"`
+	Video       string            `json:"video"`
 	Title       string            `json:"title"`
 	Excerpt     string            `json:"excerpt"`
 	Body        string            `json:"body"`
@@ -70,6 +71,7 @@ func NewGetArticleReponse(a article.Article, e []element.Element, elementsConten
 	return &GetArticleResponse{
 		UUID:        a.UUID,
 		Cover:       a.Cover,
+		Video:       a.Video,
 		Title:       a.Title,
 		Excerpt:     a.Excerpt,
 		Body:        a.Body,

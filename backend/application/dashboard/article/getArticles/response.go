@@ -9,6 +9,7 @@ import (
 type articleResponse struct {
 	UUID        string    `json:"uuid"`
 	Cover       string    `json:"cover"`
+	Video       string    `json:"video"`
 	Title       string    `json:"title"`
 	PublishedAt time.Time `json:"published_at"`
 	Author      author    `json:"author"`
@@ -35,6 +36,7 @@ func NewGetArticlesResponse(a []article.Article, totalPages, currentPage uint) *
 	for i := range a {
 		items[i].UUID = a[i].UUID
 		items[i].Cover = a[i].Cover
+		items[i].Video = a[i].Video
 		items[i].Title = a[i].Title
 		items[i].PublishedAt = a[i].PublishedAt
 
