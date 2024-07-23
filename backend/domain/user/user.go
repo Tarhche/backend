@@ -15,6 +15,7 @@ type User struct {
 
 type Repository interface {
 	GetAll(offset uint, limit uint) ([]User, error)
+	GetByUUIDs(UUIDs []string) ([]User, error)
 	GetOne(UUID string) (User, error)
 	GetOneByIdentity(username string) (User, error)
 	Save(*User) (uuid string, err error)

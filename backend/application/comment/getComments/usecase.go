@@ -2,17 +2,20 @@ package getComments
 
 import (
 	"github.com/khanzadimahdi/testproject/domain/comment"
+	"github.com/khanzadimahdi/testproject/domain/user"
 )
 
 const limit = 10
 
 type UseCase struct {
 	commentRepository comment.Repository
+	userRepository    user.Repository
 }
 
-func NewUseCase(commentRepository comment.Repository) *UseCase {
+func NewUseCase(commentRepository comment.Repository, userRepository user.Repository) *UseCase {
 	return &UseCase{
 		commentRepository: commentRepository,
+		userRepository:    userRepository,
 	}
 }
 
@@ -41,6 +44,27 @@ func (uc *UseCase) GetComments(request *Request) (*Response, error) {
 	)
 	if err != nil {
 		return nil, err
+	}
+
+	userUUIDs := make([]string, len(c))
+	for i := range c {
+		userUUIDs[i] = c[i].Author.UUID
+	}
+
+	u, err := uc.userRepository.GetByUUIDs(userUUIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	for i := range c {
+		for j := range u {
+			if c[i].Author.UUID != u[j].UUID {
+				continue
+			}
+
+			c[i].Author.Name = u[j].Name
+			c[i].Author.Avatar = u[j].Avatar
+		}
 	}
 
 	return NewResponse(c, totalPages, currentPage), nil

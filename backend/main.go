@@ -183,7 +183,7 @@ func httpHandler() http.Handler {
 	getArticlesUsecase := getArticles.NewUseCase(articlesRepository)
 	getArticlesByHashtagUseCase := getArticlesByHashtag.NewUseCase(articlesRepository)
 	getFileUseCase := getFile.NewUseCase(filesRepository, fileStorage)
-	getCommentsUseCase := getComments.NewUseCase(commentsRepository)
+	getCommentsUseCase := getComments.NewUseCase(commentsRepository, userRepository)
 	createCommentUseCase := createComment.NewUseCase(commentsRepository)
 
 	// home
@@ -224,8 +224,8 @@ func httpHandler() http.Handler {
 
 	dashboardCreateCommentUsecase := dashboardCreateComment.NewUseCase(commentsRepository)
 	dashboardDeleteCommentUsecase := dashboardDeleteComment.NewUseCase(commentsRepository)
-	dashboardGetCommentUsecase := dashboardGetComment.NewUseCase(commentsRepository)
-	dashboardGetCommentsUsecase := dashboardGetComments.NewUseCase(commentsRepository)
+	dashboardGetCommentUsecase := dashboardGetComment.NewUseCase(commentsRepository, userRepository)
+	dashboardGetCommentsUsecase := dashboardGetComments.NewUseCase(commentsRepository, userRepository)
 	dashboardUpdateCommentUsecase := dashboardUpdateComment.NewUseCase(commentsRepository)
 
 	dashboardCreateUserUsecase := createuser.NewUseCase(userRepository, hasher)

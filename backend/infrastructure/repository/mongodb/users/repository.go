@@ -6,12 +6,13 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid/v5"
-	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/password"
-	"github.com/khanzadimahdi/testproject/domain/user"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+
+	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/password"
+	"github.com/khanzadimahdi/testproject/domain/user"
 )
 
 const (
@@ -56,6 +57,47 @@ func (r *UsersRepository) GetAll(offset uint, limit uint) ([]user.User, error) {
 	defer cur.Close(ctx)
 
 	items := make([]user.User, 0, limit)
+	for cur.Next(ctx) {
+		var a UserBson
+
+		if err := cur.Decode(&a); err != nil {
+			return nil, err
+		}
+		items = append(items, user.User{
+			UUID:     a.UUID,
+			Name:     a.Name,
+			Avatar:   a.Avatar,
+			Email:    a.Email,
+			Username: a.Username,
+			PasswordHash: password.Hash{
+				Value: a.PasswordHash.Value,
+				Salt:  a.PasswordHash.Salt,
+			},
+		})
+	}
+
+	if err := cur.Err(); err != nil {
+		return nil, err
+	}
+
+	return items, nil
+}
+
+func (r *UsersRepository) GetByUUIDs(UUIDs []string) ([]user.User, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+	defer cancel()
+
+	filter := bson.M{"_id": bson.M{"$in": UUIDs}}
+
+	cur, err := r.collection.Find(ctx, filter, nil)
+
+	if err != nil {
+		return nil, err
+	}
+
+	defer cur.Close(ctx)
+
+	items := make([]user.User, 0, len(UUIDs))
 	for cur.Next(ctx) {
 		var a UserBson
 

@@ -3,7 +3,6 @@ package comments
 import (
 	"context"
 	"errors"
-	"github.com/khanzadimahdi/testproject/domain/author"
 	"time"
 
 	"github.com/gofrs/uuid/v5"
@@ -13,6 +12,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/author"
 	"github.com/khanzadimahdi/testproject/domain/comment"
 )
 
