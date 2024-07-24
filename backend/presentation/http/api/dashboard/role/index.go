@@ -13,13 +13,13 @@ import (
 )
 
 type indexHandler struct {
-	getRolesUsaCase *getroles.UseCase
+	getRolesUseCase *getroles.UseCase
 	authorizer      domain.Authorizer
 }
 
-func NewIndexHandler(getRolesUsaCase *getroles.UseCase, a domain.Authorizer) *indexHandler {
+func NewIndexHandler(getRolesUseCase *getroles.UseCase, a domain.Authorizer) *indexHandler {
 	return &indexHandler{
-		getRolesUsaCase: getRolesUsaCase,
+		getRolesUseCase: getRolesUseCase,
 		authorizer:      a,
 	}
 }
@@ -46,7 +46,7 @@ func (h *indexHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		Page: page,
 	}
 
-	response, err := h.getRolesUsaCase.GetRoles(request)
+	response, err := h.getRolesUseCase.GetRoles(request)
 	switch true {
 	case err != nil:
 		rw.WriteHeader(http.StatusInternalServerError)

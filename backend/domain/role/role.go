@@ -15,4 +15,5 @@ type Repository interface {
 	Delete(UUID string) error
 	Count() (uint, error)
 	UserHasPermission(userUUID string, permission string) (bool, error)
+	GetByUserUUID(userUUID string) ([]Role, error)
 }

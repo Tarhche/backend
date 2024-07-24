@@ -65,7 +65,7 @@ func (r *RolesRepository) GetAll(offset uint, limit uint) ([]role.Role, error) {
 			UUID:        r.UUID,
 			Name:        r.Name,
 			Description: r.Description,
-			Permissions: r.UserUUIDs,
+			Permissions: r.Permissions,
 		})
 	}
 
@@ -170,4 +170,40 @@ func (r *RolesRepository) UserHasPermission(userUUID string, permission string) 
 	}
 
 	return c > 0, nil
+}
+
+func (r *RolesRepository) GetByUserUUID(userUUID string) ([]role.Role, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+	defer cancel()
+
+	filter := bson.D{{Key: "user_uuids", Value: userUUID}}
+
+	cur, err := r.collection.Find(ctx, filter, nil)
+
+	if err != nil {
+		return nil, err
+	}
+
+	defer cur.Close(ctx)
+
+	items := make([]role.Role, 0, 2)
+	for cur.Next(ctx) {
+		var r RoleBson
+
+		if err := cur.Decode(&r); err != nil {
+			return nil, err
+		}
+		items = append(items, role.Role{
+			UUID:        r.UUID,
+			Name:        r.Name,
+			Description: r.Description,
+			Permissions: r.Permissions,
+		})
+	}
+
+	if err := cur.Err(); err != nil {
+		return nil, err
+	}
+
+	return items, nil
 }
