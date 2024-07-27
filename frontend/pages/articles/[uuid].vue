@@ -58,5 +58,5 @@
 		]
   })
 
-	onMounted(hljs.highlightAll)
+	onMounted(()=>hljs.highlightAll())
 </script>
