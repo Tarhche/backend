@@ -24,7 +24,7 @@ type FilesRepository struct {
 
 var _ file.Repository = &FilesRepository{}
 
-func NewFilesRepository(database *mongo.Database) *FilesRepository {
+func NewRepository(database *mongo.Database) *FilesRepository {
 	if database == nil {
 		panic("database should not be nil")
 	}

@@ -49,7 +49,7 @@ func (uc *UseCase) ChangePassword(request Request) (*ChangePasswordResponse, err
 		Salt:  salt,
 	}
 
-	if err := uc.userRepository.Save(&u); err != nil {
+	if _, err := uc.userRepository.Save(&u); err != nil {
 		return nil, err
 	}
 

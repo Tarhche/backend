@@ -26,7 +26,7 @@ type ArticlesRepository struct {
 
 var _ article.Repository = &ArticlesRepository{}
 
-func NewArticlesRepository(database *mongo.Database) *ArticlesRepository {
+func NewRepository(database *mongo.Database) *ArticlesRepository {
 	if database == nil {
 		panic("database should not be nil")
 	}
@@ -66,6 +66,7 @@ func (r *ArticlesRepository) GetAll(offset uint, limit uint) ([]article.Article,
 		items = append(items, article.Article{
 			UUID:        a.UUID,
 			Cover:       a.Cover,
+			Video:       a.Video,
 			Title:       a.Title,
 			Excerpt:     a.Excerpt,
 			Tags:        a.Tags,
@@ -119,6 +120,7 @@ func (r *ArticlesRepository) GetAllPublished(offset uint, limit uint) ([]article
 		items = append(items, article.Article{
 			UUID:        a.UUID,
 			Cover:       a.Cover,
+			Video:       a.Video,
 			Title:       a.Title,
 			Excerpt:     a.Excerpt,
 			Tags:        a.Tags,
@@ -163,6 +165,7 @@ func (r *ArticlesRepository) GetByUUIDs(UUIDs []string) ([]article.Article, erro
 		items = append(items, article.Article{
 			UUID:        a.UUID,
 			Cover:       a.Cover,
+			Video:       a.Video,
 			Title:       a.Title,
 			Body:        a.Body,
 			Excerpt:     a.Excerpt,
@@ -215,6 +218,7 @@ func (r *ArticlesRepository) GetMostViewed(limit uint) ([]article.Article, error
 		items = append(items, article.Article{
 			UUID:        a.UUID,
 			Cover:       a.Cover,
+			Video:       a.Video,
 			Title:       a.Title,
 			Excerpt:     a.Excerpt,
 			Tags:        a.Tags,
@@ -271,6 +275,7 @@ func (r *ArticlesRepository) GetByHashtag(hashtags []string, offset uint, limit 
 		items = append(items, article.Article{
 			UUID:        a.UUID,
 			Cover:       a.Cover,
+			Video:       a.Video,
 			Title:       a.Title,
 			Excerpt:     a.Excerpt,
 			Tags:        a.Tags,
@@ -305,6 +310,7 @@ func (r *ArticlesRepository) GetOne(UUID string) (article.Article, error) {
 	return article.Article{
 		UUID:        a.UUID,
 		Cover:       a.Cover,
+		Video:       a.Video,
 		Title:       a.Title,
 		Excerpt:     a.Excerpt,
 		Body:        a.Body,
@@ -339,6 +345,7 @@ func (r *ArticlesRepository) GetOnePublished(UUID string) (article.Article, erro
 	return article.Article{
 		UUID:        a.UUID,
 		Cover:       a.Cover,
+		Video:       a.Video,
 		Title:       a.Title,
 		Excerpt:     a.Excerpt,
 		Body:        a.Body,
@@ -397,6 +404,7 @@ func (r *ArticlesRepository) Save(a *article.Article) (string, error) {
 		UUID:        a.UUID,
 		Cover:       a.Cover,
 		Title:       a.Title,
+		Video:       a.Video,
 		Excerpt:     a.Excerpt,
 		Body:        a.Body,
 		PublishedAt: a.PublishedAt,

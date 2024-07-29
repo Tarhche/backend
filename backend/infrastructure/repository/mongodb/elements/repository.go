@@ -24,7 +24,7 @@ type ElementsRepository struct {
 
 var _ element.Repository = &ElementsRepository{}
 
-func NewElementsRepository(database *mongo.Database) *ElementsRepository {
+func NewRepository(database *mongo.Database) *ElementsRepository {
 	if database == nil {
 		panic("database should not be nil")
 	}

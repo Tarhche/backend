@@ -6,12 +6,13 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid/v5"
-	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/password"
-	"github.com/khanzadimahdi/testproject/domain/user"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+
+	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/password"
+	"github.com/khanzadimahdi/testproject/domain/user"
 )
 
 const (
@@ -25,7 +26,7 @@ type UsersRepository struct {
 
 var _ user.Repository = &UsersRepository{}
 
-func NewUsersRepository(database *mongo.Database) *UsersRepository {
+func NewRepository(database *mongo.Database) *UsersRepository {
 	if database == nil {
 		panic("database should not be nil")
 	}
@@ -33,6 +34,94 @@ func NewUsersRepository(database *mongo.Database) *UsersRepository {
 	return &UsersRepository{
 		collection: database.Collection(collectionName),
 	}
+}
+
+func (r *UsersRepository) GetAll(offset uint, limit uint) ([]user.User, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+	defer cancel()
+
+	o := int64(offset)
+	l := int64(limit)
+	desc := bson.D{{Key: "_id", Value: -1}}
+
+	cur, err := r.collection.Find(ctx, bson.D{}, &options.FindOptions{
+		Skip:  &o,
+		Limit: &l,
+		Sort:  desc,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	defer cur.Close(ctx)
+
+	items := make([]user.User, 0, limit)
+	for cur.Next(ctx) {
+		var a UserBson
+
+		if err := cur.Decode(&a); err != nil {
+			return nil, err
+		}
+		items = append(items, user.User{
+			UUID:     a.UUID,
+			Name:     a.Name,
+			Avatar:   a.Avatar,
+			Email:    a.Email,
+			Username: a.Username,
+			PasswordHash: password.Hash{
+				Value: a.PasswordHash.Value,
+				Salt:  a.PasswordHash.Salt,
+			},
+		})
+	}
+
+	if err := cur.Err(); err != nil {
+		return nil, err
+	}
+
+	return items, nil
+}
+
+func (r *UsersRepository) GetByUUIDs(UUIDs []string) ([]user.User, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+	defer cancel()
+
+	filter := bson.M{"_id": bson.M{"$in": UUIDs}}
+
+	cur, err := r.collection.Find(ctx, filter, nil)
+
+	if err != nil {
+		return nil, err
+	}
+
+	defer cur.Close(ctx)
+
+	items := make([]user.User, 0, len(UUIDs))
+	for cur.Next(ctx) {
+		var a UserBson
+
+		if err := cur.Decode(&a); err != nil {
+			return nil, err
+		}
+		items = append(items, user.User{
+			UUID:     a.UUID,
+			Name:     a.Name,
+			Avatar:   a.Avatar,
+			Email:    a.Email,
+			Username: a.Username,
+			PasswordHash: password.Hash{
+				Value: a.PasswordHash.Value,
+				Salt:  a.PasswordHash.Salt,
+			},
+		})
+	}
+
+	if err := cur.Err(); err != nil {
+		return nil, err
+	}
+
+	return items, nil
 }
 
 func (r *UsersRepository) GetOne(UUID string) (user.User, error) {
@@ -96,14 +185,14 @@ func (r *UsersRepository) GetOneByIdentity(identity string) (user.User, error) {
 	}, nil
 }
 
-func (r *UsersRepository) Save(a *user.User) error {
+func (r *UsersRepository) Save(a *user.User) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
 	defer cancel()
 
 	if len(a.UUID) == 0 {
 		UUID, err := uuid.NewV7()
 		if err != nil {
-			return err
+			return "", err
 		}
 		a.UUID = UUID.String()
 	}
@@ -125,6 +214,27 @@ func (r *UsersRepository) Save(a *user.User) error {
 	_, err := r.collection.UpdateOne(ctx, bson.D{{Key: "_id", Value: a.UUID}}, SetWrapper{Set: update}, &options.UpdateOptions{
 		Upsert: &upsert,
 	})
+
+	return a.UUID, err
+}
+
+func (r *UsersRepository) Count() (uint, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+	defer cancel()
+
+	c, err := r.collection.CountDocuments(ctx, bson.D{}, nil)
+	if err != nil {
+		return uint(c), err
+	}
+
+	return uint(c), nil
+}
+
+func (r *UsersRepository) Delete(UUID string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+	defer cancel()
+
+	_, err := r.collection.DeleteOne(ctx, bson.D{{Key: "_id", Value: UUID}}, nil)
 
 	return err
 }

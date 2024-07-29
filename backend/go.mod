@@ -2,7 +2,7 @@ module github.com/khanzadimahdi/testproject
 
 go 1.22
 
-toolchain go1.22.1
+toolchain go1.22.5
 
 require (
 	github.com/gofrs/uuid/v5 v5.2.0
