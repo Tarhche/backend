@@ -22,14 +22,12 @@
               <div v-if="data.tags" class="card-text">
                 <a class="hashtag" :href="`/hashtags/${tag}`" :key="index" v-for="(tag, index) in data.tags">{{ tag }}</a>
               </div>
-
-              <aside v-if="true" class="mt-5">
-                <Comments />
+              <aside class="mt-5">
+                <Comments :data="comments.items"/>
               </aside>
             </section>
         </div>
     </div>
-
     <div v-if="data.elements">
       <template v-for="(element, index) in data.elements" :key="index">
         <Jumbotron :key="index" v-if="element.type === 'jumbotron'" :body="element.body" />
@@ -40,14 +38,19 @@
 </template>
 
 <script setup>
-	import hljs from 'highlight.js'
+import hljs from 'highlight.js'
 
-	const {uuid} = useRoute().params;
+const {uuid} = useRoute().params;
 
 	const resolveFileUrl = useFilesUrlResolver().resolve
-
 	const data = await $fetch(useApiUrlResolver().resolve(`api/articles/${uuid}`))
-
+const comments = await $fetch( useApiUrlResolver().resolve('api/comments'), {
+  query: {
+    object_type: 'article',
+    object_uuid: uuid,
+    page: 1
+  }
+})
 	useHead({
 		title: data.title,
 		meta: [
