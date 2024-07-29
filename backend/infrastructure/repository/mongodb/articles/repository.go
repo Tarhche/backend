@@ -10,6 +10,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/article"
 	"github.com/khanzadimahdi/testproject/domain/author"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -25,7 +26,7 @@ type ArticlesRepository struct {
 
 var _ article.Repository = &ArticlesRepository{}
 
-func NewArticlesRepository(database *mongo.Database) *ArticlesRepository {
+func NewRepository(database *mongo.Database) *ArticlesRepository {
 	if database == nil {
 		panic("database should not be nil")
 	}
@@ -65,6 +66,61 @@ func (r *ArticlesRepository) GetAll(offset uint, limit uint) ([]article.Article,
 		items = append(items, article.Article{
 			UUID:        a.UUID,
 			Cover:       a.Cover,
+			Video:       a.Video,
+			Title:       a.Title,
+			Excerpt:     a.Excerpt,
+			Tags:        a.Tags,
+			PublishedAt: a.PublishedAt,
+			Author: author.Author{
+				UUID: a.AuthorUUID,
+			},
+		})
+	}
+
+	if err := cur.Err(); err != nil {
+		return nil, err
+	}
+
+	return items, nil
+}
+
+func (r *ArticlesRepository) GetAllPublished(offset uint, limit uint) ([]article.Article, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+	defer cancel()
+
+	o := int64(offset)
+	l := int64(limit)
+	desc := bson.D{{Key: "published_at", Value: -1}}
+
+	filter := bson.M{
+		"published_at": bson.M{
+			"$lte": primitive.NewDateTimeFromTime(time.Now()),
+		},
+	}
+
+	cur, err := r.collection.Find(ctx, filter, &options.FindOptions{
+		Skip:  &o,
+		Limit: &l,
+		Sort:  desc,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	defer cur.Close(ctx)
+
+	items := make([]article.Article, 0, limit)
+	for cur.Next(ctx) {
+		var a ArticleBson
+
+		if err := cur.Decode(&a); err != nil {
+			return nil, err
+		}
+		items = append(items, article.Article{
+			UUID:        a.UUID,
+			Cover:       a.Cover,
+			Video:       a.Video,
 			Title:       a.Title,
 			Excerpt:     a.Excerpt,
 			Tags:        a.Tags,
@@ -86,7 +142,7 @@ func (r *ArticlesRepository) GetByUUIDs(UUIDs []string) ([]article.Article, erro
 	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
 	defer cancel()
 
-	desc := bson.D{{Key: "_id", Value: -1}}
+	desc := bson.D{{Key: "published_at", Value: -1}}
 	filter := bson.M{"_id": bson.M{"$in": UUIDs}}
 
 	cur, err := r.collection.Find(ctx, filter, &options.FindOptions{
@@ -109,6 +165,7 @@ func (r *ArticlesRepository) GetByUUIDs(UUIDs []string) ([]article.Article, erro
 		items = append(items, article.Article{
 			UUID:        a.UUID,
 			Cover:       a.Cover,
+			Video:       a.Video,
 			Title:       a.Title,
 			Body:        a.Body,
 			Excerpt:     a.Excerpt,
@@ -134,7 +191,13 @@ func (r *ArticlesRepository) GetMostViewed(limit uint) ([]article.Article, error
 	l := int64(limit)
 	desc := bson.D{{Key: "view_count", Value: -1}}
 
-	cur, err := r.collection.Find(ctx, bson.D{}, &options.FindOptions{
+	filter := bson.M{
+		"published_at": bson.M{
+			"$lte": primitive.NewDateTimeFromTime(time.Now()),
+		},
+	}
+
+	cur, err := r.collection.Find(ctx, filter, &options.FindOptions{
 		Limit: &l,
 		Sort:  desc,
 	})
@@ -155,6 +218,7 @@ func (r *ArticlesRepository) GetMostViewed(limit uint) ([]article.Article, error
 		items = append(items, article.Article{
 			UUID:        a.UUID,
 			Cover:       a.Cover,
+			Video:       a.Video,
 			Title:       a.Title,
 			Excerpt:     a.Excerpt,
 			Tags:        a.Tags,
@@ -178,9 +242,16 @@ func (r *ArticlesRepository) GetByHashtag(hashtags []string, offset uint, limit 
 
 	o := int64(offset)
 	l := int64(limit)
-	desc := bson.D{{Key: "_id", Value: -1}}
+	desc := bson.D{{Key: "published_at", Value: -1}}
 
-	filter := bson.M{"tags": bson.M{"$in": hashtags}}
+	filter := bson.M{
+		"tags": bson.M{
+			"$in": hashtags,
+		},
+		"published_at": bson.M{
+			"$lte": primitive.NewDateTimeFromTime(time.Now()),
+		},
+	}
 
 	cur, err := r.collection.Find(ctx, filter, &options.FindOptions{
 		Skip:  &o,
@@ -204,6 +275,7 @@ func (r *ArticlesRepository) GetByHashtag(hashtags []string, offset uint, limit 
 		items = append(items, article.Article{
 			UUID:        a.UUID,
 			Cover:       a.Cover,
+			Video:       a.Video,
 			Title:       a.Title,
 			Excerpt:     a.Excerpt,
 			Tags:        a.Tags,
@@ -225,8 +297,10 @@ func (r *ArticlesRepository) GetOne(UUID string) (article.Article, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
 	defer cancel()
 
+	filter := bson.D{{Key: "_id", Value: UUID}}
+
 	var a ArticleBson
-	if err := r.collection.FindOne(ctx, bson.D{{Key: "_id", Value: UUID}}, nil).Decode(&a); err != nil {
+	if err := r.collection.FindOne(ctx, filter, nil).Decode(&a); err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			err = domain.ErrNotExists
 		}
@@ -236,6 +310,42 @@ func (r *ArticlesRepository) GetOne(UUID string) (article.Article, error) {
 	return article.Article{
 		UUID:        a.UUID,
 		Cover:       a.Cover,
+		Video:       a.Video,
+		Title:       a.Title,
+		Excerpt:     a.Excerpt,
+		Body:        a.Body,
+		PublishedAt: a.PublishedAt,
+		Author: author.Author{
+			UUID: a.AuthorUUID,
+		},
+		Tags:      a.Tags,
+		ViewCount: a.ViewCount,
+	}, nil
+}
+
+func (r *ArticlesRepository) GetOnePublished(UUID string) (article.Article, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+	defer cancel()
+
+	filter := bson.M{
+		"_id": UUID,
+		"published_at": bson.M{
+			"$lte": primitive.NewDateTimeFromTime(time.Now()),
+		},
+	}
+
+	var a ArticleBson
+	if err := r.collection.FindOne(ctx, filter, nil).Decode(&a); err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			err = domain.ErrNotExists
+		}
+		return article.Article{}, err
+	}
+
+	return article.Article{
+		UUID:        a.UUID,
+		Cover:       a.Cover,
+		Video:       a.Video,
 		Title:       a.Title,
 		Excerpt:     a.Excerpt,
 		Body:        a.Body,
@@ -260,6 +370,24 @@ func (r *ArticlesRepository) Count() (uint, error) {
 	return uint(c), nil
 }
 
+func (r *ArticlesRepository) CountPublished() (uint, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+	defer cancel()
+
+	filter := bson.M{
+		"published_at": bson.M{
+			"$lte": primitive.NewDateTimeFromTime(time.Now()),
+		},
+	}
+
+	c, err := r.collection.CountDocuments(ctx, filter, nil)
+	if err != nil {
+		return uint(c), err
+	}
+
+	return uint(c), nil
+}
+
 func (r *ArticlesRepository) Save(a *article.Article) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
 	defer cancel()
@@ -276,6 +404,7 @@ func (r *ArticlesRepository) Save(a *article.Article) (string, error) {
 		UUID:        a.UUID,
 		Cover:       a.Cover,
 		Title:       a.Title,
+		Video:       a.Video,
 		Excerpt:     a.Excerpt,
 		Body:        a.Body,
 		PublishedAt: a.PublishedAt,

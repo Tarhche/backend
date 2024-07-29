@@ -7,6 +7,7 @@ import (
 type ArticleBson struct {
 	UUID        string    `bson:"_id,omitempty"`
 	Cover       string    `bson:"cover,omitempty"`
+	Video       string    `bson:"video,omitempty"`
 	Title       string    `bson:"title,omitempty"`
 	Excerpt     string    `bson:"excerpt,omitempty"`
 	Body        string    `bson:"body,omitempty"`

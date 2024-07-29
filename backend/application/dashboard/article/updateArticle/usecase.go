@@ -22,19 +22,21 @@ func (uc *UseCase) UpdateArticle(request Request) (*UpdateArticleResponse, error
 		}, nil
 	}
 
-	article := article.Article{
-		UUID:    request.UUID,
-		Cover:   request.Cover,
-		Title:   request.Title,
-		Excerpt: request.Excerpt,
-		Body:    request.Body,
+	a := article.Article{
+		UUID:        request.UUID,
+		Cover:       request.Cover,
+		Video:       request.Video,
+		Title:       request.Title,
+		Excerpt:     request.Excerpt,
+		Body:        request.Body,
+		PublishedAt: request.PublishedAt,
 		Author: author.Author{
 			UUID: request.AuthorUUID,
 		},
 		Tags: request.Tags,
 	}
 
-	if _, err := uc.articleRepository.Save(&article); err != nil {
+	if _, err := uc.articleRepository.Save(&a); err != nil {
 		return nil, err
 	}
 

@@ -9,6 +9,7 @@ import (
 type articleResponse struct {
 	UUID        string    `json:"uuid"`
 	Cover       string    `json:"cover"`
+	Video       string    `json:"video"`
 	Title       string    `json:"title"`
 	PublishedAt time.Time `json:"published_at"`
 	Author      author    `json:"author"`
@@ -29,12 +30,13 @@ type pagination struct {
 	CurrentPage uint `json:"current_page"`
 }
 
-func NewGetArticlesReponse(a []article.Article, totalPages, currentPage uint) *GetArticlesResponse {
+func NewGetArticlesResponse(a []article.Article, totalPages, currentPage uint) *GetArticlesResponse {
 	items := make([]articleResponse, len(a))
 
 	for i := range a {
 		items[i].UUID = a[i].UUID
 		items[i].Cover = a[i].Cover
+		items[i].Video = a[i].Video
 		items[i].Title = a[i].Title
 		items[i].PublishedAt = a[i].PublishedAt
 

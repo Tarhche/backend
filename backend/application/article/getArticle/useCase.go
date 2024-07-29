@@ -24,7 +24,7 @@ func NewUseCase(
 }
 
 func (uc *UseCase) GetArticle(UUID string) (*GetArticleResponse, error) {
-	a, err := uc.articleRepository.GetOne(UUID)
+	a, err := uc.articleRepository.GetOnePublished(UUID)
 	if err != nil {
 		return nil, err
 	}

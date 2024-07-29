@@ -9,6 +9,7 @@ type validationErrors map[string]string
 type Request struct {
 	Cover       string    `json:"cover"`
 	Title       string    `json:"title"`
+	Video       string    `json:"video"`
 	Excerpt     string    `json:"excerpt"`
 	Body        string    `json:"body"`
 	PublishedAt time.Time `json:"published_at"`

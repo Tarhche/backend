@@ -8,9 +8,9 @@
             <p class="card-text" v-if="excerpt">{{ excerpt }}</p>
             <div>
                 <small class="d-block">
-                    <a class="text-muted" href="./author.html">Favid Rick</a>
+                    <a class="text-muted" href="#">Favid Rick</a>
                 </small>
-                <small class="text-muted" v-if="publishedAt" >{{ publishedAt }} &middot; 5 min read</small>
+                <time :datetime="publishedAt" class="text-muted small">{{ useTime().toAgo(publishedAt) }}</time>
             </div>
         </div>
     </div>

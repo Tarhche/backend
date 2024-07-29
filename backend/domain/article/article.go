@@ -9,6 +9,7 @@ import (
 type Article struct {
 	UUID        string
 	Cover       string
+	Video       string
 	Title       string
 	Excerpt     string
 	Body        string
@@ -20,11 +21,14 @@ type Article struct {
 
 type Repository interface {
 	GetAll(offset uint, limit uint) ([]Article, error)
+	GetAllPublished(offset uint, limit uint) ([]Article, error)
 	GetOne(UUID string) (Article, error)
+	GetOnePublished(UUID string) (Article, error)
 	GetByUUIDs(UUIDs []string) ([]Article, error)
 	GetMostViewed(limit uint) ([]Article, error)
 	GetByHashtag(hashtags []string, offset uint, limit uint) ([]Article, error)
 	Count() (uint, error)
+	CountPublished() (uint, error)
 	Save(*Article) (string, error)
 	Delete(UUID string) error
 	IncreaseView(uuid string, inc uint) error

@@ -2,6 +2,8 @@ package createfile
 
 import "io"
 
+const MaxFileSize int64 = 100 << 20 // 100MB
+
 type validationErrors map[string]string
 
 type Request struct {

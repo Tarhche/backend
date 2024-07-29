@@ -22,18 +22,20 @@ func (uc *UseCase) CreateArticle(request Request) (*CreateArticleResponse, error
 		}, nil
 	}
 
-	article := article.Article{
-		Cover:   request.Cover,
-		Title:   request.Title,
-		Excerpt: request.Excerpt,
-		Body:    request.Body,
+	a := article.Article{
+		Cover:       request.Cover,
+		Video:       request.Video,
+		Title:       request.Title,
+		Excerpt:     request.Excerpt,
+		Body:        request.Body,
+		PublishedAt: request.PublishedAt,
 		Author: author.Author{
 			UUID: request.AuthorUUID,
 		},
 		Tags: request.Tags,
 	}
 
-	uuid, err := uc.articleRepository.Save(&article)
+	uuid, err := uc.articleRepository.Save(&a)
 	if err != nil {
 		return nil, err
 	}

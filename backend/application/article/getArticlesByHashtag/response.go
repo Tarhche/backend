@@ -9,6 +9,7 @@ import (
 type articleResponse struct {
 	UUID        string    `json:"uuid"`
 	Cover       string    `json:"cover"`
+	Video       string    `json:"video"`
 	Title       string    `json:"title"`
 	Excerpt     string    `json:"excerpt"`
 	PublishedAt time.Time `json:"published_at"`
@@ -35,6 +36,7 @@ func NewGetArticlesByHashtagReponse(a []article.Article, currentPage uint) *GetA
 	for i := range a {
 		items[i].UUID = a[i].UUID
 		items[i].Cover = a[i].Cover
+		items[i].Video = a[i].Video
 		items[i].Title = a[i].Title
 		items[i].Excerpt = a[i].Excerpt
 		items[i].PublishedAt = a[i].PublishedAt

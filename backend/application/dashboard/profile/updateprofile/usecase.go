@@ -1,6 +1,7 @@
 package updateprofile
 
 import (
+	"errors"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/user"
 )
@@ -46,17 +47,17 @@ func (uc *UseCase) UpdateProfile(request Request) (*UpdateProfileResponse, error
 		}, nil
 	}
 
-	user, err := uc.userRepository.GetOne(request.UserUUID)
+	u, err := uc.userRepository.GetOne(request.UserUUID)
 	if err != nil {
 		return nil, err
 	}
 
-	user.Name = request.Name
-	user.Avatar = request.Avatar
-	user.Email = request.Email
-	user.Username = request.Username
+	u.Name = request.Name
+	u.Avatar = request.Avatar
+	u.Email = request.Email
+	u.Username = request.Username
 
-	err = uc.userRepository.Save(&user)
+	_, err = uc.userRepository.Save(&u)
 	if err != nil {
 		return nil, err
 	}
@@ -66,7 +67,7 @@ func (uc *UseCase) UpdateProfile(request Request) (*UpdateProfileResponse, error
 
 func (uc *UseCase) anotherUserExists(identity string, currentUserUUID string) (bool, error) {
 	u, err := uc.userRepository.GetOneByIdentity(identity)
-	if err == domain.ErrNotExists {
+	if errors.Is(err, domain.ErrNotExists) {
 		return false, nil
 	} else if err != nil {
 		return false, err
