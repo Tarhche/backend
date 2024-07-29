@@ -27,15 +27,20 @@
 									</div>
 								</button>
 							</div>
-							<div class="form-group d-flex flex-column flex-md-row  mt-2 pt-2 justify-content-between align-items-center">
-								<div>
-									<label class="d-flex align-items-center gap-1 checkbox-primary mb-3">
+              <div class="form-group d-flex mt-2">
+                <label class="d-flex align-items-center gap-1 checkbox-primary">
 										<input type="checkbox" checked>
 										<span>من را به خاطر بسپار</span>
 									</label>
 								</div>
+              <div
+                  class="form-group d-flex flex-column flex-md-row  mt-2 pt-2 justify-content-md-end gap-3 align-items-md-center">
+                <div>
+                  <nuxt-link to="/auth/forgot-password" class="btn btn-outline-danger w-100 btn-sm ">بازیابی کلمه عبور
+                  </nuxt-link>
+                </div>
 								<div>
-									<nuxt-link to="/auth/forgot-password" class="btn btn-outline-danger w-100 btn-sm ">بازیابی کلمه عبور</nuxt-link>
+                  <nuxt-link to="/auth/register" class="btn btn-outline-success w-100 btn-sm ">ثبت نام</nuxt-link>
 								</div>
 							</div>
 						</form>
