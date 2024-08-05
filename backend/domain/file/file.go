@@ -3,8 +3,6 @@ package file
 import (
 	"context"
 	"io"
-
-	"github.com/minio/minio-go/v7"
 )
 
 type File struct {
@@ -25,5 +23,5 @@ type Repository interface {
 type Storage interface {
 	Store(ctx context.Context, objectName string, reader io.Reader, objectSize int64) error
 	Delete(ctx context.Context, objectName string) error
-	Read(ctx context.Context, objectName string) (*minio.Object, error)
+	Read(ctx context.Context, objectName string) (io.ReadCloser, error)
 }

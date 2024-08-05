@@ -6,7 +6,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/article"
 )
 
-type GetArticleResponse struct {
+type Response struct {
 	UUID        string    `json:"uuid"`
 	Cover       string    `json:"cover"`
 	Video       string    `json:"video"`
@@ -24,11 +24,11 @@ type author struct {
 	Avatar string `json:"avatar"`
 }
 
-func NewGetArticleReponse(a article.Article) *GetArticleResponse {
+func NewResponse(a article.Article) *Response {
 	tags := make([]string, len(a.Tags))
 	copy(tags, a.Tags)
 
-	return &GetArticleResponse{
+	return &Response{
 		UUID:        a.UUID,
 		Cover:       a.Cover,
 		Video:       a.Video,

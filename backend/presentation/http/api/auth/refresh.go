@@ -26,7 +26,7 @@ func (h *refreshHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response, err := h.refreshUseCase.Login(request)
+	response, err := h.refreshUseCase.Execute(request)
 	switch true {
 	case errors.Is(err, domain.ErrNotExists):
 		rw.WriteHeader(http.StatusNotFound)

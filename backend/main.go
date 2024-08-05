@@ -146,7 +146,7 @@ func httpHandler() http.Handler {
 	elementsRepository := elementsrepository.NewRepository(database)
 	userRepository := userrepository.NewRepository(database)
 	permissionRepository := permissionsrepository.NewRepository()
-	roleRepository := rolesrepository.NewRepository(database)
+	elementRepository := rolesrepository.NewRepository(database)
 
 	privateKeyData := []byte(os.Getenv("PRIVATE_KEY"))
 	privateKey, err := ecdsa.ParsePrivateKey(privateKeyData)
@@ -167,7 +167,7 @@ func httpHandler() http.Handler {
 		Port: os.Getenv("MAIL_SMTP_PORT"),
 	})
 
-	authorization := domain.NewRoleBasedAccessControl(roleRepository)
+	authorization := domain.NewRoleBasedAccessControl(elementRepository)
 
 	homeUseCase := home.NewUseCase(articlesRepository, elementsRepository)
 
@@ -216,7 +216,7 @@ func httpHandler() http.Handler {
 	getProfileUseCase := getprofile.NewUseCase(userRepository)
 	updateProfileUseCase := updateprofile.NewUseCase(userRepository)
 	dashboardProfileChangePasswordUseCase := changepassword.NewUseCase(userRepository, hasher)
-	dashboardProfileGetRolesUseCase := getRoles.NewUseCase(roleRepository)
+	dashboardProfileGetRolesUseCase := getRoles.NewUseCase(elementRepository)
 
 	dashboardCreateArticleUsecase := dashboardCreateArticle.NewUseCase(articlesRepository)
 	dashboardDeleteArticleUsecase := dashboardDeleteArticle.NewUseCase(articlesRepository)
@@ -234,16 +234,16 @@ func httpHandler() http.Handler {
 	dashboardDeleteUserUsecase := deleteuser.NewUseCase(userRepository)
 	dashboardGetUserUsecase := getuser.NewUseCase(userRepository)
 	dashboardGetUsersUsecase := getusers.NewUseCase(userRepository)
-	dashboardUpdateUserUsecase := updateuser.NewUseCase(userRepository, hasher)
+	dashboardUpdateUserUsecase := updateuser.NewUseCase(userRepository)
 	dashboardUpdateUserChangePasswordUsecase := userchangepassword.NewUseCase(userRepository, hasher)
 
 	dashboardGetPermissionsUseCase := dashboardGetPermissions.NewUseCase(permissionRepository)
 
-	dashboardCreateRoleUsecase := dashboardCreateRole.NewUseCase(roleRepository, permissionRepository)
-	dashboardDeleteRoleUsecase := dashboardDeleteRole.NewUseCase(roleRepository)
-	dashboardGetRoleUsecase := dashboardGetRole.NewUseCase(roleRepository)
-	dashboardGetRolesUsecase := dashboardGetRoles.NewUseCase(roleRepository)
-	dashboardUpdateRoleUsecase := dashboardUpdateRole.NewUseCase(roleRepository, permissionRepository)
+	dashboardCreateRoleUsecase := dashboardCreateRole.NewUseCase(elementRepository, permissionRepository)
+	dashboardDeleteRoleUsecase := dashboardDeleteRole.NewUseCase(elementRepository)
+	dashboardGetRoleUsecase := dashboardGetRole.NewUseCase(elementRepository)
+	dashboardGetRolesUsecase := dashboardGetRoles.NewUseCase(elementRepository)
+	dashboardUpdateRoleUsecase := dashboardUpdateRole.NewUseCase(elementRepository, permissionRepository)
 
 	dashboardGetFilesUseCase := dashboardGetFiles.NewUseCase(filesRepository)
 	dashboardGetFileUseCase := dashboardGetFile.NewUseCase(filesRepository, fileStorage)

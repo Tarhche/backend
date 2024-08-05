@@ -14,9 +14,9 @@ func NewUseCase(elementRepository element.Repository) *UseCase {
 	}
 }
 
-func (uc *UseCase) UpdateElement(request Request) (*UpdateElementResponse, error) {
+func (uc *UseCase) Execute(request Request) (*Response, error) {
 	if ok, validation := request.Validate(); !ok {
-		return &UpdateElementResponse{
+		return &Response{
 			ValidationErrors: validation,
 		}, nil
 	}
@@ -32,5 +32,5 @@ func (uc *UseCase) UpdateElement(request Request) (*UpdateElementResponse, error
 		return nil, err
 	}
 
-	return &UpdateElementResponse{}, nil
+	return &Response{}, nil
 }

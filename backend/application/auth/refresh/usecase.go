@@ -20,7 +20,7 @@ func NewUseCase(userRepository user.Repository, JWT *jwt.JWT) *UseCase {
 	}
 }
 
-func (uc *UseCase) Login(request Request) (*RefreshResponse, error) {
+func (uc *UseCase) Execute(request Request) (*RefreshResponse, error) {
 	if ok, validation := request.Validate(); !ok {
 		return &RefreshResponse{
 			ValidationErrors: validation,

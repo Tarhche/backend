@@ -14,7 +14,7 @@ func NewUseCase(userRepository user.Repository) *UseCase {
 	}
 }
 
-func (uc *UseCase) GetUser(UUID string) (*Response, error) {
+func (uc *UseCase) Execute(UUID string) (*Response, error) {
 	u, err := uc.userRepository.GetOne(UUID)
 	if err != nil {
 		return nil, err

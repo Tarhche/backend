@@ -20,7 +20,7 @@ func NewUseCase(userRepository user.Repository, hasher password.Hasher) *UseCase
 	}
 }
 
-func (uc *UseCase) CreateUser(request Request) (*Response, error) {
+func (uc *UseCase) Execute(request Request) (*Response, error) {
 	if ok, validation := request.Validate(); !ok {
 		return &Response{
 			ValidationErrors: validation,
@@ -29,20 +29,20 @@ func (uc *UseCase) CreateUser(request Request) (*Response, error) {
 
 	if ok, err := uc.anotherUserExists(request.Email); err != nil {
 		return nil, err
-	} else if !ok {
+	} else if ok {
 		return &Response{
 			ValidationErrors: validationErrors{
-				"email": "another user with this email already exists",
+				"email": "another user with same email already exists",
 			},
 		}, nil
 	}
 
 	if ok, err := uc.anotherUserExists(request.Username); err != nil {
 		return nil, err
-	} else if !ok {
+	} else if ok {
 		return &Response{
 			ValidationErrors: validationErrors{
-				"username": "another user with this username already exists",
+				"username": "another user with same username already exists",
 			},
 		}, nil
 	}
@@ -56,14 +56,14 @@ func (uc *UseCase) CreateUser(request Request) (*Response, error) {
 }
 
 func (uc *UseCase) anotherUserExists(identity string) (bool, error) {
-	_, err := uc.userRepository.GetOneByIdentity(identity)
+	u, err := uc.userRepository.GetOneByIdentity(identity)
 	if errors.Is(err, domain.ErrNotExists) {
 		return false, nil
 	} else if err != nil {
 		return false, err
 	}
 
-	return true, nil
+	return u.Email == identity || u.Username == identity, nil
 }
 
 func (uc *UseCase) createUser(request Request) (string, error) {

@@ -2,66 +2,55 @@ package getelement
 
 import (
 	"errors"
-	"testing"
-
 	"github.com/khanzadimahdi/testproject/domain/element"
+	"github.com/khanzadimahdi/testproject/domain/element/component"
+	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/elements"
+	"github.com/stretchr/testify/assert"
+	"testing"
+	"time"
 )
 
-func TestUseCase_GetElement(t *testing.T) {
-	t.Run("returns an element", func(t *testing.T) {
-		repository := MockElementRepository{}
+func TestUseCase_Execute(t *testing.T) {
+	t.Run("gets an element", func(t *testing.T) {
+		var (
+			elementRepository elements.MockElementsRepository
+			mockComponent     component.MockComponent
+		)
 
-		usecase := NewUseCase(&repository)
-		response, err := usecase.GetElement("test-uuid")
+		var (
+			a = element.Element{
+				UUID:      "element-uuid-1",
+				Type:      "item",
+				Body:      &mockComponent,
+				Venues:    []string{},
+				CreatedAt: time.Now(),
+				UpdatedAt: time.Now(),
+			}
+		)
 
-		if repository.GetOneCount != 1 {
-			t.Error("unexpected number of calls")
-		}
+		elementRepository.On("GetOne", a.UUID).Return(a, nil)
+		defer elementRepository.AssertExpectations(t)
 
-		if response == nil {
-			t.Error("unexpected response")
-		}
+		response, err := NewUseCase(&elementRepository).Execute(a.UUID)
 
-		if err != nil {
-			t.Error("unexpected error")
-		}
+		assert.NoError(t, err)
+		assert.NotNil(t, response)
 	})
 
-	t.Run("returns an error", func(t *testing.T) {
-		repository := MockElementRepository{
-			GetOneErr: errors.New("element not found"),
-		}
+	t.Run("getting an element fails", func(t *testing.T) {
+		var (
+			elementRepository elements.MockElementsRepository
 
-		usecase := NewUseCase(&repository)
-		response, err := usecase.GetElement("test-uuid")
+			elementUUID   = "element-uuid"
+			expectedError = errors.New("error")
+		)
 
-		if repository.GetOneCount != 1 {
-			t.Error("unexpected number of calls")
-		}
+		elementRepository.On("GetOne", elementUUID).Once().Return(element.Element{}, expectedError)
+		defer elementRepository.AssertExpectations(t)
 
-		if response != nil {
-			t.Error("unexpected response")
-		}
+		response, err := NewUseCase(&elementRepository).Execute(elementUUID)
 
-		if err == nil {
-			t.Error("expects an error")
-		}
+		assert.ErrorIs(t, err, expectedError)
+		assert.Nil(t, response)
 	})
-}
-
-type MockElementRepository struct {
-	element.Repository
-
-	GetOneCount uint
-	GetOneErr   error
-}
-
-func (r *MockElementRepository) GetOne(UUID string) (element.Element, error) {
-	r.GetOneCount++
-
-	if r.GetOneErr != nil {
-		return element.Element{}, r.GetOneErr
-	}
-
-	return element.Element{}, nil
 }

@@ -4,131 +4,155 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/khanzadimahdi/testproject/domain/password"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/ecdsa"
+	"github.com/khanzadimahdi/testproject/infrastructure/crypto/mock"
 	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
+	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
 )
 
-func TestUseCase_Login(t *testing.T) {
+func TestUseCase_Execute(t *testing.T) {
 	privateKey, err := ecdsa.Generate()
-	if err != nil {
-		t.Error("unexpected error")
-	}
+	assert.NoError(t, err)
 
 	j := jwt.NewJWT(privateKey, privateKey.Public())
-	h := &MockHasher{}
 
-	t.Run("returns jwt tokens", func(t *testing.T) {
-		repository := MockUserRepository{}
+	t.Run("login succeeds", func(t *testing.T) {
+		var (
+			userRepository users.MockUsersRepository
+			hasher         mock.MockCrypto
 
-		usecase := NewUseCase(&repository, j, h)
+			request = Request{
+				Identity: "test-identity",
+				Password: "test-password",
+			}
 
-		request := Request{
-			Identity: "test-username",
-			Password: "test-password",
-		}
+			u = user.User{
+				UUID: request.Identity,
+				PasswordHash: password.Hash{
+					Value: []byte("hashed-value"),
+					Salt:  []byte("salt-value"),
+				},
+			}
+		)
 
-		response, err := usecase.Login(request)
+		userRepository.On("GetOneByIdentity", request.Identity).Once().Return(u, nil)
+		defer userRepository.AssertExpectations(t)
 
-		if repository.GetOneByIdentityCount != 1 {
-			t.Error("unexpected number of calls")
-		}
+		hasher.On("Equal", []byte(request.Password), u.PasswordHash.Value, u.PasswordHash.Salt).Once().Return(true)
+		defer hasher.AssertExpectations(t)
 
-		if response == nil {
-			t.Fatal("unexpected response")
-		}
+		response, err := NewUseCase(&userRepository, j, &hasher).Execute(request)
 
-		if err != nil {
-			t.Error("unexpected an error")
-		}
+		assert.NoError(t, err)
+		assert.NotNil(t, response)
+		assert.Len(t, response.ValidationErrors, 0)
 
 		accessTokenClaims, err := j.Verify(response.AccessToken)
-		if err != nil {
-			t.Errorf("unexpected an error %s", err)
-		}
+		assert.NoError(t, err)
+		assert.NotNil(t, accessTokenClaims)
 
 		audience, err := accessTokenClaims.GetAudience()
-		t.Log(audience)
-		if err != nil {
-			t.Error("unexpected an error")
-		}
-		if audience[0] != "permission" {
-			t.Error("invalid audience")
-		}
+		assert.NoError(t, err)
+		assert.Equal(t, "permission", audience[0])
 
 		refreshTokenClaims, err := j.Verify(response.RefreshToken)
-		if err != nil {
-			t.Error("unexpected an error")
-		}
+		assert.NoError(t, err)
+		assert.NotNil(t, accessTokenClaims)
 
 		audience, err = refreshTokenClaims.GetAudience()
-		if err != nil {
-			t.Error("unexpected an error")
-		}
-		if audience[0] != "refresh" {
-			t.Error("invalid audience")
-		}
+		assert.NoError(t, err)
+		assert.Equal(t, "refresh", audience[0])
 	})
 
-	t.Run("returns an error", func(t *testing.T) {
-		repository := MockUserRepository{
-			GetOneErr: errors.New("user with given username found"),
-		}
+	t.Run("validation fails", func(t *testing.T) {
+		var (
+			userRepository users.MockUsersRepository
+			hasher         mock.MockCrypto
 
-		usecase := NewUseCase(&repository, j, h)
+			request = Request{}
 
-		request := Request{
-			Identity: "test-username",
-			Password: "test-password",
-		}
+			expectedResponse = Response{
+				ValidationErrors: validationErrors{
+					"identity": "identity required",
+					"password": "password required",
+				},
+			}
+		)
 
-		response, err := usecase.Login(request)
+		response, err := NewUseCase(&userRepository, j, &hasher).Execute(request)
 
-		if repository.GetOneByIdentityCount != 1 {
-			t.Error("unexpected number of calls")
-		}
+		assert.NoError(t, err)
+		assert.NotNil(t, response)
 
-		if response != nil {
-			t.Error("unexpected response")
-		}
+		userRepository.AssertNotCalled(t, "GetOneByIdentity")
+		hasher.AssertNotCalled(t, "Equal")
 
-		if err == nil {
-			t.Error("expects an error")
-		}
+		assert.Equal(t, &expectedResponse, response)
 	})
-}
 
-type MockUserRepository struct {
-	user.Repository
+	t.Run("finding user fails", func(t *testing.T) {
+		var (
+			userRepository users.MockUsersRepository
+			hasher         mock.MockCrypto
 
-	GetOneByIdentityCount uint
-	GetOneErr             error
-}
+			request = Request{
+				Identity: "test-identity",
+				Password: "test-password",
+			}
 
-func (r *MockUserRepository) GetOneByIdentity(username string) (user.User, error) {
-	r.GetOneByIdentityCount++
+			expectedError = errors.New("test error")
+		)
 
-	if r.GetOneErr != nil {
-		return user.User{}, r.GetOneErr
-	}
+		userRepository.On("GetOneByIdentity", request.Identity).Once().Return(user.User{}, expectedError)
+		defer userRepository.AssertExpectations(t)
 
-	return user.User{
-		Username: username,
-		PasswordHash: password.Hash{
-			Value: []byte("test-password"),
-			Salt:  []byte("test-salt"),
-		},
-	}, nil
-}
+		response, err := NewUseCase(&userRepository, j, &hasher).Execute(request)
 
-type MockHasher struct {
-}
+		hasher.AssertNotCalled(t, "Equal")
 
-func (m *MockHasher) Hash(value, salt []byte) []byte {
-	return []byte("random hash")
-}
+		assert.ErrorIs(t, expectedError, err)
+		assert.Nil(t, response)
+	})
 
-func (m *MockHasher) Equal(value, hash, salt []byte) bool {
-	return true
+	t.Run("invalid password", func(t *testing.T) {
+		var (
+			userRepository users.MockUsersRepository
+			hasher         mock.MockCrypto
+
+			request = Request{
+				Identity: "test-identity",
+				Password: "test-password",
+			}
+
+			u = user.User{
+				UUID: request.Identity,
+				PasswordHash: password.Hash{
+					Value: []byte("hashed-value"),
+					Salt:  []byte("salt-value"),
+				},
+			}
+
+			expectedResponse = Response{
+				ValidationErrors: validationErrors{
+					"identity": "your identity or password is wrong",
+				},
+			}
+		)
+
+		userRepository.On("GetOneByIdentity", request.Identity).Once().Return(u, nil)
+		defer userRepository.AssertExpectations(t)
+
+		hasher.On("Equal", []byte(request.Password), u.PasswordHash.Value, u.PasswordHash.Salt).Once().Return(false)
+		defer hasher.AssertExpectations(t)
+
+		response, err := NewUseCase(&userRepository, j, &hasher).Execute(request)
+
+		assert.NoError(t, err)
+		assert.NotNil(t, response)
+		assert.Equal(t, &expectedResponse, response)
+	})
 }

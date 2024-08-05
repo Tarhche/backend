@@ -4,13 +4,17 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/ecdsa"
+	"github.com/khanzadimahdi/testproject/infrastructure/email"
 	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
+	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
 )
 
-func TestUseCase_SendResetToken(t *testing.T) {
+func TestUseCase_Execute(t *testing.T) {
 	privateKey, err := ecdsa.Generate()
 	if err != nil {
 		t.Error("unexpected error")
@@ -19,83 +23,104 @@ func TestUseCase_SendResetToken(t *testing.T) {
 
 	mailFrom := "info@noreply.nowhere.loc"
 
-	request := Request{
-		Identity: "something@somewhere.loc",
-	}
+	t.Run("successfully mails reset-password token", func(t *testing.T) {
+		var (
+			userRepository users.MockUsersRepository
+			mailer         email.MockMailer
 
-	t.Run("mails reset password token", func(t *testing.T) {
-		userRepository := &MockUserRepository{}
-		mailer := &MockMailer{}
+			request = Request{
+				Identity: "something@somewhere.loc",
+			}
 
-		usecase := NewUseCase(userRepository, j, mailer, mailFrom)
-		response, err := usecase.SendResetToken(request)
+			u = user.User{
+				UUID:  "user-uuid",
+				Email: request.Identity,
+			}
+		)
 
-		if err != nil {
-			t.Error("unexpected error")
-		}
+		userRepository.On("GetOneByIdentity", request.Identity).Once().Return(u, nil)
+		defer userRepository.AssertExpectations(t)
 
-		if response == nil {
-			t.Errorf("response not exists")
-		}
+		mailer.On("SendMail", mailFrom, u.Email, "Reset Password", mock.AnythingOfType("[]uint8")).Once().Return(nil)
+		defer mailer.AssertExpectations(t)
+
+		response, err := NewUseCase(&userRepository, j, &mailer, mailFrom).Execute(request)
+		assert.NoError(t, err)
+		assert.NotNil(t, response)
+	})
+
+	t.Run("validation fails", func(t *testing.T) {
+		var (
+			userRepository users.MockUsersRepository
+			mailer         email.MockMailer
+
+			request          = Request{}
+			expectedResponse = Response{
+				ValidationErrors: validationErrors{
+					"identity": "identity is required",
+				},
+			}
+		)
+
+		response, err := NewUseCase(&userRepository, j, &mailer, mailFrom).Execute(request)
+
+		userRepository.AssertNotCalled(t, "GetOneByIdentity")
+		mailer.AssertNotCalled(t, "SendMail")
+
+		assert.NoError(t, err)
+		assert.NotNil(t, response)
+		assert.Equal(t, &expectedResponse, response)
 	})
 
 	t.Run("error on finding user", func(t *testing.T) {
-		userRepository := &MockUserRepository{
-			GetOneByIdentityErr: domain.ErrNotExists,
-		}
-		mailer := &MockMailer{}
+		var (
+			userRepository users.MockUsersRepository
+			mailer         email.MockMailer
 
-		usecase := NewUseCase(userRepository, j, mailer, mailFrom)
-		response, err := usecase.SendResetToken(request)
+			request = Request{
+				Identity: "something@somewhere.loc",
+			}
 
-		if err != userRepository.GetOneByIdentityErr {
-			t.Error("expected an error", userRepository.GetOneByIdentityErr)
-		}
+			expectedErr = errors.New("something bad happened")
+		)
 
-		if response != nil {
-			t.Errorf("expected response to be nil but got %#v", response)
-		}
+		userRepository.On("GetOneByIdentity", request.Identity).Once().Return(user.User{}, expectedErr)
+		defer userRepository.AssertExpectations(t)
+
+		response, err := NewUseCase(&userRepository, j, &mailer, mailFrom).Execute(request)
+
+		mailer.AssertNotCalled(t, "SendMail")
+
+		assert.ErrorIs(t, expectedErr, err)
+		assert.Nil(t, response)
 	})
 
-	t.Run("sending email fails", func(t *testing.T) {
-		userRepository := &MockUserRepository{}
-		mailer := &MockMailer{SendMailErr: errors.New("can't send mail")}
+	t.Run("error on sending email", func(t *testing.T) {
+		var (
+			userRepository users.MockUsersRepository
+			mailer         email.MockMailer
 
-		usecase := NewUseCase(userRepository, j, mailer, mailFrom)
-		response, err := usecase.SendResetToken(request)
+			request = Request{
+				Identity: "something@somewhere.loc",
+			}
 
-		if err != mailer.SendMailErr {
-			t.Error("expected an error", mailer.SendMailErr)
-		}
+			u = user.User{
+				UUID:  "user-uuid",
+				Email: request.Identity,
+			}
 
-		if response != nil {
-			t.Errorf("expected response to be nil but got %#v", response)
-		}
+			expectedErr = errors.New("something bad happened")
+		)
+
+		userRepository.On("GetOneByIdentity", request.Identity).Once().Return(u, nil)
+		defer userRepository.AssertExpectations(t)
+
+		mailer.On("SendMail", mailFrom, u.Email, "Reset Password", mock.AnythingOfType("[]uint8")).Once().Return(expectedErr)
+		defer mailer.AssertExpectations(t)
+
+		response, err := NewUseCase(&userRepository, j, &mailer, mailFrom).Execute(request)
+		assert.ErrorIs(t, expectedErr, err)
+		assert.Nil(t, response)
 	})
 
-}
-
-type MockUserRepository struct {
-	user.Repository
-
-	GetOneByIdentityErr error
-}
-
-func (r *MockUserRepository) GetOneByIdentity(username string) (user.User, error) {
-	if r.GetOneByIdentityErr != nil {
-		return user.User{}, r.GetOneByIdentityErr
-	}
-
-	return user.User{
-		UUID: "018ead22-d9d3-7e78-8b52-174c06ee1528",
-	}, nil
-}
-
-type MockMailer struct {
-	domain.Mailer
-	SendMailErr error
-}
-
-func (r *MockMailer) SendMail(from string, to string, subject string, body []byte) error {
-	return r.SendMailErr
 }

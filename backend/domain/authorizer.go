@@ -9,19 +9,19 @@ type Authorizer interface {
 }
 
 type RoleBasedAccessControl struct {
-	roleRepository role.Repository
+	elementRepository role.Repository
 }
 
 var _ Authorizer = &RoleBasedAccessControl{}
 
-func NewRoleBasedAccessControl(roleRepository role.Repository) *RoleBasedAccessControl {
+func NewRoleBasedAccessControl(elementRepository role.Repository) *RoleBasedAccessControl {
 	return &RoleBasedAccessControl{
-		roleRepository: roleRepository,
+		elementRepository: elementRepository,
 	}
 }
 
 func (a *RoleBasedAccessControl) Authorize(userUUID string, permission string) (bool, error) {
-	hasPermission, err := a.roleRepository.UserHasPermission(userUUID, permission)
+	hasPermission, err := a.elementRepository.UserHasPermission(userUUID, permission)
 	if err != nil {
 		return false, err
 	}

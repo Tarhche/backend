@@ -40,7 +40,7 @@ func (h *updateHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	}
 	request.AuthorUUID = userUUID
 
-	response, err := h.updateArticleUseCase.UpdateArticle(request)
+	response, err := h.updateArticleUseCase.Execute(request)
 	switch true {
 	case errors.Is(err, domain.ErrNotExists):
 		rw.WriteHeader(http.StatusNotFound)

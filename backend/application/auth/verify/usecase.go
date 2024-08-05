@@ -25,7 +25,7 @@ func NewUseCase(userRepository user.Repository, hasher password.Hasher, JWT *jwt
 	}
 }
 
-func (uc *UseCase) Verify(request Request) (*Response, error) {
+func (uc *UseCase) Execute(request Request) (*Response, error) {
 	if ok, validation := request.Validate(); !ok {
 		return &Response{
 			ValidationErrors: validation,
@@ -58,22 +58,22 @@ func (uc *UseCase) Verify(request Request) (*Response, error) {
 		}, nil
 	}
 
-	if exists, err := uc.IdentityExists(identity); err != nil {
+	if exists, err := uc.identityExists(identity); err != nil {
 		return nil, err
 	} else if exists {
 		return &Response{
 			ValidationErrors: map[string]string{
-				"identity": "user with given email already exists",
+				"identity": "user already exists",
 			},
 		}, nil
 	}
 
-	if exists, err := uc.IdentityExists(request.Username); err != nil {
+	if exists, err := uc.identityExists(request.Username); err != nil {
 		return nil, err
 	} else if exists {
 		return &Response{
 			ValidationErrors: map[string]string{
-				"user": "user with given username already exists",
+				"username": "user with given username already exists",
 			},
 		}, nil
 	}
@@ -100,11 +100,13 @@ func (uc *UseCase) Verify(request Request) (*Response, error) {
 	return &Response{}, nil
 }
 
-func (uc *UseCase) IdentityExists(identity string) (bool, error) {
-	_, err := uc.userRepository.GetOneByIdentity(identity)
+func (uc *UseCase) identityExists(identity string) (bool, error) {
+	u, err := uc.userRepository.GetOneByIdentity(identity)
 	if errors.Is(err, domain.ErrNotExists) {
-		return true, nil
+		return false, nil
+	} else if err != nil {
+		return false, err
 	}
 
-	return false, err
+	return u.UUID == identity || u.Email == identity || u.Username == identity, nil
 }

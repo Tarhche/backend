@@ -1,22 +1,19 @@
 package getfiles
 
 import (
-	"time"
-
 	"github.com/khanzadimahdi/testproject/domain/file"
 )
 
-type fileResponse struct {
-	UUID      string    `json:"uuid"`
-	Name      string    `json:"name"`
-	Size      int64     `json:"size"`
-	OwnerUUID string    `json:"owner_uuid"`
-	CreatedAt time.Time `json:"created_at"`
-}
-
-type GetFilesReponse struct {
+type Response struct {
 	Items      []fileResponse `json:"items"`
 	Pagination pagination     `json:"pagination"`
+}
+
+type fileResponse struct {
+	UUID      string `json:"uuid"`
+	Name      string `json:"name"`
+	Size      int64  `json:"size"`
+	OwnerUUID string `json:"owner_uuid"`
 }
 
 type pagination struct {
@@ -24,7 +21,7 @@ type pagination struct {
 	CurrentPage uint `json:"current_page"`
 }
 
-func NewGetFilesReponse(a []file.File, totalPages, currentPage uint) *GetFilesReponse {
+func NewResponse(a []file.File, totalPages, currentPage uint) *Response {
 	items := make([]fileResponse, len(a))
 
 	for i := range a {
@@ -34,7 +31,7 @@ func NewGetFilesReponse(a []file.File, totalPages, currentPage uint) *GetFilesRe
 		items[i].OwnerUUID = a[i].OwnerUUID
 	}
 
-	return &GetFilesReponse{
+	return &Response{
 		Items: items,
 		Pagination: pagination{
 			TotalPages:  totalPages,

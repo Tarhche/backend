@@ -19,7 +19,7 @@ func NewUseCase(filesRepository file.Repository, storage file.Storage) *UseCase 
 	}
 }
 
-func (uc *UseCase) GetFile(UUID string, writer io.Writer) error {
+func (uc *UseCase) Execute(UUID string, writer io.Writer) error {
 	file, err := uc.filesRepository.GetOne(UUID)
 	if err != nil {
 		return err

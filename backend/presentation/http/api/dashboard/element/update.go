@@ -39,7 +39,7 @@ func (h *updateHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response, err := h.updateElementUseCase.UpdateElement(request)
+	response, err := h.updateElementUseCase.Execute(request)
 	switch true {
 	case errors.Is(err, domain.ErrNotExists):
 		rw.WriteHeader(http.StatusNotFound)

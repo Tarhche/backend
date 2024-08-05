@@ -16,13 +16,17 @@ func NewUseCase(fileRepository file.Repository) *UseCase {
 	}
 }
 
-func (uc *UseCase) GetFiles(request *Request) (*GetFilesReponse, error) {
+func (uc *UseCase) Execute(request *Request) (*Response, error) {
 	totalFiles, err := uc.fileRepository.Count()
 	if err != nil {
 		return nil, err
 	}
 
 	currentPage := request.Page
+	if currentPage == 0 {
+		currentPage = 1
+	}
+
 	var offset uint = 0
 	if currentPage > 0 {
 		offset = (currentPage - 1) * limit
@@ -39,5 +43,5 @@ func (uc *UseCase) GetFiles(request *Request) (*GetFilesReponse, error) {
 		return nil, err
 	}
 
-	return NewGetFilesReponse(a, totalPages, currentPage), nil
+	return NewResponse(a, totalPages, currentPage), nil
 }

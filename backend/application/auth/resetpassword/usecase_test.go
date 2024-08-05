@@ -2,15 +2,19 @@ package resetpassword
 
 import (
 	"encoding/base64"
+	"errors"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+
 	"github.com/khanzadimahdi/testproject/application/auth"
-	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/password"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/ecdsa"
+	crypto "github.com/khanzadimahdi/testproject/infrastructure/crypto/mock"
 	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
+	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
 )
 
 func TestUseCase_ResetPassword(t *testing.T) {
@@ -21,200 +25,135 @@ func TestUseCase_ResetPassword(t *testing.T) {
 
 	j := jwt.NewJWT(privateKey, privateKey.Public())
 
-	t.Run("malformed base64 token", func(t *testing.T) {
-		repository := MockUserRepository{}
-		h := &MockHasher{}
+	t.Run("updates password successfully", func(t *testing.T) {
+		var (
+			userRepository users.MockUsersRepository
+			hasher         crypto.MockCrypto
 
-		usecase := NewUseCase(&repository, h, j)
+			u = user.User{
+				UUID: "test-uuid",
+			}
 
-		request := Request{
-			Token:    "random.base64.token",
-			Password: "test-password",
-		}
+			request = Request{
+				Token:    resetPasswordToken(t, j, u, time.Now().Add(1*time.Minute), auth.ResetPasswordToken),
+				Password: "test-password",
+			}
+		)
 
-		response, err := usecase.ResetPassword(request)
-		if err == nil {
-			t.Error("expected an error")
-		}
+		userRepository.On("GetOne", u.UUID).Return(u, nil)
+		userRepository.On("Save", mock.Anything).Return(u.UUID, nil)
+		defer userRepository.AssertExpectations(t)
 
-		if response != nil {
-			t.Errorf("unexpected response %#v", response)
-		}
+		hasher.On("Hash", []byte(request.Password), mock.AnythingOfType("[]uint8")).Return([]byte("hashed-password"), nil)
+		defer hasher.AssertExpectations(t)
+
+		response, err := NewUseCase(&userRepository, &hasher, j).Execute(request)
+		assert.NoError(t, err)
+		assert.NotNil(t, response)
+		assert.Len(t, response.ValidationErrors, 0)
+	})
+
+	t.Run("invalid base64 token", func(t *testing.T) {
+		var (
+			userRepository users.MockUsersRepository
+			hasher         crypto.MockCrypto
+
+			request = Request{
+				Token:    "invalid-base64-token",
+				Password: "test-password",
+			}
+		)
+
+		response, err := NewUseCase(&userRepository, &hasher, j).Execute(request)
+
+		userRepository.AssertNotCalled(t, "GetOne")
+		userRepository.AssertNotCalled(t, "Save")
+		hasher.AssertNotCalled(t, "Hash")
+
+		assert.Error(t, err)
+		assert.Nil(t, response)
 	})
 
 	t.Run("invalid token", func(t *testing.T) {
-		repository := MockUserRepository{}
-		h := &MockHasher{}
+		var (
+			userRepository users.MockUsersRepository
+			hasher         crypto.MockCrypto
 
-		usecase := NewUseCase(&repository, h, j)
+			u = user.User{UUID: "test-uuid"}
 
-		testCases := make(map[string]string)
-		testCases["expired token"], _ = resetPasswordToken(j, user.User{UUID: "test-uuid"}, time.Now().Add(-time.Second), auth.ResetPasswordToken)
-		testCases["invalid audience"], _ = resetPasswordToken(j, user.User{UUID: "test-uuid"}, time.Now().Add(-time.Second), auth.AccessToken)
-		testCases["expired token"], _ = resetPasswordToken(j, user.User{}, time.Now().Add(-time.Second), auth.ResetPasswordToken)
-
-		for i := range testCases {
-			request := Request{
-				Token:    testCases[i],
+			request = Request{
+				Token:    resetPasswordToken(t, j, u, time.Now().Add(-2*time.Second), auth.ResetPasswordToken),
 				Password: "test-password",
 			}
+		)
 
-			response, err := usecase.ResetPassword(request)
-			if err == nil {
-				t.Error("expected an error")
-			}
+		response, err := NewUseCase(&userRepository, &hasher, j).Execute(request)
 
-			if response != nil {
-				t.Errorf("unexpected response %#v", response)
-			}
-		}
+		userRepository.AssertNotCalled(t, "GetOne")
+		userRepository.AssertNotCalled(t, "Save")
+		hasher.AssertNotCalled(t, "Hash")
+
+		assert.Error(t, err)
+		assert.Nil(t, response)
 	})
 
 	t.Run("error on fetching user", func(t *testing.T) {
-		repository := MockUserRepository{
-			GetOneErr: domain.ErrNotExists,
-		}
-		h := &MockHasher{}
+		var (
+			userRepository users.MockUsersRepository
+			hasher         crypto.MockCrypto
 
-		usecase := NewUseCase(&repository, h, j)
+			u = user.User{UUID: "test-uuid"}
 
-		token, _ := resetPasswordToken(j, user.User{UUID: "test-uuid"}, time.Now().Add(1*time.Minute), auth.ResetPasswordToken)
-		request := Request{
-			Token:    token,
-			Password: "test-password",
-		}
+			request = Request{
+				Token:    resetPasswordToken(t, j, u, time.Now().Add(10*time.Second), auth.ResetPasswordToken),
+				Password: "test-password",
+			}
 
-		response, err := usecase.ResetPassword(request)
-		if err != domain.ErrNotExists {
-			t.Errorf("expected error is %q but got %q", domain.ErrNotExists, err)
-		}
+			expectedErr = errors.New("user not found")
+		)
 
-		if repository.GetOneCount != 1 {
-			t.Errorf("fetching user should happen only once, but happend %d times", repository.GetOneCount)
-		}
+		userRepository.On("GetOne", u.UUID).Return(user.User{}, expectedErr)
+		defer userRepository.AssertExpectations(t)
 
-		if response != nil {
-			t.Errorf("unexpected response %#v", response)
-		}
+		response, err := NewUseCase(&userRepository, &hasher, j).Execute(request)
+
+		hasher.AssertNotCalled(t, "Hash")
+		userRepository.AssertNotCalled(t, "Save")
+
+		assert.ErrorIs(t, err, expectedErr)
+		assert.Nil(t, response)
 	})
 
 	t.Run("error on persisting user's password", func(t *testing.T) {
-		repository := MockUserRepository{
-			SaveErr: domain.ErrNotExists,
-		}
-		h := &MockHasher{}
+		var (
+			userRepository users.MockUsersRepository
+			hasher         crypto.MockCrypto
 
-		usecase := NewUseCase(&repository, h, j)
+			u = user.User{UUID: "test-uuid"}
 
-		token, _ := resetPasswordToken(j, user.User{UUID: "test-uuid"}, time.Now().Add(1*time.Minute), auth.ResetPasswordToken)
-		request := Request{
-			Token:    token,
-			Password: "test-password",
-		}
+			request = Request{
+				Token:    resetPasswordToken(t, j, u, time.Now().Add(10*time.Second), auth.ResetPasswordToken),
+				Password: "test-password",
+			}
 
-		response, err := usecase.ResetPassword(request)
-		if err != domain.ErrNotExists {
-			t.Errorf("expected error is %q but got %q", domain.ErrNotExists, err)
-		}
+			expectedErr = errors.New("user not found")
+		)
 
-		if repository.GetOneCount != 1 {
-			t.Errorf("fetching user should happen only once, but happend %d times", repository.GetOneCount)
-		}
+		userRepository.On("GetOne", u.UUID).Return(u, nil)
+		userRepository.On("Save", mock.Anything).Return("", expectedErr)
+		defer userRepository.AssertExpectations(t)
 
-		if h.HashCount != 1 {
-			t.Errorf("hashing password should happen only once, but happend %d times", h.HashCount)
-		}
+		hasher.On("Hash", []byte(request.Password), mock.AnythingOfType("[]uint8")).Return([]byte("hashed-password"), nil)
+		defer hasher.AssertExpectations(t)
 
-		if repository.SaveCount != 1 {
-			t.Errorf("persisting user should happen only once, but happend %d times", repository.SaveCount)
-		}
+		response, err := NewUseCase(&userRepository, &hasher, j).Execute(request)
 
-		if response != nil {
-			t.Errorf("unexpected response %#v", response)
-		}
-	})
-
-	t.Run("password successfully updates", func(t *testing.T) {
-		repository := MockUserRepository{
-			SaveErr: domain.ErrNotExists,
-		}
-		h := &MockHasher{}
-
-		usecase := NewUseCase(&repository, h, j)
-
-		token, _ := resetPasswordToken(j, user.User{UUID: "test-uuid"}, time.Now().Add(1*time.Minute), auth.ResetPasswordToken)
-		request := Request{
-			Token:    token,
-			Password: "test-password",
-		}
-
-		response, err := usecase.ResetPassword(request)
-		if err != domain.ErrNotExists {
-			t.Errorf("expected error is %q but got %q", domain.ErrNotExists, err)
-		}
-
-		if repository.GetOneCount != 1 {
-			t.Errorf("fetching user should happen only once, but happend %d times", repository.GetOneCount)
-		}
-
-		if h.HashCount != 1 {
-			t.Errorf("hashing password should happen only once, but happend %d times", h.HashCount)
-		}
-
-		if repository.SaveCount != 1 {
-			t.Errorf("persisting user should happen only once, but happend %d times", repository.SaveCount)
-		}
-
-		if response != nil {
-			t.Errorf("unexpected response %#v", response)
-		}
+		assert.ErrorIs(t, err, expectedErr)
+		assert.Nil(t, response)
 	})
 }
 
-type MockUserRepository struct {
-	user.Repository
-
-	GetOneCount uint
-	GetOneErr   error
-
-	SaveCount uint
-	SaveErr   error
-}
-
-func (r *MockUserRepository) GetOne(UUID string) (user.User, error) {
-	r.GetOneCount++
-
-	if r.GetOneErr != nil {
-		return user.User{}, r.GetOneErr
-	}
-
-	return user.User{
-		UUID: UUID,
-		PasswordHash: password.Hash{
-			Value: []byte("test-password"),
-			Salt:  []byte("test-salt"),
-		},
-	}, nil
-}
-
-func (r *MockUserRepository) Save(u *user.User) error {
-	r.SaveCount++
-
-	return r.SaveErr
-}
-
-type MockHasher struct {
-	password.Hasher
-	HashCount uint
-}
-
-func (m *MockHasher) Hash(value, salt []byte) []byte {
-	m.HashCount++
-
-	return []byte("random hash")
-}
-
-func resetPasswordToken(j *jwt.JWT, u user.User, expiresAt time.Time, audience string) (string, error) {
+func resetPasswordToken(t *testing.T, j *jwt.JWT, u user.User, expiresAt time.Time, audience string) string {
 	b := jwt.NewClaimsBuilder()
 	b.SetSubject(u.UUID)
 	b.SetNotBefore(time.Now().Add(-time.Hour))
@@ -222,10 +161,8 @@ func resetPasswordToken(j *jwt.JWT, u user.User, expiresAt time.Time, audience s
 	b.SetIssuedAt(time.Now())
 	b.SetAudience([]string{audience})
 
-	t, err := j.Generate(b.Build())
-	if err != nil {
-		return t, err
-	}
+	token, err := j.Generate(b.Build())
+	assert.NoError(t, err)
 
-	return base64.URLEncoding.EncodeToString([]byte(t)), nil
+	return base64.URLEncoding.EncodeToString([]byte(token))
 }

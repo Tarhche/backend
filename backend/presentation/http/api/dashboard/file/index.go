@@ -46,7 +46,7 @@ func (h *indexHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		Page: page,
 	}
 
-	response, err := h.getFilesUseCase.GetFiles(request)
+	response, err := h.getFilesUseCase.Execute(request)
 	switch true {
 	case err != nil:
 		rw.WriteHeader(http.StatusInternalServerError)

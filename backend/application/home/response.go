@@ -51,14 +51,14 @@ type jumbotronComponentResponse struct {
 func NewResponse(all, popular []article.Article, e []element.Element, elementsContent []article.Article) *Response {
 	elements := make([]elementResponse, len(e))
 	for i := range e {
-		component := toComponentResponse(e[i], elementsContent)
-		if component == nil {
+		c := toComponentResponse(e[i], elementsContent)
+		if c == nil {
 			continue
 		}
 
 		elements[i] = elementResponse{
 			Type: e[i].Type,
-			Body: component,
+			Body: c,
 		}
 	}
 

@@ -23,7 +23,7 @@ func NewGetProfileHandler(useCase *getprofile.UseCase) *getProfileHandler {
 func (h *getProfileHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	userUUID := auth.FromContext(r.Context()).UUID
 
-	response, err := h.useCase.Profile(userUUID)
+	response, err := h.useCase.Execute(userUUID)
 
 	switch true {
 	case errors.Is(err, domain.ErrNotExists):

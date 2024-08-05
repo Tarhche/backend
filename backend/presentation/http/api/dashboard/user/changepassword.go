@@ -40,7 +40,7 @@ func (h *changePasswordHandler) ServeHTTP(rw http.ResponseWriter, r *http.Reques
 	}
 	request.UserUUID = auth.FromContext(r.Context()).UUID
 
-	response, err := h.userCase.ChangePassword(request)
+	response, err := h.userCase.Execute(request)
 
 	switch true {
 	case errors.Is(err, domain.ErrNotExists):

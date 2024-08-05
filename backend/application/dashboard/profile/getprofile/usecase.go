@@ -14,13 +14,13 @@ func NewUseCase(userRepository user.Repository) *UseCase {
 	}
 }
 
-func (uc *UseCase) Profile(UUID string) (*GetProfileResponse, error) {
+func (uc *UseCase) Execute(UUID string) (*Response, error) {
 	u, err := uc.userRepository.GetOne(UUID)
 	if err != nil {
 		return nil, err
 	}
 
-	return &GetProfileResponse{
+	return &Response{
 		UUID:     UUID,
 		Name:     u.Name,
 		Avatar:   u.Avatar,

@@ -16,8 +16,12 @@ func NewUseCase(articleRepository article.Repository) *UseCase {
 	}
 }
 
-func (uc *UseCase) GetArticlesByHashtag(request *Request) (*GetArticlesByHashtagResponse, error) {
+func (uc *UseCase) Execute(request *Request) (*Response, error) {
 	currentPage := request.Page
+	if currentPage == 0 {
+		currentPage = 1
+	}
+
 	var offset uint = 0
 	if currentPage > 0 {
 		offset = (currentPage - 1) * limit
@@ -30,5 +34,5 @@ func (uc *UseCase) GetArticlesByHashtag(request *Request) (*GetArticlesByHashtag
 		return nil, err
 	}
 
-	return NewGetArticlesByHashtagReponse(a, currentPage), nil
+	return NewResponse(a, currentPage), nil
 }

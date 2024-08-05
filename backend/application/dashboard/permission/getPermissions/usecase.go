@@ -14,7 +14,7 @@ func NewUseCase(permissionRepository permission.Repository) *UseCase {
 	}
 }
 
-func (uc *UseCase) GetPermissions() (*Response, error) {
+func (uc *UseCase) Execute() (*Response, error) {
 	items := uc.permissionRepository.GetAll()
 
 	return NewResponse(items), nil

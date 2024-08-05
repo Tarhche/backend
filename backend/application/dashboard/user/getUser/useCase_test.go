@@ -4,64 +4,49 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/khanzadimahdi/testproject/domain/article"
+	"github.com/stretchr/testify/assert"
+
+	"github.com/khanzadimahdi/testproject/domain/user"
+	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
 )
 
-func TestUseCase_GetArticle(t *testing.T) {
-	t.Run("returns an article", func(t *testing.T) {
-		repository := MockArticlesRepository{}
+func TestUseCase_Execute(t *testing.T) {
+	t.Run("getting a user succeeds", func(t *testing.T) {
+		var (
+			userRepository users.MockUsersRepository
 
-		usecase := NewUseCase(&repository)
-		response, err := usecase.GetArticle("test-uuid")
+			userUUID = "user-uuid"
+			a        = user.User{
+				UUID: userUUID,
+			}
+			expectedResponse = Response{
+				UUID: userUUID,
+			}
+		)
 
-		if repository.GetOneCount != 1 {
-			t.Error("unexpected number of calls")
-		}
+		userRepository.On("GetOne", userUUID).Return(a, nil)
+		defer userRepository.AssertExpectations(t)
 
-		if response == nil {
-			t.Error("unexpected response")
-		}
+		response, err := NewUseCase(&userRepository).Execute(userUUID)
 
-		if err != nil {
-			t.Error("unexpected error")
-		}
+		assert.NoError(t, err)
+		assert.Equal(t, &expectedResponse, response)
 	})
 
-	t.Run("returns an error", func(t *testing.T) {
-		repository := MockArticlesRepository{
-			GetOneErr: errors.New("article not found"),
-		}
+	t.Run("getting a user fails", func(t *testing.T) {
+		var (
+			userRepository users.MockUsersRepository
 
-		usecase := NewUseCase(&repository)
-		response, err := usecase.GetArticle("test-uuid")
+			userUUID      = "user-uuid"
+			expectedError = errors.New("error")
+		)
 
-		if repository.GetOneCount != 1 {
-			t.Error("unexpected number of calls")
-		}
+		userRepository.On("GetOne", userUUID).Return(user.User{}, expectedError)
+		defer userRepository.AssertExpectations(t)
 
-		if response != nil {
-			t.Error("unexpected response")
-		}
+		response, err := NewUseCase(&userRepository).Execute(userUUID)
 
-		if err == nil {
-			t.Error("expects an error")
-		}
+		assert.ErrorIs(t, err, expectedError)
+		assert.Nil(t, response)
 	})
-}
-
-type MockArticlesRepository struct {
-	article.Repository
-
-	GetOneCount uint
-	GetOneErr   error
-}
-
-func (r *MockArticlesRepository) GetOne(UUID string) (article.Article, error) {
-	r.GetOneCount++
-
-	if r.GetOneErr != nil {
-		return article.Article{}, r.GetOneErr
-	}
-
-	return article.Article{}, nil
 }

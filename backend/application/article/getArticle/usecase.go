@@ -23,20 +23,20 @@ func NewUseCase(
 	}
 }
 
-func (uc *UseCase) GetArticle(UUID string) (*GetArticleResponse, error) {
+func (uc *UseCase) Execute(UUID string) (*Response, error) {
 	a, err := uc.articleRepository.GetOnePublished(UUID)
 	if err != nil {
 		return nil, err
 	}
-
-	defer uc.articleRepository.IncreaseView(a.UUID, 1)
 
 	elements, articles, err := uc.elements(a.UUID)
 	if err != nil {
 		return nil, err
 	}
 
-	return NewGetArticleReponse(a, elements, articles), nil
+	defer uc.articleRepository.IncreaseView(a.UUID, 1)
+
+	return NewResponse(a, elements, articles), nil
 }
 
 func (uc *UseCase) elements(UUID string) ([]element.Element, []article.Article, error) {

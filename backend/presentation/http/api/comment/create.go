@@ -28,7 +28,7 @@ func (h *createHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	}
 	request.AuthorUUID = auth.FromContext(r.Context()).UUID
 
-	response, err := h.createCommentUseCase.CreateComment(request)
+	response, err := h.createCommentUseCase.Execute(request)
 
 	switch true {
 	case errors.Is(err, domain.ErrNotExists):

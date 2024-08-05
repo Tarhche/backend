@@ -46,7 +46,7 @@ func (h *indexHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		Page: page,
 	}
 
-	response, err := h.getCommentsUseCase.GetComments(request)
+	response, err := h.getCommentsUseCase.Execute(request)
 	switch true {
 	case err != nil:
 		rw.WriteHeader(http.StatusInternalServerError)

@@ -5,15 +5,15 @@ import (
 )
 
 type UseCase struct {
-	roleRepository role.Repository
+	elementRepository role.Repository
 }
 
-func NewUseCase(roleRepository role.Repository) *UseCase {
+func NewUseCase(elementRepository role.Repository) *UseCase {
 	return &UseCase{
-		roleRepository: roleRepository,
+		elementRepository: elementRepository,
 	}
 }
 
-func (uc *UseCase) DeleteRole(request Request) error {
-	return uc.roleRepository.Delete(request.RoleUUID)
+func (uc *UseCase) Execute(request Request) error {
+	return uc.elementRepository.Delete(request.RoleUUID)
 }

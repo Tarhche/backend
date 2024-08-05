@@ -1,6 +1,6 @@
 package getprofile
 
-type GetProfileResponse struct {
+type Response struct {
 	UUID     string `json:"uuid,omitempty"`
 	Name     string `json:"name,omitempty"`
 	Avatar   string `json:"avatar,omitempty"`

@@ -16,9 +16,9 @@ func NewUseCase(userRepository user.Repository) *UseCase {
 	}
 }
 
-func (uc *UseCase) UpdateProfile(request Request) (*UpdateProfileResponse, error) {
+func (uc *UseCase) Execute(request Request) (*Response, error) {
 	if ok, validation := request.Validate(); !ok {
-		return &UpdateProfileResponse{
+		return &Response{
 			ValidationErrors: validation,
 		}, nil
 	}
@@ -28,7 +28,7 @@ func (uc *UseCase) UpdateProfile(request Request) (*UpdateProfileResponse, error
 	if err != nil {
 		return nil, err
 	} else if exists {
-		return &UpdateProfileResponse{
+		return &Response{
 			ValidationErrors: map[string]string{
 				"email": "another user with this email already exists",
 			},
@@ -40,7 +40,7 @@ func (uc *UseCase) UpdateProfile(request Request) (*UpdateProfileResponse, error
 	if err != nil {
 		return nil, err
 	} else if exists {
-		return &UpdateProfileResponse{
+		return &Response{
 			ValidationErrors: map[string]string{
 				"username": "another user with this email already exists",
 			},
@@ -62,7 +62,7 @@ func (uc *UseCase) UpdateProfile(request Request) (*UpdateProfileResponse, error
 		return nil, err
 	}
 
-	return &UpdateProfileResponse{}, err
+	return &Response{}, err
 }
 
 func (uc *UseCase) anotherUserExists(identity string, currentUserUUID string) (bool, error) {

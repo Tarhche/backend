@@ -32,7 +32,7 @@ func (h *indexHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response, err := h.getPermissionsUseCase.GetPermissions()
+	response, err := h.getPermissionsUseCase.Execute()
 	switch true {
 	case err != nil:
 		rw.WriteHeader(http.StatusInternalServerError)

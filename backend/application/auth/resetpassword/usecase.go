@@ -25,7 +25,7 @@ func NewUseCase(userRepository user.Repository, hasher password.Hasher, JWT *jwt
 	}
 }
 
-func (uc *UseCase) ResetPassword(request Request) (*Response, error) {
+func (uc *UseCase) Execute(request Request) (*Response, error) {
 	if ok, validation := request.Validate(); !ok {
 		return &Response{
 			ValidationErrors: validation,

@@ -1,5 +1,5 @@
 package updatearticle
 
-type UpdateArticleResponse struct {
+type Response struct {
 	ValidationErrors validationErrors `json:"errors,omitempty"`
 }

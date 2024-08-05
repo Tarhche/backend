@@ -36,7 +36,7 @@ func (h *showHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		Hashtag: hashtag,
 	}
 
-	response, err := h.getArticlesByHashtagUseCase.GetArticlesByHashtag(request)
+	response, err := h.getArticlesByHashtagUseCase.Execute(request)
 	switch true {
 	case err != nil:
 		rw.WriteHeader(http.StatusInternalServerError)

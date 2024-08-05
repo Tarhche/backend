@@ -32,9 +32,9 @@ func NewUseCase(
 	}
 }
 
-func (uc *UseCase) SendResetToken(request Request) (*ForgetResponse, error) {
+func (uc *UseCase) Execute(request Request) (*Response, error) {
 	if ok, validation := request.Validate(); !ok {
-		return &ForgetResponse{
+		return &Response{
 			ValidationErrors: validation,
 		}, nil
 	}
@@ -60,7 +60,7 @@ func (uc *UseCase) SendResetToken(request Request) (*ForgetResponse, error) {
 		return nil, err
 	}
 
-	return &ForgetResponse{}, nil
+	return &Response{}, nil
 }
 
 func (uc *UseCase) resetPasswordToken(u user.User) (string, error) {

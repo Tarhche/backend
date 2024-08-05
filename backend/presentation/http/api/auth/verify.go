@@ -26,7 +26,7 @@ func (h *verifyHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response, err := h.useCase.Verify(request)
+	response, err := h.useCase.Execute(request)
 
 	switch true {
 	case errors.Is(err, domain.ErrNotExists):

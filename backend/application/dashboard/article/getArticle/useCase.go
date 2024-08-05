@@ -12,11 +12,11 @@ func NewUseCase(articleRepository article.Repository) *UseCase {
 	}
 }
 
-func (uc *UseCase) GetArticle(UUID string) (*GetArticleResponse, error) {
+func (uc *UseCase) Execute(UUID string) (*Response, error) {
 	a, err := uc.articleRepository.GetOne(UUID)
 	if err != nil {
 		return nil, err
 	}
 
-	return NewGetArticleReponse(a), nil
+	return NewResponse(a), nil
 }

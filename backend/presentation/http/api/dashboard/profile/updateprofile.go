@@ -28,7 +28,7 @@ func (h *updateProfileHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request
 	}
 	request.UserUUID = auth.FromContext(r.Context()).UUID
 
-	response, err := h.useCase.UpdateProfile(request)
+	response, err := h.useCase.Execute(request)
 
 	switch true {
 	case errors.Is(err, domain.ErrNotExists):
