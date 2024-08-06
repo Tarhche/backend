@@ -15,8 +15,8 @@ const commentData = reactive({
   body: "",
   error: false
 })
-watch(()=>useState('clearDataAfterCloseComment').value , ()=>{
-  commentData.body=""
+watch(() => useState('clearDataAfterCloseComment').value, () => {
+  commentData.body = ""
 })
 
 const sendComment = () => {
@@ -26,7 +26,7 @@ const sendComment = () => {
     commentData.error = true
   }
 }
-const removeError = ()=>{
+const removeError = () => {
   commentData.error ? commentData.error = false : ""
 }
 </script>
