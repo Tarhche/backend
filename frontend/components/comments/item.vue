@@ -2,7 +2,8 @@
   <section :class="{child:child }" v-if="data">
     <section class="card mb-3">
       <div class="card-body d-flex flex-start">
-        <img v-if="data.author.avatar" class="rounded-circle shadow-1-strong ms-3" :src="useFilesUrlResolver().resolve(data.author.avatar)" alt="avatar" width="65"
+        <img v-if="data.author.avatar" class="rounded-circle shadow-1-strong ms-3"
+             :src="useFilesUrlResolver().resolve(data.author.avatar)" alt="avatar" width="65"
              height="65">
         <div class="flex-grow-1 flex-shrink-1 ">
           <div class="d-flex justify-content-between align-items-center">
@@ -28,39 +29,42 @@
       </div>
     </section>
     <section class="write-comment px-1" ref="writeComment">
-      <comments-write-new :clear-data="clearDataAfterCloseComment" :disabled="disabled" :parentInfo="data.uuid" @send-comment="sendComment" :replyTheme="true">
+      <comments-write-new :clear-data="clearDataAfterCloseComment" :disabled="disabled" :parentInfo="data.uuid"
+                          @send-comment="sendComment" :replyTheme="true">
         <button class="btn btn-sm btn-md-lg btn-danger align-self-start mt-2" @click.prevent="showWriteComment">بستن
         </button>
       </comments-write-new>
     </section>
-    <comments-item v-if="data.sub && data.sub.length" v-for="(item , index) in data.sub" :key="index" :data="item" :child="true" />
+    <comments-item v-if="data.sub && data.sub.length" v-for="(item , index) in data.sub" :key="index" :data="item"
+                   :child="true"/>
   </section>
 </template>
 
 <script setup lang="ts">
 const {uuid} = useRoute().params
 import {useFilesUrlResolver} from "~/composables/urlResolver";
+
 const disabled = ref()
 const writeComment = ref(null)
 const clearDataAfterCloseComment = ref(false)
-const {data , child} = defineProps({
+const {data, child} = defineProps({
   data: {
     type: Object,
   },
-  child:{
-    type:Boolean
+  child: {
+    type: Boolean
   }
 })
 /* در فانکشن زیر ما برای ظاهر شدن کامپوننت کامنت از maxHeight استفاده کردیم
  به این صورت که در ابتدا صفر و با کلیک برروی ریپلای به اندازه طول
  اسکرول آن بعلاوه 20 پیکسل بیشتر که ارفاع ارور آن دررمان ظاهر شدن است */
 const showWriteComment = () => {
-  if(writeComment.value.style.maxHeight){
+  if (writeComment.value.style.maxHeight) {
     writeComment.value.style.maxHeight = null
     useState('clearDataAfterCloseComment').value = true
-  }else{
-    writeComment.value.style.maxHeight = writeComment.value.scrollHeight+'px'
-    useState('clearDataAfterCloseComment').value=false
+  } else {
+    writeComment.value.style.maxHeight = writeComment.value.scrollHeight + 'px'
+    useState('clearDataAfterCloseComment').value = false
   }
 
 }
@@ -69,7 +73,7 @@ const sendComment = async (text: string, parentUuid: string) => {
     body: text,
     object_type: 'article',
     parent_uuid: parentUuid,
-    object_uuid:uuid
+    object_uuid: uuid
   }
   try {
     disabled.value = true /* برای غیر فعال شدن دکمه ارسال کامنت بعد فشرده شدن تا زمان برشگت درخواست  */
@@ -81,9 +85,8 @@ const sendComment = async (text: string, parentUuid: string) => {
     showWriteComment() /*برای بسته شدن ریپلای در صورت موفقیت آمیز بودن ارسال درخواست */
   } catch (e) {
     console.log(e)
-  }
-  finally {
-    disabled.value=false /* عملیات ارسال دیتا در نهایت هرچی که باشه دکمه ما تغیر حالت میده  */
+  } finally {
+    disabled.value = false /* عملیات ارسال دیتا در نهایت هرچی که باشه دکمه ما تغیر حالت میده  */
   }
 }
 const params = reactive({
@@ -96,9 +99,11 @@ const params = reactive({
 card {
   transition: 0.5s;
 }
-.child{
+
+.child {
   margin-right: 3%;
 }
+
 p {
   &.text {
     line-height: 30px;

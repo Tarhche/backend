@@ -4,7 +4,7 @@
       <span class="fa-regular fa-comment"></span>
       <span class="mx-1">دیدگاه ها</span>
     </h5>
-    <comments-write-new :clear-data="clearDataAfterCloseComment" :disabled="disabled"
+    <comments-write-new :disabled="disabled"
                         @sendComment="sendComment" v-if="params.isLogin"/>
     <div v-else class="alert alert-light">
       <i class="fa-regular fa-bell fa-shake fa-xl"></i>
