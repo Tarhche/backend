@@ -36,7 +36,7 @@ func (h *showHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 	UUID := httprouter.ParamsFromContext(r.Context()).ByName("uuid")
 
-	response, err := h.getElementUseCase.GetElement(UUID)
+	response, err := h.getElementUseCase.Execute(UUID)
 
 	switch true {
 	case errors.Is(err, domain.ErrNotExists):

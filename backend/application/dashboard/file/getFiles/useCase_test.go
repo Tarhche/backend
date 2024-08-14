@@ -4,116 +4,113 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/khanzadimahdi/testproject/domain/file"
+	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/files"
 )
 
-func TestUseCase_GetFiles(t *testing.T) {
-	t.Run("returns files", func(t *testing.T) {
-		repository := MockFilesRepository{}
+func TestUseCase_Execute(t *testing.T) {
+	t.Run("getting files", func(t *testing.T) {
+		var (
+			filesRepository files.MockFilesRepository
 
-		usecase := NewUseCase(&repository)
+			r = Request{
+				Page: 0,
+			}
 
-		request := Request{Page: 1}
-		response, err := usecase.GetFiles(&request)
+			f = []file.File{
+				{
+					UUID:      "test-uuid-01",
+					Name:      "role-name-01",
+					Size:      1000,
+					OwnerUUID: "user-uuid-01",
+				},
+				{
+					UUID: "test-uuid-02",
+					Name: "role-name-02",
+				},
+				{Name: "role-name-03"},
+			}
 
-		if repository.GetCountCount != 1 {
-			t.Errorf("unexpected number of calls %d", repository.GetCountCount)
-		}
+			expectedResponse = Response{
+				Items: []fileResponse{
+					{
+						UUID:      f[0].UUID,
+						Name:      f[0].Name,
+						Size:      f[0].Size,
+						OwnerUUID: f[0].OwnerUUID,
+					},
+					{
+						UUID:      f[1].UUID,
+						Name:      f[1].Name,
+						Size:      f[1].Size,
+						OwnerUUID: f[1].OwnerUUID,
+					},
+					{
+						UUID:      f[2].UUID,
+						Name:      f[2].Name,
+						Size:      f[2].Size,
+						OwnerUUID: f[2].OwnerUUID,
+					},
+				},
+				Pagination: pagination{
+					TotalPages:  1,
+					CurrentPage: 1,
+				},
+			}
+		)
 
-		if repository.GetAllCount != 1 {
-			t.Errorf("unexpected number of calls %d", repository.GetAllCount)
-		}
+		filesRepository.On("Count").Once().Return(uint(len(f)), nil)
+		filesRepository.On("GetAll", uint(0), uint(10)).Once().Return(f, nil)
+		defer filesRepository.AssertExpectations(t)
 
-		if response == nil {
-			t.Error("unexpected response")
-		}
+		response, err := NewUseCase(&filesRepository).Execute(&r)
 
-		if err != nil {
-			t.Error("unexpected error")
-		}
+		assert.NoError(t, err)
+		assert.Equal(t, &expectedResponse, response)
 	})
 
-	t.Run("returns an error on counting items", func(t *testing.T) {
-		repository := MockFilesRepository{
-			GetCountErr: errors.New("error on counting"),
-		}
+	t.Run("failure on counting files", func(t *testing.T) {
+		var (
+			filesRepository files.MockFilesRepository
 
-		usecase := NewUseCase(&repository)
+			r = Request{
+				Page: 0,
+			}
 
-		request := Request{Page: 1}
-		response, err := usecase.GetFiles(&request)
+			expectedError = errors.New("error")
+		)
 
-		if repository.GetCountCount != 1 {
-			t.Errorf("unexpected number of calls %d", repository.GetCountCount)
-		}
+		filesRepository.On("Count").Once().Return(uint(0), expectedError)
+		defer filesRepository.AssertExpectations(t)
 
-		if repository.GetAllCount != 1 {
-			t.Errorf("unexpected number of calls %d", repository.GetAllCount)
-		}
+		response, err := NewUseCase(&filesRepository).Execute(&r)
 
-		if response == nil {
-			t.Error("unexpected response")
-		}
+		filesRepository.AssertNotCalled(t, "GetAll")
 
-		if err != nil {
-			t.Error("expects an error")
-		}
+		assert.ErrorIs(t, err, expectedError)
+		assert.Nil(t, response)
 	})
 
-	t.Run("returns an error on getting items", func(t *testing.T) {
-		repository := MockFilesRepository{
-			GetAllErr: errors.New("article not found"),
-		}
+	t.Run("failure on getting files", func(t *testing.T) {
+		var (
+			filesRepository files.MockFilesRepository
 
-		usecase := NewUseCase(&repository)
+			r = Request{
+				Page: 0,
+			}
 
-		request := Request{Page: 1}
-		response, err := usecase.GetFiles(&request)
+			expectedError = errors.New("error")
+		)
 
-		if repository.GetCountCount != 1 {
-			t.Errorf("unexpected number of calls %d", repository.GetCountCount)
-		}
+		filesRepository.On("Count").Once().Return(uint(3), nil)
+		filesRepository.On("GetAll", uint(0), uint(10)).Once().Return(nil, expectedError)
+		defer filesRepository.AssertExpectations(t)
 
-		if repository.GetAllCount != 0 {
-			t.Errorf("unexpected number of calls %d", repository.GetAllCount)
-		}
+		response, err := NewUseCase(&filesRepository).Execute(&r)
 
-		if response != nil {
-			t.Error("unexpected response")
-		}
-
-		if err == nil {
-			t.Error("expects an error")
-		}
+		assert.ErrorIs(t, err, expectedError)
+		assert.Nil(t, response)
 	})
-}
-
-type MockFilesRepository struct {
-	file.Repository
-
-	GetAllCount uint
-	GetAllErr   error
-
-	GetCountCount uint
-	GetCountErr   error
-}
-
-func (r *MockFilesRepository) GetAll(offset uint, limit uint) ([]file.File, error) {
-	r.GetAllCount++
-
-	if r.GetAllErr != nil {
-		return nil, r.GetAllErr
-	}
-
-	return []file.File{}, nil
-}
-
-func (r *MockFilesRepository) Count() (uint, error) {
-	r.GetCountCount++
-
-	if r.GetAllErr != nil {
-		return 0, r.GetAllErr
-	}
-
-	return 1, nil
 }

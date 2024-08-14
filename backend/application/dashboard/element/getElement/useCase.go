@@ -12,11 +12,11 @@ func NewUseCase(elementRepository element.Repository) *UseCase {
 	}
 }
 
-func (uc *UseCase) GetElement(UUID string) (*GetElementResponse, error) {
+func (uc *UseCase) Execute(UUID string) (*Response, error) {
 	a, err := uc.elementRepository.GetOne(UUID)
 	if err != nil {
 		return nil, err
 	}
 
-	return NewGetElementReponse(a), nil
+	return NewResponse(a), nil
 }

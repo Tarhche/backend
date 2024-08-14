@@ -6,6 +6,11 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/article"
 )
 
+type Response struct {
+	Items      []articleResponse `json:"items"`
+	Pagination pagination        `json:"pagination"`
+}
+
 type articleResponse struct {
 	UUID        string    `json:"uuid"`
 	Cover       string    `json:"cover"`
@@ -13,11 +18,6 @@ type articleResponse struct {
 	Title       string    `json:"title"`
 	PublishedAt time.Time `json:"published_at"`
 	Author      author    `json:"author"`
-}
-
-type GetArticlesResponse struct {
-	Items      []articleResponse `json:"items"`
-	Pagination pagination        `json:"pagination"`
 }
 
 type author struct {
@@ -30,7 +30,7 @@ type pagination struct {
 	CurrentPage uint `json:"current_page"`
 }
 
-func NewGetArticlesResponse(a []article.Article, totalPages, currentPage uint) *GetArticlesResponse {
+func NewResponse(a []article.Article, totalPages, currentPage uint) *Response {
 	items := make([]articleResponse, len(a))
 
 	for i := range a {
@@ -44,7 +44,7 @@ func NewGetArticlesResponse(a []article.Article, totalPages, currentPage uint) *
 		items[i].Author.Avatar = a[i].Author.Avatar
 	}
 
-	return &GetArticlesResponse{
+	return &Response{
 		Items: items,
 		Pagination: pagination{
 			TotalPages:  totalPages,

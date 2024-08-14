@@ -6,18 +6,18 @@ import (
 )
 
 type UseCase struct {
-	roleRepository       role.Repository
+	elementRepository    role.Repository
 	permissionRepository permission.Repository
 }
 
-func NewUseCase(roleRepository role.Repository, permissionRepository permission.Repository) *UseCase {
+func NewUseCase(elementRepository role.Repository, permissionRepository permission.Repository) *UseCase {
 	return &UseCase{
-		roleRepository:       roleRepository,
+		elementRepository:    elementRepository,
 		permissionRepository: permissionRepository,
 	}
 }
 
-func (uc *UseCase) CreateRole(request Request) (*Response, error) {
+func (uc *UseCase) Execute(request Request) (*Response, error) {
 	if ok, validation := request.Validate(); !ok {
 		return &Response{
 			ValidationErrors: validation,
@@ -26,7 +26,7 @@ func (uc *UseCase) CreateRole(request Request) (*Response, error) {
 
 	if permissions, err := uc.permissionRepository.Get(request.Permissions); err != nil {
 		return nil, err
-	} else if len(permissions) != len(request.Permissions) {
+	} else if len(permissions) < len(request.Permissions) {
 		return &Response{
 			ValidationErrors: validationErrors{
 				"permissions": "one or more of permissions not exist",
@@ -41,7 +41,7 @@ func (uc *UseCase) CreateRole(request Request) (*Response, error) {
 		UserUUIDs:   request.UserUUIDs,
 	}
 
-	uuid, err := uc.roleRepository.Save(&r)
+	uuid, err := uc.elementRepository.Save(&r)
 	if err != nil {
 		return nil, err
 	}

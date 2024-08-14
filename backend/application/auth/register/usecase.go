@@ -32,19 +32,16 @@ func NewUseCase(
 	}
 }
 
-func (uc *UseCase) Register(request Request) (*Response, error) {
+func (uc *UseCase) Execute(request Request) (*Response, error) {
 	if ok, validation := request.Validate(); !ok {
 		return &Response{
 			ValidationErrors: validation,
 		}, nil
 	}
 
-	exists, err := uc.IdentityExists(request.Identity)
-	if err != nil {
+	if exists, err := uc.userExists(request.Identity); err != nil {
 		return nil, err
-	}
-
-	if exists {
+	} else if exists {
 		return &Response{
 			ValidationErrors: map[string]string{
 				"identity": "user with given email already exists",
@@ -71,13 +68,15 @@ func (uc *UseCase) Register(request Request) (*Response, error) {
 	return &Response{}, nil
 }
 
-func (uc *UseCase) IdentityExists(identity string) (bool, error) {
-	_, err := uc.userRepository.GetOneByIdentity(identity)
+func (uc *UseCase) userExists(identity string) (bool, error) {
+	u, err := uc.userRepository.GetOneByIdentity(identity)
 	if errors.Is(err, domain.ErrNotExists) {
-		return true, nil
+		return false, nil
+	} else if err != nil {
+		return false, err
 	}
 
-	return false, err
+	return u.Email == identity || u.Username == identity, nil
 }
 
 func (uc *UseCase) registrationToken(identity string) (string, error) {

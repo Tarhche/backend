@@ -18,7 +18,7 @@ func NewUseCase(filesRepository file.Repository, storage file.Storage) *UseCase 
 	}
 }
 
-func (uc *UseCase) DeleteFile(request Request) error {
+func (uc *UseCase) Execute(request Request) error {
 	file, err := uc.filesRepository.GetOne(request.FileUUID)
 	if err != nil {
 		return err

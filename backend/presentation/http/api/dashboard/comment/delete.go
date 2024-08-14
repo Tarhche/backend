@@ -39,7 +39,7 @@ func (h *deleteHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		CommentUUID: UUID,
 	}
 
-	err := h.deleteCommentUseCase.DeleteComment(request)
+	err := h.deleteCommentUseCase.Execute(request)
 	switch true {
 	case errors.Is(err, domain.ErrNotExists):
 		rw.WriteHeader(http.StatusNotFound)

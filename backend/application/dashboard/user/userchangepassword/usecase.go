@@ -19,9 +19,9 @@ func NewUseCase(userRepository user.Repository, hasher password.Hasher) *UseCase
 	}
 }
 
-func (uc *UseCase) ChangePassword(request Request) (*ChangePasswordResponse, error) {
+func (uc *UseCase) Execute(request Request) (*Response, error) {
 	if ok, validation := request.Validate(); !ok {
-		return &ChangePasswordResponse{
+		return &Response{
 			ValidationErrors: validation,
 		}, nil
 	}
@@ -45,5 +45,5 @@ func (uc *UseCase) ChangePassword(request Request) (*ChangePasswordResponse, err
 		return nil, err
 	}
 
-	return &ChangePasswordResponse{}, err
+	return &Response{}, err
 }

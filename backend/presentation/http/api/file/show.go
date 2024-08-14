@@ -24,7 +24,7 @@ func (h *showHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	UUID := httprouter.ParamsFromContext(r.Context()).ByName("uuid")
 
 	var buffer bytes.Buffer
-	err := h.showFileUseCase.GetFile(UUID, &buffer)
+	err := h.showFileUseCase.Execute(UUID, &buffer)
 
 	switch true {
 	case errors.Is(err, domain.ErrNotExists):

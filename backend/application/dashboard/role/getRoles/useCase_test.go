@@ -4,116 +4,108 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/khanzadimahdi/testproject/domain/article"
+	"github.com/stretchr/testify/assert"
+
+	"github.com/khanzadimahdi/testproject/domain/role"
+	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/roles"
 )
 
-func TestUseCase_GetArticles(t *testing.T) {
-	t.Run("returns articles", func(t *testing.T) {
-		repository := MockArticlesRepository{}
+func TestUseCase_Execute(t *testing.T) {
+	t.Run("getting roles", func(t *testing.T) {
+		var (
+			rolesRepository roles.MockRolesRepository
 
-		usecase := NewUseCase(&repository)
+			r = Request{
+				Page: 0,
+			}
 
-		request := Request{Page: 1}
-		response, err := usecase.GetArticles(&request)
+			p = []role.Role{
+				{
+					UUID:        "test-uuid-01",
+					Name:        "role-name-01",
+					Description: "test role description-01",
+					Permissions: []string{"permission-1"},
+					UserUUIDs:   []string{"user-uuid-1"},
+				},
+				{
+					UUID: "test-uuid-02",
+					Name: "role-name-02",
+				},
+				{Name: "role-name-03"},
+			}
 
-		if repository.GetCountCount != 1 {
-			t.Errorf("unexpected number of calls %d", repository.GetCountCount)
-		}
+			expectedResponse = Response{
+				Items: []roleResponse{
+					{
+						UUID:        p[0].UUID,
+						Name:        p[0].Name,
+						Description: p[0].Description,
+					},
+					{
+						UUID: p[1].UUID,
+						Name: p[1].Name,
+					},
+					{
+						Name: p[2].Name,
+					},
+				},
+				Pagination: pagination{
+					TotalPages:  1,
+					CurrentPage: 1,
+				},
+			}
+		)
 
-		if repository.GetAllCount != 1 {
-			t.Errorf("unexpected number of calls %d", repository.GetAllCount)
-		}
+		rolesRepository.On("Count").Once().Return(uint(len(p)), nil)
+		rolesRepository.On("GetAll", uint(0), uint(10)).Once().Return(p, nil)
+		defer rolesRepository.AssertExpectations(t)
 
-		if response == nil {
-			t.Error("unexpected response")
-		}
+		response, err := NewUseCase(&rolesRepository).Execute(&r)
 
-		if err != nil {
-			t.Error("unexpected error")
-		}
+		assert.NoError(t, err)
+		assert.Equal(t, &expectedResponse, response)
 	})
 
-	t.Run("returns an error on counting items", func(t *testing.T) {
-		repository := MockArticlesRepository{
-			GetCountErr: errors.New("error on counting"),
-		}
+	t.Run("failure on counting roles", func(t *testing.T) {
+		var (
+			rolesRepository roles.MockRolesRepository
 
-		usecase := NewUseCase(&repository)
+			r = Request{
+				Page: 0,
+			}
 
-		request := Request{Page: 1}
-		response, err := usecase.GetArticles(&request)
+			expectedError = errors.New("error")
+		)
 
-		if repository.GetCountCount != 1 {
-			t.Errorf("unexpected number of calls %d", repository.GetCountCount)
-		}
+		rolesRepository.On("Count").Once().Return(uint(0), expectedError)
+		defer rolesRepository.AssertExpectations(t)
 
-		if repository.GetAllCount != 1 {
-			t.Errorf("unexpected number of calls %d", repository.GetAllCount)
-		}
+		response, err := NewUseCase(&rolesRepository).Execute(&r)
 
-		if response == nil {
-			t.Error("unexpected response")
-		}
+		rolesRepository.AssertNotCalled(t, "GetAll")
 
-		if err != nil {
-			t.Error("expects an error")
-		}
+		assert.ErrorIs(t, err, expectedError)
+		assert.Nil(t, response)
 	})
 
-	t.Run("returns an error on getting items", func(t *testing.T) {
-		repository := MockArticlesRepository{
-			GetAllErr: errors.New("article not found"),
-		}
+	t.Run("failure on getting roles", func(t *testing.T) {
+		var (
+			rolesRepository roles.MockRolesRepository
 
-		usecase := NewUseCase(&repository)
+			r = Request{
+				Page: 0,
+			}
 
-		request := Request{Page: 1}
-		response, err := usecase.GetArticles(&request)
+			expectedError = errors.New("error")
+		)
 
-		if repository.GetCountCount != 1 {
-			t.Errorf("unexpected number of calls %d", repository.GetCountCount)
-		}
+		rolesRepository.On("Count").Once().Return(uint(3), nil)
+		rolesRepository.On("GetAll", uint(0), uint(10)).Once().Return(nil, expectedError)
+		defer rolesRepository.AssertExpectations(t)
 
-		if repository.GetAllCount != 0 {
-			t.Errorf("unexpected number of calls %d", repository.GetAllCount)
-		}
+		response, err := NewUseCase(&rolesRepository).Execute(&r)
 
-		if response != nil {
-			t.Error("unexpected response")
-		}
-
-		if err == nil {
-			t.Error("expects an error")
-		}
+		assert.ErrorIs(t, err, expectedError)
+		assert.Nil(t, response)
 	})
-}
-
-type MockArticlesRepository struct {
-	article.Repository
-
-	GetAllCount uint
-	GetAllErr   error
-
-	GetCountCount uint
-	GetCountErr   error
-}
-
-func (r *MockArticlesRepository) GetAll(offset uint, limit uint) ([]article.Article, error) {
-	r.GetAllCount++
-
-	if r.GetAllErr != nil {
-		return nil, r.GetAllErr
-	}
-
-	return []article.Article{}, nil
-}
-
-func (r *MockArticlesRepository) Count() (uint, error) {
-	r.GetCountCount++
-
-	if r.GetAllErr != nil {
-		return 0, r.GetAllErr
-	}
-
-	return 1, nil
 }

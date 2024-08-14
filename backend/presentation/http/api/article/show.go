@@ -23,7 +23,7 @@ func NewShowHandler(getArticleUseCase *getarticle.UseCase) *showHandler {
 func (h *showHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	UUID := httprouter.ParamsFromContext(r.Context()).ByName("uuid")
 
-	response, err := h.getArticleUseCase.GetArticle(UUID)
+	response, err := h.getArticleUseCase.Execute(UUID)
 
 	switch true {
 	case errors.Is(err, domain.ErrNotExists):

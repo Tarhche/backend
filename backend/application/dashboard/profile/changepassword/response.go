@@ -1,5 +1,5 @@
 package changepassword
 
-type ChangePasswordResponse struct {
+type Response struct {
 	ValidationErrors validationErrors `json:"errors,omitempty"`
 }

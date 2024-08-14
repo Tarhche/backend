@@ -14,9 +14,9 @@ func NewUseCase(elementRepository element.Repository) *UseCase {
 	}
 }
 
-func (uc *UseCase) CreateElement(request Request) (*CreateElementResponse, error) {
+func (uc *UseCase) Execute(request Request) (*Response, error) {
 	if ok, validation := request.Validate(); !ok {
-		return &CreateElementResponse{
+		return &Response{
 			ValidationErrors: validation,
 		}, nil
 	}
@@ -32,5 +32,5 @@ func (uc *UseCase) CreateElement(request Request) (*CreateElementResponse, error
 		return nil, err
 	}
 
-	return &CreateElementResponse{UUID: uuid}, err
+	return &Response{UUID: uuid}, err
 }

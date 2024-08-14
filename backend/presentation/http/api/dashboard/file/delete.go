@@ -35,7 +35,7 @@ func (h *deleteHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 	UUID := httprouter.ParamsFromContext(r.Context()).ByName("uuid")
 
-	err := h.deleteFileUseCase.DeleteFile(deletefile.Request{
+	err := h.deleteFileUseCase.Execute(deletefile.Request{
 		FileUUID: UUID,
 	})
 

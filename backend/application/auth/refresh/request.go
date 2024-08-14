@@ -7,5 +7,11 @@ type Request struct {
 }
 
 func (r *Request) Validate() (bool, validationErrors) {
-	return true, nil
+	errors := make(validationErrors)
+
+	if len(r.Token) == 0 {
+		errors["token"] = "token is required"
+	}
+
+	return len(errors) == 0, errors
 }

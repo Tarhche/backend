@@ -25,5 +25,5 @@ func (r *Request) Validate() (bool, validationErrors) {
 		errors["name"] = "name is required"
 	}
 
-	return len(errors) > 0, errors
+	return len(errors) == 0, errors
 }

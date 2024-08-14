@@ -9,5 +9,19 @@ type Request struct {
 }
 
 func (r *Request) Validate() (bool, validationErrors) {
-	return true, nil
+	errors := make(validationErrors)
+
+	if len(r.UserUUID) == 0 {
+		errors["uuid"] = "user's universal unique identifier (uuid) is required"
+	}
+
+	if len(r.NewPassword) == 0 {
+		errors["current_password"] = "current password is required"
+	}
+
+	if len(r.NewPassword) == 0 {
+		errors["new_password"] = "password is required"
+	}
+
+	return len(errors) == 0, errors
 }

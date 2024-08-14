@@ -15,9 +15,9 @@ func NewUseCase(articleRepository article.Repository) *UseCase {
 	}
 }
 
-func (uc *UseCase) UpdateArticle(request Request) (*UpdateArticleResponse, error) {
+func (uc *UseCase) Execute(request Request) (*Response, error) {
 	if ok, validation := request.Validate(); !ok {
-		return &UpdateArticleResponse{
+		return &Response{
 			ValidationErrors: validation,
 		}, nil
 	}
@@ -40,5 +40,5 @@ func (uc *UseCase) UpdateArticle(request Request) (*UpdateArticleResponse, error
 		return nil, err
 	}
 
-	return &UpdateArticleResponse{}, nil
+	return &Response{}, nil
 }

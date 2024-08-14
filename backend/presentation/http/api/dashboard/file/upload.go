@@ -43,7 +43,7 @@ func (h *createHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	response, err := h.uploadFileUseCase.UploadFile(uploadfile.Request{
+	response, err := h.uploadFileUseCase.Execute(uploadfile.Request{
 		Name:       header.Filename,
 		OwnerUUID:  auth.FromContext(r.Context()).UUID,
 		Size:       header.Size,

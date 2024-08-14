@@ -58,7 +58,7 @@ func (storage *MinIO) Delete(ctx context.Context, objectName string) error {
 	return storage.client.RemoveObject(ctx, storage.bucketName, objectName, minio.RemoveObjectOptions{})
 }
 
-func (storage *MinIO) Read(ctx context.Context, objectName string) (*minio.Object, error) {
+func (storage *MinIO) Read(ctx context.Context, objectName string) (io.ReadCloser, error) {
 	obj, err := storage.client.GetObject(ctx, storage.bucketName, objectName, minio.GetObjectOptions{})
 	if err != nil {
 		return nil, err

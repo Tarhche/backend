@@ -18,9 +18,9 @@ func NewUseCase(filesRepository file.Repository, storage file.Storage) *UseCase 
 	}
 }
 
-func (uc *UseCase) UploadFile(request Request) (*UploadFileResponse, error) {
+func (uc *UseCase) Execute(request Request) (*Response, error) {
 	if ok, validation := request.Validate(); !ok {
-		return &UploadFileResponse{
+		return &Response{
 			ValidationErrors: validation,
 		}, nil
 	}
@@ -38,5 +38,5 @@ func (uc *UseCase) UploadFile(request Request) (*UploadFileResponse, error) {
 		return nil, err
 	}
 
-	return &UploadFileResponse{UUID: uuid}, nil
+	return &Response{UUID: uuid}, nil
 }

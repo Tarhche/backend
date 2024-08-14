@@ -1,5 +1,5 @@
 package updateprofile
 
-type UpdateProfileResponse struct {
+type Response struct {
 	ValidationErrors validationErrors `json:"errors,omitempty"`
 }

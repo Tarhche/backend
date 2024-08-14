@@ -19,13 +19,17 @@ func NewUseCase(commentRepository comment.Repository, userRepository user.Reposi
 	}
 }
 
-func (uc *UseCase) GetComments(request *Request) (*Response, error) {
+func (uc *UseCase) Execute(request *Request) (*Response, error) {
 	totalComments, err := uc.commentRepository.CountApprovedByObjectUUID(request.ObjectType, request.ObjectUUID)
 	if err != nil {
 		return nil, err
 	}
 
 	currentPage := request.Page
+	if currentPage == 0 {
+		currentPage = 1
+	}
+
 	var offset uint = 0
 	if currentPage > 0 {
 		offset = (currentPage - 1) * limit

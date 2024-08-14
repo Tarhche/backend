@@ -8,7 +8,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/element/component"
 )
 
-type GetArticleResponse struct {
+type Response struct {
 	UUID        string            `json:"uuid"`
 	Cover       string            `json:"cover"`
 	Video       string            `json:"video"`
@@ -56,7 +56,7 @@ type jumbotronComponentResponse struct {
 	itemComponentResponse
 }
 
-func NewGetArticleReponse(a article.Article, e []element.Element, elementsContent []article.Article) *GetArticleResponse {
+func NewResponse(a article.Article, e []element.Element, elementsContent []article.Article) *Response {
 	tags := make([]string, len(a.Tags))
 	copy(tags, a.Tags)
 
@@ -68,7 +68,7 @@ func NewGetArticleReponse(a article.Article, e []element.Element, elementsConten
 		}
 	}
 
-	return &GetArticleResponse{
+	return &Response{
 		UUID:        a.UUID,
 		Cover:       a.Cover,
 		Video:       a.Video,

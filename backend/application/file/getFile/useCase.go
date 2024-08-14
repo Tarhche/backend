@@ -19,16 +19,17 @@ func NewUseCase(filesRepository file.Repository, storage file.Storage) *UseCase 
 	}
 }
 
-func (uc *UseCase) GetFile(UUID string, writer io.Writer) error {
-	file, err := uc.filesRepository.GetOne(UUID)
+func (uc *UseCase) Execute(UUID string, writer io.Writer) error {
+	f, err := uc.filesRepository.GetOne(UUID)
 	if err != nil {
 		return err
 	}
 
-	reader, err := uc.storage.Read(context.Background(), file.Name)
+	reader, err := uc.storage.Read(context.Background(), f.Name)
 	if err != nil {
 		return err
 	}
+	defer reader.Close()
 
 	_, err = io.Copy(writer, reader)
 

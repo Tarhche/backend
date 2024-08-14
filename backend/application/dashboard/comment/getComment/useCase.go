@@ -17,7 +17,7 @@ func NewUseCase(commentRepository comment.Repository, userRepository user.Reposi
 	}
 }
 
-func (uc *UseCase) GetArticle(UUID string) (*Response, error) {
+func (uc *UseCase) Execute(UUID string) (*Response, error) {
 	c, err := uc.commentRepository.GetOne(UUID)
 	if err != nil {
 		return nil, err

@@ -38,7 +38,7 @@ func (h *deleteHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		ArticleUUID: UUID,
 	}
 
-	err := h.deleteArticleUseCase.DeleteArticle(request)
+	err := h.deleteArticleUseCase.Execute(request)
 	switch true {
 	case errors.Is(err, domain.ErrNotExists):
 		rw.WriteHeader(http.StatusNotFound)

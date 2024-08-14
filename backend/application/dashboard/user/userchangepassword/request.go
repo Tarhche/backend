@@ -18,5 +18,5 @@ func (r *Request) Validate() (bool, validationErrors) {
 		errors["new_password"] = "password is required"
 	}
 
-	return len(errors) > 0, errors
+	return len(errors) == 0, errors
 }

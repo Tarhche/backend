@@ -6,6 +6,11 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/element"
 )
 
+type Response struct {
+	Items      []elementResponse `json:"items"`
+	Pagination pagination        `json:"pagination"`
+}
+
 type elementResponse struct {
 	UUID      string    `json:"uuid"`
 	Type      string    `json:"type"`
@@ -14,17 +19,12 @@ type elementResponse struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-type GetElementsResponse struct {
-	Items      []elementResponse `json:"items"`
-	Pagination pagination        `json:"pagination"`
-}
-
 type pagination struct {
 	TotalPages  uint `json:"total_pages"`
 	CurrentPage uint `json:"current_page"`
 }
 
-func NewGetElementsReponse(a []element.Element, totalPages, currentPage uint) *GetElementsResponse {
+func NewResponse(a []element.Element, totalPages, currentPage uint) *Response {
 	items := make([]elementResponse, len(a))
 
 	for i := range a {
@@ -35,7 +35,7 @@ func NewGetElementsReponse(a []element.Element, totalPages, currentPage uint) *G
 		items[i].UpdatedAt = a[i].UpdatedAt
 	}
 
-	return &GetElementsResponse{
+	return &Response{
 		Items: items,
 		Pagination: pagination{
 			TotalPages:  totalPages,

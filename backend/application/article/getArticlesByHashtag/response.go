@@ -6,31 +6,31 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/article"
 )
 
+type Response struct {
+	Items      []articleResponse  `json:"items"`
+	Pagination paginationResponse `json:"paginationResponse"`
+}
+
 type articleResponse struct {
-	UUID        string    `json:"uuid"`
-	Cover       string    `json:"cover"`
-	Video       string    `json:"video"`
-	Title       string    `json:"title"`
-	Excerpt     string    `json:"excerpt"`
-	PublishedAt time.Time `json:"published_at"`
-	Author      author    `json:"author"`
+	UUID        string         `json:"uuid"`
+	Cover       string         `json:"cover"`
+	Video       string         `json:"video"`
+	Title       string         `json:"title"`
+	Excerpt     string         `json:"excerpt"`
+	PublishedAt time.Time      `json:"published_at"`
+	Author      authorResponse `json:"authorResponse"`
 }
 
-type GetArticlesByHashtagResponse struct {
-	Items      []articleResponse `json:"items"`
-	Pagination pagination        `json:"pagination"`
-}
-
-type author struct {
+type authorResponse struct {
 	Name   string `json:"name"`
 	Avatar string `json:"avatar"`
 }
 
-type pagination struct {
+type paginationResponse struct {
 	CurrentPage uint `json:"current_page"`
 }
 
-func NewGetArticlesByHashtagReponse(a []article.Article, currentPage uint) *GetArticlesByHashtagResponse {
+func NewResponse(a []article.Article, currentPage uint) *Response {
 	items := make([]articleResponse, len(a))
 
 	for i := range a {
@@ -45,9 +45,9 @@ func NewGetArticlesByHashtagReponse(a []article.Article, currentPage uint) *GetA
 		items[i].Author.Avatar = a[i].Author.Avatar
 	}
 
-	return &GetArticlesByHashtagResponse{
+	return &Response{
 		Items: items,
-		Pagination: pagination{
+		Pagination: paginationResponse{
 			CurrentPage: currentPage,
 		},
 	}

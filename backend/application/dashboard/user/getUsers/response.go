@@ -2,17 +2,17 @@ package getusers
 
 import "github.com/khanzadimahdi/testproject/domain/user"
 
+type Response struct {
+	Items      []userResponse `json:"items"`
+	Pagination pagination     `json:"pagination"`
+}
+
 type userResponse struct {
 	UUID     string `json:"uuid,omitempty"`
 	Name     string `json:"name,omitempty"`
 	Avatar   string `json:"avatar,omitempty"`
 	Email    string `json:"email,omitempty"`
 	Username string `json:"username,omitempty"`
-}
-
-type Response struct {
-	Items      []userResponse `json:"items"`
-	Pagination pagination     `json:"pagination"`
 }
 
 type pagination struct {

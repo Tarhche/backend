@@ -15,7 +15,7 @@ func NewUseCase(commentRepository comment.Repository) *UseCase {
 	}
 }
 
-func (uc *UseCase) CreateComment(request Request) (*Response, error) {
+func (uc *UseCase) Execute(request Request) (*Response, error) {
 	if ok, validation := request.Validate(); !ok {
 		return &Response{
 			ValidationErrors: validation,

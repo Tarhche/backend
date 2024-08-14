@@ -1,5 +1,5 @@
 package updateelement
 
-type UpdateElementResponse struct {
+type Response struct {
 	ValidationErrors validationErrors `json:"errors,omitempty"`
 }

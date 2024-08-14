@@ -3,23 +3,20 @@ package updateuser
 import (
 	"errors"
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/password"
 	"github.com/khanzadimahdi/testproject/domain/user"
 )
 
 type UseCase struct {
 	userRepository user.Repository
-	hasher         password.Hasher
 }
 
-func NewUseCase(userRepository user.Repository, hasher password.Hasher) *UseCase {
+func NewUseCase(userRepository user.Repository) *UseCase {
 	return &UseCase{
 		userRepository: userRepository,
-		hasher:         hasher,
 	}
 }
 
-func (uc *UseCase) UpdateUser(request Request) (*Response, error) {
+func (uc *UseCase) Execute(request Request) (*Response, error) {
 	if ok, validation := request.Validate(); !ok {
 		return &Response{
 			ValidationErrors: validation,

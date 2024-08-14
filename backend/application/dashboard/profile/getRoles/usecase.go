@@ -7,17 +7,17 @@ import (
 const limit = 10
 
 type UseCase struct {
-	roleRepository role.Repository
+	elementRepository role.Repository
 }
 
-func NewUseCase(roleRepository role.Repository) *UseCase {
+func NewUseCase(elementRepository role.Repository) *UseCase {
 	return &UseCase{
-		roleRepository: roleRepository,
+		elementRepository: elementRepository,
 	}
 }
 
-func (uc *UseCase) GetRoles(UUID string) (*Response, error) {
-	roles, err := uc.roleRepository.GetByUserUUID(UUID)
+func (uc *UseCase) Execute(UUID string) (*Response, error) {
+	roles, err := uc.elementRepository.GetByUserUUID(UUID)
 	if err != nil {
 		return nil, err
 	}

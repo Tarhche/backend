@@ -6,7 +6,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/element"
 )
 
-type GetElementResponse struct {
+type Response struct {
 	UUID      string    `json:"uuid"`
 	Type      string    `json:"type"`
 	Body      any       `json:"body"`
@@ -15,8 +15,8 @@ type GetElementResponse struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-func NewGetElementReponse(e element.Element) *GetElementResponse {
-	return &GetElementResponse{
+func NewResponse(e element.Element) *Response {
+	return &Response{
 		UUID:      e.UUID,
 		Type:      e.Type,
 		Body:      e.Body,

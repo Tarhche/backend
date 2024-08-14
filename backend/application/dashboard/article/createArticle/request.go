@@ -18,5 +18,23 @@ type Request struct {
 }
 
 func (r *Request) Validate() (bool, validationErrors) {
-	return true, nil
+	errors := make(validationErrors)
+
+	if len(r.Title) == 0 {
+		errors["title"] = "title is required"
+	}
+
+	if len(r.Excerpt) == 0 {
+		errors["excerpt"] = "excerpt is required"
+	}
+
+	if len(r.Body) == 0 {
+		errors["body"] = "body is required"
+	}
+
+	if len(r.AuthorUUID) == 0 {
+		errors["author"] = "author is required"
+	}
+
+	return len(errors) == 0, errors
 }

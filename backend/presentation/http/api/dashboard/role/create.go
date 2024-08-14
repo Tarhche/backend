@@ -39,7 +39,7 @@ func (h *createHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response, err := h.createRoleUseCase.CreateRole(request)
+	response, err := h.createRoleUseCase.Execute(request)
 
 	switch true {
 	case errors.Is(err, domain.ErrNotExists):

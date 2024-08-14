@@ -21,7 +21,7 @@ func NewGetRolesHandler(getRolesUseCase *getroles.UseCase) *getRolesHandler {
 func (h *getRolesHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	userUUID := auth.FromContext(r.Context()).UUID
 
-	response, err := h.getRolesUseCase.GetRoles(userUUID)
+	response, err := h.getRolesUseCase.Execute(userUUID)
 	switch true {
 	case err != nil:
 		rw.WriteHeader(http.StatusInternalServerError)

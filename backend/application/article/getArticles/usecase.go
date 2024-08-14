@@ -16,13 +16,17 @@ func NewUseCase(articleRepository article.Repository) *UseCase {
 	}
 }
 
-func (uc *UseCase) GetArticles(request *Request) (*GetArticlesResponse, error) {
+func (uc *UseCase) Execute(request *Request) (*Response, error) {
 	totalArticles, err := uc.articleRepository.CountPublished()
 	if err != nil {
 		return nil, err
 	}
 
 	currentPage := request.Page
+	if currentPage == 0 {
+		currentPage = 1
+	}
+
 	var offset uint = 0
 	if currentPage > 0 {
 		offset = (currentPage - 1) * limit
@@ -39,5 +43,5 @@ func (uc *UseCase) GetArticles(request *Request) (*GetArticlesResponse, error) {
 		return nil, err
 	}
 
-	return NewGetArticlesReponse(a, totalPages, currentPage), nil
+	return NewResponse(a, totalPages, currentPage), nil
 }

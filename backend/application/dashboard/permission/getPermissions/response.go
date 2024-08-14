@@ -2,13 +2,13 @@ package getpermissions
 
 import "github.com/khanzadimahdi/testproject/domain/permission"
 
+type Response struct {
+	Items []permissionResponse `json:"items"`
+}
+
 type permissionResponse struct {
 	Name  string `json:"name"`
 	Value string `json:"value"`
-}
-
-type Response struct {
-	Items []permissionResponse `json:"items"`
 }
 
 func NewResponse(a []permission.Permission) *Response {

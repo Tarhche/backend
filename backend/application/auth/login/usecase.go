@@ -23,9 +23,9 @@ func NewUseCase(userRepository user.Repository, JWT *jwt.JWT, hasher password.Ha
 	}
 }
 
-func (uc *UseCase) Login(request Request) (*LoginResponse, error) {
+func (uc *UseCase) Execute(request Request) (*Response, error) {
 	if ok, validation := request.Validate(); !ok {
-		return &LoginResponse{
+		return &Response{
 			ValidationErrors: validation,
 		}, nil
 	}
@@ -36,7 +36,7 @@ func (uc *UseCase) Login(request Request) (*LoginResponse, error) {
 	}
 
 	if !uc.passwordIsValid(u, []byte(request.Password)) {
-		return &LoginResponse{
+		return &Response{
 			ValidationErrors: validationErrors{
 				"identity": "your identity or password is wrong",
 			},
@@ -53,7 +53,7 @@ func (uc *UseCase) Login(request Request) (*LoginResponse, error) {
 		return nil, err
 	}
 
-	return &LoginResponse{
+	return &Response{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
 	}, nil

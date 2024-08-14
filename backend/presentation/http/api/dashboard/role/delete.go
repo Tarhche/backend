@@ -39,7 +39,7 @@ func (h *deleteHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		RoleUUID: UUID,
 	}
 
-	err := h.deleteRoleUseCase.DeleteRole(request)
+	err := h.deleteRoleUseCase.Execute(request)
 	switch true {
 	case errors.Is(err, domain.ErrNotExists):
 		rw.WriteHeader(http.StatusNotFound)

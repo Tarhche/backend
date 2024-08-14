@@ -14,13 +14,17 @@ func NewUseCase(elementRepository element.Repository) *UseCase {
 	}
 }
 
-func (uc *UseCase) GetElements(request *Request) (*GetElementsResponse, error) {
+func (uc *UseCase) Execute(request *Request) (*Response, error) {
 	totalElements, err := uc.elementRepository.Count()
 	if err != nil {
 		return nil, err
 	}
 
 	currentPage := request.Page
+	if currentPage == 0 {
+		currentPage = 1
+	}
+
 	var offset uint = 0
 	if currentPage > 0 {
 		offset = (currentPage - 1) * limit
@@ -37,5 +41,5 @@ func (uc *UseCase) GetElements(request *Request) (*GetElementsResponse, error) {
 		return nil, err
 	}
 
-	return NewGetElementsReponse(a, totalPages, currentPage), nil
+	return NewResponse(a, totalPages, currentPage), nil
 }
