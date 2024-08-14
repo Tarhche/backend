@@ -17,7 +17,10 @@ jobs:
           go-version: '1.22.x'
 
       - name: Test with the Go CLI
-        run: go test ./... -race -cover
+        run: |
+          cd ./backend 
+          go test ./... -v -race -cover
+          cd ../
 
       - uses: actions/setup-node@v3
         with:
