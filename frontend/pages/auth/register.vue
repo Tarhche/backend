@@ -3,7 +3,7 @@
     <div class="row justify-content-center ">
       <div class="col-md-12 col-lg-10">
         <div class="d-flex">
-          <div class="w-100 d-none d-md-block" id="login-cover"></div>
+          <div class="w-100 d-none d-md-block" id="register-cover"></div>
           <div class="w-100 mt-3 mt-0 p-4">
             <h3 class="mb-4 text-center ">ثبت نام</h3>
             <form action="#" class="signin-form d-flex flex-column" @submit.prevent="login()">
@@ -27,12 +27,12 @@
                   </div>
                 </button>
               </div>
-              <div class="form-group d-flex flex-column flex-md-row  mt-2 pt-2 justify-content-between align-items-center">
+              <div class="form-group d-flex flex-column flex-md-row  mt-2 pt-2 justify-content-md-end gap-3 align-items-md-center">
                 <div>
-
+                  <nuxt-link to="/auth/forgot-password" class="btn btn-outline-danger w-100 btn-sm ">بازیابی کلمه عبور</nuxt-link>
                 </div>
-                <div class="w-100">
-                  <nuxt-link to="/auth/login" class="btn btn-outline-danger w-100 btn-sm " >ورود</nuxt-link>
+                <div>
+                  <nuxt-link to="/auth/login" class="btn btn-outline-success w-100 btn-sm ">ورود</nuxt-link>
                 </div>
               </div>
             </form>
@@ -45,9 +45,9 @@
 
 <script setup>
 useHead({
-  title: 'ثبت نام پنل کاربری',
+  title: 'ثبت نام',
   meta: [
-    { name: 'description', content: 'ثبت نام پنل کاربری' },
+    { name: 'description', content: 'ثبت نام' },
   ],
   link: [
     { rel: 'canonical', href: `/auth/register` }
@@ -82,8 +82,8 @@ async function login() {
 
 
 <style scoped>
-#login-cover {
-  background-image: url('/img/login-bg.jpg');
+#register-cover {
+  background-image: url('/img/register-bg.jpg');
   background-size: cover;
   background-repeat: no-repeat;
   background-position: center top;

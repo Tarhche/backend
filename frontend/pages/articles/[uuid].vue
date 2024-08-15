@@ -23,7 +23,7 @@
                 <a class="hashtag" :href="`/hashtags/${tag}`" :key="index" v-for="(tag, index) in data.tags">{{ tag }}</a>
               </div>
               <aside class="mt-5">
-                <Comments :data="comments.items"/>
+                <Comments objectType="article" :objectUUID="uuid"/>
               </aside>
             </section>
         </div>
@@ -42,24 +42,18 @@ import hljs from 'highlight.js'
 
 const {uuid} = useRoute().params;
 
-	const resolveFileUrl = useFilesUrlResolver().resolve
-	const data = await $fetch(useApiUrlResolver().resolve(`api/articles/${uuid}`))
-const comments = await $fetch( useApiUrlResolver().resolve('api/comments'), {
-  query: {
-    object_type: 'article',
-    object_uuid: uuid,
-    page: 1
-  }
-})
-	useHead({
-		title: data.title,
-		meta: [
-			{ name: 'description', content: data.excerpt },
-		],
-		link: [
-			{ rel: 'canonical', href: `/articles/${uuid}` }
-		]
-  })
+const resolveFileUrl = useFilesUrlResolver().resolve
+const data = await $fetch(useApiUrlResolver().resolve(`api/articles/${uuid}`))
 
-	onMounted(hljs.highlightAll)
+useHead({
+  title: data.title,
+  meta: [
+    { name: 'description', content: data.excerpt },
+  ],
+  link: [
+    { rel: 'canonical', href: `/articles/${uuid}` }
+  ]
+})
+
+onMounted(hljs.highlightAll)
 </script>
