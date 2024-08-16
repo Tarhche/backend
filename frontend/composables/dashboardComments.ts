@@ -1,6 +1,6 @@
 async function index(page: number) {
     return useUser().$fetch(
-        useApiUrlResolver().resolve("api/dashboard/articles"),
+        useApiUrlResolver().resolve("api/dashboard/comments"),
         {
             method: "GET",
             params: {
@@ -12,20 +12,19 @@ async function index(page: number) {
     )
 }
 
-async function create(title: string, excerpt: string, body: string, tags: string[], publishedAt?: string, cover?: string) {
+async function create(body:string, objectUUID:string, objectType:string, parentUUID?:string, approvedAt?:string) {
     return useUser().$fetch(
-        useApiUrlResolver().resolve("api/dashboard/articles"),
+        useApiUrlResolver().resolve("api/dashboard/comments"),
         {
             method: "POST",
             lazy: true,
             headers: {authorization: `Bearer ${useAuth().accessToken()}`},
             body: {
-                title: title,
-                excerpt: excerpt,
                 body: body,
-                tags: tags,
-                published_at: publishedAt,
-                cover: cover,
+                parent_uuid: parentUUID,
+                approved_at: approvedAt,
+                object_uuid: objectUUID,
+                object_type: objectType,
             }
         }
     )
@@ -33,7 +32,7 @@ async function create(title: string, excerpt: string, body: string, tags: string
 
 async function show(uuid: string) {
     return useUser().$fetch(
-        useApiUrlResolver().resolve(`api/dashboard/articles/${uuid}`),
+        useApiUrlResolver().resolve(`api/dashboard/comments/${uuid}`),
         {
             method: "GET",
             lazy: true,
@@ -42,21 +41,20 @@ async function show(uuid: string) {
     )
 }
 
-async function update(uuid: string, title: string, excerpt: string, body: string, tags: string[], publishedAt?: string, cover?: string) {
+async function update(uuid: string, body:string, objectUUID:string, objectType:string, parentUUID?:string, approvedAt?:string) {
     return useUser().$fetch(
-        useApiUrlResolver().resolve(`api/dashboard/articles`),
+        useApiUrlResolver().resolve(`api/dashboard/comments`),
         {
             method: "PUT",
             lazy: true,
             headers: {authorization: `Bearer ${useAuth().accessToken()}`},
             body: {
                 uuid: uuid,
-                title: title,
-                excerpt: excerpt,
                 body: body,
-                tags: tags,
-                published_at: publishedAt,
-                cover: cover,
+                parent_uuid: parentUUID,
+                approved_at: approvedAt,
+                object_uuid: objectUUID,
+                object_type: objectType,
             }
         }
     )
@@ -64,7 +62,7 @@ async function update(uuid: string, title: string, excerpt: string, body: string
 
 async function remove(uuid: string) {
     return useUser().$fetch(
-        useApiUrlResolver().resolve(`api/dashboard/articles/${uuid}`),
+        useApiUrlResolver().resolve(`api/dashboard/comments/${uuid}`),
         {
             method: "DELETE",
             lazy: true,
@@ -73,7 +71,7 @@ async function remove(uuid: string) {
     )
 }
 
-export function useDashboardArticles() {
+export function useDashboardComments() {
     return {
         index: index,
         create: create,

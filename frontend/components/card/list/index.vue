@@ -1,5 +1,5 @@
 <template>
-    <ol class="list-featured">
-        <slot></slot>
-    </ol>
+  <ol class="list-featured">
+    <slot></slot>
+  </ol>
 </template>

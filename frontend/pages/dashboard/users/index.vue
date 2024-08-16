@@ -9,7 +9,7 @@
             <li class="breadcrumb-item">
               <NuxtLink to="/dashboard">داشبورد</NuxtLink>
             </li>
-            <li class="breadcrumb-item active" aria-current="page">مقاله ها</li>
+            <li class="breadcrumb-item active" aria-current="page">کاربر ها</li>
           </ol>
         </nav>
 
@@ -17,8 +17,8 @@
           <div class="col-12 mb-4 mb-lg-0">
             <div class="card">
               <div class="card-header d-flex justify-content-between">
-                <h4>مقاله ها</h4>
-                <NuxtLink class="btn btn-primary" to="/dashboard/articles/create">مقاله جدید</NuxtLink>
+                <h4>کاربر ها</h4>
+                <NuxtLink class="btn btn-primary" to="/dashboard/users/create">کاربر جدید</NuxtLink>
               </div>
               <div class="card-body">
                 <div class="table-responsive">
@@ -26,27 +26,34 @@
                     <thead class="border-bottom">
                     <tr>
                       <th scope="col">#</th>
-                      <th scope="col">عنوان</th>
-                      <th scope="col">تاریخ انتشار</th>
+                      <th scope="col"></th>
+                      <th scope="col">نام</th>
+                      <th scope="col">ایمیل</th>
+                      <th scope="col">نام کاربری</th>
                       <th scope="col">#</th>
                     </tr>
                     </thead>
                     <tbody v-if="!params.pending">
-                    <tr v-for="(article, index) in params.data.items" :key="index">
+                    <tr v-for="(user, index) in params.data.items" :key="index">
                       <th scope="row">{{ index + 1 }}</th>
-                      <td>{{ article.title }}</td>
                       <td>
-                        <span v-if="useTime().isZeroDate(article.published_at)" class="fa fa-times text-danger"></span>
-                        <span v-else>{{ useTime().toAgo(article.published_at) }}</span>
+                        <img class="rounded" width="60" v-if="user.avatar" :src="useFilesUrlResolver().resolve(user.avatar)" />
+                        <span v-else class="text-danger fa fa-times"></span>
+                      </td>
+                      <td>{{ user.name }}</td>
+                      <td>
+                        <span v-if="user.name">{{ user.email }}</span>
+                        <span v-else class="text-danger fa fa-times"></span>
                       </td>
                       <td>
-                        <NuxtLink :to="`/articles/${article.uuid}`" class="btn mx-1 btn-sm btn-primary">
-                          <span class="fa fa-eye"></span>
-                        </NuxtLink>
-                        <NuxtLink :to="`/dashboard/articles/edit/${article.uuid}`" class="btn mx-1 btn-sm btn-primary">
+                        <span v-if="user.name">{{ user.username }}</span>
+                        <span v-else class="text-danger fa fa-times"></span>
+                      </td>
+                      <td>
+                        <NuxtLink :to="`/dashboard/users/edit/${user.uuid}`" class="btn mx-1 btn-sm btn-primary">
                           <span class="fa fa-pen"></span>
                         </NuxtLink>
-                        <button @click.prevent="deleteArticle(article.uuid)" type="button"
+                        <button @click.prevent="deleteUser(user.uuid)" type="button"
                                 class="btn mx-1 btn-sm btn-danger">
                           <span class="fa fa-trash"></span>
                         </button>
@@ -54,7 +61,7 @@
                     </tr>
                     <tr v-if="params.data.items.length == 0">
                       <td colspan="5">
-                        <p>هیچ مقاله ای وجود ندارد</p>
+                        <p>هیچ کاربری وجود ندارد</p>
                       </td>
                     </tr>
                     </tbody>
@@ -79,7 +86,7 @@ definePageMeta({
 })
 
 useHead({
-  name: "مقاله ها"
+  name: "کاربر ها"
 })
 
 const params = reactive({
@@ -92,8 +99,8 @@ await load((useRoute().query.page) || 1)
 
 async function load(page: number) {
   const {data, pending, error} = await useAsyncData(
-      'dashboard.articles.index',
-      () => useDashboardArticles().index(page)
+      'dashboard.users.index',
+      () => useDashboardUsers().index(page)
   )
 
   params.data = data
@@ -101,13 +108,13 @@ async function load(page: number) {
   params.error = error
 }
 
-async function deleteArticle(uuid: string) {
-  if (!confirm('آیا میخواهید این مقاله را حذف کنید؟')) {
+async function deleteUser(uuid: string) {
+  if (!confirm('آیا میخواهید این کاربر را حذف کنید؟')) {
     return
   }
 
-  await useDashboardArticles().delete(uuid)
+  await useDashboardUsers().delete(uuid)
 
-  params.data.items = params.data.items.filter((article) => article.uuid != uuid)
+  params.data.items = params.data.items.filter((user) => user.uuid != uuid)
 }
 </script>

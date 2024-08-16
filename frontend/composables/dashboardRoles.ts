@@ -1,6 +1,6 @@
 async function index(page: number) {
     return useUser().$fetch(
-        useApiUrlResolver().resolve("api/dashboard/articles"),
+        useApiUrlResolver().resolve("api/dashboard/roles"),
         {
             method: "GET",
             params: {
@@ -12,20 +12,18 @@ async function index(page: number) {
     )
 }
 
-async function create(title: string, excerpt: string, body: string, tags: string[], publishedAt?: string, cover?: string) {
+async function create(name: string, description: string, permissions: string[], userUUIDs: string[]) {
     return useUser().$fetch(
-        useApiUrlResolver().resolve("api/dashboard/articles"),
+        useApiUrlResolver().resolve("api/dashboard/roles"),
         {
             method: "POST",
             lazy: true,
             headers: {authorization: `Bearer ${useAuth().accessToken()}`},
             body: {
-                title: title,
-                excerpt: excerpt,
-                body: body,
-                tags: tags,
-                published_at: publishedAt,
-                cover: cover,
+                name: name,
+                description: description,
+                permissions: permissions,
+                user_uuids: userUUIDs,
             }
         }
     )
@@ -33,7 +31,7 @@ async function create(title: string, excerpt: string, body: string, tags: string
 
 async function show(uuid: string) {
     return useUser().$fetch(
-        useApiUrlResolver().resolve(`api/dashboard/articles/${uuid}`),
+        useApiUrlResolver().resolve(`api/dashboard/roles/${uuid}`),
         {
             method: "GET",
             lazy: true,
@@ -42,21 +40,19 @@ async function show(uuid: string) {
     )
 }
 
-async function update(uuid: string, title: string, excerpt: string, body: string, tags: string[], publishedAt?: string, cover?: string) {
+async function update(uuid: string, name: string, description: string, permissions: string[], userUUIDs: string[]) {
     return useUser().$fetch(
-        useApiUrlResolver().resolve(`api/dashboard/articles`),
+        useApiUrlResolver().resolve(`api/dashboard/roles`),
         {
             method: "PUT",
             lazy: true,
             headers: {authorization: `Bearer ${useAuth().accessToken()}`},
             body: {
                 uuid: uuid,
-                title: title,
-                excerpt: excerpt,
-                body: body,
-                tags: tags,
-                published_at: publishedAt,
-                cover: cover,
+                name: name,
+                description: description,
+                permissions: permissions,
+                user_uuids: userUUIDs,
             }
         }
     )
@@ -64,7 +60,7 @@ async function update(uuid: string, title: string, excerpt: string, body: string
 
 async function remove(uuid: string) {
     return useUser().$fetch(
-        useApiUrlResolver().resolve(`api/dashboard/articles/${uuid}`),
+        useApiUrlResolver().resolve(`api/dashboard/roles/${uuid}`),
         {
             method: "DELETE",
             lazy: true,
@@ -73,7 +69,7 @@ async function remove(uuid: string) {
     )
 }
 
-export function useDashboardArticles() {
+export function useDashboardRoles() {
     return {
         index: index,
         create: create,

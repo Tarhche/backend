@@ -1,6 +1,6 @@
 async function index(page: number) {
     return useUser().$fetch(
-        useApiUrlResolver().resolve("api/dashboard/articles"),
+        useApiUrlResolver().resolve("api/dashboard/users"),
         {
             method: "GET",
             params: {
@@ -12,20 +12,19 @@ async function index(page: number) {
     )
 }
 
-async function create(title: string, excerpt: string, body: string, tags: string[], publishedAt?: string, cover?: string) {
+async function create(email: string, name: string, password: string, avatar?: string, username?: string) {
     return useUser().$fetch(
-        useApiUrlResolver().resolve("api/dashboard/articles"),
+        useApiUrlResolver().resolve("api/dashboard/users"),
         {
             method: "POST",
             lazy: true,
             headers: {authorization: `Bearer ${useAuth().accessToken()}`},
             body: {
-                title: title,
-                excerpt: excerpt,
-                body: body,
-                tags: tags,
-                published_at: publishedAt,
-                cover: cover,
+                email: email,
+                name: name,
+                password: password,
+                avatar: avatar,
+                username: username,
             }
         }
     )
@@ -33,7 +32,7 @@ async function create(title: string, excerpt: string, body: string, tags: string
 
 async function show(uuid: string) {
     return useUser().$fetch(
-        useApiUrlResolver().resolve(`api/dashboard/articles/${uuid}`),
+        useApiUrlResolver().resolve(`api/dashboard/users/${uuid}`),
         {
             method: "GET",
             lazy: true,
@@ -42,21 +41,34 @@ async function show(uuid: string) {
     )
 }
 
-async function update(uuid: string, title: string, excerpt: string, body: string, tags: string[], publishedAt?: string, cover?: string) {
+async function update(uuid: string, email: string, name: string, avatar?: string, username?: string) {
     return useUser().$fetch(
-        useApiUrlResolver().resolve(`api/dashboard/articles`),
+        useApiUrlResolver().resolve(`api/dashboard/users`),
         {
             method: "PUT",
             lazy: true,
             headers: {authorization: `Bearer ${useAuth().accessToken()}`},
             body: {
                 uuid: uuid,
-                title: title,
-                excerpt: excerpt,
-                body: body,
-                tags: tags,
-                published_at: publishedAt,
-                cover: cover,
+                email: email,
+                name: name,
+                avatar: avatar,
+                username: username,
+            }
+        }
+    )
+}
+
+async function updatePassword(uuid: string, password: string) {
+    return useUser().$fetch(
+        useApiUrlResolver().resolve(`api/dashboard/users/password`),
+        {
+            method: "PUT",
+            lazy: true,
+            headers: {authorization: `Bearer ${useAuth().accessToken()}`},
+            body: {
+                uuid: uuid,
+                new_password: password,
             }
         }
     )
@@ -64,7 +76,7 @@ async function update(uuid: string, title: string, excerpt: string, body: string
 
 async function remove(uuid: string) {
     return useUser().$fetch(
-        useApiUrlResolver().resolve(`api/dashboard/articles/${uuid}`),
+        useApiUrlResolver().resolve(`api/dashboard/users/${uuid}`),
         {
             method: "DELETE",
             lazy: true,
@@ -73,12 +85,13 @@ async function remove(uuid: string) {
     )
 }
 
-export function useDashboardArticles() {
+export function useDashboardUsers() {
     return {
         index: index,
         create: create,
         show: show,
         update: update,
         delete: remove,
+        updatePassword: updatePassword,
     }
 }

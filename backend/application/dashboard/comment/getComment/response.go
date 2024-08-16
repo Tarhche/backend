@@ -11,6 +11,8 @@ type Response struct {
 	Body       string    `json:"body"`
 	Author     author    `json:"author"`
 	ParentUUID string    `json:"parent_uuid,omitempty"`
+	ObjectType string    `json:"object_type"`
+	ObjectUUID string    `json:"object_uuid"`
 	CreatedAt  time.Time `json:"created_at"`
 	ApprovedAt time.Time `json:"approved_at"`
 }
@@ -31,6 +33,8 @@ func NewResponse(c comment.Comment) *Response {
 			Avatar: c.Author.Avatar,
 		},
 		ParentUUID: c.ParentUUID,
+		ObjectType: c.ObjectType,
+		ObjectUUID: c.ObjectUUID,
 		CreatedAt:  c.CreatedAt,
 		ApprovedAt: c.ApprovedAt,
 	}

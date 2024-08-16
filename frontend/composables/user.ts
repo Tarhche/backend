@@ -1,23 +1,23 @@
-import type { UseFetchOptions } from 'nuxt/app'
-import { defu } from 'defu'
+import type {UseFetchOptions} from 'nuxt/app'
+import {defu} from 'defu'
 
 const auth = useAuth()
 
-function userFetch<T> (url: string, options: UseFetchOptions<T> = {}) {
+function userFetch<T>(url: string, options: UseFetchOptions<T> = {}) {
     const defaults: UseFetchOptions<T> = {
         retry: 2,
         retryStatusCodes: [401, 403],
 
-        onRequest({ options }) {
+        onRequest({options}) {
             if (!auth.isLogin()) {
                 return
             }
 
-            options.headers = { Authorization: `Bearer ${ auth.accessToken() }` }
+            options.headers = {Authorization: `Bearer ${auth.accessToken()}`}
         },
 
-        async onResponseError({ response, options }) {
-            if (! this.retryStatusCodes.includes(response.status)) {
+        async onResponseError({response, options}) {
+            if (!this.retryStatusCodes.includes(response.status)) {
                 return
             }
 
@@ -30,45 +30,45 @@ function userFetch<T> (url: string, options: UseFetchOptions<T> = {}) {
 
 async function profile() {
     return useUser().$fetch(
-		useApiUrlResolver().resolve("api/dashboard/profile"),
-		{
+        useApiUrlResolver().resolve("api/dashboard/profile"),
+        {
             method: "GET",
-	    	lazy: true,
-    		headers: {authorization: `Bearer ${useAuth().accessToken()}`}
-  		}
-	)
+            lazy: true,
+            headers: {authorization: `Bearer ${useAuth().accessToken()}`}
+        }
+    )
 }
 
-async function updateProfile(email:string, name?:string, username?:string, avatar?:string) {
+async function updateProfile(email: string, name?: string, username?: string, avatar?: string) {
     return useUser().$fetch(
-		useApiUrlResolver().resolve("api/dashboard/profile"),
-		{
+        useApiUrlResolver().resolve("api/dashboard/profile"),
+        {
             method: "PUT",
-	    	lazy: true,
-    		headers: {authorization: `Bearer ${useAuth().accessToken()}`},
+            lazy: true,
+            headers: {authorization: `Bearer ${useAuth().accessToken()}`},
             body: {
                 email: email,
                 name: name,
                 username: username,
                 avatar: avatar,
             }
-  		}
-	)
+        }
+    )
 }
 
-async function updatePassword(currentPassword:string, newPassword:string) {
+async function updatePassword(currentPassword: string, newPassword: string) {
     return useUser().$fetch(
-		useApiUrlResolver().resolve("api/dashboard/password"),
-		{
+        useApiUrlResolver().resolve("api/dashboard/password"),
+        {
             method: "PUT",
-	    	lazy: true,
-    		headers: {authorization: `Bearer ${useAuth().accessToken()}`},
+            lazy: true,
+            headers: {authorization: `Bearer ${useAuth().accessToken()}`},
             body: {
                 current_password: currentPassword,
                 new_password: newPassword,
             }
-  		}
-	)
+        }
+    )
 }
 
 export function useUser() {

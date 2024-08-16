@@ -9,7 +9,7 @@
             <li class="breadcrumb-item">
               <NuxtLink to="/dashboard">داشبورد</NuxtLink>
             </li>
-            <li class="breadcrumb-item active" aria-current="page">مقاله ها</li>
+            <li class="breadcrumb-item active" aria-current="page">کامنت ها</li>
           </ol>
         </nav>
 
@@ -17,8 +17,7 @@
           <div class="col-12 mb-4 mb-lg-0">
             <div class="card">
               <div class="card-header d-flex justify-content-between">
-                <h4>مقاله ها</h4>
-                <NuxtLink class="btn btn-primary" to="/dashboard/articles/create">مقاله جدید</NuxtLink>
+                <h4>کامنت ها</h4>
               </div>
               <div class="card-body">
                 <div class="table-responsive">
@@ -26,35 +25,48 @@
                     <thead class="border-bottom">
                     <tr>
                       <th scope="col">#</th>
-                      <th scope="col">عنوان</th>
+                      <th scope="col">محتوا</th>
                       <th scope="col">تاریخ انتشار</th>
+                      <th scope="col">تاریخ ثبت</th>
+                      <th scope="col">نویسنده</th>
                       <th scope="col">#</th>
                     </tr>
                     </thead>
                     <tbody v-if="!params.pending">
-                    <tr v-for="(article, index) in params.data.items" :key="index">
+                    <tr v-for="(comment, index) in params.data.items" :key="index">
                       <th scope="row">{{ index + 1 }}</th>
-                      <td>{{ article.title }}</td>
+                      <td>{{ trim(comment.body, 25) }}</td>
                       <td>
-                        <span v-if="useTime().isZeroDate(article.published_at)" class="fa fa-times text-danger"></span>
-                        <span v-else>{{ useTime().toAgo(article.published_at) }}</span>
+                        <span v-if="useTime().isZeroDate(comment.approved_at)" class="fa fa-times text-danger"></span>
+                        <span v-else>{{ useTime().toFormat(comment.approved_at) }}</span>
                       </td>
                       <td>
-                        <NuxtLink :to="`/articles/${article.uuid}`" class="btn mx-1 btn-sm btn-primary">
+                        <span v-if="useTime().isZeroDate(comment.created_at)" class="fa fa-times text-danger"></span>
+                        <span v-else>{{ useTime().toAgo(comment.created_at) }}</span>
+                      </td>
+                      <td>
+                        <span v-if="comment.author && comment.author.uuid">
+                          <img class="rounded" width="40" :src="useFilesUrlResolver().resolve(comment.author.avatar)"/>
+                          <small class="mx-1">{{ comment.author.name }}</small>
+                        </span>
+                        <span v-else class="text-danger">کاربر ناشناس</span>
+                      </td>
+                      <td>
+                        <NuxtLink :to="`/${comment.object_type}s/${comment.object_uuid}`" target="_blank" class="btn mx-1 btn-sm btn-primary">
                           <span class="fa fa-eye"></span>
                         </NuxtLink>
-                        <NuxtLink :to="`/dashboard/articles/edit/${article.uuid}`" class="btn mx-1 btn-sm btn-primary">
+                        <NuxtLink :to="`/dashboard/comments/edit/${comment.uuid}`" class="btn mx-1 btn-sm btn-primary">
                           <span class="fa fa-pen"></span>
                         </NuxtLink>
-                        <button @click.prevent="deleteArticle(article.uuid)" type="button"
+                        <button @click.prevent="deleteComment(comment.uuid)" type="button"
                                 class="btn mx-1 btn-sm btn-danger">
                           <span class="fa fa-trash"></span>
                         </button>
                       </td>
                     </tr>
                     <tr v-if="params.data.items.length == 0">
-                      <td colspan="5">
-                        <p>هیچ مقاله ای وجود ندارد</p>
+                      <td colspan="6">
+                        <p>هیچ کامنتی وجود ندارد</p>
                       </td>
                     </tr>
                     </tbody>
@@ -79,7 +91,7 @@ definePageMeta({
 })
 
 useHead({
-  name: "مقاله ها"
+  name: "کامنت ها"
 })
 
 const params = reactive({
@@ -90,10 +102,18 @@ const params = reactive({
 
 await load((useRoute().query.page) || 1)
 
+function trim(str, maxLength): string {
+  if (str.length > maxLength) {
+    return str.substring(0, maxLength) + "...";
+  }
+
+  return str;
+}
+
 async function load(page: number) {
   const {data, pending, error} = await useAsyncData(
-      'dashboard.articles.index',
-      () => useDashboardArticles().index(page)
+      'dashboard.comments.index',
+      () => useDashboardComments().index(page)
   )
 
   params.data = data
@@ -101,13 +121,13 @@ async function load(page: number) {
   params.error = error
 }
 
-async function deleteArticle(uuid: string) {
-  if (!confirm('آیا میخواهید این مقاله را حذف کنید؟')) {
+async function deleteComment(uuid: string) {
+  if (!confirm('آیا میخواهید این کامنت را حذف کنید؟')) {
     return
   }
 
-  await useDashboardArticles().delete(uuid)
+  await useDashboardComments().delete(uuid)
 
-  params.data.items = params.data.items.filter((article) => article.uuid != uuid)
+  params.data.items = params.data.items.filter((comment) => comment.uuid != uuid)
 }
 </script>

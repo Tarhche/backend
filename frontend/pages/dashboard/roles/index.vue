@@ -9,7 +9,7 @@
             <li class="breadcrumb-item">
               <NuxtLink to="/dashboard">داشبورد</NuxtLink>
             </li>
-            <li class="breadcrumb-item active" aria-current="page">مقاله ها</li>
+            <li class="breadcrumb-item active" aria-current="page">نقش ها</li>
           </ol>
         </nav>
 
@@ -17,8 +17,8 @@
           <div class="col-12 mb-4 mb-lg-0">
             <div class="card">
               <div class="card-header d-flex justify-content-between">
-                <h4>مقاله ها</h4>
-                <NuxtLink class="btn btn-primary" to="/dashboard/articles/create">مقاله جدید</NuxtLink>
+                <h4>نقش ها</h4>
+                <NuxtLink class="btn btn-primary" to="/dashboard/roles/create">نقش جدید</NuxtLink>
               </div>
               <div class="card-body">
                 <div class="table-responsive">
@@ -27,34 +27,27 @@
                     <tr>
                       <th scope="col">#</th>
                       <th scope="col">عنوان</th>
-                      <th scope="col">تاریخ انتشار</th>
+                      <th scope="col">توضیحات</th>
                       <th scope="col">#</th>
                     </tr>
                     </thead>
                     <tbody v-if="!params.pending">
-                    <tr v-for="(article, index) in params.data.items" :key="index">
+                    <tr v-for="(role, index) in params.data.items" :key="index">
                       <th scope="row">{{ index + 1 }}</th>
-                      <td>{{ article.title }}</td>
+                      <td>{{ role.name }}</td>
+                      <td>{{ role.description }}</td>
                       <td>
-                        <span v-if="useTime().isZeroDate(article.published_at)" class="fa fa-times text-danger"></span>
-                        <span v-else>{{ useTime().toAgo(article.published_at) }}</span>
-                      </td>
-                      <td>
-                        <NuxtLink :to="`/articles/${article.uuid}`" class="btn mx-1 btn-sm btn-primary">
-                          <span class="fa fa-eye"></span>
-                        </NuxtLink>
-                        <NuxtLink :to="`/dashboard/articles/edit/${article.uuid}`" class="btn mx-1 btn-sm btn-primary">
+                        <NuxtLink :to="`/dashboard/roles/edit/${role.uuid}`" class="btn mx-1 btn-sm btn-primary">
                           <span class="fa fa-pen"></span>
                         </NuxtLink>
-                        <button @click.prevent="deleteArticle(article.uuid)" type="button"
-                                class="btn mx-1 btn-sm btn-danger">
+                        <button @click.prevent="deleteRole(role.uuid)" type="button" class="btn mx-1 btn-sm btn-danger">
                           <span class="fa fa-trash"></span>
                         </button>
                       </td>
                     </tr>
                     <tr v-if="params.data.items.length == 0">
                       <td colspan="5">
-                        <p>هیچ مقاله ای وجود ندارد</p>
+                        <p>هیچ نقشی وجود ندارد</p>
                       </td>
                     </tr>
                     </tbody>
@@ -79,7 +72,7 @@ definePageMeta({
 })
 
 useHead({
-  name: "مقاله ها"
+  name: "نقش ها"
 })
 
 const params = reactive({
@@ -92,8 +85,8 @@ await load((useRoute().query.page) || 1)
 
 async function load(page: number) {
   const {data, pending, error} = await useAsyncData(
-      'dashboard.articles.index',
-      () => useDashboardArticles().index(page)
+      'dashboard.roles.index',
+      () => useDashboardRoles().index(page)
   )
 
   params.data = data
@@ -101,13 +94,13 @@ async function load(page: number) {
   params.error = error
 }
 
-async function deleteArticle(uuid: string) {
-  if (!confirm('آیا میخواهید این مقاله را حذف کنید؟')) {
+async function deleteRole(uuid: string) {
+  if (!confirm('آیا میخواهید این نقش را حذف کنید؟')) {
     return
   }
 
-  await useDashboardArticles().delete(uuid)
+  await useDashboardRoles().delete(uuid)
 
-  params.data.items = params.data.items.filter((article) => article.uuid != uuid)
+  params.data.items = params.data.items.filter((role) => role.uuid != uuid)
 }
 </script>

@@ -2,7 +2,8 @@
   <section :class="{child: props.data.parent_uuid}" v-if="data">
     <section class="card mb-3">
       <div class="card-body d-flex flex-start">
-        <img v-if="props.data.author.avatar" class="rounded-circle shadow-1-strong ms-3" :src="useFilesUrlResolver().resolve(props.data.author.avatar)" alt="avatar" width="65" height="65">
+        <img v-if="props.data.author.avatar" class="rounded-circle shadow-1-strong ms-3"
+             :src="useFilesUrlResolver().resolve(props.data.author.avatar)" alt="avatar" width="65" height="65">
         <div class="flex-grow-1 flex-shrink-1 ">
           <div class="d-flex justify-content-between align-items-center">
             <p class="info mb-1">
@@ -22,15 +23,18 @@
               </button>
             </div>
           </div>
-          <p v-if="props.data.body && props.data.body.length" class="text small mb-0 pt-2 border-top ">{{ props.data.body }}</p>
+          <p v-if="props.data.body && props.data.body.length" class="text small mb-0 pt-2 border-top ">
+            {{ props.data.body }}</p>
         </div>
       </div>
     </section>
     <section class="write-comment px-1" ref="createCommentContainer">
-      <comments-create @commentCreated="toggleShowCommentCreation" :objectType="props.objectType" :objectUUID="props.objectUUID" :parentUUID="props.data.uuid" :isReplying="true" />
+      <comments-create @commentCreated="toggleShowCommentCreation" :objectType="props.objectType"
+                       :objectUUID="props.objectUUID" :parentUUID="props.data.uuid" :isReplying="true"/>
     </section>
     <template v-if="props.data.sub && props.data.sub.length">
-      <comments-item v-for="(item , index) in props.data.sub" :key="index" :objectType="props.objectType" :objectUUID="props.objectUUID" :data="item"/>
+      <comments-item v-for="(item , index) in props.data.sub" :key="index" :objectType="props.objectType"
+                     :objectUUID="props.objectUUID" :data="item"/>
     </template>
   </section>
 </template>

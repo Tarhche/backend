@@ -58,6 +58,8 @@ func TestUseCase_Execute(t *testing.T) {
 						Author: authorResponse{
 							UUID: a[0].Author.UUID,
 						},
+						ObjectUUID: "object-uuid-1",
+						ObjectType: "article",
 					},
 					{
 						UUID: a[1].UUID,

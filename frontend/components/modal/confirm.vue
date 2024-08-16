@@ -4,7 +4,7 @@
       <div class="card rounded ">
         <div class="w-100 d-flex p-2 close" @click="cancel"><i class="fa-solid fa-close me-auto"></i></div>
         <div class="card-body d-flex flex-column flex-md-row align-items-baseline gap-1 pb-0">
-          <p class="card-title"> آیا از حذف این پست  اطمینان دارید ؟</p>
+          <p class="card-title"> آیا از حذف این پست اطمینان دارید ؟</p>
           <p class="card-title text-muted"> ( با حذف آن دیگر قابل دسترس نیست ) </p>
         </div>
         <div class="card-footer d-flex flex-column flex-md-row gap-2 justify-content-between border-0 bg-white">
@@ -17,7 +17,7 @@
 </template>
 
 <script setup lang="ts">
-const emit = defineEmits(['close' , 'confirm'])
+const emit = defineEmits(['close', 'confirm'])
 
 function cancel() {
   emit("close")
@@ -49,15 +49,15 @@ function confirm() {
 .card {
   box-shadow: 0 0 5px 1px rgba(0, 0, 0, 0.32);
   scale: 0;
-  animation:scale ease 0.5s forwards 1s ;
+  animation: scale ease 0.5s forwards 1s;
 }
 
 @keyframes scale {
-  from{
+  from {
     scale: 0;
     opacity: 0;
   }
-  to{
+  to {
     scale: 1;
     opacity: 1;
   }
@@ -68,7 +68,7 @@ function confirm() {
   font-size: 0.8rem;
 }
 
-.close{
+.close {
   cursor: pointer;
 }
 </style>

@@ -9,16 +9,19 @@
             <li class="breadcrumb-item">
               <NuxtLink to="/dashboard">داشبورد</NuxtLink>
             </li>
-            <li class="breadcrumb-item active" aria-current="page">پروفایل</li>
+            <li class="breadcrumb-item">
+              <NuxtLink to="/dashboard/users">کاربرها</NuxtLink>
+            </li>
+            <li class="breadcrumb-item active" aria-current="page">ویرایش کاربر</li>
           </ol>
         </nav>
 
-        <form @submit.prevent="updateProfile()" class="card">
+        <form @submit.prevent="updateUser()" class="card">
           <div class="card-body">
             <div class="row mb-3">
               <label for="name" class="col-sm-2 col-form-label">نام</label>
               <div class="col-sm-10">
-                <input type="text" placeholder="نام" class="form-control" id="name" v-model="params.name">
+                <input type="text" placeholder="نام" class="form-control" id="name" v-model="params.name" required>
               </div>
             </div>
 
@@ -47,8 +50,8 @@
             </div>
 
             <p class="alert alert-secondary">
-              <span>کلمه عبور خود را میتوانید از</span>
-              <NuxtLink class="mx-1" to="/dashboard/profile/password">اینجا</NuxtLink>
+              <span>کلمه عبور کاربر را میتوانید از</span>
+              <NuxtLink class="mx-1" :to="`/dashboard/users/password/${uuid}`">اینجا</NuxtLink>
               <span>تغییر دهید</span>
             </p>
           </div>
@@ -76,15 +79,18 @@ definePageMeta({
 })
 
 useHead({
-  name: "پروفایل"
+  name: "ویرایش کاربر"
 })
+
+// user's uuid
+const {uuid} = useRoute().params
 
 // reflects form parameters
 const params = reactive({
-  email: '', // email is required
-  name: null,
-  username: null,
+  email: null, // required
+  name: null, // required
   avatar: null,
+  username: null,
   loading: false,
   showFilePicker: false,
 })
@@ -97,7 +103,7 @@ const errors = reactive({
   avatar: null,
 })
 
-await showProfile()
+await showUser()
 
 function selectFile(uuids: string[]) {
   params.showFilePicker = false
@@ -109,9 +115,9 @@ function selectFile(uuids: string[]) {
   params.avatar = uuids[0]
 }
 
-async function showProfile() {
+async function showUser() {
   try {
-    const data = await useUser().profile()
+    const data =  await useDashboardUsers().show(uuid)
 
     params.name = data.name
     params.email = data.email
@@ -122,16 +128,19 @@ async function showProfile() {
   }
 }
 
-async function updateProfile() {
+async function updateUser() {
   params.loading = true
 
   try {
-    await useUser().updateProfile(
+    await useDashboardUsers().update(
+        uuid,
         params.email,
         params.name,
-        params.username,
         params.avatar,
+        params.username,
     )
+
+    await navigateTo("/dashboard/users")
   } catch (error) {
     console.log(error)
   }

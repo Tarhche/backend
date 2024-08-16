@@ -1,15 +1,15 @@
-import { jwtDecode } from "jwt-decode"
+import {jwtDecode} from "jwt-decode"
 
 const cookieName = "auth"
 
 const loginPage = '/auth/login'
 const dashboardPage = '/dashboard'
 
-async function login(identity:string, password:string) {
-    const { data, error } = await useFetch(
+async function login(identity: string, password: string) {
+    const {data, error} = await useFetch(
         useApiUrlResolver().resolve("api/auth/login"),
         {
-            method:"POST" ,
+            method: "POST",
             body: {
                 "identity": identity,
                 "password": password
@@ -28,7 +28,7 @@ async function login(identity:string, password:string) {
 
     persist(data.value.access_token, data.value.refresh_token)
 
-    await navigateTo({ path: dashboardPage })
+    await navigateTo({path: dashboardPage})
 }
 
 async function refresh() {
@@ -37,10 +37,10 @@ async function refresh() {
         return
     }
 
-    const { data, error } = await useFetch(
+    const {data, error} = await useFetch(
         useApiUrlResolver().resolve("api/auth/token/refresh"),
         {
-            method:"POST" ,
+            method: "POST",
             body: {
                 "token": token,
             }
@@ -65,7 +65,7 @@ async function logout() {
         cookie.value = null
     }
 
-    await navigateTo({ path: loginPage })
+    await navigateTo({path: loginPage})
 }
 
 function accessToken() {
@@ -101,10 +101,10 @@ function isLogin(): Boolean {
 }
 
 async function forgotPassword(identity: string) {
-    const { data, error } = await useFetch(
+    const {data, error} = await useFetch(
         useApiUrlResolver().resolve("api/auth/password/forget"),
         {
-            method:"POST" ,
+            method: "POST",
             body: {
                 "identity": identity,
             }
@@ -121,11 +121,11 @@ async function forgotPassword(identity: string) {
     }
 }
 
-async function resetPassword(token:string, password:string) {
-    const { data, error } = await useFetch(
+async function resetPassword(token: string, password: string) {
+    const {data, error} = await useFetch(
         useApiUrlResolver().resolve("api/auth/password/reset"),
         {
-            method:"POST" ,
+            method: "POST",
             body: {
                 "token": token,
                 "password": password,
@@ -157,8 +157,8 @@ export function useAuth() {
 }
 
 
-function persist(accessToken:string, refreshToken:string) {
-    const { exp } = jwtDecode(refreshToken)
+function persist(accessToken: string, refreshToken: string) {
+    const {exp} = jwtDecode(refreshToken)
 
     // wrap access and refresh token in an unified object
     const auth = {

@@ -9,16 +9,16 @@
             <li class="breadcrumb-item">
               <NuxtLink to="/dashboard">داشبورد</NuxtLink>
             </li>
-            <li class="breadcrumb-item active" aria-current="page">پروفایل</li>
+            <li class="breadcrumb-item active" aria-current="page">افزودن کاربر</li>
           </ol>
         </nav>
 
-        <form @submit.prevent="updateProfile()" class="card">
+        <form @submit.prevent="createUser()" class="card">
           <div class="card-body">
             <div class="row mb-3">
               <label for="name" class="col-sm-2 col-form-label">نام</label>
               <div class="col-sm-10">
-                <input type="text" placeholder="نام" class="form-control" id="name" v-model="params.name">
+                <input type="text" placeholder="نام" class="form-control" id="name" v-model="params.name" required>
               </div>
             </div>
 
@@ -26,6 +26,13 @@
               <label for="email" class="col-sm-2 col-form-label">ایمیل</label>
               <div class="col-sm-10">
                 <input type="email" placeholder="ایمیل" class="form-control" id="email" v-model="params.email" required>
+              </div>
+            </div>
+
+            <div class="row mb-3">
+              <label for="username" class="col-sm-2 col-form-label">کلمه عبور</label>
+              <div class="col-sm-10">
+                <input type="text" placeholder="کلمه عبور" class="form-control" id="username" v-model="params.password" required>
               </div>
             </div>
 
@@ -45,12 +52,6 @@
                 </div>
               </div>
             </div>
-
-            <p class="alert alert-secondary">
-              <span>کلمه عبور خود را میتوانید از</span>
-              <NuxtLink class="mx-1" to="/dashboard/profile/password">اینجا</NuxtLink>
-              <span>تغییر دهید</span>
-            </p>
           </div>
           <div class="card-footer">
             <button :disabled="params.loading" type="submit" class="btn btn-primary rounded submit px-3">
@@ -76,15 +77,16 @@ definePageMeta({
 })
 
 useHead({
-  name: "پروفایل"
+  name: "افزودن کاربر"
 })
 
 // reflects form parameters
 const params = reactive({
-  email: '', // email is required
-  name: null,
-  username: null,
+  email: null, // required
+  name: null, // required
+  password: null, // required
   avatar: null,
+  username: null,
   loading: false,
   showFilePicker: false,
 })
@@ -97,8 +99,6 @@ const errors = reactive({
   avatar: null,
 })
 
-await showProfile()
-
 function selectFile(uuids: string[]) {
   params.showFilePicker = false
 
@@ -109,29 +109,19 @@ function selectFile(uuids: string[]) {
   params.avatar = uuids[0]
 }
 
-async function showProfile() {
-  try {
-    const data = await useUser().profile()
-
-    params.name = data.name
-    params.email = data.email
-    params.username = data.username
-    params.avatar = data.avatar
-  } catch (error) {
-    console.log(error)
-  }
-}
-
-async function updateProfile() {
+async function createUser() {
   params.loading = true
 
   try {
-    await useUser().updateProfile(
+    await useDashboardUsers().create(
         params.email,
         params.name,
-        params.username,
+        params.password,
         params.avatar,
+        params.username,
     )
+
+    await navigateTo("/dashboard/users")
   } catch (error) {
     console.log(error)
   }

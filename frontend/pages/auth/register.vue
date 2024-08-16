@@ -8,28 +8,33 @@
             <h3 class="mb-4 text-center ">ثبت نام</h3>
             <form action="#" class="signin-form d-flex flex-column" @submit.prevent="login()">
               <div class="form-group mt-2">
-                <input :class="{ 'is-invalid': errors.identity }" type="text" placeholder="ایمیل" class="input form-control py-2 " v-model="params.identity" required>
+                <input :class="{ 'is-invalid': errors.identity }" type="text" placeholder="ایمیل"
+                       class="input form-control py-2 " v-model="params.identity" required>
                 <div v-if="errors.identity" class="invalid-feedback">
                   {{ errors.identity }}
                 </div>
               </div>
               <div class="form-group my-4">
-                <input :class="{ 'is-invalid': errors.password }" type="password" placeholder="کلمه عبور" class="input form-control py-2 " v-model="params.password" required>
+                <input :class="{ 'is-invalid': errors.password }" type="password" placeholder="کلمه عبور"
+                       class="input form-control py-2 " v-model="params.password" required>
                 <div v-if="errors.password" class="invalid-feedback">
                   {{ errors.password }}
                 </div>
               </div>
               <div class="form-group">
-                <button :disabled="params.loading" type="submit" class="form-control btn btn-primary rounded submit px-3">
+                <button :disabled="params.loading" type="submit"
+                        class="form-control btn btn-primary rounded submit px-3">
                   <span v-if="!params.loading">ثبت نام</span>
                   <div v-else class="spinner-border" role="status">
                     <span class="visually-hidden">Loading...</span>
                   </div>
                 </button>
               </div>
-              <div class="form-group d-flex flex-column flex-md-row  mt-2 pt-2 justify-content-md-end gap-3 align-items-md-center">
+              <div
+                  class="form-group d-flex flex-column flex-md-row  mt-2 pt-2 justify-content-md-end gap-3 align-items-md-center">
                 <div>
-                  <nuxt-link to="/auth/forgot-password" class="btn btn-outline-danger w-100 btn-sm ">بازیابی کلمه عبور</nuxt-link>
+                  <nuxt-link to="/auth/forgot-password" class="btn btn-outline-danger w-100 btn-sm ">بازیابی کلمه عبور
+                  </nuxt-link>
                 </div>
                 <div>
                   <nuxt-link to="/auth/login" class="btn btn-outline-success w-100 btn-sm ">ورود</nuxt-link>
@@ -45,12 +50,12 @@
 
 <script setup>
 useHead({
-  title: 'ثبت نام',
+  name: 'ثبت نام',
   meta: [
-    { name: 'description', content: 'ثبت نام' },
+    {name: 'description', content: 'ثبت نام'},
   ],
   link: [
-    { rel: 'canonical', href: `/auth/register` }
+    {rel: 'canonical', href: `/auth/register`}
   ]
 })
 
@@ -71,7 +76,7 @@ async function login() {
   try {
     params.loading = true
     await useAuth().login(params.identity, params.password)
-  } catch(error) {
+  } catch (error) {
     console.log(error)
     errors.identity = "نام کاربری یا کلمه عبور اشتباه است"
   }

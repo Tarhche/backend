@@ -1,4 +1,4 @@
-import { useDayjs } from '#dayjs'
+import {useDayjs} from '#dayjs'
 
 const dayjs = useDayjs()
 

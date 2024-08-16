@@ -18,7 +18,8 @@
     </div>
 
     <template v-if="comments && comments.length">
-      <comments-item v-for="(item , index) in comments" :key="index" :objectType="props.objectType" :objectUUID="props.objectUUID" :data="item"/>
+      <comments-item v-for="(item , index) in comments" :key="index" :objectType="props.objectType"
+                     :objectUUID="props.objectUUID" :data="item"/>
     </template>
   </section>
 </template>
@@ -35,7 +36,7 @@ const props = defineProps({
   },
 })
 
-const data = await $fetch( useApiUrlResolver().resolve('api/comments'), {
+const data = await $fetch(useApiUrlResolver().resolve('api/comments'), {
   query: {
     object_type: props.objectType,
     object_uuid: props.objectUUID,

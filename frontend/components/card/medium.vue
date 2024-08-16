@@ -21,49 +21,50 @@
 </template>
 
 <script setup>
-    const props = defineProps(["cover", "href", "title", "excerpt", "publishedAt"])
-    const resolveFileUrl = useFilesUrlResolver().resolve
-    const {cover, href, title, excerpt, publishedAt} = props
+const props = defineProps(["cover", "href", "title", "excerpt", "publishedAt"])
+const resolveFileUrl = useFilesUrlResolver().resolve
+const {cover, href, title, excerpt, publishedAt} = props
 </script>
 
 <style scoped>
-  p {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    line-clamp: 2;
-    -webkit-line-clamp: 2;
-    text-align: justify;
-    line-height: normal;
-  }
+p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  line-clamp: 2;
+  -webkit-line-clamp: 2;
+  text-align: justify;
+  line-height: normal;
+}
 
-  figure img {
-    transition: 0.3s;
-    object-fit: cover;
-  }
+figure img {
+  transition: 0.3s;
+  object-fit: cover;
+}
 
-  figure img:hover {
-    scale: 1.05;
-  }
+figure img:hover {
+  scale: 1.05;
+}
 
+h2 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  line-clamp: 1;
+  -webkit-line-clamp: 1;
+  line-height: normal;
+}
+
+@media screen and (max-width: 995.9px) {
   h2 {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    line-clamp: 1;
-    -webkit-line-clamp: 1;
-    line-height: normal;
+    font-size: 1.2rem;
   }
 
-  @media screen and (max-width: 995.9px) {
-    h2 {
-      font-size: 1.2rem;
-    }
-    .card-text-summary {
-      font-size: 0.9rem ;
-      letter-spacing: 0 ;
-    }
+  .card-text-summary {
+    font-size: 0.9rem;
+    letter-spacing: 0;
   }
+}
 </style>
