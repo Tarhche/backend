@@ -92,7 +92,8 @@ func (r *RolesRepository) GetOne(UUID string) (role.Role, error) {
 		UUID:        rb.UUID,
 		Name:        rb.Name,
 		Description: rb.Description,
-		Permissions: rb.UserUUIDs,
+		Permissions: rb.Permissions,
+		UserUUIDs:   rb.UserUUIDs,
 	}, nil
 }
 
