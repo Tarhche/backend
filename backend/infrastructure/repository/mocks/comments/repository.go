@@ -1,8 +1,9 @@
 package comments
 
 import (
-	"github.com/khanzadimahdi/testproject/domain/comment"
 	"github.com/stretchr/testify/mock"
+
+	"github.com/khanzadimahdi/testproject/domain/comment"
 )
 
 type MockCommentsRepository struct {

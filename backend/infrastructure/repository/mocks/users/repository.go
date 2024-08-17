@@ -1,8 +1,9 @@
 package users
 
 import (
-	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/stretchr/testify/mock"
+
+	"github.com/khanzadimahdi/testproject/domain/user"
 )
 
 type MockUsersRepository struct {

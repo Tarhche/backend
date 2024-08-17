@@ -2,16 +2,16 @@ package getarticle
 
 import (
 	"fmt"
-	"github.com/khanzadimahdi/testproject/domain/element"
-	"github.com/khanzadimahdi/testproject/domain/element/component"
-	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/elements"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/article"
+	"github.com/khanzadimahdi/testproject/domain/element"
+	"github.com/khanzadimahdi/testproject/domain/element/component"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/articles"
+	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/elements"
 )
 
 func TestUseCase_Execute(t *testing.T) {

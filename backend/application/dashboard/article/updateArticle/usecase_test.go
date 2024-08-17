@@ -2,11 +2,13 @@ package updatearticle
 
 import (
 	"errors"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+
 	"github.com/khanzadimahdi/testproject/domain/article"
 	"github.com/khanzadimahdi/testproject/domain/author"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/articles"
-	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 func TestUseCase_Execute(t *testing.T) {

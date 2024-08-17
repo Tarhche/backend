@@ -2,7 +2,6 @@ package getComments
 
 import (
 	"errors"
-	"github.com/khanzadimahdi/testproject/domain/user"
 	"testing"
 	"time"
 
@@ -10,6 +9,7 @@ import (
 
 	"github.com/khanzadimahdi/testproject/domain/author"
 	"github.com/khanzadimahdi/testproject/domain/comment"
+	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/comments"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
 )

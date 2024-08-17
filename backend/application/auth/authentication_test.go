@@ -2,9 +2,11 @@ package auth
 
 import (
 	"context"
-	"github.com/khanzadimahdi/testproject/domain/user"
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+
+	"github.com/khanzadimahdi/testproject/domain/user"
 )
 
 func TestContext(t *testing.T) {

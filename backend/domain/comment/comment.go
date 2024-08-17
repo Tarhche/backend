@@ -1,8 +1,9 @@
 package comment
 
 import (
-	"github.com/khanzadimahdi/testproject/domain/author"
 	"time"
+
+	"github.com/khanzadimahdi/testproject/domain/author"
 )
 
 const (

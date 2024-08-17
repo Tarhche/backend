@@ -1,15 +1,16 @@
 package verify
 
 import (
+	"encoding/base64"
 	"errors"
-	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/stretchr/testify/mock"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
+	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/ecdsa"
 	crypto "github.com/khanzadimahdi/testproject/infrastructure/crypto/mock"
@@ -246,5 +247,5 @@ func generateToken(t *testing.T, j *jwt.JWT, u user.User, expiresAt time.Time, a
 	token, err := j.Generate(b.Build())
 	assert.NoError(t, err)
 
-	return token
+	return base64.URLEncoding.EncodeToString([]byte(token))
 }

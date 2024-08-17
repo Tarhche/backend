@@ -4,11 +4,12 @@ import (
 	"bytes"
 	"encoding/base64"
 	"errors"
+	"time"
+
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
-	"time"
 )
 
 type UseCase struct {

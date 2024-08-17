@@ -6,13 +6,14 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid/v5"
-	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/article"
-	"github.com/khanzadimahdi/testproject/domain/author"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+
+	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/article"
+	"github.com/khanzadimahdi/testproject/domain/author"
 )
 
 const (

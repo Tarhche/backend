@@ -2,13 +2,15 @@ package getComments
 
 import (
 	"errors"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+
 	"github.com/khanzadimahdi/testproject/domain/author"
 	"github.com/khanzadimahdi/testproject/domain/comment"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/comments"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
-	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 func TestUseCase_Execute(t *testing.T) {

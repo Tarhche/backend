@@ -2,11 +2,11 @@ package getarticles
 
 import (
 	"errors"
-	"github.com/khanzadimahdi/testproject/domain/article"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/khanzadimahdi/testproject/domain/article"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/articles"
 )
 

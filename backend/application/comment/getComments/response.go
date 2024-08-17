@@ -1,8 +1,9 @@
 package getComments
 
 import (
-	"github.com/khanzadimahdi/testproject/domain/comment"
 	"time"
+
+	"github.com/khanzadimahdi/testproject/domain/comment"
 )
 
 type commentResponse struct {

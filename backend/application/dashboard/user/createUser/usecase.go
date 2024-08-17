@@ -3,6 +3,7 @@ package createuser
 import (
 	"crypto/rand"
 	"errors"
+
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/password"
 	"github.com/khanzadimahdi/testproject/domain/user"

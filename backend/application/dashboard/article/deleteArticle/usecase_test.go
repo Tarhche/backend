@@ -2,8 +2,9 @@ package deletearticle
 
 import (
 	"errors"
-	"github.com/stretchr/testify/assert"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/articles"
 )

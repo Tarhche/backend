@@ -2,6 +2,7 @@ package updateuser
 
 import (
 	"errors"
+
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/user"
 )

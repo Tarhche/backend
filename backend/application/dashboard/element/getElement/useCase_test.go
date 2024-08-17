@@ -2,12 +2,14 @@ package getelement
 
 import (
 	"errors"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+
 	"github.com/khanzadimahdi/testproject/domain/element"
 	"github.com/khanzadimahdi/testproject/domain/element/component"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/elements"
-	"github.com/stretchr/testify/assert"
-	"testing"
-	"time"
 )
 
 func TestUseCase_Execute(t *testing.T) {

@@ -1,8 +1,9 @@
 package files
 
 import (
-	"github.com/khanzadimahdi/testproject/domain/file"
 	"github.com/stretchr/testify/mock"
+
+	"github.com/khanzadimahdi/testproject/domain/file"
 )
 
 type MockFilesRepository struct {

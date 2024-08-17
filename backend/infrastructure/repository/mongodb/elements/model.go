@@ -3,9 +3,10 @@ package elements
 import (
 	"time"
 
+	"go.mongodb.org/mongo-driver/bson"
+
 	"github.com/khanzadimahdi/testproject/domain/element"
 	"github.com/khanzadimahdi/testproject/domain/element/component"
-	"go.mongodb.org/mongo-driver/bson"
 )
 
 type ElementBson struct {

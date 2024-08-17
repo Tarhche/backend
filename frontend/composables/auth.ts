@@ -2,6 +2,7 @@ import {jwtDecode} from "jwt-decode"
 
 const cookieName = "auth"
 
+const homePage = '/'
 const loginPage = '/auth/login'
 const dashboardPage = '/dashboard'
 
@@ -65,7 +66,53 @@ async function logout() {
         cookie.value = null
     }
 
-    await navigateTo({path: loginPage})
+    await navigateTo({path: homePage})
+}
+
+async function register(identity: string) {
+    const {data, error} = await useFetch(
+        useApiUrlResolver().resolve("api/auth/register"),
+        {
+            method: "POST",
+            body: {
+                "identity": identity,
+            }
+        }
+    )
+
+    if (error.value) {
+        console.log({
+            statusCode: error.value.statusCode,
+            data: error.value.data,
+        })
+
+        throw new Error("registration failed");
+    }
+}
+
+async function verify(token: string, name:string, username:string, password:string, repassword:string) {
+    const {data, error} = await useFetch(
+        useApiUrlResolver().resolve("api/auth/verify"),
+        {
+            method: "POST",
+            body: {
+                "token": token,
+                "name": name,
+                "username": username,
+                "password": password,
+                "repassword": repassword,
+            }
+        }
+    )
+
+    if (error.value) {
+        console.log({
+            statusCode: error.value.statusCode,
+            data: error.value.data,
+        })
+
+        throw new Error("verification failed");
+    }
 }
 
 function accessToken() {
@@ -153,6 +200,8 @@ export function useAuth() {
         isLogin: isLogin,
         forgotPassword: forgotPassword,
         resetPassword: resetPassword,
+        register: register,
+        verify: verify,
     }
 }
 

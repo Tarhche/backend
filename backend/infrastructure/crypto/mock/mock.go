@@ -1,8 +1,9 @@
 package mock
 
 import (
-	"github.com/khanzadimahdi/testproject/domain/password"
 	"github.com/stretchr/testify/mock"
+
+	"github.com/khanzadimahdi/testproject/domain/password"
 )
 
 type MockCrypto struct {

@@ -1,8 +1,9 @@
 package createComment
 
 import (
-	"github.com/khanzadimahdi/testproject/domain/comment"
 	"time"
+
+	"github.com/khanzadimahdi/testproject/domain/comment"
 )
 
 type validationErrors map[string]string

@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/julienschmidt/httprouter"
+
 	getarticle "github.com/khanzadimahdi/testproject/application/article/getArticle"
 	"github.com/khanzadimahdi/testproject/domain"
 )

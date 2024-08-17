@@ -1,8 +1,9 @@
 package elements
 
 import (
-	"github.com/khanzadimahdi/testproject/domain/element"
 	"github.com/stretchr/testify/mock"
+
+	"github.com/khanzadimahdi/testproject/domain/element"
 )
 
 type MockElementsRepository struct {

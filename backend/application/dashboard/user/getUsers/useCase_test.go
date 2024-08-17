@@ -2,11 +2,13 @@ package getusers
 
 import (
 	"errors"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+
 	"github.com/khanzadimahdi/testproject/domain/password"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
-	"github.com/stretchr/testify/assert"
-	"testing"
 )
 
 func TestUseCase_Execute(t *testing.T) {

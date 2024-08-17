@@ -1,8 +1,9 @@
 package permissions
 
 import (
-	"github.com/khanzadimahdi/testproject/domain/permission"
 	"github.com/stretchr/testify/mock"
+
+	"github.com/khanzadimahdi/testproject/domain/permission"
 )
 
 type MockPermissionsRepository struct {

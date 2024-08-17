@@ -2,6 +2,7 @@ package verify
 
 import (
 	"crypto/rand"
+	"encoding/base64"
 	"errors"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
@@ -32,7 +33,12 @@ func (uc *UseCase) Execute(request Request) (*Response, error) {
 		}, nil
 	}
 
-	claims, err := uc.jwt.Verify(request.Token)
+	registrationToken, err := base64.URLEncoding.DecodeString(request.Token)
+	if err != nil {
+		return nil, err
+	}
+
+	claims, err := uc.jwt.Verify(string(registrationToken))
 	if err != nil {
 		return &Response{
 			ValidationErrors: validationErrors{

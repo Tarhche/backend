@@ -2,9 +2,11 @@ package mock
 
 import (
 	"context"
-	"github.com/khanzadimahdi/testproject/domain/file"
-	"github.com/stretchr/testify/mock"
 	"io"
+
+	"github.com/stretchr/testify/mock"
+
+	"github.com/khanzadimahdi/testproject/domain/file"
 )
 
 type MockStorage struct {

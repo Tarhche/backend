@@ -30,7 +30,7 @@
                   &nbsp;
                   <span>وارد حساب کاربری خود شوید </span>
                 </p>
-                <button :disabled="params.loading" type="submit"
+                <button :disabled="params.loading || params.succeed" type="submit"
                         class="form-control btn btn-primary rounded submit px-3">
                   <span v-if="!params.loading">ذخیره کن</span>
                   <div v-else class="spinner-border" role="status">

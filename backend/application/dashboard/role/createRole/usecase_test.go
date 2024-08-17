@@ -2,11 +2,11 @@ package createrole
 
 import (
 	"errors"
-	"github.com/khanzadimahdi/testproject/domain/permission"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/khanzadimahdi/testproject/domain/permission"
 	"github.com/khanzadimahdi/testproject/domain/role"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/permissions"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/roles"
