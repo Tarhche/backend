@@ -12,8 +12,8 @@ import (
 type ElementBson struct {
 	UUID      string            `bson:"_id,omitempty"`
 	Type      string            `bson:"type,omitempty"`
-	Body      element.Component `bson:"body,omitempty"`
-	Venues    []string          `bson:"venues,omitempty"`
+	Body      element.Component `bson:"body"`
+	Venues    []string          `bson:"venues"`
 	CreatedAt time.Time         `bson:"created_at,omitempty"`
 	UpdatedAt time.Time         `bson:"updated_at,omitempty"`
 }

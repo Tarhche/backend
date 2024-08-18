@@ -6,12 +6,12 @@ import (
 
 type CommentBson struct {
 	UUID       string    `bson:"_id,omitempty"`
-	Body       string    `bson:"body,omitempty"`
-	AuthorUUID string    `bson:"author_uuid,omitempty"`
-	ParentUUID string    `bson:"parent_uuid,omitempty"`
+	Body       string    `bson:"body"`
+	AuthorUUID string    `bson:"author_uuid"`
+	ParentUUID string    `bson:"parent_uuid"`
 	ObjectUUID string    `bson:"object_uuid,omitempty"`
 	ObjectType string    `bson:"object_type,omitempty"`
-	ApprovedAt time.Time `bson:"approved_at,omitempty"`
+	ApprovedAt time.Time `bson:"approved_at"`
 	CreatedAt  time.Time `bson:"created_at,omitempty"`
 	UpdatedAt  time.Time `bson:"updated_at,omitempty"`
 }
