@@ -12,7 +12,7 @@ async function index(page: number) {
     )
 }
 
-async function create(title: string, excerpt: string, body: string, tags: string[], publishedAt?: string, cover?: string) {
+async function create(title: string, excerpt: string, body: string, tags: string[], publishedAt?: string, cover?: string, video?: string) {
     return useUser().$fetch(
         useApiUrlResolver().resolve("api/dashboard/articles"),
         {
@@ -26,6 +26,7 @@ async function create(title: string, excerpt: string, body: string, tags: string
                 tags: tags,
                 published_at: publishedAt,
                 cover: cover,
+                video: video,
             }
         }
     )
@@ -42,7 +43,7 @@ async function show(uuid: string) {
     )
 }
 
-async function update(uuid: string, title: string, excerpt: string, body: string, tags: string[], publishedAt?: string, cover?: string) {
+async function update(uuid: string, title: string, excerpt: string, body: string, tags: string[], publishedAt?: string, cover?: string, video?: string) {
     return useUser().$fetch(
         useApiUrlResolver().resolve(`api/dashboard/articles`),
         {
@@ -57,6 +58,7 @@ async function update(uuid: string, title: string, excerpt: string, body: string
                 tags: tags,
                 published_at: publishedAt,
                 cover: cover,
+                video: video,
             }
         }
     )

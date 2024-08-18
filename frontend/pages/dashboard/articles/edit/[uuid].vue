@@ -62,7 +62,7 @@
                 </div>
 
                 <div>
-                  <div @click.prevent="params.showFilePicker=true" class="image-picker"
+                  <div @click.prevent="params.showFilePicker=true; params.pickCover=true;" class="image-picker"
                        :style="{ backgroundImage: `url('${ useFilesUrlResolver().resolve(params.cover) }')` }">
                     <small class="title">تصویر اصلی</small>
                     <div class="body">
@@ -70,6 +70,17 @@
                     </div>
                   </div>
                 </div>
+
+                <div>
+                  <div @click.prevent="params.showFilePicker=true; params.pickCover=false;" class="image-picker"
+                       :style="{ backgroundImage: `url('${ useFilesUrlResolver().resolve(params.video) }')` }">
+                    <small class="title">ویدئو</small>
+                    <div class="body">
+                      <small class="fa fa-plus"></small>
+                    </div>
+                  </div>
+                </div>
+
               </div>
               <div class="card-footer">
                 <button :disabled="params.loading" type="submit" class="btn btn-primary rounded submit px-3">
@@ -109,8 +120,10 @@ const params = reactive({
   tags: null,
   publishedAt: null,
   cover: null,
+  video: null,
   loading: false,
   showFilePicker: false,
+  pickCover: false,
 })
 
 // reflects the validation errors to corresponding html input.
@@ -135,11 +148,17 @@ function tags() {
 function selectFile(uuids: string[]) {
   params.showFilePicker = false
 
-  if (params.cover && params.cover.length == 0) {
+  if (uuids && uuids.length == 0) {
     return
   }
 
-  params.cover = uuids[0]
+  if (params.pickCover) {
+    params.cover = uuids[0]
+
+    return
+  }
+
+  params.video = uuids[0]
 }
 
 async function showArticle() {
@@ -174,6 +193,7 @@ async function updateArticle() {
         tags(),
         params.publishedAt ? useTime().toISOString(params.publishedAt) : null,
         params.cover || null,
+        params.video || null,
     )
   } catch (error) {
     console.log(error)
