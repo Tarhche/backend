@@ -11,7 +11,14 @@
                   <time class="text-muted" :datetime="data.published_at">{{ useTime().toAgo(data.published_at) }}</time>
                 </span>
           </div>
-          <figure v-if="data.cover">
+          <figure v-if="data.video">
+            <video-player width="100%" :video="resolveFileUrl(data.video)" :poster="resolveFileUrl(data.cover)" />
+            <figcaption class="alert alert-secondary my-3 text-wrap">
+              <span class="fa-solid fa-book fa-flip-horizontal fa-xl"></span>
+              {{ data.excerpt }}
+            </figcaption>
+          </figure>
+          <figure v-else v-if="data.cover">
             <img class="image-zoomable" :src="resolveFileUrl(data.cover)" :alt="data.title">
             <figcaption class="alert alert-secondary my-3 text-wrap">
               <span class="fa-solid fa-book fa-flip-horizontal fa-xl"></span>
