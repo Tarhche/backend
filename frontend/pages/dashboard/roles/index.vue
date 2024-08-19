@@ -46,8 +46,8 @@
                       </td>
                     </tr>
                     <tr v-if="params.data.items.length == 0">
-                      <td colspan="5">
-                        <p>هیچ نقشی وجود ندارد</p>
+                      <td colspan="4">
+                        <p class="m-2">هیچ نقشی وجود ندارد</p>
                       </td>
                     </tr>
                     </tbody>

@@ -66,7 +66,7 @@
                     </tr>
                     <tr v-if="params.data.items.length == 0">
                       <td colspan="6">
-                        <p>هیچ کامنتی وجود ندارد</p>
+                        <p class="m-2">هیچ کامنتی وجود ندارد</p>
                       </td>
                     </tr>
                     </tbody>

@@ -53,7 +53,7 @@
                     </tr>
                     <tr v-if="data.items.length == 0">
                       <td colspan="5">
-                        <p>هیچ مقاله ای وجود ندارد</p>
+                        <p class="m-2">هیچ مقاله ای وجود ندارد</p>
                       </td>
                     </tr>
                     </tbody>
