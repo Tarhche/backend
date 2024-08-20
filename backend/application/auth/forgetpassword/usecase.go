@@ -11,11 +11,17 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
 )
 
+const (
+	templateName     = "resources/view/mail/auth/reset-password"
+	resetPasswordURL = "https://tarhche.com/auth/reset-password?token="
+)
+
 type UseCase struct {
 	userRepository user.Repository
 	jwt            *jwt.JWT
 	mailer         domain.Mailer
 	mailFrom       string
+	template       domain.Renderer
 }
 
 func NewUseCase(
@@ -23,12 +29,14 @@ func NewUseCase(
 	JWT *jwt.JWT,
 	mailer domain.Mailer,
 	mailFrom string,
+	template domain.Renderer,
 ) *UseCase {
 	return &UseCase{
 		userRepository: userRepository,
 		jwt:            JWT,
 		mailer:         mailer,
 		mailFrom:       mailFrom,
+		template:       template,
 	}
 }
 
@@ -52,7 +60,8 @@ func (uc *UseCase) Execute(request Request) (*Response, error) {
 	resetPasswordToken = base64.URLEncoding.EncodeToString([]byte(resetPasswordToken))
 
 	var msg bytes.Buffer
-	if _, err := msg.WriteString(resetPasswordToken); err != nil {
+	viewData := map[string]string{"resetPasswordURL": resetPasswordURL + resetPasswordToken}
+	if err := uc.template.Render(&msg, templateName, viewData); err != nil {
 		return nil, err
 	}
 

@@ -12,6 +12,7 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/email"
 	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
+	"github.com/khanzadimahdi/testproject/infrastructure/template"
 )
 
 func TestUseCase_Execute(t *testing.T) {
@@ -27,6 +28,7 @@ func TestUseCase_Execute(t *testing.T) {
 		var (
 			userRepository users.MockUsersRepository
 			mailer         email.MockMailer
+			renderer       template.MockRenderer
 
 			request = Request{
 				Identity: "something@somewhere.loc",
@@ -41,10 +43,13 @@ func TestUseCase_Execute(t *testing.T) {
 		userRepository.On("GetOneByIdentity", request.Identity).Once().Return(u, nil)
 		defer userRepository.AssertExpectations(t)
 
+		renderer.On("Render", mock.Anything, templateName, mock.Anything).Once().Return(nil)
+		defer renderer.AssertExpectations(t)
+
 		mailer.On("SendMail", mailFrom, u.Email, "Reset Password", mock.AnythingOfType("[]uint8")).Once().Return(nil)
 		defer mailer.AssertExpectations(t)
 
-		response, err := NewUseCase(&userRepository, j, &mailer, mailFrom).Execute(request)
+		response, err := NewUseCase(&userRepository, j, &mailer, mailFrom, &renderer).Execute(request)
 		assert.NoError(t, err)
 		assert.NotNil(t, response)
 	})
@@ -53,6 +58,7 @@ func TestUseCase_Execute(t *testing.T) {
 		var (
 			userRepository users.MockUsersRepository
 			mailer         email.MockMailer
+			renderer       template.MockRenderer
 
 			request          = Request{}
 			expectedResponse = Response{
@@ -62,9 +68,10 @@ func TestUseCase_Execute(t *testing.T) {
 			}
 		)
 
-		response, err := NewUseCase(&userRepository, j, &mailer, mailFrom).Execute(request)
+		response, err := NewUseCase(&userRepository, j, &mailer, mailFrom, &renderer).Execute(request)
 
 		userRepository.AssertNotCalled(t, "GetOneByIdentity")
+		renderer.AssertNotCalled(t, "Render")
 		mailer.AssertNotCalled(t, "SendMail")
 
 		assert.NoError(t, err)
@@ -76,6 +83,7 @@ func TestUseCase_Execute(t *testing.T) {
 		var (
 			userRepository users.MockUsersRepository
 			mailer         email.MockMailer
+			renderer       template.MockRenderer
 
 			request = Request{
 				Identity: "something@somewhere.loc",
@@ -87,18 +95,20 @@ func TestUseCase_Execute(t *testing.T) {
 		userRepository.On("GetOneByIdentity", request.Identity).Once().Return(user.User{}, expectedErr)
 		defer userRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&userRepository, j, &mailer, mailFrom).Execute(request)
+		response, err := NewUseCase(&userRepository, j, &mailer, mailFrom, &renderer).Execute(request)
 
+		renderer.AssertNotCalled(t, "Render")
 		mailer.AssertNotCalled(t, "SendMail")
 
 		assert.ErrorIs(t, expectedErr, err)
 		assert.Nil(t, response)
 	})
 
-	t.Run("error on sending email", func(t *testing.T) {
+	t.Run("error on rendering template", func(t *testing.T) {
 		var (
 			userRepository users.MockUsersRepository
 			mailer         email.MockMailer
+			renderer       template.MockRenderer
 
 			request = Request{
 				Identity: "something@somewhere.loc",
@@ -115,10 +125,45 @@ func TestUseCase_Execute(t *testing.T) {
 		userRepository.On("GetOneByIdentity", request.Identity).Once().Return(u, nil)
 		defer userRepository.AssertExpectations(t)
 
+		renderer.On("Render", mock.Anything, templateName, mock.Anything).Once().Return(expectedErr)
+		defer renderer.AssertExpectations(t)
+
+		response, err := NewUseCase(&userRepository, j, &mailer, mailFrom, &renderer).Execute(request)
+
+		mailer.AssertNotCalled(t, "SendMail")
+
+		assert.ErrorIs(t, expectedErr, err)
+		assert.Nil(t, response)
+	})
+
+	t.Run("error on sending email", func(t *testing.T) {
+		var (
+			userRepository users.MockUsersRepository
+			mailer         email.MockMailer
+			renderer       template.MockRenderer
+
+			request = Request{
+				Identity: "something@somewhere.loc",
+			}
+
+			u = user.User{
+				UUID:  "user-uuid",
+				Email: request.Identity,
+			}
+
+			expectedErr = errors.New("something bad happened")
+		)
+
+		userRepository.On("GetOneByIdentity", request.Identity).Once().Return(u, nil)
+		defer userRepository.AssertExpectations(t)
+
+		renderer.On("Render", mock.Anything, templateName, mock.Anything).Once().Return(nil)
+		defer renderer.AssertExpectations(t)
+
 		mailer.On("SendMail", mailFrom, u.Email, "Reset Password", mock.AnythingOfType("[]uint8")).Once().Return(expectedErr)
 		defer mailer.AssertExpectations(t)
 
-		response, err := NewUseCase(&userRepository, j, &mailer, mailFrom).Execute(request)
+		response, err := NewUseCase(&userRepository, j, &mailer, mailFrom, &renderer).Execute(request)
 		assert.ErrorIs(t, expectedErr, err)
 		assert.Nil(t, response)
 	})

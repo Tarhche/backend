@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"embed"
 	"fmt"
 	"log"
 	"net/http"
@@ -75,6 +76,7 @@ import (
 	rolesrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/roles"
 	userrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/users"
 	"github.com/khanzadimahdi/testproject/infrastructure/storage/minio"
+	"github.com/khanzadimahdi/testproject/infrastructure/template"
 	"github.com/khanzadimahdi/testproject/presentation/commands"
 	articleAPI "github.com/khanzadimahdi/testproject/presentation/http/api/article"
 	"github.com/khanzadimahdi/testproject/presentation/http/api/auth"
@@ -95,13 +97,16 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
+//go:embed resources/view
+var files embed.FS
+
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
 	defer cancel()
 
-	console := console.NewConsole(path.Base(os.Args[0]), "Application description", os.Stderr)
-	console.Register(commands.NewServeCommand(httpHandler()))
-	code := console.Run(ctx, os.Args)
+	c := console.NewConsole(path.Base(os.Args[0]), "Application description", os.Stderr)
+	c.Register(commands.NewServeCommand(httpHandler()))
+	code := c.Run(ctx, os.Args)
 
 	cancel()
 	os.Exit(code)
@@ -157,6 +162,8 @@ func httpHandler() http.Handler {
 	j := jwt.NewJWT(privateKey, privateKey.Public())
 	hasher := argon2.NewArgon2id(2, 64*1024, 2, 64)
 
+	templateRenderer := template.NewRenderer(files, "tmpl")
+
 	mailFromAddress := os.Getenv("MAIL_SMTP_FROM")
 	mailer := email.NewSMTP(email.Config{
 		Auth: email.Auth{
@@ -175,9 +182,9 @@ func httpHandler() http.Handler {
 	log.SetFlags(log.LstdFlags | log.Llongfile)
 	loginUseCase := login.NewUseCase(userRepository, j, hasher)
 	refreshUseCase := refresh.NewUseCase(userRepository, j)
-	forgetPasswordUseCase := forgetpassword.NewUseCase(userRepository, j, mailer, mailFromAddress)
+	forgetPasswordUseCase := forgetpassword.NewUseCase(userRepository, j, mailer, mailFromAddress, templateRenderer)
 	resetPasswordUseCase := resetpassword.NewUseCase(userRepository, hasher, j)
-	registerUseCase := register.NewUseCase(userRepository, j, mailer, mailFromAddress)
+	registerUseCase := register.NewUseCase(userRepository, j, mailer, mailFromAddress, templateRenderer)
 	verifyUseCase := verify.NewUseCase(userRepository, hasher, j)
 
 	getArticleUsecase := getArticle.NewUseCase(articlesRepository, elementsRepository)

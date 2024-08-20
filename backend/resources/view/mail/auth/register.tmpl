@@ -1,0 +1,34 @@
+{{template "base.layout.tmpl" .}}
+
+{{define "head"}}
+    <title>ثبت نام | طرح‌چه</title>
+
+    <style>
+        body {
+            direction: rtl;
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+            color: #333;
+        }
+    </style>
+{{end}}
+
+{{define "body"}}
+    <div style="direction: rtl; font-family: Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 0; color: #333;">
+        <div style="width: 100%; padding: 20px; background-color: #ffffff; max-width: 600px; margin: 40px auto; border-radius: 10px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);">
+            <div style="text-align: center; padding: 20px 0;">
+                <h1 style="margin: 0; font-size: 24px; color: #333;">ثبت نام در طرح‌چه</h1>
+            </div>
+            <div style="padding: 20px; text-align: center;">
+                <p style="font-size: 18px; margin-bottom: 30px;">دوست عزیز برای تکمیل ثبت نام لطفا بر روی دکمه زیر کلیک کنید</p>
+                <a href="{{ .registrationURL }}" style="background-color: #007bff; color: #ffffff; text-decoration: none; padding: 15px 30px; font-size: 18px; border-radius: 5px; display: inline-block;">تکمیل ثبت نام</a>
+                <p style="margin-top: 20px; font-size: 16px;">اگر دلیل ارسال شدن این ایمیل را نمیدانید, نیاز نیست اقدام خاصی انجام دهید</p>
+            </div>
+            <div style="text-align: center; padding: 20px; font-size: 14px; color: #777;">
+                <p style="margin: 0;">&copy; طرح‌چه</p>
+            </div>
+        </div>
+    </div>
+{{end}}

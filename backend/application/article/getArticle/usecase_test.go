@@ -164,7 +164,7 @@ func TestUseCase_Execute(t *testing.T) {
 		assert.ErrorIs(t, err, expectedErr)
 	})
 
-	t.Run("error on increasing view count is not reflected on response", func(t *testing.T) {
+	t.Run("error on increasing template count is not reflected on response", func(t *testing.T) {
 		var (
 			articlesRepository articles.MockArticlesRepository
 			elementsRepository elements.MockElementsRepository
