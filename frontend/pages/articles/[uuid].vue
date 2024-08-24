@@ -4,15 +4,20 @@
       <div class="row justify-content-center py-4">
         <section class="col-md-12 col-lg-8">
           <h1 class="pb-3">{{ data.title }}</h1>
-          <div class="my-3">
-                <span class="small">
-                  <span class="fa-regular fa-clock"></span>
-                  <span class="mx-1">تاریخ انتشار:</span>
-                  <time class="text-muted" :datetime="data.published_at">{{ useTime().toAgo(data.published_at) }}</time>
-                </span>
+          <div class="d-flex my-2 justify-content-between">
+            <div>
+              <span class="small">
+                <span class="fa-regular fa-clock"></span>
+                <span class="mx-1">تاریخ انتشار:</span>
+                <time class="text-muted" :datetime="data.published_at">{{ useTime().toAgo(data.published_at) }}</time>
+              </span>
+            </div>
+            <button v-if="useAuth().isLogin()" title="بوک مارک کنید و بعدا بخوانید" type="button" class="btn mx-1">
+              <span class="fa-regular fa-bookmark"></span>
+            </button>
           </div>
           <figure v-if="data.video">
-            <video-player width="100%" :video="resolveFileUrl(data.video)" :poster="resolveFileUrl(data.cover)" />
+            <video-player width="100%" :video="resolveFileUrl(data.video)" :poster="resolveFileUrl(data.cover)"/>
             <figcaption class="alert alert-secondary my-3 text-wrap">
               <span class="fa-solid fa-book fa-flip-horizontal fa-xl"></span>
               {{ data.excerpt }}

@@ -11,6 +11,7 @@ type Repository interface {
 	Get(values []string) ([]Permission, error)
 }
 
+// global accesses
 const (
 	ArticlesIndex  = "articles.index"
 	ArticlesCreate = "articles.create"
@@ -49,4 +50,15 @@ const (
 	RolesShow   = "roles.show"
 	RolesUpdate = "roles.update"
 	RolesDelete = "roles.delete"
+)
+
+// user's self related accesses
+const (
+	SelfBookmarksIndex  = "self.bookmarks.index"
+	SelfBookmarksDelete = "self.bookmarks.delete"
+
+	SelfCommentsIndex  = "self.comments.index"
+	SelfCommentsShow   = "self.comments.show"
+	SelfCommentsUpdate = "self.comments.update"
+	SelfCommentsDelete = "self.comments.delete"
 )
