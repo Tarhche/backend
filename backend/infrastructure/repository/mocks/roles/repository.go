@@ -20,6 +20,16 @@ func (r *MockRolesRepository) GetAll(offset uint, limit uint) ([]role.Role, erro
 	return nil, args.Error(1)
 }
 
+func (r *MockRolesRepository) GetByUUIDs(UUIDs []string) ([]role.Role, error) {
+	args := r.Called(UUIDs)
+
+	if c, ok := args.Get(0).([]role.Role); ok {
+		return c, args.Error(1)
+	}
+
+	return nil, args.Error(1)
+}
+
 func (r *MockRolesRepository) GetOne(UUID string) (role.Role, error) {
 	args := r.Mock.Called(UUID)
 

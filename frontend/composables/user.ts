@@ -71,12 +71,40 @@ async function updatePassword(currentPassword: string, newPassword: string) {
     )
 }
 
+async function roles() {
+    return useUser().$fetch(
+        useApiUrlResolver().resolve("api/dashboard/profile/roles"),
+        {
+            method: "GET",
+            lazy: true,
+            headers: {authorization: `Bearer ${useAuth().accessToken()}`},
+        }
+    )
+}
+
+async function permissions(): Promise<string[]> {
+    const data = await roles()
+    const p:string[] = []
+
+    for(const role of data.items) {
+        if (!role.permissions || role.permissions.length == 0) {
+            continue
+        }
+
+        p.push(...role.permissions)
+    }
+
+    return p
+}
+
 export function useUser() {
     return {
         $fetch: userFetch,
         profile: profile,
         updateProfile: updateProfile,
         updatePassword: updatePassword,
+        roles: roles,
+        permissions: permissions,
     }
 }
 

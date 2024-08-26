@@ -1,6 +1,7 @@
 package comment
 
 import (
+	"errors"
 	"time"
 
 	"github.com/khanzadimahdi/testproject/domain/author"
@@ -30,4 +31,13 @@ type Repository interface {
 
 	GetApprovedByObjectUUID(objectType string, UUID string, offset uint, limit uint) ([]Comment, error)
 	CountApprovedByObjectUUID(objectType string, UUID string) (uint, error)
+
+	GetAllByAuthorUUID(authorUUID string, offset uint, limit uint) ([]Comment, error)
+	GetOneByAuthorUUID(UUID string, authorUUID string) (Comment, error)
+	CountByAuthorUUID(authorUUID string) (uint, error)
+	DeleteByAuthorUUID(UUID string, authorUUID string) error
 }
+
+var (
+	ErrUpdatingAnApprovedCommentNotAllowed = errors.New("updating an approved comment is not allowed")
+)

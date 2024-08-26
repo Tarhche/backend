@@ -7,17 +7,17 @@ import (
 const limit = 10
 
 type UseCase struct {
-	elementRepository role.Repository
+	roleRepository role.Repository
 }
 
-func NewUseCase(elementRepository role.Repository) *UseCase {
+func NewUseCase(roleRepository role.Repository) *UseCase {
 	return &UseCase{
-		elementRepository: elementRepository,
+		roleRepository: roleRepository,
 	}
 }
 
 func (uc *UseCase) Execute(request *Request) (*Response, error) {
-	totalRoles, err := uc.elementRepository.Count()
+	totalRoles, err := uc.roleRepository.Count()
 	if err != nil {
 		return nil, err
 	}
@@ -38,7 +38,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		totalPages++
 	}
 
-	roles, err := uc.elementRepository.GetAll(offset, limit)
+	roles, err := uc.roleRepository.GetAll(offset, limit)
 	if err != nil {
 		return nil, err
 	}

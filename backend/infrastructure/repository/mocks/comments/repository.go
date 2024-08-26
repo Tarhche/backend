@@ -61,3 +61,31 @@ func (r *MockCommentsRepository) CountApprovedByObjectUUID(objectType string, UU
 
 	return args.Get(0).(uint), args.Error(1)
 }
+
+func (r *MockCommentsRepository) GetAllByAuthorUUID(authorUUID string, offset uint, limit uint) ([]comment.Comment, error) {
+	args := r.Called(authorUUID, offset, limit)
+
+	if c, ok := args.Get(0).([]comment.Comment); ok {
+		return c, args.Error(1)
+	}
+
+	return nil, args.Error(1)
+}
+
+func (r *MockCommentsRepository) GetOneByAuthorUUID(UUID string, authorUUID string) (comment.Comment, error) {
+	args := r.Called(UUID, authorUUID)
+
+	return args.Get(0).(comment.Comment), args.Error(1)
+}
+
+func (r *MockCommentsRepository) CountByAuthorUUID(authorUUID string) (uint, error) {
+	args := r.Called(authorUUID)
+
+	return args.Get(0).(uint), args.Error(1)
+}
+
+func (r *MockCommentsRepository) DeleteByAuthorUUID(UUID string, authorUUID string) error {
+	args := r.Called(UUID, authorUUID)
+
+	return args.Error(0)
+}

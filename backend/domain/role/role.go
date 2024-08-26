@@ -10,6 +10,7 @@ type Role struct {
 
 type Repository interface {
 	GetAll(offset uint, limit uint) ([]Role, error)
+	GetByUUIDs(UUIDs []string) ([]Role, error)
 	GetOne(UUID string) (Role, error)
 	Save(*Role) (uuid string, err error)
 	Delete(UUID string) error

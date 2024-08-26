@@ -267,3 +267,116 @@ func (r *CommentsRepository) CountApprovedByObjectUUID(objectType string, UUID s
 
 	return uint(c), nil
 }
+
+func (r *CommentsRepository) GetAllByAuthorUUID(authorUUID string, offset uint, limit uint) ([]comment.Comment, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+	defer cancel()
+
+	o := int64(offset)
+	l := int64(limit)
+	desc := bson.D{{Key: "_id", Value: -1}}
+
+	filter := bson.D{
+		{Key: "author_uuid", Value: authorUUID},
+	}
+
+	cur, err := r.collection.Find(ctx, filter, &options.FindOptions{
+		Skip:  &o,
+		Limit: &l,
+		Sort:  desc,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	defer cur.Close(ctx)
+
+	items := make([]comment.Comment, 0, limit)
+	for cur.Next(ctx) {
+		var c CommentBson
+
+		if err := cur.Decode(&c); err != nil {
+			return nil, err
+		}
+		items = append(items, comment.Comment{
+			UUID: c.UUID,
+			Body: c.Body,
+			Author: author.Author{
+				UUID: c.AuthorUUID,
+			},
+			ParentUUID: c.ParentUUID,
+			ObjectUUID: c.ObjectUUID,
+			ObjectType: c.ObjectType,
+			ApprovedAt: c.ApprovedAt,
+			CreatedAt:  c.CreatedAt,
+		})
+	}
+
+	if err := cur.Err(); err != nil {
+		return nil, err
+	}
+
+	return items, nil
+}
+
+func (r *CommentsRepository) GetOneByAuthorUUID(UUID string, authorUUID string) (comment.Comment, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+	defer cancel()
+
+	filter := bson.D{
+		{Key: "_id", Value: UUID},
+		{Key: "author_uuid", Value: authorUUID},
+	}
+
+	var c CommentBson
+	if err := r.collection.FindOne(ctx, filter, nil).Decode(&c); err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			err = domain.ErrNotExists
+		}
+		return comment.Comment{}, err
+	}
+
+	return comment.Comment{
+		UUID: c.UUID,
+		Body: c.Body,
+		Author: author.Author{
+			UUID: c.AuthorUUID,
+		},
+		ParentUUID: c.ParentUUID,
+		ObjectUUID: c.ObjectUUID,
+		ObjectType: c.ObjectType,
+		ApprovedAt: c.ApprovedAt,
+		CreatedAt:  c.CreatedAt,
+	}, nil
+}
+
+func (r *CommentsRepository) CountByAuthorUUID(authorUUID string) (uint, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+	defer cancel()
+
+	filter := bson.D{
+		{Key: "author_uuid", Value: authorUUID},
+	}
+
+	c, err := r.collection.CountDocuments(ctx, filter, nil)
+	if err != nil {
+		return uint(c), err
+	}
+
+	return uint(c), nil
+}
+
+func (r *CommentsRepository) DeleteByAuthorUUID(UUID string, authorUUID string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+	defer cancel()
+
+	filter := bson.D{
+		{Key: "_id", Value: UUID},
+		{Key: "author_uuid", Value: authorUUID},
+	}
+
+	_, err := r.collection.DeleteOne(ctx, filter, nil)
+
+	return err
+}

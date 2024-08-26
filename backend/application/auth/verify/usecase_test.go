@@ -11,10 +11,14 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/config"
+	"github.com/khanzadimahdi/testproject/domain/role"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/ecdsa"
 	crypto "github.com/khanzadimahdi/testproject/infrastructure/crypto/mock"
 	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
+	configRepo "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/config"
+	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/roles"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
 )
 
@@ -28,8 +32,10 @@ func TestUseCase_Execute(t *testing.T) {
 
 	t.Run("verifies user registration", func(t *testing.T) {
 		var (
-			userRepository users.MockUsersRepository
-			hasher         crypto.MockCrypto
+			userRepository   users.MockUsersRepository
+			roleRepository   roles.MockRolesRepository
+			configRepository configRepo.MockConfigRepository
+			hasher           crypto.MockCrypto
 
 			u = user.User{
 				UUID: "user-uuid",
@@ -42,6 +48,29 @@ func TestUseCase_Execute(t *testing.T) {
 				Password:   "test-password",
 				Repassword: "test-password",
 			}
+
+			roles = []role.Role{
+				{UUID: "role-uuid-1", Name: "role-1", UserUUIDs: []string{"user-uuid-1", "user-uuid-2"}},
+				{UUID: "role-uuid-2", Name: "role-2", UserUUIDs: []string{"user-uuid-1", "user-uuid-2"}},
+			}
+
+			c = config.Config{
+				Revision:             2,
+				UserDefaultRoleUUIDs: []string{roles[0].UUID, roles[1].UUID},
+			}
+
+			expectedRoles = []role.Role{
+				{
+					UUID:      "role-uuid-1",
+					Name:      "role-1",
+					UserUUIDs: []string{"user-uuid-1", "user-uuid-2", u.UUID},
+				},
+				{
+					UUID:      "role-uuid-2",
+					Name:      "role-2",
+					UserUUIDs: []string{"user-uuid-1", "user-uuid-2", u.UUID},
+				},
+			}
 		)
 
 		userRepository.On("GetOneByIdentity", u.UUID).Once().Return(user.User{}, domain.ErrNotExists)
@@ -52,7 +81,15 @@ func TestUseCase_Execute(t *testing.T) {
 		hasher.On("Hash", []byte(r.Password), mock.AnythingOfType("[]uint8")).Once().Return([]byte("hashed-password"), nil)
 		defer hasher.AssertExpectations(t)
 
-		response, err := NewUseCase(&userRepository, &hasher, j).Execute(r)
+		configRepository.On("GetLatestRevision").Once().Return(c, nil)
+		defer configRepository.AssertExpectations(t)
+
+		roleRepository.On("GetByUUIDs", c.UserDefaultRoleUUIDs).Once().Return(roles, nil)
+		roleRepository.On("Save", &expectedRoles[0]).Once().Return(expectedRoles[0].UUID, nil)
+		roleRepository.On("Save", &expectedRoles[1]).Once().Return(expectedRoles[1].UUID, nil)
+		defer roleRepository.AssertExpectations(t)
+
+		response, err := NewUseCase(&userRepository, &roleRepository, &configRepository, &hasher, j).Execute(r)
 
 		assert.NoError(t, err)
 		assert.NotNil(t, response)
@@ -61,8 +98,10 @@ func TestUseCase_Execute(t *testing.T) {
 
 	t.Run("validation fails", func(t *testing.T) {
 		var (
-			userRepository users.MockUsersRepository
-			hasher         crypto.MockCrypto
+			userRepository   users.MockUsersRepository
+			roleRepository   roles.MockRolesRepository
+			configRepository configRepo.MockConfigRepository
+			hasher           crypto.MockCrypto
 
 			r = Request{}
 
@@ -77,11 +116,14 @@ func TestUseCase_Execute(t *testing.T) {
 			}
 		)
 
-		response, err := NewUseCase(&userRepository, &hasher, j).Execute(r)
+		response, err := NewUseCase(&userRepository, &roleRepository, &configRepository, &hasher, j).Execute(r)
 
 		userRepository.AssertNotCalled(t, "GetOneByIdentity")
 		userRepository.AssertNotCalled(t, "Save")
 		hasher.AssertNotCalled(t, "Hash")
+		configRepository.AssertNotCalled(t, "GetLatestRevision")
+		roleRepository.AssertNotCalled(t, "GetByUUIDs")
+		roleRepository.AssertNotCalled(t, "Save")
 
 		assert.NoError(t, err)
 		assert.NotNil(t, response)
@@ -90,8 +132,10 @@ func TestUseCase_Execute(t *testing.T) {
 
 	t.Run("invalid token", func(t *testing.T) {
 		var (
-			userRepository users.MockUsersRepository
-			hasher         crypto.MockCrypto
+			userRepository   users.MockUsersRepository
+			roleRepository   roles.MockRolesRepository
+			configRepository configRepo.MockConfigRepository
+			hasher           crypto.MockCrypto
 
 			u = user.User{
 				UUID: "user-uuid",
@@ -112,11 +156,14 @@ func TestUseCase_Execute(t *testing.T) {
 			}
 		)
 
-		response, err := NewUseCase(&userRepository, &hasher, j).Execute(r)
+		response, err := NewUseCase(&userRepository, &roleRepository, &configRepository, &hasher, j).Execute(r)
 
 		userRepository.AssertNotCalled(t, "GetOneByIdentity")
 		userRepository.AssertNotCalled(t, "Save")
 		hasher.AssertNotCalled(t, "Hash")
+		configRepository.AssertNotCalled(t, "GetLatestRevision")
+		roleRepository.AssertNotCalled(t, "GetByUUIDs")
+		roleRepository.AssertNotCalled(t, "Save")
 
 		assert.NoError(t, err)
 		assert.NotNil(t, response)
@@ -125,8 +172,10 @@ func TestUseCase_Execute(t *testing.T) {
 
 	t.Run("user with same identity exists", func(t *testing.T) {
 		var (
-			userRepository users.MockUsersRepository
-			hasher         crypto.MockCrypto
+			userRepository   users.MockUsersRepository
+			roleRepository   roles.MockRolesRepository
+			configRepository configRepo.MockConfigRepository
+			hasher           crypto.MockCrypto
 
 			u = user.User{
 				UUID:     "user-uuid",
@@ -151,10 +200,13 @@ func TestUseCase_Execute(t *testing.T) {
 		userRepository.On("GetOneByIdentity", u.UUID).Once().Return(u, nil)
 		defer userRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&userRepository, &hasher, j).Execute(r)
+		response, err := NewUseCase(&userRepository, &roleRepository, &configRepository, &hasher, j).Execute(r)
 
 		userRepository.AssertNotCalled(t, "Save")
 		hasher.AssertNotCalled(t, "Hash")
+		configRepository.AssertNotCalled(t, "GetLatestRevision")
+		roleRepository.AssertNotCalled(t, "GetByUUIDs")
+		roleRepository.AssertNotCalled(t, "Save")
 
 		assert.NoError(t, err)
 		assert.NotNil(t, response)
@@ -163,8 +215,10 @@ func TestUseCase_Execute(t *testing.T) {
 
 	t.Run("user with same username exists", func(t *testing.T) {
 		var (
-			userRepository users.MockUsersRepository
-			hasher         crypto.MockCrypto
+			userRepository   users.MockUsersRepository
+			roleRepository   roles.MockRolesRepository
+			configRepository configRepo.MockConfigRepository
+			hasher           crypto.MockCrypto
 
 			u = user.User{
 				UUID:     "user-uuid",
@@ -190,10 +244,13 @@ func TestUseCase_Execute(t *testing.T) {
 		userRepository.On("GetOneByIdentity", r.Username).Once().Return(u, nil)
 		defer userRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&userRepository, &hasher, j).Execute(r)
+		response, err := NewUseCase(&userRepository, &roleRepository, &configRepository, &hasher, j).Execute(r)
 
 		userRepository.AssertNotCalled(t, "Save")
 		hasher.AssertNotCalled(t, "Hash")
+		configRepository.AssertNotCalled(t, "GetLatestRevision")
+		roleRepository.AssertNotCalled(t, "GetByUUIDs")
+		roleRepository.AssertNotCalled(t, "Save")
 
 		assert.NoError(t, err)
 		assert.NotNil(t, response)
@@ -202,8 +259,10 @@ func TestUseCase_Execute(t *testing.T) {
 
 	t.Run("saving user's data failed", func(t *testing.T) {
 		var (
-			userRepository users.MockUsersRepository
-			hasher         crypto.MockCrypto
+			userRepository   users.MockUsersRepository
+			roleRepository   roles.MockRolesRepository
+			configRepository configRepo.MockConfigRepository
+			hasher           crypto.MockCrypto
 
 			u = user.User{
 				UUID:     "user-uuid",
@@ -229,7 +288,11 @@ func TestUseCase_Execute(t *testing.T) {
 		hasher.On("Hash", []byte(r.Password), mock.AnythingOfType("[]uint8")).Once().Return([]byte("hashed-password"), nil)
 		defer hasher.AssertExpectations(t)
 
-		response, err := NewUseCase(&userRepository, &hasher, j).Execute(r)
+		response, err := NewUseCase(&userRepository, &roleRepository, &configRepository, &hasher, j).Execute(r)
+
+		configRepository.AssertNotCalled(t, "GetLatestRevision")
+		roleRepository.AssertNotCalled(t, "GetByUUIDs")
+		roleRepository.AssertNotCalled(t, "Save")
 
 		assert.ErrorIs(t, err, expectedErr)
 		assert.Nil(t, response)

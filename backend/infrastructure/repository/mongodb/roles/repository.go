@@ -77,6 +77,42 @@ func (r *RolesRepository) GetAll(offset uint, limit uint) ([]role.Role, error) {
 	return items, nil
 }
 
+func (r *RolesRepository) GetByUUIDs(UUIDs []string) ([]role.Role, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+	defer cancel()
+
+	filter := bson.M{"_id": bson.M{"$in": UUIDs}}
+
+	cur, err := r.collection.Find(ctx, filter, nil)
+
+	if err != nil {
+		return nil, err
+	}
+
+	defer cur.Close(ctx)
+
+	items := make([]role.Role, 0, len(UUIDs))
+	for cur.Next(ctx) {
+		var r RoleBson
+
+		if err := cur.Decode(&r); err != nil {
+			return nil, err
+		}
+		items = append(items, role.Role{
+			UUID:        r.UUID,
+			Name:        r.Name,
+			Description: r.Description,
+			Permissions: r.Permissions,
+		})
+	}
+
+	if err := cur.Err(); err != nil {
+		return nil, err
+	}
+
+	return items, nil
+}
+
 func (r *RolesRepository) GetOne(UUID string) (role.Role, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
 	defer cancel()

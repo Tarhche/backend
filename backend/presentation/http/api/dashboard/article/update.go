@@ -25,7 +25,7 @@ func NewUpdateHandler(updateArticleUseCase *updatearticle.UseCase, a domain.Auth
 
 func (h *updateHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	userUUID := auth.FromContext(r.Context()).UUID
-	if ok, err := h.authorizer.Authorize(userUUID, permission.ArticlesShow); err != nil {
+	if ok, err := h.authorizer.Authorize(userUUID, permission.ArticlesUpdate); err != nil {
 		rw.WriteHeader(http.StatusInternalServerError)
 		return
 	} else if !ok {

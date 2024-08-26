@@ -13,7 +13,7 @@ import (
 func TestUseCase_Execute(t *testing.T) {
 	t.Run("gets a role", func(t *testing.T) {
 		var (
-			elementRepository roles.MockRolesRepository
+			roleRepository roles.MockRolesRepository
 
 			roleUUID = "role-uuid"
 			a        = role.Role{
@@ -30,10 +30,10 @@ func TestUseCase_Execute(t *testing.T) {
 			}
 		)
 
-		elementRepository.On("GetOne", roleUUID).Return(a, nil)
-		defer elementRepository.AssertExpectations(t)
+		roleRepository.On("GetOne", roleUUID).Return(a, nil)
+		defer roleRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&elementRepository).Execute(roleUUID)
+		response, err := NewUseCase(&roleRepository).Execute(roleUUID)
 
 		assert.NoError(t, err)
 		assert.Equal(t, &expectedResponse, response)
@@ -41,16 +41,16 @@ func TestUseCase_Execute(t *testing.T) {
 
 	t.Run("getting a role fails", func(t *testing.T) {
 		var (
-			elementRepository roles.MockRolesRepository
+			roleRepository roles.MockRolesRepository
 
 			roleUUID      = "role-uuid"
 			expectedError = errors.New("error")
 		)
 
-		elementRepository.On("GetOne", roleUUID).Once().Return(role.Role{}, expectedError)
-		defer elementRepository.AssertExpectations(t)
+		roleRepository.On("GetOne", roleUUID).Once().Return(role.Role{}, expectedError)
+		defer roleRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&elementRepository).Execute(roleUUID)
+		response, err := NewUseCase(&roleRepository).Execute(roleUUID)
 
 		assert.ErrorIs(t, err, expectedError)
 		assert.Nil(t, response)

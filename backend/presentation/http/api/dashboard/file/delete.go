@@ -25,7 +25,7 @@ func NewDeleteHandler(deleteFileUseCase *deletefile.UseCase, a domain.Authorizer
 
 func (h *deleteHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	userUUID := auth.FromContext(r.Context()).UUID
-	if ok, err := h.authorizer.Authorize(userUUID, permission.FilesCreate); err != nil {
+	if ok, err := h.authorizer.Authorize(userUUID, permission.FilesDelete); err != nil {
 		rw.WriteHeader(http.StatusInternalServerError)
 		return
 	} else if !ok {

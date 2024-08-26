@@ -1,0 +1,41 @@
+package updateUserComment
+
+import (
+	"github.com/khanzadimahdi/testproject/domain/comment"
+)
+
+type UseCase struct {
+	commentRepository comment.Repository
+}
+
+func NewUseCase(commentRepository comment.Repository) *UseCase {
+	return &UseCase{
+		commentRepository: commentRepository,
+	}
+}
+
+func (uc *UseCase) Execute(request Request) (*Response, error) {
+	if ok, validation := request.Validate(); !ok {
+		return &Response{
+			ValidationErrors: validation,
+		}, nil
+	}
+
+	c, err := uc.commentRepository.GetOneByAuthorUUID(request.UUID, request.UserUUID)
+	if err != nil {
+		return nil, err
+	}
+
+	if !c.ApprovedAt.IsZero() {
+		return nil, comment.ErrUpdatingAnApprovedCommentNotAllowed
+	}
+
+	c.Body = request.Body
+
+	_, err = uc.commentRepository.Save(&c)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Response{}, err
+}

@@ -15,7 +15,7 @@ import (
 func TestUseCase_Execute(t *testing.T) {
 	t.Run("updates a role", func(t *testing.T) {
 		var (
-			elementRepository    roles.MockRolesRepository
+			roleRepository       roles.MockRolesRepository
 			permissionRepository permissions.MockPermissionsRepository
 
 			r = Request{
@@ -44,17 +44,17 @@ func TestUseCase_Execute(t *testing.T) {
 		permissionRepository.On("Get", r.Permissions).Once().Return(p, nil)
 		defer permissionRepository.AssertExpectations(t)
 
-		elementRepository.On("Save", &c).Once().Return(c.UUID, nil)
-		defer elementRepository.AssertExpectations(t)
+		roleRepository.On("Save", &c).Once().Return(c.UUID, nil)
+		defer roleRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&elementRepository, &permissionRepository).Execute(r)
+		response, err := NewUseCase(&roleRepository, &permissionRepository).Execute(r)
 		assert.NoError(t, err)
 		assert.Equal(t, &Response{}, response)
 	})
 
 	t.Run("validation fails", func(t *testing.T) {
 		var (
-			elementRepository    roles.MockRolesRepository
+			roleRepository       roles.MockRolesRepository
 			permissionRepository permissions.MockPermissionsRepository
 
 			r                = Request{}
@@ -67,10 +67,10 @@ func TestUseCase_Execute(t *testing.T) {
 			}
 		)
 
-		response, err := NewUseCase(&elementRepository, &permissionRepository).Execute(r)
+		response, err := NewUseCase(&roleRepository, &permissionRepository).Execute(r)
 
 		permissionRepository.AssertNotCalled(t, "Get")
-		elementRepository.AssertNotCalled(t, "Save")
+		roleRepository.AssertNotCalled(t, "Save")
 
 		assert.NoError(t, err)
 		assert.Equal(t, &expectedResponse, response)
@@ -78,7 +78,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 	t.Run("at least one permission not exists", func(t *testing.T) {
 		var (
-			elementRepository    roles.MockRolesRepository
+			roleRepository       roles.MockRolesRepository
 			permissionRepository permissions.MockPermissionsRepository
 
 			r = Request{
@@ -104,9 +104,9 @@ func TestUseCase_Execute(t *testing.T) {
 		permissionRepository.On("Get", r.Permissions).Once().Return(p, nil)
 		defer permissionRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&elementRepository, &permissionRepository).Execute(r)
+		response, err := NewUseCase(&roleRepository, &permissionRepository).Execute(r)
 
-		elementRepository.AssertNotCalled(t, "Save")
+		roleRepository.AssertNotCalled(t, "Save")
 
 		assert.NoError(t, err)
 		assert.Equal(t, &expectedResponse, response)
@@ -114,7 +114,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 	t.Run("getting permissions fails", func(t *testing.T) {
 		var (
-			elementRepository    roles.MockRolesRepository
+			roleRepository       roles.MockRolesRepository
 			permissionRepository permissions.MockPermissionsRepository
 
 			r = Request{
@@ -131,9 +131,9 @@ func TestUseCase_Execute(t *testing.T) {
 		permissionRepository.On("Get", r.Permissions).Once().Return(nil, expectedErr)
 		defer permissionRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&elementRepository, &permissionRepository).Execute(r)
+		response, err := NewUseCase(&roleRepository, &permissionRepository).Execute(r)
 
-		elementRepository.AssertNotCalled(t, "Save")
+		roleRepository.AssertNotCalled(t, "Save")
 
 		assert.ErrorIs(t, err, expectedErr)
 		assert.Nil(t, response)
@@ -141,7 +141,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 	t.Run("saving the role fails", func(t *testing.T) {
 		var (
-			elementRepository    roles.MockRolesRepository
+			roleRepository       roles.MockRolesRepository
 			permissionRepository permissions.MockPermissionsRepository
 
 			r = Request{
@@ -170,10 +170,10 @@ func TestUseCase_Execute(t *testing.T) {
 		permissionRepository.On("Get", r.Permissions).Once().Return(p, nil)
 		defer permissionRepository.AssertExpectations(t)
 
-		elementRepository.On("Save", &c).Once().Return("", expectedErr)
-		defer elementRepository.AssertExpectations(t)
+		roleRepository.On("Save", &c).Once().Return("", expectedErr)
+		defer roleRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&elementRepository, &permissionRepository).Execute(r)
+		response, err := NewUseCase(&roleRepository, &permissionRepository).Execute(r)
 		assert.ErrorIs(t, err, expectedErr)
 		assert.Nil(t, response)
 	})

@@ -79,7 +79,6 @@ const params = reactive({
 const errors = reactive({
   body: null,
   approvedAt: null,
-  cover: null,
 })
 
 await showComment()

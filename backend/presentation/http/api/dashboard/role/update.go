@@ -16,9 +16,9 @@ type updateHandler struct {
 	authorizer        domain.Authorizer
 }
 
-func NewUpdateHandler(updateArticleUseCase *updaterole.UseCase, a domain.Authorizer) *updateHandler {
+func NewUpdateHandler(updateRoleUseCase *updaterole.UseCase, a domain.Authorizer) *updateHandler {
 	return &updateHandler{
-		updateRoleUseCase: updateArticleUseCase,
+		updateRoleUseCase: updateRoleUseCase,
 		authorizer:        a,
 	}
 }

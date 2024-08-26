@@ -14,6 +14,9 @@ import (
 	"time"
 
 	"github.com/julienschmidt/httprouter"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+
 	getArticle "github.com/khanzadimahdi/testproject/application/article/getArticle"
 	getArticles "github.com/khanzadimahdi/testproject/application/article/getArticles"
 	"github.com/khanzadimahdi/testproject/application/article/getArticlesByHashtag"
@@ -23,6 +26,8 @@ import (
 	"github.com/khanzadimahdi/testproject/application/auth/register"
 	"github.com/khanzadimahdi/testproject/application/auth/resetpassword"
 	"github.com/khanzadimahdi/testproject/application/auth/verify"
+	"github.com/khanzadimahdi/testproject/application/bookmark/bookmarkExists"
+	"github.com/khanzadimahdi/testproject/application/bookmark/updateBookmark"
 	"github.com/khanzadimahdi/testproject/application/comment/createComment"
 	"github.com/khanzadimahdi/testproject/application/comment/getComments"
 	dashboardCreateArticle "github.com/khanzadimahdi/testproject/application/dashboard/article/createArticle"
@@ -30,11 +35,19 @@ import (
 	dashboardGetArticle "github.com/khanzadimahdi/testproject/application/dashboard/article/getArticle"
 	dashboardGetArticles "github.com/khanzadimahdi/testproject/application/dashboard/article/getArticles"
 	dashboardUpdateArticle "github.com/khanzadimahdi/testproject/application/dashboard/article/updateArticle"
+	dashboardDeleteUserBookmark "github.com/khanzadimahdi/testproject/application/dashboard/bookmark/deleteUserBookmark"
+	dashboardGetUserBookmarks "github.com/khanzadimahdi/testproject/application/dashboard/bookmark/getUserBookmarks"
 	dashboardCreateComment "github.com/khanzadimahdi/testproject/application/dashboard/comment/createComment"
 	dashboardDeleteComment "github.com/khanzadimahdi/testproject/application/dashboard/comment/deleteComment"
+	dashboardDeleteUserComment "github.com/khanzadimahdi/testproject/application/dashboard/comment/deleteUserComment"
 	dashboardGetComment "github.com/khanzadimahdi/testproject/application/dashboard/comment/getComment"
 	dashboardGetComments "github.com/khanzadimahdi/testproject/application/dashboard/comment/getComments"
+	dashboardGetUserComment "github.com/khanzadimahdi/testproject/application/dashboard/comment/getUserComment"
+	dashboardGetUserComments "github.com/khanzadimahdi/testproject/application/dashboard/comment/getUserComments"
 	dashboardUpdateComment "github.com/khanzadimahdi/testproject/application/dashboard/comment/updateComment"
+	dashboardUpdateUserComment "github.com/khanzadimahdi/testproject/application/dashboard/comment/updateUserComment"
+	dashboardGetConfig "github.com/khanzadimahdi/testproject/application/dashboard/config/getConfig"
+	dashboardUpdateConfig "github.com/khanzadimahdi/testproject/application/dashboard/config/updateConfig"
 	dashboardCreateElement "github.com/khanzadimahdi/testproject/application/dashboard/element/createElement"
 	dashboardDeleteElement "github.com/khanzadimahdi/testproject/application/dashboard/element/deleteElement"
 	dashboardGetElement "github.com/khanzadimahdi/testproject/application/dashboard/element/getElement"
@@ -69,7 +82,9 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/email"
 	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
 	articlesrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/articles"
+	bookmarksrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/bookmarks"
 	commentsrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/comments"
+	configrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/config"
 	elementsrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/elements"
 	filesrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/files"
 	permissionsrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/permissions"
@@ -80,9 +95,12 @@ import (
 	"github.com/khanzadimahdi/testproject/presentation/commands"
 	articleAPI "github.com/khanzadimahdi/testproject/presentation/http/api/article"
 	"github.com/khanzadimahdi/testproject/presentation/http/api/auth"
+	bookmarkAPI "github.com/khanzadimahdi/testproject/presentation/http/api/bookmark"
 	commentAPI "github.com/khanzadimahdi/testproject/presentation/http/api/comment"
 	dashboardArticleAPI "github.com/khanzadimahdi/testproject/presentation/http/api/dashboard/article"
+	dashboardBookmarkAPI "github.com/khanzadimahdi/testproject/presentation/http/api/dashboard/bookmark"
 	dashboardCommentAPI "github.com/khanzadimahdi/testproject/presentation/http/api/dashboard/comment"
+	dashboardConfigAPI "github.com/khanzadimahdi/testproject/presentation/http/api/dashboard/config"
 	dashboardElementAPI "github.com/khanzadimahdi/testproject/presentation/http/api/dashboard/element"
 	dashboardFileAPI "github.com/khanzadimahdi/testproject/presentation/http/api/dashboard/file"
 	dashboardPermissionAPI "github.com/khanzadimahdi/testproject/presentation/http/api/dashboard/permission"
@@ -93,8 +111,6 @@ import (
 	hashtagAPI "github.com/khanzadimahdi/testproject/presentation/http/api/hashtag"
 	homeapi "github.com/khanzadimahdi/testproject/presentation/http/api/home"
 	"github.com/khanzadimahdi/testproject/presentation/http/middleware"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 //go:embed resources/view
@@ -151,7 +167,9 @@ func httpHandler() http.Handler {
 	elementsRepository := elementsrepository.NewRepository(database)
 	userRepository := userrepository.NewRepository(database)
 	permissionRepository := permissionsrepository.NewRepository()
-	elementRepository := rolesrepository.NewRepository(database)
+	rolesRepository := rolesrepository.NewRepository(database)
+	bookmarkRepository := bookmarksrepository.NewRepository(database)
+	configRepository := configrepository.NewRepository(database)
 
 	privateKeyData := []byte(os.Getenv("PRIVATE_KEY"))
 	privateKey, err := ecdsa.ParsePrivateKey(privateKeyData)
@@ -174,7 +192,7 @@ func httpHandler() http.Handler {
 		Port: os.Getenv("MAIL_SMTP_PORT"),
 	})
 
-	authorization := domain.NewRoleBasedAccessControl(elementRepository)
+	authorization := domain.NewRoleBasedAccessControl(rolesRepository)
 
 	homeUseCase := home.NewUseCase(articlesRepository, elementsRepository)
 
@@ -185,7 +203,7 @@ func httpHandler() http.Handler {
 	forgetPasswordUseCase := forgetpassword.NewUseCase(userRepository, j, mailer, mailFromAddress, templateRenderer)
 	resetPasswordUseCase := resetpassword.NewUseCase(userRepository, hasher, j)
 	registerUseCase := register.NewUseCase(userRepository, j, mailer, mailFromAddress, templateRenderer)
-	verifyUseCase := verify.NewUseCase(userRepository, hasher, j)
+	verifyUseCase := verify.NewUseCase(userRepository, rolesRepository, configRepository, hasher, j)
 
 	getArticleUsecase := getArticle.NewUseCase(articlesRepository, elementsRepository)
 	getArticlesUsecase := getArticles.NewUseCase(articlesRepository)
@@ -193,6 +211,8 @@ func httpHandler() http.Handler {
 	getFileUseCase := getFile.NewUseCase(filesRepository, fileStorage)
 	getCommentsUseCase := getComments.NewUseCase(commentsRepository, userRepository)
 	createCommentUseCase := createComment.NewUseCase(commentsRepository)
+	bookmarkExistsUseCase := bookmarkExists.NewUseCase(bookmarkRepository)
+	updateABookmark := updateBookmark.NewUseCase(bookmarkRepository)
 
 	// home
 	router.Handler(http.MethodGet, "/api/home", homeapi.NewHomeHandler(homeUseCase))
@@ -213,6 +233,10 @@ func httpHandler() http.Handler {
 	router.Handler(http.MethodPost, "/api/comments", middleware.NewAuthoriseMiddleware(commentAPI.NewCreateHandler(createCommentUseCase), j, userRepository))
 	router.Handler(http.MethodGet, "/api/comments", commentAPI.NewIndexHandler(getCommentsUseCase))
 
+	// bookmark
+	router.Handler(http.MethodPost, "/api/bookmarks/exists", middleware.NewAuthoriseMiddleware(bookmarkAPI.NewExistsHandler(bookmarkExistsUseCase), j, userRepository))
+	router.Handler(http.MethodPut, "/api/bookmarks", middleware.NewAuthoriseMiddleware(bookmarkAPI.NewUpdateHandler(updateABookmark), j, userRepository))
+
 	// hashtags
 	router.Handler(http.MethodGet, "/api/hashtags/:hashtag", hashtagAPI.NewShowHandler(getArticlesByHashtagUseCase))
 
@@ -223,7 +247,7 @@ func httpHandler() http.Handler {
 	getProfileUseCase := getprofile.NewUseCase(userRepository)
 	updateProfileUseCase := updateprofile.NewUseCase(userRepository)
 	dashboardProfileChangePasswordUseCase := changepassword.NewUseCase(userRepository, hasher)
-	dashboardProfileGetRolesUseCase := getRoles.NewUseCase(elementRepository)
+	dashboardProfileGetRolesUseCase := getRoles.NewUseCase(rolesRepository)
 
 	dashboardCreateArticleUsecase := dashboardCreateArticle.NewUseCase(articlesRepository)
 	dashboardDeleteArticleUsecase := dashboardDeleteArticle.NewUseCase(articlesRepository)
@@ -237,6 +261,14 @@ func httpHandler() http.Handler {
 	dashboardGetCommentsUsecase := dashboardGetComments.NewUseCase(commentsRepository, userRepository)
 	dashboardUpdateCommentUsecase := dashboardUpdateComment.NewUseCase(commentsRepository)
 
+	dashboardDeleteUserCommentUsecase := dashboardDeleteUserComment.NewUseCase(commentsRepository)
+	dashboardGetUserCommentUsecase := dashboardGetUserComment.NewUseCase(commentsRepository, userRepository)
+	dashboardGetUserCommentsUsecase := dashboardGetUserComments.NewUseCase(commentsRepository, userRepository)
+	dashboardUpdateUserCommentUsecase := dashboardUpdateUserComment.NewUseCase(commentsRepository)
+
+	dashboardDeleteUserBookmarkUsecase := dashboardDeleteUserBookmark.NewUseCase(bookmarkRepository)
+	dashboardGetUserBookmarksUsecase := dashboardGetUserBookmarks.NewUseCase(bookmarkRepository)
+
 	dashboardCreateUserUsecase := createuser.NewUseCase(userRepository, hasher)
 	dashboardDeleteUserUsecase := deleteuser.NewUseCase(userRepository)
 	dashboardGetUserUsecase := getuser.NewUseCase(userRepository)
@@ -246,11 +278,11 @@ func httpHandler() http.Handler {
 
 	dashboardGetPermissionsUseCase := dashboardGetPermissions.NewUseCase(permissionRepository)
 
-	dashboardCreateRoleUsecase := dashboardCreateRole.NewUseCase(elementRepository, permissionRepository)
-	dashboardDeleteRoleUsecase := dashboardDeleteRole.NewUseCase(elementRepository)
-	dashboardGetRoleUsecase := dashboardGetRole.NewUseCase(elementRepository)
-	dashboardGetRolesUsecase := dashboardGetRoles.NewUseCase(elementRepository)
-	dashboardUpdateRoleUsecase := dashboardUpdateRole.NewUseCase(elementRepository, permissionRepository)
+	dashboardCreateRoleUsecase := dashboardCreateRole.NewUseCase(rolesRepository, permissionRepository)
+	dashboardDeleteRoleUsecase := dashboardDeleteRole.NewUseCase(rolesRepository)
+	dashboardGetRoleUsecase := dashboardGetRole.NewUseCase(rolesRepository)
+	dashboardGetRolesUsecase := dashboardGetRoles.NewUseCase(rolesRepository)
+	dashboardUpdateRoleUsecase := dashboardUpdateRole.NewUseCase(rolesRepository, permissionRepository)
 
 	dashboardGetFilesUseCase := dashboardGetFiles.NewUseCase(filesRepository)
 	dashboardGetFileUseCase := dashboardGetFile.NewUseCase(filesRepository, fileStorage)
@@ -262,6 +294,9 @@ func httpHandler() http.Handler {
 	dashboardGetElementUsecase := dashboardGetElement.NewUseCase(elementsRepository)
 	dashboardGetElementsUsecase := dashboardGetElements.NewUseCase(elementsRepository)
 	dashboardUpdateElementUsecase := dashboardUpdateElement.NewUseCase(elementsRepository)
+
+	dashboardGetConfigUsecase := dashboardGetConfig.NewUseCase(configRepository)
+	dashboardUpdateConfigUsecase := dashboardUpdateConfig.NewUseCase(configRepository)
 
 	// profile
 	router.Handler(http.MethodGet, "/api/dashboard/profile", middleware.NewAuthoriseMiddleware(profile.NewGetProfileHandler(getProfileUseCase), j, userRepository))
@@ -301,6 +336,16 @@ func httpHandler() http.Handler {
 	router.Handler(http.MethodGet, "/api/dashboard/comments/:uuid", middleware.NewAuthoriseMiddleware(dashboardCommentAPI.NewShowHandler(dashboardGetCommentUsecase, authorization), j, userRepository))
 	router.Handler(http.MethodPut, "/api/dashboard/comments", middleware.NewAuthoriseMiddleware(dashboardCommentAPI.NewUpdateHandler(dashboardUpdateCommentUsecase, authorization), j, userRepository))
 
+	// self comments
+	router.Handler(http.MethodDelete, "/api/dashboard/my/comments/:uuid", middleware.NewAuthoriseMiddleware(dashboardCommentAPI.NewDeleteUserCommentHandler(dashboardDeleteUserCommentUsecase, authorization), j, userRepository))
+	router.Handler(http.MethodGet, "/api/dashboard/my/comments", middleware.NewAuthoriseMiddleware(dashboardCommentAPI.NewIndexUserCommentsHandler(dashboardGetUserCommentsUsecase, authorization), j, userRepository))
+	router.Handler(http.MethodGet, "/api/dashboard/my/comments/:uuid", middleware.NewAuthoriseMiddleware(dashboardCommentAPI.NewShowUserCommentHandler(dashboardGetUserCommentUsecase, authorization), j, userRepository))
+	router.Handler(http.MethodPut, "/api/dashboard/my/comments", middleware.NewAuthoriseMiddleware(dashboardCommentAPI.NewUpdateUserCommentHandler(dashboardUpdateUserCommentUsecase, authorization), j, userRepository))
+
+	// self bookmarks
+	router.Handler(http.MethodDelete, "/api/dashboard/my/bookmarks", middleware.NewAuthoriseMiddleware(dashboardBookmarkAPI.NewDeleteUserBookmarkHandler(dashboardDeleteUserBookmarkUsecase, authorization), j, userRepository))
+	router.Handler(http.MethodGet, "/api/dashboard/my/bookmarks", middleware.NewAuthoriseMiddleware(dashboardBookmarkAPI.NewIndexUserBookmarksHandler(dashboardGetUserBookmarksUsecase, authorization), j, userRepository))
+
 	// files
 	router.Handler(http.MethodPost, "/api/dashboard/files", middleware.NewAuthoriseMiddleware(dashboardFileAPI.NewUploadHandler(dashboardUploadFileUseCase, authorization), j, userRepository))
 	router.Handler(http.MethodDelete, "/api/dashboard/files/:uuid", middleware.NewAuthoriseMiddleware(dashboardFileAPI.NewDeleteHandler(dashboardDeleteFileUseCase, authorization), j, userRepository))
@@ -314,5 +359,9 @@ func httpHandler() http.Handler {
 	router.Handler(http.MethodGet, "/api/dashboard/elements/:uuid", middleware.NewAuthoriseMiddleware(dashboardElementAPI.NewShowHandler(dashboardGetElementUsecase, authorization), j, userRepository))
 	router.Handler(http.MethodPut, "/api/dashboard/elements", middleware.NewAuthoriseMiddleware(dashboardElementAPI.NewUpdateHandler(dashboardUpdateElementUsecase, authorization), j, userRepository))
 
-	return middleware.NewCORSMiddleware(middleware.NewRateLimitMiddleware(router, 60, 1*time.Minute))
+	// config
+	router.Handler(http.MethodGet, "/api/dashboard/config", middleware.NewAuthoriseMiddleware(dashboardConfigAPI.NewShowHandler(dashboardGetConfigUsecase, authorization), j, userRepository))
+	router.Handler(http.MethodPut, "/api/dashboard/config", middleware.NewAuthoriseMiddleware(dashboardConfigAPI.NewUpdateHandler(dashboardUpdateConfigUsecase, authorization), j, userRepository))
+
+	return middleware.NewCORSMiddleware(middleware.NewRateLimitMiddleware(router, 600, 1*time.Minute))
 }

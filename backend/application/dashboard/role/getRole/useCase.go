@@ -3,17 +3,17 @@ package getrole
 import "github.com/khanzadimahdi/testproject/domain/role"
 
 type UseCase struct {
-	elementRepository role.Repository
+	roleRepository role.Repository
 }
 
-func NewUseCase(elementRepository role.Repository) *UseCase {
+func NewUseCase(roleRepository role.Repository) *UseCase {
 	return &UseCase{
-		elementRepository: elementRepository,
+		roleRepository: roleRepository,
 	}
 }
 
 func (uc *UseCase) Execute(UUID string) (*Response, error) {
-	a, err := uc.elementRepository.GetOne(UUID)
+	a, err := uc.roleRepository.GetOne(UUID)
 	if err != nil {
 		return nil, err
 	}

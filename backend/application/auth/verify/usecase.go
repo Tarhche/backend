@@ -7,22 +7,34 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/config"
 	"github.com/khanzadimahdi/testproject/domain/password"
+	"github.com/khanzadimahdi/testproject/domain/role"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
 )
 
 type UseCase struct {
-	userRepository user.Repository
-	hasher         password.Hasher
-	jwt            *jwt.JWT
+	userRepository   user.Repository
+	roleRepository   role.Repository
+	configRepository config.Repository
+	hasher           password.Hasher
+	jwt              *jwt.JWT
 }
 
-func NewUseCase(userRepository user.Repository, hasher password.Hasher, JWT *jwt.JWT) *UseCase {
+func NewUseCase(
+	userRepository user.Repository,
+	roleRepository role.Repository,
+	configRepository config.Repository,
+	hasher password.Hasher,
+	JWT *jwt.JWT,
+) *UseCase {
 	return &UseCase{
-		userRepository: userRepository,
-		hasher:         hasher,
-		jwt:            JWT,
+		userRepository:   userRepository,
+		roleRepository:   roleRepository,
+		configRepository: configRepository,
+		hasher:           hasher,
+		jwt:              JWT,
 	}
 }
 
@@ -99,11 +111,44 @@ func (uc *UseCase) Execute(request Request) (*Response, error) {
 		},
 	}
 
-	if _, err := uc.userRepository.Save(&u); err != nil {
+	userUUID, err := uc.userRepository.Save(&u)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := uc.assignDefaultRoles(userUUID); err != nil {
 		return nil, err
 	}
 
 	return &Response{}, nil
+}
+
+func (uc *UseCase) assignDefaultRoles(userUUID string) error {
+	c, err := uc.configRepository.GetLatestRevision()
+	if errors.Is(err, domain.ErrNotExists) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+
+	roles, err := uc.roleRepository.GetByUUIDs(c.UserDefaultRoleUUIDs)
+	if err != nil {
+		return err
+	}
+
+	for i := range roles {
+		userUUIDs := make([]string, len(roles[i].UserUUIDs)+1)
+		copy(userUUIDs, roles[i].UserUUIDs)
+		userUUIDs[len(userUUIDs)-1] = userUUID
+
+		roles[i].UserUUIDs = userUUIDs
+
+		if _, err := uc.roleRepository.Save(&roles[i]); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (uc *UseCase) identityExists(identity string) (bool, error) {

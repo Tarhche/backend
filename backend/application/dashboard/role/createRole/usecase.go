@@ -6,13 +6,13 @@ import (
 )
 
 type UseCase struct {
-	elementRepository    role.Repository
+	roleRepository       role.Repository
 	permissionRepository permission.Repository
 }
 
-func NewUseCase(elementRepository role.Repository, permissionRepository permission.Repository) *UseCase {
+func NewUseCase(roleRepository role.Repository, permissionRepository permission.Repository) *UseCase {
 	return &UseCase{
-		elementRepository:    elementRepository,
+		roleRepository:       roleRepository,
 		permissionRepository: permissionRepository,
 	}
 }
@@ -41,7 +41,7 @@ func (uc *UseCase) Execute(request Request) (*Response, error) {
 		UserUUIDs:   request.UserUUIDs,
 	}
 
-	uuid, err := uc.elementRepository.Save(&r)
+	uuid, err := uc.roleRepository.Save(&r)
 	if err != nil {
 		return nil, err
 	}
