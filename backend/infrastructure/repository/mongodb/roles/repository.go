@@ -57,16 +57,16 @@ func (r *RolesRepository) GetAll(offset uint, limit uint) ([]role.Role, error) {
 
 	items := make([]role.Role, 0, limit)
 	for cur.Next(ctx) {
-		var r RoleBson
+		var rb RoleBson
 
-		if err := cur.Decode(&r); err != nil {
+		if err := cur.Decode(&rb); err != nil {
 			return nil, err
 		}
 		items = append(items, role.Role{
-			UUID:        r.UUID,
-			Name:        r.Name,
-			Description: r.Description,
-			Permissions: r.Permissions,
+			UUID:        rb.UUID,
+			Name:        rb.Name,
+			Description: rb.Description,
+			Permissions: rb.Permissions,
 		})
 	}
 
@@ -93,16 +93,17 @@ func (r *RolesRepository) GetByUUIDs(UUIDs []string) ([]role.Role, error) {
 
 	items := make([]role.Role, 0, len(UUIDs))
 	for cur.Next(ctx) {
-		var r RoleBson
+		var rb RoleBson
 
-		if err := cur.Decode(&r); err != nil {
+		if err := cur.Decode(&rb); err != nil {
 			return nil, err
 		}
 		items = append(items, role.Role{
-			UUID:        r.UUID,
-			Name:        r.Name,
-			Description: r.Description,
-			Permissions: r.Permissions,
+			UUID:        rb.UUID,
+			Name:        rb.Name,
+			Description: rb.Description,
+			Permissions: rb.Permissions,
+			UserUUIDs:   rb.UserUUIDs,
 		})
 	}
 
@@ -226,16 +227,16 @@ func (r *RolesRepository) GetByUserUUID(userUUID string) ([]role.Role, error) {
 
 	items := make([]role.Role, 0, 2)
 	for cur.Next(ctx) {
-		var r RoleBson
+		var rb RoleBson
 
-		if err := cur.Decode(&r); err != nil {
+		if err := cur.Decode(&rb); err != nil {
 			return nil, err
 		}
 		items = append(items, role.Role{
-			UUID:        r.UUID,
-			Name:        r.Name,
-			Description: r.Description,
-			Permissions: r.Permissions,
+			UUID:        rb.UUID,
+			Name:        rb.Name,
+			Description: rb.Description,
+			Permissions: rb.Permissions,
 		})
 	}
 
