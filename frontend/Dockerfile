@@ -5,7 +5,7 @@ RUN npm install
 
 FROM base AS develop
 EXPOSE 3000
-CMD ["npm", "run", "dev", '--host']
+CMD ["npm", "run", "dev", "--", "--host", "--port", "3000"]
 
 FROM base as build
 RUN npm run build

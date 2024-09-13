@@ -14,7 +14,7 @@ services:
       NUXT_PUBLIC_API_BASE_URL: ${NUXT_PUBLIC_API_BASE_URL}
       NUXT_INTERNAL_API_BASE_URL: ${NUXT_INTERNAL_API_BASE_URL}
     command: >
-      sh -c "npm install; npm run dev --host"
+      sh -c "npm install; npm run dev -- --host --port 3000"
 
   app:
     build:
@@ -91,6 +91,6 @@ services:
     image: nats:2.10-alpine
     # command: "--config /etc/nats/nats-server.conf --jetstream"
     ports:
-      - 4222:4222 # client port
-      - 6222:6222 # cluster post
-      - 8222:8222 # HTTP monitoring port
+      - "4222:4222" # client port
+      - "6222:6222" # cluster post
+      - "8222:8222" # HTTP monitoring port
