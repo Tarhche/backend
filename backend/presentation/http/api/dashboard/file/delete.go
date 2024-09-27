@@ -4,7 +4,6 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/julienschmidt/httprouter"
 	"github.com/khanzadimahdi/testproject/application/auth"
 	deletefile "github.com/khanzadimahdi/testproject/application/dashboard/file/deleteFile"
 	"github.com/khanzadimahdi/testproject/domain"
@@ -33,7 +32,7 @@ func (h *deleteHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	UUID := httprouter.ParamsFromContext(r.Context()).ByName("uuid")
+	UUID := r.PathValue("uuid")
 
 	err := h.deleteFileUseCase.Execute(deletefile.Request{
 		FileUUID: UUID,

@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"unsafe"
 
-	"github.com/julienschmidt/httprouter"
 	getArticlesByHashtag "github.com/khanzadimahdi/testproject/application/article/getArticlesByHashtag"
 )
 
@@ -29,7 +28,7 @@ func (h *showHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	hashtag := httprouter.ParamsFromContext(r.Context()).ByName("hashtag")
+	hashtag := r.PathValue("hashtag")
 
 	request := &getArticlesByHashtag.Request{
 		Page:    page,

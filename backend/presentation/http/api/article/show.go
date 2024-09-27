@@ -5,8 +5,6 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/julienschmidt/httprouter"
-
 	getarticle "github.com/khanzadimahdi/testproject/application/article/getArticle"
 	"github.com/khanzadimahdi/testproject/domain"
 )
@@ -22,7 +20,7 @@ func NewShowHandler(getArticleUseCase *getarticle.UseCase) *showHandler {
 }
 
 func (h *showHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
-	UUID := httprouter.ParamsFromContext(r.Context()).ByName("uuid")
+	UUID := r.PathValue("uuid")
 
 	response, err := h.getArticleUseCase.Execute(UUID)
 

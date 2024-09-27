@@ -13,7 +13,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/julienschmidt/httprouter"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 
@@ -196,7 +195,6 @@ func httpHandler() http.Handler {
 
 	homeUseCase := home.NewUseCase(articlesRepository, elementsRepository)
 
-	router := httprouter.New()
 	log.SetFlags(log.LstdFlags | log.Llongfile)
 	loginUseCase := login.NewUseCase(userRepository, j, hasher)
 	refreshUseCase := refresh.NewUseCase(userRepository, j)
@@ -214,34 +212,36 @@ func httpHandler() http.Handler {
 	bookmarkExistsUseCase := bookmarkExists.NewUseCase(bookmarkRepository)
 	updateABookmark := updateBookmark.NewUseCase(bookmarkRepository)
 
+	mux := http.NewServeMux()
+
 	// home
-	router.Handler(http.MethodGet, "/api/home", homeapi.NewHomeHandler(homeUseCase))
+	mux.Handle("GET /api/home", homeapi.NewHomeHandler(homeUseCase))
 
 	// auth
-	router.Handler(http.MethodPost, "/api/auth/login", auth.NewLoginHandler(loginUseCase))
-	router.Handler(http.MethodPost, "/api/auth/token/refresh", auth.NewRefreshHandler(refreshUseCase))
-	router.Handler(http.MethodPost, "/api/auth/password/forget", auth.NewForgetPasswordHandler(forgetPasswordUseCase))
-	router.Handler(http.MethodPost, "/api/auth/password/reset", auth.NewResetPasswordHandler(resetPasswordUseCase))
-	router.Handler(http.MethodPost, "/api/auth/register", auth.NewRegisterHandler(registerUseCase))
-	router.Handler(http.MethodPost, "/api/auth/verify", auth.NewVerifyHandler(verifyUseCase))
+	mux.Handle("POST /api/auth/login", auth.NewLoginHandler(loginUseCase))
+	mux.Handle("POST /api/auth/token/refresh", auth.NewRefreshHandler(refreshUseCase))
+	mux.Handle("POST /api/auth/password/forget", auth.NewForgetPasswordHandler(forgetPasswordUseCase))
+	mux.Handle("POST /api/auth/password/reset", auth.NewResetPasswordHandler(resetPasswordUseCase))
+	mux.Handle("POST /api/auth/register", auth.NewRegisterHandler(registerUseCase))
+	mux.Handle("POST /api/auth/verify", auth.NewVerifyHandler(verifyUseCase))
 
 	// articles
-	router.Handler(http.MethodGet, "/api/articles", articleAPI.NewIndexHandler(getArticlesUsecase))
-	router.Handler(http.MethodGet, "/api/articles/:uuid", articleAPI.NewShowHandler(getArticleUsecase))
+	mux.Handle("GET /api/articles", articleAPI.NewIndexHandler(getArticlesUsecase))
+	mux.Handle("GET /api/articles/{uuid}", articleAPI.NewShowHandler(getArticleUsecase))
 
 	// comments
-	router.Handler(http.MethodPost, "/api/comments", middleware.NewAuthoriseMiddleware(commentAPI.NewCreateHandler(createCommentUseCase), j, userRepository))
-	router.Handler(http.MethodGet, "/api/comments", commentAPI.NewIndexHandler(getCommentsUseCase))
+	mux.Handle("POST /api/comments", middleware.NewAuthoriseMiddleware(commentAPI.NewCreateHandler(createCommentUseCase), j, userRepository))
+	mux.Handle("GET /api/comments", commentAPI.NewIndexHandler(getCommentsUseCase))
 
 	// bookmark
-	router.Handler(http.MethodPost, "/api/bookmarks/exists", middleware.NewAuthoriseMiddleware(bookmarkAPI.NewExistsHandler(bookmarkExistsUseCase), j, userRepository))
-	router.Handler(http.MethodPut, "/api/bookmarks", middleware.NewAuthoriseMiddleware(bookmarkAPI.NewUpdateHandler(updateABookmark), j, userRepository))
+	mux.Handle("POST /api/bookmarks/exists", middleware.NewAuthoriseMiddleware(bookmarkAPI.NewExistsHandler(bookmarkExistsUseCase), j, userRepository))
+	mux.Handle("PUT /api/bookmarks", middleware.NewAuthoriseMiddleware(bookmarkAPI.NewUpdateHandler(updateABookmark), j, userRepository))
 
 	// hashtags
-	router.Handler(http.MethodGet, "/api/hashtags/:hashtag", hashtagAPI.NewShowHandler(getArticlesByHashtagUseCase))
+	mux.Handle("GET /api/hashtags/{hashtag}", hashtagAPI.NewShowHandler(getArticlesByHashtagUseCase))
 
 	// files
-	router.Handler(http.MethodGet, "/files/:uuid", fileAPI.NewShowHandler(getFileUseCase))
+	mux.Handle("GET /files/{uuid}", fileAPI.NewShowHandler(getFileUseCase))
 
 	// -------------------- dashboard -------------------- //
 	getProfileUseCase := getprofile.NewUseCase(userRepository)
@@ -299,69 +299,69 @@ func httpHandler() http.Handler {
 	dashboardUpdateConfigUsecase := dashboardUpdateConfig.NewUseCase(configRepository)
 
 	// profile
-	router.Handler(http.MethodGet, "/api/dashboard/profile", middleware.NewAuthoriseMiddleware(profile.NewGetProfileHandler(getProfileUseCase), j, userRepository))
-	router.Handler(http.MethodPut, "/api/dashboard/profile", middleware.NewAuthoriseMiddleware(profile.NewUpdateProfileHandler(updateProfileUseCase), j, userRepository))
-	router.Handler(http.MethodPut, "/api/dashboard/password", middleware.NewAuthoriseMiddleware(profile.NewChangePasswordHandler(dashboardProfileChangePasswordUseCase), j, userRepository))
-	router.Handler(http.MethodGet, "/api/dashboard/profile/roles", middleware.NewAuthoriseMiddleware(profile.NewGetRolesHandler(dashboardProfileGetRolesUseCase), j, userRepository))
+	mux.Handle("GET /api/dashboard/profile", middleware.NewAuthoriseMiddleware(profile.NewGetProfileHandler(getProfileUseCase), j, userRepository))
+	mux.Handle("PUT /api/dashboard/profile", middleware.NewAuthoriseMiddleware(profile.NewUpdateProfileHandler(updateProfileUseCase), j, userRepository))
+	mux.Handle("PUT /api/dashboard/password", middleware.NewAuthoriseMiddleware(profile.NewChangePasswordHandler(dashboardProfileChangePasswordUseCase), j, userRepository))
+	mux.Handle("GET /api/dashboard/profile/roles", middleware.NewAuthoriseMiddleware(profile.NewGetRolesHandler(dashboardProfileGetRolesUseCase), j, userRepository))
 
 	// user
-	router.Handler(http.MethodPost, "/api/dashboard/users", middleware.NewAuthoriseMiddleware(dashboardUserAPI.NewCreateHandler(dashboardCreateUserUsecase, authorization), j, userRepository))
-	router.Handler(http.MethodDelete, "/api/dashboard/users/:uuid", middleware.NewAuthoriseMiddleware(dashboardUserAPI.NewDeleteHandler(dashboardDeleteUserUsecase, authorization), j, userRepository))
-	router.Handler(http.MethodGet, "/api/dashboard/users", middleware.NewAuthoriseMiddleware(dashboardUserAPI.NewIndexHandler(dashboardGetUsersUsecase, authorization), j, userRepository))
-	router.Handler(http.MethodGet, "/api/dashboard/users/:uuid", middleware.NewAuthoriseMiddleware(dashboardUserAPI.NewShowHandler(dashboardGetUserUsecase, authorization), j, userRepository))
-	router.Handler(http.MethodPut, "/api/dashboard/users", middleware.NewAuthoriseMiddleware(dashboardUserAPI.NewUpdateHandler(dashboardUpdateUserUsecase, authorization), j, userRepository))
-	router.Handler(http.MethodPut, "/api/dashboard/users/password", middleware.NewAuthoriseMiddleware(dashboardUserAPI.NewChangePasswordHandler(dashboardUpdateUserChangePasswordUsecase, authorization), j, userRepository))
+	mux.Handle("POST /api/dashboard/users", middleware.NewAuthoriseMiddleware(dashboardUserAPI.NewCreateHandler(dashboardCreateUserUsecase, authorization), j, userRepository))
+	mux.Handle("DELETE /api/dashboard/users/{uuid}", middleware.NewAuthoriseMiddleware(dashboardUserAPI.NewDeleteHandler(dashboardDeleteUserUsecase, authorization), j, userRepository))
+	mux.Handle("GET /api/dashboard/users", middleware.NewAuthoriseMiddleware(dashboardUserAPI.NewIndexHandler(dashboardGetUsersUsecase, authorization), j, userRepository))
+	mux.Handle("GET /api/dashboard/users/{uuid}", middleware.NewAuthoriseMiddleware(dashboardUserAPI.NewShowHandler(dashboardGetUserUsecase, authorization), j, userRepository))
+	mux.Handle("PUT /api/dashboard/users", middleware.NewAuthoriseMiddleware(dashboardUserAPI.NewUpdateHandler(dashboardUpdateUserUsecase, authorization), j, userRepository))
+	mux.Handle("PUT /api/dashboard/users/password", middleware.NewAuthoriseMiddleware(dashboardUserAPI.NewChangePasswordHandler(dashboardUpdateUserChangePasswordUsecase, authorization), j, userRepository))
 
 	// permissions
-	router.Handler(http.MethodGet, "/api/dashboard/permissions", middleware.NewAuthoriseMiddleware(dashboardPermissionAPI.NewIndexHandler(dashboardGetPermissionsUseCase, authorization), j, userRepository))
+	mux.Handle("GET /api/dashboard/permissions", middleware.NewAuthoriseMiddleware(dashboardPermissionAPI.NewIndexHandler(dashboardGetPermissionsUseCase, authorization), j, userRepository))
 
 	// roles
-	router.Handler(http.MethodPost, "/api/dashboard/roles", middleware.NewAuthoriseMiddleware(dashboardRoleAPI.NewCreateHandler(dashboardCreateRoleUsecase, authorization), j, userRepository))
-	router.Handler(http.MethodDelete, "/api/dashboard/roles/:uuid", middleware.NewAuthoriseMiddleware(dashboardRoleAPI.NewDeleteHandler(dashboardDeleteRoleUsecase, authorization), j, userRepository))
-	router.Handler(http.MethodGet, "/api/dashboard/roles", middleware.NewAuthoriseMiddleware(dashboardRoleAPI.NewIndexHandler(dashboardGetRolesUsecase, authorization), j, userRepository))
-	router.Handler(http.MethodGet, "/api/dashboard/roles/:uuid", middleware.NewAuthoriseMiddleware(dashboardRoleAPI.NewShowHandler(dashboardGetRoleUsecase, authorization), j, userRepository))
-	router.Handler(http.MethodPut, "/api/dashboard/roles", middleware.NewAuthoriseMiddleware(dashboardRoleAPI.NewUpdateHandler(dashboardUpdateRoleUsecase, authorization), j, userRepository))
+	mux.Handle("POST /api/dashboard/roles", middleware.NewAuthoriseMiddleware(dashboardRoleAPI.NewCreateHandler(dashboardCreateRoleUsecase, authorization), j, userRepository))
+	mux.Handle("DELETE /api/dashboard/roles/{uuid}", middleware.NewAuthoriseMiddleware(dashboardRoleAPI.NewDeleteHandler(dashboardDeleteRoleUsecase, authorization), j, userRepository))
+	mux.Handle("GET /api/dashboard/roles", middleware.NewAuthoriseMiddleware(dashboardRoleAPI.NewIndexHandler(dashboardGetRolesUsecase, authorization), j, userRepository))
+	mux.Handle("GET /api/dashboard/roles/{uuid}", middleware.NewAuthoriseMiddleware(dashboardRoleAPI.NewShowHandler(dashboardGetRoleUsecase, authorization), j, userRepository))
+	mux.Handle("PUT /api/dashboard/roles", middleware.NewAuthoriseMiddleware(dashboardRoleAPI.NewUpdateHandler(dashboardUpdateRoleUsecase, authorization), j, userRepository))
 
 	// articles
-	router.Handler(http.MethodPost, "/api/dashboard/articles", middleware.NewAuthoriseMiddleware(dashboardArticleAPI.NewCreateHandler(dashboardCreateArticleUsecase, authorization), j, userRepository))
-	router.Handler(http.MethodDelete, "/api/dashboard/articles/:uuid", middleware.NewAuthoriseMiddleware(dashboardArticleAPI.NewDeleteHandler(dashboardDeleteArticleUsecase, authorization), j, userRepository))
-	router.Handler(http.MethodGet, "/api/dashboard/articles", middleware.NewAuthoriseMiddleware(dashboardArticleAPI.NewIndexHandler(dashboardGetArticlesUsecase, authorization), j, userRepository))
-	router.Handler(http.MethodGet, "/api/dashboard/articles/:uuid", middleware.NewAuthoriseMiddleware(dashboardArticleAPI.NewShowHandler(dashboardGetArticleUsecase, authorization), j, userRepository))
-	router.Handler(http.MethodPut, "/api/dashboard/articles", middleware.NewAuthoriseMiddleware(dashboardArticleAPI.NewUpdateHandler(dashboardUpdateArticleUsecase, authorization), j, userRepository))
+	mux.Handle("POST /api/dashboard/articles", middleware.NewAuthoriseMiddleware(dashboardArticleAPI.NewCreateHandler(dashboardCreateArticleUsecase, authorization), j, userRepository))
+	mux.Handle("DELETE /api/dashboard/articles/{uuid}", middleware.NewAuthoriseMiddleware(dashboardArticleAPI.NewDeleteHandler(dashboardDeleteArticleUsecase, authorization), j, userRepository))
+	mux.Handle("GET /api/dashboard/articles", middleware.NewAuthoriseMiddleware(dashboardArticleAPI.NewIndexHandler(dashboardGetArticlesUsecase, authorization), j, userRepository))
+	mux.Handle("GET /api/dashboard/articles/{uuid}", middleware.NewAuthoriseMiddleware(dashboardArticleAPI.NewShowHandler(dashboardGetArticleUsecase, authorization), j, userRepository))
+	mux.Handle("PUT /api/dashboard/articles", middleware.NewAuthoriseMiddleware(dashboardArticleAPI.NewUpdateHandler(dashboardUpdateArticleUsecase, authorization), j, userRepository))
 
 	// comments
-	router.Handler(http.MethodPost, "/api/dashboard/comments", middleware.NewAuthoriseMiddleware(dashboardCommentAPI.NewCreateHandler(dashboardCreateCommentUsecase, authorization), j, userRepository))
-	router.Handler(http.MethodDelete, "/api/dashboard/comments/:uuid", middleware.NewAuthoriseMiddleware(dashboardCommentAPI.NewDeleteHandler(dashboardDeleteCommentUsecase, authorization), j, userRepository))
-	router.Handler(http.MethodGet, "/api/dashboard/comments", middleware.NewAuthoriseMiddleware(dashboardCommentAPI.NewIndexHandler(dashboardGetCommentsUsecase, authorization), j, userRepository))
-	router.Handler(http.MethodGet, "/api/dashboard/comments/:uuid", middleware.NewAuthoriseMiddleware(dashboardCommentAPI.NewShowHandler(dashboardGetCommentUsecase, authorization), j, userRepository))
-	router.Handler(http.MethodPut, "/api/dashboard/comments", middleware.NewAuthoriseMiddleware(dashboardCommentAPI.NewUpdateHandler(dashboardUpdateCommentUsecase, authorization), j, userRepository))
+	mux.Handle("POST /api/dashboard/comments", middleware.NewAuthoriseMiddleware(dashboardCommentAPI.NewCreateHandler(dashboardCreateCommentUsecase, authorization), j, userRepository))
+	mux.Handle("DELETE /api/dashboard/comments/{uuid}", middleware.NewAuthoriseMiddleware(dashboardCommentAPI.NewDeleteHandler(dashboardDeleteCommentUsecase, authorization), j, userRepository))
+	mux.Handle("GET /api/dashboard/comments", middleware.NewAuthoriseMiddleware(dashboardCommentAPI.NewIndexHandler(dashboardGetCommentsUsecase, authorization), j, userRepository))
+	mux.Handle("GET /api/dashboard/comments/{uuid}", middleware.NewAuthoriseMiddleware(dashboardCommentAPI.NewShowHandler(dashboardGetCommentUsecase, authorization), j, userRepository))
+	mux.Handle("PUT /api/dashboard/comments", middleware.NewAuthoriseMiddleware(dashboardCommentAPI.NewUpdateHandler(dashboardUpdateCommentUsecase, authorization), j, userRepository))
 
 	// self comments
-	router.Handler(http.MethodDelete, "/api/dashboard/my/comments/:uuid", middleware.NewAuthoriseMiddleware(dashboardCommentAPI.NewDeleteUserCommentHandler(dashboardDeleteUserCommentUsecase, authorization), j, userRepository))
-	router.Handler(http.MethodGet, "/api/dashboard/my/comments", middleware.NewAuthoriseMiddleware(dashboardCommentAPI.NewIndexUserCommentsHandler(dashboardGetUserCommentsUsecase, authorization), j, userRepository))
-	router.Handler(http.MethodGet, "/api/dashboard/my/comments/:uuid", middleware.NewAuthoriseMiddleware(dashboardCommentAPI.NewShowUserCommentHandler(dashboardGetUserCommentUsecase, authorization), j, userRepository))
-	router.Handler(http.MethodPut, "/api/dashboard/my/comments", middleware.NewAuthoriseMiddleware(dashboardCommentAPI.NewUpdateUserCommentHandler(dashboardUpdateUserCommentUsecase, authorization), j, userRepository))
+	mux.Handle("DELETE /api/dashboard/my/comments/{uuid}", middleware.NewAuthoriseMiddleware(dashboardCommentAPI.NewDeleteUserCommentHandler(dashboardDeleteUserCommentUsecase, authorization), j, userRepository))
+	mux.Handle("GET /api/dashboard/my/comments", middleware.NewAuthoriseMiddleware(dashboardCommentAPI.NewIndexUserCommentsHandler(dashboardGetUserCommentsUsecase, authorization), j, userRepository))
+	mux.Handle("GET /api/dashboard/my/comments/{uuid}", middleware.NewAuthoriseMiddleware(dashboardCommentAPI.NewShowUserCommentHandler(dashboardGetUserCommentUsecase, authorization), j, userRepository))
+	mux.Handle("PUT /api/dashboard/my/comments", middleware.NewAuthoriseMiddleware(dashboardCommentAPI.NewUpdateUserCommentHandler(dashboardUpdateUserCommentUsecase, authorization), j, userRepository))
 
 	// self bookmarks
-	router.Handler(http.MethodDelete, "/api/dashboard/my/bookmarks", middleware.NewAuthoriseMiddleware(dashboardBookmarkAPI.NewDeleteUserBookmarkHandler(dashboardDeleteUserBookmarkUsecase, authorization), j, userRepository))
-	router.Handler(http.MethodGet, "/api/dashboard/my/bookmarks", middleware.NewAuthoriseMiddleware(dashboardBookmarkAPI.NewIndexUserBookmarksHandler(dashboardGetUserBookmarksUsecase, authorization), j, userRepository))
+	mux.Handle("DELETE /api/dashboard/my/bookmarks", middleware.NewAuthoriseMiddleware(dashboardBookmarkAPI.NewDeleteUserBookmarkHandler(dashboardDeleteUserBookmarkUsecase, authorization), j, userRepository))
+	mux.Handle("GET /api/dashboard/my/bookmarks", middleware.NewAuthoriseMiddleware(dashboardBookmarkAPI.NewIndexUserBookmarksHandler(dashboardGetUserBookmarksUsecase, authorization), j, userRepository))
 
 	// files
-	router.Handler(http.MethodPost, "/api/dashboard/files", middleware.NewAuthoriseMiddleware(dashboardFileAPI.NewUploadHandler(dashboardUploadFileUseCase, authorization), j, userRepository))
-	router.Handler(http.MethodDelete, "/api/dashboard/files/:uuid", middleware.NewAuthoriseMiddleware(dashboardFileAPI.NewDeleteHandler(dashboardDeleteFileUseCase, authorization), j, userRepository))
-	router.Handler(http.MethodGet, "/api/dashboard/files", middleware.NewAuthoriseMiddleware(dashboardFileAPI.NewIndexHandler(dashboardGetFilesUseCase, authorization), j, userRepository))
-	router.Handler(http.MethodGet, "/dashboard/files/:uuid", middleware.NewAuthoriseMiddleware(dashboardFileAPI.NewShowHandler(dashboardGetFileUseCase, authorization), j, userRepository))
+	mux.Handle("POST /api/dashboard/files", middleware.NewAuthoriseMiddleware(dashboardFileAPI.NewUploadHandler(dashboardUploadFileUseCase, authorization), j, userRepository))
+	mux.Handle("DELETE /api/dashboard/files/{uuid}", middleware.NewAuthoriseMiddleware(dashboardFileAPI.NewDeleteHandler(dashboardDeleteFileUseCase, authorization), j, userRepository))
+	mux.Handle("GET /api/dashboard/files", middleware.NewAuthoriseMiddleware(dashboardFileAPI.NewIndexHandler(dashboardGetFilesUseCase, authorization), j, userRepository))
+	mux.Handle("GET /dashboard/files/{uuid}", middleware.NewAuthoriseMiddleware(dashboardFileAPI.NewShowHandler(dashboardGetFileUseCase, authorization), j, userRepository))
 
 	// elements
-	router.Handler(http.MethodPost, "/api/dashboard/elements", middleware.NewAuthoriseMiddleware(dashboardElementAPI.NewCreateHandler(dashboardCreateElementUsecase, authorization), j, userRepository))
-	router.Handler(http.MethodDelete, "/api/dashboard/elements/:uuid", middleware.NewAuthoriseMiddleware(dashboardElementAPI.NewDeleteHandler(dashboardDeleteElementUsecase, authorization), j, userRepository))
-	router.Handler(http.MethodGet, "/api/dashboard/elements", middleware.NewAuthoriseMiddleware(dashboardElementAPI.NewIndexHandler(dashboardGetElementsUsecase, authorization), j, userRepository))
-	router.Handler(http.MethodGet, "/api/dashboard/elements/:uuid", middleware.NewAuthoriseMiddleware(dashboardElementAPI.NewShowHandler(dashboardGetElementUsecase, authorization), j, userRepository))
-	router.Handler(http.MethodPut, "/api/dashboard/elements", middleware.NewAuthoriseMiddleware(dashboardElementAPI.NewUpdateHandler(dashboardUpdateElementUsecase, authorization), j, userRepository))
+	mux.Handle("POST /api/dashboard/elements", middleware.NewAuthoriseMiddleware(dashboardElementAPI.NewCreateHandler(dashboardCreateElementUsecase, authorization), j, userRepository))
+	mux.Handle("DELETE /api/dashboard/elements/{uuid}", middleware.NewAuthoriseMiddleware(dashboardElementAPI.NewDeleteHandler(dashboardDeleteElementUsecase, authorization), j, userRepository))
+	mux.Handle("GET /api/dashboard/elements", middleware.NewAuthoriseMiddleware(dashboardElementAPI.NewIndexHandler(dashboardGetElementsUsecase, authorization), j, userRepository))
+	mux.Handle("GET /api/dashboard/elements/{uuid}", middleware.NewAuthoriseMiddleware(dashboardElementAPI.NewShowHandler(dashboardGetElementUsecase, authorization), j, userRepository))
+	mux.Handle("PUT /api/dashboard/elements", middleware.NewAuthoriseMiddleware(dashboardElementAPI.NewUpdateHandler(dashboardUpdateElementUsecase, authorization), j, userRepository))
 
 	// config
-	router.Handler(http.MethodGet, "/api/dashboard/config", middleware.NewAuthoriseMiddleware(dashboardConfigAPI.NewShowHandler(dashboardGetConfigUsecase, authorization), j, userRepository))
-	router.Handler(http.MethodPut, "/api/dashboard/config", middleware.NewAuthoriseMiddleware(dashboardConfigAPI.NewUpdateHandler(dashboardUpdateConfigUsecase, authorization), j, userRepository))
+	mux.Handle("GET /api/dashboard/config", middleware.NewAuthoriseMiddleware(dashboardConfigAPI.NewShowHandler(dashboardGetConfigUsecase, authorization), j, userRepository))
+	mux.Handle("PUT /api/dashboard/config", middleware.NewAuthoriseMiddleware(dashboardConfigAPI.NewUpdateHandler(dashboardUpdateConfigUsecase, authorization), j, userRepository))
 
-	return middleware.NewCORSMiddleware(middleware.NewRateLimitMiddleware(router, 600, 1*time.Minute))
+	return middleware.NewCORSMiddleware(middleware.NewRateLimitMiddleware(mux, 600, 1*time.Minute))
 }

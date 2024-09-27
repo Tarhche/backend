@@ -3,7 +3,6 @@ package user
 import (
 	"encoding/json"
 	"errors"
-	"github.com/julienschmidt/httprouter"
 	"net/http"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
@@ -34,7 +33,7 @@ func (h *showHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	UUID := httprouter.ParamsFromContext(r.Context()).ByName("uuid")
+	UUID := r.PathValue("uuid")
 	response, err := h.useCase.Execute(UUID)
 
 	switch true {

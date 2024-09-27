@@ -5,8 +5,6 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/julienschmidt/httprouter"
-
 	getfile "github.com/khanzadimahdi/testproject/application/file/getFile"
 	"github.com/khanzadimahdi/testproject/domain"
 )
@@ -22,7 +20,7 @@ func NewShowHandler(showFileUseCase *getfile.UseCase) *showHandler {
 }
 
 func (h *showHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
-	UUID := httprouter.ParamsFromContext(r.Context()).ByName("uuid")
+	UUID := r.PathValue("uuid")
 
 	var buffer bytes.Buffer
 	err := h.showFileUseCase.Execute(UUID, &buffer)

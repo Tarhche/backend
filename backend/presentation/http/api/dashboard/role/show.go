@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/julienschmidt/httprouter"
 	"github.com/khanzadimahdi/testproject/application/auth"
 	getrole "github.com/khanzadimahdi/testproject/application/dashboard/role/getRole"
 	"github.com/khanzadimahdi/testproject/domain"
@@ -34,7 +33,7 @@ func (h *showHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	UUID := httprouter.ParamsFromContext(r.Context()).ByName("uuid")
+	UUID := r.PathValue("uuid")
 
 	response, err := h.getRoleUseCase.Execute(UUID)
 

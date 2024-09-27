@@ -22,5 +22,11 @@ func (a *CORS) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	rw.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
 	rw.Header().Set("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization")
 
+	if r.Method == http.MethodOptions {
+		rw.WriteHeader(http.StatusNoContent)
+
+		return
+	}
+
 	a.next.ServeHTTP(rw, r)
 }
