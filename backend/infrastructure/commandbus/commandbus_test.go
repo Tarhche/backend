@@ -1,9 +1,10 @@
 package commandbus
 
 import (
-	"bytes"
 	"crypto/rand"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestBus(t *testing.T) {
@@ -22,13 +23,9 @@ func TestBus(t *testing.T) {
 		counter++
 
 		cmd, ok := command.(*FakeCommand)
-		if !ok {
-			t.Error("invalid command")
-		}
 
-		if !bytes.Equal(payload, cmd.Payload) {
-			t.Error("command payload is not valid")
-		}
+		assert.True(t, ok, "invalid command")
+		assert.Equal(t, payload, cmd.Payload, "command payload is not valid")
 	}
 
 	b.Register(&FakeCommand{}, HandlerFunc(handler))

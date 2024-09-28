@@ -1,0 +1,6 @@
+{
+    "errors": {
+        "identity": "identity required",
+        "password": "password required"
+    }
+}

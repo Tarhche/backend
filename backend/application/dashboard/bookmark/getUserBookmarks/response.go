@@ -12,10 +12,10 @@ type Response struct {
 }
 
 type bookmarkResponse struct {
-	Title      string    `json:"title"`
-	ObjectUUID string    `json:"object_uuid"`
-	ObjectType string    `json:"object_type"`
-	CreatedAt  time.Time `json:"created_at"`
+	Title      string `json:"title"`
+	ObjectUUID string `json:"object_uuid"`
+	ObjectType string `json:"object_type"`
+	CreatedAt  string `json:"created_at"`
 }
 
 type pagination struct {
@@ -30,7 +30,7 @@ func NewResponse(b []bookmark.Bookmark, totalPages, currentPage uint) *Response 
 		items[i].Title = b[i].Title
 		items[i].ObjectUUID = b[i].ObjectUUID
 		items[i].ObjectType = b[i].ObjectType
-		items[i].CreatedAt = b[i].CreatedAt
+		items[i].CreatedAt = b[i].CreatedAt.Format(time.RFC3339)
 	}
 
 	return &Response{

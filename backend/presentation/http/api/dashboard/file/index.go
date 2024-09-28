@@ -13,14 +13,14 @@ import (
 )
 
 type indexHandler struct {
-	getFilesUseCase *getfiles.UseCase
-	authorizer      domain.Authorizer
+	useCase    *getfiles.UseCase
+	authorizer domain.Authorizer
 }
 
-func NewIndexHandler(getFilesUseCase *getfiles.UseCase, a domain.Authorizer) *indexHandler {
+func NewIndexHandler(useCase *getfiles.UseCase, a domain.Authorizer) *indexHandler {
 	return &indexHandler{
-		getFilesUseCase: getFilesUseCase,
-		authorizer:      a,
+		useCase:    useCase,
+		authorizer: a,
 	}
 }
 
@@ -46,8 +46,8 @@ func (h *indexHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		Page: page,
 	}
 
-	response, err := h.getFilesUseCase.Execute(request)
-	switch true {
+	response, err := h.useCase.Execute(request)
+	switch {
 	case err != nil:
 		rw.WriteHeader(http.StatusInternalServerError)
 	default:

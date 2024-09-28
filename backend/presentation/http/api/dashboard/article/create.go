@@ -12,14 +12,14 @@ import (
 )
 
 type createHandler struct {
-	createArticleUseCase *createarticle.UseCase
-	authorizer           domain.Authorizer
+	useCase    *createarticle.UseCase
+	authorizer domain.Authorizer
 }
 
-func NewCreateHandler(createArticleUseCase *createarticle.UseCase, a domain.Authorizer) *createHandler {
+func NewCreateHandler(useCase *createarticle.UseCase, a domain.Authorizer) *createHandler {
 	return &createHandler{
-		createArticleUseCase: createArticleUseCase,
-		authorizer:           a,
+		useCase:    useCase,
+		authorizer: a,
 	}
 }
 
@@ -40,17 +40,19 @@ func (h *createHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	}
 	request.AuthorUUID = userUUID
 
-	response, err := h.createArticleUseCase.Execute(request)
+	response, err := h.useCase.Execute(request)
 
-	switch true {
+	switch {
 	case errors.Is(err, domain.ErrNotExists):
 		rw.WriteHeader(http.StatusNotFound)
 	case err != nil:
 		rw.WriteHeader(http.StatusInternalServerError)
 	case len(response.ValidationErrors) > 0:
+		rw.Header().Add("Content-Type", "application/json")
 		rw.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(rw).Encode(response)
 	default:
+		rw.Header().Add("Content-Type", "application/json")
 		rw.WriteHeader(http.StatusCreated)
 		json.NewEncoder(rw).Encode(response)
 	}

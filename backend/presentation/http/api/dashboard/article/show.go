@@ -12,14 +12,14 @@ import (
 )
 
 type showHandler struct {
-	getArticleUseCase *getarticle.UseCase
-	authorizer        domain.Authorizer
+	useCase    *getarticle.UseCase
+	authorizer domain.Authorizer
 }
 
-func NewShowHandler(getArticleUseCase *getarticle.UseCase, a domain.Authorizer) *showHandler {
+func NewShowHandler(useCase *getarticle.UseCase, a domain.Authorizer) *showHandler {
 	return &showHandler{
-		getArticleUseCase: getArticleUseCase,
-		authorizer:        a,
+		useCase:    useCase,
+		authorizer: a,
 	}
 }
 
@@ -35,9 +35,9 @@ func (h *showHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 	UUID := r.PathValue("uuid")
 
-	response, err := h.getArticleUseCase.Execute(UUID)
+	response, err := h.useCase.Execute(UUID)
 
-	switch true {
+	switch {
 	case errors.Is(err, domain.ErrNotExists):
 		rw.WriteHeader(http.StatusNotFound)
 	case err != nil:

@@ -12,11 +12,11 @@ type Response struct {
 }
 
 type elementResponse struct {
-	UUID      string    `json:"uuid"`
-	Type      string    `json:"type"`
-	Venues    []string  `json:"venues"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	UUID      string   `json:"uuid"`
+	Type      string   `json:"type"`
+	Venues    []string `json:"venues"`
+	CreatedAt string   `json:"created_at"`
+	UpdatedAt string   `json:"updated_at"`
 }
 
 type pagination struct {
@@ -31,8 +31,8 @@ func NewResponse(a []element.Element, totalPages, currentPage uint) *Response {
 		items[i].UUID = a[i].UUID
 		items[i].Type = a[i].Type
 		items[i].Venues = a[i].Venues
-		items[i].CreatedAt = a[i].CreatedAt
-		items[i].UpdatedAt = a[i].UpdatedAt
+		items[i].CreatedAt = a[i].CreatedAt.Format(time.RFC3339)
+		items[i].UpdatedAt = a[i].UpdatedAt.Format(time.RFC3339)
 	}
 
 	return &Response{

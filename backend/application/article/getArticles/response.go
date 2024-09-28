@@ -17,7 +17,7 @@ type articleResponse struct {
 	Video       string         `json:"video"`
 	Title       string         `json:"title"`
 	Excerpt     string         `json:"excerpt"`
-	PublishedAt time.Time      `json:"published_at"`
+	PublishedAt string         `json:"published_at"`
 	Author      authorResponse `json:"author"`
 }
 
@@ -40,7 +40,7 @@ func NewResponse(a []article.Article, totalPages, currentPage uint) *Response {
 		items[i].Video = a[i].Video
 		items[i].Title = a[i].Title
 		items[i].Excerpt = a[i].Excerpt
-		items[i].PublishedAt = a[i].PublishedAt
+		items[i].PublishedAt = a[i].PublishedAt.Format(time.RFC3339)
 
 		items[i].Author.Name = a[i].Author.Name
 		items[i].Author.Avatar = a[i].Author.Avatar

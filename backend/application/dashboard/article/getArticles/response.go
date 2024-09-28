@@ -12,12 +12,12 @@ type Response struct {
 }
 
 type articleResponse struct {
-	UUID        string    `json:"uuid"`
-	Cover       string    `json:"cover"`
-	Video       string    `json:"video"`
-	Title       string    `json:"title"`
-	PublishedAt time.Time `json:"published_at"`
-	Author      author    `json:"author"`
+	UUID        string `json:"uuid"`
+	Cover       string `json:"cover"`
+	Video       string `json:"video"`
+	Title       string `json:"title"`
+	PublishedAt string `json:"published_at"`
+	Author      author `json:"author"`
 }
 
 type author struct {
@@ -38,7 +38,7 @@ func NewResponse(a []article.Article, totalPages, currentPage uint) *Response {
 		items[i].Cover = a[i].Cover
 		items[i].Video = a[i].Video
 		items[i].Title = a[i].Title
-		items[i].PublishedAt = a[i].PublishedAt
+		items[i].PublishedAt = a[i].PublishedAt.Format(time.RFC3339)
 
 		items[i].Author.Name = a[i].Author.Name
 		items[i].Author.Avatar = a[i].Author.Avatar

@@ -10,12 +10,12 @@ import (
 )
 
 type showHandler struct {
-	getArticlesByHashtagUseCase *getArticlesByHashtag.UseCase
+	useCase *getArticlesByHashtag.UseCase
 }
 
-func NewShowHandler(getArticlesByHashtagUseCase *getArticlesByHashtag.UseCase) *showHandler {
+func NewShowHandler(useCase *getArticlesByHashtag.UseCase) *showHandler {
 	return &showHandler{
-		getArticlesByHashtagUseCase: getArticlesByHashtagUseCase,
+		useCase: useCase,
 	}
 }
 
@@ -35,8 +35,9 @@ func (h *showHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		Hashtag: hashtag,
 	}
 
-	response, err := h.getArticlesByHashtagUseCase.Execute(request)
-	switch true {
+	response, err := h.useCase.Execute(request)
+
+	switch {
 	case err != nil:
 		rw.WriteHeader(http.StatusInternalServerError)
 	default:

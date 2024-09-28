@@ -10,28 +10,28 @@ import (
 )
 
 type showHandler struct {
-	showFileUseCase *getfile.UseCase
+	useCase *getfile.UseCase
 }
 
-func NewShowHandler(showFileUseCase *getfile.UseCase) *showHandler {
+func NewShowHandler(useCase *getfile.UseCase) *showHandler {
 	return &showHandler{
-		showFileUseCase: showFileUseCase,
+		useCase: useCase,
 	}
 }
 
 func (h *showHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	UUID := r.PathValue("uuid")
 
-	var buffer bytes.Buffer
-	err := h.showFileUseCase.Execute(UUID, &buffer)
+	var buf bytes.Buffer
+	err := h.useCase.Execute(UUID, &buf)
 
-	switch true {
+	switch {
 	case errors.Is(err, domain.ErrNotExists):
 		rw.WriteHeader(http.StatusNotFound)
 	case err != nil:
 		rw.WriteHeader(http.StatusInternalServerError)
 	default:
 		rw.WriteHeader(http.StatusOK)
-		buffer.WriteTo(rw)
+		_, _ = buf.WriteTo(rw)
 	}
 }

@@ -1,6 +1,8 @@
 package updateBookmark
 
 import (
+	"log"
+
 	"github.com/khanzadimahdi/testproject/domain/bookmark"
 )
 
@@ -22,6 +24,8 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 			ValidationErrors: validation,
 		}, nil
 	}
+
+	log.Println("keep", !request.Keep)
 
 	if !request.Keep {
 		if err := uc.bookmarkRepository.DeleteByOwnerUUID(

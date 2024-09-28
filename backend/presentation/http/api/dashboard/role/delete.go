@@ -11,14 +11,14 @@ import (
 )
 
 type deleteHandler struct {
-	deleteRoleUseCase *deleterole.UseCase
-	authorizer        domain.Authorizer
+	useCase    *deleterole.UseCase
+	authorizer domain.Authorizer
 }
 
-func NewDeleteHandler(deleteRoleUseCase *deleterole.UseCase, a domain.Authorizer) *deleteHandler {
+func NewDeleteHandler(useCase *deleterole.UseCase, a domain.Authorizer) *deleteHandler {
 	return &deleteHandler{
-		deleteRoleUseCase: deleteRoleUseCase,
-		authorizer:        a,
+		useCase:    useCase,
+		authorizer: a,
 	}
 }
 
@@ -38,8 +38,8 @@ func (h *deleteHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		RoleUUID: UUID,
 	}
 
-	err := h.deleteRoleUseCase.Execute(request)
-	switch true {
+	err := h.useCase.Execute(request)
+	switch {
 	case errors.Is(err, domain.ErrNotExists):
 		rw.WriteHeader(http.StatusNotFound)
 	case err != nil:

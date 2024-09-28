@@ -15,7 +15,7 @@ type Response struct {
 	Title       string            `json:"title"`
 	Excerpt     string            `json:"excerpt"`
 	Body        string            `json:"body"`
-	PublishedAt time.Time         `json:"published_at"`
+	PublishedAt string            `json:"published_at"`
 	Author      authorResponse    `json:"avatar"`
 	Tags        []string          `json:"tags"`
 	ViewCount   uint              `json:"view_count"`
@@ -32,7 +32,7 @@ type articleResponse struct {
 	Cover       string         `json:"cover"`
 	Title       string         `json:"title"`
 	Author      authorResponse `json:"author"`
-	PublishedAt time.Time      `json:"published_at"`
+	PublishedAt string         `json:"published_at"`
 	Excerpt     string         `json:"excerpt"`
 	Tags        []string       `json:"tags"`
 }
@@ -75,7 +75,7 @@ func NewResponse(a article.Article, e []element.Element, elementsContent []artic
 		Title:       a.Title,
 		Excerpt:     a.Excerpt,
 		Body:        a.Body,
-		PublishedAt: a.PublishedAt,
+		PublishedAt: a.PublishedAt.Format(time.RFC3339),
 		Author: authorResponse{
 			Name:   a.Author.Name,
 			Avatar: a.Author.Avatar,
@@ -147,7 +147,7 @@ func toArticleResponse(a []article.Article) []articleResponse {
 		items[i].Title = a[i].Title
 		items[i].Excerpt = a[i].Excerpt
 		items[i].Tags = a[i].Tags
-		items[i].PublishedAt = a[i].PublishedAt
+		items[i].PublishedAt = a[i].PublishedAt.Format(time.RFC3339)
 
 		items[i].Author.Name = a[i].Author.Name
 		items[i].Author.Avatar = a[i].Author.Avatar

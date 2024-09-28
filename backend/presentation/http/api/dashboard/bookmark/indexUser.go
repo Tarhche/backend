@@ -1,4 +1,4 @@
-package comment
+package bookmark
 
 import (
 	"encoding/json"
@@ -48,7 +48,7 @@ func (h *indexUserHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	}
 
 	response, err := h.useCase.Execute(request)
-	switch true {
+	switch {
 	case err != nil:
 		rw.WriteHeader(http.StatusInternalServerError)
 	default:
