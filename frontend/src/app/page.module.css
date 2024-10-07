@@ -1,0 +1,10 @@
+.headingWithBorder {
+  --padding-bottom: 10px;
+  padding-bottom: var(--padding-bottom);
+  border-bottom: 1px solid var(--mantine-color-gray-3);
+
+  span {
+    padding-bottom: var(--padding-bottom);
+    border-bottom: 1px solid var(--mantine-color-dark-8);
+  }
+}
