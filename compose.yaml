@@ -11,10 +11,10 @@ services:
     volumes:
       - ./frontend:/opt/app
     environment:
-      NUXT_PUBLIC_API_BASE_URL: ${NUXT_PUBLIC_API_BASE_URL}
-      NUXT_INTERNAL_API_BASE_URL: ${NUXT_INTERNAL_API_BASE_URL}
+      NEXT_PUBLIC_EXTERNAL_BACKEND_BASE_URL: ${NEXT_PUBLIC_EXTERNAL_BACKEND_BASE_URL}
+      INTERNAL_BACKEND_BASE_URL: ${INTERNAL_BACKEND_BASE_URL}
     command: >
-      sh -c "npm install; npm run dev -- --host --port 3000"
+      sh -c "npm install; npm run dev -- --hostname \"0.0.0.0\" --port 3000"
 
   app:
     build:
