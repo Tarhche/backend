@@ -8,8 +8,6 @@ import {
   ListItem,
   Group,
   Anchor,
-  Divider,
-  Title,
 } from "@mantine/core";
 import {ArticleCardVertical} from "@/features/home-page/article-card-vertical";
 import classes from "./page.module.css";
