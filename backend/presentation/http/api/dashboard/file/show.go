@@ -1,10 +1,10 @@
 package file
 
 import (
+	"bytes"
 	"errors"
 	"net/http"
 
-	"github.com/julienschmidt/httprouter"
 	"github.com/khanzadimahdi/testproject/application/auth"
 	getfile "github.com/khanzadimahdi/testproject/application/dashboard/file/getFile"
 	"github.com/khanzadimahdi/testproject/domain"
@@ -12,14 +12,14 @@ import (
 )
 
 type showHandler struct {
-	showFileUseCase *getfile.UseCase
-	authorizer      domain.Authorizer
+	useCase    *getfile.UseCase
+	authorizer domain.Authorizer
 }
 
-func NewShowHandler(showFileUseCase *getfile.UseCase, a domain.Authorizer) *showHandler {
+func NewShowHandler(useCase *getfile.UseCase, a domain.Authorizer) *showHandler {
 	return &showHandler{
-		showFileUseCase: showFileUseCase,
-		authorizer:      a,
+		useCase:    useCase,
+		authorizer: a,
 	}
 }
 
@@ -33,16 +33,18 @@ func (h *showHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	UUID := httprouter.ParamsFromContext(r.Context()).ByName("uuid")
+	UUID := r.PathValue("uuid")
 
-	err := h.showFileUseCase.Execute(UUID, rw)
+	var buf bytes.Buffer
+	err := h.useCase.Execute(UUID, &buf)
 
-	switch true {
+	switch {
 	case errors.Is(err, domain.ErrNotExists):
 		rw.WriteHeader(http.StatusNotFound)
 	case err != nil:
 		rw.WriteHeader(http.StatusInternalServerError)
 	default:
 		rw.WriteHeader(http.StatusOK)
+		_, _ = buf.WriteTo(rw)
 	}
 }

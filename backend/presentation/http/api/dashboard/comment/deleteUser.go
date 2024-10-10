@@ -4,8 +4,6 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/julienschmidt/httprouter"
-
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/application/dashboard/comment/deleteUserComment"
 	"github.com/khanzadimahdi/testproject/domain"
@@ -34,7 +32,7 @@ func (h *deleteUserHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	UUID := httprouter.ParamsFromContext(r.Context()).ByName("uuid")
+	UUID := r.PathValue("uuid")
 
 	request := deleteUserComment.Request{
 		CommentUUID: UUID,
@@ -42,7 +40,7 @@ func (h *deleteUserHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	}
 
 	err := h.useCase.Execute(request)
-	switch true {
+	switch {
 	case errors.Is(err, domain.ErrNotExists):
 		rw.WriteHeader(http.StatusNotFound)
 	case err != nil:

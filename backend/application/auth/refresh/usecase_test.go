@@ -15,9 +15,7 @@ import (
 
 func TestUseCase_Execute(t *testing.T) {
 	privateKey, err := ecdsa.Generate()
-	if err != nil {
-		t.Error("unexpected error")
-	}
+	assert.NoError(t, err)
 
 	j := jwt.NewJWT(privateKey, privateKey.Public())
 
@@ -60,7 +58,7 @@ func TestUseCase_Execute(t *testing.T) {
 		var (
 			userRepository   users.MockUsersRepository
 			r                = Request{}
-			expectedResponse = RefreshResponse{
+			expectedResponse = Response{
 				ValidationErrors: validationErrors{
 					"token": "token is required",
 				},
@@ -84,7 +82,7 @@ func TestUseCase_Execute(t *testing.T) {
 			r              = Request{
 				Token: generateRefreshToken(t, j, u, time.Now().Add(-10*time.Second), auth.RefreshToken),
 			}
-			expectedResponse = RefreshResponse{
+			expectedResponse = Response{
 				ValidationErrors: validationErrors{
 					"token": "token has invalid claims: token is expired",
 				},

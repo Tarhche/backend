@@ -3,6 +3,7 @@ package getComment
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -23,7 +24,9 @@ func TestUseCase_Execute(t *testing.T) {
 				UUID: commentUUID,
 			}
 			expectedResponse = Response{
-				UUID: commentUUID,
+				UUID:       commentUUID,
+				CreatedAt:  a.CreatedAt.Format(time.RFC3339),
+				ApprovedAt: a.ApprovedAt.Format(time.RFC3339),
 			}
 		)
 

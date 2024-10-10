@@ -1,0 +1,87 @@
+{
+    "all": [
+        {
+            "uuid": "article-uuid-1",
+            "cover": "article-cover-1",
+            "title": "article-title-1",
+            "author": {
+                "name": "author-name",
+                "avatar": "author-avatar"
+            },
+            "published_at": "2024-09-29T15:56:25Z",
+            "excerpt": "article-excerpt-1",
+            "tags": [
+                "tag-1",
+                "tag-2",
+                "tag-3"
+            ]
+        },
+        {
+            "uuid": "article-uuid-2",
+            "cover": "article-cover-2",
+            "title": "article-title-2",
+            "author": {
+                "name": "author-name",
+                "avatar": "author-avatar"
+            },
+            "published_at": "0001-01-01T00:00:00Z",
+            "excerpt": "article-excerpt-2",
+            "tags": null
+        },
+        {
+            "uuid": "article-uuid-3",
+            "cover": "article-cover-3",
+            "title": "article-title-3",
+            "author": {
+                "name": "author-name",
+                "avatar": "author-avatar"
+            },
+            "published_at": "0001-01-01T00:00:00Z",
+            "excerpt": "article-excerpt-3",
+            "tags": null
+        }
+    ],
+    "popular": [
+        {
+            "uuid": "article-uuid-1",
+            "cover": "article-cover-1",
+            "title": "article-title-1",
+            "author": {
+                "name": "author-name",
+                "avatar": "author-avatar"
+            },
+            "published_at": "2024-09-29T15:56:25Z",
+            "excerpt": "article-excerpt-1",
+            "tags": [
+                "tag-1",
+                "tag-2",
+                "tag-3"
+            ]
+        },
+        {
+            "uuid": "article-uuid-2",
+            "cover": "article-cover-2",
+            "title": "article-title-2",
+            "author": {
+                "name": "author-name",
+                "avatar": "author-avatar"
+            },
+            "published_at": "0001-01-01T00:00:00Z",
+            "excerpt": "article-excerpt-2",
+            "tags": null
+        },
+        {
+            "uuid": "article-uuid-3",
+            "cover": "article-cover-3",
+            "title": "article-title-3",
+            "author": {
+                "name": "author-name",
+                "avatar": "author-avatar"
+            },
+            "published_at": "0001-01-01T00:00:00Z",
+            "excerpt": "article-excerpt-3",
+            "tags": null
+        }
+    ],
+    "elements": []
+}

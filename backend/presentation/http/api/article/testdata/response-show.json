@@ -1,0 +1,16 @@
+{
+    "uuid": "test-uuid-1",
+    "cover": "",
+    "video": "",
+    "title": "test title",
+    "excerpt": "",
+    "body": "test body",
+    "published_at": "2024-09-29T15:56:25Z",
+    "avatar": {
+        "name": "test name",
+        "avatar": "test avatar"
+    },
+    "tags": [],
+    "view_count": 11,
+    "elements": []
+}

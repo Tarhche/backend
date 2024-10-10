@@ -6,6 +6,10 @@ import (
 	"fmt"
 	"net/http"
 	"testing"
+	"time"
+
+	"github.com/khanzadimahdi/testproject/infrastructure/console"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestServe(t *testing.T) {
@@ -81,11 +85,30 @@ func TestServe(t *testing.T) {
 		})
 
 		command := NewServeCommand(handler)
+		command.port = 1234
 
-		_ = ctx
-		_ = command
-		// if exitStatus := command.Run(ctx); exitStatus != console.ExitSuccess {
-		// 	t.Error("unexpected exit code")
-		// }
+		serverStartedListening := make(chan struct{})
+
+		go func() {
+			serverStartedListening <- struct{}{}
+			if exitStatus := command.Run(ctx); exitStatus != console.ExitSuccess {
+				t.Error("unexpected exit code")
+			}
+		}()
+
+		<-serverStartedListening
+		time.Sleep(50 * time.Millisecond) // wait for server to start serving
+
+		req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://0.0.0.0:%d", command.port), nil)
+		assert.NoError(t, err)
+
+		c := http.Client{
+			Timeout: 1 * time.Second,
+		}
+
+		resp, err := c.Do(req)
+
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
 	})
 }

@@ -25,7 +25,7 @@ func (h *getProfileHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 	response, err := h.useCase.Execute(userUUID)
 
-	switch true {
+	switch {
 	case errors.Is(err, domain.ErrNotExists):
 		rw.WriteHeader(http.StatusNotFound)
 	case err != nil:

@@ -1,4 +1,4 @@
-package comment
+package bookmark
 
 import (
 	"encoding/json"
@@ -41,7 +41,7 @@ func (h *deleteUserHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	request.OwnerUUID = auth.FromContext(r.Context()).UUID
 
 	err := h.useCase.Execute(&request)
-	switch true {
+	switch {
 	case errors.Is(err, domain.ErrNotExists):
 		rw.WriteHeader(http.StatusNotFound)
 	case err != nil:

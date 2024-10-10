@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
+	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/password"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
@@ -31,7 +32,13 @@ func (uc *UseCase) Execute(request Request) (*Response, error) {
 	}
 
 	u, err := uc.userRepository.GetOneByIdentity(request.Identity)
-	if err != nil {
+	if err == domain.ErrNotExists {
+		return &Response{
+			ValidationErrors: validationErrors{
+				"identity": "identity (email/username) or password is wrong",
+			},
+		}, nil
+	} else if err != nil {
 		return nil, err
 	}
 

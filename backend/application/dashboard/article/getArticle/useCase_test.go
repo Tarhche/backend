@@ -3,6 +3,7 @@ package getarticle
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -20,8 +21,9 @@ func TestUseCase_Execute(t *testing.T) {
 				UUID: articleUUID,
 			}
 			expectedResponse = Response{
-				UUID: articleUUID,
-				Tags: []string{},
+				UUID:        articleUUID,
+				Tags:        []string{},
+				PublishedAt: a.PublishedAt.Format(time.RFC3339),
 			}
 		)
 

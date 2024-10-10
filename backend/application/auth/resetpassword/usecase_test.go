@@ -19,9 +19,7 @@ import (
 
 func TestUseCase_ResetPassword(t *testing.T) {
 	privateKey, err := ecdsa.Generate()
-	if err != nil {
-		t.Error("unexpected error")
-	}
+	assert.NoError(t, err)
 
 	j := jwt.NewJWT(privateKey, privateKey.Public())
 

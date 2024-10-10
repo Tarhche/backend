@@ -41,15 +41,17 @@ func TestUseCase_Execute(t *testing.T) {
 			expectedResponse = Response{
 				Items: []articleResponse{
 					{
-						UUID:  a[0].UUID,
-						Title: a[0].Title,
+						UUID:        a[0].UUID,
+						Title:       a[0].Title,
+						PublishedAt: "0001-01-01T00:00:00Z",
 					},
 					{
-						UUID: a[1].UUID,
+						UUID:        a[1].UUID,
+						PublishedAt: "0001-01-01T00:00:00Z",
 					},
 					{
 						UUID:        a[2].UUID,
-						PublishedAt: a[2].PublishedAt,
+						PublishedAt: a[2].PublishedAt.Format(time.RFC3339),
 					},
 				},
 				Pagination: pagination{

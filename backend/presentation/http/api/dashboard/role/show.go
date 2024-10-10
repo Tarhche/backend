@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/julienschmidt/httprouter"
 	"github.com/khanzadimahdi/testproject/application/auth"
 	getrole "github.com/khanzadimahdi/testproject/application/dashboard/role/getRole"
 	"github.com/khanzadimahdi/testproject/domain"
@@ -13,14 +12,14 @@ import (
 )
 
 type showHandler struct {
-	getRoleUseCase *getrole.UseCase
-	authorizer     domain.Authorizer
+	useCase    *getrole.UseCase
+	authorizer domain.Authorizer
 }
 
-func NewShowHandler(getRoleUseCase *getrole.UseCase, a domain.Authorizer) *showHandler {
+func NewShowHandler(useCase *getrole.UseCase, a domain.Authorizer) *showHandler {
 	return &showHandler{
-		getRoleUseCase: getRoleUseCase,
-		authorizer:     a,
+		useCase:    useCase,
+		authorizer: a,
 	}
 }
 
@@ -34,11 +33,11 @@ func (h *showHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	UUID := httprouter.ParamsFromContext(r.Context()).ByName("uuid")
+	UUID := r.PathValue("uuid")
 
-	response, err := h.getRoleUseCase.Execute(UUID)
+	response, err := h.useCase.Execute(UUID)
 
-	switch true {
+	switch {
 	case errors.Is(err, domain.ErrNotExists):
 		rw.WriteHeader(http.StatusNotFound)
 	case err != nil:

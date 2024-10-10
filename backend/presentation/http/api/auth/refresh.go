@@ -2,20 +2,18 @@ package auth
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http"
 
 	"github.com/khanzadimahdi/testproject/application/auth/refresh"
-	"github.com/khanzadimahdi/testproject/domain"
 )
 
 type refreshHandler struct {
-	refreshUseCase *refresh.UseCase
+	useCase *refresh.UseCase
 }
 
-func NewRefreshHandler(refreshUseCase *refresh.UseCase) *refreshHandler {
+func NewRefreshHandler(useCase *refresh.UseCase) *refreshHandler {
 	return &refreshHandler{
-		refreshUseCase: refreshUseCase,
+		useCase: useCase,
 	}
 }
 
@@ -26,13 +24,12 @@ func (h *refreshHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response, err := h.refreshUseCase.Execute(request)
-	switch true {
-	case errors.Is(err, domain.ErrNotExists):
-		rw.WriteHeader(http.StatusNotFound)
+	response, err := h.useCase.Execute(request)
+	switch {
 	case err != nil:
 		rw.WriteHeader(http.StatusInternalServerError)
 	case len(response.ValidationErrors) > 0:
+		rw.Header().Add("Content-Type", "application/json")
 		rw.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(rw).Encode(response)
 	default:
