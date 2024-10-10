@@ -14,7 +14,7 @@ import (
 
 const (
 	templateName    = "resources/view/mail/auth/register"
-	registrationURL = "https://tarhche.com/auth/verify?token="
+	registrationURL = "https://reactjs.tarhche.com/auth/verify?token="
 )
 
 type UseCase struct {
