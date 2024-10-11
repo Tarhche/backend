@@ -1,0 +1,13 @@
+{
+    "uuid": "role-uuid",
+    "body": "",
+    "author": {
+        "uuid": "auth-user-uuid",
+        "name": "",
+        "avatar": ""
+    },
+    "object_type": "",
+    "object_uuid": "",
+    "created_at": "0001-01-01T00:00:00Z",
+    "approved_at": "0001-01-01T00:00:00Z"
+}

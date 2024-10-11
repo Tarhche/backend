@@ -47,6 +47,6 @@ func (h *updateHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		rw.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(rw).Encode(response)
 	default:
-		rw.WriteHeader(http.StatusOK)
+		rw.WriteHeader(http.StatusNoContent)
 	}
 }

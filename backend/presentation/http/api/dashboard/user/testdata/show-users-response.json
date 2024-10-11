@@ -1,0 +1,1 @@
+{"items":[{"uuid":"article-uuid-1","name":"John Doe","email":"johndoe@test.com","username":"john.doe"},{"uuid":"article-uuid-2","avatar":"random-avatar","username":"test-username"},{"uuid":"article-uuid-3","name":"test name"}],"pagination":{"total_pages":1,"current_page":1}}

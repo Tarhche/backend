@@ -2,7 +2,6 @@ package bookmark
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
@@ -42,11 +41,9 @@ func (h *deleteUserHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 	err := h.useCase.Execute(&request)
 	switch {
-	case errors.Is(err, domain.ErrNotExists):
-		rw.WriteHeader(http.StatusNotFound)
 	case err != nil:
 		rw.WriteHeader(http.StatusInternalServerError)
 	default:
-		rw.WriteHeader(http.StatusOK)
+		rw.WriteHeader(http.StatusNoContent)
 	}
 }

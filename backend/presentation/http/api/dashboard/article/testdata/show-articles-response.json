@@ -1,0 +1,41 @@
+{
+    "items": [
+        {
+            "uuid": "article-uuid-1",
+            "cover": "",
+            "video": "",
+            "title": "article-title-1",
+            "published_at": "0001-01-01T00:00:00Z",
+            "author": {
+                "name": "",
+                "avatar": ""
+            }
+        },
+        {
+            "uuid": "article-uuid-2",
+            "cover": "",
+            "video": "",
+            "title": "",
+            "published_at": "0001-01-01T00:00:00Z",
+            "author": {
+                "name": "",
+                "avatar": ""
+            }
+        },
+        {
+            "uuid": "article-uuid-3",
+            "cover": "",
+            "video": "",
+            "title": "",
+            "published_at": "2024-10-11T04:27:44Z",
+            "author": {
+                "name": "",
+                "avatar": ""
+            }
+        }
+    ],
+    "pagination": {
+        "total_pages": 1,
+        "current_page": 1
+    }
+}

@@ -1,0 +1,26 @@
+{
+    "items": [
+        {
+            "uuid": "test-uuid-01",
+            "name": "role-name-01",
+            "size": 1000,
+            "owner_uuid": "user-uuid-01"
+        },
+        {
+            "uuid": "test-uuid-02",
+            "name": "role-name-02",
+            "size": 0,
+            "owner_uuid": ""
+        },
+        {
+            "uuid": "",
+            "name": "role-name-03",
+            "size": 0,
+            "owner_uuid": ""
+        }
+    ],
+    "pagination": {
+        "total_pages": 1,
+        "current_page": 1
+    }
+}

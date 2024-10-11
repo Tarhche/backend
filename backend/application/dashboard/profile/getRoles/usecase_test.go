@@ -13,7 +13,7 @@ import (
 func TestUseCase_Execute(t *testing.T) {
 	t.Run("get user's roles", func(t *testing.T) {
 		var (
-			elementRepository roles.MockRolesRepository
+			roleRepository roles.MockRolesRepository
 
 			userUUID = "test-user-uuid"
 
@@ -63,10 +63,10 @@ func TestUseCase_Execute(t *testing.T) {
 			}
 		)
 
-		elementRepository.On("GetByUserUUID", userUUID).Once().Return(rl, nil)
-		defer elementRepository.AssertExpectations(t)
+		roleRepository.On("GetByUserUUID", userUUID).Once().Return(rl, nil)
+		defer roleRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&elementRepository).Execute(userUUID)
+		response, err := NewUseCase(&roleRepository).Execute(userUUID)
 
 		assert.NoError(t, err)
 		assert.Equal(t, &expectedResponse, response)
@@ -74,17 +74,17 @@ func TestUseCase_Execute(t *testing.T) {
 
 	t.Run("failure on getting user's roles", func(t *testing.T) {
 		var (
-			elementRepository roles.MockRolesRepository
+			roleRepository roles.MockRolesRepository
 
 			userUUID = "test-user-uuid"
 
 			expectedErr = errors.New("some error")
 		)
 
-		elementRepository.On("GetByUserUUID", userUUID).Once().Return(nil, expectedErr)
-		defer elementRepository.AssertExpectations(t)
+		roleRepository.On("GetByUserUUID", userUUID).Once().Return(nil, expectedErr)
+		defer roleRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&elementRepository).Execute(userUUID)
+		response, err := NewUseCase(&roleRepository).Execute(userUUID)
 
 		assert.ErrorIs(t, err, expectedErr)
 		assert.Nil(t, response)

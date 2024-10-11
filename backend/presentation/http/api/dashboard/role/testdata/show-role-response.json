@@ -1,0 +1,7 @@
+{
+    "uuid": "role-uuid",
+    "name": "Test Role",
+    "description": "Test Description",
+    "permissions": [],
+    "user_uuids": []
+}

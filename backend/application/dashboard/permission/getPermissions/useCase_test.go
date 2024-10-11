@@ -29,7 +29,7 @@ func TestUseCase_Execute(t *testing.T) {
 			}
 		)
 
-		permissionsRepository.On("GetAll").Return(p)
+		permissionsRepository.On("GetAll").Once().Return(p)
 		defer permissionsRepository.AssertExpectations(t)
 
 		response, err := NewUseCase(&permissionsRepository).Execute()

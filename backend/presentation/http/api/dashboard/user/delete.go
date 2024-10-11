@@ -45,6 +45,6 @@ func (h *deleteHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		rw.WriteHeader(http.StatusInternalServerError)
 	default:
-		rw.WriteHeader(http.StatusOK)
+		rw.WriteHeader(http.StatusNoContent)
 	}
 }
