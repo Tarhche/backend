@@ -1,0 +1,9 @@
+{
+    "errors": {
+        "name": "name is required",
+        "password": "password is required",
+        "repassword": "password and it's repeat should be same",
+        "token": "token is required",
+        "username": "username is required"
+    }
+}

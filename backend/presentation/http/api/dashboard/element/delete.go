@@ -4,7 +4,6 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/julienschmidt/httprouter"
 	"github.com/khanzadimahdi/testproject/application/auth"
 	deleteElement "github.com/khanzadimahdi/testproject/application/dashboard/element/deleteElement"
 	"github.com/khanzadimahdi/testproject/domain"
@@ -12,13 +11,13 @@ import (
 )
 
 type deleteHandler struct {
-	deleteElementUseCase *deleteElement.UseCase
-	authorizer           domain.Authorizer
+	useCase    *deleteElement.UseCase
+	authorizer domain.Authorizer
 }
 
-func NewDeleteHandler(deleteElementUseCase *deleteElement.UseCase, a domain.Authorizer) *deleteHandler {
+func NewDeleteHandler(useCase *deleteElement.UseCase, a domain.Authorizer) *deleteHandler {
 	return &deleteHandler{
-		deleteElementUseCase: deleteElementUseCase,
+		useCase: useCase,
 	}
 }
 
@@ -32,14 +31,14 @@ func (h *deleteHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	UUID := httprouter.ParamsFromContext(r.Context()).ByName("uuid")
+	UUID := r.PathValue("uuid")
 
 	request := deleteElement.Request{
 		ElementUUID: UUID,
 	}
 
-	err := h.deleteElementUseCase.Execute(request)
-	switch true {
+	err := h.useCase.Execute(request)
+	switch {
 	case errors.Is(err, domain.ErrNotExists):
 		rw.WriteHeader(http.StatusNotFound)
 	case err != nil:

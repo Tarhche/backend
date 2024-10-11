@@ -15,13 +15,13 @@ type Response struct {
 }
 
 type articleResponse struct {
-	UUID        string    `json:"uuid"`
-	Cover       string    `json:"cover"`
-	Title       string    `json:"title"`
-	Author      author    `json:"author"`
-	PublishedAt time.Time `json:"published_at"`
-	Excerpt     string    `json:"excerpt"`
-	Tags        []string  `json:"tags"`
+	UUID        string   `json:"uuid"`
+	Cover       string   `json:"cover"`
+	Title       string   `json:"title"`
+	Author      author   `json:"author"`
+	PublishedAt string   `json:"published_at"`
+	Excerpt     string   `json:"excerpt"`
+	Tags        []string `json:"tags"`
 }
 
 type author struct {
@@ -130,7 +130,7 @@ func toArticleResponse(a []article.Article) []articleResponse {
 		items[i].Title = a[i].Title
 		items[i].Excerpt = a[i].Excerpt
 		items[i].Tags = a[i].Tags
-		items[i].PublishedAt = a[i].PublishedAt
+		items[i].PublishedAt = a[i].PublishedAt.Format(time.RFC3339)
 
 		items[i].Author.Name = a[i].Author.Name
 		items[i].Author.Avatar = a[i].Author.Avatar

@@ -1,0 +1,44 @@
+{
+    "items": [
+        {
+            "uuid": "article-uuid-1",
+            "cover": "article-cover-1",
+            "video": "article-video-1",
+            "title": "article-title-1",
+            "excerpt": "article-excerpt-1",
+            "published_at": "2024-09-29T15:56:25Z",
+            "author": {
+                "name": "author-name",
+                "avatar": "author-avatar"
+            }
+        },
+        {
+            "uuid": "article-uuid-2",
+            "cover": "article-cover-2",
+            "video": "",
+            "title": "article-title-2",
+            "excerpt": "article-excerpt-2",
+            "published_at": "0001-01-01T00:00:00Z",
+            "author": {
+                "name": "author-name",
+                "avatar": "author-avatar"
+            }
+        },
+        {
+            "uuid": "article-uuid-3",
+            "cover": "article-cover-3",
+            "video": "",
+            "title": "article-title-3",
+            "excerpt": "article-excerpt-3",
+            "published_at": "0001-01-01T00:00:00Z",
+            "author": {
+                "name": "author-name",
+                "avatar": "author-avatar"
+            }
+        }
+    ],
+    "paginationResponse": {
+        "total_pages": 1,
+        "current_page": 1
+    }
+}

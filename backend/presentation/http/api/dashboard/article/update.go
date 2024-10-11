@@ -12,14 +12,14 @@ import (
 )
 
 type updateHandler struct {
-	updateArticleUseCase *updatearticle.UseCase
-	authorizer           domain.Authorizer
+	useCase    *updatearticle.UseCase
+	authorizer domain.Authorizer
 }
 
-func NewUpdateHandler(updateArticleUseCase *updatearticle.UseCase, a domain.Authorizer) *updateHandler {
+func NewUpdateHandler(useCase *updatearticle.UseCase, a domain.Authorizer) *updateHandler {
 	return &updateHandler{
-		updateArticleUseCase: updateArticleUseCase,
-		authorizer:           a,
+		useCase:    useCase,
+		authorizer: a,
 	}
 }
 
@@ -40,13 +40,14 @@ func (h *updateHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	}
 	request.AuthorUUID = userUUID
 
-	response, err := h.updateArticleUseCase.Execute(request)
-	switch true {
+	response, err := h.useCase.Execute(request)
+	switch {
 	case errors.Is(err, domain.ErrNotExists):
 		rw.WriteHeader(http.StatusNotFound)
 	case err != nil:
 		rw.WriteHeader(http.StatusInternalServerError)
 	case len(response.ValidationErrors) > 0:
+		rw.Header().Add("Content-Type", "application/json")
 		rw.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(rw).Encode(response)
 	default:

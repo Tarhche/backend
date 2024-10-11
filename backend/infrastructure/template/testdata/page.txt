@@ -1,0 +1,7 @@
+<!doctype html>
+
+<html>
+    <head><title>test head</title></head>
+    <body><div>test body</div></body>
+</html>
+

@@ -11,14 +11,14 @@ import (
 )
 
 type createHandler struct {
-	uploadFileUseCase *uploadfile.UseCase
-	authorizer        domain.Authorizer
+	useCase    *uploadfile.UseCase
+	authorizer domain.Authorizer
 }
 
-func NewUploadHandler(uploadFileUseCase *uploadfile.UseCase, a domain.Authorizer) *createHandler {
+func NewUploadHandler(useCase *uploadfile.UseCase, a domain.Authorizer) *createHandler {
 	return &createHandler{
-		uploadFileUseCase: uploadFileUseCase,
-		authorizer:        a,
+		useCase:    useCase,
+		authorizer: a,
 	}
 }
 
@@ -43,20 +43,22 @@ func (h *createHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	response, err := h.uploadFileUseCase.Execute(uploadfile.Request{
+	response, err := h.useCase.Execute(uploadfile.Request{
 		Name:       header.Filename,
 		OwnerUUID:  auth.FromContext(r.Context()).UUID,
 		Size:       header.Size,
 		FileReader: file,
 	})
 
-	switch true {
+	switch {
 	case err != nil:
 		rw.WriteHeader(http.StatusInternalServerError)
 	case len(response.ValidationErrors) > 0:
+		rw.Header().Add("Content-Type", "application/json")
 		rw.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(rw).Encode(response)
 	default:
+		rw.Header().Add("Content-Type", "application/json")
 		rw.WriteHeader(http.StatusCreated)
 		json.NewEncoder(rw).Encode(response)
 	}

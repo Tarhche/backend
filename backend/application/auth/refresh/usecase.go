@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
+	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
 )
@@ -20,16 +21,16 @@ func NewUseCase(userRepository user.Repository, JWT *jwt.JWT) *UseCase {
 	}
 }
 
-func (uc *UseCase) Execute(request Request) (*RefreshResponse, error) {
+func (uc *UseCase) Execute(request Request) (*Response, error) {
 	if ok, validation := request.Validate(); !ok {
-		return &RefreshResponse{
+		return &Response{
 			ValidationErrors: validation,
 		}, nil
 	}
 
 	claims, err := uc.JWT.Verify(request.Token)
 	if err != nil {
-		return &RefreshResponse{
+		return &Response{
 			ValidationErrors: validationErrors{
 				"token": err.Error(),
 			},
@@ -37,7 +38,7 @@ func (uc *UseCase) Execute(request Request) (*RefreshResponse, error) {
 	}
 
 	if audiences, err := claims.GetAudience(); err != nil || len(audiences) == 0 || audiences[0] != auth.RefreshToken {
-		return &RefreshResponse{
+		return &Response{
 			ValidationErrors: validationErrors{
 				"token": "refresh token is not valid",
 			},
@@ -46,7 +47,7 @@ func (uc *UseCase) Execute(request Request) (*RefreshResponse, error) {
 
 	userUUID, err := claims.GetSubject()
 	if err != nil {
-		return &RefreshResponse{
+		return &Response{
 			ValidationErrors: validationErrors{
 				"token": err.Error(),
 			},
@@ -54,7 +55,13 @@ func (uc *UseCase) Execute(request Request) (*RefreshResponse, error) {
 	}
 
 	u, err := uc.userRepository.GetOne(userUUID)
-	if err != nil {
+	if err == domain.ErrNotExists {
+		return &Response{
+			ValidationErrors: validationErrors{
+				"identity": "identity (email/username) not exists",
+			},
+		}, nil
+	} else if err != nil {
 		return nil, err
 	}
 
@@ -68,7 +75,7 @@ func (uc *UseCase) Execute(request Request) (*RefreshResponse, error) {
 		return nil, err
 	}
 
-	return &RefreshResponse{
+	return &Response{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
 	}, nil

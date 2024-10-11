@@ -13,8 +13,8 @@ type commentResponse struct {
 	ParentUUID string         `json:"parent_uuid,omitempty"`
 	ObjectType string         `json:"object_type"`
 	ObjectUUID string         `json:"object_uuid"`
-	ApprovedAt time.Time      `json:"approved_at,omitempty"`
-	CreatedAt  time.Time      `json:"created_at"`
+	ApprovedAt string         `json:"approved_at,omitempty"`
+	CreatedAt  string         `json:"created_at"`
 }
 
 type authorResponse struct {
@@ -42,8 +42,8 @@ func NewResponse(c []comment.Comment, totalPages, currentPage uint) *Response {
 		items[i].ParentUUID = c[i].ParentUUID
 		items[i].ObjectType = c[i].ObjectType
 		items[i].ObjectUUID = c[i].ObjectUUID
-		items[i].CreatedAt = c[i].CreatedAt
-		items[i].ApprovedAt = c[i].ApprovedAt
+		items[i].CreatedAt = c[i].CreatedAt.Format(time.RFC3339)
+		items[i].ApprovedAt = c[i].ApprovedAt.Format(time.RFC3339)
 
 		items[i].Author = authorResponse{
 			UUID:   c[i].Author.UUID,

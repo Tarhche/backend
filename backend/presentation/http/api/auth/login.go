@@ -2,20 +2,18 @@ package auth
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http"
 
 	"github.com/khanzadimahdi/testproject/application/auth/login"
-	"github.com/khanzadimahdi/testproject/domain"
 )
 
 type loginHandler struct {
-	loginUseCase *login.UseCase
+	useCase *login.UseCase
 }
 
-func NewLoginHandler(loginUseCase *login.UseCase) *loginHandler {
+func NewLoginHandler(useCase *login.UseCase) *loginHandler {
 	return &loginHandler{
-		loginUseCase: loginUseCase,
+		useCase: useCase,
 	}
 }
 
@@ -26,13 +24,12 @@ func (h *loginHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response, err := h.loginUseCase.Execute(request)
-	switch true {
-	case errors.Is(err, domain.ErrNotExists):
-		rw.WriteHeader(http.StatusNotFound)
+	response, err := h.useCase.Execute(request)
+	switch {
 	case err != nil:
 		rw.WriteHeader(http.StatusInternalServerError)
 	case len(response.ValidationErrors) > 0:
+		rw.Header().Add("Content-Type", "application/json")
 		rw.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(rw).Encode(response)
 	default:

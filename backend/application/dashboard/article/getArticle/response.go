@@ -7,16 +7,16 @@ import (
 )
 
 type Response struct {
-	UUID        string    `json:"uuid"`
-	Cover       string    `json:"cover"`
-	Video       string    `json:"video"`
-	Title       string    `json:"title"`
-	Excerpt     string    `json:"excerpt"`
-	Body        string    `json:"body"`
-	PublishedAt time.Time `json:"published_at"`
-	Author      author    `json:"avatar"`
-	Tags        []string  `json:"tags"`
-	ViewCount   uint      `json:"view_count"`
+	UUID        string   `json:"uuid"`
+	Cover       string   `json:"cover"`
+	Video       string   `json:"video"`
+	Title       string   `json:"title"`
+	Excerpt     string   `json:"excerpt"`
+	Body        string   `json:"body"`
+	PublishedAt string   `json:"published_at"`
+	Author      author   `json:"avatar"`
+	Tags        []string `json:"tags"`
+	ViewCount   uint     `json:"view_count"`
 }
 
 type author struct {
@@ -35,7 +35,7 @@ func NewResponse(a article.Article) *Response {
 		Title:       a.Title,
 		Excerpt:     a.Excerpt,
 		Body:        a.Body,
-		PublishedAt: a.PublishedAt,
+		PublishedAt: a.PublishedAt.Format(time.RFC3339),
 		Author: author{
 			Name:   a.Author.Name,
 			Avatar: a.Author.Avatar,

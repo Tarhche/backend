@@ -9,20 +9,20 @@ import (
 )
 
 type getRolesHandler struct {
-	getRolesUseCase *getroles.UseCase
+	useCase *getroles.UseCase
 }
 
-func NewGetRolesHandler(getRolesUseCase *getroles.UseCase) *getRolesHandler {
+func NewGetRolesHandler(useCase *getroles.UseCase) *getRolesHandler {
 	return &getRolesHandler{
-		getRolesUseCase: getRolesUseCase,
+		useCase: useCase,
 	}
 }
 
 func (h *getRolesHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	userUUID := auth.FromContext(r.Context()).UUID
 
-	response, err := h.getRolesUseCase.Execute(userUUID)
-	switch true {
+	response, err := h.useCase.Execute(userUUID)
+	switch {
 	case err != nil:
 		rw.WriteHeader(http.StatusInternalServerError)
 	default:

@@ -47,7 +47,7 @@ func (h *indexHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	}
 
 	response, err := h.useCase.Execute(request)
-	switch true {
+	switch {
 	case err != nil:
 		rw.WriteHeader(http.StatusInternalServerError)
 	default:

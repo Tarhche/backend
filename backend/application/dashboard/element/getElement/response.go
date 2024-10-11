@@ -7,12 +7,12 @@ import (
 )
 
 type Response struct {
-	UUID      string    `json:"uuid"`
-	Type      string    `json:"type"`
-	Body      any       `json:"body"`
-	Venues    []string  `json:"venues"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	UUID      string   `json:"uuid"`
+	Type      string   `json:"type"`
+	Body      any      `json:"body"`
+	Venues    []string `json:"venues"`
+	CreatedAt string   `json:"created_at"`
+	UpdatedAt string   `json:"updated_at"`
 }
 
 func NewResponse(e element.Element) *Response {
@@ -21,7 +21,7 @@ func NewResponse(e element.Element) *Response {
 		Type:      e.Type,
 		Body:      e.Body,
 		Venues:    e.Venues,
-		CreatedAt: e.CreatedAt,
-		UpdatedAt: e.UpdatedAt,
+		CreatedAt: e.CreatedAt.Format(time.RFC3339),
+		UpdatedAt: e.UpdatedAt.Format(time.RFC3339),
 	}
 }

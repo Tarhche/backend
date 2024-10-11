@@ -96,6 +96,7 @@ func (r *ArticlesRepository) GetAllPublished(offset uint, limit uint) ([]article
 	filter := bson.M{
 		"published_at": bson.M{
 			"$lte": primitive.NewDateTimeFromTime(time.Now()),
+			"$ne":  time.Time{},
 		},
 	}
 
@@ -195,6 +196,7 @@ func (r *ArticlesRepository) GetMostViewed(limit uint) ([]article.Article, error
 	filter := bson.M{
 		"published_at": bson.M{
 			"$lte": primitive.NewDateTimeFromTime(time.Now()),
+			"$ne":  time.Time{},
 		},
 	}
 
@@ -251,6 +253,7 @@ func (r *ArticlesRepository) GetByHashtag(hashtags []string, offset uint, limit 
 		},
 		"published_at": bson.M{
 			"$lte": primitive.NewDateTimeFromTime(time.Now()),
+			"$ne":  time.Time{},
 		},
 	}
 
@@ -332,6 +335,7 @@ func (r *ArticlesRepository) GetOnePublished(UUID string) (article.Article, erro
 		"_id": UUID,
 		"published_at": bson.M{
 			"$lte": primitive.NewDateTimeFromTime(time.Now()),
+			"$ne":  time.Time{},
 		},
 	}
 
@@ -378,6 +382,7 @@ func (r *ArticlesRepository) CountPublished() (uint, error) {
 	filter := bson.M{
 		"published_at": bson.M{
 			"$lte": primitive.NewDateTimeFromTime(time.Now()),
+			"$ne":  time.Time{},
 		},
 	}
 

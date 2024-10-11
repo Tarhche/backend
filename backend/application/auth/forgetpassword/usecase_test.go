@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
+	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/ecdsa"
 	"github.com/khanzadimahdi/testproject/infrastructure/email"
@@ -17,9 +18,8 @@ import (
 
 func TestUseCase_Execute(t *testing.T) {
 	privateKey, err := ecdsa.Generate()
-	if err != nil {
-		t.Error("unexpected error")
-	}
+	assert.NoError(t, err)
+
 	j := jwt.NewJWT(privateKey, privateKey.Public())
 
 	mailFrom := "info@noreply.nowhere.loc"
@@ -71,6 +71,35 @@ func TestUseCase_Execute(t *testing.T) {
 		response, err := NewUseCase(&userRepository, j, &mailer, mailFrom, &renderer).Execute(request)
 
 		userRepository.AssertNotCalled(t, "GetOneByIdentity")
+		renderer.AssertNotCalled(t, "Render")
+		mailer.AssertNotCalled(t, "SendMail")
+
+		assert.NoError(t, err)
+		assert.NotNil(t, response)
+		assert.Equal(t, &expectedResponse, response)
+	})
+
+	t.Run("user not found", func(t *testing.T) {
+		var (
+			userRepository users.MockUsersRepository
+			mailer         email.MockMailer
+			renderer       template.MockRenderer
+
+			request = Request{
+				Identity: "something@somewhere.loc",
+			}
+			expectedResponse = Response{
+				ValidationErrors: validationErrors{
+					"identity": "identity (email/username) not exists",
+				},
+			}
+		)
+
+		userRepository.On("GetOneByIdentity", request.Identity).Once().Return(user.User{}, domain.ErrNotExists)
+		defer userRepository.AssertExpectations(t)
+
+		response, err := NewUseCase(&userRepository, j, &mailer, mailFrom, &renderer).Execute(request)
+
 		renderer.AssertNotCalled(t, "Render")
 		mailer.AssertNotCalled(t, "SendMail")
 

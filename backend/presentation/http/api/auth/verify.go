@@ -2,11 +2,9 @@ package auth
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http"
 
 	"github.com/khanzadimahdi/testproject/application/auth/verify"
-	"github.com/khanzadimahdi/testproject/domain"
 )
 
 type verifyHandler struct {
@@ -28,16 +26,14 @@ func (h *verifyHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 	response, err := h.useCase.Execute(request)
 
-	switch true {
-	case errors.Is(err, domain.ErrNotExists):
-		rw.WriteHeader(http.StatusNotFound)
+	switch {
 	case err != nil:
 		rw.WriteHeader(http.StatusInternalServerError)
 	case len(response.ValidationErrors) > 0:
+		rw.Header().Add("Content-Type", "application/json")
 		rw.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(rw).Encode(response)
 	default:
-		rw.Header().Add("Content-Type", "application/json")
 		rw.WriteHeader(http.StatusNoContent)
 	}
 }

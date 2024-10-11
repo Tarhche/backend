@@ -61,20 +61,24 @@ func TestUseCase_Execute(t *testing.T) {
 						},
 						ObjectUUID: "object-uuid-1",
 						ObjectType: "article",
+						ApprovedAt: a[1].ApprovedAt.Format(time.RFC3339),
+						CreatedAt:  a[1].CreatedAt.Format(time.RFC3339),
 					},
 					{
 						UUID: a[1].UUID,
 						Author: authorResponse{
 							UUID: a[1].Author.UUID,
 						},
+						ApprovedAt: a[1].ApprovedAt.Format(time.RFC3339),
+						CreatedAt:  a[1].CreatedAt.Format(time.RFC3339),
 					},
 					{
 						UUID: a[2].UUID,
 						Author: authorResponse{
 							UUID: a[2].Author.UUID,
 						},
-						ApprovedAt: a[2].ApprovedAt,
-						CreatedAt:  a[2].CreatedAt,
+						ApprovedAt: a[2].ApprovedAt.Format(time.RFC3339),
+						CreatedAt:  a[2].CreatedAt.Format(time.RFC3339),
 					},
 				},
 				Pagination: pagination{

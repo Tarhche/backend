@@ -1,4 +1,4 @@
-package article
+package home
 
 import (
 	"encoding/json"
@@ -8,18 +8,19 @@ import (
 )
 
 type homeHandler struct {
-	homeUseCase *home.UseCase
+	useCase *home.UseCase
 }
 
-func NewHomeHandler(homeUseCase *home.UseCase) *homeHandler {
+func NewHomeHandler(useCase *home.UseCase) *homeHandler {
 	return &homeHandler{
-		homeUseCase: homeUseCase,
+		useCase: useCase,
 	}
 }
 
 func (h *homeHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
-	response, err := h.homeUseCase.Execute()
-	switch true {
+	response, err := h.useCase.Execute()
+
+	switch {
 	case err != nil:
 		rw.WriteHeader(http.StatusInternalServerError)
 	default:

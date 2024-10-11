@@ -48,7 +48,13 @@ func (uc *UseCase) Execute(request Request) (*Response, error) {
 	}
 
 	u, err := uc.userRepository.GetOneByIdentity(request.Identity)
-	if err != nil {
+	if err == domain.ErrNotExists {
+		return &Response{
+			ValidationErrors: validationErrors{
+				"identity": "identity (email/username) not exists",
+			},
+		}, nil
+	} else if err != nil {
 		return nil, err
 	}
 

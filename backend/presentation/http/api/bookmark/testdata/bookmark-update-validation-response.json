@@ -1,0 +1,7 @@
+{
+    "errors": {
+        "object_type": "object type is not supported",
+        "object_uuid": "object uuid is required",
+        "title": "title is required"
+    }
+}

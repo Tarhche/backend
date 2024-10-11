@@ -6,17 +6,16 @@ import (
 	"strconv"
 	"unsafe"
 
-	"github.com/julienschmidt/httprouter"
 	getArticlesByHashtag "github.com/khanzadimahdi/testproject/application/article/getArticlesByHashtag"
 )
 
 type showHandler struct {
-	getArticlesByHashtagUseCase *getArticlesByHashtag.UseCase
+	useCase *getArticlesByHashtag.UseCase
 }
 
-func NewShowHandler(getArticlesByHashtagUseCase *getArticlesByHashtag.UseCase) *showHandler {
+func NewShowHandler(useCase *getArticlesByHashtag.UseCase) *showHandler {
 	return &showHandler{
-		getArticlesByHashtagUseCase: getArticlesByHashtagUseCase,
+		useCase: useCase,
 	}
 }
 
@@ -29,15 +28,16 @@ func (h *showHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	hashtag := httprouter.ParamsFromContext(r.Context()).ByName("hashtag")
+	hashtag := r.PathValue("hashtag")
 
 	request := &getArticlesByHashtag.Request{
 		Page:    page,
 		Hashtag: hashtag,
 	}
 
-	response, err := h.getArticlesByHashtagUseCase.Execute(request)
-	switch true {
+	response, err := h.useCase.Execute(request)
+
+	switch {
 	case err != nil:
 		rw.WriteHeader(http.StatusInternalServerError)
 	default:

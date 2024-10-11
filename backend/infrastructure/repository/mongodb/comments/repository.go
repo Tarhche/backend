@@ -191,6 +191,7 @@ func (r *CommentsRepository) GetApprovedByObjectUUID(objectType string, UUID str
 						Key: "approved_at",
 						Value: bson.M{
 							"$lte": primitive.NewDateTimeFromTime(time.Now()),
+							"$ne":  time.Time{},
 						},
 					},
 				},
@@ -253,6 +254,7 @@ func (r *CommentsRepository) CountApprovedByObjectUUID(objectType string, UUID s
 						Key: "approved_at",
 						Value: bson.M{
 							"$lte": primitive.NewDateTimeFromTime(time.Now()),
+							"$ne":  time.Time{},
 						},
 					},
 				},
