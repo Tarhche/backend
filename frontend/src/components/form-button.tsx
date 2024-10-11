@@ -15,3 +15,5 @@ export const FormButton = forwardRef<
     </Button>
   );
 });
+
+FormButton.displayName = "FormButton";

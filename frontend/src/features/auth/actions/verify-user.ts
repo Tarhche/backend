@@ -59,12 +59,14 @@ export async function verifyUser(
   state: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const data: Record<string, any> = {};
+  const data: Record<string, string> = {};
   formData.forEach((value, key) => {
-    data[key.toString()] = value;
+    if (value instanceof File === false) {
+      data[key.toString()] = value;
+    }
   });
   const fieldsValidation = await FIELDS_SCHEMA.safeParseAsync(data);
-  let nonFieldErrors: string[] = [];
+  const nonFieldErrors: string[] = [];
   if (Boolean(data.token) === false) {
     nonFieldErrors.push(
       "توکن ثبت نامی یافت نشد. لطفا مطمئن شوید از طریق ایمیلتان به این صفحه راه یافته اید",

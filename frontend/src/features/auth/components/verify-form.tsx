@@ -29,7 +29,6 @@ export function VerifyForm({token}: Props) {
     nonFieldErrors: [],
   });
   const fieldErrors = state.fieldErrors;
-  const nonFieldErrors = state.nonFieldErrors;
 
   if (state.success) {
     return (
@@ -111,6 +110,7 @@ export function VerifyForm({token}: Props) {
           {state.nonFieldErrors?.map((err) => {
             return (
               <Alert
+                key={err}
                 variant="filled"
                 color="red"
                 title="ثبت نام ناموفق"
