@@ -1,0 +1,47 @@
+{
+    "items": [
+        {
+            "uuid": "article-uuid-1",
+            "body": "body-1",
+            "author": {
+                "uuid": "author-uuid-1",
+                "name": "",
+                "avatar": ""
+            },
+            "object_type": "article",
+            "object_uuid": "object-uuid-1",
+            "approved_at": "0001-01-01T00:00:00Z",
+            "created_at": "0001-01-01T00:00:00Z"
+        },
+        {
+            "uuid": "article-uuid-2",
+            "body": "",
+            "author": {
+                "uuid": "author-uuid-2",
+                "name": "",
+                "avatar": ""
+            },
+            "object_type": "",
+            "object_uuid": "",
+            "approved_at": "0001-01-01T00:00:00Z",
+            "created_at": "0001-01-01T00:00:00Z"
+        },
+        {
+            "uuid": "article-uuid-3",
+            "body": "",
+            "author": {
+                "uuid": "author-uuid-2",
+                "name": "",
+                "avatar": ""
+            },
+            "object_type": "",
+            "object_uuid": "",
+            "approved_at": "2024-10-11T04:27:44Z",
+            "created_at": "2024-10-11T04:27:44Z"
+        }
+    ],
+    "pagination": {
+        "total_pages": 1,
+        "current_page": 1
+    }
+}

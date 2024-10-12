@@ -2,7 +2,6 @@ package article
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
@@ -43,8 +42,6 @@ func (h *createHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	response, err := h.useCase.Execute(request)
 
 	switch {
-	case errors.Is(err, domain.ErrNotExists):
-		rw.WriteHeader(http.StatusNotFound)
 	case err != nil:
 		rw.WriteHeader(http.StatusInternalServerError)
 	case len(response.ValidationErrors) > 0:

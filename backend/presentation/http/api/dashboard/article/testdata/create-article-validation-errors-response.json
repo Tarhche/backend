@@ -1,0 +1,7 @@
+{
+    "errors": {
+        "body": "body is required",
+        "excerpt": "excerpt is required",
+        "title": "title is required"
+    }
+}

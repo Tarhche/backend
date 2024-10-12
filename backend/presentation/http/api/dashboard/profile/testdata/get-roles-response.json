@@ -1,0 +1,28 @@
+{
+    "items": [
+        {
+            "uuid": "role-uuid-1",
+            "name": "role-1",
+            "description": "role description 1",
+            "permissions": [
+                "permission-1",
+                "permission-2"
+            ]
+        },
+        {
+            "uuid": "role-uuid-2",
+            "name": "role-2",
+            "description": "role description 2",
+            "permissions": [
+                "permission-1",
+                "permission-5"
+            ]
+        },
+        {
+            "uuid": "role-uuid-3",
+            "name": "role-3",
+            "description": "role description 3",
+            "permissions": []
+        }
+    ]
+}

@@ -1,0 +1,23 @@
+{
+    "items": [
+        {
+            "uuid": "test-uuid-01",
+            "name": "role-name-01",
+            "description": "test role description-01"
+        },
+        {
+            "uuid": "test-uuid-02",
+            "name": "role-name-02",
+            "description": ""
+        },
+        {
+            "uuid": "",
+            "name": "role-name-03",
+            "description": ""
+        }
+    ],
+    "pagination": {
+        "total_pages": 1,
+        "current_page": 1
+    }
+}

@@ -1,0 +1,7 @@
+{
+    "errors": {
+        "description": "description is required",
+        "name": "name is required",
+        "uuid": "uuid is required"
+    }
+}

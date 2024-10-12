@@ -1,0 +1,6 @@
+{
+    "errors": {
+        "body": "body is required",
+        "uuid": "uuid is required"
+    }
+}
