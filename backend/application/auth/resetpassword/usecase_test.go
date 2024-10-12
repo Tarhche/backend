@@ -51,6 +51,31 @@ func TestUseCase_ResetPassword(t *testing.T) {
 		assert.Len(t, response.ValidationErrors, 0)
 	})
 
+	t.Run("validation fails", func(t *testing.T) {
+		var (
+			userRepository users.MockUsersRepository
+			hasher         crypto.MockCrypto
+
+			request = Request{}
+
+			expectedResponse = Response{
+				ValidationErrors: validationErrors{
+					"token":    "token is required",
+					"password": "password is required",
+				},
+			}
+		)
+
+		response, err := NewUseCase(&userRepository, &hasher, j).Execute(request)
+
+		userRepository.AssertNotCalled(t, "GetOne")
+		userRepository.AssertNotCalled(t, "Save")
+		hasher.AssertNotCalled(t, "Hash")
+
+		assert.NoError(t, err)
+		assert.Equal(t, &expectedResponse, response)
+	})
+
 	t.Run("invalid base64 token", func(t *testing.T) {
 		var (
 			userRepository users.MockUsersRepository
