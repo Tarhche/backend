@@ -6,8 +6,8 @@ import {useDisclosure} from "@mantine/hooks";
 import classes from "./app-main-shell.module.css";
 
 type Links = {
-  label: string;
-  href: string;
+  readonly label: string;
+  readonly href: string;
 };
 
 const LINKS: Links[] = [
@@ -19,7 +19,7 @@ const LINKS: Links[] = [
     label: "عضویت",
     href: "/auth/register",
   },
-] as const;
+];
 
 type Props = {
   children: ReactNode;

@@ -62,7 +62,7 @@ export async function verifyUser(
   const data: Record<string, string> = {};
   formData.forEach((value, key) => {
     if (value instanceof File === false) {
-      data[key.toString()] = value;
+      data[key] = value as string;
     }
   });
   const fieldsValidation = await FIELDS_SCHEMA.safeParseAsync(data);

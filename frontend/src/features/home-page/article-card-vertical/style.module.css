@@ -4,6 +4,7 @@
 
 .group {
   flex-direction: row;
+
   @media (max-width: 572px) {
     flex-direction: column;
   }
@@ -18,7 +19,9 @@
 
 .title {
   font-weight: bold;
-  font-family: Greycliff CF, var(--mantine-font-family);
+  font-family:
+    Greycliff CF,
+    var(--mantine-font-family);
   line-height: 1.2;
 }
 
