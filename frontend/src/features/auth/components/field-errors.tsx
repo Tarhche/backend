@@ -1,7 +1,7 @@
 import {List, ListItem} from "@mantine/core";
 
 type Props = {
-  errors?: string[];
+  errors?: (string | undefined | null)[];
 };
 
 export function FieldErrors({errors = []}: Props) {
@@ -9,6 +9,9 @@ export function FieldErrors({errors = []}: Props) {
   return (
     <List mt={0}>
       {errors.map((e) => {
+        if (Boolean(e) === false) {
+          return null;
+        }
         return (
           <ListItem fz={"xs"} c={"red"} key={e}>
             {e}
