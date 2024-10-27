@@ -20,7 +20,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-      target: production
+      target: develop
     depends_on:
       - mongodb
       - minio
@@ -28,7 +28,7 @@ services:
     ports:
       - "8000:80"
     volumes:
-      - ./:/app
+      - ./backend:/opt/app
     environment:
       PRIVATE_KEY: ${PRIVATE_KEY}
       S3_ENDPOINT: ${S3_ENDPOINT}
@@ -88,8 +88,8 @@ services:
       mc mb minio/blog;"
 
   nats:
-    image: nats:2.10-alpine
-    # command: "--config /etc/nats/nats-server.conf --jetstream"
+    image: nats:2.10
+    command: "--jetstream" # --config /etc/nats/nats-server.conf
     ports:
       - "4222:4222" # client port
       - "6222:6222" # cluster post
