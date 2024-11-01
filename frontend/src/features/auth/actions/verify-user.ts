@@ -1,7 +1,7 @@
 "use server";
 import * as z from "zod";
 import {AxiosError} from "axios";
-import {API} from "@/lib/api";
+import {apiClient, apiPaths} from "@/dal";
 
 const FIELDS_SCHEMA = z
   .object({
@@ -80,7 +80,7 @@ export async function verifyUser(
     };
   } else {
     try {
-      await API.post("auth/verify", {
+      await apiClient.post(apiPaths.auth.verify, {
         ...data,
       });
       return {

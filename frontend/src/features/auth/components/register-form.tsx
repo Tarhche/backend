@@ -7,11 +7,12 @@ import {
   Paper,
   Title,
   Text,
-  Container,
+  Box,
   Alert,
+  Button,
 } from "@mantine/core";
 import {FormButton} from "@/components/form-button";
-import {IconInfoCircle} from "@tabler/icons-react";
+import {IconInfoCircle, IconChevronRight} from "@tabler/icons-react";
 import {registerUser} from "../actions/register-user";
 
 export function RegisterForm() {
@@ -51,8 +52,19 @@ export function RegisterForm() {
   };
 
   return (
-    <Container size={500} my={80}>
-      <Paper withBorder shadow="md" p={30} mt={30} radius="md">
+    <Box pt={60}>
+      <Button
+        variant="transparent"
+        c={"dimmed"}
+        component={Link}
+        href={"/"}
+        leftSection={<IconChevronRight />}
+        mb={"sm"}
+        p={0}
+      >
+        صفحه اصلی
+      </Button>
+      <Paper withBorder shadow="md" p={30} radius="md">
         <Title ta="center">خوش آمدید</Title>
         <Text c="dimmed" size="sm" ta="center" mt={5}>
           از قبل حساب دارید؟{" "}
@@ -71,12 +83,12 @@ export function RegisterForm() {
           />
           {renderFeedbackAlert()}
           {(state.success === false || state.success === undefined) && (
-            <FormButton mt="sm" type="submit" fullWidth>
+            <FormButton mt="lg" type="submit" fullWidth>
               ثبت نام
             </FormButton>
           )}
         </form>
       </Paper>
-    </Container>
+    </Box>
   );
 }

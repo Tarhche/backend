@@ -1,5 +1,5 @@
 "use server";
-import {API} from "@/lib/api";
+import {apiClient, apiPaths} from "@/dal";
 import {AxiosError} from "axios";
 
 type SuccessRegisterState = {
@@ -24,7 +24,7 @@ export async function registerUser(
 ): Promise<State> {
   const email = formData.get("email");
   try {
-    await API.post("auth/register", {
+    await apiClient.post(apiPaths.auth.register, {
       identity: email,
     });
     return {
@@ -34,7 +34,7 @@ export async function registerUser(
   } catch (e) {
     if (e instanceof AxiosError) {
       const errors = e.response?.data.errors;
-      if (Boolean(errors.identity)) {
+      if (Boolean(errors?.identity)) {
         return {
           success: false,
           errorMessage:

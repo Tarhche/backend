@@ -1,6 +1,6 @@
 "use server";
 import {AxiosError} from "axios";
-import {API} from "@/lib/api";
+import {apiClient, apiPaths} from "@/dal";
 
 type FormState = {
   success: boolean;
@@ -28,7 +28,7 @@ export async function resetPassword(
   }
 
   try {
-    await API.post("auth/password/reset", {
+    await apiClient.post(apiPaths.auth.resetPassword, {
       password: newPassword,
       token,
     });

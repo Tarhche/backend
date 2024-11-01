@@ -9,7 +9,7 @@ import {
   Title,
   Text,
   Stack,
-  Container,
+  Box,
 } from "@mantine/core";
 import {FormButton} from "@/components/form-button";
 import {FieldErrors} from "./field-errors";
@@ -24,8 +24,8 @@ export function ResetPasswordForm({token}: Props) {
   const [state, dispatch] = useFormState(resetPassword, null);
 
   return (
-    <Container size={500} my={80}>
-      <Paper withBorder shadow="md" p={30} mt={30} radius="md">
+    <Box pt={60}>
+      <Paper withBorder shadow="md" p={30} radius="md">
         <Title ta="center">تغییر کلمه عبور</Title>
         <Text c="dimmed" size="sm" ta="center" mt={5}>
           کلمه عبور جدیدتان را وارد کنید
@@ -48,7 +48,7 @@ export function ResetPasswordForm({token}: Props) {
               label="تکرار کلمه عبور جدید"
               placeholder="..."
               name="confirm-new-password"
-              mt={"md"}
+              mt={"sm"}
               error={Boolean(state?.fieldErrors?.password)}
               disabled={state?.success}
               required
@@ -94,11 +94,11 @@ export function ResetPasswordForm({token}: Props) {
               })}
             </>
           )}
-          <FormButton mt="sm" type="submit" disabled={state?.success} fullWidth>
+          <FormButton mt="lg" type="submit" disabled={state?.success} fullWidth>
             {state?.success === false ? "تلاش مجدد" : "تغییر کلمه عبور"}
           </FormButton>
         </form>
       </Paper>
-    </Container>
+    </Box>
   );
 }

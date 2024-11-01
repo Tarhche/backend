@@ -1,4 +1,4 @@
-import {API} from "@/lib/api";
+import {apiClient, apiPaths} from "@/dal";
 import Link from "next/link";
 import {
   Stack,
@@ -26,7 +26,7 @@ interface ArticleType {
 }
 
 export default async function HomePage() {
-  const homePageData = (await API.get("home")).data;
+  const homePageData = (await apiClient.get(apiPaths.home)).data;
   const latestArticles = homePageData.all as ArticleType[];
   const popularArticles = homePageData.popular as ArticleType[];
 

@@ -1,6 +1,5 @@
 import type {Metadata} from "next";
 import {ColorSchemeScript} from "@mantine/core";
-import {AppMainShell} from "@/components/app-main-shell";
 import {Providers} from "./providers";
 import {vazir} from "./fonts";
 import "@mantine/core/styles.css";
@@ -18,12 +17,10 @@ export default function RootLayout({
   return (
     <html lang="fa" dir="rtl">
       <head>
-        <ColorSchemeScript />
+        <ColorSchemeScript defaultColorScheme="auto" />
       </head>
-      <body className={`${vazir.className} antialiased`}>
-        <Providers>
-          <AppMainShell>{children}</AppMainShell>
-        </Providers>
+      <body className={`${vazir.className}`}>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

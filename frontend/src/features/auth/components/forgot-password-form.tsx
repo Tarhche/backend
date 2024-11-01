@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import {useFormState} from "react-dom";
 import {
   TextInput,
@@ -6,20 +7,32 @@ import {
   Title,
   Text,
   Stack,
-  Container,
   Alert,
+  Box,
+  Button,
 } from "@mantine/core";
 import {FormButton} from "@/components/form-button";
 import {FieldErrors} from "./field-errors";
-import {IconInfoCircle} from "@tabler/icons-react";
+import {IconInfoCircle, IconChevronRight} from "@tabler/icons-react";
 import {forgotPassword} from "../actions/forgot-password";
 
 export function ForgotPasswordForm() {
   const [state, dispatch] = useFormState(forgotPassword, undefined);
 
   return (
-    <Container size={500} my={80}>
-      <Paper withBorder shadow="md" p={30} mt={30} radius="md">
+    <Box pt={50}>
+      <Button
+        variant="transparent"
+        c={"dimmed"}
+        component={Link}
+        href={"/"}
+        leftSection={<IconChevronRight />}
+        mb={"sm"}
+        p={0}
+      >
+        صفحه اصلی
+      </Button>
+      <Paper withBorder shadow="md" p={30} radius="md">
         <Title ta="center">بازیابی کلمه عبور</Title>
         <Text c="dimmed" size="sm" ta="center" mt={5}>
           با ایمیل یا نام کاربری تان میتوانید کلمه عبورتان را تغییر دهید
@@ -72,6 +85,6 @@ export function ForgotPasswordForm() {
           </FormButton>
         </form>
       </Paper>
-    </Container>
+    </Box>
   );
 }

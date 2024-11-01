@@ -1,25 +1,9 @@
 "use client";
-import {ReactNode} from "react";
+import {type ReactNode} from "react";
 import Link from "next/link";
 import {AppShell, Burger, Group, UnstyledButton} from "@mantine/core";
 import {useDisclosure} from "@mantine/hooks";
-import classes from "./app-main-shell.module.css";
-
-type Links = {
-  readonly label: string;
-  readonly href: string;
-};
-
-const LINKS: Links[] = [
-  {
-    label: "ورود",
-    href: "/auth/login",
-  },
-  {
-    label: "عضویت",
-    href: "/auth/register",
-  },
-];
+import {AuthButtons} from "./auth-button";
 
 type Props = {
   children: ReactNode;
@@ -27,19 +11,6 @@ type Props = {
 
 export function AppMainShell({children}: Props) {
   const [opened, {toggle}] = useDisclosure();
-
-  const AUTH_LINKS = LINKS.map((link) => {
-    return (
-      <UnstyledButton
-        key={link.href}
-        className={classes.control}
-        component={Link}
-        href={link.href}
-      >
-        {link.label}
-      </UnstyledButton>
-    );
-  });
 
   return (
     <AppShell
@@ -59,13 +30,13 @@ export function AppMainShell({children}: Props) {
               طرح‌چه
             </UnstyledButton>
             <Group ml="xl" gap={0} visibleFrom="sm">
-              {AUTH_LINKS}
+              <AuthButtons />
             </Group>
           </Group>
         </Group>
       </AppShell.Header>
       <AppShell.Navbar py="md" px={4}>
-        {AUTH_LINKS}
+        <AuthButtons />
       </AppShell.Navbar>
       <AppShell.Main px={"xl"}>{children}</AppShell.Main>
     </AppShell>
