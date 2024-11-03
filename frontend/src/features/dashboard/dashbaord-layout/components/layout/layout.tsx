@@ -11,6 +11,7 @@ import {
   Indicator,
   useMantineColorScheme,
   UnstyledButton,
+  ScrollArea,
 } from "@mantine/core";
 import {
   IconNotes,
@@ -81,13 +82,13 @@ export function DashboardLayout({children}: Props) {
     >
       <AppShell.Header>
         <Group h="100%" px={16} justify="space-between" align="center">
-          <Burger
-            opened={mobileOpened}
-            onClick={toggleMobile}
-            hiddenFrom="sm"
-            size="sm"
-          />
           <Group>
+            <Burger
+              opened={mobileOpened}
+              onClick={toggleMobile}
+              hiddenFrom="sm"
+              size="sm"
+            />
             <Burger
               opened={desktopOpened}
               onClick={toggleDesktop}
@@ -126,18 +127,23 @@ export function DashboardLayout({children}: Props) {
           </Group>
         </Group>
       </AppShell.Header>
-      <AppShell.Navbar>
-        <nav className={classes.navbar}>
-          <div className={classes.navbarMain}>{links}</div>
-          <div className={classes.footer}>
-            <form action={logout}>
-              <UnstyledButton w={"100%"} type="submit" className={classes.link}>
-                <IconLogout className={classes.linkIcon} stroke={1.5} />
-                <span>خروج</span>
-              </UnstyledButton>
-            </form>
-          </div>
-        </nav>
+      <AppShell.Navbar className={classes.navbar}>
+        <ScrollArea
+          className={classes.navbarMain}
+          type="hover"
+          scrollbars="y"
+          scrollHideDelay={0}
+        >
+          {links}
+        </ScrollArea>
+        <div className={classes.footer}>
+          <form action={logout}>
+            <UnstyledButton w={"100%"} type="submit" className={classes.link}>
+              <IconLogout className={classes.linkIcon} stroke={1.5} />
+              <span>خروج</span>
+            </UnstyledButton>
+          </form>
+        </div>
       </AppShell.Navbar>
       <AppShell.Main>{children}</AppShell.Main>
     </AppShell>
