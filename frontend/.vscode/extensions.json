@@ -3,6 +3,8 @@
     "dbaeumer.vscode-eslint",
     "esbenp.prettier-vscode",
     "csstools.postcss",
-    "ms-azuretools.vscode-docker"
+    "ms-azuretools.vscode-docker",
+    "clinyong.vscode-css-modules",
+    "vunguyentuan.vscode-postcss"
   ]
 }
