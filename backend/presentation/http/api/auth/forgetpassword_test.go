@@ -2,6 +2,7 @@ package auth
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -10,52 +11,41 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/application/auth/forgetpassword"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/user"
-	"github.com/khanzadimahdi/testproject/infrastructure/crypto/ecdsa"
-	"github.com/khanzadimahdi/testproject/infrastructure/email"
-	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
+	"github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
-	"github.com/khanzadimahdi/testproject/infrastructure/template"
 )
 
 func TestForgetPasswordHandler(t *testing.T) {
-	privateKey, err := ecdsa.Generate()
-	assert.NoError(t, err)
-
-	j := jwt.NewJWT(privateKey, privateKey.Public())
-	mailFrom := "info@noreply.nowhere.loc"
-	templateName := "resources/view/mail/auth/reset-password"
-
 	t.Run("sends forget password email", func(t *testing.T) {
 		var (
-			userRepository users.MockUsersRepository
-			mailer         email.MockMailer
-			renderer       template.MockRenderer
+			userRepository  users.MockUsersRepository
+			asyncCommandBus mock.MockPublishSubscriber
 
-			r = forgetpassword.Request{Identity: "something@somewhere.loc"}
-			u = user.User{
+			r       = forgetpassword.Request{Identity: "something@somewhere.loc"}
+			command = forgetpassword.SendForgetPasswordEmail{Identity: r.Identity}
+			u       = user.User{
 				UUID:  "user-uuid",
 				Email: r.Identity,
 			}
 		)
 
+		commandPayload, err := json.Marshal(command)
+		assert.NoError(t, err)
+
 		userRepository.On("GetOneByIdentity", r.Identity).Once().Return(u, nil)
 		defer userRepository.AssertExpectations(t)
 
-		renderer.On("Render", mock.Anything, templateName, mock.Anything).Once().Return(nil)
-		defer renderer.AssertExpectations(t)
+		asyncCommandBus.On("Publish", context.Background(), forgetpassword.SendForgetPasswordEmailName, commandPayload).Return(nil)
+		defer asyncCommandBus.AssertExpectations(t)
 
-		mailer.On("SendMail", mailFrom, u.Email, "Reset Password", mock.AnythingOfType("[]uint8")).Once().Return(nil)
-		defer mailer.AssertExpectations(t)
-
-		handler := NewForgetPasswordHandler(forgetpassword.NewUseCase(&userRepository, j, &mailer, mailFrom, &renderer))
+		handler := NewForgetPasswordHandler(forgetpassword.NewUseCase(&userRepository, &asyncCommandBus))
 
 		var payload bytes.Buffer
-		err := json.NewEncoder(&payload).Encode(r)
+		err = json.NewEncoder(&payload).Encode(r)
 		assert.NoError(t, err)
 
 		request := httptest.NewRequest(http.MethodPost, "/", &payload)
@@ -69,12 +59,11 @@ func TestForgetPasswordHandler(t *testing.T) {
 
 	t.Run("validation fails", func(t *testing.T) {
 		var (
-			userRepository users.MockUsersRepository
-			mailer         email.MockMailer
-			renderer       template.MockRenderer
+			userRepository  users.MockUsersRepository
+			asyncCommandBus mock.MockPublishSubscriber
 		)
 
-		handler := NewForgetPasswordHandler(forgetpassword.NewUseCase(&userRepository, j, &mailer, mailFrom, &renderer))
+		handler := NewForgetPasswordHandler(forgetpassword.NewUseCase(&userRepository, &asyncCommandBus))
 
 		request := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString("{}"))
 		response := httptest.NewRecorder()
@@ -82,8 +71,7 @@ func TestForgetPasswordHandler(t *testing.T) {
 		handler.ServeHTTP(response, request)
 
 		userRepository.AssertNotCalled(t, "GetOneByIdentity")
-		renderer.AssertNotCalled(t, "Render")
-		mailer.AssertNotCalled(t, "SendMail")
+		asyncCommandBus.AssertNotCalled(t, "Publish")
 
 		expected, err := os.ReadFile("testdata/forgetpassword-response-validation-fail.json")
 		assert.NoError(t, err)
@@ -95,9 +83,8 @@ func TestForgetPasswordHandler(t *testing.T) {
 
 	t.Run("user not found", func(t *testing.T) {
 		var (
-			userRepository users.MockUsersRepository
-			mailer         email.MockMailer
-			renderer       template.MockRenderer
+			userRepository  users.MockUsersRepository
+			asyncCommandBus mock.MockPublishSubscriber
 
 			r = forgetpassword.Request{Identity: "something@somewhere.loc"}
 		)
@@ -105,7 +92,7 @@ func TestForgetPasswordHandler(t *testing.T) {
 		userRepository.On("GetOneByIdentity", r.Identity).Once().Return(user.User{}, domain.ErrNotExists)
 		defer userRepository.AssertExpectations(t)
 
-		handler := NewForgetPasswordHandler(forgetpassword.NewUseCase(&userRepository, j, &mailer, mailFrom, &renderer))
+		handler := NewForgetPasswordHandler(forgetpassword.NewUseCase(&userRepository, &asyncCommandBus))
 
 		var payload bytes.Buffer
 		err := json.NewEncoder(&payload).Encode(r)
@@ -116,8 +103,7 @@ func TestForgetPasswordHandler(t *testing.T) {
 
 		handler.ServeHTTP(response, request)
 
-		renderer.AssertNotCalled(t, "Render")
-		mailer.AssertNotCalled(t, "SendMail")
+		asyncCommandBus.AssertNotCalled(t, "Publish")
 
 		expected, err := os.ReadFile("testdata/forgetpassword-response-user-not-found.json")
 		assert.NoError(t, err)
@@ -129,9 +115,8 @@ func TestForgetPasswordHandler(t *testing.T) {
 
 	t.Run("error", func(t *testing.T) {
 		var (
-			userRepository users.MockUsersRepository
-			mailer         email.MockMailer
-			renderer       template.MockRenderer
+			userRepository  users.MockUsersRepository
+			asyncCommandBus mock.MockPublishSubscriber
 
 			r = forgetpassword.Request{Identity: "something@somewhere.loc"}
 		)
@@ -139,7 +124,7 @@ func TestForgetPasswordHandler(t *testing.T) {
 		userRepository.On("GetOneByIdentity", r.Identity).Once().Return(user.User{}, errors.New("some error"))
 		defer userRepository.AssertExpectations(t)
 
-		handler := NewForgetPasswordHandler(forgetpassword.NewUseCase(&userRepository, j, &mailer, mailFrom, &renderer))
+		handler := NewForgetPasswordHandler(forgetpassword.NewUseCase(&userRepository, &asyncCommandBus))
 
 		var payload bytes.Buffer
 		err := json.NewEncoder(&payload).Encode(r)
@@ -150,9 +135,9 @@ func TestForgetPasswordHandler(t *testing.T) {
 
 		handler.ServeHTTP(response, request)
 
+		asyncCommandBus.AssertNotCalled(t, "Publish")
+
 		userRepository.AssertNotCalled(t, "GetOneByIdentity")
-		renderer.AssertNotCalled(t, "Render")
-		mailer.AssertNotCalled(t, "SendMail")
 
 		assert.Len(t, response.Body.Bytes(), 0)
 		assert.Equal(t, http.StatusInternalServerError, response.Code)

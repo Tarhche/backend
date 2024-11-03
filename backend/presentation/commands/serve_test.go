@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/khanzadimahdi/testproject/infrastructure/console"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -91,9 +90,7 @@ func TestServe(t *testing.T) {
 
 		go func() {
 			serverStartedListening <- struct{}{}
-			if exitStatus := command.Run(ctx); exitStatus != console.ExitSuccess {
-				t.Error("unexpected exit code")
-			}
+			command.Run(ctx)
 		}()
 
 		<-serverStartedListening

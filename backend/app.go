@@ -76,6 +76,7 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/ecdsa"
 	"github.com/khanzadimahdi/testproject/infrastructure/email"
 	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
+	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/jetstream"
 	articlesrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/articles"
 	bookmarksrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/bookmarks"
 	commentsrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/comments"
@@ -105,12 +106,13 @@ import (
 	hashtagAPI "github.com/khanzadimahdi/testproject/presentation/http/api/hashtag"
 	homeapi "github.com/khanzadimahdi/testproject/presentation/http/api/home"
 	"github.com/khanzadimahdi/testproject/presentation/http/middleware"
+	"github.com/nats-io/nats.go"
 )
 
 //go:embed resources/view
 var files embed.FS
 
-func Handler() http.Handler {
+func App(ctx context.Context) (http.Handler, func()) {
 	uri := fmt.Sprintf(
 		"%s://%s:%s@%s:%s",
 		os.Getenv("MONGO_SCHEME"),
@@ -120,7 +122,7 @@ func Handler() http.Handler {
 		os.Getenv("MONGO_PORT"),
 	)
 
-	client, err := mongo.Connect(context.Background(), options.Client().ApplyURI(uri))
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(uri))
 	if err != nil {
 		panic(err)
 	}
@@ -138,7 +140,16 @@ func Handler() http.Handler {
 		UseSSL:     useSSL,
 		BucketName: os.Getenv("S3_BUCKET_NAME"),
 	})
+	if err != nil {
+		panic(err)
+	}
 
+	natsConnection, err := nats.Connect(os.Getenv("NATS_URL"))
+	if err != nil {
+		panic(err)
+	}
+
+	publishSubscriber, err := jetstream.NewPublishSubscriber(natsConnection)
 	if err != nil {
 		panic(err)
 	}
@@ -174,6 +185,14 @@ func Handler() http.Handler {
 		Port: os.Getenv("MAIL_SMTP_PORT"),
 	})
 
+	if err := publishSubscriber.Subscribe(ctx, "0", forgetpassword.SendForgetPasswordEmailName, forgetpassword.NewSendForgetPasswordEmailHandler(userRepository, j, mailer, mailFromAddress, templateRenderer)); err != nil {
+		panic(err)
+	}
+
+	if err := publishSubscriber.Subscribe(ctx, "0", register.SendRegisterationEmailName, register.NewSendRegisterationEmailHandler(j, mailer, mailFromAddress, templateRenderer)); err != nil {
+		panic(err)
+	}
+
 	authorization := domain.NewRoleBasedAccessControl(rolesRepository)
 
 	homeUseCase := home.NewUseCase(articlesRepository, elementsRepository)
@@ -181,9 +200,9 @@ func Handler() http.Handler {
 	log.SetFlags(log.LstdFlags | log.Llongfile)
 	loginUseCase := login.NewUseCase(userRepository, j, hasher)
 	refreshUseCase := refresh.NewUseCase(userRepository, j)
-	forgetPasswordUseCase := forgetpassword.NewUseCase(userRepository, j, mailer, mailFromAddress, templateRenderer)
+	forgetPasswordUseCase := forgetpassword.NewUseCase(userRepository, publishSubscriber)
 	resetPasswordUseCase := resetpassword.NewUseCase(userRepository, hasher, j)
-	registerUseCase := register.NewUseCase(userRepository, j, mailer, mailFromAddress, templateRenderer)
+	registerUseCase := register.NewUseCase(userRepository, publishSubscriber)
 	verifyUseCase := verify.NewUseCase(userRepository, rolesRepository, configRepository, hasher, j)
 
 	getArticleUsecase := getArticle.NewUseCase(articlesRepository, elementsRepository)
@@ -346,5 +365,5 @@ func Handler() http.Handler {
 	mux.Handle("GET /api/dashboard/config", middleware.NewAuthoriseMiddleware(dashboardConfigAPI.NewShowHandler(dashboardGetConfigUsecase, authorization), j, userRepository))
 	mux.Handle("PUT /api/dashboard/config", middleware.NewAuthoriseMiddleware(dashboardConfigAPI.NewUpdateHandler(dashboardUpdateConfigUsecase, authorization), j, userRepository))
 
-	return middleware.NewCORSMiddleware(middleware.NewRateLimitMiddleware(mux, 600, 1*time.Minute))
+	return middleware.NewCORSMiddleware(middleware.NewRateLimitMiddleware(mux, 600, 1*time.Minute)), publishSubscriber.Wait
 }

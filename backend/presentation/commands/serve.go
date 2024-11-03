@@ -61,7 +61,8 @@ func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 
 	if err := server.ListenAndServe(); err != nil {
 		log.Println(err)
+		return console.ExitFailure
 	}
 
-	return 0
+	return console.ExitSuccess
 }

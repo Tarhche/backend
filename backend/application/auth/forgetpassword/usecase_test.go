@@ -1,37 +1,31 @@
 package forgetpassword
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/user"
-	"github.com/khanzadimahdi/testproject/infrastructure/crypto/ecdsa"
-	"github.com/khanzadimahdi/testproject/infrastructure/email"
-	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
+	"github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
-	"github.com/khanzadimahdi/testproject/infrastructure/template"
 )
 
 func TestUseCase_Execute(t *testing.T) {
-	privateKey, err := ecdsa.Generate()
-	assert.NoError(t, err)
-
-	j := jwt.NewJWT(privateKey, privateKey.Public())
-
-	mailFrom := "info@noreply.nowhere.loc"
-
 	t.Run("successfully mails reset-password token", func(t *testing.T) {
 		var (
-			userRepository users.MockUsersRepository
-			mailer         email.MockMailer
-			renderer       template.MockRenderer
+			userRepository  users.MockUsersRepository
+			asyncCommandBus mock.MockPublishSubscriber
 
 			request = Request{
 				Identity: "something@somewhere.loc",
+			}
+
+			command = SendForgetPasswordEmail{
+				Identity: request.Identity,
 			}
 
 			u = user.User{
@@ -40,25 +34,24 @@ func TestUseCase_Execute(t *testing.T) {
 			}
 		)
 
+		payload, err := json.Marshal(command)
+		assert.NoError(t, err)
+
 		userRepository.On("GetOneByIdentity", request.Identity).Once().Return(u, nil)
 		defer userRepository.AssertExpectations(t)
 
-		renderer.On("Render", mock.Anything, templateName, mock.Anything).Once().Return(nil)
-		defer renderer.AssertExpectations(t)
+		asyncCommandBus.On("Publish", context.Background(), SendForgetPasswordEmailName, payload).Return(nil)
+		defer asyncCommandBus.AssertExpectations(t)
 
-		mailer.On("SendMail", mailFrom, u.Email, "Reset Password", mock.AnythingOfType("[]uint8")).Once().Return(nil)
-		defer mailer.AssertExpectations(t)
-
-		response, err := NewUseCase(&userRepository, j, &mailer, mailFrom, &renderer).Execute(request)
+		response, err := NewUseCase(&userRepository, &asyncCommandBus).Execute(request)
 		assert.NoError(t, err)
 		assert.NotNil(t, response)
 	})
 
 	t.Run("validation fails", func(t *testing.T) {
 		var (
-			userRepository users.MockUsersRepository
-			mailer         email.MockMailer
-			renderer       template.MockRenderer
+			userRepository  users.MockUsersRepository
+			asyncCommandBus mock.MockPublishSubscriber
 
 			request          = Request{}
 			expectedResponse = Response{
@@ -68,11 +61,10 @@ func TestUseCase_Execute(t *testing.T) {
 			}
 		)
 
-		response, err := NewUseCase(&userRepository, j, &mailer, mailFrom, &renderer).Execute(request)
+		response, err := NewUseCase(&userRepository, &asyncCommandBus).Execute(request)
 
 		userRepository.AssertNotCalled(t, "GetOneByIdentity")
-		renderer.AssertNotCalled(t, "Render")
-		mailer.AssertNotCalled(t, "SendMail")
+		asyncCommandBus.AssertNotCalled(t, "Publish")
 
 		assert.NoError(t, err)
 		assert.NotNil(t, response)
@@ -81,9 +73,8 @@ func TestUseCase_Execute(t *testing.T) {
 
 	t.Run("user not found", func(t *testing.T) {
 		var (
-			userRepository users.MockUsersRepository
-			mailer         email.MockMailer
-			renderer       template.MockRenderer
+			userRepository  users.MockUsersRepository
+			asyncCommandBus mock.MockPublishSubscriber
 
 			request = Request{
 				Identity: "something@somewhere.loc",
@@ -98,10 +89,9 @@ func TestUseCase_Execute(t *testing.T) {
 		userRepository.On("GetOneByIdentity", request.Identity).Once().Return(user.User{}, domain.ErrNotExists)
 		defer userRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&userRepository, j, &mailer, mailFrom, &renderer).Execute(request)
+		response, err := NewUseCase(&userRepository, &asyncCommandBus).Execute(request)
 
-		renderer.AssertNotCalled(t, "Render")
-		mailer.AssertNotCalled(t, "SendMail")
+		asyncCommandBus.AssertNotCalled(t, "Publish")
 
 		assert.NoError(t, err)
 		assert.NotNil(t, response)
@@ -110,9 +100,8 @@ func TestUseCase_Execute(t *testing.T) {
 
 	t.Run("error on finding user", func(t *testing.T) {
 		var (
-			userRepository users.MockUsersRepository
-			mailer         email.MockMailer
-			renderer       template.MockRenderer
+			userRepository  users.MockUsersRepository
+			asyncCommandBus mock.MockPublishSubscriber
 
 			request = Request{
 				Identity: "something@somewhere.loc",
@@ -124,23 +113,23 @@ func TestUseCase_Execute(t *testing.T) {
 		userRepository.On("GetOneByIdentity", request.Identity).Once().Return(user.User{}, expectedErr)
 		defer userRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&userRepository, j, &mailer, mailFrom, &renderer).Execute(request)
-
-		renderer.AssertNotCalled(t, "Render")
-		mailer.AssertNotCalled(t, "SendMail")
+		response, err := NewUseCase(&userRepository, &asyncCommandBus).Execute(request)
 
 		assert.ErrorIs(t, expectedErr, err)
 		assert.Nil(t, response)
 	})
 
-	t.Run("error on rendering template", func(t *testing.T) {
+	t.Run("error on publishing sendmail command", func(t *testing.T) {
 		var (
-			userRepository users.MockUsersRepository
-			mailer         email.MockMailer
-			renderer       template.MockRenderer
+			userRepository  users.MockUsersRepository
+			asyncCommandBus mock.MockPublishSubscriber
 
 			request = Request{
 				Identity: "something@somewhere.loc",
+			}
+
+			command = SendForgetPasswordEmail{
+				Identity: request.Identity,
 			}
 
 			u = user.User{
@@ -151,48 +140,16 @@ func TestUseCase_Execute(t *testing.T) {
 			expectedErr = errors.New("something bad happened")
 		)
 
-		userRepository.On("GetOneByIdentity", request.Identity).Once().Return(u, nil)
-		defer userRepository.AssertExpectations(t)
-
-		renderer.On("Render", mock.Anything, templateName, mock.Anything).Once().Return(expectedErr)
-		defer renderer.AssertExpectations(t)
-
-		response, err := NewUseCase(&userRepository, j, &mailer, mailFrom, &renderer).Execute(request)
-
-		mailer.AssertNotCalled(t, "SendMail")
-
-		assert.ErrorIs(t, expectedErr, err)
-		assert.Nil(t, response)
-	})
-
-	t.Run("error on sending email", func(t *testing.T) {
-		var (
-			userRepository users.MockUsersRepository
-			mailer         email.MockMailer
-			renderer       template.MockRenderer
-
-			request = Request{
-				Identity: "something@somewhere.loc",
-			}
-
-			u = user.User{
-				UUID:  "user-uuid",
-				Email: request.Identity,
-			}
-
-			expectedErr = errors.New("something bad happened")
-		)
+		payload, err := json.Marshal(command)
+		assert.NoError(t, err)
 
 		userRepository.On("GetOneByIdentity", request.Identity).Once().Return(u, nil)
 		defer userRepository.AssertExpectations(t)
 
-		renderer.On("Render", mock.Anything, templateName, mock.Anything).Once().Return(nil)
-		defer renderer.AssertExpectations(t)
+		asyncCommandBus.On("Publish", context.Background(), SendForgetPasswordEmailName, payload).Return(expectedErr)
+		defer asyncCommandBus.AssertExpectations(t)
 
-		mailer.On("SendMail", mailFrom, u.Email, "Reset Password", mock.AnythingOfType("[]uint8")).Once().Return(expectedErr)
-		defer mailer.AssertExpectations(t)
-
-		response, err := NewUseCase(&userRepository, j, &mailer, mailFrom, &renderer).Execute(request)
+		response, err := NewUseCase(&userRepository, &asyncCommandBus).Execute(request)
 		assert.ErrorIs(t, expectedErr, err)
 		assert.Nil(t, response)
 	})

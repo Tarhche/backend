@@ -19,7 +19,7 @@
             <td>{{ trim(comment.body, 25) }}</td>
             <td>
               <span v-if="useTime().isZeroDate(comment.approved_at)" class="fa fa-times text-danger"></span>
-              <span class="fa fa-check text-success"></span>
+              <span v-else class="fa fa-check text-success"></span>
             </td>
             <td>
               <span v-if="useTime().isZeroDate(comment.created_at)" class="fa fa-times text-danger"></span>

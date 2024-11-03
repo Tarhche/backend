@@ -1,13 +1,16 @@
-package eventbus
+package memory
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"testing"
+
+	"github.com/khanzadimahdi/testproject/domain"
 )
 
 func TestBus(t *testing.T) {
-	b := New()
+	b := NewSyncPublishSubscriber()
 
 	payload := make([]byte, 100)
 	if _, err := rand.Read(payload); err != nil {
@@ -17,36 +20,32 @@ func TestBus(t *testing.T) {
 	command := &FakeEvent{Payload: payload}
 
 	var counter1 int
-	handler1 := func(command any) {
+	handler1 := func(payload []byte) error {
 		counter1++
 
-		cmd, ok := command.(*FakeEvent)
-		if !ok {
-			t.Error("invalid command")
-		}
-
-		if !bytes.Equal(payload, cmd.Payload) {
+		if !bytes.Equal(payload, command.Payload) {
 			t.Error("command payload is not valid")
 		}
+
+		return nil
 	}
 
 	var counter2 int
-	handler2 := func(command any) {
+	handler2 := func(payload []byte) error {
 		counter2++
 
-		cmd, ok := command.(*FakeEvent)
-		if !ok {
-			t.Error("invalid command")
-		}
-
-		if !bytes.Equal(payload, cmd.Payload) {
+		if !bytes.Equal(payload, command.Payload) {
 			t.Error("command payload is not valid")
 		}
+
+		return nil
 	}
 
-	b.Subscribe(&FakeEvent{}, HandlerFunc(handler1))
-	b.Subscribe(&FakeEvent{}, HandlerFunc(handler2))
-	b.Publish(command)
+	ctx := context.Background()
+
+	b.Subscribe(ctx, "1", "test-subject", domain.MessageHandlerFunc(handler1))
+	b.Subscribe(ctx, "2", "test-subject", domain.MessageHandlerFunc(handler2))
+	b.Publish(ctx, "test-subject", command.Payload)
 
 	if counter1 != 1 {
 		t.Errorf("event handler-1 should be invoked once but invoked %d", counter1)

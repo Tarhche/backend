@@ -2,6 +2,7 @@ package auth
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -10,50 +11,41 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/application/auth/register"
 	"github.com/khanzadimahdi/testproject/domain/user"
-	"github.com/khanzadimahdi/testproject/infrastructure/crypto/ecdsa"
-	"github.com/khanzadimahdi/testproject/infrastructure/email"
-	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
+	"github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
-	"github.com/khanzadimahdi/testproject/infrastructure/template"
 )
 
 func TestRegisterHandler(t *testing.T) {
-	mailFrom := "info@noreply.nowhere.loc"
-	templateName := "resources/view/mail/auth/register"
-
-	privateKey, err := ecdsa.Generate()
-	assert.NoError(t, err)
-
-	j := jwt.NewJWT(privateKey, privateKey.Public())
-
 	t.Run("refresh token", func(t *testing.T) {
 		var (
-			userRepository users.MockUsersRepository
-			mailer         email.MockMailer
-			renderer       template.MockRenderer
+			userRepository  users.MockUsersRepository
+			asyncCommandBus mock.MockPublishSubscriber
 
 			r = register.Request{
 				Identity: "test@test-mail.test",
 			}
+
+			command = register.SendRegistrationEmail{
+				Identity: r.Identity,
+			}
 		)
+
+		commandPayload, err := json.Marshal(command)
+		assert.NoError(t, err)
 
 		userRepository.On("GetOneByIdentity", r.Identity).Once().Return(user.User{}, nil)
 		defer userRepository.AssertExpectations(t)
 
-		renderer.On("Render", mock.Anything, templateName, mock.Anything).Once().Return(nil)
-		defer renderer.AssertExpectations(t)
+		asyncCommandBus.On("Publish", context.Background(), register.SendRegisterationEmailName, commandPayload).Return(nil)
+		defer asyncCommandBus.AssertExpectations(t)
 
-		mailer.On("SendMail", mailFrom, r.Identity, "Registration", mock.AnythingOfType("[]uint8")).Once().Return(nil)
-		defer mailer.AssertExpectations(t)
-
-		handler := NewRegisterHandler(register.NewUseCase(&userRepository, j, &mailer, mailFrom, &renderer))
+		handler := NewRegisterHandler(register.NewUseCase(&userRepository, &asyncCommandBus))
 
 		var payload bytes.Buffer
-		err := json.NewEncoder(&payload).Encode(r)
+		err = json.NewEncoder(&payload).Encode(r)
 		assert.NoError(t, err)
 
 		request := httptest.NewRequest(http.MethodPost, "/", &payload)
@@ -67,12 +59,11 @@ func TestRegisterHandler(t *testing.T) {
 
 	t.Run("validation failed", func(t *testing.T) {
 		var (
-			userRepository users.MockUsersRepository
-			mailer         email.MockMailer
-			renderer       template.MockRenderer
+			userRepository  users.MockUsersRepository
+			asyncCommandBus mock.MockPublishSubscriber
 		)
 
-		handler := NewRegisterHandler(register.NewUseCase(&userRepository, j, &mailer, mailFrom, &renderer))
+		handler := NewRegisterHandler(register.NewUseCase(&userRepository, &asyncCommandBus))
 
 		request := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString("{}"))
 		response := httptest.NewRecorder()
@@ -80,8 +71,7 @@ func TestRegisterHandler(t *testing.T) {
 		handler.ServeHTTP(response, request)
 
 		userRepository.AssertNotCalled(t, "GetOneByIdentity")
-		renderer.AssertNotCalled(t, "Render")
-		mailer.AssertNotCalled(t, "SendMail")
+		asyncCommandBus.AssertNotCalled(t, "Publish")
 
 		expected, err := os.ReadFile("testdata/register-response-validation-failed.json")
 		assert.NoError(t, err)
@@ -93,9 +83,8 @@ func TestRegisterHandler(t *testing.T) {
 
 	t.Run("error", func(t *testing.T) {
 		var (
-			userRepository users.MockUsersRepository
-			mailer         email.MockMailer
-			renderer       template.MockRenderer
+			userRepository  users.MockUsersRepository
+			asyncCommandBus mock.MockPublishSubscriber
 
 			r = register.Request{
 				Identity: "test@test-mail.test",
@@ -105,7 +94,7 @@ func TestRegisterHandler(t *testing.T) {
 		userRepository.On("GetOneByIdentity", r.Identity).Once().Return(user.User{}, errors.New("undexprected error"))
 		defer userRepository.AssertExpectations(t)
 
-		handler := NewRegisterHandler(register.NewUseCase(&userRepository, j, &mailer, mailFrom, &renderer))
+		handler := NewRegisterHandler(register.NewUseCase(&userRepository, &asyncCommandBus))
 
 		var payload bytes.Buffer
 		err := json.NewEncoder(&payload).Encode(r)
@@ -116,8 +105,7 @@ func TestRegisterHandler(t *testing.T) {
 
 		handler.ServeHTTP(response, request)
 
-		renderer.AssertNotCalled(t, "Render")
-		mailer.AssertNotCalled(t, "SendMail")
+		asyncCommandBus.AssertNotCalled(t, "Publish")
 
 		assert.Len(t, response.Body.Bytes(), 0)
 		assert.Equal(t, http.StatusInternalServerError, response.Code)

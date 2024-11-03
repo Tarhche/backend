@@ -47,6 +47,7 @@ services:
       MAIL_SMTP_PASSWORD: ${MAIL_SMTP_PASSWORD}
       MAIL_SMTP_HOST: ${MAIL_SMTP_HOST}
       MAIL_SMTP_PORT: ${MAIL_SMTP_PORT}
+      NATS_URL: ${NATS_URL}
 
   mongodb:
     image: mongo
@@ -89,7 +90,7 @@ services:
 
   nats:
     image: nats:2.10
-    command: "--jetstream" # --config /etc/nats/nats-server.conf
+    command: ["--jetstream", "-m", "8222", "-p", "4222"] # --config /etc/nats/nats-server.conf
     ports:
       - "4222:4222" # client port
       - "6222:6222" # cluster post
