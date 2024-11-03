@@ -16,4 +16,7 @@ export const apiPaths = {
     profile: "dashboard/profile",
     roles: "dashboard/profile/roles",
   },
+  comments: {
+    list: "comments",
+  },
 } as const;

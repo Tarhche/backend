@@ -3,6 +3,7 @@ import {ColorSchemeScript} from "@mantine/core";
 import {Providers} from "./providers";
 import {vazir} from "./fonts";
 import "@mantine/core/styles.css";
+import "./globals.css";
 
 export const metadata: Metadata = {
   title: "طرح چه",

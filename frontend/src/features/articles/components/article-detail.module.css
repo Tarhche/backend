@@ -1,0 +1,22 @@
+.content {
+  font-weight: lighter;
+
+  img {
+    max-width: 100%;
+    object-fit: cover;
+  }
+
+  pre:has(> code) {
+    text-align: left;
+    direction: ltr;
+    font-weight: 500;
+    border: 1px solid
+      light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-6));
+    border-radius: 0.25rem;
+    background-color: light-dark(
+      var(--mantine-color-light-3),
+      var(--mantine-color-dark-9)
+    );
+    padding: 10px;
+  }
+}
