@@ -1,26 +1,15 @@
 import Image from "next/image";
 import Link from "next/link";
 import {notFound} from "next/navigation";
-import {
-  Title,
-  Box,
-  Group,
-  Text,
-  ActionIcon,
-  Tooltip,
-  Blockquote,
-  Badge,
-} from "@mantine/core";
+import {Title, Box, Group, Text, Blockquote, Badge} from "@mantine/core";
+import {BookmarkButton} from "./bookmark-button";
 import hljs from "highlight.js";
-import {
-  IconClockHour2,
-  IconBookmark,
-  IconInfoCircle,
-} from "@tabler/icons-react";
+import {IconClockHour2, IconInfoCircle} from "@tabler/icons-react";
 import {FILES_PUBLIC_URL} from "@/constants/envs";
 import {fetchArticleByUUID} from "@/dal/articles";
+import {checkBookmarkStatus} from "@/dal/bookmarks";
 import {dateFromNow} from "@/lib/date-and-time";
-import classes from "./article-detail.module.css";
+import classes from "./content.module.css";
 import "highlight.js/styles/atom-one-dark.css";
 
 function highlightCode(content: string) {
@@ -44,8 +33,13 @@ type Props = {
   uuid: string;
 };
 
-export async function ArticleDetail({uuid}: Props) {
-  const article = await fetchArticleByUUID(uuid);
+export async function Content({uuid}: Props) {
+  const articleData = fetchArticleByUUID(uuid);
+  const bookmarkStatusData = checkBookmarkStatus(uuid);
+  const [article, isBookmarked] = await Promise.all([
+    articleData,
+    bookmarkStatusData,
+  ]);
   const tags = article.tags ?? [];
 
   if (article === undefined) {
@@ -53,26 +47,22 @@ export async function ArticleDetail({uuid}: Props) {
   }
 
   return (
-    <Box>
+    <Box component="article">
       <Title>{article.title}</Title>
-      <Group
-        wrap="nowrap"
-        c={"dimmed"}
-        my={"sm"}
-        // align="center"
-        justify="space-between"
-      >
+      <Group wrap="nowrap" c={"dimmed"} my={"sm"} justify="space-between">
         <Group gap={5}>
           <IconClockHour2 spacing={0} size={20} />
           <Text size="sm" c="dimmed" mt={4}>
             {dateFromNow(article.published_at).toString()}
           </Text>
         </Group>
-        <Tooltip label="ذخیره کردن" withArrow>
-          <ActionIcon variant="transparent" c={"dimmed"} ml={-7}>
-            <IconBookmark />
-          </ActionIcon>
-        </Tooltip>
+        {isBookmarked === undefined ? null : (
+          <BookmarkButton
+            uuid={article.uuid}
+            isBookmarked={isBookmarked}
+            title={article.title}
+          />
+        )}
       </Group>
       <Image
         width={1000}

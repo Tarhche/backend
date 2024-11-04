@@ -1,8 +1,7 @@
 import {Suspense} from "react";
 import {notFound} from "next/navigation";
 import {Container, Box} from "@mantine/core";
-import {ArticleDetail} from "@/features/articles/components/article-detail";
-import {Comments} from "@/features/articles/components/comments";
+import {Content, Comments} from "@/features/articles/components/article-detail";
 
 type Props = {
   params: {
@@ -16,9 +15,9 @@ async function ArticleDetailPage({params: {slug}}: Props) {
   }
 
   return (
-    <Container size={"sm"} mt={"xl"}>
+    <Container size={"sm"} mt={"xl"} component="section">
       <Suspense fallback={"Loading..."}>
-        <ArticleDetail uuid={slug} />
+        <Content uuid={slug} />
       </Suspense>
       <Box mt={"xl"}>
         <Suspense fallback={"Loading comments..."}>

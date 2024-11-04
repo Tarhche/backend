@@ -19,4 +19,8 @@ export const apiPaths = {
   comments: {
     list: "comments",
   },
+  bookmarks: {
+    bookmarks: "/bookmarks",
+    exists: "/bookmarks/exists",
+  },
 } as const;

@@ -1,5 +1,5 @@
 import {serialize} from "cookie";
-import {cookies as nextCookies, headers} from "next/headers";
+import {cookies, headers} from "next/headers";
 import axios, {AxiosError} from "axios";
 import {apiPaths} from "./api-paths";
 import {INTERNAL_BACKEND_URL} from "@/constants/envs";
@@ -16,7 +16,7 @@ export const apiClient = axios.create({
 
 apiClient.interceptors.request.use(
   async (config) => {
-    const accessToken = nextCookies().get("access_token")?.value;
+    const accessToken = cookies().get("access_token")?.value;
     if (accessToken !== undefined) {
       config.headers.Authorization = `Bearer ${accessToken}`;
     }
@@ -29,9 +29,10 @@ apiClient.interceptors.response.use(
   (value) => value,
   async (error) => {
     const headersStore = headers();
-    const cookiesStore = nextCookies();
+    const cookiesStore = cookies();
     const originalRequest = error.config;
     const isFromApiRoutes = Boolean(headersStore.get("client-to-proxy"));
+    const isFromServerAction = Boolean(headersStore.get("next-action"));
     if (error instanceof AxiosError && error.status === 401) {
       const refreshToken = cookiesStore.get("refresh_token")?.value;
       if (refreshToken === undefined || originalRequest._retry) {
@@ -45,6 +46,7 @@ apiClient.interceptors.response.use(
           },
         );
         const {access_token, refresh_token} = response.data;
+        originalRequest._retry = true;
         const originalRequestResponse = await axios({
           ...originalRequest,
           headers: {
@@ -66,12 +68,21 @@ apiClient.interceptors.response.use(
           ];
           return originalRequestResponse;
         }
+        if (isFromServerAction) {
+          cookies().set("access_token", access_token, {
+            httpOnly: true,
+            maxAge: ACCESS_TOKEN_EXP,
+            path: "/",
+          });
+          cookies().set("refresh_token", refresh_token, {
+            httpOnly: true,
+            maxAge: REFRESH_TOKEN_EXP,
+            path: "/",
+          });
+        }
+        return originalRequestResponse;
       } catch (err) {
-        if (err instanceof AxiosError) {
-        }
-        if (isFromApiRoutes) {
-          return err;
-        }
+        return err;
       }
     }
     return error;
