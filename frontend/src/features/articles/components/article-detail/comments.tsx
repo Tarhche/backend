@@ -1,6 +1,17 @@
-import {Box, Stack, Group, Button, Textarea, Title} from "@mantine/core";
+import Link from "next/link";
+import {
+  Box,
+  Stack,
+  Group,
+  Button,
+  Textarea,
+  Title,
+  Alert,
+  Anchor,
+} from "@mantine/core";
+import {AuthGuard} from "@/components/auth-guard";
 import {Comment} from "./comment";
-import {IconMessage} from "@tabler/icons-react";
+import {IconMessage, IconInfoCircle} from "@tabler/icons-react";
 import {fetchArticleComments} from "@/dal/comments";
 import {FILES_PUBLIC_URL} from "@/constants/envs";
 import {dateFromNow} from "@/lib/date-and-time";
@@ -20,15 +31,32 @@ export async function Comments({uuid}: Props) {
           دیدگاه ها
         </Title>
       </Group>
-      <Stack align="flex-end">
-        <Textarea
-          placeholder="دیدگاه خود را اینجا بنویسید"
-          w={"100%"}
-          rows={4}
-        />
-        <Button>ثبت نظر</Button>
-      </Stack>
-      <Stack>
+      <AuthGuard
+        fallback={
+          <Alert
+            variant="light"
+            color="yellow"
+            title="نیازمند احراز هویت"
+            icon={<IconInfoCircle />}
+          >
+            برای اینکه بتوانید دیدگاه خود را ثبت کنید باید ابتدا{" "}
+            <Anchor underline="always" href={"/auth/login"} component={Link}>
+              وارد حسابتان
+            </Anchor>{" "}
+            شوید
+          </Alert>
+        }
+      >
+        <Stack align="flex-end">
+          <Textarea
+            placeholder="دیدگاه خود را اینجا بنویسید"
+            w={"100%"}
+            rows={4}
+          />
+          <Button>ثبت نظر</Button>
+        </Stack>
+      </AuthGuard>
+      <Stack mt={"lg"}>
         {comments.map((comment) => {
           return (
             <Comment
@@ -40,6 +68,11 @@ export async function Comments({uuid}: Props) {
             />
           );
         })}
+        {comments.length === 0 && (
+          <Alert variant="light" color="green" icon={<IconInfoCircle />}>
+            هنوز دیدگاهی برای ان مقاله ثبت نشده!
+          </Alert>
+        )}
       </Stack>
     </Box>
   );
