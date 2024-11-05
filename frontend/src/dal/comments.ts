@@ -9,3 +9,15 @@ export async function fetchArticleComments(articleUUID: string) {
   });
   return article.data;
 }
+
+export async function createArticleComment(body: {
+  object_uuid: string;
+  body: string;
+  parent_uuid: string;
+}) {
+  const response = await apiClient.post(apiPaths.comments.list, {
+    ...body,
+    object_type: "article",
+  });
+  return response.data;
+}

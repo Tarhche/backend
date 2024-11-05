@@ -85,6 +85,6 @@ apiClient.interceptors.response.use(
         return err;
       }
     }
-    return error;
+    throw new AxiosError(error);
   },
 );

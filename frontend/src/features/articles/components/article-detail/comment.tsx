@@ -1,27 +1,99 @@
-import {Text, Avatar, Group} from "@mantine/core";
+"use client";
+import {useState} from "react";
+import {
+  Text,
+  Avatar,
+  Group,
+  Box,
+  Paper,
+  Button,
+  Tooltip,
+  Skeleton,
+} from "@mantine/core";
+import {CommentForm} from "./comment-form";
+import {useInit} from "@/hooks/data/init";
+import {IconCornerUpLeft, IconX} from "@tabler/icons-react";
+import clsx from "clsx";
+import {dateFromNow} from "@/lib/date-and-time";
+import {type Comment as CommentType} from "../../types/comment";
+import {FILES_PUBLIC_URL} from "@/constants/envs";
+import classes from "./comment.module.css";
 
 type Props = {
-  avatar: string;
-  name: string;
-  message: string;
-  date: string;
+  comment: CommentType;
+  comments: CommentType[];
+  level?: number;
 };
 
-export function Comment({avatar, name, message, date}: Props) {
+export function Comment({comment, comments, level = 0}: Props) {
+  const {data, isLoading} = useInit();
+  const isLoggedIn = data?.status === "authenticated";
+  const [isReplying, setIsReplying] = useState(false);
+  const {uuid, author, body, created_at} = comment;
+  const {name, avatar} = author;
+  const replies = comments.filter((c) => c.parent_uuid === uuid);
+
   return (
-    <div>
-      <Group>
-        <Avatar src={avatar} alt={name} radius="xl" />
-        <div>
-          <Text size="sm">{name}</Text>
-          <Text size="xs" c="dimmed">
-            {date}
+    <Paper
+      mb="xs"
+      className={clsx({
+        [classes.comment]: true,
+        [classes.rootComment]: level === 0,
+        [classes.nestedComment]: level > 0,
+      })}
+      pb={isLoggedIn ? 0 : "sm"}
+    >
+      <Group align="flex-start">
+        <Avatar src={`${FILES_PUBLIC_URL}/${avatar}`} radius="xl" />
+        <div className={classes.commentContent}>
+          <Text size="sm" fw={500}>
+            {name}
           </Text>
+          <Text size="xs" c="dimmed">
+            {dateFromNow(created_at)}
+          </Text>
+          <Text mt="xs">{body}</Text>
+          {isLoading ? (
+            <Skeleton w={30} h={25} className={classes.replyButton} />
+          ) : isLoggedIn ? (
+            <Tooltip label={"پاسخ دادن"} withArrow>
+              <Button
+                className={classes.replyButton}
+                variant="transparent"
+                c="dimmed"
+                size="xs"
+                mt="xs"
+                onClick={() => {
+                  setIsReplying(!isReplying);
+                }}
+              >
+                {isReplying ? (
+                  <IconX size={25} />
+                ) : (
+                  <IconCornerUpLeft size={25} />
+                )}
+              </Button>
+            </Tooltip>
+          ) : null}
         </div>
       </Group>
-      <Text pl={54} pt="sm" size="sm">
-        {message}
-      </Text>
-    </div>
+      {isReplying && (
+        <Box mt={"xs"}>
+          <CommentForm object_uuid="abc" parent_uuid={comment.uuid} />
+        </Box>
+      )}
+      {replies && (
+        <div style={{marginTop: 10}}>
+          {replies.map((reply, index) => (
+            <Comment
+              key={index}
+              comment={reply}
+              comments={comments}
+              level={level + 1}
+            />
+          ))}
+        </div>
+      )}
+    </Paper>
   );
 }

@@ -1,20 +1,10 @@
 import Link from "next/link";
-import {
-  Box,
-  Stack,
-  Group,
-  Button,
-  Textarea,
-  Title,
-  Alert,
-  Anchor,
-} from "@mantine/core";
+import {Box, Stack, Alert, Anchor} from "@mantine/core";
 import {AuthGuard} from "@/components/auth-guard";
+import {CommentForm} from "./comment-form";
 import {Comment} from "./comment";
-import {IconMessage, IconInfoCircle} from "@tabler/icons-react";
+import {IconInfoCircle} from "@tabler/icons-react";
 import {fetchArticleComments} from "@/dal/comments";
-import {FILES_PUBLIC_URL} from "@/constants/envs";
-import {dateFromNow} from "@/lib/date-and-time";
 
 type Props = {
   uuid: string;
@@ -22,18 +12,14 @@ type Props = {
 
 export async function Comments({uuid}: Props) {
   const comments = (await fetchArticleComments(uuid)).items;
+  const rootComments = comments.filter((c) => c.parent_uuid === undefined);
 
   return (
-    <Box>
-      <Group align="center" mb={"sm"} gap={"sm"}>
-        <IconMessage />
-        <Title ta={"right"} order={3}>
-          دیدگاه ها
-        </Title>
-      </Group>
+    <>
       <AuthGuard
         fallback={
           <Alert
+            mt={"md"}
             variant="light"
             color="yellow"
             title="نیازمند احراز هویت"
@@ -47,33 +33,22 @@ export async function Comments({uuid}: Props) {
           </Alert>
         }
       >
-        <Stack align="flex-end">
-          <Textarea
-            placeholder="دیدگاه خود را اینجا بنویسید"
-            w={"100%"}
-            rows={4}
-          />
-          <Button>ثبت نظر</Button>
-        </Stack>
+        <Box mt={"lg"}>
+          <CommentForm object_uuid={uuid} parent_uuid="" />
+        </Box>
       </AuthGuard>
-      <Stack mt={"lg"}>
-        {comments.map((comment) => {
+      <Stack mt={"xl"}>
+        {rootComments.map((comment) => {
           return (
-            <Comment
-              key={comment.uuid}
-              avatar={`${FILES_PUBLIC_URL}/${comment.author.avatar}`}
-              name={comment.author.name}
-              message={comment.body}
-              date={dateFromNow(comment.created_at)}
-            />
+            <Comment key={comment.uuid} comments={comments} comment={comment} />
           );
         })}
         {comments.length === 0 && (
           <Alert variant="light" color="green" icon={<IconInfoCircle />}>
-            هنوز دیدگاهی برای ان مقاله ثبت نشده!
+            هنوز دیدگاهی برای این مقاله ثبت نشده!
           </Alert>
         )}
       </Stack>
-    </Box>
+    </>
   );
 }
