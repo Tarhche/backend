@@ -2,7 +2,11 @@ import {Suspense} from "react";
 import {notFound} from "next/navigation";
 import {Container, Box, Group, Title} from "@mantine/core";
 import {IconMessage} from "@tabler/icons-react";
-import {Content, Comments} from "@/features/articles/components/article-detail";
+import {
+  Content,
+  ContentSkeleton,
+  Comments,
+} from "@/features/articles/components/article-detail";
 
 type Props = {
   params: {
@@ -17,7 +21,7 @@ async function ArticleDetailPage({params: {slug}}: Props) {
 
   return (
     <Container size={"sm"} mt={"xl"} component="section">
-      <Suspense fallback={"Loading..."}>
+      <Suspense fallback={<ContentSkeleton />}>
         <Content uuid={slug} />
       </Suspense>
       <Box mt={"xl"}>
