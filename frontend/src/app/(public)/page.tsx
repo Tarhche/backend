@@ -1,4 +1,3 @@
-import {apiClient, apiPaths} from "@/dal";
 import Link from "next/link";
 import {
   Stack,
@@ -10,6 +9,7 @@ import {
   Anchor,
 } from "@mantine/core";
 import {ArticleCardVertical} from "@/features/home-page/article-card-vertical";
+import {apiClient, apiPaths} from "@/dal";
 import classes from "./page.module.css";
 
 interface ArticleType {

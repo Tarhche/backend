@@ -23,4 +23,7 @@ export const apiPaths = {
     bookmarks: "/bookmarks",
     exists: "/bookmarks/exists",
   },
+  hashtags: {
+    show: (slug: string) => `/hashtags/${slug}`,
+  },
 } as const;
