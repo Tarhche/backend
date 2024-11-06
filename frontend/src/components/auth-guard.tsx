@@ -1,6 +1,5 @@
-import {cookies} from "next/headers";
+import {isUserLoggedIn} from "@/lib/auth";
 import {type ReactNode} from "react";
-import jwt from "jsonwebtoken";
 
 type Props = {
   children: ReactNode;
@@ -8,18 +7,11 @@ type Props = {
 };
 
 export function AuthGuard({fallback, children}: Props) {
-  const cookiesStore = cookies();
-  const refreshToken = cookiesStore.get("refresh_token")?.value;
-  const decodedRefreshToken = jwt.decode(refreshToken ?? "", {
-    json: true,
-  });
+  const isLoggedIn = isUserLoggedIn();
 
-  if (
-    decodedRefreshToken === null ||
-    Date.now() > new Date(decodedRefreshToken.exp! * 1000).getTime()
-  ) {
-    return fallback ?? null;
+  if (isLoggedIn) {
+    return children;
   }
 
-  return children;
+  return fallback ?? null;
 }
