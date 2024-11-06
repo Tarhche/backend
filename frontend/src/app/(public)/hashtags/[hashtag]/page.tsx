@@ -1,3 +1,4 @@
+import {type Metadata} from "next";
 import {notFound} from "next/navigation";
 import {ArticleCardVertical} from "@/features/home-page/article-card-vertical";
 import {fetchAllArticlesByHashtag} from "@/dal/hashtags";
@@ -7,6 +8,13 @@ type Props = {
     hashtag?: string;
   };
 };
+
+export async function generateMetadata({params}: Props): Promise<Metadata> {
+  const hashtag = decodeURI(params.hashtag ?? "");
+  return {
+    title: `${hashtag} | تگ ها`,
+  };
+}
 
 async function HashtagPage({params}: Props) {
   const hashtag = params.hashtag;

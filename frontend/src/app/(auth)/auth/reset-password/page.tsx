@@ -1,4 +1,9 @@
+import {type Metadata} from "next";
 import {ResetPasswordForm} from "@/features/auth/components/reset-password-form";
+
+export const metadata: Metadata = {
+  title: "بازیابی کلمه عبور",
+};
 
 type Props = {
   searchParams: {

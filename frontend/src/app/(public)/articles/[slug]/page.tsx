@@ -1,3 +1,4 @@
+import {type Metadata} from "next";
 import {Suspense} from "react";
 import {notFound} from "next/navigation";
 import {Container, Box, Group, Title} from "@mantine/core";
@@ -8,12 +9,26 @@ import {
   Comments,
   CommentsSkeleton,
 } from "@/features/articles/components/article-detail";
+import {fetchArticleByUUID} from "@/dal/articles";
 
 type Props = {
   params: {
     slug?: string;
   };
 };
+
+export async function generateMetadata({
+  params,
+}: Props): Promise<Metadata | null> {
+  const slug = params.slug;
+  if (slug === undefined) {
+    return null;
+  }
+  const article = await fetchArticleByUUID(slug);
+  return {
+    title: `${article.title}`,
+  };
+}
 
 async function ArticleDetailPage({params: {slug}}: Props) {
   if (slug === undefined) {

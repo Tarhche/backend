@@ -1,3 +1,4 @@
+import {type Metadata} from "next";
 import Link from "next/link";
 import {
   Stack,
@@ -24,6 +25,10 @@ interface ArticleType {
   excerpt: string;
   tags: string[];
 }
+
+export const metadata: Metadata = {
+  title: "خانه",
+};
 
 export default async function HomePage() {
   const homePageData = (await apiClient.get(apiPaths.home)).data;

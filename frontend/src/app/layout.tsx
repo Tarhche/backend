@@ -6,7 +6,10 @@ import "@mantine/core/styles.css";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "طرح چه",
+  title: {
+    default: "طرحچه",
+    template: "%s | طرحچه",
+  },
   description: "طرح‌چه",
 };
 

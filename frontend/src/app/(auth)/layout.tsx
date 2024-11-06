@@ -3,7 +3,10 @@ import {type ReactNode} from "react";
 import {Container} from "@mantine/core";
 
 export const metadata: Metadata = {
-  title: "احراز هویت | طرحچه",
+  title: {
+    default: "احراز هویت | طرحچه",
+    template: "%s | احراز هویت | طرحچه",
+  },
 };
 
 type Props = {

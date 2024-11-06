@@ -1,4 +1,9 @@
+import {type Metadata} from "next";
 import {VerifyForm} from "@/features/auth/components/verify-form";
+
+export const metadata: Metadata = {
+  title: "تکمیل حساب کاربری",
+};
 
 type Props = {
   searchParams: {
