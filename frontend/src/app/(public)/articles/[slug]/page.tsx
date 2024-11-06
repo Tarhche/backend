@@ -6,6 +6,7 @@ import {
   Content,
   ContentSkeleton,
   Comments,
+  CommentsSkeleton,
 } from "@/features/articles/components/article-detail";
 
 type Props = {
@@ -31,7 +32,7 @@ async function ArticleDetailPage({params: {slug}}: Props) {
             دیدگاه ها
           </Title>
         </Group>
-        <Suspense fallback={"Loading comments..."}>
+        <Suspense fallback={<CommentsSkeleton />}>
           <Comments uuid={slug} />
         </Suspense>
       </Box>
