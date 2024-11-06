@@ -3,7 +3,7 @@ import {type ReactNode} from "react";
 import {DashboardLayout} from "@/features/dashboard/dashbaord-layout";
 
 export const metadata: Metadata = {
-  title: "داشبرد | طرحچه",
+  title: "داشبرد",
 };
 
 type Props = {
