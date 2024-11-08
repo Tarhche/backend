@@ -2,6 +2,7 @@
 import Image from "next/image";
 import {useState} from "react";
 import {Avatar, Skeleton} from "@mantine/core";
+import BoringAvatar from "boring-avatars";
 import {useInit} from "@/hooks/data/init";
 import {FILES_PUBLIC_URL} from "@/constants/envs";
 import classes from "./auth-user-avatar.module.css";
@@ -18,12 +19,15 @@ export function AuthUserAvatar({width = 45, height = 45}: Props) {
     return <Skeleton circle width={width} height={height} />;
   }
 
-  if (hasImageFailed) {
-    return <Avatar src={null} w={width} h={height} />;
-  }
-
   if (data?.status === "authenticated") {
-    const {avatar, name} = data.profile;
+    const {avatar, name, email} = data.profile;
+    if (hasImageFailed || avatar === undefined) {
+      return (
+        <Avatar src={null} w={width} h={height}>
+          <BoringAvatar variant="beam" name={email} size={width} />
+        </Avatar>
+      );
+    }
     return (
       <Image
         src={`${FILES_PUBLIC_URL}/${avatar}`}
@@ -35,5 +39,6 @@ export function AuthUserAvatar({width = 45, height = 45}: Props) {
       />
     );
   }
+
   return null;
 }
