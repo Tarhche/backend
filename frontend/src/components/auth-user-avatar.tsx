@@ -1,7 +1,7 @@
 "use client";
 import Image from "next/image";
 import {useState} from "react";
-import {Avatar, Skeleton} from "@mantine/core";
+import {Avatar, Skeleton, useMantineTheme} from "@mantine/core";
 import BoringAvatar from "boring-avatars";
 import {useInit} from "@/hooks/data/init";
 import {FILES_PUBLIC_URL} from "@/constants/envs";
@@ -14,6 +14,8 @@ type Props = {
 
 export function AuthUserAvatar({width = 45, height = 45}: Props) {
   const {data, isLoading} = useInit();
+  const theme = useMantineTheme();
+  const colors = Object.values(theme.colors).map((c) => c[6]);
   const [hasImageFailed, setHasImageFailed] = useState(false);
   if (isLoading) {
     return <Skeleton circle width={width} height={height} />;
@@ -24,7 +26,12 @@ export function AuthUserAvatar({width = 45, height = 45}: Props) {
     if (hasImageFailed || avatar === undefined) {
       return (
         <Avatar src={null} w={width} h={height}>
-          <BoringAvatar variant="beam" name={email} size={width} />
+          <BoringAvatar
+            variant="beam"
+            name={email}
+            size={width}
+            colors={colors}
+          />
         </Avatar>
       );
     }
