@@ -70,7 +70,7 @@ export default async function HomePage() {
         }}
       >
         <h2 className={classes.headingWithBorder}>
-          <span>جدیدترین ها</span>
+          <span>پربازدیدترین ها</span>
         </h2>
         <Stack gap={"sm"}>
           <List listStyleType="numbered">
