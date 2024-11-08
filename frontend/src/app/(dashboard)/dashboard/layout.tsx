@@ -1,6 +1,6 @@
 import {Metadata} from "next";
 import {type ReactNode} from "react";
-import {DashboardLayout} from "@/features/dashboard/dashbaord-layout";
+import {DashboardLayout} from "@/features/dashboard/components/layout";
 import {buildTitle} from "@/lib/seo";
 
 export const metadata: Metadata = {

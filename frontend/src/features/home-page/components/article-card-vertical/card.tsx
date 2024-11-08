@@ -4,7 +4,7 @@ import {Card, Text, Group, Box, Flex} from "@mantine/core";
 import {IconClockHour2} from "@tabler/icons-react";
 import {dateFromNow} from "@/lib/date-and-time";
 import {FILES_PUBLIC_URL} from "@/constants/envs";
-import classes from "./style.module.css";
+import classes from "./card.module.css";
 
 type Props = {
   article: {
@@ -16,7 +16,7 @@ type Props = {
   };
 };
 
-export function ArticleCardVertical({article}: Props) {
+export function VerticalArticleCard({article}: Props) {
   return (
     <Card withBorder radius="md" p={0} className={classes.card}>
       <Flex gap={0} className={classes.group}>

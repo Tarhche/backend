@@ -8,12 +8,12 @@ import {
   Skeleton,
   Group,
 } from "@mantine/core";
-import {SkeletonArticleCardVertical} from "@/features/home-page/article-card-vertical/skeleton";
-import classes from "./page.module.css";
+import {VerticalArticleCardSkeleton} from "../article-card-vertical/skeleton";
+import classes from "./featured-articles.module.css";
 
 const POPULAR_POSTS_COUNT = [1, 2, 3] as const;
 
-function HomePageLoading() {
+export function FeaturedArticlesSkeleton() {
   return (
     <>
       <Grid>
@@ -27,9 +27,9 @@ function HomePageLoading() {
             <span>جدیدترین ها</span>
           </h2>
           <Stack gap={"sm"}>
-            <SkeletonArticleCardVertical />
-            <SkeletonArticleCardVertical />
-            <SkeletonArticleCardVertical />
+            <VerticalArticleCardSkeleton />
+            <VerticalArticleCardSkeleton />
+            <VerticalArticleCardSkeleton />
           </Stack>
         </GridCol>
         <GridCol
@@ -77,5 +77,3 @@ function HomePageLoading() {
     </>
   );
 }
-
-export default HomePageLoading;

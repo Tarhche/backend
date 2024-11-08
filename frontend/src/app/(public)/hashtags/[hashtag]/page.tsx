@@ -1,6 +1,6 @@
 import {type Metadata} from "next";
 import {notFound} from "next/navigation";
-import {ArticleCardVertical} from "@/features/home-page/article-card-vertical";
+import {VerticalArticleCard} from "@/features/home-page/components/article-card-vertical";
 import {fetchAllArticlesByHashtag} from "@/dal/hashtags";
 
 type Props = {
@@ -25,7 +25,7 @@ async function HashtagPage({params}: Props) {
 
   return articles.map((article: any) => {
     return (
-      <ArticleCardVertical
+      <VerticalArticleCard
         key={article.uuid}
         article={{
           thumbnail: article.cover,

@@ -1,8 +1,8 @@
 import {Card, Group, Box, Flex, Skeleton} from "@mantine/core";
 import {IconClockHour2} from "@tabler/icons-react";
-import classes from "./style.module.css";
+import classes from "./card.module.css";
 
-export function SkeletonArticleCardVertical() {
+export function VerticalArticleCardSkeleton() {
   return (
     <Card withBorder radius="md" p={0} className={classes.card}>
       <Flex wrap="nowrap" gap={0} className={classes.group}>
