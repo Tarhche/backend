@@ -1,6 +1,5 @@
 "use client";
 import Link from "next/link";
-import {usePathname} from "next/navigation";
 import {type ReactNode} from "react";
 import {
   AppShell,
@@ -13,18 +12,8 @@ import {
   UnstyledButton,
   ScrollArea,
 } from "@mantine/core";
-import {
-  IconNotes,
-  IconHome,
-  IconFile,
-  IconMessage,
-  IconUser,
-  IconSettings,
-  IconMoon,
-  IconSun,
-  IconBell,
-  IconLogout,
-} from "@tabler/icons-react";
+import {LayoutSidebar} from "./layout-sidebar";
+import {IconMoon, IconSun, IconBell, IconLogout} from "@tabler/icons-react";
 import {useDisclosure} from "@mantine/hooks";
 import {logout} from "@/features/dashboard/actions/logout";
 import classes from "./layout.module.css";
@@ -33,42 +22,10 @@ type Props = {
   children: ReactNode;
 };
 
-const mockdata = [
-  {label: "داشبرد", icon: IconHome, href: "/dashboard"},
-  {
-    label: "مقالات",
-    icon: IconNotes,
-    href: "/dashboard/articles",
-  },
-  {
-    label: "کامنت ها",
-    icon: IconMessage,
-    href: "/dashboard/comments",
-  },
-  {label: "فایل ها", icon: IconFile, href: "/dashboard/files"},
-  {label: "حساب", icon: IconUser, href: "/dashboard/account"},
-  {label: "تنظیمات", icon: IconSettings, href: "/dashboard/setting"},
-];
-
 export function DashboardLayout({children}: Props) {
-  const pathname = usePathname();
   const [mobileOpened, {toggle: toggleMobile}] = useDisclosure();
   const [desktopOpened, {toggle: toggleDesktop}] = useDisclosure(true);
   const {toggleColorScheme} = useMantineColorScheme();
-
-  const links = mockdata.map((item) => (
-    <UnstyledButton
-      component={Link}
-      className={classes.link}
-      href={item.href}
-      key={item.label}
-      mb={5}
-      data-active={pathname === item.href || undefined}
-    >
-      <item.icon className={classes.linkIcon} stroke={1.5} />
-      <span>{item.label}</span>
-    </UnstyledButton>
-  ));
 
   return (
     <AppShell
@@ -134,7 +91,7 @@ export function DashboardLayout({children}: Props) {
           scrollbars="y"
           scrollHideDelay={0}
         >
-          {links}
+          <LayoutSidebar />
         </ScrollArea>
         <div className={classes.footer}>
           <form action={logout}>
