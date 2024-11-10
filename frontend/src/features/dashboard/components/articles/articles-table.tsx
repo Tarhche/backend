@@ -74,6 +74,13 @@ export async function ArticlesTable({page}: Props) {
           </TableTr>
         </TableThead>
         <TableTbody>
+          {articles.length === 0 && (
+            <TableTr>
+              <TableTd colSpan={4} ta={"center"}>
+                مقاله های وجود ندارد
+              </TableTd>
+            </TableTr>
+          )}
           {articles.map((article: any, index: number) => {
             return (
               <TableTr key={article.uuid}>
@@ -119,9 +126,11 @@ export async function ArticlesTable({page}: Props) {
           })}
         </TableTbody>
       </Table>
-      <Group mt="md" mb={"lg"} justify="flex-end">
-        <ArticlesPagination total={total_pages} current={current_page} />
-      </Group>
+      {articles.length >= 1 && (
+        <Group mt="md" mb={"lg"} justify="flex-end">
+          <ArticlesPagination total={total_pages} current={current_page} />
+        </Group>
+      )}
     </>
   );
 }
