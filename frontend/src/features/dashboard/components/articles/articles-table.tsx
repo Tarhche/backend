@@ -14,12 +14,8 @@ import {
   rem,
 } from "@mantine/core";
 import {ArticlesPagination} from "./articles-table-pagination";
-import {
-  IconEye,
-  IconPencil,
-  IconFilePlus,
-  IconTrash,
-} from "@tabler/icons-react";
+import {ArticleDeleteButton} from "./article-delete-button";
+import {IconEye, IconPencil, IconFilePlus} from "@tabler/icons-react";
 import {fetchArticles} from "@/dal/articles";
 import {dateFromNow} from "@/lib/date-and-time";
 import {APP_PATHS} from "@/lib/app-paths";
@@ -109,16 +105,10 @@ export async function ArticlesTable({page}: Props) {
                         </Tooltip>
                       );
                     })}
-                    <Tooltip label="حذف کردن مقاله" withArrow>
-                      <ActionIcon
-                        variant="light"
-                        size="lg"
-                        color="red"
-                        aria-label="حذف کردن مقاله"
-                      >
-                        <IconTrash style={{width: rem(20)}} stroke={1.5} />
-                      </ActionIcon>
-                    </Tooltip>
+                    <ArticleDeleteButton
+                      articleID={article.uuid}
+                      articleTitle={article.title}
+                    />
                   </ActionIconGroup>
                 </TableTd>
               </TableTr>

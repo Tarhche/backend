@@ -15,6 +15,8 @@ export const apiPaths = {
   dashbaord: {
     profile: "dashboard/profile",
     roles: "dashboard/profile/roles",
+    articles: "dashboard/articles",
+    articlesDetail: (id: string) => `/dashboard/articles/${id}`,
   },
   comments: {
     list: "comments",
