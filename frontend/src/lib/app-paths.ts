@@ -23,7 +23,7 @@ export const APP_PATHS = {
     },
     comments: {
       index: "/dashboard/comments",
-      edit: (uuid: string) => `/dashboard/comments/edit/${uuid}`,
+      edit: (uuid: string) => `/dashboard/comments/${uuid}`,
     },
     my: {
       comments: "/dashboard/my/comments",

@@ -1,4 +1,13 @@
+import {AxiosRequestConfig} from "axios";
 import {apiClient, apiPaths} from "@/dal";
+
+export async function fetchUsersComments(config?: AxiosRequestConfig) {
+  const response = await apiClient.get(
+    apiPaths.dashbaord.usersComments,
+    config,
+  );
+  return response.data;
+}
 
 export async function fetchArticleComments(articleUUID: string) {
   const article = await apiClient.get(apiPaths.comments.list, {

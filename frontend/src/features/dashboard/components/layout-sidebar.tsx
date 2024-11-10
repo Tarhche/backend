@@ -33,7 +33,11 @@ export function LayoutSidebar() {
       href: dashboard.comments.index,
     },
     {label: "فایل ها", icon: IconFile, href: dashboard.files},
-    {label: "کامنت های من", icon: IconMessage, href: dashboard.comments.index},
+    {
+      label: "کامنت های من",
+      icon: IconMessage,
+      href: dashboard.my.comments,
+    },
     {
       label: "بوکمارک های من",
       icon: IconBookmarks,

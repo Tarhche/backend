@@ -2,12 +2,14 @@ import {type Metadata} from "next";
 import {Suspense} from "react";
 import {Box} from "@mantine/core";
 import {DashboardBreadcrumbs} from "@/features/dashboard/components/breadcrumbs";
-import {ArticlesTable} from "@/features/dashboard/components/articles/articles-table";
-import {ArticlesTableSkeleton} from "@/features/dashboard/components/articles/articles-table-skeleton";
+import {
+  CommentsTable,
+  CommentsTableSkeleton,
+} from "@/features/dashboard/components/comments";
 import {APP_PATHS} from "@/lib/app-paths";
 
 export const metadata: Metadata = {
-  title: "مقاله ها",
+  title: "کامنت کاربران",
 };
 
 type Props = {
@@ -16,7 +18,7 @@ type Props = {
   };
 };
 
-async function ArticlesPage({searchParams}: Props) {
+async function CommentsPage({searchParams}: Props) {
   const {page} = searchParams;
 
   return (
@@ -24,21 +26,21 @@ async function ArticlesPage({searchParams}: Props) {
       <DashboardBreadcrumbs
         crumbs={[
           {
-            label: "مقاله ها",
-            href: APP_PATHS.dashboard.articles.index,
+            label: "کامنت کاربران",
+            href: APP_PATHS.dashboard.comments.index,
           },
         ]}
       />
       <Box mt={"md"}>
         <Suspense
           key={JSON.stringify(searchParams)}
-          fallback={<ArticlesTableSkeleton />}
+          fallback={<CommentsTableSkeleton />}
         >
-          <ArticlesTable page={page ?? 1} />
+          <CommentsTable page={page ?? 1} />
         </Suspense>
       </Box>
     </Box>
   );
 }
 
-export default ArticlesPage;
+export default CommentsPage;

@@ -17,6 +17,8 @@ export const apiPaths = {
     roles: "dashboard/profile/roles",
     articles: "dashboard/articles",
     articlesDetail: (id: string) => `/dashboard/articles/${id}`,
+    usersComments: "/dashboard/comments",
+    usersCommentsDetail: (id: string) => `/dashboard/comments/${id}`,
   },
   comments: {
     list: "comments",
