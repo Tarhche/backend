@@ -4,7 +4,7 @@ import {APP_PATHS} from "@/lib/app-paths";
 type Props = {
   crumbs: {
     label: string;
-    href: string;
+    href?: string;
   }[];
 };
 
