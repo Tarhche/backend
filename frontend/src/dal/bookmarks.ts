@@ -1,4 +1,4 @@
-import {apiClient, apiPaths} from ".";
+import {apiClient} from ".";
 
 export async function checkBookmarkStatus(
   uuid?: string,
@@ -6,7 +6,7 @@ export async function checkBookmarkStatus(
   if (uuid === undefined) {
     return undefined;
   }
-  const response = await apiClient.post(apiPaths.bookmarks.exists, {
+  const response = await apiClient.post("bookmarks/exists", {
     object_type: "article",
     object_uuid: uuid,
   });
@@ -19,7 +19,7 @@ export async function bookmarkArticle(body: {
   uuid: string;
   title: string;
 }) {
-  const response = await apiClient.put(apiPaths.bookmarks.bookmarks, {
+  const response = await apiClient.put("bookmarks", {
     keep: body.keep,
     title: body.title,
     object_type: "article",

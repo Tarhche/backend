@@ -9,11 +9,11 @@ import {
   Anchor,
 } from "@mantine/core";
 import {VerticalArticleCard} from "../article-card-vertical";
-import {apiClient, apiPaths} from "@/dal";
+import {fetchHomePageData} from "@/dal/home";
 import classes from "./featured-articles.module.css";
 
 export async function FeaturedArticles() {
-  const homePageData = (await apiClient.get(apiPaths.home)).data;
+  const homePageData = await fetchHomePageData();
   const latestArticles = homePageData.all;
   const popularArticles = homePageData.popular;
 

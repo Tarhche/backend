@@ -1,16 +1,13 @@
 import {AxiosRequestConfig} from "axios";
-import {apiClient, apiPaths} from "@/dal";
+import {apiClient} from "@/dal";
 
 export async function fetchUsersComments(config?: AxiosRequestConfig) {
-  const response = await apiClient.get(
-    apiPaths.dashbaord.usersComments,
-    config,
-  );
+  const response = await apiClient.get("dashboard/comments", config);
   return response.data;
 }
 
 export async function fetchArticleComments(articleUUID: string) {
-  const article = await apiClient.get(apiPaths.comments.list, {
+  const article = await apiClient.get("comments", {
     params: {
       object_type: "article",
       object_uuid: articleUUID,
@@ -24,7 +21,7 @@ export async function createArticleComment(body: {
   body: string;
   parent_uuid: string;
 }) {
-  const response = await apiClient.post(apiPaths.comments.list, {
+  const response = await apiClient.post("comments", {
     ...body,
     object_type: "article",
   });

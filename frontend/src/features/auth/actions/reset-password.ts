@@ -1,6 +1,6 @@
 "use server";
 import {AxiosError} from "axios";
-import {apiClient, apiPaths} from "@/dal";
+import {resetPassword as changePassword} from "@/dal/auth";
 
 type FormState = {
   success: boolean;
@@ -14,9 +14,9 @@ export async function resetPassword(
   state: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const newPassword = formData.get("new-password");
-  const confirmNewPassword = formData.get("confirm-new-password");
-  const token = formData.get("token");
+  const newPassword = formData.get("new-password")?.toString();
+  const confirmNewPassword = formData.get("confirm-new-password")?.toString();
+  const token = formData.get("token")?.toString();
 
   if (newPassword !== confirmNewPassword) {
     return {
@@ -28,10 +28,11 @@ export async function resetPassword(
   }
 
   try {
-    await apiClient.post(apiPaths.auth.resetPassword, {
-      password: newPassword,
-      token,
-    });
+    if (newPassword && token) {
+      await changePassword(newPassword, token);
+    } else {
+      throw new Error();
+    }
     return {
       success: true,
     };

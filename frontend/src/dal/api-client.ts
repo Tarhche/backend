@@ -1,7 +1,7 @@
 import {serialize} from "cookie";
 import {cookies, headers} from "next/headers";
 import axios, {AxiosError} from "axios";
-import {apiPaths} from "./api-paths";
+import {REFRESH_TOKEN_URL} from "./auth";
 import {INTERNAL_BACKEND_URL} from "@/constants/envs";
 import {ACCESS_TOKEN_EXP, REFRESH_TOKEN_EXP} from "@/constants/numbers";
 
@@ -39,12 +39,9 @@ apiClient.interceptors.response.use(
         return error;
       }
       try {
-        const response = await axios.post(
-          `${BASE_URL}/${apiPaths.auth.refreshToken}`,
-          {
-            token: refreshToken,
-          },
-        );
+        const response = await axios.post(`${BASE_URL}/${REFRESH_TOKEN_URL}`, {
+          token: refreshToken,
+        });
         const {access_token, refresh_token} = response.data;
         originalRequest._retry = true;
         const originalRequestResponse = await axios({

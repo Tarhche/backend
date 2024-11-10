@@ -1,6 +1,6 @@
 "use server";
-import {apiClient, apiPaths} from "@/dal";
 import {AxiosError} from "axios";
+import {registerUser as signUpUser} from "@/dal/auth";
 
 type SuccessRegisterState = {
   success: true;
@@ -22,11 +22,12 @@ export async function registerUser(
   state: State,
   formData: FormData,
 ): Promise<State> {
-  const email = formData.get("email");
+  const email = formData.get("email")?.toString();
   try {
-    await apiClient.post(apiPaths.auth.register, {
-      identity: email,
-    });
+    if (email === undefined) {
+      throw new Error();
+    }
+    await signUpUser(email);
     return {
       success: true,
       message: "",

@@ -1,5 +1,6 @@
-import {apiClient, apiPaths} from ".";
+import {apiClient} from ".";
 
 export async function fetchUserProfile() {
-  return await apiClient.get(apiPaths.dashbaord.profile);
+  const response = await apiClient.get("dashboard/profile");
+  return response;
 }

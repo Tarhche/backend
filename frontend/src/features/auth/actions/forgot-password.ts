@@ -1,6 +1,6 @@
 "use server";
 import {AxiosError} from "axios";
-import {apiClient, apiPaths} from "@/dal";
+import {forgotPassword as recoverPassword} from "@/dal/auth";
 
 type FormState =
   | {
@@ -16,11 +16,12 @@ export async function forgotPassword(
   prevState: FormState,
   formData: FormData,
 ): Promise<FormState> {
-  const identity = formData.get("identity");
+  const identity = formData.get("identity")?.toString();
   try {
-    await apiClient.post(apiPaths.auth.forgetPassword, {
-      identity,
-    });
+    if (identity === undefined) {
+      throw new Error();
+    }
+    await recoverPassword(identity);
     return {
       success: true,
     };
