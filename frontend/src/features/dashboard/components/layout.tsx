@@ -56,7 +56,7 @@ export function DashboardLayout({children}: Props) {
               طرحچه
             </Text>
           </Group>
-          <Group h="100%" px="md" align="center">
+          <Group h="100%" align="center">
             <Indicator color="red" size={8} offset={2}>
               <ActionIcon variant="light" size="lg" radius="md">
                 <IconBell style={{width: "70%", height: "70%"}} stroke={1.5} />

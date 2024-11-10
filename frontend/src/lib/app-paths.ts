@@ -1,7 +1,3 @@
-type Path = string | ((...args: any[]) => string);
-
-export type PathSchema = Record<string, Path | Record<string, Path>>;
-
 export const APP_PATHS = {
   home: "/",
   articles: {
@@ -20,21 +16,31 @@ export const APP_PATHS = {
   },
   dashboard: {
     index: "/dashboard",
-    articles: "/dashboard/articles",
-    articlesDetail: (uuid: string) => `/dashboard/articles/${uuid}`,
-    newArticle: "/dashboard/articles/new",
-    comments: "/dashboard/comments",
-    editComment: (uuid: string) => `/dashboard/comments/edit/${uuid}`,
-    myComments: "/dashboard/my/comments",
-    myBookmarks: "/dashboard/my/bookmarks",
-    users: "/dashboard/users",
-    newUser: "/dashboard/users/new",
-    editUser: (uuid: string) => `/dashboard/users/${uuid}`,
-    roles: "/dashboard/roles",
-    newRole: "/dashboard/roles/new",
-    editRole: (uuid: string) => `/dashboard/roles/${uuid}`,
+    articles: {
+      index: "/dashboard/articles",
+      new: "/dashboard/articles/new",
+      edit: (uuid: string) => `/dashboard/articles/${uuid}`,
+    },
+    comments: {
+      index: "/dashboard/comments",
+      edit: (uuid: string) => `/dashboard/comments/edit/${uuid}`,
+    },
+    my: {
+      comments: "/dashboard/my/comments",
+      bookmarks: "/dashboard/my/bookmarks",
+    },
+    users: {
+      index: "/dashboard/users",
+      new: "/dashboard/users/new",
+      edit: (uuid: string) => `/dashboard/users/${uuid}`,
+    },
+    roles: {
+      index: "/dashboard/roles",
+      new: "/dashboard/roles/new",
+      edit: (uuid: string) => `/dashboard/roles/${uuid}`,
+    },
     files: "/dashboard/files",
     settings: "/dashboard/settings",
     profile: "/dashboard/profile",
   },
-} as const satisfies PathSchema;
+};

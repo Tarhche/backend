@@ -25,18 +25,22 @@ export function LayoutSidebar() {
     {
       label: "مقالات",
       icon: IconNotes,
-      href: dashboard.articles,
+      href: dashboard.articles.index,
     },
     {
       label: "کامنت ها",
       icon: IconMessages,
-      href: dashboard.comments,
+      href: dashboard.comments.index,
     },
     {label: "فایل ها", icon: IconFile, href: dashboard.files},
-    {label: "کامنت های من", icon: IconMessage, href: dashboard.comments},
-    {label: "بوکمارک های من", icon: IconBookmarks, href: dashboard.myBookmarks},
-    {label: "کاربرها", icon: IconUsers, href: dashboard.users},
-    {label: "نقش ها", icon: IconKey, href: dashboard.roles},
+    {label: "کامنت های من", icon: IconMessage, href: dashboard.comments.index},
+    {
+      label: "بوکمارک های من",
+      icon: IconBookmarks,
+      href: dashboard.my.bookmarks,
+    },
+    {label: "کاربرها", icon: IconUsers, href: dashboard.users.index},
+    {label: "نقش ها", icon: IconKey, href: dashboard.roles.index},
     {label: "تنظیمات", icon: IconSettings, href: dashboard.settings},
     {label: "پروفایل", icon: IconUser, href: dashboard.profile},
   ];
