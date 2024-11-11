@@ -1,0 +1,14 @@
+.imageCard {
+  width: 100px;
+  height: 100px;
+  object-fit: cover;
+  border-radius: var(--mantine-radius-default);
+}
+
+.actionsWrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}

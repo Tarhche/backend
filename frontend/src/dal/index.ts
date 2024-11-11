@@ -7,3 +7,4 @@ export * from "./comments";
 export * from "./bookmarks";
 export * from "./auth";
 export * from "./articles";
+export * from "./files";
