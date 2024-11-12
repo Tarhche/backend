@@ -48,7 +48,7 @@ export async function MyBookmarksTable({page}: Props) {
           {bookmarks.length === 0 && (
             <TableTr>
               <TableTd colSpan={TABLE_HEADERS.length} ta={"center"}>
-                هنوز کامنتی را ثبت نکرده اید
+                هنوز چیزی را ذخیره نکرده اید
               </TableTd>
             </TableTr>
           )}
