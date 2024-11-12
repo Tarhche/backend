@@ -1,8 +1,13 @@
 import {AxiosRequestConfig} from "axios";
 import {apiClient} from "@/dal";
 
-export async function fetchUsersComments(config?: AxiosRequestConfig) {
+export async function fetchAllComments(config?: AxiosRequestConfig) {
   const response = await apiClient.get("dashboard/comments", config);
+  return response.data;
+}
+
+export async function fetchUserComments(config?: AxiosRequestConfig) {
+  const response = await apiClient.get("dashboard/my/comments", config);
   return response.data;
 }
 

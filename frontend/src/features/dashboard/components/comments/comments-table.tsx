@@ -15,7 +15,7 @@ import {
 import {CommentsPagination} from "./comments-table-pagination";
 import {CommentDeleteButton} from "./comment-delete-button";
 import {IconEye, IconPencil} from "@tabler/icons-react";
-import {fetchUsersComments} from "@/dal/comments";
+import {fetchAllComments} from "@/dal/comments";
 import {dateFromNow} from "@/lib/date-and-time";
 import {APP_PATHS} from "@/lib/app-paths";
 
@@ -33,7 +33,7 @@ type Props = {
 };
 
 export async function CommentsTable({page}: Props) {
-  const commentsResponse = await fetchUsersComments({
+  const commentsResponse = await fetchAllComments({
     params: {
       page: page,
     },
@@ -69,7 +69,7 @@ export async function CommentsTable({page}: Props) {
         <TableTbody>
           {comments.length === 0 && (
             <TableTr>
-              <TableTd colSpan={4} ta={"center"}>
+              <TableTd colSpan={TABLE_HEADERS.length} ta={"center"}>
                 کامنتی وجود ندارد
               </TableTd>
             </TableTr>
