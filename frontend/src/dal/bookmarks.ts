@@ -1,4 +1,20 @@
+import {AxiosRequestConfig} from "axios";
 import {apiClient} from ".";
+
+export async function fetchUserBookmarks(config?: AxiosRequestConfig) {
+  const response = await apiClient.get("dashboard/my/bookmarks", config);
+  return response.data;
+}
+
+export async function removeUserBookmark(id: string) {
+  const response = await apiClient.delete("dashboard/my/bookmarks", {
+    data: {
+      object_type: "article",
+      object_uuid: id,
+    },
+  });
+  return response.data;
+}
 
 export async function checkBookmarkStatus(
   uuid?: string,
