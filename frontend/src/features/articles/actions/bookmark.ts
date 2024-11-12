@@ -1,5 +1,7 @@
 "use server";
+import {revalidatePath} from "next/cache";
 import * as z from "zod";
+import {APP_PATHS} from "@/lib/app-paths";
 import {bookmarkArticle} from "@/dal/bookmarks";
 
 type FormState = {
@@ -33,6 +35,7 @@ export async function bookmark(
       uuid: validatedData.data.uuid,
       title: validatedData.data.title,
     });
+    revalidatePath(APP_PATHS.dashboard.my.bookmarks);
     return {
       success: true,
       bookmarked: !isBookmarked,
