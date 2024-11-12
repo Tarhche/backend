@@ -10,6 +10,7 @@ import {
   ActionIconGroup,
   Tooltip,
   Group,
+  Badge,
   rem,
 } from "@mantine/core";
 import {CommentsPagination} from "./comments-table-pagination";
@@ -75,11 +76,21 @@ export async function CommentsTable({page}: Props) {
             </TableTr>
           )}
           {comments.map((comment: any, index: number) => {
+            const isApproved = new Date(comment.approved_at).getDate() !== 1;
+
             return (
               <TableTr key={comment.uuid}>
                 <TableTd>{index + 1}</TableTd>
                 <TableTd>{comment.body}</TableTd>
-                <TableTd>{dateFromNow(comment.approved_at)}</TableTd>
+                <TableTd>
+                  {isApproved ? (
+                    dateFromNow(comment.approved_at)
+                  ) : (
+                    <Badge color="yellow" variant="light">
+                      تایید نشده
+                    </Badge>
+                  )}
+                </TableTd>
                 <TableTd>{dateFromNow(comment.created_at)}</TableTd>
                 <TableTd>{comment.author.name}</TableTd>
                 <TableTd>
