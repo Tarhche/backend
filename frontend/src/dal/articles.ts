@@ -1,6 +1,11 @@
 import {AxiosRequestConfig} from "axios";
 import {apiClient} from "@/dal";
 
+export async function fetchAllArticles(config?: AxiosRequestConfig) {
+  const response = await apiClient.get("dashboard/articles", config);
+  return response.data;
+}
+
 export async function fetchArticles(config?: AxiosRequestConfig) {
   const response = await apiClient.get("articles", config);
   return response.data;

@@ -11,12 +11,13 @@ import {
   Tooltip,
   Group,
   Button,
+  Badge,
   rem,
 } from "@mantine/core";
 import {ArticlesPagination} from "./articles-table-pagination";
 import {ArticleDeleteButton} from "./article-delete-button";
 import {IconEye, IconPencil, IconFilePlus} from "@tabler/icons-react";
-import {fetchArticles} from "@/dal/articles";
+import {fetchAllArticles} from "@/dal/articles";
 import {dateFromNow} from "@/lib/date-and-time";
 import {APP_PATHS} from "@/lib/app-paths";
 
@@ -25,13 +26,13 @@ type Props = {
 };
 
 export async function ArticlesTable({page}: Props) {
-  const articlesResponse = await fetchArticles({
+  const articlesResponse = await fetchAllArticles({
     params: {
       page: page,
     },
   });
   const articles = articlesResponse.items;
-  const {total_pages, current_page} = articlesResponse.paginationResponse;
+  const {total_pages, current_page} = articlesResponse.pagination;
 
   const tableActions = [
     {
@@ -39,12 +40,14 @@ export async function ArticlesTable({page}: Props) {
       Icon: IconEye,
       color: "blue",
       href: (uuid: string) => APP_PATHS.articles.detail(uuid),
+      disabled: (published: boolean) => published,
     },
     {
       tooltipLabel: "ویرایش کردن مقاله",
       Icon: IconPencil,
       color: "blue",
       href: (uuid: string) => APP_PATHS.dashboard.articles.edit(uuid),
+      disabled: () => false,
     },
   ];
 
@@ -78,33 +81,46 @@ export async function ArticlesTable({page}: Props) {
             </TableTr>
           )}
           {articles.map((article: any, index: number) => {
+            const isPublished = new Date(article.published_at).getDate() !== 1;
+
             return (
               <TableTr key={article.uuid}>
                 <TableTd>{index + 1}</TableTd>
                 <TableTd>{article.title}</TableTd>
-                <TableTd>{dateFromNow(article.published_at)}</TableTd>
+                <TableTd>
+                  {isPublished ? (
+                    dateFromNow(article.published_at)
+                  ) : (
+                    <Badge color="yellow" variant="light">
+                      منتشر نشده
+                    </Badge>
+                  )}
+                </TableTd>
                 <TableTd>
                   <ActionIconGroup>
-                    {tableActions.map(({Icon, tooltipLabel, color, href}) => {
-                      return (
-                        <Tooltip
-                          key={tooltipLabel}
-                          label={tooltipLabel}
-                          withArrow
-                        >
-                          <ActionIcon
-                            component={Link}
-                            variant="light"
-                            size="lg"
-                            color={color}
-                            href={href(article.uuid)}
-                            aria-label={tooltipLabel}
+                    {tableActions.map(
+                      ({Icon, tooltipLabel, color, href, disabled}) => {
+                        return (
+                          <Tooltip
+                            key={tooltipLabel}
+                            label={tooltipLabel}
+                            withArrow
                           >
-                            <Icon style={{width: rem(20)}} stroke={1.5} />
-                          </ActionIcon>
-                        </Tooltip>
-                      );
-                    })}
+                            <ActionIcon
+                              component={Link}
+                              variant="light"
+                              size="lg"
+                              color={color}
+                              href={href(article.uuid)}
+                              disabled={disabled(isPublished === false)}
+                              aria-label={tooltipLabel}
+                            >
+                              <Icon style={{width: rem(20)}} stroke={1.5} />
+                            </ActionIcon>
+                          </Tooltip>
+                        );
+                      },
+                    )}
                     <ArticleDeleteButton
                       articleID={article.uuid}
                       articleTitle={article.title}
