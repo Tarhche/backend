@@ -12,7 +12,7 @@ type Props = {
   isBookmarked: boolean;
 };
 
-export function BookmarkButton({uuid, isBookmarked}: Props) {
+export function BookmarkButton({uuid, title, isBookmarked}: Props) {
   const [state, dispatch] = useFormState(bookmark, {
     success: true,
     bookmarked: isBookmarked,
@@ -38,7 +38,7 @@ export function BookmarkButton({uuid, isBookmarked}: Props) {
         </FormActionButton>
       </Tooltip>
       <input type="text" value={uuid} name="uuid" readOnly hidden />
-      <input type="text" value={uuid} name="title" readOnly hidden />
+      <input type="text" value={title} name="title" readOnly hidden />
     </Box>
   );
 }
