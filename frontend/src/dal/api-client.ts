@@ -1,5 +1,6 @@
-import {serialize} from "cookie";
+import {notFound} from "next/navigation";
 import {cookies, headers} from "next/headers";
+import {serialize} from "cookie";
 import axios, {AxiosError} from "axios";
 import {REFRESH_TOKEN_URL} from "./auth";
 import {INTERNAL_BACKEND_URL} from "@/constants/envs";
@@ -81,6 +82,9 @@ apiClient.interceptors.response.use(
       } catch (err) {
         return err;
       }
+    }
+    if (error instanceof AxiosError && error.status === 404) {
+      notFound();
     }
     throw new AxiosError(error);
   },
