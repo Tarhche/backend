@@ -34,13 +34,18 @@ export async function Comments({uuid}: Props) {
         }
       >
         <Box mt={"lg"}>
-          <CommentForm object_uuid={uuid} parent_uuid="" />
+          <CommentForm objectUUID={uuid} parentUUID={""} />
         </Box>
       </AuthGuard>
       <Stack mt={"xl"}>
         {rootComments.map((comment) => {
           return (
-            <Comment key={comment.uuid} comments={comments} comment={comment} />
+            <Comment
+              objectUUID={uuid}
+              key={comment.uuid}
+              comments={comments}
+              comment={comment}
+            />
           );
         })}
         {comments.length === 0 && (

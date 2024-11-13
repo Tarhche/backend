@@ -9,11 +9,18 @@ import {updateCommentAction} from "../../actions/update-comment";
 type Props = {
   id: string;
   objectId: string;
+  parentId: string;
   message: string;
   approvalDate: string;
 };
 
-export function EditCommentForm({message, approvalDate, id, objectId}: Props) {
+export function EditCommentForm({
+  message,
+  approvalDate,
+  parentId,
+  id,
+  objectId,
+}: Props) {
   const [state, dispatch] = useFormState(updateCommentAction, {});
 
   return (
@@ -41,6 +48,7 @@ export function EditCommentForm({message, approvalDate, id, objectId}: Props) {
           </Group>
           <input type="text" name="id" value={id} readOnly hidden />
           <input type="text" name="objectId" value={objectId} readOnly hidden />
+          <input type="text" name="parentId" value={parentId} readOnly hidden />
         </Stack>
       </form>
     </Paper>

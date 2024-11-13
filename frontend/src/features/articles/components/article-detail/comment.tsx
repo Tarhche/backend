@@ -20,12 +20,14 @@ import {FILES_PUBLIC_URL} from "@/constants/envs";
 import classes from "./comment.module.css";
 
 type Props = {
+  // This objectUUID is related to the article that the comment will be linked to
+  objectUUID: string;
   comment: CommentType;
   comments: CommentType[];
   level?: number;
 };
 
-export function Comment({comment, comments, level = 0}: Props) {
+export function Comment({objectUUID, comment, comments, level = 0}: Props) {
   const {data, isLoading} = useInit();
   const isLoggedIn = data?.status === "authenticated";
   const [isReplying, setIsReplying] = useState(false);
@@ -79,7 +81,7 @@ export function Comment({comment, comments, level = 0}: Props) {
       </Group>
       {isReplying && (
         <Box mt={"xs"}>
-          <CommentForm object_uuid="abc" parent_uuid={comment.uuid} />
+          <CommentForm objectUUID={objectUUID} parentUUID={uuid ?? null} />
         </Box>
       )}
       {replies && (
@@ -87,6 +89,7 @@ export function Comment({comment, comments, level = 0}: Props) {
           {replies.map((reply, index) => (
             <Comment
               key={index}
+              objectUUID={objectUUID}
               comment={reply}
               comments={comments}
               level={level + 1}

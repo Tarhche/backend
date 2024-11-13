@@ -14,18 +14,21 @@ export async function updateCommentAction(
   prevState: FormState,
   formData: FormData,
 ): Promise<FormState | never> {
-  const message = formData.get("message");
-  const commentId = formData.get("id");
-  const approvalDate = formData.get("approvalDate");
-  const objectId = formData.get("objectId");
+  const message = formData.get("message")?.toString();
+  const commentId = formData.get("id")?.toString();
+  const approvalDate = formData.get("approvalDate")?.toString() || null;
+  const objectId = formData.get("objectId")?.toString();
+  const parentId = formData.get("parentId")?.toString() || null;
+
   try {
     await updateUserComment({
       body: message,
       uuid: commentId,
       approved_at: approvalDate,
       object_uuid: objectId,
+      parent_uuid: parentId,
     });
-  } catch (err) {
+  } catch {
     return {
       success: false,
       errorMessage: "ویرایش کامنت با خطا مواجه شد",

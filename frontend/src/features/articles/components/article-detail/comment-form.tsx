@@ -14,11 +14,11 @@ import {comment} from "../../actions/comment";
 import classes from "./comment-form.module.css";
 
 type Props = {
-  object_uuid: string;
-  parent_uuid: string;
+  objectUUID: string;
+  parentUUID: string;
 };
 
-export function CommentForm({object_uuid, parent_uuid}: Props) {
+export function CommentForm({objectUUID, parentUUID}: Props) {
   const formRef = useRef<HTMLFormElement>(null);
   const [state, dispatch] = useFormState(comment, {});
   const isSuccessful = state.success;
@@ -61,8 +61,8 @@ export function CommentForm({object_uuid, parent_uuid}: Props) {
             )}
           </Stack>
         </Group>
-        <input name="object-uuid" value={object_uuid} hidden readOnly />
-        <input name="parent-uuid" value={parent_uuid} hidden readOnly />
+        <input name="object-uuid" value={objectUUID} hidden readOnly />
+        <input name="parent-uuid" value={parentUUID} hidden readOnly />
         <FormButton
           leftSection={<IconSend size={20} />}
           style={{

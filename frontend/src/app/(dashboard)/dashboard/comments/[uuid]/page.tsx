@@ -24,6 +24,7 @@ async function ArticleDetalPage({params}: Props) {
   return (
     <EditCommentForm
       id={comment.uuid}
+      parentId={comment.parent_uuid}
       objectId={comment.object_uuid}
       message={comment.body}
       approvalDate={comment.approved_at}
