@@ -24,8 +24,8 @@ export const TABLE_HEADERS = [
   "#",
   "آواتار",
   "نام",
-  "ایمیل",
   "نام کاربری",
+  "ایمیل",
   "عملیات",
 ];
 
@@ -93,7 +93,7 @@ export async function UsersTable({page}: Props) {
                         color="blue"
                         aria-label="ویرایش کردن کاربر"
                         component={Link}
-                        href={`${APP_PATHS.articles.detail(user.object_uuid)}`}
+                        href={`${APP_PATHS.dashboard.users.edit(user.uuid)}`}
                       >
                         <IconPencil style={{width: rem(20)}} stroke={1.5} />
                       </ActionIcon>

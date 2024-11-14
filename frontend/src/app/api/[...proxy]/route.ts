@@ -26,8 +26,10 @@ export async function DELETE(request: NextRequest, {params}) {
 async function handleRequest(request: NextRequest, params, method: string) {
   try {
     const response = await apiClient({
-      url: params.proxy.join("/"),
+      url: params.proxy.join("/") + request.nextUrl.search,
       method: method,
+      params: request.nextUrl.searchParams,
+      data: request.body,
     });
     return axiosToFetchResponse(response);
   } catch (error) {

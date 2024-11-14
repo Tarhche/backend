@@ -33,6 +33,7 @@ export const APP_PATHS = {
       index: "/dashboard/users",
       new: "/dashboard/users/new",
       edit: (uuid: string) => `/dashboard/users/${uuid}`,
+      editPassword: (uuid: string) => `/dashboard/users/${uuid}/edit-password`,
     },
     roles: {
       index: "/dashboard/roles",

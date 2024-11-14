@@ -4,35 +4,11 @@ import {
   QueryClient,
   QueryClientProvider as QueryClientProvider_,
 } from "@tanstack/react-query";
+import {fetchWrapper} from "@/lib/client-fetch-wrapper";
 
 type Props = {
   children: ReactNode;
 };
-
-async function fetchWrapper(
-  input: string | URL | globalThis.Request,
-  init?: RequestInit,
-) {
-  const options: RequestInit = {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      "Client-To-Proxy": "TRUE",
-      ...init?.headers,
-    },
-  };
-  const response = await fetch(input, options);
-  if (!response.ok) {
-    if (response.status === 401) {
-      const currentUrl = `${window.location.pathname}${window.location.search}`;
-      window.location.href = `/auth/login?callbackUrl=${encodeURIComponent(currentUrl)}`;
-      return;
-    }
-    const error = await response.json();
-    throw new Error(error.message || "Fetch request failed");
-  }
-  return await response.json();
-}
 
 const queryClient = new QueryClient({
   defaultOptions: {

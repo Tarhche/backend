@@ -1,3 +1,4 @@
+export {AxiosError} from "axios";
 export {apiClient} from "./api-client";
 export * from "./roles";
 export * from "./profile";

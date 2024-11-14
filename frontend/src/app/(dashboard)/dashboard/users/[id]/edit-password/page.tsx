@@ -2,11 +2,10 @@ import {Metadata} from "next";
 import {notFound} from "next/navigation";
 import {Box, Stack} from "@mantine/core";
 import {DashboardBreadcrumbs} from "@/features/dashboard/components/breadcrumbs";
-import {UpsertUserForm} from "@/features/dashboard/components/upsert-user-form";
 import {fetchUser} from "@/dal";
 import {APP_PATHS} from "@/lib/app-paths";
 
-const PAGE_TITLE = "بروزرسانی کاربر";
+const PAGE_TITLE = "تغییر گذرواژه";
 
 export const metadata: Metadata = {
   title: PAGE_TITLE,
@@ -34,21 +33,15 @@ async function UpdateUserPage({params}: Props) {
             href: APP_PATHS.dashboard.users.index,
           },
           {
+            label: userData.name,
+            href: APP_PATHS.dashboard.users.edit(userData.uuid),
+          },
+          {
             label: PAGE_TITLE,
           },
         ]}
       />
-      <Box>
-        <UpsertUserForm
-          userInfo={{
-            userId: userData.uuid,
-            defaultAvatar: userData.avatar,
-            defaultName: userData.name,
-            defaultEmail: userData.email,
-            defaultUsername: userData.username,
-          }}
-        />
-      </Box>
+      <Box>تغییر گذرواژه</Box>
     </Stack>
   );
 }

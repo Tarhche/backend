@@ -6,6 +6,19 @@ export async function fetchUsers(config?: AxiosRequestConfig) {
   return response.data;
 }
 
+export async function fetchUser(userId: string, config?: AxiosRequestConfig) {
+  const response = await apiClient.get(`dashboard/users/${userId}`, config);
+  return response.data;
+}
+
+export async function createUser(data: Record<string, string>) {
+  return await apiClient.post("dashboard/users", data);
+}
+
+export async function updateUser(data: Record<string, string>) {
+  return await apiClient.put("dashboard/users", data);
+}
+
 export async function deleteUser(id: string) {
   return await apiClient.delete(`dashboard/users/${id}`);
 }

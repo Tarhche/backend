@@ -86,6 +86,15 @@ apiClient.interceptors.response.use(
     if (error instanceof AxiosError && error.status === 404) {
       notFound();
     }
-    throw new AxiosError(error);
+    if (error instanceof AxiosError) {
+      throw new AxiosError(
+        error.message,
+        error.code,
+        error.config,
+        error.request,
+        error.response,
+      );
+    }
+    throw new Error("Something bad happened!");
   },
 );

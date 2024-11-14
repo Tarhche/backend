@@ -8,7 +8,7 @@ import classes from "./user-avatar.module.css";
 
 type Props = {
   src?: string;
-  email: string;
+  email?: string;
   width?: number;
   height?: number;
 };
@@ -20,16 +20,19 @@ export function UserAvatar({src, email, width = 45, height = 45}: Props) {
   const avatarSize = width === height ? width : Math.min(width, height);
 
   if (src === undefined || hasImageFailed) {
-    return (
-      <Avatar src={null} w={avatarSize} h={avatarSize}>
-        <BoringAvatar
-          variant="beam"
-          name={email}
-          size={avatarSize}
-          colors={colors}
-        />
-      </Avatar>
-    );
+    if (email !== undefined) {
+      return (
+        <Avatar src={null} w={avatarSize} h={avatarSize}>
+          <BoringAvatar
+            variant="beam"
+            name={email}
+            size={avatarSize}
+            colors={colors}
+          />
+        </Avatar>
+      );
+    }
+    return <Avatar src={null} w={avatarSize} h={avatarSize} />;
   }
 
   return (
@@ -38,6 +41,10 @@ export function UserAvatar({src, email, width = 45, height = 45}: Props) {
       alt="user avatar"
       width={avatarSize}
       height={avatarSize}
+      style={{
+        minWidth: avatarSize,
+        minHeight: avatarSize,
+      }}
       className={classes.avatar}
       onError={() => setHasImageFailed(true)}
     />
