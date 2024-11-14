@@ -86,7 +86,7 @@ export function FilesExplorer({onSelect}: Props) {
                   uuid: file.uuid,
                 }}
                 isSelected={selectedFile === file.uuid}
-                onSelect={handleSelectFile}
+                onSelect={onSelect ? handleSelectFile : undefined}
                 onDelete={handleDeleteFile}
               />
             );
