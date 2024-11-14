@@ -1,7 +1,13 @@
 "use client";
 import {type ReactNode} from "react";
 import Link from "next/link";
-import {AppShell, Burger, Group, UnstyledButton} from "@mantine/core";
+import {
+  AppShell,
+  Burger,
+  Group,
+  Container,
+  UnstyledButton,
+} from "@mantine/core";
 import {useDisclosure} from "@mantine/hooks";
 import {AuthButtons} from "./auth-button";
 
@@ -22,23 +28,32 @@ export function AppMainShell({children}: Props) {
       }}
       padding="md"
     >
-      <AppShell.Header px={"xl"}>
-        <Group h="100%">
-          <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" />
-          <Group justify="space-between" style={{flex: 1}}>
-            <UnstyledButton fz={"h4"} component={Link} href={"/"}>
-              طرح‌چه
-            </UnstyledButton>
-            <Group ml="xl" gap={0} visibleFrom="sm">
-              <AuthButtons />
+      <AppShell.Header>
+        <Container size={"lg"} h={"100%"}>
+          <Group h="100%">
+            <Burger
+              opened={opened}
+              onClick={toggle}
+              hiddenFrom="sm"
+              size="sm"
+            />
+            <Group justify="space-between" style={{flex: 1}}>
+              <UnstyledButton fz={"h4"} component={Link} href={"/"}>
+                طرح‌چه
+              </UnstyledButton>
+              <Group gap={0} visibleFrom="sm">
+                <AuthButtons />
+              </Group>
             </Group>
           </Group>
-        </Group>
+        </Container>
       </AppShell.Header>
       <AppShell.Navbar py="md" px={4}>
         <AuthButtons />
       </AppShell.Navbar>
-      <AppShell.Main px={"xl"}>{children}</AppShell.Main>
+      <AppShell.Main>
+        <Container size={"lg"}>{children}</Container>
+      </AppShell.Main>
     </AppShell>
   );
 }
