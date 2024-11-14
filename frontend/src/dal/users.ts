@@ -22,3 +22,7 @@ export async function updateUser(data: Record<string, string>) {
 export async function deleteUser(id: string) {
   return await apiClient.delete(`dashboard/users/${id}`);
 }
+
+export async function updatePassword(data: Record<string, string>) {
+  return await apiClient.put(`dashboard/users/password`, data);
+}

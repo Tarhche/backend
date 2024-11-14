@@ -2,10 +2,11 @@ import {Metadata} from "next";
 import {notFound} from "next/navigation";
 import {Box, Stack} from "@mantine/core";
 import {DashboardBreadcrumbs} from "@/features/dashboard/components/breadcrumbs";
+import {UserPasswordForm} from "@/features/dashboard/components/change-user-password";
 import {fetchUser} from "@/dal";
 import {APP_PATHS} from "@/lib/app-paths";
 
-const PAGE_TITLE = "تغییر گذرواژه";
+const PAGE_TITLE = "تغییر کلمه عبور کاربر";
 
 export const metadata: Metadata = {
   title: PAGE_TITLE,
@@ -41,7 +42,9 @@ async function UpdateUserPage({params}: Props) {
           },
         ]}
       />
-      <Box>تغییر گذرواژه</Box>
+      <Box>
+        <UserPasswordForm userId={userId} />
+      </Box>
     </Stack>
   );
 }
