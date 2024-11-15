@@ -48,7 +48,7 @@ export async function Content({uuid}: Props) {
 
   return (
     <Box component="article">
-      <Title>{article.title}</Title>
+      <Title order={2}>{article.title}</Title>
       <Group wrap="nowrap" c={"dimmed"} my={"sm"} justify="space-between">
         <Group gap={5}>
           <IconClockHour2 spacing={0} size={20} />
