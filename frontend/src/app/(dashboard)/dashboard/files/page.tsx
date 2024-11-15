@@ -1,25 +1,13 @@
 import {type Metadata} from "next";
-import {Suspense} from "react";
 import {Stack} from "@mantine/core";
 import {DashboardBreadcrumbs} from "@/features/dashboard/components/breadcrumbs";
-import {
-  FilesList,
-  FilesListSkeleton,
-} from "@/features/dashboard/components/files";
+import {FilesList} from "@/features/dashboard/components/files";
 
 export const metadata: Metadata = {
   title: "فایل ها",
 };
 
-type Props = {
-  searchParams: {
-    page?: number;
-  };
-};
-
-async function FilesPage({searchParams}: Props) {
-  const page = searchParams.page ?? 1;
-
+async function FilesPage() {
   return (
     <Stack>
       <DashboardBreadcrumbs
@@ -29,12 +17,7 @@ async function FilesPage({searchParams}: Props) {
           },
         ]}
       />
-      <Suspense
-        key={JSON.stringify(searchParams ?? {})}
-        fallback={<FilesListSkeleton />}
-      >
-        <FilesList page={page} />
-      </Suspense>
+      <FilesList />
     </Stack>
   );
 }
