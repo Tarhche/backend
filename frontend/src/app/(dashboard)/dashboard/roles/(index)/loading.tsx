@@ -1,7 +1,13 @@
 import {RolesTableSkeleton} from "@/features/dashboard/roles-table";
+import {BreadcrumbSkeleton} from "@/components/breadcrumb-skeleton";
 
 function RolesPageLoading() {
-  return <RolesTableSkeleton />;
+  return (
+    <>
+      <BreadcrumbSkeleton />
+      <RolesTableSkeleton />
+    </>
+  );
 }
 
 export default RolesPageLoading;

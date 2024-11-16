@@ -1,7 +1,6 @@
 import {notFound} from "next/navigation";
 import {fetchRole} from "@/dal";
 import {RolesUpsertForm} from "@/features/dashboard/roles-upsert-form";
-import {waitFor} from "@/lib/sleep";
 
 type Props = {
   params: {
@@ -15,7 +14,6 @@ async function UpdateRolePage({params}: Props) {
     notFound();
   }
   const role = await fetchRole(roleId);
-  await waitFor(3000);
 
   return (
     <RolesUpsertForm
