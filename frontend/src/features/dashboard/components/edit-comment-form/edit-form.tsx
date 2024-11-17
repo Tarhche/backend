@@ -2,9 +2,10 @@
 import {useFormState} from "react-dom";
 import {Group, Paper, Stack, Textarea, Alert} from "@mantine/core";
 import {FormButton} from "@/components/form-button";
-import {DateField} from "./date-field";
+import {DateTimeInput} from "@/components/date-time-input";
 import {IconInfoCircle} from "@tabler/icons-react";
 import {updateCommentAction} from "../../actions/update-comment";
+import {isGregorianStartDateTime} from "@/lib/date-and-time";
 
 type Props = {
   id: string;
@@ -33,7 +34,18 @@ export function EditCommentForm({
             rows={4}
             defaultValue={message}
           />
-          <DateField initialDate={approvalDate} />
+          <DateTimeInput
+            valueFormat="DD MMM YYYY hh:mm A"
+            placeholder="تاریخ انتشار را وارد کنید"
+            label="تاریخ تایید"
+            name="approvalDate"
+            defaultValue={
+              isGregorianStartDateTime(approvalDate) === true
+                ? null
+                : new Date(approvalDate)
+            }
+            clearable
+          />
           {state.success === false && state.errorMessage && (
             <Alert
               title="عملیات با خطا مواجه شد"
