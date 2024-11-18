@@ -46,7 +46,7 @@ export function LayoutSidebar() {
     {label: "کاربرها", icon: IconUsers, href: dashboard.users.index},
     {label: "نقش ها", icon: IconKey, href: dashboard.roles.index},
     {label: "تنظیمات", icon: IconSettings, href: dashboard.settings},
-    {label: "پروفایل", icon: IconUser, href: dashboard.profile},
+    {label: "پروفایل", icon: IconUser, href: dashboard.profile.index},
   ];
 
   return SIDE_BAR_DATA.map((item) => (

@@ -42,6 +42,9 @@ export const APP_PATHS = {
     },
     files: "/dashboard/files",
     settings: "/dashboard/settings",
-    profile: "/dashboard/profile",
+    profile: {
+      index: "/dashboard/profile",
+      editPassword: "/dashboard/profile/password",
+    },
   },
 };

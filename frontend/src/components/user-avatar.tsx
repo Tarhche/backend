@@ -46,6 +46,7 @@ export function UserAvatar({src, email, width = 45, height = 45}: Props) {
         minHeight: avatarSize,
       }}
       className={classes.avatar}
+      priority
       onError={() => setHasImageFailed(true)}
     />
   );
