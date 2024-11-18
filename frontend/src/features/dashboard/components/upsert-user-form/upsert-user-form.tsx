@@ -3,7 +3,7 @@ import Link from "next/link";
 import {useFormState} from "react-dom";
 import {Paper, Stack, Group, TextInput, Alert, Anchor} from "@mantine/core";
 import {FormButton} from "@/components/form-button";
-import {AvatarInput} from "./avatar-input";
+import {UserAvatarInput} from "@/components/user-avatar-input";
 import {upsertUserAction} from "../../actions/upsert-user";
 import {APP_PATHS} from "@/lib/app-paths";
 
@@ -28,7 +28,10 @@ export function UpsertUserForm({userInfo = {}}: Props) {
     <Paper p={"xl"} withBorder>
       <form action={dispatch}>
         <Group justify="center" align="flex-start" gap={"xl"}>
-          <AvatarInput defaultValue={defaultAvatar} username={defaultEmail} />
+          <UserAvatarInput
+            defaultValue={defaultAvatar}
+            username={defaultEmail}
+          />
           <Stack gap={"sm"} flex={1}>
             <TextInput
               name="name"

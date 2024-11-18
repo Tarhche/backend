@@ -11,7 +11,7 @@ type Props = {
   inputName?: string;
 };
 
-export function AvatarInput({
+export function UserAvatarInput({
   inputName = "avatar",
   username,
   defaultValue,
