@@ -12,3 +12,4 @@ export * from "./files";
 export * from "./users";
 export * from "./permissions";
 export * from "./password";
+export * from "./config";

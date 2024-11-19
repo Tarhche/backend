@@ -23,3 +23,15 @@ export function axiosToFetchResponse(
     headers: headersObj,
   });
 }
+
+export function convertFormDataActionToObject(formData: FormData) {
+  const object: Record<string, string | string[]> = {};
+
+  formData.forEach((value, key) => {
+    if (value.toString() && key.includes("$") === false) {
+      object[key] = value.toString();
+    }
+  });
+
+  return object;
+}
