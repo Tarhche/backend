@@ -22,6 +22,7 @@ export function CommentForm({objectUUID, parentUUID}: Props) {
   const formRef = useRef<HTMLFormElement>(null);
   const [state, dispatch] = useFormState(comment, {});
   const isSuccessful = state.success;
+  const isReplying = Boolean(parentUUID);
 
   if (isSuccessful) {
     formRef.current?.reset();
@@ -34,7 +35,11 @@ export function CommentForm({objectUUID, parentUUID}: Props) {
           <AuthUserAvatar />
           <Stack flex={1} gap={10}>
             <Textarea
-              placeholder="دیدگاه خود را اینجا بنویسید"
+              placeholder={
+                isReplying
+                  ? "پاسخ خود را بنویسید"
+                  : "دیدگاه خود را اینجا بنویسید"
+              }
               rows={4}
               name="body"
               classNames={{
