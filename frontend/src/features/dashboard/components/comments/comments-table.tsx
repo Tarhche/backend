@@ -17,7 +17,7 @@ import {CommentsPagination} from "./comments-table-pagination";
 import {CommentDeleteButton} from "./comment-delete-button";
 import {IconEye, IconPencil} from "@tabler/icons-react";
 import {fetchAllComments} from "@/dal/comments";
-import {dateFromNow} from "@/lib/date-and-time";
+import {dateFromNow, isGregorianStartDateTime} from "@/lib/date-and-time";
 import {APP_PATHS} from "@/lib/app-paths";
 
 export const TABLE_HEADERS = [
@@ -76,7 +76,7 @@ export async function CommentsTable({page}: Props) {
             </TableTr>
           )}
           {comments.map((comment: any, index: number) => {
-            const isApproved = new Date(comment.approved_at).getDate() !== 1;
+            const isApproved = !isGregorianStartDateTime(comment.approved_at);
 
             return (
               <TableTr key={comment.uuid}>
