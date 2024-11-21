@@ -11,6 +11,7 @@ import {
   Skeleton,
 } from "@mantine/core";
 import {CommentForm} from "./comment-form";
+import {OrphanCommentIndicator} from "./orphan-comment-indicator";
 import {useInit} from "@/hooks/data/init";
 import {IconCornerUpLeft, IconX} from "@tabler/icons-react";
 import clsx from "clsx";
@@ -25,9 +26,16 @@ type Props = {
   comment: CommentType;
   comments: CommentType[];
   level?: number;
+  isOrphan?: boolean;
 };
 
-export function Comment({objectUUID, comment, comments, level = 0}: Props) {
+export function Comment({
+  objectUUID,
+  isOrphan = false,
+  comment,
+  comments,
+  level = 0,
+}: Props) {
   const {data, isLoading} = useInit();
   const isLoggedIn = data?.status === "authenticated";
   const [isReplying, setIsReplying] = useState(false);
@@ -48,9 +56,12 @@ export function Comment({objectUUID, comment, comments, level = 0}: Props) {
       <Group align="flex-start">
         <Avatar src={`${FILES_PUBLIC_URL}/${avatar}`} radius="xl" />
         <div className={classes.commentContent}>
-          <Text size="sm" fw={500}>
-            {name}
-          </Text>
+          <Group justify="space-between">
+            <Text size="sm" fw={500}>
+              {name}
+            </Text>
+            {isOrphan && <OrphanCommentIndicator />}
+          </Group>
           <Text size="xs" c="dimmed">
             {dateFromNow(created_at)}
           </Text>

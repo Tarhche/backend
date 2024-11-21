@@ -13,6 +13,13 @@ type Props = {
 export async function Comments({uuid}: Props) {
   const comments = (await fetchArticleComments(uuid)).items;
   const rootComments = comments.filter((c) => c.parent_uuid === undefined);
+  const validIds = new Set(comments.map((c) => c.uuid));
+  const orphanComments = comments.filter((c) => {
+    if (c.parent_uuid && validIds.has(c.parent_uuid) === false) {
+      return true;
+    }
+    return false;
+  });
 
   return (
     <>
@@ -45,6 +52,17 @@ export async function Comments({uuid}: Props) {
               key={comment.uuid}
               comments={comments}
               comment={comment}
+            />
+          );
+        })}
+        {orphanComments.map((comment) => {
+          return (
+            <Comment
+              objectUUID={uuid}
+              key={comment.uuid}
+              comments={comments}
+              comment={comment}
+              isOrphan={true}
             />
           );
         })}
