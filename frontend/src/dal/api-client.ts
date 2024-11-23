@@ -5,6 +5,10 @@ import axios, {AxiosError} from "axios";
 import {REFRESH_TOKEN_URL} from "./auth";
 import {INTERNAL_BACKEND_URL} from "@/constants/envs";
 import {ACCESS_TOKEN_EXP, REFRESH_TOKEN_EXP} from "@/constants/numbers";
+import {
+  ACCESS_TOKEN_COOKIE_NAME,
+  REFRESH_TOKEN_COOKIE_NAME,
+} from "@/constants/strings";
 
 const BASE_URL = `${INTERNAL_BACKEND_URL}/api`;
 
@@ -17,7 +21,7 @@ export const apiClient = axios.create({
 
 apiClient.interceptors.request.use(
   async (config) => {
-    const accessToken = cookies().get("access_token")?.value;
+    const accessToken = cookies().get(ACCESS_TOKEN_COOKIE_NAME)?.value;
     if (accessToken !== undefined) {
       config.headers.Authorization = `Bearer ${accessToken}`;
     }
@@ -35,7 +39,7 @@ apiClient.interceptors.response.use(
     const isFromApiRoutes = Boolean(headersStore.get("client-to-proxy"));
     const isFromServerAction = Boolean(headersStore.get("next-action"));
     if (error instanceof AxiosError && error.status === 401) {
-      const refreshToken = cookiesStore.get("refresh_token")?.value;
+      const refreshToken = cookiesStore.get(REFRESH_TOKEN_COOKIE_NAME)?.value;
       if (refreshToken === undefined || originalRequest._retry) {
         return error;
       }
@@ -53,12 +57,12 @@ apiClient.interceptors.response.use(
         });
         if (isFromApiRoutes) {
           originalRequestResponse.headers["set-cookie"] = [
-            serialize("access_token", access_token, {
+            serialize(ACCESS_TOKEN_COOKIE_NAME, access_token, {
               httpOnly: true,
               maxAge: ACCESS_TOKEN_EXP,
               path: "/",
             }),
-            serialize("refresh_token", refresh_token, {
+            serialize(REFRESH_TOKEN_COOKIE_NAME, refresh_token, {
               httpOnly: true,
               maxAge: REFRESH_TOKEN_EXP,
               path: "/",
@@ -67,12 +71,12 @@ apiClient.interceptors.response.use(
           return originalRequestResponse;
         }
         if (isFromServerAction) {
-          cookies().set("access_token", access_token, {
+          cookies().set(ACCESS_TOKEN_COOKIE_NAME, access_token, {
             httpOnly: true,
             maxAge: ACCESS_TOKEN_EXP,
             path: "/",
           });
-          cookies().set("refresh_token", refresh_token, {
+          cookies().set(REFRESH_TOKEN_COOKIE_NAME, refresh_token, {
             httpOnly: true,
             maxAge: REFRESH_TOKEN_EXP,
             path: "/",

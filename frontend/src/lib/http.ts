@@ -1,4 +1,8 @@
 import {cookies, headers} from "next/headers";
+import {
+  ACCESS_TOKEN_COOKIE_NAME,
+  REFRESH_TOKEN_COOKIE_NAME,
+} from "@/constants/strings";
 
 export function getRootUrl() {
   const host = headers().get("host");
@@ -9,7 +13,7 @@ export function getRootUrl() {
 export function getCredentialsFromCookies() {
   const cookiesStore = cookies();
   return {
-    accessToken: cookiesStore.get("access_token")?.value,
-    refreshToken: cookiesStore.get("refresh_token")?.value,
+    accessToken: cookiesStore.get(ACCESS_TOKEN_COOKIE_NAME)?.value,
+    refreshToken: cookiesStore.get(REFRESH_TOKEN_COOKIE_NAME)?.value,
   };
 }

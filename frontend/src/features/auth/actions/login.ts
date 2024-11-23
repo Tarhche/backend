@@ -2,6 +2,10 @@
 import {redirect} from "next/navigation";
 import {cookies} from "next/headers";
 import {loginUser} from "@/dal/auth";
+import {
+  ACCESS_TOKEN_COOKIE_NAME,
+  REFRESH_TOKEN_COOKIE_NAME,
+} from "@/constants/strings";
 import {ACCESS_TOKEN_EXP, REFRESH_TOKEN_EXP} from "@/constants/numbers";
 
 type FormState = {
@@ -29,12 +33,12 @@ export async function login(
   if (isDataValid) {
     try {
       const response = await loginUser(identity, password);
-      cookies().set("access_token", response.access_token, {
+      cookies().set(ACCESS_TOKEN_COOKIE_NAME, response.access_token, {
         maxAge: ACCESS_TOKEN_EXP,
         httpOnly: true,
         secure: true,
       });
-      cookies().set("refresh_token", response.refresh_token, {
+      cookies().set(REFRESH_TOKEN_COOKIE_NAME, response.refresh_token, {
         maxAge: REFRESH_TOKEN_EXP,
         httpOnly: true,
         secure: true,
