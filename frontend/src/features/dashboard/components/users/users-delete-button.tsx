@@ -30,12 +30,12 @@ export function UsersDeleteButton({userID, username}: Props) {
 
   return (
     <>
-      <Tooltip label="حذف کردن کامنت" withArrow>
+      <Tooltip label="حذف کردن کاربر" withArrow>
         <ActionIcon
           variant="light"
           size="lg"
           color="red"
-          aria-label="حذف کردن کامنت"
+          aria-label="حذف کردن کاربر"
           onClick={() => {
             setIsConfirmOpen(true);
           }}
