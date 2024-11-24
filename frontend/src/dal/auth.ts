@@ -1,4 +1,4 @@
-import {apiClient} from ".";
+import {apiClient, fetchUserRoles} from ".";
 
 export async function loginUser(identity: string, password: string) {
   const response = await apiClient.post("auth/login", {
@@ -6,7 +6,19 @@ export async function loginUser(identity: string, password: string) {
     password: password,
   });
 
-  return response.data;
+  if (response.status === 200) {
+    const roles = await fetchUserRoles({
+      headers: {
+        Authorization: `Bearer ${response.data.access_token}`,
+      },
+    });
+    return {
+      ...response.data,
+      permissions: Array.from(
+        new Set(roles.items.flatMap((item: any) => item.permissions)),
+      ),
+    };
+  }
 }
 
 export async function registerUser(identity: string) {

@@ -1,7 +1,7 @@
 import jwt from "jsonwebtoken";
-import {getCredentialsFromCookies} from "./http";
+import {getCredentialsFromCookies} from "../http";
 
-export function decodeCredentials() {
+function decodeCredentials() {
   const {accessToken, refreshToken} = getCredentialsFromCookies();
 
   return {
@@ -22,4 +22,10 @@ export function isUserLoggedIn() {
     refreshToken !== null && Date.now() < refreshToken.exp! * 1000;
 
   return isAccessTokenValid || isRefreshTokenValid;
+}
+
+export function getUserPermissions(): string[] {
+  const {permissions} = getCredentialsFromCookies();
+
+  return JSON.parse(atob(permissions || "[]"));
 }

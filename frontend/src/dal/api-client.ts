@@ -22,7 +22,10 @@ export const apiClient = axios.create({
 apiClient.interceptors.request.use(
   async (config) => {
     const accessToken = cookies().get(ACCESS_TOKEN_COOKIE_NAME)?.value;
-    if (accessToken !== undefined) {
+    if (
+      accessToken !== undefined &&
+      config.headers.Authorization === undefined
+    ) {
       config.headers.Authorization = `Bearer ${accessToken}`;
     }
     return config;
