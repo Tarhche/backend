@@ -29,6 +29,7 @@ export function FilesExplorer({onSelect}: Props) {
   ];
   const {data, isLoading} = useQuery<Data>({
     queryKey: queryKey,
+    retry: 1,
   });
   const [selectedFile, setSelectedFile] = useState<string>();
   const files = data?.items || [];

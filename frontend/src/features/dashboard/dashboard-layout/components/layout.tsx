@@ -33,7 +33,7 @@ export function DashboardLayout({children}: Props) {
           </form>
         </div>
       </LayoutNavbar>
-      <LayoutMain>{children}</LayoutMain>
+      <LayoutMain h={0}>{children}</LayoutMain>
     </LayoutShell>
   );
 }

@@ -1,27 +1,29 @@
 import jwt from "jsonwebtoken";
 import {getCredentialsFromCookies} from "../http";
 
-function decodeCredentials() {
+export function decodeJWT(token: string) {
+  return jwt.decode(token ?? "", {
+    json: true,
+  });
+}
+
+/**
+  This function retrieves the access or refresh token from cookies and verifies its validity
+*/
+export function isUserTokenValid(type: "access-token" | "refresh-token") {
   const {accessToken, refreshToken} = getCredentialsFromCookies();
 
-  return {
-    accessToken: jwt.decode(accessToken ?? "", {
-      json: true,
-    }),
-    refreshToken: jwt.decode(refreshToken ?? "", {
-      json: true,
-    }),
-  };
+  if (type === "access-token") {
+    const token = decodeJWT(accessToken || "");
+    return token !== null && Date.now() < token.exp! * 1000;
+  } else if (type === "refresh-token") {
+    const token = decodeJWT(refreshToken || "");
+    return token !== null && Date.now() < token.exp! * 1000;
+  }
 }
 
 export function isUserLoggedIn() {
-  const {accessToken, refreshToken} = decodeCredentials();
-  const isAccessTokenValid =
-    accessToken !== null && Date.now() < accessToken.exp! * 1000;
-  const isRefreshTokenValid =
-    refreshToken !== null && Date.now() < refreshToken.exp! * 1000;
-
-  return isAccessTokenValid || isRefreshTokenValid;
+  return isUserTokenValid("access-token") || isUserTokenValid("refresh-token");
 }
 
 export function getUserPermissions(): string[] {
