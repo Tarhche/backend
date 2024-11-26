@@ -28,6 +28,6 @@ export function isUserLoggedIn() {
 
 export function getUserPermissions(): string[] {
   const {permissions} = getCredentialsFromCookies();
-
-  return JSON.parse(atob(permissions || "[]"));
+  // "W10=" is equal to "[]"
+  return JSON.parse(atob(permissions || "W10="));
 }
