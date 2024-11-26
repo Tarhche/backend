@@ -1,34 +1,32 @@
 import {NextRequest, NextResponse} from "next/server";
-import {AxiosError} from "axios";
-import {fetchUserProfile} from "@/dal/profile";
+import {fetchUserProfile} from "@/dal";
 import {AuthState} from "@/types/api-responses/init";
 import {axiosToFetchResponse} from "@/lib/transformers";
+import {APIClientUnauthorizedError} from "@/dal/api-client-errors";
 
 export async function GET(request: NextRequest) {
   try {
     const profile = await fetchUserProfile();
-    if (profile.status === 400) {
-      throw new AxiosError("", "400");
+    const data: AuthState = {
+      status: "authenticated",
+      profile: profile.data,
+    };
+
+    return axiosToFetchResponse(profile, data);
+  } catch (err) {
+    if (err instanceof APIClientUnauthorizedError) {
+      return new Response(
+        JSON.stringify({
+          status: "unauthenticated",
+        }),
+        {
+          status: 200,
+        },
+      );
     }
-    if (profile.status === 200) {
-      const data: AuthState = {
-        status: "authenticated",
-        profile: profile.data,
-      };
-      return axiosToFetchResponse(profile, data);
-    } else if (profile.status === 401) {
-      const data: AuthState = {
-        status: "unauthenticated",
-      };
-      return new Response(JSON.stringify(data), {
-        status: 200,
-      });
-    }
-  } catch {
-    const response = new NextResponse(null, {
-      status: 401,
-    });
+
     const cookies = request.cookies.getAll();
+    const response = new NextResponse();
     cookies.forEach(({name}) => {
       response.cookies.set(name, "", {maxAge: -1});
     });

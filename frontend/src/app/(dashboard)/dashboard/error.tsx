@@ -1,7 +1,7 @@
 "use client";
 import {Error} from "@/components/error";
-import {PERMISSION_DENIED} from "@/constants/strings";
 import {PermissionDeniedError} from "@/components/errors/dashboard-permission-denied";
+import {APIClientUnauthorizedError} from "@/dal/api-client-errors";
 
 type Props = {
   error: Error;
@@ -9,7 +9,7 @@ type Props = {
 };
 
 function ErrorPage({error, reset}: Props) {
-  if (error.message === PERMISSION_DENIED) {
+  if (error instanceof APIClientUnauthorizedError) {
     return <PermissionDeniedError />;
   }
 

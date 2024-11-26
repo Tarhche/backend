@@ -1,6 +1,9 @@
 import {NextRequest} from "next/server";
-import {AxiosError} from "axios";
 import {apiClient} from "@/dal/api-client";
+import {
+  APIClientError,
+  APIClientUnauthorizedError,
+} from "@/dal/api-client-errors";
 import {axiosToFetchResponse} from "@/lib/transformers";
 
 export async function GET(request: NextRequest, {params}) {
@@ -28,14 +31,18 @@ async function handleRequest(request: NextRequest, params, method: string) {
     const response = await apiClient({
       url: params.proxy.join("/") + request.nextUrl.search,
       method: method,
-      params: request.nextUrl.searchParams,
       data: request.body,
     });
     return axiosToFetchResponse(response);
   } catch (error) {
-    if (error instanceof AxiosError) {
-      return new Response(JSON.stringify(error.response?.data), {
-        status: error.status,
+    if (error instanceof APIClientUnauthorizedError) {
+      return new Response(JSON.stringify(error.metadata), {
+        status: error.statusCode,
+      });
+    }
+    if (error instanceof APIClientError) {
+      return new Response("", {
+        status: error.statusCode,
       });
     }
     return new Response(JSON.stringify({error: "Can't handle your request"}), {
