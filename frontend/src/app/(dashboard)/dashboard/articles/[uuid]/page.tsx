@@ -1,7 +1,8 @@
 import {notFound} from "next/navigation";
 import {Stack, Paper} from "@mantine/core";
-import {ArticleUpsertForm} from "@/features/dashboard/article-upsert-form";
+import {ArticleUpsertForm} from "@/features/articles/components/article-upsert-form";
 import {DashboardBreadcrumbs} from "@/features/dashboard/components/breadcrumbs";
+import {withPermissions} from "@/components/with-authorization";
 import {fetchArticle} from "@/dal";
 import {APP_PATHS} from "@/lib/app-paths";
 
@@ -54,4 +55,7 @@ async function ArticleDetalPage({params}: Props) {
   );
 }
 
-export default ArticleDetalPage;
+export default withPermissions(ArticleDetalPage, {
+  requiredPermissions: ["articles.show", "articles.update"],
+  operator: "AND",
+});

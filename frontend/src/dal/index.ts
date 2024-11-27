@@ -1,6 +1,6 @@
 export {AxiosError, type AxiosRequestConfig} from "axios";
 export {apiClient} from "./api-client";
-export * from "./api-client-errors";
+export * from "./api-client-error";
 export * from "./roles";
 export * from "./profile";
 export * from "./home";

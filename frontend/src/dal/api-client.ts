@@ -1,11 +1,7 @@
 import {notFound} from "next/navigation";
 import {cookies, headers} from "next/headers";
 import {serialize} from "cookie";
-import axios, {
-  AxiosError,
-  AxiosResponse,
-  InternalAxiosRequestConfig,
-} from "axios";
+import axios, {AxiosError, InternalAxiosRequestConfig} from "axios";
 import {isUserTokenValid} from "@/lib/auth/server";
 import {getCredentialsFromCookies} from "@/lib/http";
 import {
@@ -16,7 +12,7 @@ import {
   REFRESH_TOKEN_COOKIE_NAME,
 } from "@/constants";
 import {REFRESH_TOKEN_URL} from "./auth";
-import {APIClientError, APIClientUnauthorizedError} from "./api-client-errors";
+import {APIClientError} from "./api-client-error";
 
 const BASE_URL = `${INTERNAL_BACKEND_URL}/api`;
 
@@ -40,7 +36,7 @@ apiClient.interceptors.request.use(
   async (error) => error,
 );
 
-async function handleResponseRejection(response: AxiosResponse) {
+async function handleResponseRejection(response: any) {
   const headersStore = headers();
   const isFromApiRoutes = Boolean(headersStore.get("client-to-proxy"));
   const isFromServerAction = Boolean(headersStore.get("next-action"));
@@ -49,14 +45,16 @@ async function handleResponseRejection(response: AxiosResponse) {
   const isResponseUnauthorized = response.status === 401;
   const originalRequest = response.config;
 
-  const unauthorizedError = new APIClientUnauthorizedError(
-    `A user tried to access ${response.config.url} but encountered 401`,
-    response.data,
-  );
+  const unauthorizedError = new APIClientError("Unauthorized access", 401, {
+    data: response.response.data,
+  });
+
   const unexpectedBehaviorError = new APIClientError(
     "Something bad happened",
     500,
-    response.data,
+    {
+      data: response.response.data,
+    },
   );
 
   if (isResponseUnauthorized && isAccessTokenValid) {
@@ -66,6 +64,9 @@ async function handleResponseRejection(response: AxiosResponse) {
      * requested resource. In this case, refreshing the token is unnecessary,
      * and we should immediately throw a 'APIClientUnauthorizedError'.
      */
+    if (!isFromApiRoutes && !isFromServerAction) {
+      throw unauthorizedError;
+    }
     throw unauthorizedError;
   }
 
@@ -116,6 +117,9 @@ async function handleResponseRejection(response: AxiosResponse) {
       return originalRequestResponse;
     } catch (err) {
       if (err instanceof AxiosError && err.status === 401) {
+        if (!isFromApiRoutes && !isFromServerAction) {
+          throw unauthorizedError;
+        }
         /*
          * If the user still receives a 401 error after obtaining a new access token,
          * it indicates they lack the necessary permissions for requested resource.
@@ -147,7 +151,13 @@ async function handleResponseRejection(response: AxiosResponse) {
     notFound();
   }
 
-  throw new APIClientError("", response.status, response.data);
+  throw new APIClientError(
+    "An error happened when trying to access backend.",
+    response.status,
+    {
+      data: response.response.data,
+    },
+  );
 }
 
 apiClient.interceptors.response.use((value) => value, handleResponseRejection);

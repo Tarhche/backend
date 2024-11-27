@@ -1,9 +1,6 @@
 import {NextRequest} from "next/server";
 import {apiClient} from "@/dal/api-client";
-import {
-  APIClientError,
-  APIClientUnauthorizedError,
-} from "@/dal/api-client-errors";
+import {APIClientError} from "@/dal/api-client-error";
 import {axiosToFetchResponse} from "@/lib/transformers";
 
 export async function GET(request: NextRequest, {params}) {
@@ -33,18 +30,21 @@ async function handleRequest(request: NextRequest, params, method: string) {
       method: method,
       data: request.body,
     });
+
     return axiosToFetchResponse(response);
   } catch (error) {
-    if (error instanceof APIClientUnauthorizedError) {
-      return new Response(JSON.stringify(error.metadata), {
+    if (error instanceof APIClientError && error.statusCode === 401) {
+      return new Response(JSON.stringify(error.response?.data || {}), {
         status: error.statusCode,
       });
     }
+
     if (error instanceof APIClientError) {
       return new Response("", {
         status: error.statusCode,
       });
     }
+
     return new Response(JSON.stringify({error: "Can't handle your request"}), {
       status: 400,
     });

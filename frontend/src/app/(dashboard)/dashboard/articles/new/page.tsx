@@ -1,7 +1,8 @@
 import {type Metadata} from "next";
 import {Box, Paper} from "@mantine/core";
 import {DashboardBreadcrumbs} from "@/features/dashboard/components/breadcrumbs";
-import {ArticleUpsertForm} from "@/features/dashboard/article-upsert-form";
+import {ArticleUpsertForm} from "@/features/articles/components/article-upsert-form";
+import {withPermissions} from "@/components/with-authorization";
 import {APP_PATHS} from "@/lib/app-paths";
 
 export const metadata: Metadata = {
@@ -29,4 +30,6 @@ async function NewArticlesPage() {
   );
 }
 
-export default NewArticlesPage;
+export default withPermissions(NewArticlesPage, {
+  requiredPermissions: ["articles.create"],
+});

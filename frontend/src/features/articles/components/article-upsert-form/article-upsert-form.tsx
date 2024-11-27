@@ -15,7 +15,7 @@ import {FormButton} from "@/components/form-button";
 import {TipTapEditor, EditorRef} from "@/components/tiptap-editor";
 import {FileInput} from "./file-input";
 import {IconPhotoPlus, IconMovie} from "@tabler/icons-react";
-import {upsertArticleAction} from "../actions/upsert-article";
+import {upsertArticleAction} from "../../actions/upsert-article";
 import {isGregorianStartDateTime} from "@/lib/date-and-time";
 
 type Props = {

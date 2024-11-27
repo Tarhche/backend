@@ -1,9 +1,12 @@
 import {type Metadata} from "next";
 import {Suspense} from "react";
 import {Box} from "@mantine/core";
+import {withPermissions} from "@/components/with-authorization";
 import {DashboardBreadcrumbs} from "@/features/dashboard/components/breadcrumbs";
-import {ArticlesTable} from "@/features/dashboard/components/articles/articles-table";
-import {ArticlesTableSkeleton} from "@/features/dashboard/components/articles/articles-table-skeleton";
+import {
+  ArticlesTable,
+  ArticlesTableSkeleton,
+} from "@/features/articles/components/articles-table";
 import {APP_PATHS} from "@/lib/app-paths";
 
 export const metadata: Metadata = {
@@ -29,11 +32,8 @@ async function ArticlesPage({searchParams}: Props) {
           },
         ]}
       />
-      <Box mt={"md"}>
-        <Suspense
-          key={JSON.stringify(searchParams)}
-          fallback={<ArticlesTableSkeleton />}
-        >
+      <Box py="md">
+        <Suspense key={page} fallback={<ArticlesTableSkeleton />}>
           <ArticlesTable page={page ?? 1} />
         </Suspense>
       </Box>
@@ -41,4 +41,6 @@ async function ArticlesPage({searchParams}: Props) {
   );
 }
 
-export default ArticlesPage;
+export default withPermissions(ArticlesPage, {
+  requiredPermissions: ["articles.index"],
+});

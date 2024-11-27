@@ -1,7 +1,7 @@
 "use server";
 import {revalidatePath} from "next/cache";
 import {redirect} from "next/navigation";
-import {createArticle, updateArticle, AxiosError} from "@/dal";
+import {createArticle, updateArticle, APIClientError} from "@/dal";
 import {APP_PATHS} from "@/lib/app-paths";
 
 type FormState = {
@@ -35,12 +35,12 @@ export async function upsertArticleAction(
     }
   } catch (err) {
     if (
-      err instanceof AxiosError &&
-      (err.status === 400 || err.status === 422)
+      err instanceof APIClientError &&
+      (err.statusCode === 400 || err.statusCode == 401)
     ) {
       return {
         success: false,
-        fieldErrors: err.response?.data.errors,
+        fieldErrors: err.response?.data.errors ?? {},
       };
     }
     return {

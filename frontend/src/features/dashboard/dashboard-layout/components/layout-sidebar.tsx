@@ -16,6 +16,7 @@ import {
 } from "@tabler/icons-react";
 import {hasPermission} from "@/lib/auth/shared";
 import {APP_PATHS} from "@/lib/app-paths";
+import {Permissions} from "@/lib/app-permissions";
 import classes from "./layout.module.css";
 
 type Props = {
@@ -24,8 +25,20 @@ type Props = {
 
 const dashboard = APP_PATHS.dashboard;
 
-const SIDE_BAR_DATA = [
-  {label: "داشبرد", icon: IconHome, href: dashboard.index},
+type SidebarSchema = {
+  label: string;
+  icon: any;
+  href: string;
+  requiredPermissions: Permissions[];
+};
+
+const SIDE_BAR_DATA: SidebarSchema[] = [
+  {
+    label: "داشبرد",
+    icon: IconHome,
+    href: dashboard.index,
+    requiredPermissions: [],
+  },
   {
     label: "مقالات",
     icon: IconNotes,
@@ -74,17 +87,19 @@ const SIDE_BAR_DATA = [
     href: dashboard.settings,
     requiredPermissions: ["config.show"],
   },
-  {label: "پروفایل", icon: IconUser, href: dashboard.profile.index},
+  {
+    label: "پروفایل",
+    icon: IconUser,
+    href: dashboard.profile.index,
+    requiredPermissions: [],
+  },
 ];
 
 export function LayoutSidebar({userPermissions}: Props) {
   const pathname = usePathname();
 
   return SIDE_BAR_DATA.map((item) => {
-    const hasAccess =
-      item.requiredPermissions === undefined
-        ? true
-        : hasPermission(userPermissions, item.requiredPermissions);
+    const hasAccess = hasPermission(userPermissions, item.requiredPermissions);
 
     if (hasAccess) {
       return (

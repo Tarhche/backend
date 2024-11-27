@@ -14,6 +14,7 @@ import {
   Badge,
   rem,
 } from "@mantine/core";
+import {PermissionGuard} from "@/components/permission-guard";
 import {ArticlesPagination} from "./articles-table-pagination";
 import {ArticleDeleteButton} from "./article-delete-button";
 import {IconEye, IconPencil, IconFilePlus} from "@tabler/icons-react";
@@ -53,16 +54,18 @@ export async function ArticlesTable({page}: Props) {
 
   return (
     <>
-      <Group justify="flex-end">
-        <Button
-          variant="light"
-          component={Link}
-          leftSection={<IconFilePlus />}
-          href={APP_PATHS.dashboard.articles.new}
-        >
-          مقاله جدید
-        </Button>
-      </Group>
+      <PermissionGuard allowedPermissions={["articles.create"]}>
+        <Group justify="flex-end">
+          <Button
+            variant="light"
+            component={Link}
+            leftSection={<IconFilePlus />}
+            href={APP_PATHS.dashboard.articles.new}
+          >
+            مقاله جدید
+          </Button>
+        </Group>
+      </PermissionGuard>
       <Table verticalSpacing={"sm"} striped withRowBorders>
         <TableThead>
           <TableTr>
@@ -133,7 +136,7 @@ export async function ArticlesTable({page}: Props) {
         </TableTbody>
       </Table>
       {articles.length >= 1 && (
-        <Group mt="md" mb={"lg"} justify="flex-end">
+        <Group mt="md" mb="xl" justify="flex-end">
           <ArticlesPagination total={total_pages} current={current_page} />
         </Group>
       )}
