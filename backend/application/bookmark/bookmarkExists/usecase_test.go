@@ -9,12 +9,18 @@ import (
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/bookmark"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/bookmarks"
+	"github.com/khanzadimahdi/testproject/infrastructure/validator"
 )
 
 func TestUseCase_Execute(t *testing.T) {
+	t.Parallel()
+
 	t.Run("bookmark exists", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			boomkarkRepository bookmarks.MockBookmarksRepository
+			validator          validator.MockValidator
 
 			r = Request{
 				OwnerUUID:  "test-user-uuid",
@@ -25,10 +31,14 @@ func TestUseCase_Execute(t *testing.T) {
 			b bookmark.Bookmark
 		)
 
+		validator.On("Validate", &r).Once().Return(nil)
+		defer validator.AssertExpectations(t)
+
 		boomkarkRepository.On("GetByOwnerUUID", r.OwnerUUID, r.ObjectType, r.ObjectUUID).Once().Return(b, nil)
 		defer boomkarkRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&boomkarkRepository).Execute(&r)
+		response, err := NewUseCase(&boomkarkRepository, &validator).Execute(&r)
+
 		assert.NoError(t, err)
 		assert.NotNil(t, response)
 		assert.Len(t, response.ValidationErrors, 0)
@@ -36,8 +46,11 @@ func TestUseCase_Execute(t *testing.T) {
 	})
 
 	t.Run("bookmark not exists", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			boomkarkRepository bookmarks.MockBookmarksRepository
+			validator          validator.MockValidator
 
 			r = Request{
 				OwnerUUID:  "test-user-uuid",
@@ -48,10 +61,14 @@ func TestUseCase_Execute(t *testing.T) {
 			b bookmark.Bookmark
 		)
 
+		validator.On("Validate", &r).Once().Return(nil)
+		defer validator.AssertExpectations(t)
+
 		boomkarkRepository.On("GetByOwnerUUID", r.OwnerUUID, r.ObjectType, r.ObjectUUID).Once().Return(b, domain.ErrNotExists)
 		defer boomkarkRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&boomkarkRepository).Execute(&r)
+		response, err := NewUseCase(&boomkarkRepository, &validator).Execute(&r)
+
 		assert.NoError(t, err)
 		assert.NotNil(t, response)
 		assert.Len(t, response.ValidationErrors, 0)
@@ -59,12 +76,16 @@ func TestUseCase_Execute(t *testing.T) {
 	})
 
 	t.Run("validation failure", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			boomkarkRepository bookmarks.MockBookmarksRepository
-			r                  Request
+			validator          validator.MockValidator
+
+			r Request
 
 			expectedResponse = Response{
-				ValidationErrors: validationErrors{
+				ValidationErrors: domain.ValidationErrors{
 					"object_type": "object type is not supported",
 					"object_uuid": "object uuid is required",
 					"owner_uuid":  "owner uuid is required",
@@ -72,7 +93,10 @@ func TestUseCase_Execute(t *testing.T) {
 			}
 		)
 
-		response, err := NewUseCase(&boomkarkRepository).Execute(&r)
+		validator.On("Validate", &r).Once().Return(expectedResponse.ValidationErrors)
+		defer validator.AssertExpectations(t)
+
+		response, err := NewUseCase(&boomkarkRepository, &validator).Execute(&r)
 
 		boomkarkRepository.AssertNotCalled(t, "GetByOwnerUUID")
 
@@ -82,8 +106,11 @@ func TestUseCase_Execute(t *testing.T) {
 	})
 
 	t.Run("error on getting bookmark details", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			boomkarkRepository bookmarks.MockBookmarksRepository
+			validator          validator.MockValidator
 
 			r = Request{
 				OwnerUUID:  "test-user-uuid",
@@ -96,10 +123,14 @@ func TestUseCase_Execute(t *testing.T) {
 			b bookmark.Bookmark
 		)
 
+		validator.On("Validate", &r).Once().Return(nil)
+		defer validator.AssertExpectations(t)
+
 		boomkarkRepository.On("GetByOwnerUUID", r.OwnerUUID, r.ObjectType, r.ObjectUUID).Once().Return(b, expectedErr)
 		defer boomkarkRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&boomkarkRepository).Execute(&r)
+		response, err := NewUseCase(&boomkarkRepository, &validator).Execute(&r)
+
 		assert.ErrorIs(t, err, expectedErr)
 		assert.Nil(t, response)
 	})

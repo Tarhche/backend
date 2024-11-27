@@ -16,13 +16,19 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/permission"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/bookmarks"
+	"github.com/khanzadimahdi/testproject/infrastructure/validator"
 )
 
 func TestDeleteUserHandler(t *testing.T) {
+	t.Parallel()
+
 	t.Run("delete user's bookmark", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			bookmarkRepository bookmarks.MockBookmarksRepository
 			authorizer         domain.MockAuthorizer
+			requestValidator   validator.MockValidator
 
 			u = user.User{
 				UUID: "user-uuid",
@@ -38,10 +44,13 @@ func TestDeleteUserHandler(t *testing.T) {
 		authorizer.On("Authorize", u.UUID, permission.SelfBookmarksDelete).Once().Return(true, nil)
 		defer authorizer.AssertExpectations(t)
 
+		requestValidator.On("Validate", &r).Once().Return(nil)
+		defer requestValidator.AssertExpectations(t)
+
 		bookmarkRepository.On("DeleteByOwnerUUID", r.OwnerUUID, r.ObjectType, r.ObjectUUID).Return(nil)
 		defer bookmarkRepository.AssertExpectations(t)
 
-		handler := NewDeleteUserBookmarkHandler(deleteUserBookmark.NewUseCase(&bookmarkRepository), &authorizer)
+		handler := NewDeleteUserBookmarkHandler(deleteUserBookmark.NewUseCase(&bookmarkRepository, &requestValidator), &authorizer)
 
 		var payload bytes.Buffer
 		err := json.NewEncoder(&payload).Encode(r)
@@ -58,9 +67,12 @@ func TestDeleteUserHandler(t *testing.T) {
 	})
 
 	t.Run("unauthorized", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			bookmarkRepository bookmarks.MockBookmarksRepository
 			authorizer         domain.MockAuthorizer
+			requestValidator   validator.MockValidator
 
 			u = user.User{
 				UUID: "user-uuid",
@@ -76,7 +88,7 @@ func TestDeleteUserHandler(t *testing.T) {
 		authorizer.On("Authorize", u.UUID, permission.SelfBookmarksDelete).Once().Return(false, nil)
 		defer authorizer.AssertExpectations(t)
 
-		handler := NewDeleteUserBookmarkHandler(deleteUserBookmark.NewUseCase(&bookmarkRepository), &authorizer)
+		handler := NewDeleteUserBookmarkHandler(deleteUserBookmark.NewUseCase(&bookmarkRepository, &requestValidator), &authorizer)
 
 		var payload bytes.Buffer
 		err := json.NewEncoder(&payload).Encode(r)
@@ -88,6 +100,7 @@ func TestDeleteUserHandler(t *testing.T) {
 
 		handler.ServeHTTP(response, request)
 
+		requestValidator.AssertNotCalled(t, "Validate")
 		bookmarkRepository.AssertNotCalled(t, "DeleteByOwnerUUID")
 
 		assert.Len(t, response.Body.Bytes(), 0)
@@ -95,9 +108,12 @@ func TestDeleteUserHandler(t *testing.T) {
 	})
 
 	t.Run("error", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			bookmarkRepository bookmarks.MockBookmarksRepository
 			authorizer         domain.MockAuthorizer
+			requestValidator   validator.MockValidator
 
 			u = user.User{
 				UUID: "user-uuid",
@@ -113,7 +129,7 @@ func TestDeleteUserHandler(t *testing.T) {
 		authorizer.On("Authorize", u.UUID, permission.SelfBookmarksDelete).Once().Return(false, errors.New("unexpected error"))
 		defer authorizer.AssertExpectations(t)
 
-		handler := NewDeleteUserBookmarkHandler(deleteUserBookmark.NewUseCase(&bookmarkRepository), &authorizer)
+		handler := NewDeleteUserBookmarkHandler(deleteUserBookmark.NewUseCase(&bookmarkRepository, &requestValidator), &authorizer)
 
 		var payload bytes.Buffer
 		err := json.NewEncoder(&payload).Encode(r)
@@ -125,6 +141,7 @@ func TestDeleteUserHandler(t *testing.T) {
 
 		handler.ServeHTTP(response, request)
 
+		requestValidator.AssertNotCalled(t, "Validate")
 		bookmarkRepository.AssertNotCalled(t, "DeleteByOwnerUUID")
 
 		assert.Len(t, response.Body.Bytes(), 0)

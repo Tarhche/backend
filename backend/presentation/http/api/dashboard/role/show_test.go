@@ -19,7 +19,11 @@ import (
 )
 
 func TestShowHandler(t *testing.T) {
+	t.Parallel()
+
 	t.Run("show role", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			roleRepository roles.MockRolesRepository
 			authorizer     domain.MockAuthorizer
@@ -58,6 +62,8 @@ func TestShowHandler(t *testing.T) {
 	})
 
 	t.Run("not found", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			roleRepository roles.MockRolesRepository
 			authorizer     domain.MockAuthorizer
@@ -87,6 +93,8 @@ func TestShowHandler(t *testing.T) {
 	})
 
 	t.Run("unauthorized", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			roleRepository roles.MockRolesRepository
 			authorizer     domain.MockAuthorizer
@@ -115,6 +123,8 @@ func TestShowHandler(t *testing.T) {
 	})
 
 	t.Run("error", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			roleRepository roles.MockRolesRepository
 			authorizer     domain.MockAuthorizer

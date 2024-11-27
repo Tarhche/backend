@@ -1,6 +1,6 @@
 package createuser
 
-type validationErrors map[string]string
+import "github.com/khanzadimahdi/testproject/domain"
 
 type Request struct {
 	Email    string `json:"email"`
@@ -10,20 +10,22 @@ type Request struct {
 	Password string `json:"password"`
 }
 
-func (r *Request) Validate() (bool, validationErrors) {
-	errors := make(validationErrors)
+var _ domain.Validatable = &Request{}
+
+func (r *Request) Validate() domain.ValidationErrors {
+	validationErrors := make(domain.ValidationErrors)
 
 	if len(r.Email) == 0 {
-		errors["email"] = "email is required"
+		validationErrors["email"] = "required_field"
 	}
 
 	if len(r.Name) == 0 {
-		errors["name"] = "name is required"
+		validationErrors["name"] = "required_field"
 	}
 
 	if len(r.Password) == 0 {
-		errors["password"] = "password is required"
+		validationErrors["password"] = "required_field"
 	}
 
-	return len(errors) == 0, errors
+	return validationErrors
 }

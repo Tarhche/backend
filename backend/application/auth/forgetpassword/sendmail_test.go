@@ -18,6 +18,8 @@ import (
 )
 
 func TestHandler_Execute(t *testing.T) {
+	t.Parallel()
+
 	privateKey, err := ecdsa.Generate()
 	assert.NoError(t, err)
 
@@ -26,6 +28,8 @@ func TestHandler_Execute(t *testing.T) {
 	mailFrom := "info@noreply.nowhere.loc"
 
 	t.Run("successfully mails reset-password token", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			userRepository users.MockUsersRepository
 			mailer         email.MockMailer
@@ -62,6 +66,8 @@ func TestHandler_Execute(t *testing.T) {
 	})
 
 	t.Run("user not found", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			userRepository users.MockUsersRepository
 			mailer         email.MockMailer
@@ -91,6 +97,8 @@ func TestHandler_Execute(t *testing.T) {
 	})
 
 	t.Run("error on finding user", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			userRepository users.MockUsersRepository
 			mailer         email.MockMailer
@@ -122,6 +130,8 @@ func TestHandler_Execute(t *testing.T) {
 	})
 
 	t.Run("error on rendering template", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			userRepository users.MockUsersRepository
 			mailer         email.MockMailer
@@ -160,6 +170,8 @@ func TestHandler_Execute(t *testing.T) {
 	})
 
 	t.Run("error on sending email", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			userRepository users.MockUsersRepository
 			mailer         email.MockMailer

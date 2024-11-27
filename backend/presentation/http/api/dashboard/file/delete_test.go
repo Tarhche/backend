@@ -20,7 +20,11 @@ import (
 )
 
 func TestDeleteHandler(t *testing.T) {
+	t.Parallel()
+
 	t.Run("delete file", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			filesRepository files.MockFilesRepository
 			storage         s.MockStorage
@@ -60,6 +64,8 @@ func TestDeleteHandler(t *testing.T) {
 	})
 
 	t.Run("unauthorized", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			filesRepository files.MockFilesRepository
 			storage         s.MockStorage
@@ -95,6 +101,8 @@ func TestDeleteHandler(t *testing.T) {
 	})
 
 	t.Run("error", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			filesRepository files.MockFilesRepository
 			storage         s.MockStorage

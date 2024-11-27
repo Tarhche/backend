@@ -10,7 +10,11 @@ import (
 )
 
 func TestUseCase_Execute(t *testing.T) {
+	t.Parallel()
+
 	t.Run("deletes an element", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			elementRepository elements.MockElementsRepository
 
@@ -20,12 +24,14 @@ func TestUseCase_Execute(t *testing.T) {
 		elementRepository.On("Delete", r.ElementUUID).Return(nil)
 		defer elementRepository.AssertExpectations(t)
 
-		err := NewUseCase(&elementRepository).Execute(r)
+		err := NewUseCase(&elementRepository).Execute(&r)
 
 		assert.NoError(t, err)
 	})
 
 	t.Run("deleting an element fails", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			elementRepository elements.MockElementsRepository
 
@@ -36,7 +42,7 @@ func TestUseCase_Execute(t *testing.T) {
 		elementRepository.On("Delete", r.ElementUUID).Return(expectedError)
 		defer elementRepository.AssertExpectations(t)
 
-		err := NewUseCase(&elementRepository).Execute(r)
+		err := NewUseCase(&elementRepository).Execute(&r)
 
 		assert.ErrorIs(t, err, expectedError)
 	})

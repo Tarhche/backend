@@ -17,7 +17,11 @@ import (
 )
 
 func TestGetRolesHandler(t *testing.T) {
+	t.Parallel()
+
 	t.Run("get roles", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			roleRepository roles.MockRolesRepository
 
@@ -68,6 +72,8 @@ func TestGetRolesHandler(t *testing.T) {
 	})
 
 	t.Run("no data", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			roleRepository roles.MockRolesRepository
 
@@ -96,6 +102,8 @@ func TestGetRolesHandler(t *testing.T) {
 	})
 
 	t.Run("error", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			roleRepository roles.MockRolesRepository
 

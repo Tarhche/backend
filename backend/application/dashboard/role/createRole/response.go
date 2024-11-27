@@ -1,6 +1,9 @@
 package createrole
 
+import "github.com/khanzadimahdi/testproject/domain"
+
 type Response struct {
-	ValidationErrors validationErrors `json:"errors,omitempty"`
-	UUID             string           `json:"uuid,omitempty"`
+	ValidationErrors domain.ValidationErrors `json:"errors,omitempty"`
+
+	UUID string `json:"uuid,omitempty"`
 }

@@ -10,7 +10,11 @@ import (
 )
 
 func TestUseCase_Execute(t *testing.T) {
+	t.Parallel()
+
 	t.Run("getting permissions", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			permissionsRepository permissions.MockPermissionsRepository
 

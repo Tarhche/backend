@@ -88,6 +88,8 @@ import (
 	userrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/users"
 	"github.com/khanzadimahdi/testproject/infrastructure/storage/minio"
 	"github.com/khanzadimahdi/testproject/infrastructure/template"
+	"github.com/khanzadimahdi/testproject/infrastructure/translator"
+	"github.com/khanzadimahdi/testproject/infrastructure/validator"
 	articleAPI "github.com/khanzadimahdi/testproject/presentation/http/api/article"
 	"github.com/khanzadimahdi/testproject/presentation/http/api/auth"
 	bookmarkAPI "github.com/khanzadimahdi/testproject/presentation/http/api/bookmark"
@@ -106,6 +108,7 @@ import (
 	hashtagAPI "github.com/khanzadimahdi/testproject/presentation/http/api/hashtag"
 	homeapi "github.com/khanzadimahdi/testproject/presentation/http/api/home"
 	"github.com/khanzadimahdi/testproject/presentation/http/middleware"
+	"github.com/khanzadimahdi/testproject/resources/translation"
 	"github.com/nats-io/nats.go"
 )
 
@@ -154,6 +157,10 @@ func App(ctx context.Context) (http.Handler, func()) {
 		panic(err)
 	}
 
+	translator := translator.New(translation.Translations, translation.FA)
+	validator := validator.New(translator)
+	_ = validator
+
 	articlesRepository := articlesrepository.NewRepository(database)
 	commentsRepository := commentsrepository.NewRepository(database)
 	filesRepository := filesrepository.NewRepository(database)
@@ -198,21 +205,21 @@ func App(ctx context.Context) (http.Handler, func()) {
 	homeUseCase := home.NewUseCase(articlesRepository, elementsRepository)
 
 	log.SetFlags(log.LstdFlags | log.Llongfile)
-	loginUseCase := login.NewUseCase(userRepository, j, hasher)
-	refreshUseCase := refresh.NewUseCase(userRepository, j)
-	forgetPasswordUseCase := forgetpassword.NewUseCase(userRepository, publishSubscriber)
-	resetPasswordUseCase := resetpassword.NewUseCase(userRepository, hasher, j)
-	registerUseCase := register.NewUseCase(userRepository, publishSubscriber)
-	verifyUseCase := verify.NewUseCase(userRepository, rolesRepository, configRepository, hasher, j)
+	loginUseCase := login.NewUseCase(userRepository, j, hasher, translator, validator)
+	refreshUseCase := refresh.NewUseCase(userRepository, j, translator, validator)
+	forgetPasswordUseCase := forgetpassword.NewUseCase(userRepository, publishSubscriber, translator, validator)
+	resetPasswordUseCase := resetpassword.NewUseCase(userRepository, hasher, j, translator, validator)
+	registerUseCase := register.NewUseCase(userRepository, publishSubscriber, translator, validator)
+	verifyUseCase := verify.NewUseCase(userRepository, rolesRepository, configRepository, hasher, j, translator, validator)
 
 	getArticleUsecase := getArticle.NewUseCase(articlesRepository, elementsRepository)
 	getArticlesUsecase := getArticles.NewUseCase(articlesRepository)
-	getArticlesByHashtagUseCase := getArticlesByHashtag.NewUseCase(articlesRepository)
+	getArticlesByHashtagUseCase := getArticlesByHashtag.NewUseCase(articlesRepository, validator)
 	getFileUseCase := getFile.NewUseCase(filesRepository, fileStorage)
-	getCommentsUseCase := getComments.NewUseCase(commentsRepository, userRepository)
-	createCommentUseCase := createComment.NewUseCase(commentsRepository)
-	bookmarkExistsUseCase := bookmarkExists.NewUseCase(bookmarkRepository)
-	updateABookmark := updateBookmark.NewUseCase(bookmarkRepository)
+	getCommentsUseCase := getComments.NewUseCase(commentsRepository, userRepository, validator)
+	createCommentUseCase := createComment.NewUseCase(commentsRepository, validator)
+	bookmarkExistsUseCase := bookmarkExists.NewUseCase(bookmarkRepository, validator)
+	updateABookmark := updateBookmark.NewUseCase(bookmarkRepository, validator)
 
 	mux := http.NewServeMux()
 
@@ -247,48 +254,48 @@ func App(ctx context.Context) (http.Handler, func()) {
 
 	// -------------------- dashboard -------------------- //
 	getProfileUseCase := getprofile.NewUseCase(userRepository)
-	updateProfileUseCase := updateprofile.NewUseCase(userRepository)
-	dashboardProfileChangePasswordUseCase := changepassword.NewUseCase(userRepository, hasher)
+	updateProfileUseCase := updateprofile.NewUseCase(userRepository, validator, translator)
+	dashboardProfileChangePasswordUseCase := changepassword.NewUseCase(userRepository, hasher, validator, translator)
 	dashboardProfileGetRolesUseCase := getRoles.NewUseCase(rolesRepository)
 
-	dashboardCreateArticleUsecase := dashboardCreateArticle.NewUseCase(articlesRepository)
+	dashboardCreateArticleUsecase := dashboardCreateArticle.NewUseCase(articlesRepository, validator)
 	dashboardDeleteArticleUsecase := dashboardDeleteArticle.NewUseCase(articlesRepository)
 	dashboardGetArticleUsecase := dashboardGetArticle.NewUseCase(articlesRepository)
 	dashboardGetArticlesUsecase := dashboardGetArticles.NewUseCase(articlesRepository)
-	dashboardUpdateArticleUsecase := dashboardUpdateArticle.NewUseCase(articlesRepository)
+	dashboardUpdateArticleUsecase := dashboardUpdateArticle.NewUseCase(articlesRepository, validator)
 
-	dashboardCreateCommentUsecase := dashboardCreateComment.NewUseCase(commentsRepository)
+	dashboardCreateCommentUsecase := dashboardCreateComment.NewUseCase(commentsRepository, validator)
 	dashboardDeleteCommentUsecase := dashboardDeleteComment.NewUseCase(commentsRepository)
 	dashboardGetCommentUsecase := dashboardGetComment.NewUseCase(commentsRepository, userRepository)
 	dashboardGetCommentsUsecase := dashboardGetComments.NewUseCase(commentsRepository, userRepository)
-	dashboardUpdateCommentUsecase := dashboardUpdateComment.NewUseCase(commentsRepository)
+	dashboardUpdateCommentUsecase := dashboardUpdateComment.NewUseCase(commentsRepository, validator)
 
 	dashboardDeleteUserCommentUsecase := dashboardDeleteUserComment.NewUseCase(commentsRepository)
 	dashboardGetUserCommentUsecase := dashboardGetUserComment.NewUseCase(commentsRepository, userRepository)
 	dashboardGetUserCommentsUsecase := dashboardGetUserComments.NewUseCase(commentsRepository, userRepository)
-	dashboardUpdateUserCommentUsecase := dashboardUpdateUserComment.NewUseCase(commentsRepository)
+	dashboardUpdateUserCommentUsecase := dashboardUpdateUserComment.NewUseCase(commentsRepository, validator)
 
-	dashboardDeleteUserBookmarkUsecase := dashboardDeleteUserBookmark.NewUseCase(bookmarkRepository)
-	dashboardGetUserBookmarksUsecase := dashboardGetUserBookmarks.NewUseCase(bookmarkRepository)
+	dashboardDeleteUserBookmarkUsecase := dashboardDeleteUserBookmark.NewUseCase(bookmarkRepository, validator)
+	dashboardGetUserBookmarksUsecase := dashboardGetUserBookmarks.NewUseCase(bookmarkRepository, validator)
 
-	dashboardCreateUserUsecase := createuser.NewUseCase(userRepository, hasher)
+	dashboardCreateUserUsecase := createuser.NewUseCase(userRepository, hasher, validator, translator)
 	dashboardDeleteUserUsecase := deleteuser.NewUseCase(userRepository)
 	dashboardGetUserUsecase := getuser.NewUseCase(userRepository)
 	dashboardGetUsersUsecase := getusers.NewUseCase(userRepository)
-	dashboardUpdateUserUsecase := updateuser.NewUseCase(userRepository)
-	dashboardUpdateUserChangePasswordUsecase := userchangepassword.NewUseCase(userRepository, hasher)
+	dashboardUpdateUserUsecase := updateuser.NewUseCase(userRepository, validator)
+	dashboardUpdateUserChangePasswordUsecase := userchangepassword.NewUseCase(userRepository, hasher, validator)
 
 	dashboardGetPermissionsUseCase := dashboardGetPermissions.NewUseCase(permissionRepository)
 
-	dashboardCreateRoleUsecase := dashboardCreateRole.NewUseCase(rolesRepository, permissionRepository)
+	dashboardCreateRoleUsecase := dashboardCreateRole.NewUseCase(rolesRepository, permissionRepository, validator, translator)
 	dashboardDeleteRoleUsecase := dashboardDeleteRole.NewUseCase(rolesRepository)
 	dashboardGetRoleUsecase := dashboardGetRole.NewUseCase(rolesRepository)
 	dashboardGetRolesUsecase := dashboardGetRoles.NewUseCase(rolesRepository)
-	dashboardUpdateRoleUsecase := dashboardUpdateRole.NewUseCase(rolesRepository, permissionRepository)
+	dashboardUpdateRoleUsecase := dashboardUpdateRole.NewUseCase(rolesRepository, permissionRepository, validator, translator)
 
 	dashboardGetFilesUseCase := dashboardGetFiles.NewUseCase(filesRepository)
 	dashboardGetFileUseCase := dashboardGetFile.NewUseCase(filesRepository, fileStorage)
-	dashboardUploadFileUseCase := dashboardUploadFile.NewUseCase(filesRepository, fileStorage)
+	dashboardUploadFileUseCase := dashboardUploadFile.NewUseCase(filesRepository, fileStorage, validator)
 	dashboardDeleteFileUseCase := dashboardDeleteFile.NewUseCase(filesRepository, fileStorage)
 
 	dashboardCreateElementUsecase := dashboardCreateElement.NewUseCase(elementsRepository)
@@ -298,7 +305,7 @@ func App(ctx context.Context) (http.Handler, func()) {
 	dashboardUpdateElementUsecase := dashboardUpdateElement.NewUseCase(elementsRepository)
 
 	dashboardGetConfigUsecase := dashboardGetConfig.NewUseCase(configRepository)
-	dashboardUpdateConfigUsecase := dashboardUpdateConfig.NewUseCase(configRepository)
+	dashboardUpdateConfigUsecase := dashboardUpdateConfig.NewUseCase(configRepository, validator)
 
 	// profile
 	mux.Handle("GET /api/dashboard/profile", middleware.NewAuthoriseMiddleware(profile.NewGetProfileHandler(getProfileUseCase), j, userRepository))

@@ -1,5 +1,7 @@
 package changepassword
 
+import "github.com/khanzadimahdi/testproject/domain"
+
 type validationErrors map[string]string
 
 type Request struct {
@@ -8,20 +10,22 @@ type Request struct {
 	NewPassword     string `json:"new_password"`
 }
 
-func (r *Request) Validate() (bool, validationErrors) {
-	errors := make(validationErrors)
+var _ domain.Validatable = &Request{}
+
+func (r *Request) Validate() domain.ValidationErrors {
+	validationErrors := make(domain.ValidationErrors)
 
 	if len(r.UserUUID) == 0 {
-		errors["uuid"] = "user's universal unique identifier (uuid) is required"
+		validationErrors["uuid"] = "required_field"
 	}
 
 	if len(r.NewPassword) == 0 {
-		errors["current_password"] = "current password is required"
+		validationErrors["current_password"] = "required_field"
 	}
 
 	if len(r.NewPassword) == 0 {
-		errors["new_password"] = "password is required"
+		validationErrors["new_password"] = "required_field"
 	}
 
-	return len(errors) == 0, errors
+	return validationErrors
 }

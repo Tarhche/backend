@@ -43,7 +43,7 @@ func (h *createHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	response, err := h.useCase.Execute(uploadfile.Request{
+	response, err := h.useCase.Execute(&uploadfile.Request{
 		Name:       header.Filename,
 		OwnerUUID:  auth.FromContext(r.Context()).UUID,
 		Size:       header.Size,
@@ -53,7 +53,7 @@ func (h *createHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	switch {
 	case err != nil:
 		rw.WriteHeader(http.StatusInternalServerError)
-	case len(response.ValidationErrors) > 0:
+	case response != nil && len(response.ValidationErrors) > 0:
 		rw.Header().Add("Content-Type", "application/json")
 		rw.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(rw).Encode(response)

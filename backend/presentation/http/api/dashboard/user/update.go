@@ -29,7 +29,7 @@ func (h *updateHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		rw.WriteHeader(http.StatusInternalServerError)
 		return
 	} else if !ok {
-		rw.WriteHeader(http.StatusUnauthorized)
+		rw.WriteHeader(http.StatusForbidden)
 		return
 	}
 
@@ -39,14 +39,14 @@ func (h *updateHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response, err := h.useCase.Execute(request)
+	response, err := h.useCase.Execute(&request)
 
 	switch {
 	case errors.Is(err, domain.ErrNotExists):
 		rw.WriteHeader(http.StatusNotFound)
 	case err != nil:
 		rw.WriteHeader(http.StatusInternalServerError)
-	case len(response.ValidationErrors) > 0:
+	case response != nil && len(response.ValidationErrors) > 0:
 		rw.Header().Add("Content-Type", "application/json")
 		rw.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(rw).Encode(response)

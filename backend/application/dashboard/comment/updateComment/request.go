@@ -3,10 +3,9 @@ package updateComment
 import (
 	"time"
 
+	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/comment"
 )
-
-type validationErrors map[string]string
 
 type Request struct {
 	UUID       string    `json:"uuid"`
@@ -18,24 +17,26 @@ type Request struct {
 	ApprovedAt time.Time `json:"approved_at"`
 }
 
-func (r *Request) Validate() (bool, validationErrors) {
-	errors := make(validationErrors)
+var _ domain.Validatable = &Request{}
+
+func (r *Request) Validate() domain.ValidationErrors {
+	validationErrors := make(domain.ValidationErrors)
 
 	if len(r.UUID) == 0 {
-		errors["uuid"] = "uuid is required"
+		validationErrors["uuid"] = "required_field"
 	}
 
 	if len(r.Body) == 0 {
-		errors["body"] = "body is required"
+		validationErrors["body"] = "required_field"
 	}
 
 	if r.ObjectType != comment.ObjectTypeArticle {
-		errors["object_type"] = "object type is not supported"
+		validationErrors["object_type"] = "invalid_value"
 	}
 
 	if len(r.ObjectUUID) == 0 {
-		errors["object_uuid"] = "object_uuid is required"
+		validationErrors["object_uuid"] = "required_field"
 	}
 
-	return len(errors) == 0, errors
+	return validationErrors
 }

@@ -9,20 +9,23 @@ import (
 
 type UseCase struct {
 	bookmarkRepository bookmark.Repository
+	validator          domain.Validator
 }
 
 func NewUseCase(
 	bookmarkRepository bookmark.Repository,
+	validator domain.Validator,
 ) *UseCase {
 	return &UseCase{
 		bookmarkRepository: bookmarkRepository,
+		validator:          validator,
 	}
 }
 
 func (uc *UseCase) Execute(request *Request) (*Response, error) {
-	if ok, validation := request.Validate(); !ok {
+	if validationErrors := uc.validator.Validate(request); len(validationErrors) > 0 {
 		return &Response{
-			ValidationErrors: validation,
+			ValidationErrors: validationErrors,
 		}, nil
 	}
 

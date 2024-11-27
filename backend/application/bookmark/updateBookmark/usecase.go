@@ -1,31 +1,31 @@
 package updateBookmark
 
 import (
-	"log"
-
+	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/bookmark"
 )
 
 type UseCase struct {
 	bookmarkRepository bookmark.Repository
+	validator          domain.Validator
 }
 
 func NewUseCase(
 	bookmarkRepository bookmark.Repository,
+	validator domain.Validator,
 ) *UseCase {
 	return &UseCase{
 		bookmarkRepository: bookmarkRepository,
+		validator:          validator,
 	}
 }
 
 func (uc *UseCase) Execute(request *Request) (*Response, error) {
-	if ok, validation := request.Validate(); !ok {
+	if validationErrors := uc.validator.Validate(request); len(validationErrors) > 0 {
 		return &Response{
-			ValidationErrors: validation,
+			ValidationErrors: validationErrors,
 		}, nil
 	}
-
-	log.Println("keep", !request.Keep)
 
 	if !request.Keep {
 		if err := uc.bookmarkRepository.DeleteByOwnerUUID(
@@ -36,7 +36,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 			return nil, err
 		}
 
-		return &Response{}, nil
+		return nil, nil
 	}
 
 	b := bookmark.Bookmark{
@@ -50,5 +50,5 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		return nil, err
 	}
 
-	return &Response{}, nil
+	return nil, nil
 }

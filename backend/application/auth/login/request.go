@@ -1,22 +1,24 @@
 package login
 
-type validationErrors map[string]string
+import "github.com/khanzadimahdi/testproject/domain"
 
 type Request struct {
 	Identity string `json:"identity"`
 	Password string `json:"password"`
 }
 
-func (r *Request) Validate() (bool, validationErrors) {
-	errors := make(validationErrors)
+var _ domain.Validatable = &Request{}
+
+func (r *Request) Validate() domain.ValidationErrors {
+	validationErrors := make(domain.ValidationErrors)
 
 	if len(r.Identity) == 0 {
-		errors["identity"] = "identity required"
+		validationErrors["identity"] = "required_field"
 	}
 
 	if len(r.Password) == 0 {
-		errors["password"] = "password required"
+		validationErrors["password"] = "required_field"
 	}
 
-	return len(errors) == 0, errors
+	return validationErrors
 }

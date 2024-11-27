@@ -9,12 +9,19 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/author"
 	"github.com/khanzadimahdi/testproject/domain/comment"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/comments"
+	"github.com/khanzadimahdi/testproject/infrastructure/validator"
 )
 
 func TestUseCase_Execute(t *testing.T) {
+	t.Parallel()
+
 	t.Run("creates a comment", func(t *testing.T) {
+		t.Parallel()
+
 		var (
-			c comments.MockCommentsRepository
+			c         comments.MockCommentsRepository
+			validator validator.MockValidator
+
 			r = Request{
 				Body:       "test body",
 				AuthorUUID: "test-author-uuid",
@@ -34,18 +41,25 @@ func TestUseCase_Execute(t *testing.T) {
 			}
 		)
 
+		validator.On("Validate", &r).Once().Return(nil)
+		defer validator.AssertExpectations(t)
+
 		c.On("Save", &cm).Once().Return("comment-uuid", nil)
 		defer c.AssertExpectations(t)
 
-		response, err := NewUseCase(&c).Execute(r)
+		response, err := NewUseCase(&c, &validator).Execute(&r)
 
 		assert.NoError(t, err)
-		assert.NotNil(t, response)
+		assert.Nil(t, response)
 	})
 
 	t.Run("validation fails", func(t *testing.T) {
+		t.Parallel()
+
 		var (
-			c                comments.MockCommentsRepository
+			c         comments.MockCommentsRepository
+			validator validator.MockValidator
+
 			r                = Request{}
 			expectedResponse = Response{
 				ValidationErrors: map[string]string{
@@ -56,7 +70,10 @@ func TestUseCase_Execute(t *testing.T) {
 			}
 		)
 
-		response, err := NewUseCase(&c).Execute(r)
+		validator.On("Validate", &r).Once().Return(expectedResponse.ValidationErrors)
+		defer validator.AssertExpectations(t)
+
+		response, err := NewUseCase(&c, &validator).Execute(&r)
 
 		c.AssertNotCalled(t, "Save")
 
@@ -65,8 +82,12 @@ func TestUseCase_Execute(t *testing.T) {
 	})
 
 	t.Run("failure on saving a comment", func(t *testing.T) {
+		t.Parallel()
+
 		var (
-			c comments.MockCommentsRepository
+			c         comments.MockCommentsRepository
+			validator validator.MockValidator
+
 			r = Request{
 				Body:       "test body",
 				AuthorUUID: "test-author-uuid",
@@ -88,10 +109,13 @@ func TestUseCase_Execute(t *testing.T) {
 			expectedErr = errors.New("save comment error")
 		)
 
+		validator.On("Validate", &r).Once().Return(nil)
+		defer validator.AssertExpectations(t)
+
 		c.On("Save", &cm).Once().Return("", expectedErr)
 		defer c.AssertExpectations(t)
 
-		response, err := NewUseCase(&c).Execute(r)
+		response, err := NewUseCase(&c, &validator).Execute(&r)
 
 		assert.ErrorIs(t, err, expectedErr)
 		assert.Nil(t, response)

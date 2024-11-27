@@ -14,6 +14,6 @@ func NewUseCase(articleRepository article.Repository) *UseCase {
 	}
 }
 
-func (uc *UseCase) Execute(request Request) error {
+func (uc *UseCase) Execute(request *Request) error {
 	return uc.articleRepository.Delete(request.ArticleUUID)
 }

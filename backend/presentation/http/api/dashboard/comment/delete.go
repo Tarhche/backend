@@ -37,7 +37,7 @@ func (h *deleteHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		CommentUUID: UUID,
 	}
 
-	err := h.useCase.Execute(request)
+	err := h.useCase.Execute(&request)
 	switch {
 	case err != nil:
 		rw.WriteHeader(http.StatusInternalServerError)

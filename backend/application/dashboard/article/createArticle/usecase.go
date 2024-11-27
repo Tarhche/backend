@@ -1,24 +1,30 @@
 package createarticle
 
 import (
+	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/article"
 	"github.com/khanzadimahdi/testproject/domain/author"
 )
 
 type UseCase struct {
 	articleRepository article.Repository
+	validator         domain.Validator
 }
 
-func NewUseCase(articleRepository article.Repository) *UseCase {
+func NewUseCase(
+	articleRepository article.Repository,
+	validator domain.Validator,
+) *UseCase {
 	return &UseCase{
 		articleRepository: articleRepository,
+		validator:         validator,
 	}
 }
 
-func (uc *UseCase) Execute(request Request) (*Response, error) {
-	if ok, validation := request.Validate(); !ok {
+func (uc *UseCase) Execute(request *Request) (*Response, error) {
+	if validationErrors := uc.validator.Validate(request); len(validationErrors) > 0 {
 		return &Response{
-			ValidationErrors: validation,
+			ValidationErrors: validationErrors,
 		}, nil
 	}
 

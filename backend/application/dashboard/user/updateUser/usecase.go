@@ -9,18 +9,23 @@ import (
 
 type UseCase struct {
 	userRepository user.Repository
+	validator      domain.Validator
 }
 
-func NewUseCase(userRepository user.Repository) *UseCase {
+func NewUseCase(
+	userRepository user.Repository,
+	validator domain.Validator,
+) *UseCase {
 	return &UseCase{
 		userRepository: userRepository,
+		validator:      validator,
 	}
 }
 
-func (uc *UseCase) Execute(request Request) (*Response, error) {
-	if ok, validation := request.Validate(); !ok {
+func (uc *UseCase) Execute(request *Request) (*Response, error) {
+	if validationErrors := uc.validator.Validate(request); len(validationErrors) > 0 {
 		return &Response{
-			ValidationErrors: validation,
+			ValidationErrors: validationErrors,
 		}, nil
 	}
 
@@ -59,11 +64,8 @@ func (uc *UseCase) Execute(request Request) (*Response, error) {
 	u.Username = request.Username
 
 	_, err = uc.userRepository.Save(&u)
-	if err != nil {
-		return nil, err
-	}
 
-	return &Response{}, err
+	return nil, err
 }
 
 func (uc *UseCase) anotherUserExists(identity string, userUUID string) (bool, error) {

@@ -17,7 +17,11 @@ import (
 )
 
 func TestGetProfileHandler(t *testing.T) {
+	t.Parallel()
+
 	t.Run("get profile", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			userRepository users.MockUsersRepository
 
@@ -51,6 +55,8 @@ func TestGetProfileHandler(t *testing.T) {
 	})
 
 	t.Run("not found", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			userRepository users.MockUsersRepository
 
@@ -80,6 +86,8 @@ func TestGetProfileHandler(t *testing.T) {
 	})
 
 	t.Run("error", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			userRepository users.MockUsersRepository
 

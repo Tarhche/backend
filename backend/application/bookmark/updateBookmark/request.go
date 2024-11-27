@@ -1,8 +1,9 @@
 package updateBookmark
 
-import "github.com/khanzadimahdi/testproject/domain/bookmark"
-
-type validationErrors map[string]string
+import (
+	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/bookmark"
+)
 
 type Request struct {
 	Keep       bool   `json:"keep"`
@@ -12,24 +13,26 @@ type Request struct {
 	OwnerUUID  string `json:"-"`
 }
 
-func (r *Request) Validate() (bool, validationErrors) {
-	errors := make(validationErrors)
+var _ domain.Validatable = &Request{}
+
+func (r *Request) Validate() domain.ValidationErrors {
+	validationErrors := make(domain.ValidationErrors)
 
 	if len(r.Title) == 0 {
-		errors["title"] = "title is required"
+		validationErrors["title"] = "required_field"
 	}
 
 	if r.ObjectType != bookmark.ObjectTypeArticle {
-		errors["object_type"] = "object type is not supported"
+		validationErrors["object_type"] = "invalid_value"
 	}
 
 	if len(r.ObjectUUID) == 0 {
-		errors["object_uuid"] = "object uuid is required"
+		validationErrors["object_uuid"] = "required_field"
 	}
 
 	if len(r.OwnerUUID) == 0 {
-		errors["owner_uuid"] = "owner uuid is required"
+		validationErrors["owner_uuid"] = "required_field"
 	}
 
-	return len(errors) == 0, errors
+	return validationErrors
 }

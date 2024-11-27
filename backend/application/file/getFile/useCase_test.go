@@ -15,7 +15,11 @@ import (
 )
 
 func TestUseCase_Execute(t *testing.T) {
+	t.Parallel()
+
 	t.Run("loads file", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			filesRepository files.MockFilesRepository
 			storage         mock.MockStorage
@@ -44,6 +48,8 @@ func TestUseCase_Execute(t *testing.T) {
 	})
 
 	t.Run("error on getting file", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			filesRepository files.MockFilesRepository
 			storage         mock.MockStorage
@@ -67,6 +73,8 @@ func TestUseCase_Execute(t *testing.T) {
 	})
 
 	t.Run("error on reading file from storage", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			filesRepository files.MockFilesRepository
 			storage         mock.MockStorage

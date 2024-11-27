@@ -33,7 +33,7 @@ func (h *deleteHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 	UUID := r.PathValue("uuid")
 
-	request := deleteElement.Request{
+	request := &deleteElement.Request{
 		ElementUUID: UUID,
 	}
 

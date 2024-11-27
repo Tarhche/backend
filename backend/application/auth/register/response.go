@@ -1,5 +1,7 @@
 package register
 
+import "github.com/khanzadimahdi/testproject/domain"
+
 type Response struct {
-	ValidationErrors validationErrors `json:"errors,omitempty"`
+	ValidationErrors domain.ValidationErrors `json:"errors,omitempty"`
 }

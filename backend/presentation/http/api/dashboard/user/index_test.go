@@ -19,7 +19,11 @@ import (
 )
 
 func TestIndexHandler(t *testing.T) {
+	t.Parallel()
+
 	t.Run("show users", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			userRepository users.MockUsersRepository
 			authorizer     domain.MockAuthorizer
@@ -75,6 +79,8 @@ func TestIndexHandler(t *testing.T) {
 	})
 
 	t.Run("no data", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			userRepository users.MockUsersRepository
 			authorizer     domain.MockAuthorizer
@@ -108,6 +114,8 @@ func TestIndexHandler(t *testing.T) {
 	})
 
 	t.Run("unauthorised", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			userRepository users.MockUsersRepository
 			authorizer     domain.MockAuthorizer
@@ -136,6 +144,8 @@ func TestIndexHandler(t *testing.T) {
 	})
 
 	t.Run("error", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			userRepository users.MockUsersRepository
 			authorizer     domain.MockAuthorizer

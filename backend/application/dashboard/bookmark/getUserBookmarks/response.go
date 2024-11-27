@@ -3,10 +3,13 @@ package getUserBookmarks
 import (
 	"time"
 
+	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/bookmark"
 )
 
 type Response struct {
+	ValidationErrors domain.ValidationErrors `json:"errors,omitempty"`
+
 	Items      []bookmarkResponse `json:"items"`
 	Pagination pagination         `json:"pagination"`
 }

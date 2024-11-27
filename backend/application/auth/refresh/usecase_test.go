@@ -6,32 +6,47 @@ import (
 	"time"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
+	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/ecdsa"
 	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
+	"github.com/khanzadimahdi/testproject/infrastructure/translator"
+	"github.com/khanzadimahdi/testproject/infrastructure/validator"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestUseCase_Execute(t *testing.T) {
+	t.Parallel()
+
 	privateKey, err := ecdsa.Generate()
 	assert.NoError(t, err)
 
 	j := jwt.NewJWT(privateKey, privateKey.Public())
 
 	t.Run("generates a fresh jwt token", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			userRepository users.MockUsersRepository
-			u              = user.User{UUID: "test-uuid"}
-			r              = Request{
+			validator      validator.MockValidator
+			translator     translator.TranslatorMock
+
+			u = user.User{UUID: "test-uuid"}
+			r = Request{
 				Token: generateRefreshToken(t, j, u, time.Now().Add(15*time.Second), auth.RefreshToken),
 			}
 		)
 
+		validator.On("Validate", &r).Once().Return(nil)
+		defer validator.AssertExpectations(t)
+
 		userRepository.On("GetOne", u.UUID).Once().Return(u, nil)
 		defer userRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&userRepository, j).Execute(r)
+		response, err := NewUseCase(&userRepository, j, &translator, &validator).Execute(&r)
+
+		translator.AssertNotCalled(t, "Translate")
 
 		assert.NoError(t, err)
 		assert.NotNil(t, response)
@@ -55,18 +70,27 @@ func TestUseCase_Execute(t *testing.T) {
 	})
 
 	t.Run("validation fails", func(t *testing.T) {
+		t.Parallel()
+
 		var (
-			userRepository   users.MockUsersRepository
+			userRepository users.MockUsersRepository
+			validator      validator.MockValidator
+			translator     translator.TranslatorMock
+
 			r                = Request{}
 			expectedResponse = Response{
-				ValidationErrors: validationErrors{
+				ValidationErrors: domain.ValidationErrors{
 					"token": "token is required",
 				},
 			}
 		)
 
-		response, err := NewUseCase(&userRepository, j).Execute(r)
+		validator.On("Validate", &r).Once().Return(expectedResponse.ValidationErrors)
+		defer validator.AssertExpectations(t)
 
+		response, err := NewUseCase(&userRepository, j, &translator, &validator).Execute(&r)
+
+		translator.AssertNotCalled(t, "Translate")
 		userRepository.AssertExpectations(t)
 
 		assert.NoError(t, err)
@@ -76,21 +100,30 @@ func TestUseCase_Execute(t *testing.T) {
 	})
 
 	t.Run("token is not valid", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			userRepository users.MockUsersRepository
-			u              = user.User{UUID: "test-uuid"}
-			r              = Request{
+			validator      validator.MockValidator
+			translator     translator.TranslatorMock
+
+			u = user.User{UUID: "test-uuid"}
+			r = Request{
 				Token: generateRefreshToken(t, j, u, time.Now().Add(-10*time.Second), auth.RefreshToken),
 			}
 			expectedResponse = Response{
-				ValidationErrors: validationErrors{
+				ValidationErrors: domain.ValidationErrors{
 					"token": "token has invalid claims: token is expired",
 				},
 			}
 		)
 
-		response, err := NewUseCase(&userRepository, j).Execute(r)
+		validator.On("Validate", &r).Once().Return(nil)
+		defer validator.AssertExpectations(t)
 
+		response, err := NewUseCase(&userRepository, j, &translator, &validator).Execute(&r)
+
+		translator.AssertNotCalled(t, "Translate")
 		userRepository.AssertNotCalled(t, "GetOne")
 
 		assert.NoError(t, err)
@@ -100,19 +133,29 @@ func TestUseCase_Execute(t *testing.T) {
 	})
 
 	t.Run("error on fetching user's data", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			userRepository users.MockUsersRepository
-			u              = user.User{UUID: "test-uuid"}
-			r              = Request{
+			validator      validator.MockValidator
+			translator     translator.TranslatorMock
+
+			u = user.User{UUID: "test-uuid"}
+			r = Request{
 				Token: generateRefreshToken(t, j, u, time.Now().Add(15*time.Second), auth.RefreshToken),
 			}
 			expectedErr = errors.New("some error")
 		)
 
+		validator.On("Validate", &r).Once().Return(nil)
+		defer validator.AssertExpectations(t)
+
 		userRepository.On("GetOne", u.UUID).Once().Return(user.User{}, expectedErr)
 		defer userRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&userRepository, j).Execute(r)
+		response, err := NewUseCase(&userRepository, j, &translator, &validator).Execute(&r)
+
+		translator.AssertNotCalled(t, "Translate")
 
 		assert.ErrorIs(t, err, expectedErr)
 		assert.Nil(t, response)

@@ -11,7 +11,11 @@ import (
 )
 
 func TestUseCase_Execute(t *testing.T) {
+	t.Parallel()
+
 	t.Run("gets config", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			configRepository configMocks.MockConfigRepository
 
@@ -35,6 +39,8 @@ func TestUseCase_Execute(t *testing.T) {
 	})
 
 	t.Run("get last revision of config fails", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			configRepository configMocks.MockConfigRepository
 

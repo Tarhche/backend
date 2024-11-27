@@ -3,6 +3,7 @@ package verify
 import (
 	"encoding/base64"
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/config"
 	"github.com/khanzadimahdi/testproject/domain/role"
+	translatorContract "github.com/khanzadimahdi/testproject/domain/translator"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/ecdsa"
 	crypto "github.com/khanzadimahdi/testproject/infrastructure/crypto/mock"
@@ -20,20 +22,30 @@ import (
 	configRepo "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/config"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/roles"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
+	"github.com/khanzadimahdi/testproject/infrastructure/translator"
+	"github.com/khanzadimahdi/testproject/infrastructure/validator"
 )
 
 func TestUseCase_Execute(t *testing.T) {
+	t.Parallel()
+
 	privateKey, err := ecdsa.Generate()
 	assert.NoError(t, err)
 
 	j := jwt.NewJWT(privateKey, privateKey.Public())
 
+	var translatorOptionsType = reflect.TypeOf(func(*translatorContract.Params) {}).Name()
+
 	t.Run("verifies user registration", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			userRepository   users.MockUsersRepository
 			roleRepository   roles.MockRolesRepository
 			configRepository configRepo.MockConfigRepository
 			hasher           crypto.MockCrypto
+			validator        validator.MockValidator
+			translator       translator.TranslatorMock
 
 			u = user.User{
 				UUID: "user-uuid",
@@ -71,6 +83,9 @@ func TestUseCase_Execute(t *testing.T) {
 			}
 		)
 
+		validator.On("Validate", &r).Once().Return(nil)
+		defer validator.AssertExpectations(t)
+
 		userRepository.On("GetOneByIdentity", u.UUID).Once().Return(user.User{}, domain.ErrNotExists)
 		userRepository.On("GetOneByIdentity", r.Username).Once().Return(user.User{}, domain.ErrNotExists)
 		userRepository.On("Save", mock.Anything).Once().Return(u.UUID, nil)
@@ -87,7 +102,9 @@ func TestUseCase_Execute(t *testing.T) {
 		roleRepository.On("Save", &expectedRoles[1]).Once().Return(expectedRoles[1].UUID, nil)
 		defer roleRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&userRepository, &roleRepository, &configRepository, &hasher, j).Execute(r)
+		response, err := NewUseCase(&userRepository, &roleRepository, &configRepository, &hasher, j, &translator, &validator).Execute(&r)
+
+		translator.AssertNotCalled(t, "Translate")
 
 		assert.NoError(t, err)
 		assert.NotNil(t, response)
@@ -95,16 +112,20 @@ func TestUseCase_Execute(t *testing.T) {
 	})
 
 	t.Run("validation fails", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			userRepository   users.MockUsersRepository
 			roleRepository   roles.MockRolesRepository
 			configRepository configRepo.MockConfigRepository
 			hasher           crypto.MockCrypto
+			validator        validator.MockValidator
+			translator       translator.TranslatorMock
 
 			r = Request{}
 
 			expectedResponse = Response{
-				ValidationErrors: validationErrors{
+				ValidationErrors: domain.ValidationErrors{
 					"token":      "token is required",
 					"name":       "name is required",
 					"username":   "username is required",
@@ -114,8 +135,12 @@ func TestUseCase_Execute(t *testing.T) {
 			}
 		)
 
-		response, err := NewUseCase(&userRepository, &roleRepository, &configRepository, &hasher, j).Execute(r)
+		validator.On("Validate", &r).Once().Return(expectedResponse.ValidationErrors)
+		defer validator.AssertExpectations(t)
 
+		response, err := NewUseCase(&userRepository, &roleRepository, &configRepository, &hasher, j, &translator, &validator).Execute(&r)
+
+		translator.AssertNotCalled(t, "Translate")
 		userRepository.AssertNotCalled(t, "GetOneByIdentity")
 		userRepository.AssertNotCalled(t, "Save")
 		hasher.AssertNotCalled(t, "Hash")
@@ -129,11 +154,15 @@ func TestUseCase_Execute(t *testing.T) {
 	})
 
 	t.Run("invalid token", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			userRepository   users.MockUsersRepository
 			roleRepository   roles.MockRolesRepository
 			configRepository configRepo.MockConfigRepository
 			hasher           crypto.MockCrypto
+			validator        validator.MockValidator
+			translator       translator.TranslatorMock
 
 			u = user.User{
 				UUID: "user-uuid",
@@ -148,14 +177,18 @@ func TestUseCase_Execute(t *testing.T) {
 			}
 
 			expectedResponse = Response{
-				ValidationErrors: validationErrors{
+				ValidationErrors: domain.ValidationErrors{
 					"token": "token has invalid claims: token is expired",
 				},
 			}
 		)
 
-		response, err := NewUseCase(&userRepository, &roleRepository, &configRepository, &hasher, j).Execute(r)
+		validator.On("Validate", &r).Once().Return(nil)
+		defer validator.AssertExpectations(t)
 
+		response, err := NewUseCase(&userRepository, &roleRepository, &configRepository, &hasher, j, &translator, &validator).Execute(&r)
+
+		translator.AssertNotCalled(t, "Translate")
 		userRepository.AssertNotCalled(t, "GetOneByIdentity")
 		userRepository.AssertNotCalled(t, "Save")
 		hasher.AssertNotCalled(t, "Hash")
@@ -169,11 +202,15 @@ func TestUseCase_Execute(t *testing.T) {
 	})
 
 	t.Run("user with same identity exists", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			userRepository   users.MockUsersRepository
 			roleRepository   roles.MockRolesRepository
 			configRepository configRepo.MockConfigRepository
 			hasher           crypto.MockCrypto
+			validator        validator.MockValidator
+			translator       translator.TranslatorMock
 
 			u = user.User{
 				UUID:     "user-uuid",
@@ -189,16 +226,26 @@ func TestUseCase_Execute(t *testing.T) {
 			}
 
 			expectedResponse = Response{
-				ValidationErrors: validationErrors{
+				ValidationErrors: domain.ValidationErrors{
 					"identity": "user already exists",
 				},
 			}
 		)
 
+		validator.On("Validate", &r).Once().Return(nil)
+		defer validator.AssertExpectations(t)
+
+		translator.On(
+			"Translate",
+			expectedResponse.ValidationErrors["identity"],
+			mock.AnythingOfType(translatorOptionsType),
+		).Once().Return(expectedResponse.ValidationErrors["identity"])
+		defer translator.AssertExpectations(t)
+
 		userRepository.On("GetOneByIdentity", u.UUID).Once().Return(u, nil)
 		defer userRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&userRepository, &roleRepository, &configRepository, &hasher, j).Execute(r)
+		response, err := NewUseCase(&userRepository, &roleRepository, &configRepository, &hasher, j, &translator, &validator).Execute(&r)
 
 		userRepository.AssertNotCalled(t, "Save")
 		hasher.AssertNotCalled(t, "Hash")
@@ -212,11 +259,15 @@ func TestUseCase_Execute(t *testing.T) {
 	})
 
 	t.Run("user with same username exists", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			userRepository   users.MockUsersRepository
 			roleRepository   roles.MockRolesRepository
 			configRepository configRepo.MockConfigRepository
 			hasher           crypto.MockCrypto
+			validator        validator.MockValidator
+			translator       translator.TranslatorMock
 
 			u = user.User{
 				UUID:     "user-uuid",
@@ -232,17 +283,27 @@ func TestUseCase_Execute(t *testing.T) {
 			}
 
 			expectedResponse = Response{
-				ValidationErrors: validationErrors{
+				ValidationErrors: domain.ValidationErrors{
 					"username": "user with given username already exists",
 				},
 			}
 		)
 
+		validator.On("Validate", &r).Once().Return(nil)
+		defer validator.AssertExpectations(t)
+
+		translator.On(
+			"Translate",
+			expectedResponse.ValidationErrors["username"],
+			mock.AnythingOfType(translatorOptionsType),
+		).Once().Return(expectedResponse.ValidationErrors["username"])
+		defer translator.AssertExpectations(t)
+
 		userRepository.On("GetOneByIdentity", u.UUID).Once().Return(user.User{}, nil)
 		userRepository.On("GetOneByIdentity", r.Username).Once().Return(u, nil)
 		defer userRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&userRepository, &roleRepository, &configRepository, &hasher, j).Execute(r)
+		response, err := NewUseCase(&userRepository, &roleRepository, &configRepository, &hasher, j, &translator, &validator).Execute(&r)
 
 		userRepository.AssertNotCalled(t, "Save")
 		hasher.AssertNotCalled(t, "Hash")
@@ -256,11 +317,15 @@ func TestUseCase_Execute(t *testing.T) {
 	})
 
 	t.Run("saving user's data failed", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			userRepository   users.MockUsersRepository
 			roleRepository   roles.MockRolesRepository
 			configRepository configRepo.MockConfigRepository
 			hasher           crypto.MockCrypto
+			validator        validator.MockValidator
+			translator       translator.TranslatorMock
 
 			u = user.User{
 				UUID:     "user-uuid",
@@ -278,6 +343,9 @@ func TestUseCase_Execute(t *testing.T) {
 			expectedErr = errors.New("some error")
 		)
 
+		validator.On("Validate", &r).Once().Return(nil)
+		defer validator.AssertExpectations(t)
+
 		userRepository.On("GetOneByIdentity", u.UUID).Once().Return(user.User{}, domain.ErrNotExists)
 		userRepository.On("GetOneByIdentity", r.Username).Once().Return(user.User{}, domain.ErrNotExists)
 		userRepository.On("Save", mock.Anything).Once().Return("", expectedErr)
@@ -286,7 +354,7 @@ func TestUseCase_Execute(t *testing.T) {
 		hasher.On("Hash", []byte(r.Password), mock.AnythingOfType("[]uint8")).Once().Return([]byte("hashed-password"), nil)
 		defer hasher.AssertExpectations(t)
 
-		response, err := NewUseCase(&userRepository, &roleRepository, &configRepository, &hasher, j).Execute(r)
+		response, err := NewUseCase(&userRepository, &roleRepository, &configRepository, &hasher, j, &translator, &validator).Execute(&r)
 
 		configRepository.AssertNotCalled(t, "GetLatestRevision")
 		roleRepository.AssertNotCalled(t, "GetByUUIDs")

@@ -13,6 +13,8 @@ import (
 )
 
 func TestUseCase_Execute(t *testing.T) {
+	t.Parallel()
+
 	t.Run("deletes a file", func(t *testing.T) {
 		var (
 			filesRepository files.MockFilesRepository
@@ -39,6 +41,8 @@ func TestUseCase_Execute(t *testing.T) {
 	})
 
 	t.Run("getting file info fails", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			filesRepository files.MockFilesRepository
 			storage         s.MockStorage
@@ -60,6 +64,8 @@ func TestUseCase_Execute(t *testing.T) {
 	})
 
 	t.Run("deleting file from storage fails", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			filesRepository files.MockFilesRepository
 			storage         s.MockStorage
@@ -88,6 +94,8 @@ func TestUseCase_Execute(t *testing.T) {
 	})
 
 	t.Run("fails to deletes a file from database", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			filesRepository files.MockFilesRepository
 			storage         s.MockStorage

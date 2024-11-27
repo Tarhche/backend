@@ -1,22 +1,24 @@
 package userchangepassword
 
-type validationErrors map[string]string
+import "github.com/khanzadimahdi/testproject/domain"
 
 type Request struct {
 	UserUUID    string `json:"-"`
 	NewPassword string `json:"new_password"`
 }
 
-func (r *Request) Validate() (bool, validationErrors) {
-	errors := make(validationErrors)
+var _ domain.Validatable = &Request{}
+
+func (r *Request) Validate() domain.ValidationErrors {
+	validationErrors := make(domain.ValidationErrors)
 
 	if len(r.UserUUID) == 0 {
-		errors["uuid"] = "universal unique identifier (uuid) is required"
+		validationErrors["uuid"] = "required_field"
 	}
 
 	if len(r.NewPassword) == 0 {
-		errors["new_password"] = "password is required"
+		validationErrors["new_password"] = "required_field"
 	}
 
-	return len(errors) == 0, errors
+	return validationErrors
 }

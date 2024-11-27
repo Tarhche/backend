@@ -1,18 +1,20 @@
 package getUserBookmarks
 
-type validationErrors map[string]string
+import "github.com/khanzadimahdi/testproject/domain"
 
 type Request struct {
 	OwnerUUID string `json:"-"`
 	Page      uint
 }
 
-func (r *Request) Validate() (bool, validationErrors) {
-	errors := make(validationErrors)
+var _ domain.Validatable = &Request{}
+
+func (r *Request) Validate() domain.ValidationErrors {
+	validationErrors := make(domain.ValidationErrors)
 
 	if len(r.OwnerUUID) == 0 {
-		errors["owner_uuid"] = "owner uuid is required"
+		validationErrors["owner_uuid"] = "required_field"
 	}
 
-	return len(errors) == 0, errors
+	return validationErrors
 }

@@ -13,15 +13,22 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/application/bookmark/updateBookmark"
+	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/bookmark"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/bookmarks"
+	"github.com/khanzadimahdi/testproject/infrastructure/validator"
 )
 
 func TestUpdateHandler(t *testing.T) {
+	t.Parallel()
+
 	t.Run("update", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			bookmarkRepository bookmarks.MockBookmarksRepository
+			requestValidator   validator.MockValidator
 		)
 
 		u := user.User{
@@ -46,15 +53,18 @@ func TestUpdateHandler(t *testing.T) {
 		}
 
 		var payload bytes.Buffer
-
 		err := json.NewEncoder(&payload).Encode(r)
 		assert.NoError(t, err)
+
+		r.OwnerUUID = u.UUID
+		requestValidator.On("Validate", &r).Once().Return(nil)
+		defer requestValidator.AssertExpectations(t)
 
 		request := httptest.NewRequest(http.MethodPost, "/", &payload)
 		request = request.WithContext(auth.ToContext(request.Context(), &u))
 		response := httptest.NewRecorder()
 
-		handler := NewUpdateHandler(updateBookmark.NewUseCase(&bookmarkRepository))
+		handler := NewUpdateHandler(updateBookmark.NewUseCase(&bookmarkRepository, &requestValidator))
 
 		handler.ServeHTTP(response, request)
 
@@ -63,19 +73,29 @@ func TestUpdateHandler(t *testing.T) {
 	})
 
 	t.Run("validation failed", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			bookmarkRepository bookmarks.MockBookmarksRepository
+			requestValidator   validator.MockValidator
 		)
 
 		u := user.User{
 			UUID: "user-uuid-1",
 		}
 
+		requestValidator.On("Validate", &updateBookmark.Request{OwnerUUID: u.UUID}).Once().Return(domain.ValidationErrors{
+			"object_type": "object type is not supported",
+			"object_uuid": "object uuid is required",
+			"title":       "title is required",
+		})
+		defer requestValidator.AssertExpectations(t)
+
 		request := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString("{}"))
 		request = request.WithContext(auth.ToContext(request.Context(), &u))
 		response := httptest.NewRecorder()
 
-		handler := NewUpdateHandler(updateBookmark.NewUseCase(&bookmarkRepository))
+		handler := NewUpdateHandler(updateBookmark.NewUseCase(&bookmarkRepository, &requestValidator))
 
 		handler.ServeHTTP(response, request)
 
@@ -90,8 +110,11 @@ func TestUpdateHandler(t *testing.T) {
 	})
 
 	t.Run("error", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			bookmarkRepository bookmarks.MockBookmarksRepository
+			requestValidator   validator.MockValidator
 		)
 
 		u := user.User{
@@ -116,15 +139,18 @@ func TestUpdateHandler(t *testing.T) {
 		}
 
 		var payload bytes.Buffer
-
 		err := json.NewEncoder(&payload).Encode(r)
 		assert.NoError(t, err)
+
+		r.OwnerUUID = u.UUID
+		requestValidator.On("Validate", &r).Once().Return(nil)
+		defer requestValidator.AssertExpectations(t)
 
 		request := httptest.NewRequest(http.MethodPost, "/", &payload)
 		request = request.WithContext(auth.ToContext(request.Context(), &u))
 		response := httptest.NewRecorder()
 
-		handler := NewUpdateHandler(updateBookmark.NewUseCase(&bookmarkRepository))
+		handler := NewUpdateHandler(updateBookmark.NewUseCase(&bookmarkRepository, &requestValidator))
 
 		handler.ServeHTTP(response, request)
 

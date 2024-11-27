@@ -26,20 +26,28 @@ import (
 	configRepo "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/config"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/roles"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
+	"github.com/khanzadimahdi/testproject/infrastructure/translator"
+	"github.com/khanzadimahdi/testproject/infrastructure/validator"
 )
 
 func TestVerifyHandler(t *testing.T) {
+	t.Parallel()
+
 	privateKey, err := ecdsa.Generate()
 	assert.NoError(t, err)
 
 	j := jwt.NewJWT(privateKey, privateKey.Public())
 
 	t.Run("verify", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			userRepository   users.MockUsersRepository
 			roleRepository   roles.MockRolesRepository
 			configRepository configRepo.MockConfigRepository
 			hasher           crypto.MockCrypto
+			requestValidator validator.MockValidator
+			translator       translator.TranslatorMock
 
 			u = user.User{
 				UUID: "user-uuid",
@@ -77,6 +85,9 @@ func TestVerifyHandler(t *testing.T) {
 			}
 		)
 
+		requestValidator.On("Validate", &r).Once().Return(nil)
+		defer requestValidator.AssertExpectations(t)
+
 		userRepository.On("GetOneByIdentity", u.UUID).Once().Return(user.User{}, domain.ErrNotExists)
 		userRepository.On("GetOneByIdentity", r.Username).Once().Return(user.User{}, domain.ErrNotExists)
 		userRepository.On("Save", mock.Anything).Once().Return(u.UUID, nil)
@@ -100,6 +111,8 @@ func TestVerifyHandler(t *testing.T) {
 				&configRepository,
 				&hasher,
 				j,
+				&translator,
+				&requestValidator,
 			),
 		)
 
@@ -112,17 +125,32 @@ func TestVerifyHandler(t *testing.T) {
 
 		handler.ServeHTTP(response, request)
 
+		translator.AssertNotCalled(t, "Translate")
+
 		assert.Len(t, response.Body.Bytes(), 0)
 		assert.Equal(t, http.StatusNoContent, response.Code)
 	})
 
 	t.Run("validation failed", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			userRepository   users.MockUsersRepository
 			roleRepository   roles.MockRolesRepository
 			configRepository configRepo.MockConfigRepository
 			hasher           crypto.MockCrypto
+			requestValidator validator.MockValidator
+			translator       translator.TranslatorMock
 		)
+
+		requestValidator.On("Validate", &verify.Request{}).Once().Return(domain.ValidationErrors{
+			"name":       "name is required",
+			"password":   "password is required",
+			"repassword": "password and it's repeat should be same",
+			"token":      "token is required",
+			"username":   "username is required",
+		})
+		defer requestValidator.AssertExpectations(t)
 
 		handler := NewVerifyHandler(
 			verify.NewUseCase(
@@ -131,6 +159,8 @@ func TestVerifyHandler(t *testing.T) {
 				&configRepository,
 				&hasher,
 				j,
+				&translator,
+				&requestValidator,
 			),
 		)
 
@@ -139,6 +169,7 @@ func TestVerifyHandler(t *testing.T) {
 
 		handler.ServeHTTP(response, request)
 
+		translator.AssertNotCalled(t, "Translate")
 		userRepository.AssertNotCalled(t, "GetOneByIdentity")
 		userRepository.AssertNotCalled(t, "Save")
 		hasher.AssertNotCalled(t, "Hash")
@@ -155,11 +186,15 @@ func TestVerifyHandler(t *testing.T) {
 	})
 
 	t.Run("error", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			userRepository   users.MockUsersRepository
 			roleRepository   roles.MockRolesRepository
 			configRepository configRepo.MockConfigRepository
 			hasher           crypto.MockCrypto
+			requestValidator validator.MockValidator
+			translator       translator.TranslatorMock
 
 			u = user.User{
 				UUID: "user-uuid",
@@ -184,6 +219,8 @@ func TestVerifyHandler(t *testing.T) {
 				&configRepository,
 				&hasher,
 				j,
+				&translator,
+				&requestValidator,
 			),
 		)
 
@@ -191,11 +228,15 @@ func TestVerifyHandler(t *testing.T) {
 		err := json.NewEncoder(&payload).Encode(r)
 		assert.NoError(t, err)
 
+		requestValidator.On("Validate", &r).Once().Return(nil)
+		defer requestValidator.AssertExpectations(t)
+
 		request := httptest.NewRequest(http.MethodPost, "/", &payload)
 		response := httptest.NewRecorder()
 
 		handler.ServeHTTP(response, request)
 
+		translator.AssertNotCalled(t, "Translate")
 		userRepository.AssertNotCalled(t, "GetOneByIdentity", u.Username)
 		userRepository.AssertNotCalled(t, "Save")
 		hasher.AssertNotCalled(t, "Hash")

@@ -3,6 +3,7 @@ package getComments
 import (
 	"time"
 
+	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/comment"
 )
 
@@ -21,6 +22,8 @@ type authorResponse struct {
 }
 
 type Response struct {
+	ValidationErrors domain.ValidationErrors `json:"errors,omitempty"`
+
 	Items      []commentResponse `json:"items"`
 	Pagination pagination        `json:"pagination"`
 }

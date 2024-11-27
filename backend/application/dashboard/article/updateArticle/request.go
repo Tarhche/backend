@@ -2,9 +2,9 @@ package updatearticle
 
 import (
 	"time"
-)
 
-type validationErrors map[string]string
+	"github.com/khanzadimahdi/testproject/domain"
+)
 
 type Request struct {
 	UUID        string    `json:"uuid"`
@@ -18,24 +18,26 @@ type Request struct {
 	Tags        []string  `json:"tags"`
 }
 
-func (r *Request) Validate() (bool, validationErrors) {
-	errors := make(validationErrors)
+var _ domain.Validatable = &Request{}
+
+func (r *Request) Validate() domain.ValidationErrors {
+	validationErrors := make(domain.ValidationErrors)
 
 	if len(r.Title) == 0 {
-		errors["title"] = "title is required"
+		validationErrors["title"] = "required_field"
 	}
 
 	if len(r.Excerpt) == 0 {
-		errors["excerpt"] = "excerpt is required"
+		validationErrors["excerpt"] = "required_field"
 	}
 
 	if len(r.Body) == 0 {
-		errors["body"] = "body is required"
+		validationErrors["body"] = "required_field"
 	}
 
 	if len(r.AuthorUUID) == 0 {
-		errors["author"] = "author is required"
+		validationErrors["author"] = "required_field"
 	}
 
-	return len(errors) == 0, errors
+	return validationErrors
 }

@@ -13,7 +13,11 @@ import (
 )
 
 func TestUseCase_Execute(t *testing.T) {
+	t.Parallel()
+
 	t.Run("gets an element", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			elementRepository elements.MockElementsRepository
 			mockComponent     component.MockComponent
@@ -40,6 +44,8 @@ func TestUseCase_Execute(t *testing.T) {
 	})
 
 	t.Run("getting an element fails", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			elementRepository elements.MockElementsRepository
 

@@ -34,7 +34,7 @@ func (h *deleteHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 	UUID := r.PathValue("uuid")
 
-	request := deleterole.Request{
+	request := &deleterole.Request{
 		RoleUUID: UUID,
 	}
 

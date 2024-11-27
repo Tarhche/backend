@@ -1,5 +1,7 @@
 package verify
 
+import "github.com/khanzadimahdi/testproject/domain"
+
 type validationErrors map[string]string
 
 type Request struct {
@@ -10,28 +12,30 @@ type Request struct {
 	Repassword string `json:"repassword"`
 }
 
-func (r *Request) Validate() (bool, validationErrors) {
-	errors := make(validationErrors)
+var _ domain.Validatable = &Request{}
+
+func (r *Request) Validate() domain.ValidationErrors {
+	validationErrors := make(domain.ValidationErrors)
 
 	if len(r.Token) == 0 {
-		errors["token"] = "token is required"
+		validationErrors["token"] = "required_field"
 	}
 
 	if len(r.Name) == 0 {
-		errors["name"] = "name is required"
+		validationErrors["name"] = "required_field"
 	}
 
 	if len(r.Username) == 0 {
-		errors["username"] = "username is required"
+		validationErrors["username"] = "required_field"
 	}
 
 	if len(r.Password) == 0 {
-		errors["password"] = "password is required"
+		validationErrors["password"] = "required_field"
 	}
 
 	if len(r.Repassword) == 0 || len(r.Password) != len(r.Repassword) || r.Password != r.Repassword {
-		errors["repassword"] = "password and it's repeat should be same"
+		validationErrors["repassword"] = "repassword"
 	}
 
-	return len(errors) == 0, errors
+	return validationErrors
 }

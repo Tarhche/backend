@@ -38,7 +38,7 @@ func (h *deleteUserHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		UserUUID:    userUUID,
 	}
 
-	err := h.useCase.Execute(request)
+	err := h.useCase.Execute(&request)
 	switch {
 	case err != nil:
 		rw.WriteHeader(http.StatusInternalServerError)

@@ -21,14 +21,20 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/files"
 	s "github.com/khanzadimahdi/testproject/infrastructure/storage/mock"
+	"github.com/khanzadimahdi/testproject/infrastructure/validator"
 )
 
 func TestUploadHandler(t *testing.T) {
+	t.Parallel()
+
 	t.Run("upload file", func(t *testing.T) {
+		t.Parallel()
+
 		var (
-			filesRepository files.MockFilesRepository
-			storage         s.MockStorage
-			authorizer      domain.MockAuthorizer
+			filesRepository  files.MockFilesRepository
+			storage          s.MockStorage
+			authorizer       domain.MockAuthorizer
+			requestValidator validator.MockValidator
 
 			u = user.User{UUID: "auth-user-uuid"}
 
@@ -39,13 +45,13 @@ func TestUploadHandler(t *testing.T) {
 				Size: int64(len(fileContent)),
 			}
 
+			fileUUID = "test-file-uuid"
+
 			f = file.File{
 				Name:      r.Name,
 				Size:      r.Size,
 				OwnerUUID: u.UUID,
 			}
-
-			fileUUID = "test-file-uuid"
 		)
 
 		var payload bytes.Buffer
@@ -60,13 +66,16 @@ func TestUploadHandler(t *testing.T) {
 		authorizer.On("Authorize", u.UUID, permission.FilesCreate).Once().Return(true, nil)
 		defer authorizer.AssertExpectations(t)
 
+		requestValidator.On("Validate", mock.Anything).Once().Return(nil)
+		defer requestValidator.AssertExpectations(t)
+
 		storage.On("Store", context.Background(), r.Name, mock.Anything, r.Size).Once().Return(nil)
 		defer storage.AssertExpectations(t)
 
 		filesRepository.On("Save", &f).Once().Return(fileUUID, nil)
 		defer filesRepository.AssertExpectations(t)
 
-		handler := NewUploadHandler(createfile.NewUseCase(&filesRepository, &storage), &authorizer)
+		handler := NewUploadHandler(createfile.NewUseCase(&filesRepository, &storage, &requestValidator), &authorizer)
 
 		request := httptest.NewRequest(http.MethodPost, "/", &payload)
 		request.Header.Add("Content-Type", w.FormDataContentType())
@@ -84,10 +93,13 @@ func TestUploadHandler(t *testing.T) {
 	})
 
 	t.Run("unauthorized", func(t *testing.T) {
+		t.Parallel()
+
 		var (
-			filesRepository files.MockFilesRepository
-			storage         s.MockStorage
-			authorizer      domain.MockAuthorizer
+			filesRepository  files.MockFilesRepository
+			storage          s.MockStorage
+			authorizer       domain.MockAuthorizer
+			requestValidator validator.MockValidator
 
 			u = user.User{UUID: "auth-user-uuid"}
 
@@ -110,7 +122,7 @@ func TestUploadHandler(t *testing.T) {
 		authorizer.On("Authorize", u.UUID, permission.FilesCreate).Once().Return(false, nil)
 		defer authorizer.AssertExpectations(t)
 
-		handler := NewUploadHandler(createfile.NewUseCase(&filesRepository, &storage), &authorizer)
+		handler := NewUploadHandler(createfile.NewUseCase(&filesRepository, &storage, &requestValidator), &authorizer)
 
 		request := httptest.NewRequest(http.MethodPost, "/", &payload)
 		request.Header.Add("Content-Type", w.FormDataContentType())
@@ -119,6 +131,7 @@ func TestUploadHandler(t *testing.T) {
 
 		handler.ServeHTTP(response, request)
 
+		requestValidator.AssertNotCalled(t, "Validate")
 		storage.AssertNotCalled(t, "Store")
 		filesRepository.AssertNotCalled(t, "Save")
 
@@ -127,10 +140,13 @@ func TestUploadHandler(t *testing.T) {
 	})
 
 	t.Run("error", func(t *testing.T) {
+		t.Parallel()
+
 		var (
-			filesRepository files.MockFilesRepository
-			storage         s.MockStorage
-			authorizer      domain.MockAuthorizer
+			filesRepository  files.MockFilesRepository
+			storage          s.MockStorage
+			authorizer       domain.MockAuthorizer
+			requestValidator validator.MockValidator
 
 			u = user.User{UUID: "auth-user-uuid"}
 
@@ -153,7 +169,7 @@ func TestUploadHandler(t *testing.T) {
 		authorizer.On("Authorize", u.UUID, permission.FilesCreate).Once().Return(false, errors.New("unexpected error"))
 		defer authorizer.AssertExpectations(t)
 
-		handler := NewUploadHandler(createfile.NewUseCase(&filesRepository, &storage), &authorizer)
+		handler := NewUploadHandler(createfile.NewUseCase(&filesRepository, &storage, &requestValidator), &authorizer)
 
 		request := httptest.NewRequest(http.MethodPost, "/", &payload)
 		request.Header.Add("Content-Type", w.FormDataContentType())
@@ -162,6 +178,7 @@ func TestUploadHandler(t *testing.T) {
 
 		handler.ServeHTTP(response, request)
 
+		requestValidator.AssertNotCalled(t, "Validate")
 		storage.AssertNotCalled(t, "Store")
 		filesRepository.AssertNotCalled(t, "Save")
 

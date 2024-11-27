@@ -14,7 +14,11 @@ import (
 )
 
 func TestUseCase_Execute(t *testing.T) {
+	t.Parallel()
+
 	t.Run("gets a comment", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			commentRepository comments.MockCommentsRepository
 			userRepository    users.MockUsersRepository
@@ -48,6 +52,8 @@ func TestUseCase_Execute(t *testing.T) {
 	})
 
 	t.Run("getting a comment fails", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			commentRepository comments.MockCommentsRepository
 			userRepository    users.MockUsersRepository
@@ -70,6 +76,8 @@ func TestUseCase_Execute(t *testing.T) {
 	})
 
 	t.Run("getting a comment's userinfo fails", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			commentRepository comments.MockCommentsRepository
 			userRepository    users.MockUsersRepository

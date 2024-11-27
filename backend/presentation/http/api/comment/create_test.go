@@ -13,16 +13,23 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/application/comment/createComment"
+	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/author"
 	"github.com/khanzadimahdi/testproject/domain/comment"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/comments"
+	"github.com/khanzadimahdi/testproject/infrastructure/validator"
 )
 
 func TestCreateHandler(t *testing.T) {
+	t.Parallel()
+
 	t.Run("creates a comment", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			commentRepository comments.MockCommentsRepository
+			requestValidator  validator.MockValidator
 		)
 
 		u := user.User{UUID: "auth-user-uuid"}
@@ -36,11 +43,6 @@ func TestCreateHandler(t *testing.T) {
 			},
 		}
 
-		commentRepository.On("Save", &c).Once().Return(c.UUID, nil)
-		defer commentRepository.AssertExpectations(t)
-
-		handler := NewCreateHandler(createComment.NewUseCase(&commentRepository))
-
 		body := createComment.Request{
 			Body:       c.Body,
 			ParentUUID: c.ParentUUID,
@@ -51,6 +53,15 @@ func TestCreateHandler(t *testing.T) {
 		var payload bytes.Buffer
 		err := json.NewEncoder(&payload).Encode(body)
 		assert.NoError(t, err)
+
+		body.AuthorUUID = u.UUID
+		requestValidator.On("Validate", &body).Once().Return(nil)
+		defer requestValidator.AssertExpectations(t)
+
+		commentRepository.On("Save", &c).Once().Return(c.UUID, nil)
+		defer commentRepository.AssertExpectations(t)
+
+		handler := NewCreateHandler(createComment.NewUseCase(&commentRepository, &requestValidator))
 
 		request := httptest.NewRequest(http.MethodPost, "/", &payload)
 		request = request.WithContext(auth.ToContext(request.Context(), &u))
@@ -63,13 +74,16 @@ func TestCreateHandler(t *testing.T) {
 	})
 
 	t.Run("validation failed", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			commentRepository comments.MockCommentsRepository
+			requestValidator  validator.MockValidator
 		)
 
 		u := user.User{UUID: "auth-user-uuid"}
 
-		handler := NewCreateHandler(createComment.NewUseCase(&commentRepository))
+		handler := NewCreateHandler(createComment.NewUseCase(&commentRepository, &requestValidator))
 
 		body := createComment.Request{
 			ObjectType: "some test type",
@@ -78,6 +92,14 @@ func TestCreateHandler(t *testing.T) {
 		var payload bytes.Buffer
 		err := json.NewEncoder(&payload).Encode(body)
 		assert.NoError(t, err)
+
+		body.AuthorUUID = u.UUID
+		requestValidator.On("Validate", &body).Once().Return(domain.ValidationErrors{
+			"body":        "body is required",
+			"object_type": "object type is not supported",
+			"object_uuid": "object_uuid is required",
+		})
+		defer requestValidator.AssertExpectations(t)
 
 		request := httptest.NewRequest(http.MethodPost, "/", &payload)
 		request = request.WithContext(auth.ToContext(request.Context(), &u))
@@ -96,8 +118,11 @@ func TestCreateHandler(t *testing.T) {
 	})
 
 	t.Run("error", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			commentRepository comments.MockCommentsRepository
+			requestValidator  validator.MockValidator
 		)
 
 		u := user.User{UUID: "auth-user-uuid"}
@@ -114,7 +139,7 @@ func TestCreateHandler(t *testing.T) {
 		commentRepository.On("Save", &c).Once().Return(c.UUID, errors.New("some unwanted error"))
 		defer commentRepository.AssertExpectations(t)
 
-		handler := NewCreateHandler(createComment.NewUseCase(&commentRepository))
+		handler := NewCreateHandler(createComment.NewUseCase(&commentRepository, &requestValidator))
 
 		body := createComment.Request{
 			Body:       c.Body,
@@ -126,6 +151,10 @@ func TestCreateHandler(t *testing.T) {
 		var payload bytes.Buffer
 		err := json.NewEncoder(&payload).Encode(body)
 		assert.NoError(t, err)
+
+		body.AuthorUUID = u.UUID
+		requestValidator.On("Validate", &body).Once().Return(nil)
+		defer requestValidator.AssertExpectations(t)
 
 		request := httptest.NewRequest(http.MethodPost, "/", &payload)
 		request = request.WithContext(auth.ToContext(request.Context(), &u))

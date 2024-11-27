@@ -20,7 +20,11 @@ import (
 )
 
 func TestShowHandler(t *testing.T) {
+	t.Parallel()
+
 	t.Run("show", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			articlesRepository articles.MockArticlesRepository
 			elementsRepository elements.MockElementsRepository
@@ -68,6 +72,8 @@ func TestShowHandler(t *testing.T) {
 	})
 
 	t.Run("not found", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			articlesRepository articles.MockArticlesRepository
 			elementsRepository elements.MockElementsRepository
@@ -98,6 +104,8 @@ func TestShowHandler(t *testing.T) {
 	})
 
 	t.Run("error", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			articlesRepository articles.MockArticlesRepository
 			elementsRepository elements.MockElementsRepository

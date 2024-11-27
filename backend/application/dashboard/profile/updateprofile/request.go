@@ -14,19 +14,19 @@ func (r *Request) Validate() (bool, validationErrors) {
 	errors := make(validationErrors)
 
 	if len(r.UserUUID) == 0 {
-		errors["uuid"] = "universal unique identifier (uuid) is required"
+		errors["uuid"] = "required_field"
 	}
 
 	if len(r.Name) == 0 {
-		errors["name"] = "name is required"
+		errors["name"] = "required_field"
 	}
 
 	if len(r.Email) == 0 {
-		errors["email"] = "email is required"
+		errors["email"] = "required_field"
 	}
 
 	if len(r.Username) == 0 {
-		errors["username"] = "username is required"
+		errors["username"] = "required_field"
 	}
 
 	return len(errors) == 0, errors

@@ -13,16 +13,25 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/khanzadimahdi/testproject/application/auth/register"
+	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
+	"github.com/khanzadimahdi/testproject/infrastructure/translator"
+	"github.com/khanzadimahdi/testproject/infrastructure/validator"
 )
 
 func TestRegisterHandler(t *testing.T) {
+	t.Parallel()
+
 	t.Run("refresh token", func(t *testing.T) {
+		t.Parallel()
+
 		var (
-			userRepository  users.MockUsersRepository
-			asyncCommandBus mock.MockPublishSubscriber
+			userRepository   users.MockUsersRepository
+			asyncCommandBus  mock.MockPublishSubscriber
+			requestValidator validator.MockValidator
+			translator       translator.TranslatorMock
 
 			r = register.Request{
 				Identity: "test@test-mail.test",
@@ -36,13 +45,16 @@ func TestRegisterHandler(t *testing.T) {
 		commandPayload, err := json.Marshal(command)
 		assert.NoError(t, err)
 
+		requestValidator.On("Validate", &r).Once().Return(nil)
+		defer requestValidator.AssertExpectations(t)
+
 		userRepository.On("GetOneByIdentity", r.Identity).Once().Return(user.User{}, nil)
 		defer userRepository.AssertExpectations(t)
 
 		asyncCommandBus.On("Publish", context.Background(), register.SendRegisterationEmailName, commandPayload).Return(nil)
 		defer asyncCommandBus.AssertExpectations(t)
 
-		handler := NewRegisterHandler(register.NewUseCase(&userRepository, &asyncCommandBus))
+		handler := NewRegisterHandler(register.NewUseCase(&userRepository, &asyncCommandBus, &translator, &requestValidator))
 
 		var payload bytes.Buffer
 		err = json.NewEncoder(&payload).Encode(r)
@@ -53,23 +65,35 @@ func TestRegisterHandler(t *testing.T) {
 
 		handler.ServeHTTP(response, request)
 
+		translator.AssertNotCalled(t, "Translate")
+
 		assert.Len(t, response.Body.Bytes(), 0)
 		assert.Equal(t, http.StatusNoContent, response.Code)
 	})
 
 	t.Run("validation failed", func(t *testing.T) {
+		t.Parallel()
+
 		var (
-			userRepository  users.MockUsersRepository
-			asyncCommandBus mock.MockPublishSubscriber
+			userRepository   users.MockUsersRepository
+			asyncCommandBus  mock.MockPublishSubscriber
+			requestValidator validator.MockValidator
+			translator       translator.TranslatorMock
 		)
 
-		handler := NewRegisterHandler(register.NewUseCase(&userRepository, &asyncCommandBus))
+		requestValidator.On("Validate", &register.Request{}).Once().Return(domain.ValidationErrors{
+			"identity": "identity is not a valid email address",
+		})
+		defer requestValidator.AssertExpectations(t)
+
+		handler := NewRegisterHandler(register.NewUseCase(&userRepository, &asyncCommandBus, &translator, &requestValidator))
 
 		request := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString("{}"))
 		response := httptest.NewRecorder()
 
 		handler.ServeHTTP(response, request)
 
+		translator.AssertNotCalled(t, "Translate")
 		userRepository.AssertNotCalled(t, "GetOneByIdentity")
 		asyncCommandBus.AssertNotCalled(t, "Publish")
 
@@ -82,19 +106,26 @@ func TestRegisterHandler(t *testing.T) {
 	})
 
 	t.Run("error", func(t *testing.T) {
+		t.Parallel()
+
 		var (
-			userRepository  users.MockUsersRepository
-			asyncCommandBus mock.MockPublishSubscriber
+			userRepository   users.MockUsersRepository
+			asyncCommandBus  mock.MockPublishSubscriber
+			requestValidator validator.MockValidator
+			translator       translator.TranslatorMock
 
 			r = register.Request{
 				Identity: "test@test-mail.test",
 			}
 		)
 
+		requestValidator.On("Validate", &r).Once().Return(nil)
+		defer requestValidator.AssertExpectations(t)
+
 		userRepository.On("GetOneByIdentity", r.Identity).Once().Return(user.User{}, errors.New("undexprected error"))
 		defer userRepository.AssertExpectations(t)
 
-		handler := NewRegisterHandler(register.NewUseCase(&userRepository, &asyncCommandBus))
+		handler := NewRegisterHandler(register.NewUseCase(&userRepository, &asyncCommandBus, &translator, &requestValidator))
 
 		var payload bytes.Buffer
 		err := json.NewEncoder(&payload).Encode(r)
@@ -105,6 +136,7 @@ func TestRegisterHandler(t *testing.T) {
 
 		handler.ServeHTTP(response, request)
 
+		translator.AssertNotCalled(t, "Translate")
 		asyncCommandBus.AssertNotCalled(t, "Publish")
 
 		assert.Len(t, response.Body.Bytes(), 0)

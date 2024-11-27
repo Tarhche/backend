@@ -24,12 +24,12 @@ func (h *forgetPasswordHandler) ServeHTTP(rw http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	response, err := h.useCase.Execute(request)
+	response, err := h.useCase.Execute(&request)
 
 	switch {
 	case err != nil:
 		rw.WriteHeader(http.StatusInternalServerError)
-	case len(response.ValidationErrors) > 0:
+	case response != nil && len(response.ValidationErrors) > 0:
 		rw.Header().Add("Content-Type", "application/json")
 		rw.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(rw).Encode(response)

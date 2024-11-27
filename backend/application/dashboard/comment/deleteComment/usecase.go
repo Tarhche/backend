@@ -14,6 +14,6 @@ func NewUseCase(commentRepository comment.Repository) *UseCase {
 	}
 }
 
-func (uc *UseCase) Execute(request Request) error {
+func (uc *UseCase) Execute(request *Request) error {
 	return uc.commentRepository.Delete(request.CommentUUID)
 }

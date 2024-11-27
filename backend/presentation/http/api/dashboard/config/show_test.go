@@ -19,7 +19,11 @@ import (
 )
 
 func TestShowHandler(t *testing.T) {
+	t.Parallel()
+
 	t.Run("show config", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			configRepository configMocks.MockConfigRepository
 			authorizer       domain.MockAuthorizer
@@ -55,6 +59,8 @@ func TestShowHandler(t *testing.T) {
 	})
 
 	t.Run("unauthorized", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			configRepository configMocks.MockConfigRepository
 			authorizer       domain.MockAuthorizer
@@ -80,6 +86,8 @@ func TestShowHandler(t *testing.T) {
 	})
 
 	t.Run("error", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			configRepository configMocks.MockConfigRepository
 			authorizer       domain.MockAuthorizer

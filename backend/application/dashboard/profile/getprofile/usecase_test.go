@@ -11,7 +11,11 @@ import (
 )
 
 func TestUseCase_Execute(t *testing.T) {
+	t.Parallel()
+
 	t.Run("gets user info", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			userRepository users.MockUsersRepository
 
@@ -43,6 +47,8 @@ func TestUseCase_Execute(t *testing.T) {
 	})
 
 	t.Run("getting user info fails", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			userRepository users.MockUsersRepository
 

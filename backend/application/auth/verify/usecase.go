@@ -10,6 +10,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/config"
 	"github.com/khanzadimahdi/testproject/domain/password"
 	"github.com/khanzadimahdi/testproject/domain/role"
+	"github.com/khanzadimahdi/testproject/domain/translator"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
 )
@@ -20,6 +21,8 @@ type UseCase struct {
 	configRepository config.Repository
 	hasher           password.Hasher
 	jwt              *jwt.JWT
+	translator       translator.Translator
+	validator        domain.Validator
 }
 
 func NewUseCase(
@@ -28,6 +31,8 @@ func NewUseCase(
 	configRepository config.Repository,
 	hasher password.Hasher,
 	JWT *jwt.JWT,
+	translator translator.Translator,
+	validator domain.Validator,
 ) *UseCase {
 	return &UseCase{
 		userRepository:   userRepository,
@@ -35,13 +40,15 @@ func NewUseCase(
 		configRepository: configRepository,
 		hasher:           hasher,
 		jwt:              JWT,
+		translator:       translator,
+		validator:        validator,
 	}
 }
 
-func (uc *UseCase) Execute(request Request) (*Response, error) {
-	if ok, validation := request.Validate(); !ok {
+func (uc *UseCase) Execute(request *Request) (*Response, error) {
+	if validationErrors := uc.validator.Validate(request); len(validationErrors) > 0 {
 		return &Response{
-			ValidationErrors: validation,
+			ValidationErrors: validationErrors,
 		}, nil
 	}
 
@@ -53,7 +60,7 @@ func (uc *UseCase) Execute(request Request) (*Response, error) {
 	claims, err := uc.jwt.Verify(string(registrationToken))
 	if err != nil {
 		return &Response{
-			ValidationErrors: validationErrors{
+			ValidationErrors: domain.ValidationErrors{
 				"token": err.Error(),
 			},
 		}, nil
@@ -61,8 +68,8 @@ func (uc *UseCase) Execute(request Request) (*Response, error) {
 
 	if audiences, err := claims.GetAudience(); err != nil || len(audiences) == 0 || audiences[0] != auth.RegistrationToken {
 		return &Response{
-			ValidationErrors: validationErrors{
-				"token": "registration token is not valid",
+			ValidationErrors: domain.ValidationErrors{
+				"token": uc.translator.Translate("registration token is not valid"),
 			},
 		}, nil
 	}
@@ -70,7 +77,7 @@ func (uc *UseCase) Execute(request Request) (*Response, error) {
 	identity, err := claims.GetSubject()
 	if err != nil {
 		return &Response{
-			ValidationErrors: validationErrors{
+			ValidationErrors: domain.ValidationErrors{
 				"token": err.Error(),
 			},
 		}, nil
@@ -81,7 +88,7 @@ func (uc *UseCase) Execute(request Request) (*Response, error) {
 	} else if exists {
 		return &Response{
 			ValidationErrors: map[string]string{
-				"identity": "user already exists",
+				"identity": uc.translator.Translate("user already exists"),
 			},
 		}, nil
 	}
@@ -91,7 +98,7 @@ func (uc *UseCase) Execute(request Request) (*Response, error) {
 	} else if exists {
 		return &Response{
 			ValidationErrors: map[string]string{
-				"username": "user with given username already exists",
+				"username": uc.translator.Translate("user with given username already exists"),
 			},
 		}, nil
 	}

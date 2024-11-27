@@ -10,7 +10,11 @@ import (
 )
 
 func TestUseCase_Execute(t *testing.T) {
+	t.Parallel()
+
 	t.Run("deletes a role", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			roleRepository roles.MockRolesRepository
 
@@ -20,12 +24,14 @@ func TestUseCase_Execute(t *testing.T) {
 		roleRepository.On("Delete", r.RoleUUID).Return(nil)
 		defer roleRepository.AssertExpectations(t)
 
-		err := NewUseCase(&roleRepository).Execute(r)
+		err := NewUseCase(&roleRepository).Execute(&r)
 
 		assert.NoError(t, err)
 	})
 
 	t.Run("deleting the role fails", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			roleRepository roles.MockRolesRepository
 
@@ -36,7 +42,7 @@ func TestUseCase_Execute(t *testing.T) {
 		roleRepository.On("Delete", r.RoleUUID).Return(expectedError)
 		defer roleRepository.AssertExpectations(t)
 
-		err := NewUseCase(&roleRepository).Execute(r)
+		err := NewUseCase(&roleRepository).Execute(&r)
 
 		assert.ErrorIs(t, err, expectedError)
 	})

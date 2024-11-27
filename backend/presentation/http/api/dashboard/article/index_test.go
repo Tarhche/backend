@@ -20,7 +20,11 @@ import (
 )
 
 func TestIndexHandler(t *testing.T) {
+	t.Parallel()
+
 	t.Run("show articles", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			articleRepository articles.MockArticlesRepository
 			authorizer        domain.MockAuthorizer
@@ -74,6 +78,8 @@ func TestIndexHandler(t *testing.T) {
 	})
 
 	t.Run("no data", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			articleRepository articles.MockArticlesRepository
 			authorizer        domain.MockAuthorizer
@@ -107,6 +113,8 @@ func TestIndexHandler(t *testing.T) {
 	})
 
 	t.Run("unauthorized", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			articleRepository articles.MockArticlesRepository
 			authorizer        domain.MockAuthorizer
@@ -135,6 +143,8 @@ func TestIndexHandler(t *testing.T) {
 	})
 
 	t.Run("error", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			articleRepository articles.MockArticlesRepository
 			authorizer        domain.MockAuthorizer

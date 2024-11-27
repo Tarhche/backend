@@ -6,15 +6,22 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/article"
 	"github.com/khanzadimahdi/testproject/domain/author"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/articles"
+	"github.com/khanzadimahdi/testproject/infrastructure/validator"
 )
 
 func TestUseCase_Execute(t *testing.T) {
+	t.Parallel()
+
 	t.Run("updating an articles succeeds", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			articleRepository articles.MockArticlesRepository
+			validator         validator.MockValidator
 
 			r = Request{
 				UUID:       "test-article-uuid",
@@ -37,24 +44,30 @@ func TestUseCase_Execute(t *testing.T) {
 				},
 				Tags: r.Tags,
 			}
-
-			expectedResponse = Response{}
 		)
+
+		validator.On("Validate", &r).Once().Return(nil)
+		defer validator.AssertExpectations(t)
 
 		articleRepository.On("Save", &a).Once().Return(a.UUID, nil)
 		defer articleRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&articleRepository).Execute(r)
+		response, err := NewUseCase(&articleRepository, &validator).Execute(&r)
+
 		assert.NoError(t, err)
-		assert.Equal(t, &expectedResponse, response)
+		assert.Nil(t, response)
 	})
 
 	t.Run("validation fails", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			articleRepository articles.MockArticlesRepository
-			r                 = Request{}
-			expectedResponse  = Response{
-				ValidationErrors: validationErrors{
+			validator         validator.MockValidator
+
+			r                = Request{}
+			expectedResponse = Response{
+				ValidationErrors: domain.ValidationErrors{
 					"title":   "title is required",
 					"excerpt": "excerpt is required",
 					"body":    "body is required",
@@ -63,7 +76,10 @@ func TestUseCase_Execute(t *testing.T) {
 			}
 		)
 
-		response, err := NewUseCase(&articleRepository).Execute(r)
+		validator.On("Validate", &r).Once().Return(expectedResponse.ValidationErrors)
+		defer validator.AssertExpectations(t)
+
+		response, err := NewUseCase(&articleRepository, &validator).Execute(&r)
 
 		articleRepository.AssertNotCalled(t, "Save")
 
@@ -72,9 +88,13 @@ func TestUseCase_Execute(t *testing.T) {
 	})
 
 	t.Run("updating an article fails", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			articleRepository articles.MockArticlesRepository
-			r                 = Request{
+			validator         validator.MockValidator
+
+			r = Request{
 				UUID:       "test-article-uuid",
 				Title:      "test title",
 				Excerpt:    "test excerpt",
@@ -99,10 +119,14 @@ func TestUseCase_Execute(t *testing.T) {
 			expectedErr = errors.New("error happened")
 		)
 
+		validator.On("Validate", &r).Once().Return(nil)
+		defer validator.AssertExpectations(t)
+
 		articleRepository.On("Save", &a).Once().Return("", expectedErr)
 		defer articleRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&articleRepository).Execute(r)
+		response, err := NewUseCase(&articleRepository, &validator).Execute(&r)
+
 		assert.ErrorIs(t, err, expectedErr)
 		assert.Nil(t, response)
 	})

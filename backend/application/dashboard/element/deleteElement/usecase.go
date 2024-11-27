@@ -14,6 +14,6 @@ func NewUseCase(elementRepository element.Repository) *UseCase {
 	}
 }
 
-func (uc *UseCase) Execute(request Request) error {
+func (uc *UseCase) Execute(request *Request) error {
 	return uc.elementRepository.Delete(request.ElementUUID)
 }

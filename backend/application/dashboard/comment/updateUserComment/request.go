@@ -1,6 +1,6 @@
 package updateUserComment
 
-type validationErrors map[string]string
+import "github.com/khanzadimahdi/testproject/domain"
 
 type Request struct {
 	UUID     string `json:"uuid"`
@@ -8,20 +8,22 @@ type Request struct {
 	UserUUID string `json:"-"`
 }
 
-func (r *Request) Validate() (bool, validationErrors) {
-	errors := make(validationErrors)
+var _ domain.Validatable = &Request{}
+
+func (r *Request) Validate() domain.ValidationErrors {
+	validationErrors := make(domain.ValidationErrors)
 
 	if len(r.UUID) == 0 {
-		errors["uuid"] = "uuid is required"
+		validationErrors["uuid"] = "required_field"
 	}
 
 	if len(r.Body) == 0 {
-		errors["body"] = "body is required"
+		validationErrors["body"] = "required_field"
 	}
 
 	if len(r.UserUUID) == 0 {
-		errors["user_uuid"] = "user's uuid is required"
+		validationErrors["user_uuid"] = "required_field"
 	}
 
-	return len(errors) == 0, errors
+	return validationErrors
 }

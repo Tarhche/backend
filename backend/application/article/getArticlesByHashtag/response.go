@@ -3,10 +3,13 @@ package getArticlesByHashtag
 import (
 	"time"
 
+	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/article"
 )
 
 type Response struct {
+	ValidationErrors domain.ValidationErrors `json:"errors,omitempty"`
+
 	Items      []articleResponse  `json:"items"`
 	Pagination paginationResponse `json:"paginationResponse"`
 }

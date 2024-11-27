@@ -6,25 +6,35 @@ import (
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/password"
+	"github.com/khanzadimahdi/testproject/domain/translator"
 	"github.com/khanzadimahdi/testproject/domain/user"
 )
 
 type UseCase struct {
 	userRepository user.Repository
 	hasher         password.Hasher
+	validator      domain.Validator
+	translator     translator.Translator
 }
 
-func NewUseCase(userRepository user.Repository, hasher password.Hasher) *UseCase {
+func NewUseCase(
+	userRepository user.Repository,
+	hasher password.Hasher,
+	validator domain.Validator,
+	translator translator.Translator,
+) *UseCase {
 	return &UseCase{
 		userRepository: userRepository,
 		hasher:         hasher,
+		validator:      validator,
+		translator:     translator,
 	}
 }
 
-func (uc *UseCase) Execute(request Request) (*Response, error) {
-	if ok, validation := request.Validate(); !ok {
+func (uc *UseCase) Execute(request *Request) (*Response, error) {
+	if validationErrors := uc.validator.Validate(request); len(validationErrors) > 0 {
 		return &Response{
-			ValidationErrors: validation,
+			ValidationErrors: validationErrors,
 		}, nil
 	}
 
@@ -32,8 +42,8 @@ func (uc *UseCase) Execute(request Request) (*Response, error) {
 		return nil, err
 	} else if ok {
 		return &Response{
-			ValidationErrors: validationErrors{
-				"email": "another user with same email already exists",
+			ValidationErrors: domain.ValidationErrors{
+				"email": uc.translator.Translate("another user with same email already exists"),
 			},
 		}, nil
 	}
@@ -42,8 +52,8 @@ func (uc *UseCase) Execute(request Request) (*Response, error) {
 		return nil, err
 	} else if ok {
 		return &Response{
-			ValidationErrors: validationErrors{
-				"username": "another user with same username already exists",
+			ValidationErrors: domain.ValidationErrors{
+				"username": uc.translator.Translate("another user with same username already exists"),
 			},
 		}, nil
 	}
@@ -67,7 +77,7 @@ func (uc *UseCase) anotherUserExists(identity string) (bool, error) {
 	return u.Email == identity || u.Username == identity, nil
 }
 
-func (uc *UseCase) createUser(request Request) (string, error) {
+func (uc *UseCase) createUser(request *Request) (string, error) {
 	salt := make([]byte, 64)
 	if _, err := rand.Read(salt); err != nil {
 		return "", err

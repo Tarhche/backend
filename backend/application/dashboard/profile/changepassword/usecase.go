@@ -3,26 +3,37 @@ package changepassword
 import (
 	"crypto/rand"
 
+	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/password"
+	"github.com/khanzadimahdi/testproject/domain/translator"
 	"github.com/khanzadimahdi/testproject/domain/user"
 )
 
 type UseCase struct {
 	userRepository user.Repository
 	hasher         password.Hasher
+	validator      domain.Validator
+	translator     translator.Translator
 }
 
-func NewUseCase(userRepository user.Repository, hasher password.Hasher) *UseCase {
+func NewUseCase(
+	userRepository user.Repository,
+	hasher password.Hasher,
+	validator domain.Validator,
+	translator translator.Translator,
+) *UseCase {
 	return &UseCase{
 		userRepository: userRepository,
 		hasher:         hasher,
+		validator:      validator,
+		translator:     translator,
 	}
 }
 
-func (uc *UseCase) Execute(request Request) (*Response, error) {
-	if ok, validation := request.Validate(); !ok {
+func (uc *UseCase) Execute(request *Request) (*Response, error) {
+	if validationErrors := uc.validator.Validate(request); len(validationErrors) > 0 {
 		return &Response{
-			ValidationErrors: validation,
+			ValidationErrors: validationErrors,
 		}, nil
 	}
 
@@ -33,8 +44,8 @@ func (uc *UseCase) Execute(request Request) (*Response, error) {
 
 	if !uc.passwordIsValid(u, []byte(request.CurrentPassword)) {
 		return &Response{
-			ValidationErrors: validationErrors{
-				"current_password": "current password is not valid",
+			ValidationErrors: domain.ValidationErrors{
+				"current_password": uc.translator.Translate("current password is not valid"),
 			},
 		}, nil
 	}
@@ -49,11 +60,9 @@ func (uc *UseCase) Execute(request Request) (*Response, error) {
 		Salt:  salt,
 	}
 
-	if _, err := uc.userRepository.Save(&u); err != nil {
-		return nil, err
-	}
+	_, err = uc.userRepository.Save(&u)
 
-	return &Response{}, err
+	return nil, err
 }
 
 func (uc *UseCase) passwordIsValid(u user.User, password []byte) bool {

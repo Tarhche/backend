@@ -1,17 +1,21 @@
 package updateConfig
 
+import "github.com/khanzadimahdi/testproject/domain"
+
 type validationErrors map[string]string
 
 type Request struct {
 	UserDefaultRoles []string `json:"user_default_roles"`
 }
 
-func (r *Request) Validate() (bool, validationErrors) {
-	errors := make(validationErrors)
+var _ domain.Validatable = &Request{}
+
+func (r *Request) Validate() domain.ValidationErrors {
+	validationErrors := make(domain.ValidationErrors)
 
 	if len(r.UserDefaultRoles) == 0 {
-		errors["user_default_roles"] = "user_default_roles is required"
+		validationErrors["user_default_roles"] = "required_field"
 	}
 
-	return len(errors) == 0, errors
+	return validationErrors
 }

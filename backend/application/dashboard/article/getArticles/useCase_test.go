@@ -12,7 +12,11 @@ import (
 )
 
 func TestUseCase_Execute(t *testing.T) {
+	t.Parallel()
+
 	t.Run("getting articles succeeds", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			articleRepository articles.MockArticlesRepository
 
@@ -72,6 +76,8 @@ func TestUseCase_Execute(t *testing.T) {
 	})
 
 	t.Run("counting articles fails", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			articleRepository articles.MockArticlesRepository
 
@@ -94,6 +100,8 @@ func TestUseCase_Execute(t *testing.T) {
 	})
 
 	t.Run("getting articles fails", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			articleRepository articles.MockArticlesRepository
 

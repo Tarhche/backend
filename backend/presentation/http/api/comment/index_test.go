@@ -17,13 +17,19 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/comments"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
+	"github.com/khanzadimahdi/testproject/infrastructure/validator"
 )
 
 func TestIndexHandler(t *testing.T) {
+	t.Parallel()
+
 	t.Run("show comments", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			commentsRepository comments.MockCommentsRepository
 			usersRepository    users.MockUsersRepository
+			requestValidator   validator.MockValidator
 		)
 
 		data := getComments.Request{
@@ -90,6 +96,9 @@ func TestIndexHandler(t *testing.T) {
 			},
 		}
 
+		requestValidator.On("Validate", &data).Once().Return(nil)
+		defer requestValidator.AssertExpectations(t)
+
 		commentsRepository.On("CountApprovedByObjectUUID", data.ObjectType, data.ObjectUUID).Once().Return(uint(len(c)), nil)
 		commentsRepository.On("GetApprovedByObjectUUID", data.ObjectType, data.ObjectUUID, uint(0), uint(10)).Once().Return(c, nil)
 		defer commentsRepository.AssertExpectations(t)
@@ -97,7 +106,7 @@ func TestIndexHandler(t *testing.T) {
 		usersRepository.On("GetByUUIDs", []string{u[0].UUID, u[1].UUID, u[1].UUID}).Once().Return(u, nil)
 		defer usersRepository.AssertExpectations(t)
 
-		handler := NewIndexHandler(getComments.NewUseCase(&commentsRepository, &usersRepository))
+		handler := NewIndexHandler(getComments.NewUseCase(&commentsRepository, &usersRepository, &requestValidator))
 
 		url := fmt.Sprintf("/?object_uuid=%s&object_type=%s&page=%d", data.ObjectUUID, data.ObjectType, data.Page)
 		request := httptest.NewRequest(http.MethodGet, url, nil)
@@ -114,9 +123,12 @@ func TestIndexHandler(t *testing.T) {
 	})
 
 	t.Run("no data", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			commentsRepository comments.MockCommentsRepository
 			usersRepository    users.MockUsersRepository
+			requestValidator   validator.MockValidator
 		)
 
 		data := getComments.Request{
@@ -125,6 +137,9 @@ func TestIndexHandler(t *testing.T) {
 			ObjectType: "test-type",
 		}
 
+		requestValidator.On("Validate", &data).Once().Return(nil)
+		defer requestValidator.AssertExpectations(t)
+
 		commentsRepository.On("CountApprovedByObjectUUID", data.ObjectType, data.ObjectUUID).Once().Return(uint(0), nil)
 		commentsRepository.On("GetApprovedByObjectUUID", data.ObjectType, data.ObjectUUID, uint(0), uint(10)).Once().Return(nil, nil)
 		defer commentsRepository.AssertExpectations(t)
@@ -132,7 +147,7 @@ func TestIndexHandler(t *testing.T) {
 		usersRepository.On("GetByUUIDs", []string{}).Once().Return(nil, nil)
 		defer usersRepository.AssertExpectations(t)
 
-		handler := NewIndexHandler(getComments.NewUseCase(&commentsRepository, &usersRepository))
+		handler := NewIndexHandler(getComments.NewUseCase(&commentsRepository, &usersRepository, &requestValidator))
 
 		url := fmt.Sprintf("/?object_uuid=%s&object_type=%s&page=%d", data.ObjectUUID, data.ObjectType, data.Page)
 		request := httptest.NewRequest(http.MethodGet, url, nil)
@@ -149,9 +164,12 @@ func TestIndexHandler(t *testing.T) {
 	})
 
 	t.Run("error", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			commentsRepository comments.MockCommentsRepository
 			usersRepository    users.MockUsersRepository
+			requestValidator   validator.MockValidator
 		)
 
 		data := getComments.Request{
@@ -160,10 +178,13 @@ func TestIndexHandler(t *testing.T) {
 			ObjectType: "test-type",
 		}
 
+		requestValidator.On("Validate", &data).Once().Return(nil)
+		defer requestValidator.AssertExpectations(t)
+
 		commentsRepository.On("CountApprovedByObjectUUID", data.ObjectType, data.ObjectUUID).Once().Return(uint(0), errors.New("something doesn't work"))
 		defer commentsRepository.AssertExpectations(t)
 
-		handler := NewIndexHandler(getComments.NewUseCase(&commentsRepository, &usersRepository))
+		handler := NewIndexHandler(getComments.NewUseCase(&commentsRepository, &usersRepository, &requestValidator))
 
 		url := fmt.Sprintf("/?object_uuid=%s&object_type=%s&page=%d", data.ObjectUUID, data.ObjectType, data.Page)
 		request := httptest.NewRequest(http.MethodGet, url, nil)

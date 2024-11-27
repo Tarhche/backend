@@ -1,10 +1,12 @@
 package createfile
 
-import "io"
+import (
+	"io"
+
+	"github.com/khanzadimahdi/testproject/domain"
+)
 
 const MaxFileSize int64 = 100 << 20 // 100MB
-
-type validationErrors map[string]string
 
 type Request struct {
 	Name       string
@@ -13,24 +15,24 @@ type Request struct {
 	Size       int64
 }
 
-func (r *Request) Validate() (bool, validationErrors) {
-	errors := make(validationErrors)
+func (r *Request) Validate() domain.ValidationErrors {
+	validationErrors := make(domain.ValidationErrors)
 
 	if len(r.Name) == 0 {
-		errors["name"] = "name is required"
+		validationErrors["name"] = "required_field"
 	}
 
 	if len(r.OwnerUUID) == 0 {
-		errors["owner_uuid"] = "owner uuid is required"
+		validationErrors["owner_uuid"] = "required_field"
 	}
 
 	if r.Size == 0 {
-		errors["size"] = "file's size should be greater than zero"
+		validationErrors["size"] = "greater_than_zero"
 	}
 
 	if r.Size > MaxFileSize {
-		errors["size"] = "file's size exceeds the limit"
+		validationErrors["size"] = "exceeds_limit"
 	}
 
-	return len(errors) == 0, errors
+	return validationErrors
 }

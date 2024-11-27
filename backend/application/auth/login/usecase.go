@@ -6,6 +6,7 @@ import (
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/password"
+	"github.com/khanzadimahdi/testproject/domain/translator"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
 )
@@ -14,28 +15,37 @@ type UseCase struct {
 	userRepository user.Repository
 	JWT            *jwt.JWT
 	Hasher         password.Hasher
+	translator     translator.Translator
+	validator      domain.Validator
 }
 
-func NewUseCase(userRepository user.Repository, JWT *jwt.JWT, hasher password.Hasher) *UseCase {
+func NewUseCase(
+	userRepository user.Repository,
+	JWT *jwt.JWT, hasher password.Hasher,
+	translator translator.Translator,
+	validator domain.Validator,
+) *UseCase {
 	return &UseCase{
 		userRepository: userRepository,
 		JWT:            JWT,
 		Hasher:         hasher,
+		translator:     translator,
+		validator:      validator,
 	}
 }
 
-func (uc *UseCase) Execute(request Request) (*Response, error) {
-	if ok, validation := request.Validate(); !ok {
+func (uc *UseCase) Execute(request *Request) (*Response, error) {
+	if validationErrors := uc.validator.Validate(request); len(validationErrors) > 0 {
 		return &Response{
-			ValidationErrors: validation,
+			ValidationErrors: validationErrors,
 		}, nil
 	}
 
 	u, err := uc.userRepository.GetOneByIdentity(request.Identity)
 	if err == domain.ErrNotExists {
 		return &Response{
-			ValidationErrors: validationErrors{
-				"identity": "identity (email/username) or password is wrong",
+			ValidationErrors: domain.ValidationErrors{
+				"identity": uc.translator.Translate("identity (email/username) or password is wrong"),
 			},
 		}, nil
 	} else if err != nil {
@@ -44,8 +54,8 @@ func (uc *UseCase) Execute(request Request) (*Response, error) {
 
 	if !uc.passwordIsValid(u, []byte(request.Password)) {
 		return &Response{
-			ValidationErrors: validationErrors{
-				"identity": "your identity or password is wrong",
+			ValidationErrors: domain.ValidationErrors{
+				"identity": uc.translator.Translate("your identity or password is wrong"),
 			},
 		}, nil
 	}

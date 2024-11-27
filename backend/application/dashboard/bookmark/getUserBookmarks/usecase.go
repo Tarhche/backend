@@ -1,6 +1,7 @@
 package getUserBookmarks
 
 import (
+	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/bookmark"
 )
 
@@ -8,17 +9,26 @@ const limit = 10
 
 type UseCase struct {
 	bookmarkRepository bookmark.Repository
+	validator          domain.Validator
 }
 
 func NewUseCase(
 	bookmarkRepository bookmark.Repository,
+	validator domain.Validator,
 ) *UseCase {
 	return &UseCase{
 		bookmarkRepository: bookmarkRepository,
+		validator:          validator,
 	}
 }
 
 func (uc *UseCase) Execute(request *Request) (*Response, error) {
+	if validationErrors := uc.validator.Validate(request); len(validationErrors) > 0 {
+		return &Response{
+			ValidationErrors: validationErrors,
+		}, nil
+	}
+
 	totalArticles, err := uc.bookmarkRepository.CountByOwnerUUID(request.OwnerUUID)
 	if err != nil {
 		return nil, err

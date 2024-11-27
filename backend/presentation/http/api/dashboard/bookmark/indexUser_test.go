@@ -17,16 +17,23 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/permission"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/bookmarks"
+	"github.com/khanzadimahdi/testproject/infrastructure/validator"
 )
 
 func TestIndexUserHandler(t *testing.T) {
+	t.Parallel()
+
 	t.Run("user's bookmarks", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			bookmarkRepository bookmarks.MockBookmarksRepository
 			authorizer         domain.MockAuthorizer
+			requestValidator   validator.MockValidator
 
 			r = getUserBookmarks.Request{
 				OwnerUUID: "owner-uuid",
+				Page:      1,
 			}
 
 			u = user.User{
@@ -66,11 +73,14 @@ func TestIndexUserHandler(t *testing.T) {
 		authorizer.On("Authorize", r.OwnerUUID, permission.SelfBookmarksIndex).Once().Return(true, nil)
 		defer authorizer.AssertExpectations(t)
 
+		requestValidator.On("Validate", &r).Once().Return(nil)
+		defer requestValidator.AssertExpectations(t)
+
 		bookmarkRepository.On("CountByOwnerUUID", r.OwnerUUID).Once().Return(uint(len(b)), nil)
 		bookmarkRepository.On("GetAllByOwnerUUID", r.OwnerUUID, uint(0), uint(10)).Once().Return(b, nil)
 		defer bookmarkRepository.AssertExpectations(t)
 
-		handler := NewIndexUserBookmarksHandler(getUserBookmarks.NewUseCase(&bookmarkRepository), &authorizer)
+		handler := NewIndexUserBookmarksHandler(getUserBookmarks.NewUseCase(&bookmarkRepository, &requestValidator), &authorizer)
 
 		request := httptest.NewRequest(http.MethodGet, "/?page=1", nil)
 		request = request.WithContext(auth.ToContext(request.Context(), &u))
@@ -87,12 +97,16 @@ func TestIndexUserHandler(t *testing.T) {
 	})
 
 	t.Run("unauthorized", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			bookmarkRepository bookmarks.MockBookmarksRepository
 			authorizer         domain.MockAuthorizer
+			requestValidator   validator.MockValidator
 
 			r = getUserBookmarks.Request{
 				OwnerUUID: "owner-uuid",
+				Page:      1,
 			}
 
 			u = user.User{
@@ -103,7 +117,7 @@ func TestIndexUserHandler(t *testing.T) {
 		authorizer.On("Authorize", r.OwnerUUID, permission.SelfBookmarksIndex).Once().Return(false, nil)
 		defer authorizer.AssertExpectations(t)
 
-		handler := NewIndexUserBookmarksHandler(getUserBookmarks.NewUseCase(&bookmarkRepository), &authorizer)
+		handler := NewIndexUserBookmarksHandler(getUserBookmarks.NewUseCase(&bookmarkRepository, &requestValidator), &authorizer)
 
 		request := httptest.NewRequest(http.MethodGet, "/?page=1", nil)
 		request = request.WithContext(auth.ToContext(request.Context(), &u))
@@ -111,6 +125,7 @@ func TestIndexUserHandler(t *testing.T) {
 
 		handler.ServeHTTP(response, request)
 
+		requestValidator.AssertNotCalled(t, "Validate")
 		bookmarkRepository.AssertNotCalled(t, "CountByOwnerUUID")
 		bookmarkRepository.AssertNotCalled(t, "GetAllByOwnerUUID")
 
@@ -119,12 +134,16 @@ func TestIndexUserHandler(t *testing.T) {
 	})
 
 	t.Run("no data", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			bookmarkRepository bookmarks.MockBookmarksRepository
 			authorizer         domain.MockAuthorizer
+			requestValidator   validator.MockValidator
 
 			r = getUserBookmarks.Request{
 				OwnerUUID: "owner-uuid",
+				Page:      1,
 			}
 
 			u = user.User{
@@ -135,11 +154,14 @@ func TestIndexUserHandler(t *testing.T) {
 		authorizer.On("Authorize", r.OwnerUUID, permission.SelfBookmarksIndex).Once().Return(true, nil)
 		defer authorizer.AssertExpectations(t)
 
+		requestValidator.On("Validate", &r).Once().Return(nil)
+		defer requestValidator.AssertExpectations(t)
+
 		bookmarkRepository.On("CountByOwnerUUID", r.OwnerUUID).Once().Return(uint(0), nil)
 		bookmarkRepository.On("GetAllByOwnerUUID", r.OwnerUUID, uint(0), uint(10)).Once().Return(nil, nil)
 		defer bookmarkRepository.AssertExpectations(t)
 
-		handler := NewIndexUserBookmarksHandler(getUserBookmarks.NewUseCase(&bookmarkRepository), &authorizer)
+		handler := NewIndexUserBookmarksHandler(getUserBookmarks.NewUseCase(&bookmarkRepository, &requestValidator), &authorizer)
 
 		request := httptest.NewRequest(http.MethodGet, "/?page=1", nil)
 		request = request.WithContext(auth.ToContext(request.Context(), &u))
@@ -156,9 +178,12 @@ func TestIndexUserHandler(t *testing.T) {
 	})
 
 	t.Run("error", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			bookmarkRepository bookmarks.MockBookmarksRepository
 			authorizer         domain.MockAuthorizer
+			requestValidator   validator.MockValidator
 
 			r = getUserBookmarks.Request{
 				OwnerUUID: "owner-uuid",
@@ -172,7 +197,7 @@ func TestIndexUserHandler(t *testing.T) {
 		authorizer.On("Authorize", r.OwnerUUID, permission.SelfBookmarksIndex).Once().Return(false, errors.New("unexpected error"))
 		defer authorizer.AssertExpectations(t)
 
-		handler := NewIndexUserBookmarksHandler(getUserBookmarks.NewUseCase(&bookmarkRepository), &authorizer)
+		handler := NewIndexUserBookmarksHandler(getUserBookmarks.NewUseCase(&bookmarkRepository, &requestValidator), &authorizer)
 
 		request := httptest.NewRequest(http.MethodGet, "/?page=1", nil)
 		request = request.WithContext(auth.ToContext(request.Context(), &u))
@@ -180,6 +205,7 @@ func TestIndexUserHandler(t *testing.T) {
 
 		handler.ServeHTTP(response, request)
 
+		requestValidator.AssertNotCalled(t, "Validate")
 		bookmarkRepository.AssertNotCalled(t, "CountByOwnerUUID")
 		bookmarkRepository.AssertNotCalled(t, "GetAllByOwnerUUID")
 

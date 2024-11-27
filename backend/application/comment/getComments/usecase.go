@@ -1,6 +1,7 @@
 package getComments
 
 import (
+	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/comment"
 	"github.com/khanzadimahdi/testproject/domain/user"
 )
@@ -10,16 +11,28 @@ const limit = 10
 type UseCase struct {
 	commentRepository comment.Repository
 	userRepository    user.Repository
+	validator         domain.Validator
 }
 
-func NewUseCase(commentRepository comment.Repository, userRepository user.Repository) *UseCase {
+func NewUseCase(
+	commentRepository comment.Repository,
+	userRepository user.Repository,
+	validator domain.Validator,
+) *UseCase {
 	return &UseCase{
 		commentRepository: commentRepository,
 		userRepository:    userRepository,
+		validator:         validator,
 	}
 }
 
 func (uc *UseCase) Execute(request *Request) (*Response, error) {
+	if validationErrors := uc.validator.Validate(request); len(validationErrors) > 0 {
+		return &Response{
+			ValidationErrors: validationErrors,
+		}, nil
+	}
+
 	totalComments, err := uc.commentRepository.CountApprovedByObjectUUID(request.ObjectType, request.ObjectUUID)
 	if err != nil {
 		return nil, err

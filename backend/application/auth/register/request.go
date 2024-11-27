@@ -1,23 +1,27 @@
 package register
 
-import "regexp"
+import (
+	"regexp"
+
+	"github.com/khanzadimahdi/testproject/domain"
+)
 
 var (
 	emailRegex = regexp.MustCompile(`^[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,4}$`)
 )
 
-type validationErrors map[string]string
-
 type Request struct {
 	Identity string `json:"identity"`
 }
 
-func (r *Request) Validate() (bool, validationErrors) {
+var _ domain.Validatable = &Request{}
+
+func (r *Request) Validate() domain.ValidationErrors {
+	validationErrors := make(domain.ValidationErrors)
+
 	if !emailRegex.MatchString(r.Identity) {
-		return false, validationErrors{
-			"identity": "identity is not a valid email address",
-		}
+		validationErrors["identity"] = "invalid_email"
 	}
 
-	return true, nil
+	return validationErrors
 }

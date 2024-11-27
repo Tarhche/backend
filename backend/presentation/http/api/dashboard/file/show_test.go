@@ -22,7 +22,11 @@ import (
 )
 
 func TestShowHandler(t *testing.T) {
+	t.Parallel()
+
 	t.Run("show file", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			filesRepository files.MockFilesRepository
 			storage         mock.MockStorage
@@ -64,6 +68,8 @@ func TestShowHandler(t *testing.T) {
 	})
 
 	t.Run("file not found", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			filesRepository files.MockFilesRepository
 			storage         mock.MockStorage
@@ -100,6 +106,8 @@ func TestShowHandler(t *testing.T) {
 	})
 
 	t.Run("unauthorized", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			filesRepository files.MockFilesRepository
 			storage         mock.MockStorage
@@ -134,6 +142,8 @@ func TestShowHandler(t *testing.T) {
 	})
 
 	t.Run("error on reading file/writing to output", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			filesRepository files.MockFilesRepository
 			storage         mock.MockStorage
@@ -175,6 +185,8 @@ func TestShowHandler(t *testing.T) {
 	})
 
 	t.Run("error", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			filesRepository files.MockFilesRepository
 			storage         mock.MockStorage

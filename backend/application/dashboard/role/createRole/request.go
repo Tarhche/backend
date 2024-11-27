@@ -1,6 +1,6 @@
 package createrole
 
-type validationErrors map[string]string
+import "github.com/khanzadimahdi/testproject/domain"
 
 type Request struct {
 	Name        string   `json:"name"`
@@ -9,16 +9,18 @@ type Request struct {
 	UserUUIDs   []string `json:"user_uuids"`
 }
 
-func (r *Request) Validate() (bool, validationErrors) {
-	errors := make(validationErrors)
+var _ domain.Validatable = &Request{}
+
+func (r *Request) Validate() domain.ValidationErrors {
+	validationErrors := make(domain.ValidationErrors)
 
 	if len(r.Name) == 0 {
-		errors["name"] = "name is required"
+		validationErrors["name"] = "required_field"
 	}
 
 	if len(r.Description) == 0 {
-		errors["description"] = "description is required"
+		validationErrors["description"] = "required_field"
 	}
 
-	return len(errors) == 0, errors
+	return validationErrors
 }

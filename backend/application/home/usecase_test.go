@@ -14,7 +14,11 @@ import (
 )
 
 func TestUseCase_Execute(t *testing.T) {
+	t.Parallel()
+
 	t.Run("returns articles", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			articlesRepository articles.MockArticlesRepository
 			elementsRepository elements.MockElementsRepository
@@ -67,6 +71,8 @@ func TestUseCase_Execute(t *testing.T) {
 	})
 
 	t.Run("error on getting most viewed articles", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			articlesRepository articles.MockArticlesRepository
 			elementsRepository elements.MockElementsRepository
@@ -89,6 +95,8 @@ func TestUseCase_Execute(t *testing.T) {
 	})
 
 	t.Run("error on getting all published articles", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			articlesRepository articles.MockArticlesRepository
 			elementsRepository elements.MockElementsRepository
@@ -117,6 +125,8 @@ func TestUseCase_Execute(t *testing.T) {
 	})
 
 	t.Run("error on getting elements", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			articlesRepository articles.MockArticlesRepository
 			elementsRepository elements.MockElementsRepository
@@ -147,6 +157,8 @@ func TestUseCase_Execute(t *testing.T) {
 	})
 
 	t.Run("error on getting element articles", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			articlesRepository articles.MockArticlesRepository
 			elementsRepository elements.MockElementsRepository

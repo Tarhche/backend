@@ -39,10 +39,14 @@ func (h *deleteUserHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	}
 	request.OwnerUUID = auth.FromContext(r.Context()).UUID
 
-	err := h.useCase.Execute(&request)
+	response, err := h.useCase.Execute(&request)
 	switch {
 	case err != nil:
 		rw.WriteHeader(http.StatusInternalServerError)
+	case response != nil && len(response.ValidationErrors) > 0:
+		rw.Header().Add("Content-Type", "application/json")
+		rw.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(rw).Encode(response)
 	default:
 		rw.WriteHeader(http.StatusNoContent)
 	}

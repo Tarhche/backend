@@ -5,6 +5,7 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/translator"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
 )
@@ -12,26 +13,34 @@ import (
 type UseCase struct {
 	userRepository user.Repository
 	JWT            *jwt.JWT
+	translator     translator.Translator
+	validator      domain.Validator
 }
 
-func NewUseCase(userRepository user.Repository, JWT *jwt.JWT) *UseCase {
+func NewUseCase(
+	userRepository user.Repository, JWT *jwt.JWT,
+	translator translator.Translator,
+	validator domain.Validator,
+) *UseCase {
 	return &UseCase{
 		userRepository: userRepository,
 		JWT:            JWT,
+		translator:     translator,
+		validator:      validator,
 	}
 }
 
-func (uc *UseCase) Execute(request Request) (*Response, error) {
-	if ok, validation := request.Validate(); !ok {
+func (uc *UseCase) Execute(request *Request) (*Response, error) {
+	if validationErrors := uc.validator.Validate(request); len(validationErrors) > 0 {
 		return &Response{
-			ValidationErrors: validation,
+			ValidationErrors: validationErrors,
 		}, nil
 	}
 
 	claims, err := uc.JWT.Verify(request.Token)
 	if err != nil {
 		return &Response{
-			ValidationErrors: validationErrors{
+			ValidationErrors: domain.ValidationErrors{
 				"token": err.Error(),
 			},
 		}, nil
@@ -39,8 +48,8 @@ func (uc *UseCase) Execute(request Request) (*Response, error) {
 
 	if audiences, err := claims.GetAudience(); err != nil || len(audiences) == 0 || audiences[0] != auth.RefreshToken {
 		return &Response{
-			ValidationErrors: validationErrors{
-				"token": "refresh token is not valid",
+			ValidationErrors: domain.ValidationErrors{
+				"token": err.Error(),
 			},
 		}, nil
 	}
@@ -48,7 +57,7 @@ func (uc *UseCase) Execute(request Request) (*Response, error) {
 	userUUID, err := claims.GetSubject()
 	if err != nil {
 		return &Response{
-			ValidationErrors: validationErrors{
+			ValidationErrors: domain.ValidationErrors{
 				"token": err.Error(),
 			},
 		}, nil
@@ -57,8 +66,8 @@ func (uc *UseCase) Execute(request Request) (*Response, error) {
 	u, err := uc.userRepository.GetOne(userUUID)
 	if err == domain.ErrNotExists {
 		return &Response{
-			ValidationErrors: validationErrors{
-				"identity": "identity (email/username) not exists",
+			ValidationErrors: domain.ValidationErrors{
+				"identity": uc.translator.Translate("identity (email/username) not exists"),
 			},
 		}, nil
 	} else if err != nil {

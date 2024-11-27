@@ -11,7 +11,11 @@ import (
 )
 
 func TestUseCase_Execute(t *testing.T) {
+	t.Parallel()
+
 	t.Run("get user's roles", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			roleRepository roles.MockRolesRepository
 
@@ -73,6 +77,8 @@ func TestUseCase_Execute(t *testing.T) {
 	})
 
 	t.Run("failure on getting user's roles", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			roleRepository roles.MockRolesRepository
 

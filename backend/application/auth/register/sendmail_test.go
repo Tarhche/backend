@@ -15,6 +15,8 @@ import (
 )
 
 func TestHandler_Execute(t *testing.T) {
+	t.Parallel()
+
 	privateKey, err := ecdsa.Generate()
 	assert.NoError(t, err)
 
@@ -23,6 +25,8 @@ func TestHandler_Execute(t *testing.T) {
 	mailFrom := "info@noreply.nowhere.loc"
 
 	t.Run("sends registration mail", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			mailer   email.MockMailer
 			renderer template.MockRenderer
@@ -47,6 +51,8 @@ func TestHandler_Execute(t *testing.T) {
 	})
 
 	t.Run("error on rendering template", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			mailer   email.MockMailer
 			renderer template.MockRenderer
@@ -72,6 +78,8 @@ func TestHandler_Execute(t *testing.T) {
 	})
 
 	t.Run("sending mail fails", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			mailer   email.MockMailer
 			renderer template.MockRenderer

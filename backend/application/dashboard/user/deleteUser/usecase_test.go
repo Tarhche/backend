@@ -10,7 +10,11 @@ import (
 )
 
 func TestUseCase_Execute(t *testing.T) {
+	t.Parallel()
+
 	t.Run("deleting a user succeeds", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			userRepository users.MockUsersRepository
 
@@ -20,12 +24,14 @@ func TestUseCase_Execute(t *testing.T) {
 		userRepository.On("Delete", r.UserUUID).Return(nil)
 		defer userRepository.AssertExpectations(t)
 
-		err := NewUseCase(&userRepository).Execute(r)
+		err := NewUseCase(&userRepository).Execute(&r)
 
 		assert.NoError(t, err)
 	})
 
 	t.Run("deleting a user fails", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			userRepository users.MockUsersRepository
 
@@ -36,7 +42,7 @@ func TestUseCase_Execute(t *testing.T) {
 		userRepository.On("Delete", r.UserUUID).Return(expectedError)
 		defer userRepository.AssertExpectations(t)
 
-		err := NewUseCase(&userRepository).Execute(r)
+		err := NewUseCase(&userRepository).Execute(&r)
 
 		assert.ErrorIs(t, err, expectedError)
 	})

@@ -22,18 +22,26 @@ import (
 	crypto "github.com/khanzadimahdi/testproject/infrastructure/crypto/mock"
 	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
+	"github.com/khanzadimahdi/testproject/infrastructure/translator"
+	"github.com/khanzadimahdi/testproject/infrastructure/validator"
 )
 
 func TestResetPasswordHandler(t *testing.T) {
+	t.Parallel()
+
 	privateKey, err := ecdsa.Generate()
 	assert.NoError(t, err)
 
 	j := jwt.NewJWT(privateKey, privateKey.Public())
 
 	t.Run("reset password", func(t *testing.T) {
+		t.Parallel()
+
 		var (
-			userRepository users.MockUsersRepository
-			hasher         crypto.MockCrypto
+			userRepository   users.MockUsersRepository
+			hasher           crypto.MockCrypto
+			requestValidator validator.MockValidator
+			translator       translator.TranslatorMock
 
 			u = user.User{
 				UUID: "test-uuid",
@@ -45,6 +53,9 @@ func TestResetPasswordHandler(t *testing.T) {
 			}
 		)
 
+		requestValidator.On("Validate", &r).Once().Return(nil)
+		defer requestValidator.AssertExpectations(t)
+
 		userRepository.On("GetOne", u.UUID).Return(u, nil)
 		userRepository.On("Save", mock.Anything).Return(u.UUID, nil)
 		defer userRepository.AssertExpectations(t)
@@ -52,7 +63,7 @@ func TestResetPasswordHandler(t *testing.T) {
 		hasher.On("Hash", []byte(r.Password), mock.AnythingOfType("[]uint8")).Return([]byte("hashed-password"), nil)
 		defer hasher.AssertExpectations(t)
 
-		handler := NewResetPasswordHandler(resetpassword.NewUseCase(&userRepository, &hasher, j))
+		handler := NewResetPasswordHandler(resetpassword.NewUseCase(&userRepository, &hasher, j, &translator, &requestValidator))
 
 		var payload bytes.Buffer
 		err := json.NewEncoder(&payload).Encode(r)
@@ -68,12 +79,22 @@ func TestResetPasswordHandler(t *testing.T) {
 	})
 
 	t.Run("validation fails", func(t *testing.T) {
+		t.Parallel()
+
 		var (
-			userRepository users.MockUsersRepository
-			hasher         crypto.MockCrypto
+			userRepository   users.MockUsersRepository
+			hasher           crypto.MockCrypto
+			requestValidator validator.MockValidator
+			translator       translator.TranslatorMock
 		)
 
-		handler := NewResetPasswordHandler(resetpassword.NewUseCase(&userRepository, &hasher, j))
+		requestValidator.On("Validate", &resetpassword.Request{}).Once().Return(domain.ValidationErrors{
+			"password": "password is required",
+			"token":    "token is required",
+		})
+		defer requestValidator.AssertExpectations(t)
+
+		handler := NewResetPasswordHandler(resetpassword.NewUseCase(&userRepository, &hasher, j, &translator, &requestValidator))
 
 		request := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString("{}"))
 		response := httptest.NewRecorder()
@@ -93,9 +114,13 @@ func TestResetPasswordHandler(t *testing.T) {
 	})
 
 	t.Run("user not exists", func(t *testing.T) {
+		t.Parallel()
+
 		var (
-			userRepository users.MockUsersRepository
-			hasher         crypto.MockCrypto
+			userRepository   users.MockUsersRepository
+			hasher           crypto.MockCrypto
+			requestValidator validator.MockValidator
+			translator       translator.TranslatorMock
 
 			u = user.User{
 				UUID: "test-uuid",
@@ -107,9 +132,15 @@ func TestResetPasswordHandler(t *testing.T) {
 			}
 		)
 
+		requestValidator.On("Validate", &r).Once().Return(nil)
+		defer requestValidator.AssertExpectations(t)
+
+		translator.On("Translate", "identity (email/username) not exists", mock.Anything).Once().Return("identity (email/username) not exists")
+		defer translator.AssertExpectations(t)
+
 		userRepository.On("GetOne", u.UUID).Return(user.User{}, domain.ErrNotExists)
 
-		handler := NewResetPasswordHandler(resetpassword.NewUseCase(&userRepository, &hasher, j))
+		handler := NewResetPasswordHandler(resetpassword.NewUseCase(&userRepository, &hasher, j, &translator, &requestValidator))
 
 		var payload bytes.Buffer
 		err := json.NewEncoder(&payload).Encode(r)
@@ -132,9 +163,13 @@ func TestResetPasswordHandler(t *testing.T) {
 	})
 
 	t.Run("error", func(t *testing.T) {
+		t.Parallel()
+
 		var (
-			userRepository users.MockUsersRepository
-			hasher         crypto.MockCrypto
+			userRepository   users.MockUsersRepository
+			hasher           crypto.MockCrypto
+			requestValidator validator.MockValidator
+			translator       translator.TranslatorMock
 
 			u = user.User{
 				UUID: "test-uuid",
@@ -146,9 +181,12 @@ func TestResetPasswordHandler(t *testing.T) {
 			}
 		)
 
+		requestValidator.On("Validate", &r).Once().Return(nil)
+		defer requestValidator.AssertExpectations(t)
+
 		userRepository.On("GetOne", u.UUID).Return(user.User{}, errors.New("unexpected error"))
 
-		handler := NewResetPasswordHandler(resetpassword.NewUseCase(&userRepository, &hasher, j))
+		handler := NewResetPasswordHandler(resetpassword.NewUseCase(&userRepository, &hasher, j, &translator, &requestValidator))
 
 		var payload bytes.Buffer
 		err := json.NewEncoder(&payload).Encode(r)
@@ -159,6 +197,7 @@ func TestResetPasswordHandler(t *testing.T) {
 
 		handler.ServeHTTP(response, request)
 
+		translator.AssertNotCalled(t, "Translate")
 		userRepository.AssertNotCalled(t, "Save")
 		hasher.AssertNotCalled(t, "Hash")
 

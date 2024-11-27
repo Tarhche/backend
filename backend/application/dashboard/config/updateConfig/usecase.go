@@ -9,18 +9,23 @@ import (
 
 type UseCase struct {
 	configRepository config.Repository
+	validator        domain.Validator
 }
 
-func NewUseCase(configRepository config.Repository) *UseCase {
+func NewUseCase(
+	configRepository config.Repository,
+	validator domain.Validator,
+) *UseCase {
 	return &UseCase{
 		configRepository: configRepository,
+		validator:        validator,
 	}
 }
 
 func (uc *UseCase) Execute(request *Request) (*Response, error) {
-	if ok, validation := request.Validate(); !ok {
+	if validationErrors := uc.validator.Validate(request); len(validationErrors) > 0 {
 		return &Response{
-			ValidationErrors: validation,
+			ValidationErrors: validationErrors,
 		}, nil
 	}
 
@@ -31,9 +36,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 
 	c.UserDefaultRoleUUIDs = request.UserDefaultRoles
 
-	if _, err = uc.configRepository.Save(&c); err != nil {
-		return nil, err
-	}
+	_, err = uc.configRepository.Save(&c)
 
-	return &Response{}, nil
+	return nil, err
 }

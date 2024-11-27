@@ -14,6 +14,6 @@ func NewUseCase(userRepository user.Repository) *UseCase {
 	}
 }
 
-func (uc *UseCase) Execute(request Request) error {
+func (uc *UseCase) Execute(request *Request) error {
 	return uc.userRepository.Delete(request.UserUUID)
 }

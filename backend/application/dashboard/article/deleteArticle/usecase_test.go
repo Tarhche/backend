@@ -10,7 +10,11 @@ import (
 )
 
 func TestUseCase_Execute(t *testing.T) {
+	t.Parallel()
+
 	t.Run("deleting an article succeeds", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			articleRepository articles.MockArticlesRepository
 
@@ -20,12 +24,14 @@ func TestUseCase_Execute(t *testing.T) {
 		articleRepository.On("Delete", r.ArticleUUID).Return(nil)
 		defer articleRepository.AssertExpectations(t)
 
-		err := NewUseCase(&articleRepository).Execute(r)
+		err := NewUseCase(&articleRepository).Execute(&r)
 
 		assert.NoError(t, err)
 	})
 
 	t.Run("deleting an article fails", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			articleRepository articles.MockArticlesRepository
 
@@ -36,7 +42,7 @@ func TestUseCase_Execute(t *testing.T) {
 		articleRepository.On("Delete", r.ArticleUUID).Return(expectedError)
 		defer articleRepository.AssertExpectations(t)
 
-		err := NewUseCase(&articleRepository).Execute(r)
+		err := NewUseCase(&articleRepository).Execute(&r)
 
 		assert.ErrorIs(t, err, expectedError)
 	})

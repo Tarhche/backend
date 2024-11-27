@@ -11,7 +11,11 @@ import (
 )
 
 func TestUseCase_Execute(t *testing.T) {
+	t.Parallel()
+
 	t.Run("getting files", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			filesRepository files.MockFilesRepository
 
@@ -72,6 +76,8 @@ func TestUseCase_Execute(t *testing.T) {
 	})
 
 	t.Run("failure on counting files", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			filesRepository files.MockFilesRepository
 
@@ -94,6 +100,8 @@ func TestUseCase_Execute(t *testing.T) {
 	})
 
 	t.Run("failure on getting files", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			filesRepository files.MockFilesRepository
 

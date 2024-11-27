@@ -8,6 +8,7 @@ import (
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/password"
+	"github.com/khanzadimahdi/testproject/domain/translator"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
 )
@@ -16,20 +17,29 @@ type UseCase struct {
 	userRepository user.Repository
 	hasher         password.Hasher
 	jwt            *jwt.JWT
+	translator     translator.Translator
+	validator      domain.Validator
 }
 
-func NewUseCase(userRepository user.Repository, hasher password.Hasher, JWT *jwt.JWT) *UseCase {
+func NewUseCase(
+	userRepository user.Repository,
+	hasher password.Hasher, JWT *jwt.JWT,
+	translator translator.Translator,
+	validator domain.Validator,
+) *UseCase {
 	return &UseCase{
 		userRepository: userRepository,
 		hasher:         hasher,
 		jwt:            JWT,
+		translator:     translator,
+		validator:      validator,
 	}
 }
 
-func (uc *UseCase) Execute(request Request) (*Response, error) {
-	if ok, validation := request.Validate(); !ok {
+func (uc *UseCase) Execute(request *Request) (*Response, error) {
+	if validationErrors := uc.validator.Validate(request); len(validationErrors) > 0 {
 		return &Response{
-			ValidationErrors: validation,
+			ValidationErrors: validationErrors,
 		}, nil
 	}
 
@@ -56,8 +66,8 @@ func (uc *UseCase) Execute(request Request) (*Response, error) {
 	u, err := uc.userRepository.GetOne(userUUID)
 	if err == domain.ErrNotExists {
 		return &Response{
-			ValidationErrors: validationErrors{
-				"identity": "identity (email/username) not exists",
+			ValidationErrors: domain.ValidationErrors{
+				"identity": uc.translator.Translate("identity (email/username) not exists"),
 			},
 		}, nil
 	} else if err != nil {

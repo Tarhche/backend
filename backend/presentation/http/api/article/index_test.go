@@ -17,7 +17,11 @@ import (
 )
 
 func TestIndexHandler(t *testing.T) {
+	t.Parallel()
+
 	t.Run("get list of articles", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			articlesRepository articles.MockArticlesRepository
 		)
@@ -88,6 +92,8 @@ func TestIndexHandler(t *testing.T) {
 	})
 
 	t.Run("get empty list of articles", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			articlesRepository articles.MockArticlesRepository
 		)
@@ -112,6 +118,8 @@ func TestIndexHandler(t *testing.T) {
 	})
 
 	t.Run("error", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			articlesRepository articles.MockArticlesRepository
 		)

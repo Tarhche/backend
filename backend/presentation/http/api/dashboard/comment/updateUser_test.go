@@ -12,8 +12,6 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
-	"github.com/khanzadimahdi/testproject/application/dashboard/comment/createComment"
-	"github.com/khanzadimahdi/testproject/application/dashboard/comment/updateComment"
 	"github.com/khanzadimahdi/testproject/application/dashboard/comment/updateUserComment"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/author"
@@ -21,6 +19,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/permission"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/comments"
+	"github.com/khanzadimahdi/testproject/infrastructure/validator"
 )
 
 func TestUpdateUserHandler(t *testing.T) {
@@ -28,6 +27,7 @@ func TestUpdateUserHandler(t *testing.T) {
 		var (
 			commentRepository comments.MockCommentsRepository
 			authorizer        domain.MockAuthorizer
+			requestValidator  validator.MockValidator
 
 			u = user.User{UUID: "auth-user-uuid"}
 			c = comment.Comment{
@@ -49,19 +49,20 @@ func TestUpdateUserHandler(t *testing.T) {
 		commentRepository.On("Save", &c).Once().Return(c.UUID, nil)
 		defer commentRepository.AssertExpectations(t)
 
-		handler := NewUpdateUserCommentHandler(updateUserComment.NewUseCase(&commentRepository), &authorizer)
+		handler := NewUpdateUserCommentHandler(updateUserComment.NewUseCase(&commentRepository, &requestValidator), &authorizer)
 
-		body := updateComment.Request{
-			UUID:       c.UUID,
-			Body:       c.Body,
-			ParentUUID: c.ParentUUID,
-			ObjectUUID: c.ObjectUUID,
-			ObjectType: c.ObjectType,
+		body := updateUserComment.Request{
+			UUID: c.UUID,
+			Body: c.Body,
 		}
 
 		var payload bytes.Buffer
 		err := json.NewEncoder(&payload).Encode(body)
 		assert.NoError(t, err)
+
+		body.UserUUID = u.UUID
+		requestValidator.On("Validate", &body).Once().Return(nil)
+		defer requestValidator.AssertExpectations(t)
 
 		request := httptest.NewRequest(http.MethodPost, "/", &payload)
 		request = request.WithContext(auth.ToContext(request.Context(), &u))
@@ -77,6 +78,7 @@ func TestUpdateUserHandler(t *testing.T) {
 		var (
 			commentRepository comments.MockCommentsRepository
 			authorizer        domain.MockAuthorizer
+			requestValidator  validator.MockValidator
 
 			u = user.User{UUID: "auth-user-uuid"}
 		)
@@ -84,7 +86,13 @@ func TestUpdateUserHandler(t *testing.T) {
 		authorizer.On("Authorize", u.UUID, permission.SelfCommentsUpdate).Once().Return(true, nil)
 		defer authorizer.AssertExpectations(t)
 
-		handler := NewUpdateUserCommentHandler(updateUserComment.NewUseCase(&commentRepository), &authorizer)
+		requestValidator.On("Validate", &updateUserComment.Request{UserUUID: u.UUID}).Once().Return(domain.ValidationErrors{
+			"body": "body is required",
+			"uuid": "uuid is required",
+		})
+		defer requestValidator.AssertExpectations(t)
+
+		handler := NewUpdateUserCommentHandler(updateUserComment.NewUseCase(&commentRepository, &requestValidator), &authorizer)
 
 		request := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString("{}"))
 		request = request.WithContext(auth.ToContext(request.Context(), &u))
@@ -107,13 +115,12 @@ func TestUpdateUserHandler(t *testing.T) {
 		var (
 			commentRepository comments.MockCommentsRepository
 			authorizer        domain.MockAuthorizer
+			requestValidator  validator.MockValidator
 
 			u = user.User{UUID: "auth-user-uuid"}
 			c = comment.Comment{
-				Body:       "this is a test body",
-				ParentUUID: "parent-uuid-1",
-				ObjectUUID: "object-uuid-test",
-				ObjectType: "article",
+				UUID: "comment-uuid",
+				Body: "this is a test body",
 				Author: author.Author{
 					UUID: u.UUID,
 				},
@@ -123,13 +130,11 @@ func TestUpdateUserHandler(t *testing.T) {
 		authorizer.On("Authorize", u.UUID, permission.SelfCommentsUpdate).Once().Return(false, nil)
 		defer authorizer.AssertExpectations(t)
 
-		handler := NewUpdateUserCommentHandler(updateUserComment.NewUseCase(&commentRepository), &authorizer)
+		handler := NewUpdateUserCommentHandler(updateUserComment.NewUseCase(&commentRepository, &requestValidator), &authorizer)
 
-		body := createComment.Request{
-			Body:       c.Body,
-			ParentUUID: c.ParentUUID,
-			ObjectUUID: c.ObjectUUID,
-			ObjectType: c.ObjectType,
+		body := updateUserComment.Request{
+			UUID: c.UUID,
+			Body: c.Body,
 		}
 
 		var payload bytes.Buffer
@@ -142,6 +147,7 @@ func TestUpdateUserHandler(t *testing.T) {
 
 		handler.ServeHTTP(response, request)
 
+		requestValidator.AssertNotCalled(t, "Validate")
 		commentRepository.AssertNotCalled(t, "GetOneByAuthorUUID")
 		commentRepository.AssertNotCalled(t, "Save")
 
@@ -153,13 +159,12 @@ func TestUpdateUserHandler(t *testing.T) {
 		var (
 			commentRepository comments.MockCommentsRepository
 			authorizer        domain.MockAuthorizer
+			requestValidator  validator.MockValidator
 
 			u = user.User{UUID: "auth-user-uuid"}
 			c = comment.Comment{
-				Body:       "this is a test body",
-				ParentUUID: "parent-uuid-1",
-				ObjectUUID: "object-uuid-test",
-				ObjectType: "article",
+				UUID: "comment-uuid",
+				Body: "this is a test body",
 				Author: author.Author{
 					UUID: u.UUID,
 				},
@@ -169,13 +174,11 @@ func TestUpdateUserHandler(t *testing.T) {
 		authorizer.On("Authorize", u.UUID, permission.SelfCommentsUpdate).Once().Return(false, errors.New("unexpected error"))
 		defer authorizer.AssertExpectations(t)
 
-		handler := NewUpdateUserCommentHandler(updateUserComment.NewUseCase(&commentRepository), &authorizer)
+		handler := NewUpdateUserCommentHandler(updateUserComment.NewUseCase(&commentRepository, &requestValidator), &authorizer)
 
-		body := createComment.Request{
-			Body:       c.Body,
-			ParentUUID: c.ParentUUID,
-			ObjectUUID: c.ObjectUUID,
-			ObjectType: c.ObjectType,
+		body := updateUserComment.Request{
+			UUID: c.UUID,
+			Body: c.Body,
 		}
 
 		var payload bytes.Buffer
@@ -188,6 +191,7 @@ func TestUpdateUserHandler(t *testing.T) {
 
 		handler.ServeHTTP(response, request)
 
+		requestValidator.AssertNotCalled(t, "Validate")
 		commentRepository.AssertNotCalled(t, "GetOneByAuthorUUID")
 		commentRepository.AssertNotCalled(t, "Save")
 

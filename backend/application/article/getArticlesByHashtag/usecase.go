@@ -1,6 +1,7 @@
 package getArticlesByHashtag
 
 import (
+	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/article"
 )
 
@@ -8,15 +9,26 @@ const limit = 10
 
 type UseCase struct {
 	articleRepository article.Repository
+	validator         domain.Validator
 }
 
-func NewUseCase(articleRepository article.Repository) *UseCase {
+func NewUseCase(
+	articleRepository article.Repository,
+	validator domain.Validator,
+) *UseCase {
 	return &UseCase{
 		articleRepository: articleRepository,
+		validator:         validator,
 	}
 }
 
 func (uc *UseCase) Execute(request *Request) (*Response, error) {
+	if validationErrors := uc.validator.Validate(request); len(validationErrors) > 0 {
+		return &Response{
+			ValidationErrors: validationErrors,
+		}, nil
+	}
+
 	currentPage := request.Page
 	if currentPage == 0 {
 		currentPage = 1

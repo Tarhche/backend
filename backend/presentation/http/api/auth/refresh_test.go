@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/application/auth/refresh"
@@ -20,9 +21,13 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/ecdsa"
 	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
+	"github.com/khanzadimahdi/testproject/infrastructure/translator"
+	"github.com/khanzadimahdi/testproject/infrastructure/validator"
 )
 
 func TestRefreshHandler(t *testing.T) {
+	t.Parallel()
+
 	privateKey, err := ecdsa.Generate()
 	assert.NoError(t, err)
 
@@ -40,8 +45,12 @@ func TestRefreshHandler(t *testing.T) {
 	}
 
 	t.Run("refresh token", func(t *testing.T) {
+		t.Parallel()
+
 		var (
-			userRepository users.MockUsersRepository
+			userRepository   users.MockUsersRepository
+			requestValidator validator.MockValidator
+			translator       translator.TranslatorMock
 
 			u = user.User{
 				UUID:     "user-uuid",
@@ -60,18 +69,25 @@ func TestRefreshHandler(t *testing.T) {
 		refreshToken, err := generateRefreshToken(u)
 		assert.NoError(t, err)
 
-		var payload bytes.Buffer
-		err = json.NewEncoder(&payload).Encode(refresh.Request{
+		r := refresh.Request{
 			Token: refreshToken,
-		})
+		}
+
+		var payload bytes.Buffer
+		err = json.NewEncoder(&payload).Encode(r)
 		assert.NoError(t, err)
 
-		handler := NewRefreshHandler(refresh.NewUseCase(&userRepository, j))
+		requestValidator.On("Validate", &r).Once().Return(nil)
+		defer requestValidator.AssertExpectations(t)
+
+		handler := NewRefreshHandler(refresh.NewUseCase(&userRepository, j, &translator, &requestValidator))
 
 		request := httptest.NewRequest(http.MethodPost, "/", &payload)
 		response := httptest.NewRecorder()
 
 		handler.ServeHTTP(response, request)
+
+		translator.AssertNotCalled(t, "Translate")
 
 		assert.Equal(t, "application/json", response.Header().Get("content-type"))
 		assert.Contains(t, response.Body.String(), "access_token")
@@ -80,17 +96,27 @@ func TestRefreshHandler(t *testing.T) {
 	})
 
 	t.Run("validation failed", func(t *testing.T) {
+		t.Parallel()
+
 		var (
-			userRepository users.MockUsersRepository
+			userRepository   users.MockUsersRepository
+			requestValidator validator.MockValidator
+			translator       translator.TranslatorMock
 		)
 
-		handler := NewRefreshHandler(refresh.NewUseCase(&userRepository, j))
+		requestValidator.On("Validate", &refresh.Request{}).Once().Return(domain.ValidationErrors{
+			"token": "token is required",
+		})
+		defer requestValidator.AssertExpectations(t)
+
+		handler := NewRefreshHandler(refresh.NewUseCase(&userRepository, j, &translator, &requestValidator))
 
 		request := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString("{}"))
 		response := httptest.NewRecorder()
 
 		handler.ServeHTTP(response, request)
 
+		translator.AssertNotCalled(t, "Translate")
 		userRepository.AssertNotCalled(t, "GetOne")
 
 		expected, err := os.ReadFile("testdata/refresh-response-validation-failed.json")
@@ -102,8 +128,12 @@ func TestRefreshHandler(t *testing.T) {
 	})
 
 	t.Run("user not found", func(t *testing.T) {
+		t.Parallel()
+
 		var (
-			userRepository users.MockUsersRepository
+			userRepository   users.MockUsersRepository
+			requestValidator validator.MockValidator
+			translator       translator.TranslatorMock
 
 			u = user.User{
 				UUID:     "user-uuid",
@@ -122,13 +152,21 @@ func TestRefreshHandler(t *testing.T) {
 		refreshToken, err := generateRefreshToken(u)
 		assert.NoError(t, err)
 
-		var payload bytes.Buffer
-		err = json.NewEncoder(&payload).Encode(refresh.Request{
+		r := refresh.Request{
 			Token: refreshToken,
-		})
+		}
+
+		var payload bytes.Buffer
+		err = json.NewEncoder(&payload).Encode(r)
 		assert.NoError(t, err)
 
-		handler := NewRefreshHandler(refresh.NewUseCase(&userRepository, j))
+		requestValidator.On("Validate", &r).Once().Return(nil)
+		defer requestValidator.AssertExpectations(t)
+
+		translator.On("Translate", "identity (email/username) not exists", mock.Anything).Once().Return("identity (email/username) not exists")
+		defer translator.AssertExpectations(t)
+
+		handler := NewRefreshHandler(refresh.NewUseCase(&userRepository, j, &translator, &requestValidator))
 
 		request := httptest.NewRequest(http.MethodPost, "/", &payload)
 		response := httptest.NewRecorder()
@@ -144,8 +182,12 @@ func TestRefreshHandler(t *testing.T) {
 	})
 
 	t.Run("error", func(t *testing.T) {
+		t.Parallel()
+
 		var (
-			userRepository users.MockUsersRepository
+			userRepository   users.MockUsersRepository
+			requestValidator validator.MockValidator
+			translator       translator.TranslatorMock
 
 			u = user.User{
 				UUID:     "user-uuid",
@@ -158,24 +200,31 @@ func TestRefreshHandler(t *testing.T) {
 			}
 		)
 
-		userRepository.On("GetOne", u.UUID).Once().Return(user.User{}, errors.New("something unexpected"))
-		defer userRepository.AssertExpectations(t)
-
 		refreshToken, err := generateRefreshToken(u)
 		assert.NoError(t, err)
 
-		var payload bytes.Buffer
-		err = json.NewEncoder(&payload).Encode(refresh.Request{
+		r := refresh.Request{
 			Token: refreshToken,
-		})
+		}
+
+		var payload bytes.Buffer
+		err = json.NewEncoder(&payload).Encode(r)
 		assert.NoError(t, err)
 
-		handler := NewRefreshHandler(refresh.NewUseCase(&userRepository, j))
+		requestValidator.On("Validate", &r).Once().Return(nil)
+		defer requestValidator.AssertExpectations(t)
+
+		userRepository.On("GetOne", u.UUID).Once().Return(user.User{}, errors.New("something unexpected"))
+		defer userRepository.AssertExpectations(t)
+
+		handler := NewRefreshHandler(refresh.NewUseCase(&userRepository, j, &translator, &requestValidator))
 
 		request := httptest.NewRequest(http.MethodPost, "/", &payload)
 		response := httptest.NewRecorder()
 
 		handler.ServeHTTP(response, request)
+
+		translator.AssertNotCalled(t, "Translate")
 
 		assert.Len(t, response.Body.Bytes(), 0)
 		assert.Equal(t, http.StatusInternalServerError, response.Code)

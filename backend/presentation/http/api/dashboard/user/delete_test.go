@@ -16,7 +16,11 @@ import (
 )
 
 func TestDeleteHandler(t *testing.T) {
+	t.Parallel()
+
 	t.Run("delete user", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			userRepository users.MockUsersRepository
 			authorizer     domain.MockAuthorizer
@@ -47,6 +51,8 @@ func TestDeleteHandler(t *testing.T) {
 	})
 
 	t.Run("unauthorised", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			userRepository users.MockUsersRepository
 			authorizer     domain.MockAuthorizer
@@ -77,6 +83,8 @@ func TestDeleteHandler(t *testing.T) {
 	})
 
 	t.Run("error", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			userRepository users.MockUsersRepository
 			authorizer     domain.MockAuthorizer

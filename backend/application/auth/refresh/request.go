@@ -1,17 +1,19 @@
 package refresh
 
-type validationErrors map[string]string
+import "github.com/khanzadimahdi/testproject/domain"
 
 type Request struct {
 	Token string `json:"token"`
 }
 
-func (r *Request) Validate() (bool, validationErrors) {
-	errors := make(validationErrors)
+var _ domain.Validatable = &Request{}
+
+func (r *Request) Validate() domain.ValidationErrors {
+	validationErrors := make(domain.ValidationErrors)
 
 	if len(r.Token) == 0 {
-		errors["token"] = "token is required"
+		validationErrors["token"] = "required_field"
 	}
 
-	return len(errors) == 0, errors
+	return validationErrors
 }

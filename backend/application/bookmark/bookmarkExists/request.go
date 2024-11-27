@@ -1,8 +1,9 @@
 package bookmarkExists
 
-import "github.com/khanzadimahdi/testproject/domain/bookmark"
-
-type validationErrors map[string]string
+import (
+	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/bookmark"
+)
 
 type Request struct {
 	ObjectType string `json:"object_type"`
@@ -10,20 +11,20 @@ type Request struct {
 	OwnerUUID  string `json:"-"`
 }
 
-func (r *Request) Validate() (bool, validationErrors) {
-	errors := make(validationErrors)
+func (r *Request) Validate() domain.ValidationErrors {
+	errors := make(domain.ValidationErrors)
 
 	if r.ObjectType != bookmark.ObjectTypeArticle {
-		errors["object_type"] = "object type is not supported"
+		errors["object_type"] = "invalid_value"
 	}
 
 	if len(r.ObjectUUID) == 0 {
-		errors["object_uuid"] = "object uuid is required"
+		errors["object_uuid"] = "required_field"
 	}
 
 	if len(r.OwnerUUID) == 0 {
-		errors["owner_uuid"] = "owner uuid is required"
+		errors["owner_uuid"] = "required_field"
 	}
 
-	return len(errors) == 0, errors
+	return errors
 }
