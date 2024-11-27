@@ -1,6 +1,5 @@
 import Image from "next/image";
 import Link from "next/link";
-import {notFound} from "next/navigation";
 import {Title, Box, Group, Text, Blockquote, Badge} from "@mantine/core";
 import {BookmarkButton} from "./bookmark-button";
 import hljs from "highlight.js";
@@ -34,17 +33,13 @@ type Props = {
 };
 
 export async function Content({uuid}: Props) {
-  const articleData = fetchArticleByUUID(uuid);
+  const articleData = await fetchArticleByUUID(uuid);
   const bookmarkStatusData = checkBookmarkStatus(uuid);
   const [article, isBookmarked] = await Promise.all([
     articleData,
     bookmarkStatusData,
   ]);
-  const tags = article.tags ?? [];
-
-  if (article === undefined) {
-    notFound();
-  }
+  const tags = article?.status ?? [];
 
   return (
     <Box component="article">

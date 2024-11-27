@@ -22,12 +22,16 @@ export async function checkBookmarkStatus(
   if (uuid === undefined) {
     return undefined;
   }
-  const response = await apiClient.post("bookmarks/exists", {
-    object_type: "article",
-    object_uuid: uuid,
-  });
+  try {
+    const response = await apiClient.post("bookmarks/exists", {
+      object_type: "article",
+      object_uuid: uuid,
+    });
 
-  return response.data?.exist;
+    return response.data?.exist;
+  } catch {
+    return undefined;
+  }
 }
 
 export async function bookmarkArticle(body: {
