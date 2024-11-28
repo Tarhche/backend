@@ -1,7 +1,11 @@
 import {Metadata} from "next";
+import {Suspense} from "react";
 import {Stack} from "@mantine/core";
 import {DashboardBreadcrumbs} from "@/features/dashboard/components/breadcrumbs";
-import {RolesTable} from "@/features/dashboard/roles-table";
+import {
+  RolesTable,
+  RolesTableSkeleton,
+} from "@/features/roles/components/roles-table";
 
 const PAGE_TITLE = "نقش ها";
 
@@ -27,7 +31,9 @@ function RolesPage({searchParams}: Props) {
           },
         ]}
       />
-      <RolesTable page={page} />
+      <Suspense key={page} fallback={<RolesTableSkeleton />}>
+        <RolesTable page={page} />
+      </Suspense>
     </Stack>
   );
 }

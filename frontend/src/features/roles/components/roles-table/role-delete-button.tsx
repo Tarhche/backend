@@ -11,7 +11,7 @@ import {
 } from "@mantine/core";
 import {FormButton} from "@/components/form-button";
 import {IconTrash} from "@tabler/icons-react";
-import {deleteRoleAction} from "../actions/delete-role";
+import {deleteRoleAction} from "../../actions/delete-role";
 
 type Props = {
   roleId: string;

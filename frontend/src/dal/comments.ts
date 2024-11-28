@@ -48,3 +48,7 @@ export async function createArticleComment(body: {
   });
   return response.data;
 }
+
+export async function deleteComment(commentId: string) {
+  return await apiClient.delete(`/dashboard/comments/${commentId}`);
+}

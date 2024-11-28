@@ -1,7 +1,7 @@
 "use server";
 import {revalidatePath} from "next/cache";
 import {redirect} from "next/navigation";
-import {createRole, updateRole, AxiosError} from "@/dal";
+import {createRole, updateRole, APIClientError} from "@/dal";
 import {APP_PATHS} from "@/lib/app-paths";
 
 type FormState = {
@@ -17,6 +17,7 @@ export async function upsertRoleAction(
   formData: FormData,
 ): Promise<FormState> {
   const roleId = formData.get("roleId")?.toString();
+
   try {
     const values: Record<string, string | string[] | null> = {
       name: formData.get("name")?.toString() || null,
@@ -32,8 +33,8 @@ export async function upsertRoleAction(
     }
   } catch (error) {
     if (
-      error instanceof AxiosError &&
-      (error.status === 400 || error.status === 422)
+      error instanceof APIClientError &&
+      (error.statusCode === 400 || error.statusCode === 422)
     ) {
       return {
         success: false,
@@ -44,6 +45,7 @@ export async function upsertRoleAction(
       success: false,
     };
   }
+
   revalidatePath(APP_PATHS.dashboard.roles.index);
   redirect(APP_PATHS.dashboard.roles.index);
 }

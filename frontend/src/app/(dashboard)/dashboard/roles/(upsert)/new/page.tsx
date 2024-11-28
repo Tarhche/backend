@@ -1,4 +1,4 @@
-import {RolesUpsertForm} from "@/features/dashboard/roles-upsert-form";
+import {RolesUpsertForm} from "@/features/roles/components/roles-upsert-form";
 
 function NewRolePage() {
   return <RolesUpsertForm />;

@@ -26,6 +26,7 @@ type Props = {
 };
 
 export async function RolesTable({page}: Props) {
+  await new Promise((res) => setTimeout(res, 3000));
   const {items: roles, pagination} = await fetchRoles({
     params: {
       page,

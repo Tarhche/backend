@@ -2,7 +2,7 @@
 import {useFormState} from "react-dom";
 import {Stack, TextInput, Textarea, Fieldset, Group} from "@mantine/core";
 import {FormButton} from "@/components/form-button";
-import {upsertRoleAction} from "../actions/upsert-role";
+import {upsertRoleAction} from "../../actions/upsert-role";
 
 export type DefaultValues = {
   roleId: string;

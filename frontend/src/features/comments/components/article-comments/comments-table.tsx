@@ -13,7 +13,7 @@ import {
   Badge,
   rem,
 } from "@mantine/core";
-import {CommentsPagination} from "./comments-table-pagination";
+import {Pagination} from "@/components/pagination";
 import {CommentDeleteButton} from "./comment-delete-button";
 import {IconEye, IconPencil} from "@tabler/icons-react";
 import {fetchAllComments} from "@/dal/comments";
@@ -128,7 +128,7 @@ export async function CommentsTable({page}: Props) {
       </Table>
       {comments.length >= 1 && (
         <Group mt="md" mb={"lg"} justify="flex-end">
-          <CommentsPagination total={total_pages} current={current_page} />
+          <Pagination total={total_pages} current={current_page} />
         </Group>
       )}
     </>

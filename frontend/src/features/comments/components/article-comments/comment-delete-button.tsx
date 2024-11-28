@@ -10,8 +10,8 @@ import {
   Text,
 } from "@mantine/core";
 import {FormButton} from "@/components/form-button";
+import {deleteCommentAction} from "../../actions/delete-comment";
 import {IconTrash} from "@tabler/icons-react";
-import {deleteComment} from "../../actions/delete-comment";
 
 type Props = {
   commentID: string;
@@ -24,7 +24,7 @@ export function CommentDeleteButton({commentID, commentMessage}: Props) {
   const handleSubmit = async () => {
     const fd = new FormData();
     fd.set("id", commentID);
-    await deleteComment(fd);
+    await deleteCommentAction(fd);
     setIsConfirmOpen(false);
   };
 

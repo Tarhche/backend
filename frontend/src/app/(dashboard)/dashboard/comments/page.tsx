@@ -5,7 +5,7 @@ import {DashboardBreadcrumbs} from "@/features/dashboard/components/breadcrumbs"
 import {
   CommentsTable,
   CommentsTableSkeleton,
-} from "@/features/dashboard/components/comments";
+} from "@/features/comments/components/article-comments";
 import {APP_PATHS} from "@/lib/app-paths";
 
 export const metadata: Metadata = {

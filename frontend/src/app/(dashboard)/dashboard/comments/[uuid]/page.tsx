@@ -1,5 +1,5 @@
 import {notFound} from "next/navigation";
-import {EditCommentForm} from "@/features/dashboard/components/edit-comment-form/edit-form";
+import {EditCommentForm} from "@/features/comments/components/edit-comment-form";
 import {fetchUsersDetailComments} from "@/dal";
 
 export const metadata = {

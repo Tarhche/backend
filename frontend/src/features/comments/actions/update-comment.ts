@@ -34,6 +34,7 @@ export async function updateCommentAction(
       errorMessage: "ویرایش کامنت با خطا مواجه شد",
     };
   }
+
   revalidatePath(APP_PATHS.dashboard.comments.index);
   redirect(`${getRootUrl()}${APP_PATHS.dashboard.comments.index}`);
 }
