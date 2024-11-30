@@ -10,7 +10,15 @@ const nextConfig = {
       },
     ],
   },
-  experimental: {},
+  experimental: {
+    optimizePackageImports: [
+      "@mantine/core",
+      "@mantine/dates",
+      "@mantine/hooks",
+      "@mantine/notifications",
+      "@mantine/tiptap",
+    ],
+  },
 };
 
 export default nextConfig;
