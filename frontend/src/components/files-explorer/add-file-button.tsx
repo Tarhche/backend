@@ -21,6 +21,9 @@ export function AddFileButton({onAdd}: Props) {
         setPending(true);
         await addFileAction(fd);
         onAdd();
+        if (inputRef.current?.value) {
+          inputRef.current.value = "";
+        }
       } finally {
         setPending(false);
       }

@@ -1,7 +1,7 @@
 import {type Metadata} from "next";
 import {Stack} from "@mantine/core";
 import {DashboardBreadcrumbs} from "@/features/dashboard/components/breadcrumbs";
-import {FilesList} from "@/features/dashboard/components/files";
+import {FilesList} from "@/features/files/components";
 
 export const metadata: Metadata = {
   title: "فایل ها",
