@@ -1,6 +1,6 @@
-import {apiClient} from "./api-client";
+import {dalDriver} from "./driver/dal-driver";
 
 export async function fetchAllPermissions() {
-  const response = await apiClient.get("dashboard/permissions");
+  const response = await dalDriver.get("dashboard/permissions");
   return response.data;
 }

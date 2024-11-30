@@ -1,13 +1,13 @@
 import {AxiosRequestConfig} from "axios";
-import {apiClient} from "@/dal";
+import {dalDriver} from "@/dal";
 
 export async function fetchFiles(config?: AxiosRequestConfig) {
-  const response = await apiClient.get("dashboard/files", config);
+  const response = await dalDriver.get("dashboard/files", config);
   return response.data;
 }
 
 export async function addNewFile(body: FormData) {
-  return await apiClient.post("dashboard/files", body, {
+  return await dalDriver.post("dashboard/files", body, {
     headers: {
       "Content-Type": "multipart/form-data",
     },
@@ -15,5 +15,5 @@ export async function addNewFile(body: FormData) {
 }
 
 export async function deleteFile(id: string) {
-  return await apiClient.delete(`dashboard/files/${id}`);
+  return await dalDriver.delete(`dashboard/files/${id}`);
 }

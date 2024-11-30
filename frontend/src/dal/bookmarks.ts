@@ -1,13 +1,13 @@
 import {AxiosRequestConfig} from "axios";
-import {apiClient} from ".";
+import {dalDriver} from ".";
 
 export async function fetchUserBookmarks(config?: AxiosRequestConfig) {
-  const response = await apiClient.get("dashboard/my/bookmarks", config);
+  const response = await dalDriver.get("dashboard/my/bookmarks", config);
   return response.data;
 }
 
 export async function removeUserBookmark(id: string) {
-  const response = await apiClient.delete("dashboard/my/bookmarks", {
+  const response = await dalDriver.delete("dashboard/my/bookmarks", {
     data: {
       object_type: "article",
       object_uuid: id,
@@ -23,7 +23,7 @@ export async function checkBookmarkStatus(
     return undefined;
   }
   try {
-    const response = await apiClient.post("bookmarks/exists", {
+    const response = await dalDriver.post("bookmarks/exists", {
       object_type: "article",
       object_uuid: uuid,
     });
@@ -39,7 +39,7 @@ export async function bookmarkArticle(body: {
   uuid: string;
   title: string;
 }) {
-  const response = await apiClient.put("bookmarks", {
+  const response = await dalDriver.put("bookmarks", {
     keep: body.keep,
     title: body.title,
     object_type: "article",

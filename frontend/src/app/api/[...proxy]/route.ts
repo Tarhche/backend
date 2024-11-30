@@ -1,6 +1,5 @@
 import {NextRequest} from "next/server";
-import {apiClient} from "@/dal/api-client";
-import {APIClientError} from "@/dal/api-client-error";
+import {dalDriver, DALDriverError} from "@/dal";
 import {axiosToFetchResponse} from "@/lib/transformers";
 
 export async function GET(request: NextRequest, {params}) {
@@ -25,7 +24,7 @@ export async function DELETE(request: NextRequest, {params}) {
 
 async function handleRequest(request: NextRequest, params, method: string) {
   try {
-    const response = await apiClient({
+    const response = await dalDriver({
       url: params.proxy.join("/") + request.nextUrl.search,
       method: method,
       data: request.body,
@@ -33,13 +32,13 @@ async function handleRequest(request: NextRequest, params, method: string) {
 
     return axiosToFetchResponse(response);
   } catch (error) {
-    if (error instanceof APIClientError && error.statusCode === 401) {
+    if (error instanceof DALDriverError && error.statusCode === 401) {
       return new Response(JSON.stringify(error.response?.data || {}), {
         status: error.statusCode,
       });
     }
 
-    if (error instanceof APIClientError) {
+    if (error instanceof DALDriverError) {
       return new Response("", {
         status: error.statusCode,
       });

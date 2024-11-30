@@ -1,6 +1,5 @@
 "use server";
-import {AxiosError} from "axios";
-import {forgotPassword as recoverPassword} from "@/dal/auth";
+import {forgotPassword as recoverPassword, DALDriverError} from "@/dal";
 
 type FormState =
   | {
@@ -26,7 +25,7 @@ export async function forgotPassword(
       success: true,
     };
   } catch (error) {
-    if (error instanceof AxiosError) {
+    if (error instanceof DALDriverError) {
       return {
         success: false,
         fieldErrors: error.response?.data?.errors ?? {},

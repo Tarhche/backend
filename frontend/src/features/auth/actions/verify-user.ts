@@ -1,7 +1,6 @@
 "use server";
-import {AxiosError} from "axios";
 import * as z from "zod";
-import {verifyUser as completeUserProfile} from "@/dal/auth";
+import {verifyUser as completeUserProfile, DALDriverError} from "@/dal";
 
 const FIELDS_SCHEMA = z
   .object({
@@ -85,7 +84,7 @@ export async function verifyUser(
         success: true,
       };
     } catch (e) {
-      if (e instanceof AxiosError) {
+      if (e instanceof DALDriverError) {
         const errors = e.response?.data.errors;
         if (errors && errors.token) {
           nonFieldErrors.push("توکن ثبت نام معبتر نیست");

@@ -1,6 +1,5 @@
 "use server";
-import {AxiosError} from "axios";
-import {registerUser as signUpUser} from "@/dal/auth";
+import {registerUser as signUpUser, DALDriverError} from "@/dal";
 
 type SuccessRegisterState = {
   success: true;
@@ -33,7 +32,7 @@ export async function registerUser(
       message: "",
     };
   } catch (e) {
-    if (e instanceof AxiosError) {
+    if (e instanceof DALDriverError) {
       const errors = e.response?.data.errors;
       if (Boolean(errors?.identity)) {
         return {

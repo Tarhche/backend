@@ -2,13 +2,13 @@ type Response = {
   data?: any;
 };
 
-export class APIClientError extends Error {
+export class DALDriverError extends Error {
   public statusCode: number;
   public response?: Response = {};
 
   constructor(message: string, statusCode: number, response?: Response) {
     super(message);
-    this.name = "APIClientError";
+    this.name = "DALClientError";
     this.statusCode = statusCode;
     this.response = response;
   }

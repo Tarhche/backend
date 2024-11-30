@@ -1,6 +1,5 @@
 "use server";
-import {AxiosError} from "axios";
-import {resetPassword as changePassword} from "@/dal/auth";
+import {resetPassword as changePassword, DALDriverError} from "@/dal";
 
 type FormState = {
   success: boolean;
@@ -37,14 +36,14 @@ export async function resetPassword(
       success: true,
     };
   } catch (error) {
-    if (error instanceof AxiosError) {
+    if (error instanceof DALDriverError) {
       const errors = error.response?.data?.errors ?? {};
       if ("token" in errors) {
         return {
           success: false,
           errorMessage: [errors.token],
         };
-      } else if (error.status === 500) {
+      } else if (error.statusCode === 500) {
         return {
           success: false,
           errorMessage: ["خطایی سمت سرور اتفاق افتاد"],

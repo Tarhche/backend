@@ -1,7 +1,7 @@
 "use server";
 import {revalidatePath} from "next/cache";
 import {redirect} from "next/navigation";
-import {updateProfilePassword, AxiosError} from "@/dal";
+import {updateProfilePassword, DALDriverError} from "@/dal";
 import {APP_PATHS} from "@/lib/app-paths";
 
 type FormState = {
@@ -26,7 +26,7 @@ export async function updateProfilePasswordAction(
   try {
     await updateProfilePassword(values);
   } catch (err) {
-    if (err instanceof AxiosError) {
+    if (err instanceof DALDriverError) {
       return {
         success: false,
         fieldErrors: err.response?.data.errors || {},

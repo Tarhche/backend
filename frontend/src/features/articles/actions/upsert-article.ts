@@ -1,7 +1,7 @@
 "use server";
 import {revalidatePath} from "next/cache";
 import {redirect} from "next/navigation";
-import {createArticle, updateArticle, APIClientError} from "@/dal";
+import {createArticle, updateArticle, DALDriverError} from "@/dal";
 import {APP_PATHS} from "@/lib/app-paths";
 
 type FormState = {
@@ -35,7 +35,7 @@ export async function upsertArticleAction(
     }
   } catch (err) {
     if (
-      err instanceof APIClientError &&
+      err instanceof DALDriverError &&
       (err.statusCode === 400 || err.statusCode == 401)
     ) {
       return {

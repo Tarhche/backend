@@ -1,13 +1,13 @@
 import {AxiosRequestConfig} from "axios";
-import {apiClient} from "@/dal";
+import {dalDriver} from "@/dal";
 
 export async function fetchAllComments(config?: AxiosRequestConfig) {
-  const response = await apiClient.get("dashboard/comments", config);
+  const response = await dalDriver.get("dashboard/comments", config);
   return response.data;
 }
 
 export async function fetchUserComments(config?: AxiosRequestConfig) {
-  const response = await apiClient.get("dashboard/my/comments", config);
+  const response = await dalDriver.get("dashboard/my/comments", config);
   return response.data;
 }
 
@@ -15,12 +15,12 @@ export async function fetchUsersDetailComments(
   id: string,
   config?: AxiosRequestConfig,
 ) {
-  const response = await apiClient.get(`dashboard/comments/${id}`, config);
+  const response = await dalDriver.get(`dashboard/comments/${id}`, config);
   return response.data;
 }
 
 export async function updateUserComment(body: any) {
-  const response = await apiClient.put(`dashboard/comments`, {
+  const response = await dalDriver.put(`dashboard/comments`, {
     object_type: "article",
     ...body,
   });
@@ -28,7 +28,7 @@ export async function updateUserComment(body: any) {
 }
 
 export async function fetchArticleComments(articleUUID: string) {
-  const article = await apiClient.get("comments", {
+  const article = await dalDriver.get("comments", {
     params: {
       object_type: "article",
       object_uuid: articleUUID,
@@ -42,7 +42,7 @@ export async function createArticleComment(body: {
   body: string;
   parent_uuid: string;
 }) {
-  const response = await apiClient.post("comments", {
+  const response = await dalDriver.post("comments", {
     ...body,
     object_type: "article",
   });
@@ -50,5 +50,5 @@ export async function createArticleComment(body: {
 }
 
 export async function deleteComment(commentId: string) {
-  return await apiClient.delete(`/dashboard/comments/${commentId}`);
+  return await dalDriver.delete(`/dashboard/comments/${commentId}`);
 }

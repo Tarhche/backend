@@ -1,6 +1,6 @@
 export {AxiosError, type AxiosRequestConfig} from "axios";
-export {apiClient} from "./api-client";
-export * from "./api-client-error";
+export {dalDriver} from "./driver/dal-driver";
+export * from "./driver/dal-driver-error";
 export * from "./roles";
 export * from "./profile";
 export * from "./home";

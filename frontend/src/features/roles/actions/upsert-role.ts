@@ -1,7 +1,7 @@
 "use server";
 import {revalidatePath} from "next/cache";
 import {redirect} from "next/navigation";
-import {createRole, updateRole, APIClientError} from "@/dal";
+import {createRole, updateRole, DALDriverError} from "@/dal";
 import {APP_PATHS} from "@/lib/app-paths";
 
 type FormState = {
@@ -33,7 +33,7 @@ export async function upsertRoleAction(
     }
   } catch (error) {
     if (
-      error instanceof APIClientError &&
+      error instanceof DALDriverError &&
       (error.statusCode === 400 || error.statusCode === 422)
     ) {
       return {

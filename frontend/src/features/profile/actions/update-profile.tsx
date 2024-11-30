@@ -1,6 +1,6 @@
 "use server";
 import {revalidatePath} from "next/cache";
-import {updateUserProfile, APIClientError} from "@/dal";
+import {updateUserProfile, DALDriverError} from "@/dal";
 import {APP_PATHS} from "@/lib/app-paths";
 
 type FormState = {
@@ -26,7 +26,7 @@ export async function updateProfileAction(
   try {
     await updateUserProfile(values);
   } catch (err) {
-    if (err instanceof APIClientError && err.statusCode === 400) {
+    if (err instanceof DALDriverError && err.statusCode === 400) {
       return {
         success: false,
         fieldErrors: err.response?.data.errors || {},

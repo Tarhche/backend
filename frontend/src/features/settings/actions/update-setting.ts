@@ -1,6 +1,6 @@
 "use server";
 import {revalidatePath} from "next/cache";
-import {updateConfigs, APIClientError} from "@/dal";
+import {updateConfigs, DALDriverError} from "@/dal";
 import {convertFormDataActionToObject} from "@/lib/transformers";
 import {APP_PATHS} from "@/lib/app-paths";
 
@@ -20,7 +20,7 @@ export async function updateSettingAction(
     }
     await updateConfigs(data);
   } catch (error) {
-    if (error instanceof APIClientError && error.statusCode === 400) {
+    if (error instanceof DALDriverError && error.statusCode === 400) {
       return {
         success: false,
         fieldErrors: error.response?.data.errors,

@@ -11,12 +11,12 @@ import {
   ACCESS_TOKEN_COOKIE_NAME,
   REFRESH_TOKEN_COOKIE_NAME,
 } from "@/constants";
-import {REFRESH_TOKEN_URL} from "./auth";
-import {APIClientError} from "./api-client-error";
+import {REFRESH_TOKEN_URL} from "../auth";
+import {DALDriverError} from "./dal-driver-error";
 
 const BASE_URL = `${INTERNAL_BACKEND_URL}/api`;
 
-export const apiClient = axios.create({
+export const dalDriver = axios.create({
   baseURL: BASE_URL,
   headers: {
     "Content-Type": "application/json",
@@ -31,7 +31,7 @@ function handleRequestResolve(config: InternalAxiosRequestConfig) {
   return config;
 }
 
-apiClient.interceptors.request.use(
+dalDriver.interceptors.request.use(
   handleRequestResolve,
   async (error) => error,
 );
@@ -45,11 +45,11 @@ async function handleResponseRejection(response: any) {
   const isResponseUnauthorized = response.status === 401;
   const originalRequest = response.config;
 
-  const unauthorizedError = new APIClientError("Unauthorized access", 401, {
+  const unauthorizedError = new DALDriverError("Unauthorized access", 401, {
     data: response.response.data,
   });
 
-  const unexpectedBehaviorError = new APIClientError(
+  const unexpectedBehaviorError = new DALDriverError(
     "Something bad happened",
     500,
     {
@@ -62,7 +62,7 @@ async function handleResponseRejection(response: any) {
      * If a user with a valid access token encounters a 401 error,
      * it signifies that they lack the necessary permissions to access the
      * requested resource. In this case, refreshing the token is unnecessary,
-     * and we should immediately throw a 'APIClientUnauthorizedError'.
+     * and we should immediately throw a 'dalDriverUnauthorizedError'.
      */
     if (!isFromApiRoutes && !isFromServerAction) {
       throw unauthorizedError;
@@ -128,7 +128,7 @@ async function handleResponseRejection(response: any) {
       }
 
       if (err instanceof AxiosError) {
-        throw new APIClientError(err.message, err.status || 500, response.data);
+        throw new DALDriverError(err.message, err.status || 500, response.data);
       }
       throw unexpectedBehaviorError;
     }
@@ -151,7 +151,7 @@ async function handleResponseRejection(response: any) {
     notFound();
   }
 
-  throw new APIClientError(
+  throw new DALDriverError(
     "An error happened when trying to access backend.",
     response.status,
     {
@@ -160,4 +160,4 @@ async function handleResponseRejection(response: any) {
   );
 }
 
-apiClient.interceptors.response.use((value) => value, handleResponseRejection);
+dalDriver.interceptors.response.use((value) => value, handleResponseRejection);

@@ -1,6 +1,6 @@
-import {apiClient} from "@/dal";
+import {dalDriver} from "@/dal";
 
 export async function fetchAllArticlesByHashtag(hashtag: string) {
-  const response = await apiClient.get(`hashtags/${hashtag}`);
+  const response = await dalDriver.get(`hashtags/${hashtag}`);
   return response.data;
 }

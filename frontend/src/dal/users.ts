@@ -1,28 +1,28 @@
 import {AxiosRequestConfig} from "axios";
-import {apiClient} from "./api-client";
+import {dalDriver} from "./driver/dal-driver";
 
 export async function fetchUsers(config?: AxiosRequestConfig) {
-  const response = await apiClient.get("dashboard/users", config);
+  const response = await dalDriver.get("dashboard/users", config);
   return response.data;
 }
 
 export async function fetchUser(userId: string, config?: AxiosRequestConfig) {
-  const response = await apiClient.get(`dashboard/users/${userId}`, config);
+  const response = await dalDriver.get(`dashboard/users/${userId}`, config);
   return response.data;
 }
 
 export async function createUser(data: Record<string, string>) {
-  return await apiClient.post("dashboard/users", data);
+  return await dalDriver.post("dashboard/users", data);
 }
 
 export async function updateUser(data: Record<string, string>) {
-  return await apiClient.put("dashboard/users", data);
+  return await dalDriver.put("dashboard/users", data);
 }
 
 export async function deleteUser(id: string) {
-  return await apiClient.delete(`dashboard/users/${id}`);
+  return await dalDriver.delete(`dashboard/users/${id}`);
 }
 
 export async function updatePassword(data: Record<string, string>) {
-  return await apiClient.put(`dashboard/users/password`, data);
+  return await dalDriver.put(`dashboard/users/password`, data);
 }
