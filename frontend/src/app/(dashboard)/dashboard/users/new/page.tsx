@@ -1,6 +1,6 @@
 import {Metadata} from "next";
 import {Box, Stack} from "@mantine/core";
-import {DashboardBreadcrumbs} from "@/features/dashboard/components/breadcrumbs";
+import {DashboardBreadcrumbs} from "@/features/breadcrumbs/components/breadcrumbs";
 import {UpsertUserForm} from "@/features/users/components";
 import {withPermissions} from "@/components/with-authorization";
 import {APP_PATHS} from "@/lib/app-paths";

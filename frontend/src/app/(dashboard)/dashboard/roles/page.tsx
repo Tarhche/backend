@@ -1,7 +1,7 @@
 import {Metadata} from "next";
 import {Suspense} from "react";
 import {Stack} from "@mantine/core";
-import {DashboardBreadcrumbs} from "@/features/dashboard/components/breadcrumbs";
+import {DashboardBreadcrumbs} from "@/features/breadcrumbs/components/breadcrumbs";
 import {RolesTable, RolesTableSkeleton} from "@/features/roles/components";
 import {withPermissions} from "@/components/with-authorization";
 

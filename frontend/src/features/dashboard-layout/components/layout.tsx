@@ -1,8 +1,8 @@
 import {UnstyledButton, ScrollArea} from "@mantine/core";
 import {IconLogout} from "@tabler/icons-react";
-import {logout} from "@/features/dashboard/actions/logout";
 import {LayoutShell, LayoutMain, LayoutNavbar} from "./layout-shell";
 import {LayoutSidebar} from "./layout-sidebar";
+import {logout} from "@/features/auth/actions";
 import {getUserPermissions} from "@/lib/auth";
 import classes from "./layout.module.css";
 

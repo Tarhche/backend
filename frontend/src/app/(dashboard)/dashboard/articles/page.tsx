@@ -2,7 +2,7 @@ import {type Metadata} from "next";
 import {Suspense} from "react";
 import {Box} from "@mantine/core";
 import {withPermissions} from "@/components/with-authorization";
-import {DashboardBreadcrumbs} from "@/features/dashboard/components/breadcrumbs";
+import {DashboardBreadcrumbs} from "@/features/breadcrumbs/components/breadcrumbs";
 import {
   ArticlesTable,
   ArticlesTableSkeleton,

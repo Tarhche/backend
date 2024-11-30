@@ -1,7 +1,7 @@
 import {type Metadata} from "next";
 import {Suspense} from "react";
 import {Box} from "@mantine/core";
-import {DashboardBreadcrumbs} from "@/features/dashboard/components/breadcrumbs";
+import {DashboardBreadcrumbs} from "@/features/breadcrumbs/components/breadcrumbs";
 import {
   CommentsTable,
   CommentsTableSkeleton,

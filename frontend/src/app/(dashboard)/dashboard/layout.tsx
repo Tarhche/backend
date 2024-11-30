@@ -1,5 +1,5 @@
 import {Metadata} from "next";
-import {DashboardLayout} from "@/features/dashboard/dashboard-layout";
+import {DashboardLayout} from "@/features/dashboard-layout";
 import {buildTitle} from "@/lib/seo";
 
 export const metadata: Metadata = {

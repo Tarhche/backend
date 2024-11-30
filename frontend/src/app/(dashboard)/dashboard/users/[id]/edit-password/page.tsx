@@ -1,7 +1,7 @@
 import {Metadata} from "next";
 import {notFound} from "next/navigation";
 import {Box, Stack} from "@mantine/core";
-import {DashboardBreadcrumbs} from "@/features/dashboard/components/breadcrumbs";
+import {DashboardBreadcrumbs} from "@/features/breadcrumbs/components/breadcrumbs";
 import {UserPasswordForm} from "@/features/users/components";
 import {withPermissions} from "@/components/with-authorization";
 import {fetchUser} from "@/dal";

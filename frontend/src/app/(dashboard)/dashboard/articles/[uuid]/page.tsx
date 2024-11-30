@@ -1,7 +1,7 @@
 import {notFound} from "next/navigation";
 import {Stack, Paper} from "@mantine/core";
 import {ArticleUpsertForm} from "@/features/articles/components/article-upsert-form";
-import {DashboardBreadcrumbs} from "@/features/dashboard/components/breadcrumbs";
+import {DashboardBreadcrumbs} from "@/features/breadcrumbs/components/breadcrumbs";
 import {withPermissions} from "@/components/with-authorization";
 import {fetchArticle} from "@/dal";
 import {APP_PATHS} from "@/lib/app-paths";

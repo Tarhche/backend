@@ -1,6 +1,6 @@
 import {Metadata} from "next";
 import {Stack, Paper} from "@mantine/core";
-import {DashboardBreadcrumbs} from "@/features/dashboard/components/breadcrumbs";
+import {DashboardBreadcrumbs} from "@/features/breadcrumbs/components/breadcrumbs";
 import {AppSettingForm} from "@/features/settings/components/app-setting-form";
 import {fetchConfigs} from "@/dal";
 import {withPermissions} from "@/components/with-authorization";

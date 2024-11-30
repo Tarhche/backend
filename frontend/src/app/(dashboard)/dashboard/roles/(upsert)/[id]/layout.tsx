@@ -1,6 +1,6 @@
 import {Metadata} from "next";
 import {Stack} from "@mantine/core";
-import {DashboardBreadcrumbs} from "@/features/dashboard/components/breadcrumbs";
+import {DashboardBreadcrumbs} from "@/features/breadcrumbs/components/breadcrumbs";
 import {APP_PATHS} from "@/lib/app-paths";
 
 type Props = {

@@ -1,6 +1,6 @@
 import {type Metadata} from "next";
 import {Stack} from "@mantine/core";
-import {DashboardBreadcrumbs} from "@/features/dashboard/components/breadcrumbs";
+import {DashboardBreadcrumbs} from "@/features/breadcrumbs/components/breadcrumbs";
 import {withPermissions} from "@/components/with-authorization";
 import {FilesList} from "@/features/files/components";
 

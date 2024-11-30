@@ -16,7 +16,7 @@ import {
 import {FormButton} from "../form-button";
 import {IconEye, IconTrash, IconCheck} from "@tabler/icons-react";
 import {FILES_PUBLIC_URL} from "@/constants/envs";
-import {deleteFileAction} from "@/features/dashboard/actions/delete-file";
+import {deleteFileAction} from "@/features/files/actions";
 import classes from "./file-card.module.css";
 
 type File = {

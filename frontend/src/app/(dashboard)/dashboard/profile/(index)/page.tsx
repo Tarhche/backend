@@ -1,6 +1,6 @@
 import {Metadata} from "next";
 import {Stack, Paper} from "@mantine/core";
-import {DashboardBreadcrumbs} from "@/features/dashboard/components/breadcrumbs";
+import {DashboardBreadcrumbs} from "@/features/breadcrumbs/components/breadcrumbs";
 import {ProfileUpdateForm} from "@/features/profile/components";
 import {fetchUserProfile} from "@/dal";
 

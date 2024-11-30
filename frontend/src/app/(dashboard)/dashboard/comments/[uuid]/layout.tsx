@@ -1,6 +1,6 @@
 import {ReactNode} from "react";
 import {Box} from "@mantine/core";
-import {DashboardBreadcrumbs} from "@/features/dashboard/components/breadcrumbs";
+import {DashboardBreadcrumbs} from "@/features/breadcrumbs/components/breadcrumbs";
 import {APP_PATHS} from "@/lib/app-paths";
 
 function EditCommentLayout({children}: {children: ReactNode}) {
