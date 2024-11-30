@@ -15,27 +15,20 @@ import {
 } from "@mantine/core";
 import {PermissionGuard} from "@/components/permission-guard";
 import {Pagination} from "@/components/pagination";
-import {CommentDeleteButton} from "./comment-delete-button";
-import {IconEye, IconPencil} from "@tabler/icons-react";
-import {fetchAllComments} from "@/dal/comments";
+import {DeleteButton} from "./delete-button";
+import {IconEye} from "@tabler/icons-react";
+import {fetchUserComments} from "@/dal/comments";
 import {dateFromNow, isGregorianStartDateTime} from "@/lib/date-and-time";
 import {APP_PATHS} from "@/lib/app-paths";
 
-export const TABLE_HEADERS = [
-  "#",
-  "کامنت",
-  "تاریخ انتشار",
-  "تاریخ ثبت",
-  "نویسنده",
-  "عملیات",
-];
+export const TABLE_HEADERS = ["#", "کامنت", "وضعیت", "تاریخ ثبت", "عملیات"];
 
 type Props = {
   page: number | string;
 };
 
-export async function CommentsTable({page}: Props) {
-  const commentsResponse = await fetchAllComments({
+export async function UserCommentsTable({page}: Props) {
+  const commentsResponse = await fetchUserComments({
     params: {
       page: page,
     },
@@ -45,7 +38,7 @@ export async function CommentsTable({page}: Props) {
 
   return (
     <>
-      <Table verticalSpacing={"sm"} striped withRowBorders>
+      <Table verticalSpacing="sm" striped withRowBorders>
         <TableThead>
           <TableTr>
             {TABLE_HEADERS.map((h) => {
@@ -56,8 +49,8 @@ export async function CommentsTable({page}: Props) {
         <TableTbody>
           {comments.length === 0 && (
             <TableTr>
-              <TableTd colSpan={TABLE_HEADERS.length} ta={"center"}>
-                کامنتی وجود ندارد
+              <TableTd colSpan={TABLE_HEADERS.length} ta="center">
+                هنوز کامنتی را ثبت نکرده اید
               </TableTd>
             </TableTr>
           )}
@@ -70,45 +63,34 @@ export async function CommentsTable({page}: Props) {
                 <TableTd>{comment.body}</TableTd>
                 <TableTd>
                   {isApproved ? (
-                    dateFromNow(comment.approved_at)
+                    <Badge color="green" variant="light">
+                      تایید شده
+                    </Badge>
                   ) : (
                     <Badge color="yellow" variant="light">
-                      تایید نشده
+                      در انتظار تایید
                     </Badge>
                   )}
                 </TableTd>
                 <TableTd>{dateFromNow(comment.created_at)}</TableTd>
-                <TableTd>{comment.author.name}</TableTd>
                 <TableTd>
                   <ActionIconGroup>
                     <Tooltip label="بازدید کردن کامنت" withArrow>
                       <ActionIcon
-                        component={Link}
                         variant="light"
                         size="lg"
                         color="blue"
-                        href={APP_PATHS.articles.detail(comment.object_uuid)}
                         aria-label="بازدید کردن کامنت"
+                        component={Link}
+                        href={`${APP_PATHS.articles.detail(comment.object_uuid)}`}
                       >
                         <IconEye style={{width: rem(20)}} stroke={1.5} />
                       </ActionIcon>
                     </Tooltip>
-                    <PermissionGuard allowedPermissions={["comments.update"]}>
-                      <Tooltip label="ویرایش کردن کامنت" withArrow>
-                        <ActionIcon
-                          component={Link}
-                          variant="light"
-                          size="lg"
-                          color="blue"
-                          href={APP_PATHS.dashboard.comments.edit(comment.uuid)}
-                          aria-label="ویرایش کردن کامنت"
-                        >
-                          <IconPencil style={{width: rem(20)}} stroke={1.5} />
-                        </ActionIcon>
-                      </Tooltip>
-                    </PermissionGuard>
-                    <PermissionGuard allowedPermissions={["comments.delete"]}>
-                      <CommentDeleteButton
+                    <PermissionGuard
+                      allowedPermissions={["self.comments.delete"]}
+                    >
+                      <DeleteButton
                         commentID={comment.uuid}
                         commentMessage={comment.body}
                       />
@@ -121,7 +103,7 @@ export async function CommentsTable({page}: Props) {
         </TableTbody>
       </Table>
       {comments.length >= 1 && (
-        <Group mt="md" mb={"lg"} justify="flex-end">
+        <Group mt="md" mb="lg" justify="flex-end">
           <Pagination total={total_pages} current={current_page} />
         </Group>
       )}

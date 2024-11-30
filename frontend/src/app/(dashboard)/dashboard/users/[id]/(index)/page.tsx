@@ -2,7 +2,8 @@ import {Metadata} from "next";
 import {notFound} from "next/navigation";
 import {Box, Stack} from "@mantine/core";
 import {DashboardBreadcrumbs} from "@/features/dashboard/components/breadcrumbs";
-import {UpsertUserForm} from "@/features/dashboard/components/upsert-user-form";
+import {UpsertUserForm} from "@/features/users/components/upsert-user-form";
+import {withPermissions} from "@/components/with-authorization";
 import {fetchUser} from "@/dal";
 import {APP_PATHS} from "@/lib/app-paths";
 
@@ -53,4 +54,7 @@ async function UpdateUserPage({params}: Props) {
   );
 }
 
-export default UpdateUserPage;
+export default withPermissions(UpdateUserPage, {
+  requiredPermissions: ["users.show", "users.update"],
+  operator: "AND",
+});

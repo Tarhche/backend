@@ -1,6 +1,7 @@
 import {notFound} from "next/navigation";
 import {EditCommentForm} from "@/features/comments/components/edit-comment-form";
 import {fetchUsersDetailComments} from "@/dal";
+import {withPermissions} from "@/components/with-authorization";
 
 export const metadata = {
   title: "ویرایش کامنت",
@@ -32,4 +33,7 @@ async function ArticleDetalPage({params}: Props) {
   );
 }
 
-export default ArticleDetalPage;
+export default withPermissions(ArticleDetalPage, {
+  requiredPermissions: ["comments.show", "comments.update"],
+  operator: "AND",
+});

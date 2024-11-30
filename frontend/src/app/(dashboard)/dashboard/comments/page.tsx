@@ -6,6 +6,7 @@ import {
   CommentsTable,
   CommentsTableSkeleton,
 } from "@/features/comments/components/article-comments";
+import {withPermissions} from "@/components/with-authorization";
 import {APP_PATHS} from "@/lib/app-paths";
 
 export const metadata: Metadata = {
@@ -43,4 +44,6 @@ async function CommentsPage({searchParams}: Props) {
   );
 }
 
-export default CommentsPage;
+export default withPermissions(CommentsPage, {
+  requiredPermissions: ["comments.index"],
+});

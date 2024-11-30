@@ -2,10 +2,8 @@ import {Metadata} from "next";
 import {Suspense} from "react";
 import {Stack} from "@mantine/core";
 import {DashboardBreadcrumbs} from "@/features/dashboard/components/breadcrumbs";
-import {
-  RolesTable,
-  RolesTableSkeleton,
-} from "@/features/roles/components/roles-table";
+import {RolesTable, RolesTableSkeleton} from "@/features/roles/components";
+import {withPermissions} from "@/components/with-authorization";
 
 const PAGE_TITLE = "نقش ها";
 
@@ -38,4 +36,6 @@ function RolesPage({searchParams}: Props) {
   );
 }
 
-export default RolesPage;
+export default withPermissions(RolesPage, {
+  requiredPermissions: ["roles.index"],
+});

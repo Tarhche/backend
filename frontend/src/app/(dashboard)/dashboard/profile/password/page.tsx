@@ -2,7 +2,7 @@ import {Metadata} from "next";
 import {Stack} from "@mantine/core";
 import {Paper} from "@mantine/core";
 import {DashboardBreadcrumbs} from "@/features/dashboard/components/breadcrumbs";
-import {ProfilePasswordForm} from "@/features/dashboard/profile-password-form";
+import {ProfilePasswordForm} from "@/features/profile/components";
 import {APP_PATHS} from "@/lib/app-paths";
 
 const PAGE_TITLE = "تغییر کلمه عبور";

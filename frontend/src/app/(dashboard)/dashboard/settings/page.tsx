@@ -1,8 +1,9 @@
 import {Metadata} from "next";
 import {Stack, Paper} from "@mantine/core";
 import {DashboardBreadcrumbs} from "@/features/dashboard/components/breadcrumbs";
-import {AppSettingForm} from "@/features/dashboard/app-setting-form";
+import {AppSettingForm} from "@/features/settings/components/app-setting-form";
 import {fetchConfigs} from "@/dal";
+import {withPermissions} from "@/components/with-authorization";
 
 const PAGE_TITLE = "تنظیمات";
 
@@ -33,4 +34,6 @@ async function SettingsPage() {
   );
 }
 
-export default SettingsPage;
+export default withPermissions(SettingsPage, {
+  requiredPermissions: ["config.update"],
+});

@@ -13,17 +13,34 @@ import {
   Button,
   Badge,
   rem,
+  type MantineColor,
 } from "@mantine/core";
 import {PermissionGuard} from "@/components/permission-guard";
 import {ArticlesPagination} from "./articles-table-pagination";
 import {ArticleDeleteButton} from "./article-delete-button";
-import {IconEye, IconPencil, IconFilePlus} from "@tabler/icons-react";
+import {
+  IconEye,
+  IconPencil,
+  IconFilePlus,
+  Icon,
+  IconProps,
+} from "@tabler/icons-react";
 import {fetchAllArticles} from "@/dal/articles";
 import {dateFromNow} from "@/lib/date-and-time";
 import {APP_PATHS} from "@/lib/app-paths";
+import {type Permissions} from "@/lib/app-permissions";
 
 type Props = {
   page: number | string;
+};
+
+type TableAction = {
+  tooltipLabel: string;
+  Icon: React.ForwardRefExoticComponent<IconProps & React.RefAttributes<Icon>>;
+  color: MantineColor;
+  allowedPermissions: Permissions[];
+  href: (uuid: string) => string;
+  disabled: (...args: any[]) => boolean;
 };
 
 export async function ArticlesTable({page}: Props) {
@@ -35,11 +52,12 @@ export async function ArticlesTable({page}: Props) {
   const articles = articlesResponse.items;
   const {total_pages, current_page} = articlesResponse.pagination;
 
-  const tableActions = [
+  const tableActions: TableAction[] = [
     {
       tooltipLabel: "بازدید کردن مقاله",
       Icon: IconEye,
       color: "blue",
+      allowedPermissions: [],
       href: (uuid: string) => APP_PATHS.articles.detail(uuid),
       disabled: (published: boolean) => published,
     },
@@ -47,6 +65,7 @@ export async function ArticlesTable({page}: Props) {
       tooltipLabel: "ویرایش کردن مقاله",
       Icon: IconPencil,
       color: "blue",
+      allowedPermissions: ["articles.update"],
       href: (uuid: string) => APP_PATHS.dashboard.articles.edit(uuid),
       disabled: () => false,
     },
@@ -102,32 +121,42 @@ export async function ArticlesTable({page}: Props) {
                 <TableTd>
                   <ActionIconGroup>
                     {tableActions.map(
-                      ({Icon, tooltipLabel, color, href, disabled}) => {
+                      ({
+                        Icon,
+                        tooltipLabel,
+                        color,
+                        href,
+                        allowedPermissions,
+                        disabled,
+                      }) => {
                         return (
-                          <Tooltip
+                          <PermissionGuard
                             key={tooltipLabel}
-                            label={tooltipLabel}
-                            withArrow
+                            allowedPermissions={allowedPermissions}
                           >
-                            <ActionIcon
-                              component={Link}
-                              variant="light"
-                              size="lg"
-                              color={color}
-                              href={href(article.uuid)}
-                              disabled={disabled(isPublished === false)}
-                              aria-label={tooltipLabel}
-                            >
-                              <Icon style={{width: rem(20)}} stroke={1.5} />
-                            </ActionIcon>
-                          </Tooltip>
+                            <Tooltip label={tooltipLabel} withArrow>
+                              <ActionIcon
+                                component={Link}
+                                variant="light"
+                                size="lg"
+                                color={color}
+                                href={href(article.uuid)}
+                                disabled={disabled(isPublished === false)}
+                                aria-label={tooltipLabel}
+                              >
+                                <Icon style={{width: rem(20)}} stroke={1.5} />
+                              </ActionIcon>
+                            </Tooltip>
+                          </PermissionGuard>
                         );
                       },
                     )}
-                    <ArticleDeleteButton
-                      articleID={article.uuid}
-                      articleTitle={article.title}
-                    />
+                    <PermissionGuard allowedPermissions={["articles.delete"]}>
+                      <ArticleDeleteButton
+                        articleID={article.uuid}
+                        articleTitle={article.title}
+                      />
+                    </PermissionGuard>
                   </ActionIconGroup>
                 </TableTd>
               </TableTr>

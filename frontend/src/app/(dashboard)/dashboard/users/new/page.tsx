@@ -1,7 +1,8 @@
 import {Metadata} from "next";
 import {Box, Stack} from "@mantine/core";
 import {DashboardBreadcrumbs} from "@/features/dashboard/components/breadcrumbs";
-import {UpsertUserForm} from "@/features/dashboard/components/upsert-user-form";
+import {UpsertUserForm} from "@/features/users/components";
+import {withPermissions} from "@/components/with-authorization";
 import {APP_PATHS} from "@/lib/app-paths";
 
 const PAGE_TITLE = "کاربر جدید";
@@ -31,4 +32,6 @@ function NewUserPage() {
   );
 }
 
-export default NewUserPage;
+export default withPermissions(NewUserPage, {
+  requiredPermissions: ["users.create"],
+});

@@ -3,9 +3,10 @@ import {Suspense} from "react";
 import {Box, Stack} from "@mantine/core";
 import {DashboardBreadcrumbs} from "@/features/dashboard/components/breadcrumbs";
 import {
-  MyBookmarksTable,
-  MyBookmarksTableSkeleton,
-} from "@/features/dashboard/components/my-bookmarks";
+  UserBookmarksTable,
+  UserBookmarksTableSkeleton,
+} from "@/features/bookmarks/components";
+import {withPermissions} from "@/components/with-authorization";
 
 const title = "بوکمارک های من";
 
@@ -34,13 +35,15 @@ function MyBookmarksPage({searchParams}: Props) {
       <Box>
         <Suspense
           key={JSON.stringify(searchParams)}
-          fallback={<MyBookmarksTableSkeleton />}
+          fallback={<UserBookmarksTableSkeleton />}
         >
-          <MyBookmarksTable page={page} />
+          <UserBookmarksTable page={page} />
         </Suspense>
       </Box>
     </Stack>
   );
 }
 
-export default MyBookmarksPage;
+export default withPermissions(MyBookmarksPage, {
+  requiredPermissions: ["self.bookmarks.index"],
+});

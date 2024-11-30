@@ -1,7 +1,7 @@
 import {Metadata} from "next";
 import {Stack, Paper} from "@mantine/core";
 import {DashboardBreadcrumbs} from "@/features/dashboard/components/breadcrumbs";
-import {ProfileUpdateForm} from "@/features/dashboard/profile-update-form";
+import {ProfileUpdateForm} from "@/features/profile/components";
 import {fetchUserProfile} from "@/dal";
 
 const PAGE_TITLE = "پروفایل";

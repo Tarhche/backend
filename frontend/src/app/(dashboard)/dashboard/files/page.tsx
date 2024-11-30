@@ -1,6 +1,7 @@
 import {type Metadata} from "next";
 import {Stack} from "@mantine/core";
 import {DashboardBreadcrumbs} from "@/features/dashboard/components/breadcrumbs";
+import {withPermissions} from "@/components/with-authorization";
 import {FilesList} from "@/features/files/components";
 
 export const metadata: Metadata = {
@@ -22,4 +23,6 @@ async function FilesPage() {
   );
 }
 
-export default FilesPage;
+export default withPermissions(FilesPage, {
+  requiredPermissions: ["files.index"],
+});

@@ -10,40 +10,49 @@ import {
   ActionIconGroup,
   Tooltip,
   Group,
+  Stack,
   Button,
   rem,
 } from "@mantine/core";
+import {UserAvatar} from "@/components/user-avatar";
 import {Pagination} from "@/components/pagination";
 import {PermissionGuard} from "@/components/permission-guard";
-import {RoleDeleteButton} from "./role-delete-button";
-import {IconPencil, IconPlus} from "@tabler/icons-react";
-import {fetchRoles} from "@/dal/roles";
+import {DeleteButton} from "./delete-button";
+import {IconPencil, IconUserPlus} from "@tabler/icons-react";
+import {fetchUsers} from "@/dal/users";
 import {APP_PATHS} from "@/lib/app-paths";
 
-export const TABLE_HEADERS = ["#", "عنوان", "توضیحات", "عملیات"];
+export const TABLE_HEADERS = [
+  "#",
+  "آواتار",
+  "نام",
+  "نام کاربری",
+  "ایمیل",
+  "عملیات",
+];
 
 type Props = {
   page: number | string;
 };
 
-export async function RolesTable({page}: Props) {
-  await new Promise((res) => setTimeout(res, 3000));
-  const {items: roles, pagination} = await fetchRoles({
+export async function UsersTable({page}: Props) {
+  const {items: users, pagination} = await fetchUsers({
     params: {
-      page,
+      page: page,
     },
   });
+  const {total_pages, current_page} = pagination;
 
   return (
-    <>
+    <Stack>
       <Group justify="flex-end">
         <Button
           variant="light"
           component={Link}
-          href={APP_PATHS.dashboard.roles.new}
-          leftSection={<IconPlus />}
+          leftSection={<IconUserPlus />}
+          href={APP_PATHS.dashboard.users.new}
         >
-          نقش جدید
+          کاربر جدید
         </Button>
       </Group>
       <Table verticalSpacing={"sm"} striped withRowBorders>
@@ -55,43 +64,49 @@ export async function RolesTable({page}: Props) {
           </TableTr>
         </TableThead>
         <TableTbody>
-          {roles.length === 0 && (
+          {users.length === 0 && (
             <TableTr>
               <TableTd colSpan={TABLE_HEADERS.length} ta={"center"}>
-                نقشی هنوز وجود ندارد
+                کاربری وجود ندارد
               </TableTd>
             </TableTr>
           )}
-          {roles.map((role: any, index: number) => {
+          {users.map((user: any, index: number) => {
             return (
-              <TableTr key={role.uuid}>
+              <TableTr key={user.uuid}>
                 <TableTd>{index + 1}</TableTd>
-                <TableTd>{role.name}</TableTd>
-                <TableTd>{role.description}</TableTd>
+                <TableTd>
+                  <UserAvatar
+                    width={48}
+                    height={48}
+                    email={user.email}
+                    src={user.avatar}
+                  />
+                </TableTd>
+                <TableTd>{user.name}</TableTd>
+                <TableTd>{user.username}</TableTd>
+                <TableTd>{user.email}</TableTd>
                 <TableTd>
                   <ActionIconGroup>
                     <PermissionGuard
-                      allowedPermissions={["roles.update", "roles.show"]}
+                      allowedPermissions={["users.update", "users.show"]}
                       operator="AND"
                     >
-                      <Tooltip label={"ویرایش کردن نقش"} withArrow>
+                      <Tooltip label={"ویرایش کردن کاربر"} withArrow>
                         <ActionIcon
                           variant="light"
                           size="lg"
                           color="blue"
-                          aria-label="ویرایش کردن نقش"
+                          aria-label="ویرایش کردن کاربر"
                           component={Link}
-                          href={`${APP_PATHS.dashboard.roles.edit(role.uuid)}`}
+                          href={`${APP_PATHS.dashboard.users.edit(user.uuid)}`}
                         >
                           <IconPencil style={{width: rem(20)}} stroke={1.5} />
                         </ActionIcon>
                       </Tooltip>
                     </PermissionGuard>
-                    <PermissionGuard allowedPermissions={["roles.delete"]}>
-                      <RoleDeleteButton
-                        roleId={role.uuid}
-                        roleName={role.name}
-                      />
+                    <PermissionGuard allowedPermissions={["users.delete"]}>
+                      <DeleteButton userID={user.uuid} username={user.name} />
                     </PermissionGuard>
                   </ActionIconGroup>
                 </TableTd>
@@ -100,14 +115,11 @@ export async function RolesTable({page}: Props) {
           })}
         </TableTbody>
       </Table>
-      {roles.length >= 1 && (
+      {users.length >= 1 && (
         <Group mt="md" mb={"lg"} justify="flex-end">
-          <Pagination
-            total={pagination.total_pages}
-            current={pagination.current_page}
-          />
+          <Pagination total={total_pages} current={current_page} />
         </Group>
       )}
-    </>
+    </Stack>
   );
 }

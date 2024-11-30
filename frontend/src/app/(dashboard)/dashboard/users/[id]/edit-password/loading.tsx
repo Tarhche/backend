@@ -1,4 +1,4 @@
-import {FormSkeleton} from "@/features/dashboard/components/change-user-password";
+import {FormSkeleton} from "@/features/users/components";
 
 function UserUpsertFormLoading() {
   return <FormSkeleton />;

@@ -3,9 +3,10 @@ import {Suspense} from "react";
 import {Box, Stack} from "@mantine/core";
 import {DashboardBreadcrumbs} from "@/features/dashboard/components/breadcrumbs";
 import {
-  MyCommentsTable,
-  MyCommentsTableSkeleton,
-} from "@/features/dashboard/components/my-comments";
+  UserCommentsTable,
+  UserCommentsTableSkeleton,
+} from "@/features/comments/components/user-comments-table";
+import {withPermissions} from "@/components/with-authorization";
 
 export const metadata: Metadata = {
   title: "کامنت های من",
@@ -32,13 +33,15 @@ function MyCommentsPage({searchParams}: Props) {
       <Box>
         <Suspense
           key={JSON.stringify(searchParams)}
-          fallback={<MyCommentsTableSkeleton />}
+          fallback={<UserCommentsTableSkeleton />}
         >
-          <MyCommentsTable page={page} />
+          <UserCommentsTable page={page} />
         </Suspense>
       </Box>
     </Stack>
   );
 }
 
-export default MyCommentsPage;
+export default withPermissions(MyCommentsPage, {
+  requiredPermissions: ["self.comments.index"],
+});

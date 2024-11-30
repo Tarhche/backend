@@ -1,4 +1,4 @@
-import {UserUpsertFormSkeleton} from "@/features/dashboard/components/upsert-user-form";
+import {UserUpsertFormSkeleton} from "@/features/users/components";
 
 function UserUpsertFormLoading() {
   return <UserUpsertFormSkeleton />;
