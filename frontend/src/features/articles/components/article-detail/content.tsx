@@ -1,32 +1,16 @@
 import Image from "next/image";
 import Link from "next/link";
 import {Title, Box, Group, Text, Blockquote, Badge} from "@mantine/core";
+import {ImageZoom} from "@/components/image-zoom";
+import {parseArticleBodyToReact} from "@/features/articles/utils/article-body-parser";
 import {BookmarkButton} from "./bookmark-button";
-import hljs from "highlight.js";
 import {IconClockHour2, IconInfoCircle} from "@tabler/icons-react";
 import {FILES_PUBLIC_URL} from "@/constants/envs";
 import {fetchArticleByUUID} from "@/dal/articles";
 import {checkBookmarkStatus} from "@/dal/bookmarks";
 import {dateFromNow} from "@/lib/date-and-time";
+import "react-medium-image-zoom/dist/styles.css";
 import classes from "./content.module.css";
-import "highlight.js/styles/atom-one-dark.css";
-
-function highlightCode(content: string) {
-  const codeRegex = new RegExp(`<code class="(.*?)">(.*?)<\/code>`, "sg");
-  // const codeRegex = /<code class="(.*?)">(.*?)<\/code>/g;
-
-  return content.replace(
-    codeRegex,
-    (match: string, languageClass: string, code: string) => {
-      const language = languageClass.replace("language-", "");
-      const highlightedCode = hljs.highlight(code, {
-        language: language,
-        ignoreIllegals: true,
-      }).value;
-      return `<code class="${languageClass}">${highlightedCode}</code>`;
-    },
-  );
-}
 
 type Props = {
   uuid: string;
@@ -59,12 +43,14 @@ export async function Content({uuid}: Props) {
           />
         )}
       </Group>
-      <Image
-        width={1000}
-        height={563}
-        src={`${FILES_PUBLIC_URL}/${article.cover}`}
-        alt={article.title}
-      />
+      <ImageZoom classDialog={classes.rmiz}>
+        <Image
+          width={1200}
+          height={720}
+          src={`${FILES_PUBLIC_URL}/${article.cover}`}
+          alt={article.title}
+        />
+      </ImageZoom>
       <Blockquote
         color="blue"
         radius="md"
@@ -75,12 +61,9 @@ export async function Content({uuid}: Props) {
       >
         {article.excerpt}
       </Blockquote>
-      <Box
-        className={classes.content}
-        dangerouslySetInnerHTML={{
-          __html: highlightCode(article.body),
-        }}
-      />
+      <Box className={classes.content}>
+        {parseArticleBodyToReact(article.body)}
+      </Box>
       <Group gap={"xs"} mt={"md"}>
         {tags.map((tag: string) => {
           return (

@@ -8,6 +8,10 @@ const nextConfig = {
         protocol: "https",
         hostname: "backend-reactjs.tarhche.com",
       },
+      {
+        protocol: "https",
+        hostname: "backend.tarhche.com",
+      },
     ],
   },
   experimental: {
@@ -17,6 +21,7 @@ const nextConfig = {
       "@mantine/hooks",
       "@mantine/notifications",
       "@mantine/tiptap",
+      "@mantine/code-highlight",
     ],
   },
 };
