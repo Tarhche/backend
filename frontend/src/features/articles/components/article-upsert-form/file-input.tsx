@@ -1,6 +1,15 @@
 import Image from "next/image";
 import {useState} from "react";
-import {Box, Stack, Paper, Modal, InputLabel, Button} from "@mantine/core";
+import {
+  Box,
+  Stack,
+  Paper,
+  Modal,
+  InputLabel,
+  Button,
+  ActionIcon,
+} from "@mantine/core";
+import {IconTrash} from "@tabler/icons-react";
 import {FilesExplorer} from "@/components/files-explorer";
 import {FILES_PUBLIC_URL} from "@/constants/envs";
 import classes from "./file-input.module.css";
@@ -29,6 +38,10 @@ export function FileInput({name, label, defaultValue, icon}: Props) {
     setIsFileExplorerOpen(false);
   };
 
+  const handleRemoveFile = () => {
+    setSelectedFile("");
+  };
+
   return (
     <Box>
       <Stack gap={5}>
@@ -44,14 +57,19 @@ export function FileInput({name, label, defaultValue, icon}: Props) {
             {icon}
           </Button>
         ) : (
-          <Image
-            src={`${FILES_PUBLIC_URL}/${selectedFile}`}
-            alt="article's file"
-            width={200}
-            height={150}
-            className={classes.image}
-            onClick={handleOpenFileExplorer}
-          />
+          <Stack gap="xs" w="max-content" align="center">
+            <Image
+              src={`${FILES_PUBLIC_URL}/${selectedFile}`}
+              alt="article's file"
+              width={200}
+              height={150}
+              className={classes.image}
+              onClick={handleOpenFileExplorer}
+            />
+            <ActionIcon size="lg" color="red" onClick={handleRemoveFile}>
+              <IconTrash size={20} />
+            </ActionIcon>
+          </Stack>
         )}
       </Stack>
       <input name={name} value={selectedFile} hidden readOnly />
