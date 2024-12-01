@@ -24,6 +24,8 @@ export async function Content({uuid}: Props) {
     bookmarkStatusData,
   ]);
   const tags = article?.status ?? [];
+  const ARTICLE_COVER = `${FILES_PUBLIC_URL}/${article.cover}`;
+  const ARTICLE_VIDEO = `${FILES_PUBLIC_URL}/${article.cover}`;
 
   return (
     <Box component="article">
@@ -43,11 +45,23 @@ export async function Content({uuid}: Props) {
           />
         )}
       </Group>
+      {article.video && (
+        <video
+          controls
+          style={{
+            width: "100%",
+            height: "auto",
+          }}
+          poster={ARTICLE_COVER}
+        >
+          <source src={`${FILES_PUBLIC_URL}/${ARTICLE_VIDEO}`} />
+        </video>
+      )}
       <ImageZoom classDialog={classes.rmiz}>
         <Image
           width={1200}
-          height={720}
-          src={`${FILES_PUBLIC_URL}/${article.cover}`}
+          height={675}
+          src={ARTICLE_COVER}
           alt={article.title}
         />
       </ImageZoom>

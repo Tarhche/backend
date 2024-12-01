@@ -1,4 +1,11 @@
-import {Box, Group, Blockquote, Skeleton, AspectRatio} from "@mantine/core";
+import {
+  Box,
+  Group,
+  Stack,
+  Blockquote,
+  Skeleton,
+  AspectRatio,
+} from "@mantine/core";
 import {IconInfoCircle} from "@tabler/icons-react";
 
 export async function ContentSkeleton() {
@@ -11,9 +18,14 @@ export async function ContentSkeleton() {
         </Group>
         <Skeleton w={30} h={20} />
       </Group>
-      <AspectRatio ratio={16 / 9} maw={"100%"} mx={"auto"}>
-        <Skeleton w={"100%"} h={"100%"} />
-      </AspectRatio>
+      <Stack>
+        <AspectRatio ratio={16 / 9}>
+          <Skeleton w={"100%"} h={"100%"} />
+        </AspectRatio>
+        <AspectRatio ratio={16 / 9}>
+          <Skeleton w={"100%"} h={"100%"} />
+        </AspectRatio>
+      </Stack>
       <Blockquote
         py={"lg"}
         color="blue"
