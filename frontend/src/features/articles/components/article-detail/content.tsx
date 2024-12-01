@@ -25,10 +25,12 @@ export async function Content({uuid}: Props) {
   ]);
   const tags = article?.status ?? [];
   const ARTICLE_COVER = `${FILES_PUBLIC_URL}/${article.cover}`;
-  const ARTICLE_VIDEO = `${FILES_PUBLIC_URL}/${article.cover}`;
+  const ARTICLE_VIDEO = Boolean(article.video)
+    ? `${FILES_PUBLIC_URL}/${article.video}`
+    : undefined;
 
   return (
-    <Box component="article">
+    <article>
       <Title order={2}>{article.title}</Title>
       <Group wrap="nowrap" c={"dimmed"} my={"sm"} justify="space-between">
         <Group gap={5}>
@@ -54,17 +56,19 @@ export async function Content({uuid}: Props) {
           }}
           poster={ARTICLE_COVER}
         >
-          <source src={`${FILES_PUBLIC_URL}/${ARTICLE_VIDEO}`} />
+          <source src={ARTICLE_VIDEO} />
         </video>
       )}
-      <ImageZoom classDialog={classes.rmiz}>
-        <Image
-          width={1200}
-          height={675}
-          src={ARTICLE_COVER}
-          alt={article.title}
-        />
-      </ImageZoom>
+      {ARTICLE_VIDEO === undefined && (
+        <ImageZoom classDialog={classes.rmiz}>
+          <Image
+            width={1200}
+            height={675}
+            src={ARTICLE_COVER}
+            alt={article.title}
+          />
+        </ImageZoom>
+      )}
       <Blockquote
         color="blue"
         radius="md"
@@ -96,6 +100,6 @@ export async function Content({uuid}: Props) {
           );
         })}
       </Group>
-    </Box>
+    </article>
   );
 }
