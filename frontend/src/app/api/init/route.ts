@@ -1,5 +1,6 @@
 import {NextRequest, NextResponse} from "next/server";
-import {fetchUserProfile, DALDriverError} from "@/dal";
+import {DALDriverError} from "@/dal/dal-driver-error";
+import {fetchUserProfile} from "@/dal/private/profile";
 import {AuthState} from "@/types/api-responses/init";
 import {axiosToFetchResponse} from "@/lib/transformers";
 

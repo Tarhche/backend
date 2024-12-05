@@ -4,7 +4,7 @@ import {AuthGuard} from "@/components/auth-guard";
 import {CommentForm} from "./comment-form";
 import {Comment} from "./comment";
 import {IconInfoCircle} from "@tabler/icons-react";
-import {fetchArticleComments} from "@/dal/comments";
+import {fetchArticleComments} from "@/dal/public/comments";
 
 type Props = {
   uuid: string;

@@ -17,7 +17,7 @@ import {Pagination} from "@/components/pagination";
 import {PermissionGuard} from "@/components/permission-guard";
 import {RoleDeleteButton} from "./role-delete-button";
 import {IconPencil, IconPlus} from "@tabler/icons-react";
-import {fetchRoles} from "@/dal/roles";
+import {fetchRoles} from "@/dal/private/roles";
 import {APP_PATHS} from "@/lib/app-paths";
 
 export const TABLE_HEADERS = ["#", "عنوان", "توضیحات", "عملیات"];

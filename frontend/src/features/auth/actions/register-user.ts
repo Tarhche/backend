@@ -1,5 +1,6 @@
 "use server";
-import {registerUser as signUpUser, DALDriverError} from "@/dal";
+import {DALDriverError} from "@/dal/dal-driver-error";
+import {registerUser as signUpUser} from "@/dal/public/auth";
 
 type SuccessRegisterState = {
   success: true;

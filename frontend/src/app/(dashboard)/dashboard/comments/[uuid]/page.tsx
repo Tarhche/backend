@@ -1,6 +1,6 @@
 import {notFound} from "next/navigation";
 import {EditCommentForm} from "@/features/comments/components/edit-comment-form";
-import {fetchUsersDetailComments} from "@/dal";
+import {fetchUsersDetailComments} from "@/dal/private/comments";
 import {withPermissions} from "@/components/with-authorization";
 
 export const metadata = {

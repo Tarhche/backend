@@ -4,7 +4,7 @@ import {Box, Stack} from "@mantine/core";
 import {DashboardBreadcrumbs} from "@/features/breadcrumbs/components/breadcrumbs";
 import {UpsertUserForm} from "@/features/users/components/upsert-user-form";
 import {withPermissions} from "@/components/with-authorization";
-import {fetchUser} from "@/dal";
+import {fetchUser} from "@/dal/private/users";
 import {APP_PATHS} from "@/lib/app-paths";
 
 const PAGE_TITLE = "بروزرسانی کاربر";

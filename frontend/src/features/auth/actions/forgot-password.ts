@@ -1,5 +1,6 @@
 "use server";
-import {forgotPassword as recoverPassword, DALDriverError} from "@/dal";
+import {DALDriverError} from "@/dal/dal-driver-error";
+import {forgotPassword as recoverPassword} from "@/dal/public/auth";
 
 type FormState =
   | {

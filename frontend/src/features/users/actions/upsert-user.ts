@@ -1,7 +1,8 @@
 "use server";
 import {revalidatePath} from "next/cache";
 import {redirect} from "next/navigation";
-import {createUser, updateUser, DALDriverError} from "@/dal";
+import {DALDriverError} from "@/dal/dal-driver-error";
+import {createUser, updateUser} from "@/dal/private/users";
 import {APP_PATHS} from "@/lib/app-paths";
 
 type FormState = {

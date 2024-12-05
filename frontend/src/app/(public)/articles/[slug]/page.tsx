@@ -9,7 +9,7 @@ import {
   Comments,
   CommentsSkeleton,
 } from "@/features/articles/components/article-detail";
-import {fetchArticleByUUID} from "@/dal/articles";
+import {fetchArticleByUUID} from "@/dal/public/articles";
 
 type Props = {
   params: {

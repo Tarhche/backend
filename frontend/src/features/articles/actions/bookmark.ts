@@ -2,7 +2,7 @@
 import {revalidatePath} from "next/cache";
 import * as z from "zod";
 import {APP_PATHS} from "@/lib/app-paths";
-import {bookmarkArticle} from "@/dal/bookmarks";
+import {bookmarkArticle} from "@/dal/private/bookmarks";
 
 type FormState = {
   success: boolean;

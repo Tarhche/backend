@@ -1,7 +1,7 @@
 "use server";
 import {redirect} from "next/navigation";
 import {revalidatePath} from "next/cache";
-import {updateUserComment} from "@/dal";
+import {updateUserComment} from "@/dal/private/comments";
 import {getRootUrl} from "@/lib/http";
 import {APP_PATHS} from "@/lib/app-paths";
 

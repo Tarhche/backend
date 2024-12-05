@@ -2,7 +2,7 @@ import {Metadata} from "next";
 import {Stack, Paper} from "@mantine/core";
 import {DashboardBreadcrumbs} from "@/features/breadcrumbs/components/breadcrumbs";
 import {AppSettingForm} from "@/features/settings/components/app-setting-form";
-import {fetchConfigs} from "@/dal";
+import {fetchConfigs} from "@/dal/private/config";
 import {withPermissions} from "@/components/with-authorization";
 
 const PAGE_TITLE = "تنظیمات";

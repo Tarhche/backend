@@ -1,6 +1,6 @@
 "use server";
 import {revalidatePath} from "next/cache";
-import {deleteRole} from "@/dal";
+import {deleteRole} from "@/dal/private/roles";
 import {APP_PATHS} from "@/lib/app-paths";
 
 export async function deleteRoleAction(formData: FormData) {

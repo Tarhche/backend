@@ -19,7 +19,7 @@ import {Pagination} from "@/components/pagination";
 import {PermissionGuard} from "@/components/permission-guard";
 import {DeleteButton} from "./delete-button";
 import {IconPencil, IconUserPlus} from "@tabler/icons-react";
-import {fetchUsers} from "@/dal/users";
+import {fetchUsers} from "@/dal/private/users";
 import {APP_PATHS} from "@/lib/app-paths";
 
 export const TABLE_HEADERS = [

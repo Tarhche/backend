@@ -1,7 +1,7 @@
 import {type Metadata} from "next";
 import {notFound} from "next/navigation";
 import {VerticalArticleCard} from "@/features/home-page/components/article-card-vertical";
-import {fetchAllArticlesByHashtag} from "@/dal/hashtags";
+import {fetchAllArticlesByHashtag} from "@/dal/public/hashtags";
 
 type Props = {
   params: {

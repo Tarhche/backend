@@ -1,7 +1,7 @@
 import {AxiosRequestConfig} from "axios";
-import {dalDriver} from "@/dal";
+import {publicDalDriver} from "./public-dal-driver";
 
 export async function fetchHomePageData(config?: AxiosRequestConfig) {
-  const response = await dalDriver.get("home", config);
+  const response = await publicDalDriver.get("home", config);
   return response.data;
 }

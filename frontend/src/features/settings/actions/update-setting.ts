@@ -1,6 +1,7 @@
 "use server";
 import {revalidatePath} from "next/cache";
-import {updateConfigs, DALDriverError} from "@/dal";
+import {DALDriverError} from "@/dal/dal-driver-error";
+import {updateConfigs} from "@/dal/private/config";
 import {convertFormDataActionToObject} from "@/lib/transformers";
 import {APP_PATHS} from "@/lib/app-paths";
 

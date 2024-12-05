@@ -9,7 +9,7 @@ import {
   Anchor,
 } from "@mantine/core";
 import {VerticalArticleCard} from "../article-card-vertical";
-import {fetchHomePageData} from "@/dal/home";
+import {fetchHomePageData} from "@/dal/public/home";
 import classes from "./featured-articles.module.css";
 
 export async function FeaturedArticles() {

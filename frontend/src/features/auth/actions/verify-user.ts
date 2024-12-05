@@ -1,6 +1,7 @@
 "use server";
 import * as z from "zod";
-import {verifyUser as completeUserProfile, DALDriverError} from "@/dal";
+import {DALDriverError} from "@/dal/dal-driver-error";
+import {verifyUser as completeUserProfile} from "@/dal/public/auth";
 
 const FIELDS_SCHEMA = z
   .object({

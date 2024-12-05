@@ -1,5 +1,6 @@
 "use server";
-import {resetPassword as changePassword, DALDriverError} from "@/dal";
+import {DALDriverError} from "@/dal/dal-driver-error";
+import {resetPassword as changePassword} from "@/dal/public/auth";
 
 type FormState = {
   success: boolean;

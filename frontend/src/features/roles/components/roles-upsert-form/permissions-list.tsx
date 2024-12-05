@@ -1,5 +1,5 @@
 import {Stack, Title, Group, Chip, ChipGroup} from "@mantine/core";
-import {fetchAllPermissions} from "@/dal";
+import {fetchAllPermissions} from "@/dal/private/permissions";
 
 type Permission = {name: string; value: string};
 

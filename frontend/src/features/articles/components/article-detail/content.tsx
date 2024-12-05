@@ -6,10 +6,9 @@ import {parseArticleBodyToReact} from "@/features/articles/utils/article-body-pa
 import {BookmarkButton} from "./bookmark-button";
 import {IconClockHour2, IconInfoCircle} from "@tabler/icons-react";
 import {FILES_PUBLIC_URL} from "@/constants/envs";
-import {fetchArticleByUUID} from "@/dal/articles";
-import {checkBookmarkStatus} from "@/dal/bookmarks";
+import {fetchArticleByUUID} from "@/dal/public/articles";
+import {checkBookmarkStatus} from "@/dal/private/bookmarks";
 import {dateFromNow} from "@/lib/date-and-time";
-import "react-medium-image-zoom/dist/styles.css";
 import classes from "./content.module.css";
 
 type Props = {

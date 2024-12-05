@@ -17,7 +17,7 @@ import {PermissionGuard} from "@/components/permission-guard";
 import {Pagination} from "@/components/pagination";
 import {CommentDeleteButton} from "./comment-delete-button";
 import {IconEye, IconPencil} from "@tabler/icons-react";
-import {fetchAllComments} from "@/dal/comments";
+import {fetchAllComments} from "@/dal/private/comments";
 import {dateFromNow, isGregorianStartDateTime} from "@/lib/date-and-time";
 import {APP_PATHS} from "@/lib/app-paths";
 

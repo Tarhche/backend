@@ -1,7 +1,7 @@
 "use server";
 import {redirect} from "next/navigation";
 import {cookies} from "next/headers";
-import {loginUser} from "@/dal";
+import {loginUser} from "@/dal/public/auth";
 import {
   ACCESS_TOKEN_COOKIE_NAME,
   REFRESH_TOKEN_COOKIE_NAME,

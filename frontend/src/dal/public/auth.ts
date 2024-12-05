@@ -1,7 +1,8 @@
-import {dalDriver, fetchUserRoles} from ".";
+import {publicDalDriver} from "./public-dal-driver";
+import {fetchUserRoles} from "../private/profile";
 
 export async function loginUser(identity: string, password: string) {
-  const response = await dalDriver.post("auth/login", {
+  const response = await publicDalDriver.post("auth/login", {
     identity: identity,
     password: password,
   });
@@ -22,30 +23,30 @@ export async function loginUser(identity: string, password: string) {
 }
 
 export async function registerUser(identity: string) {
-  return await dalDriver.post("auth/register", {
+  return await publicDalDriver.post("auth/register", {
     identity: identity,
   });
 }
 
 export async function verifyUser(data: Record<string, string>) {
-  return await dalDriver.post("auth/verify", data);
+  return await publicDalDriver.post("auth/verify", data);
 }
 
 export const REFRESH_TOKEN_URL = "auth/token/refresh";
 export async function refreshToken(refreshToken: string) {
-  return await dalDriver.post(REFRESH_TOKEN_URL, {
+  return await publicDalDriver.post(REFRESH_TOKEN_URL, {
     token: refreshToken,
   });
 }
 
 export async function forgotPassword(identity: string) {
-  return await dalDriver.post("auth/password/forget", {
+  return await publicDalDriver.post("auth/password/forget", {
     identity,
   });
 }
 
 export async function resetPassword(password: string, token: string) {
-  return await dalDriver.post("auth/password/reset", {
+  return await publicDalDriver.post("auth/password/reset", {
     password,
     token,
   });

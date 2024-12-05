@@ -1,7 +1,7 @@
 "use server";
 import {revalidatePath} from "next/cache";
 import {APP_PATHS} from "@/lib/app-paths";
-import {deleteComment} from "@/dal";
+import {deleteComment} from "@/dal/private/comments";
 
 export async function deleteCommentAction(formData: FormData) {
   const commentId = formData.get("id")?.toString();

@@ -16,7 +16,7 @@ import {PermissionGuard} from "@/components/permission-guard";
 import {Pagination} from "@/components/pagination";
 import {MyBookmarkDeleteButton} from "./delete-button";
 import {IconEye} from "@tabler/icons-react";
-import {fetchUserBookmarks} from "@/dal/bookmarks";
+import {fetchUserBookmarks} from "@/dal/private/bookmarks";
 import {dateFromNow} from "@/lib/date-and-time";
 import {APP_PATHS} from "@/lib/app-paths";
 

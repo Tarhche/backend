@@ -1,7 +1,7 @@
 "use server";
 import {revalidatePath} from "next/cache";
 import {APP_PATHS} from "@/lib/app-paths";
-import {removeUserBookmark} from "@/dal";
+import {removeUserBookmark} from "@/dal/private/bookmarks";
 
 export async function removeBookmarkAction(formData: FormData) {
   const fileId = formData.get("id")?.toString();

@@ -11,12 +11,11 @@ import {
   ACCESS_TOKEN_COOKIE_NAME,
   REFRESH_TOKEN_COOKIE_NAME,
 } from "@/constants";
-import {REFRESH_TOKEN_URL} from "../auth";
-import {DALDriverError} from "./dal-driver-error";
+import {REFRESH_TOKEN_URL} from "../public/auth";
+import {DALDriverError} from "../dal-driver-error";
 
 const BASE_URL = `${INTERNAL_BACKEND_URL}/api`;
-
-export const dalDriver = axios.create({
+export const privateDalDriver = axios.create({
   baseURL: BASE_URL,
   headers: {
     "Content-Type": "application/json",
@@ -31,7 +30,7 @@ function handleRequestResolve(config: InternalAxiosRequestConfig) {
   return config;
 }
 
-dalDriver.interceptors.request.use(
+privateDalDriver.interceptors.request.use(
   handleRequestResolve,
   async (error) => error,
 );
@@ -160,4 +159,7 @@ async function handleResponseRejection(response: any) {
   );
 }
 
-dalDriver.interceptors.response.use((value) => value, handleResponseRejection);
+privateDalDriver.interceptors.response.use(
+  (value) => value,
+  handleResponseRejection,
+);

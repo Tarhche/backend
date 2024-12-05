@@ -1,5 +1,6 @@
 import {NextRequest} from "next/server";
-import {dalDriver, DALDriverError} from "@/dal";
+import {DALDriverError} from "@/dal/dal-driver-error";
+import {privateDalDriver} from "@/dal/private/private-dal-driver";
 import {axiosToFetchResponse} from "@/lib/transformers";
 
 export async function GET(request: NextRequest, {params}) {
@@ -24,7 +25,7 @@ export async function DELETE(request: NextRequest, {params}) {
 
 async function handleRequest(request: NextRequest, params, method: string) {
   try {
-    const response = await dalDriver({
+    const response = await privateDalDriver({
       url: params.proxy.join("/") + request.nextUrl.search,
       method: method,
       data: request.body,

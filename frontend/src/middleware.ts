@@ -1,6 +1,6 @@
 import {NextRequest, NextResponse} from "next/server";
 import jwt from "jsonwebtoken";
-import {refreshToken as getNewTokens} from "./dal/auth";
+import {refreshToken as getNewTokens} from "./dal/public/auth";
 import {
   ACCESS_TOKEN_COOKIE_NAME,
   REFRESH_TOKEN_COOKIE_NAME,
@@ -62,6 +62,7 @@ export async function middleware(request: NextRequest) {
     });
     return redirectResponse;
   }
+
   return NextResponse.next();
 }
 

@@ -1,7 +1,7 @@
 "use server";
 import {revalidatePath} from "next/cache";
 import {redirect} from "next/navigation";
-import {updatePassword} from "@/dal/users";
+import {updatePassword} from "@/dal/private/users";
 import {APP_PATHS} from "@/lib/app-paths";
 
 type FormStatus = {

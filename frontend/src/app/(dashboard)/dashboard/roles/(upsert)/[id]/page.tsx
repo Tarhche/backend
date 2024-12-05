@@ -1,6 +1,6 @@
 import {notFound} from "next/navigation";
 import {RolesUpsertForm} from "@/features/roles/components/roles-upsert-form";
-import {fetchRole} from "@/dal";
+import {fetchRole} from "@/dal/private/roles";
 import {withPermissions} from "@/components/with-authorization";
 
 type Props = {

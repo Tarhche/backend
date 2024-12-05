@@ -25,7 +25,7 @@ import {
   Icon,
   IconProps,
 } from "@tabler/icons-react";
-import {fetchAllArticles} from "@/dal/articles";
+import {fetchAllArticles} from "@/dal/private/articles";
 import {dateFromNow} from "@/lib/date-and-time";
 import {APP_PATHS} from "@/lib/app-paths";
 import {type Permissions} from "@/lib/app-permissions";
