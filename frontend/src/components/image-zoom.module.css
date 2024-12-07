@@ -1,0 +1,3 @@
+.rmiz > [data-rmiz-modal-content] {
+  background-color: var(--mantine-color-body) !important;
+}

@@ -1,0 +1,17 @@
+.text {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.errorText {
+  color: var(--mantine-color-red-6);
+}
+
+.successText {
+  color: light-dark(var(--mantine-color-green-9), var(--mantine-color-green-5));
+}
+
+.redBorder {
+  border: 1px solid var(--mantine-color-red-6);
+}
