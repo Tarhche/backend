@@ -6,10 +6,6 @@ const nextConfig = {
     remotePatterns: [
       {
         protocol: "https",
-        hostname: "backend-reactjs.tarhche.com",
-      },
-      {
-        protocol: "https",
         hostname: "backend.tarhche.com",
       },
     ],
