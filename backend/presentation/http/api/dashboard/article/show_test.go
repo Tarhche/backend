@@ -99,7 +99,7 @@ func TestShowHandler(t *testing.T) {
 		articleRepository.AssertNotCalled(t, "GetOne")
 
 		assert.Len(t, response.Body.Bytes(), 0)
-		assert.Equal(t, http.StatusUnauthorized, response.Code)
+		assert.Equal(t, http.StatusForbidden, response.Code)
 	})
 
 	t.Run("not found", func(t *testing.T) {

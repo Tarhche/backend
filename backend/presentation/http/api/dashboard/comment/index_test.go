@@ -27,7 +27,7 @@ func TestIndexHandler(t *testing.T) {
 
 	t.Run("show comments", func(t *testing.T) {
 		t.Parallel()
-	
+
 		var (
 			commentRepository comments.MockCommentsRepository
 			userRepository    users.MockUsersRepository
@@ -182,7 +182,7 @@ func TestIndexHandler(t *testing.T) {
 		userRepository.AssertNotCalled(t, "GetByUUIDs")
 
 		assert.Len(t, response.Body.Bytes(), 0)
-		assert.Equal(t, http.StatusUnauthorized, response.Code)
+		assert.Equal(t, http.StatusForbidden, response.Code)
 	})
 
 	t.Run("error", func(t *testing.T) {

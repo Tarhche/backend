@@ -171,7 +171,7 @@ func TestCreateHandler(t *testing.T) {
 		hasher.AssertNotCalled(t, "Hash")
 
 		assert.Len(t, response.Body.Bytes(), 0)
-		assert.Equal(t, http.StatusUnauthorized, response.Code)
+		assert.Equal(t, http.StatusForbidden, response.Code)
 
 	})
 

@@ -138,7 +138,7 @@ func TestShowHandler(t *testing.T) {
 		storage.AssertNotCalled(t, "Read")
 
 		assert.Equal(t, 0, response.Body.Len())
-		assert.Equal(t, http.StatusUnauthorized, response.Code)
+		assert.Equal(t, http.StatusForbidden, response.Code)
 	})
 
 	t.Run("error on reading file/writing to output", func(t *testing.T) {

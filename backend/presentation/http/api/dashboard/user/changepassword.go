@@ -29,7 +29,7 @@ func (h *changePasswordHandler) ServeHTTP(rw http.ResponseWriter, r *http.Reques
 		rw.WriteHeader(http.StatusInternalServerError)
 		return
 	} else if !ok {
-		rw.WriteHeader(http.StatusUnauthorized)
+		rw.WriteHeader(http.StatusForbidden)
 		return
 	}
 

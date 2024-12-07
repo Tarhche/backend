@@ -165,7 +165,7 @@ func TestUpdateHandler(t *testing.T) {
 		roleRepository.AssertNotCalled(t, "Save")
 
 		assert.Len(t, response.Body.Bytes(), 0)
-		assert.Equal(t, http.StatusUnauthorized, response.Code)
+		assert.Equal(t, http.StatusForbidden, response.Code)
 	})
 
 	t.Run("error", func(t *testing.T) {

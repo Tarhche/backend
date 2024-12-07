@@ -130,7 +130,7 @@ func TestCreateHandler(t *testing.T) {
 		articleRepository.AssertNotCalled(t, "Save")
 
 		assert.Len(t, response.Body.Bytes(), 0)
-		assert.Equal(t, http.StatusUnauthorized, response.Code)
+		assert.Equal(t, http.StatusForbidden, response.Code)
 	})
 
 	t.Run("validation failed", func(t *testing.T) {

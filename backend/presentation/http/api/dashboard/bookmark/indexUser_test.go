@@ -130,7 +130,7 @@ func TestIndexUserHandler(t *testing.T) {
 		bookmarkRepository.AssertNotCalled(t, "GetAllByOwnerUUID")
 
 		assert.Len(t, response.Body.Bytes(), 0)
-		assert.Equal(t, http.StatusUnauthorized, response.Code)
+		assert.Equal(t, http.StatusForbidden, response.Code)
 	})
 
 	t.Run("no data", func(t *testing.T) {

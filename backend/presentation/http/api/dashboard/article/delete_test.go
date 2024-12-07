@@ -79,7 +79,7 @@ func TestDeleteHandler(t *testing.T) {
 		articleRepository.AssertNotCalled(t, "Delete")
 
 		assert.Len(t, response.Body.Bytes(), 0)
-		assert.Equal(t, http.StatusUnauthorized, response.Code)
+		assert.Equal(t, http.StatusForbidden, response.Code)
 	})
 
 	t.Run("error", func(t *testing.T) {
