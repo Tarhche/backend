@@ -40,7 +40,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 	} else if len(permissions) < len(request.Permissions) {
 		return &Response{
 			ValidationErrors: domain.ValidationErrors{
-				"permissions": uc.translator.Translate("one or more of permissions not exist"),
+				"permissions": uc.translator.Translate("one_or_more_permissions_not_exist"),
 			},
 		}, nil
 	}

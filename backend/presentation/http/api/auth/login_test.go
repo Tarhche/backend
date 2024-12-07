@@ -138,7 +138,7 @@ func TestLoginHandler(t *testing.T) {
 		requestValidator.On("Validate", &r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
-		translator.On("Translate", "identity (email/username) or password is wrong", mock.Anything).Once().Return("identity (email/username) or password is wrong")
+		translator.On("Translate", "invalid_identity_or_password", mock.Anything).Once().Return("identity (email/username) or password is wrong")
 		defer translator.AssertExpectations(t)
 
 		userRepository.On("GetOneByIdentity", r.Identity).Once().Return(user.User{}, domain.ErrNotExists)

@@ -187,7 +187,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		translator.On(
 			"Translate",
-			expectedResponse.ValidationErrors["identity"],
+			"invalid_identity_or_password",
 			mock2.AnythingOfType(translatorOptionsType),
 		).Once().Return(expectedResponse.ValidationErrors["identity"])
 		defer translator.AssertExpectations(t)

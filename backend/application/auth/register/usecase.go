@@ -43,7 +43,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 	} else if exists {
 		return &Response{
 			ValidationErrors: map[string]string{
-				"identity": uc.translator.Translate("user with given email already exists"),
+				"identity": uc.translator.Translate("email_already_exists"),
 			},
 		}, nil
 	}

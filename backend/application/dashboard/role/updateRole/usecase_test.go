@@ -138,7 +138,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		translator.On(
 			"Translate",
-			expectedResponse.ValidationErrors["permissions"],
+			"one_or_more_permissions_not_exist",
 			mock.AnythingOfType(translatorOptionsType),
 		).Once().Return(expectedResponse.ValidationErrors["permissions"])
 		defer translator.AssertExpectations(t)

@@ -163,7 +163,7 @@ func TestRefreshHandler(t *testing.T) {
 		requestValidator.On("Validate", &r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
-		translator.On("Translate", "identity (email/username) not exists", mock.Anything).Once().Return("identity (email/username) not exists")
+		translator.On("Translate", "identity_not_exists", mock.Anything).Once().Return("identity (email/username) not exists")
 		defer translator.AssertExpectations(t)
 
 		handler := NewRefreshHandler(refresh.NewUseCase(&userRepository, j, &translator, &requestValidator))

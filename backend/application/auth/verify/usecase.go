@@ -69,7 +69,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 	if audiences, err := claims.GetAudience(); err != nil || len(audiences) == 0 || audiences[0] != auth.RegistrationToken {
 		return &Response{
 			ValidationErrors: domain.ValidationErrors{
-				"token": uc.translator.Translate("registration token is not valid"),
+				"token": uc.translator.Translate("invalid_value"),
 			},
 		}, nil
 	}
@@ -88,7 +88,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 	} else if exists {
 		return &Response{
 			ValidationErrors: map[string]string{
-				"identity": uc.translator.Translate("user already exists"),
+				"identity": uc.translator.Translate("user_already_exists"),
 			},
 		}, nil
 	}
@@ -98,7 +98,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 	} else if exists {
 		return &Response{
 			ValidationErrors: map[string]string{
-				"username": uc.translator.Translate("user with given username already exists"),
+				"username": uc.translator.Translate("username_already_exists"),
 			},
 		}, nil
 	}

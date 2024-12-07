@@ -123,7 +123,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		translator.On(
 			"Translate",
-			expectedResponse.ValidationErrors["identity"],
+			"email_already_exists",
 			mock2.AnythingOfType(translatorOptionsType),
 		).Once().Return(expectedResponse.ValidationErrors["identity"])
 		defer translator.AssertExpectations(t)

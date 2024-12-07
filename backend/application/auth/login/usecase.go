@@ -45,7 +45,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 	if err == domain.ErrNotExists {
 		return &Response{
 			ValidationErrors: domain.ValidationErrors{
-				"identity": uc.translator.Translate("identity (email/username) or password is wrong"),
+				"identity": uc.translator.Translate("invalid_identity_or_password"),
 			},
 		}, nil
 	} else if err != nil {
@@ -55,7 +55,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 	if !uc.passwordIsValid(u, []byte(request.Password)) {
 		return &Response{
 			ValidationErrors: domain.ValidationErrors{
-				"identity": uc.translator.Translate("your identity or password is wrong"),
+				"identity": uc.translator.Translate("invalid_identity_or_password"),
 			},
 		}, nil
 	}

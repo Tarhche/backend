@@ -40,7 +40,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 	} else if exists {
 		return &Response{
 			ValidationErrors: domain.ValidationErrors{
-				"email": uc.translator.Translate("another user with this email already exists"),
+				"email": uc.translator.Translate("email_already_exists"),
 			},
 		}, nil
 	}
@@ -52,7 +52,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 	} else if exists {
 		return &Response{
 			ValidationErrors: domain.ValidationErrors{
-				"username": uc.translator.Translate("another user with this email already exists"),
+				"username": uc.translator.Translate("username_already_exists"),
 			},
 		}, nil
 	}

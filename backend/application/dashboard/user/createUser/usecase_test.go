@@ -130,7 +130,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		translator.On(
 			"Translate",
-			expectedResponse.ValidationErrors["email"],
+			"email_already_exists",
 			mock2.AnythingOfType(translatorOptionsType),
 		).Once().Return(expectedResponse.ValidationErrors["email"])
 		defer translator.AssertExpectations(t)
@@ -181,7 +181,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		translator.On(
 			"Translate",
-			expectedResponse.ValidationErrors["username"],
+			"username_already_exists",
 			mock2.AnythingOfType(translatorOptionsType),
 		).Once().Return(expectedResponse.ValidationErrors["username"])
 		defer translator.AssertExpectations(t)

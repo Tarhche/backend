@@ -172,7 +172,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		translator.On(
 			"Translate",
-			expectedResponse.ValidationErrors["current_password"],
+			"invalid_value",
 			mock.AnythingOfType(translatorOptionsType),
 		).Once().Return(expectedResponse.ValidationErrors["current_password"])
 		defer translator.AssertExpectations(t)

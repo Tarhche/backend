@@ -112,7 +112,7 @@ func TestUseCase_Execute(t *testing.T) {
 			}
 			expectedResponse = Response{
 				ValidationErrors: domain.ValidationErrors{
-					"identity": "identity (email/username) not exists",
+					"identity": "identity_not_exists",
 				},
 			}
 		)

@@ -36,7 +36,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 	} else if exists {
 		return &Response{
 			ValidationErrors: map[string]string{
-				"email": "another user with this email already exists",
+				"email": "email_already_exists",
 			},
 		}, nil
 	}
@@ -48,7 +48,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 	} else if exists {
 		return &Response{
 			ValidationErrors: map[string]string{
-				"username": "another user with this email already exists",
+				"username": "username_already_exists",
 			},
 		}, nil
 	}

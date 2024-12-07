@@ -12,7 +12,7 @@ type MockValidator struct {
 var _ domain.Validator = &validator{}
 
 // Validate validates the given value and returns the validation error, if any.
-func (m MockValidator) Validate(value any) domain.ValidationErrors {
+func (m *MockValidator) Validate(value any) domain.ValidationErrors {
 	args := m.Mock.Called(value)
 
 	validationErrors := args.Get(0)

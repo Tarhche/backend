@@ -67,7 +67,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 	if err == domain.ErrNotExists {
 		return &Response{
 			ValidationErrors: domain.ValidationErrors{
-				"identity": uc.translator.Translate("identity (email/username) not exists"),
+				"identity": uc.translator.Translate("identity_not_exists"),
 			},
 		}, nil
 	} else if err != nil {

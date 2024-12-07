@@ -45,7 +45,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 	if !uc.passwordIsValid(u, []byte(request.CurrentPassword)) {
 		return &Response{
 			ValidationErrors: domain.ValidationErrors{
-				"current_password": uc.translator.Translate("current password is not valid"),
+				"current_password": uc.translator.Translate("invalid_value"),
 			},
 		}, nil
 	}
