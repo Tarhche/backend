@@ -127,7 +127,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		return nil, err
 	}
 
-	return &Response{}, nil
+	return nil, nil
 }
 
 func (uc *UseCase) assignDefaultRoles(userUUID string) error {

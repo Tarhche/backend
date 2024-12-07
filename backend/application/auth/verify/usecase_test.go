@@ -107,8 +107,7 @@ func TestUseCase_Execute(t *testing.T) {
 		translator.AssertNotCalled(t, "Translate")
 
 		assert.NoError(t, err)
-		assert.NotNil(t, response)
-		assert.Len(t, response.ValidationErrors, 0)
+		assert.Nil(t, response)
 	})
 
 	t.Run("validation fails", func(t *testing.T) {
