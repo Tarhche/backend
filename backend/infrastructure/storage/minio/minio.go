@@ -5,6 +5,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/khanzadimahdi/testproject/domain/file"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
@@ -21,6 +22,8 @@ type MinIO struct {
 	client     *minio.Client
 	bucketName string
 }
+
+var _ file.Storage = &MinIO{}
 
 func New(opt Options) (*MinIO, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -58,7 +61,7 @@ func (storage *MinIO) Delete(ctx context.Context, objectName string) error {
 	return storage.client.RemoveObject(ctx, storage.bucketName, objectName, minio.RemoveObjectOptions{})
 }
 
-func (storage *MinIO) Read(ctx context.Context, objectName string) (io.ReadCloser, error) {
+func (storage *MinIO) Read(ctx context.Context, objectName string) (io.ReadSeekCloser, error) {
 	obj, err := storage.client.GetObject(ctx, storage.bucketName, objectName, minio.GetObjectOptions{})
 	if err != nil {
 		return nil, err

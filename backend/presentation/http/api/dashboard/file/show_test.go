@@ -1,6 +1,7 @@
 package file
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -40,8 +41,8 @@ func TestShowHandler(t *testing.T) {
 			}
 		)
 
-		fileData := "this is the file payload"
-		reader := io.NopCloser(strings.NewReader(fileData))
+		fileData := []byte("this is the file payload")
+		reader := NewSeekReadCloser(fileData)
 
 		authorizer.On("Authorize", u.UUID, permission.FilesShow).Once().Return(true, nil)
 		defer authorizer.AssertExpectations(t)
@@ -63,7 +64,7 @@ func TestShowHandler(t *testing.T) {
 
 		handler.ServeHTTP(response, request)
 
-		assert.Equal(t, fileData, response.Body.String())
+		assert.Equal(t, fileData, response.Body.Bytes())
 		assert.Equal(t, http.StatusOK, response.Code)
 	})
 
@@ -219,4 +220,20 @@ func TestShowHandler(t *testing.T) {
 		assert.Equal(t, 0, response.Body.Len())
 		assert.Equal(t, http.StatusInternalServerError, response.Code)
 	})
+}
+
+type SeekReadCloser struct {
+	*bytes.Reader
+}
+
+func NewSeekReadCloser(s []byte) *SeekReadCloser {
+	return &SeekReadCloser{
+		Reader: bytes.NewReader(s),
+	}
+}
+
+// Implement the io.Closer interface (no-op, since we're not managing resources like file handles)
+func (src *SeekReadCloser) Close() error {
+	// No-op for this case, since we don't need to release resources
+	return nil
 }

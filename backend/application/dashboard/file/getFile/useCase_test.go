@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"io"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -26,8 +25,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 			fileContent = []byte("some file content")
 
-			reader = io.NopCloser(bytes.NewReader(fileContent))
-			writer bytes.Buffer
+			reader = NewSeekReadCloser(fileContent)
 
 			uuid = "test-uuid"
 			f    = file.File{
@@ -40,6 +38,8 @@ func TestUseCase_Execute(t *testing.T) {
 				Size:      f.Size,
 				OwnerUUID: f.OwnerUUID,
 				MimeType:  f.MimeType,
+
+				Reader: reader,
 			}
 		)
 
@@ -49,10 +49,9 @@ func TestUseCase_Execute(t *testing.T) {
 		storage.On("Read", context.Background(), f.Name).Return(reader, nil)
 		defer storage.AssertExpectations(t)
 
-		response, err := NewUseCase(&filesRepository, &storage).Execute(uuid, &writer)
+		response, err := NewUseCase(&filesRepository, &storage).Execute(uuid)
 
 		assert.NoError(t, err)
-		assert.Equal(t, fileContent, writer.Bytes())
 		assert.Equal(t, &expectedResponse, response)
 	})
 
@@ -63,8 +62,6 @@ func TestUseCase_Execute(t *testing.T) {
 			filesRepository files.MockFilesRepository
 			storage         mock.MockStorage
 
-			writer bytes.Buffer
-
 			expectedErr = errors.New("some error")
 
 			uuid = "test-uuid"
@@ -73,12 +70,11 @@ func TestUseCase_Execute(t *testing.T) {
 		filesRepository.On("GetOne", uuid).Once().Return(file.File{}, expectedErr)
 		defer filesRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&filesRepository, &storage).Execute(uuid, &writer)
+		response, err := NewUseCase(&filesRepository, &storage).Execute(uuid)
 
 		storage.AssertNotCalled(t, "Read")
 
 		assert.ErrorIs(t, err, expectedErr)
-		assert.Equal(t, 0, writer.Len())
 		assert.Nil(t, response)
 	})
 
@@ -88,8 +84,6 @@ func TestUseCase_Execute(t *testing.T) {
 		var (
 			filesRepository files.MockFilesRepository
 			storage         mock.MockStorage
-
-			writer bytes.Buffer
 
 			expectedErr = errors.New("some error")
 
@@ -105,10 +99,25 @@ func TestUseCase_Execute(t *testing.T) {
 		storage.On("Read", context.Background(), f.Name).Return(nil, expectedErr)
 		defer storage.AssertExpectations(t)
 
-		response, err := NewUseCase(&filesRepository, &storage).Execute(uuid, &writer)
+		response, err := NewUseCase(&filesRepository, &storage).Execute(uuid)
 
 		assert.ErrorIs(t, err, expectedErr)
-		assert.Equal(t, 0, writer.Len())
 		assert.Nil(t, response)
 	})
+}
+
+type SeekReadCloser struct {
+	*bytes.Reader
+}
+
+func NewSeekReadCloser(s []byte) *SeekReadCloser {
+	return &SeekReadCloser{
+		Reader: bytes.NewReader(s),
+	}
+}
+
+// Implement the io.Closer interface (no-op, since we're not managing resources like file handles)
+func (src *SeekReadCloser) Close() error {
+	// No-op for this case, since we don't need to release resources
+	return nil
 }

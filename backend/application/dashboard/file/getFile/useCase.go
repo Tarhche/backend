@@ -2,7 +2,6 @@ package getfile
 
 import (
 	"context"
-	"io"
 
 	"github.com/khanzadimahdi/testproject/domain/file"
 )
@@ -19,7 +18,7 @@ func NewUseCase(filesRepository file.Repository, storage file.Storage) *UseCase 
 	}
 }
 
-func (uc *UseCase) Execute(UUID string, writer io.Writer) (*Response, error) {
+func (uc *UseCase) Execute(UUID string) (*Response, error) {
 	f, err := uc.filesRepository.GetOne(UUID)
 	if err != nil {
 		return nil, err
@@ -29,17 +28,14 @@ func (uc *UseCase) Execute(UUID string, writer io.Writer) (*Response, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer reader.Close()
-
-	if _, err = io.Copy(writer, reader); err != nil {
-		return nil, err
-	}
 
 	response := Response{
 		Name:      f.Name,
 		Size:      f.Size,
 		OwnerUUID: f.OwnerUUID,
 		MimeType:  f.MimeType,
+
+		Reader: reader,
 	}
 
 	return &response, nil
