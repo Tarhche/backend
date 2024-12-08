@@ -29,5 +29,5 @@ type Repository interface {
 type Storage interface {
 	Store(ctx context.Context, objectName string, reader io.Reader, objectSize int64) error
 	Delete(ctx context.Context, objectName string) error
-	Read(ctx context.Context, objectName string) (io.ReadCloser, error)
+	Read(ctx context.Context, objectName string) (io.ReadSeekCloser, error)
 }

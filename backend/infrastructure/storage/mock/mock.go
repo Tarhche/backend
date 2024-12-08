@@ -27,10 +27,10 @@ func (s *MockStorage) Delete(ctx context.Context, objectName string) error {
 	return args.Error(0)
 }
 
-func (s *MockStorage) Read(ctx context.Context, objectName string) (io.ReadCloser, error) {
+func (s *MockStorage) Read(ctx context.Context, objectName string) (io.ReadSeekCloser, error) {
 	args := s.Called(ctx, objectName)
 
-	if obj, ok := args.Get(0).(io.ReadCloser); ok {
+	if obj, ok := args.Get(0).(io.ReadSeekCloser); ok {
 		return obj, args.Error(1)
 	}
 
