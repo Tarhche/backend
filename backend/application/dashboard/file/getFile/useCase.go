@@ -34,6 +34,7 @@ func (uc *UseCase) Execute(UUID string) (*Response, error) {
 		Size:      f.Size,
 		OwnerUUID: f.OwnerUUID,
 		MimeType:  f.MimeType,
+		CreatedAt: f.CreatedAt,
 
 		Reader: reader,
 	}

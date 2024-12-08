@@ -3,6 +3,7 @@ package file
 import (
 	"context"
 	"io"
+	"time"
 )
 
 type File struct {
@@ -11,6 +12,7 @@ type File struct {
 	Size      int64
 	OwnerUUID string
 	MimeType  string
+	CreatedAt time.Time
 }
 
 type Repository interface {

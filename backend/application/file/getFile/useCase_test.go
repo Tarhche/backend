@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -27,10 +28,13 @@ func TestUseCase_Execute(t *testing.T) {
 
 			reader = NewSeekReadCloser(fileContent)
 
+			now = time.Now()
+
 			uuid = "test-uuid"
 			f    = file.File{
-				Name:     "test-file-name",
-				MimeType: "application/octet-stream",
+				Name:      "test-file-name",
+				MimeType:  "application/octet-stream",
+				CreatedAt: now,
 			}
 
 			expectedResponse = Response{
@@ -38,6 +42,7 @@ func TestUseCase_Execute(t *testing.T) {
 				Size:      f.Size,
 				OwnerUUID: f.OwnerUUID,
 				MimeType:  f.MimeType,
+				CreatedAt: now,
 
 				Reader: reader,
 			}
