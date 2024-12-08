@@ -34,10 +34,12 @@ func TestIndexUserHandler(t *testing.T) {
 					Name:      "role-name-01",
 					Size:      1000,
 					OwnerUUID: "user-uuid-01",
+					MimeType:  "image/jpeg",
 				},
 				{
-					UUID: "test-uuid-02",
-					Name: "role-name-02",
+					UUID:     "test-uuid-02",
+					Name:     "role-name-02",
+					MimeType: "video/mp4",
 				},
 				{Name: "role-name-03"},
 			}
@@ -60,7 +62,7 @@ func TestIndexUserHandler(t *testing.T) {
 
 		handler.ServeHTTP(response, request)
 
-		expectedBody, err := os.ReadFile("testdata/index-files-response.json")
+		expectedBody, err := os.ReadFile("testdata/index-user-files-response.json")
 		assert.NoError(t, err)
 
 		assert.Equal(t, "application/json", response.Header().Get("content-type"))

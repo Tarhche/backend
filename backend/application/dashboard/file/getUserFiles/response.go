@@ -14,6 +14,7 @@ type fileResponse struct {
 	Name      string `json:"name"`
 	Size      int64  `json:"size"`
 	OwnerUUID string `json:"owner_uuid"`
+	MimeType  string `json:"mimetype"`
 }
 
 type pagination struct {
@@ -29,6 +30,7 @@ func NewResponse(a []file.File, totalPages, currentPage uint) *Response {
 		items[i].Name = a[i].Name
 		items[i].Size = a[i].Size
 		items[i].OwnerUUID = a[i].OwnerUUID
+		items[i].MimeType = a[i].MimeType
 	}
 
 	return &Response{
