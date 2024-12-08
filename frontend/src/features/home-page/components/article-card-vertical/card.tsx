@@ -39,7 +39,7 @@ export function VerticalArticleCard({article}: Props) {
           >
             {article.title}
           </Text>
-          <Text size="sm" c={"dimmed"} mt={5} mb="md" lineClamp={1}>
+          <Text size="sm" c={"dimmed"} mt={5} mb="md" lineClamp={3}>
             {article.subtitle}
           </Text>
           <Group wrap="nowrap" gap={5} c={"dimmed"}>

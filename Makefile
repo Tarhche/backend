@@ -1,12 +1,11 @@
 ps:
-	podman compose ps
+	docker compose ps
 
 up:
-	podman compose up --build -d
+	docker compose up --build -d
 
 down:
-	podman compose down --remove-orphans --volumes
+	docker compose down --remove-orphans --volumes
 
 sh%:
-	podman compose exec -it $* sh
-
+	docker compose exec -it $* sh
