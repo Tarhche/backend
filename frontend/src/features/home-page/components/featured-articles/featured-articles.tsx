@@ -22,7 +22,7 @@ export async function FeaturedArticles() {
       <GridCol
         span={{
           base: 12,
-          md: 6,
+          md: 8,
         }}
       >
         <h2 className={classes.headingWithBorder}>
@@ -48,7 +48,7 @@ export async function FeaturedArticles() {
       <GridCol
         span={{
           base: 12,
-          md: 6,
+          md: 4,
         }}
       >
         <h2 className={classes.headingWithBorder}>
