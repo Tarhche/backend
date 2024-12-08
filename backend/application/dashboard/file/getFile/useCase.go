@@ -19,18 +19,28 @@ func NewUseCase(filesRepository file.Repository, storage file.Storage) *UseCase 
 	}
 }
 
-func (uc *UseCase) Execute(UUID string, writer io.Writer) error {
-	file, err := uc.filesRepository.GetOne(UUID)
+func (uc *UseCase) Execute(UUID string, writer io.Writer) (*Response, error) {
+	f, err := uc.filesRepository.GetOne(UUID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	reader, err := uc.storage.Read(context.Background(), file.Name)
+	reader, err := uc.storage.Read(context.Background(), f.Name)
 	if err != nil {
-		return err
+		return nil, err
+	}
+	defer reader.Close()
+
+	if _, err = io.Copy(writer, reader); err != nil {
+		return nil, err
 	}
 
-	_, err = io.Copy(writer, reader)
+	response := Response{
+		Name:      f.Name,
+		Size:      f.Size,
+		OwnerUUID: f.OwnerUUID,
+		MimeType:  f.MimeType,
+	}
 
-	return err
+	return &response, nil
 }

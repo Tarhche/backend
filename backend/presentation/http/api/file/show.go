@@ -23,7 +23,7 @@ func (h *showHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	UUID := r.PathValue("uuid")
 
 	var buf bytes.Buffer
-	err := h.useCase.Execute(UUID, &buf)
+	response, err := h.useCase.Execute(UUID, &buf)
 
 	switch {
 	case errors.Is(err, domain.ErrNotExists):
@@ -32,6 +32,8 @@ func (h *showHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		rw.WriteHeader(http.StatusInternalServerError)
 	default:
 		rw.WriteHeader(http.StatusOK)
+		rw.Header().Add("Content-Type", response.MimeType)
+
 		_, _ = buf.WriteTo(rw)
 	}
 }

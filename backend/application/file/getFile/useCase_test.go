@@ -31,7 +31,15 @@ func TestUseCase_Execute(t *testing.T) {
 
 			uuid = "test-uuid"
 			f    = file.File{
-				Name: "test-file-name",
+				Name:     "test-file-name",
+				MimeType: "application/octet-stream",
+			}
+
+			expectedResponse = Response{
+				Name:      f.Name,
+				Size:      f.Size,
+				OwnerUUID: f.OwnerUUID,
+				MimeType:  f.MimeType,
 			}
 		)
 
@@ -41,10 +49,11 @@ func TestUseCase_Execute(t *testing.T) {
 		storage.On("Read", context.Background(), f.Name).Return(reader, nil)
 		defer storage.AssertExpectations(t)
 
-		err := NewUseCase(&filesRepository, &storage).Execute(uuid, &writer)
+		response, err := NewUseCase(&filesRepository, &storage).Execute(uuid, &writer)
 
 		assert.NoError(t, err)
 		assert.Equal(t, fileContent, writer.Bytes())
+		assert.Equal(t, &expectedResponse, response)
 	})
 
 	t.Run("error on getting file", func(t *testing.T) {
@@ -64,12 +73,13 @@ func TestUseCase_Execute(t *testing.T) {
 		filesRepository.On("GetOne", uuid).Once().Return(file.File{}, expectedErr)
 		defer filesRepository.AssertExpectations(t)
 
-		err := NewUseCase(&filesRepository, &storage).Execute(uuid, &writer)
+		response, err := NewUseCase(&filesRepository, &storage).Execute(uuid, &writer)
 
 		storage.AssertNotCalled(t, "Read")
 
 		assert.ErrorIs(t, err, expectedErr)
 		assert.Equal(t, 0, writer.Len())
+		assert.Nil(t, response)
 	})
 
 	t.Run("error on reading file from storage", func(t *testing.T) {
@@ -95,9 +105,10 @@ func TestUseCase_Execute(t *testing.T) {
 		storage.On("Read", context.Background(), f.Name).Return(nil, expectedErr)
 		defer storage.AssertExpectations(t)
 
-		err := NewUseCase(&filesRepository, &storage).Execute(uuid, &writer)
+		response, err := NewUseCase(&filesRepository, &storage).Execute(uuid, &writer)
 
 		assert.ErrorIs(t, err, expectedErr)
 		assert.Equal(t, 0, writer.Len())
+		assert.Nil(t, response)
 	})
 }
