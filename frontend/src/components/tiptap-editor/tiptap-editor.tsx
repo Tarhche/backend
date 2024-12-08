@@ -7,12 +7,14 @@ import Underline from "@tiptap/extension-underline";
 import TextAlign from "@tiptap/extension-text-align";
 import Superscript from "@tiptap/extension-superscript";
 import SubScript from "@tiptap/extension-subscript";
+import Image from "@tiptap/extension-image";
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
+import {ImagePickerControl} from "./controls/image-picker-control";
 import {useEditor} from "@tiptap/react";
 import {createLowlight} from "lowlight";
 import go from "highlight.js/lib/languages/go";
 import "@mantine/tiptap/styles.css";
-import "./tiptap-editor.css";
+import classes from "./tiptap-editor.module.css";
 
 const lowlight = createLowlight();
 lowlight.register("go", go);
@@ -29,20 +31,21 @@ export const TipTapEditor = forwardRef<EditorRef, Props>((props, ref) => {
   const {defaultValue} = props;
 
   const editor = useEditor({
+    content: defaultValue,
+    immediatelyRender: false,
     extensions: [
       Underline,
       Link,
       Superscript,
       SubScript,
       Highlight,
+      Image,
       StarterKit.configure({codeBlock: false}),
       CodeBlockLowlight.configure({
         lowlight,
       }),
       TextAlign.configure({types: ["heading", "paragraph"]}),
     ],
-    content: defaultValue,
-    immediatelyRender: false,
   });
 
   useImperativeHandle(ref, () => {
@@ -52,7 +55,12 @@ export const TipTapEditor = forwardRef<EditorRef, Props>((props, ref) => {
   }, [editor]);
 
   return (
-    <RichTextEditor editor={editor}>
+    <RichTextEditor
+      editor={editor}
+      classNames={{
+        content: classes.content,
+      }}
+    >
       <RichTextEditor.Toolbar sticky stickyOffset={60}>
         <RichTextEditor.ControlsGroup>
           <RichTextEditor.Bold />
@@ -68,6 +76,9 @@ export const TipTapEditor = forwardRef<EditorRef, Props>((props, ref) => {
           <RichTextEditor.H2 />
           <RichTextEditor.H3 />
           <RichTextEditor.H4 />
+        </RichTextEditor.ControlsGroup>
+        <RichTextEditor.ControlsGroup>
+          <ImagePickerControl />
         </RichTextEditor.ControlsGroup>
         <RichTextEditor.ControlsGroup>
           <RichTextEditor.Blockquote />
