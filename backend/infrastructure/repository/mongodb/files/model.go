@@ -9,6 +9,7 @@ type FileBson struct {
 	Name      string    `bson:"name"`
 	Size      int64     `bson:"size"`
 	OwnerUUID string    `bson:"owner_uuid"`
+	MimeType  string    `bson:"mimetype"`
 	CreatedAt time.Time `bson:"created_at,omitempty"`
 }
 

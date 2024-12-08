@@ -10,6 +10,7 @@ type File struct {
 	Name      string
 	Size      int64
 	OwnerUUID string
+	MimeType  string
 }
 
 type Repository interface {
@@ -18,6 +19,11 @@ type Repository interface {
 	Save(*File) (string, error)
 	Delete(UUID string) error
 	Count() (uint, error)
+
+	GetAllByOwnerUUID(ownerUUID string, offset uint, limit uint) ([]File, error)
+	GetOneByOwnerUUID(ownerUUID string, UUID string) (File, error)
+	DeleteByOwnerUUID(ownerUUID string, UUID string) error
+	CountByOwnerUUID(ownerUUID string) (uint, error)
 }
 
 type Storage interface {

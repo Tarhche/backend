@@ -13,6 +13,7 @@ type Request struct {
 	OwnerUUID  string
 	FileReader io.Reader
 	Size       int64
+	MimeType   string
 }
 
 func (r *Request) Validate() domain.ValidationErrors {

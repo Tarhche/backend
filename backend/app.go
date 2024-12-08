@@ -50,8 +50,10 @@ import (
 	dashboardGetElements "github.com/khanzadimahdi/testproject/application/dashboard/element/getElements"
 	dashboardUpdateElement "github.com/khanzadimahdi/testproject/application/dashboard/element/updateElement"
 	dashboardDeleteFile "github.com/khanzadimahdi/testproject/application/dashboard/file/deleteFile"
+	dashboardDeleteUserFile "github.com/khanzadimahdi/testproject/application/dashboard/file/deleteUserFile"
 	dashboardGetFile "github.com/khanzadimahdi/testproject/application/dashboard/file/getFile"
 	dashboardGetFiles "github.com/khanzadimahdi/testproject/application/dashboard/file/getFiles"
+	dashboardGetUserFiles "github.com/khanzadimahdi/testproject/application/dashboard/file/getUserFiles"
 	dashboardUploadFile "github.com/khanzadimahdi/testproject/application/dashboard/file/uploadFile"
 	dashboardGetPermissions "github.com/khanzadimahdi/testproject/application/dashboard/permission/getPermissions"
 	"github.com/khanzadimahdi/testproject/application/dashboard/profile/changepassword"
@@ -298,6 +300,9 @@ func App(ctx context.Context) (http.Handler, func()) {
 	dashboardUploadFileUseCase := dashboardUploadFile.NewUseCase(filesRepository, fileStorage, validator)
 	dashboardDeleteFileUseCase := dashboardDeleteFile.NewUseCase(filesRepository, fileStorage)
 
+	dashboardGetUserFilesUseCase := dashboardGetUserFiles.NewUseCase(filesRepository)
+	dashboardDeleteUserFileUseCase := dashboardDeleteUserFile.NewUseCase(filesRepository, fileStorage)
+
 	dashboardCreateElementUsecase := dashboardCreateElement.NewUseCase(elementsRepository)
 	dashboardDeleteElementUsecase := dashboardDeleteElement.NewUseCase(elementsRepository)
 	dashboardGetElementUsecase := dashboardGetElement.NewUseCase(elementsRepository)
@@ -360,6 +365,10 @@ func App(ctx context.Context) (http.Handler, func()) {
 	mux.Handle("DELETE /api/dashboard/files/{uuid}", middleware.NewAuthoriseMiddleware(dashboardFileAPI.NewDeleteHandler(dashboardDeleteFileUseCase, authorization), j, userRepository))
 	mux.Handle("GET /api/dashboard/files", middleware.NewAuthoriseMiddleware(dashboardFileAPI.NewIndexHandler(dashboardGetFilesUseCase, authorization), j, userRepository))
 	mux.Handle("GET /dashboard/files/{uuid}", middleware.NewAuthoriseMiddleware(dashboardFileAPI.NewShowHandler(dashboardGetFileUseCase, authorization), j, userRepository))
+
+	// self files
+	mux.Handle("DELETE /api/dashboard/my/files/{uuid}", middleware.NewAuthoriseMiddleware(dashboardFileAPI.NewDeleteUserHandler(dashboardDeleteUserFileUseCase, authorization), j, userRepository))
+	mux.Handle("GET /api/dashboard/my/files", middleware.NewAuthoriseMiddleware(dashboardFileAPI.NewIndexUserHandler(dashboardGetUserFilesUseCase, authorization), j, userRepository))
 
 	// elements
 	mux.Handle("POST /api/dashboard/elements", middleware.NewAuthoriseMiddleware(dashboardElementAPI.NewCreateHandler(dashboardCreateElementUsecase, authorization), j, userRepository))

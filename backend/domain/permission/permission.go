@@ -64,4 +64,7 @@ const (
 	SelfCommentsShow   = "self.comments.show"
 	SelfCommentsUpdate = "self.comments.update"
 	SelfCommentsDelete = "self.comments.delete"
+
+	SelfFilesIndex  = "self.files.index"
+	SelfFilesDelete = "self.files.delete"
 )

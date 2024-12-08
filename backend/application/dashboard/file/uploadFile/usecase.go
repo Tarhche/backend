@@ -40,6 +40,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		Name:      request.Name,
 		Size:      request.Size,
 		OwnerUUID: request.OwnerUUID,
+		MimeType:  request.MimeType,
 	})
 	if err != nil {
 		return nil, err

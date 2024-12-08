@@ -45,3 +45,31 @@ func (r *MockFilesRepository) Count() (uint, error) {
 
 	return args.Get(0).(uint), args.Error(1)
 }
+
+func (r *MockFilesRepository) GetAllByOwnerUUID(ownerUUID string, offset uint, limit uint) ([]file.File, error) {
+	args := r.Called(ownerUUID, offset, limit)
+
+	if f, ok := args.Get(0).([]file.File); ok {
+		return f, args.Error(1)
+	}
+
+	return nil, args.Error(1)
+}
+
+func (r *MockFilesRepository) GetOneByOwnerUUID(ownerUUID string, UUID string) (file.File, error) {
+	args := r.Called(ownerUUID, UUID)
+
+	return args.Get(0).(file.File), args.Error(1)
+}
+
+func (r *MockFilesRepository) DeleteByOwnerUUID(ownerUUID string, UUID string) error {
+	args := r.Called(ownerUUID, UUID)
+
+	return args.Error(0)
+}
+
+func (r *MockFilesRepository) CountByOwnerUUID(ownerUUID string) (uint, error) {
+	args := r.Called(ownerUUID)
+
+	return args.Get(0).(uint), args.Error(1)
+}

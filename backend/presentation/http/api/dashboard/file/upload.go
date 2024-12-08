@@ -2,6 +2,7 @@ package file
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
@@ -43,11 +44,18 @@ func (h *createHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
+	mimetype, err := detectMimeType(file)
+	if err != nil {
+		rw.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
 	response, err := h.useCase.Execute(&uploadfile.Request{
 		Name:       header.Filename,
 		OwnerUUID:  auth.FromContext(r.Context()).UUID,
 		Size:       header.Size,
 		FileReader: file,
+		MimeType:   mimetype,
 	})
 
 	switch {
@@ -62,4 +70,18 @@ func (h *createHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		rw.WriteHeader(http.StatusCreated)
 		json.NewEncoder(rw).Encode(response)
 	}
+}
+
+func detectMimeType(file io.ReadSeeker) (string, error) {
+	buffer := make([]byte, 512)
+
+	if _, err := file.Read(buffer); err != nil {
+		return "", err
+	}
+
+	if _, err := file.Seek(0, 0); err != nil {
+		return "", err
+	}
+
+	return http.DetectContentType(buffer), nil
 }

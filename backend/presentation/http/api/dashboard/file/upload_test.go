@@ -51,6 +51,7 @@ func TestUploadHandler(t *testing.T) {
 				Name:      r.Name,
 				Size:      r.Size,
 				OwnerUUID: u.UUID,
+				MimeType:  "application/octet-stream",
 			}
 		)
 
