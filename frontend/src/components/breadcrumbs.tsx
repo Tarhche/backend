@@ -32,7 +32,7 @@ export function Breadcrumbs({crumbs}: Props) {
           );
         }
         return (
-          <Text size="md" key={crumb.label}>
+          <Text c="dimmed" size="md" key={crumb.label}>
             {crumb.label}
           </Text>
         );
