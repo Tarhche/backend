@@ -67,6 +67,7 @@ func (r *FilesRepository) GetAll(offset uint, limit uint) ([]file.File, error) {
 			Size:      a.Size,
 			OwnerUUID: a.OwnerUUID,
 			MimeType:  a.MimeType,
+			CreatedAt: a.CreatedAt,
 		})
 	}
 
@@ -95,6 +96,7 @@ func (r *FilesRepository) GetOne(UUID string) (file.File, error) {
 		Size:      a.Size,
 		OwnerUUID: a.OwnerUUID,
 		MimeType:  a.MimeType,
+		CreatedAt: a.CreatedAt,
 	}, nil
 }
 
@@ -190,6 +192,7 @@ func (r *FilesRepository) GetAllByOwnerUUID(ownerUUID string, offset uint, limit
 			Size:      a.Size,
 			OwnerUUID: a.OwnerUUID,
 			MimeType:  a.MimeType,
+			CreatedAt: a.CreatedAt,
 		})
 	}
 
@@ -223,6 +226,7 @@ func (r *FilesRepository) GetOneByOwnerUUID(ownerUUID string, UUID string) (file
 		Size:      a.Size,
 		OwnerUUID: a.OwnerUUID,
 		MimeType:  a.MimeType,
+		CreatedAt: a.CreatedAt,
 	}, nil
 }
 
