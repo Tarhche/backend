@@ -36,7 +36,7 @@ jobs:
 
       - name: Build image
         run: |
-          cd ./frontend && docker build . --file Dockerfile --target production --tag $IMAGE_ID:$IMAGE_VERSION --tag $IMAGE_ID:latest
+          cd ./frontend && docker build . --file Dockerfile --target production --tag $IMAGE_ID:$IMAGE_VERSION
 
   cd:
     runs-on: ubuntu-latest
