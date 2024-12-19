@@ -12,7 +12,10 @@ import {
 } from "@mantine/core";
 import {DateTimeInput} from "@/components/date-time-input";
 import {FormButton} from "@/components/form-button";
-import {TipTapEditor, EditorRef} from "@/components/tiptap-editor";
+import {
+  ArticleEditor,
+  type Ref,
+} from "@/features/articles/components/article-editor";
 import {FileInput} from "./file-input";
 import {IconPhotoPlus, IconMovie} from "@tabler/icons-react";
 import {upsertArticleAction} from "../../actions/upsert-article";
@@ -32,7 +35,7 @@ type Props = {
 };
 
 export function ArticleUpsertForm({article}: Props) {
-  const editorRef = useRef<EditorRef>(null);
+  const editorRef = useRef<Ref>(null);
   const [state, dispatch] = useFormState(upsertArticleAction, {
     success: true,
   });
@@ -43,7 +46,7 @@ export function ArticleUpsertForm({article}: Props) {
     : null;
 
   const handleSubmit = async (formData: FormData) => {
-    formData.set("body", editorRef.current?.getHTML?.() || "");
+    formData.set("body", editorRef.current?.editor.getHTML() || "");
     if (article?.articleId) {
       formData.set("uuid", article.articleId);
     }
@@ -68,9 +71,9 @@ export function ArticleUpsertForm({article}: Props) {
         />
         <Box>
           <InputLabel>محتوا</InputLabel>
-          <TipTapEditor
-            defaultValue={article?.defaultBody ?? ""}
+          <ArticleEditor
             ref={editorRef}
+            initialContent={article?.defaultBody || ""}
           />
         </Box>
         <FileInput
