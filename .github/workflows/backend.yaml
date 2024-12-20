@@ -11,6 +11,10 @@ on:
       - .github/**
       - backend/**
 
+defaults:
+  run:
+    working-directory: ./backend
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: backend
@@ -30,7 +34,7 @@ jobs:
 
       - name: Run unit tests
         run: |
-          cd ./backend && go test ./... -v -race -cover
+          go test ./... -v -race -cover
 
       - name: Provide image name and version
         run: |
@@ -41,7 +45,7 @@ jobs:
 
       - name: Build image
         run: |
-          cd ./backend && docker build . --file Dockerfile --target production --tag $IMAGE_ID:$IMAGE_VERSION --tag $IMAGE_ID:latest
+          docker build . --file Dockerfile --target production --tag $IMAGE_ID:$IMAGE_VERSION --tag $IMAGE_ID:latest
 
   cd:
     runs-on: ubuntu-latest
@@ -69,7 +73,7 @@ jobs:
 
       - name: Build image
         run: |
-          cd ./backend && docker build . --file Dockerfile --target production --tag $IMAGE_ID:$IMAGE_VERSION --tag $IMAGE_ID:latest
+          docker build . --file Dockerfile --target production --tag $IMAGE_ID:$IMAGE_VERSION --tag $IMAGE_ID:latest
 
       - name: Log in to registry
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin

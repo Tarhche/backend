@@ -11,6 +11,10 @@ on:
       - .github/**
       - frontend/**
 
+defaults:
+  run:
+    working-directory: ./frontend
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: frontend
@@ -36,7 +40,7 @@ jobs:
 
       - name: Build image
         run: |
-          cd ./frontend && docker build . --file Dockerfile --target production --tag $IMAGE_ID:$IMAGE_VERSION --tag $IMAGE_ID:latest
+          docker build . --file Dockerfile --target production --tag $IMAGE_ID:$IMAGE_VERSION --tag $IMAGE_ID:latest
 
   cd:
     runs-on: ubuntu-latest
@@ -64,7 +68,7 @@ jobs:
 
       - name: Build image
         run: |
-          cd ./frontend && docker build . --file Dockerfile --target production --tag $IMAGE_ID:$IMAGE_VERSION --tag $IMAGE_ID:latest
+          docker build . --file Dockerfile --target production --tag $IMAGE_ID:$IMAGE_VERSION --tag $IMAGE_ID:latest
 
       - name: Log in to registry
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin

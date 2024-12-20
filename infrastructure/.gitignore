@@ -1,0 +1,10 @@
+/.idea
+
+# SSH keys
+/*.pem
+/*.pub
+
+# Terraform files
+*.tfstate
+*.tfstate.backup
+.terraform/

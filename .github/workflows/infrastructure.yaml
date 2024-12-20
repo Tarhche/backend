@@ -1,0 +1,81 @@
+name: Infrastructure CI and CD
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/**
+      - infrastructure/**
+  pull_request:
+    paths:
+      - .github/**
+      - infrastructure/**
+
+defaults:
+  run:
+    working-directory: ./infrastructure
+
+env:
+  TF_VAR_project_name: tarhche
+  TF_VAR_instance_name: backend
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Set up AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Format
+        id: fmt
+        run: terraform fmt -check
+
+      - name: Terraform Init
+        id: init
+        run: terraform init
+
+      - name: Terraform Validate
+        id: validate
+        run: terraform validate -no-color
+
+      - name: Terraform Plan
+        run: terraform plan -no-color -input=false
+        continue-on-error: true
+
+  cd:
+    runs-on: ubuntu-latest
+
+    # This job will be invoked only on default branch
+    if: ${{ always() && format('refs/heads/{0}', github.event.repository.default_branch) == github.ref }}
+
+    needs:
+      - ci
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Set up AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve -input=false
+        continue-on-error: true
