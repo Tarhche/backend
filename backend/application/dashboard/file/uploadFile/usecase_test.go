@@ -51,13 +51,15 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		storage.On("Store", context.Background(), r.Name, r.FileReader, r.Size).Once().Return(nil)
-		defer storage.AssertExpectations(t)
-
 		filesRepository.On("Save", &f).Once().Return(fileUUID, nil)
 		defer filesRepository.AssertExpectations(t)
 
+		storage.On("Store", context.Background(), fileUUID, r.FileReader, r.Size).Once().Return(nil)
+		defer storage.AssertExpectations(t)
+
 		response, err := NewUseCase(&filesRepository, &storage, &validator).Execute(&r)
+
+		filesRepository.AssertNotCalled(t, "Delete")
 
 		assert.NoError(t, err)
 		assert.Equal(t, &expectedResponse, response)
@@ -87,8 +89,9 @@ func TestUseCase_Execute(t *testing.T) {
 
 		response, err := NewUseCase(&filesRepository, &storage, &validator).Execute(&r)
 
-		storage.AssertNotCalled(t, "Store")
 		filesRepository.AssertNotCalled(t, "Save")
+		storage.AssertNotCalled(t, "Store")
+		filesRepository.AssertNotCalled(t, "Delete")
 
 		assert.NoError(t, err)
 		assert.Equal(t, &expectedResponse, response)
@@ -111,18 +114,30 @@ func TestUseCase_Execute(t *testing.T) {
 				Size:       int64(len(fileContent)),
 			}
 
+			f = file.File{
+				Name:      r.Name,
+				Size:      r.Size,
+				OwnerUUID: r.OwnerUUID,
+			}
+
+			fileUUID = "test-file-uuid"
+
 			expectedErr = errors.New("storage error")
 		)
 
 		validator.On("Validate", &r).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		storage.On("Store", context.Background(), r.Name, r.FileReader, r.Size).Once().Return(expectedErr)
+		filesRepository.On("Save", &f).Once().Return(fileUUID, nil)
+		defer filesRepository.AssertExpectations(t)
+
+		storage.On("Store", context.Background(), fileUUID, r.FileReader, r.Size).Once().Return(expectedErr)
 		defer storage.AssertExpectations(t)
 
-		response, err := NewUseCase(&filesRepository, &storage, &validator).Execute(&r)
+		filesRepository.On("Delete", fileUUID).Once().Return(nil)
+		defer filesRepository.AssertExpectations(t)
 
-		filesRepository.AssertNotCalled(t, "Save")
+		response, err := NewUseCase(&filesRepository, &storage, &validator).Execute(&r)
 
 		assert.ErrorIs(t, err, expectedErr)
 		assert.Nil(t, response)
@@ -157,13 +172,13 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		storage.On("Store", context.Background(), r.Name, r.FileReader, r.Size).Once().Return(nil)
-		defer storage.AssertExpectations(t)
-
 		filesRepository.On("Save", &f).Once().Return("", expectedErr)
 		defer filesRepository.AssertExpectations(t)
 
 		response, err := NewUseCase(&filesRepository, &storage, &validator).Execute(&r)
+
+		storage.AssertNotCalled(t, "Store")
+		filesRepository.AssertNotCalled(t, "Delete")
 
 		assert.ErrorIs(t, err, expectedErr)
 		assert.Nil(t, response)
