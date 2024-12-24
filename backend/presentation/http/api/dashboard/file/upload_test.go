@@ -70,11 +70,11 @@ func TestUploadHandler(t *testing.T) {
 		requestValidator.On("Validate", mock.Anything).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
-		storage.On("Store", context.Background(), r.Name, mock.Anything, r.Size).Once().Return(nil)
-		defer storage.AssertExpectations(t)
-
 		filesRepository.On("Save", &f).Once().Return(fileUUID, nil)
 		defer filesRepository.AssertExpectations(t)
+
+		storage.On("Store", context.Background(), fileUUID, mock.Anything, r.Size).Once().Return(nil)
+		defer storage.AssertExpectations(t)
 
 		handler := NewUploadHandler(createfile.NewUseCase(&filesRepository, &storage, &requestValidator), &authorizer)
 
