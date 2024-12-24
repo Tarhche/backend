@@ -85,6 +85,8 @@ func TestUploadHandler(t *testing.T) {
 
 		handler.ServeHTTP(response, request)
 
+		filesRepository.AssertNotCalled(t, "Delete")
+
 		expectedBody, err := os.ReadFile("testdata/upload-files-response.json")
 		assert.NoError(t, err)
 

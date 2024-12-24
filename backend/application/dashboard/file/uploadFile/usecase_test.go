@@ -59,6 +59,8 @@ func TestUseCase_Execute(t *testing.T) {
 
 		response, err := NewUseCase(&filesRepository, &storage, &validator).Execute(&r)
 
+		filesRepository.AssertNotCalled(t, "Delete")
+
 		assert.NoError(t, err)
 		assert.Equal(t, &expectedResponse, response)
 	})
@@ -89,6 +91,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		filesRepository.AssertNotCalled(t, "Save")
 		storage.AssertNotCalled(t, "Store")
+		filesRepository.AssertNotCalled(t, "Delete")
 
 		assert.NoError(t, err)
 		assert.Equal(t, &expectedResponse, response)
@@ -175,6 +178,7 @@ func TestUseCase_Execute(t *testing.T) {
 		response, err := NewUseCase(&filesRepository, &storage, &validator).Execute(&r)
 
 		storage.AssertNotCalled(t, "Store")
+		filesRepository.AssertNotCalled(t, "Delete")
 
 		assert.ErrorIs(t, err, expectedErr)
 		assert.Nil(t, response)
