@@ -19,6 +19,8 @@ env:
   TF_VAR_project_name: tarhche
   TF_VAR_instance_name: backend
 
+  EC2_SSH_ADDRESS: ${{ secrets.EC2_SSH_ADDRESS }}
+
 jobs:
   ci:
     runs-on: ubuntu-latest
@@ -51,7 +53,7 @@ jobs:
 
       - name: Terraform Plan
         run: terraform plan -no-color -input=false
-        continue-on-error: true
+        continue-on-error: false
 
   cd:
     runs-on: ubuntu-latest
@@ -78,4 +80,68 @@ jobs:
 
       - name: Terraform Apply
         run: terraform apply -auto-approve -input=false
-        continue-on-error: true
+        continue-on-error: false
+
+      - name: Deploy services
+        run: |
+          # setup ssh key
+          echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" | base64 --decode > ~/ec2-key.pem
+          chmod 400 ~/ec2-key.pem
+
+          # copy files
+          scp -i ~/ec2-key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ./* ubuntu@${{ secrets.EC2_PUBLIC_IP }}:/opt/deployment/
+
+          # connect and deploy services
+          ssh -i ~/ec2-key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ubuntu@${{ secrets.EC2_PUBLIC_IP }} << 'EOF'
+            VOLUME_PATH="${{ secrets.VOLUME_PATH }}"
+
+            MONGO_USERNAME="${{ secrets.MONGO_USERNAME }}"
+            MONGO_PASSWORD="${{ secrets.MONGO_PASSWORD }}"
+
+            DASHBOARD_MONGO_USERNAME="${{ secrets.DASHBOARD_MONGO_USERNAME }}"
+            DASHBOARD_MONGO_PASSWORD="${{ secrets.DASHBOARD_MONGO_PASSWORD }}"
+            DASHBOARD_MONGO_MONGODB_URL="mongodb://${{ secrets.MONGO_USERNAME }}:${{ secrets.MONGO_PASSWORD }}@mongodb:27017"
+
+            BACKEND_NATS_URL="${{ secrets.BACKEND_NATS_URL }}"
+            BACKEND_PRIVATE_KEY="${{ secrets.BACKEND_PRIVATE_KEY }}"
+
+            BACKEND_MONGO_HOST="mongodb"
+            BACKEND_MONGO_PORT="27017"
+            BACKEND_MONGO_SCHEME="mongodb"
+            BACKEND_MONGO_DATABASE_NAME="${{ secrets.BACKEND_MONGO_DATABASE_NAME }}"
+            BACKEND_MONGO_USERNAME="${{ secrets.MONGO_USERNAME }}"
+            BACKEND_MONGO_PASSWORD="${{ secrets.MONGO_PASSWORD }}"
+
+            BACKEND_MAIL_SMTP_PASSWORD="${{ secrets.BACKEND_MAIL_SMTP_PASSWORD }}"
+            BACKEND_MAIL_SMTP_HOST="${{ secrets.BACKEND_MAIL_SMTP_HOST }}"
+            BACKEND_MAIL_SMTP_FROM="${{ secrets.BACKEND_MAIL_SMTP_FROM }}"
+            BACKEND_MAIL_SMTP_USERNAME="${{ secrets.BACKEND_MAIL_SMTP_USERNAME }}"
+            BACKEND_MAIL_SMTP_PORT="${{ secrets.BACKEND_MAIL_SMTP_PORT }}"
+
+            BACKEND_S3_ENDPOINT="${{ secrets.BACKEND_S3_ENDPOINT }}"
+            BACKEND_S3_SECRET_KEY="${{ secrets.BACKEND_S3_SECRET_KEY }}"
+            BACKEND_S3_ACCESS_KEY="${{ secrets.BACKEND_S3_ACCESS_KEY }}"
+            BACKEND_S3_USE_SSL="${{ secrets.BACKEND_S3_USE_SSL }}"
+            BACKEND_S3_BUCKET_NAME="${{ secrets.BACKEND_S3_BUCKET_NAME }}"
+
+            APP_IMAGE="${{ secrets.APP_IMAGE }}"
+
+            PORTAINER_ADMIN_PASSWORD="${{ secrets.PORTAINER_ADMIN_PASSWORD }}"
+
+            FRONTEND_IMAGE="${{ secrets.FRONTEND_IMAGE }}"
+            NEXT_PUBLIC_EXTERNAL_BACKEND_BASE_URL="${{ secrets.NEXT_PUBLIC_EXTERNAL_BACKEND_BASE_URL }}"
+            INTERNAL_BACKEND_BASE_URL="${{ secrets.INTERNAL_BACKEND_BASE_URL }}"
+            NEXT_PUBLIC_FILES_BASE_URL="${{ secrets.NEXT_PUBLIC_FILES_BASE_URL }}"
+
+            # Run Docker Compose
+            cd /opt/deployment/
+
+            docker compose \
+              -f compose.mongodb.yaml \
+              -f compose.nats.yaml \
+              -f compose.docker.yaml \
+              -f compose.backend.yaml \
+              -f compose.frontend.yaml \
+              -f compose.proxy.yaml \
+              up -d
+          EOF

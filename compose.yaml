@@ -4,6 +4,7 @@ x-app: &app
     context: ./backend
     dockerfile: Dockerfile
     target: develop
+  restart: unless-stopped
   depends_on:
     - mongodb
     - minio
@@ -36,6 +37,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       target: develop
+    restart: unless-stopped
     depends_on:
       - app
     ports:
@@ -56,8 +58,6 @@ services:
 
   runner:
     <<: *app
-    volumes:
-      - podman-data:/tmp
     ports:
       - "8001:80"
     command: >
@@ -65,7 +65,7 @@ services:
 
   mongodb:
     image: mongo
-    restart: always
+    restart: unless-stopped
     ports:
       - "27017:27017"
     environment:
@@ -74,6 +74,7 @@ services:
 
   mongodashboard:
     image: mongo-express
+    restart: unless-stopped
     depends_on:
       - mongodb
     ports:
@@ -85,6 +86,7 @@ services:
 
   minio:
     image: minio/minio
+    restart: unless-stopped
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -115,17 +117,25 @@ services:
     ports:
       - "8082:80"
 
-  podman:
-    image: quay.io/podman/stable
-    volumes:
-      - podman-data:/tmp
-    security_opt:
-      - label=disable
-    devices:
-      - /dev/fuse
-    user: podman
-    command: >
-      podman system service --time=0 unix:///tmp/podman.sock
+  docker:
+    image: docker:27-dind
+    restart: unless-stopped
+    privileged: true
+    ports:
+      - "2375:2375"
+    environment:
+      DOCKER_TLS_CERTDIR: "" # disable certs
 
-volumes:
-  podman-data:
+  portainer:
+    image: portainer/portainer-ce
+    restart: unless-stopped
+    depends_on:
+      - docker
+    ports:
+      - "9100:9000"
+      - "9443:9443"
+    command: >
+      --admin-password="$$2a$$12$$4xcOa82Ni5rjgQF.v.JWi.i71OyUm3fwmfWiumgJHIAPGU.uOw3qu"
+    # username: admin
+    # password: admin-password
+    # standalone docker API url: docker:2375

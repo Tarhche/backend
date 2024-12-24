@@ -75,7 +75,7 @@ resource "aws_ebs_volume" "backend" {
 
 import {
   to = aws_volume_attachment.backend
-  id = "/dev/xvdf:vol-0d2bab5e75ac580e9:i-092b668f7d09a7e69"
+  id = "/dev/xvdf:vol-0d2bab5e75ac580e9:${aws_instance.backend.id}"
 }
 
 resource "aws_volume_attachment" "backend" {
@@ -86,29 +86,51 @@ resource "aws_volume_attachment" "backend" {
 
 import {
   to = aws_instance.backend
-  id = "i-092b668f7d09a7e69"
+  id = "i-026c60a5a3cdec06e"
 }
 
 resource "aws_instance" "backend" {
-  ami               = "ami-0e54671bdf3c8ed8d" # Amazon linux 2023
+  ami               = "ami-0a628e1e89aaedf80" # Canonical, Ubuntu, 24.04, amd64 noble image
   instance_type     = "t2.micro"
   key_name          = "backend"
   availability_zone = "eu-central-1b"
 
   user_data = <<-EOT
     #!/bin/bash
+
+    # volumes
     sudo mkfs.ext4 /dev/xvdf
     sudo mkdir /volume_01
     sudo mount /dev/xvdf /volume_01
     sudo echo "/dev/xvdf /volume_01 ext4 defaults,nofail 0 0" | sudo tee -a /etc/fstab
-    sudo yum install wget -y python3
-    sudo yum install -y amazon-cloudwatch-agent jq htop vim docker
+
+    # tools
+    sudo apt install -y wget python3 ca-certificates curl htop jq vim
+
+    # Add Docker's official GPG key:
+    sudo install -m 0755 -d /etc/apt/keyrings
+    sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+    sudo chmod a+r /etc/apt/keyrings/docker.asc
+
+    # Add the repository to Apt sources:
+    echo \
+      "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
+      $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+      sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+    sudo apt-get update
+
+    # install docker and sysbox
+    sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+    wget https://downloads.nestybox.com/sysbox/releases/v0.6.5/sysbox-ce_0.6.5-0.linux_amd64.deb
+    sudo apt install -y ./sysbox-ce_0.6.5-0.linux_amd64.deb
+    rm ./sysbox-ce_0.6.5-0.linux_amd64.deb
+
+    # setup
     sudo systemctl enable docker.service
     sudo systemctl start docker.service
-    sudo usermod -a -G docker ec2-user
-    id ec2-user
+    sudo usermod -a -G docker ubuntu
+    id ubuntu
     newgrp docker
-
     docker swarm init --advertise-addr 192.168.99.100
   EOT
 
@@ -140,6 +162,76 @@ import {
 resource "aws_eip" "backend" {
   instance = aws_instance.backend.id
   domain   = "vpc"
+
+  tags = {
+    project_name = var.project_name
+  }
+}
+
+import {
+  to = aws_route53_zone.tarhche_com
+  id = "Z0951095A7CDVGITDCUP"
+}
+
+resource "aws_route53_zone" "tarhche_com" {
+  name          = "tarhche.com"
+  force_destroy = false
+  comment       = ""
+
+  tags = {
+    project_name = var.project_name
+  }
+}
+
+import {
+  to = aws_route53_record.a_record_tarhche_com
+  id = "${aws_route53_zone.tarhche_com.id}_tarhche.com_A"
+}
+
+resource "aws_route53_record" "a_record_tarhche_com" {
+  zone_id = aws_route53_zone.tarhche_com.id
+  name    = "tarhche.com"
+  type    = "A"
+  ttl     = 300
+  records = ["3.125.118.7"]
+}
+
+import {
+  to = aws_route53_zone.tarhche_ir
+  id = "Z07817351L3HY3TPTD5IU"
+}
+
+resource "aws_route53_zone" "tarhche_ir" {
+  name          = "tarhche.ir"
+  force_destroy = false
+  comment       = ""
+
+  tags = {
+    project_name = var.project_name
+  }
+}
+
+import {
+  to = aws_route53_record.a_record_tarhche_ir
+  id = "${aws_route53_zone.tarhche_ir.id}_tarhche.ir_A"
+}
+
+resource "aws_route53_record" "a_record_tarhche_ir" {
+  zone_id = aws_route53_zone.tarhche_ir.id
+  name    = "tarhche.ir"
+  type    = "A"
+  ttl     = 300
+  records = ["3.125.118.7"]
+}
+
+import {
+  to = aws_s3_bucket.tarhche-backend
+  id = "tarhche-backend"
+}
+
+resource "aws_s3_bucket" "tarhche-backend" {
+  bucket        = "tarhche-backend"
+  force_destroy = false
 
   tags = {
     project_name = var.project_name
