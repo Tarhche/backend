@@ -1,0 +1,24 @@
+services:
+  docker:
+    image: docker:27-dind
+    restart: unless-stopped
+    networks:
+      - docker
+    runtime: sysbox-runc
+    # privileged: true # uncomment this to test locally and comment runtime.
+    environment:
+      DOCKER_TLS_CERTDIR: "" # disable certs
+
+  portainer:
+    image: portainer/portainer-ce
+    restart: unless-stopped
+    networks:
+      - docker
+    depends_on:
+      - docker
+    command: >
+      --admin-password="${PORTAINER_ADMIN_PASSWORD}"
+
+networks:
+  docker:
+    name: docker

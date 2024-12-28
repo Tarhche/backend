@@ -1,0 +1,27 @@
+services:
+  mongodb:
+    image: mongo:8.0
+    restart: unless-stopped
+    networks:
+      - mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
+    volumes:
+      - ./${VOLUME_PATH}/mongodb:/data
+
+  mongodashboard:
+    image: mongo-express
+    restart: unless-stopped
+    networks:
+      - mongodb
+    depends_on:
+      - mongodb
+    environment:
+      ME_CONFIG_BASICAUTH_USERNAME: ${DASHBOARD_MONGO_USERNAME}
+      ME_CONFIG_BASICAUTH_PASSWORD: ${DASHBOARD_MONGO_PASSWORD}
+      ME_CONFIG_MONGODB_URL: ${DASHBOARD_MONGO_MONGODB_URL}
+
+networks:
+  mongodb:
+    name: mongodb

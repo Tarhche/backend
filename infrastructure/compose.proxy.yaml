@@ -1,0 +1,27 @@
+services:
+  proxy:
+    build:
+      dockerfile: Dockerfile
+      context: ./proxy
+    restart: unless-stopped
+    networks:
+      - backend
+      - frontend
+      - mongodb
+      - docker
+    deploy:
+      mode: replicated
+      replicas: 1
+      endpoint_mode: vip
+    ports:
+      - 80:80
+
+networks:
+  backend:
+    name: backend
+  frontend:
+    name: frontend
+  mongodb:
+    name: mongodb
+  docker:
+    name: docker

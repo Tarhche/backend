@@ -1,0 +1,21 @@
+services:
+  frontend:
+    image: ${FRONTEND_IMAGE}
+    restart: unless-stopped
+    networks:
+      - frontend
+      - backend
+    deploy:
+      mode: replicated
+      replicas: 2
+      endpoint_mode: vip
+    environment:
+      NEXT_PUBLIC_EXTERNAL_BACKEND_BASE_URL: ${NEXT_PUBLIC_EXTERNAL_BACKEND_BASE_URL}
+      INTERNAL_BACKEND_BASE_URL: ${INTERNAL_BACKEND_BASE_URL}
+      NEXT_PUBLIC_FILES_BASE_URL: ${NEXT_PUBLIC_FILES_BASE_URL}
+
+networks:
+  frontend:
+    name: frontend
+  backend:
+    name: backend
