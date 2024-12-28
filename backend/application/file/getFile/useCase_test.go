@@ -51,7 +51,7 @@ func TestUseCase_Execute(t *testing.T) {
 		filesRepository.On("GetOne", uuid).Once().Return(f, nil)
 		defer filesRepository.AssertExpectations(t)
 
-		storage.On("Read", context.Background(), f.Name).Return(reader, nil)
+		storage.On("Read", context.Background(), f.UUID).Return(reader, nil)
 		defer storage.AssertExpectations(t)
 
 		response, err := NewUseCase(&filesRepository, &storage).Execute(uuid)
@@ -101,7 +101,7 @@ func TestUseCase_Execute(t *testing.T) {
 		filesRepository.On("GetOne", uuid).Once().Return(f, nil)
 		defer filesRepository.AssertExpectations(t)
 
-		storage.On("Read", context.Background(), f.Name).Return(nil, expectedErr)
+		storage.On("Read", context.Background(), f.UUID).Return(nil, expectedErr)
 		defer storage.AssertExpectations(t)
 
 		response, err := NewUseCase(&filesRepository, &storage).Execute(uuid)
