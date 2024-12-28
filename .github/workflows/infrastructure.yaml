@@ -97,10 +97,10 @@ jobs:
           chmod 400 ~/ec2-key.pem
 
           # copy files
-          scp -i ~/ec2-key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ./* ubuntu@${{ secrets.EC2_PUBLIC_IP }}:/opt/deployment/
+          scp -i ~/ec2-key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ./* ${{ secrets.EC2_SSH_ADDRESS }}:/opt/deployment/
 
           # connect and deploy services
-          ssh -i ~/ec2-key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ubuntu@${{ secrets.EC2_PUBLIC_IP }} << 'EOF'
+          ssh -i ~/ec2-key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${{ secrets.EC2_SSH_ADDRESS }} << 'EOF'
             VOLUME_PATH="${{ secrets.VOLUME_PATH }}"
 
             MONGO_USERNAME="${{ secrets.MONGO_USERNAME }}"
