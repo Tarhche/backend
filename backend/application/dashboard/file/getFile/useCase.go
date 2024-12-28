@@ -24,7 +24,7 @@ func (uc *UseCase) Execute(UUID string) (*Response, error) {
 		return nil, err
 	}
 
-	reader, err := uc.storage.Read(context.Background(), f.Name)
+	reader, err := uc.storage.Read(context.Background(), f.UUID)
 	if err != nil {
 		return nil, err
 	}

@@ -32,10 +32,6 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		}, nil
 	}
 
-	if err := uc.storage.Store(context.Background(), request.Name, request.FileReader, request.Size); err != nil {
-		return nil, err
-	}
-
 	uuid, err := uc.filesRepository.Save(&file.File{
 		Name:      request.Name,
 		Size:      request.Size,
@@ -43,6 +39,12 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		MimeType:  request.MimeType,
 	})
 	if err != nil {
+		return nil, err
+	}
+
+	if err := uc.storage.Store(context.Background(), uuid, request.FileReader, request.Size); err != nil {
+		_ = uc.filesRepository.Delete(uuid)
+
 		return nil, err
 	}
 
