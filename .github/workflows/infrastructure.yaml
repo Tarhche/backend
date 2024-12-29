@@ -1,15 +1,12 @@
 name: Infrastructure CI and CD
+
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - .github/**
-      - infrastructure/**
-  pull_request:
-    paths:
-      - .github/**
-      - infrastructure/**
+  workflow_run:
+    workflows:
+      - Frontend CI and CD
+      - Backend CI and CD
+    types:
+      - completed
 
 defaults:
   run:
@@ -20,6 +17,7 @@ env:
   TF_VAR_instance_name: backend
 
   EC2_SSH_ADDRESS: ${{ secrets.EC2_SSH_ADDRESS }}
+  EC2_SSH_ENDPOINT: ${{ secrets.EC2_SSH_USER }}@${{ secrets.EC2_SSH_ADDRESS }}
 
 jobs:
   ci:
@@ -58,9 +56,6 @@ jobs:
   cd:
     runs-on: ubuntu-latest
 
-    # This job will be invoked only on default branch
-    if: ${{ always() && format('refs/heads/{0}', github.event.repository.default_branch) == github.ref }}
-
     needs:
       - ci
 
@@ -92,57 +87,63 @@ jobs:
 
       - name: Deploy services
         run: |
-          # setup ssh key
+          # Setup ssh key
           echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/ec2-key.pem
           chmod 400 ~/ec2-key.pem
 
+          mkdir -p ~/.ssh
+          ssh-keyscan -H $EC2_SSH_ADDRESS >> ~/.ssh/known_hosts
+
           # Ensure remote directory exists
-          ssh -i ~/ec2-key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${{ secrets.EC2_SSH_ADDRESS }} "mkdir -p /opt/deployment/"
+          ssh -q -i ~/ec2-key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $EC2_SSH_ENDPOINT > /dev/null 2>&1 << 'EOF'
+            sudo mkdir -p /opt/deployment
+            sudo chown ${{ secrets.EC2_SSH_USER }}:${{ secrets.EC2_SSH_USER }} /opt/deployment
+          EOF
 
-          # copy files
-          scp -i ~/ec2-key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ./* ${{ secrets.EC2_SSH_ADDRESS }}:/opt/deployment/
+          # Copy files
+          scp -q -i ~/ec2-key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -r ./* $EC2_SSH_ENDPOINT:/opt/deployment/ > /dev/null 2>&1
 
-          # connect and deploy services
-          ssh -i ~/ec2-key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${{ secrets.EC2_SSH_ADDRESS }} << 'EOF'
-            VOLUME_PATH="${{ secrets.VOLUME_PATH }}"
+          # Connect and deploy services
+          ssh -q -i ~/ec2-key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $EC2_SSH_ENDPOINT > /dev/null 2>&1 << 'EOF'
+            export VOLUME_PATH="${{ secrets.VOLUME_PATH }}"
 
-            MONGO_USERNAME="${{ secrets.MONGO_USERNAME }}"
-            MONGO_PASSWORD="${{ secrets.MONGO_PASSWORD }}"
+            export MONGO_USERNAME="${{ secrets.MONGO_USERNAME }}"
+            export MONGO_PASSWORD="${{ secrets.MONGO_PASSWORD }}"
 
-            DASHBOARD_MONGO_USERNAME="${{ secrets.DASHBOARD_MONGO_USERNAME }}"
-            DASHBOARD_MONGO_PASSWORD="${{ secrets.DASHBOARD_MONGO_PASSWORD }}"
-            DASHBOARD_MONGO_MONGODB_URL="mongodb://${{ secrets.MONGO_USERNAME }}:${{ secrets.MONGO_PASSWORD }}@mongodb:27017"
+            export DASHBOARD_MONGO_USERNAME="${{ secrets.DASHBOARD_MONGO_USERNAME }}"
+            export DASHBOARD_MONGO_PASSWORD="${{ secrets.DASHBOARD_MONGO_PASSWORD }}"
+            export DASHBOARD_MONGO_MONGODB_URL="mongodb://${{ secrets.MONGO_USERNAME }}:${{ secrets.MONGO_PASSWORD }}@mongodb:27017"
 
-            BACKEND_NATS_URL="${{ secrets.BACKEND_NATS_URL }}"
-            BACKEND_PRIVATE_KEY="${{ secrets.BACKEND_PRIVATE_KEY }}"
+            export BACKEND_NATS_URL="${{ secrets.BACKEND_NATS_URL }}"
+            export BACKEND_PRIVATE_KEY="${{ secrets.BACKEND_PRIVATE_KEY }}"
 
-            BACKEND_MONGO_HOST="mongodb"
-            BACKEND_MONGO_PORT="27017"
-            BACKEND_MONGO_SCHEME="mongodb"
-            BACKEND_MONGO_DATABASE_NAME="${{ secrets.BACKEND_MONGO_DATABASE_NAME }}"
-            BACKEND_MONGO_USERNAME="${{ secrets.MONGO_USERNAME }}"
-            BACKEND_MONGO_PASSWORD="${{ secrets.MONGO_PASSWORD }}"
+            export BACKEND_MONGO_HOST="mongodb"
+            export BACKEND_MONGO_PORT="27017"
+            export BACKEND_MONGO_SCHEME="mongodb"
+            export BACKEND_MONGO_DATABASE_NAME="${{ secrets.BACKEND_MONGO_DATABASE_NAME }}"
+            export BACKEND_MONGO_USERNAME="${{ secrets.MONGO_USERNAME }}"
+            export BACKEND_MONGO_PASSWORD="${{ secrets.MONGO_PASSWORD }}"
 
-            BACKEND_MAIL_SMTP_PASSWORD="${{ secrets.BACKEND_MAIL_SMTP_PASSWORD }}"
-            BACKEND_MAIL_SMTP_HOST="${{ secrets.BACKEND_MAIL_SMTP_HOST }}"
-            BACKEND_MAIL_SMTP_FROM="${{ secrets.BACKEND_MAIL_SMTP_FROM }}"
-            BACKEND_MAIL_SMTP_USERNAME="${{ secrets.BACKEND_MAIL_SMTP_USERNAME }}"
-            BACKEND_MAIL_SMTP_PORT="${{ secrets.BACKEND_MAIL_SMTP_PORT }}"
+            export BACKEND_MAIL_SMTP_PASSWORD="${{ secrets.BACKEND_MAIL_SMTP_PASSWORD }}"
+            export BACKEND_MAIL_SMTP_HOST="${{ secrets.BACKEND_MAIL_SMTP_HOST }}"
+            export BACKEND_MAIL_SMTP_FROM="${{ secrets.BACKEND_MAIL_SMTP_FROM }}"
+            export BACKEND_MAIL_SMTP_USERNAME="${{ secrets.BACKEND_MAIL_SMTP_USERNAME }}"
+            export BACKEND_MAIL_SMTP_PORT="${{ secrets.BACKEND_MAIL_SMTP_PORT }}"
 
-            BACKEND_S3_ENDPOINT="${{ secrets.BACKEND_S3_ENDPOINT }}"
-            BACKEND_S3_SECRET_KEY="${{ secrets.BACKEND_S3_SECRET_KEY }}"
-            BACKEND_S3_ACCESS_KEY="${{ secrets.BACKEND_S3_ACCESS_KEY }}"
-            BACKEND_S3_USE_SSL="${{ secrets.BACKEND_S3_USE_SSL }}"
-            BACKEND_S3_BUCKET_NAME="${{ secrets.BACKEND_S3_BUCKET_NAME }}"
+            export BACKEND_S3_ENDPOINT="${{ secrets.BACKEND_S3_ENDPOINT }}"
+            export BACKEND_S3_SECRET_KEY="${{ secrets.BACKEND_S3_SECRET_KEY }}"
+            export BACKEND_S3_ACCESS_KEY="${{ secrets.BACKEND_S3_ACCESS_KEY }}"
+            export BACKEND_S3_USE_SSL="${{ secrets.BACKEND_S3_USE_SSL }}"
+            export BACKEND_S3_BUCKET_NAME="${{ secrets.BACKEND_S3_BUCKET_NAME }}"
 
-            APP_IMAGE="${{ secrets.APP_IMAGE }}"
+            export APP_IMAGE="${{ secrets.APP_IMAGE }}"
 
-            PORTAINER_ADMIN_PASSWORD="${{ secrets.PORTAINER_ADMIN_PASSWORD }}"
+            export PORTAINER_ADMIN_PASSWORD="${{ secrets.PORTAINER_ADMIN_PASSWORD }}"
 
-            FRONTEND_IMAGE="${{ secrets.FRONTEND_IMAGE }}"
-            NEXT_PUBLIC_EXTERNAL_BACKEND_BASE_URL="${{ secrets.NEXT_PUBLIC_EXTERNAL_BACKEND_BASE_URL }}"
-            INTERNAL_BACKEND_BASE_URL="${{ secrets.INTERNAL_BACKEND_BASE_URL }}"
-            NEXT_PUBLIC_FILES_BASE_URL="${{ secrets.NEXT_PUBLIC_FILES_BASE_URL }}"
+            export FRONTEND_IMAGE="${{ secrets.FRONTEND_IMAGE }}"
+            export NEXT_PUBLIC_EXTERNAL_BACKEND_BASE_URL="${{ secrets.NEXT_PUBLIC_EXTERNAL_BACKEND_BASE_URL }}"
+            export INTERNAL_BACKEND_BASE_URL="${{ secrets.INTERNAL_BACKEND_BASE_URL }}"
+            export NEXT_PUBLIC_FILES_BASE_URL="${{ secrets.NEXT_PUBLIC_FILES_BASE_URL }}"
 
             # Run Docker Compose
             cd /opt/deployment/
@@ -154,5 +155,5 @@ jobs:
               -f compose.backend.yaml \
               -f compose.frontend.yaml \
               -f compose.proxy.yaml \
-              up -d
+              up --detach --pull always
           EOF

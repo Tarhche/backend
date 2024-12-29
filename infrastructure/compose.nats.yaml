@@ -5,38 +5,8 @@ services:
     networks:
       - nats
     volumes:
-      - ./${VOLUME_PATH}/nats:/data
-    command: "--jetstream --store_dir /data --cluster_name NATS --cluster nats://0.0.0.0:6222 --http_port 8222"
-  nats-1:
-    image: nats:2.10
-    restart: unless-stopped
-    networks:
-      - nats
-    depends_on:
-      - nats
-    volumes:
-      - ./${VOLUME_PATH}/nats-1:/data
-    command: "--jetstream --store_dir /data --cluster_name NATS --cluster nats://0.0.0.0:6222 --routes=nats://ruser:T0pS3cr3t@nats:6222"
-  nats-2:
-    image: nats:2.10
-    restart: unless-stopped
-    networks:
-      - nats
-    depends_on:
-      - nats
-    volumes:
-      - ./${VOLUME_PATH}/nats-2:/data
-    command: "--jetstream --store_dir /data --cluster_name NATS --cluster nats://0.0.0.0:6222 --routes=nats://ruser:T0pS3cr3t@nats:6222"
-  nats-3:
-    image: nats:2.10
-    restart: unless-stopped
-    networks:
-      - nats
-    depends_on:
-      - nats
-    volumes:
-      - ./${VOLUME_PATH}/nats-3:/data
-    command: "--jetstream --store_dir /data --cluster_name NATS --cluster nats://0.0.0.0:6222 --routes=nats://ruser:T0pS3cr3t@nats:6222"
+      - ${VOLUME_PATH}/nats:/data
+    command: ["--jetstream", "-m", "8222", "-p", "4222"]
 
 networks:
   nats:

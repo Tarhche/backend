@@ -2,6 +2,8 @@ export TF_VAR_project_name	 = tarhche
 export TF_VAR_instance_name	 = backend
 
 export EC2_SSH_ADDRESS		 =
+export EC2_SSH_USER 		 =
+export EC2_SSH_ENDPOINT 	 = ${EC2_SSH_USER}@${EC2_SSH_ADDRESS}
 export VOLUME_PATH           = ./tmp/volume_01
 
 export MONGO_USERNAME = test
@@ -67,7 +69,7 @@ public_key:
 	ssh-keygen -y -f ssh-private-key.pem > ssh-public-key.pub
 
 ssh:
-	ssh -i "ssh-private-key.pem" ${EC2_SSH_ADDRESS}
+	ssh -i "ssh-private-key.pem" ${EC2_SSH_ENDPOINT}
 
 up:
 	docker compose \
@@ -77,7 +79,7 @@ up:
 		-f compose.backend.yaml \
 		-f compose.frontend.yaml \
 		-f compose.proxy.yaml \
-		up -d
+		up --detach --pull always
 
 down:
 	docker compose \
