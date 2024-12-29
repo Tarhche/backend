@@ -96,6 +96,9 @@ jobs:
           echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/ec2-key.pem
           chmod 400 ~/ec2-key.pem
 
+          # Ensure remote directory exists
+          ssh -i ~/ec2-key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${{ secrets.EC2_SSH_ADDRESS }} "mkdir -p /opt/deployment/"
+
           # copy files
           scp -i ~/ec2-key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ./* ${{ secrets.EC2_SSH_ADDRESS }}:/opt/deployment/
 
