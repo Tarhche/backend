@@ -8,7 +8,7 @@ services:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_USERNAME}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
     volumes:
-      - ./${VOLUME_PATH}/mongodb:/data
+      - ${VOLUME_PATH}/mongodb:/data
 
   mongodashboard:
     image: mongo-express

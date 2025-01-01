@@ -105,7 +105,7 @@ resource "aws_instance" "backend" {
     sudo echo "/dev/xvdf /volume_01 ext4 defaults,nofail 0 0" | sudo tee -a /etc/fstab
 
     # tools
-    sudo apt install -y wget python3 ca-certificates curl htop jq vim
+    sudo apt install -y wget python3 ca-certificates curl htop jq vim make
 
     # Add Docker's official GPG key:
     sudo install -m 0755 -d /etc/apt/keyrings
@@ -156,12 +156,168 @@ resource "aws_instance" "backend" {
 
 import {
   to = aws_eip.backend
-  id = "eipalloc-0adaac6f91269c716"
+  id = "eipalloc-02bceef376bc05f89"
 }
 
 resource "aws_eip" "backend" {
   instance = aws_instance.backend.id
   domain   = "vpc"
+
+  tags = {
+    project_name = var.project_name
+  }
+}
+
+import {
+  to = aws_lb.tarhche
+  id = "arn:aws:elasticloadbalancing:eu-central-1:381491955644:loadbalancer/app/tarhche/6953bf38e49158d7"
+}
+
+resource "aws_lb" "tarhche" {
+  name                       = "tarhche"
+  internal                   = false
+  load_balancer_type         = "application"
+  idle_timeout               = 60
+  ip_address_type            = "ipv4"
+  enable_deletion_protection = true
+
+  security_groups = [
+    aws_security_group.backend.id,
+  ]
+
+  subnets = [
+    "subnet-0d68a01f5a4861c65",
+    "subnet-0fca4d198b88d68d6",
+    "subnet-0c8f8df628e715018",
+  ]
+
+  tags = {
+    project_name = var.project_name
+  }
+}
+
+import {
+  to = aws_lb_target_group.http
+  id = "arn:aws:elasticloadbalancing:eu-central-1:381491955644:targetgroup/HTTP/374d0a16b08c8d4a"
+}
+
+resource "aws_lb_target_group" "http" {
+  name              = "HTTP"
+  port              = 80
+  protocol          = "HTTP"
+  vpc_id            = "vpc-04db3e4490d90be8e"
+  ip_address_type   = "ipv4"
+  proxy_protocol_v2 = false
+
+  lambda_multi_value_headers_enabled = false
+
+  health_check {
+    path                = "/"
+    interval            = 30
+    timeout             = 5
+    healthy_threshold   = 5
+    unhealthy_threshold = 2
+  }
+
+  tags = {
+    project_name = var.project_name
+  }
+}
+
+# resource "aws_lb_target_group_attachment" "backend_http" {
+#   target_group_arn = aws_lb_target_group.http.arn
+#   target_id        = aws_instance.backend.id
+#   port             = 80
+# }
+
+import {
+  to = aws_lb_listener.http
+  id = "arn:aws:elasticloadbalancing:eu-central-1:381491955644:listener/app/tarhche/6953bf38e49158d7/637c8770b5e4d6ed"
+}
+
+resource "aws_lb_listener" "http" {
+  load_balancer_arn = aws_lb.tarhche.arn
+  port              = 80
+  protocol          = "HTTP"
+
+  default_action {
+    order            = 1
+    type             = "redirect"
+    target_group_arn = aws_lb_target_group.http.arn
+
+    redirect {
+      host        = "#{host}"
+      path        = "/#{path}"
+      port        = "443"
+      protocol    = "HTTPS"
+      query       = "#{query}"
+      status_code = "HTTP_301"
+    }
+  }
+
+  tags = {
+    project_name = var.project_name
+  }
+}
+
+import {
+  to = aws_lb_listener.https
+  id = "arn:aws:elasticloadbalancing:eu-central-1:381491955644:listener/app/tarhche/6953bf38e49158d7/ab1c7847cbb6f739"
+}
+
+resource "aws_lb_listener" "https" {
+  load_balancer_arn = aws_lb.tarhche.arn
+  port              = 443
+  protocol          = "HTTPS"
+  ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
+  certificate_arn   = aws_acm_certificate.tarhche_com.arn
+
+  default_action {
+    order            = 1
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.http.arn
+
+    forward {
+      stickiness {
+        duration = 3600
+        enabled  = false
+      }
+
+      target_group {
+        arn    = aws_lb_target_group.http.arn
+        weight = 1
+      }
+    }
+  }
+
+  tags = {
+    project_name = var.project_name
+  }
+}
+
+import {
+  to = aws_route53domains_registered_domain.tarhche-com
+  id = "tarhche.com"
+}
+
+resource "aws_route53domains_registered_domain" "tarhche-com" {
+  domain_name = "tarhche.com"
+
+  name_server {
+    name = "ns-1611.awsdns-09.co.uk"
+  }
+
+  name_server {
+    name = "ns-1254.awsdns-28.org"
+  }
+
+  name_server {
+    name = "ns-143.awsdns-17.com"
+  }
+
+  name_server {
+    name = "ns-769.awsdns-32.net"
+  }
 
   tags = {
     project_name = var.project_name
@@ -192,8 +348,29 @@ resource "aws_route53_record" "a_record_tarhche_com" {
   zone_id = aws_route53_zone.tarhche_com.id
   name    = "tarhche.com"
   type    = "A"
-  ttl     = 300
-  records = ["3.125.118.7"]
+
+  alias {
+    name                   = aws_lb.tarhche.dns_name
+    zone_id                = aws_lb.tarhche.zone_id
+    evaluate_target_health = true
+  }
+}
+
+import {
+  to = aws_route53_record.a_record_all_tarhche_com
+  id = "${aws_route53_zone.tarhche_com.id}_*.tarhche.com_A"
+}
+
+resource "aws_route53_record" "a_record_all_tarhche_com" {
+  zone_id = aws_route53_zone.tarhche_com.id
+  name    = "*.tarhche.com"
+  type    = "A"
+
+  alias {
+    name                   = aws_lb.tarhche.dns_name
+    zone_id                = aws_lb.tarhche.zone_id
+    evaluate_target_health = true
+  }
 }
 
 import {
@@ -220,8 +397,12 @@ resource "aws_route53_record" "a_record_tarhche_ir" {
   zone_id = aws_route53_zone.tarhche_ir.id
   name    = "tarhche.ir"
   type    = "A"
-  ttl     = 300
-  records = ["3.125.118.7"]
+
+  alias {
+    evaluate_target_health = true
+    name                   = aws_lb.tarhche.dns_name
+    zone_id                = aws_lb.tarhche.zone_id
+  }
 }
 
 import {
@@ -236,4 +417,40 @@ resource "aws_s3_bucket" "tarhche-backend" {
   tags = {
     project_name = var.project_name
   }
+}
+
+import {
+  to = aws_acm_certificate.tarhche_com
+  id = "arn:aws:acm:eu-central-1:381491955644:certificate/a446a0ad-9cac-479f-a1d6-59b983d633d6"
+}
+
+resource "aws_acm_certificate" "tarhche_com" {
+  domain_name       = "tarhche.com"
+  validation_method = "DNS"
+
+  subject_alternative_names = [
+    "tarhche.com",
+    "*.tarhche.com",
+  ]
+
+  lifecycle {
+    create_before_destroy = true
+  }
+
+  tags = {
+    project_name = var.project_name
+  }
+}
+
+import {
+  to = aws_route53_record.tarhche_com_ssl_validation
+  id = "${aws_route53_zone.tarhche_com.id}__e7a6f01cbe22cb6d1db5c70fb80299a8.tarhche.com_CNAME"
+}
+
+resource "aws_route53_record" "tarhche_com_ssl_validation" {
+  zone_id = aws_route53_zone.tarhche_com.id
+  name    = "_e7a6f01cbe22cb6d1db5c70fb80299a8.tarhche.com"
+  type    = "CNAME"
+  records = ["_0fdeb4d57a8f62c9a90a8f77b0146a14.zfyfvmchrl.acm-validations.aws."]
+  ttl     = 60
 }

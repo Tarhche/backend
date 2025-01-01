@@ -1,8 +1,7 @@
 name: Backend CI and CD
+
 on:
   push:
-    branches:
-      - main
     paths:
       - .github/**
       - backend/**
@@ -47,50 +46,37 @@ jobs:
         run: |
           docker build . --file Dockerfile --target production --tag $IMAGE_ID:$IMAGE_VERSION --tag $IMAGE_ID:latest
 
-  # cd:
-  #   runs-on: ubuntu-latest
+  cd:
+    runs-on: ubuntu-latest
 
-  #   # This job will be invoked only on default branch
-  #   if: ${{ always() && format('refs/heads/{0}', github.event.repository.default_branch) == github.ref }}
+    if: ${{ format('refs/heads/{0}', github.event.repository.default_branch) == github.ref }}
 
-  #   permissions:
-  #     packages: write
-  #     contents: read
+    permissions:
+      packages: write
+      contents: read
 
-  #   needs:
-  #     - ci
+    needs:
+      - ci
 
-  #   steps:
-  #     - name: Checkout code
-  #       uses: actions/checkout@v4
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-  #     - name: Provide image name and version
-  #       run: |
-  #         IMAGE_ID=$(echo $REGISTRY/${{ github.repository_owner }}/$IMAGE_NAME | tr '[A-Z]' '[a-z]')
-  #         IMAGE_VERSION=${{ github.sha }}
-  #         echo "IMAGE_ID=$IMAGE_ID" >> "$GITHUB_ENV"
-  #         echo "IMAGE_VERSION=$IMAGE_VERSION" >> "$GITHUB_ENV"
+      - name: Provide image name and version
+        run: |
+          IMAGE_ID=$(echo $REGISTRY/${{ github.repository_owner }}/$IMAGE_NAME | tr '[A-Z]' '[a-z]')
+          IMAGE_VERSION=${{ github.sha }}
+          echo "IMAGE_ID=$IMAGE_ID" >> "$GITHUB_ENV"
+          echo "IMAGE_VERSION=$IMAGE_VERSION" >> "$GITHUB_ENV"
 
-  #     - name: Build image
-  #       run: |
-  #         docker build . --file Dockerfile --target production --tag $IMAGE_ID:$IMAGE_VERSION --tag $IMAGE_ID:latest
+      - name: Build image
+        run: |
+          docker build . --file Dockerfile --target production --tag $IMAGE_ID:$IMAGE_VERSION --tag $IMAGE_ID:latest
 
-  #     - name: Log in to registry
-  #       run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+      - name: Log in to registry
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-  #     - name: Push image
-  #       run: |
-  #         docker push $IMAGE_ID:$IMAGE_VERSION
-  #         docker push $IMAGE_ID:latest
-
-  #     - uses: actions/setup-node@v3
-  #       with:
-  #         node-version: "18"
-
-  #     - name: deploy to production
-  #       env:
-  #         LIARA_TOKEN: ${{ secrets.LIARA_API_TOKEN }}
-  #         LIARA_BACKEND_APP_NAME: ${{secrets.LIARA_BACKEND_APP_NAME}}
-  #       run: |
-  #         npm i -g @liara/cli@7
-  #         liara deploy --image $IMAGE_ID:$IMAGE_VERSION --platform=docker --port="80" --app="$LIARA_BACKEND_APP_NAME" --api-token="$LIARA_TOKEN" --detach
+      - name: Push image
+        run: |
+          docker push $IMAGE_ID:$IMAGE_VERSION
+          docker push $IMAGE_ID:latest
