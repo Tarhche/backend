@@ -69,6 +69,9 @@ services:
     restart: unless-stopped
     ports:
       - "27017:27017"
+    volumes:
+      - ./tmp/mongodb/db:/data/db
+      - ./tmp/mongodb/configdb:/data/configdb
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_USERNAME}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
@@ -89,7 +92,7 @@ services:
     image: minio/minio
     restart: unless-stopped
     ports:
-      - "9000:9000"
+      - "9100:9000"
       - "9001:9001"
     environment:
       MINIO_ROOT_USER: ${S3_ACCESS_KEY}
@@ -107,11 +110,13 @@ services:
 
   nats:
     image: nats:2.10
-    command: ["--jetstream", "-m", "8222", "-p", "4222"] # --config /etc/nats/nats-server.conf
+    command: ["--jetstream", "--http_port", "8222", "--port", "4222", "--store_dir", "/data"]
     ports:
       - "4222:4222" # client port
       - "6222:6222" # cluster post
       - "8222:8222" # HTTP monitoring port
+    volumes:
+      - ./tmp/nats:/data
 
   natsdashboard:
     image: mdawar/nats-dashboard
@@ -133,7 +138,7 @@ services:
     depends_on:
       - docker
     ports:
-      - "9100:9000"
+      - "9200:9000"
       - "9443:9443"
     command: >
       --admin-password="$$2a$$12$$4xcOa82Ni5rjgQF.v.JWi.i71OyUm3fwmfWiumgJHIAPGU.uOw3qu"

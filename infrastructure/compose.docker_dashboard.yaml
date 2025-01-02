@@ -1,8 +1,9 @@
 services:
-  docker:
-    image: docker:27-dind
+  docker_dashboard:
+    image: portainer/portainer-ce
     networks:
       - docker
+      - docker_dashboard
     deploy:
       mode: replicated
       replicas: 1
@@ -11,11 +12,13 @@ services:
         condition: on-failure
         delay: 5s
         max_attempts: 3
-    runtime: sysbox-runc
-    environment:
-      DOCKER_TLS_CERTDIR: "" # disable certs
+    command: >
+      --admin-password="${PORTAINER_ADMIN_PASSWORD}"
 
 networks:
+  docker_dashboard:
+    name: docker_dashboard
+    driver: overlay
   docker:
     name: docker
-    driver: overlay
+    external: true

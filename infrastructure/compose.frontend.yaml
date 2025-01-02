@@ -1,14 +1,17 @@
 services:
   frontend:
     image: ${FRONTEND_IMAGE}
-    restart: unless-stopped
     networks:
       - frontend
-      - backend
+      - app
     deploy:
       mode: replicated
       replicas: 2
       endpoint_mode: vip
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
     environment:
       NEXT_PUBLIC_EXTERNAL_BACKEND_BASE_URL: ${NEXT_PUBLIC_EXTERNAL_BACKEND_BASE_URL}
       INTERNAL_BACKEND_BASE_URL: ${INTERNAL_BACKEND_BASE_URL}
@@ -17,5 +20,7 @@ services:
 networks:
   frontend:
     name: frontend
-  backend:
-    name: backend
+    driver: overlay
+  app:
+    name: app
+    external: true

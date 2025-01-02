@@ -1,27 +1,36 @@
 services:
   proxy:
-    build:
-      dockerfile: Dockerfile
-      context: ./proxy
-    restart: unless-stopped
+    image: ${PROXY_IMAGE}
     networks:
-      - backend
+      - proxy
       - frontend
-      - mongodb
-      - docker
+      - app
+      - mongodb_dashboard
+      - docker_dashboard
     deploy:
       mode: replicated
       replicas: 1
       endpoint_mode: vip
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
     ports:
       - 80:80
 
 networks:
-  backend:
-    name: backend
+  proxy:
+    name: proxy
+    driver: overlay
   frontend:
     name: frontend
-  mongodb:
-    name: mongodb
-  docker:
-    name: docker
+    external: true
+  app:
+    name: app
+    external: true
+  mongodb_dashboard:
+    name: mongodb_dashboard
+    external: true
+  docker_dashboard:
+    name: docker_dashboard
+    external: true

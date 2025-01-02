@@ -1,0 +1,28 @@
+services:
+  mongodb_dashboard:
+    image: mongo-express
+    networks:
+      - mongodb
+      - mongodb_dashboard
+    deploy:
+      mode: replicated
+      replicas: 1
+      endpoint_mode: vip
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+    depends_on:
+      - mongodb
+    environment:
+      ME_CONFIG_BASICAUTH_USERNAME: ${DASHBOARD_MONGO_USERNAME}
+      ME_CONFIG_BASICAUTH_PASSWORD: ${DASHBOARD_MONGO_PASSWORD}
+      ME_CONFIG_MONGODB_URL: ${DASHBOARD_MONGO_MONGODB_URL}
+
+networks:
+  mongodb_dashboard:
+    name: mongodb_dashboard
+    driver: overlay
+  mongodb:
+    name: mongodb
+    external: true
