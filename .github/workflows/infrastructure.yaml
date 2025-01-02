@@ -121,8 +121,16 @@ jobs:
 
           # Ensure remote directory exists
           ssh -q -i ~/ec2-key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $EC2_SSH_ENDPOINT > /dev/null 2>&1 << 'EOF'
+            export VOLUME_PATH="${{ secrets.VOLUME_PATH }}"
+
             sudo mkdir -p /opt/deployment
             sudo chown ${{ secrets.EC2_SSH_USER }}:${{ secrets.EC2_SSH_USER }} /opt/deployment
+
+            # create volumes directories
+            sudo mkdir -p $VOLUME_PATH/mongodb/db
+            sudo mkdir -p $VOLUME_PATH/mongodb/configdb
+            sudo mkdir -p $VOLUME_PATH/nats
+            sudo chown -R ${{ secrets.EC2_SSH_USER }}:${{ secrets.EC2_SSH_USER }} $VOLUME_PATH/*
           EOF
 
           # Copy files
