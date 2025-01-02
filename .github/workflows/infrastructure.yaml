@@ -16,6 +16,9 @@ env:
   TF_VAR_project_name: tarhche
   TF_VAR_instance_name: backend
 
+  DOCKER_REGISTRY: ghcr.io
+  PROXY_IMAGE_NAME: proxy
+
   EC2_SSH_ADDRESS: ${{ secrets.EC2_SSH_ADDRESS }}
   EC2_SSH_ENDPOINT: ${{ secrets.EC2_SSH_USER }}@${{ secrets.EC2_SSH_ADDRESS }}
 
@@ -56,9 +59,7 @@ jobs:
   cd:
     runs-on: ubuntu-latest
 
-    if: |
-      (format('refs/heads/{0}', github.event.repository.default_branch) == github.ref)
-      && (github.event.workflow_run.conclusion == 'success')
+    # if: ${{ format('refs/heads/{0}', github.event.repository.default_branch) == github.ref }}
 
     needs:
       - ci
@@ -88,6 +89,22 @@ jobs:
       - name: Terraform Apply
         run: terraform apply -auto-approve -input=false
         continue-on-error: false
+
+      - name: Build images
+        run: |
+          PROXY_IMAGE_ID=$(echo $REGISTRY/${{ github.repository_owner }}/$PROXY_IMAGE_NAME | tr '[A-Z]' '[a-z]')
+          PROXY_IMAGE_VERSION=${{ github.sha }}
+          echo "PROXY_IMAGE_ID=$PROXY_IMAGE_ID" >> "$GITHUB_ENV"
+          echo "PROXY_IMAGE_VERSION=$PROXY_IMAGE_VERSION" >> "$GITHUB_ENV"
+          docker build . --file Dockerfile --target production --tag $PROXY_IMAGE_ID:$PROXY_IMAGE_VERSION --tag $PROXY_IMAGE_ID:latest
+
+      - name: Log in to registry
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Push images
+        run: |
+          docker push $PROXY_IMAGE_ID:$PROXY_IMAGE_VERSION
+          docker push $PROXY_IMAGE_ID:latest
 
       - name: Deploy services
         run: |
@@ -140,6 +157,8 @@ jobs:
             export BACKEND_S3_USE_SSL="${{ secrets.BACKEND_S3_USE_SSL }}"
             export BACKEND_S3_BUCKET_NAME="${{ secrets.BACKEND_S3_BUCKET_NAME }}"
 
+            export PROXY_IMAGE=${{ secrets.PROXY_IMAGE }}
+
             export APP_IMAGE="${{ secrets.APP_IMAGE }}"
 
             export PORTAINER_ADMIN_PASSWORD='${{ secrets.PORTAINER_ADMIN_PASSWORD }}'
@@ -152,12 +171,12 @@ jobs:
             # Run Docker Compose
             cd /opt/deployment/
 
-            docker compose \
-              -f compose.mongodb.yaml \
-              -f compose.nats.yaml \
-              -f compose.docker.yaml \
-              -f compose.backend.yaml \
-              -f compose.frontend.yaml \
-              -f compose.proxy.yaml \
-              up --detach --pull always
+            docker stack deploy -c compose.mongodb.yaml mongodb --detach=false
+            docker stack deploy -c compose.mongodb_dashboard.yaml mongodb_dashboard --detach=false
+            docker stack deploy -c compose.nats.yaml nats --detach=false
+            docker stack deploy -c compose.docker.yaml docker --detach=false
+            docker stack deploy -c compose.docker_dashboard.yaml docker_dashboard --detach=false
+            docker stack deploy -c compose.backend.yaml backend --detach=false
+            docker stack deploy -c compose.frontend.yaml frontend --detach=false
+            docker stack deploy -c compose.proxy.yaml proxy --detach=false
           EOF
