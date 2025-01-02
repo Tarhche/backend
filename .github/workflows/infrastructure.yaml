@@ -90,8 +90,6 @@ jobs:
         continue-on-error: false
 
       - name: Deploy services
-        env: 
-          PORTAINER_ADMIN_PASSWORD: ${{ secrets.PORTAINER_ADMIN_PASSWORD }}  # Set the secret as an environment variable
         run: |
           # Setup ssh key
           echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/ec2-key.pem
@@ -144,7 +142,7 @@ jobs:
 
             export APP_IMAGE="${{ secrets.APP_IMAGE }}"
 
-            export PORTAINER_ADMIN_PASSWORD=$PORTAINER_ADMIN_PASSWORD
+            export PORTAINER_ADMIN_PASSWORD='${{ secrets.PORTAINER_ADMIN_PASSWORD }}'
 
             export FRONTEND_IMAGE="${{ secrets.FRONTEND_IMAGE }}"
             export NEXT_PUBLIC_EXTERNAL_BACKEND_BASE_URL="${{ secrets.NEXT_PUBLIC_EXTERNAL_BACKEND_BASE_URL }}"
