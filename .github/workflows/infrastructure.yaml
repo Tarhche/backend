@@ -92,7 +92,7 @@ jobs:
 
       - name: Build images
         run: |
-          PROXY_IMAGE_ID=$(echo $REGISTRY/${{ github.repository_owner }}/$PROXY_IMAGE_NAME | tr '[A-Z]' '[a-z]')
+          PROXY_IMAGE_ID=$(echo $DOCKER_REGISTRY/${{ github.repository_owner }}/$PROXY_IMAGE_NAME | tr '[A-Z]' '[a-z]')
           PROXY_IMAGE_VERSION=${{ github.sha }}
           echo "PROXY_IMAGE_ID=$PROXY_IMAGE_ID" >> "$GITHUB_ENV"
           echo "PROXY_IMAGE_VERSION=$PROXY_IMAGE_VERSION" >> "$GITHUB_ENV"
