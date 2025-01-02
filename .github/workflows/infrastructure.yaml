@@ -96,7 +96,7 @@ jobs:
           PROXY_IMAGE_VERSION=${{ github.sha }}
           echo "PROXY_IMAGE_ID=$PROXY_IMAGE_ID" >> "$GITHUB_ENV"
           echo "PROXY_IMAGE_VERSION=$PROXY_IMAGE_VERSION" >> "$GITHUB_ENV"
-          docker build . --file Dockerfile --target production --tag $PROXY_IMAGE_ID:$PROXY_IMAGE_VERSION --tag $PROXY_IMAGE_ID:latest
+          docker build ./proxy --file ./proxy/Dockerfile --target production --tag $PROXY_IMAGE_ID:$PROXY_IMAGE_VERSION --tag $PROXY_IMAGE_ID:latest
 
       - name: Log in to registry
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
