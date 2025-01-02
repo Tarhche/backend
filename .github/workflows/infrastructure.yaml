@@ -175,12 +175,12 @@ jobs:
             # Run Docker Compose
             cd /opt/deployment/
 
-            docker stack deploy -c compose.mongodb.yaml mongodb --detach=false
-            docker stack deploy -c compose.mongodb_dashboard.yaml mongodb_dashboard --detach=false
-            docker stack deploy -c compose.nats.yaml nats --detach=false
-            docker stack deploy -c compose.docker.yaml docker --detach=false
-            docker stack deploy -c compose.docker_dashboard.yaml docker_dashboard --detach=false
-            docker stack deploy -c compose.backend.yaml backend --detach=false
-            docker stack deploy -c compose.frontend.yaml frontend --detach=false
-            docker stack deploy -c compose.proxy.yaml proxy --detach=false
+            docker stack deploy -c compose.mongodb.yaml mongodb --detach=true
+            docker stack deploy -c compose.mongodb_dashboard.yaml mongodb_dashboard --detach=true
+            docker stack deploy -c compose.nats.yaml nats --detach=true
+            docker stack deploy -c compose.docker.yaml docker --detach=true
+            docker stack deploy -c compose.docker_dashboard.yaml docker_dashboard --detach=true
+            docker stack deploy -c compose.backend.yaml backend --detach=true
+            docker stack deploy -c compose.frontend.yaml frontend --detach=true
+            docker stack deploy -c compose.proxy.yaml proxy --detach=true
           EOF
