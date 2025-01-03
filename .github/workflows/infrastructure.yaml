@@ -130,7 +130,6 @@ jobs:
             sudo mkdir -p $VOLUME_PATH/mongodb/db
             sudo mkdir -p $VOLUME_PATH/mongodb/configdb
             sudo mkdir -p $VOLUME_PATH/nats
-            sudo chown -R ${{ secrets.EC2_SSH_USER }}:${{ secrets.EC2_SSH_USER }} $VOLUME_PATH/*
           EOF
 
           # Copy files
@@ -183,12 +182,12 @@ jobs:
             # Run Docker Compose
             cd /opt/deployment/
 
-            docker stack deploy -c compose.mongodb.yaml mongodb --detach=true
-            docker stack deploy -c compose.mongodb_dashboard.yaml mongodb_dashboard --detach=true
-            docker stack deploy -c compose.nats.yaml nats --detach=true
-            docker stack deploy -c compose.docker.yaml docker --detach=true
-            docker stack deploy -c compose.docker_dashboard.yaml docker_dashboard --detach=true
-            docker stack deploy -c compose.backend.yaml backend --detach=true
-            docker stack deploy -c compose.frontend.yaml frontend --detach=true
-            docker stack deploy -c compose.proxy.yaml proxy --detach=true
+            docker compose -f compose.mongodb.yaml --project-name mongodb up --pull always --detach
+            docker compose -f compose.mongodb_dashboard.yaml --project-name mongodb_dashboard up --pull always --detach
+            docker compose -f compose.nats.yaml --project-name nats up --pull always --detach
+            docker compose -f compose.docker.yaml --project-name docker up --pull always --detach
+            docker compose -f compose.docker_dashboard.yaml --project-name docker_dashboard up --pull always --detach
+            docker compose -f compose.app.yaml --project-name app up --pull always --detach
+            docker compose -f compose.frontend.yaml --project-name frontend up --pull always --detach
+            docker compose -f compose.proxy.yaml --project-name proxy up --pull always --detach
           EOF

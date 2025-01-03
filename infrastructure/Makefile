@@ -74,21 +74,21 @@ ssh:
 	ssh -i "ssh-private-key.pem" ${EC2_SSH_ENDPOINT}
 
 up:
-	docker stack deploy -c compose.mongodb.yaml mongodb --detach=false
-	docker stack deploy -c compose.mongodb_dashboard.yaml mongodb_dashboard --detach=false
-	docker stack deploy -c compose.nats.yaml nats --detach=false
-	docker stack deploy -c compose.docker.yaml docker --detach=false
-	docker stack deploy -c compose.docker_dashboard.yaml docker_dashboard --detach=false
-	docker stack deploy -c compose.backend.yaml backend --detach=false
-	docker stack deploy -c compose.frontend.yaml frontend --detach=false
-	docker stack deploy -c compose.proxy.yaml proxy --detach=false
+	docker compose -f compose.mongodb.yaml --project-name mongodb up --pull always --detach
+	docker compose -f compose.mongodb_dashboard.yaml --project-name mongodb_dashboard up --pull always --detach
+	docker compose -f compose.nats.yaml --project-name nats up --pull always --detach
+	docker compose -f compose.docker.yaml --project-name docker up --pull always --detach
+	docker compose -f compose.docker_dashboard.yaml --project-name docker_dashboard up --pull always --detach
+	docker compose -f compose.app.yaml --project-name app up --pull always --detach
+	docker compose -f compose.frontend.yaml --project-name frontend up --pull always --detach
+	docker compose -f compose.proxy.yaml --project-name proxy up --pull always --detach
 
 down:
-	docker stack rm proxy
-	docker stack rm frontend
-	docker stack rm backend
-	docker stack rm docker_dashboard
-	docker stack rm docker
-	docker stack rm nats
-	docker stack rm mongodb_dashboard
-	docker stack rm mongodb
+	docker compose -f compose.frontend.yaml --project-name frontend down --volumes --remove-orphans
+	docker compose -f compose.app.yaml --project-name app down --volumes --remove-orphans
+	docker compose -f compose.proxy.yaml --project-name proxy down --volumes --remove-orphans
+	docker compose -f compose.nats.yaml --project-name nats down --volumes --remove-orphans
+	docker compose -f compose.docker_dashboard.yaml --project-name docker_dashboard down --volumes --remove-orphans
+	docker compose -f compose.docker.yaml --project-name docker down --volumes --remove-orphans
+	docker compose -f compose.mongodb_dashboard.yaml --project-name mongodb_dashboard down --volumes --remove-orphans
+	docker compose -f compose.mongodb.yaml --project-name mongodb down --volumes --remove-orphans

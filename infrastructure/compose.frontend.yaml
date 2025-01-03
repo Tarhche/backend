@@ -20,7 +20,6 @@ services:
 networks:
   frontend:
     name: frontend
-    driver: overlay
   app:
     name: app
     external: true

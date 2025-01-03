@@ -12,8 +12,6 @@ services:
         condition: on-failure
         delay: 5s
         max_attempts: 3
-    depends_on:
-      - mongodb
     environment:
       ME_CONFIG_BASICAUTH_USERNAME: ${DASHBOARD_MONGO_USERNAME}
       ME_CONFIG_BASICAUTH_PASSWORD: ${DASHBOARD_MONGO_PASSWORD}
@@ -22,7 +20,6 @@ services:
 networks:
   mongodb_dashboard:
     name: mongodb_dashboard
-    driver: overlay
   mongodb:
     name: mongodb
     external: true

@@ -37,7 +37,6 @@ services:
 networks:
   app:
     name: app
-    driver: overlay
   mongodb:
     name: mongodb
     external: true

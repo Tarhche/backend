@@ -21,7 +21,6 @@ services:
 networks:
   proxy:
     name: proxy
-    driver: overlay
   frontend:
     name: frontend
     external: true

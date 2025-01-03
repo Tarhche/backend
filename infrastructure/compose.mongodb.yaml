@@ -21,4 +21,3 @@ services:
 networks:
   mongodb:
     name: mongodb
-    driver: overlay
