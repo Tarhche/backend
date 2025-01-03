@@ -130,7 +130,6 @@ jobs:
             sudo mkdir -p $VOLUME_PATH/mongodb/db
             sudo mkdir -p $VOLUME_PATH/mongodb/configdb
             sudo mkdir -p $VOLUME_PATH/nats
-            sudo chown -R ${{ secrets.EC2_SSH_USER }}:${{ secrets.EC2_SSH_USER }} $VOLUME_PATH/*
           EOF
 
           # Copy files
