@@ -37,6 +37,7 @@ services:
 networks:
   app:
     name: app
+    external: true
   mongodb:
     name: mongodb
     external: true

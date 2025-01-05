@@ -20,6 +20,7 @@ services:
 networks:
   frontend:
     name: frontend
+    external: true
   app:
     name: app
     external: true
