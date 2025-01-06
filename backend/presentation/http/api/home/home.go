@@ -2,6 +2,7 @@ package home
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 
 	"github.com/khanzadimahdi/testproject/application/home"
@@ -22,6 +23,7 @@ func (h *homeHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 	switch {
 	case err != nil:
+		log.Println(err)
 		rw.WriteHeader(http.StatusInternalServerError)
 	default:
 		rw.Header().Add("Content-Type", "application/json")
