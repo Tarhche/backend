@@ -91,7 +91,7 @@ jobs:
       - name: Deploy services
         run: |
           # Setup ssh key
-          echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/ec2-key.pem
+          echo '${{ secrets.EC2_SSH_PRIVATE_KEY }}' > ~/ec2-key.pem
           chmod 400 ~/ec2-key.pem
 
           mkdir -p ~/.ssh
@@ -109,32 +109,32 @@ jobs:
 
           # Connect and deploy services
           ssh -q -i ~/ec2-key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $EC2_SSH_ENDPOINT > /dev/null 2>&1 << 'EOF'
-            export MONGO_USERNAME="${{ secrets.MONGO_USERNAME }}"
-            export MONGO_PASSWORD="${{ secrets.MONGO_PASSWORD }}"
+            export MONGO_USERNAME='${{ secrets.MONGO_USERNAME }}'
+            export MONGO_PASSWORD='${{ secrets.MONGO_PASSWORD }}'
 
-            export BACKEND_NATS_URL="${{ secrets.BACKEND_NATS_URL }}"
-            export BACKEND_PRIVATE_KEY="${{ secrets.BACKEND_PRIVATE_KEY }}"
+            export BACKEND_NATS_URL='${{ secrets.BACKEND_NATS_URL }}'
+            export BACKEND_PRIVATE_KEY='${{ secrets.BACKEND_PRIVATE_KEY }}'
 
-            export BACKEND_MONGO_HOST="mongodb"
-            export BACKEND_MONGO_PORT="27017"
-            export BACKEND_MONGO_SCHEME="mongodb"
-            export BACKEND_MONGO_DATABASE_NAME="${{ secrets.BACKEND_MONGO_DATABASE_NAME }}"
-            export BACKEND_MONGO_USERNAME="${{ secrets.MONGO_USERNAME }}"
-            export BACKEND_MONGO_PASSWORD="${{ secrets.MONGO_PASSWORD }}"
+            export BACKEND_MONGO_HOST='mongodb'
+            export BACKEND_MONGO_PORT='27017'
+            export BACKEND_MONGO_SCHEME='mongodb'
+            export BACKEND_MONGO_DATABASE_NAME='${{ secrets.BACKEND_MONGO_DATABASE_NAME }}'
+            export BACKEND_MONGO_USERNAME='${{ secrets.MONGO_USERNAME }}'
+            export BACKEND_MONGO_PASSWORD='${{ secrets.MONGO_PASSWORD }}'
 
-            export BACKEND_MAIL_SMTP_PASSWORD="${{ secrets.BACKEND_MAIL_SMTP_PASSWORD }}"
-            export BACKEND_MAIL_SMTP_HOST="${{ secrets.BACKEND_MAIL_SMTP_HOST }}"
-            export BACKEND_MAIL_SMTP_FROM="${{ secrets.BACKEND_MAIL_SMTP_FROM }}"
-            export BACKEND_MAIL_SMTP_USERNAME="${{ secrets.BACKEND_MAIL_SMTP_USERNAME }}"
-            export BACKEND_MAIL_SMTP_PORT="${{ secrets.BACKEND_MAIL_SMTP_PORT }}"
+            export BACKEND_MAIL_SMTP_PASSWORD='${{ secrets.BACKEND_MAIL_SMTP_PASSWORD }}'
+            export BACKEND_MAIL_SMTP_HOST='${{ secrets.BACKEND_MAIL_SMTP_HOST }}'
+            export BACKEND_MAIL_SMTP_FROM='${{ secrets.BACKEND_MAIL_SMTP_FROM }}'
+            export BACKEND_MAIL_SMTP_USERNAME='${{ secrets.BACKEND_MAIL_SMTP_USERNAME }}'
+            export BACKEND_MAIL_SMTP_PORT='${{ secrets.BACKEND_MAIL_SMTP_PORT }}'
 
-            export BACKEND_S3_ENDPOINT="${{ secrets.BACKEND_S3_ENDPOINT }}"
-            export BACKEND_S3_SECRET_KEY="${{ secrets.BACKEND_S3_SECRET_KEY }}"
-            export BACKEND_S3_ACCESS_KEY="${{ secrets.BACKEND_S3_ACCESS_KEY }}"
-            export BACKEND_S3_USE_SSL="${{ secrets.BACKEND_S3_USE_SSL }}"
-            export BACKEND_S3_BUCKET_NAME="${{ secrets.BACKEND_S3_BUCKET_NAME }}"
+            export BACKEND_S3_ENDPOINT='${{ secrets.BACKEND_S3_ENDPOINT }}'
+            export BACKEND_S3_SECRET_KEY='${{ secrets.BACKEND_S3_SECRET_KEY }}'
+            export BACKEND_S3_ACCESS_KEY='${{ secrets.BACKEND_S3_ACCESS_KEY }}'
+            export BACKEND_S3_USE_SSL='${{ secrets.BACKEND_S3_USE_SSL }}'
+            export BACKEND_S3_BUCKET_NAME='${{ secrets.BACKEND_S3_BUCKET_NAME }}'
 
-            export APP_IMAGE="${{ secrets.APP_IMAGE }}"
+            export APP_IMAGE='${{ secrets.APP_IMAGE }}'
 
             # Run Docker Compose
             cd /tmp/deployment_backend/

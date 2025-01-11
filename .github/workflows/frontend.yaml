@@ -21,6 +21,10 @@ env:
   EC2_SSH_ADDRESS: ${{ secrets.EC2_SSH_ADDRESS }}
   EC2_SSH_ENDPOINT: ${{ secrets.EC2_SSH_USER }}@${{ secrets.EC2_SSH_ADDRESS }}
 
+  INTERNAL_BACKEND_BASE_URL: ${{ secrets.INTERNAL_BACKEND_BASE_URL }}
+  NEXT_PUBLIC_FILES_PROTOCOL: https
+  NEXT_PUBLIC_FILES_HOST: ${{ secrets.NEXT_PUBLIC_FILES_HOST }}
+
 jobs:
   ci:
     runs-on: ubuntu-latest
@@ -82,7 +86,7 @@ jobs:
       - name: Deploy services
         run: |
           # Setup ssh key
-          echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/ec2-key.pem
+          echo '${{ secrets.EC2_SSH_PRIVATE_KEY }}' > ~/ec2-key.pem
           chmod 400 ~/ec2-key.pem
 
           mkdir -p ~/.ssh
@@ -99,10 +103,10 @@ jobs:
 
           # Connect and deploy services
           ssh -q -i ~/ec2-key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $EC2_SSH_ENDPOINT > /dev/null 2>&1 << 'EOF'
-            export FRONTEND_IMAGE="${{ secrets.FRONTEND_IMAGE }}"
-            export NEXT_PUBLIC_EXTERNAL_BACKEND_BASE_URL="${{ secrets.NEXT_PUBLIC_EXTERNAL_BACKEND_BASE_URL }}"
-            export INTERNAL_BACKEND_BASE_URL="${{ secrets.INTERNAL_BACKEND_BASE_URL }}"
-            export NEXT_PUBLIC_FILES_BASE_URL="${{ secrets.NEXT_PUBLIC_FILES_BASE_URL }}"
+            export FRONTEND_IMAGE='${{ secrets.FRONTEND_IMAGE }}'
+            export INTERNAL_BACKEND_BASE_URL='${{ env.INTERNAL_BACKEND_BASE_URL }}'
+            export NEXT_PUBLIC_FILES_PROTOCOL='${{ env.NEXT_PUBLIC_FILES_PROTOCOL }}'
+            export NEXT_PUBLIC_FILES_HOST='${{ env.NEXT_PUBLIC_FILES_HOST }}'
 
             # Run Docker Compose
             cd /tmp/deployment_frontend/

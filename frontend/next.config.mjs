@@ -8,7 +8,6 @@ const nextConfig = {
       {
         protocol: process.env.NEXT_PUBLIC_FILES_PROTOCOL,
         hostname: process.env.NEXT_PUBLIC_FILES_HOST,
-        port: process.env.NEXT_PUBLIC_FILES_PORT,
       },
     ],
   },
