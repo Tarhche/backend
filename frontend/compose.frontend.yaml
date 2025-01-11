@@ -12,6 +12,10 @@ services:
         condition: on-failure
         delay: 5s
         max_attempts: 3
+      resources:
+        limits:
+          cpus: '0.20'
+          memory: 150M
     environment:
       INTERNAL_BACKEND_BASE_URL: ${INTERNAL_BACKEND_BASE_URL}
       NEXT_PUBLIC_FILES_PROTOCOL: ${NEXT_PUBLIC_FILES_PROTOCOL}

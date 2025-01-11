@@ -8,12 +8,16 @@ services:
       - docker
     deploy:
       mode: replicated
-      replicas: 1
+      replicas: 2
       endpoint_mode: vip
       restart_policy:
         condition: on-failure
         delay: 5s
         max_attempts: 3
+      resources:
+        limits:
+          cpus: '0.20'
+          memory: 150M
     environment:
       PRIVATE_KEY: ${BACKEND_PRIVATE_KEY}
       S3_ENDPOINT: ${BACKEND_S3_ENDPOINT}
