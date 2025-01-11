@@ -62,12 +62,13 @@ func (r *FilesRepository) GetAll(offset uint, limit uint) ([]file.File, error) {
 			return nil, err
 		}
 		items = append(items, file.File{
-			UUID:      a.UUID,
-			Name:      a.Name,
-			Size:      a.Size,
-			OwnerUUID: a.OwnerUUID,
-			MimeType:  a.MimeType,
-			CreatedAt: a.CreatedAt,
+			UUID:       a.UUID,
+			Name:       a.Name,
+			StoredName: a.StoredName,
+			Size:       a.Size,
+			OwnerUUID:  a.OwnerUUID,
+			MimeType:   a.MimeType,
+			CreatedAt:  a.CreatedAt,
 		})
 	}
 
@@ -91,12 +92,13 @@ func (r *FilesRepository) GetOne(UUID string) (file.File, error) {
 	}
 
 	return file.File{
-		UUID:      a.UUID,
-		Name:      a.Name,
-		Size:      a.Size,
-		OwnerUUID: a.OwnerUUID,
-		MimeType:  a.MimeType,
-		CreatedAt: a.CreatedAt,
+		UUID:       a.UUID,
+		Name:       a.Name,
+		StoredName: a.StoredName,
+		Size:       a.Size,
+		OwnerUUID:  a.OwnerUUID,
+		MimeType:   a.MimeType,
+		CreatedAt:  a.CreatedAt,
 	}, nil
 }
 
@@ -113,12 +115,13 @@ func (r *FilesRepository) Save(a *file.File) (string, error) {
 	}
 
 	update := FileBson{
-		UUID:      a.UUID,
-		Name:      a.Name,
-		Size:      a.Size,
-		OwnerUUID: a.OwnerUUID,
-		MimeType:  a.MimeType,
-		CreatedAt: time.Now(),
+		UUID:       a.UUID,
+		Name:       a.Name,
+		StoredName: a.StoredName,
+		Size:       a.Size,
+		OwnerUUID:  a.OwnerUUID,
+		MimeType:   a.MimeType,
+		CreatedAt:  time.Now(),
 	}
 
 	upsert := true
@@ -187,12 +190,13 @@ func (r *FilesRepository) GetAllByOwnerUUID(ownerUUID string, offset uint, limit
 			return nil, err
 		}
 		items = append(items, file.File{
-			UUID:      a.UUID,
-			Name:      a.Name,
-			Size:      a.Size,
-			OwnerUUID: a.OwnerUUID,
-			MimeType:  a.MimeType,
-			CreatedAt: a.CreatedAt,
+			UUID:       a.UUID,
+			Name:       a.Name,
+			StoredName: a.StoredName,
+			Size:       a.Size,
+			OwnerUUID:  a.OwnerUUID,
+			MimeType:   a.MimeType,
+			CreatedAt:  a.CreatedAt,
 		})
 	}
 
@@ -221,12 +225,13 @@ func (r *FilesRepository) GetOneByOwnerUUID(ownerUUID string, UUID string) (file
 	}
 
 	return file.File{
-		UUID:      a.UUID,
-		Name:      a.Name,
-		Size:      a.Size,
-		OwnerUUID: a.OwnerUUID,
-		MimeType:  a.MimeType,
-		CreatedAt: a.CreatedAt,
+		UUID:       a.UUID,
+		Name:       a.Name,
+		StoredName: a.StoredName,
+		Size:       a.Size,
+		OwnerUUID:  a.OwnerUUID,
+		MimeType:   a.MimeType,
+		CreatedAt:  a.CreatedAt,
 	}, nil
 }
 

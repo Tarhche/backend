@@ -7,12 +7,13 @@ import (
 )
 
 type File struct {
-	UUID      string
-	Name      string
-	Size      int64
-	OwnerUUID string
-	MimeType  string
-	CreatedAt time.Time
+	UUID       string
+	Name       string
+	StoredName string
+	Size       int64
+	OwnerUUID  string
+	MimeType   string
+	CreatedAt  time.Time
 }
 
 type Repository interface {

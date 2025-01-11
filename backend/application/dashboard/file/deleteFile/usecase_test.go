@@ -23,8 +23,9 @@ func TestUseCase_Execute(t *testing.T) {
 			r = Request{FileUUID: "file-uuid"}
 
 			f = file.File{
-				UUID: r.FileUUID,
-				Name: "file-name",
+				UUID:       r.FileUUID,
+				Name:       "file-name",
+				StoredName: "store-name",
 			}
 		)
 
@@ -32,7 +33,7 @@ func TestUseCase_Execute(t *testing.T) {
 		filesRepository.On("Delete", r.FileUUID).Return(nil)
 		defer filesRepository.AssertExpectations(t)
 
-		storage.On("Delete", context.Background(), f.Name).Once().Return(nil)
+		storage.On("Delete", context.Background(), f.StoredName).Once().Return(nil)
 		defer storage.AssertExpectations(t)
 
 		err := NewUseCase(&filesRepository, &storage).Execute(r)
@@ -73,8 +74,9 @@ func TestUseCase_Execute(t *testing.T) {
 			r = Request{FileUUID: "file-uuid"}
 
 			f = file.File{
-				UUID: r.FileUUID,
-				Name: "file-name",
+				UUID:       r.FileUUID,
+				Name:       "file-name",
+				StoredName: "store-name",
 			}
 
 			expectedErr = errors.New("error")
@@ -83,7 +85,7 @@ func TestUseCase_Execute(t *testing.T) {
 		filesRepository.On("GetOne", r.FileUUID).Once().Return(f, nil)
 		defer filesRepository.AssertExpectations(t)
 
-		storage.On("Delete", context.Background(), f.Name).Once().Return(expectedErr)
+		storage.On("Delete", context.Background(), f.StoredName).Once().Return(expectedErr)
 		defer storage.AssertExpectations(t)
 
 		err := NewUseCase(&filesRepository, &storage).Execute(r)
@@ -103,8 +105,9 @@ func TestUseCase_Execute(t *testing.T) {
 			r = Request{FileUUID: "file-uuid"}
 
 			f = file.File{
-				UUID: r.FileUUID,
-				Name: "file-name",
+				UUID:       r.FileUUID,
+				Name:       "file-name",
+				StoredName: "store-name",
 			}
 
 			expectedErr = errors.New("error")
@@ -114,7 +117,7 @@ func TestUseCase_Execute(t *testing.T) {
 		filesRepository.On("Delete", r.FileUUID).Return(expectedErr)
 		defer filesRepository.AssertExpectations(t)
 
-		storage.On("Delete", context.Background(), f.Name).Once().Return(nil)
+		storage.On("Delete", context.Background(), f.StoredName).Once().Return(nil)
 		defer storage.AssertExpectations(t)
 
 		err := NewUseCase(&filesRepository, &storage).Execute(r)

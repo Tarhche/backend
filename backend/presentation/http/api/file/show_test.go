@@ -31,8 +31,9 @@ func TestShowHandler(t *testing.T) {
 		)
 
 		f := file.File{
-			UUID: "file-test-uuid",
-			Name: "file-test-name",
+			UUID:       "file-test-uuid",
+			Name:       "file-test-name",
+			StoredName: "stored-file-name",
 		}
 
 		fileData := []byte("this is the file payload")
@@ -41,7 +42,7 @@ func TestShowHandler(t *testing.T) {
 		filesRepository.On("GetOne", f.UUID).Once().Return(f, nil)
 		defer filesRepository.AssertExpectations(t)
 
-		storage.On("Read", context.Background(), f.UUID).Once().Return(reader, nil)
+		storage.On("Read", context.Background(), f.StoredName).Once().Return(reader, nil)
 		defer storage.AssertExpectations(t)
 
 		useCase := getfile.NewUseCase(&filesRepository, &storage)
@@ -98,8 +99,9 @@ func TestShowHandler(t *testing.T) {
 		)
 
 		file := file.File{
-			UUID: "file-test-uuid",
-			Name: "file-test-name",
+			UUID:       "file-test-uuid",
+			Name:       "file-test-name",
+			StoredName: "stored-file-name",
 		}
 
 		fileData := "this is the file payload"
@@ -108,7 +110,7 @@ func TestShowHandler(t *testing.T) {
 		filesRepository.On("GetOne", file.UUID).Once().Return(file, nil)
 		defer filesRepository.AssertExpectations(t)
 
-		storage.On("Read", context.Background(), file.UUID).Once().Return(reader, errors.New("some error"))
+		storage.On("Read", context.Background(), file.StoredName).Once().Return(reader, errors.New("some error"))
 		defer storage.AssertExpectations(t)
 
 		useCase := getfile.NewUseCase(&filesRepository, &storage)

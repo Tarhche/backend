@@ -32,19 +32,23 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		}, nil
 	}
 
-	uuid, err := uc.filesRepository.Save(&file.File{
-		Name:      request.Name,
-		Size:      request.Size,
-		OwnerUUID: request.OwnerUUID,
-		MimeType:  request.MimeType,
-	})
+	storedName, err := request.StoredName()
 	if err != nil {
 		return nil, err
 	}
 
-	if err := uc.storage.Store(context.Background(), uuid, request.FileReader, request.Size); err != nil {
-		_ = uc.filesRepository.Delete(uuid)
+	if err := uc.storage.Store(context.Background(), storedName, request.FileReader, request.Size); err != nil {
+		return nil, err
+	}
 
+	uuid, err := uc.filesRepository.Save(&file.File{
+		Name:       request.Name,
+		StoredName: storedName,
+		Size:       request.Size,
+		OwnerUUID:  request.OwnerUUID,
+		MimeType:   request.MimeType,
+	})
+	if err != nil {
 		return nil, err
 	}
 

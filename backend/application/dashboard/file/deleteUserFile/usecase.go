@@ -24,7 +24,7 @@ func (uc *UseCase) Execute(request Request) error {
 		return err
 	}
 
-	if err := uc.storage.Delete(context.Background(), file.Name); err != nil {
+	if err := uc.storage.Delete(context.Background(), file.StoredName); err != nil {
 		return err
 	}
 
