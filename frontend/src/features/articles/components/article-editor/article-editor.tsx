@@ -1,37 +1,43 @@
-import {forwardRef} from "react";
-import {useComputedColorScheme} from "@mantine/core";
-import RichTextEditor, {Editor} from "reactjs-tiptap-editor";
-import {extensions} from "./extensions";
-import "katex/dist/katex.min.css";
-import "reactjs-tiptap-editor/style.css";
-
-export type Ref = {
-  editor: Editor;
-};
+"use client";
+import {useRef, useMemo} from "react";
+import {CKEditor} from "@ckeditor/ckeditor5-react";
+import {ClassicEditor, EditorConfig} from "ckeditor5";
+import {editorConfig} from "./editor-config";
+import "ckeditor5/ckeditor5.css";
+import "./article-editor.css";
 
 type Props = {
-  initialContent?: string;
+  initialData?: string;
 };
 
-export const ArticleEditor = forwardRef<Ref, Props>((props, ref) => {
-  const {initialContent = ""} = props;
-  const theme = useComputedColorScheme();
+export function ArticleEditor({initialData}: Props) {
+  const editorContainerRef = useRef<any>(null);
+  const editorRef = useRef<any>(null);
+  const editorWordCountRef = useRef<any>(null);
+
+  const config: EditorConfig = useMemo(() => {
+    return {
+      ...editorConfig,
+      initialData: initialData || "",
+    };
+  }, [initialData]);
 
   return (
-    <div dir="ltr">
-      <RichTextEditor
-        ref={ref}
-        output="html"
-        content={initialContent}
-        extensions={extensions}
-        useEditorOptions={{
-          immediatelyRender: false,
-          shouldRerenderOnTransaction: false,
-        }}
-        dark={theme === "dark"}
-      />
+    <div className="main-container">
+      <div
+        className="editor-container editor-container_classic-editor editor-container_include-style editor-container_include-block-toolbar editor-container_include-word-count"
+        ref={editorContainerRef}
+      >
+        <div className="editor-container__editor">
+          <div ref={editorRef}>
+            {config && <CKEditor editor={ClassicEditor} config={config} />}
+          </div>
+        </div>
+        <div
+          className="editor_container__word-count"
+          ref={editorWordCountRef}
+        ></div>
+      </div>
     </div>
   );
-});
-
-ArticleEditor.displayName = "ArticleRichTextEditor";
+}
