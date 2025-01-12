@@ -1,8 +1,7 @@
 name: Frontend CI and CD
+
 on:
   push:
-    branches:
-      - main
     paths:
       - .github/**
       - frontend/**
@@ -11,9 +10,20 @@ on:
       - .github/**
       - frontend/**
 
+defaults:
+  run:
+    working-directory: ./frontend
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: frontend
+
+  EC2_SSH_ADDRESS: ${{ secrets.EC2_SSH_ADDRESS }}
+  EC2_SSH_ENDPOINT: ${{ secrets.EC2_SSH_USER }}@${{ secrets.EC2_SSH_ADDRESS }}
+
+  INTERNAL_BACKEND_BASE_URL: ${{ secrets.INTERNAL_BACKEND_BASE_URL }}
+  NEXT_PUBLIC_FILES_PROTOCOL: https
+  NEXT_PUBLIC_FILES_HOST: ${{ secrets.NEXT_PUBLIC_FILES_HOST }}
 
 jobs:
   ci:
@@ -23,26 +33,20 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v3
-        with:
-          node-version: "18"
-
-      - name: Provide image name and version
-        run: |
-          IMAGE_ID=$(echo $REGISTRY/${{ github.repository_owner }}/$IMAGE_NAME | tr '[A-Z]' '[a-z]')
-          IMAGE_VERSION=${{ github.sha }}
-          echo "IMAGE_ID=$IMAGE_ID" >> "$GITHUB_ENV"
-          echo "IMAGE_VERSION=$IMAGE_VERSION" >> "$GITHUB_ENV"
-
       - name: Build image
-        run: |
-          cd ./frontend && docker build . --file Dockerfile --target production --tag $IMAGE_ID:$IMAGE_VERSION --tag $IMAGE_ID:latest
+        uses: ./.github/actions/docker-build
+        with:
+          context: ./frontend
+          dockerfile: ./frontend/Dockerfile
+          image-name: ${{ env.IMAGE_NAME }}
+          target: production
+          push: false
+          container-registry: ${{ env.REGISTRY }}
 
-  cd:
+  build-and-push-images:
     runs-on: ubuntu-latest
 
-    # This job will be invoked only on default branch
-    if: ${{ always() && format('refs/heads/{0}', github.event.repository.default_branch) == github.ref }}
+    if: ${{ format('refs/heads/{0}', github.event.repository.default_branch) == github.ref }}
 
     permissions:
       packages: write
@@ -55,33 +59,59 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Provide image name and version
-        run: |
-          IMAGE_ID=$(echo $REGISTRY/${{ github.repository_owner }}/$IMAGE_NAME | tr '[A-Z]' '[a-z]')
-          IMAGE_VERSION=${{ github.sha }}
-          echo "IMAGE_ID=$IMAGE_ID" >> "$GITHUB_ENV"
-          echo "IMAGE_VERSION=$IMAGE_VERSION" >> "$GITHUB_ENV"
-
-      - name: Build image
-        run: |
-          cd ./frontend && docker build . --file Dockerfile --target production --tag $IMAGE_ID:$IMAGE_VERSION --tag $IMAGE_ID:latest
-
-      - name: Log in to registry
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-
-      - name: Push image
-        run: |
-          docker push $IMAGE_ID:$IMAGE_VERSION
-          docker push $IMAGE_ID:latest
-
-      - uses: actions/setup-node@v3
+      - name: Build and push image
+        uses: ./.github/actions/docker-build
         with:
-          node-version: "18"
+          context: ./frontend
+          dockerfile: ./frontend/Dockerfile
+          image-name: ${{ env.IMAGE_NAME }}
+          target: production
+          push: true
+          container-registry: ${{ env.REGISTRY }}
+          container-registry-username: ${{ github.actor }}
+          container-registry-password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: deploy to production
-        env:
-          LIARA_TOKEN: ${{ secrets.LIARA_API_TOKEN }}
-          LIARA_FRONTEND_APP_NAME: ${{secrets.LIARA_FRONTEND_APP_NAME}}
+  deploy:
+    runs-on: ubuntu-latest
+
+    if: ${{ format('refs/heads/{0}', github.event.repository.default_branch) == github.ref }}
+
+    needs:
+      - build-and-push-images
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy services
         run: |
-          npm i -g @liara/cli@7
-          liara deploy --image $IMAGE_ID:$IMAGE_VERSION --platform=docker --port="3000" --app="$LIARA_FRONTEND_APP_NAME" --api-token="$LIARA_TOKEN" --detach
+          # Setup ssh key
+          echo '${{ secrets.EC2_SSH_PRIVATE_KEY }}' > ~/ec2-key.pem
+          chmod 400 ~/ec2-key.pem
+
+          mkdir -p ~/.ssh
+          ssh-keyscan -H $EC2_SSH_ADDRESS >> ~/.ssh/known_hosts
+
+          # Ensure remote directory exists
+          ssh -q -i ~/ec2-key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $EC2_SSH_ENDPOINT > /dev/null 2>&1 << 'EOF'
+            sudo mkdir -p /tmp/deployment_frontend
+            sudo chown ${{ secrets.EC2_SSH_USER }}:${{ secrets.EC2_SSH_USER }} /tmp/deployment_frontend
+          EOF
+
+          # Copy files
+          scp -q -i ~/ec2-key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -r ./compose.frontend.yaml $EC2_SSH_ENDPOINT:/tmp/deployment_frontend/ > /dev/null 2>&1
+
+          # Connect and deploy services
+          ssh -q -i ~/ec2-key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $EC2_SSH_ENDPOINT > /dev/null 2>&1 << 'EOF'
+            export FRONTEND_IMAGE='${{ secrets.FRONTEND_IMAGE }}'
+            export INTERNAL_BACKEND_BASE_URL='${{ env.INTERNAL_BACKEND_BASE_URL }}'
+            export NEXT_PUBLIC_FILES_PROTOCOL='${{ env.NEXT_PUBLIC_FILES_PROTOCOL }}'
+            export NEXT_PUBLIC_FILES_HOST='${{ env.NEXT_PUBLIC_FILES_HOST }}'
+
+            # Run Docker Compose
+            cd /tmp/deployment_frontend/
+
+            docker compose -f compose.frontend.yaml --project-name frontend up --pull always --detach
+
+            sudo rm -rf /tmp/deployment_frontend
+          EOF

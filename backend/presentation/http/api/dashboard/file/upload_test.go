@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -46,13 +47,6 @@ func TestUploadHandler(t *testing.T) {
 			}
 
 			fileUUID = "test-file-uuid"
-
-			f = file.File{
-				Name:      r.Name,
-				Size:      r.Size,
-				OwnerUUID: u.UUID,
-				MimeType:  "application/octet-stream",
-			}
 		)
 
 		var payload bytes.Buffer
@@ -70,10 +64,14 @@ func TestUploadHandler(t *testing.T) {
 		requestValidator.On("Validate", mock.Anything).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
-		storage.On("Store", context.Background(), r.Name, mock.Anything, r.Size).Once().Return(nil)
+		storage.On("Store", context.Background(), mock.Anything, mock.Anything, r.Size).Once().Return(nil)
 		defer storage.AssertExpectations(t)
 
-		filesRepository.On("Save", &f).Once().Return(fileUUID, nil)
+		matchingFile := mock.MatchedBy(func(f *file.File) bool {
+			return f.Name == r.Name && f.Size == r.Size && f.OwnerUUID == u.UUID && f.MimeType == "application/octet-stream" && filepath.Ext(f.Name) == filepath.Ext(f.StoredName)
+		})
+
+		filesRepository.On("Save", matchingFile).Once().Return(fileUUID, nil)
 		defer filesRepository.AssertExpectations(t)
 
 		handler := NewUploadHandler(createfile.NewUseCase(&filesRepository, &storage, &requestValidator), &authorizer)
@@ -84,6 +82,8 @@ func TestUploadHandler(t *testing.T) {
 		response := httptest.NewRecorder()
 
 		handler.ServeHTTP(response, request)
+
+		filesRepository.AssertNotCalled(t, "Delete")
 
 		expectedBody, err := os.ReadFile("testdata/upload-files-response.json")
 		assert.NoError(t, err)

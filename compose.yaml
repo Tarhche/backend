@@ -4,6 +4,7 @@ x-app: &app
     context: ./backend
     dockerfile: Dockerfile
     target: develop
+  restart: unless-stopped
   depends_on:
     - mongodb
     - minio
@@ -36,6 +37,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       target: develop
+    restart: unless-stopped
     depends_on:
       - app
     ports:
@@ -43,9 +45,9 @@ services:
     volumes:
       - ./frontend:/opt/app
     environment:
-      NEXT_PUBLIC_EXTERNAL_BACKEND_BASE_URL: ${NEXT_PUBLIC_EXTERNAL_BACKEND_BASE_URL}
       INTERNAL_BACKEND_BASE_URL: ${INTERNAL_BACKEND_BASE_URL}
-      NEXT_PUBLIC_FILES_BASE_URL: ${NEXT_PUBLIC_FILES_BASE_URL}
+      NEXT_PUBLIC_FILES_PROTOCOL: ${NEXT_PUBLIC_FILES_PROTOCOL}
+      NEXT_PUBLIC_FILES_HOST: ${NEXT_PUBLIC_FILES_HOST}
     command: >
       sh -c "npm install; npm run dev -- --hostname \"0.0.0.0\" --port 3000"
 
@@ -56,8 +58,6 @@ services:
 
   runner:
     <<: *app
-    volumes:
-      - podman-data:/tmp
     ports:
       - "8001:80"
     command: >
@@ -65,15 +65,19 @@ services:
 
   mongodb:
     image: mongo
-    restart: always
+    restart: unless-stopped
     ports:
       - "27017:27017"
+    volumes:
+      - ./tmp/mongodb/db:/data/db
+      - ./tmp/mongodb/configdb:/data/configdb
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_USERNAME}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
 
   mongodashboard:
     image: mongo-express
+    restart: unless-stopped
     depends_on:
       - mongodb
     ports:
@@ -85,8 +89,9 @@ services:
 
   minio:
     image: minio/minio
+    restart: unless-stopped
     ports:
-      - "9000:9000"
+      - "9100:9000"
       - "9001:9001"
     environment:
       MINIO_ROOT_USER: ${S3_ACCESS_KEY}
@@ -104,28 +109,38 @@ services:
 
   nats:
     image: nats:2.10
-    command: ["--jetstream", "-m", "8222", "-p", "4222"] # --config /etc/nats/nats-server.conf
+    command: ["--jetstream", "--http_port", "8222", "--port", "4222", "--store_dir", "/data"]
     ports:
       - "4222:4222" # client port
       - "6222:6222" # cluster post
       - "8222:8222" # HTTP monitoring port
+    volumes:
+      - ./tmp/nats:/data
 
   natsdashboard:
     image: mdawar/nats-dashboard
     ports:
       - "8082:80"
 
-  podman:
-    image: quay.io/podman/stable
-    volumes:
-      - podman-data:/tmp
-    security_opt:
-      - label=disable
-    devices:
-      - /dev/fuse
-    user: podman
-    command: >
-      podman system service --time=0 unix:///tmp/podman.sock
+  docker:
+    image: docker:27-dind
+    restart: unless-stopped
+    privileged: true
+    ports:
+      - "2375:2375"
+    environment:
+      DOCKER_TLS_CERTDIR: "" # disable certs
 
-volumes:
-  podman-data:
+  portainer:
+    image: portainer/portainer-ce
+    restart: unless-stopped
+    depends_on:
+      - docker
+    ports:
+      - "9200:9000"
+      - "9443:9443"
+    command: >
+      --admin-password="$$2a$$12$$4xcOa82Ni5rjgQF.v.JWi.i71OyUm3fwmfWiumgJHIAPGU.uOw3qu"
+    # username: admin
+    # password: admin-password
+    # standalone docker API url: docker:2375

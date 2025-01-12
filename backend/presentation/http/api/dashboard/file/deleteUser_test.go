@@ -38,8 +38,9 @@ func TestDeleteUserHandler(t *testing.T) {
 			}
 
 			f = file.File{
-				UUID: r.FileUUID,
-				Name: "file-name",
+				UUID:       r.FileUUID,
+				Name:       "file-name",
+				StoredName: "stored-name",
 			}
 		)
 
@@ -50,7 +51,7 @@ func TestDeleteUserHandler(t *testing.T) {
 		filesRepository.On("DeleteByOwnerUUID", r.OwnerUUID, r.FileUUID).Return(nil)
 		defer filesRepository.AssertExpectations(t)
 
-		storage.On("Delete", context.Background(), f.Name).Once().Return(nil)
+		storage.On("Delete", context.Background(), f.StoredName).Once().Return(nil)
 		defer storage.AssertExpectations(t)
 
 		handler := NewDeleteUserHandler(deleteuserfile.NewUseCase(&filesRepository, &storage), &authorizer)

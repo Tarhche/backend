@@ -1,0 +1,74 @@
+name: 'Docker Build Action'
+description: 'Builds a Docker image using a specified Dockerfile and context'
+
+inputs:
+  context:
+    description: 'The Docker build context (path to the directory containing the Dockerfile)'
+    required: true
+    default: '.'
+  dockerfile:
+    description: 'The path to the Dockerfile (relative to the context)'
+    required: true
+    default: 'Dockerfile'
+  target:
+    description: 'The build target'
+    required: false
+  image-name:
+    description: 'The name of the image to build'
+    required: true
+  push:
+    description: 'Determines if the built image should be pushed'
+    required: true
+    default: 'no'
+  container-registry:
+    description: 'container registry address (example: ghcr.io)'
+    required: false
+  container-registry-username:
+    description: 'container registry username'
+    required: false
+  container-registry-password:
+    description: 'container registry password'
+    required: false
+
+runs:
+  using: 'composite'
+
+  steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Login to GitHub Container Registry
+      uses: docker/login-action@v3
+      if: ${{ inputs.push == 'true' }}
+      with:
+        logout: false
+        registry: ${{ inputs.container-registry }}
+        username: ${{ inputs.container-registry-username }}
+        password: ${{ inputs.container-registry-password }}
+
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Extract metadata (tags, labels) for Docker image
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: |
+          ${{ inputs.container-registry }}/${{ github.repository_owner }}/${{ inputs.image-name }}
+        tags: |
+          type=raw,value=latest,priority=200,enable={{is_default_branch}}
+          type=sha,enable=true,priority=100,prefix=,suffix=,format=short
+
+    - name: Build image and push (optional)
+      uses: docker/build-push-action@v6
+      with:
+        platforms: linux/amd64,linux/arm64
+        push: ${{ inputs.push == 'true' }}
+        context: ${{ inputs.context }}
+        file: ${{ inputs.dockerfile }}
+        target: ${{ inputs.target }}
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}

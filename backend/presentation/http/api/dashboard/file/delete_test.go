@@ -35,8 +35,9 @@ func TestDeleteHandler(t *testing.T) {
 			r = deletefile.Request{FileUUID: "file-uuid"}
 
 			f = file.File{
-				UUID: r.FileUUID,
-				Name: "file-name",
+				UUID:       r.FileUUID,
+				Name:       "file-name",
+				StoredName: "stored-name",
 			}
 		)
 
@@ -47,7 +48,7 @@ func TestDeleteHandler(t *testing.T) {
 		filesRepository.On("Delete", r.FileUUID).Return(nil)
 		defer filesRepository.AssertExpectations(t)
 
-		storage.On("Delete", context.Background(), f.Name).Once().Return(nil)
+		storage.On("Delete", context.Background(), f.StoredName).Once().Return(nil)
 		defer storage.AssertExpectations(t)
 
 		handler := NewDeleteHandler(deletefile.NewUseCase(&filesRepository, &storage), &authorizer)

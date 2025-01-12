@@ -284,3 +284,8 @@
 
   --ck-color-link-default: hsl(190, 100%, 75%);
 }
+
+:root[data-mantine-color-scheme="dark"] .ck-content pre {
+  color: var(--mantine-color-text);
+  background-color: var(--mantine-color-dark-6);
+}

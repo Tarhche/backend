@@ -377,4 +377,13 @@ export const editorConfig: EditorConfig = {
       "tableCellProperties",
     ],
   },
+  codeBlock: {
+    languages: [
+      {language: "plaintext", label: "Plain text"},
+      {language: "javascript", label: "JavaScript"},
+      {language: "python", label: "Python"},
+      {language: "go", label: "Golang"},
+      {language: "bash", label: "bash"},
+    ],
+  },
 };
