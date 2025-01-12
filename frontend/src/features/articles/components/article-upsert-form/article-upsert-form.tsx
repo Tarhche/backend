@@ -1,5 +1,5 @@
 "use client";
-import {useRef} from "react";
+import dynamic from "next/dynamic";
 import {useFormState} from "react-dom";
 import {
   Box,
@@ -9,17 +9,25 @@ import {
   TextInput,
   InputLabel,
   TagsInput,
+  Skeleton,
 } from "@mantine/core";
 import {DateTimeInput} from "@/components/date-time-input";
 import {FormButton} from "@/components/form-button";
-import {
-  ArticleEditor,
-  type Ref,
-} from "@/features/articles/components/article-editor";
 import {FileInput} from "./file-input";
 import {IconPhotoPlus, IconMovie} from "@tabler/icons-react";
 import {upsertArticleAction} from "../../actions/upsert-article";
 import {isGregorianStartDateTime} from "@/lib/date-and-time";
+
+const ArticleEditor = dynamic(
+  async () => {
+    const mod = await import("@/features/articles/components/article-editor");
+    return mod.ArticleEditor;
+  },
+  {
+    ssr: false,
+    loading: () => <Skeleton w={"100%"} h={150} />,
+  },
+);
 
 type Props = {
   article?: {
@@ -35,7 +43,6 @@ type Props = {
 };
 
 export function ArticleUpsertForm({article}: Props) {
-  const editorRef = useRef<Ref>(null);
   const [state, dispatch] = useFormState(upsertArticleAction, {
     success: true,
   });
@@ -46,7 +53,7 @@ export function ArticleUpsertForm({article}: Props) {
     : null;
 
   const handleSubmit = async (formData: FormData) => {
-    formData.set("body", editorRef.current?.editor.getHTML() || "");
+    formData.set("body", "");
     if (article?.articleId) {
       formData.set("uuid", article.articleId);
     }
@@ -71,10 +78,7 @@ export function ArticleUpsertForm({article}: Props) {
         />
         <Box>
           <InputLabel>محتوا</InputLabel>
-          <ArticleEditor
-            ref={editorRef}
-            initialContent={article?.defaultBody || ""}
-          />
+          <ArticleEditor initialData={article?.defaultBody} />
         </Box>
         <FileInput
           name="cover"
