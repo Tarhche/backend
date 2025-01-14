@@ -1,5 +1,5 @@
 "use client";
-import dynamic from "next/dynamic";
+import {useRef} from "react";
 import {useFormState} from "react-dom";
 import {
   Box,
@@ -13,10 +13,12 @@ import {
 } from "@mantine/core";
 import {DateTimeInput} from "@/components/date-time-input";
 import {FormButton} from "@/components/form-button";
+import {type EditorRef} from "@/features/articles/components/article-editor";
 import {FileInput} from "./file-input";
 import {IconPhotoPlus, IconMovie} from "@tabler/icons-react";
 import {upsertArticleAction} from "../../actions/upsert-article";
 import {isGregorianStartDateTime} from "@/lib/date-and-time";
+import dynamic from "next/dynamic";
 
 const ArticleEditor = dynamic(
   async () => {
@@ -43,6 +45,7 @@ type Props = {
 };
 
 export function ArticleUpsertForm({article}: Props) {
+  const editorRef = useRef<EditorRef>(null);
   const [state, dispatch] = useFormState(upsertArticleAction, {
     success: true,
   });
@@ -53,7 +56,10 @@ export function ArticleUpsertForm({article}: Props) {
     : null;
 
   const handleSubmit = async (formData: FormData) => {
-    formData.set("body", "");
+    if (Boolean(editorRef.current?.editor?.getData) === false) {
+      throw new Error("ArticleEditor getData is undefined");
+    }
+    formData.set("body", editorRef.current?.editor?.getData() || "");
     if (article?.articleId) {
       formData.set("uuid", article.articleId);
     }
@@ -78,7 +84,10 @@ export function ArticleUpsertForm({article}: Props) {
         />
         <Box>
           <InputLabel>محتوا</InputLabel>
-          <ArticleEditor initialData={article?.defaultBody} />
+          <ArticleEditor
+            initialData={article?.defaultBody}
+            editorRef={editorRef}
+          />
         </Box>
         <FileInput
           name="cover"

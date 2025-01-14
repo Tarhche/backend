@@ -18,7 +18,7 @@
 }
 
 .ck.ck-editor__main > .ck-editor__editable {
-  background-color: var(--mantine-color-body);
+  background-color: var(--mantine-color-dark-6);
 }
 
 .editor-container_classic-editor .editor-container__editor {
@@ -182,7 +182,7 @@
 
 :root[data-mantine-color-scheme="dark"] {
   /* Helper variables to avoid duplication in the colors. */
-  --ck-custom-background: var(--mantine-color-body);
+  --ck-custom-background: var(--mantine-color-dark-6);
   --ck-custom-foreground: hsl(255, 3%, 18%);
   --ck-custom-border: var(--mantine-color-dark-4);
   --ck-color-base-border: var(--mantine-color-dark-4);
@@ -215,6 +215,7 @@
 
   --ck-color-button-save: hsl(120, 100%, 46%);
   --ck-color-button-cancel: hsl(15, 100%, 56%);
+  --ck-color-button-on-color: var(--mantine-color-blue-6);
 
   /* -- Overrides the default .ck-dropdown class colors. -------------------------------------- */
 
@@ -281,7 +282,6 @@
   --ck-color-widget-editable-focus-background: var(--ck-custom-white);
 
   /* -- Overrides the default colors used by the ckeditor5-link package. ---------------------- */
-
   --ck-color-link-default: hsl(190, 100%, 75%);
 }
 

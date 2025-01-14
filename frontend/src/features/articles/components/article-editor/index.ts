@@ -1,1 +1,1 @@
-export {ArticleEditor} from "./article-editor";
+export {ArticleEditor, type EditorRef} from "./article-editor";
