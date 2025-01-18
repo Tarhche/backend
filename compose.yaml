@@ -1,7 +1,7 @@
 # app placement
 x-app: &app
   build:
-    context: ./backend
+    context: .
     dockerfile: Dockerfile
     target: develop
   restart: unless-stopped
@@ -10,7 +10,7 @@ x-app: &app
     - minio
     - minio_configure
   volumes:
-    - ./backend:/opt/app
+    - ./:/opt/app
   environment:
     PRIVATE_KEY: ${PRIVATE_KEY}
     S3_ENDPOINT: ${S3_ENDPOINT}
@@ -33,23 +33,16 @@ x-app: &app
 
 services:
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      target: develop
+    image: ghcr.io/tarhche/frontend:latest
     restart: unless-stopped
     depends_on:
       - app
     ports:
       - "3000:3000"
-    volumes:
-      - ./frontend:/opt/app
     environment:
-      INTERNAL_BACKEND_BASE_URL: ${INTERNAL_BACKEND_BASE_URL}
-      NEXT_PUBLIC_FILES_PROTOCOL: ${NEXT_PUBLIC_FILES_PROTOCOL}
-      NEXT_PUBLIC_FILES_HOST: ${NEXT_PUBLIC_FILES_HOST}
-    command: >
-      sh -c "npm install; npm run dev -- --hostname \"0.0.0.0\" --port 3000"
+      INTERNAL_BACKEND_BASE_URL: "http://app"
+      NEXT_PUBLIC_FILES_PROTOCOL: "http"
+      NEXT_PUBLIC_FILES_HOST: "localhost:8000"
 
   app:
     <<: *app

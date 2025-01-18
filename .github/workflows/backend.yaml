@@ -2,17 +2,7 @@ name: Backend CI and CD
 
 on:
   push:
-    paths:
-      - .github/**
-      - backend/**
   pull_request:
-    paths:
-      - .github/**
-      - backend/**
-
-defaults:
-  run:
-    working-directory: ./backend
 
 env:
   REGISTRY: ghcr.io
@@ -41,8 +31,8 @@ jobs:
       - name: Build image
         uses: ./.github/actions/docker-build
         with:
-          context: ./backend
-          dockerfile: ./backend/Dockerfile
+          context: .
+          dockerfile: Dockerfile
           image-name: ${{ env.IMAGE_NAME }}
           target: production
           push: false
@@ -67,8 +57,8 @@ jobs:
       - name: Build and push image
         uses: ./.github/actions/docker-build
         with:
-          context: ./backend
-          dockerfile: ./backend/Dockerfile
+          context: .
+          dockerfile: Dockerfile
           image-name: ${{ env.IMAGE_NAME }}
           target: production
           push: true

@@ -1,7 +1,0 @@
-{
-  "Await Timeout": {
-    "prefix": "awaittimeout",
-    "body": ["await new Promise((res) => setTimeout(res, ${1:time}));"],
-    "description": "Generate a timeout promise using await",
-  },
-}
