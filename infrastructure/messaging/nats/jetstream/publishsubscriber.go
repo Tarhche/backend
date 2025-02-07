@@ -2,6 +2,7 @@ package jetstream
 
 import (
 	"context"
+	"log"
 	"sync"
 	"time"
 
@@ -104,10 +105,13 @@ func (m *publishSubscriber) consumer(ctx context.Context, subscriber *subscriber
 func (m *publishSubscriber) consume(handler domain.MessageHandler) func(msg jetstream.Msg) {
 	return func(msg jetstream.Msg) {
 		_ = msg.InProgress()
+		log.Printf("message recieved: %s\n", msg.Subject())
 		if err := handler.Handle(msg.Data()); err != nil {
 			_ = msg.Nak()
+			log.Printf("message Nak: %s | error: %s\n", msg.Subject(), err.Error())
 			return
 		}
 		_ = msg.DoubleAck(context.Background())
+		log.Printf("message Ack: %s\n", msg.Subject())
 	}
 }
