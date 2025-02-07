@@ -11,6 +11,10 @@ env:
   EC2_SSH_ADDRESS: ${{ secrets.EC2_SSH_ADDRESS }}
   EC2_SSH_ENDPOINT: ${{ secrets.EC2_SSH_USER }}@${{ secrets.EC2_SSH_ADDRESS }}
 
+concurrency:
+  group: ${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   ci:
     runs-on: ubuntu-latest
