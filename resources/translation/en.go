@@ -15,4 +15,5 @@ var english = map[string]string{
 	"identity_not_exists":               "identity (email/username) not exists",
 	"invalid_identity_or_password":      "identity (email/username) or password is wrong",
 	"one_or_more_permissions_not_exist": "one or more of permissions not exist",
+	"invalid_state_transition":          "invalid state transition",
 }

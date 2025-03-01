@@ -20,7 +20,7 @@ type Publisher interface {
 }
 
 type Subscriber interface {
-	Subscribe(ctx context.Context, id string, subject string, subscriber MessageHandler) error
+	Subscribe(ctx context.Context, consumerID string, subject string, subscriber MessageHandler) error
 }
 
 type PublishSubscriber interface {

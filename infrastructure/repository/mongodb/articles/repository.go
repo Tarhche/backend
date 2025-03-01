@@ -425,7 +425,7 @@ func (r *ArticlesRepository) Save(a *article.Article) (string, error) {
 	if _, err := r.collection.UpdateOne(
 		ctx,
 		bson.D{{Key: "_id", Value: a.UUID}},
-		SetWrapper{Set: update},
+		bson.M{"$set": update},
 		&options.UpdateOptions{Upsert: &upsert},
 	); err != nil {
 		return "", err

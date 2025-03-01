@@ -18,7 +18,3 @@ type PasswordHashBson struct {
 	Value []byte `bson:"value,omitempty"`
 	Salt  []byte `bson:"salt,omitempty"`
 }
-
-type SetWrapper struct {
-	Set interface{} `bson:"$set,omitempty"`
-}

@@ -61,7 +61,7 @@ func (r *BookmarksRepository) Save(b *bookmark.Bookmark) (string, error) {
 	if _, err := r.collection.UpdateOne(
 		ctx,
 		bson.D{{Key: "_id", Value: b.UUID}},
-		SetWrapper{Set: update},
+		bson.M{"$set": update},
 		&options.UpdateOptions{Upsert: &upsert},
 	); err != nil {
 		return "", err

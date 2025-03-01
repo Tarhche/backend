@@ -30,6 +30,7 @@ x-app: &app
     MAIL_SMTP_HOST: ${MAIL_SMTP_HOST}
     MAIL_SMTP_PORT: ${MAIL_SMTP_PORT}
     NATS_URL: ${NATS_URL}
+    DOCKER_HOST: ${DOCKER_HOST}
 
 services:
   frontend:

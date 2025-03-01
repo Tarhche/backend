@@ -37,6 +37,7 @@ services:
       MAIL_SMTP_HOST: ${BACKEND_MAIL_SMTP_HOST}
       MAIL_SMTP_PORT: ${BACKEND_MAIL_SMTP_PORT}
       NATS_URL: ${BACKEND_NATS_URL}
+      DOCKER_HOST: ${DOCKER_HOST}
 
 networks:
   app:

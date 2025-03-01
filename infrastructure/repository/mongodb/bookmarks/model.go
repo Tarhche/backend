@@ -12,7 +12,3 @@ type BookmarkBson struct {
 	OwnerUUID  string    `bson:"owner_uuid,omitempty"`
 	CreatedAt  time.Time `bson:"created_at,omitempty"`
 }
-
-type SetWrapper struct {
-	Set interface{} `bson:"$set,omitempty"`
-}

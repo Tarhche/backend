@@ -15,4 +15,5 @@ var farsi = map[string]string{
 	"identity_not_exists":               "هویت (ایمیل/نام کاربری) وجود ندارد",
 	"invalid_identity_or_password":      "هویت (ایمیل/نام کاربری) یا رمز عبور اشتباه است",
 	"one_or_more_permissions_not_exist": "یک یا چند مجوز وجود ندارد",
+	"invalid_state_transition":          "تغییر وضعیت غیر ممکن است",
 }

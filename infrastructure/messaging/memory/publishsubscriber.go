@@ -25,12 +25,12 @@ func NewSyncPublishSubscriber() *bus {
 	}
 }
 
-func (m *bus) Subscribe(ctx context.Context, ID string, subject string, handler domain.MessageHandler) error {
+func (m *bus) Subscribe(ctx context.Context, consumerID string, subject string, handler domain.MessageHandler) error {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
 	m.subscribers[subject] = append(m.subscribers[subject], subscriber{
-		id:      ID,
+		id:      consumerID,
 		handler: handler,
 	})
 

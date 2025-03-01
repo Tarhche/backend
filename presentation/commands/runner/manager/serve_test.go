@@ -1,4 +1,4 @@
-package commands
+package manager
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 
 func TestServe(t *testing.T) {
 	t.Run("name", func(t *testing.T) {
-		command := NewServeCommand(nil)
+		command := NewServeCommand(nil, nil, nil)
 
 		want := "serve"
 		got := command.Name()
@@ -24,7 +24,7 @@ func TestServe(t *testing.T) {
 	})
 
 	t.Run("description", func(t *testing.T) {
-		command := NewServeCommand(nil)
+		command := NewServeCommand(nil, nil, nil)
 
 		want := "serves a http server."
 		got := command.Description()
@@ -35,7 +35,7 @@ func TestServe(t *testing.T) {
 	})
 
 	t.Run("usage", func(t *testing.T) {
-		command := NewServeCommand(nil)
+		command := NewServeCommand(nil, nil, nil)
 
 		want := "serve [arguments]"
 		got := command.Usage()
@@ -46,7 +46,7 @@ func TestServe(t *testing.T) {
 	})
 
 	t.Run("configure", func(t *testing.T) {
-		command := NewServeCommand(nil)
+		command := NewServeCommand(nil, nil, nil)
 
 		flagSet := flag.NewFlagSet(command.Name(), flag.ContinueOnError)
 
@@ -83,7 +83,7 @@ func TestServe(t *testing.T) {
 			fmt.Fprint(rw, "test response")
 		})
 
-		command := NewServeCommand(handler)
+		command := NewServeCommand(handler, nil, nil)
 		command.port = 1234
 
 		serverStartedListening := make(chan struct{})

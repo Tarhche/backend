@@ -161,9 +161,14 @@ func (r *RolesRepository) Save(a *role.Role) (string, error) {
 	}
 
 	upsert := true
-	_, err := r.collection.UpdateOne(ctx, bson.D{{Key: "_id", Value: a.UUID}}, SetWrapper{Set: update}, &options.UpdateOptions{
-		Upsert: &upsert,
-	})
+	_, err := r.collection.UpdateOne(
+		ctx,
+		bson.D{{Key: "_id", Value: a.UUID}},
+		bson.M{"$set": update},
+		&options.UpdateOptions{
+			Upsert: &upsert,
+		},
+	)
 
 	return a.UUID, err
 }

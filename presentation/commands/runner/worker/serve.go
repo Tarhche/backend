@@ -1,4 +1,4 @@
-package commands
+package worker
 
 import (
 	"context"
@@ -7,27 +7,38 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/infrastructure/console"
 )
 
 const (
-	serveName string = "serve"
+	serveName    string = "serve-runner-worker"
+	consumerName string = "runner-worker"
 )
 
 type ServeCommand struct {
-	port    int
-	handler http.Handler
+	port        int
+	handler     http.Handler
+	subscriber  domain.Subscriber
+	subscribers map[string]domain.MessageHandler
 }
 
 // insures it implements console.Command
-var _ console.Command = NewServeCommand(nil)
+var _ console.Command = &ServeCommand{}
 
-func NewServeCommand(handler http.Handler) *ServeCommand {
+func NewServeCommand(
+	handler http.Handler,
+	subscriber domain.Subscriber,
+	subscribers map[string]domain.MessageHandler,
+) *ServeCommand {
 	return &ServeCommand{
-		handler: handler,
+		handler:     handler,
+		subscriber:  subscriber,
+		subscribers: subscribers,
 	}
 }
 
+// Name returns the name of the command which is used to identify it.
 func (c *ServeCommand) Name() string {
 	return serveName
 }
@@ -58,6 +69,13 @@ func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 
 		_ = server.Shutdown(context.Background())
 	}()
+
+	for subject, messageHandler := range c.subscribers {
+		if err := c.subscriber.Subscribe(ctx, consumerName, subject, messageHandler); err != nil {
+			log.Println(err)
+			return console.ExitFailure
+		}
+	}
 
 	if err := server.ListenAndServe(); err != nil {
 		log.Println(err)

@@ -128,7 +128,7 @@ func (r *FilesRepository) Save(a *file.File) (string, error) {
 	_, err := r.collection.UpdateOne(
 		ctx,
 		bson.D{{Key: "_id", Value: a.UUID}},
-		SetWrapper{Set: update},
+		bson.M{"$set": update},
 		&options.UpdateOptions{Upsert: &upsert},
 	)
 	if err != nil {

@@ -154,7 +154,7 @@ func (r *CommentsRepository) Save(c *comment.Comment) (string, error) {
 	if _, err := r.collection.UpdateOne(
 		ctx,
 		bson.D{{Key: "_id", Value: c.UUID}},
-		SetWrapper{Set: update},
+		bson.M{"$set": update},
 		&options.UpdateOptions{Upsert: &upsert},
 	); err != nil {
 		return "", err
