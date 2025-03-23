@@ -6,7 +6,9 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: backend
+  APP_IMAGE_NAME: backend
+  RUNNER_MANAGER_IMAGE_NAME: runner-manager
+  RUNNER_WORKER_IMAGE_NAME: runner-worker
 
   EC2_SSH_ADDRESS: ${{ secrets.EC2_SSH_ADDRESS }}
   EC2_SSH_ENDPOINT: ${{ secrets.EC2_SSH_USER }}@${{ secrets.EC2_SSH_ADDRESS }}
@@ -32,13 +34,33 @@ jobs:
         run: |
           go test ./... -v -race -cover
 
-      - name: Build image
+      - name: Build app image
         uses: ./.github/actions/docker-build
         with:
           context: .
           dockerfile: Dockerfile
-          image-name: ${{ env.IMAGE_NAME }}
+          image-name: ${{ env.APP_IMAGE_NAME }}
           target: production
+          push: false
+          container-registry: ${{ env.REGISTRY }}
+
+      - name: Build runner-manager image
+        uses: ./.github/actions/docker-build
+        with:
+          context: .
+          dockerfile: Dockerfile
+          image-name: ${{ env.RUNNER_MANAGER_IMAGE_NAME }}
+          target: production-runner-manager
+          push: false
+          container-registry: ${{ env.REGISTRY }}
+
+      - name: Build runner-worker image
+        uses: ./.github/actions/docker-build
+        with:
+          context: .
+          dockerfile: Dockerfile
+          image-name: ${{ env.RUNNER_WORKER_IMAGE_NAME }}
+          target: production-runner-worker
           push: false
           container-registry: ${{ env.REGISTRY }}
 
@@ -58,13 +80,37 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Build and push image
+      - name: Build and push app image
         uses: ./.github/actions/docker-build
         with:
           context: .
           dockerfile: Dockerfile
-          image-name: ${{ env.IMAGE_NAME }}
+          image-name: ${{ env.APP_IMAGE_NAME }}
           target: production
+          push: true
+          container-registry: ${{ env.REGISTRY }}
+          container-registry-username: ${{ github.actor }}
+          container-registry-password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push runner-manager image
+        uses: ./.github/actions/docker-build
+        with:
+          context: .
+          dockerfile: Dockerfile
+          image-name: ${{ env.RUNNER_MANAGER_IMAGE_NAME }}
+          target: production-runner-manager
+          push: true
+          container-registry: ${{ env.REGISTRY }}
+          container-registry-username: ${{ github.actor }}
+          container-registry-password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push runner-worker image
+        uses: ./.github/actions/docker-build
+        with:
+          context: .
+          dockerfile: Dockerfile
+          image-name: ${{ env.RUNNER_WORKER_IMAGE_NAME }}
+          target: production-runner-worker
           push: true
           container-registry: ${{ env.REGISTRY }}
           container-registry-username: ${{ github.actor }}
@@ -129,11 +175,16 @@ jobs:
             export BACKEND_S3_BUCKET_NAME='${{ secrets.BACKEND_S3_BUCKET_NAME }}'
 
             export APP_IMAGE='${{ secrets.APP_IMAGE }}'
+            export RUNNER_MANAGER_IMAGE='${{ env.RUNNER_MANAGER_IMAGE }}'
+            export RUNNER_WORKER_IMAGE='${{ env.RUNNER_WORKER_IMAGE }}'
 
             # Run Docker Compose
             cd /tmp/deployment_backend/
 
             docker compose -f compose.app.yaml --project-name app up --pull always --detach
+            docker compose -f compose.runner-manager.yaml --project-name runner-manager up --pull always --detach
+            docker compose -f compose.runner-worker-01.yaml --project-name runner-worker-01 up --pull always --detach
+            docker compose -f compose.runner-worker-02.yaml --project-name runner-worker-02 up --pull always --detach
 
             sudo rm -rf /tmp/deployment_backend
           EOF

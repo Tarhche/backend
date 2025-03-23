@@ -8,24 +8,30 @@ import (
 	"syscall"
 
 	"github.com/khanzadimahdi/testproject/infrastructure/console"
+	"github.com/khanzadimahdi/testproject/infrastructure/ioc"
+	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers"
+	runnerProviders "github.com/khanzadimahdi/testproject/infrastructure/ioc/providers/runner"
+	"github.com/khanzadimahdi/testproject/presentation/commands/blog"
+	"github.com/khanzadimahdi/testproject/presentation/commands/runner/manager"
+	"github.com/khanzadimahdi/testproject/presentation/commands/runner/worker"
 )
 
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
 	defer cancel()
 
-	container, wait := NewContainer(ctx)
+	c := console.NewConsole(
+		path.Base(os.Args[0]),
+		"Application description",
+		os.Stderr,
+		ioc.NewContainer(),
+	)
 
-	c := console.NewConsole(path.Base(os.Args[0]), "Application description", os.Stderr)
-
-	c.Register(Blog(container))
-	c.Register(RunnerMannager(container))
-	c.Register(RunnerWorker(container))
+	c.Register(blog.NewServeCommand(providers.NewBlogProvider()))
+	c.Register(manager.NewServeCommand(runnerProviders.NewManagerProvider()))
+	c.Register(worker.NewServeCommand(runnerProviders.NewWorkerProvider()))
 
 	code := c.Run(ctx, os.Args)
-
-	// waiting for parallel jobs/tasks/processes to gracefully shutdown
-	wait()
 
 	cancel()
 	os.Exit(code)

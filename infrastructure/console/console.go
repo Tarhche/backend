@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/khanzadimahdi/testproject/infrastructure/ioc"
 )
 
 // ExitStatus represents a Posix exit status that a command expects to be returned to the shell.
@@ -31,7 +33,7 @@ type Command interface {
 	// Configure configures this command.
 	Configure(*flag.FlagSet)
 
-	// Run attems to run the command.
+	// Run attempts to run the command.
 	Run(context.Context) ExitStatus
 }
 
@@ -42,15 +44,17 @@ type Console struct {
 	commands    map[string]Command
 
 	errWriter io.Writer // specifies where should write errors (default: os.Stderr).
+	container ioc.ServiceContainer
 }
 
 // NewConsole returns a new Console.
-func NewConsole(name, description string, errWriter io.Writer) *Console {
+func NewConsole(name, description string, errWriter io.Writer, container ioc.ServiceContainer) *Console {
 	return &Console{
 		name:        name,
 		description: description,
 		commands:    make(map[string]Command),
 		errWriter:   errWriter,
+		container:   container,
 	}
 }
 
@@ -82,9 +86,24 @@ func (c *Console) Run(ctx context.Context, arguments []string) ExitStatus {
 	flagSet := flag.NewFlagSet(cmdName, flag.ContinueOnError)
 	flagSet.SetOutput(c.errWriter)
 	flagSet.Usage = func() { explain(c.errWriter, cmd) }
+
+	serviceProvider, providesServices := cmd.(ioc.ServiceProvider)
+	if providesServices {
+		if err := serviceProvider.Register(ctx, c.container); err != nil {
+			return ExitFailure
+		}
+		defer serviceProvider.Terminate()
+	}
+
 	cmd.Configure(flagSet)
 	if flagSet.Parse(arguments[2:]) != nil {
 		return ExitUsageError
+	}
+
+	if providesServices {
+		if err := serviceProvider.Boot(ctx, c.container); err != nil {
+			return ExitFailure
+		}
 	}
 
 	return cmd.Run(ctx)

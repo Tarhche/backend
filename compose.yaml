@@ -3,7 +3,6 @@ x-app: &app
   build:
     context: .
     dockerfile: Dockerfile
-    target: develop
   restart: unless-stopped
   depends_on:
     - mongodb
@@ -47,15 +46,41 @@ services:
 
   app:
     <<: *app
+    build:
+      target: develop-blog
     ports:
       - "8000:80"
 
-  runner:
+  runner-manager:
     <<: *app
+    build:
+      target: develop-runner-manager
     ports:
-      - "8001:80"
-    command: >
-      sleep 3600
+      - "8020:80"
+
+  runner-worker-01:
+    <<: *app
+    build:
+      target: develop-runner-worker
+    ports:
+      - "8040:80"
+    command: ["serve-runner-worker", "-port=80", "-name=runner-worker-01"]
+
+  runner-worker-02:
+    <<: *app
+    build:
+      target: develop-runner-worker
+    ports:
+      - "8041:80"
+    command: ["serve-runner-worker", "-port=80", "-name=runner-worker-02"]
+
+  runner-worker-03:
+    <<: *app
+    build:
+      target: develop-runner-worker
+    ports:
+      - "8042:80"
+    command: ["serve-runner-worker", "-port=80", "-name=runner-worker-03"]
 
   mongodb:
     image: mongo

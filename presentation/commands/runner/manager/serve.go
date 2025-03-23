@@ -9,6 +9,8 @@ import (
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/infrastructure/console"
+	"github.com/khanzadimahdi/testproject/infrastructure/ioc"
+	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers/runner"
 )
 
 const (
@@ -17,24 +19,22 @@ const (
 )
 
 type ServeCommand struct {
-	port        int
-	handler     http.Handler
-	subscriber  domain.Subscriber
-	subscribers map[string]domain.MessageHandler
+	port            int
+	handler         http.Handler
+	subscriber      domain.Subscriber
+	subscribers     map[string]domain.MessageHandler
+	serviceProvider ioc.ServiceProvider
 }
 
 // insures it implements console.Command
 var _ console.Command = &ServeCommand{}
 
-func NewServeCommand(
-	handler http.Handler,
-	subscriber domain.Subscriber,
-	subscribers map[string]domain.MessageHandler,
-) *ServeCommand {
+// insures it implements ioc.ServiceProvider
+var _ ioc.ServiceProvider = &ServeCommand{}
+
+func NewServeCommand(serviceProvider ioc.ServiceProvider) *ServeCommand {
 	return &ServeCommand{
-		handler:     handler,
-		subscriber:  subscriber,
-		subscribers: subscribers,
+		serviceProvider: serviceProvider,
 	}
 }
 
@@ -58,6 +58,30 @@ func (c *ServeCommand) Configure(flagSet *flag.FlagSet) {
 	flagSet.IntVar(&c.port, "port", 80, "specifies which port server should listen to.")
 }
 
+func (c *ServeCommand) Register(ctx context.Context, iocContainer ioc.ServiceContainer) error {
+	return c.serviceProvider.Register(ctx, iocContainer)
+}
+
+func (c *ServeCommand) Boot(ctx context.Context, iocContainer ioc.ServiceContainer) error {
+	if err := c.serviceProvider.Boot(ctx, iocContainer); err != nil {
+		return err
+	}
+
+	if err := iocContainer.Resolve(&c.handler, ioc.WithNameResolving(runner.ManagerHandler)); err != nil {
+		return err
+	}
+
+	if err := iocContainer.Resolve(&c.subscriber); err != nil {
+		return err
+	}
+
+	return iocContainer.Resolve(&c.subscribers, ioc.WithNameResolving(runner.ManagerSubscribers))
+}
+
+func (c *ServeCommand) Terminate() error {
+	return c.serviceProvider.Terminate()
+}
+
 func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 	server := http.Server{
 		Addr:    fmt.Sprintf("0.0.0.0:%d", c.port),
@@ -70,11 +94,9 @@ func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 		_ = server.Shutdown(context.Background())
 	}()
 
-	for subject, messageHandler := range c.subscribers {
-		if err := c.subscriber.Subscribe(ctx, consumerName, subject, messageHandler); err != nil {
-			log.Println(err)
-			return console.ExitFailure
-		}
+	if err := c.subscribeToTopics(ctx); err != nil {
+		log.Println(err)
+		return console.ExitFailure
 	}
 
 	if err := server.ListenAndServe(); err != nil {
@@ -83,4 +105,14 @@ func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 	}
 
 	return console.ExitSuccess
+}
+
+func (c *ServeCommand) subscribeToTopics(ctx context.Context) error {
+	for subject, messageHandler := range c.subscribers {
+		if err := c.subscriber.Subscribe(ctx, consumerName, subject, messageHandler); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
