@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/khanzadimahdi/testproject/domain"
-	translatorContract "github.com/khanzadimahdi/testproject/domain/translator"
+	"github.com/khanzadimahdi/testproject/domain/translator"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc"
 	"github.com/khanzadimahdi/testproject/infrastructure/validator"
 )
@@ -18,8 +18,8 @@ func NewValidationProvider() *validationProvider {
 }
 
 func (p *validationProvider) Register(ctx context.Context, iocContainer ioc.ServiceContainer) error {
-	return iocContainer.Singleton(func(translator translatorContract.Translator) domain.Validator {
-		return validator.New(translator)
+	return iocContainer.Singleton(func(t translator.Translator) domain.Validator {
+		return validator.New(t)
 	})
 }
 
@@ -28,5 +28,5 @@ func (p *validationProvider) Boot(ctx context.Context, iocContainer ioc.ServiceC
 }
 
 func (p *validationProvider) Terminate() error {
-	return p.Terminate()
+	return nil
 }

@@ -7,7 +7,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/runner/stats"
 )
 
-const HeartbeatName = "node.heartbeat"
+const HeartbeatName = "runnerNodeHeartbeat"
 
 type Heartbeat struct {
 	Name      string

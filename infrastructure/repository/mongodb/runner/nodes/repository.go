@@ -106,6 +106,7 @@ func (r *NodesRepository) GetAll(offset uint, limit uint) ([]node.Node, error) {
 					LastPID:        t.Stats.Load.LastPID,
 				},
 			},
+			LastHeartbeatAt: t.LastHeartbeatAt,
 		})
 	}
 
@@ -174,6 +175,7 @@ func (r *NodesRepository) GetOne(UUID string) (node.Node, error) {
 				LastPID:        t.Stats.Load.LastPID,
 			},
 		},
+		LastHeartbeatAt: t.LastHeartbeatAt,
 	}, nil
 }
 
@@ -225,8 +227,9 @@ func (r *NodesRepository) Save(n *node.Node) (string, error) {
 				LastPID:        n.Stats.Load.LastPID,
 			},
 		},
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		LastHeartbeatAt: n.LastHeartbeatAt,
+		CreatedAt:       time.Now(),
+		UpdatedAt:       time.Now(),
 	}
 
 	upsert := true

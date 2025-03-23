@@ -10,6 +10,7 @@ import (
 type Request struct {
 	Name           string                 `json:"name"`
 	Image          string                 `json:"image"`
+	AutoRemove     bool                   `json:"auto_remove"`
 	PortBindings   map[uint][]PortBinding `json:"port_bindings"`
 	RestartPolicy  string                 `json:"restart_policy"`
 	RestartCount   uint                   `json:"restart_count"`

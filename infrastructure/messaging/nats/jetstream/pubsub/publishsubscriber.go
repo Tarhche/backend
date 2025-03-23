@@ -1,4 +1,4 @@
-package jetstream
+package pubsub
 
 import (
 	"context"
@@ -82,11 +82,13 @@ func (m *publishSubscriber) consumer(ctx context.Context, subscriber *subscriber
 		AckWait:   30 * time.Second,
 	})
 	if err != nil {
+		m.wg.Done()
 		return err
 	}
 
 	c, err := consumer.Consume(m.consume(subscriber.handler))
 	if err != nil {
+		m.wg.Done()
 		return err
 	}
 
@@ -103,15 +105,22 @@ func (m *publishSubscriber) consumer(ctx context.Context, subscriber *subscriber
 
 func (m *publishSubscriber) consume(handler domain.MessageHandler) func(msg jetstream.Msg) {
 	return func(msg jetstream.Msg) {
-		_ = msg.InProgress()
-		log.Printf("message recieved: %s\n", msg.Subject())
+		if err := msg.InProgress(); err != nil {
+			log.Println("in progress error", err)
+		}
+
 		if err := handler.Handle(msg.Data()); err != nil {
-			_ = msg.Nak()
-			log.Printf("message Nak: %s | error: %s\n", msg.Subject(), err.Error())
+			log.Println("consume error", err, string(msg.Subject()))
+
+			if err := msg.Nak(); err != nil {
+				log.Println("nak error", err)
+			}
 			return
 		}
-		_ = msg.DoubleAck(context.Background())
-		log.Printf("message Ack: %s\n", msg.Subject())
+
+		if err := msg.DoubleAck(context.Background()); err != nil {
+			log.Println("double ack error", err)
+		}
 	}
 }
 

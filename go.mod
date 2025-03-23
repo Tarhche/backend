@@ -10,6 +10,7 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.2.1
 	github.com/golobby/container/v3 v3.3.2
 	github.com/google/go-cmp v0.6.0
+	github.com/gorilla/websocket v1.5.3
 	github.com/minio/minio-go/v7 v7.0.70
 	github.com/nats-io/nats.go v1.37.0
 	github.com/sethvargo/go-limiter v1.0.0

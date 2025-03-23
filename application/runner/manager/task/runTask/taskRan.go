@@ -38,11 +38,8 @@ func (uc *TaskRan) Handle(data []byte) error {
 		return nil
 	}
 
-	if !task.ValidStateTransition(t.State, destinationState) {
-		return task.ErrInvalidStateTransition
-	}
-
 	t.State = destinationState
+	t.StartedAt = taskRan.StartedAt
 	_, err = uc.taskRepository.Save(&t)
 
 	return err

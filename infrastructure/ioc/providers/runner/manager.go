@@ -109,27 +109,29 @@ func managerConsoleCommand(
 
 	mux := http.NewServeMux()
 
-	mux.Handle("GET /api/runner/manager/tasks", managerTaskAPI.NewIndexHandler(managerGetTasksUseCase))
-	mux.Handle("GET /api/runner/manager/tasks/{uuid}", managerTaskAPI.NewShowHandler(managerGetTaskUseCase))
-	mux.Handle("DELETE /api/runner/manager/tasks/{uuid}", managerTaskAPI.NewDeleteHandler(managerDeleteTaskUseCase))
-	mux.Handle("POST /api/runner/manager/tasks/run", managerTaskAPI.NewRunHandler(managerRunTaskUseCase))
-	mux.Handle("POST /api/runner/manager/tasks/{uuid}/stop", managerTaskAPI.NewStopHandler(managerStopTaskUseCase))
+	mux.Handle("GET /api/tasks", managerTaskAPI.NewIndexHandler(managerGetTasksUseCase))
+	mux.Handle("GET /api/tasks/{uuid}", managerTaskAPI.NewShowHandler(managerGetTaskUseCase))
+	mux.Handle("DELETE /api/tasks/{uuid}", managerTaskAPI.NewDeleteHandler(managerDeleteTaskUseCase))
+	mux.Handle("POST /api/tasks/run", managerTaskAPI.NewRunHandler(managerRunTaskUseCase))
+	mux.Handle("POST /api/tasks/{uuid}/stop", managerTaskAPI.NewStopHandler(managerStopTaskUseCase))
 
-	mux.Handle("GET /api/runner/manager/nodes", managerNodeAPI.NewIndexHandler(managerGetNodesUseCase))
-	mux.Handle("GET /api/runner/manager/nodes/{name}", managerNodeAPI.NewShowHandler(managerGetNodeUseCase))
+	mux.Handle("GET /api/nodes", managerNodeAPI.NewIndexHandler(managerGetNodesUseCase))
+	mux.Handle("GET /api/nodes/{name}", managerNodeAPI.NewShowHandler(managerGetNodeUseCase))
 
 	handler := middleware.NewCORSMiddleware(middleware.NewRateLimitMiddleware(mux, 600, 1*time.Minute))
 
 	subscribers := map[string]domain.MessageHandler{
-		nodeEvents.HeartbeatName:     managerHeartbeatNode.NewHeartbeatHandler(nodeRepository),
-		taskEvents.HeartbeatName:     managerHeartbeatTask.NewHeartbeatHandler(taskRepository, jetStreamPublishSubscriber),
-		taskEvents.TaskCreatedName:   managerRunTask.NewTaskCreated(taskRepository, nodeRepository, taskScheduler, jetStreamPublishSubscriber),
-		taskEvents.TaskRanName:       managerRunTask.NewTaskRan(taskRepository),
-		taskEvents.TaskCompletedName: managerRunTask.NewTaskCompleted(taskRepository),
-		taskEvents.TaskFailedName:    managerRunTask.NewTaskFailed(taskRepository),
-		taskEvents.TaskStoppedName:   managerStopTask.NewTaskStopped(taskRepository),
+		nodeEvents.HeartbeatName:        managerHeartbeatNode.NewHeartbeatHandler(nodeRepository),
+		taskEvents.HeartbeatName:        managerHeartbeatTask.NewHeartbeatHandler(taskRepository, jetStreamPublishSubscriber),
+		taskEvents.TaskRunRequestedName: managerRunTask.NewTaskRunRequested(managerRunTaskUseCase),
+		taskEvents.TaskCreatedName:      managerRunTask.NewTaskCreated(taskRepository, nodeRepository, taskScheduler, jetStreamPublishSubscriber),
+		taskEvents.TaskRanName:          managerRunTask.NewTaskRan(taskRepository),
+		taskEvents.TaskCompletedName:    managerRunTask.NewTaskCompleted(taskRepository),
+		taskEvents.TaskFailedName:       managerRunTask.NewTaskFailed(taskRepository),
+		taskEvents.TaskStoppedName:      managerStopTask.NewTaskStopped(taskRepository),
 	}
 
+	// manager subscribers
 	if err := iocContainer.Singleton(func() map[string]domain.MessageHandler {
 		return subscribers
 	}, ioc.WithNameBinding(ManagerSubscribers)); err != nil {

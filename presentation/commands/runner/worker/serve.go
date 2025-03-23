@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
+	workerHeartbeat "github.com/khanzadimahdi/testproject/application/runner/worker/beatHeart"
+	taskHeartbeat "github.com/khanzadimahdi/testproject/application/runner/worker/task/beatHeart"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/infrastructure/console"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc"
@@ -14,8 +17,10 @@ import (
 )
 
 const (
-	serveName          string = "serve-runner-worker"
-	consumerNamePrefix string = "runner-worker-%s"
+	serveName               string = "serve-runner-worker"
+	consumerNamePrefix      string = "runner-worker-%s"
+	workerHeartbeatInterval        = 1 * time.Second
+	taskHeartbeatInterval          = 300 * time.Millisecond
 )
 
 type ServeCommand struct {
@@ -25,6 +30,8 @@ type ServeCommand struct {
 	subscriber      domain.Subscriber
 	subscribers     map[string]domain.MessageHandler
 	serviceProvider ioc.ServiceProvider
+	taskHeartBeat   *taskHeartbeat.UseCase
+	workerHeartBeat *workerHeartbeat.UseCase
 }
 
 // insures it implements console.Command
@@ -84,6 +91,14 @@ func (c *ServeCommand) Boot(ctx context.Context, iocContainer ioc.ServiceContain
 		return err
 	}
 
+	if err := iocContainer.Resolve(&c.taskHeartBeat); err != nil {
+		return err
+	}
+
+	if err := iocContainer.Resolve(&c.workerHeartBeat); err != nil {
+		return err
+	}
+
 	return iocContainer.Resolve(&c.subscribers, ioc.WithNameResolving(runner.WorkerSubscribers))
 }
 
@@ -110,6 +125,9 @@ func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 		return console.ExitFailure
 	}
 
+	go c.tasksHeartbeat(ctx)
+	go c.workerHeartbeat(ctx)
+
 	if err := server.ListenAndServe(); err != nil {
 		log.Println(err)
 		return console.ExitFailure
@@ -134,4 +152,38 @@ func (c *ServeCommand) subscribeToTopics(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (c *ServeCommand) tasksHeartbeat(ctx context.Context) {
+	ticker := time.NewTicker(taskHeartbeatInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			err := c.taskHeartBeat.Execute(ctx)
+			if err != nil {
+				log.Println(err)
+			}
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+func (c *ServeCommand) workerHeartbeat(ctx context.Context) {
+	ticker := time.NewTicker(workerHeartbeatInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			err := c.workerHeartBeat.Execute()
+			if err != nil {
+				log.Println(err)
+			}
+		case <-ctx.Done():
+			return
+		}
+	}
 }

@@ -90,6 +90,7 @@ func (c *Console) Run(ctx context.Context, arguments []string) ExitStatus {
 	serviceProvider, providesServices := cmd.(ioc.ServiceProvider)
 	if providesServices {
 		if err := serviceProvider.Register(ctx, c.container); err != nil {
+			fmt.Println(err)
 			return ExitFailure
 		}
 		defer serviceProvider.Terminate()
@@ -102,6 +103,7 @@ func (c *Console) Run(ctx context.Context, arguments []string) ExitStatus {
 
 	if providesServices {
 		if err := serviceProvider.Boot(ctx, c.container); err != nil {
+			fmt.Println(err)
 			return ExitFailure
 		}
 	}

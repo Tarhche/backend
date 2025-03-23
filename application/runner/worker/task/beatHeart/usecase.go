@@ -41,7 +41,7 @@ func (uc *UseCase) Execute(ctx context.Context) error {
 
 	for _, c := range allContainers {
 		if err := uc.containerManager.Logs(c.ID, &logsBuffer); err != nil {
-			log.Println(err)
+			log.Println(err) // there are some cases that the container is not started yet and we can't get the logs
 		}
 
 		var logs []byte

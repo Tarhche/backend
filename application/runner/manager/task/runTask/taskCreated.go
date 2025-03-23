@@ -3,6 +3,7 @@ package runTask
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/runner/node"
@@ -54,11 +55,7 @@ func (uc *TaskCreated) Handle(data []byte) error {
 		return nil
 	}
 
-	if !task.ValidStateTransition(t.State, destinationState) {
-		return task.ErrInvalidStateTransition
-	}
-
-	nodes, err := uc.nodeRepository.GetAll(0, nominatedNodesLimit)
+	nodes, err := uc.getHealthyNodes()
 	if err != nil {
 		return err
 	}
@@ -74,6 +71,24 @@ func (uc *TaskCreated) Handle(data []byte) error {
 	}
 
 	return uc.publishTaskScheduled(&t, &selectedNode)
+}
+
+func (uc *TaskCreated) getHealthyNodes() ([]node.Node, error) {
+	nodes, err := uc.nodeRepository.GetAll(0, nominatedNodesLimit)
+	if err != nil {
+		return nil, err
+	}
+
+	j := 0
+	for i := range nodes {
+		if nodes[i].LastHeartbeatAt.After(time.Now().Add(-3 * time.Second)) {
+			nodes[j] = nodes[i]
+			j++
+		}
+	}
+	nodes = nodes[:j:j]
+
+	return nodes, nil
 }
 
 func (uc *TaskCreated) publishTaskScheduled(t *task.Task, selectedNode *node.Node) error {

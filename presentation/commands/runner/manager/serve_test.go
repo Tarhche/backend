@@ -8,7 +8,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/infrastructure/ioc"
+	messaging "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
 func TestServe(t *testing.T) {
@@ -78,13 +82,31 @@ func TestServe(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		// handler := http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		// 	rw.WriteHeader(http.StatusOK)
-		// 	fmt.Fprint(rw, "test response")
-		// })
+		handler := http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+			rw.WriteHeader(http.StatusOK)
+			fmt.Fprint(rw, "test response")
+		})
 
-		command := NewServeCommand(nil)
+		subscribers := map[string]domain.MessageHandler{
+			"test1": domain.MessageHandlerFunc(func(message []byte) error { return nil }),
+			"test2": domain.MessageHandlerFunc(func(message []byte) error { return nil }),
+			"test3": domain.MessageHandlerFunc(func(message []byte) error { return nil }),
+		}
+
+		var subscriber messaging.MockPublishSubscriber
+		subscriber.On("Subscribe", ctx, consumerName, mock.Anything, mock.Anything).Times(len(subscribers)).Return(nil)
+		defer subscriber.AssertExpectations(t)
+
+		var serviceProvider ioc.ServiceProviderMock
+		defer serviceProvider.AssertNotCalled(t, "Register")
+		defer serviceProvider.AssertNotCalled(t, "Boot")
+		defer serviceProvider.AssertNotCalled(t, "Terminate")
+
+		command := NewServeCommand(&serviceProvider)
 		command.port = 1234
+		command.handler = handler
+		command.subscriber = &subscriber
+		command.subscribers = subscribers
 
 		serverStartedListening := make(chan struct{})
 
@@ -107,5 +129,6 @@ func TestServe(t *testing.T) {
 
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
 	})
 }

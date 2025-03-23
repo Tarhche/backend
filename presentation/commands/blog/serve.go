@@ -22,7 +22,9 @@ type ServeCommand struct {
 	port            int
 	handler         http.Handler
 	subscriber      domain.Subscriber
+	requester       domain.Requester
 	subscribers     map[string]domain.MessageHandler
+	requestReplyers map[string]domain.Replyer
 	serviceProvider ioc.ServiceProvider
 }
 
@@ -75,7 +77,19 @@ func (c *ServeCommand) Boot(ctx context.Context, iocContainer ioc.ServiceContain
 		return err
 	}
 
-	return iocContainer.Resolve(&c.subscribers, ioc.WithNameResolving(providers.BlogSubscribers))
+	if err := iocContainer.Resolve(&c.requester); err != nil {
+		return err
+	}
+
+	if err := iocContainer.Resolve(&c.subscribers, ioc.WithNameResolving(providers.BlogSubscribers)); err != nil {
+		return err
+	}
+
+	if err := iocContainer.Resolve(&c.requestReplyers, ioc.WithNameResolving(providers.BlogRequestReplyers)); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (c *ServeCommand) Terminate() error {
@@ -99,6 +113,11 @@ func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 		return console.ExitFailure
 	}
 
+	if err := c.registerRequestReplyers(ctx); err != nil {
+		log.Println(err)
+		return console.ExitFailure
+	}
+
 	if err := server.ListenAndServe(); err != nil {
 		log.Println(err)
 		return console.ExitFailure
@@ -110,6 +129,16 @@ func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 func (c *ServeCommand) subscribeToTopics(ctx context.Context) error {
 	for subject, messageHandler := range c.subscribers {
 		if err := c.subscriber.Subscribe(ctx, consumerName, subject, messageHandler); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (c *ServeCommand) registerRequestReplyers(ctx context.Context) error {
+	for subject, replyer := range c.requestReplyers {
+		if err := c.requester.RegisterReplyer(ctx, subject, replyer); err != nil {
 			return err
 		}
 	}

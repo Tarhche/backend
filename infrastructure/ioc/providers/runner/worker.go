@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"time"
 
+	workerHeartbeat "github.com/khanzadimahdi/testproject/application/runner/worker/beatHeart"
+	workerTaskHeartbeat "github.com/khanzadimahdi/testproject/application/runner/worker/task/beatHeart"
 	workerDeleteTask "github.com/khanzadimahdi/testproject/application/runner/worker/task/deleteTask"
 	workergettasks "github.com/khanzadimahdi/testproject/application/runner/worker/task/getTasks"
 	workerruntask "github.com/khanzadimahdi/testproject/application/runner/worker/task/runTask"
@@ -29,6 +31,7 @@ var workerDependencies = []ioc.ServiceProvider{
 	providers.NewMongodbProvider(),
 	providers.NewNatsProvider(),
 	providers.NewDockerProvider(),
+	providers.NewTranslationProvider(),
 	providers.NewValidationProvider(),
 	providers.NewContainerProvider(),
 }
@@ -86,6 +89,7 @@ func workerConsoleCommand(
 		return nil, err
 	}
 
+	// tasks
 	getTasksUseCase := workergettasks.NewUseCase(containerManager, nodeName)
 	runTaskUseCase := workerruntask.NewUseCase(containerManager, validator, nodeName)
 	stopTaskUseCase := workerstoptask.NewUseCase(containerManager, validator)
@@ -93,9 +97,9 @@ func workerConsoleCommand(
 
 	mux := http.NewServeMux()
 
-	mux.Handle("GET /api/runner/worker/tasks", workerTaskAPI.NewIndexHandler(getTasksUseCase))
-	mux.Handle("POST /api/runner/worker/tasks/run", workerTaskAPI.NewRunHandler(runTaskUseCase))
-	mux.Handle("POST /api/runner/worker/tasks/{uuid}/stop", workerTaskAPI.NewStopHandler(stopTaskUseCase))
+	mux.Handle("GET /api/tasks", workerTaskAPI.NewIndexHandler(getTasksUseCase))
+	mux.Handle("POST /api/tasks/run", workerTaskAPI.NewRunHandler(runTaskUseCase))
+	mux.Handle("POST /api/tasks/{uuid}/stop", workerTaskAPI.NewStopHandler(stopTaskUseCase))
 
 	handler := middleware.NewCORSMiddleware(middleware.NewRateLimitMiddleware(mux, 600, 1*time.Minute))
 
@@ -105,9 +109,24 @@ func workerConsoleCommand(
 		taskEvents.TaskDeletedName:           workerDeleteTask.NewDeleteTaskHandler(deleteTaskUseCase),
 	}
 
+	// worker subscribers
 	if err := iocContainer.Singleton(func() map[string]domain.MessageHandler {
 		return subscribers
 	}, ioc.WithNameBinding(WorkerSubscribers)); err != nil {
+		return nil, err
+	}
+
+	// worker heartbeat
+	if err := iocContainer.Singleton(func() *workerHeartbeat.UseCase {
+		return workerHeartbeat.NewUseCase(asyncPublishSubscriber, nodeName)
+	}); err != nil {
+		return nil, err
+	}
+
+	// task heartbeat
+	if err := iocContainer.Singleton(func() *workerTaskHeartbeat.UseCase {
+		return workerTaskHeartbeat.NewUseCase(containerManager, asyncPublishSubscriber, nodeName)
+	}); err != nil {
 		return nil, err
 	}
 

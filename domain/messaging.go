@@ -2,9 +2,10 @@ package domain
 
 import (
 	"context"
+	"errors"
 )
 
-// Handler handlers a message with given payload
+// publish/subscribe interfaces
 type MessageHandler interface {
 	Handle(payload []byte) error
 }
@@ -26,4 +27,27 @@ type Subscriber interface {
 type PublishSubscriber interface {
 	Publisher
 	Subscriber
+}
+
+// request/reply interfaces
+var ErrReplierNotFound = errors.New("replier not found")
+
+type Replyer interface {
+	Reply(request Request, replyChan chan<- *Reply) error
+}
+
+type Request struct {
+	ID      string
+	Subject string
+	Payload []byte
+}
+
+type Reply struct {
+	RequestID string
+	Payload   []byte
+}
+
+type Requester interface {
+	Request(ctx context.Context, request *Request) error
+	RegisterReplyer(ctx context.Context, subject string, replyer Replyer) error
 }

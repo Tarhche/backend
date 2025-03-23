@@ -11,6 +11,7 @@ type TaskBson struct {
 	Name           string         `bson:"name"`
 	State          uint           `bson:"state"`
 	Image          string         `bson:"image"`
+	AutoRemove     bool           `bson:"auto_remove,omitempty"`
 	PortBindings   []port.PortMap `bson:"port_bindings,omitempty"`
 	RestartPolicy  string         `bson:"restart_policy,omitempty"`
 	RestartCount   uint           `bson:"restart_count,omitempty"`
@@ -23,6 +24,7 @@ type TaskBson struct {
 	Entrypoint     []string       `bson:"entrypoint,omitempty"`
 	Mounts         []Mount        `bson:"mounts,omitempty"`
 	ResourceLimits ResourceLimits `bson:"resource_limits,omitempty"`
+	ContainerLogs  []byte         `bson:"container_logs,omitempty"`
 	ContainerID    string         `bson:"container_id,omitempty"`
 	OwnerUUID      string         `bson:"owner_uuid"`
 	CreatedAt      time.Time      `bson:"created_at,omitempty"`

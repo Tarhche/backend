@@ -4,7 +4,7 @@ import (
 	"time"
 )
 
-const HeartbeatName = "task.heartbeat"
+const HeartbeatName = "runnerTaskHeartbeat"
 
 type Heartbeat struct {
 	UUID          string

@@ -17,6 +17,8 @@ import (
 	"github.com/khanzadimahdi/testproject/application/auth/verify"
 	"github.com/khanzadimahdi/testproject/application/bookmark/bookmarkExists"
 	"github.com/khanzadimahdi/testproject/application/bookmark/updateBookmark"
+	"github.com/khanzadimahdi/testproject/application/code/heartbeat"
+	"github.com/khanzadimahdi/testproject/application/code/runCode"
 	"github.com/khanzadimahdi/testproject/application/comment/createComment"
 	"github.com/khanzadimahdi/testproject/application/comment/getComments"
 	dashboardCreateArticle "github.com/khanzadimahdi/testproject/application/dashboard/article/createArticle"
@@ -98,13 +100,21 @@ import (
 	fileAPI "github.com/khanzadimahdi/testproject/presentation/http/api/file"
 	hashtagAPI "github.com/khanzadimahdi/testproject/presentation/http/api/hashtag"
 	homeapi "github.com/khanzadimahdi/testproject/presentation/http/api/home"
+	"github.com/khanzadimahdi/testproject/presentation/http/api/websocket"
 	"github.com/khanzadimahdi/testproject/presentation/http/middleware"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
 const (
-	BlogSubscribers = "blog:subscribers"
-	BlogHandler     = "blog:handler"
+	BlogSubscribers     = "blog:subscribers"
+	BlogRequestReplyers = "blog:requestReplyers"
+	BlogHandler         = "blog:handler"
+
+	WebSocketWriteWait        = 10 * time.Second
+	WebSocketMaxMessageSize   = 256 * 1024 // 256KB
+	WebSocketPongWait         = 60 * time.Second
+	WebSocketPingPeriod       = (WebSocketPongWait * 9) / 10
+	WebSocketCloseGracePeriod = 10 * time.Second
 )
 
 type blogProvider struct {
@@ -178,6 +188,16 @@ func blog(
 ) (http.Handler, error) {
 	var mailFromAddress string
 	if err := iocContainer.Resolve(&mailFromAddress, ioc.WithNameResolving("mailFromAddress")); err != nil {
+		return nil, err
+	}
+
+	var jetStreamRequester domain.Requester
+	if err := iocContainer.Resolve(&jetStreamRequester, ioc.WithNameResolving(BlogRequestReplyer)); err != nil {
+		return nil, err
+	}
+
+	var asyncReplyChan chan *domain.Reply
+	if err := iocContainer.Resolve(asyncReplyChan, ioc.WithNameResolving(BlogRequestReplyerChannel)); err != nil {
 		return nil, err
 	}
 
@@ -270,7 +290,18 @@ func blog(
 
 	mux := http.NewServeMux()
 
-	// ---- public ----
+	// ---- public HTTP API ----
+
+	// websocket
+	mux.Handle("GET /api/ws", websocket.NewWsHandler(
+		WebSocketWriteWait,
+		WebSocketMaxMessageSize,
+		WebSocketPongWait,
+		WebSocketPingPeriod,
+		WebSocketCloseGracePeriod,
+		asyncReplyChan,
+		jetStreamRequester,
+	))
 
 	// home
 	mux.Handle("GET /api/home", homeapi.NewHomeHandler(homeUseCase))
@@ -301,7 +332,7 @@ func blog(
 	// files
 	mux.Handle("GET /files/{uuid}", fileAPI.NewShowHandler(getFileUseCase))
 
-	// ---- dashboard ----
+	// ---- dashboard HTTP API ----
 
 	// profile
 	mux.Handle("GET /api/dashboard/profile", middleware.NewAuthoriseMiddleware(profile.NewGetProfileHandler(getProfileUseCase), jwt, userRepository))
@@ -374,9 +405,22 @@ func blog(
 
 	handler := middleware.NewCORSMiddleware(middleware.NewRateLimitMiddleware(mux, 600, 1*time.Minute))
 
+	// request replyers
+	requestReplyers := map[string]domain.Replyer{
+		runCode.RunCodeRequest: runCode.NewRunCodeHandler(validator, asyncPublishSubscriber),
+	}
+
+	if err := iocContainer.Singleton(func() map[string]domain.Replyer {
+		return requestReplyers
+	}, ioc.WithNameBinding(BlogRequestReplyers)); err != nil {
+		return nil, err
+	}
+
+	// subscribers
 	subscribers := map[string]domain.MessageHandler{
 		forgetpassword.SendForgetPasswordEmailName: forgetpassword.NewSendForgetPasswordEmailHandler(userRepository, jwt, mailer, mailFromAddress, renderer),
 		register.SendRegisterationEmailName:        register.NewSendRegisterationEmailHandler(jwt, mailer, mailFromAddress, renderer),
+		runCode.RunCodeRequest:                     heartbeat.NewHeartbeatHandler(asyncReplyChan),
 	}
 
 	if err := iocContainer.Singleton(func() map[string]domain.MessageHandler {

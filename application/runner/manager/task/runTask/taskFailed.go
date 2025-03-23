@@ -38,10 +38,6 @@ func (uc *TaskFailed) Handle(data []byte) error {
 		return nil
 	}
 
-	if !task.ValidStateTransition(t.State, destinationState) {
-		return task.ErrInvalidStateTransition
-	}
-
 	t.State = destinationState
 	_, err = uc.taskRepository.Save(&t)
 

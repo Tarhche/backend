@@ -6,8 +6,16 @@ import (
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc"
-	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/jetstream"
+	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/jetstream/pubsub"
+	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/jetstream/requestreply"
 	"github.com/nats-io/nats.go"
+)
+
+const (
+	BlogRequestReplyer        = "blog::request-replyer"
+	BlogRequestReplyerChannel = "blog::request-replyer-channel"
+
+	blogRequestReplyerConsumerID = "blog-request-replyer"
 )
 
 type natsProvider struct {
@@ -26,18 +34,28 @@ func (p *natsProvider) Register(ctx context.Context, iocContainer ioc.ServiceCon
 		return err
 	}
 
-	jetstreamPublishSubscriber, err := jetstream.NewPublishSubscriber(natsConnection)
+	jetstreamPublishSubscriber, err := pubsub.NewPublishSubscriber(natsConnection)
+	if err != nil {
+		return err
+	}
+
+	reqreplyer, replyChan, err := requestreply.New(natsConnection, blogRequestReplyerConsumerID)
 	if err != nil {
 		return err
 	}
 
 	p.terminate = func() {
-		defer jetstreamPublishSubscriber.Wait()
 		defer natsConnection.Close()
+		defer jetstreamPublishSubscriber.Wait()
+		defer reqreplyer.Close()
 	}
 
 	iocContainer.Singleton(func() *nats.Conn { return natsConnection })
+	iocContainer.Singleton(func() domain.Publisher { return jetstreamPublishSubscriber })
+	iocContainer.Singleton(func() domain.Subscriber { return jetstreamPublishSubscriber })
 	iocContainer.Singleton(func() domain.PublishSubscriber { return jetstreamPublishSubscriber })
+	iocContainer.Singleton(func() domain.Requester { return reqreplyer }, ioc.WithNameBinding(BlogRequestReplyer))
+	iocContainer.Singleton(func() chan *domain.Reply { return replyChan }, ioc.WithNameBinding(BlogRequestReplyerChannel))
 
 	return nil
 }

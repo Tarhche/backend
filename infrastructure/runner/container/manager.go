@@ -59,7 +59,7 @@ func (m *DockerManager) GetAll() ([]container.Container, error) {
 		result[i] = container.Container{
 			ID:           c.ID,
 			Name:         c.Names[0],
-			Status:       convertToContainerStatus(c.Status),
+			Status:       convertToContainerStatus(c.State),
 			Image:        c.Image,
 			Labels:       c.Labels,
 			CreatedAt:    time.Unix(c.Created, 0),
@@ -88,7 +88,7 @@ func (m *DockerManager) GetByLabel(labelName string, labelValue string) ([]conta
 		result[i] = container.Container{
 			ID:           c.ID,
 			Name:         c.Names[0],
-			Status:       convertToContainerStatus(c.Status),
+			Status:       convertToContainerStatus(c.State),
 			Image:        c.Image,
 			Labels:       c.Labels,
 			CreatedAt:    time.Unix(c.Created, 0),
@@ -303,8 +303,10 @@ func (m *DockerManager) EvaluateTaskState(status container.Status) task.State {
 		return task.Scheduled
 	case container.StatusRunning:
 		return task.Running
-	case container.StatusPaused, container.StatusRestarting:
+	case container.StatusRestarting:
 		return task.Stopping
+	case container.StatusPaused:
+		return task.Stopped
 	case container.StatusDead:
 		return task.Failed
 	case container.StatusExited, container.StatusRemoving:

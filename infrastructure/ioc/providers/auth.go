@@ -19,11 +19,14 @@ func NewAuthProvider() *authProvider {
 }
 
 func (p *authProvider) Register(ctx context.Context, iocContainer ioc.ServiceContainer) error {
-	return iocContainer.Singleton(func(database *mongo.Database) (roleContract.Repository, domain.Authorizer) {
-		roleRepository := rolesrepository.NewRepository(database)
-		authorizer := domain.NewRoleBasedAccessControl(roleRepository)
+	if err := iocContainer.Singleton(func(database *mongo.Database) roleContract.Repository {
+		return rolesrepository.NewRepository(database)
+	}); err != nil {
+		return err
+	}
 
-		return roleRepository, authorizer
+	return iocContainer.Singleton(func(roleRepository roleContract.Repository) domain.Authorizer {
+		return domain.NewRoleBasedAccessControl(roleRepository)
 	})
 }
 
@@ -32,5 +35,5 @@ func (p *authProvider) Boot(ctx context.Context, iocContainer ioc.ServiceContain
 }
 
 func (p *authProvider) Terminate() error {
-	return p.Terminate()
+	return nil
 }

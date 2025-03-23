@@ -6,8 +6,10 @@ x-app: &app
   restart: unless-stopped
   depends_on:
     - mongodb
+    - nats
     - minio
     - minio_configure
+    - docker
   volumes:
     - ./:/opt/app
   environment:

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/khanzadimahdi/testproject/infrastructure/ioc"
 )
 
 func TestConsole(t *testing.T) {
@@ -34,7 +35,8 @@ func TestConsole(t *testing.T) {
 			for _, testCase := range testCases {
 				t.Run(testCase.name, func(t *testing.T) {
 					var errWriter bytes.Buffer
-					console := NewConsole("Test", "Test description", &errWriter)
+					var serviceContainer ioc.ServiceContainerMock
+					console := NewConsole("Test", "Test description", &errWriter, &serviceContainer)
 
 					if exitStatus := console.Run(context.Background(), testCase.arguments); exitStatus != 0 {
 						t.Errorf("unexpected exit code, want %d got %d", 0, exitStatus)
@@ -70,7 +72,8 @@ func TestConsole(t *testing.T) {
 			for _, testCase := range testCases {
 				t.Run(testCase.name, func(t *testing.T) {
 					var errWriter bytes.Buffer
-					console := NewConsole("Test", "Test description", &errWriter)
+					var serviceContainer ioc.ServiceContainerMock
+					console := NewConsole("Test", "Test description", &errWriter, &serviceContainer)
 
 					var (
 						boolArg bool
@@ -152,7 +155,8 @@ func TestConsole(t *testing.T) {
 		for _, testCase := range testCases {
 			t.Run(testCase.name, func(t *testing.T) {
 				var errWriter bytes.Buffer
-				console := NewConsole("Test", "Test description", &errWriter)
+				var serviceContainer ioc.ServiceContainerMock
+				console := NewConsole("Test", "Test description", &errWriter, &serviceContainer)
 
 				if exitStatus := console.Run(context.Background(), testCase.arguments); exitStatus != testCase.exitStatus {
 					t.Errorf("unexpected exit code, want %d got %d", testCase.exitStatus, exitStatus)
@@ -172,7 +176,8 @@ func TestConsole(t *testing.T) {
 
 		for _, status := range statuses {
 			var errWriter bytes.Buffer
-			console := NewConsole("Test", "Test description", &errWriter)
+			var serviceContainer ioc.ServiceContainerMock
+			console := NewConsole("Test", "Test description", &errWriter, &serviceContainer)
 
 			command := NewSpyCommand(
 				"command",
@@ -218,7 +223,8 @@ func TestConsole(t *testing.T) {
 
 	t.Run("test command arguments", func(t *testing.T) {
 		var errWriter bytes.Buffer
-		console := NewConsole("Test", "Test description", &errWriter)
+		var serviceContainer ioc.ServiceContainerMock
+		console := NewConsole("Test", "Test description", &errWriter, &serviceContainer)
 
 		var (
 			boolArg bool

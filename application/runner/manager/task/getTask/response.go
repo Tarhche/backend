@@ -27,6 +27,7 @@ type Response struct {
 	StartedAt     time.Time `json:"started_at"`
 	FinishedAt    time.Time `json:"finished_at"`
 	ContainerID   string    `json:"container_id"`
+	ContainerLogs []byte    `json:"container_logs"`
 }
 
 // NewResponse creates a new response from a task
@@ -60,5 +61,6 @@ func NewResponse(t task.Task) *Response {
 		StartedAt:     t.StartedAt,
 		FinishedAt:    t.FinishedAt,
 		ContainerID:   t.ContainerID,
+		ContainerLogs: t.ContainerLogs,
 	}
 }

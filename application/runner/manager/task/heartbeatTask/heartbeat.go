@@ -41,9 +41,17 @@ func (h *Heartbeat) Handle(data []byte) error {
 		return err
 	}
 
+	t.ContainerLogs = heartbeat.Logs
+	_, err = h.taskRepository.Save(&t)
+	if err != nil {
+		return err
+	}
+
 	taskState := task.State(heartbeat.State)
 
 	switch taskState {
+	case task.Running:
+		err = h.publishTaskRan(&heartbeat)
 	case task.Stopped:
 		err = h.publishTaskStopped(&heartbeat)
 	case task.Completed:
@@ -57,16 +65,33 @@ func (h *Heartbeat) Handle(data []byte) error {
 	}
 
 	if task.IsTerminalState(taskState) && t.AutoRemove {
-		err = h.publishTaskDeleted(heartbeat.UUID)
+		return h.publishTaskDeleted(&heartbeat)
 	}
 
-	return err
+	return nil
+}
+
+func (uc *Heartbeat) publishTaskRan(heartbeat *events.Heartbeat) error {
+	event := events.TaskRan{
+		UUID:          heartbeat.UUID,
+		NodeName:      heartbeat.NodeName,
+		ContainerUUID: heartbeat.ContainerUUID,
+		StartedAt:     heartbeat.At,
+	}
+
+	payload, err := json.Marshal(event)
+	if err != nil {
+		return err
+	}
+
+	return uc.publisher.Publish(context.Background(), events.TaskRanName, payload)
 }
 
 func (uc *Heartbeat) publishTaskStopped(heartbeat *events.Heartbeat) error {
 	event := events.TaskStopped{
 		UUID:     heartbeat.UUID,
 		NodeName: heartbeat.NodeName,
+		At:       heartbeat.At,
 	}
 
 	payload, err := json.Marshal(event)
@@ -74,13 +99,14 @@ func (uc *Heartbeat) publishTaskStopped(heartbeat *events.Heartbeat) error {
 		return err
 	}
 
-	return uc.publisher.Publish(context.Background(), events.TaskDeletedName, payload)
+	return uc.publisher.Publish(context.Background(), events.TaskStoppedName, payload)
 }
 
 func (uc *Heartbeat) publishTaskCompleted(heartbeat *events.Heartbeat) error {
 	event := events.TaskCompleted{
 		UUID:     heartbeat.UUID,
 		NodeName: heartbeat.NodeName,
+		At:       heartbeat.At,
 	}
 
 	payload, err := json.Marshal(event)
@@ -88,7 +114,7 @@ func (uc *Heartbeat) publishTaskCompleted(heartbeat *events.Heartbeat) error {
 		return err
 	}
 
-	return uc.publisher.Publish(context.Background(), events.TaskDeletedName, payload)
+	return uc.publisher.Publish(context.Background(), events.TaskCompletedName, payload)
 }
 
 func (uc *Heartbeat) publishTaskFailed(heartbeat *events.Heartbeat) error {
@@ -96,7 +122,7 @@ func (uc *Heartbeat) publishTaskFailed(heartbeat *events.Heartbeat) error {
 		UUID:          heartbeat.UUID,
 		ContainerUUID: heartbeat.ContainerUUID,
 		NodeName:      heartbeat.NodeName,
-		FailedAt:      heartbeat.At,
+		At:            heartbeat.At,
 	}
 
 	payload, err := json.Marshal(event)
@@ -104,12 +130,13 @@ func (uc *Heartbeat) publishTaskFailed(heartbeat *events.Heartbeat) error {
 		return err
 	}
 
-	return uc.publisher.Publish(context.Background(), events.TaskDeletedName, payload)
+	return uc.publisher.Publish(context.Background(), events.TaskFailedName, payload)
 }
 
-func (uc *Heartbeat) publishTaskDeleted(uuid string) error {
+func (uc *Heartbeat) publishTaskDeleted(heartbeat *events.Heartbeat) error {
 	event := events.TaskDeleted{
-		UUID: uuid,
+		UUID: heartbeat.UUID,
+		At:   heartbeat.At,
 	}
 
 	payload, err := json.Marshal(event)

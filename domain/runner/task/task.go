@@ -27,6 +27,7 @@ type Task struct {
 	Mounts         []Mount
 	ResourceLimits ResourceLimits
 	ContainerID    string
+	ContainerLogs  []byte
 	OwnerUUID      string
 	CreatedAt      time.Time
 	StartedAt      time.Time

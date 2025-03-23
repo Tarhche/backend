@@ -38,6 +38,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		Name:          request.Name,
 		State:         task.Created,
 		Image:         request.Image,
+		AutoRemove:    request.AutoRemove,
 		PortBindings:  request.ConvertPortBindings(),
 		RestartPolicy: request.RestartPolicy,
 		RestartCount:  request.RestartCount,
