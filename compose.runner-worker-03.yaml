@@ -1,5 +1,5 @@
 services:
-  runner-worker-02:
+  runner-worker-03:
     image: ${RUNNER_WORKER_IMAGE}
     networks:
       - nats
@@ -25,7 +25,7 @@ services:
       S3_USE_SSL: ${BACKEND_S3_USE_SSL}
       NATS_URL: ${BACKEND_NATS_URL}
       DOCKER_HOST: ${DOCKER_HOST}
-      RUNNER_WORKER_NAME: runner-worker-02
+      RUNNER_WORKER_NAME: runner-worker-03
 
 networks:
   nats:

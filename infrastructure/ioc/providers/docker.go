@@ -17,7 +17,7 @@ func NewDockerProvider() *dockerProvider {
 }
 
 func (p *dockerProvider) Register(ctx context.Context, iocContainer ioc.ServiceContainer) error {
-	containerManager, err := container.NewDockerManager("tcp://docker:2375")
+	containerManager, err := container.NewDockerManager("tcp://docker:2375") // TODO: make this configurable (env variable?)
 	if err != nil {
 		return err
 	}

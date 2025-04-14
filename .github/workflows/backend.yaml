@@ -2,6 +2,8 @@ name: Backend CI and CD
 
 on:
   push:
+    branches:
+      - main
   pull_request:
 
 env:
@@ -34,13 +36,13 @@ jobs:
         run: |
           go test ./... -v -race -cover
 
-      - name: Build app image
+      - name: Build blog image
         uses: ./.github/actions/docker-build
         with:
           context: .
           dockerfile: Dockerfile
           image-name: ${{ env.APP_IMAGE_NAME }}
-          target: production
+          target: production-blog
           push: false
           container-registry: ${{ env.REGISTRY }}
 
@@ -80,13 +82,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Build and push app image
+      - name: Build and push blog image
         uses: ./.github/actions/docker-build
         with:
           context: .
           dockerfile: Dockerfile
           image-name: ${{ env.APP_IMAGE_NAME }}
-          target: production
+          target: production-blog
           push: true
           container-registry: ${{ env.REGISTRY }}
           container-registry-username: ${{ github.actor }}
@@ -175,8 +177,8 @@ jobs:
             export BACKEND_S3_BUCKET_NAME='${{ secrets.BACKEND_S3_BUCKET_NAME }}'
 
             export APP_IMAGE='${{ secrets.APP_IMAGE }}'
-            export RUNNER_MANAGER_IMAGE='${{ env.RUNNER_MANAGER_IMAGE }}'
-            export RUNNER_WORKER_IMAGE='${{ env.RUNNER_WORKER_IMAGE }}'
+            export RUNNER_MANAGER_IMAGE='${{ secrets.RUNNER_MANAGER_IMAGE }}'
+            export RUNNER_WORKER_IMAGE='${{ secrets.RUNNER_WORKER_IMAGE }}'
 
             # Run Docker Compose
             cd /tmp/deployment_backend/
@@ -185,6 +187,7 @@ jobs:
             docker compose -f compose.runner-manager.yaml --project-name runner-manager up --pull always --detach
             docker compose -f compose.runner-worker-01.yaml --project-name runner-worker-01 up --pull always --detach
             docker compose -f compose.runner-worker-02.yaml --project-name runner-worker-02 up --pull always --detach
+            docker compose -f compose.runner-worker-03.yaml --project-name runner-worker-03 up --pull always --detach
 
             sudo rm -rf /tmp/deployment_backend
           EOF

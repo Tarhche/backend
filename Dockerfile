@@ -16,7 +16,7 @@ WORKDIR /opt/app
 ENV PATH=$GOPATH/bin/linux_$GOARCH:$PATH
 RUN apk add tmux \
     && go install github.com/air-verse/air@v1.61 \
-    && go install github.com/nats-io/natscli/nats@v0.1.6
+    && go install github.com/nats-io/natscli/nats@v0.2.2
 ENTRYPOINT ["air", "--"]
 
 FROM alpine:latest AS production

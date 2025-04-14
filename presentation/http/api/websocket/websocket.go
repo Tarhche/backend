@@ -3,17 +3,19 @@ package websocket
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"io"
 	"log"
 	"net/http"
+	"regexp"
 	"slices"
 	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/translator"
 )
+
+var IDRegex = regexp.MustCompile("^[a-zA-Z0-9-]+$")
 
 type wsHandler struct {
 	// Time allowed to write a message to the peer.
@@ -40,6 +42,13 @@ type wsHandler struct {
 	lock sync.RWMutex
 
 	asyncRequester domain.Requester
+
+	translator translator.Translator
+}
+
+type failureResponse struct {
+	Error            string                  `json:"error,omitempty"`
+	ValidationErrors domain.ValidationErrors `json:"validationErrors,omitempty"`
 }
 
 var _ http.Handler = &wsHandler{}
@@ -52,6 +61,7 @@ func NewWsHandler(
 	closeGracePeriod time.Duration,
 	asyncReplyChan <-chan *domain.Reply,
 	asyncRequester domain.Requester,
+	translator translator.Translator,
 ) *wsHandler {
 	if pingPeriod >= pongWait {
 		panic("pingPeriod must be less than pongWait")
@@ -66,6 +76,7 @@ func NewWsHandler(
 		asyncReplyChan:   asyncReplyChan,
 		responseChans:    make([]chan *domain.Reply, 0, 10),
 		asyncRequester:   asyncRequester,
+		translator:       translator,
 	}
 
 	// fanout replies to all response channels
@@ -88,6 +99,9 @@ func (h *wsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println("upgrade:", err)
+
+		w.WriteHeader(http.StatusInternalServerError)
+
 		return
 	}
 	defer ws.Close()
@@ -98,6 +112,7 @@ func (h *wsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	go h.heartbeat(ws, r.Context().Done())
 
+	log.Println("new client connected")
 	responseChan := make(chan *domain.Reply)
 	h.lock.Lock()
 	h.responseChans = append(h.responseChans, responseChan)
@@ -116,6 +131,7 @@ func (h *wsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		close(responseChan)
 	}()
 
+	// TODO: we need to add a prefix to the request ID to avoid collisions/hijacking between clients
 	var lock sync.RWMutex
 	pendingRequestIDs := make(map[string]bool, 0)
 
@@ -123,136 +139,174 @@ func (h *wsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	go func() {
 		for reply := range responseChan {
 			lock.RLock()
-			binaryMessage, ok := pendingRequestIDs[reply.RequestID]
+			isBinaryMessage, ok := pendingRequestIDs[reply.RequestID]
 			lock.RUnlock()
+
+			log.Printf("isBinaryMessage: %t, ok: %t", isBinaryMessage, ok)
 
 			if !ok {
 				continue
 			}
 
-			json, err := json.Marshal(reply)
+			replyJSON, err := json.Marshal(reply)
 			if err != nil {
 				log.Println("error marshalling reply:", err)
 				continue
 			}
 
-			if binaryMessage {
-				ws.WriteMessage(websocket.BinaryMessage, json)
+			if isBinaryMessage {
+				ws.WriteMessage(websocket.BinaryMessage, replyJSON)
 				continue
 			}
 
-			ws.WriteMessage(websocket.TextMessage, json)
+			ws.WriteMessage(websocket.TextMessage, replyJSON)
 		}
 	}()
 
 	// read requests from client
 	for {
 		messageType, message, err := ws.ReadMessage()
-		if err == io.EOF {
-			break
-		} else if err != nil {
+		if err != nil {
 			log.Println("read:", err)
-			continue
+			break
 		}
 
-		// TODO: improve the code (duplicate, error handling, better structure, better validation)
-		if messageType == websocket.TextMessage {
-			requestID, err := h.handleTextMessage(ws, message)
-			if err == domain.ErrReplierNotFound {
-				log.Println("unknown subject")
-				continue
-			}
-
-			if err != nil {
-				log.Println("error handling text message:", err)
-				continue
-			}
-
-			lock.Lock()
-			pendingRequestIDs[requestID] = false
-			lock.Unlock()
-
-			continue
-		}
-
-		if messageType == websocket.BinaryMessage {
-			requestID, err := h.handleBinaryMessage(ws, message)
-			if err == domain.ErrReplierNotFound {
-				log.Println("unknown subject")
-				continue
-			}
-
-			if err != nil {
-				log.Println("error handling binary message:", err)
-				continue
-			}
-
-			lock.Lock()
-			pendingRequestIDs[requestID] = true
-			lock.Unlock()
-
-			continue
-		}
+		go h.handleMessage(ws, messageType, message, &lock, pendingRequestIDs)
 	}
 }
 
-func (h *wsHandler) handleTextMessage(ws *websocket.Conn, message []byte) (string, error) {
+func (h *wsHandler) handleMessage(ws *websocket.Conn, messageType int, message []byte, lock *sync.RWMutex, pendingRequestIDs map[string]bool) {
+	var (
+		requestID        string
+		validationErrors domain.ValidationErrors
+		err              error
+	)
+
+	if messageType == websocket.TextMessage {
+		requestID, validationErrors, err = h.handleTextMessage(ws, message)
+	} else if messageType == websocket.BinaryMessage {
+		requestID, validationErrors, err = h.handleBinaryMessage(ws, message)
+	} else {
+		log.Println("unknown message type:", messageType)
+		return
+	}
+
+	if validationErrors == nil {
+		validationErrors = make(domain.ValidationErrors)
+	}
+	defer clear(validationErrors)
+
+	lock.RLock()
+	if _, ok := pendingRequestIDs[requestID]; ok {
+		validationErrors["request_id"] = h.translator.Translate("request_already_exists")
+	}
+	lock.RUnlock()
+
+	// TODO: improve the code (duplicate, error handling, better structure, better validation)
+	if len(validationErrors) > 0 || err != nil {
+		failureResponse := &failureResponse{
+			ValidationErrors: validationErrors,
+		}
+
+		if err != nil {
+			failureResponse.Error = h.translator.Translate("error_on_processing_the_request")
+
+			if err == domain.ErrReplierNotFound {
+				failureResponse.ValidationErrors["subject"] = h.translator.Translate("invalid_value")
+			}
+		}
+
+		if len(failureResponse.ValidationErrors) > 0 {
+			failureResponse.ValidationErrors = validationErrors
+		}
+
+		failureResponseJSON, err := json.Marshal(failureResponse)
+		if err != nil {
+			log.Println("error marshalling reply payload:", err)
+			return
+		}
+
+		reply := &domain.Reply{
+			RequestID: requestID,
+			Payload:   failureResponseJSON,
+		}
+
+		replyJSON, err := json.Marshal(reply)
+		if err != nil {
+			log.Println("error marshalling reply:", err)
+			return
+		}
+
+		if messageType == websocket.TextMessage {
+			ws.WriteMessage(websocket.TextMessage, replyJSON)
+		}
+
+		if messageType == websocket.BinaryMessage {
+			ws.WriteMessage(websocket.BinaryMessage, replyJSON)
+		}
+
+		return
+	}
+
+	lock.Lock()
+	pendingRequestIDs[requestID] = false
+	lock.Unlock()
+}
+
+func (h *wsHandler) handleTextMessage(ws *websocket.Conn, message []byte) (string, domain.ValidationErrors, error) {
 	log.Println("received text message:", string(message))
 
 	var request domain.Request
 	if err := json.Unmarshal(message, &request); err != nil {
-		log.Println("error unmarshalling request:", err)
-		return "", err
+		return "", nil, err
 	}
 
-	if err := h.validateRequest(request); err != nil {
-		log.Println("invalid request:", err)
-		return "", err
+	if validationErrors := h.validateRequest(request); len(validationErrors) > 0 {
+		return request.ID, validationErrors, nil
 	}
 
-	err := h.handleRequest(request)
+	if err := h.asyncRequester.Request(context.Background(), &request); err != nil {
+		return request.ID, nil, err
+	}
 
-	return request.ID, err
+	return request.ID, nil, nil
 }
 
-func (h *wsHandler) handleBinaryMessage(ws *websocket.Conn, message []byte) (string, error) {
+func (h *wsHandler) handleBinaryMessage(ws *websocket.Conn, message []byte) (string, domain.ValidationErrors, error) {
 	log.Println("received binary message:", string(message))
 
 	var request domain.Request
 	if err := json.Unmarshal(message, &request); err != nil {
-		log.Println("error unmarshalling request:", err)
-		return "", err
+		return "", nil, err
 	}
 
-	if err := h.validateRequest(request); err != nil {
-		log.Println("invalid request:", err)
-		return "", err
+	if validationErrors := h.validateRequest(request); len(validationErrors) > 0 {
+		return request.ID, validationErrors, nil
 	}
 
-	err := h.handleRequest(request)
+	if err := h.asyncRequester.Request(context.Background(), &request); err != nil {
+		return request.ID, nil, err
+	}
 
-	return request.ID, err
+	return request.ID, nil, nil
 }
 
-func (h *wsHandler) handleRequest(request domain.Request) error {
-	err := h.asyncRequester.Request(context.Background(), &request)
-	if err == domain.ErrReplierNotFound {
-		return errors.New("unknown subject")
-	}
+func (h *wsHandler) validateRequest(request domain.Request) domain.ValidationErrors {
+	validationErrors := make(domain.ValidationErrors)
 
-	return err
-}
-
-func (h *wsHandler) validateRequest(request domain.Request) error {
 	if len(request.ID) == 0 {
-		return errors.New("request ID is required")
+		validationErrors["request_id"] = h.translator.Translate("required_field")
+	}
+
+	if !IDRegex.MatchString(request.ID) {
+		validationErrors["request_id"] = h.translator.Translate("invalid_value")
 	}
 
 	if len(request.Subject) == 0 {
-		return errors.New("subject is required")
+		validationErrors["subject"] = h.translator.Translate("required_field")
 	}
 
-	return nil
+	return validationErrors
 }
 
 func (h *wsHandler) heartbeat(ws *websocket.Conn, done <-chan struct{}) {

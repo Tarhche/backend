@@ -1,8 +1,8 @@
 services:
-  app:
+  runner-manager:
     image: ${RUNNER_MANAGER_IMAGE}
     networks:
-      - app
+      - runner-manager
       - mongodb
       - nats
       - docker
@@ -31,17 +31,12 @@ services:
       MONGO_HOST: ${BACKEND_MONGO_HOST}
       MONGO_PORT: ${BACKEND_MONGO_PORT}
       MONGO_DATABASE_NAME: ${BACKEND_MONGO_DATABASE_NAME}
-      MAIL_SMTP_FROM: ${BACKEND_MAIL_SMTP_FROM}
-      MAIL_SMTP_USERNAME: ${BACKEND_MAIL_SMTP_USERNAME}
-      MAIL_SMTP_PASSWORD: ${BACKEND_MAIL_SMTP_PASSWORD}
-      MAIL_SMTP_HOST: ${BACKEND_MAIL_SMTP_HOST}
-      MAIL_SMTP_PORT: ${BACKEND_MAIL_SMTP_PORT}
       NATS_URL: ${BACKEND_NATS_URL}
       DOCKER_HOST: ${DOCKER_HOST}
 
 networks:
-  app:
-    name: app
+  runner-manager:
+    name: runner-manager
     external: true
   mongodb:
     name: mongodb

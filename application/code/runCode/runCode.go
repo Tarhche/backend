@@ -3,14 +3,19 @@ package runCode
 import (
 	"context"
 	"encoding/json"
+	"log"
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/runner/task/events"
 )
 
 const (
-	RunCodeRequest      = "runCodeRequest"
-	CodeRunnerOwnerUUID = "blog:codeRunner"
+	RunCodeRequest      = "runCode"
+	CodeRunnerOwnerUUID = "guest"
+
+	DefaultMaxDiskSize   = 1 << 20 // 1 MB
+	DefaultMaxMemorySize = 5 << 20 // 5 MB
+	DefaultMaxCpu        = 0.05
 )
 
 type runCode struct {
@@ -36,11 +41,19 @@ func (h *runCode) Reply(r domain.Request, replyChan chan<- *domain.Reply) error 
 		return err
 	}
 
-	if validationErrors := h.validator.Validate(request); len(validationErrors) > 0 {
-		payload, err := json.Marshal(validationErrors)
+	log.Printf("request: %+v", request)
+
+	if validationErrors := h.validator.Validate(&request); len(validationErrors) > 0 {
+		response := Response{
+			ValidationErrors: validationErrors,
+		}
+
+		payload, err := json.Marshal(&response)
 		if err != nil {
 			return err
 		}
+
+		log.Printf("validation errors: %+v", validationErrors)
 
 		replyChan <- &domain.Reply{
 			RequestID: r.ID,
@@ -55,8 +68,15 @@ func (h *runCode) Reply(r domain.Request, replyChan chan<- *domain.Reply) error 
 		Image:      request.Image(),
 		AutoRemove: true,
 		Command:    []string{request.Code},
-		OwnerUUID:  CodeRunnerOwnerUUID,
+		ResourceLimits: events.ResourceLimits{
+			Cpu:    DefaultMaxCpu,
+			Memory: DefaultMaxMemorySize,
+			Disk:   DefaultMaxDiskSize,
+		},
+		OwnerUUID: CodeRunnerOwnerUUID,
 	}
+
+	log.Printf("event: %+v", event)
 
 	payload, err := json.Marshal(event)
 	if err != nil {

@@ -45,7 +45,7 @@ func (p *natsProvider) Register(ctx context.Context, iocContainer ioc.ServiceCon
 	}
 
 	p.terminate = func() {
-		defer natsConnection.Close()
+		defer natsConnection.Drain()
 		defer jetstreamPublishSubscriber.Wait()
 		defer reqreplyer.Close()
 	}

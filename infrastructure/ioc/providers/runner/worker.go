@@ -28,7 +28,6 @@ const (
 )
 
 var workerDependencies = []ioc.ServiceProvider{
-	providers.NewMongodbProvider(),
 	providers.NewNatsProvider(),
 	providers.NewDockerProvider(),
 	providers.NewTranslationProvider(),

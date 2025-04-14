@@ -1,12 +1,9 @@
 services:
-  app:
+  runner-worker-01:
     image: ${RUNNER_WORKER_IMAGE}
     networks:
-      - app
-      - mongodb
       - nats
       - docker
-    command: ["serve-runner-worker", "-port=80", "-name=runner-worker-01"]
     deploy:
       mode: replicated
       replicas: 2
@@ -17,7 +14,7 @@ services:
         max_attempts: 3
       resources:
         limits:
-          cpus: '0.20'
+          cpus: '0.10'
           memory: 50M
     environment:
       PRIVATE_KEY: ${BACKEND_PRIVATE_KEY}
@@ -26,27 +23,11 @@ services:
       S3_SECRET_KEY: ${BACKEND_S3_SECRET_KEY}
       S3_BUCKET_NAME: ${BACKEND_S3_BUCKET_NAME}
       S3_USE_SSL: ${BACKEND_S3_USE_SSL}
-      MONGO_SCHEME: ${BACKEND_MONGO_SCHEME}
-      MONGO_USERNAME: ${BACKEND_MONGO_USERNAME}
-      MONGO_PASSWORD: ${BACKEND_MONGO_PASSWORD}
-      MONGO_HOST: ${BACKEND_MONGO_HOST}
-      MONGO_PORT: ${BACKEND_MONGO_PORT}
-      MONGO_DATABASE_NAME: ${BACKEND_MONGO_DATABASE_NAME}
-      MAIL_SMTP_FROM: ${BACKEND_MAIL_SMTP_FROM}
-      MAIL_SMTP_USERNAME: ${BACKEND_MAIL_SMTP_USERNAME}
-      MAIL_SMTP_PASSWORD: ${BACKEND_MAIL_SMTP_PASSWORD}
-      MAIL_SMTP_HOST: ${BACKEND_MAIL_SMTP_HOST}
-      MAIL_SMTP_PORT: ${BACKEND_MAIL_SMTP_PORT}
       NATS_URL: ${BACKEND_NATS_URL}
       DOCKER_HOST: ${DOCKER_HOST}
+      RUNNER_WORKER_NAME: runner-worker-01
 
 networks:
-  app:
-    name: app
-    external: true
-  mongodb:
-    name: mongodb
-    external: true
   nats:
     name: nats
     external: true
