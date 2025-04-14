@@ -3,6 +3,8 @@ package translation
 const FA = "FA"
 
 var farsi = map[string]string{
+	"error_on_processing_the_request":   "خطا در پردازش درخواست رخ داده است",
+	"request_already_exists":            "درخواست قبلا ارسال شده است",
 	"required_field":                    "این فیلد اجباری است",
 	"invalid_value":                     "مقدار ارائه شده نامعتبر است",
 	"invalid_email":                     "مقدار ارائه شده باید یک آدرس ایمیل معتبر باشد",

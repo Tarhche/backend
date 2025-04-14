@@ -2,13 +2,14 @@ package runCode
 
 import (
 	"fmt"
+	"log"
 	"slices"
 
 	"github.com/khanzadimahdi/testproject/domain"
 )
 
 const (
-	codeRunnerImageUrl = "ghcr.io/khanzadimahdi/code-runner"
+	codeRunnerImageUrl = "ghcr.io/tarhche/code-runner"
 )
 
 type Request struct {
@@ -45,8 +46,10 @@ func (r *Request) Validate() domain.ValidationErrors {
 	}
 
 	if !slices.Contains(supportedCodeRunners, r.Runner) {
-		validationErrors["runner"] = "invalid_runner"
+		validationErrors["runner"] = "invalid_value"
 	}
+
+	log.Printf("validation errors: %+v", validationErrors)
 
 	return validationErrors
 }

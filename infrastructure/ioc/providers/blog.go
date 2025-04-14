@@ -71,6 +71,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/file"
 	"github.com/khanzadimahdi/testproject/domain/password"
+	taskEvents "github.com/khanzadimahdi/testproject/domain/runner/task/events"
 	translatorContract "github.com/khanzadimahdi/testproject/domain/translator"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc"
 	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
@@ -197,7 +198,7 @@ func blog(
 	}
 
 	var asyncReplyChan chan *domain.Reply
-	if err := iocContainer.Resolve(asyncReplyChan, ioc.WithNameResolving(BlogRequestReplyerChannel)); err != nil {
+	if err := iocContainer.Resolve(&asyncReplyChan, ioc.WithNameResolving(BlogRequestReplyerChannel)); err != nil {
 		return nil, err
 	}
 
@@ -301,6 +302,7 @@ func blog(
 		WebSocketCloseGracePeriod,
 		asyncReplyChan,
 		jetStreamRequester,
+		translator,
 	))
 
 	// home
@@ -420,7 +422,7 @@ func blog(
 	subscribers := map[string]domain.MessageHandler{
 		forgetpassword.SendForgetPasswordEmailName: forgetpassword.NewSendForgetPasswordEmailHandler(userRepository, jwt, mailer, mailFromAddress, renderer),
 		register.SendRegisterationEmailName:        register.NewSendRegisterationEmailHandler(jwt, mailer, mailFromAddress, renderer),
-		runCode.RunCodeRequest:                     heartbeat.NewHeartbeatHandler(asyncReplyChan),
+		taskEvents.HeartbeatName:                   heartbeat.NewHeartbeatHandler(asyncReplyChan),
 	}
 
 	if err := iocContainer.Singleton(func() map[string]domain.MessageHandler {

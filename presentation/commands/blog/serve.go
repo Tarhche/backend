@@ -77,7 +77,7 @@ func (c *ServeCommand) Boot(ctx context.Context, iocContainer ioc.ServiceContain
 		return err
 	}
 
-	if err := iocContainer.Resolve(&c.requester); err != nil {
+	if err := iocContainer.Resolve(&c.requester, ioc.WithNameResolving(providers.BlogRequestReplyer)); err != nil {
 		return err
 	}
 

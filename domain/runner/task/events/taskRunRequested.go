@@ -18,5 +18,5 @@ type TaskRunRequested struct {
 	Entrypoint     []string               `json:"entrypoint"`
 	Mounts         []Mount                `json:"mounts"`
 	ResourceLimits ResourceLimits         `json:"resource_limits"`
-	OwnerUUID      string                 `json:"-"`
+	OwnerUUID      string                 `json:"owner_uuid"`
 }

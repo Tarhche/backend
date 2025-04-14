@@ -133,8 +133,9 @@ func (m *publishSubscriber) makeSureStreamExists(ctx context.Context, subject st
 	}
 
 	stream, err := m.jetstream.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
-		Name:     subject,
-		Subjects: []string{subject},
+		Name:      subject,
+		Subjects:  []string{subject},
+		Retention: jetstream.InterestPolicy,
 	})
 	if err != nil {
 		return nil, err
