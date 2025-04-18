@@ -73,6 +73,10 @@ func (c *ServeCommand) Register(ctx context.Context, iocContainer ioc.ServiceCon
 }
 
 func (c *ServeCommand) Boot(ctx context.Context, iocContainer ioc.ServiceContainer) error {
+	if len(c.name) == 0 {
+		c.name = os.Getenv("RUNNER_WORKER_NAME")
+	}
+
 	if err := iocContainer.Singleton(
 		func() string { return c.name },
 		ioc.WithNameBinding(runner.WorkerName),
@@ -108,10 +112,6 @@ func (c *ServeCommand) Terminate() error {
 }
 
 func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
-	if len(c.name) == 0 {
-		c.name = os.Getenv("RUNNER_WORKER_NAME")
-	}
-
 	c.validateParams()
 
 	server := http.Server{
