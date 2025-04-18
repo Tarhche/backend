@@ -147,7 +147,7 @@ jobs:
           EOF
 
           # Copy files
-          scp -q -i ~/ec2-key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -r ./compose.app.yaml $EC2_SSH_ENDPOINT:/tmp/deployment_backend/ > /dev/null 2>&1
+          scp -q -i ~/ec2-key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -r ./compose.*.yaml $EC2_SSH_ENDPOINT:/tmp/deployment_backend/ > /dev/null 2>&1
 
           # Connect and deploy services
           ssh -q -i ~/ec2-key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $EC2_SSH_ENDPOINT > /dev/null 2>&1 << 'EOF'
@@ -176,7 +176,7 @@ jobs:
             export BACKEND_S3_USE_SSL='${{ secrets.BACKEND_S3_USE_SSL }}'
             export BACKEND_S3_BUCKET_NAME='${{ secrets.BACKEND_S3_BUCKET_NAME }}'
 
-            export DOCKER_HOST='${{ secrets.DOCKER_HOST }}'
+            export BACKEND_DOCKER_HOST='${{ secrets.BACKEND_DOCKER_HOST }}'
 
             export APP_IMAGE='${{ secrets.APP_IMAGE }}'
             export RUNNER_MANAGER_IMAGE='${{ secrets.RUNNER_MANAGER_IMAGE }}'

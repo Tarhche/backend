@@ -12,26 +12,6 @@ x-app: &app
     - docker
   volumes:
     - ./:/opt/app
-  environment:
-    PRIVATE_KEY: ${PRIVATE_KEY}
-    S3_ENDPOINT: ${S3_ENDPOINT}
-    S3_ACCESS_KEY: ${S3_ACCESS_KEY}
-    S3_SECRET_KEY: ${S3_SECRET_KEY}
-    S3_BUCKET_NAME: ${S3_BUCKET_NAME}
-    S3_USE_SSL: ${S3_USE_SSL}
-    MONGO_SCHEME: ${MONGO_SCHEME}
-    MONGO_USERNAME: ${MONGO_USERNAME}
-    MONGO_PASSWORD: ${MONGO_PASSWORD}
-    MONGO_HOST: ${MONGO_HOST}
-    MONGO_PORT: ${MONGO_PORT}
-    MONGO_DATABASE_NAME: ${MONGO_DATABASE_NAME}
-    MAIL_SMTP_FROM: ${MAIL_SMTP_FROM}
-    MAIL_SMTP_USERNAME: ${MAIL_SMTP_USERNAME}
-    MAIL_SMTP_PASSWORD: ${MAIL_SMTP_PASSWORD}
-    MAIL_SMTP_HOST: ${MAIL_SMTP_HOST}
-    MAIL_SMTP_PORT: ${MAIL_SMTP_PORT}
-    NATS_URL: ${NATS_URL}
-    DOCKER_HOST: ${DOCKER_HOST}
 
 services:
   frontend:
@@ -52,13 +32,6 @@ services:
       target: develop-blog
     ports:
       - "8000:80"
-
-  runner-manager:
-    <<: *app
-    build:
-      target: develop-runner-manager
-    ports:
-      - "8020:80"
     environment:
       PRIVATE_KEY: ${PRIVATE_KEY}
       S3_ENDPOINT: ${S3_ENDPOINT}
@@ -72,8 +45,27 @@ services:
       MONGO_HOST: ${MONGO_HOST}
       MONGO_PORT: ${MONGO_PORT}
       MONGO_DATABASE_NAME: ${MONGO_DATABASE_NAME}
+      MAIL_SMTP_FROM: ${MAIL_SMTP_FROM}
+      MAIL_SMTP_USERNAME: ${MAIL_SMTP_USERNAME}
+      MAIL_SMTP_PASSWORD: ${MAIL_SMTP_PASSWORD}
+      MAIL_SMTP_HOST: ${MAIL_SMTP_HOST}
+      MAIL_SMTP_PORT: ${MAIL_SMTP_PORT}
       NATS_URL: ${NATS_URL}
-      DOCKER_HOST: ${DOCKER_HOST}
+
+  runner-manager:
+    <<: *app
+    build:
+      target: develop-runner-manager
+    ports:
+      - "8020:80"
+    environment:
+      MONGO_SCHEME: ${MONGO_SCHEME}
+      MONGO_USERNAME: ${MONGO_USERNAME}
+      MONGO_PASSWORD: ${MONGO_PASSWORD}
+      MONGO_HOST: ${MONGO_HOST}
+      MONGO_PORT: ${MONGO_PORT}
+      MONGO_DATABASE_NAME: ${MONGO_DATABASE_NAME}
+      NATS_URL: ${NATS_URL}
 
   runner-worker-01:
     <<: *app
@@ -83,12 +75,6 @@ services:
       - "8040:80"
     environment:
       RUNNER_WORKER_NAME: runner-worker-01
-      PRIVATE_KEY: ${PRIVATE_KEY}
-      S3_ENDPOINT: ${S3_ENDPOINT}
-      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
-      S3_SECRET_KEY: ${S3_SECRET_KEY}
-      S3_BUCKET_NAME: ${S3_BUCKET_NAME}
-      S3_USE_SSL: ${S3_USE_SSL}
       NATS_URL: ${NATS_URL}
       DOCKER_HOST: ${DOCKER_HOST}
 
@@ -100,12 +86,6 @@ services:
       - "8041:80"
     environment:
       RUNNER_WORKER_NAME: runner-worker-02
-      PRIVATE_KEY: ${PRIVATE_KEY}
-      S3_ENDPOINT: ${S3_ENDPOINT}
-      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
-      S3_SECRET_KEY: ${S3_SECRET_KEY}
-      S3_BUCKET_NAME: ${S3_BUCKET_NAME}
-      S3_USE_SSL: ${S3_USE_SSL}
       NATS_URL: ${NATS_URL}
       DOCKER_HOST: ${DOCKER_HOST}
 
@@ -117,12 +97,6 @@ services:
       - "8042:80"
     environment:
       RUNNER_WORKER_NAME: runner-worker-03
-      PRIVATE_KEY: ${PRIVATE_KEY}
-      S3_ENDPOINT: ${S3_ENDPOINT}
-      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
-      S3_SECRET_KEY: ${S3_SECRET_KEY}
-      S3_BUCKET_NAME: ${S3_BUCKET_NAME}
-      S3_USE_SSL: ${S3_USE_SSL}
       NATS_URL: ${NATS_URL}
       DOCKER_HOST: ${DOCKER_HOST}
 

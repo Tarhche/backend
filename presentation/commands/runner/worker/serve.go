@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	workerHeartbeat "github.com/khanzadimahdi/testproject/application/runner/worker/beatHeart"
@@ -107,6 +108,10 @@ func (c *ServeCommand) Terminate() error {
 }
 
 func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
+	if len(c.name) == 0 {
+		c.name = os.Getenv("RUNNER_WORKER_NAME")
+	}
+
 	c.validateParams()
 
 	server := http.Server{
