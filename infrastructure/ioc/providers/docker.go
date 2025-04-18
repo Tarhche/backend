@@ -2,6 +2,7 @@ package providers
 
 import (
 	"context"
+	"os"
 
 	containerContract "github.com/khanzadimahdi/testproject/domain/runner/container"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc"
@@ -17,7 +18,9 @@ func NewDockerProvider() *dockerProvider {
 }
 
 func (p *dockerProvider) Register(ctx context.Context, iocContainer ioc.ServiceContainer) error {
-	containerManager, err := container.NewDockerManager("tcp://docker:2375") // TODO: make this configurable (env variable?)
+	dockerHost := os.Getenv("DOCKER_HOST")
+
+	containerManager, err := container.NewDockerManager(dockerHost)
 	if err != nil {
 		return err
 	}

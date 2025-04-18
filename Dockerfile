@@ -45,9 +45,11 @@ CMD ["serve-runner-manager", "-port=80"]
 
 # runner worker service
 FROM develop AS develop-runner-worker
+ENV RUNNER_WORKER_NAME=runner-worker-01
 EXPOSE 80
-CMD ["serve-runner-worker", "-port=80", "-name=runner-worker-01"]
+CMD ["serve-runner-worker", "-port=80", "-name=${RUNNER_WORKER_NAME}"]
 
 FROM production AS production-runner-worker
+ENV RUNNER_WORKER_NAME=runner-worker-01
 EXPOSE 80
-CMD ["serve-runner-worker", "-port=80", "-name=runner-worker-01"]
+CMD ["serve-runner-worker", "-port=80", "-name=${RUNNER_WORKER_NAME}"]
