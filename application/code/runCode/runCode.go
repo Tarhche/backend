@@ -67,7 +67,7 @@ func (h *runCode) Reply(r domain.Request, replyChan chan<- *domain.Reply) error 
 		Name:       r.ID,
 		Image:      request.Image(),
 		AutoRemove: true,
-		Command:    []string{request.Code},
+		Command:    []string{"--timeout", "15", request.Code},
 		ResourceLimits: events.ResourceLimits{
 			Cpu:    DefaultMaxCpu,
 			Memory: DefaultMaxMemorySize,
