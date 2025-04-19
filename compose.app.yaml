@@ -7,7 +7,7 @@ services:
       - nats
     deploy:
       mode: replicated
-      replicas: 2
+      replicas: 1
       endpoint_mode: vip
       restart_policy:
         condition: on-failure

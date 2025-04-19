@@ -94,13 +94,15 @@ func NewWsHandler(
 }
 
 func (h *wsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	var upgrader = websocket.Upgrader{}
+	var upgrader = websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool {
+			return true // TODO: check origin
+		},
+	}
 
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println("upgrade:", err)
-
-		w.WriteHeader(http.StatusInternalServerError)
 
 		return
 	}
@@ -134,6 +136,7 @@ func (h *wsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// TODO: we need to add a prefix to the request ID to avoid collisions/hijacking between clients
 	var lock sync.RWMutex
 	pendingRequestIDs := make(map[string]bool, 0)
+	defer clear(pendingRequestIDs)
 
 	// write responses to client
 	go func() {
@@ -142,7 +145,9 @@ func (h *wsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			isBinaryMessage, ok := pendingRequestIDs[reply.RequestID]
 			lock.RUnlock()
 
+			log.Printf("pendingRequestIDs: %+v", pendingRequestIDs)
 			log.Printf("isBinaryMessage: %t, ok: %t", isBinaryMessage, ok)
+			log.Printf("reply: %+v", reply)
 
 			if !ok {
 				continue
@@ -203,6 +208,8 @@ func (h *wsHandler) handleMessage(ws *websocket.Conn, messageType int, message [
 	lock.RUnlock()
 
 	// TODO: improve the code (duplicate, error handling, better structure, better validation)
+	// TODO: we should not keep states on the server side, we should just send the request and get the response (replication can cause issues)
+	// TODO: to fix replication issue, set the replicas to 1, after fixing the issue set it back to 2
 	if len(validationErrors) > 0 || err != nil {
 		failureResponse := &failureResponse{
 			ValidationErrors: validationErrors,
@@ -250,6 +257,9 @@ func (h *wsHandler) handleMessage(ws *websocket.Conn, messageType int, message [
 
 	lock.Lock()
 	pendingRequestIDs[requestID] = false
+	if messageType == websocket.BinaryMessage {
+		pendingRequestIDs[requestID] = true
+	}
 	lock.Unlock()
 }
 

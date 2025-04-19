@@ -2,6 +2,7 @@ package heartbeat
 
 import (
 	"encoding/json"
+	"log"
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
@@ -39,6 +40,8 @@ func (h *heartbeat) Handle(data []byte) error {
 
 	taskState := task.State(heartbeat.State)
 	requestID := heartbeat.Name
+
+	log.Printf("heartbeat: %+v", heartbeat)
 
 	if task.IsTerminalState(taskState) {
 		h.asyncReplyChan <- &domain.Reply{
