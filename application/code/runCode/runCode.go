@@ -13,9 +13,9 @@ const (
 	RunCodeRequest      = "runCode"
 	CodeRunnerOwnerUUID = "guest"
 
-	DefaultMaxDiskSize   = 1 << 20 // 1 MB
-	DefaultMaxMemorySize = 5 << 20 // 5 MB
-	DefaultMaxCpu        = 0.05
+	DefaultMaxDiskSize   = 30 << 20  // 30 MB
+	DefaultMaxMemorySize = 150 << 20 // 150 MB
+	DefaultMaxCpu        = 0.15
 )
 
 type runCode struct {
@@ -67,7 +67,7 @@ func (h *runCode) Reply(r domain.Request, replyChan chan<- *domain.Reply) error 
 		Name:       r.ID,
 		Image:      request.Image(),
 		AutoRemove: true,
-		Command:    []string{"--timeout", "15", request.Code},
+		Command:    []string{"--timeout", "30", request.Code},
 		ResourceLimits: events.ResourceLimits{
 			Cpu:    DefaultMaxCpu,
 			Memory: DefaultMaxMemorySize,
