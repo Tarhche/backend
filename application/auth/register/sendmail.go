@@ -14,7 +14,7 @@ import (
 const (
 	SendRegisterationEmailName = "sendRegistrationEmail"
 
-	templateName    = "resources/view/mail/auth/register"
+	templateName    = "mail/auth/register"
 	registrationURL = "https://tarhche.com/auth/verify?token="
 )
 

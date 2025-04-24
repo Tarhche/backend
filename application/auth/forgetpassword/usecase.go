@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	templateName     = "resources/view/mail/auth/reset-password"
+	templateName     = "mail/auth/reset-password"
 	resetPasswordURL = "https://tarhche.com/auth/reset-password?token="
 )
 

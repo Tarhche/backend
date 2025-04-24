@@ -1,6 +1,7 @@
 package template
 
 import (
+	"fmt"
 	"html/template"
 	"io"
 	"io/fs"
@@ -47,7 +48,7 @@ func (r *Renderer) Render(writer io.Writer, templateName string, data any) error
 
 	index, ok := slices.BinarySearch(r.files, templateName+"."+r.extension)
 	if !ok {
-		return nil
+		return fmt.Errorf("template not found: %s", templateName)
 	}
 
 	if _, ok := r.cache[templateName]; !ok {
