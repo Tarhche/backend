@@ -38,7 +38,23 @@ func NewRunCodeHandler(
 func (h *runCode) Reply(r domain.Request, replyChan chan<- *domain.Reply) error {
 	var request Request
 	if err := json.Unmarshal(r.Payload, &request); err != nil {
-		return err
+		response := Response{
+			ValidationErrors: domain.ValidationErrors{
+				"runner": "request doesn't have a valid format",
+			},
+		}
+
+		payload, err := json.Marshal(&response)
+		if err != nil {
+			return err
+		}
+
+		replyChan <- &domain.Reply{
+			RequestID: r.ID,
+			Payload:   payload,
+		}
+
+		return nil
 	}
 
 	log.Printf("request: %+v", request)
