@@ -67,7 +67,7 @@ func TestUseCase_Execute(t *testing.T) {
 		)
 
 		filesRepository.On("CountByOwnerUUID", r.OwnerUUID).Once().Return(uint(len(f)), nil)
-		filesRepository.On("GetAllByOwnerUUID", r.OwnerUUID, uint(0), uint(10)).Once().Return(f, nil)
+		filesRepository.On("GetAllByOwnerUUID", r.OwnerUUID, uint(0), uint(20)).Once().Return(f, nil)
 		defer filesRepository.AssertExpectations(t)
 
 		response, err := NewUseCase(&filesRepository).Execute(&r)
@@ -116,7 +116,7 @@ func TestUseCase_Execute(t *testing.T) {
 		)
 
 		filesRepository.On("CountByOwnerUUID", r.OwnerUUID).Once().Return(uint(3), nil)
-		filesRepository.On("GetAllByOwnerUUID", r.OwnerUUID, uint(0), uint(10)).Once().Return(nil, expectedError)
+		filesRepository.On("GetAllByOwnerUUID", r.OwnerUUID, uint(0), uint(20)).Once().Return(nil, expectedError)
 		defer filesRepository.AssertExpectations(t)
 
 		response, err := NewUseCase(&filesRepository).Execute(&r)
