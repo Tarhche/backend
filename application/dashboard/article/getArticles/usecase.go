@@ -4,7 +4,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/article"
 )
 
-const limit = 10
+const limit = 20
 
 type UseCase struct {
 	articleRepository article.Repository

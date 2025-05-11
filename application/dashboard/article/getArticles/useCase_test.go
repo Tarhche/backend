@@ -66,7 +66,7 @@ func TestUseCase_Execute(t *testing.T) {
 		)
 
 		articleRepository.On("Count").Once().Return(uint(len(a)), nil)
-		articleRepository.On("GetAll", uint(0), uint(10)).Return(a, nil)
+		articleRepository.On("GetAll", uint(0), uint(20)).Return(a, nil)
 		defer articleRepository.AssertExpectations(t)
 
 		response, err := NewUseCase(&articleRepository).Execute(&r)
@@ -113,7 +113,7 @@ func TestUseCase_Execute(t *testing.T) {
 		)
 
 		articleRepository.On("Count").Once().Return(uint(3), nil)
-		articleRepository.On("GetAll", uint(0), uint(10)).Return(nil, expectedErr)
+		articleRepository.On("GetAll", uint(0), uint(20)).Return(nil, expectedErr)
 		defer articleRepository.AssertExpectations(t)
 
 		response, err := NewUseCase(&articleRepository).Execute(&r)

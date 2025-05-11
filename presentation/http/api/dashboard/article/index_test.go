@@ -58,7 +58,7 @@ func TestIndexHandler(t *testing.T) {
 		defer authorizer.AssertExpectations(t)
 
 		articleRepository.On("Count").Once().Return(uint(len(a)), nil)
-		articleRepository.On("GetAll", uint(0), uint(10)).Return(a, nil)
+		articleRepository.On("GetAll", uint(0), uint(20)).Return(a, nil)
 		defer articleRepository.AssertExpectations(t)
 
 		handler := NewIndexHandler(getarticles.NewUseCase(&articleRepository), &authorizer)
@@ -93,7 +93,7 @@ func TestIndexHandler(t *testing.T) {
 		defer authorizer.AssertExpectations(t)
 
 		articleRepository.On("Count").Once().Return(uint(0), nil)
-		articleRepository.On("GetAll", uint(0), uint(10)).Return(nil, nil)
+		articleRepository.On("GetAll", uint(0), uint(20)).Return(nil, nil)
 		defer articleRepository.AssertExpectations(t)
 
 		handler := NewIndexHandler(getarticles.NewUseCase(&articleRepository), &authorizer)
