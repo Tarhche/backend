@@ -59,13 +59,11 @@ func (m *publishSubscriber) Subscribe(ctx context.Context, consumerID string, su
 		return err
 	}
 
-	go m.consumer(ctx, &subscriber{
+	return m.consumer(ctx, &subscriber{
 		id:      consumerID,
 		handler: handler,
 		stream:  stream,
 	})
-
-	return nil
 }
 
 func (m *publishSubscriber) Wait() {

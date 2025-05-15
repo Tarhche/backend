@@ -57,13 +57,11 @@ func (r *requestReply) RegisterReplyer(ctx context.Context, subject string, repl
 		return err
 	}
 
-	go r.consumer(ctx, &subscriber{
+	return r.consumer(ctx, &subscriber{
 		id:      r.consumerID,
 		replyer: replyer,
 		stream:  stream,
 	})
-
-	return nil
 }
 
 func (r *requestReply) Request(ctx context.Context, request *domain.Request) error {
