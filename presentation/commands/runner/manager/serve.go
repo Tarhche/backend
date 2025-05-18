@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/infrastructure/console"
@@ -84,8 +85,10 @@ func (c *ServeCommand) Terminate() error {
 
 func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 	server := http.Server{
-		Addr:    fmt.Sprintf("0.0.0.0:%d", c.port),
-		Handler: c.handler,
+		Addr:        fmt.Sprintf("0.0.0.0:%d", c.port),
+		Handler:     c.handler,
+		ReadTimeout: 20 * time.Second,
+		IdleTimeout: 10 * time.Second,
 	}
 
 	go func() {
