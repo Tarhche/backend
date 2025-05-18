@@ -35,6 +35,11 @@ func (p *mongodbProvider) Register(ctx context.Context, iocContainer ioc.Service
 	if err != nil {
 		return err
 	}
+
+	if err := mongoClient.Ping(ctx, nil); err != nil {
+		return err
+	}
+
 	database := mongoClient.Database(os.Getenv("MONGO_DATABASE_NAME"))
 
 	p.terminate = func() {
