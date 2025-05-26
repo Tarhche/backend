@@ -2,8 +2,11 @@ package auth
 
 import (
 	"context"
+	"time"
 
+	"github.com/khanzadimahdi/testproject/domain/role"
 	"github.com/khanzadimahdi/testproject/domain/user"
+	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
 )
 
 const (
@@ -26,4 +29,79 @@ func FromContext(ctx context.Context) *user.User {
 
 func ToContext(ctx context.Context, user *user.User) context.Context {
 	return context.WithValue(ctx, AuthKey, user)
+}
+
+type AuthTokenGenerator struct {
+	jwt            *jwt.JWT
+	roleRepository role.Repository
+}
+
+func NewTokenGenerator(jwt *jwt.JWT, roleRepository role.Repository) *AuthTokenGenerator {
+	return &AuthTokenGenerator{
+		jwt:            jwt,
+		roleRepository: roleRepository,
+	}
+}
+
+func (t *AuthTokenGenerator) GenerateAccessToken(userUUID string) (string, error) {
+	roles, err := t.roleRepository.GetByUserUUID(userUUID)
+	if err != nil {
+		return "", err
+	}
+
+	var permissionsCount int
+	for i := range roles {
+		permissionsCount += len(roles[i].Permissions)
+	}
+
+	roleNames := make([]string, 0, len(roles))
+	permissionNames := make([]string, 0, permissionsCount)
+	for i := range roles {
+		roleNames = append(roleNames, roles[i].Name)
+		permissionNames = append(permissionNames, roles[i].Permissions...)
+	}
+
+	b := jwt.NewClaimsBuilder()
+	b.SetSubject(userUUID)
+	b.SetNotBefore(time.Now())
+	b.SetExpirationTime(time.Now().Add(15 * time.Minute))
+	b.SetIssuedAt(time.Now())
+	b.SetAudience([]string{AccessToken})
+	b.SetRoles(roleNames)
+	b.SetPermissions(permissionNames)
+
+	return t.jwt.Generate(b.Build())
+}
+
+func (t *AuthTokenGenerator) GenerateRefreshToken(userUUID string) (string, error) {
+	b := jwt.NewClaimsBuilder()
+	b.SetSubject(userUUID)
+	b.SetNotBefore(time.Now())
+	b.SetExpirationTime(time.Now().Add(2 * 24 * time.Hour))
+	b.SetIssuedAt(time.Now())
+	b.SetAudience([]string{RefreshToken})
+
+	return t.jwt.Generate(b.Build())
+}
+
+func (t *AuthTokenGenerator) GenerateResetPasswordToken(userUUID string) (string, error) {
+	b := jwt.NewClaimsBuilder()
+	b.SetSubject(userUUID)
+	b.SetNotBefore(time.Now())
+	b.SetExpirationTime(time.Now().Add(10 * time.Minute))
+	b.SetIssuedAt(time.Now())
+	b.SetAudience([]string{ResetPasswordToken})
+
+	return t.jwt.Generate(b.Build())
+}
+
+func (t *AuthTokenGenerator) GenerateRegistrationToken(identity string) (string, error) {
+	b := jwt.NewClaimsBuilder()
+	b.SetSubject(identity)
+	b.SetNotBefore(time.Now())
+	b.SetExpirationTime(time.Now().Add(24 * time.Hour))
+	b.SetIssuedAt(time.Now())
+	b.SetAudience([]string{RegistrationToken})
+
+	return t.jwt.Generate(b.Build())
 }

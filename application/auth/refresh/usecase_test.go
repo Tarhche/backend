@@ -7,9 +7,11 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/role"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/ecdsa"
 	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
+	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/roles"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
 	"github.com/khanzadimahdi/testproject/infrastructure/translator"
 	"github.com/khanzadimahdi/testproject/infrastructure/validator"
@@ -24,11 +26,34 @@ func TestUseCase_Execute(t *testing.T) {
 
 	j := jwt.NewJWT(privateKey, privateKey.Public())
 
+	rl := []role.Role{
+		{
+			UUID:        "role-uuid-1",
+			Name:        "role-1",
+			Description: "role description 1",
+			Permissions: []string{"permission-1", "permission-2"},
+			UserUUIDs:   []string{"test-user-uuid-1", "test-user-uuid-2"},
+		},
+		{
+			UUID:        "role-uuid-2",
+			Name:        "role-2",
+			Description: "role description 2",
+			Permissions: []string{"permission-1", "permission-5"},
+			UserUUIDs:   []string{"test-user-uuid-2"},
+		},
+		{
+			UUID:        "role-uuid-3",
+			Name:        "role-3",
+			Description: "role description 3",
+		},
+	}
+
 	t.Run("generates a fresh jwt token", func(t *testing.T) {
 		t.Parallel()
 
 		var (
 			userRepository users.MockUsersRepository
+			roleRepository roles.MockRolesRepository
 			validator      validator.MockValidator
 			translator     translator.TranslatorMock
 
@@ -44,7 +69,12 @@ func TestUseCase_Execute(t *testing.T) {
 		userRepository.On("GetOne", u.UUID).Once().Return(u, nil)
 		defer userRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&userRepository, j, &translator, &validator).Execute(&r)
+		roleRepository.On("GetByUserUUID", u.UUID).Once().Return(rl, nil)
+		defer roleRepository.AssertExpectations(t)
+
+		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
+
+		response, err := NewUseCase(&userRepository, j, authTokenGenerator, &translator, &validator).Execute(&r)
 
 		translator.AssertNotCalled(t, "Translate")
 
@@ -74,6 +104,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		var (
 			userRepository users.MockUsersRepository
+			roleRepository roles.MockRolesRepository
 			validator      validator.MockValidator
 			translator     translator.TranslatorMock
 
@@ -88,8 +119,11 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(expectedResponse.ValidationErrors)
 		defer validator.AssertExpectations(t)
 
-		response, err := NewUseCase(&userRepository, j, &translator, &validator).Execute(&r)
+		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
 
+		response, err := NewUseCase(&userRepository, j, authTokenGenerator, &translator, &validator).Execute(&r)
+
+		roleRepository.AssertNotCalled(t, "GetByUserUUID")
 		translator.AssertNotCalled(t, "Translate")
 		userRepository.AssertExpectations(t)
 
@@ -104,6 +138,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		var (
 			userRepository users.MockUsersRepository
+			roleRepository roles.MockRolesRepository
 			validator      validator.MockValidator
 			translator     translator.TranslatorMock
 
@@ -121,8 +156,11 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		response, err := NewUseCase(&userRepository, j, &translator, &validator).Execute(&r)
+		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
 
+		response, err := NewUseCase(&userRepository, j, authTokenGenerator, &translator, &validator).Execute(&r)
+
+		roleRepository.AssertNotCalled(t, "GetByUserUUID")
 		translator.AssertNotCalled(t, "Translate")
 		userRepository.AssertNotCalled(t, "GetOne")
 
@@ -137,6 +175,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		var (
 			userRepository users.MockUsersRepository
+			roleRepository roles.MockRolesRepository
 			validator      validator.MockValidator
 			translator     translator.TranslatorMock
 
@@ -153,8 +192,11 @@ func TestUseCase_Execute(t *testing.T) {
 		userRepository.On("GetOne", u.UUID).Once().Return(user.User{}, expectedErr)
 		defer userRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&userRepository, j, &translator, &validator).Execute(&r)
+		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
 
+		response, err := NewUseCase(&userRepository, j, authTokenGenerator, &translator, &validator).Execute(&r)
+
+		roleRepository.AssertNotCalled(t, "GetByUserUUID")
 		translator.AssertNotCalled(t, "Translate")
 
 		assert.ErrorIs(t, err, expectedErr)

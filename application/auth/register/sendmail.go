@@ -4,11 +4,9 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
-	"time"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
 )
 
 const (
@@ -25,25 +23,25 @@ type SendRegistrationEmail struct {
 
 // SendRegisterationEmailHandler handles SendMail command
 type sendRegisterationEmailHandler struct {
-	jwt      *jwt.JWT
-	mailer   domain.Mailer
-	mailFrom string
-	template domain.Renderer
+	authTokenGenerator *auth.AuthTokenGenerator
+	mailer             domain.Mailer
+	mailFrom           string
+	template           domain.Renderer
 }
 
 var _ domain.MessageHandler = &sendRegisterationEmailHandler{}
 
 func NewSendRegisterationEmailHandler(
-	JWT *jwt.JWT,
+	authTokenGenerator *auth.AuthTokenGenerator,
 	mailer domain.Mailer,
 	mailFrom string,
 	template domain.Renderer,
 ) *sendRegisterationEmailHandler {
 	return &sendRegisterationEmailHandler{
-		jwt:      JWT,
-		mailer:   mailer,
-		mailFrom: mailFrom,
-		template: template,
+		authTokenGenerator: authTokenGenerator,
+		mailer:             mailer,
+		mailFrom:           mailFrom,
+		template:           template,
 	}
 }
 
@@ -53,7 +51,7 @@ func (h *sendRegisterationEmailHandler) Handle(data []byte) error {
 		return err
 	}
 
-	registrationToken, err := h.registrationToken(command.Identity)
+	registrationToken, err := h.authTokenGenerator.GenerateRegistrationToken(command.Identity)
 	if err != nil {
 		return err
 	}
@@ -67,15 +65,4 @@ func (h *sendRegisterationEmailHandler) Handle(data []byte) error {
 	}
 
 	return h.mailer.SendMail(h.mailFrom, command.Identity, "Registration", msg.Bytes())
-}
-
-func (h *sendRegisterationEmailHandler) registrationToken(identity string) (string, error) {
-	b := jwt.NewClaimsBuilder()
-	b.SetSubject(identity)
-	b.SetNotBefore(time.Now())
-	b.SetExpirationTime(time.Now().Add(24 * time.Hour))
-	b.SetIssuedAt(time.Now())
-	b.SetAudience([]string{auth.RegistrationToken})
-
-	return h.jwt.Generate(b.Build())
 }

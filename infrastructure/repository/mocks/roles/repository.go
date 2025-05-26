@@ -10,6 +10,8 @@ type MockRolesRepository struct {
 	mock.Mock
 }
 
+var _ role.Repository = &MockRolesRepository{}
+
 func (r *MockRolesRepository) GetAll(offset uint, limit uint) ([]role.Role, error) {
 	args := r.Mock.Called(offset, limit)
 

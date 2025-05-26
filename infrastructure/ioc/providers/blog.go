@@ -9,6 +9,7 @@ import (
 	getArticle "github.com/khanzadimahdi/testproject/application/article/getArticle"
 	getArticles "github.com/khanzadimahdi/testproject/application/article/getArticles"
 	"github.com/khanzadimahdi/testproject/application/article/getArticlesByHashtag"
+	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/application/auth/forgetpassword"
 	"github.com/khanzadimahdi/testproject/application/auth/login"
 	"github.com/khanzadimahdi/testproject/application/auth/refresh"
@@ -85,7 +86,7 @@ import (
 	rolesrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/roles"
 	userrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/users"
 	articleAPI "github.com/khanzadimahdi/testproject/presentation/http/api/article"
-	"github.com/khanzadimahdi/testproject/presentation/http/api/auth"
+	authAPI "github.com/khanzadimahdi/testproject/presentation/http/api/auth"
 	bookmarkAPI "github.com/khanzadimahdi/testproject/presentation/http/api/bookmark"
 	commentAPI "github.com/khanzadimahdi/testproject/presentation/http/api/comment"
 	dashboardArticleAPI "github.com/khanzadimahdi/testproject/presentation/http/api/dashboard/article"
@@ -212,11 +213,13 @@ func blog(
 	bookmarkRepository := bookmarksrepository.NewRepository(database)
 	configRepository := configrepository.NewRepository(database)
 
+	authTokenGenerator := auth.NewTokenGenerator(jwt, rolesRepository)
+
 	// ---- public ----
 	homeUseCase := home.NewUseCase(articlesRepository, elementsRepository)
 
-	loginUseCase := login.NewUseCase(userRepository, jwt, hasher, translator, validator)
-	refreshUseCase := refresh.NewUseCase(userRepository, jwt, translator, validator)
+	loginUseCase := login.NewUseCase(userRepository, authTokenGenerator, hasher, translator, validator)
+	refreshUseCase := refresh.NewUseCase(userRepository, jwt, authTokenGenerator, translator, validator)
 	forgetPasswordUseCase := forgetpassword.NewUseCase(userRepository, asyncPublishSubscriber, translator, validator)
 	resetPasswordUseCase := resetpassword.NewUseCase(userRepository, hasher, jwt, translator, validator)
 	registerUseCase := register.NewUseCase(userRepository, asyncPublishSubscriber, translator, validator)
@@ -309,12 +312,12 @@ func blog(
 	mux.Handle("GET /api/home", homeapi.NewHomeHandler(homeUseCase))
 
 	// auth
-	mux.Handle("POST /api/auth/login", auth.NewLoginHandler(loginUseCase))
-	mux.Handle("POST /api/auth/token/refresh", auth.NewRefreshHandler(refreshUseCase))
-	mux.Handle("POST /api/auth/password/forget", auth.NewForgetPasswordHandler(forgetPasswordUseCase))
-	mux.Handle("POST /api/auth/password/reset", auth.NewResetPasswordHandler(resetPasswordUseCase))
-	mux.Handle("POST /api/auth/register", auth.NewRegisterHandler(registerUseCase))
-	mux.Handle("POST /api/auth/verify", auth.NewVerifyHandler(verifyUseCase))
+	mux.Handle("POST /api/auth/login", authAPI.NewLoginHandler(loginUseCase))
+	mux.Handle("POST /api/auth/token/refresh", authAPI.NewRefreshHandler(refreshUseCase))
+	mux.Handle("POST /api/auth/password/forget", authAPI.NewForgetPasswordHandler(forgetPasswordUseCase))
+	mux.Handle("POST /api/auth/password/reset", authAPI.NewResetPasswordHandler(resetPasswordUseCase))
+	mux.Handle("POST /api/auth/register", authAPI.NewRegisterHandler(registerUseCase))
+	mux.Handle("POST /api/auth/verify", authAPI.NewVerifyHandler(verifyUseCase))
 
 	// articles
 	mux.Handle("GET /api/articles", articleAPI.NewIndexHandler(getArticlesUsecase))
@@ -420,8 +423,8 @@ func blog(
 
 	// subscribers
 	subscribers := map[string]domain.MessageHandler{
-		forgetpassword.SendForgetPasswordEmailName: forgetpassword.NewSendForgetPasswordEmailHandler(userRepository, jwt, mailer, mailFromAddress, renderer),
-		register.SendRegisterationEmailName:        register.NewSendRegisterationEmailHandler(jwt, mailer, mailFromAddress, renderer),
+		forgetpassword.SendForgetPasswordEmailName: forgetpassword.NewSendForgetPasswordEmailHandler(userRepository, authTokenGenerator, mailer, mailFromAddress, renderer),
+		register.SendRegisterationEmailName:        register.NewSendRegisterationEmailHandler(authTokenGenerator, mailer, mailFromAddress, renderer),
 		taskEvents.HeartbeatName:                   heartbeat.NewHeartbeatHandler(asyncReplyChan),
 	}
 
