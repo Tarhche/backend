@@ -8,11 +8,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
+	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/ecdsa"
 	"github.com/khanzadimahdi/testproject/infrastructure/email"
 	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
+	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/roles"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
 	"github.com/khanzadimahdi/testproject/infrastructure/template"
 )
@@ -32,6 +34,7 @@ func TestHandler_Execute(t *testing.T) {
 
 		var (
 			userRepository users.MockUsersRepository
+			roleRepository roles.MockRolesRepository
 			mailer         email.MockMailer
 			renderer       template.MockRenderer
 
@@ -61,7 +64,9 @@ func TestHandler_Execute(t *testing.T) {
 		payload, err := json.Marshal(command)
 		assert.NoError(t, err)
 
-		err = NewSendForgetPasswordEmailHandler(&userRepository, j, &mailer, mailFrom, &renderer).Handle(payload)
+		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
+
+		err = NewSendForgetPasswordEmailHandler(&userRepository, authTokenGenerator, &mailer, mailFrom, &renderer).Handle(payload)
 		assert.NoError(t, err)
 	})
 
@@ -70,6 +75,7 @@ func TestHandler_Execute(t *testing.T) {
 
 		var (
 			userRepository users.MockUsersRepository
+			roleRepository roles.MockRolesRepository
 			mailer         email.MockMailer
 			renderer       template.MockRenderer
 
@@ -88,7 +94,9 @@ func TestHandler_Execute(t *testing.T) {
 		payload, err := json.Marshal(command)
 		assert.NoError(t, err)
 
-		err = NewSendForgetPasswordEmailHandler(&userRepository, j, &mailer, mailFrom, &renderer).Handle(payload)
+		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
+
+		err = NewSendForgetPasswordEmailHandler(&userRepository, authTokenGenerator, &mailer, mailFrom, &renderer).Handle(payload)
 
 		renderer.AssertNotCalled(t, "Render")
 		mailer.AssertNotCalled(t, "SendMail")
@@ -101,6 +109,7 @@ func TestHandler_Execute(t *testing.T) {
 
 		var (
 			userRepository users.MockUsersRepository
+			roleRepository roles.MockRolesRepository
 			mailer         email.MockMailer
 			renderer       template.MockRenderer
 
@@ -121,7 +130,9 @@ func TestHandler_Execute(t *testing.T) {
 		payload, err := json.Marshal(command)
 		assert.NoError(t, err)
 
-		err = NewSendForgetPasswordEmailHandler(&userRepository, j, &mailer, mailFrom, &renderer).Handle(payload)
+		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
+
+		err = NewSendForgetPasswordEmailHandler(&userRepository, authTokenGenerator, &mailer, mailFrom, &renderer).Handle(payload)
 
 		renderer.AssertNotCalled(t, "Render")
 		mailer.AssertNotCalled(t, "SendMail")
@@ -134,6 +145,7 @@ func TestHandler_Execute(t *testing.T) {
 
 		var (
 			userRepository users.MockUsersRepository
+			roleRepository roles.MockRolesRepository
 			mailer         email.MockMailer
 			renderer       template.MockRenderer
 
@@ -162,7 +174,9 @@ func TestHandler_Execute(t *testing.T) {
 		payload, err := json.Marshal(command)
 		assert.NoError(t, err)
 
-		err = NewSendForgetPasswordEmailHandler(&userRepository, j, &mailer, mailFrom, &renderer).Handle(payload)
+		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
+
+		err = NewSendForgetPasswordEmailHandler(&userRepository, authTokenGenerator, &mailer, mailFrom, &renderer).Handle(payload)
 
 		mailer.AssertNotCalled(t, "SendMail")
 
@@ -174,6 +188,7 @@ func TestHandler_Execute(t *testing.T) {
 
 		var (
 			userRepository users.MockUsersRepository
+			roleRepository roles.MockRolesRepository
 			mailer         email.MockMailer
 			renderer       template.MockRenderer
 
@@ -205,7 +220,9 @@ func TestHandler_Execute(t *testing.T) {
 		payload, err := json.Marshal(command)
 		assert.NoError(t, err)
 
-		err = NewSendForgetPasswordEmailHandler(&userRepository, j, &mailer, mailFrom, &renderer).Handle(payload)
+		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
+
+		err = NewSendForgetPasswordEmailHandler(&userRepository, authTokenGenerator, &mailer, mailFrom, &renderer).Handle(payload)
 		assert.ErrorIs(t, expectedErr, err)
 	})
 

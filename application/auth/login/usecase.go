@@ -1,36 +1,34 @@
 package login
 
 import (
-	"time"
-
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/password"
 	"github.com/khanzadimahdi/testproject/domain/translator"
 	"github.com/khanzadimahdi/testproject/domain/user"
-	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
 )
 
 type UseCase struct {
-	userRepository user.Repository
-	JWT            *jwt.JWT
-	Hasher         password.Hasher
-	translator     translator.Translator
-	validator      domain.Validator
+	userRepository     user.Repository
+	authTokenGenerator *auth.AuthTokenGenerator
+	Hasher             password.Hasher
+	translator         translator.Translator
+	validator          domain.Validator
 }
 
 func NewUseCase(
 	userRepository user.Repository,
-	JWT *jwt.JWT, hasher password.Hasher,
+	authTokenGenerator *auth.AuthTokenGenerator,
+	hasher password.Hasher,
 	translator translator.Translator,
 	validator domain.Validator,
 ) *UseCase {
 	return &UseCase{
-		userRepository: userRepository,
-		JWT:            JWT,
-		Hasher:         hasher,
-		translator:     translator,
-		validator:      validator,
+		userRepository:     userRepository,
+		authTokenGenerator: authTokenGenerator,
+		Hasher:             hasher,
+		translator:         translator,
+		validator:          validator,
 	}
 }
 
@@ -60,12 +58,12 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		}, nil
 	}
 
-	accessToken, err := uc.generateAccessToken(u)
+	accessToken, err := uc.authTokenGenerator.GenerateAccessToken(u.UUID)
 	if err != nil {
 		return nil, err
 	}
 
-	refreshToken, err := uc.generateRefreshToken(u)
+	refreshToken, err := uc.authTokenGenerator.GenerateRefreshToken(u.UUID)
 	if err != nil {
 		return nil, err
 	}
@@ -78,26 +76,4 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 
 func (uc *UseCase) passwordIsValid(u user.User, password []byte) bool {
 	return uc.Hasher.Equal(password, u.PasswordHash.Value, u.PasswordHash.Salt)
-}
-
-func (uc *UseCase) generateAccessToken(u user.User) (string, error) {
-	b := jwt.NewClaimsBuilder()
-	b.SetSubject(u.UUID)
-	b.SetNotBefore(time.Now())
-	b.SetExpirationTime(time.Now().Add(15 * time.Minute))
-	b.SetIssuedAt(time.Now())
-	b.SetAudience([]string{auth.AccessToken})
-
-	return uc.JWT.Generate(b.Build())
-}
-
-func (uc *UseCase) generateRefreshToken(u user.User) (string, error) {
-	b := jwt.NewClaimsBuilder()
-	b.SetSubject(u.UUID)
-	b.SetNotBefore(time.Now())
-	b.SetExpirationTime(time.Now().Add(2 * 24 * time.Hour))
-	b.SetIssuedAt(time.Now())
-	b.SetAudience([]string{auth.RefreshToken})
-
-	return uc.JWT.Generate(b.Build())
 }

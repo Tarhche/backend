@@ -8,9 +8,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
+	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/ecdsa"
 	"github.com/khanzadimahdi/testproject/infrastructure/email"
 	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
+	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/roles"
 	"github.com/khanzadimahdi/testproject/infrastructure/template"
 )
 
@@ -28,8 +30,9 @@ func TestHandler_Execute(t *testing.T) {
 		t.Parallel()
 
 		var (
-			mailer   email.MockMailer
-			renderer template.MockRenderer
+			mailer         email.MockMailer
+			roleRepository roles.MockRolesRepository
+			renderer       template.MockRenderer
 
 			command = SendRegistrationEmail{
 				Identity: "test@mail.com",
@@ -45,7 +48,9 @@ func TestHandler_Execute(t *testing.T) {
 		payload, err := json.Marshal(command)
 		assert.NoError(t, err)
 
-		err = NewSendRegisterationEmailHandler(j, &mailer, mailFrom, &renderer).Handle(payload)
+		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
+
+		err = NewSendRegisterationEmailHandler(authTokenGenerator, &mailer, mailFrom, &renderer).Handle(payload)
 
 		assert.NoError(t, err)
 	})
@@ -54,8 +59,9 @@ func TestHandler_Execute(t *testing.T) {
 		t.Parallel()
 
 		var (
-			mailer   email.MockMailer
-			renderer template.MockRenderer
+			mailer         email.MockMailer
+			roleRepository roles.MockRolesRepository
+			renderer       template.MockRenderer
 
 			command = SendRegistrationEmail{
 				Identity: "test@mail.com",
@@ -70,7 +76,9 @@ func TestHandler_Execute(t *testing.T) {
 		payload, err := json.Marshal(command)
 		assert.NoError(t, err)
 
-		err = NewSendRegisterationEmailHandler(j, &mailer, mailFrom, &renderer).Handle(payload)
+		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
+
+		err = NewSendRegisterationEmailHandler(authTokenGenerator, &mailer, mailFrom, &renderer).Handle(payload)
 
 		mailer.AssertNotCalled(t, "SendMail")
 
@@ -81,8 +89,9 @@ func TestHandler_Execute(t *testing.T) {
 		t.Parallel()
 
 		var (
-			mailer   email.MockMailer
-			renderer template.MockRenderer
+			mailer         email.MockMailer
+			roleRepository roles.MockRolesRepository
+			renderer       template.MockRenderer
 
 			command = SendRegistrationEmail{
 				Identity: "test@mail.com",
@@ -100,7 +109,9 @@ func TestHandler_Execute(t *testing.T) {
 		payload, err := json.Marshal(command)
 		assert.NoError(t, err)
 
-		err = NewSendRegisterationEmailHandler(j, &mailer, mailFrom, &renderer).Handle(payload)
+		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
+
+		err = NewSendRegisterationEmailHandler(authTokenGenerator, &mailer, mailFrom, &renderer).Handle(payload)
 
 		assert.ErrorIs(t, err, expectedError)
 	})

@@ -4,12 +4,10 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
-	"time"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/user"
-	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
 )
 
 const SendForgetPasswordEmailName = "sendForgetPasswordEmail"
@@ -21,28 +19,28 @@ type SendForgetPasswordEmail struct {
 
 // SendForgetPasswordEmailHandler handles SendMail command
 type sendForgetPasswordEmailHandler struct {
-	userRepository user.Repository
-	jwt            *jwt.JWT
-	mailer         domain.Mailer
-	mailFrom       string
-	template       domain.Renderer
+	userRepository     user.Repository
+	authTokenGenerator *auth.AuthTokenGenerator
+	mailer             domain.Mailer
+	mailFrom           string
+	template           domain.Renderer
 }
 
 var _ domain.MessageHandler = &sendForgetPasswordEmailHandler{}
 
 func NewSendForgetPasswordEmailHandler(
 	userRepository user.Repository,
-	JWT *jwt.JWT,
+	authTokenGenerator *auth.AuthTokenGenerator,
 	mailer domain.Mailer,
 	mailFrom string,
 	template domain.Renderer,
 ) *sendForgetPasswordEmailHandler {
 	return &sendForgetPasswordEmailHandler{
-		userRepository: userRepository,
-		jwt:            JWT,
-		mailer:         mailer,
-		mailFrom:       mailFrom,
-		template:       template,
+		userRepository:     userRepository,
+		authTokenGenerator: authTokenGenerator,
+		mailer:             mailer,
+		mailFrom:           mailFrom,
+		template:           template,
 	}
 }
 
@@ -59,7 +57,7 @@ func (h *sendForgetPasswordEmailHandler) Handle(data []byte) error {
 		return err
 	}
 
-	resetPasswordToken, err := h.resetPasswordToken(u)
+	resetPasswordToken, err := h.authTokenGenerator.GenerateResetPasswordToken(u.UUID)
 	if err != nil {
 		return err
 	}
@@ -73,15 +71,4 @@ func (h *sendForgetPasswordEmailHandler) Handle(data []byte) error {
 	}
 
 	return h.mailer.SendMail(h.mailFrom, u.Email, "Reset Password", msg.Bytes())
-}
-
-func (h *sendForgetPasswordEmailHandler) resetPasswordToken(u user.User) (string, error) {
-	b := jwt.NewClaimsBuilder()
-	b.SetSubject(u.UUID)
-	b.SetNotBefore(time.Now())
-	b.SetExpirationTime(time.Now().Add(10 * time.Minute))
-	b.SetIssuedAt(time.Now())
-	b.SetAudience([]string{auth.ResetPasswordToken})
-
-	return h.jwt.Generate(b.Build())
 }

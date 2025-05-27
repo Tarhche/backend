@@ -40,6 +40,14 @@ func (b builder) SetID(value string) {
 	b.Set("jti", value)
 }
 
+func (b builder) SetRoles(value []string) {
+	b.Set("roles", value)
+}
+
+func (b builder) SetPermissions(value []string) {
+	b.Set("permissions", value)
+}
+
 func (c builder) Set(name string, value any) {
 	c[name] = value
 }

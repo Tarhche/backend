@@ -12,13 +12,16 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
+	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/application/auth/login"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/password"
+	"github.com/khanzadimahdi/testproject/domain/role"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/ecdsa"
 	crypto "github.com/khanzadimahdi/testproject/infrastructure/crypto/mock"
 	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
+	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/roles"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
 	"github.com/khanzadimahdi/testproject/infrastructure/translator"
 	"github.com/khanzadimahdi/testproject/infrastructure/validator"
@@ -32,11 +35,34 @@ func TestLoginHandler(t *testing.T) {
 
 	j := jwt.NewJWT(privateKey, privateKey.Public())
 
+	rl := []role.Role{
+		{
+			UUID:        "role-uuid-1",
+			Name:        "role-1",
+			Description: "role description 1",
+			Permissions: []string{"permission-1", "permission-2"},
+			UserUUIDs:   []string{"test-user-uuid-1", "test-user-uuid-2"},
+		},
+		{
+			UUID:        "role-uuid-2",
+			Name:        "role-2",
+			Description: "role description 2",
+			Permissions: []string{"permission-1", "permission-5"},
+			UserUUIDs:   []string{"test-user-uuid-2"},
+		},
+		{
+			UUID:        "role-uuid-3",
+			Name:        "role-3",
+			Description: "role description 3",
+		},
+	}
+
 	t.Run("successfully login", func(t *testing.T) {
 		t.Parallel()
 
 		var (
 			userRepository   users.MockUsersRepository
+			roleRepository   roles.MockRolesRepository
 			hasher           crypto.MockCrypto
 			requestValidator validator.MockValidator
 			translator       translator.TranslatorMock
@@ -63,7 +89,12 @@ func TestLoginHandler(t *testing.T) {
 		hasher.On("Equal", []byte(r.Password), u.PasswordHash.Value, u.PasswordHash.Salt).Once().Return(true)
 		defer hasher.AssertExpectations(t)
 
-		handler := NewLoginHandler(login.NewUseCase(&userRepository, j, &hasher, &translator, &requestValidator))
+		roleRepository.On("GetByUserUUID", u.UUID).Once().Return(rl, nil)
+		defer roleRepository.AssertExpectations(t)
+
+		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
+
+		handler := NewLoginHandler(login.NewUseCase(&userRepository, authTokenGenerator, &hasher, &translator, &requestValidator))
 
 		var payload bytes.Buffer
 		err := json.NewEncoder(&payload).Encode(r)
@@ -90,6 +121,7 @@ func TestLoginHandler(t *testing.T) {
 
 		var (
 			userRepository   users.MockUsersRepository
+			roleRepository   roles.MockRolesRepository
 			hasher           crypto.MockCrypto
 			requestValidator validator.MockValidator
 			translator       translator.TranslatorMock
@@ -101,13 +133,16 @@ func TestLoginHandler(t *testing.T) {
 		})
 		defer requestValidator.AssertExpectations(t)
 
-		handler := NewLoginHandler(login.NewUseCase(&userRepository, j, &hasher, &translator, &requestValidator))
+		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
+
+		handler := NewLoginHandler(login.NewUseCase(&userRepository, authTokenGenerator, &hasher, &translator, &requestValidator))
 
 		request := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString("{}"))
 		response := httptest.NewRecorder()
 
 		handler.ServeHTTP(response, request)
 
+		roleRepository.AssertNotCalled(t, "GetByUserUUID")
 		translator.AssertNotCalled(t, "Translate")
 		userRepository.AssertNotCalled(t, "GetOneByIdentity")
 		hasher.AssertNotCalled(t, "Equal")
@@ -125,6 +160,7 @@ func TestLoginHandler(t *testing.T) {
 
 		var (
 			userRepository   users.MockUsersRepository
+			roleRepository   roles.MockRolesRepository
 			hasher           crypto.MockCrypto
 			requestValidator validator.MockValidator
 			translator       translator.TranslatorMock
@@ -144,7 +180,9 @@ func TestLoginHandler(t *testing.T) {
 		userRepository.On("GetOneByIdentity", r.Identity).Once().Return(user.User{}, domain.ErrNotExists)
 		defer userRepository.AssertExpectations(t)
 
-		handler := NewLoginHandler(login.NewUseCase(&userRepository, j, &hasher, &translator, &requestValidator))
+		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
+
+		handler := NewLoginHandler(login.NewUseCase(&userRepository, authTokenGenerator, &hasher, &translator, &requestValidator))
 
 		var payload bytes.Buffer
 		err := json.NewEncoder(&payload).Encode(r)
@@ -155,6 +193,7 @@ func TestLoginHandler(t *testing.T) {
 
 		handler.ServeHTTP(response, request)
 
+		roleRepository.AssertNotCalled(t, "GetByUserUUID")
 		hasher.AssertNotCalled(t, "Equal")
 
 		expected, err := os.ReadFile("testdata/login-response-user-not-found.json")
@@ -170,6 +209,7 @@ func TestLoginHandler(t *testing.T) {
 
 		var (
 			userRepository   users.MockUsersRepository
+			roleRepository   roles.MockRolesRepository
 			hasher           crypto.MockCrypto
 			requestValidator validator.MockValidator
 			translator       translator.TranslatorMock
@@ -186,7 +226,9 @@ func TestLoginHandler(t *testing.T) {
 		userRepository.On("GetOneByIdentity", r.Identity).Once().Return(user.User{}, errors.New("an unexpected error"))
 		defer userRepository.AssertExpectations(t)
 
-		handler := NewLoginHandler(login.NewUseCase(&userRepository, j, &hasher, &translator, &requestValidator))
+		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
+
+		handler := NewLoginHandler(login.NewUseCase(&userRepository, authTokenGenerator, &hasher, &translator, &requestValidator))
 
 		var payload bytes.Buffer
 		err := json.NewEncoder(&payload).Encode(r)
@@ -197,6 +239,7 @@ func TestLoginHandler(t *testing.T) {
 
 		handler.ServeHTTP(response, request)
 
+		roleRepository.AssertNotCalled(t, "GetByUserUUID")
 		translator.AssertNotCalled(t, "Translate")
 		hasher.AssertNotCalled(t, "Equal")
 
