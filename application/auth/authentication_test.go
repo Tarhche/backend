@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	jwtv5 "github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/khanzadimahdi/testproject/domain/role"
@@ -57,6 +58,11 @@ func TestGenerateAccessToken(t *testing.T) {
 				Name:        "role-3",
 				Description: "role description 3",
 			},
+			{ // duplicated role to check deduplication
+				UUID:        "role-uuid-3",
+				Name:        "role-3",
+				Description: "role description 3",
+			},
 		}
 	)
 
@@ -73,6 +79,17 @@ func TestGenerateAccessToken(t *testing.T) {
 		accessToken, err := authTokenGenerator.GenerateAccessToken(userUUID)
 		assert.NoError(t, err)
 		assert.NotEmpty(t, accessToken)
+
+		claims, err := j.Verify(accessToken)
+		assert.NoError(t, err)
+
+		claimsMap, ok := claims.(jwtv5.MapClaims)
+		assert.True(t, ok)
+
+		assert.Equal(t, userUUID, claimsMap["sub"].(string))
+
+		assert.ElementsMatch(t, []string{"role-1", "role-2", "role-3"}, claimsMap["roles"])
+		assert.ElementsMatch(t, []string{"permission-1", "permission-2", "permission-5"}, claimsMap["permissions"])
 	})
 
 	t.Run("generating access token fails", func(t *testing.T) {

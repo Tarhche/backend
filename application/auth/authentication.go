@@ -54,11 +54,23 @@ func (t *AuthTokenGenerator) GenerateAccessToken(userUUID string) (string, error
 		permissionsCount += len(roles[i].Permissions)
 	}
 
-	roleNames := make([]string, 0, len(roles))
-	permissionNames := make([]string, 0, permissionsCount)
+	uniqueRoleNames := make(map[string]struct{}, len(roles))
+	uniquePermissionNames := make(map[string]struct{}, permissionsCount)
 	for i := range roles {
-		roleNames = append(roleNames, roles[i].Name)
-		permissionNames = append(permissionNames, roles[i].Permissions...)
+		uniqueRoleNames[roles[i].Name] = struct{}{}
+		for _, permission := range roles[i].Permissions {
+			uniquePermissionNames[permission] = struct{}{}
+		}
+	}
+
+	roleNames := make([]string, 0, len(uniqueRoleNames))
+	for name := range uniqueRoleNames {
+		roleNames = append(roleNames, name)
+	}
+
+	permissionNames := make([]string, 0, len(uniquePermissionNames))
+	for name := range uniquePermissionNames {
+		permissionNames = append(permissionNames, name)
 	}
 
 	b := jwt.NewClaimsBuilder()
