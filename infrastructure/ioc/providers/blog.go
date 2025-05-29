@@ -74,6 +74,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/password"
 	taskEvents "github.com/khanzadimahdi/testproject/domain/runner/task/events"
 	translatorContract "github.com/khanzadimahdi/testproject/domain/translator"
+	"github.com/khanzadimahdi/testproject/infrastructure/cache"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc"
 	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
 	articlesrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/articles"
@@ -104,13 +105,15 @@ import (
 	homeapi "github.com/khanzadimahdi/testproject/presentation/http/api/home"
 	"github.com/khanzadimahdi/testproject/presentation/http/api/websocket"
 	"github.com/khanzadimahdi/testproject/presentation/http/middleware"
+	"github.com/nats-io/nats.go"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
 const (
-	BlogSubscribers     = "blog:subscribers"
-	BlogRequestReplyers = "blog:requestReplyers"
-	BlogHandler         = "blog:handler"
+	BlogSubscribers         = "blog:subscribers"
+	BlogRequestReplyers     = "blog:requestReplyers"
+	BlogHandler             = "blog:handler"
+	BlogHTTPCacheBucketName = "blog_http_cache"
 
 	WebSocketWriteWait        = 10 * time.Second
 	WebSocketMaxMessageSize   = 256 * 1024 // 256KB
@@ -195,6 +198,22 @@ func blog(
 
 	var jetStreamRequester domain.Requester
 	if err := iocContainer.Resolve(&jetStreamRequester, ioc.WithNameResolving(BlogRequestReplyer)); err != nil {
+		return nil, err
+	}
+
+	var natsConnection *nats.Conn
+	if err := iocContainer.Resolve(&natsConnection); err != nil {
+		return nil, err
+	}
+
+	httpCache, err := cache.NewNatsCache(
+		natsConnection,
+		BlogHTTPCacheBucketName,
+		cache.WithTTL(1*time.Minute),
+		cache.WithLimitMarkerTTL(1*time.Second),
+		cache.WithCompression(true),
+	)
+	if err != nil {
 		return nil, err
 	}
 
@@ -309,7 +328,7 @@ func blog(
 	))
 
 	// home
-	mux.Handle("GET /api/home", homeapi.NewHomeHandler(homeUseCase))
+	mux.Handle("GET /api/home", middleware.NewCacheMiddleware(homeapi.NewHomeHandler(homeUseCase), httpCache))
 
 	// auth
 	mux.Handle("POST /api/auth/login", authAPI.NewLoginHandler(loginUseCase))
@@ -320,8 +339,8 @@ func blog(
 	mux.Handle("POST /api/auth/verify", authAPI.NewVerifyHandler(verifyUseCase))
 
 	// articles
-	mux.Handle("GET /api/articles", articleAPI.NewIndexHandler(getArticlesUsecase))
-	mux.Handle("GET /api/articles/{uuid}", articleAPI.NewShowHandler(getArticleUsecase))
+	mux.Handle("GET /api/articles", middleware.NewCacheMiddleware(articleAPI.NewIndexHandler(getArticlesUsecase), httpCache))
+	mux.Handle("GET /api/articles/{uuid}", middleware.NewCacheMiddleware(articleAPI.NewShowHandler(getArticleUsecase), httpCache))
 
 	// comments
 	mux.Handle("POST /api/comments", middleware.NewAuthoriseMiddleware(commentAPI.NewCreateHandler(createCommentUseCase), jwt, userRepository))
@@ -332,10 +351,10 @@ func blog(
 	mux.Handle("PUT /api/bookmarks", middleware.NewAuthoriseMiddleware(bookmarkAPI.NewUpdateHandler(updateABookmark), jwt, userRepository))
 
 	// hashtags
-	mux.Handle("GET /api/hashtags/{hashtag}", hashtagAPI.NewShowHandler(getArticlesByHashtagUseCase))
+	mux.Handle("GET /api/hashtags/{hashtag}", middleware.NewCacheMiddleware(hashtagAPI.NewShowHandler(getArticlesByHashtagUseCase), httpCache))
 
 	// files
-	mux.Handle("GET /files/{uuid}", fileAPI.NewShowHandler(getFileUseCase))
+	mux.Handle("GET /files/{uuid}", middleware.NewCacheMiddleware(fileAPI.NewShowHandler(getFileUseCase), httpCache))
 
 	// ---- dashboard HTTP API ----
 

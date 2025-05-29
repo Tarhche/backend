@@ -16,7 +16,52 @@ type natsCache struct {
 
 var _ domain.Cache = (*natsCache)(nil)
 
-func NewNatsCache(nc *nats.Conn, bucket string) (*natsCache, error) {
+type params struct {
+	ttl            time.Duration
+	limitMarkerTTL time.Duration
+	replicas       int
+	compression    bool
+}
+
+type Option func(*params)
+
+func WithTTL(ttl time.Duration) Option {
+	return func(o *params) {
+		o.ttl = ttl
+	}
+}
+
+func WithLimitMarkerTTL(limitMarkerTTL time.Duration) Option {
+	return func(o *params) {
+		o.limitMarkerTTL = limitMarkerTTL
+	}
+}
+
+func WithReplicas(replicas int) Option {
+	return func(o *params) {
+		o.replicas = replicas
+	}
+}
+
+func WithCompression(compression bool) Option {
+	return func(o *params) {
+		o.compression = compression
+	}
+}
+
+var defaultParams = params{
+	ttl:            0,               // 0 means no TTL. If we omit TTL, keys do not expire.
+	limitMarkerTTL: 1 * time.Second, // 0 means no limit marker TTL. If we omit LimitMarkerTTL, purge markers are retained forever.
+	replicas:       1,
+	compression:    false, // false means no compression
+}
+
+func NewNatsCache(nc *nats.Conn, bucket string, options ...Option) (*natsCache, error) {
+	params := defaultParams
+	for i := range options {
+		options[i](&params)
+	}
+
 	js, err := jetstream.New(nc)
 	if err != nil {
 		return nil, err
@@ -27,8 +72,11 @@ func NewNatsCache(nc *nats.Conn, bucket string) (*natsCache, error) {
 		Description:    "This bucket is used for caching",
 		Storage:        jetstream.FileStorage,
 		History:        1,
-		Replicas:       1,
-		LimitMarkerTTL: 1 * time.Second, // If we omit LimitMarkerTTL, purge markers are retained forever.
+		MaxValueSize:   5 << 20, // 5MB
+		Replicas:       params.replicas,
+		TTL:            params.ttl,
+		LimitMarkerTTL: params.limitMarkerTTL,
+		Compression:    params.compression,
 	})
 	if err != nil {
 		return nil, err

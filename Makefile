@@ -10,11 +10,11 @@ down:
 restart:
 	docker compose restart
 
-restart%:
+restart %:
 	docker compose restart $*
 
-sh%:
+sh %:
 	docker compose exec -it $* sh
 
-logs%:
+logs %:
 	docker compose logs -f $*

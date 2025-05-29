@@ -145,7 +145,7 @@ services:
       mc mb minio/blog;"
 
   nats:
-    image: nats:2.10
+    image: nats:2.11
     command: ["--jetstream", "--http_port", "8222", "--port", "4222", "--store_dir", "/data"]
     ports:
       - "4222:4222" # client port
@@ -155,9 +155,11 @@ services:
       - ./tmp/nats:/data
 
   natsdashboard:
-    image: mdawar/nats-dashboard
+    image: ghcr.io/nats-nui/nui:0.7
+    depends_on:
+      - nats
     ports:
-      - "8082:80"
+      - "8082:31311"
 
   docker:
     image: docker:27-dind
