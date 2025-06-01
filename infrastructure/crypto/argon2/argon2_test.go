@@ -41,3 +41,18 @@ func TestArgon2(t *testing.T) {
 		}
 	})
 }
+
+func BenchmarkArgon2idHash(b *testing.B) {
+	hasher := NewArgon2id(3, 64*1024, 2, 64)
+
+	salt := make([]byte, 16)
+	rand.Read(salt)
+
+	value := make([]byte, 64)
+	rand.Read(value)
+
+	b.ResetTimer()
+	for range b.N {
+		hasher.Hash(value, salt)
+	}
+}

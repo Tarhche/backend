@@ -16,7 +16,7 @@ services:
       resources:
         limits:
           cpus: '0.20'
-          memory: 150M
+          memory: 200M
     environment:
       PRIVATE_KEY: ${BACKEND_PRIVATE_KEY}
       S3_ENDPOINT: ${BACKEND_S3_ENDPOINT}

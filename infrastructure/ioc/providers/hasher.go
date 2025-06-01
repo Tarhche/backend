@@ -17,7 +17,7 @@ func NewHasherProvider() *hasherProvider {
 }
 
 func (p *hasherProvider) Register(ctx context.Context, iocContainer ioc.ServiceContainer) error {
-	hasher := argon2.NewArgon2id(2, 64*1024, 2, 64)
+	hasher := argon2.NewArgon2id(3, 32*1024, 2, 64)
 
 	return iocContainer.Singleton(func() password.Hasher { return hasher })
 }
