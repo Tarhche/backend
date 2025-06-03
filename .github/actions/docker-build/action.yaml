@@ -63,7 +63,7 @@ runs:
           type=sha,enable=true,priority=100,prefix=,suffix=,format=short
 
     - name: Build image and push (optional)
-      uses: docker/build-push-action@v6
+      uses: useblacksmith/build-push-action@v1
       with:
         platforms: linux/amd64,linux/arm64
         push: ${{ inputs.push == 'true' }}
