@@ -21,14 +21,14 @@ concurrency:
 
 jobs:
   ci:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: useblacksmith/setup-go@v6
         with:
           go-version: '1.24.x'
 
@@ -67,7 +67,7 @@ jobs:
           container-registry: ${{ env.REGISTRY }}
 
   build-and-push-images:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
 
     if: ${{ format('refs/heads/{0}', github.event.repository.default_branch) == github.ref }}
 
@@ -119,7 +119,7 @@ jobs:
           container-registry-password: ${{ secrets.GITHUB_TOKEN }}
 
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
 
     if: ${{ format('refs/heads/{0}', github.event.repository.default_branch) == github.ref }}
 
