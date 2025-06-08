@@ -101,9 +101,20 @@ func (m *DockerManager) GetByLabel(labelName string, labelValue string) ([]conta
 }
 
 func (m *DockerManager) Create(c *container.Container) (string, error) {
-	_, err := m.client.ImagePull(context.Background(), c.Image, image.PullOptions{All: false})
+	// check if image exists
+	images, err := m.client.ImageList(context.Background(), image.ListOptions{
+		All:     false,
+		Filters: filters.NewArgs(filters.Arg("reference", c.Image)),
+	})
 	if err != nil {
 		return "", err
+	}
+
+	if len(images) == 0 {
+		_, err := m.client.ImagePull(context.Background(), c.Image, image.PullOptions{All: false})
+		if err != nil {
+			return "", err
+		}
 	}
 
 	config := &containerTypes.Config{
