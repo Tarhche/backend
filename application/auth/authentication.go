@@ -14,6 +14,11 @@ const (
 	RefreshToken       = "refresh"
 	ResetPasswordToken = "reset-password"
 	RegistrationToken  = "registration"
+
+	AccessTokenExpirationTime        = 30 * time.Second
+	RefreshTokenExpirationTime       = 2 * 24 * time.Hour
+	ResetPasswordTokenExpirationTime = 10 * time.Minute
+	RegistrationTokenExpirationTime  = 24 * time.Hour
 )
 
 type authKey struct{}
@@ -76,7 +81,7 @@ func (t *AuthTokenGenerator) GenerateAccessToken(userUUID string) (string, error
 	b := jwt.NewClaimsBuilder()
 	b.SetSubject(userUUID)
 	b.SetNotBefore(time.Now())
-	b.SetExpirationTime(time.Now().Add(15 * time.Minute))
+	b.SetExpirationTime(time.Now().Add(AccessTokenExpirationTime))
 	b.SetIssuedAt(time.Now())
 	b.SetAudience([]string{AccessToken})
 	b.SetRoles(roleNames)
@@ -89,7 +94,7 @@ func (t *AuthTokenGenerator) GenerateRefreshToken(userUUID string) (string, erro
 	b := jwt.NewClaimsBuilder()
 	b.SetSubject(userUUID)
 	b.SetNotBefore(time.Now())
-	b.SetExpirationTime(time.Now().Add(2 * 24 * time.Hour))
+	b.SetExpirationTime(time.Now().Add(RefreshTokenExpirationTime))
 	b.SetIssuedAt(time.Now())
 	b.SetAudience([]string{RefreshToken})
 
@@ -100,7 +105,7 @@ func (t *AuthTokenGenerator) GenerateResetPasswordToken(userUUID string) (string
 	b := jwt.NewClaimsBuilder()
 	b.SetSubject(userUUID)
 	b.SetNotBefore(time.Now())
-	b.SetExpirationTime(time.Now().Add(10 * time.Minute))
+	b.SetExpirationTime(time.Now().Add(ResetPasswordTokenExpirationTime))
 	b.SetIssuedAt(time.Now())
 	b.SetAudience([]string{ResetPasswordToken})
 
@@ -111,7 +116,7 @@ func (t *AuthTokenGenerator) GenerateRegistrationToken(identity string) (string,
 	b := jwt.NewClaimsBuilder()
 	b.SetSubject(identity)
 	b.SetNotBefore(time.Now())
-	b.SetExpirationTime(time.Now().Add(24 * time.Hour))
+	b.SetExpirationTime(time.Now().Add(RegistrationTokenExpirationTime))
 	b.SetIssuedAt(time.Now())
 	b.SetAudience([]string{RegistrationToken})
 
