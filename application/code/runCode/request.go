@@ -30,6 +30,9 @@ var supportedCodeRunners = []string{
 	// PHP
 	"php-8.4",
 	"php-8.3",
+
+	// nats
+	"nats-2.10.0",
 }
 
 var _ domain.Validatable = &Request{}
