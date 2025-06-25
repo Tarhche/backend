@@ -15,9 +15,9 @@ const (
 	ResetPasswordToken = "reset-password"
 	RegistrationToken  = "registration"
 
-	AccessTokenExpirationTime        = 30 * time.Second
+	AccessTokenExpirationTime        = 15 * time.Minute
 	RefreshTokenExpirationTime       = 2 * 24 * time.Hour
-	ResetPasswordTokenExpirationTime = 10 * time.Minute
+	ResetPasswordTokenExpirationTime = 15 * time.Minute
 	RegistrationTokenExpirationTime  = 24 * time.Hour
 )
 
