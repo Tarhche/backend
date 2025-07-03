@@ -23,6 +23,16 @@ jobs:
   ci:
     runs-on: blacksmith-4vcpu-ubuntu-2404
 
+    strategy:
+      matrix:
+        image:
+          - name: ${{ env.APP_IMAGE_NAME }}
+            target: production-blog
+          - name: ${{ env.RUNNER_MANAGER_IMAGE_NAME }}
+            target: production-runner-manager
+          - name: ${{ env.RUNNER_WORKER_IMAGE_NAME }}
+            target: production-runner-worker
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -36,33 +46,13 @@ jobs:
         run: |
           go test ./... -v -race -cover
 
-      - name: Build blog image
+      - name: Build ${{ matrix.image.name }} image
         uses: ./.github/actions/docker-build
         with:
           context: .
           dockerfile: Dockerfile
-          image-name: ${{ env.APP_IMAGE_NAME }}
-          target: production-blog
-          push: false
-          container-registry: ${{ env.REGISTRY }}
-
-      - name: Build runner-manager image
-        uses: ./.github/actions/docker-build
-        with:
-          context: .
-          dockerfile: Dockerfile
-          image-name: ${{ env.RUNNER_MANAGER_IMAGE_NAME }}
-          target: production-runner-manager
-          push: false
-          container-registry: ${{ env.REGISTRY }}
-
-      - name: Build runner-worker image
-        uses: ./.github/actions/docker-build
-        with:
-          context: .
-          dockerfile: Dockerfile
-          image-name: ${{ env.RUNNER_WORKER_IMAGE_NAME }}
-          target: production-runner-worker
+          image-name: ${{ matrix.image.name }}
+          target: ${{ matrix.image.target }}
           push: false
           container-registry: ${{ env.REGISTRY }}
 
@@ -78,41 +68,27 @@ jobs:
     needs:
       - ci
 
+    strategy:
+      matrix:
+        image:
+          - name: ${{ env.APP_IMAGE_NAME }}
+            target: production-blog
+          - name: ${{ env.RUNNER_MANAGER_IMAGE_NAME }}
+            target: production-runner-manager
+          - name: ${{ env.RUNNER_WORKER_IMAGE_NAME }}
+            target: production-runner-worker
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Build and push blog image
+      - name: Build and push ${{ matrix.image.name }} image
         uses: ./.github/actions/docker-build
         with:
           context: .
           dockerfile: Dockerfile
-          image-name: ${{ env.APP_IMAGE_NAME }}
-          target: production-blog
-          push: true
-          container-registry: ${{ env.REGISTRY }}
-          container-registry-username: ${{ github.actor }}
-          container-registry-password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and push runner-manager image
-        uses: ./.github/actions/docker-build
-        with:
-          context: .
-          dockerfile: Dockerfile
-          image-name: ${{ env.RUNNER_MANAGER_IMAGE_NAME }}
-          target: production-runner-manager
-          push: true
-          container-registry: ${{ env.REGISTRY }}
-          container-registry-username: ${{ github.actor }}
-          container-registry-password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and push runner-worker image
-        uses: ./.github/actions/docker-build
-        with:
-          context: .
-          dockerfile: Dockerfile
-          image-name: ${{ env.RUNNER_WORKER_IMAGE_NAME }}
-          target: production-runner-worker
+          image-name: ${{ matrix.image.name }}
+          target: ${{ matrix.image.target }}
           push: true
           container-registry: ${{ env.REGISTRY }}
           container-registry-username: ${{ github.actor }}
