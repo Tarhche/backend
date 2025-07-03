@@ -8,10 +8,6 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  APP_IMAGE_NAME: backend
-  RUNNER_MANAGER_IMAGE_NAME: runner-manager
-  RUNNER_WORKER_IMAGE_NAME: runner-worker
-
   EC2_SSH_ADDRESS: ${{ secrets.EC2_SSH_ADDRESS }}
   EC2_SSH_ENDPOINT: ${{ secrets.EC2_SSH_USER }}@${{ secrets.EC2_SSH_ADDRESS }}
 
@@ -26,11 +22,11 @@ jobs:
     strategy:
       matrix:
         image:
-          - name: ${{ env.APP_IMAGE_NAME }}
+          - name: backend
             target: production-blog
-          - name: ${{ env.RUNNER_MANAGER_IMAGE_NAME }}
+          - name: runner-manager
             target: production-runner-manager
-          - name: ${{ env.RUNNER_WORKER_IMAGE_NAME }}
+          - name: runner-worker
             target: production-runner-worker
 
     steps:
@@ -71,11 +67,11 @@ jobs:
     strategy:
       matrix:
         image:
-          - name: ${{ env.APP_IMAGE_NAME }}
+          - name: backend
             target: production-blog
-          - name: ${{ env.RUNNER_MANAGER_IMAGE_NAME }}
+          - name: runner-manager
             target: production-runner-manager
-          - name: ${{ env.RUNNER_WORKER_IMAGE_NAME }}
+          - name: runner-worker
             target: production-runner-worker
 
     steps:
