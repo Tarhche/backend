@@ -17,13 +17,13 @@ make up
 - to see a container's logs, the `make logs <container_name>` command can be used. the `<container_name>` refers to the name of your target container.
 
 ```sh
-make logs app
+make logs-app
 ```
 
 - to attach to `sh` in a container `make sh <container_name>` can be used. the `<container_name>` refers to the name of your target container.
 
 ```sh
-make sh app
+make sh-app
 ```
 
 ## production grade builds

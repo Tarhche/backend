@@ -190,8 +190,11 @@ func (r *ArticlesRepository) GetMostViewed(limit uint) ([]article.Article, error
 	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
 	defer cancel()
 
-	l := int64(limit)
-	desc := bson.D{{Key: "view_count", Value: -1}}
+	// using hot score algorithm:
+	// score = log10(views) + (publishTimestamp - baseTimestamp) / timeFactor
+	// times should be in milliseconds
+	timeFactor := float64((12 * time.Hour).Milliseconds())
+	baseTimestamp := time.Now().Add(-7 * 24 * time.Hour).UTC().UnixMilli() // since 7 days ago
 
 	filter := bson.M{
 		"published_at": bson.M{
@@ -200,9 +203,37 @@ func (r *ArticlesRepository) GetMostViewed(limit uint) ([]article.Article, error
 		},
 	}
 
+	fieldsToBeReturned := bson.M{
+		"uuid":         1,
+		"cover":        1,
+		"video":        1,
+		"title":        1,
+		"excerpt":      1,
+		"tags":         1,
+		"author_uuid":  1,
+		"published_at": 1,
+		"view_count":   1,
+		"hot_score": bson.M{ // virtual field to calculate hot score
+			"$add": []interface{}{
+				bson.M{"$log10": "$view_count"},
+				bson.M{"$divide": []interface{}{
+					bson.M{"$subtract": []interface{}{
+						bson.M{"$toLong": "$published_at"},
+						baseTimestamp,
+					}},
+					timeFactor,
+				}},
+			},
+		},
+	}
+
+	l := int64(limit)
+	sort := bson.D{{Key: "hot_score", Value: -1}}
+
 	cur, err := r.collection.Find(ctx, filter, &options.FindOptions{
-		Limit: &l,
-		Sort:  desc,
+		Limit:      &l,
+		Sort:       sort,
+		Projection: fieldsToBeReturned,
 	})
 
 	if err != nil {
