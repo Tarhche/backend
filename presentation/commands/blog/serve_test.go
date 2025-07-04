@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"net"
 	"net/http"
 	"testing"
 	"time"
@@ -14,6 +15,18 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
+
+// findAvailablePort finds an available port to use for testing
+func findAvailablePort() int {
+	listener, err := net.Listen("tcp", ":0")
+	if err != nil {
+		return 8080 // fallback to default port
+	}
+	defer listener.Close()
+
+	addr := listener.Addr().(*net.TCPAddr)
+	return addr.Port
+}
 
 func TestServe(t *testing.T) {
 	t.Run("name", func(t *testing.T) {
@@ -103,7 +116,7 @@ func TestServe(t *testing.T) {
 		defer serviceProvider.AssertNotCalled(t, "Terminate")
 
 		command := NewServeCommand(&serviceProvider)
-		command.port = 1234
+		command.port = findAvailablePort()
 		command.handler = handler
 		command.subscriber = &subscriber
 		command.subscribers = subscribers
