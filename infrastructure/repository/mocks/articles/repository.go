@@ -64,7 +64,13 @@ func (r *MockArticlesRepository) GetMostViewed(limit uint) ([]article.Article, e
 	return nil, args.Error(1)
 }
 
-func (r *MockArticlesRepository) GetByHashtag(hashtags []string, offset uint, limit uint) ([]article.Article, error) {
+func (r *MockArticlesRepository) CountPublishedByHashtags(hashtags []string) (uint, error) {
+	args := r.Mock.Called(hashtags)
+
+	return args.Get(0).(uint), args.Error(1)
+}
+
+func (r *MockArticlesRepository) GetPublishedByHashtags(hashtags []string, offset uint, limit uint) ([]article.Article, error) {
 	args := r.Mock.Called(hashtags, offset, limit)
 
 	if a, ok := args.Get(0).([]article.Article); ok {

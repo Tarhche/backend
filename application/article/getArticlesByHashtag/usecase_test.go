@@ -12,7 +12,11 @@ import (
 )
 
 func TestUseCase_Execute(t *testing.T) {
+	t.Parallel()
+
 	t.Run("returns articles by hashtag", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			repository articles.MockArticlesRepository
 			validator  validator.MockValidator
@@ -29,7 +33,10 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &request).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		repository.On("GetByHashtag", []string{hashtag}, uint(0), uint(10)).Once().Return(a, nil)
+		repository.On("CountPublishedByHashtags", []string{hashtag}).Once().Return(uint(len(a)), nil)
+		defer repository.AssertExpectations(t)
+
+		repository.On("GetPublishedByHashtags", []string{hashtag}, uint(0), uint(10)).Once().Return(a, nil)
 		defer repository.AssertExpectations(t)
 
 		usecase := NewUseCase(&repository, &validator)
@@ -40,6 +47,8 @@ func TestUseCase_Execute(t *testing.T) {
 	})
 
 	t.Run("validation failed", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			repository articles.MockArticlesRepository
 			validator  validator.MockValidator
@@ -60,13 +69,16 @@ func TestUseCase_Execute(t *testing.T) {
 		usecase := NewUseCase(&repository, &validator)
 		response, err := usecase.Execute(&request)
 
-		repository.AssertNotCalled(t, "GetByHashtag")
+		repository.AssertNotCalled(t, "CountPublishedByHashtags")
+		repository.AssertNotCalled(t, "GetPublishedByHashtags")
 
 		assert.NoError(t, err)
 		assert.Equal(t, &expectedResponse, response)
 	})
 
-	t.Run("returns an error on getting items", func(t *testing.T) {
+	t.Run("returns an error on counting items", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			repository articles.MockArticlesRepository
 			validator  validator.MockValidator
@@ -79,7 +91,37 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &request).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		repository.On("GetByHashtag", []string{hashtag}, uint(0), uint(10)).Once().Return(nil, expectedErr)
+		repository.On("CountPublishedByHashtags", []string{hashtag}).Once().Return(uint(0), expectedErr)
+		defer repository.AssertExpectations(t)
+
+		usecase := NewUseCase(&repository, &validator)
+		response, err := usecase.Execute(&request)
+
+		repository.AssertNotCalled(t, "GetPublishedByHashtags")
+
+		assert.ErrorIs(t, err, expectedErr)
+		assert.Nil(t, response, "unexpected response")
+	})
+
+	t.Run("returns an error on getting items", func(t *testing.T) {
+		t.Parallel()
+
+		var (
+			repository articles.MockArticlesRepository
+			validator  validator.MockValidator
+
+			hashtag     = "test-hashtag"
+			expectedErr = errors.New("test error")
+			request     = Request{Page: 1, Hashtag: hashtag}
+		)
+
+		validator.On("Validate", &request).Once().Return(nil)
+		defer validator.AssertExpectations(t)
+
+		repository.On("CountPublishedByHashtags", []string{hashtag}).Once().Return(uint(5), nil)
+		defer repository.AssertExpectations(t)
+
+		repository.On("GetPublishedByHashtags", []string{hashtag}, uint(0), uint(10)).Once().Return(nil, expectedErr)
 		defer repository.AssertExpectations(t)
 
 		usecase := NewUseCase(&repository, &validator)

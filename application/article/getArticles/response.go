@@ -8,7 +8,7 @@ import (
 
 type Response struct {
 	Items      []articleResponse  `json:"items"`
-	Pagination paginationResponse `json:"paginationResponse"`
+	Pagination paginationResponse `json:"pagination"`
 }
 
 type articleResponse struct {

@@ -3,7 +3,8 @@
         "hashtag": "this field is required"
     },
     "items": null,
-    "paginationResponse": {
+    "pagination": {
+        "total_pages": 0,
         "current_page": 0
     }
 }

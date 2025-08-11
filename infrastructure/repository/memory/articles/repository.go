@@ -90,7 +90,11 @@ func (r *ArticlesRepository) GetMostViewed(limit uint) ([]article.Article, error
 	return nil, nil
 }
 
-func (r *ArticlesRepository) GetByHashtag(hashtags []string, offset uint, limit uint) ([]article.Article, error) {
+func (r *ArticlesRepository) CountPublishedByHashtags(hashtags []string) (uint, error) {
+	return 0, nil
+}
+
+func (r *ArticlesRepository) GetPublishedByHashtags(hashtags []string, offset uint, limit uint) ([]article.Article, error) {
 	return nil, nil
 }
 

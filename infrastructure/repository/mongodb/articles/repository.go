@@ -239,7 +239,29 @@ func (r *ArticlesRepository) GetMostViewed(limit uint) ([]article.Article, error
 	return items, nil
 }
 
-func (r *ArticlesRepository) GetByHashtag(hashtags []string, offset uint, limit uint) ([]article.Article, error) {
+func (r *ArticlesRepository) CountPublishedByHashtags(hashtags []string) (uint, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+	defer cancel()
+
+	filter := bson.M{
+		"tags": bson.M{
+			"$in": hashtags,
+		},
+		"published_at": bson.M{
+			"$lte": primitive.NewDateTimeFromTime(time.Now()),
+			"$ne":  time.Time{},
+		},
+	}
+
+	c, err := r.collection.CountDocuments(ctx, filter, nil)
+	if err != nil {
+		return uint(c), err
+	}
+
+	return uint(c), nil
+}
+
+func (r *ArticlesRepository) GetPublishedByHashtags(hashtags []string, offset uint, limit uint) ([]article.Article, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
 	defer cancel()
 

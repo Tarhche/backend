@@ -11,7 +11,7 @@ type Response struct {
 	ValidationErrors domain.ValidationErrors `json:"errors,omitempty"`
 
 	Items      []articleResponse  `json:"items"`
-	Pagination paginationResponse `json:"paginationResponse"`
+	Pagination paginationResponse `json:"pagination"`
 }
 
 type articleResponse struct {
@@ -30,10 +30,11 @@ type authorResponse struct {
 }
 
 type paginationResponse struct {
+	TotalPages  uint `json:"total_pages"`
 	CurrentPage uint `json:"current_page"`
 }
 
-func NewResponse(a []article.Article, currentPage uint) *Response {
+func NewResponse(a []article.Article, totalPages, currentPage uint) *Response {
 	items := make([]articleResponse, len(a))
 
 	for i := range a {
@@ -51,6 +52,7 @@ func NewResponse(a []article.Article, currentPage uint) *Response {
 	return &Response{
 		Items: items,
 		Pagination: paginationResponse{
+			TotalPages:  totalPages,
 			CurrentPage: currentPage,
 		},
 	}

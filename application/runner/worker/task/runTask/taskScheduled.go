@@ -3,6 +3,7 @@ package runTask
 import (
 	"encoding/json"
 
+	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/runner/task/events"
 )
 
@@ -20,6 +21,8 @@ func NewTaskScheduled(
 		nodeName: nodeName,
 	}
 }
+
+var _ domain.MessageHandler = &TaskScheduled{}
 
 func (uc *TaskScheduled) Handle(data []byte) error {
 	var taskScheduled events.TaskScheduled

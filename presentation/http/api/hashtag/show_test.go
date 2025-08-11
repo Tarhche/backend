@@ -82,7 +82,10 @@ func TestShowHandler(t *testing.T) {
 			Hashtag: hashtag,
 		}
 
-		articlesRepository.On("GetByHashtag", []string{hashtag}, uint(0), uint(10)).Once().Return(articles, nil)
+		articlesRepository.On("CountPublishedByHashtags", []string{hashtag}).Once().Return(uint(len(articles)), nil)
+		defer articlesRepository.AssertExpectations(t)
+
+		articlesRepository.On("GetPublishedByHashtags", []string{hashtag}, uint(0), uint(10)).Once().Return(articles, nil)
 		defer articlesRepository.AssertExpectations(t)
 
 		requestValidator.On("Validate", r).Once().Return(nil)
@@ -137,7 +140,8 @@ func TestShowHandler(t *testing.T) {
 		expected, err := os.ReadFile("testdata/response-validation-failed.txt")
 		assert.NoError(t, err)
 
-		articlesRepository.AssertNotCalled(t, "GetByHashtag")
+		articlesRepository.AssertNotCalled(t, "CountPublishedByHashtags")
+		articlesRepository.AssertNotCalled(t, "GetPublishedByHashtags")
 
 		assert.Equal(t, "application/json", response.Header().Get("content-type"))
 		assert.JSONEq(t, string(expected), response.Body.String())
@@ -159,7 +163,10 @@ func TestShowHandler(t *testing.T) {
 			Hashtag: hashtag,
 		}
 
-		articlesRepository.On("GetByHashtag", []string{hashtag}, uint(0), uint(10)).Once().Return(nil, nil)
+		articlesRepository.On("CountPublishedByHashtags", []string{hashtag}).Once().Return(uint(0), nil)
+		defer articlesRepository.AssertExpectations(t)
+
+		articlesRepository.On("GetPublishedByHashtags", []string{hashtag}, uint(0), uint(10)).Once().Return(nil, nil)
 		defer articlesRepository.AssertExpectations(t)
 
 		requestValidator.On("Validate", r).Once().Return(nil)
@@ -198,7 +205,10 @@ func TestShowHandler(t *testing.T) {
 			Hashtag: hashtag,
 		}
 
-		articlesRepository.On("GetByHashtag", []string{hashtag}, uint(0), uint(10)).Once().Return(nil, errors.New("some error happened"))
+		articlesRepository.On("CountPublishedByHashtags", []string{hashtag}).Once().Return(uint(5), nil)
+		defer articlesRepository.AssertExpectations(t)
+
+		articlesRepository.On("GetPublishedByHashtags", []string{hashtag}, uint(0), uint(10)).Once().Return(nil, errors.New("some error happened"))
 		defer articlesRepository.AssertExpectations(t)
 
 		requestValidator.On("Validate", r).Once().Return(nil)

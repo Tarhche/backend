@@ -29,6 +29,13 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		}, nil
 	}
 
+	hashtags := []string{request.Hashtag}
+
+	totalArticles, err := uc.articleRepository.CountPublishedByHashtags(hashtags)
+	if err != nil {
+		return nil, err
+	}
+
 	currentPage := request.Page
 	if currentPage == 0 {
 		currentPage = 1
@@ -39,12 +46,16 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		offset = (currentPage - 1) * limit
 	}
 
-	hashtags := []string{request.Hashtag}
+	totalPages := totalArticles / limit
 
-	a, err := uc.articleRepository.GetByHashtag(hashtags, offset, limit)
+	if (totalPages * limit) != totalArticles {
+		totalPages++
+	}
+
+	a, err := uc.articleRepository.GetPublishedByHashtags(hashtags, offset, limit)
 	if err != nil {
 		return nil, err
 	}
 
-	return NewResponse(a, currentPage), nil
+	return NewResponse(a, totalPages, currentPage), nil
 }
