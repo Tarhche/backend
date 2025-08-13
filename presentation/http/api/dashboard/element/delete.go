@@ -17,7 +17,8 @@ type deleteHandler struct {
 
 func NewDeleteHandler(useCase *deleteElement.UseCase, a domain.Authorizer) *deleteHandler {
 	return &deleteHandler{
-		useCase: useCase,
+		useCase:    useCase,
+		authorizer: a,
 	}
 }
 
