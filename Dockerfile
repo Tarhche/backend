@@ -1,4 +1,4 @@
-FROM golang:1.24-alpine AS base
+FROM golang:1.25-alpine AS base
 WORKDIR /opt/app
 COPY . .
 ENV CGO_ENABLED=0
@@ -14,10 +14,9 @@ RUN cd /opt/app \
 FROM base AS develop
 WORKDIR /opt/app
 ENV PATH=$GOPATH/bin/linux_$GOARCH:$PATH
-RUN apk add tmux \
-    && go install github.com/air-verse/air@v1.61 \
-    && go install github.com/nats-io/natscli/nats@v0.2.2
-ENTRYPOINT ["air", "--"]
+RUN apk add tmux
+
+ENTRYPOINT ["go", "tool", "air", "--"]
 
 FROM alpine:latest AS production
 COPY --from=build /opt/dist /usr/bin

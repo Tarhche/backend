@@ -76,7 +76,7 @@ services:
     environment:
       RUNNER_WORKER_NAME: runner-worker-01
       NATS_URL: ${NATS_URL}
-      DOCKER_HOST: ${DOCKER_HOST}
+      DOCKER_HOST: ${BACKEND_DOCKER_HOST}
 
   runner-worker-02:
     <<: *app
@@ -87,7 +87,7 @@ services:
     environment:
       RUNNER_WORKER_NAME: runner-worker-02
       NATS_URL: ${NATS_URL}
-      DOCKER_HOST: ${DOCKER_HOST}
+      DOCKER_HOST: ${BACKEND_DOCKER_HOST}
 
   runner-worker-03:
     <<: *app
@@ -98,7 +98,7 @@ services:
     environment:
       RUNNER_WORKER_NAME: runner-worker-03
       NATS_URL: ${NATS_URL}
-      DOCKER_HOST: ${DOCKER_HOST}
+      DOCKER_HOST: ${BACKEND_DOCKER_HOST}
 
   mongodb:
     image: mongo
