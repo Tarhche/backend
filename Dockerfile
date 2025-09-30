@@ -15,14 +15,15 @@ FROM base AS develop
 WORKDIR /opt/app
 ENV PATH=$GOPATH/bin/linux_$GOARCH:$PATH
 RUN apk add tmux
-
 ENTRYPOINT ["go", "tool", "air", "--"]
 
 FROM alpine:latest AS production
-COPY --from=build /opt/dist /usr/bin
+RUN addgroup -g 10001 app \
+    && adduser -u 10000 -g app -S -h /home/app app
+USER app:app
+COPY --chown=app:app --from=build /opt/dist /usr/bin
 ENV GODEBUG=gctrace=1
 ENTRYPOINT [ "app" ]
-
 
 # blog service
 FROM develop AS develop-blog
