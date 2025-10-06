@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"time"
 
 	"github.com/docker/docker/api/types"
@@ -102,6 +103,7 @@ func (m *DockerManager) GetByLabel(labelName string, labelValue string) ([]conta
 
 func (m *DockerManager) Create(c *container.Container) (string, error) {
 	// check if image exists
+	log.Println("checking if image exists", c.Image, time.Now().Format(time.UnixDate))
 	images, err := m.client.ImageList(context.Background(), image.ListOptions{
 		All:     false,
 		Filters: filters.NewArgs(filters.Arg("reference", c.Image)),
@@ -110,11 +112,17 @@ func (m *DockerManager) Create(c *container.Container) (string, error) {
 		return "", err
 	}
 
+	log.Println("image exists", len(images) > 0, time.Now().Format(time.UnixDate))
+
 	if len(images) == 0 {
+		log.Println("image does not exist, start pulling", c.Image, time.Now().Format(time.UnixDate))
+
 		_, err := m.client.ImagePull(context.Background(), c.Image, image.PullOptions{All: false})
 		if err != nil {
 			return "", err
 		}
+
+		log.Println("image pulled", c.Image, time.Now().Format(time.UnixDate))
 	}
 
 	config := &containerTypes.Config{
@@ -139,15 +147,18 @@ func (m *DockerManager) Create(c *container.Container) (string, error) {
 		AutoRemove:   c.AutoRemove,
 	}
 
+	log.Println("creating container", c.Name, time.Now().Format(time.UnixDate))
 	resp, err := m.client.ContainerCreate(context.Background(), config, hostConfig, nil, nil, c.Name)
 	if err != nil {
 		return "", err
 	}
+	log.Println("container created", c.Image, resp.ID, time.Now().Format(time.UnixDate))
 
 	return resp.ID, nil
 }
 
 func (m *DockerManager) Start(containerUUID string) error {
+	log.Println("starting container", containerUUID, time.Now().Format(time.UnixDate))
 	err := m.client.ContainerStart(context.Background(), containerUUID, containerTypes.StartOptions{})
 	if err != nil {
 		return err
@@ -290,6 +301,7 @@ func (m *DockerManager) Stats(containerUUID string) (stats.Stats, error) {
 }
 
 func (m *DockerManager) Logs(containerUUID string, writer io.Writer) error {
+	log.Println("getting logs for container", containerUUID, time.Now().Format(time.UnixDate))
 	readCloser, err := m.client.ContainerLogs(
 		context.Background(),
 		containerUUID, containerTypes.LogsOptions{
@@ -302,6 +314,8 @@ func (m *DockerManager) Logs(containerUUID string, writer io.Writer) error {
 		return err
 	}
 	defer readCloser.Close()
+
+	log.Println("got the logs for container", containerUUID, time.Now().Format(time.UnixDate))
 
 	_, err = io.Copy(writer, readCloser)
 
