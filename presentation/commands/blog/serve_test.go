@@ -139,6 +139,7 @@ func TestServe(t *testing.T) {
 		}
 
 		resp, err := c.Do(req)
+		defer resp.Body.Close()
 
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
