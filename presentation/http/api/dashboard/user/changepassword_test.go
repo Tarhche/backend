@@ -40,7 +40,7 @@ func TestChangePasswordHandler(t *testing.T) {
 			}
 
 			u = user.User{
-				UUID: r.UserUUID,
+				UUID: "logged-in-user-uuid",
 			}
 		)
 
@@ -83,18 +83,19 @@ func TestChangePasswordHandler(t *testing.T) {
 			requestValidator validator.MockValidator
 
 			u = user.User{
-				UUID: "user-uuid",
+				UUID: "logged-in-user-uuid",
 			}
 
 			validationErrors = domain.ValidationErrors{
-				"new_password": "password is required",
+				"uuid":         "this field is required",
+				"new_password": "this field is required",
 			}
 		)
 
 		authorizer.On("Authorize", u.UUID, permission.UsersPasswordUpdate).Once().Return(true, nil)
 		defer authorizer.AssertExpectations(t)
 
-		requestValidator.On("Validate", &userchangepassword.Request{UserUUID: u.UUID}).Once().Return(validationErrors)
+		requestValidator.On("Validate", &userchangepassword.Request{}).Once().Return(validationErrors)
 		defer requestValidator.AssertExpectations(t)
 
 		handler := NewChangePasswordHandler(userchangepassword.NewUseCase(&userRepository, &hasher, &requestValidator), &authorizer)

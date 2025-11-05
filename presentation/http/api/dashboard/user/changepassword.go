@@ -38,7 +38,6 @@ func (h *changePasswordHandler) ServeHTTP(rw http.ResponseWriter, r *http.Reques
 		rw.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	request.UserUUID = auth.FromContext(r.Context()).UUID
 
 	response, err := h.userCase.Execute(&request)
 

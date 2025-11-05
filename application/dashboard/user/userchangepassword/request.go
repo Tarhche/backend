@@ -1,9 +1,11 @@
 package userchangepassword
 
-import "github.com/khanzadimahdi/testproject/domain"
+import (
+	"github.com/khanzadimahdi/testproject/domain"
+)
 
 type Request struct {
-	UserUUID    string `json:"-"`
+	UserUUID    string `json:"uuid"`
 	NewPassword string `json:"new_password"`
 }
 

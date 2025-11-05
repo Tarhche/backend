@@ -63,8 +63,8 @@ func TestUseCase_Execute(t *testing.T) {
 
 			expectedResponse = Response{
 				ValidationErrors: domain.ValidationErrors{
-					"uuid":         "universal unique identifier (uuid) is required",
-					"new_password": "password is required",
+					"uuid":         "this field is required",
+					"new_password": "this field is required",
 				},
 			}
 		)
