@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/signal"
 	"path"
-	"syscall"
 
 	"github.com/khanzadimahdi/testproject/infrastructure/console"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc"
@@ -17,7 +16,7 @@ import (
 )
 
 func main() {
-	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancel()
 
 	c := console.NewConsole(

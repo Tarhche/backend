@@ -124,7 +124,11 @@ func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 	go func() {
 		<-ctx.Done()
 
-		_ = server.Shutdown(context.Background())
+		// Shutdown the server after getting a signal with a timeout to ensure graceful shutdown.
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		_ = server.Shutdown(shutdownCtx)
 	}()
 
 	if err := c.subscribeToTopics(ctx); err != nil {

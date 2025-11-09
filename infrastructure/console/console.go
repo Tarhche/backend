@@ -14,8 +14,13 @@ import (
 type ExitStatus = int
 
 const (
-	ExitSuccess    ExitStatus = 0
-	ExitFailure    ExitStatus = 1
+	// ExitSuccess is the exit status for a successful command.
+	ExitSuccess ExitStatus = 0
+
+	// ExitFailure is the exit status for a failed command.
+	ExitFailure ExitStatus = 1
+
+	// ExitUsageError is the exit status for a usage error.
 	ExitUsageError ExitStatus = 2
 )
 
@@ -111,7 +116,7 @@ func (c *Console) Run(ctx context.Context, arguments []string) ExitStatus {
 	return cmd.Run(ctx)
 }
 
-// Explain writes a brief description of console commands.
+// explain writes a brief description of console commands.
 func (c *Console) explain() {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s\n\nUsage:\n", c.description)
