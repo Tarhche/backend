@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	getarticle "github.com/khanzadimahdi/testproject/application/article/getArticle"
+	"github.com/khanzadimahdi/testproject/application/element"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/article"
 	"github.com/khanzadimahdi/testproject/domain/author"
@@ -54,7 +55,8 @@ func TestShowHandler(t *testing.T) {
 		elementsRepository.On("GetByVenues", []string{fmt.Sprintf("articles/%s", a.UUID)}).Once().Return(nil, nil)
 		defer elementsRepository.AssertExpectations(t)
 
-		handler := NewShowHandler(getarticle.NewUseCase(&articlesRepository, &elementsRepository))
+		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository)
+		handler := NewShowHandler(getarticle.NewUseCase(&articlesRepository, elementRetriever))
 
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
 		request.SetPathValue("uuid", a.UUID)
@@ -86,7 +88,8 @@ func TestShowHandler(t *testing.T) {
 		articlesRepository.On("GetOnePublished", a.UUID).Once().Return(article.Article{}, domain.ErrNotExists)
 		defer articlesRepository.AssertExpectations(t)
 
-		handler := NewShowHandler(getarticle.NewUseCase(&articlesRepository, &elementsRepository))
+		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository)
+		handler := NewShowHandler(getarticle.NewUseCase(&articlesRepository, elementRetriever))
 
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
 		request.SetPathValue("uuid", a.UUID)
@@ -118,7 +121,8 @@ func TestShowHandler(t *testing.T) {
 		articlesRepository.On("GetOnePublished", a.UUID).Once().Return(article.Article{}, errors.New("an error has happened"))
 		defer articlesRepository.AssertExpectations(t)
 
-		handler := NewShowHandler(getarticle.NewUseCase(&articlesRepository, &elementsRepository))
+		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository)
+		handler := NewShowHandler(getarticle.NewUseCase(&articlesRepository, elementRetriever))
 
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
 		request.SetPathValue("uuid", a.UUID)

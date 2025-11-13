@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/khanzadimahdi/testproject/application/element"
 	"github.com/khanzadimahdi/testproject/application/home"
 	"github.com/khanzadimahdi/testproject/domain/article"
 	"github.com/khanzadimahdi/testproject/domain/author"
@@ -82,7 +83,8 @@ func TestHomeHandler(t *testing.T) {
 		elementsRepository.On("GetByVenues", []string{"home"}).Once().Return(nil, nil)
 		defer elementsRepository.AssertExpectations(t)
 
-		useCase := home.NewUseCase(&articlesRepository, &elementsRepository)
+		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository)
+		useCase := home.NewUseCase(&articlesRepository, elementRetriever)
 		handler := NewHomeHandler(useCase)
 
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -114,7 +116,8 @@ func TestHomeHandler(t *testing.T) {
 		elementsRepository.On("GetByVenues", []string{"home"}).Once().Return(nil, nil)
 		defer elementsRepository.AssertExpectations(t)
 
-		useCase := home.NewUseCase(&articlesRepository, &elementsRepository)
+		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository)
+		useCase := home.NewUseCase(&articlesRepository, elementRetriever)
 		handler := NewHomeHandler(useCase)
 
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -139,7 +142,8 @@ func TestHomeHandler(t *testing.T) {
 		articlesRepository.On("GetMostViewed", uint(4)).Once().Return(nil, errors.New("an error has happened"))
 		defer articlesRepository.AssertExpectations(t)
 
-		useCase := home.NewUseCase(&articlesRepository, &elementsRepository)
+		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository)
+		useCase := home.NewUseCase(&articlesRepository, elementRetriever)
 		handler := NewHomeHandler(useCase)
 
 		request := httptest.NewRequest(http.MethodGet, "/", nil)

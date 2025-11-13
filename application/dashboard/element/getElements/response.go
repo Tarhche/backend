@@ -13,7 +13,7 @@ type Response struct {
 
 type elementResponse struct {
 	UUID      string   `json:"uuid"`
-	Type      string   `json:"type"`
+	BodyType  string   `json:"body_type"`
 	Venues    []string `json:"venues"`
 	CreatedAt string   `json:"created_at"`
 	UpdatedAt string   `json:"updated_at"`
@@ -29,7 +29,7 @@ func NewResponse(a []element.Element, totalPages, currentPage uint) *Response {
 
 	for i := range a {
 		items[i].UUID = a[i].UUID
-		items[i].Type = a[i].Type
+		items[i].BodyType = a[i].Body.Type()
 		items[i].Venues = a[i].Venues
 		items[i].CreatedAt = a[i].CreatedAt.Format(time.RFC3339)
 		items[i].UpdatedAt = a[i].UpdatedAt.Format(time.RFC3339)

@@ -8,21 +8,72 @@ import (
 )
 
 func TestRequest_Validate(t *testing.T) {
-	t.Run("always returns valid", func(t *testing.T) {
+	t.Run("valid request with item component", func(t *testing.T) {
 		req := Request{
-			Type:   "jumbotron",
-			Body:   component.Jumbotron{},
+			Body: &itemComponentRequest{
+				Type:        component.ComponentTypeItem,
+				ContentUUID: "test-uuid",
+				ContentType: "article",
+			},
 			Venues: []string{"venue1"},
 		}
 
-		valid, errs := req.Validate()
-
-		if !valid {
-			t.Errorf("Validate() valid = false, want true")
-		}
+		errs := req.Validate()
 
 		if len(errs) != 0 {
-			t.Errorf("Validate() returned %d errors, want 0", len(errs))
+			t.Errorf("Validate() returned %d errors, want 0: %v", len(errs), errs)
+		}
+	})
+
+	t.Run("valid request with jumbotron component", func(t *testing.T) {
+		req := Request{
+			Body: &jumbotronComponentRequest{
+				Type: component.ComponentTypeJumbotron,
+				Item: itemComponentRequest{
+					Type:        component.ComponentTypeItem,
+					ContentUUID: "test-uuid",
+					ContentType: "article",
+				},
+			},
+			Venues: []string{"venue1"},
+		}
+
+		errs := req.Validate()
+
+		if len(errs) != 0 {
+			t.Errorf("Validate() returned %d errors, want 0: %v", len(errs), errs)
+		}
+	})
+
+	t.Run("valid request with featured component", func(t *testing.T) {
+		req := Request{
+			Body: &featuredComponentRequest{
+				Type: component.ComponentTypeFeatured,
+				Main: itemComponentRequest{
+					Type:        component.ComponentTypeItem,
+					ContentUUID: "main-uuid",
+					ContentType: "article",
+				},
+				Aside: []itemComponentRequest{
+					{
+						Type:        component.ComponentTypeItem,
+						ContentUUID: "aside-uuid-1",
+						ContentType: "article",
+					},
+					{
+						Type:        component.ComponentTypeItem,
+						ContentUUID: "aside-uuid-2",
+						ContentType: "article",
+					},
+				},
+			},
+			Venues: []string{"venue1", "venue2"},
+		}
+
+		errs := req.Validate()
+
+		if len(errs) != 0 {
+			t.Errorf("Validate() returned %d errors, want 0: %v", len(errs), errs)
 		}
 	})
 }
@@ -36,34 +87,40 @@ func TestRequest_UnmarshalJSON(t *testing.T) {
 	}{
 		{
 			name:    "unmarshals jumbotron component",
-			json:    `{"type":"jumbotron","body":{"title":"Test","subtitle":"Subtitle"},"venues":["venue1"]}`,
+			json:    `{"body":{"type":"jumbotron","item":{"type":"item","content_uuid":"test-uuid","content_type":"article"}},"venues":["venue1"]}`,
 			wantErr: false,
 			check: func(r *Request) bool {
-				_, ok := r.Body.(component.Jumbotron)
-				return ok && r.Type == "jumbotron"
+				jumbotron, ok := r.Body.(*jumbotronComponentRequest)
+				return ok && jumbotron.Type == component.ComponentTypeJumbotron && len(r.Venues) == 1
 			},
 		},
 		{
 			name:    "unmarshals featured component",
-			json:    `{"type":"featured","body":{},"venues":["venue1"]}`,
+			json:    `{"body":{"type":"featured","main":{"type":"item","content_uuid":"main-uuid","content_type":"article"},"aside":[{"type":"item","content_uuid":"aside-uuid","content_type":"article"}]},"venues":["venue1"]}`,
 			wantErr: false,
 			check: func(r *Request) bool {
-				_, ok := r.Body.(component.Featured)
-				return ok && r.Type == "featured"
+				featured, ok := r.Body.(*featuredComponentRequest)
+				return ok && featured.Type == component.ComponentTypeFeatured && len(r.Venues) == 1
 			},
 		},
 		{
 			name:    "unmarshals item component",
-			json:    `{"type":"item","body":{},"venues":["venue1"]}`,
+			json:    `{"body":{"type":"item","content_uuid":"test-uuid","content_type":"article"},"venues":["venue1"]}`,
 			wantErr: false,
 			check: func(r *Request) bool {
-				_, ok := r.Body.(component.Item)
-				return ok && r.Type == "item"
+				item, ok := r.Body.(*itemComponentRequest)
+				return ok && item.Type == component.ComponentTypeItem && len(r.Venues) == 1
 			},
 		},
 		{
 			name:    "returns error for unsupported component type",
-			json:    `{"type":"unsupported","body":{},"venues":["venue1"]}`,
+			json:    `{"body":{"type":"unsupported"},"venues":["venue1"]}`,
+			wantErr: true,
+			check:   func(r *Request) bool { return true },
+		},
+		{
+			name:    "returns error for malformed json",
+			json:    `{"body":}`,
 			wantErr: true,
 			check:   func(r *Request) bool { return true },
 		},

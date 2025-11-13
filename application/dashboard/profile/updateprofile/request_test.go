@@ -3,6 +3,7 @@ package updateprofile
 import (
 	"testing"
 
+	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -11,7 +12,7 @@ func TestRequest_Validate(t *testing.T) {
 		name    string
 		request Request
 		want    bool
-		wantErr validationErrors
+		wantErr domain.ValidationErrors
 	}{
 		{
 			name: "valid request",
@@ -22,8 +23,7 @@ func TestRequest_Validate(t *testing.T) {
 				Email:    "user@example.com",
 				Username: "johndoe",
 			},
-			want:    true,
-			wantErr: validationErrors{},
+			wantErr: domain.ValidationErrors{},
 		},
 		{
 			name: "valid request with empty optional fields",
@@ -33,8 +33,7 @@ func TestRequest_Validate(t *testing.T) {
 				Email:    "user@example.com",
 				Username: "johndoe",
 			},
-			want:    true,
-			wantErr: validationErrors{},
+			wantErr: domain.ValidationErrors{},
 		},
 		{
 			name: "invalid request with empty user uuid",
@@ -44,8 +43,7 @@ func TestRequest_Validate(t *testing.T) {
 				Email:    "user@example.com",
 				Username: "johndoe",
 			},
-			want: false,
-			wantErr: validationErrors{
+			wantErr: domain.ValidationErrors{
 				"uuid": "required_field",
 			},
 		},
@@ -57,8 +55,7 @@ func TestRequest_Validate(t *testing.T) {
 				Email:    "user@example.com",
 				Username: "johndoe",
 			},
-			want: false,
-			wantErr: validationErrors{
+			wantErr: domain.ValidationErrors{
 				"name": "required_field",
 			},
 		},
@@ -70,8 +67,7 @@ func TestRequest_Validate(t *testing.T) {
 				Email:    "",
 				Username: "johndoe",
 			},
-			want: false,
-			wantErr: validationErrors{
+			wantErr: domain.ValidationErrors{
 				"email": "required_field",
 			},
 		},
@@ -83,8 +79,7 @@ func TestRequest_Validate(t *testing.T) {
 				Email:    "user@example.com",
 				Username: "",
 			},
-			want: false,
-			wantErr: validationErrors{
+			wantErr: domain.ValidationErrors{
 				"username": "required_field",
 			},
 		},
@@ -96,8 +91,7 @@ func TestRequest_Validate(t *testing.T) {
 				Email:    "",
 				Username: "",
 			},
-			want: false,
-			wantErr: validationErrors{
+			wantErr: domain.ValidationErrors{
 				"uuid":     "required_field",
 				"name":     "required_field",
 				"email":    "required_field",
@@ -108,10 +102,8 @@ func TestRequest_Validate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, gotErr := tt.request.Validate()
-			assert.Equal(t, tt.want, got)
+			gotErr := tt.request.Validate()
 			assert.Equal(t, tt.wantErr, gotErr)
 		})
 	}
 }
-

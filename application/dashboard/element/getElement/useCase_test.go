@@ -26,13 +26,15 @@ func TestUseCase_Execute(t *testing.T) {
 		var (
 			a = element.Element{
 				UUID:      "element-uuid-1",
-				Type:      "item",
 				Body:      &mockComponent,
 				Venues:    []string{},
 				CreatedAt: time.Now(),
 				UpdatedAt: time.Now(),
 			}
 		)
+
+		mockComponent.On("Type").Return(component.ComponentTypeMock)
+		defer mockComponent.AssertExpectations(t)
 
 		elementRepository.On("GetOne", a.UUID).Return(a, nil)
 		defer elementRepository.AssertExpectations(t)
