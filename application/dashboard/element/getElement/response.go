@@ -45,10 +45,7 @@ func toComponentResponse(c element.Component) any {
 
 		aside := make([]itemComponentResponse, len(featured.Aside))
 		for i := range featured.Aside {
-			aside[i] = itemComponentResponse{
-				ContentUUID: featured.Aside[i].ContentUUID,
-				ContentType: featured.Aside[i].ContentType,
-			}
+			aside[i] = toComponentResponse(featured.Aside[i]).(itemComponentResponse)
 		}
 
 		return featuredComponentResponse{
