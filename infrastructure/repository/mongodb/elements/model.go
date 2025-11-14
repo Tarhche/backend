@@ -39,8 +39,7 @@ func (e *ElementBson) UnmarshalBSON(data []byte) error {
 		Element   ElementBson `bson:",inline"`
 		Component struct {
 			Type string `bson:"type"`
-		} `bson:"component"`
-		Body bson.Raw `bson:"body"`
+		} `bson:"body"`
 	}
 
 	if err := bson.Unmarshal(data, &temporary); err != nil {
@@ -49,23 +48,31 @@ func (e *ElementBson) UnmarshalBSON(data []byte) error {
 
 	switch temporary.Component.Type {
 	case component.ComponentTypeItem:
-		var item component.Item
-		if err := bson.Unmarshal(temporary.Body, &item); err != nil {
+		var item struct {
+			Body ItemBson `bson:"body"`
+		}
+
+		if err := bson.Unmarshal(data, &item); err != nil {
 			return err
 		}
-		temporary.Element.Body = item
+		temporary.Element.Body = item.Body
 	case component.ComponentTypeJumbotron:
-		var jumbotron component.Jumbotron
-		if err := bson.Unmarshal(temporary.Body, &jumbotron); err != nil {
+		var jumbotron struct {
+			Body JumbotronBson `bson:"body"`
+		}
+
+		if err := bson.Unmarshal(data, &jumbotron); err != nil {
 			return err
 		}
-		temporary.Element.Body = jumbotron.Item
+		temporary.Element.Body = jumbotron.Body
 	case component.ComponentTypeFeatured:
-		var featured component.Featured
-		if err := bson.Unmarshal(temporary.Body, &featured); err != nil {
+		var featured struct {
+			Body FeaturedBson `bson:"body"`
+		}
+		if err := bson.Unmarshal(data, &featured); err != nil {
 			return err
 		}
-		temporary.Element.Body = featured.Items
+		temporary.Element.Body = featured.Body
 	default:
 		return element.ErrUnSupportedComponent
 	}
