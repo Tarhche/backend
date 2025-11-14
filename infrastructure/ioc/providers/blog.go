@@ -67,6 +67,7 @@ import (
 	getusers "github.com/khanzadimahdi/testproject/application/dashboard/user/getUsers"
 	updateuser "github.com/khanzadimahdi/testproject/application/dashboard/user/updateUser"
 	"github.com/khanzadimahdi/testproject/application/dashboard/user/userchangepassword"
+	"github.com/khanzadimahdi/testproject/application/element"
 	getFile "github.com/khanzadimahdi/testproject/application/file/getFile"
 	"github.com/khanzadimahdi/testproject/application/home"
 	"github.com/khanzadimahdi/testproject/domain"
@@ -233,9 +234,10 @@ func blog(
 	configRepository := configrepository.NewRepository(database)
 
 	authTokenGenerator := auth.NewTokenGenerator(jwt, rolesRepository)
+	elementRetriever := element.NewRetriever(articlesRepository, elementsRepository)
 
 	// ---- public ----
-	homeUseCase := home.NewUseCase(articlesRepository, elementsRepository)
+	homeUseCase := home.NewUseCase(articlesRepository, elementRetriever)
 
 	loginUseCase := login.NewUseCase(userRepository, authTokenGenerator, hasher, translator, validator)
 	refreshUseCase := refresh.NewUseCase(userRepository, jwt, authTokenGenerator, translator, validator)
@@ -244,7 +246,7 @@ func blog(
 	registerUseCase := register.NewUseCase(userRepository, asyncPublishSubscriber, translator, validator)
 	verifyUseCase := verify.NewUseCase(userRepository, rolesRepository, configRepository, hasher, jwt, translator, validator)
 
-	getArticleUsecase := getArticle.NewUseCase(articlesRepository, elementsRepository)
+	getArticleUsecase := getArticle.NewUseCase(articlesRepository, elementRetriever)
 	getArticlesUsecase := getArticles.NewUseCase(articlesRepository)
 	getArticlesByHashtagUseCase := getArticlesByHashtag.NewUseCase(articlesRepository, validator)
 	getFileUseCase := getFile.NewUseCase(filesRepository, fileStorage)
@@ -302,11 +304,11 @@ func blog(
 	dashboardGetUserFilesUseCase := dashboardGetUserFiles.NewUseCase(filesRepository)
 	dashboardDeleteUserFileUseCase := dashboardDeleteUserFile.NewUseCase(filesRepository, fileStorage)
 
-	dashboardCreateElementUsecase := dashboardCreateElement.NewUseCase(elementsRepository)
+	dashboardCreateElementUsecase := dashboardCreateElement.NewUseCase(elementsRepository, validator)
 	dashboardDeleteElementUsecase := dashboardDeleteElement.NewUseCase(elementsRepository)
 	dashboardGetElementUsecase := dashboardGetElement.NewUseCase(elementsRepository)
 	dashboardGetElementsUsecase := dashboardGetElements.NewUseCase(elementsRepository)
-	dashboardUpdateElementUsecase := dashboardUpdateElement.NewUseCase(elementsRepository)
+	dashboardUpdateElementUsecase := dashboardUpdateElement.NewUseCase(elementsRepository, validator)
 
 	dashboardGetConfigUsecase := dashboardGetConfig.NewUseCase(configRepository)
 	dashboardUpdateConfigUsecase := dashboardUpdateConfig.NewUseCase(configRepository, validator)

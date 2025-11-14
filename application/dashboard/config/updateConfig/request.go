@@ -2,8 +2,6 @@ package updateConfig
 
 import "github.com/khanzadimahdi/testproject/domain"
 
-type validationErrors map[string]string
-
 type Request struct {
 	UserDefaultRoles []string `json:"user_default_roles"`
 }

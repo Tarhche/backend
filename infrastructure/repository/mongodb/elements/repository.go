@@ -60,14 +60,13 @@ func (r *ElementsRepository) GetAll(offset uint, limit uint) ([]element.Element,
 		if err := cur.Decode(&a); err != nil {
 			return nil, err
 		}
-		items = append(items, element.Element{
-			UUID:      a.UUID,
-			Type:      a.Type,
-			Body:      a.Body,
-			Venues:    a.Venues,
-			CreatedAt: a.CreatedAt,
-			UpdatedAt: a.UpdatedAt,
-		})
+
+		e, err := bsonToElement(&a)
+		if err != nil {
+			return nil, err
+		}
+
+		items = append(items, e)
 	}
 
 	if err := cur.Err(); err != nil {
@@ -95,14 +94,13 @@ func (r *ElementsRepository) GetByVenues(venues []string) ([]element.Element, er
 		if err := cur.Decode(&a); err != nil {
 			return nil, err
 		}
-		items = append(items, element.Element{
-			UUID:      a.UUID,
-			Type:      a.Type,
-			Body:      a.Body,
-			Venues:    a.Venues,
-			CreatedAt: a.CreatedAt,
-			UpdatedAt: a.UpdatedAt,
-		})
+
+		e, err := bsonToElement(&a)
+		if err != nil {
+			return nil, err
+		}
+
+		items = append(items, e)
 	}
 
 	if err := cur.Err(); err != nil {
@@ -124,14 +122,7 @@ func (r *ElementsRepository) GetOne(UUID string) (element.Element, error) {
 		return element.Element{}, err
 	}
 
-	return element.Element{
-		UUID:      a.UUID,
-		Type:      a.Type,
-		Body:      a.Body,
-		Venues:    a.Venues,
-		CreatedAt: a.CreatedAt,
-		UpdatedAt: a.UpdatedAt,
-	}, nil
+	return bsonToElement(&a)
 }
 
 func (r *ElementsRepository) Count() (uint, error) {
@@ -163,17 +154,14 @@ func (r *ElementsRepository) Save(a *element.Element) (string, error) {
 		a.CreatedAt = now
 	}
 
-	update := ElementBson{
-		UUID:      a.UUID,
-		Type:      a.Type,
-		Body:      a.Body,
-		Venues:    a.Venues,
-		CreatedAt: a.CreatedAt,
-		UpdatedAt: now,
+	update, err := elementToBson(a)
+	if err != nil {
+		return "", err
 	}
+	update.UpdatedAt = now
 
 	upsert := true
-	_, err := r.collection.UpdateOne(
+	_, err = r.collection.UpdateOne(
 		ctx,
 		bson.D{{Key: "_id", Value: a.UUID}},
 		bson.M{"$set": update},

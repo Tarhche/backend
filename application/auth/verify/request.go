@@ -2,8 +2,6 @@ package verify
 
 import "github.com/khanzadimahdi/testproject/domain"
 
-type validationErrors map[string]string
-
 type Request struct {
 	Token      string `json:"token"`
 	Name       string `json:"name"`

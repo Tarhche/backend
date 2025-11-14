@@ -6,9 +6,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/khanzadimahdi/testproject/application/element"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/article"
-	"github.com/khanzadimahdi/testproject/domain/element"
+	domainElement "github.com/khanzadimahdi/testproject/domain/element"
 	"github.com/khanzadimahdi/testproject/domain/element/component"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/articles"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/elements"
@@ -31,14 +32,14 @@ func TestUseCase_Execute(t *testing.T) {
 				{UUID: "test-article-2"},
 			}
 			i = []component.Item{
-				{UUID: va[0].UUID},
-				{UUID: va[1].UUID},
-				{UUID: "not-exist-article-uuid"},
+				{ContentUUID: va[0].UUID},
+				{ContentUUID: va[1].UUID},
+				{ContentUUID: "not-exist-article-uuid"},
 			}
 			u = []string{
-				i[0].UUID,
-				i[1].UUID,
-				i[2].UUID,
+				i[0].ContentUUID,
+				i[1].ContentUUID,
+				i[2].ContentUUID,
 			}
 		)
 
@@ -48,16 +49,18 @@ func TestUseCase_Execute(t *testing.T) {
 		defer articlesRepository.AssertExpectations(t)
 
 		mockComponent.On("Items").Once().Return(i)
+		mockComponent.On("Type").Return(component.ComponentTypeMock)
 		defer mockComponent.AssertExpectations(t)
 
-		v := []element.Element{
+		v := []domainElement.Element{
 			{Body: &mockComponent},
 		}
 
 		elementsRepository.On("GetByVenues", venues).Once().Return(v, nil)
 		defer elementsRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&articlesRepository, &elementsRepository).Execute("test-uuid")
+		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository)
+		response, err := NewUseCase(&articlesRepository, elementRetriever).Execute("test-uuid")
 
 		assert.NotNil(t, response, "unexpected response")
 		assert.NoError(t, err, "unexpected error")
@@ -77,7 +80,8 @@ func TestUseCase_Execute(t *testing.T) {
 		articlesRepository.On("GetOnePublished", articleUUID).Once().Return(a, expectedErr)
 		defer articlesRepository.AssertExpectations(t)
 
-		usecase := NewUseCase(&articlesRepository, &elementsRepository)
+		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository)
+		usecase := NewUseCase(&articlesRepository, elementRetriever)
 		response, err := usecase.Execute("test-uuid")
 
 		elementsRepository.AssertNotCalled(t, "GetByVenues")
@@ -105,7 +109,8 @@ func TestUseCase_Execute(t *testing.T) {
 		elementsRepository.On("GetByVenues", venues).Once().Return(nil, expectedErr)
 		defer elementsRepository.AssertExpectations(t)
 
-		usecase := NewUseCase(&articlesRepository, &elementsRepository)
+		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository)
+		usecase := NewUseCase(&articlesRepository, elementRetriever)
 		response, err := usecase.Execute("test-uuid")
 
 		articlesRepository.AssertNotCalled(t, "GetByUUIDs")
@@ -131,14 +136,14 @@ func TestUseCase_Execute(t *testing.T) {
 				{UUID: "test-article-2"},
 			}
 			i = []component.Item{
-				{UUID: va[0].UUID},
-				{UUID: va[1].UUID},
-				{UUID: "not-exist-article-uuid"},
+				{ContentUUID: va[0].UUID},
+				{ContentUUID: va[1].UUID},
+				{ContentUUID: "not-exist-article-uuid"},
 			}
 			u = []string{
-				i[0].UUID,
-				i[1].UUID,
-				i[2].UUID,
+				i[0].ContentUUID,
+				i[1].ContentUUID,
+				i[2].ContentUUID,
 			}
 		)
 
@@ -149,14 +154,15 @@ func TestUseCase_Execute(t *testing.T) {
 		mockComponent.On("Items").Once().Return(i)
 		defer mockComponent.AssertExpectations(t)
 
-		v := []element.Element{
+		v := []domainElement.Element{
 			{Body: &mockComponent},
 		}
 
 		elementsRepository.On("GetByVenues", venues).Once().Return(v, nil)
 		defer elementsRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&articlesRepository, &elementsRepository).Execute("test-uuid")
+		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository)
+		response, err := NewUseCase(&articlesRepository, elementRetriever).Execute("test-uuid")
 
 		articlesRepository.AssertNotCalled(t, "IncreaseView")
 
@@ -181,14 +187,14 @@ func TestUseCase_Execute(t *testing.T) {
 				{UUID: "test-article-2"},
 			}
 			i = []component.Item{
-				{UUID: va[0].UUID},
-				{UUID: va[1].UUID},
-				{UUID: "not-exist-article-uuid"},
+				{ContentUUID: va[0].UUID},
+				{ContentUUID: va[1].UUID},
+				{ContentUUID: "not-exist-article-uuid"},
 			}
 			u = []string{
-				i[0].UUID,
-				i[1].UUID,
-				i[2].UUID,
+				i[0].ContentUUID,
+				i[1].ContentUUID,
+				i[2].ContentUUID,
 			}
 		)
 
@@ -198,16 +204,18 @@ func TestUseCase_Execute(t *testing.T) {
 		defer articlesRepository.AssertExpectations(t)
 
 		mockComponent.On("Items").Once().Return(i)
+		mockComponent.On("Type").Return(component.ComponentTypeMock)
 		defer mockComponent.AssertExpectations(t)
 
-		v := []element.Element{
+		v := []domainElement.Element{
 			{Body: &mockComponent},
 		}
 
 		elementsRepository.On("GetByVenues", venues).Once().Return(v, nil)
 		defer elementsRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&articlesRepository, &elementsRepository).Execute("test-uuid")
+		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository)
+		response, err := NewUseCase(&articlesRepository, elementRetriever).Execute("test-uuid")
 
 		assert.NotNil(t, response, "unexpected response")
 		assert.NoError(t, err, "unexpected error")

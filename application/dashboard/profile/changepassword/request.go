@@ -2,8 +2,6 @@ package changepassword
 
 import "github.com/khanzadimahdi/testproject/domain"
 
-type validationErrors map[string]string
-
 type Request struct {
 	UserUUID        string `json:"-"`
 	CurrentPassword string `json:"current_password"`
