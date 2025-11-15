@@ -113,6 +113,15 @@ func TestRequest_UnmarshalJSON(t *testing.T) {
 			},
 		},
 		{
+			name:    "unmarshals cards component",
+			json:    `{"body":{"type":"cards","title":"test-title","is_carousel":true,"items":[{"type":"item","content_uuid":"test-uuid","content_type":"article"}]},"venues":["venue1"]}`,
+			wantErr: false,
+			check: func(r *Request) bool {
+				cards, ok := r.Body.(*cardsComponentRequest)
+				return ok && cards.Type == component.ComponentTypeCards && len(r.Venues) == 1
+			},
+		},
+		{
 			name:    "returns error for unsupported component type",
 			json:    `{"body":{"type":"unsupported"},"venues":["venue1"]}`,
 			wantErr: true,

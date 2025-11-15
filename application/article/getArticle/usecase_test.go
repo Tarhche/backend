@@ -23,7 +23,7 @@ func TestUseCase_Execute(t *testing.T) {
 			mockComponent      component.MockComponent
 
 			articleUUID  string   = "test-uuid"
-			venues       []string = []string{fmt.Sprintf("articles/%s", articleUUID)}
+			venues       []string = []string{"articles/*", fmt.Sprintf("articles/%s", articleUUID)}
 			increaseView uint     = 1
 
 			a  = article.Article{UUID: articleUUID}
@@ -98,7 +98,7 @@ func TestUseCase_Execute(t *testing.T) {
 			elementsRepository elements.MockElementsRepository
 
 			articleUUID string   = "test-uuid"
-			venues      []string = []string{fmt.Sprintf("articles/%s", articleUUID)}
+			venues      []string = []string{"articles/*", fmt.Sprintf("articles/%s", articleUUID)}
 			expectedErr          = domain.ErrNotExists
 			a                    = article.Article{UUID: articleUUID}
 		)
@@ -127,7 +127,7 @@ func TestUseCase_Execute(t *testing.T) {
 			mockComponent      component.MockComponent
 
 			articleUUID string   = "test-uuid"
-			venues      []string = []string{fmt.Sprintf("articles/%s", articleUUID)}
+			venues      []string = []string{"articles/*", fmt.Sprintf("articles/%s", articleUUID)}
 			expectedErr          = domain.ErrNotExists
 
 			a  = article.Article{UUID: articleUUID}
@@ -177,7 +177,7 @@ func TestUseCase_Execute(t *testing.T) {
 			mockComponent      component.MockComponent
 
 			articleUUID  string   = "test-uuid"
-			venues       []string = []string{fmt.Sprintf("articles/%s", articleUUID)}
+			venues       []string = []string{"articles/*", fmt.Sprintf("articles/%s", articleUUID)}
 			increaseView uint     = 1
 			expectedErr           = domain.ErrNotExists
 

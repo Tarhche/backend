@@ -52,7 +52,7 @@ func TestShowHandler(t *testing.T) {
 		articlesRepository.On("GetByUUIDs", []string{}).Once().Return(nil, nil)
 		defer articlesRepository.AssertExpectations(t)
 
-		elementsRepository.On("GetByVenues", []string{fmt.Sprintf("articles/%s", a.UUID)}).Once().Return(nil, nil)
+		elementsRepository.On("GetByVenues", []string{"articles/*", fmt.Sprintf("articles/%s", a.UUID)}).Once().Return(nil, nil)
 		defer elementsRepository.AssertExpectations(t)
 
 		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository)

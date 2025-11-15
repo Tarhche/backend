@@ -28,7 +28,10 @@ func (uc *UseCase) Execute(UUID string) (*Response, error) {
 		return nil, err
 	}
 
-	elementsResponse, err := uc.elementRetriever.RetrieveByVenues([]string{fmt.Sprintf("articles/%s", UUID)})
+	elementsResponse, err := uc.elementRetriever.RetrieveByVenues([]string{
+		"articles/*",
+		fmt.Sprintf("articles/%s", UUID),
+	})
 	if err != nil {
 		return nil, err
 	}

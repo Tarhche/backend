@@ -34,6 +34,13 @@ type FeaturedBson struct {
 	Aside []ItemBson `bson:"aside"`
 }
 
+type CardsBson struct {
+	Type       string     `bson:"type"`
+	Title      string     `bson:"title"`
+	IsCarousel bool       `bson:"is_carousel"`
+	Items      []ItemBson `bson:"items"`
+}
+
 func (e *ElementBson) UnmarshalBSON(data []byte) error {
 	var temporary struct {
 		Element   ElementBson `bson:",inline"`
@@ -73,6 +80,14 @@ func (e *ElementBson) UnmarshalBSON(data []byte) error {
 			return err
 		}
 		temporary.Element.Body = featured.Body
+	case component.ComponentTypeCards:
+		var cards struct {
+			Body CardsBson `bson:"body"`
+		}
+		if err := bson.Unmarshal(data, &cards); err != nil {
+			return err
+		}
+		temporary.Element.Body = cards.Body
 	default:
 		return element.ErrUnSupportedComponent
 	}
@@ -162,6 +177,22 @@ func componentToBson(c element.Component) (any, error) {
 			Main:  main.(ItemBson),
 			Aside: asideItems,
 		}
+	case component.ComponentTypeCards:
+		cards := c.(component.Cards)
+		items := make([]ItemBson, len(cards.ItemsList))
+		for i := range cards.ItemsList {
+			item, err := componentToBson(cards.ItemsList[i])
+			if err != nil {
+				return nil, err
+			}
+			items[i] = item.(ItemBson)
+		}
+		bson = CardsBson{
+			Type:       cards.Type(),
+			Title:      cards.Title,
+			IsCarousel: cards.IsCarousel,
+			Items:      items,
+		}
 	default:
 		return nil, element.ErrUnSupportedComponent
 	}
@@ -206,6 +237,20 @@ func bsonToComponent(b any) (element.Component, error) {
 		c = component.Featured{
 			Main:  main.(component.Item),
 			Aside: asideItems,
+		}
+	case CardsBson:
+		items := make([]component.Item, len(b.(CardsBson).Items))
+		for i := range b.(CardsBson).Items {
+			item, err := bsonToComponent(b.(CardsBson).Items[i])
+			if err != nil {
+				return nil, err
+			}
+			items[i] = item.(component.Item)
+		}
+		c = component.Cards{
+			Title:      b.(CardsBson).Title,
+			IsCarousel: b.(CardsBson).IsCarousel,
+			ItemsList:  items,
 		}
 	default:
 		return nil, element.ErrUnSupportedComponent

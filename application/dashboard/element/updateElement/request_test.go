@@ -47,6 +47,31 @@ func TestRequest_Validate(t *testing.T) {
 		}
 	})
 
+	t.Run("valid request with cards component", func(t *testing.T) {
+		req := Request{
+			UUID: "element-uuid-123",
+			Body: &cardsComponentRequest{
+				Type:       component.ComponentTypeCards,
+				Title:      "test-title",
+				IsCarousel: true,
+				Items: []itemComponentRequest{
+					{
+						Type:        component.ComponentTypeItem,
+						ContentUUID: "test-uuid",
+						ContentType: "article",
+					},
+				},
+			},
+			Venues: []string{"venue1"},
+		}
+
+		errs := req.Validate()
+
+		if len(errs) != 0 {
+			t.Errorf("Validate() returned %d errors, want 0: %v", len(errs), errs)
+		}
+	})
+
 	t.Run("valid request with featured component", func(t *testing.T) {
 		req := Request{
 			UUID: "element-uuid-123",
@@ -113,6 +138,15 @@ func TestRequest_UnmarshalJSON(t *testing.T) {
 			check: func(r *Request) bool {
 				item, ok := r.Body.(*itemComponentRequest)
 				return ok && item.Type == component.ComponentTypeItem && r.UUID == "element-uuid-123" && len(r.Venues) == 1
+			},
+		},
+		{
+			name:    "unmarshals cards component",
+			json:    `{"uuid":"element-uuid-123","body":{"type":"cards","title":"test-title","is_carousel":true,"items":[{"type":"item","content_uuid":"test-uuid","content_type":"article"}]},"venues":["venue1"]}`,
+			wantErr: false,
+			check: func(r *Request) bool {
+				cards, ok := r.Body.(*cardsComponentRequest)
+				return ok && cards.Type == component.ComponentTypeCards && r.UUID == "element-uuid-123" && len(r.Venues) == 1
 			},
 		},
 		{

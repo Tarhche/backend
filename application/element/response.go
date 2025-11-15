@@ -42,6 +42,12 @@ type jumbotronComponentResponse struct {
 	Item itemComponentResponse `json:"item"`
 }
 
+type cardsComponentResponse struct {
+	Title      string                  `json:"title"`
+	IsCarousel bool                    `json:"is_carousel"`
+	Items      []itemComponentResponse `json:"items"`
+}
+
 func NewResponse(elements []element.Element, elementsContent []article.Article) []Response {
 	response := make([]Response, len(elements))
 	for i := range elements {
@@ -67,6 +73,10 @@ func toComponentResponse(ec element.Component, elementsContent []article.Article
 		c = toItemResponse(ec.(component.Item), elementsContent)
 	}
 
+	if ec.Type() == component.ComponentTypeCards {
+		c = toCardsResponse(ec.(component.Cards), elementsContent)
+	}
+
 	return c
 }
 
@@ -86,6 +96,19 @@ func toFeaturedResponse(c component.Featured, elementsContent []article.Article)
 	return featuredComponentResponse{
 		Main:  toItemResponse(c.Main, elementsContent),
 		Aside: aside,
+	}
+}
+
+func toCardsResponse(c component.Cards, elementsContent []article.Article) cardsComponentResponse {
+	items := make([]itemComponentResponse, len(c.ItemsList))
+	for i := range c.ItemsList {
+		items[i] = toItemResponse(c.ItemsList[i], elementsContent)
+	}
+
+	return cardsComponentResponse{
+		Title:      c.Title,
+		IsCarousel: c.IsCarousel,
+		Items:      items,
 	}
 }
 

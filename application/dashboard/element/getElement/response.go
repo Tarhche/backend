@@ -32,6 +32,13 @@ type jumbotronComponentResponse struct {
 	Item itemComponentResponse `json:"item"`
 }
 
+type cardsComponentResponse struct {
+	Type       string                  `json:"type"`
+	Title      string                  `json:"title"`
+	IsCarousel bool                    `json:"is_carousel"`
+	Items      []itemComponentResponse `json:"items"`
+}
+
 func toComponentResponse(c element.Component) any {
 	switch c.Type() {
 	case component.ComponentTypeItem:
@@ -55,9 +62,23 @@ func toComponentResponse(c element.Component) any {
 		}
 	case component.ComponentTypeJumbotron:
 		jumbotron := c.(component.Jumbotron)
+
 		return jumbotronComponentResponse{
 			Type: c.Type(),
 			Item: toComponentResponse(jumbotron.Item).(itemComponentResponse),
+		}
+	case component.ComponentTypeCards:
+		cards := c.(component.Cards)
+		items := make([]itemComponentResponse, len(cards.ItemsList))
+		for i := range cards.ItemsList {
+			items[i] = toComponentResponse(cards.ItemsList[i]).(itemComponentResponse)
+		}
+
+		return cardsComponentResponse{
+			Type:       c.Type(),
+			Title:      cards.Title,
+			IsCarousel: cards.IsCarousel,
+			Items:      items,
 		}
 	}
 

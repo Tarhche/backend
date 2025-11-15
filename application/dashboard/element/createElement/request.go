@@ -122,6 +122,37 @@ func (r *jumbotronComponentRequest) Validate() domain.ValidationErrors {
 	return validationErrors
 }
 
+type cardsComponentRequest struct {
+	Type       string                 `json:"type"`
+	Title      string                 `json:"title"`
+	IsCarousel bool                   `json:"is_carousel"`
+	Items      []itemComponentRequest `json:"items"`
+}
+
+var _ domain.Validatable = &cardsComponentRequest{}
+
+func (r *cardsComponentRequest) Validate() domain.ValidationErrors {
+	validationErrors := make(domain.ValidationErrors)
+
+	if len(r.Type) == 0 {
+		validationErrors["type"] = "required_field"
+	}
+
+	if r.Type != component.ComponentTypeCards {
+		validationErrors["type"] = "invalid_value"
+	}
+
+	for i, item := range r.Items {
+		if errs := item.Validate(); len(errs) > 0 {
+			for errKey, errValue := range errs {
+				validationErrors["items."+strconv.Itoa(i)+"."+errKey] = errValue
+			}
+		}
+	}
+
+	return validationErrors
+}
+
 func (e *Request) UnmarshalJSON(data []byte) error {
 	var tmp struct {
 		Venues    []string `json:"venues"`
@@ -156,6 +187,14 @@ func (e *Request) UnmarshalJSON(data []byte) error {
 	case component.ComponentTypeFeatured:
 		var component struct {
 			Body featuredComponentRequest `json:"body"`
+		}
+		if err := json.Unmarshal(data, &component); err != nil {
+			return err
+		}
+		e.Body = &component.Body
+	case component.ComponentTypeCards:
+		var component struct {
+			Body cardsComponentRequest `json:"body"`
 		}
 		if err := json.Unmarshal(data, &component); err != nil {
 			return err
@@ -205,6 +244,20 @@ func (r *Request) ToElement() *element.Element {
 		e.Body = component.Featured{
 			Main:  main,
 			Aside: aside,
+		}
+	case *cardsComponentRequest:
+		items := make([]component.Item, len(r.Body.(*cardsComponentRequest).Items))
+		for i := range r.Body.(*cardsComponentRequest).Items {
+			items[i] = component.Item{
+				ContentUUID: r.Body.(*cardsComponentRequest).Items[i].ContentUUID,
+				ContentType: r.Body.(*cardsComponentRequest).Items[i].ContentType,
+			}
+		}
+
+		e.Body = component.Cards{
+			Title:      r.Body.(*cardsComponentRequest).Title,
+			IsCarousel: r.Body.(*cardsComponentRequest).IsCarousel,
+			ItemsList:  items,
 		}
 	}
 
