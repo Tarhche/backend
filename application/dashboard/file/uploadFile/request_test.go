@@ -135,4 +135,3 @@ func TestRequest_StoredName(t *testing.T) {
 		assert.NotEmpty(t, storedName)
 	})
 }
-

@@ -101,10 +101,10 @@ func TestRequest_Validate(t *testing.T) {
 				AuthorUUID:  "",
 			},
 			want: domain.ValidationErrors{
-				"title":  "required_field",
+				"title":   "required_field",
 				"excerpt": "required_field",
-				"body":   "required_field",
-				"author": "required_field",
+				"body":    "required_field",
+				"author":  "required_field",
 			},
 		},
 	}
@@ -116,4 +116,3 @@ func TestRequest_Validate(t *testing.T) {
 		})
 	}
 }
-

@@ -42,8 +42,8 @@ func TestRequest_Validate(t *testing.T) {
 		{
 			name: "invalid request with empty name",
 			request: Request{
-				Name:          "",
-				Image:         "test-image:latest",
+				Name:  "",
+				Image: "test-image:latest",
 				ResourceLimits: ResourceLimits{
 					Cpu:    1.0,
 					Memory: 1024,
@@ -58,8 +58,8 @@ func TestRequest_Validate(t *testing.T) {
 		{
 			name: "invalid request with empty image",
 			request: Request{
-				Name:          "test-task",
-				Image:         "",
+				Name:  "test-task",
+				Image: "",
 				ResourceLimits: ResourceLimits{
 					Cpu:    1.0,
 					Memory: 1024,
@@ -74,8 +74,8 @@ func TestRequest_Validate(t *testing.T) {
 		{
 			name: "invalid request with zero cpu",
 			request: Request{
-				Name:          "test-task",
-				Image:         "test-image:latest",
+				Name:  "test-task",
+				Image: "test-image:latest",
 				ResourceLimits: ResourceLimits{
 					Cpu:    0,
 					Memory: 1024,
@@ -90,8 +90,8 @@ func TestRequest_Validate(t *testing.T) {
 		{
 			name: "invalid request with zero memory",
 			request: Request{
-				Name:          "test-task",
-				Image:         "test-image:latest",
+				Name:  "test-task",
+				Image: "test-image:latest",
 				ResourceLimits: ResourceLimits{
 					Cpu:    1.0,
 					Memory: 0,
@@ -106,8 +106,8 @@ func TestRequest_Validate(t *testing.T) {
 		{
 			name: "invalid request with zero disk",
 			request: Request{
-				Name:          "test-task",
-				Image:         "test-image:latest",
+				Name:  "test-task",
+				Image: "test-image:latest",
 				ResourceLimits: ResourceLimits{
 					Cpu:    1.0,
 					Memory: 1024,
@@ -122,8 +122,8 @@ func TestRequest_Validate(t *testing.T) {
 		{
 			name: "invalid request with empty owner uuid",
 			request: Request{
-				Name:          "test-task",
-				Image:         "test-image:latest",
+				Name:  "test-task",
+				Image: "test-image:latest",
 				ResourceLimits: ResourceLimits{
 					Cpu:    1.0,
 					Memory: 1024,
@@ -138,8 +138,8 @@ func TestRequest_Validate(t *testing.T) {
 		{
 			name: "invalid request with multiple errors",
 			request: Request{
-				Name:          "",
-				Image:         "",
+				Name:  "",
+				Image: "",
 				ResourceLimits: ResourceLimits{
 					Cpu:    0,
 					Memory: 0,
@@ -148,12 +148,12 @@ func TestRequest_Validate(t *testing.T) {
 				OwnerUUID: "",
 			},
 			want: domain.ValidationErrors{
-				"name":                "required_field",
-				"image":               "required_field",
-				"resource_limits.cpu": "required_field",
+				"name":                   "required_field",
+				"image":                  "required_field",
+				"resource_limits.cpu":    "required_field",
 				"resource_limits.memory": "required_field",
-				"resource_limits.disk": "required_field",
-				"owner_uuid":          "required_field",
+				"resource_limits.disk":   "required_field",
+				"owner_uuid":             "required_field",
 			},
 		},
 	}
@@ -201,4 +201,3 @@ func TestRequest_ConvertPortBindings(t *testing.T) {
 
 	assert.Len(t, portMaps, 1)
 }
-

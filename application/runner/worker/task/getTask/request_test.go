@@ -38,4 +38,3 @@ func TestRequest_Validate(t *testing.T) {
 		})
 	}
 }
-

@@ -118,9 +118,8 @@ func TestRequest_Validate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-got := tt.request.Validate()
+			got := tt.request.Validate()
 			assert.Equal(t, tt.want, got)
-
 
 			for key, wantValue := range tt.want {
 				if gotValue, ok := got[key]; !ok {
@@ -138,4 +137,3 @@ got := tt.request.Validate()
 		})
 	}
 }
-

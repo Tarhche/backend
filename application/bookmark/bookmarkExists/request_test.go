@@ -66,7 +66,7 @@ func TestRequest_Validate(t *testing.T) {
 			want: domain.ValidationErrors{
 				"object_type": "invalid_value",
 				"object_uuid": "required_field",
-				"owner_uuid": "required_field",
+				"owner_uuid":  "required_field",
 			},
 		},
 	}
@@ -78,4 +78,3 @@ func TestRequest_Validate(t *testing.T) {
 		})
 	}
 }
-

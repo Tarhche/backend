@@ -62,18 +62,17 @@ func TestRequest_Validate(t *testing.T) {
 				NewPassword:     "",
 			},
 			want: domain.ValidationErrors{
-				"uuid":            "required_field",
+				"uuid":             "required_field",
 				"current_password": "required_field",
-				"new_password":    "required_field",
+				"new_password":     "required_field",
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-got := tt.request.Validate()
+			got := tt.request.Validate()
 			assert.Equal(t, tt.want, got)
-
 
 			for key, wantValue := range tt.want {
 				if gotValue, ok := got[key]; !ok {
@@ -91,4 +90,3 @@ got := tt.request.Validate()
 		})
 	}
 }
-

@@ -42,9 +42,9 @@ func TestRequest_Validate(t *testing.T) {
 		{
 			name: "invalid request with empty uuid",
 			request: Request{
-				UUID:          "",
-				Name:          "test-task",
-				Image:         "test-image:latest",
+				UUID:  "",
+				Name:  "test-task",
+				Image: "test-image:latest",
 				ResourceLimits: ResourceLimits{
 					Cpu:    1.0,
 					Memory: 1024,
@@ -58,9 +58,9 @@ func TestRequest_Validate(t *testing.T) {
 		{
 			name: "invalid request with empty name",
 			request: Request{
-				UUID:          "task-uuid-123",
-				Name:          "",
-				Image:         "test-image:latest",
+				UUID:  "task-uuid-123",
+				Name:  "",
+				Image: "test-image:latest",
 				ResourceLimits: ResourceLimits{
 					Cpu:    1.0,
 					Memory: 1024,
@@ -74,9 +74,9 @@ func TestRequest_Validate(t *testing.T) {
 		{
 			name: "invalid request with empty image",
 			request: Request{
-				UUID:          "task-uuid-123",
-				Name:          "test-task",
-				Image:         "",
+				UUID:  "task-uuid-123",
+				Name:  "test-task",
+				Image: "",
 				ResourceLimits: ResourceLimits{
 					Cpu:    1.0,
 					Memory: 1024,
@@ -90,9 +90,9 @@ func TestRequest_Validate(t *testing.T) {
 		{
 			name: "invalid request with zero cpu",
 			request: Request{
-				UUID:          "task-uuid-123",
-				Name:          "test-task",
-				Image:         "test-image:latest",
+				UUID:  "task-uuid-123",
+				Name:  "test-task",
+				Image: "test-image:latest",
 				ResourceLimits: ResourceLimits{
 					Cpu:    0,
 					Memory: 1024,
@@ -106,9 +106,9 @@ func TestRequest_Validate(t *testing.T) {
 		{
 			name: "invalid request with zero memory",
 			request: Request{
-				UUID:          "task-uuid-123",
-				Name:          "test-task",
-				Image:         "test-image:latest",
+				UUID:  "task-uuid-123",
+				Name:  "test-task",
+				Image: "test-image:latest",
 				ResourceLimits: ResourceLimits{
 					Cpu:    1.0,
 					Memory: 0,
@@ -122,9 +122,9 @@ func TestRequest_Validate(t *testing.T) {
 		{
 			name: "invalid request with zero disk",
 			request: Request{
-				UUID:          "task-uuid-123",
-				Name:          "test-task",
-				Image:         "test-image:latest",
+				UUID:  "task-uuid-123",
+				Name:  "test-task",
+				Image: "test-image:latest",
 				ResourceLimits: ResourceLimits{
 					Cpu:    1.0,
 					Memory: 1024,
@@ -138,9 +138,9 @@ func TestRequest_Validate(t *testing.T) {
 		{
 			name: "invalid request with multiple errors",
 			request: Request{
-				UUID:          "",
-				Name:          "",
-				Image:         "",
+				UUID:  "",
+				Name:  "",
+				Image: "",
 				ResourceLimits: ResourceLimits{
 					Cpu:    0,
 					Memory: 0,
@@ -148,12 +148,12 @@ func TestRequest_Validate(t *testing.T) {
 				},
 			},
 			want: domain.ValidationErrors{
-				"uuid":                "required_field",
-				"name":                "required_field",
-				"image":               "required_field",
-				"resource_limits.cpu": "required_field",
+				"uuid":                   "required_field",
+				"name":                   "required_field",
+				"image":                  "required_field",
+				"resource_limits.cpu":    "required_field",
 				"resource_limits.memory": "required_field",
-				"resource_limits.disk": "required_field",
+				"resource_limits.disk":   "required_field",
 			},
 		},
 	}
@@ -165,4 +165,3 @@ func TestRequest_Validate(t *testing.T) {
 		})
 	}
 }
-
