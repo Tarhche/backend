@@ -15,7 +15,7 @@ FROM base AS develop
 WORKDIR /opt/app
 ENV PATH=$GOPATH/bin/linux_$GOARCH:$PATH
 RUN apk add tmux
-ENTRYPOINT ["go", "tool", "air", "--"]
+ENTRYPOINT ["go", "tool", "air", "-build.poll=true", "--"]
 
 FROM alpine:latest AS production
 RUN addgroup -g 10001 app \
