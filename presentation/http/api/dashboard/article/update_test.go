@@ -16,7 +16,6 @@ import (
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/article"
 	"github.com/khanzadimahdi/testproject/domain/author"
-	"github.com/khanzadimahdi/testproject/domain/permission"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/articles"
 	"github.com/khanzadimahdi/testproject/infrastructure/validator"
@@ -30,7 +29,6 @@ func TestUpdateHandler(t *testing.T) {
 
 		var (
 			articleRepository articles.MockArticlesRepository
-			authorizer        domain.MockAuthorizer
 			requestValidator  validator.MockValidator
 
 			r = updatearticle.Request{
@@ -60,16 +58,13 @@ func TestUpdateHandler(t *testing.T) {
 			}
 		)
 
-		authorizer.On("Authorize", u.UUID, permission.ArticlesUpdate).Once().Return(true, nil)
-		defer authorizer.AssertExpectations(t)
-
 		requestValidator.On("Validate", &r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
 		articleRepository.On("Save", &a).Once().Return(a.UUID, nil)
 		defer articleRepository.AssertExpectations(t)
 
-		handler := NewUpdateHandler(updatearticle.NewUseCase(&articleRepository, &requestValidator), &authorizer)
+		handler := NewUpdateHandler(updatearticle.NewUseCase(&articleRepository, &requestValidator))
 
 		var payload bytes.Buffer
 		err := json.NewEncoder(&payload).Encode(r)
@@ -85,65 +80,17 @@ func TestUpdateHandler(t *testing.T) {
 		assert.Equal(t, http.StatusNoContent, response.Code)
 	})
 
-	t.Run("unauthorized", func(t *testing.T) {
-		t.Parallel()
-
-		var (
-			articleRepository articles.MockArticlesRepository
-			authorizer        domain.MockAuthorizer
-			requestValidator  validator.MockValidator
-
-			r = updatearticle.Request{
-				UUID:       "test-article-uuid",
-				Title:      "test title",
-				Excerpt:    "test excerpt",
-				Body:       "test body",
-				AuthorUUID: "test-author-uuid",
-				Tags:       []string{"tag1", "tag2"},
-			}
-
-			u = user.User{
-				UUID: r.AuthorUUID,
-			}
-		)
-
-		authorizer.On("Authorize", u.UUID, permission.ArticlesUpdate).Once().Return(false, nil)
-		defer authorizer.AssertExpectations(t)
-
-		handler := NewUpdateHandler(updatearticle.NewUseCase(&articleRepository, &requestValidator), &authorizer)
-
-		var payload bytes.Buffer
-		err := json.NewEncoder(&payload).Encode(r)
-		assert.NoError(t, err)
-
-		request := httptest.NewRequest(http.MethodPatch, "/", &payload)
-		request = request.WithContext(auth.ToContext(request.Context(), &u))
-		response := httptest.NewRecorder()
-
-		handler.ServeHTTP(response, request)
-
-		requestValidator.AssertNotCalled(t, "Validate")
-		articleRepository.AssertNotCalled(t, "Save")
-
-		assert.Len(t, response.Body.Bytes(), 0)
-		assert.Equal(t, http.StatusForbidden, response.Code)
-	})
-
 	t.Run("validation failed", func(t *testing.T) {
 		t.Parallel()
 
 		var (
 			articleRepository articles.MockArticlesRepository
-			authorizer        domain.MockAuthorizer
 			requestValidator  validator.MockValidator
 
 			u = user.User{
 				UUID: "test-author-uuid",
 			}
 		)
-
-		authorizer.On("Authorize", u.UUID, permission.ArticlesUpdate).Once().Return(true, nil)
-		defer authorizer.AssertExpectations(t)
 
 		requestValidator.On("Validate", &updatearticle.Request{AuthorUUID: u.UUID}).Once().Return(domain.ValidationErrors{
 			"body":    "body is required",
@@ -152,7 +99,7 @@ func TestUpdateHandler(t *testing.T) {
 		})
 		defer requestValidator.AssertExpectations(t)
 
-		handler := NewUpdateHandler(updatearticle.NewUseCase(&articleRepository, &requestValidator), &authorizer)
+		handler := NewUpdateHandler(updatearticle.NewUseCase(&articleRepository, &requestValidator))
 
 		request := httptest.NewRequest(http.MethodPatch, "/", bytes.NewBufferString("{}"))
 		request = request.WithContext(auth.ToContext(request.Context(), &u))
@@ -175,7 +122,6 @@ func TestUpdateHandler(t *testing.T) {
 
 		var (
 			articleRepository articles.MockArticlesRepository
-			authorizer        domain.MockAuthorizer
 			requestValidator  validator.MockValidator
 
 			r = updatearticle.Request{
@@ -205,16 +151,13 @@ func TestUpdateHandler(t *testing.T) {
 			}
 		)
 
-		authorizer.On("Authorize", u.UUID, permission.ArticlesUpdate).Once().Return(true, nil)
-		defer authorizer.AssertExpectations(t)
-
 		requestValidator.On("Validate", &r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
 		articleRepository.On("Save", &a).Once().Return("", errors.New("unexpected error"))
 		defer articleRepository.AssertExpectations(t)
 
-		handler := NewUpdateHandler(updatearticle.NewUseCase(&articleRepository, &requestValidator), &authorizer)
+		handler := NewUpdateHandler(updatearticle.NewUseCase(&articleRepository, &requestValidator))
 
 		var payload bytes.Buffer
 		err := json.NewEncoder(&payload).Encode(r)

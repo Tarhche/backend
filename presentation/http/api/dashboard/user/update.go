@@ -5,34 +5,21 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/khanzadimahdi/testproject/application/auth"
 	updateuser "github.com/khanzadimahdi/testproject/application/dashboard/user/updateUser"
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/permission"
 )
 
 type updateHandler struct {
-	useCase    *updateuser.UseCase
-	authorizer domain.Authorizer
+	useCase *updateuser.UseCase
 }
 
-func NewUpdateHandler(useCase *updateuser.UseCase, a domain.Authorizer) *updateHandler {
+func NewUpdateHandler(useCase *updateuser.UseCase) *updateHandler {
 	return &updateHandler{
-		useCase:    useCase,
-		authorizer: a,
+		useCase: useCase,
 	}
 }
 
 func (h *updateHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
-	currentUserUUID := auth.FromContext(r.Context()).UUID
-	if ok, err := h.authorizer.Authorize(currentUserUUID, permission.UsersUpdate); err != nil {
-		rw.WriteHeader(http.StatusInternalServerError)
-		return
-	} else if !ok {
-		rw.WriteHeader(http.StatusForbidden)
-		return
-	}
-
 	var request updateuser.Request
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		rw.WriteHeader(http.StatusBadRequest)

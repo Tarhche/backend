@@ -3,7 +3,6 @@ package user
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -15,7 +14,6 @@ import (
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/application/dashboard/user/userchangepassword"
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/permission"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	crypt "github.com/khanzadimahdi/testproject/infrastructure/crypto/mock"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
@@ -31,7 +29,6 @@ func TestChangePasswordHandler(t *testing.T) {
 		var (
 			userRepository   users.MockUsersRepository
 			hasher           crypt.MockCrypto
-			authorizer       domain.MockAuthorizer
 			requestValidator validator.MockValidator
 
 			r = userchangepassword.Request{
@@ -44,9 +41,6 @@ func TestChangePasswordHandler(t *testing.T) {
 			}
 		)
 
-		authorizer.On("Authorize", u.UUID, permission.UsersPasswordUpdate).Once().Return(true, nil)
-		defer authorizer.AssertExpectations(t)
-
 		requestValidator.On("Validate", &r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
@@ -57,7 +51,7 @@ func TestChangePasswordHandler(t *testing.T) {
 		hasher.On("Hash", []byte(r.NewPassword), mock.AnythingOfType("[]uint8")).Once().Return([]byte("hashed-new-password"), nil)
 		defer hasher.AssertExpectations(t)
 
-		handler := NewChangePasswordHandler(userchangepassword.NewUseCase(&userRepository, &hasher, &requestValidator), &authorizer)
+		handler := NewChangePasswordHandler(userchangepassword.NewUseCase(&userRepository, &hasher, &requestValidator))
 
 		var payload bytes.Buffer
 		err := json.NewEncoder(&payload).Encode(r)
@@ -79,7 +73,6 @@ func TestChangePasswordHandler(t *testing.T) {
 		var (
 			userRepository   users.MockUsersRepository
 			hasher           crypt.MockCrypto
-			authorizer       domain.MockAuthorizer
 			requestValidator validator.MockValidator
 
 			u = user.User{
@@ -92,13 +85,10 @@ func TestChangePasswordHandler(t *testing.T) {
 			}
 		)
 
-		authorizer.On("Authorize", u.UUID, permission.UsersPasswordUpdate).Once().Return(true, nil)
-		defer authorizer.AssertExpectations(t)
-
 		requestValidator.On("Validate", &userchangepassword.Request{}).Once().Return(validationErrors)
 		defer requestValidator.AssertExpectations(t)
 
-		handler := NewChangePasswordHandler(userchangepassword.NewUseCase(&userRepository, &hasher, &requestValidator), &authorizer)
+		handler := NewChangePasswordHandler(userchangepassword.NewUseCase(&userRepository, &hasher, &requestValidator))
 
 		request := httptest.NewRequest(http.MethodPatch, "/", bytes.NewBufferString("{}"))
 		request = request.WithContext(auth.ToContext(request.Context(), &u))
@@ -116,75 +106,5 @@ func TestChangePasswordHandler(t *testing.T) {
 		assert.Equal(t, "application/json", response.Header().Get("content-type"))
 		assert.JSONEq(t, string(expectedBody), response.Body.String())
 		assert.Equal(t, http.StatusBadRequest, response.Code)
-	})
-
-	t.Run("unauthorised", func(t *testing.T) {
-		t.Parallel()
-
-		var (
-			userRepository   users.MockUsersRepository
-			hasher           crypt.MockCrypto
-			authorizer       domain.MockAuthorizer
-			requestValidator validator.MockValidator
-
-			u = user.User{
-				UUID: "user-uuid",
-			}
-		)
-
-		authorizer.On("Authorize", u.UUID, permission.UsersPasswordUpdate).Once().Return(false, nil)
-		defer authorizer.AssertExpectations(t)
-
-		handler := NewChangePasswordHandler(userchangepassword.NewUseCase(&userRepository, &hasher, &requestValidator), &authorizer)
-
-		request := httptest.NewRequest(http.MethodPatch, "/", bytes.NewBufferString("{}"))
-		request = request.WithContext(auth.ToContext(request.Context(), &u))
-		response := httptest.NewRecorder()
-
-		handler.ServeHTTP(response, request)
-
-		requestValidator.AssertNotCalled(t, "Validate")
-
-		userRepository.AssertNotCalled(t, "GetOne")
-		userRepository.AssertNotCalled(t, "Save")
-		hasher.AssertNotCalled(t, "Hash")
-
-		assert.Len(t, response.Body.Bytes(), 0)
-		assert.Equal(t, http.StatusForbidden, response.Code)
-	})
-
-	t.Run("error", func(t *testing.T) {
-		t.Parallel()
-
-		var (
-			userRepository   users.MockUsersRepository
-			hasher           crypt.MockCrypto
-			authorizer       domain.MockAuthorizer
-			requestValidator validator.MockValidator
-
-			u = user.User{
-				UUID: "user-uuid",
-			}
-		)
-
-		authorizer.On("Authorize", u.UUID, permission.UsersPasswordUpdate).Once().Return(false, errors.New("undexpected error"))
-		defer authorizer.AssertExpectations(t)
-
-		handler := NewChangePasswordHandler(userchangepassword.NewUseCase(&userRepository, &hasher, &requestValidator), &authorizer)
-
-		request := httptest.NewRequest(http.MethodPatch, "/", bytes.NewBufferString("{}"))
-		request = request.WithContext(auth.ToContext(request.Context(), &u))
-		response := httptest.NewRecorder()
-
-		handler.ServeHTTP(response, request)
-
-		requestValidator.AssertNotCalled(t, "Validate")
-
-		userRepository.AssertNotCalled(t, "GetOne")
-		userRepository.AssertNotCalled(t, "Save")
-		hasher.AssertNotCalled(t, "Hash")
-
-		assert.Len(t, response.Body.Bytes(), 0)
-		assert.Equal(t, http.StatusInternalServerError, response.Code)
 	})
 }

@@ -6,31 +6,20 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	createarticle "github.com/khanzadimahdi/testproject/application/dashboard/article/createArticle"
-	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/permission"
 )
 
 type createHandler struct {
-	useCase    *createarticle.UseCase
-	authorizer domain.Authorizer
+	useCase *createarticle.UseCase
 }
 
-func NewCreateHandler(useCase *createarticle.UseCase, a domain.Authorizer) *createHandler {
+func NewCreateHandler(useCase *createarticle.UseCase) *createHandler {
 	return &createHandler{
-		useCase:    useCase,
-		authorizer: a,
+		useCase: useCase,
 	}
 }
 
 func (h *createHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	userUUID := auth.FromContext(r.Context()).UUID
-	if ok, err := h.authorizer.Authorize(userUUID, permission.ArticlesCreate); err != nil {
-		rw.WriteHeader(http.StatusInternalServerError)
-		return
-	} else if !ok {
-		rw.WriteHeader(http.StatusForbidden)
-		return
-	}
 
 	var request createarticle.Request
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {

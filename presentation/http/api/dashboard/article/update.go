@@ -8,30 +8,20 @@ import (
 	"github.com/khanzadimahdi/testproject/application/auth"
 	updatearticle "github.com/khanzadimahdi/testproject/application/dashboard/article/updateArticle"
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/permission"
 )
 
 type updateHandler struct {
-	useCase    *updatearticle.UseCase
-	authorizer domain.Authorizer
+	useCase *updatearticle.UseCase
 }
 
-func NewUpdateHandler(useCase *updatearticle.UseCase, a domain.Authorizer) *updateHandler {
+func NewUpdateHandler(useCase *updatearticle.UseCase) *updateHandler {
 	return &updateHandler{
-		useCase:    useCase,
-		authorizer: a,
+		useCase: useCase,
 	}
 }
 
 func (h *updateHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	userUUID := auth.FromContext(r.Context()).UUID
-	if ok, err := h.authorizer.Authorize(userUUID, permission.ArticlesUpdate); err != nil {
-		rw.WriteHeader(http.StatusInternalServerError)
-		return
-	} else if !ok {
-		rw.WriteHeader(http.StatusForbidden)
-		return
-	}
 
 	var request updatearticle.Request
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {

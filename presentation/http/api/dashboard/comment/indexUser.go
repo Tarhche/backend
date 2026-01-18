@@ -8,31 +8,20 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/application/dashboard/comment/getUserComments"
-	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/permission"
 )
 
 type indexUserHandler struct {
-	useCase    *getUserComments.UseCase
-	authorizer domain.Authorizer
+	useCase *getUserComments.UseCase
 }
 
-func NewIndexUserCommentsHandler(useCase *getUserComments.UseCase, a domain.Authorizer) *indexUserHandler {
+func NewIndexUserCommentsHandler(useCase *getUserComments.UseCase) *indexUserHandler {
 	return &indexUserHandler{
-		useCase:    useCase,
-		authorizer: a,
+		useCase: useCase,
 	}
 }
 
 func (h *indexUserHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	userUUID := auth.FromContext(r.Context()).UUID
-	if ok, err := h.authorizer.Authorize(userUUID, permission.SelfCommentsIndex); err != nil {
-		rw.WriteHeader(http.StatusInternalServerError)
-		return
-	} else if !ok {
-		rw.WriteHeader(http.StatusForbidden)
-		return
-	}
 
 	var page uint = 1
 	if r.URL.Query().Has("page") {

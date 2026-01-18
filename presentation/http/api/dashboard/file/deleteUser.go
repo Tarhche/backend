@@ -7,30 +7,20 @@ import (
 	"github.com/khanzadimahdi/testproject/application/auth"
 	deleteuserfile "github.com/khanzadimahdi/testproject/application/dashboard/file/deleteUserFile"
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/permission"
 )
 
 type deleteUserHandler struct {
-	useCase    *deleteuserfile.UseCase
-	authorizer domain.Authorizer
+	useCase *deleteuserfile.UseCase
 }
 
-func NewDeleteUserHandler(useCase *deleteuserfile.UseCase, a domain.Authorizer) *deleteUserHandler {
+func NewDeleteUserHandler(useCase *deleteuserfile.UseCase) *deleteUserHandler {
 	return &deleteUserHandler{
-		useCase:    useCase,
-		authorizer: a,
+		useCase: useCase,
 	}
 }
 
 func (h *deleteUserHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	userUUID := auth.FromContext(r.Context()).UUID
-	if ok, err := h.authorizer.Authorize(userUUID, permission.SelfFilesDelete); err != nil {
-		rw.WriteHeader(http.StatusInternalServerError)
-		return
-	} else if !ok {
-		rw.WriteHeader(http.StatusForbidden)
-		return
-	}
 
 	UUID := r.PathValue("uuid")
 

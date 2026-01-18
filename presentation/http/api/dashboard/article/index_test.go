@@ -1,7 +1,6 @@
 package article
 
 import (
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -10,12 +9,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/khanzadimahdi/testproject/application/auth"
 	getarticles "github.com/khanzadimahdi/testproject/application/dashboard/article/getArticles"
-	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/article"
-	"github.com/khanzadimahdi/testproject/domain/permission"
-	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/articles"
 )
 
@@ -27,7 +22,6 @@ func TestIndexHandler(t *testing.T) {
 
 		var (
 			articleRepository articles.MockArticlesRepository
-			authorizer        domain.MockAuthorizer
 
 			publishedAt, _ = time.Parse(time.RFC3339, "2024-10-11T04:27:44Z")
 
@@ -48,23 +42,15 @@ func TestIndexHandler(t *testing.T) {
 					PublishedAt: publishedAt,
 				},
 			}
-
-			u = user.User{
-				UUID: "user-uuid",
-			}
 		)
-
-		authorizer.On("Authorize", u.UUID, permission.ArticlesIndex).Once().Return(true, nil)
-		defer authorizer.AssertExpectations(t)
 
 		articleRepository.On("Count").Once().Return(uint(len(a)), nil)
 		articleRepository.On("GetAll", uint(0), uint(20)).Return(a, nil)
 		defer articleRepository.AssertExpectations(t)
 
-		handler := NewIndexHandler(getarticles.NewUseCase(&articleRepository), &authorizer)
+		handler := NewIndexHandler(getarticles.NewUseCase(&articleRepository))
 
 		request := httptest.NewRequest(http.MethodGet, "/?page=1", nil)
-		request = request.WithContext(auth.ToContext(request.Context(), &u))
 		response := httptest.NewRecorder()
 
 		handler.ServeHTTP(response, request)
@@ -82,24 +68,15 @@ func TestIndexHandler(t *testing.T) {
 
 		var (
 			articleRepository articles.MockArticlesRepository
-			authorizer        domain.MockAuthorizer
-
-			u = user.User{
-				UUID: "user-uuid",
-			}
 		)
-
-		authorizer.On("Authorize", u.UUID, permission.ArticlesIndex).Once().Return(true, nil)
-		defer authorizer.AssertExpectations(t)
 
 		articleRepository.On("Count").Once().Return(uint(0), nil)
 		articleRepository.On("GetAll", uint(0), uint(20)).Return(nil, nil)
 		defer articleRepository.AssertExpectations(t)
 
-		handler := NewIndexHandler(getarticles.NewUseCase(&articleRepository), &authorizer)
+		handler := NewIndexHandler(getarticles.NewUseCase(&articleRepository))
 
 		request := httptest.NewRequest(http.MethodGet, "/?page=1", nil)
-		request = request.WithContext(auth.ToContext(request.Context(), &u))
 		response := httptest.NewRecorder()
 
 		handler.ServeHTTP(response, request)
@@ -110,65 +87,5 @@ func TestIndexHandler(t *testing.T) {
 		assert.Equal(t, "application/json", response.Header().Get("content-type"))
 		assert.JSONEq(t, string(expectedBody), response.Body.String())
 		assert.Equal(t, http.StatusOK, response.Code)
-	})
-
-	t.Run("unauthorized", func(t *testing.T) {
-		t.Parallel()
-
-		var (
-			articleRepository articles.MockArticlesRepository
-			authorizer        domain.MockAuthorizer
-
-			u = user.User{
-				UUID: "user-uuid",
-			}
-		)
-
-		authorizer.On("Authorize", u.UUID, permission.ArticlesIndex).Once().Return(false, nil)
-		defer authorizer.AssertExpectations(t)
-
-		handler := NewIndexHandler(getarticles.NewUseCase(&articleRepository), &authorizer)
-
-		request := httptest.NewRequest(http.MethodGet, "/?page=1", nil)
-		request = request.WithContext(auth.ToContext(request.Context(), &u))
-		response := httptest.NewRecorder()
-
-		handler.ServeHTTP(response, request)
-
-		articleRepository.AssertNotCalled(t, "Count")
-		articleRepository.AssertNotCalled(t, "GetAll")
-
-		assert.Len(t, response.Body.Bytes(), 0)
-		assert.Equal(t, http.StatusForbidden, response.Code)
-	})
-
-	t.Run("error", func(t *testing.T) {
-		t.Parallel()
-
-		var (
-			articleRepository articles.MockArticlesRepository
-			authorizer        domain.MockAuthorizer
-
-			u = user.User{
-				UUID: "user-uuid",
-			}
-		)
-
-		authorizer.On("Authorize", u.UUID, permission.ArticlesIndex).Once().Return(false, errors.New("unexpected error"))
-		defer authorizer.AssertExpectations(t)
-
-		handler := NewIndexHandler(getarticles.NewUseCase(&articleRepository), &authorizer)
-
-		request := httptest.NewRequest(http.MethodGet, "/?page=1", nil)
-		request = request.WithContext(auth.ToContext(request.Context(), &u))
-		response := httptest.NewRecorder()
-
-		handler.ServeHTTP(response, request)
-
-		articleRepository.AssertNotCalled(t, "Count")
-		articleRepository.AssertNotCalled(t, "GetAll")
-
-		assert.Len(t, response.Body.Bytes(), 0)
-		assert.Equal(t, http.StatusInternalServerError, response.Code)
 	})
 }

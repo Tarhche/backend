@@ -3,34 +3,20 @@ package comment
 import (
 	"net/http"
 
-	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/application/dashboard/comment/deleteComment"
-	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/permission"
 )
 
 type deleteHandler struct {
-	useCase    *deleteComment.UseCase
-	authorizer domain.Authorizer
+	useCase *deleteComment.UseCase
 }
 
-func NewDeleteHandler(useCase *deleteComment.UseCase, a domain.Authorizer) *deleteHandler {
+func NewDeleteHandler(useCase *deleteComment.UseCase) *deleteHandler {
 	return &deleteHandler{
-		useCase:    useCase,
-		authorizer: a,
+		useCase: useCase,
 	}
 }
 
 func (h *deleteHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
-	userUUID := auth.FromContext(r.Context()).UUID
-	if ok, err := h.authorizer.Authorize(userUUID, permission.CommentsDelete); err != nil {
-		rw.WriteHeader(http.StatusInternalServerError)
-		return
-	} else if !ok {
-		rw.WriteHeader(http.StatusForbidden)
-		return
-	}
-
 	UUID := r.PathValue("uuid")
 
 	request := deleteComment.Request{

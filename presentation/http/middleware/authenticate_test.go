@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"bytes"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -17,13 +16,13 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
 )
 
-func TestAuthorizeMiddleware(t *testing.T) {
+func TestAuthenticateMiddleware(t *testing.T) {
 	privateKey, err := ecdsa.Generate()
 	assert.NoError(t, err)
 
 	j := jwt.NewJWT(privateKey, privateKey.Public())
 
-	t.Run("authorize and run next handler", func(t *testing.T) {
+	t.Run("authenticate and run next handler", func(t *testing.T) {
 		var (
 			userRepository users.MockUsersRepository
 
@@ -47,10 +46,10 @@ func TestAuthorizeMiddleware(t *testing.T) {
 			assert.NoError(t, err)
 		})
 
-		middleware := NewAuthoriseMiddleware(next, j, &userRepository)
+		middleware := NewAuthenticateMiddleware(next, j, &userRepository)
 
 		request := httptest.NewRequest(http.MethodPost, "/", nil)
-		request.Header.Set("authorization", fmt.Sprintf("bearer %s", token))
+		request.Header.Set(authenticationHeaderName, authenticationHeaderPrefix+token)
 		response := httptest.NewRecorder()
 
 		middleware.ServeHTTP(response, request)
@@ -59,7 +58,7 @@ func TestAuthorizeMiddleware(t *testing.T) {
 		assert.Equal(t, http.StatusOK, response.Code)
 	})
 
-	t.Run("unauthorized", func(t *testing.T) {
+	t.Run("authentication fails", func(t *testing.T) {
 		var (
 			userRepository users.MockUsersRepository
 
@@ -80,10 +79,10 @@ func TestAuthorizeMiddleware(t *testing.T) {
 			assert.NoError(t, err)
 		})
 
-		middleware := NewAuthoriseMiddleware(next, j, &userRepository)
+		middleware := NewAuthenticateMiddleware(next, j, &userRepository)
 
 		request := httptest.NewRequest(http.MethodPost, "/", nil)
-		request.Header.Set("authorization", fmt.Sprintf("bearer %s", token))
+		request.Header.Set(authenticationHeaderName, authenticationHeaderPrefix+token)
 		response := httptest.NewRecorder()
 
 		middleware.ServeHTTP(response, request)

@@ -4,35 +4,20 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/khanzadimahdi/testproject/application/auth"
-	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/permission"
-
 	getpermissions "github.com/khanzadimahdi/testproject/application/dashboard/permission/getPermissions"
 )
 
 type indexHandler struct {
-	useCase    *getpermissions.UseCase
-	authorizer domain.Authorizer
+	useCase *getpermissions.UseCase
 }
 
-func NewIndexHandler(useCase *getpermissions.UseCase, a domain.Authorizer) *indexHandler {
+func NewIndexHandler(useCase *getpermissions.UseCase) *indexHandler {
 	return &indexHandler{
-		useCase:    useCase,
-		authorizer: a,
+		useCase: useCase,
 	}
 }
 
 func (h *indexHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
-	userUUID := auth.FromContext(r.Context()).UUID
-	if ok, err := h.authorizer.Authorize(userUUID, permission.PermissionsIndex); err != nil {
-		rw.WriteHeader(http.StatusInternalServerError)
-		return
-	} else if !ok {
-		rw.WriteHeader(http.StatusForbidden)
-		return
-	}
-
 	response, err := h.useCase.Execute()
 	switch {
 	case err != nil:

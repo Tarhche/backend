@@ -3,7 +3,6 @@ package role
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -32,7 +31,6 @@ func TestUpdateHandler(t *testing.T) {
 		var (
 			roleRepository       roles.MockRolesRepository
 			permissionRepository permissions.MockPermissionsRepository
-			authorizer           domain.MockAuthorizer
 			requestValidator     validator.MockValidator
 			translator           translator.TranslatorMock
 
@@ -61,9 +59,6 @@ func TestUpdateHandler(t *testing.T) {
 			}
 		)
 
-		authorizer.On("Authorize", u.UUID, permission.RolesUpdate).Once().Return(true, nil)
-		defer authorizer.AssertExpectations(t)
-
 		requestValidator.On("Validate", &r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
@@ -73,7 +68,7 @@ func TestUpdateHandler(t *testing.T) {
 		roleRepository.On("Save", &c).Once().Return(c.UUID, nil)
 		defer roleRepository.AssertExpectations(t)
 
-		handler := NewUpdateHandler(updaterole.NewUseCase(&roleRepository, &permissionRepository, &requestValidator, &translator), &authorizer)
+		handler := NewUpdateHandler(updaterole.NewUseCase(&roleRepository, &permissionRepository, &requestValidator, &translator))
 
 		var payload bytes.Buffer
 		err := json.NewEncoder(&payload).Encode(r)
@@ -97,15 +92,11 @@ func TestUpdateHandler(t *testing.T) {
 		var (
 			roleRepository       roles.MockRolesRepository
 			permissionRepository permissions.MockPermissionsRepository
-			authorizer           domain.MockAuthorizer
 			requestValidator     validator.MockValidator
 			translator           translator.TranslatorMock
 
 			u = user.User{UUID: "auth-user-uuid"}
 		)
-
-		authorizer.On("Authorize", u.UUID, permission.RolesUpdate).Once().Return(true, nil)
-		defer authorizer.AssertExpectations(t)
 
 		requestValidator.On("Validate", &updaterole.Request{}).Once().Return(domain.ValidationErrors{
 			"description": "description is required",
@@ -114,7 +105,7 @@ func TestUpdateHandler(t *testing.T) {
 		})
 		defer requestValidator.AssertExpectations(t)
 
-		handler := NewUpdateHandler(updaterole.NewUseCase(&roleRepository, &permissionRepository, &requestValidator, &translator), &authorizer)
+		handler := NewUpdateHandler(updaterole.NewUseCase(&roleRepository, &permissionRepository, &requestValidator, &translator))
 
 		request := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString("{}"))
 		request = request.WithContext(auth.ToContext(request.Context(), &u))
@@ -132,73 +123,5 @@ func TestUpdateHandler(t *testing.T) {
 		assert.Equal(t, "application/json", response.Header().Get("content-type"))
 		assert.JSONEq(t, string(expectedBody), response.Body.String())
 		assert.Equal(t, http.StatusBadRequest, response.Code)
-	})
-
-	t.Run("unauthorized", func(t *testing.T) {
-		t.Parallel()
-
-		var (
-			roleRepository       roles.MockRolesRepository
-			permissionRepository permissions.MockPermissionsRepository
-			authorizer           domain.MockAuthorizer
-			requestValidator     validator.MockValidator
-			translator           translator.TranslatorMock
-
-			u = user.User{UUID: "auth-user-uuid"}
-		)
-
-		authorizer.On("Authorize", u.UUID, permission.RolesUpdate).Once().Return(false, nil)
-		defer authorizer.AssertExpectations(t)
-
-		handler := NewUpdateHandler(updaterole.NewUseCase(&roleRepository, &permissionRepository, &requestValidator, &translator), &authorizer)
-
-		request := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString("{}"))
-		request = request.WithContext(auth.ToContext(request.Context(), &u))
-		response := httptest.NewRecorder()
-
-		handler.ServeHTTP(response, request)
-
-		requestValidator.AssertNotCalled(t, "Validate")
-		translator.AssertNotCalled(t, "Translate")
-
-		permissionRepository.AssertNotCalled(t, "Get")
-		roleRepository.AssertNotCalled(t, "Save")
-
-		assert.Len(t, response.Body.Bytes(), 0)
-		assert.Equal(t, http.StatusForbidden, response.Code)
-	})
-
-	t.Run("error", func(t *testing.T) {
-		t.Parallel()
-
-		var (
-			roleRepository       roles.MockRolesRepository
-			permissionRepository permissions.MockPermissionsRepository
-			authorizer           domain.MockAuthorizer
-			requestValidator     validator.MockValidator
-			translator           translator.TranslatorMock
-
-			u = user.User{UUID: "auth-user-uuid"}
-		)
-
-		authorizer.On("Authorize", u.UUID, permission.RolesUpdate).Once().Return(false, errors.New("unexpected error"))
-		defer authorizer.AssertExpectations(t)
-
-		handler := NewUpdateHandler(updaterole.NewUseCase(&roleRepository, &permissionRepository, &requestValidator, &translator), &authorizer)
-
-		request := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString("{}"))
-		request = request.WithContext(auth.ToContext(request.Context(), &u))
-		response := httptest.NewRecorder()
-
-		handler.ServeHTTP(response, request)
-
-		requestValidator.AssertNotCalled(t, "Validate")
-		translator.AssertNotCalled(t, "Translate")
-
-		permissionRepository.AssertNotCalled(t, "Get")
-		roleRepository.AssertNotCalled(t, "Save")
-
-		assert.Len(t, response.Body.Bytes(), 0)
-		assert.Equal(t, http.StatusInternalServerError, response.Code)
 	})
 }

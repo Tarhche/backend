@@ -1,7 +1,6 @@
 package user
 
 import (
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -11,9 +10,7 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	getusers "github.com/khanzadimahdi/testproject/application/dashboard/user/getUsers"
-	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/password"
-	"github.com/khanzadimahdi/testproject/domain/permission"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
 )
@@ -26,7 +23,6 @@ func TestIndexHandler(t *testing.T) {
 
 		var (
 			userRepository users.MockUsersRepository
-			authorizer     domain.MockAuthorizer
 
 			u = user.User{
 				UUID: "user-uuid",
@@ -55,14 +51,11 @@ func TestIndexHandler(t *testing.T) {
 			}
 		)
 
-		authorizer.On("Authorize", u.UUID, permission.UsersIndex).Once().Return(true, nil)
-		defer authorizer.AssertExpectations(t)
-
 		userRepository.On("Count").Once().Return(uint(len(a)), nil)
 		userRepository.On("GetAll", uint(0), uint(10)).Return(a, nil)
 		defer userRepository.AssertExpectations(t)
 
-		handler := NewIndexHandler(getusers.NewUseCase(&userRepository), &authorizer)
+		handler := NewIndexHandler(getusers.NewUseCase(&userRepository))
 
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
 		request = request.WithContext(auth.ToContext(request.Context(), &u))
@@ -83,21 +76,17 @@ func TestIndexHandler(t *testing.T) {
 
 		var (
 			userRepository users.MockUsersRepository
-			authorizer     domain.MockAuthorizer
 
 			u = user.User{
 				UUID: "user-uuid",
 			}
 		)
 
-		authorizer.On("Authorize", u.UUID, permission.UsersIndex).Once().Return(true, nil)
-		defer authorizer.AssertExpectations(t)
-
 		userRepository.On("Count").Once().Return(uint(0), nil)
 		userRepository.On("GetAll", uint(0), uint(10)).Return(nil, nil)
 		defer userRepository.AssertExpectations(t)
 
-		handler := NewIndexHandler(getusers.NewUseCase(&userRepository), &authorizer)
+		handler := NewIndexHandler(getusers.NewUseCase(&userRepository))
 
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
 		request = request.WithContext(auth.ToContext(request.Context(), &u))
@@ -111,65 +100,5 @@ func TestIndexHandler(t *testing.T) {
 		assert.Equal(t, "application/json", response.Header().Get("content-type"))
 		assert.JSONEq(t, string(expectedBody), response.Body.String())
 		assert.Equal(t, http.StatusOK, response.Code)
-	})
-
-	t.Run("unauthorised", func(t *testing.T) {
-		t.Parallel()
-
-		var (
-			userRepository users.MockUsersRepository
-			authorizer     domain.MockAuthorizer
-
-			u = user.User{
-				UUID: "user-uuid",
-			}
-		)
-
-		authorizer.On("Authorize", u.UUID, permission.UsersIndex).Once().Return(false, nil)
-		defer authorizer.AssertExpectations(t)
-
-		handler := NewIndexHandler(getusers.NewUseCase(&userRepository), &authorizer)
-
-		request := httptest.NewRequest(http.MethodGet, "/", nil)
-		request = request.WithContext(auth.ToContext(request.Context(), &u))
-		response := httptest.NewRecorder()
-
-		handler.ServeHTTP(response, request)
-
-		userRepository.AssertNotCalled(t, "Count")
-		userRepository.AssertNotCalled(t, "GetAll")
-
-		assert.Len(t, response.Body.String(), 0)
-		assert.Equal(t, http.StatusForbidden, response.Code)
-	})
-
-	t.Run("error", func(t *testing.T) {
-		t.Parallel()
-
-		var (
-			userRepository users.MockUsersRepository
-			authorizer     domain.MockAuthorizer
-
-			u = user.User{
-				UUID: "user-uuid",
-			}
-		)
-
-		authorizer.On("Authorize", u.UUID, permission.UsersIndex).Once().Return(false, errors.New("unexpected error"))
-		defer authorizer.AssertExpectations(t)
-
-		handler := NewIndexHandler(getusers.NewUseCase(&userRepository), &authorizer)
-
-		request := httptest.NewRequest(http.MethodGet, "/", nil)
-		request = request.WithContext(auth.ToContext(request.Context(), &u))
-		response := httptest.NewRecorder()
-
-		handler.ServeHTTP(response, request)
-
-		userRepository.AssertNotCalled(t, "Count")
-		userRepository.AssertNotCalled(t, "GetAll")
-
-		assert.Len(t, response.Body.String(), 0)
-		assert.Equal(t, http.StatusInternalServerError, response.Code)
 	})
 }

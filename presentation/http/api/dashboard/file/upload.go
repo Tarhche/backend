@@ -7,32 +7,19 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	uploadfile "github.com/khanzadimahdi/testproject/application/dashboard/file/uploadFile"
-	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/permission"
 )
 
 type createHandler struct {
-	useCase    *uploadfile.UseCase
-	authorizer domain.Authorizer
+	useCase *uploadfile.UseCase
 }
 
-func NewUploadHandler(useCase *uploadfile.UseCase, a domain.Authorizer) *createHandler {
+func NewUploadHandler(useCase *uploadfile.UseCase) *createHandler {
 	return &createHandler{
-		useCase:    useCase,
-		authorizer: a,
+		useCase: useCase,
 	}
 }
 
 func (h *createHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
-	userUUID := auth.FromContext(r.Context()).UUID
-	if ok, err := h.authorizer.Authorize(userUUID, permission.FilesCreate); err != nil {
-		rw.WriteHeader(http.StatusInternalServerError)
-		return
-	} else if !ok {
-		rw.WriteHeader(http.StatusForbidden)
-		return
-	}
-
 	if err := r.ParseMultipartForm(uploadfile.MaxFileSize); err != nil {
 		rw.WriteHeader(http.StatusInternalServerError)
 		return

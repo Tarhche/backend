@@ -6,31 +6,20 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/application/dashboard/comment/createComment"
-	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/permission"
 )
 
 type createHandler struct {
-	useCase    *createComment.UseCase
-	authorizer domain.Authorizer
+	useCase *createComment.UseCase
 }
 
-func NewCreateHandler(useCase *createComment.UseCase, a domain.Authorizer) *createHandler {
+func NewCreateHandler(useCase *createComment.UseCase) *createHandler {
 	return &createHandler{
-		useCase:    useCase,
-		authorizer: a,
+		useCase: useCase,
 	}
 }
 
 func (h *createHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	userUUID := auth.FromContext(r.Context()).UUID
-	if ok, err := h.authorizer.Authorize(userUUID, permission.CommentsCreate); err != nil {
-		rw.WriteHeader(http.StatusInternalServerError)
-		return
-	} else if !ok {
-		rw.WriteHeader(http.StatusForbidden)
-		return
-	}
 
 	var request createComment.Request
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {

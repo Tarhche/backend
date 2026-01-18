@@ -8,23 +8,28 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
 )
 
-type Authorise struct {
+const (
+	authenticationHeaderName   = "authorization"
+	authenticationHeaderPrefix = "bearer "
+)
+
+type Authenticate struct {
 	next           http.Handler
 	j              *jwt.JWT
 	userRepository user.Repository
 }
 
-var _ http.Handler = &Authorise{}
+var _ http.Handler = &Authenticate{}
 
-func NewAuthoriseMiddleware(next http.Handler, j *jwt.JWT, userRepository user.Repository) *Authorise {
-	return &Authorise{
+func NewAuthenticateMiddleware(next http.Handler, j *jwt.JWT, userRepository user.Repository) *Authenticate {
+	return &Authenticate{
 		j:              j,
 		userRepository: userRepository,
 		next:           next,
 	}
 }
 
-func (a *Authorise) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
+func (a *Authenticate) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	token := a.bearerToken(r)
 	claims, err := a.j.Verify(token)
 	if err != nil {
@@ -52,9 +57,9 @@ func (a *Authorise) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	a.next.ServeHTTP(rw, r.WithContext(auth.ToContext(r.Context(), &user)))
 }
 
-func (a *Authorise) bearerToken(r *http.Request) string {
-	offset := len("bearer ")
-	h := r.Header.Get("authorization")
+func (a *Authenticate) bearerToken(r *http.Request) string {
+	offset := len(authenticationHeaderPrefix)
+	h := r.Header.Get(authenticationHeaderName)
 	if len(h) <= offset {
 		return ""
 	}
