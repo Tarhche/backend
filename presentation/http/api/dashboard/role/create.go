@@ -5,34 +5,21 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/khanzadimahdi/testproject/application/auth"
 	createrole "github.com/khanzadimahdi/testproject/application/dashboard/role/createRole"
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/permission"
 )
 
 type createHandler struct {
-	useCase    *createrole.UseCase
-	authorizer domain.Authorizer
+	useCase *createrole.UseCase
 }
 
-func NewCreateHandler(useCase *createrole.UseCase, a domain.Authorizer) *createHandler {
+func NewCreateHandler(useCase *createrole.UseCase) *createHandler {
 	return &createHandler{
-		useCase:    useCase,
-		authorizer: a,
+		useCase: useCase,
 	}
 }
 
 func (h *createHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
-	userUUID := auth.FromContext(r.Context()).UUID
-	if ok, err := h.authorizer.Authorize(userUUID, permission.RolesCreate); err != nil {
-		rw.WriteHeader(http.StatusInternalServerError)
-		return
-	} else if !ok {
-		rw.WriteHeader(http.StatusForbidden)
-		return
-	}
-
 	var request createrole.Request
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		rw.WriteHeader(http.StatusBadRequest)

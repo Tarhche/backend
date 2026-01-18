@@ -1,7 +1,6 @@
 package comment
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -14,10 +13,8 @@ import (
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/application/dashboard/comment/getComments"
 	"github.com/khanzadimahdi/testproject/application/dashboard/comment/getUserComments"
-	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/author"
 	"github.com/khanzadimahdi/testproject/domain/comment"
-	"github.com/khanzadimahdi/testproject/domain/permission"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/comments"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
@@ -32,7 +29,6 @@ func TestIndexUserHandler(t *testing.T) {
 		var (
 			commentRepository comments.MockCommentsRepository
 			userRepository    users.MockUsersRepository
-			authorizer        domain.MockAuthorizer
 
 			u = user.User{UUID: "auth-user-uuid"}
 
@@ -71,9 +67,6 @@ func TestIndexUserHandler(t *testing.T) {
 			}
 		)
 
-		authorizer.On("Authorize", u.UUID, permission.SelfCommentsIndex).Once().Return(true, nil)
-		defer authorizer.AssertExpectations(t)
-
 		commentRepository.On("CountByAuthorUUID", u.UUID).Once().Return(uint(len(a)), nil)
 		commentRepository.On("GetAllByAuthorUUID", u.UUID, uint(0), uint(10)).Return(a, nil)
 		defer commentRepository.AssertExpectations(t)
@@ -81,7 +74,7 @@ func TestIndexUserHandler(t *testing.T) {
 		userRepository.On("GetOne", u.UUID).Once().Return(u, nil)
 		defer userRepository.AssertExpectations(t)
 
-		handler := NewIndexUserCommentsHandler(getUserComments.NewUseCase(&commentRepository, &userRepository), &authorizer)
+		handler := NewIndexUserCommentsHandler(getUserComments.NewUseCase(&commentRepository, &userRepository))
 
 		url := fmt.Sprintf("/?object_uuid=%s&object_type=%s&page=%d", r.ObjectUUID, r.ObjectType, r.Page)
 		request := httptest.NewRequest(http.MethodGet, url, nil)
@@ -104,7 +97,6 @@ func TestIndexUserHandler(t *testing.T) {
 		var (
 			commentRepository comments.MockCommentsRepository
 			userRepository    users.MockUsersRepository
-			authorizer        domain.MockAuthorizer
 
 			u = user.User{UUID: "auth-user-uuid"}
 
@@ -115,9 +107,6 @@ func TestIndexUserHandler(t *testing.T) {
 			}
 		)
 
-		authorizer.On("Authorize", u.UUID, permission.SelfCommentsIndex).Once().Return(true, nil)
-		defer authorizer.AssertExpectations(t)
-
 		commentRepository.On("CountByAuthorUUID", u.UUID).Once().Return(uint(0), nil)
 		commentRepository.On("GetAllByAuthorUUID", u.UUID, uint(0), uint(10)).Return(nil, nil)
 		defer commentRepository.AssertExpectations(t)
@@ -125,7 +114,7 @@ func TestIndexUserHandler(t *testing.T) {
 		userRepository.On("GetOne", u.UUID).Once().Return(u, nil)
 		defer userRepository.AssertExpectations(t)
 
-		handler := NewIndexUserCommentsHandler(getUserComments.NewUseCase(&commentRepository, &userRepository), &authorizer)
+		handler := NewIndexUserCommentsHandler(getUserComments.NewUseCase(&commentRepository, &userRepository))
 
 		url := fmt.Sprintf("/?object_uuid=%s&object_type=%s&page=%d", r.ObjectUUID, r.ObjectType, r.Page)
 		request := httptest.NewRequest(http.MethodGet, url, nil)
@@ -140,79 +129,5 @@ func TestIndexUserHandler(t *testing.T) {
 		assert.Equal(t, "application/json", response.Header().Get("content-type"))
 		assert.JSONEq(t, string(expectedBody), response.Body.String())
 		assert.Equal(t, http.StatusOK, response.Code)
-	})
-
-	t.Run("unauthorized", func(t *testing.T) {
-		t.Parallel()
-
-		var (
-			commentRepository comments.MockCommentsRepository
-			userRepository    users.MockUsersRepository
-			authorizer        domain.MockAuthorizer
-
-			u = user.User{UUID: "auth-user-uuid"}
-
-			r = getComments.Request{
-				Page:       1,
-				ObjectUUID: "object-uuid-1",
-				ObjectType: "article",
-			}
-		)
-
-		authorizer.On("Authorize", u.UUID, permission.SelfCommentsIndex).Once().Return(false, nil)
-		defer authorizer.AssertExpectations(t)
-
-		handler := NewIndexUserCommentsHandler(getUserComments.NewUseCase(&commentRepository, &userRepository), &authorizer)
-
-		url := fmt.Sprintf("/?object_uuid=%s&object_type=%s&page=%d", r.ObjectUUID, r.ObjectType, r.Page)
-		request := httptest.NewRequest(http.MethodGet, url, nil)
-		request = request.WithContext(auth.ToContext(request.Context(), &u))
-		response := httptest.NewRecorder()
-
-		handler.ServeHTTP(response, request)
-
-		commentRepository.AssertNotCalled(t, "Count")
-		commentRepository.AssertNotCalled(t, "GetAll")
-		userRepository.AssertNotCalled(t, "GetByUUIDs")
-
-		assert.Len(t, response.Body.Bytes(), 0)
-		assert.Equal(t, http.StatusForbidden, response.Code)
-	})
-
-	t.Run("error", func(t *testing.T) {
-		t.Parallel()
-
-		var (
-			commentRepository comments.MockCommentsRepository
-			userRepository    users.MockUsersRepository
-			authorizer        domain.MockAuthorizer
-
-			u = user.User{UUID: "auth-user-uuid"}
-
-			r = getComments.Request{
-				Page:       1,
-				ObjectUUID: "object-uuid-1",
-				ObjectType: "article",
-			}
-		)
-
-		authorizer.On("Authorize", u.UUID, permission.SelfCommentsIndex).Once().Return(false, errors.New("unexpected error"))
-		defer authorizer.AssertExpectations(t)
-
-		handler := NewIndexUserCommentsHandler(getUserComments.NewUseCase(&commentRepository, &userRepository), &authorizer)
-
-		url := fmt.Sprintf("/?object_uuid=%s&object_type=%s&page=%d", r.ObjectUUID, r.ObjectType, r.Page)
-		request := httptest.NewRequest(http.MethodGet, url, nil)
-		request = request.WithContext(auth.ToContext(request.Context(), &u))
-		response := httptest.NewRecorder()
-
-		handler.ServeHTTP(response, request)
-
-		commentRepository.AssertNotCalled(t, "Count")
-		commentRepository.AssertNotCalled(t, "GetAll")
-		userRepository.AssertNotCalled(t, "GetByUUIDs")
-
-		assert.Len(t, response.Body.Bytes(), 0)
-		assert.Equal(t, http.StatusInternalServerError, response.Code)
 	})
 }

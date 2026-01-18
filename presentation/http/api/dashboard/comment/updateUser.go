@@ -8,30 +8,20 @@ import (
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/application/dashboard/comment/updateUserComment"
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/permission"
 )
 
 type updateUserHandler struct {
-	useCase    *updateUserComment.UseCase
-	authorizer domain.Authorizer
+	useCase *updateUserComment.UseCase
 }
 
-func NewUpdateUserCommentHandler(useCase *updateUserComment.UseCase, a domain.Authorizer) *updateUserHandler {
+func NewUpdateUserCommentHandler(useCase *updateUserComment.UseCase) *updateUserHandler {
 	return &updateUserHandler{
-		useCase:    useCase,
-		authorizer: a,
+		useCase: useCase,
 	}
 }
 
 func (h *updateUserHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	userUUID := auth.FromContext(r.Context()).UUID
-	if ok, err := h.authorizer.Authorize(userUUID, permission.SelfCommentsUpdate); err != nil {
-		rw.WriteHeader(http.StatusInternalServerError)
-		return
-	} else if !ok {
-		rw.WriteHeader(http.StatusForbidden)
-		return
-	}
 
 	var request updateUserComment.Request
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {

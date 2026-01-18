@@ -4,34 +4,21 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/khanzadimahdi/testproject/application/auth"
 	deleterole "github.com/khanzadimahdi/testproject/application/dashboard/role/deleteRole"
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/permission"
 )
 
 type deleteHandler struct {
-	useCase    *deleterole.UseCase
-	authorizer domain.Authorizer
+	useCase *deleterole.UseCase
 }
 
-func NewDeleteHandler(useCase *deleterole.UseCase, a domain.Authorizer) *deleteHandler {
+func NewDeleteHandler(useCase *deleterole.UseCase) *deleteHandler {
 	return &deleteHandler{
-		useCase:    useCase,
-		authorizer: a,
+		useCase: useCase,
 	}
 }
 
 func (h *deleteHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
-	userUUID := auth.FromContext(r.Context()).UUID
-	if ok, err := h.authorizer.Authorize(userUUID, permission.RolesDelete); err != nil {
-		rw.WriteHeader(http.StatusInternalServerError)
-		return
-	} else if !ok {
-		rw.WriteHeader(http.StatusForbidden)
-		return
-	}
-
 	UUID := r.PathValue("uuid")
 
 	request := &deleterole.Request{

@@ -3,7 +3,6 @@ package user
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -15,7 +14,6 @@ import (
 	"github.com/khanzadimahdi/testproject/application/auth"
 	updateuser "github.com/khanzadimahdi/testproject/application/dashboard/user/updateUser"
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/permission"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
 	"github.com/khanzadimahdi/testproject/infrastructure/validator"
@@ -29,7 +27,6 @@ func TestUpdateHandler(t *testing.T) {
 
 		var (
 			userRepository   users.MockUsersRepository
-			authorizer       domain.MockAuthorizer
 			requestValidator validator.MockValidator
 
 			u = user.User{
@@ -51,9 +48,6 @@ func TestUpdateHandler(t *testing.T) {
 			}
 		)
 
-		authorizer.On("Authorize", u.UUID, permission.UsersUpdate).Once().Return(true, nil)
-		defer authorizer.AssertExpectations(t)
-
 		requestValidator.On("Validate", &r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
@@ -63,7 +57,7 @@ func TestUpdateHandler(t *testing.T) {
 		userRepository.On("Save", mock2.Anything).Once().Return(r.UserUUID, nil)
 		defer userRepository.AssertExpectations(t)
 
-		handler := NewUpdateHandler(updateuser.NewUseCase(&userRepository, &requestValidator), &authorizer)
+		handler := NewUpdateHandler(updateuser.NewUseCase(&userRepository, &requestValidator))
 
 		var payload bytes.Buffer
 		err := json.NewEncoder(&payload).Encode(r)
@@ -84,16 +78,12 @@ func TestUpdateHandler(t *testing.T) {
 
 		var (
 			userRepository   users.MockUsersRepository
-			authorizer       domain.MockAuthorizer
 			requestValidator validator.MockValidator
 
 			u = user.User{
 				UUID: "user-uuid",
 			}
 		)
-
-		authorizer.On("Authorize", u.UUID, permission.UsersUpdate).Once().Return(true, nil)
-		defer authorizer.AssertExpectations(t)
 
 		requestValidator.On("Validate", &updateuser.Request{}).Once().Return(domain.ValidationErrors{
 			"email": "email is required",
@@ -102,7 +92,7 @@ func TestUpdateHandler(t *testing.T) {
 		})
 		defer requestValidator.AssertExpectations(t)
 
-		handler := NewUpdateHandler(updateuser.NewUseCase(&userRepository, &requestValidator), &authorizer)
+		handler := NewUpdateHandler(updateuser.NewUseCase(&userRepository, &requestValidator))
 
 		request := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString("{}"))
 		request = request.WithContext(auth.ToContext(request.Context(), &u))
@@ -121,74 +111,5 @@ func TestUpdateHandler(t *testing.T) {
 		assert.Equal(t, "application/json", response.Header().Get("content-type"))
 		assert.JSONEq(t, string(expectedBody), response.Body.String())
 		assert.Equal(t, http.StatusBadRequest, response.Code)
-	})
-
-	t.Run("access forbidden", func(t *testing.T) {
-		var (
-			userRepository   users.MockUsersRepository
-			authorizer       domain.MockAuthorizer
-			requestValidator validator.MockValidator
-
-			u = user.User{
-				UUID: "user-uuid",
-			}
-		)
-
-		authorizer.On("Authorize", u.UUID, permission.UsersUpdate).Once().Return(false, nil)
-		defer authorizer.AssertExpectations(t)
-
-		handler := NewUpdateHandler(updateuser.NewUseCase(&userRepository, &requestValidator), &authorizer)
-
-		request := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString("{}"))
-		request = request.WithContext(auth.ToContext(request.Context(), &u))
-		response := httptest.NewRecorder()
-
-		handler.ServeHTTP(response, request)
-
-		requestValidator.AssertNotCalled(t, "Validate")
-
-		userRepository.AssertNotCalled(t, "GetOneByIdentity")
-		userRepository.AssertNotCalled(t, "GetOneByIdentity")
-		userRepository.AssertNotCalled(t, "GetOne")
-		userRepository.AssertNotCalled(t, "Save")
-
-		assert.Len(t, response.Body.Bytes(), 0)
-		assert.Equal(t, http.StatusForbidden, response.Code)
-
-	})
-
-	t.Run("error", func(t *testing.T) {
-		t.Parallel()
-
-		var (
-			userRepository   users.MockUsersRepository
-			authorizer       domain.MockAuthorizer
-			requestValidator validator.MockValidator
-
-			u = user.User{
-				UUID: "user-uuid",
-			}
-		)
-
-		authorizer.On("Authorize", u.UUID, permission.UsersUpdate).Once().Return(false, errors.New("unexpected error"))
-		defer authorizer.AssertExpectations(t)
-
-		handler := NewUpdateHandler(updateuser.NewUseCase(&userRepository, &requestValidator), &authorizer)
-
-		request := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString("{}"))
-		request = request.WithContext(auth.ToContext(request.Context(), &u))
-		response := httptest.NewRecorder()
-
-		handler.ServeHTTP(response, request)
-
-		requestValidator.AssertNotCalled(t, "Validate")
-
-		userRepository.AssertNotCalled(t, "GetOneByIdentity")
-		userRepository.AssertNotCalled(t, "GetOneByIdentity")
-		userRepository.AssertNotCalled(t, "GetOne")
-		userRepository.AssertNotCalled(t, "Save")
-
-		assert.Len(t, response.Body.Bytes(), 0)
-		assert.Equal(t, http.StatusInternalServerError, response.Code)
 	})
 }

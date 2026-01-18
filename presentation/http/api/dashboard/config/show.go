@@ -4,34 +4,20 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/application/dashboard/config/getConfig"
-	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/permission"
 )
 
 type showHandler struct {
-	useCase    *getConfig.UseCase
-	authorizer domain.Authorizer
+	useCase *getConfig.UseCase
 }
 
-func NewShowHandler(useCase *getConfig.UseCase, a domain.Authorizer) *showHandler {
+func NewShowHandler(useCase *getConfig.UseCase) *showHandler {
 	return &showHandler{
-		useCase:    useCase,
-		authorizer: a,
+		useCase: useCase,
 	}
 }
 
 func (h *showHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
-	userUUID := auth.FromContext(r.Context()).UUID
-	if ok, err := h.authorizer.Authorize(userUUID, permission.ConfigShow); err != nil {
-		rw.WriteHeader(http.StatusInternalServerError)
-		return
-	} else if !ok {
-		rw.WriteHeader(http.StatusForbidden)
-		return
-	}
-
 	response, err := h.useCase.Execute()
 
 	switch {

@@ -6,34 +6,20 @@ import (
 	"strconv"
 	"unsafe"
 
-	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/application/dashboard/comment/getComments"
-	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/permission"
 )
 
 type indexHandler struct {
-	useCase    *getComments.UseCase
-	authorizer domain.Authorizer
+	useCase *getComments.UseCase
 }
 
-func NewIndexHandler(useCase *getComments.UseCase, a domain.Authorizer) *indexHandler {
+func NewIndexHandler(useCase *getComments.UseCase) *indexHandler {
 	return &indexHandler{
-		useCase:    useCase,
-		authorizer: a,
+		useCase: useCase,
 	}
 }
 
 func (h *indexHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
-	userUUID := auth.FromContext(r.Context()).UUID
-	if ok, err := h.authorizer.Authorize(userUUID, permission.CommentsIndex); err != nil {
-		rw.WriteHeader(http.StatusInternalServerError)
-		return
-	} else if !ok {
-		rw.WriteHeader(http.StatusForbidden)
-		return
-	}
-
 	var page uint = 1
 	if r.URL.Query().Has("page") {
 		parsedPage, err := strconv.ParseUint(r.URL.Query().Get("page"), 10, int(unsafe.Sizeof(page)))

@@ -3,7 +3,6 @@ package user
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -15,7 +14,6 @@ import (
 	"github.com/khanzadimahdi/testproject/application/auth"
 	createuser "github.com/khanzadimahdi/testproject/application/dashboard/user/createUser"
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/permission"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/mock"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
@@ -32,7 +30,6 @@ func TestCreateHandler(t *testing.T) {
 		var (
 			userRepository   users.MockUsersRepository
 			hasher           mock.MockCrypto
-			authorizer       domain.MockAuthorizer
 			requestValidator validator.MockValidator
 			translator       translator.TranslatorMock
 
@@ -50,9 +47,6 @@ func TestCreateHandler(t *testing.T) {
 			userUUID = "test-user-uuid"
 		)
 
-		authorizer.On("Authorize", u.UUID, permission.UsersCreate).Once().Return(true, nil)
-		defer authorizer.AssertExpectations(t)
-
 		requestValidator.On("Validate", &r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
@@ -64,7 +58,7 @@ func TestCreateHandler(t *testing.T) {
 		hasher.On("Hash", []byte(r.Password), mock2.AnythingOfType("[]uint8")).Once().Return([]byte("hashed-password"))
 		defer hasher.AssertExpectations(t)
 
-		handler := NewCreateHandler(createuser.NewUseCase(&userRepository, &hasher, &requestValidator, &translator), &authorizer)
+		handler := NewCreateHandler(createuser.NewUseCase(&userRepository, &hasher, &requestValidator, &translator))
 
 		var payload bytes.Buffer
 		err := json.NewEncoder(&payload).Encode(r)
@@ -92,7 +86,6 @@ func TestCreateHandler(t *testing.T) {
 		var (
 			userRepository   users.MockUsersRepository
 			hasher           mock.MockCrypto
-			authorizer       domain.MockAuthorizer
 			requestValidator validator.MockValidator
 			translator       translator.TranslatorMock
 
@@ -107,13 +100,10 @@ func TestCreateHandler(t *testing.T) {
 			}
 		)
 
-		authorizer.On("Authorize", u.UUID, permission.UsersCreate).Once().Return(true, nil)
-		defer authorizer.AssertExpectations(t)
-
 		requestValidator.On("Validate", &createuser.Request{}).Once().Return(validationErrors)
 		defer requestValidator.AssertExpectations(t)
 
-		handler := NewCreateHandler(createuser.NewUseCase(&userRepository, &hasher, &requestValidator, &translator), &authorizer)
+		handler := NewCreateHandler(createuser.NewUseCase(&userRepository, &hasher, &requestValidator, &translator))
 
 		request := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString("{}"))
 		request = request.WithContext(auth.ToContext(request.Context(), &u))
@@ -134,82 +124,5 @@ func TestCreateHandler(t *testing.T) {
 		assert.Equal(t, "application/json", response.Header().Get("content-type"))
 		assert.JSONEq(t, string(expectedBody), response.Body.String())
 		assert.Equal(t, http.StatusBadRequest, response.Code)
-	})
-
-	t.Run("unauthorised", func(t *testing.T) {
-		t.Parallel()
-
-		var (
-			userRepository   users.MockUsersRepository
-			hasher           mock.MockCrypto
-			authorizer       domain.MockAuthorizer
-			requestValidator validator.MockValidator
-			translator       translator.TranslatorMock
-
-			u = user.User{
-				UUID: "user-uuid",
-			}
-		)
-
-		authorizer.On("Authorize", u.UUID, permission.UsersCreate).Once().Return(false, nil)
-		defer authorizer.AssertExpectations(t)
-
-		handler := NewCreateHandler(createuser.NewUseCase(&userRepository, &hasher, &requestValidator, &translator), &authorizer)
-
-		request := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString("{}"))
-		request = request.WithContext(auth.ToContext(request.Context(), &u))
-		response := httptest.NewRecorder()
-
-		handler.ServeHTTP(response, request)
-
-		requestValidator.AssertNotCalled(t, "Validate")
-		translator.AssertNotCalled(t, "Translate")
-
-		userRepository.AssertNotCalled(t, "GetOneByIdentity")
-		userRepository.AssertNotCalled(t, "GetOneByIdentity")
-		userRepository.AssertNotCalled(t, "Save")
-		hasher.AssertNotCalled(t, "Hash")
-
-		assert.Len(t, response.Body.Bytes(), 0)
-		assert.Equal(t, http.StatusForbidden, response.Code)
-
-	})
-
-	t.Run("error", func(t *testing.T) {
-		t.Parallel()
-
-		var (
-			userRepository   users.MockUsersRepository
-			hasher           mock.MockCrypto
-			authorizer       domain.MockAuthorizer
-			requestValidator validator.MockValidator
-			translator       translator.TranslatorMock
-
-			u = user.User{
-				UUID: "user-uuid",
-			}
-		)
-
-		authorizer.On("Authorize", u.UUID, permission.UsersCreate).Once().Return(false, errors.New("unexpected error"))
-		defer authorizer.AssertExpectations(t)
-
-		handler := NewCreateHandler(createuser.NewUseCase(&userRepository, &hasher, &requestValidator, &translator), &authorizer)
-
-		request := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString("{}"))
-		request = request.WithContext(auth.ToContext(request.Context(), &u))
-		response := httptest.NewRecorder()
-
-		handler.ServeHTTP(response, request)
-
-		requestValidator.AssertNotCalled(t, "Validate")
-		translator.AssertNotCalled(t, "Translate")
-
-		userRepository.AssertNotCalled(t, "GetOneByIdentity")
-		userRepository.AssertNotCalled(t, "GetOneByIdentity")
-		userRepository.AssertNotCalled(t, "Save")
-		hasher.AssertNotCalled(t, "Hash")
-
-		assert.Len(t, response.Body.Bytes(), 0)
-		assert.Equal(t, http.StatusInternalServerError, response.Code)
 	})
 }

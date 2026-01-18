@@ -6,34 +6,20 @@ import (
 	"strconv"
 	"unsafe"
 
-	"github.com/khanzadimahdi/testproject/application/auth"
 	getroles "github.com/khanzadimahdi/testproject/application/dashboard/role/getRoles"
-	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/permission"
 )
 
 type indexHandler struct {
-	useCase    *getroles.UseCase
-	authorizer domain.Authorizer
+	useCase *getroles.UseCase
 }
 
-func NewIndexHandler(useCase *getroles.UseCase, a domain.Authorizer) *indexHandler {
+func NewIndexHandler(useCase *getroles.UseCase) *indexHandler {
 	return &indexHandler{
-		useCase:    useCase,
-		authorizer: a,
+		useCase: useCase,
 	}
 }
 
 func (h *indexHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
-	userUUID := auth.FromContext(r.Context()).UUID
-	if ok, err := h.authorizer.Authorize(userUUID, permission.RolesIndex); err != nil {
-		rw.WriteHeader(http.StatusInternalServerError)
-		return
-	} else if !ok {
-		rw.WriteHeader(http.StatusForbidden)
-		return
-	}
-
 	var page uint = 1
 	if r.URL.Query().Has("page") {
 		parsedPage, err := strconv.ParseUint(r.URL.Query().Get("page"), 10, int(unsafe.Sizeof(page)))

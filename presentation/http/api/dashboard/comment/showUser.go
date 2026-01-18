@@ -8,30 +8,20 @@ import (
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/application/dashboard/comment/getUserComment"
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/permission"
 )
 
 type showUserHandler struct {
-	useCase    *getUserComment.UseCase
-	authorizer domain.Authorizer
+	useCase *getUserComment.UseCase
 }
 
-func NewShowUserCommentHandler(useCase *getUserComment.UseCase, a domain.Authorizer) *showUserHandler {
+func NewShowUserCommentHandler(useCase *getUserComment.UseCase) *showUserHandler {
 	return &showUserHandler{
-		useCase:    useCase,
-		authorizer: a,
+		useCase: useCase,
 	}
 }
 
 func (h *showUserHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	userUUID := auth.FromContext(r.Context()).UUID
-	if ok, err := h.authorizer.Authorize(userUUID, permission.SelfCommentsShow); err != nil {
-		rw.WriteHeader(http.StatusInternalServerError)
-		return
-	} else if !ok {
-		rw.WriteHeader(http.StatusForbidden)
-		return
-	}
 
 	UUID := r.PathValue("uuid")
 

@@ -5,34 +5,21 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/khanzadimahdi/testproject/application/auth"
 	getElement "github.com/khanzadimahdi/testproject/application/dashboard/element/getElement"
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/permission"
 )
 
 type showHandler struct {
-	useCase    *getElement.UseCase
-	authorizer domain.Authorizer
+	useCase *getElement.UseCase
 }
 
-func NewShowHandler(useCase *getElement.UseCase, a domain.Authorizer) *showHandler {
+func NewShowHandler(useCase *getElement.UseCase) *showHandler {
 	return &showHandler{
-		useCase:    useCase,
-		authorizer: a,
+		useCase: useCase,
 	}
 }
 
 func (h *showHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
-	userUUID := auth.FromContext(r.Context()).UUID
-	if ok, err := h.authorizer.Authorize(userUUID, permission.ElementsShow); err != nil {
-		rw.WriteHeader(http.StatusInternalServerError)
-		return
-	} else if !ok {
-		rw.WriteHeader(http.StatusForbidden)
-		return
-	}
-
 	UUID := r.PathValue("uuid")
 
 	response, err := h.useCase.Execute(UUID)
