@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid/v5"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
@@ -43,16 +43,10 @@ func (r *TasksRepository) GetAll(offset uint, limit uint) ([]task.Task, error) {
 	l := int64(limit)
 	desc := bson.D{{Key: "_id", Value: -1}}
 
-	cur, err := r.collection.Find(ctx, bson.D{}, &options.FindOptions{
-		Skip:  &o,
-		Limit: &l,
-		Sort:  desc,
-	})
-
+	cur, err := r.collection.Find(ctx, bson.D{}, options.Find().SetSkip(o).SetLimit(l).SetSort(desc))
 	if err != nil {
 		return nil, err
 	}
-
 	defer cur.Close(ctx)
 
 	items := make([]task.Task, 0, limit)
@@ -106,7 +100,7 @@ func (r *TasksRepository) GetOne(UUID string) (task.Task, error) {
 	filter := bson.D{{Key: "_id", Value: UUID}}
 
 	var t TaskBson
-	if err := r.collection.FindOne(ctx, filter, nil).Decode(&t); err != nil {
+	if err := r.collection.FindOne(ctx, filter).Decode(&t); err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			err = domain.ErrNotExists
 		}
@@ -196,12 +190,11 @@ func (r *TasksRepository) Save(t *task.Task) (string, error) {
 		FinishedAt:    t.FinishedAt,
 	}
 
-	upsert := true
 	if _, err := r.collection.UpdateOne(
 		ctx,
 		bson.D{{Key: "_id", Value: t.UUID}},
 		bson.M{"$set": update},
-		&options.UpdateOptions{Upsert: &upsert},
+		options.UpdateOne().SetUpsert(true),
 	); err != nil {
 		return "", err
 	}
@@ -213,7 +206,7 @@ func (r *TasksRepository) Delete(UUID string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
 	defer cancel()
 
-	_, err := r.collection.DeleteOne(ctx, bson.D{{Key: "_id", Value: UUID}}, nil)
+	_, err := r.collection.DeleteOne(ctx, bson.D{{Key: "_id", Value: UUID}})
 
 	return err
 }
@@ -222,7 +215,7 @@ func (r *TasksRepository) Count() (uint, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
 	defer cancel()
 
-	c, err := r.collection.CountDocuments(ctx, bson.D{}, nil)
+	c, err := r.collection.CountDocuments(ctx, bson.D{})
 	if err != nil {
 		return uint(c), err
 	}
@@ -241,5 +234,6 @@ func convertMounts(mounts []Mount) []task.Mount {
 			ReadOnly: m.ReadOnly,
 		}
 	}
+
 	return result
 }

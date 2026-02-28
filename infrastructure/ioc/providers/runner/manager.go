@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	managerGetNode "github.com/khanzadimahdi/testproject/application/runner/manager/node/getNode"
 	managerGetNodes "github.com/khanzadimahdi/testproject/application/runner/manager/node/getNodes"

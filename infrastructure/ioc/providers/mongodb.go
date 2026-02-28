@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"os"
 
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc"
 )
@@ -31,7 +32,10 @@ func (p *mongodbProvider) Register(ctx context.Context, iocContainer ioc.Service
 		os.Getenv("MONGO_PORT"),
 	)
 
-	mongoClient, err := mongo.Connect(ctx, options.Client().ApplyURI(uri))
+	serverAPIVersion := options.ServerAPI(options.ServerAPIVersion1)
+	connectionOptions := options.Client().ApplyURI(uri).SetServerAPIOptions(serverAPIVersion)
+
+	mongoClient, err := mongo.Connect(connectionOptions)
 	if err != nil {
 		return err
 	}
@@ -41,6 +45,11 @@ func (p *mongodbProvider) Register(ctx context.Context, iocContainer ioc.Service
 	}
 
 	database := mongoClient.Database(os.Getenv("MONGO_DATABASE_NAME"))
+
+	var result bson.M
+	if err := database.RunCommand(ctx, bson.D{{"ping", 1}}).Decode(&result); err != nil {
+		return err
+	}
 
 	p.terminate = func() {
 		mongoClient.Disconnect(context.Background())

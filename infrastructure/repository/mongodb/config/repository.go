@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid/v5"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/config"
@@ -40,11 +40,10 @@ func (r *ConfigRepository) GetLatestRevision() (config.Config, error) {
 	defer cancel()
 
 	desc := bson.D{{Key: "_id", Value: -1}}
+	sort := options.FindOne().SetSort(desc)
 
 	var c configBson
-	if err := r.collection.FindOne(ctx, bson.D{}, &options.FindOneOptions{
-		Sort: desc,
-	}).Decode(&c); err != nil {
+	if err := r.collection.FindOne(ctx, bson.D{}, sort).Decode(&c); err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			err = domain.ErrNotExists
 		}
@@ -73,7 +72,7 @@ func (r *ConfigRepository) Save(a *config.Config) (string, error) {
 		CreatedAt:            time.Now(),
 	}
 
-	_, err = r.collection.InsertOne(ctx, record, nil)
+	_, err = r.collection.InsertOne(ctx, record)
 
 	return record.UUID, err
 }

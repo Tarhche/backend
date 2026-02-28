@@ -6,10 +6,9 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid/v5"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/article"
@@ -45,16 +44,10 @@ func (r *ArticlesRepository) GetAll(offset uint, limit uint) ([]article.Article,
 	l := int64(limit)
 	desc := bson.D{{Key: "_id", Value: -1}}
 
-	cur, err := r.collection.Find(ctx, bson.D{}, &options.FindOptions{
-		Skip:  &o,
-		Limit: &l,
-		Sort:  desc,
-	})
-
+	cur, err := r.collection.Find(ctx, bson.D{}, options.Find().SetLimit(l).SetSkip(o).SetSort(desc))
 	if err != nil {
 		return nil, err
 	}
-
 	defer cur.Close(ctx)
 
 	items := make([]article.Article, 0, limit)
@@ -95,21 +88,15 @@ func (r *ArticlesRepository) GetAllPublished(offset uint, limit uint) ([]article
 
 	filter := bson.M{
 		"published_at": bson.M{
-			"$lte": primitive.NewDateTimeFromTime(time.Now()),
+			"$lte": bson.NewDateTimeFromTime(time.Now()),
 			"$ne":  time.Time{},
 		},
 	}
 
-	cur, err := r.collection.Find(ctx, filter, &options.FindOptions{
-		Skip:  &o,
-		Limit: &l,
-		Sort:  desc,
-	})
-
+	cur, err := r.collection.Find(ctx, filter, options.Find().SetLimit(l).SetSkip(o).SetSort(desc))
 	if err != nil {
 		return nil, err
 	}
-
 	defer cur.Close(ctx)
 
 	items := make([]article.Article, 0, limit)
@@ -147,14 +134,10 @@ func (r *ArticlesRepository) GetByUUIDs(UUIDs []string) ([]article.Article, erro
 	desc := bson.D{{Key: "published_at", Value: -1}}
 	filter := bson.M{"_id": bson.M{"$in": UUIDs}}
 
-	cur, err := r.collection.Find(ctx, filter, &options.FindOptions{
-		Sort: desc,
-	})
-
+	cur, err := r.collection.Find(ctx, filter, options.Find().SetSort(desc))
 	if err != nil {
 		return nil, err
 	}
-
 	defer cur.Close(ctx)
 
 	items := make([]article.Article, 0, len(UUIDs))
@@ -192,23 +175,17 @@ func (r *ArticlesRepository) GetMostViewed(limit uint) ([]article.Article, error
 
 	l := int64(limit)
 	desc := bson.D{{Key: "view_count", Value: -1}}
-
 	filter := bson.M{
 		"published_at": bson.M{
-			"$lte": primitive.NewDateTimeFromTime(time.Now()),
+			"$lte": bson.NewDateTimeFromTime(time.Now()),
 			"$ne":  time.Time{},
 		},
 	}
 
-	cur, err := r.collection.Find(ctx, filter, &options.FindOptions{
-		Limit: &l,
-		Sort:  desc,
-	})
-
+	cur, err := r.collection.Find(ctx, filter, options.Find().SetLimit(l).SetSort(desc))
 	if err != nil {
 		return nil, err
 	}
-
 	defer cur.Close(ctx)
 
 	items := make([]article.Article, 0, limit)
@@ -248,12 +225,12 @@ func (r *ArticlesRepository) CountPublishedByHashtags(hashtags []string) (uint, 
 			"$in": hashtags,
 		},
 		"published_at": bson.M{
-			"$lte": primitive.NewDateTimeFromTime(time.Now()),
+			"$lte": bson.NewDateTimeFromTime(time.Now()),
 			"$ne":  time.Time{},
 		},
 	}
 
-	c, err := r.collection.CountDocuments(ctx, filter, nil)
+	c, err := r.collection.CountDocuments(ctx, filter)
 	if err != nil {
 		return uint(c), err
 	}
@@ -268,27 +245,25 @@ func (r *ArticlesRepository) GetPublishedByHashtags(hashtags []string, offset ui
 	o := int64(offset)
 	l := int64(limit)
 	desc := bson.D{{Key: "published_at", Value: -1}}
-
 	filter := bson.M{
 		"tags": bson.M{
 			"$in": hashtags,
 		},
 		"published_at": bson.M{
-			"$lte": primitive.NewDateTimeFromTime(time.Now()),
+			"$lte": bson.NewDateTimeFromTime(time.Now()),
 			"$ne":  time.Time{},
 		},
 	}
 
-	cur, err := r.collection.Find(ctx, filter, &options.FindOptions{
-		Skip:  &o,
-		Limit: &l,
-		Sort:  desc,
-	})
+	cur, err := r.collection.Find(
+		ctx,
+		filter,
+		options.Find().SetLimit(l).SetSkip(o).SetSort(desc),
+	)
 
 	if err != nil {
 		return nil, err
 	}
-
 	defer cur.Close(ctx)
 
 	items := make([]article.Article, 0, limit)
@@ -326,7 +301,7 @@ func (r *ArticlesRepository) GetOne(UUID string) (article.Article, error) {
 	filter := bson.D{{Key: "_id", Value: UUID}}
 
 	var a ArticleBson
-	if err := r.collection.FindOne(ctx, filter, nil).Decode(&a); err != nil {
+	if err := r.collection.FindOne(ctx, filter).Decode(&a); err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			err = domain.ErrNotExists
 		}
@@ -356,13 +331,13 @@ func (r *ArticlesRepository) GetOnePublished(UUID string) (article.Article, erro
 	filter := bson.M{
 		"_id": UUID,
 		"published_at": bson.M{
-			"$lte": primitive.NewDateTimeFromTime(time.Now()),
+			"$lte": bson.NewDateTimeFromTime(time.Now()),
 			"$ne":  time.Time{},
 		},
 	}
 
 	var a ArticleBson
-	if err := r.collection.FindOne(ctx, filter, nil).Decode(&a); err != nil {
+	if err := r.collection.FindOne(ctx, filter).Decode(&a); err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			err = domain.ErrNotExists
 		}
@@ -389,7 +364,7 @@ func (r *ArticlesRepository) Count() (uint, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
 	defer cancel()
 
-	c, err := r.collection.CountDocuments(ctx, bson.D{}, nil)
+	c, err := r.collection.CountDocuments(ctx, bson.D{})
 	if err != nil {
 		return uint(c), err
 	}
@@ -403,12 +378,12 @@ func (r *ArticlesRepository) CountPublished() (uint, error) {
 
 	filter := bson.M{
 		"published_at": bson.M{
-			"$lte": primitive.NewDateTimeFromTime(time.Now()),
+			"$lte": bson.NewDateTimeFromTime(time.Now()),
 			"$ne":  time.Time{},
 		},
 	}
 
-	c, err := r.collection.CountDocuments(ctx, filter, nil)
+	c, err := r.collection.CountDocuments(ctx, filter)
 	if err != nil {
 		return uint(c), err
 	}
@@ -443,12 +418,11 @@ func (r *ArticlesRepository) Save(a *article.Article) (string, error) {
 		UpdatedAt:   time.Now(),
 	}
 
-	upsert := true
 	if _, err := r.collection.UpdateOne(
 		ctx,
 		bson.D{{Key: "_id", Value: a.UUID}},
 		bson.M{"$set": update},
-		&options.UpdateOptions{Upsert: &upsert},
+		options.UpdateOne().SetUpsert(true),
 	); err != nil {
 		return "", err
 	}
@@ -460,7 +434,7 @@ func (r *ArticlesRepository) Delete(UUID string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
 	defer cancel()
 
-	_, err := r.collection.DeleteOne(ctx, bson.D{{Key: "_id", Value: UUID}}, nil)
+	_, err := r.collection.DeleteOne(ctx, bson.D{{Key: "_id", Value: UUID}})
 
 	return err
 }

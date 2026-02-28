@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid/v5"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/element"
@@ -43,15 +43,11 @@ func (r *ElementsRepository) GetAll(offset uint, limit uint) ([]element.Element,
 	l := int64(limit)
 	desc := bson.D{{Key: "_id", Value: -1}}
 
-	cur, err := r.collection.Find(ctx, bson.D{}, &options.FindOptions{
-		Skip:  &o,
-		Limit: &l,
-		Sort:  desc,
-	})
-
+	cur, err := r.collection.Find(ctx, bson.D{}, options.Find().SetSkip(o).SetLimit(l).SetSort(desc))
 	if err != nil {
 		return nil, err
 	}
+	defer cur.Close(ctx)
 
 	items := make([]element.Element, 0, limit)
 	for cur.Next(ctx) {
@@ -81,11 +77,11 @@ func (r *ElementsRepository) GetByVenues(venues []string) ([]element.Element, er
 	defer cancel()
 
 	filter := bson.M{"venues": bson.M{"$in": venues}}
-	cur, err := r.collection.Find(ctx, filter, &options.FindOptions{})
-
+	cur, err := r.collection.Find(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
+	defer cur.Close(ctx)
 
 	items := make([]element.Element, 0, 2)
 	for cur.Next(ctx) {
@@ -115,7 +111,7 @@ func (r *ElementsRepository) GetOne(UUID string) (element.Element, error) {
 	defer cancel()
 
 	var a ElementBson
-	if err := r.collection.FindOne(ctx, bson.D{{Key: "_id", Value: UUID}}, nil).Decode(&a); err != nil {
+	if err := r.collection.FindOne(ctx, bson.D{{Key: "_id", Value: UUID}}).Decode(&a); err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			err = domain.ErrNotExists
 		}
@@ -129,7 +125,7 @@ func (r *ElementsRepository) Count() (uint, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
 	defer cancel()
 
-	c, err := r.collection.CountDocuments(ctx, bson.D{}, nil)
+	c, err := r.collection.CountDocuments(ctx, bson.D{})
 	if err != nil {
 		return uint(c), err
 	}
@@ -160,12 +156,11 @@ func (r *ElementsRepository) Save(a *element.Element) (string, error) {
 	}
 	update.UpdatedAt = now
 
-	upsert := true
 	_, err = r.collection.UpdateOne(
 		ctx,
 		bson.D{{Key: "_id", Value: a.UUID}},
 		bson.M{"$set": update},
-		&options.UpdateOptions{Upsert: &upsert},
+		options.UpdateOne().SetUpsert(true),
 	)
 	if err != nil {
 		return "", err
@@ -178,7 +173,7 @@ func (r *ElementsRepository) Delete(UUID string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
 	defer cancel()
 
-	_, err := r.collection.DeleteOne(ctx, bson.D{{Key: "_id", Value: UUID}}, nil)
+	_, err := r.collection.DeleteOne(ctx, bson.D{{Key: "_id", Value: UUID}})
 
 	return err
 }

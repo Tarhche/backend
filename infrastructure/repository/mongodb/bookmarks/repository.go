@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/gofrs/uuid/v5"
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/bookmark"
@@ -57,12 +57,11 @@ func (r *BookmarksRepository) Save(b *bookmark.Bookmark) (string, error) {
 		CreatedAt:  b.CreatedAt,
 	}
 
-	upsert := true
 	if _, err := r.collection.UpdateOne(
 		ctx,
 		bson.D{{Key: "_id", Value: b.UUID}},
 		bson.M{"$set": update},
-		&options.UpdateOptions{Upsert: &upsert},
+		options.UpdateOne().SetUpsert(true),
 	); err != nil {
 		return "", err
 	}
@@ -79,7 +78,7 @@ func (r *BookmarksRepository) Count(objectType string, objectUUID string) (uint,
 		"object_type": objectType,
 	}
 
-	c, err := r.collection.CountDocuments(ctx, filter, nil)
+	c, err := r.collection.CountDocuments(ctx, filter)
 	if err != nil {
 		return uint(c), err
 	}
@@ -99,16 +98,10 @@ func (r *BookmarksRepository) GetAllByOwnerUUID(ownerUUID string, offset uint, l
 		"owner_uuid": ownerUUID,
 	}
 
-	cur, err := r.collection.Find(ctx, filter, &options.FindOptions{
-		Skip:  &o,
-		Limit: &l,
-		Sort:  desc,
-	})
-
+	cur, err := r.collection.Find(ctx, filter, options.Find().SetSkip(o).SetLimit(l).SetSort(desc))
 	if err != nil {
 		return nil, err
 	}
-
 	defer cur.Close(ctx)
 
 	items := make([]bookmark.Bookmark, 0, limit)
@@ -143,7 +136,7 @@ func (r *BookmarksRepository) CountByOwnerUUID(ownerUUID string) (uint, error) {
 		"owner_uuid": ownerUUID,
 	}
 
-	c, err := r.collection.CountDocuments(ctx, filter, nil)
+	c, err := r.collection.CountDocuments(ctx, filter)
 	if err != nil {
 		return uint(c), err
 	}
@@ -162,7 +155,7 @@ func (r *BookmarksRepository) GetByOwnerUUID(ownerUUID string, objectType string
 	}
 
 	var b BookmarkBson
-	if err := r.collection.FindOne(ctx, filter, nil).Decode(&b); err != nil {
+	if err := r.collection.FindOne(ctx, filter).Decode(&b); err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			err = domain.ErrNotExists
 		}
@@ -189,7 +182,7 @@ func (r *BookmarksRepository) DeleteByOwnerUUID(ownerUUID string, objectType str
 		"owner_uuid":  ownerUUID,
 	}
 
-	_, err := r.collection.DeleteOne(ctx, filter, nil)
+	_, err := r.collection.DeleteOne(ctx, filter)
 
 	return err
 }

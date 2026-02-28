@@ -108,7 +108,7 @@ import (
 	"github.com/khanzadimahdi/testproject/presentation/http/api/websocket"
 	"github.com/khanzadimahdi/testproject/presentation/http/middleware"
 	"github.com/nats-io/nats.go"
-	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
 const (
