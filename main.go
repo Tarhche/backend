@@ -15,6 +15,7 @@ import (
 	"github.com/khanzadimahdi/testproject/presentation/commands/runner/worker"
 )
 
+//go:generate go tool swag init --generalInfo ./presentation/commands/blog/serve.go --dir ./ --output ./resources/docs/blog/openapi
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancel()

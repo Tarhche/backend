@@ -17,8 +17,8 @@ import (
 	taskEvents "github.com/khanzadimahdi/testproject/domain/runner/task/events"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers"
-	workerTaskAPI "github.com/khanzadimahdi/testproject/presentation/http/api/runner/worker/task"
 	"github.com/khanzadimahdi/testproject/presentation/http/middleware"
+	workerTaskAPI "github.com/khanzadimahdi/testproject/presentation/http/runner/worker/api/task"
 )
 
 const (

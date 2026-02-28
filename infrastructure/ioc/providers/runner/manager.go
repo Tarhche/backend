@@ -26,9 +26,9 @@ import (
 	noderepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/runner/nodes"
 	taskrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/runner/tasks"
 	"github.com/khanzadimahdi/testproject/infrastructure/runner/scheduler/roundrobin"
-	managerNodeAPI "github.com/khanzadimahdi/testproject/presentation/http/api/runner/manager/node"
-	managerTaskAPI "github.com/khanzadimahdi/testproject/presentation/http/api/runner/manager/task"
 	"github.com/khanzadimahdi/testproject/presentation/http/middleware"
+	managerNodeAPI "github.com/khanzadimahdi/testproject/presentation/http/runner/manager/api/node"
+	managerTaskAPI "github.com/khanzadimahdi/testproject/presentation/http/runner/manager/api/task"
 )
 
 const (

@@ -83,6 +83,17 @@ func (c *ServeCommand) Terminate() error {
 	return c.serviceProvider.Terminate()
 }
 
+// @title			Runner Manager API
+// @version		1.0
+// @description	Swagger/OpenAPI documentation for the runner manager service.
+// @termsOfService	http://swagger.io/terms/
+//
+// @license.name	Apache 2.0
+// @license.url	http://www.apache.org/licenses/LICENSE-2.0.html
+//
+// @host			0.0.0.0:80
+// @basePath		/api
+// @schemes		http
 func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 	server := http.Server{
 		Addr:        fmt.Sprintf("0.0.0.0:%d", c.port),

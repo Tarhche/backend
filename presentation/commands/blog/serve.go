@@ -97,6 +97,16 @@ func (c *ServeCommand) Terminate() error {
 	return c.serviceProvider.Terminate()
 }
 
+// @title			Backend API
+// @version		1.0
+// @description	Swagger/OpenAPI documentation for the backend service.
+// @termsOfService	http://swagger.io/terms/
+//
+// @license.name	Apache 2.0
+// @license.url	http://www.apache.org/licenses/LICENSE-2.0.html
+//
+// @basePath		/api
+// @schemes		http https
 func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 	server := http.Server{
 		Addr:        fmt.Sprintf("0.0.0.0:%d", c.port),

@@ -19,4 +19,7 @@ sh-%:
 logs-%:
 	docker compose logs -f $*
 
+generate:
+	docker compose exec -it app go generate
+
 .PHONY: ps up down restart restart-% sh-% logs-%

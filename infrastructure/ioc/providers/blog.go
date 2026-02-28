@@ -88,24 +88,25 @@ import (
 	permissionsrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/permissions"
 	rolesrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/roles"
 	userrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/users"
-	articleAPI "github.com/khanzadimahdi/testproject/presentation/http/api/article"
-	authAPI "github.com/khanzadimahdi/testproject/presentation/http/api/auth"
-	bookmarkAPI "github.com/khanzadimahdi/testproject/presentation/http/api/bookmark"
-	commentAPI "github.com/khanzadimahdi/testproject/presentation/http/api/comment"
-	dashboardArticleAPI "github.com/khanzadimahdi/testproject/presentation/http/api/dashboard/article"
-	dashboardBookmarkAPI "github.com/khanzadimahdi/testproject/presentation/http/api/dashboard/bookmark"
-	dashboardCommentAPI "github.com/khanzadimahdi/testproject/presentation/http/api/dashboard/comment"
-	dashboardConfigAPI "github.com/khanzadimahdi/testproject/presentation/http/api/dashboard/config"
-	dashboardElementAPI "github.com/khanzadimahdi/testproject/presentation/http/api/dashboard/element"
-	dashboardFileAPI "github.com/khanzadimahdi/testproject/presentation/http/api/dashboard/file"
-	dashboardPermissionAPI "github.com/khanzadimahdi/testproject/presentation/http/api/dashboard/permission"
-	"github.com/khanzadimahdi/testproject/presentation/http/api/dashboard/profile"
-	dashboardRoleAPI "github.com/khanzadimahdi/testproject/presentation/http/api/dashboard/role"
-	dashboardUserAPI "github.com/khanzadimahdi/testproject/presentation/http/api/dashboard/user"
-	fileAPI "github.com/khanzadimahdi/testproject/presentation/http/api/file"
-	hashtagAPI "github.com/khanzadimahdi/testproject/presentation/http/api/hashtag"
-	homeapi "github.com/khanzadimahdi/testproject/presentation/http/api/home"
-	"github.com/khanzadimahdi/testproject/presentation/http/api/websocket"
+	articleAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/article"
+	authAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/auth"
+	bookmarkAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/bookmark"
+	commentAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/comment"
+	dashboardArticleAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/article"
+	dashboardBookmarkAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/bookmark"
+	dashboardCommentAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/comment"
+	dashboardConfigAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/config"
+	dashboardElementAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/element"
+	dashboardFileAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/file"
+	dashboardPermissionAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/permission"
+	"github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/profile"
+	dashboardRoleAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/role"
+	dashboardUserAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/user"
+	fileAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/file"
+	hashtagAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/hashtag"
+	homeapi "github.com/khanzadimahdi/testproject/presentation/http/blog/api/home"
+	"github.com/khanzadimahdi/testproject/presentation/http/blog/api/websocket"
+	"github.com/khanzadimahdi/testproject/presentation/http/blog/openapi"
 	"github.com/khanzadimahdi/testproject/presentation/http/middleware"
 	"github.com/nats-io/nats.go"
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -315,6 +316,9 @@ func blog(
 	dashboardUpdateConfigUsecase := dashboardUpdateConfig.NewUseCase(configRepository, validator)
 
 	mux := http.NewServeMux()
+
+	// ---- openapi ----
+	mux.Handle("/openapi/", openapi.NewOpenAPIHandler())
 
 	// ---- public HTTP API ----
 

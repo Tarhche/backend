@@ -1,0 +1,3414 @@
+basePath: /api
+definitions:
+  bookmarkExists.Request:
+    properties:
+      object_type:
+        type: string
+      object_uuid:
+        type: string
+    type: object
+  bookmarkExists.Response:
+    properties:
+      errors:
+        $ref: '#/definitions/domain.ValidationErrors'
+      exist:
+        type: boolean
+    type: object
+  changepassword.Request:
+    properties:
+      current_password:
+        type: string
+      new_password:
+        type: string
+    type: object
+  createarticle.Request:
+    properties:
+      body:
+        type: string
+      cover:
+        type: string
+      excerpt:
+        type: string
+      published_at:
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+      title:
+        type: string
+      video:
+        type: string
+    type: object
+  createarticle.Response:
+    properties:
+      errors:
+        $ref: '#/definitions/domain.ValidationErrors'
+      uuid:
+        type: string
+    type: object
+  createelement.Request:
+    type: object
+  createelement.Response:
+    properties:
+      errors:
+        $ref: '#/definitions/domain.ValidationErrors'
+      uuid:
+        type: string
+    type: object
+  createfile.Response:
+    properties:
+      errors:
+        $ref: '#/definitions/domain.ValidationErrors'
+      uuid:
+        type: string
+    type: object
+  createrole.Request:
+    properties:
+      description:
+        type: string
+      name:
+        type: string
+      permissions:
+        items:
+          type: string
+        type: array
+      user_uuids:
+        items:
+          type: string
+        type: array
+    type: object
+  createrole.Response:
+    properties:
+      errors:
+        $ref: '#/definitions/domain.ValidationErrors'
+      uuid:
+        type: string
+    type: object
+  createuser.Request:
+    properties:
+      avatar:
+        type: string
+      email:
+        type: string
+      name:
+        type: string
+      password:
+        type: string
+      username:
+        type: string
+    type: object
+  createuser.Response:
+    properties:
+      errors:
+        $ref: '#/definitions/domain.ValidationErrors'
+      uuid:
+        type: string
+    type: object
+  deleteUserBookmark.Request:
+    properties:
+      object_type:
+        type: string
+      object_uuid:
+        type: string
+    type: object
+  deleteelements.Response:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/deleteelements.elementResponse'
+        type: array
+      pagination:
+        $ref: '#/definitions/deleteelements.pagination'
+    type: object
+  deleteelements.elementResponse:
+    properties:
+      body_type:
+        type: string
+      created_at:
+        type: string
+      updated_at:
+        type: string
+      uuid:
+        type: string
+      venues:
+        items:
+          type: string
+        type: array
+    type: object
+  deleteelements.pagination:
+    properties:
+      current_page:
+        type: integer
+      total_pages:
+        type: integer
+    type: object
+  domain.ValidationErrors:
+    additionalProperties:
+      type: string
+    type: object
+  element.Response:
+    properties:
+      body: {}
+      type:
+        type: string
+    type: object
+  forgetpassword.Request:
+    properties:
+      identity:
+        type: string
+    type: object
+  getArticlesByHashtag.Response:
+    properties:
+      errors:
+        $ref: '#/definitions/domain.ValidationErrors'
+      items:
+        items:
+          $ref: '#/definitions/getArticlesByHashtag.articleResponse'
+        type: array
+      pagination:
+        $ref: '#/definitions/getArticlesByHashtag.paginationResponse'
+    type: object
+  getArticlesByHashtag.articleResponse:
+    properties:
+      authorResponse:
+        $ref: '#/definitions/getArticlesByHashtag.authorResponse'
+      cover:
+        type: string
+      excerpt:
+        type: string
+      published_at:
+        type: string
+      title:
+        type: string
+      uuid:
+        type: string
+      video:
+        type: string
+    type: object
+  getArticlesByHashtag.authorResponse:
+    properties:
+      avatar:
+        type: string
+      name:
+        type: string
+    type: object
+  getArticlesByHashtag.paginationResponse:
+    properties:
+      current_page:
+        type: integer
+      total_pages:
+        type: integer
+    type: object
+  getComment.Response:
+    properties:
+      approved_at:
+        type: string
+      author:
+        $ref: '#/definitions/getComment.author'
+      body:
+        type: string
+      created_at:
+        type: string
+      object_type:
+        type: string
+      object_uuid:
+        type: string
+      parent_uuid:
+        type: string
+      uuid:
+        type: string
+    type: object
+  getComment.author:
+    properties:
+      avatar:
+        type: string
+      name:
+        type: string
+      uuid:
+        type: string
+    type: object
+  getConfig.Response:
+    properties:
+      revision:
+        type: integer
+      user_default_roles:
+        items:
+          type: string
+        type: array
+    type: object
+  getNode.CPU:
+    properties:
+      guest:
+        type: integer
+      guest_nice:
+        type: integer
+      idle:
+        type: integer
+      io_wait:
+        type: integer
+      irq:
+        type: integer
+      nice:
+        type: integer
+      soft_irq:
+        type: integer
+      steal:
+        type: integer
+      system:
+        type: integer
+      user:
+        type: integer
+    type: object
+  getNode.Disk:
+    properties:
+      available:
+        type: integer
+      free_inodes:
+        type: integer
+      total:
+        type: integer
+      used:
+        type: integer
+    type: object
+  getNode.Load:
+    properties:
+      last_1_min:
+        type: number
+      last_5_min:
+        type: number
+      last_15_min:
+        type: number
+      last_pid:
+        type: integer
+      process_running:
+        type: integer
+      process_total:
+        type: integer
+    type: object
+  getNode.Memory:
+    properties:
+      available:
+        type: integer
+      total:
+        type: integer
+      used:
+        type: integer
+    type: object
+  getNode.Resource:
+    properties:
+      cpu:
+        type: number
+      disk:
+        type: integer
+      memory:
+        type: integer
+    type: object
+  getNode.Response:
+    properties:
+      created_at:
+        type: string
+      last_heartbeat_at:
+        type: string
+      name:
+        type: string
+      resources:
+        $ref: '#/definitions/getNode.Resource'
+      stats:
+        $ref: '#/definitions/getNode.Stats'
+    type: object
+  getNode.Stats:
+    properties:
+      cpu:
+        $ref: '#/definitions/getNode.CPU'
+      disk:
+        $ref: '#/definitions/getNode.Disk'
+      load:
+        $ref: '#/definitions/getNode.Load'
+      memory:
+        $ref: '#/definitions/getNode.Memory'
+    type: object
+  getNodes.NodeResponse:
+    properties:
+      created_at:
+        type: string
+      last_heartbeat_at:
+        type: string
+      name:
+        type: string
+      resources:
+        $ref: '#/definitions/getNodes.Resource'
+    type: object
+  getNodes.Pagination:
+    properties:
+      current_page:
+        type: integer
+      total_pages:
+        type: integer
+    type: object
+  getNodes.Resource:
+    properties:
+      cpu:
+        type: number
+      disk:
+        type: integer
+      memory:
+        type: integer
+    type: object
+  getNodes.Response:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/getNodes.NodeResponse'
+        type: array
+      pagination:
+        $ref: '#/definitions/getNodes.Pagination'
+    type: object
+  getUserBookmarks.Response:
+    properties:
+      errors:
+        $ref: '#/definitions/domain.ValidationErrors'
+      items:
+        items:
+          $ref: '#/definitions/getUserBookmarks.bookmarkResponse'
+        type: array
+      pagination:
+        $ref: '#/definitions/getUserBookmarks.pagination'
+    type: object
+  getUserBookmarks.bookmarkResponse:
+    properties:
+      created_at:
+        type: string
+      object_type:
+        type: string
+      object_uuid:
+        type: string
+      title:
+        type: string
+    type: object
+  getUserBookmarks.pagination:
+    properties:
+      current_page:
+        type: integer
+      total_pages:
+        type: integer
+    type: object
+  getUserComment.Response:
+    properties:
+      approved_at:
+        type: string
+      author:
+        $ref: '#/definitions/getUserComment.author'
+      body:
+        type: string
+      created_at:
+        type: string
+      object_type:
+        type: string
+      object_uuid:
+        type: string
+      parent_uuid:
+        type: string
+      uuid:
+        type: string
+    type: object
+  getUserComment.author:
+    properties:
+      avatar:
+        type: string
+      name:
+        type: string
+      uuid:
+        type: string
+    type: object
+  getUserComments.Response:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/getUserComments.commentResponse'
+        type: array
+      pagination:
+        $ref: '#/definitions/getUserComments.pagination'
+    type: object
+  getUserComments.authorResponse:
+    properties:
+      avatar:
+        type: string
+      name:
+        type: string
+      uuid:
+        type: string
+    type: object
+  getUserComments.commentResponse:
+    properties:
+      approved_at:
+        type: string
+      author:
+        $ref: '#/definitions/getUserComments.authorResponse'
+      body:
+        type: string
+      created_at:
+        type: string
+      object_type:
+        type: string
+      object_uuid:
+        type: string
+      parent_uuid:
+        type: string
+      uuid:
+        type: string
+    type: object
+  getUserComments.pagination:
+    properties:
+      current_page:
+        type: integer
+      total_pages:
+        type: integer
+    type: object
+  getarticle.author:
+    properties:
+      avatar:
+        type: string
+      name:
+        type: string
+    type: object
+  getarticle.authorResponse:
+    properties:
+      avatar:
+        type: string
+      name:
+        type: string
+    type: object
+  getarticles.author:
+    properties:
+      avatar:
+        type: string
+      name:
+        type: string
+    type: object
+  getarticles.authorResponse:
+    properties:
+      avatar:
+        type: string
+      name:
+        type: string
+    type: object
+  getarticles.pagination:
+    properties:
+      current_page:
+        type: integer
+      total_pages:
+        type: integer
+    type: object
+  getarticles.paginationResponse:
+    properties:
+      current_page:
+        type: integer
+      total_pages:
+        type: integer
+    type: object
+  getelement.Response:
+    properties:
+      body: {}
+      created_at:
+        type: string
+      updated_at:
+        type: string
+      uuid:
+        type: string
+      venues:
+        items:
+          type: string
+        type: array
+    type: object
+  getfiles.Response:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/getfiles.fileResponse'
+        type: array
+      pagination:
+        $ref: '#/definitions/getfiles.pagination'
+    type: object
+  getfiles.fileResponse:
+    properties:
+      mimetype:
+        type: string
+      name:
+        type: string
+      owner_uuid:
+        type: string
+      size:
+        type: integer
+      uuid:
+        type: string
+    type: object
+  getfiles.pagination:
+    properties:
+      current_page:
+        type: integer
+      total_pages:
+        type: integer
+    type: object
+  getpermissions.Response:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/getpermissions.permissionResponse'
+        type: array
+    type: object
+  getpermissions.permissionResponse:
+    properties:
+      name:
+        type: string
+      value:
+        type: string
+    type: object
+  getprofile.Response:
+    properties:
+      avatar:
+        type: string
+      email:
+        type: string
+      name:
+        type: string
+      username:
+        type: string
+      uuid:
+        type: string
+    type: object
+  getrole.Response:
+    properties:
+      description:
+        type: string
+      name:
+        type: string
+      permissions:
+        items:
+          type: string
+        type: array
+      user_uuids:
+        items:
+          type: string
+        type: array
+      uuid:
+        type: string
+    type: object
+  getroles.Response:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/getroles.roleResponse'
+        type: array
+      pagination:
+        $ref: '#/definitions/getroles.pagination'
+    type: object
+  getroles.pagination:
+    properties:
+      current_page:
+        type: integer
+      total_pages:
+        type: integer
+    type: object
+  getroles.roleResponse:
+    properties:
+      description:
+        type: string
+      name:
+        type: string
+      uuid:
+        type: string
+    type: object
+  gettask.Response:
+    properties:
+      attach_stderr:
+        type: boolean
+      attach_stdin:
+        type: boolean
+      attach_stdout:
+        type: boolean
+      auto_remove:
+        type: boolean
+      command:
+        items:
+          type: string
+        type: array
+      container_id:
+        type: string
+      container_logs:
+        items:
+          type: integer
+        type: array
+      created_at:
+        type: string
+      entrypoint:
+        items:
+          type: string
+        type: array
+      environment:
+        items:
+          type: string
+        type: array
+      finished_at:
+        type: string
+      health_check:
+        type: string
+      image:
+        type: string
+      name:
+        type: string
+      owner_uuid:
+        type: string
+      restart_count:
+        type: integer
+      restart_policy:
+        type: string
+      started_at:
+        type: string
+      state:
+        type: string
+      uuid:
+        type: string
+    type: object
+  gettasks.Pagination:
+    properties:
+      current_page:
+        type: integer
+      total_pages:
+        type: integer
+    type: object
+  getuser.Response:
+    properties:
+      avatar:
+        type: string
+      email:
+        type: string
+      name:
+        type: string
+      username:
+        type: string
+      uuid:
+        type: string
+    type: object
+  getuserfiles.Response:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/getuserfiles.fileResponse'
+        type: array
+      pagination:
+        $ref: '#/definitions/getuserfiles.pagination'
+    type: object
+  getuserfiles.fileResponse:
+    properties:
+      mimetype:
+        type: string
+      name:
+        type: string
+      owner_uuid:
+        type: string
+      size:
+        type: integer
+      uuid:
+        type: string
+    type: object
+  getuserfiles.pagination:
+    properties:
+      current_page:
+        type: integer
+      total_pages:
+        type: integer
+    type: object
+  getusers.Response:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/getusers.userResponse'
+        type: array
+      pagination:
+        $ref: '#/definitions/getusers.pagination'
+    type: object
+  getusers.pagination:
+    properties:
+      current_page:
+        type: integer
+      total_pages:
+        type: integer
+    type: object
+  getusers.userResponse:
+    properties:
+      avatar:
+        type: string
+      email:
+        type: string
+      name:
+        type: string
+      username:
+        type: string
+      uuid:
+        type: string
+    type: object
+  github_com_khanzadimahdi_testproject_application_article_getArticle.Response:
+    properties:
+      avatar:
+        $ref: '#/definitions/getarticle.authorResponse'
+      body:
+        type: string
+      cover:
+        type: string
+      elements:
+        items:
+          $ref: '#/definitions/element.Response'
+        type: array
+      excerpt:
+        type: string
+      published_at:
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+      title:
+        type: string
+      uuid:
+        type: string
+      video:
+        type: string
+      view_count:
+        type: integer
+    type: object
+  github_com_khanzadimahdi_testproject_application_article_getArticles.Response:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_article_getArticles.articleResponse'
+        type: array
+      pagination:
+        $ref: '#/definitions/getarticles.paginationResponse'
+    type: object
+  github_com_khanzadimahdi_testproject_application_article_getArticles.articleResponse:
+    properties:
+      author:
+        $ref: '#/definitions/getarticles.authorResponse'
+      cover:
+        type: string
+      excerpt:
+        type: string
+      published_at:
+        type: string
+      title:
+        type: string
+      uuid:
+        type: string
+      video:
+        type: string
+    type: object
+  github_com_khanzadimahdi_testproject_application_comment_createComment.Request:
+    properties:
+      body:
+        type: string
+      object_type:
+        type: string
+      object_uuid:
+        type: string
+      parent_uuid:
+        type: string
+    type: object
+  github_com_khanzadimahdi_testproject_application_comment_getComments.Response:
+    properties:
+      errors:
+        $ref: '#/definitions/domain.ValidationErrors'
+      items:
+        items:
+          $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_comment_getComments.commentResponse'
+        type: array
+      pagination:
+        $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_comment_getComments.pagination'
+    type: object
+  github_com_khanzadimahdi_testproject_application_comment_getComments.authorResponse:
+    properties:
+      avatar:
+        type: string
+      name:
+        type: string
+      uuid:
+        type: string
+    type: object
+  github_com_khanzadimahdi_testproject_application_comment_getComments.commentResponse:
+    properties:
+      author:
+        $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_comment_getComments.authorResponse'
+      body:
+        type: string
+      created_at:
+        type: string
+      parent_uuid:
+        type: string
+      uuid:
+        type: string
+    type: object
+  github_com_khanzadimahdi_testproject_application_comment_getComments.pagination:
+    properties:
+      current_page:
+        type: integer
+      total_pages:
+        type: integer
+    type: object
+  github_com_khanzadimahdi_testproject_application_dashboard_article_getArticle.Response:
+    properties:
+      avatar:
+        $ref: '#/definitions/getarticle.author'
+      body:
+        type: string
+      cover:
+        type: string
+      excerpt:
+        type: string
+      published_at:
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+      title:
+        type: string
+      uuid:
+        type: string
+      video:
+        type: string
+      view_count:
+        type: integer
+    type: object
+  github_com_khanzadimahdi_testproject_application_dashboard_article_getArticles.Response:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_article_getArticles.articleResponse'
+        type: array
+      pagination:
+        $ref: '#/definitions/getarticles.pagination'
+    type: object
+  github_com_khanzadimahdi_testproject_application_dashboard_article_getArticles.articleResponse:
+    properties:
+      author:
+        $ref: '#/definitions/getarticles.author'
+      cover:
+        type: string
+      published_at:
+        type: string
+      title:
+        type: string
+      uuid:
+        type: string
+      video:
+        type: string
+    type: object
+  github_com_khanzadimahdi_testproject_application_dashboard_comment_createComment.Request:
+    properties:
+      approved_at:
+        type: string
+      author_uuid:
+        type: string
+      body:
+        type: string
+      object_type:
+        type: string
+      object_uuid:
+        type: string
+      parent_uuid:
+        type: string
+    type: object
+  github_com_khanzadimahdi_testproject_application_dashboard_comment_getComments.Response:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_comment_getComments.commentResponse'
+        type: array
+      pagination:
+        $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_comment_getComments.pagination'
+    type: object
+  github_com_khanzadimahdi_testproject_application_dashboard_comment_getComments.authorResponse:
+    properties:
+      avatar:
+        type: string
+      name:
+        type: string
+      uuid:
+        type: string
+    type: object
+  github_com_khanzadimahdi_testproject_application_dashboard_comment_getComments.commentResponse:
+    properties:
+      approved_at:
+        type: string
+      author:
+        $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_comment_getComments.authorResponse'
+      body:
+        type: string
+      created_at:
+        type: string
+      object_type:
+        type: string
+      object_uuid:
+        type: string
+      parent_uuid:
+        type: string
+      uuid:
+        type: string
+    type: object
+  github_com_khanzadimahdi_testproject_application_dashboard_comment_getComments.pagination:
+    properties:
+      current_page:
+        type: integer
+      total_pages:
+        type: integer
+    type: object
+  github_com_khanzadimahdi_testproject_application_runner_manager_task_getTasks.Response:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_runner_manager_task_getTasks.TaskResponse'
+        type: array
+      pagination:
+        $ref: '#/definitions/gettasks.Pagination'
+    type: object
+  github_com_khanzadimahdi_testproject_application_runner_manager_task_getTasks.TaskResponse:
+    properties:
+      created_at:
+        type: string
+      finished_at:
+        type: string
+      image:
+        type: string
+      name:
+        type: string
+      started_at:
+        type: string
+      state:
+        type: string
+      uuid:
+        type: string
+    type: object
+  github_com_khanzadimahdi_testproject_application_runner_manager_task_runTask.Mount:
+    properties:
+      read_only:
+        type: boolean
+      source:
+        type: string
+      target:
+        type: string
+      type:
+        type: string
+    type: object
+  github_com_khanzadimahdi_testproject_application_runner_manager_task_runTask.PortBinding:
+    properties:
+      host_ip:
+        type: string
+      host_port:
+        type: integer
+    type: object
+  github_com_khanzadimahdi_testproject_application_runner_manager_task_runTask.Request:
+    properties:
+      attach_stderr:
+        type: boolean
+      attach_stdin:
+        type: boolean
+      attach_stdout:
+        type: boolean
+      auto_remove:
+        type: boolean
+      command:
+        items:
+          type: string
+        type: array
+      entrypoint:
+        items:
+          type: string
+        type: array
+      environment:
+        items:
+          type: string
+        type: array
+      health_check:
+        type: string
+      image:
+        type: string
+      mounts:
+        items:
+          $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_runner_manager_task_runTask.Mount'
+        type: array
+      name:
+        type: string
+      port_bindings:
+        additionalProperties:
+          items:
+            $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_runner_manager_task_runTask.PortBinding'
+          type: array
+        type: object
+      resource_limits:
+        $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_runner_manager_task_runTask.ResourceLimits'
+      restart_count:
+        type: integer
+      restart_policy:
+        type: string
+    type: object
+  github_com_khanzadimahdi_testproject_application_runner_manager_task_runTask.ResourceLimits:
+    properties:
+      cpu:
+        type: number
+      disk:
+        type: integer
+      memory:
+        type: integer
+    type: object
+  github_com_khanzadimahdi_testproject_application_runner_manager_task_runTask.Response:
+    properties:
+      errors:
+        $ref: '#/definitions/domain.ValidationErrors'
+      uuid:
+        type: string
+    type: object
+  github_com_khanzadimahdi_testproject_application_runner_worker_task_getTasks.Response:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_runner_worker_task_getTasks.TaskResponse'
+        type: array
+    type: object
+  github_com_khanzadimahdi_testproject_application_runner_worker_task_getTasks.TaskResponse:
+    properties:
+      created_at:
+        type: string
+      finished_at:
+        type: string
+      image:
+        type: string
+      name:
+        type: string
+      started_at:
+        type: string
+      state:
+        type: string
+      uuid:
+        type: string
+    type: object
+  github_com_khanzadimahdi_testproject_application_runner_worker_task_runTask.Mount:
+    properties:
+      read_only:
+        type: boolean
+      source:
+        type: string
+      target:
+        type: string
+      type:
+        type: string
+    type: object
+  github_com_khanzadimahdi_testproject_application_runner_worker_task_runTask.PortBinding:
+    properties:
+      host_ip:
+        type: string
+      host_port:
+        type: integer
+    type: object
+  github_com_khanzadimahdi_testproject_application_runner_worker_task_runTask.Request:
+    properties:
+      attach_stderr:
+        type: boolean
+      attach_stdin:
+        type: boolean
+      attach_stdout:
+        type: boolean
+      auto_remove:
+        type: boolean
+      command:
+        items:
+          type: string
+        type: array
+      entrypoint:
+        items:
+          type: string
+        type: array
+      environment:
+        items:
+          type: string
+        type: array
+      health_check:
+        type: string
+      image:
+        type: string
+      mounts:
+        items:
+          $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_runner_worker_task_runTask.Mount'
+        type: array
+      name:
+        type: string
+      port_bindings:
+        additionalProperties:
+          items:
+            $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_runner_worker_task_runTask.PortBinding'
+          type: array
+        type: object
+      resource_limits:
+        $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_runner_worker_task_runTask.ResourceLimits'
+      restart_count:
+        type: integer
+      restart_policy:
+        type: string
+      uuid:
+        type: string
+    type: object
+  github_com_khanzadimahdi_testproject_application_runner_worker_task_runTask.ResourceLimits:
+    properties:
+      cpu:
+        type: number
+      disk:
+        type: integer
+      memory:
+        type: integer
+    type: object
+  home.Response:
+    properties:
+      all:
+        items:
+          $ref: '#/definitions/home.articleResponse'
+        type: array
+      elements:
+        items:
+          $ref: '#/definitions/element.Response'
+        type: array
+      popular:
+        items:
+          $ref: '#/definitions/home.articleResponse'
+        type: array
+    type: object
+  home.articleResponse:
+    properties:
+      author:
+        $ref: '#/definitions/home.author'
+      cover:
+        type: string
+      excerpt:
+        type: string
+      published_at:
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+      title:
+        type: string
+      uuid:
+        type: string
+    type: object
+  home.author:
+    properties:
+      avatar:
+        type: string
+      name:
+        type: string
+    type: object
+  login.Request:
+    properties:
+      identity:
+        type: string
+      password:
+        type: string
+    type: object
+  login.Response:
+    properties:
+      access_token:
+        type: string
+      errors:
+        $ref: '#/definitions/domain.ValidationErrors'
+      refresh_token:
+        type: string
+    type: object
+  refresh.Request:
+    properties:
+      token:
+        type: string
+    type: object
+  refresh.Response:
+    properties:
+      access_token:
+        type: string
+      errors:
+        $ref: '#/definitions/domain.ValidationErrors'
+      refresh_token:
+        type: string
+    type: object
+  register.Request:
+    properties:
+      identity:
+        type: string
+    type: object
+  resetpassword.Request:
+    properties:
+      password:
+        type: string
+      token:
+        type: string
+    type: object
+  updateBookmark.Request:
+    properties:
+      keep:
+        type: boolean
+      object_type:
+        type: string
+      object_uuid:
+        type: string
+      title:
+        type: string
+    type: object
+  updateComment.Request:
+    properties:
+      approved_at:
+        type: string
+      author_uuid:
+        type: string
+      body:
+        type: string
+      object_type:
+        type: string
+      object_uuid:
+        type: string
+      parent_uuid:
+        type: string
+      uuid:
+        type: string
+    type: object
+  updateConfig.Request:
+    properties:
+      user_default_roles:
+        items:
+          type: string
+        type: array
+    type: object
+  updateUserComment.Request:
+    properties:
+      body:
+        type: string
+      uuid:
+        type: string
+    type: object
+  updatearticle.Request:
+    properties:
+      body:
+        type: string
+      cover:
+        type: string
+      excerpt:
+        type: string
+      published_at:
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+      title:
+        type: string
+      uuid:
+        type: string
+      video:
+        type: string
+    type: object
+  updateelement.Request:
+    type: object
+  updateprofile.Request:
+    properties:
+      avatar:
+        type: string
+      email:
+        type: string
+      name:
+        type: string
+      username:
+        type: string
+    type: object
+  updaterole.Request:
+    properties:
+      description:
+        type: string
+      name:
+        type: string
+      permissions:
+        items:
+          type: string
+        type: array
+      user_uuids:
+        items:
+          type: string
+        type: array
+      uuid:
+        type: string
+    type: object
+  updateuser.Request:
+    properties:
+      avatar:
+        type: string
+      email:
+        type: string
+      name:
+        type: string
+      username:
+        type: string
+      uuid:
+        type: string
+    type: object
+  userchangepassword.Request:
+    properties:
+      new_password:
+        type: string
+      uuid:
+        type: string
+    type: object
+  verify.Request:
+    properties:
+      name:
+        type: string
+      password:
+        type: string
+      repassword:
+        type: string
+      token:
+        type: string
+      username:
+        type: string
+    type: object
+host: 0.0.0.0:80
+info:
+  contact: {}
+  description: Swagger/OpenAPI documentation for the backend service.
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: Backend API
+  version: "1.0"
+paths:
+  /articles:
+    get:
+      consumes:
+      - application/json
+      description: return a page of the most recent published articles
+      parameters:
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_article_getArticles.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List published articles
+      tags:
+      - articles
+  /articles/{uuid}:
+    get:
+      consumes:
+      - application/json
+      description: get one published article by UUID
+      parameters:
+      - description: Article UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_article_getArticle.Response'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Retrieve a single article
+      tags:
+      - articles
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      description: obtain authentication tokens
+      parameters:
+      - description: Credentials
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/login.Request'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/login.Response'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Login
+      tags:
+      - auth
+  /auth/password/forget:
+    post:
+      consumes:
+      - application/json
+      description: request a password reset email
+      parameters:
+      - description: Email address
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/forgetpassword.Request'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Forgot password
+      tags:
+      - auth
+  /auth/password/reset:
+    post:
+      consumes:
+      - application/json
+      description: set a new password using reset token
+      parameters:
+      - description: Reset password data
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/resetpassword.Request'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Reset password
+      tags:
+      - auth
+  /auth/register:
+    post:
+      consumes:
+      - application/json
+      description: create a new user account
+      parameters:
+      - description: Registration details
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/register.Request'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Register new user
+      tags:
+      - auth
+  /auth/token/refresh:
+    post:
+      consumes:
+      - application/json
+      description: exchange refresh token for new access token
+      parameters:
+      - description: Refresh request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/refresh.Request'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/refresh.Response'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Refresh token
+      tags:
+      - auth
+  /auth/verify:
+    post:
+      consumes:
+      - application/json
+      description: verify user email using token
+      parameters:
+      - description: Verification data
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/verify.Request'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Verify account
+      tags:
+      - auth
+  /bookmarks:
+    put:
+      consumes:
+      - application/json
+      description: create or update an article bookmark for authenticated user
+      parameters:
+      - description: Bookmark request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/updateBookmark.Request'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Create or update bookmark
+      tags:
+      - bookmarks
+  /bookmarks/exists:
+    post:
+      consumes:
+      - application/json
+      description: return whether a bookmark exists for the given article
+      parameters:
+      - description: Bookmark existence request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/bookmarkExists.Request'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/bookmarkExists.Response'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Check bookmark existence
+      tags:
+      - bookmarks
+  /comments:
+    get:
+      consumes:
+      - application/json
+      description: list comments optionally filtered by object and paginated
+      parameters:
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - description: Object UUID
+        in: query
+        name: object_uuid
+        type: string
+      - description: Object type
+        in: query
+        name: object_type
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_comment_getComments.Response'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List comments
+      tags:
+      - comments
+    post:
+      consumes:
+      - application/json
+      description: create a comment on an object (article, etc.) as the current user
+      parameters:
+      - description: Comment payload
+        in: body
+        name: comment
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_comment_createComment.Request'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Create a new comment
+      tags:
+      - comments
+  /dashboard/articles:
+    get:
+      consumes:
+      - application/json
+      description: page through articles in dashboard
+      parameters:
+      - default: 1
+        description: Page
+        in: query
+        name: page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_article_getArticles.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List dashboard articles
+      tags:
+      - dashboard articles
+    post:
+      consumes:
+      - application/json
+      description: create a new article in dashboard as current user
+      parameters:
+      - description: Article data
+        in: body
+        name: article
+        required: true
+        schema:
+          $ref: '#/definitions/createarticle.Request'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/createarticle.Response'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Create dashboard article
+      tags:
+      - dashboard articles
+    put:
+      consumes:
+      - application/json
+      description: update existing article fields, current user must be author
+      parameters:
+      - description: Article update payload
+        in: body
+        name: article
+        required: true
+        schema:
+          $ref: '#/definitions/updatearticle.Request'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Update a dashboard article
+      tags:
+      - dashboard articles
+  /dashboard/articles/{uuid}:
+    delete:
+      consumes:
+      - application/json
+      description: remove an article by UUID
+      parameters:
+      - description: Article UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Delete dashboard article
+      tags:
+      - dashboard articles
+    get:
+      consumes:
+      - application/json
+      description: retrieve one article by UUID
+      parameters:
+      - description: Article UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_article_getArticle.Response'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get dashboard article
+      tags:
+      - dashboard articles
+  /dashboard/comments:
+    get:
+      consumes:
+      - application/json
+      description: paginated list of comments
+      parameters:
+      - default: 1
+        description: Page
+        in: query
+        name: page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_comment_getComments.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List comments
+      tags:
+      - dashboard comments
+    post:
+      consumes:
+      - application/json
+      description: post a comment as authenticated user
+      parameters:
+      - description: Comment data
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_comment_createComment.Request'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Create dashboard comment
+      tags:
+      - dashboard comments
+    put:
+      consumes:
+      - application/json
+      description: modify a comment owned by current user
+      parameters:
+      - description: Comment update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/updateComment.Request'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Update comment
+      tags:
+      - dashboard comments
+  /dashboard/comments/{uuid}:
+    delete:
+      consumes:
+      - application/json
+      description: delete comment by UUID
+      parameters:
+      - description: Comment UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Delete comment
+      tags:
+      - dashboard comments
+    get:
+      consumes:
+      - application/json
+      description: retrieve comment by UUID
+      parameters:
+      - description: Comment UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getComment.Response'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get comment
+      tags:
+      - dashboard comments
+  /dashboard/comments/user:
+    get:
+      consumes:
+      - application/json
+      description: paginated list of comments authored by current user
+      parameters:
+      - default: 1
+        description: Page
+        in: query
+        name: page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getUserComments.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List my comments
+      tags:
+      - dashboard comments
+    put:
+      consumes:
+      - application/json
+      description: admin action to edit a user's comment
+      parameters:
+      - description: Comment update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/updateUserComment.Request'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Update other user's comment
+      tags:
+      - dashboard comments
+  /dashboard/comments/user/{uuid}:
+    delete:
+      consumes:
+      - application/json
+      description: remove a comment belonging to specified user
+      parameters:
+      - description: Comment UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      - description: User UUID
+        in: query
+        name: user_uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Delete comment (user scoped)
+      tags:
+      - dashboard comments
+    get:
+      consumes:
+      - application/json
+      description: fetch comment by UUID and user
+      parameters:
+      - description: Comment UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      - description: User UUID
+        in: query
+        name: user_uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getUserComment.Response'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get user comment
+      tags:
+      - dashboard comments
+  /dashboard/config:
+    get:
+      consumes:
+      - application/json
+      description: fetch dashboard configuration
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getConfig.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get config
+      tags:
+      - dashboard config
+    put:
+      consumes:
+      - application/json
+      description: modify dashboard configuration values
+      parameters:
+      - description: Config update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/updateConfig.Request'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Update config
+      tags:
+      - dashboard config
+  /dashboard/elements:
+    get:
+      consumes:
+      - application/json
+      description: paginated list of elements
+      parameters:
+      - default: 1
+        description: Page
+        in: query
+        name: page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/deleteelements.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List elements
+      tags:
+      - dashboard elements
+    post:
+      consumes:
+      - application/json
+      description: add a new element via dashboard
+      parameters:
+      - description: Element data
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/createelement.Request'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/createelement.Response'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Create element
+      tags:
+      - dashboard elements
+    put:
+      consumes:
+      - application/json
+      description: modify existing element data
+      parameters:
+      - description: Element update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/updateelement.Request'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Update element
+      tags:
+      - dashboard elements
+  /dashboard/elements/{uuid}:
+    delete:
+      consumes:
+      - application/json
+      description: remove element identified by UUID
+      parameters:
+      - description: Element UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Delete element
+      tags:
+      - dashboard elements
+    get:
+      consumes:
+      - application/json
+      description: fetch element by UUID
+      parameters:
+      - description: Element UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getelement.Response'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get element
+      tags:
+      - dashboard elements
+  /dashboard/files:
+    get:
+      consumes:
+      - application/json
+      description: paginated list of all files
+      parameters:
+      - default: 1
+        description: Page
+        in: query
+        name: page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getfiles.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List files
+      tags:
+      - dashboard files
+    post:
+      consumes:
+      - multipart/form-data
+      description: upload a file via multipart form
+      parameters:
+      - description: File to upload
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/createfile.Response'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Upload file
+      tags:
+      - dashboard files
+  /dashboard/files/{uuid}:
+    delete:
+      consumes:
+      - application/json
+      description: remove file by UUID
+      parameters:
+      - description: File UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Delete file
+      tags:
+      - dashboard files
+    get:
+      consumes:
+      - application/json
+      description: retrieve file content by UUID
+      parameters:
+      - description: File UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/octet-stream
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Download file
+      tags:
+      - dashboard files
+  /dashboard/files/user:
+    get:
+      consumes:
+      - application/json
+      description: paginated list of files owned by current user
+      parameters:
+      - default: 1
+        description: Page
+        in: query
+        name: page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getuserfiles.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List own files
+      tags:
+      - dashboard files
+  /dashboard/my/bookmarks:
+    delete:
+      consumes:
+      - application/json
+      description: delete a bookmark owned by current user
+      parameters:
+      - description: Bookmark to delete
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/deleteUserBookmark.Request'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Delete my bookmark
+      tags:
+      - dashboard bookmarks
+    get:
+      consumes:
+      - application/json
+      description: paginated list of bookmarks for authenticated user
+      parameters:
+      - default: 1
+        description: Page
+        in: query
+        name: page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getUserBookmarks.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List my bookmarks
+      tags:
+      - dashboard bookmarks
+  /dashboard/my/files/{uuid}:
+    delete:
+      consumes:
+      - application/json
+      description: remove a file owned by authenticated user
+      parameters:
+      - description: File UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Delete own file
+      tags:
+      - dashboard files
+  /dashboard/permissions:
+    get:
+      consumes:
+      - application/json
+      description: retrieve all permissions
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getpermissions.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List permissions
+      tags:
+      - dashboard permissions
+  /dashboard/profile:
+    get:
+      consumes:
+      - application/json
+      description: retrieve profile for current user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getprofile.Response'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get profile
+      tags:
+      - dashboard profile
+    put:
+      consumes:
+      - application/json
+      description: update profile data for current user
+      parameters:
+      - description: Profile update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/updateprofile.Request'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Update profile
+      tags:
+      - dashboard profile
+  /dashboard/profile/password:
+    put:
+      consumes:
+      - application/json
+      description: update password for current authenticated user
+      parameters:
+      - description: Password change
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/changepassword.Request'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Change user password
+      tags:
+      - dashboard profile
+  /dashboard/profile/roles:
+    get:
+      consumes:
+      - application/json
+      description: returns roles for current user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getroles.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get user roles
+      tags:
+      - dashboard profile
+  /dashboard/roles:
+    get:
+      consumes:
+      - application/json
+      description: paginated list of roles
+      parameters:
+      - default: 1
+        description: Page
+        in: query
+        name: page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getroles.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List roles
+      tags:
+      - dashboard roles
+    post:
+      consumes:
+      - application/json
+      description: add a new role via dashboard
+      parameters:
+      - description: Role data
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/createrole.Request'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/createrole.Response'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Create role
+      tags:
+      - dashboard roles
+    put:
+      consumes:
+      - application/json
+      description: modify an existing role
+      parameters:
+      - description: Role update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/updaterole.Request'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Update role
+      tags:
+      - dashboard roles
+  /dashboard/roles/{uuid}:
+    delete:
+      consumes:
+      - application/json
+      description: remove a role by UUID
+      parameters:
+      - description: Role UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Delete role
+      tags:
+      - dashboard roles
+    get:
+      consumes:
+      - application/json
+      description: fetch role by UUID
+      parameters:
+      - description: Role UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getrole.Response'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get role
+      tags:
+      - dashboard roles
+  /dashboard/users:
+    get:
+      consumes:
+      - application/json
+      description: paginated list of users
+      parameters:
+      - default: 1
+        description: Page
+        in: query
+        name: page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getusers.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List users
+      tags:
+      - dashboard users
+    post:
+      consumes:
+      - application/json
+      description: register a new user via dashboard
+      parameters:
+      - description: User data
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/createuser.Request'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/createuser.Response'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Create a new user
+      tags:
+      - dashboard users
+    put:
+      consumes:
+      - application/json
+      description: update a user's data
+      parameters:
+      - description: User update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/updateuser.Request'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Update user
+      tags:
+      - dashboard users
+  /dashboard/users/{uuid}:
+    delete:
+      consumes:
+      - application/json
+      description: remove a user by UUID
+      parameters:
+      - description: User UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Delete user
+      tags:
+      - dashboard users
+    get:
+      consumes:
+      - application/json
+      description: fetch a user by UUID
+      parameters:
+      - description: User UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getuser.Response'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get user
+      tags:
+      - dashboard users
+  /dashboard/users/password:
+    put:
+      consumes:
+      - application/json
+      description: change another user's password (admin action)
+      parameters:
+      - description: Password data
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/userchangepassword.Request'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Change password for a user
+      tags:
+      - dashboard users
+  /files/{uuid}:
+    get:
+      consumes:
+      - application/json
+      description: serve file content by UUID
+      parameters:
+      - description: File UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/octet-stream
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Download file
+      tags:
+      - files
+  /hashtags/{hashtag}:
+    get:
+      consumes:
+      - application/json
+      description: return a page of the most recent published articles with the given
+        hashtag
+      parameters:
+      - description: Hashtag
+        in: path
+        name: hashtag
+        required: true
+        type: string
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getArticlesByHashtag.Response'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List articles by hashtag
+      tags:
+      - hashtags
+  /home:
+    get:
+      consumes:
+      - application/json
+      description: returns the contents used for home page
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/home.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Application home endpoint
+      tags:
+      - home
+  /nodes:
+    get:
+      consumes:
+      - application/json
+      description: return a page of runner nodes
+      parameters:
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getNodes.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List nodes
+      tags:
+      - runner nodes
+  /nodes/{name}:
+    get:
+      consumes:
+      - application/json
+      description: retrieve information about a runner node
+      parameters:
+      - description: Node name
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getNode.Response'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get node
+      tags:
+      - runner nodes
+  /tasks:
+    get:
+      consumes:
+      - application/json
+      description: return tasks scheduled for this worker
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_runner_worker_task_getTasks.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List worker tasks
+      tags:
+      - runner tasks
+  /tasks/{uuid}:
+    delete:
+      consumes:
+      - application/json
+      description: remove a task by UUID
+      parameters:
+      - description: Task UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Delete task
+      tags:
+      - runner tasks
+    get:
+      consumes:
+      - application/json
+      description: retrieve details of a task
+      parameters:
+      - description: Task UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/gettask.Response'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get task
+      tags:
+      - runner tasks
+  /tasks/{uuid}/stop:
+    post:
+      consumes:
+      - application/json
+      description: instruct worker to halt a task
+      parameters:
+      - description: Task UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Stop worker task
+      tags:
+      - runner tasks
+  /tasks/run:
+    post:
+      consumes:
+      - application/json
+      description: accept a task result or status update from worker
+      parameters:
+      - description: Task operation
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_runner_worker_task_runTask.Request'
+      produces:
+      - application/json
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Run worker task
+      tags:
+      - runner tasks
+  /ws:
+    get:
+      consumes:
+      - application/json
+      description: upgrade HTTP connection to WebSocket
+      produces:
+      - application/json
+      responses:
+        "101":
+          description: Switching Protocols
+          schema:
+            type: string
+      summary: Websocket endpoint
+      tags:
+      - websocket
+schemes:
+- http
+swagger: "2.0"
