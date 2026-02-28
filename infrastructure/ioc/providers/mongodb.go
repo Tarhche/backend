@@ -47,7 +47,7 @@ func (p *mongodbProvider) Register(ctx context.Context, iocContainer ioc.Service
 	database := mongoClient.Database(os.Getenv("MONGO_DATABASE_NAME"))
 
 	var result bson.M
-	if err := database.RunCommand(ctx, bson.D{{"ping", 1}}).Decode(&result); err != nil {
+	if err := database.RunCommand(ctx, bson.D{{Key: "ping", Value: 1}}).Decode(&result); err != nil {
 		return err
 	}
 
