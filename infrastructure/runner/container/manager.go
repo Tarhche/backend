@@ -13,6 +13,7 @@ import (
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/client"
+	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/docker/go-connections/nat"
 
 	"github.com/khanzadimahdi/testproject/domain/runner/container"
@@ -317,7 +318,7 @@ func (m *DockerManager) Logs(containerUUID string, writer io.Writer) error {
 
 	log.Println("got the logs for container", containerUUID, time.Now().Format(time.UnixDate))
 
-	_, err = io.Copy(writer, readCloser)
+	_, err = stdcopy.StdCopy(writer, writer, readCloser)
 
 	return err
 }
