@@ -1,7 +1,6 @@
 package manager
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"net"
@@ -80,8 +79,7 @@ func TestServe(t *testing.T) {
 	})
 
 	t.Run("run", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
+		ctx := t.Context()
 
 		handler := http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 			rw.WriteHeader(http.StatusOK)

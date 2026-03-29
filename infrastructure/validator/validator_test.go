@@ -37,7 +37,7 @@ func (u *user) Validate() domain.ValidationErrors {
 	return nil
 }
 
-var optionsType = reflect.TypeOf([]func(*translatorContract.Params){}).Name()
+var optionsType = reflect.TypeFor[[]func(*translatorContract.Params)]().Name()
 
 func TestValidator(t *testing.T) {
 	t.Parallel()

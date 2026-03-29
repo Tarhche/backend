@@ -22,7 +22,7 @@ func TestArticlesRepository_GetAll(t *testing.T) {
 	datastore := sync.Map{}
 	itemsCount := uint(32)
 
-	for i := uint(0); i < itemsCount; i++ {
+	for range itemsCount {
 		uuid, err := uuid.NewV7()
 		if err != nil {
 			t.Error("unexpected error")
@@ -50,7 +50,7 @@ func TestArticlesRepository_GetOne(t *testing.T) {
 	datastore := sync.Map{}
 	itemsCount := 20
 
-	for i := 0; i < itemsCount; i++ {
+	for range itemsCount {
 		u, err := uuid.NewV7()
 		if err != nil {
 			t.Error("unexpected error")
@@ -100,7 +100,7 @@ func TestArticlesRepository_Count(t *testing.T) {
 	datastore := sync.Map{}
 	itemsCount := 200
 
-	for i := 0; i < itemsCount; i++ {
+	for range itemsCount {
 		uuid, err := uuid.NewV7()
 		if err != nil {
 			t.Error("unexpected error")

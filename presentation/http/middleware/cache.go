@@ -6,7 +6,7 @@ import (
 	"hash/fnv"
 	"net/http"
 	"net/url"
-	"sort"
+	"slices"
 	"strconv"
 	"sync"
 
@@ -134,9 +134,7 @@ func generateCacheKey(r *http.Request) string {
 func sortURLParams(URL *url.URL) {
 	params := URL.Query()
 	for _, param := range params {
-		sort.Slice(param, func(i, j int) bool {
-			return param[i] < param[j]
-		})
+		slices.Sort(param)
 	}
 	URL.RawQuery = params.Encode()
 }

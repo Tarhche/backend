@@ -31,7 +31,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 	j := jwt.NewJWT(privateKey, privateKey.Public())
 
-	var translatorOptionsType = reflect.TypeOf(func(*translatorContract.Params) {}).Name()
+	var translatorOptionsType = reflect.TypeFor[func(*translatorContract.Params)]().Name()
 
 	rl := []role.Role{
 		{

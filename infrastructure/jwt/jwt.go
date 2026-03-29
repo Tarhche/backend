@@ -34,7 +34,7 @@ func (t *JWT) Generate(claims jwt.Claims) (string, error) {
 }
 
 func (t *JWT) Verify(tokenString string) (jwt.Claims, error) {
-	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (any, error) {
 		// Check if the signing method is the expected ECDSA P-521 with SHA-512
 		if _, ok := token.Method.(*jwt.SigningMethodECDSA); !ok {
 			return nil, fmt.Errorf("%w: %v", ErrUnexpectedSigningMethod, token.Header["alg"])

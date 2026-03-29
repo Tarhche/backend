@@ -20,7 +20,7 @@ import (
 func TestUseCase_Execute(t *testing.T) {
 	t.Parallel()
 
-	var translatorOptionsType = reflect.TypeOf(func(*translatorContract.Params) {}).Name()
+	var translatorOptionsType = reflect.TypeFor[func(*translatorContract.Params)]().Name()
 
 	t.Run("successfully create a user", func(t *testing.T) {
 		t.Parallel()

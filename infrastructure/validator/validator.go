@@ -41,7 +41,7 @@ func validate(value any, rules ...domain.Validator) domain.ValidationErrors {
 	}
 
 	rv := reflect.ValueOf(value)
-	if (rv.Kind() == reflect.Ptr || rv.Kind() == reflect.Interface) && rv.IsNil() {
+	if (rv.Kind() == reflect.Pointer || rv.Kind() == reflect.Interface) && rv.IsNil() {
 		return nil
 	}
 
@@ -54,7 +54,7 @@ func validate(value any, rules ...domain.Validator) domain.ValidationErrors {
 		return validateMap(rv)
 	case reflect.Slice, reflect.Array:
 		return validateSlice(rv)
-	case reflect.Ptr, reflect.Interface:
+	case reflect.Pointer, reflect.Interface:
 		return validate(rv.Elem().Interface())
 	}
 
@@ -85,7 +85,7 @@ func validateSlice(rv reflect.Value) domain.ValidationErrors {
 	)
 
 	l := rv.Len()
-	for i := 0; i < l; i++ {
+	for i := range l {
 		if ev := rv.Index(i).Interface(); ev != nil {
 			if validationMessage = validate(ev); len(validationMessage) > 0 {
 				break
