@@ -1,4 +1,4 @@
-package pubsub
+package produceConsumer
 
 import (
 	"context"
@@ -12,38 +12,34 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 )
 
-type publishSubscriber struct {
+type produceConsumer struct {
 	connection *nats.Conn
 	jetstream  jetstream.JetStream
+	consumerID string
 	streams    map[string]jetstream.Stream
 	lock       sync.RWMutex
 	wg         sync.WaitGroup
 }
 
-type subscriber struct {
-	id      string
-	handler domain.MessageHandler
-	stream  jetstream.Stream
-}
+var _ domain.ProduceConsumer = &produceConsumer{}
 
-var _ domain.PublishSubscriber = &publishSubscriber{}
-
-func NewPublishSubscriber(connection *nats.Conn) (*publishSubscriber, error) {
+func NewProduceConsumer(connection *nats.Conn, consumerID string) (*produceConsumer, error) {
 	j, err := jetstream.New(connection)
 	if err != nil {
 		return nil, err
 	}
 
-	s := &publishSubscriber{
+	s := &produceConsumer{
 		connection: connection,
 		jetstream:  j,
+		consumerID: consumerID,
 		streams:    make(map[string]jetstream.Stream),
 	}
 
 	return s, nil
 }
 
-func (m *publishSubscriber) Publish(ctx context.Context, subject string, payload []byte) error {
+func (m *produceConsumer) Produce(ctx context.Context, subject string, payload []byte) error {
 	if _, err := m.makeSureStreamExists(ctx, subject); err != nil {
 		return err
 	}
@@ -53,29 +49,25 @@ func (m *publishSubscriber) Publish(ctx context.Context, subject string, payload
 	return err
 }
 
-func (m *publishSubscriber) Subscribe(ctx context.Context, consumerID string, subject string, handler domain.MessageHandler) error {
+func (m *produceConsumer) Consume(ctx context.Context, subject string, handler domain.MessageHandler) error {
 	stream, err := m.makeSureStreamExists(ctx, subject)
 	if err != nil {
 		return err
 	}
 
-	return m.consumer(ctx, &subscriber{
-		id:      consumerID,
-		handler: handler,
-		stream:  stream,
-	})
+	return m.consumeInBackground(ctx, stream, handler)
 }
 
-func (m *publishSubscriber) Wait() {
+func (m *produceConsumer) Wait() {
 	m.wg.Wait()
 }
 
-func (m *publishSubscriber) consumer(ctx context.Context, subscriber *subscriber) error {
+func (m *produceConsumer) consumeInBackground(ctx context.Context, stream jetstream.Stream, handler domain.MessageHandler) error {
 	m.wg.Add(1)
 
-	consumer, err := subscriber.stream.CreateOrUpdateConsumer(ctx, jetstream.ConsumerConfig{
-		Name:      subscriber.id,
-		Durable:   subscriber.id,
+	consumer, err := stream.CreateOrUpdateConsumer(ctx, jetstream.ConsumerConfig{
+		Name:      m.consumerID,
+		Durable:   m.consumerID,
 		AckPolicy: jetstream.AckExplicitPolicy,
 		AckWait:   30 * time.Second,
 	})
@@ -84,7 +76,7 @@ func (m *publishSubscriber) consumer(ctx context.Context, subscriber *subscriber
 		return err
 	}
 
-	c, err := consumer.Consume(m.consume(subscriber.handler))
+	c, err := consumer.Consume(m.consumeFunc(handler))
 	if err != nil {
 		m.wg.Done()
 		return err
@@ -101,7 +93,7 @@ func (m *publishSubscriber) consumer(ctx context.Context, subscriber *subscriber
 	return nil
 }
 
-func (m *publishSubscriber) consume(handler domain.MessageHandler) func(msg jetstream.Msg) {
+func (m *produceConsumer) consumeFunc(handler domain.MessageHandler) func(msg jetstream.Msg) {
 	return func(msg jetstream.Msg) {
 		if err := msg.InProgress(); err != nil {
 			log.Println("in progress error", err)
@@ -122,7 +114,7 @@ func (m *publishSubscriber) consume(handler domain.MessageHandler) func(msg jets
 	}
 }
 
-func (m *publishSubscriber) makeSureStreamExists(ctx context.Context, subject string) (jetstream.Stream, error) {
+func (m *produceConsumer) makeSureStreamExists(ctx context.Context, subject string) (jetstream.Stream, error) {
 	m.lock.RLock()
 	stream, ok := m.streams[subject]
 	m.lock.RUnlock()

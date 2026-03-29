@@ -20,18 +20,18 @@ const (
 
 type runCode struct {
 	validator domain.Validator
-	publisher domain.Publisher
+	producer  domain.Producer
 }
 
 var _ domain.Replyer = &runCode{}
 
 func NewRunCodeHandler(
 	validator domain.Validator,
-	publisher domain.Publisher,
+	producer domain.Producer,
 ) *runCode {
 	return &runCode{
 		validator: validator,
-		publisher: publisher,
+		producer:  producer,
 	}
 }
 
@@ -99,5 +99,5 @@ func (h *runCode) Reply(r domain.Request, replyChan chan<- *domain.Reply) error 
 		return err
 	}
 
-	return h.publisher.Publish(context.Background(), events.TaskRunRequestedName, payload)
+	return h.producer.Produce(context.Background(), events.TaskRunRequestedName, payload)
 }

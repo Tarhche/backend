@@ -12,11 +12,11 @@ import (
 
 type UseCase struct {
 	taskRepository  task.Repository
-	asyncCommandBus domain.Publisher
+	asyncCommandBus domain.Producer
 	translator      translator.Translator
 }
 
-func NewUseCase(taskRepository task.Repository, asyncCommandBus domain.Publisher, translator translator.Translator) *UseCase {
+func NewUseCase(taskRepository task.Repository, asyncCommandBus domain.Producer, translator translator.Translator) *UseCase {
 	return &UseCase{
 		taskRepository:  taskRepository,
 		asyncCommandBus: asyncCommandBus,
@@ -55,5 +55,5 @@ func (uc *UseCase) publishTaskDeleted(uuid string) error {
 		return err
 	}
 
-	return uc.asyncCommandBus.Publish(context.Background(), events.TaskDeletedName, payload)
+	return uc.asyncCommandBus.Produce(context.Background(), events.TaskDeletedName, payload)
 }

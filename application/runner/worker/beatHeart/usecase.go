@@ -11,17 +11,17 @@ import (
 )
 
 type UseCase struct {
-	publisher domain.Publisher
-	nodeName  string
+	producer domain.Producer
+	nodeName string
 }
 
 func NewUseCase(
-	publisher domain.Publisher,
+	producer domain.Producer,
 	nodeName string,
 ) *UseCase {
 	return &UseCase{
-		publisher: publisher,
-		nodeName:  nodeName,
+		producer: producer,
+		nodeName: nodeName,
 	}
 }
 
@@ -37,5 +37,5 @@ func (h *UseCase) Execute() error {
 		return err
 	}
 
-	return h.publisher.Publish(context.Background(), events.HeartbeatName, payload)
+	return h.producer.Produce(context.Background(), events.HeartbeatName, payload)
 }

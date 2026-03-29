@@ -15,15 +15,14 @@ import (
 )
 
 const (
-	serveName    string = "serve-runner-manager"
-	consumerName string = "runner-manager"
+	serveName string = "serve-runner-manager"
 )
 
 type ServeCommand struct {
 	port            int
 	handler         http.Handler
-	subscriber      domain.Subscriber
-	subscribers     map[string]domain.MessageHandler
+	consumer        domain.Consumer
+	consumers       map[string]domain.MessageHandler
 	serviceProvider ioc.ServiceProvider
 }
 
@@ -72,11 +71,11 @@ func (c *ServeCommand) Boot(ctx context.Context, iocContainer ioc.ServiceContain
 		return err
 	}
 
-	if err := iocContainer.Resolve(&c.subscriber); err != nil {
+	if err := iocContainer.Resolve(&c.consumer); err != nil {
 		return err
 	}
 
-	return iocContainer.Resolve(&c.subscribers, ioc.WithNameResolving(runner.ManagerSubscribers))
+	return iocContainer.Resolve(&c.consumers, ioc.WithNameResolving(runner.ManagerSubscribers))
 }
 
 func (c *ServeCommand) Terminate() error {
@@ -112,7 +111,7 @@ func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 		_ = server.Shutdown(shutdownCtx)
 	}()
 
-	if err := c.subscribeToTopics(ctx); err != nil {
+	if err := c.consumeTopics(ctx); err != nil {
 		log.Println(err)
 		return console.ExitFailure
 	}
@@ -125,9 +124,9 @@ func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 	return console.ExitSuccess
 }
 
-func (c *ServeCommand) subscribeToTopics(ctx context.Context) error {
-	for subject, messageHandler := range c.subscribers {
-		if err := c.subscriber.Subscribe(ctx, consumerName, subject, messageHandler); err != nil {
+func (c *ServeCommand) consumeTopics(ctx context.Context) error {
+	for subject, messageHandler := range c.consumers {
+		if err := c.consumer.Consume(ctx, subject, messageHandler); err != nil {
 			return err
 		}
 	}

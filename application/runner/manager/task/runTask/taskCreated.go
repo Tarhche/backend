@@ -20,14 +20,14 @@ type TaskCreated struct {
 	taskRepository  task.Repository
 	nodeRepository  node.Repository
 	scheduler       task.Scheduler
-	asyncCommandBus domain.PublishSubscriber
+	asyncCommandBus domain.ProduceConsumer
 }
 
 func NewTaskCreated(
 	taskRepository task.Repository,
 	nodeRepository node.Repository,
 	scheduler task.Scheduler,
-	asyncCommandBus domain.PublishSubscriber,
+	asyncCommandBus domain.ProduceConsumer,
 ) *TaskCreated {
 	return &TaskCreated{
 		taskRepository:  taskRepository,
@@ -121,7 +121,7 @@ func (uc *TaskCreated) publishTaskScheduled(t *task.Task, selectedNode *node.Nod
 		return err
 	}
 
-	return uc.asyncCommandBus.Publish(context.Background(), events.TaskScheduledName, payload)
+	return uc.asyncCommandBus.Produce(context.Background(), events.TaskScheduledName, payload)
 }
 
 func convertPortBindings(domainPorts []port.PortMap) []events.PortMap {

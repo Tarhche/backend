@@ -104,9 +104,9 @@ func TestServe(t *testing.T) {
 			"test3": domain.MessageHandlerFunc(func(message []byte) error { return nil }),
 		}
 
-		var subscriber messaging.MockPublishSubscriber
-		subscriber.On("Subscribe", ctx, consumerName, mock.Anything, mock.Anything).Times(len(subscribers)).Return(nil)
-		defer subscriber.AssertExpectations(t)
+		var consumer messaging.MockProduceConsumer
+		consumer.On("Consume", ctx, mock.Anything, mock.Anything).Times(len(subscribers)).Return(nil)
+		defer consumer.AssertExpectations(t)
 
 		var serviceProvider ioc.ServiceProviderMock
 		defer serviceProvider.AssertNotCalled(t, "Register")
@@ -116,8 +116,8 @@ func TestServe(t *testing.T) {
 		command := NewServeCommand(&serviceProvider)
 		command.port = findAvailablePort()
 		command.handler = handler
-		command.subscriber = &subscriber
-		command.subscribers = subscribers
+		command.consumer = &consumer
+		command.consumers = subscribers
 
 		serverStartedListening := make(chan struct{})
 

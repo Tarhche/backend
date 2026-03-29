@@ -29,7 +29,7 @@ func TestRegisterHandler(t *testing.T) {
 
 		var (
 			userRepository   users.MockUsersRepository
-			asyncCommandBus  mock.MockPublishSubscriber
+			asyncCommandBus  mock.MockProduceConsumer
 			requestValidator validator.MockValidator
 			translator       translator.TranslatorMock
 
@@ -51,7 +51,7 @@ func TestRegisterHandler(t *testing.T) {
 		userRepository.On("GetOneByIdentity", r.Identity).Once().Return(user.User{}, nil)
 		defer userRepository.AssertExpectations(t)
 
-		asyncCommandBus.On("Publish", context.Background(), register.SendRegisterationEmailName, commandPayload).Return(nil)
+		asyncCommandBus.On("Produce", context.Background(), register.SendRegisterationEmailName, commandPayload).Return(nil)
 		defer asyncCommandBus.AssertExpectations(t)
 
 		handler := NewRegisterHandler(register.NewUseCase(&userRepository, &asyncCommandBus, &translator, &requestValidator))
@@ -76,7 +76,7 @@ func TestRegisterHandler(t *testing.T) {
 
 		var (
 			userRepository   users.MockUsersRepository
-			asyncCommandBus  mock.MockPublishSubscriber
+			asyncCommandBus  mock.MockProduceConsumer
 			requestValidator validator.MockValidator
 			translator       translator.TranslatorMock
 		)
@@ -95,7 +95,7 @@ func TestRegisterHandler(t *testing.T) {
 
 		translator.AssertNotCalled(t, "Translate")
 		userRepository.AssertNotCalled(t, "GetOneByIdentity")
-		asyncCommandBus.AssertNotCalled(t, "Publish")
+		asyncCommandBus.AssertNotCalled(t, "Produce")
 
 		expected, err := os.ReadFile("testdata/register-response-validation-failed.json")
 		assert.NoError(t, err)
@@ -110,7 +110,7 @@ func TestRegisterHandler(t *testing.T) {
 
 		var (
 			userRepository   users.MockUsersRepository
-			asyncCommandBus  mock.MockPublishSubscriber
+			asyncCommandBus  mock.MockProduceConsumer
 			requestValidator validator.MockValidator
 			translator       translator.TranslatorMock
 
@@ -137,7 +137,7 @@ func TestRegisterHandler(t *testing.T) {
 		handler.ServeHTTP(response, request)
 
 		translator.AssertNotCalled(t, "Translate")
-		asyncCommandBus.AssertNotCalled(t, "Publish")
+		asyncCommandBus.AssertNotCalled(t, "Produce")
 
 		assert.Len(t, response.Body.Bytes(), 0)
 		assert.Equal(t, http.StatusInternalServerError, response.Code)

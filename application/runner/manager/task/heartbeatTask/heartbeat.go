@@ -11,18 +11,18 @@ import (
 
 type Heartbeat struct {
 	taskRepository task.Repository
-	publisher      domain.Publisher
+	producer       domain.Producer
 }
 
 var _ domain.MessageHandler = &Heartbeat{}
 
 func NewHeartbeatHandler(
 	taskRepository task.Repository,
-	publisher domain.Publisher,
+	producer domain.Producer,
 ) *Heartbeat {
 	return &Heartbeat{
 		taskRepository: taskRepository,
-		publisher:      publisher,
+		producer:       producer,
 	}
 }
 
@@ -84,7 +84,7 @@ func (uc *Heartbeat) publishTaskRan(heartbeat *events.Heartbeat) error {
 		return err
 	}
 
-	return uc.publisher.Publish(context.Background(), events.TaskRanName, payload)
+	return uc.producer.Produce(context.Background(), events.TaskRanName, payload)
 }
 
 func (uc *Heartbeat) publishTaskStopped(heartbeat *events.Heartbeat) error {
@@ -99,7 +99,7 @@ func (uc *Heartbeat) publishTaskStopped(heartbeat *events.Heartbeat) error {
 		return err
 	}
 
-	return uc.publisher.Publish(context.Background(), events.TaskStoppedName, payload)
+	return uc.producer.Produce(context.Background(), events.TaskStoppedName, payload)
 }
 
 func (uc *Heartbeat) publishTaskCompleted(heartbeat *events.Heartbeat) error {
@@ -114,7 +114,7 @@ func (uc *Heartbeat) publishTaskCompleted(heartbeat *events.Heartbeat) error {
 		return err
 	}
 
-	return uc.publisher.Publish(context.Background(), events.TaskCompletedName, payload)
+	return uc.producer.Produce(context.Background(), events.TaskCompletedName, payload)
 }
 
 func (uc *Heartbeat) publishTaskFailed(heartbeat *events.Heartbeat) error {
@@ -130,7 +130,7 @@ func (uc *Heartbeat) publishTaskFailed(heartbeat *events.Heartbeat) error {
 		return err
 	}
 
-	return uc.publisher.Publish(context.Background(), events.TaskFailedName, payload)
+	return uc.producer.Produce(context.Background(), events.TaskFailedName, payload)
 }
 
 func (uc *Heartbeat) publishTaskDeleted(heartbeat *events.Heartbeat) error {
@@ -144,5 +144,5 @@ func (uc *Heartbeat) publishTaskDeleted(heartbeat *events.Heartbeat) error {
 		return err
 	}
 
-	return uc.publisher.Publish(context.Background(), events.TaskDeletedName, payload)
+	return uc.producer.Produce(context.Background(), events.TaskDeletedName, payload)
 }

@@ -23,12 +23,14 @@ import (
 	translatorContract "github.com/khanzadimahdi/testproject/domain/translator"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers"
+	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/jetstream/produceConsumer"
 	noderepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/runner/nodes"
 	taskrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/runner/tasks"
 	"github.com/khanzadimahdi/testproject/infrastructure/runner/scheduler/roundrobin"
 	"github.com/khanzadimahdi/testproject/presentation/http/middleware"
 	managerNodeAPI "github.com/khanzadimahdi/testproject/presentation/http/runner/manager/api/node"
 	managerTaskAPI "github.com/khanzadimahdi/testproject/presentation/http/runner/manager/api/task"
+	"github.com/nats-io/nats.go"
 )
 
 const (
@@ -46,6 +48,7 @@ var managerDependencies = []ioc.ServiceProvider{
 
 type managerProvider struct {
 	dependencies []ioc.ServiceProvider
+	terminate    func()
 }
 
 var _ ioc.ServiceProvider = &managerProvider{}
@@ -75,6 +78,24 @@ func (p *managerProvider) Boot(ctx context.Context, iocContainer ioc.ServiceCont
 		}
 	}
 
+	var natsConnection *nats.Conn
+	if err := iocContainer.Resolve(&natsConnection); err != nil {
+		return err
+	}
+
+	pc, err := produceConsumer.NewProduceConsumer(natsConnection, "runner-manager")
+	if err != nil {
+		return err
+	}
+
+	iocContainer.Singleton(func() domain.Producer { return pc })
+	iocContainer.Singleton(func() domain.Consumer { return pc })
+	iocContainer.Singleton(func() domain.ProduceConsumer { return pc })
+
+	p.terminate = func() {
+		defer pc.Wait()
+	}
+
 	return iocContainer.Singleton(managerConsoleCommand, ioc.WithNameBinding(ManagerHandler))
 }
 
@@ -83,12 +104,16 @@ func (p *managerProvider) Terminate() error {
 		defer dependency.Terminate()
 	}
 
+	if p.terminate != nil {
+		p.terminate()
+	}
+
 	return nil
 }
 
 func managerConsoleCommand(
 	database *mongo.Database,
-	jetStreamPublishSubscriber domain.PublishSubscriber,
+	jetStreamProduceConsumer domain.ProduceConsumer,
 	validator domain.Validator,
 	translator translatorContract.Translator,
 	iocContainer ioc.ServiceContainer,
@@ -98,9 +123,9 @@ func managerConsoleCommand(
 	taskRepository := taskrepository.NewRepository(database)
 	nodeRepository := noderepository.NewRepository(database)
 
-	managerRunTaskUseCase := managerRunTask.NewUseCase(taskRepository, jetStreamPublishSubscriber, validator)
-	managerDeleteTaskUseCase := managerDeleteTask.NewUseCase(taskRepository, jetStreamPublishSubscriber, translator)
-	managerStopTaskUseCase := managerStopTask.NewUseCase(taskRepository, jetStreamPublishSubscriber, translator)
+	managerRunTaskUseCase := managerRunTask.NewUseCase(taskRepository, jetStreamProduceConsumer, validator)
+	managerDeleteTaskUseCase := managerDeleteTask.NewUseCase(taskRepository, jetStreamProduceConsumer, translator)
+	managerStopTaskUseCase := managerStopTask.NewUseCase(taskRepository, jetStreamProduceConsumer, translator)
 	managerGetTaskUseCase := managerGetTask.NewUseCase(taskRepository)
 	managerGetTasksUseCase := managerGetTasks.NewUseCase(taskRepository)
 
@@ -122,9 +147,9 @@ func managerConsoleCommand(
 
 	subscribers := map[string]domain.MessageHandler{
 		nodeEvents.HeartbeatName:        managerHeartbeatNode.NewHeartbeatHandler(nodeRepository),
-		taskEvents.HeartbeatName:        managerHeartbeatTask.NewHeartbeatHandler(taskRepository, jetStreamPublishSubscriber),
+		taskEvents.HeartbeatName:        managerHeartbeatTask.NewHeartbeatHandler(taskRepository, jetStreamProduceConsumer),
 		taskEvents.TaskRunRequestedName: managerRunTask.NewTaskRunRequested(managerRunTaskUseCase),
-		taskEvents.TaskCreatedName:      managerRunTask.NewTaskCreated(taskRepository, nodeRepository, taskScheduler, jetStreamPublishSubscriber),
+		taskEvents.TaskCreatedName:      managerRunTask.NewTaskCreated(taskRepository, nodeRepository, taskScheduler, jetStreamProduceConsumer),
 		taskEvents.TaskRanName:          managerRunTask.NewTaskRan(taskRepository),
 		taskEvents.TaskCompletedName:    managerRunTask.NewTaskCompleted(taskRepository),
 		taskEvents.TaskFailedName:       managerRunTask.NewTaskFailed(taskRepository),
