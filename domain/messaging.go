@@ -21,12 +21,25 @@ type Publisher interface {
 }
 
 type Subscriber interface {
-	Subscribe(ctx context.Context, consumerID string, subject string, subscriber MessageHandler) error
+	Subscribe(ctx context.Context, subject string, subscriber MessageHandler) error
 }
 
 type PublishSubscriber interface {
 	Publisher
 	Subscriber
+}
+
+type Producer interface {
+	Produce(ctx context.Context, subject string, payload []byte) error
+}
+
+type Consumer interface {
+	Consume(ctx context.Context, subject string, handler MessageHandler) error
+}
+
+type ProduceConsumer interface {
+	Producer
+	Consumer
 }
 
 // request/reply interfaces

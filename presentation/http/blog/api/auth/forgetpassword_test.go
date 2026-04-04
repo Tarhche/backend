@@ -30,7 +30,7 @@ func TestForgetPasswordHandler(t *testing.T) {
 
 		var (
 			userRepository   users.MockUsersRepository
-			asyncCommandBus  mock.MockPublishSubscriber
+			asyncCommandBus  mock.MockProduceConsumer
 			requestValidator validator.MockValidator
 			translator       translator.TranslatorMock
 
@@ -51,7 +51,7 @@ func TestForgetPasswordHandler(t *testing.T) {
 		userRepository.On("GetOneByIdentity", r.Identity).Once().Return(u, nil)
 		defer userRepository.AssertExpectations(t)
 
-		asyncCommandBus.On("Publish", context.Background(), forgetpassword.SendForgetPasswordEmailName, commandPayload).Return(nil)
+		asyncCommandBus.On("Produce", context.Background(), forgetpassword.SendForgetPasswordEmailName, commandPayload).Return(nil)
 		defer asyncCommandBus.AssertExpectations(t)
 
 		handler := NewForgetPasswordHandler(forgetpassword.NewUseCase(&userRepository, &asyncCommandBus, &translator, &requestValidator))
@@ -76,7 +76,7 @@ func TestForgetPasswordHandler(t *testing.T) {
 
 		var (
 			userRepository   users.MockUsersRepository
-			asyncCommandBus  mock.MockPublishSubscriber
+			asyncCommandBus  mock.MockProduceConsumer
 			requestValidator validator.MockValidator
 			translator       translator.TranslatorMock
 		)
@@ -95,7 +95,7 @@ func TestForgetPasswordHandler(t *testing.T) {
 
 		translator.AssertNotCalled(t, "Translate")
 		userRepository.AssertNotCalled(t, "GetOneByIdentity")
-		asyncCommandBus.AssertNotCalled(t, "Publish")
+		asyncCommandBus.AssertNotCalled(t, "Produce")
 
 		expected, err := os.ReadFile("testdata/forgetpassword-response-validation-fail.json")
 		assert.NoError(t, err)
@@ -110,7 +110,7 @@ func TestForgetPasswordHandler(t *testing.T) {
 
 		var (
 			userRepository   users.MockUsersRepository
-			asyncCommandBus  mock.MockPublishSubscriber
+			asyncCommandBus  mock.MockProduceConsumer
 			requestValidator validator.MockValidator
 			translator       translator.TranslatorMock
 
@@ -137,7 +137,7 @@ func TestForgetPasswordHandler(t *testing.T) {
 
 		handler.ServeHTTP(response, request)
 
-		asyncCommandBus.AssertNotCalled(t, "Publish")
+		asyncCommandBus.AssertNotCalled(t, "Produce")
 
 		expected, err := os.ReadFile("testdata/forgetpassword-response-user-not-found.json")
 		assert.NoError(t, err)
@@ -152,7 +152,7 @@ func TestForgetPasswordHandler(t *testing.T) {
 
 		var (
 			userRepository   users.MockUsersRepository
-			asyncCommandBus  mock.MockPublishSubscriber
+			asyncCommandBus  mock.MockProduceConsumer
 			requestValidator validator.MockValidator
 			translator       translator.TranslatorMock
 
@@ -177,7 +177,7 @@ func TestForgetPasswordHandler(t *testing.T) {
 		handler.ServeHTTP(response, request)
 
 		translator.AssertNotCalled(t, "Translate")
-		asyncCommandBus.AssertNotCalled(t, "Publish")
+		asyncCommandBus.AssertNotCalled(t, "Produce")
 		userRepository.AssertNotCalled(t, "GetOneByIdentity")
 
 		assert.Len(t, response.Body.Bytes(), 0)

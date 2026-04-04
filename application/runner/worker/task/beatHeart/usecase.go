@@ -14,18 +14,18 @@ import (
 
 type UseCase struct {
 	containerManager container.Manager
-	messagePublisher domain.Publisher
+	messageProducer  domain.Producer
 	nodeName         string
 }
 
 func NewUseCase(
 	containerManager container.Manager,
-	messagePublisher domain.Publisher,
+	messageProducer domain.Producer,
 	nodeName string,
 ) *UseCase {
 	return &UseCase{
 		containerManager: containerManager,
-		messagePublisher: messagePublisher,
+		messageProducer:  messageProducer,
 		nodeName:         nodeName,
 	}
 }
@@ -71,7 +71,7 @@ func (uc *UseCase) Execute(ctx context.Context) error {
 			return err
 		}
 
-		if err := uc.messagePublisher.Publish(context.Background(), events.HeartbeatName, payload); err != nil {
+		if err := uc.messageProducer.Produce(context.Background(), events.HeartbeatName, payload); err != nil {
 			return err
 		}
 	}

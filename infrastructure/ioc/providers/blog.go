@@ -79,6 +79,8 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/cache"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc"
 	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
+	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/jetstream/produceConsumer"
+	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/jetstream/requestreply"
 	articlesrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/articles"
 	bookmarksrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/bookmarks"
 	commentsrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/comments"
@@ -113,6 +115,12 @@ import (
 )
 
 const (
+	BlogRequestReplyer        = "blog::request-replyer"
+	BlogRequestReplyerChannel = "blog::request-replyer-channel"
+
+	blogConsumerID               = "blog"
+	blogRequestReplyerConsumerID = "blog-request-replyer"
+
 	BlogSubscribers         = "blog:subscribers"
 	BlogRequestReplyers     = "blog:requestReplyers"
 	BlogHandler             = "blog:handler"
@@ -127,6 +135,7 @@ const (
 
 type blogProvider struct {
 	dependencies []ioc.ServiceProvider
+	terminate    func()
 }
 
 var blogDependencies = []ioc.ServiceProvider{
@@ -170,12 +179,42 @@ func (p *blogProvider) Boot(ctx context.Context, iocContainer ioc.ServiceContain
 		}
 	}
 
+	var natsConnection *nats.Conn
+	if err := iocContainer.Resolve(&natsConnection); err != nil {
+		return err
+	}
+
+	pc, err := produceConsumer.NewProduceConsumer(natsConnection, blogConsumerID)
+	if err != nil {
+		return err
+	}
+
+	reqreplyer, replyChan, err := requestreply.New(natsConnection, blogRequestReplyerConsumerID)
+	if err != nil {
+		return err
+	}
+
+	iocContainer.Singleton(func() domain.Producer { return pc })
+	iocContainer.Singleton(func() domain.Consumer { return pc })
+	iocContainer.Singleton(func() domain.ProduceConsumer { return pc })
+	iocContainer.Singleton(func() domain.Requester { return reqreplyer }, ioc.WithNameBinding(BlogRequestReplyer))
+	iocContainer.Singleton(func() chan *domain.Reply { return replyChan }, ioc.WithNameBinding(BlogRequestReplyerChannel))
+
+	p.terminate = func() {
+		defer pc.Wait()
+		defer reqreplyer.Close()
+	}
+
 	return iocContainer.Singleton(blog, ioc.WithNameBinding(BlogHandler))
 }
 
 func (p *blogProvider) Terminate() error {
 	for _, dependency := range p.dependencies {
 		defer dependency.Terminate()
+	}
+
+	if p.terminate != nil {
+		p.terminate()
 	}
 
 	return nil
@@ -185,7 +224,7 @@ func blog(
 	database *mongo.Database,
 	jwt *jwt.JWT,
 	hasher password.Hasher,
-	asyncPublishSubscriber domain.PublishSubscriber,
+	asyncProduceConsumer domain.ProduceConsumer,
 	translator translatorContract.Translator,
 	validator domain.Validator,
 	fileStorage file.Storage,
@@ -243,9 +282,9 @@ func blog(
 
 	loginUseCase := login.NewUseCase(userRepository, authTokenGenerator, hasher, translator, validator)
 	refreshUseCase := refresh.NewUseCase(userRepository, jwt, authTokenGenerator, translator, validator)
-	forgetPasswordUseCase := forgetpassword.NewUseCase(userRepository, asyncPublishSubscriber, translator, validator)
+	forgetPasswordUseCase := forgetpassword.NewUseCase(userRepository, asyncProduceConsumer, translator, validator)
 	resetPasswordUseCase := resetpassword.NewUseCase(userRepository, hasher, jwt, translator, validator)
-	registerUseCase := register.NewUseCase(userRepository, asyncPublishSubscriber, translator, validator)
+	registerUseCase := register.NewUseCase(userRepository, asyncProduceConsumer, translator, validator)
 	verifyUseCase := verify.NewUseCase(userRepository, rolesRepository, configRepository, hasher, jwt, translator, validator)
 
 	getArticleUsecase := getArticle.NewUseCase(articlesRepository, elementRetriever)
@@ -438,7 +477,7 @@ func blog(
 
 	// request replyers
 	requestReplyers := map[string]domain.Replyer{
-		runCode.RunCodeRequest: runCode.NewRunCodeHandler(validator, asyncPublishSubscriber),
+		runCode.RunCodeRequest: runCode.NewRunCodeHandler(validator, asyncProduceConsumer),
 	}
 
 	if err := iocContainer.Singleton(func() map[string]domain.Replyer {

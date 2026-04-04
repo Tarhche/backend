@@ -11,13 +11,13 @@ import (
 
 type UseCase struct {
 	taskRepository  task.Repository
-	asyncCommandBus domain.Publisher
+	asyncCommandBus domain.Producer
 	validator       domain.Validator
 }
 
 func NewUseCase(
 	taskRepository task.Repository,
-	asyncCommandBus domain.Publisher,
+	asyncCommandBus domain.Producer,
 	validator domain.Validator,
 ) *UseCase {
 	return &UseCase{
@@ -80,5 +80,5 @@ func (uc *UseCase) publishTaskCreated(uuid string) error {
 		return err
 	}
 
-	return uc.asyncCommandBus.Publish(context.Background(), events.TaskCreatedName, payload)
+	return uc.asyncCommandBus.Produce(context.Background(), events.TaskCreatedName, payload)
 }

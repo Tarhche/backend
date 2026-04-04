@@ -43,8 +43,8 @@ func TestBus(t *testing.T) {
 
 	ctx := context.Background()
 
-	b.Subscribe(ctx, "1", "test-subject", domain.MessageHandlerFunc(handler1))
-	b.Subscribe(ctx, "2", "test-subject", domain.MessageHandlerFunc(handler2))
+	b.Subscribe(ctx, "test-subject", domain.MessageHandlerFunc(handler1))
+	b.Subscribe(ctx, "test-subject", domain.MessageHandlerFunc(handler2))
 	b.Publish(ctx, "test-subject", command.Payload)
 
 	if counter1 != 1 {

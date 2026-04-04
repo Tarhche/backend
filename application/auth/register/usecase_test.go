@@ -29,7 +29,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		var (
 			userRepository  users.MockUsersRepository
-			asyncCommandBus mock.MockPublishSubscriber
+			asyncCommandBus mock.MockProduceConsumer
 			validator       validator.MockValidator
 			translator      translator.TranslatorMock
 
@@ -51,7 +51,7 @@ func TestUseCase_Execute(t *testing.T) {
 		userRepository.On("GetOneByIdentity", r.Identity).Once().Return(user.User{}, nil)
 		defer userRepository.AssertExpectations(t)
 
-		asyncCommandBus.On("Publish", context.Background(), SendRegisterationEmailName, payload).Return(nil)
+		asyncCommandBus.On("Produce", context.Background(), SendRegisterationEmailName, payload).Return(nil)
 		defer asyncCommandBus.AssertExpectations(t)
 
 		response, err := NewUseCase(&userRepository, &asyncCommandBus, &translator, &validator).Execute(&r)
@@ -67,7 +67,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		var (
 			userRepository  users.MockUsersRepository
-			asyncCommandBus mock.MockPublishSubscriber
+			asyncCommandBus mock.MockProduceConsumer
 			validator       validator.MockValidator
 			translator      translator.TranslatorMock
 
@@ -88,7 +88,7 @@ func TestUseCase_Execute(t *testing.T) {
 		response, err := NewUseCase(&userRepository, &asyncCommandBus, &translator, &validator).Execute(&r)
 
 		userRepository.AssertNotCalled(t, "GetOneByIdentity")
-		asyncCommandBus.AssertNotCalled(t, "Publish")
+		asyncCommandBus.AssertNotCalled(t, "Produce")
 
 		assert.NoError(t, err)
 		assert.Equal(t, &expectedResponse, response)
@@ -99,7 +99,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		var (
 			userRepository  users.MockUsersRepository
-			asyncCommandBus mock.MockPublishSubscriber
+			asyncCommandBus mock.MockProduceConsumer
 			validator       validator.MockValidator
 			translator      translator.TranslatorMock
 
@@ -133,7 +133,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		response, err := NewUseCase(&userRepository, &asyncCommandBus, &translator, &validator).Execute(&r)
 
-		asyncCommandBus.AssertNotCalled(t, "Publish")
+		asyncCommandBus.AssertNotCalled(t, "Produce")
 
 		assert.NoError(t, err)
 		assert.NotNil(t, response)
@@ -145,7 +145,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		var (
 			userRepository  users.MockUsersRepository
-			asyncCommandBus mock.MockPublishSubscriber
+			asyncCommandBus mock.MockProduceConsumer
 			validator       validator.MockValidator
 			translator      translator.TranslatorMock
 
@@ -169,7 +169,7 @@ func TestUseCase_Execute(t *testing.T) {
 		response, err := NewUseCase(&userRepository, &asyncCommandBus, &translator, &validator).Execute(&r)
 
 		translator.AssertNotCalled(t, "Translate")
-		asyncCommandBus.AssertNotCalled(t, "Publish")
+		asyncCommandBus.AssertNotCalled(t, "Produce")
 
 		assert.ErrorIs(t, err, expectedError)
 		assert.Nil(t, response)
@@ -180,7 +180,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		var (
 			userRepository  users.MockUsersRepository
-			asyncCommandBus mock.MockPublishSubscriber
+			asyncCommandBus mock.MockProduceConsumer
 			validator       validator.MockValidator
 			translator      translator.TranslatorMock
 
@@ -204,7 +204,7 @@ func TestUseCase_Execute(t *testing.T) {
 		userRepository.On("GetOneByIdentity", r.Identity).Once().Return(user.User{}, domain.ErrNotExists)
 		defer userRepository.AssertExpectations(t)
 
-		asyncCommandBus.On("Publish", context.Background(), SendRegisterationEmailName, payload).Return(expectedError)
+		asyncCommandBus.On("Produce", context.Background(), SendRegisterationEmailName, payload).Return(expectedError)
 		defer asyncCommandBus.AssertExpectations(t)
 
 		response, err := NewUseCase(&userRepository, &asyncCommandBus, &translator, &validator).Execute(&r)

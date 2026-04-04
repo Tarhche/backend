@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -17,14 +18,18 @@ import (
 	taskEvents "github.com/khanzadimahdi/testproject/domain/runner/task/events"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers"
+	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/jetstream/produceConsumer"
 	"github.com/khanzadimahdi/testproject/presentation/http/middleware"
 	workerTaskAPI "github.com/khanzadimahdi/testproject/presentation/http/runner/worker/api/task"
+	"github.com/nats-io/nats.go"
 )
 
 const (
 	WorkerSubscribers = "runner:worker:subscribers"
 	WorkerHandler     = "runner:worker:handler"
 	WorkerName        = "runner:worker:name"
+
+	consumerNamePrefix string = "runner-worker-%s"
 )
 
 var workerDependencies = []ioc.ServiceProvider{
@@ -37,6 +42,7 @@ var workerDependencies = []ioc.ServiceProvider{
 
 type workerProvider struct {
 	dependencies []ioc.ServiceProvider
+	terminate    func()
 }
 
 var _ ioc.ServiceProvider = &workerProvider{}
@@ -66,6 +72,31 @@ func (p *workerProvider) Boot(ctx context.Context, iocContainer ioc.ServiceConta
 		}
 	}
 
+	var nodeName string
+	if err := iocContainer.Resolve(&nodeName, ioc.WithNameResolving(WorkerName)); err != nil {
+		return err
+	}
+
+	var natsConnection *nats.Conn
+	if err := iocContainer.Resolve(&natsConnection); err != nil {
+		return err
+	}
+
+	consumerName := fmt.Sprintf(consumerNamePrefix, nodeName)
+
+	pc, err := produceConsumer.NewProduceConsumer(natsConnection, consumerName)
+	if err != nil {
+		return err
+	}
+
+	iocContainer.Singleton(func() domain.Producer { return pc })
+	iocContainer.Singleton(func() domain.Consumer { return pc })
+	iocContainer.Singleton(func() domain.ProduceConsumer { return pc })
+
+	p.terminate = func() {
+		defer pc.Wait()
+	}
+
 	return iocContainer.Singleton(workerConsoleCommand, ioc.WithNameBinding(WorkerHandler))
 }
 
@@ -74,12 +105,16 @@ func (p *workerProvider) Terminate() error {
 		defer dependency.Terminate()
 	}
 
+	if p.terminate != nil {
+		p.terminate()
+	}
+
 	return nil
 }
 
 func workerConsoleCommand(
 	containerManager containerContract.Manager,
-	asyncPublishSubscriber domain.PublishSubscriber,
+	asyncProduceConsumer domain.ProduceConsumer,
 	validator domain.Validator,
 	iocContainer ioc.ServiceContainer,
 ) (http.Handler, error) {
@@ -117,14 +152,14 @@ func workerConsoleCommand(
 
 	// worker heartbeat
 	if err := iocContainer.Singleton(func() *workerHeartbeat.UseCase {
-		return workerHeartbeat.NewUseCase(asyncPublishSubscriber, nodeName)
+		return workerHeartbeat.NewUseCase(asyncProduceConsumer, nodeName)
 	}); err != nil {
 		return nil, err
 	}
 
 	// task heartbeat
 	if err := iocContainer.Singleton(func() *workerTaskHeartbeat.UseCase {
-		return workerTaskHeartbeat.NewUseCase(containerManager, asyncPublishSubscriber, nodeName)
+		return workerTaskHeartbeat.NewUseCase(containerManager, asyncProduceConsumer, nodeName)
 	}); err != nil {
 		return nil, err
 	}

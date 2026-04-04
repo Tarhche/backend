@@ -15,16 +15,15 @@ import (
 )
 
 const (
-	serveName    string = "serve-blog"
-	consumerName string = "blog"
+	serveName string = "serve-blog"
 )
 
 type ServeCommand struct {
 	port            int
 	handler         http.Handler
-	subscriber      domain.Subscriber
+	consumer        domain.Consumer
 	requester       domain.Requester
-	subscribers     map[string]domain.MessageHandler
+	consumers       map[string]domain.MessageHandler
 	requestReplyers map[string]domain.Replyer
 	serviceProvider ioc.ServiceProvider
 }
@@ -74,7 +73,7 @@ func (c *ServeCommand) Boot(ctx context.Context, iocContainer ioc.ServiceContain
 		return err
 	}
 
-	if err := iocContainer.Resolve(&c.subscriber); err != nil {
+	if err := iocContainer.Resolve(&c.consumer); err != nil {
 		return err
 	}
 
@@ -82,7 +81,7 @@ func (c *ServeCommand) Boot(ctx context.Context, iocContainer ioc.ServiceContain
 		return err
 	}
 
-	if err := iocContainer.Resolve(&c.subscribers, ioc.WithNameResolving(providers.BlogSubscribers)); err != nil {
+	if err := iocContainer.Resolve(&c.consumers, ioc.WithNameResolving(providers.BlogSubscribers)); err != nil {
 		return err
 	}
 
@@ -125,7 +124,7 @@ func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 		_ = server.Shutdown(shutdownCtx)
 	}()
 
-	if err := c.subscribeToTopics(ctx); err != nil {
+	if err := c.consumeTopics(ctx); err != nil {
 		log.Println(err)
 		return console.ExitFailure
 	}
@@ -143,9 +142,9 @@ func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 	return console.ExitSuccess
 }
 
-func (c *ServeCommand) subscribeToTopics(ctx context.Context) error {
-	for subject, messageHandler := range c.subscribers {
-		if err := c.subscriber.Subscribe(ctx, consumerName, subject, messageHandler); err != nil {
+func (c *ServeCommand) consumeTopics(ctx context.Context) error {
+	for subject, messageHandler := range c.consumers {
+		if err := c.consumer.Consume(ctx, subject, messageHandler); err != nil {
 			return err
 		}
 	}

@@ -12,13 +12,13 @@ import (
 
 type UseCase struct {
 	taskRepository  task.Repository
-	asyncCommandBus domain.PublishSubscriber
+	asyncCommandBus domain.ProduceConsumer
 	translator      translator.Translator
 }
 
 func NewUseCase(
 	taskRepository task.Repository,
-	asyncCommandBus domain.PublishSubscriber,
+	asyncCommandBus domain.ProduceConsumer,
 	translator translator.Translator,
 ) *UseCase {
 	return &UseCase{
@@ -57,7 +57,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		return nil, err
 	}
 
-	if err = uc.asyncCommandBus.Publish(context.Background(), events.TaskStoppageRequestedName, payload); err != nil {
+	if err = uc.asyncCommandBus.Produce(context.Background(), events.TaskStoppageRequestedName, payload); err != nil {
 		return nil, err
 	}
 

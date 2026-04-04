@@ -16,14 +16,14 @@ const (
 
 type UseCase struct {
 	userRepository  user.Repository
-	asyncCommandBus domain.PublishSubscriber
+	asyncCommandBus domain.ProduceConsumer
 	translator      translator.Translator
 	validator       domain.Validator
 }
 
 func NewUseCase(
 	userRepository user.Repository,
-	asyncCommandBus domain.PublishSubscriber,
+	asyncCommandBus domain.ProduceConsumer,
 	translator translator.Translator,
 	validator domain.Validator,
 ) *UseCase {
@@ -62,7 +62,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		return nil, err
 	}
 
-	err = uc.asyncCommandBus.Publish(context.Background(), SendForgetPasswordEmailName, payload)
+	err = uc.asyncCommandBus.Produce(context.Background(), SendForgetPasswordEmailName, payload)
 
 	return nil, err
 }
