@@ -118,7 +118,7 @@ const (
 	BlogRequestReplyer        = "blog::request-replyer"
 	BlogRequestReplyerChannel = "blog::request-replyer-channel"
 
-	blogConsumerId               = "blog"
+	blogConsumerID               = "blog"
 	blogRequestReplyerConsumerID = "blog-request-replyer"
 
 	BlogSubscribers         = "blog:subscribers"
@@ -184,7 +184,7 @@ func (p *blogProvider) Boot(ctx context.Context, iocContainer ioc.ServiceContain
 		return err
 	}
 
-	pc, err := produceConsumer.NewProduceConsumer(natsConnection, blogConsumerId)
+	pc, err := produceConsumer.NewProduceConsumer(natsConnection, blogConsumerID)
 	if err != nil {
 		return err
 	}
