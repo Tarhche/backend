@@ -1,8 +1,6 @@
 package providers
 
 import (
-	"context"
-
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc"
 )
 
@@ -14,11 +12,11 @@ func NewContainerProvider() *containerProvider {
 	return &containerProvider{}
 }
 
-func (p *containerProvider) Register(ctx context.Context, iocContainer ioc.ServiceContainer) error {
-	return iocContainer.Singleton(func() ioc.ServiceContainer { return iocContainer })
+func (p *containerProvider) Register(app *ioc.Application) error {
+	return app.Container.Singleton(func() ioc.ServiceContainer { return app.Container })
 }
 
-func (p *containerProvider) Boot(ctx context.Context, iocContainer ioc.ServiceContainer) error {
+func (p *containerProvider) Boot(app *ioc.Application) error {
 	return nil
 }
 

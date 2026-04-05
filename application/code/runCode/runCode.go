@@ -23,8 +23,6 @@ type runCode struct {
 	producer  domain.Producer
 }
 
-var _ domain.Replyer = &runCode{}
-
 func NewRunCodeHandler(
 	validator domain.Validator,
 	producer domain.Producer,
@@ -35,16 +33,16 @@ func NewRunCodeHandler(
 	}
 }
 
-func (h *runCode) Reply(r domain.Request, replyChan chan<- *domain.Reply) error {
+func (h *runCode) Handle(data []byte) error {
 	var request Request
 	if err := json.Unmarshal(r.Payload, &request); err != nil {
-		response := Response{
+		response := &Response{
 			ValidationErrors: domain.ValidationErrors{
 				"runner": "request doesn't have a valid format",
 			},
 		}
 
-		payload, err := json.Marshal(&response)
+		payload, err := json.Marshal(response)
 		if err != nil {
 			return err
 		}
@@ -60,11 +58,11 @@ func (h *runCode) Reply(r domain.Request, replyChan chan<- *domain.Reply) error 
 	log.Printf("request: %+v", request)
 
 	if validationErrors := h.validator.Validate(&request); len(validationErrors) > 0 {
-		response := Response{
+		response := &Response{
 			ValidationErrors: validationErrors,
 		}
 
-		payload, err := json.Marshal(&response)
+		payload, err := json.Marshal(response)
 		if err != nil {
 			return err
 		}

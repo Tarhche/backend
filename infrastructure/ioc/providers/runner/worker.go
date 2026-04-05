@@ -1,7 +1,6 @@
 package runner
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -53,11 +52,11 @@ func NewWorkerProvider() *workerProvider {
 	}
 }
 
-func (p *workerProvider) Register(ctx context.Context, iocContainer ioc.ServiceContainer) error {
+func (p *workerProvider) Register(app *ioc.Application) error {
 	log.SetFlags(log.LstdFlags | log.Llongfile)
 
 	for _, dependency := range p.dependencies {
-		if err := dependency.Register(ctx, iocContainer); err != nil {
+		if err := dependency.Register(app); err != nil {
 			return err
 		}
 	}
@@ -65,20 +64,20 @@ func (p *workerProvider) Register(ctx context.Context, iocContainer ioc.ServiceC
 	return nil
 }
 
-func (p *workerProvider) Boot(ctx context.Context, iocContainer ioc.ServiceContainer) error {
+func (p *workerProvider) Boot(app *ioc.Application) error {
 	for _, dependency := range p.dependencies {
-		if err := dependency.Boot(ctx, iocContainer); err != nil {
+		if err := dependency.Boot(app); err != nil {
 			return err
 		}
 	}
 
 	var nodeName string
-	if err := iocContainer.Resolve(&nodeName, ioc.WithNameResolving(WorkerName)); err != nil {
+	if err := app.Container.Resolve(&nodeName, ioc.WithNameResolving(WorkerName)); err != nil {
 		return err
 	}
 
 	var natsConnection *nats.Conn
-	if err := iocContainer.Resolve(&natsConnection); err != nil {
+	if err := app.Container.Resolve(&natsConnection); err != nil {
 		return err
 	}
 
@@ -89,15 +88,15 @@ func (p *workerProvider) Boot(ctx context.Context, iocContainer ioc.ServiceConta
 		return err
 	}
 
-	iocContainer.Singleton(func() domain.Producer { return pc })
-	iocContainer.Singleton(func() domain.Consumer { return pc })
-	iocContainer.Singleton(func() domain.ProduceConsumer { return pc })
+	app.Container.Singleton(func() domain.Producer { return pc })
+	app.Container.Singleton(func() domain.Consumer { return pc })
+	app.Container.Singleton(func() domain.ProduceConsumer { return pc })
 
 	p.terminate = func() {
 		defer pc.Wait()
 	}
 
-	return iocContainer.Singleton(workerConsoleCommand, ioc.WithNameBinding(WorkerHandler))
+	return app.Container.Singleton(workerConsoleCommand, ioc.WithNameBinding(WorkerHandler))
 }
 
 func (p *workerProvider) Terminate() error {

@@ -58,24 +58,24 @@ func (c *ServeCommand) Configure(flagSet *flag.FlagSet) {
 	flagSet.IntVar(&c.port, "port", 80, "specifies which port server should listen to.")
 }
 
-func (c *ServeCommand) Register(ctx context.Context, iocContainer ioc.ServiceContainer) error {
-	return c.serviceProvider.Register(ctx, iocContainer)
+func (c *ServeCommand) Register(app *ioc.Application) error {
+	return c.serviceProvider.Register(app)
 }
 
-func (c *ServeCommand) Boot(ctx context.Context, iocContainer ioc.ServiceContainer) error {
-	if err := c.serviceProvider.Boot(ctx, iocContainer); err != nil {
+func (c *ServeCommand) Boot(app *ioc.Application) error {
+	if err := c.serviceProvider.Boot(app); err != nil {
 		return err
 	}
 
-	if err := iocContainer.Resolve(&c.handler, ioc.WithNameResolving(runner.ManagerHandler)); err != nil {
+	if err := app.Container.Resolve(&c.handler, ioc.WithNameResolving(runner.ManagerHandler)); err != nil {
 		return err
 	}
 
-	if err := iocContainer.Resolve(&c.consumer); err != nil {
+	if err := app.Container.Resolve(&c.consumer); err != nil {
 		return err
 	}
 
-	return iocContainer.Resolve(&c.consumers, ioc.WithNameResolving(runner.ManagerSubscribers))
+	return app.Container.Resolve(&c.consumers, ioc.WithNameResolving(runner.ManagerSubscribers))
 }
 
 func (c *ServeCommand) Terminate() error {

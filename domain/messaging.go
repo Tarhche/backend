@@ -2,8 +2,27 @@ package domain
 
 import (
 	"context"
-	"errors"
 )
+
+// Request reflects a request from the client to the server
+type Request struct {
+	ID      string `json:"id"`
+	Subject string `json:"subject"`
+	Payload []byte `json:"payload"`
+}
+
+// Reply reflects a reply from the server to the client
+type Reply struct {
+	RequestID string `json:"request_id"`
+	Payload   []byte `json:"payload"`
+}
+
+type RequestRegistry interface {
+	Add(clientSideID string) (string, error)
+	GetClientSideID(serverSideID string) (string, error)
+	GetServerSideID(clientSideID string) (string, error)
+	DeleteByServerSideID(serverSideID string) error
+}
 
 // publish/subscribe interfaces
 type MessageHandler interface {
@@ -21,7 +40,7 @@ type Publisher interface {
 }
 
 type Subscriber interface {
-	Subscribe(ctx context.Context, subject string, subscriber MessageHandler) error
+	Subscribe(ctx context.Context, subject string, handler MessageHandler) error
 }
 
 type PublishSubscriber interface {
@@ -40,27 +59,4 @@ type Consumer interface {
 type ProduceConsumer interface {
 	Producer
 	Consumer
-}
-
-// request/reply interfaces
-var ErrReplierNotFound = errors.New("replier not found")
-
-type Replyer interface {
-	Reply(request Request, replyChan chan<- *Reply) error
-}
-
-type Request struct {
-	ID      string
-	Subject string
-	Payload []byte
-}
-
-type Reply struct {
-	RequestID string
-	Payload   []byte
-}
-
-type Requester interface {
-	Request(ctx context.Context, request *Request) error
-	RegisterReplyer(ctx context.Context, subject string, replyer Replyer) error
 }

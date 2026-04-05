@@ -1,7 +1,6 @@
 package providers
 
 import (
-	"context"
 	"log"
 	"net/http"
 	"time"
@@ -19,7 +18,6 @@ import (
 	"github.com/khanzadimahdi/testproject/application/bookmark/bookmarkExists"
 	"github.com/khanzadimahdi/testproject/application/bookmark/updateBookmark"
 	"github.com/khanzadimahdi/testproject/application/code/heartbeat"
-	"github.com/khanzadimahdi/testproject/application/code/runCode"
 	"github.com/khanzadimahdi/testproject/application/comment/createComment"
 	"github.com/khanzadimahdi/testproject/application/comment/getComments"
 	dashboardCreateArticle "github.com/khanzadimahdi/testproject/application/dashboard/article/createArticle"
@@ -79,8 +77,8 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/cache"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc"
 	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
+	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/core/pubsub"
 	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/jetstream/produceConsumer"
-	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/jetstream/requestreply"
 	articlesrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/articles"
 	bookmarksrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/bookmarks"
 	commentsrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/comments"
@@ -90,6 +88,7 @@ import (
 	permissionsrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/permissions"
 	rolesrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/roles"
 	userrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/users"
+	websocketHandler "github.com/khanzadimahdi/testproject/infrastructure/websocket"
 	articleAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/article"
 	authAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/auth"
 	bookmarkAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/bookmark"
@@ -107,7 +106,6 @@ import (
 	fileAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/file"
 	hashtagAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/hashtag"
 	homeapi "github.com/khanzadimahdi/testproject/presentation/http/blog/api/home"
-	"github.com/khanzadimahdi/testproject/presentation/http/blog/api/websocket"
 	"github.com/khanzadimahdi/testproject/presentation/http/blog/openapi"
 	"github.com/khanzadimahdi/testproject/presentation/http/middleware"
 	"github.com/nats-io/nats.go"
@@ -115,14 +113,9 @@ import (
 )
 
 const (
-	BlogRequestReplyer        = "blog::request-replyer"
-	BlogRequestReplyerChannel = "blog::request-replyer-channel"
-
-	blogConsumerID               = "blog"
-	blogRequestReplyerConsumerID = "blog-request-replyer"
+	blogConsumerID = "blog"
 
 	BlogSubscribers         = "blog:subscribers"
-	BlogRequestReplyers     = "blog:requestReplyers"
 	BlogHandler             = "blog:handler"
 	BlogHTTPCacheBucketName = "blog_http_cache"
 
@@ -160,11 +153,11 @@ func NewBlogProvider() *blogProvider {
 	}
 }
 
-func (p *blogProvider) Register(ctx context.Context, iocContainer ioc.ServiceContainer) error {
+func (p *blogProvider) Register(app *ioc.Application) error {
 	log.SetFlags(log.LstdFlags | log.Llongfile)
 
 	for _, dependency := range p.dependencies {
-		if err := dependency.Register(ctx, iocContainer); err != nil {
+		if err := dependency.Register(app); err != nil {
 			return err
 		}
 	}
@@ -172,15 +165,15 @@ func (p *blogProvider) Register(ctx context.Context, iocContainer ioc.ServiceCon
 	return nil
 }
 
-func (p *blogProvider) Boot(ctx context.Context, iocContainer ioc.ServiceContainer) error {
+func (p *blogProvider) Boot(app *ioc.Application) error {
 	for _, dependency := range p.dependencies {
-		if err := dependency.Boot(ctx, iocContainer); err != nil {
+		if err := dependency.Boot(app); err != nil {
 			return err
 		}
 	}
 
 	var natsConnection *nats.Conn
-	if err := iocContainer.Resolve(&natsConnection); err != nil {
+	if err := app.Container.Resolve(&natsConnection); err != nil {
 		return err
 	}
 
@@ -189,23 +182,15 @@ func (p *blogProvider) Boot(ctx context.Context, iocContainer ioc.ServiceContain
 		return err
 	}
 
-	reqreplyer, replyChan, err := requestreply.New(natsConnection, blogRequestReplyerConsumerID)
-	if err != nil {
-		return err
-	}
-
-	iocContainer.Singleton(func() domain.Producer { return pc })
-	iocContainer.Singleton(func() domain.Consumer { return pc })
-	iocContainer.Singleton(func() domain.ProduceConsumer { return pc })
-	iocContainer.Singleton(func() domain.Requester { return reqreplyer }, ioc.WithNameBinding(BlogRequestReplyer))
-	iocContainer.Singleton(func() chan *domain.Reply { return replyChan }, ioc.WithNameBinding(BlogRequestReplyerChannel))
+	app.Container.Singleton(func() domain.Producer { return pc })
+	app.Container.Singleton(func() domain.Consumer { return pc })
+	app.Container.Singleton(func() domain.ProduceConsumer { return pc })
 
 	p.terminate = func() {
 		defer pc.Wait()
-		defer reqreplyer.Close()
 	}
 
-	return iocContainer.Singleton(blog, ioc.WithNameBinding(BlogHandler))
+	return app.Container.Singleton(blog, ioc.WithNameBinding(BlogHandler))
 }
 
 func (p *blogProvider) Terminate() error {
@@ -238,8 +223,8 @@ func blog(
 		return nil, err
 	}
 
-	var jetStreamRequester domain.Requester
-	if err := iocContainer.Resolve(&jetStreamRequester, ioc.WithNameResolving(BlogRequestReplyer)); err != nil {
+	var asyncReplyChan chan *domain.Reply
+	if err := iocContainer.Resolve(&asyncReplyChan, ioc.WithNameResolving("asyncReplyChan")); err != nil {
 		return nil, err
 	}
 
@@ -259,10 +244,7 @@ func blog(
 		return nil, err
 	}
 
-	var asyncReplyChan chan *domain.Reply
-	if err := iocContainer.Resolve(&asyncReplyChan, ioc.WithNameResolving(BlogRequestReplyerChannel)); err != nil {
-		return nil, err
-	}
+	publishSubscriber := pubsub.NewPublishSubscriber(natsConnection)
 
 	articlesRepository := articlesrepository.NewRepository(database)
 	commentsRepository := commentsrepository.NewRepository(database)
@@ -362,14 +344,9 @@ func blog(
 	// ---- public HTTP API ----
 
 	// websocket
-	mux.Handle("GET /api/ws", websocket.NewWsHandler(
-		WebSocketWriteWait,
-		WebSocketMaxMessageSize,
-		WebSocketPongWait,
-		WebSocketPingPeriod,
-		WebSocketCloseGracePeriod,
-		asyncReplyChan,
-		jetStreamRequester,
+	mux.Handle("GET /api/ws", websocketHandler.NewWebsocket(
+		websocketHandler.NewInMemoryRequestRegistry(100),
+		publishSubscriber,
 		translator,
 	))
 
@@ -474,17 +451,6 @@ func blog(
 	mux.Handle("PUT /api/dashboard/config", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardConfigAPI.NewUpdateHandler(dashboardUpdateConfigUsecase), authorizer, permission.ConfigUpdate), jwt, userRepository))
 
 	handler := middleware.NewCORSMiddleware(middleware.NewRateLimitMiddleware(mux, 600, 1*time.Minute))
-
-	// request replyers
-	requestReplyers := map[string]domain.Replyer{
-		runCode.RunCodeRequest: runCode.NewRunCodeHandler(validator, asyncProduceConsumer),
-	}
-
-	if err := iocContainer.Singleton(func() map[string]domain.Replyer {
-		return requestReplyers
-	}, ioc.WithNameBinding(BlogRequestReplyers)); err != nil {
-		return nil, err
-	}
 
 	// subscribers
 	subscribers := map[string]domain.MessageHandler{

@@ -19,8 +19,8 @@ func (m *MockPublishSubscriber) Publish(ctx context.Context, subject string, pay
 	return args.Error(0)
 }
 
-func (m *MockPublishSubscriber) Subscribe(ctx context.Context, subject string, subscriber domain.MessageHandler) error {
-	args := m.Called(ctx, subject, subscriber)
+func (m *MockPublishSubscriber) Subscribe(ctx context.Context, subject string, handler domain.MessageHandler) error {
+	args := m.Called(ctx, subject, handler)
 
 	return args.Error(0)
 }

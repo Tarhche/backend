@@ -1,8 +1,6 @@
 package ioc
 
 import (
-	"context"
-
 	"github.com/stretchr/testify/mock"
 )
 
@@ -12,13 +10,13 @@ type ServiceProviderMock struct {
 
 var _ ServiceProvider = &ServiceProviderMock{}
 
-func (m *ServiceProviderMock) Register(ctx context.Context, container ServiceContainer) error {
-	args := m.Called(ctx, container)
+func (m *ServiceProviderMock) Register(app *Application) error {
+	args := m.Called(app)
 	return args.Error(0)
 }
 
-func (m *ServiceProviderMock) Boot(ctx context.Context, container ServiceContainer) error {
-	args := m.Called(ctx, container)
+func (m *ServiceProviderMock) Boot(app *Application) error {
+	args := m.Called(app)
 	return args.Error(0)
 }
 
