@@ -91,7 +91,7 @@ func TestWebsocket(t *testing.T) {
 		message := domain.Request{
 			ID:      clientSideID,
 			Subject: "test",
-			Payload: []byte("hello, world"),
+			Payload: []byte(`{"message":"hello, world"}`),
 		}
 
 		requestRegistryMock.On("GetServerSideID", clientSideID).Return("", domain.ErrNotExists)
@@ -103,11 +103,10 @@ func TestWebsocket(t *testing.T) {
 		requestProcessed := make(chan struct{}, 1)
 		publishSubscriberMock.On("Subscribe", expectedCtx, "test", &messageHandlerMock).Return(nil)
 		publishSubscriberMock.On("Publish", expectedCtx, "test", mock.MatchedBy(func(payload []byte) bool {
-			var request domain.Request
-			assert.NoError(t, json.Unmarshal(payload, &request))
-			assert.NotEqual(t, message.ID, request.ID)
-			assert.Equal(t, message.Subject, request.Subject)
-			assert.Equal(t, message.Payload, request.Payload)
+			var data map[string]any
+			assert.NoError(t, json.Unmarshal(payload, &data))
+			assert.Equal(t, serverSideID, data["id"])
+			assert.Equal(t, "hello, world", data["message"])
 			return true
 		})).Run(func(args mock.Arguments) {
 			requestProcessed <- struct{}{}
@@ -139,10 +138,8 @@ func TestWebsocket(t *testing.T) {
 			RequestID: serverSideID,
 			Payload:   []byte("hello, this is websocket replying back"),
 		}
-		replyJson, err := json.Marshal(&reply)
-		assert.NoError(t, err)
 
-		assert.NoError(t, ws.Publish(context.Background(), "test", replyJson))
+		assert.NoError(t, ws.Reply(context.Background(), &reply))
 
 		var response domain.Reply
 		assert.NoError(t, client.ReadJSON(&response))
@@ -219,7 +216,7 @@ func TestWebsocket(t *testing.T) {
 		}
 	})
 
-	t.Run("publish returns error when closed", func(t *testing.T) {
+	t.Run("reply returns error when closed", func(t *testing.T) {
 		t.Parallel()
 
 		var (
@@ -232,14 +229,12 @@ func TestWebsocket(t *testing.T) {
 		ws.Close()
 
 		reply := domain.Reply{RequestID: "req-1", Payload: []byte("test")}
-		payload, err := json.Marshal(&reply)
-		assert.NoError(t, err)
 
-		err = ws.Publish(context.Background(), "test", payload)
+		err := ws.Reply(context.Background(), &reply)
 		assert.EqualError(t, err, "connection is closed")
 	})
 
-	t.Run("publish returns error on invalid json", func(t *testing.T) {
+	t.Run("reply returns error when request id is empty", func(t *testing.T) {
 		t.Parallel()
 
 		var (
@@ -251,27 +246,8 @@ func TestWebsocket(t *testing.T) {
 		ws := NewWebsocket(&requestRegistryMock, &publishSubscriberMock, &translatorMock)
 		defer ws.Close()
 
-		err := ws.Publish(context.Background(), "test", []byte("invalid json"))
-		assert.Error(t, err)
-	})
-
-	t.Run("publish returns error when request id is empty", func(t *testing.T) {
-		t.Parallel()
-
-		var (
-			requestRegistryMock   MockRequestRegistry
-			publishSubscriberMock messagingMock.MockPublishSubscriber
-			translatorMock        translator.TranslatorMock
-		)
-
-		ws := NewWebsocket(&requestRegistryMock, &publishSubscriberMock, &translatorMock)
-		defer ws.Close()
-
-		reply := domain.Reply{RequestID: "", Payload: []byte("test")}
-		payload, err := json.Marshal(&reply)
-		assert.NoError(t, err)
-
-		err = ws.Publish(context.Background(), "test", payload)
+		reply := domain.Reply{Payload: []byte("test")}
+		err := ws.Reply(context.Background(), &reply)
 		assert.EqualError(t, err, "request id is required")
 	})
 
@@ -386,13 +362,13 @@ func TestWebsocket(t *testing.T) {
 		defer client.Close()
 
 		// first request succeeds
-		assert.NoError(t, client.WriteJSON(domain.Request{ID: "req-dup", Subject: "test"}))
+		assert.NoError(t, client.WriteJSON(domain.Request{ID: "req-dup", Subject: "test", Payload: []byte(`{}`)}))
 
 		// allow time for the first request to be processed
 		time.Sleep(100 * time.Millisecond)
 
 		// second request with the same ID gets validation error
-		assert.NoError(t, client.WriteJSON(domain.Request{ID: "req-dup", Subject: "test"}))
+		assert.NoError(t, client.WriteJSON(domain.Request{ID: "req-dup", Subject: "test", Payload: []byte(`{}`)}))
 
 		var response domain.Reply
 		assert.NoError(t, client.ReadJSON(&response))
@@ -455,7 +431,7 @@ func TestWebsocket(t *testing.T) {
 		assert.NoError(t, err)
 		defer client.Close()
 
-		assert.NoError(t, client.WriteJSON(domain.Request{ID: "req-1", Subject: "test"}))
+		assert.NoError(t, client.WriteJSON(domain.Request{ID: "req-1", Subject: "test", Payload: []byte(`{}`)}))
 
 		var response domain.Reply
 		assert.NoError(t, client.ReadJSON(&response))

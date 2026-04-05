@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"time"
@@ -18,6 +19,7 @@ import (
 	"github.com/khanzadimahdi/testproject/application/bookmark/bookmarkExists"
 	"github.com/khanzadimahdi/testproject/application/bookmark/updateBookmark"
 	"github.com/khanzadimahdi/testproject/application/code/heartbeat"
+	runCode "github.com/khanzadimahdi/testproject/application/code/runCode"
 	"github.com/khanzadimahdi/testproject/application/comment/createComment"
 	"github.com/khanzadimahdi/testproject/application/comment/getComments"
 	dashboardCreateArticle "github.com/khanzadimahdi/testproject/application/dashboard/article/createArticle"
@@ -223,11 +225,6 @@ func blog(
 		return nil, err
 	}
 
-	var asyncReplyChan chan *domain.Reply
-	if err := iocContainer.Resolve(&asyncReplyChan, ioc.WithNameResolving("asyncReplyChan")); err != nil {
-		return nil, err
-	}
-
 	var natsConnection *nats.Conn
 	if err := iocContainer.Resolve(&natsConnection); err != nil {
 		return nil, err
@@ -245,6 +242,12 @@ func blog(
 	}
 
 	publishSubscriber := pubsub.NewPublishSubscriber(natsConnection)
+
+	ws := websocketHandler.NewWebsocket(
+		websocketHandler.NewInMemoryRequestRegistry(100),
+		publishSubscriber,
+		translator,
+	)
 
 	articlesRepository := articlesrepository.NewRepository(database)
 	commentsRepository := commentsrepository.NewRepository(database)
@@ -277,6 +280,14 @@ func blog(
 	createCommentUseCase := createComment.NewUseCase(commentsRepository, validator)
 	bookmarkExistsUseCase := bookmarkExists.NewUseCase(bookmarkRepository, validator)
 	updateABookmark := updateBookmark.NewUseCase(bookmarkRepository, validator)
+
+	if err := ws.Subscribe(
+		context.Background(),
+		runCode.RunCodeRequest,
+		runCode.NewRunCodeHandler(validator, asyncProduceConsumer, ws),
+	); err != nil {
+		return nil, err
+	}
 
 	// ---- dashboard ----
 	getProfileUseCase := getprofile.NewUseCase(userRepository)
@@ -344,11 +355,7 @@ func blog(
 	// ---- public HTTP API ----
 
 	// websocket
-	mux.Handle("GET /api/ws", websocketHandler.NewWebsocket(
-		websocketHandler.NewInMemoryRequestRegistry(100),
-		publishSubscriber,
-		translator,
-	))
+	mux.Handle("GET /api/ws", ws)
 
 	// home
 	mux.Handle("GET /api/home", middleware.NewCacheMiddleware(homeapi.NewHomeHandler(homeUseCase), httpCache))
@@ -456,7 +463,7 @@ func blog(
 	subscribers := map[string]domain.MessageHandler{
 		forgetpassword.SendForgetPasswordEmailName: forgetpassword.NewSendForgetPasswordEmailHandler(userRepository, authTokenGenerator, mailer, mailFromAddress, renderer),
 		register.SendRegisterationEmailName:        register.NewSendRegisterationEmailHandler(authTokenGenerator, mailer, mailFromAddress, renderer),
-		taskEvents.HeartbeatName:                   heartbeat.NewHeartbeatHandler(asyncReplyChan),
+		taskEvents.HeartbeatName:                   heartbeat.NewHeartbeatHandler(ws),
 	}
 
 	if err := iocContainer.Singleton(func() map[string]domain.MessageHandler {

@@ -17,6 +17,10 @@ type Reply struct {
 	Payload   []byte `json:"payload"`
 }
 
+type Replyer interface {
+	Reply(ctx context.Context, reply *Reply) error
+}
+
 type RequestRegistry interface {
 	Add(clientSideID string) (string, error)
 	GetClientSideID(serverSideID string) (string, error)

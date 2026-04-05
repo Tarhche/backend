@@ -51,8 +51,11 @@ type Websocket struct {
 	subscribedSubjects map[string]struct{}
 }
 
-// make sure the websocket implements the domain.PublishSubscriber interface
-var _ domain.PublishSubscriber = &Websocket{}
+// Ensure Websocket implements the domain.Subscriber interface
+var _ domain.Subscriber = &Websocket{}
+
+// Ensure Websocket implements the domain.Replyer interface
+var _ domain.Replyer = &Websocket{}
 
 // make sure the websocket implements the http.Handler interface
 var _ http.Handler = &Websocket{}
@@ -95,23 +98,16 @@ func NewWebsocket(
 	return ws
 }
 
-func (w *Websocket) Publish(ctx context.Context, subject string, payload []byte) error {
+func (w *Websocket) Reply(ctx context.Context, reply *domain.Reply) error {
 	if w.isClosed() {
 		return errors.New("connection is closed")
-	}
-
-	var reply domain.Reply
-	if err := json.Unmarshal(payload, &reply); err != nil {
-		return err
 	}
 
 	if len(reply.RequestID) == 0 {
 		return errors.New("request id is required")
 	}
 
-	log.Println("publishing request to subject:", subject)
-
-	w.publish.ch <- &reply
+	w.publish.ch <- reply
 
 	return nil
 }
@@ -249,16 +245,14 @@ func (w *Websocket) handleRequests(ctx context.Context, ws *websocket.Conn) {
 			continue
 		}
 
-		// save the client side id before overwriting
+		// to be more informative, keep the client-side request id in a variable.
 		clientSideID := request.ID
-
-		// update the request id to the server side id to prevent request hijacking
-		request.ID = serverSideID
 
 		// delete the request from registry if the client gets disconnected.
 		defer w.requestRegistry.DeleteByServerSideID(serverSideID)
 
-		payload, err := json.Marshal(&request)
+		// inject the server-side request id to the payload.
+		payload, err := injectRequestId(request.Payload, serverSideID)
 		if err != nil {
 			log.Println("error on marshalling request:", err)
 			w.writeErrorResponse(ws, clientSideID, nil, err)
@@ -379,4 +373,16 @@ func (w *Websocket) writeErrorResponse(
 	}
 
 	_ = ws.WriteJSON(reply)
+}
+
+func injectRequestId(payload []byte, requestID string) ([]byte, error) {
+	var request map[string]any
+
+	if err := json.Unmarshal(payload, &request); err != nil {
+		return nil, err
+	}
+
+	request["id"] = requestID
+
+	return json.Marshal(request)
 }

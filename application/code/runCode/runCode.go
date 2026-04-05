@@ -21,21 +21,26 @@ const (
 type runCode struct {
 	validator domain.Validator
 	producer  domain.Producer
+	response  domain.Replyer
 }
+
+var _ domain.MessageHandler = &runCode{}
 
 func NewRunCodeHandler(
 	validator domain.Validator,
 	producer domain.Producer,
+	replyer domain.Replyer,
 ) *runCode {
 	return &runCode{
 		validator: validator,
 		producer:  producer,
+		response:  replyer,
 	}
 }
 
 func (h *runCode) Handle(data []byte) error {
 	var request Request
-	if err := json.Unmarshal(r.Payload, &request); err != nil {
+	if err := json.Unmarshal(data, &request); err != nil {
 		response := &Response{
 			ValidationErrors: domain.ValidationErrors{
 				"runner": "request doesn't have a valid format",
@@ -47,12 +52,10 @@ func (h *runCode) Handle(data []byte) error {
 			return err
 		}
 
-		replyChan <- &domain.Reply{
-			RequestID: r.ID,
+		return h.response.Reply(context.Background(), &domain.Reply{
+			RequestID: request.ID,
 			Payload:   payload,
-		}
-
-		return nil
+		})
 	}
 
 	log.Printf("request: %+v", request)
@@ -69,16 +72,14 @@ func (h *runCode) Handle(data []byte) error {
 
 		log.Printf("validation errors: %+v", validationErrors)
 
-		replyChan <- &domain.Reply{
-			RequestID: r.ID,
+		return h.response.Reply(context.Background(), &domain.Reply{
+			RequestID: request.ID,
 			Payload:   payload,
-		}
-
-		return nil
+		})
 	}
 
 	event := &events.TaskRunRequested{
-		Name:       r.ID,
+		Name:       request.ID,
 		Image:      request.Image(),
 		AutoRemove: true,
 		Command:    []string{"--timeout", "30", request.Code},
