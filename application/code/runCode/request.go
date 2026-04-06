@@ -13,6 +13,7 @@ const (
 )
 
 type Request struct {
+	ID     string `json:"id"`
 	Code   string `json:"code"`
 	Runner string `json:"runner"`
 }

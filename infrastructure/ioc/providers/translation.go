@@ -1,8 +1,6 @@
 package providers
 
 import (
-	"context"
-
 	translatorContract "github.com/khanzadimahdi/testproject/domain/translator"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc"
 	"github.com/khanzadimahdi/testproject/infrastructure/translator"
@@ -17,13 +15,13 @@ func NewTranslationProvider() *translationProvider {
 	return &translationProvider{}
 }
 
-func (p *translationProvider) Register(ctx context.Context, iocContainer ioc.ServiceContainer) error {
+func (p *translationProvider) Register(app *ioc.Application) error {
 	translator := translator.New(translation.Translations, translation.FA)
 
-	return iocContainer.Singleton(func() translatorContract.Translator { return translator })
+	return app.Container.Singleton(func() translatorContract.Translator { return translator })
 }
 
-func (p *translationProvider) Boot(ctx context.Context, iocContainer ioc.ServiceContainer) error {
+func (p *translationProvider) Boot(app *ioc.Application) error {
 	return nil
 }
 

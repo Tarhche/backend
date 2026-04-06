@@ -1,8 +1,6 @@
 package providers
 
 import (
-	"context"
-
 	"github.com/khanzadimahdi/testproject/domain"
 	roleContract "github.com/khanzadimahdi/testproject/domain/role"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc"
@@ -18,19 +16,19 @@ func NewAuthProvider() *authProvider {
 	return &authProvider{}
 }
 
-func (p *authProvider) Register(ctx context.Context, iocContainer ioc.ServiceContainer) error {
-	if err := iocContainer.Singleton(func(database *mongo.Database) roleContract.Repository {
+func (p *authProvider) Register(app *ioc.Application) error {
+	if err := app.Container.Singleton(func(database *mongo.Database) roleContract.Repository {
 		return rolesrepository.NewRepository(database)
 	}); err != nil {
 		return err
 	}
 
-	return iocContainer.Singleton(func(roleRepository roleContract.Repository) domain.Authorizer {
+	return app.Container.Singleton(func(roleRepository roleContract.Repository) domain.Authorizer {
 		return domain.NewRoleBasedAccessControl(roleRepository)
 	})
 }
 
-func (p *authProvider) Boot(ctx context.Context, iocContainer ioc.ServiceContainer) error {
+func (p *authProvider) Boot(app *ioc.Application) error {
 	return nil
 }
 

@@ -22,9 +22,7 @@ type ServeCommand struct {
 	port            int
 	handler         http.Handler
 	consumer        domain.Consumer
-	requester       domain.Requester
 	consumers       map[string]domain.MessageHandler
-	requestReplyers map[string]domain.Replyer
 	serviceProvider ioc.ServiceProvider
 }
 
@@ -60,32 +58,24 @@ func (c *ServeCommand) Configure(flagSet *flag.FlagSet) {
 	flagSet.IntVar(&c.port, "port", 80, "specifies which port server should listen to.")
 }
 
-func (c *ServeCommand) Register(ctx context.Context, iocContainer ioc.ServiceContainer) error {
-	return c.serviceProvider.Register(ctx, iocContainer)
+func (c *ServeCommand) Register(app *ioc.Application) error {
+	return c.serviceProvider.Register(app)
 }
 
-func (c *ServeCommand) Boot(ctx context.Context, iocContainer ioc.ServiceContainer) error {
-	if err := c.serviceProvider.Boot(ctx, iocContainer); err != nil {
+func (c *ServeCommand) Boot(app *ioc.Application) error {
+	if err := c.serviceProvider.Boot(app); err != nil {
 		return err
 	}
 
-	if err := iocContainer.Resolve(&c.handler, ioc.WithNameResolving(providers.BlogHandler)); err != nil {
+	if err := app.Container.Resolve(&c.handler, ioc.WithNameResolving(providers.BlogHandler)); err != nil {
 		return err
 	}
 
-	if err := iocContainer.Resolve(&c.consumer); err != nil {
+	if err := app.Container.Resolve(&c.consumer); err != nil {
 		return err
 	}
 
-	if err := iocContainer.Resolve(&c.requester, ioc.WithNameResolving(providers.BlogRequestReplyer)); err != nil {
-		return err
-	}
-
-	if err := iocContainer.Resolve(&c.consumers, ioc.WithNameResolving(providers.BlogSubscribers)); err != nil {
-		return err
-	}
-
-	if err := iocContainer.Resolve(&c.requestReplyers, ioc.WithNameResolving(providers.BlogRequestReplyers)); err != nil {
+	if err := app.Container.Resolve(&c.consumers, ioc.WithNameResolving(providers.BlogSubscribers)); err != nil {
 		return err
 	}
 
@@ -129,11 +119,6 @@ func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 		return console.ExitFailure
 	}
 
-	if err := c.registerRequestReplyers(ctx); err != nil {
-		log.Println(err)
-		return console.ExitFailure
-	}
-
 	if err := server.ListenAndServe(); err != nil {
 		log.Println(err)
 		return console.ExitFailure
@@ -145,16 +130,6 @@ func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 func (c *ServeCommand) consumeTopics(ctx context.Context) error {
 	for subject, messageHandler := range c.consumers {
 		if err := c.consumer.Consume(ctx, subject, messageHandler); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (c *ServeCommand) registerRequestReplyers(ctx context.Context) error {
-	for subject, replyer := range c.requestReplyers {
-		if err := c.requester.RegisterReplyer(ctx, subject, replyer); err != nil {
 			return err
 		}
 	}

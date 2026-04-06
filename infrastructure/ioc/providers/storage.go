@@ -1,7 +1,6 @@
 package providers
 
 import (
-	"context"
 	"os"
 	"strconv"
 
@@ -18,7 +17,7 @@ func NewStorageProvider() *storageProvider {
 	return &storageProvider{}
 }
 
-func (p *storageProvider) Register(ctx context.Context, iocContainer ioc.ServiceContainer) error {
+func (p *storageProvider) Register(app *ioc.Application) error {
 	useSSL, err := strconv.ParseBool(os.Getenv("S3_USE_SSL"))
 	if err != nil {
 		return err
@@ -35,10 +34,10 @@ func (p *storageProvider) Register(ctx context.Context, iocContainer ioc.Service
 		return err
 	}
 
-	return iocContainer.Singleton(func() file.Storage { return fileStorage })
+	return app.Container.Singleton(func() file.Storage { return fileStorage })
 }
 
-func (p *storageProvider) Boot(ctx context.Context, iocContainer ioc.ServiceContainer) error {
+func (p *storageProvider) Boot(app *ioc.Application) error {
 	return nil
 }
 

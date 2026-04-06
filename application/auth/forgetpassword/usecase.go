@@ -53,7 +53,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		return nil, err
 	}
 
-	command := SendForgetPasswordEmail{
+	command := &SendForgetPasswordEmail{
 		Identity: request.Identity,
 	}
 

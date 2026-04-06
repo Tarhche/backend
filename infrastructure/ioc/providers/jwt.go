@@ -1,7 +1,6 @@
 package providers
 
 import (
-	"context"
 	"os"
 
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/ecdsa"
@@ -17,7 +16,7 @@ func NewJwtProvider() *jwtProvider {
 	return &jwtProvider{}
 }
 
-func (p *jwtProvider) Register(ctx context.Context, iocContainer ioc.ServiceContainer) error {
+func (p *jwtProvider) Register(app *ioc.Application) error {
 	privateKeyData := []byte(os.Getenv("PRIVATE_KEY"))
 	privateKey, err := ecdsa.ParsePrivateKey(privateKeyData)
 	if err != nil {
@@ -26,10 +25,10 @@ func (p *jwtProvider) Register(ctx context.Context, iocContainer ioc.ServiceCont
 
 	j := jwt.NewJWT(privateKey, privateKey.Public())
 
-	return iocContainer.Singleton(func() *jwt.JWT { return j })
+	return app.Container.Singleton(func() *jwt.JWT { return j })
 }
 
-func (p *jwtProvider) Boot(ctx context.Context, iocContainer ioc.ServiceContainer) error {
+func (p *jwtProvider) Boot(app *ioc.Application) error {
 	return nil
 }
 

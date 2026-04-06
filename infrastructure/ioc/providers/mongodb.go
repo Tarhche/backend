@@ -22,7 +22,7 @@ func NewMongodbProvider() *mongodbProvider {
 	return &mongodbProvider{}
 }
 
-func (p *mongodbProvider) Register(ctx context.Context, iocContainer ioc.ServiceContainer) error {
+func (p *mongodbProvider) Register(app *ioc.Application) error {
 	uri := fmt.Sprintf(
 		"%s://%s:%s@%s:%s",
 		os.Getenv("MONGO_SCHEME"),
@@ -40,14 +40,14 @@ func (p *mongodbProvider) Register(ctx context.Context, iocContainer ioc.Service
 		return err
 	}
 
-	if err := mongoClient.Ping(ctx, nil); err != nil {
+	if err := mongoClient.Ping(app.Ctx, nil); err != nil {
 		return err
 	}
 
 	database := mongoClient.Database(os.Getenv("MONGO_DATABASE_NAME"))
 
 	var result bson.M
-	if err := database.RunCommand(ctx, bson.D{{Key: "ping", Value: 1}}).Decode(&result); err != nil {
+	if err := database.RunCommand(app.Ctx, bson.D{{Key: "ping", Value: 1}}).Decode(&result); err != nil {
 		return err
 	}
 
@@ -55,10 +55,10 @@ func (p *mongodbProvider) Register(ctx context.Context, iocContainer ioc.Service
 		mongoClient.Disconnect(context.Background())
 	}
 
-	return iocContainer.Singleton(func() *mongo.Database { return database })
+	return app.Container.Singleton(func() *mongo.Database { return database })
 }
 
-func (p *mongodbProvider) Boot(ctx context.Context, iocContainer ioc.ServiceContainer) error {
+func (p *mongodbProvider) Boot(app *ioc.Application) error {
 	return nil
 }
 

@@ -71,7 +71,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 }
 
 func (uc *UseCase) publishTaskCreated(uuid string) error {
-	event := events.TaskCreated{
+	event := &events.TaskCreated{
 		UUID: uuid,
 	}
 

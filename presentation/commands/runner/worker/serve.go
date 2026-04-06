@@ -67,43 +67,43 @@ func (c *ServeCommand) Configure(flagSet *flag.FlagSet) {
 	flagSet.StringVar(&c.name, "name", "", "specifies the unique name of the worker.")
 }
 
-func (c *ServeCommand) Register(ctx context.Context, iocContainer ioc.ServiceContainer) error {
-	return c.serviceProvider.Register(ctx, iocContainer)
+func (c *ServeCommand) Register(app *ioc.Application) error {
+	return c.serviceProvider.Register(app)
 }
 
-func (c *ServeCommand) Boot(ctx context.Context, iocContainer ioc.ServiceContainer) error {
+func (c *ServeCommand) Boot(app *ioc.Application) error {
 	if len(c.name) == 0 {
 		c.name = os.Getenv("RUNNER_WORKER_NAME")
 	}
 
-	if err := iocContainer.Singleton(
+	if err := app.Container.Singleton(
 		func() string { return c.name },
 		ioc.WithNameBinding(runner.WorkerName),
 	); err != nil {
 		return err
 	}
 
-	if err := c.serviceProvider.Boot(ctx, iocContainer); err != nil {
+	if err := c.serviceProvider.Boot(app); err != nil {
 		return err
 	}
 
-	if err := iocContainer.Resolve(&c.handler, ioc.WithNameResolving(runner.WorkerHandler)); err != nil {
+	if err := app.Container.Resolve(&c.handler, ioc.WithNameResolving(runner.WorkerHandler)); err != nil {
 		return err
 	}
 
-	if err := iocContainer.Resolve(&c.consumer); err != nil {
+	if err := app.Container.Resolve(&c.consumer); err != nil {
 		return err
 	}
 
-	if err := iocContainer.Resolve(&c.taskHeartBeat); err != nil {
+	if err := app.Container.Resolve(&c.taskHeartBeat); err != nil {
 		return err
 	}
 
-	if err := iocContainer.Resolve(&c.workerHeartBeat); err != nil {
+	if err := app.Container.Resolve(&c.workerHeartBeat); err != nil {
 		return err
 	}
 
-	return iocContainer.Resolve(&c.consumers, ioc.WithNameResolving(runner.WorkerSubscribers))
+	return app.Container.Resolve(&c.consumers, ioc.WithNameResolving(runner.WorkerSubscribers))
 }
 
 func (c *ServeCommand) Terminate() error {

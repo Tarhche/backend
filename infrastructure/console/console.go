@@ -92,22 +92,36 @@ func (c *Console) Run(ctx context.Context, arguments []string) ExitStatus {
 	flagSet.SetOutput(c.errWriter)
 	flagSet.Usage = func() { explain(c.errWriter, cmd) }
 
+	inputArgs := arguments[2:]
+	if cmd.Configure(flagSet); flagSet.Parse(inputArgs) != nil {
+		return ExitUsageError
+	}
+
+	flags := make(map[string]string)
+	flagSet.VisitAll(func(f *flag.Flag) {
+		flags[f.Name] = f.Value.String()
+	})
+
+	app := ioc.Application{
+		Name:        c.name,
+		Description: c.description,
+		Arguments:   inputArgs,
+		Flags:       flags,
+		Container:   c.container,
+		Ctx:         ctx,
+	}
+
 	serviceProvider, providesServices := cmd.(ioc.ServiceProvider)
 	if providesServices {
-		if err := serviceProvider.Register(ctx, c.container); err != nil {
+		if err := serviceProvider.Register(&app); err != nil {
 			fmt.Println(err)
 			return ExitFailure
 		}
 		defer serviceProvider.Terminate()
 	}
 
-	cmd.Configure(flagSet)
-	if flagSet.Parse(arguments[2:]) != nil {
-		return ExitUsageError
-	}
-
 	if providesServices {
-		if err := serviceProvider.Boot(ctx, c.container); err != nil {
+		if err := serviceProvider.Boot(&app); err != nil {
 			fmt.Println(err)
 			return ExitFailure
 		}

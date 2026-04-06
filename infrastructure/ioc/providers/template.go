@@ -1,8 +1,6 @@
 package providers
 
 import (
-	"context"
-
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc"
 	"github.com/khanzadimahdi/testproject/infrastructure/template"
@@ -17,13 +15,13 @@ func NewTemplateProvider() *templateProvider {
 	return &templateProvider{}
 }
 
-func (p *templateProvider) Register(ctx context.Context, iocContainer ioc.ServiceContainer) error {
+func (p *templateProvider) Register(app *ioc.Application) error {
 	templateRenderer := template.NewRenderer(view.Files, "tmpl")
 
-	return iocContainer.Singleton(func() domain.Renderer { return templateRenderer })
+	return app.Container.Singleton(func() domain.Renderer { return templateRenderer })
 }
 
-func (p *templateProvider) Boot(ctx context.Context, iocContainer ioc.ServiceContainer) error {
+func (p *templateProvider) Boot(app *ioc.Application) error {
 	return nil
 }
 

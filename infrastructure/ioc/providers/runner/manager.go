@@ -1,7 +1,6 @@
 package runner
 
 import (
-	"context"
 	"log"
 	"net/http"
 	"time"
@@ -59,11 +58,11 @@ func NewManagerProvider() *managerProvider {
 	}
 }
 
-func (p *managerProvider) Register(ctx context.Context, iocContainer ioc.ServiceContainer) error {
+func (p *managerProvider) Register(app *ioc.Application) error {
 	log.SetFlags(log.LstdFlags | log.Llongfile)
 
 	for _, dependency := range p.dependencies {
-		if err := dependency.Register(ctx, iocContainer); err != nil {
+		if err := dependency.Register(app); err != nil {
 			return err
 		}
 	}
@@ -71,15 +70,15 @@ func (p *managerProvider) Register(ctx context.Context, iocContainer ioc.Service
 	return nil
 }
 
-func (p *managerProvider) Boot(ctx context.Context, iocContainer ioc.ServiceContainer) error {
+func (p *managerProvider) Boot(app *ioc.Application) error {
 	for _, dependency := range p.dependencies {
-		if err := dependency.Boot(ctx, iocContainer); err != nil {
+		if err := dependency.Boot(app); err != nil {
 			return err
 		}
 	}
 
 	var natsConnection *nats.Conn
-	if err := iocContainer.Resolve(&natsConnection); err != nil {
+	if err := app.Container.Resolve(&natsConnection); err != nil {
 		return err
 	}
 
@@ -88,15 +87,15 @@ func (p *managerProvider) Boot(ctx context.Context, iocContainer ioc.ServiceCont
 		return err
 	}
 
-	iocContainer.Singleton(func() domain.Producer { return pc })
-	iocContainer.Singleton(func() domain.Consumer { return pc })
-	iocContainer.Singleton(func() domain.ProduceConsumer { return pc })
+	app.Container.Singleton(func() domain.Producer { return pc })
+	app.Container.Singleton(func() domain.Consumer { return pc })
+	app.Container.Singleton(func() domain.ProduceConsumer { return pc })
 
 	p.terminate = func() {
 		defer pc.Wait()
 	}
 
-	return iocContainer.Singleton(managerConsoleCommand, ioc.WithNameBinding(ManagerHandler))
+	return app.Container.Singleton(managerConsoleCommand, ioc.WithNameBinding(ManagerHandler))
 }
 
 func (p *managerProvider) Terminate() error {

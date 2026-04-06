@@ -1,7 +1,6 @@
 package providers
 
 import (
-	"context"
 	"os"
 
 	containerContract "github.com/khanzadimahdi/testproject/domain/runner/container"
@@ -17,7 +16,7 @@ func NewDockerProvider() *dockerProvider {
 	return &dockerProvider{}
 }
 
-func (p *dockerProvider) Register(ctx context.Context, iocContainer ioc.ServiceContainer) error {
+func (p *dockerProvider) Register(app *ioc.Application) error {
 	dockerHost := os.Getenv("DOCKER_HOST")
 
 	containerManager, err := container.NewDockerManager(dockerHost)
@@ -25,10 +24,10 @@ func (p *dockerProvider) Register(ctx context.Context, iocContainer ioc.ServiceC
 		return err
 	}
 
-	return iocContainer.Singleton(func() containerContract.Manager { return containerManager })
+	return app.Container.Singleton(func() containerContract.Manager { return containerManager })
 }
 
-func (p *dockerProvider) Boot(ctx context.Context, iocContainer ioc.ServiceContainer) error {
+func (p *dockerProvider) Boot(app *ioc.Application) error {
 	return nil
 }
 

@@ -1,6 +1,7 @@
 package heartbeat
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 
@@ -10,14 +11,14 @@ import (
 )
 
 type heartbeat struct {
-	asyncReplyChan chan<- *domain.Reply
+	replyer domain.Replyer
 }
 
 var _ domain.MessageHandler = &heartbeat{}
 
-func NewHeartbeatHandler(asyncReplyChan chan<- *domain.Reply) *heartbeat {
+func NewHeartbeatHandler(replyer domain.Replyer) *heartbeat {
 	return &heartbeat{
-		asyncReplyChan: asyncReplyChan,
+		replyer: replyer,
 	}
 }
 
@@ -44,9 +45,11 @@ func (h *heartbeat) Handle(data []byte) error {
 	log.Printf("heartbeat: %+v", heartbeat)
 
 	if task.IsTerminalState(taskState) {
-		h.asyncReplyChan <- &domain.Reply{
+		if err := h.replyer.Reply(context.Background(), &domain.Reply{
 			RequestID: requestID,
 			Payload:   payload,
+		}); err != nil {
+			return err
 		}
 	}
 

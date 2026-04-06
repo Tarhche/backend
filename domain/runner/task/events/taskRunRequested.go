@@ -19,4 +19,5 @@ type TaskRunRequested struct {
 	Mounts         []Mount                `json:"mounts"`
 	ResourceLimits ResourceLimits         `json:"resource_limits"`
 	OwnerUUID      string                 `json:"owner_uuid"`
+	Labels         map[string]string      `json:"labels"`
 }
