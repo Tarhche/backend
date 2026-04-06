@@ -191,11 +191,16 @@ func (p *blogProvider) Boot(app *ioc.Application) error {
 
 	ps := pubsub.NewPublishSubscriber(natsConnection)
 
-	ws := websocketHandler.NewWebsocket(
+	ws, err := websocketHandler.NewWebsocket(
 		websocketHandler.NewInMemoryRequestRegistry(100),
+		pc,
 		ps,
 		translator,
+		"replies",
 	)
+	if err != nil {
+		return err
+	}
 
 	app.Container.Singleton(func() domain.Producer { return pc })
 	app.Container.Singleton(func() domain.Consumer { return pc })
@@ -291,7 +296,7 @@ func blog(
 	bookmarkExistsUseCase := bookmarkExists.NewUseCase(bookmarkRepository, validator)
 	updateABookmark := updateBookmark.NewUseCase(bookmarkRepository, validator)
 
-	if err := ws.Subscribe(
+	if err := ws.Consume(
 		context.Background(),
 		runCode.RunCodeRequest,
 		runCode.NewRunCodeHandler(validator, asyncProduceConsumer, ws),

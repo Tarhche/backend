@@ -18,10 +18,11 @@ import (
 )
 
 const (
-	maxMessageSize = 1024
-	writeWait      = 6 * time.Second
-	pingPeriod     = 2 * time.Second
-	pongWait       = 6 * time.Second
+	maxMessageSize      = 1024
+	writeWait           = 6 * time.Second
+	pingPeriod          = 2 * time.Second
+	pongWait            = 6 * time.Second
+	subscriptionsPrefix = "websocket_"
 )
 
 var IDRegex = regexp.MustCompile("^[a-zA-Z0-9-]+$")
@@ -33,6 +34,7 @@ type failureResponse struct {
 
 type Websocket struct {
 	requestRegistry   domain.RequestRegistry
+	produceConsumer   domain.ProduceConsumer
 	publishSubscriber domain.PublishSubscriber
 	translator        translator.Translator
 
@@ -41,9 +43,10 @@ type Websocket struct {
 	websocketPingPeriod     time.Duration
 	websocketPongWait       time.Duration
 
-	publish struct {
-		ch   chan *domain.Reply
-		done chan struct{}
+	publish *struct {
+		ch      chan *domain.Reply
+		done    chan struct{}
+		subject string
 	}
 
 	lock               sync.RWMutex
@@ -51,8 +54,8 @@ type Websocket struct {
 	subscribedSubjects map[string]struct{}
 }
 
-// Ensure Websocket implements the domain.Subscriber interface
-var _ domain.Subscriber = &Websocket{}
+// Ensure Websocket implements the domain.Consumer interface
+var _ domain.Consumer = &Websocket{}
 
 // Ensure Websocket implements the domain.Replyer interface
 var _ domain.Replyer = &Websocket{}
@@ -65,15 +68,18 @@ var _ io.Closer = &Websocket{}
 
 func NewWebsocket(
 	requestRegistry domain.RequestRegistry,
+	produceConsumer domain.ProduceConsumer,
 	publishSubscriber domain.PublishSubscriber,
 	translator translator.Translator,
-) *Websocket {
+	repliesSubject string,
+) (*Websocket, error) {
 	if pingPeriod >= pongWait {
 		panic("pingPeriod must be less than pongWait")
 	}
 
 	ws := &Websocket{
 		requestRegistry:   requestRegistry,
+		produceConsumer:   produceConsumer,
 		publishSubscriber: publishSubscriber,
 		translator:        translator,
 
@@ -82,38 +88,52 @@ func NewWebsocket(
 		websocketPingPeriod:     pingPeriod,
 		websocketPongWait:       pongWait,
 
-		publish: struct {
-			ch   chan *domain.Reply
-			done chan struct{}
+		publish: &struct {
+			ch      chan *domain.Reply
+			done    chan struct{}
+			subject string
 		}{
-			ch:   make(chan *domain.Reply),
-			done: make(chan struct{}, 1),
+			ch:      make(chan *domain.Reply),
+			done:    make(chan struct{}, 1),
+			subject: subscriptionsPrefix + repliesSubject,
 		},
 		replyChans:         make([]chan *domain.Reply, 0, 10),
 		subscribedSubjects: make(map[string]struct{}),
 	}
 
+	if err := ws.subscribeToReplies(); err != nil {
+		return nil, err
+	}
+
 	go ws.fanoutRepliesToAllResponseChannels()
 
-	return ws
+	return ws, nil
 }
 
 func (w *Websocket) Reply(ctx context.Context, reply *domain.Reply) error {
-	if w.isClosed() {
+	select {
+	case <-w.publish.done:
 		return errors.New("connection is closed")
+	default:
+		if len(reply.RequestID) == 0 {
+			return errors.New("request id is required")
+		}
+
+		// publish message, so all replicas of the application can handle the reply
+		// and send it back to the client if client is connected to any of them.
+		replyPayload, err := json.Marshal(reply)
+		if err != nil {
+			return err
+		}
+
+		return w.publishSubscriber.Publish(ctx, w.publish.subject, replyPayload)
 	}
-
-	if len(reply.RequestID) == 0 {
-		return errors.New("request id is required")
-	}
-
-	w.publish.ch <- reply
-
-	return nil
 }
 
-func (w *Websocket) Subscribe(ctx context.Context, subject string, handler domain.MessageHandler) error {
-	if err := w.publishSubscriber.Subscribe(ctx, subject, handler); err != nil {
+// Consume subscribes to the given subject and handles incoming messages using the provided handler once for each message,
+// even if there are multiple replicas of the application running.
+func (w *Websocket) Consume(ctx context.Context, subject string, handler domain.MessageHandler) error {
+	if err := w.produceConsumer.Consume(ctx, subscriptionsPrefix+subject, handler); err != nil {
 		return err
 	}
 
@@ -161,20 +181,41 @@ func (w *Websocket) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 }
 
 func (w *Websocket) Close() error {
-	if !w.isClosed() {
+	select {
+	case <-w.publish.done:
+	default:
 		close(w.publish.done)
 	}
 
 	return nil
 }
 
-func (w *Websocket) isClosed() bool {
-	select {
-	case <-w.publish.done:
-		return true
-	default:
-		return false
-	}
+func (w *Websocket) subscribeToReplies() error {
+	w.lock.RLock()
+	defer w.lock.RUnlock()
+
+	return w.publishSubscriber.Subscribe(
+		context.Background(),
+		w.publish.subject,
+		domain.MessageHandlerFunc(func(payload []byte) error {
+			var reply domain.Reply
+
+			if err := json.Unmarshal(payload, &reply); err != nil {
+				log.Println("error on unmarshalling reply:", err)
+
+				return nil
+			}
+
+			log.Println(reply)
+
+			select {
+			case w.publish.ch <- &reply:
+			case <-w.publish.done:
+			}
+
+			return nil
+		}),
+	)
 }
 
 func (w *Websocket) heartbeat(ctx context.Context, ws *websocket.Conn) {
@@ -260,7 +301,8 @@ func (w *Websocket) handleRequests(ctx context.Context, ws *websocket.Conn) {
 			continue
 		}
 
-		if err := w.publishSubscriber.Publish(ctx, request.Subject, payload); err != nil {
+		// produce the request, so the message will be handled only once by the consumer a single replica of the application.
+		if err := w.produceConsumer.Produce(ctx, subscriptionsPrefix+request.Subject, payload); err != nil {
 			log.Println("error on publishing request:", err)
 			w.writeErrorResponse(ws, clientSideID, nil, err)
 
