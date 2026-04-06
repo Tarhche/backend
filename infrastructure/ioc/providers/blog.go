@@ -174,6 +174,11 @@ func (p *blogProvider) Boot(app *ioc.Application) error {
 		}
 	}
 
+	var translator translatorContract.Translator
+	if err := app.Container.Resolve(&translator); err != nil {
+		return err
+	}
+
 	var natsConnection *nats.Conn
 	if err := app.Container.Resolve(&natsConnection); err != nil {
 		return err
@@ -184,12 +189,24 @@ func (p *blogProvider) Boot(app *ioc.Application) error {
 		return err
 	}
 
+	ps := pubsub.NewPublishSubscriber(natsConnection)
+
+	ws := websocketHandler.NewWebsocket(
+		websocketHandler.NewInMemoryRequestRegistry(100),
+		ps,
+		translator,
+	)
+
 	app.Container.Singleton(func() domain.Producer { return pc })
 	app.Container.Singleton(func() domain.Consumer { return pc })
 	app.Container.Singleton(func() domain.ProduceConsumer { return pc })
+	app.Container.Singleton(func() domain.PublishSubscriber { return ps })
+	app.Container.Singleton(func() *websocketHandler.Websocket { return ws })
 
 	p.terminate = func() {
 		defer pc.Wait()
+		defer ps.Wait()
+		defer ws.Close()
 	}
 
 	return app.Container.Singleton(blog, ioc.WithNameBinding(BlogHandler))
@@ -218,6 +235,7 @@ func blog(
 	authorizer domain.Authorizer,
 	mailer domain.Mailer,
 	renderer domain.Renderer,
+	ws *websocketHandler.Websocket,
 	iocContainer ioc.ServiceContainer,
 ) (http.Handler, error) {
 	var mailFromAddress string
@@ -240,14 +258,6 @@ func blog(
 	if err != nil {
 		return nil, err
 	}
-
-	publishSubscriber := pubsub.NewPublishSubscriber(natsConnection)
-
-	ws := websocketHandler.NewWebsocket(
-		websocketHandler.NewInMemoryRequestRegistry(100),
-		publishSubscriber,
-		translator,
-	)
 
 	articlesRepository := articlesrepository.NewRepository(database)
 	commentsRepository := commentsrepository.NewRepository(database)
