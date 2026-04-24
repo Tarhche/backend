@@ -250,7 +250,7 @@ func (w *Websocket) writeResponses(ws *websocket.Conn, responseChan <-chan *doma
 		serverSideID := reply.RequestID
 		reply.RequestID = clientSideID
 
-		ws.WriteJSON(reply)
+		_ = ws.WriteJSON(reply)
 
 		// delete the request from registry after sending the response.
 		w.requestRegistry.DeleteByServerSideID(serverSideID)
@@ -354,14 +354,19 @@ func (w *Websocket) fanoutRepliesToAllResponseChannels() {
 
 		w.lock.RLock()
 		for _, replyChan := range w.replyChans {
-			replyChan <- reply
+			select {
+			case replyChan <- reply:
+			default:
+				log.Println("response channel is full due to slow connection, skipping the reply for request id:", reply.RequestID)
+			}
 		}
 		w.lock.RUnlock()
 	}
 }
 
 func (w *Websocket) newResponseChan() (<-chan *domain.Reply, func(w *Websocket)) {
-	replyChan := make(chan *domain.Reply)
+	// buffered channel is used to absorb short bursts (up to 10 parallel comming responses) without blocking.
+	replyChan := make(chan *domain.Reply, 10)
 
 	closeResponseChan := func(w *Websocket) {
 		defer close(replyChan)
