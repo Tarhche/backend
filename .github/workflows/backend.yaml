@@ -8,8 +8,8 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  EC2_SSH_ADDRESS: ${{ secrets.EC2_SSH_ADDRESS }}
-  EC2_SSH_ENDPOINT: ${{ secrets.EC2_SSH_USER }}@${{ secrets.EC2_SSH_ADDRESS }}
+  HETZNER_SSH_ADDRESS: ${{ secrets.HETZNER_SSH_ADDRESS }}
+  HETZNER_SSH_ENDPOINT: ${{ secrets.HETZNER_SSH_USER }}@${{ secrets.HETZNER_SSH_ADDRESS }}
 
 concurrency:
   group: ${{ github.ref }}
@@ -95,6 +95,10 @@ jobs:
 
     if: ${{ format('refs/heads/{0}', github.event.repository.default_branch) == github.ref }}
 
+    permissions:
+      packages: read
+      contents: read
+
     needs:
       - build-and-push-images
 
@@ -105,24 +109,26 @@ jobs:
       - name: Deploy services
         run: |
           # Setup ssh key
-          echo '${{ secrets.EC2_SSH_PRIVATE_KEY }}' > ~/ec2-key.pem
-          chmod 400 ~/ec2-key.pem
+          echo '${{ secrets.HETZNER_SSH_PRIVATE_KEY }}' > ~/hetzner-key.pem
+          chmod 400 ~/hetzner-key.pem
 
           mkdir -p ~/.ssh
-          ssh-keyscan -H $EC2_SSH_ADDRESS >> ~/.ssh/known_hosts
+          ssh-keyscan -H $HETZNER_SSH_ADDRESS >> ~/.ssh/known_hosts
 
           # Ensure remote directory exists
-          ssh -q -i ~/ec2-key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $EC2_SSH_ENDPOINT > /dev/null 2>&1 << 'EOF'
-            sudo mkdir -p /tmp/deployment_backend
-            sudo chown ${{ secrets.EC2_SSH_USER }}:${{ secrets.EC2_SSH_USER }} /tmp/deployment_backend
+          ssh -q -i ~/hetzner-key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $HETZNER_SSH_ENDPOINT << 'EOF'
+            mkdir -p /tmp/deployment_backend
+            chown ${{ secrets.HETZNER_SSH_USER }}:${{ secrets.HETZNER_SSH_USER }} /tmp/deployment_backend
 
           EOF
 
           # Copy files
-          scp -q -i ~/ec2-key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -r ./compose.*.yaml $EC2_SSH_ENDPOINT:/tmp/deployment_backend/ > /dev/null 2>&1
+          scp -q -i ~/hetzner-key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -r ./compose.*.yaml $HETZNER_SSH_ENDPOINT:/tmp/deployment_backend/
 
           # Connect and deploy services
-          ssh -q -i ~/ec2-key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $EC2_SSH_ENDPOINT > /dev/null 2>&1 << 'EOF'
+          ssh -q -i ~/hetzner-key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $HETZNER_SSH_ENDPOINT << 'EOF'
+            echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
             export MONGO_USERNAME='${{ secrets.MONGO_USERNAME }}'
             export MONGO_PASSWORD='${{ secrets.MONGO_PASSWORD }}'
 
@@ -163,5 +169,5 @@ jobs:
             docker compose -f compose.runner-worker-02.yaml --project-name runner-worker-02 up --pull always --detach
             docker compose -f compose.runner-worker-03.yaml --project-name runner-worker-03 up --pull always --detach
 
-            sudo rm -rf /tmp/deployment_backend
+            rm -rf /tmp/deployment_backend
           EOF
