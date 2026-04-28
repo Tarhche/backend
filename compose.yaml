@@ -23,6 +23,7 @@ services:
       - "3000:3000"
     environment:
       INTERNAL_BACKEND_BASE_URL: "http://app"
+      NEXT_PUBLIC_BACKEND_BASE_URL: "http://localhost:8000"
       NEXT_PUBLIC_FILES_PROTOCOL: "http"
       NEXT_PUBLIC_FILES_HOST: "localhost:8000"
 

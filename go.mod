@@ -10,6 +10,7 @@ require (
 	github.com/golobby/container/v3 v3.3.2
 	github.com/google/go-cmp v0.7.0
 	github.com/gorilla/websocket v1.5.3
+	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/minio/minio-go/v7 v7.1.0
 	github.com/nats-io/nats.go v1.51.0
 	github.com/sethvargo/go-limiter v1.1.0

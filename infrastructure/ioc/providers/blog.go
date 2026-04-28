@@ -296,10 +296,17 @@ func blog(
 	bookmarkExistsUseCase := bookmarkExists.NewUseCase(bookmarkRepository, validator)
 	updateABookmark := updateBookmark.NewUseCase(bookmarkRepository, validator)
 
-	if err := ws.Consume(
+	runCodeCache, err := cache.NewInMemoryLRU(cache.DefaultLRUSize)
+	if err != nil {
+		return nil, err
+	}
+
+	cachedWs := websocketHandler.NewCacheDecorator(ws, ws, runCodeCache)
+
+	if err := cachedWs.Consume(
 		context.Background(),
 		runCode.RunCodeRequest,
-		runCode.NewRunCodeHandler(validator, asyncProduceConsumer, ws),
+		runCode.NewRunCodeHandler(validator, asyncProduceConsumer, cachedWs),
 	); err != nil {
 		return nil, err
 	}
@@ -478,7 +485,7 @@ func blog(
 	subscribers := map[string]domain.MessageHandler{
 		forgetpassword.SendForgetPasswordEmailName: forgetpassword.NewSendForgetPasswordEmailHandler(userRepository, authTokenGenerator, mailer, mailFromAddress, renderer),
 		register.SendRegisterationEmailName:        register.NewSendRegisterationEmailHandler(authTokenGenerator, mailer, mailFromAddress, renderer),
-		taskEvents.HeartbeatName:                   heartbeat.NewHeartbeatHandler(ws),
+		taskEvents.HeartbeatName:                   heartbeat.NewHeartbeatHandler(cachedWs),
 	}
 
 	if err := iocContainer.Singleton(func() map[string]domain.MessageHandler {
