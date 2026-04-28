@@ -31,7 +31,6 @@ func (h *Heartbeat) Handle(data []byte) error {
 
 	n.Name = heartbeat.Name
 	n.Role = heartbeat.Role
-	n.Resources = heartbeat.Resources
 	n.Stats = heartbeat.Stats
 	n.LastHeartbeatAt = heartbeat.At
 

@@ -13,15 +13,8 @@ type Response struct {
 
 type NodeResponse struct {
 	Name            string    `json:"name"`
-	Resources       Resource  `json:"resources"`
 	LastHeartbeatAt time.Time `json:"last_heartbeat_at"`
 	CreatedAt       time.Time `json:"created_at"`
-}
-
-type Resource struct {
-	Cpu    float64 `json:"cpu"`
-	Memory uint64  `json:"memory"`
-	Disk   uint64  `json:"disk"`
 }
 
 type Pagination struct {
@@ -34,12 +27,7 @@ func NewResponse(tasks []node.Node, totalPages, currentPage uint) *Response {
 
 	for i, t := range tasks {
 		items[i] = NodeResponse{
-			Name: t.Name,
-			Resources: Resource{
-				Cpu:    t.Resources.Cpu,
-				Memory: t.Resources.Memory,
-				Disk:   t.Resources.Disk,
-			},
+			Name:            t.Name,
 			LastHeartbeatAt: t.LastHeartbeatAt,
 			CreatedAt:       t.CreatedAt,
 		}

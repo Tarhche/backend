@@ -11,25 +11,34 @@ import (
 )
 
 type UseCase struct {
-	producer domain.Producer
-	nodeName string
+	producer    domain.Producer
+	nodeManager node.Manager
+	nodeName    string
 }
 
 func NewUseCase(
 	producer domain.Producer,
+	nodeManager node.Manager,
 	nodeName string,
 ) *UseCase {
 	return &UseCase{
-		producer: producer,
-		nodeName: nodeName,
+		producer:    producer,
+		nodeManager: nodeManager,
+		nodeName:    nodeName,
 	}
 }
 
 func (h *UseCase) Execute() error {
+	nodeStats, err := h.nodeManager.Stats(h.nodeName)
+	if err != nil {
+		return err
+	}
+
 	heartbeat := events.Heartbeat{
-		Name: h.nodeName,
-		Role: node.Worker,
-		At:   time.Now(),
+		Name:  h.nodeName,
+		Role:  node.WorkerRole,
+		Stats: nodeStats,
+		At:    time.Now(),
 	}
 
 	payload, err := json.Marshal(heartbeat)

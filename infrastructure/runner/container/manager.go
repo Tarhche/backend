@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/docker/docker/api/types"
@@ -18,7 +19,6 @@ import (
 
 	"github.com/khanzadimahdi/testproject/domain/runner/container"
 	"github.com/khanzadimahdi/testproject/domain/runner/port"
-	"github.com/khanzadimahdi/testproject/domain/runner/stats"
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
 )
 
@@ -31,6 +31,11 @@ var statusMap = map[string]container.Status{
 	"removing":   container.StatusRemoving,
 	"dead":       container.StatusDead,
 }
+
+const (
+	readOperation  = "read"
+	writeOperation = "write"
+)
 
 type DockerManager struct {
 	client *client.Client
@@ -224,80 +229,64 @@ func (m *DockerManager) Inspect(containerUUID string) (container.Container, erro
 	}, nil
 }
 
-func (m *DockerManager) Stats(containerUUID string) (stats.Stats, error) {
+func (m *DockerManager) Stats(containerUUID string) (container.Stats, error) {
 	dockerStats, err := m.client.ContainerStats(context.Background(), containerUUID, false)
 	if err != nil {
-		return stats.Stats{}, err
+		return container.Stats{}, err
 	}
 	defer dockerStats.Body.Close()
 
 	var v containerTypes.StatsResponse
 	if err := json.NewDecoder(dockerStats.Body).Decode(&v); err != nil {
-		return stats.Stats{}, err
+		return container.Stats{}, err
 	}
 
-	// Calculate CPU usage percentage
-	cpuDelta := v.CPUStats.CPUUsage.TotalUsage - v.PreCPUStats.CPUUsage.TotalUsage
-	systemDelta := v.CPUStats.SystemUsage - v.PreCPUStats.SystemUsage
-
-	var cpuUsage float64
-	if systemDelta > 0 && cpuDelta > 0 {
-		cpuUsage = float64(cpuDelta) / float64(systemDelta) * 100.0
-	}
-
-	// Calculate memory usage
 	memoryUsage := v.MemoryStats.Usage
 	memoryLimit := v.MemoryStats.Limit
-	if memoryLimit == 0 {
-		memoryLimit = memoryUsage
+
+	var memoryPercent float64
+	if memoryLimit > 0 {
+		memoryPercent = float64(memoryUsage) / float64(memoryLimit) * 100.0
 	}
 
-	// Calculate disk usage from blkio stats
-	var diskRead, diskWrite uint64
+	var netIn, netOut uint64
+	for _, n := range v.Networks {
+		netIn += n.RxBytes
+		netOut += n.TxBytes
+	}
+
+	var blockIn, blockOut uint64
 	for _, entry := range v.BlkioStats.IoServiceBytesRecursive {
-		switch entry.Op {
-		case "Read":
-			diskRead = entry.Value
-		case "Write":
-			diskWrite = entry.Value
+		switch strings.ToLower(entry.Op) {
+		case readOperation:
+			blockIn += entry.Value
+		case writeOperation:
+			blockOut += entry.Value
 		}
 	}
 
-	return stats.Stats{
-		Memory: stats.Memory{
-			Total:     memoryLimit,
-			Used:      memoryUsage,
-			Available: memoryLimit - memoryUsage,
-			SwapTotal: 0, // Docker doesn't provide swap information
-			SwapFree:  0, // Docker doesn't provide swap information
-		},
-		Disk: stats.Disk{
-			Total:      diskRead + diskWrite,
-			Used:       diskWrite,
-			Available:  diskRead,
-			FreeInodes: 0, // Docker doesn't provide inode information
-		},
-		CPU: stats.CPU{
-			ID:        "container",
-			User:      v.CPUStats.CPUUsage.UsageInUsermode,
-			Nice:      0, // Docker doesn't provide nice time
-			System:    v.CPUStats.CPUUsage.UsageInKernelmode,
-			Idle:      0, // Docker doesn't provide idle time
-			IOWait:    0, // Docker doesn't provide IOWait time
-			IRQ:       0, // Docker doesn't provide IRQ time
-			SoftIRQ:   0, // Docker doesn't provide SoftIRQ time
-			Steal:     0, // Docker doesn't provide steal time
-			Guest:     0, // Docker doesn't provide guest time
-			GuestNice: 0, // Docker doesn't provide guest nice time
-		},
-		Load: stats.Load{
-			Last1Min:       cpuUsage,
-			Last5Min:       cpuUsage,
-			Last15Min:      cpuUsage,
-			ProcessRunning: uint64(v.PidsStats.Current),
-			ProcessTotal:   uint64(v.PidsStats.Limit),
-			LastPID:        0, // Docker doesn't provide last PID
-		},
+	var cpuPercent float64
+	cpuDelta := v.CPUStats.CPUUsage.TotalUsage - v.PreCPUStats.CPUUsage.TotalUsage
+	systemDelta := v.CPUStats.SystemUsage - v.PreCPUStats.SystemUsage
+	if systemDelta != 0 && cpuDelta != 0 {
+		onlineCPUs := float64(v.CPUStats.OnlineCPUs)
+		if onlineCPUs == 0 {
+			onlineCPUs = float64(len(v.CPUStats.CPUUsage.PercpuUsage))
+		}
+
+		cpuPercent = float64(cpuDelta) / float64(systemDelta) * onlineCPUs * 100.0
+	}
+
+	return container.Stats{
+		PIDs:          v.PidsStats.Current,
+		CPUPercent:    cpuPercent,
+		MemoryUsage:   memoryUsage,
+		MemoryLimit:   memoryLimit,
+		MemoryPercent: memoryPercent,
+		NetworkInput:  netIn,
+		NetworkOutput: netOut,
+		BlockInput:    blockIn,
+		BlockOutput:   blockOut,
 	}, nil
 }
 

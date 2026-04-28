@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/khanzadimahdi/testproject/domain/runner/port"
-	"github.com/khanzadimahdi/testproject/domain/runner/stats"
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
 )
 
@@ -46,7 +45,7 @@ type Manager interface {
 	Stop(containerUUID string) error
 	Delete(containerUUID string) error
 	Inspect(containerUUID string) (Container, error)
-	Stats(containerUUID string) (stats.Stats, error)
+	Stats(containerUUID string) (Stats, error)
 	Logs(containerUUID string, writer io.Writer) error
 	EvaluateTaskState(status Status) task.State
 }

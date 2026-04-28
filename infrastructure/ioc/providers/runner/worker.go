@@ -14,6 +14,7 @@ import (
 	workerstoptask "github.com/khanzadimahdi/testproject/application/runner/worker/task/stopTask"
 	"github.com/khanzadimahdi/testproject/domain"
 	containerContract "github.com/khanzadimahdi/testproject/domain/runner/container"
+	nodeContract "github.com/khanzadimahdi/testproject/domain/runner/node"
 	taskEvents "github.com/khanzadimahdi/testproject/domain/runner/task/events"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers"
@@ -113,6 +114,7 @@ func (p *workerProvider) Terminate() error {
 
 func workerConsoleCommand(
 	containerManager containerContract.Manager,
+	nodeManager nodeContract.Manager,
 	asyncProduceConsumer domain.ProduceConsumer,
 	validator domain.Validator,
 	iocContainer ioc.ServiceContainer,
@@ -151,7 +153,7 @@ func workerConsoleCommand(
 
 	// worker heartbeat
 	if err := iocContainer.Singleton(func() *workerHeartbeat.UseCase {
-		return workerHeartbeat.NewUseCase(asyncProduceConsumer, nodeName)
+		return workerHeartbeat.NewUseCase(asyncProduceConsumer, nodeManager, nodeName)
 	}); err != nil {
 		return nil, err
 	}
