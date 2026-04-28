@@ -15,7 +15,7 @@ const (
 
 	DefaultMaxDiskSize   = 100 << 20 // 100 MB
 	DefaultMaxMemorySize = 200 << 20 // 200 MB
-	DefaultMaxCpu        = 1
+	DefaultMaxCpu        = 2
 )
 
 type runCode struct {
