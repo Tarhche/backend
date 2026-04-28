@@ -117,9 +117,10 @@ import (
 const (
 	blogConsumerID = "blog"
 
-	BlogSubscribers         = "blog:subscribers"
-	BlogHandler             = "blog:handler"
-	BlogHTTPCacheBucketName = "blog_http_cache"
+	BlogSubscribers              = "blog:subscribers"
+	BlogHandler                  = "blog:handler"
+	BlogHTTPCacheBucketName      = "blog_http_cache"
+	BlogWebSocketCacheBucketName = "blog_ws_cache"
 
 	WebSocketWriteWait        = 10 * time.Second
 	WebSocketMaxMessageSize   = 256 * 1024 // 256KB
@@ -296,12 +297,18 @@ func blog(
 	bookmarkExistsUseCase := bookmarkExists.NewUseCase(bookmarkRepository, validator)
 	updateABookmark := updateBookmark.NewUseCase(bookmarkRepository, validator)
 
-	runCodeCache, err := cache.NewInMemoryLRU(cache.DefaultLRUSize)
+	runCodeCache, err := cache.NewNatsCache(
+		natsConnection,
+		BlogWebSocketCacheBucketName,
+		cache.WithTTL(24*time.Hour),
+		cache.WithLimitMarkerTTL(1*time.Second),
+		cache.WithCompression(true),
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	cachedWs := websocketHandler.NewCacheDecorator(ws, ws, runCodeCache)
+	cachedWs := websocketHandler.NewCacheDecorator(ws, ws, runCodeCache, runCode.RunCodeRequest)
 
 	if err := cachedWs.Consume(
 		context.Background(),

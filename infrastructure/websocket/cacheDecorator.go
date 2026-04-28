@@ -12,13 +12,16 @@ import (
 )
 
 // CacheDecorator wraps a Consumer and a Replyer to add transparent
-// payload-based caching. On a cache hit the reply is returned immediately without
-// dispatching a message to the queue. On a cache miss the request is forwarded
-// normally and the reply payload is stored in the cache before being sent.
+// payload-based caching for a specified set of subjects. On a cache hit the
+// reply is returned immediately without dispatching a message to the queue.
+// On a cache miss the request is forwarded normally and the reply payload is
+// stored in the cache before being sent. Subjects not in the allowlist are
+// consumed without caching.
 type CacheDecorator struct {
 	consumer domain.Consumer
 	replyer  domain.Replyer
 	cache    domain.Cache
+	subjects map[string]struct{}
 
 	mu      sync.Mutex
 	pending map[string]string // serverSideRequestID -> checksumKey
@@ -27,16 +30,26 @@ type CacheDecorator struct {
 var _ domain.Consumer = (*CacheDecorator)(nil)
 var _ domain.Replyer = (*CacheDecorator)(nil)
 
-func NewCacheDecorator(consumer domain.Consumer, replyer domain.Replyer, cache domain.Cache) *CacheDecorator {
+func NewCacheDecorator(consumer domain.Consumer, replyer domain.Replyer, cache domain.Cache, subjects ...string) *CacheDecorator {
+	s := make(map[string]struct{}, len(subjects))
+	for _, subject := range subjects {
+		s[subject] = struct{}{}
+	}
+
 	return &CacheDecorator{
 		consumer: consumer,
 		replyer:  replyer,
 		cache:    cache,
+		subjects: s,
 		pending:  make(map[string]string),
 	}
 }
 
 func (d *CacheDecorator) Consume(ctx context.Context, subject string, handler domain.MessageHandler) error {
+	if _, ok := d.subjects[subject]; !ok {
+		return d.consumer.Consume(ctx, subject, handler)
+	}
+
 	return d.consumer.Consume(ctx, subject, domain.MessageHandlerFunc(func(payload []byte) error {
 		checksum, requestID, err := payloadChecksum(payload)
 		if err != nil {

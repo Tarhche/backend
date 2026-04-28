@@ -29,7 +29,6 @@ func (h *heartbeat) Handle(data []byte) error {
 	}
 
 	response := &Response{
-		UUID: heartbeat.UUID,
 		Name: heartbeat.Name,
 		Logs: heartbeat.Logs,
 	}
