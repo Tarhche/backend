@@ -14,19 +14,6 @@ x-app: &app
     - ./:/opt/app
 
 services:
-  frontend:
-    image: ghcr.io/tarhche/frontend:latest
-    restart: unless-stopped
-    depends_on:
-      - app
-    ports:
-      - "3000:3000"
-    environment:
-      INTERNAL_BACKEND_BASE_URL: "http://app"
-      NEXT_PUBLIC_BACKEND_BASE_URL: "http://localhost:8000"
-      NEXT_PUBLIC_FILES_PROTOCOL: "http"
-      NEXT_PUBLIC_FILES_HOST: "localhost:8000"
-
   app:
     <<: *app
     build:
