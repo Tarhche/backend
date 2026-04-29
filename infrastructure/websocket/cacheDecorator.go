@@ -83,7 +83,9 @@ func (d *CacheDecorator) Consume(ctx context.Context, subject string, handler do
 			}
 
 			// if we have cached reply, return it immediately.
+			log.Println("checking cache for checksum key:", checksum, "for request ID:", requestID)
 			if cached, err := d.cache.Get(checksum); err == nil {
+				log.Println("cache hit for checksum key:", checksum, "for request ID:", requestID)
 				return d.parent.Reply(context.Background(), &domain.Reply{
 					RequestID: requestID,
 					Payload:   cached,
@@ -104,7 +106,9 @@ func (d *CacheDecorator) Reply(ctx context.Context, reply *domain.Reply) error {
 	checksum, ok := d.pending[reply.RequestID]
 	d.mu.RUnlock()
 
+	log.Println("pending checksum key:", checksum, "for request ID:", reply.RequestID, "exists:", ok)
 	if ok {
+		log.Println("caching reply with checksum key:", checksum)
 		if err := d.cache.Set(checksum, reply.Payload); err != nil {
 			log.Println("WS cache set error:", err)
 		}
