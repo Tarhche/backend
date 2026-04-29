@@ -1,12 +1,15 @@
 package websocket
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sync"
 	"testing"
 	"time"
 
@@ -16,7 +19,20 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/translator"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"go.uber.org/goleak"
 )
+
+// hijackableResponseWriter lets the gorilla Upgrader hand back a net.Conn that
+// the test fully controls (e.g. one end of a net.Pipe).
+type hijackableResponseWriter struct {
+	*httptest.ResponseRecorder
+	conn net.Conn
+	bw   *bufio.ReadWriter
+}
+
+func (h *hijackableResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	return h.conn, h.bw, nil
+}
 
 func TestWebsocket(t *testing.T) {
 	t.Parallel()
@@ -536,4 +552,276 @@ func TestWebsocket(t *testing.T) {
 		assert.Equal(t, "req-1", response.RequestID)
 		assert.JSONEq(t, `{"error":"error_on_processing_the_request"}`, string(response.Payload))
 	})
+
+	t.Run("write deadline prevents writeResponses from blocking on slow client", func(t *testing.T) {
+		t.Parallel()
+
+		var registry MockRequestRegistry
+		registry.On("GetClientSideID", "server-1").Return("client-1", nil).Once()
+		registry.On("DeleteByServerSideID", "server-1").Return(nil).Once()
+		defer registry.AssertExpectations(t)
+
+		w := &Websocket{
+			requestRegistry:    &registry,
+			websocketWriteWait: 50 * time.Millisecond,
+		}
+
+		// net.Pipe is synchronous and unbuffered: writes block until the
+		// other end reads. We drain the HTTP 101 upgrade response on the
+		// client side, then stop reading so subsequent server writes block.
+		serverConn, clientConn := net.Pipe()
+		defer clientConn.Close()
+		defer serverConn.Close()
+
+		upgradeDrained := make(chan struct{})
+		go func() {
+			defer close(upgradeDrained)
+			buf := make([]byte, 4096)
+			_, _ = clientConn.Read(buf)
+		}()
+
+		rec := &hijackableResponseWriter{
+			ResponseRecorder: httptest.NewRecorder(),
+			conn:             serverConn,
+			bw: bufio.NewReadWriter(
+				bufio.NewReader(serverConn),
+				bufio.NewWriter(serverConn),
+			),
+		}
+
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.Header.Set("Connection", "Upgrade")
+		req.Header.Set("Upgrade", "websocket")
+		req.Header.Set("Sec-WebSocket-Version", "13")
+		req.Header.Set("Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ==")
+
+		upgrader := websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }}
+		wsConn, err := upgrader.Upgrade(rec, req, nil)
+		assert.NoError(t, err)
+		<-upgradeDrained
+
+		responseChan := make(chan *domain.Reply, 1)
+		responseChan <- &domain.Reply{RequestID: "server-1", Payload: []byte("payload")}
+		close(responseChan)
+
+		done := make(chan struct{})
+		go func() {
+			w.writeResponses(wsConn, responseChan)
+			close(done)
+		}()
+
+		select {
+		case <-done:
+			// PASS: the write deadline expired, the WriteJSON failed, and the
+			// loop drained responseChan and returned.
+		case <-time.After(time.Second):
+			t.Fatal("writeResponses blocked indefinitely; the write deadline did not fire")
+		}
+	})
+
+	t.Run("registry is cleaned up when client disconnects before reply arrives", func(t *testing.T) {
+		t.Parallel()
+
+		var (
+			requestRegistryMock   MockRequestRegistry
+			produceConsumerMock   messagingMock.MockProduceConsumer
+			publishSubscriberMock messagingMock.MockPublishSubscriber
+			translatorMock        translator.TranslatorMock
+			messageHandlerMock    messagingMock.MockMessageHandler
+		)
+
+		publishSubscriberMock.On("Subscribe", mock.Anything, "websocket_replies", mock.Anything).Return(nil)
+		produceConsumerMock.On("Consume", mock.Anything, "websocket_test", &messageHandlerMock).Return(nil)
+
+		requestProcessed := make(chan struct{}, 1)
+		produceConsumerMock.On("Produce", mock.Anything, "websocket_test", mock.Anything).
+			Run(func(args mock.Arguments) { requestProcessed <- struct{}{} }).
+			Return(nil)
+
+		requestRegistryMock.On("GetServerSideID", "req-orphan").Return("", domain.ErrNotExists)
+		requestRegistryMock.On("Add", "req-orphan").Return("server-orphan", nil)
+
+		swept := make(chan struct{}, 1)
+		requestRegistryMock.On("DeleteByServerSideID", "server-orphan").
+			Run(func(args mock.Arguments) { swept <- struct{}{} }).
+			Return(nil).Once()
+
+		ws, err := NewWebsocket(&requestRegistryMock, &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies")
+		assert.NoError(t, err)
+		defer ws.Close()
+
+		ws.Consume(context.Background(), "test", &messageHandlerMock)
+
+		server := httptest.NewServer(ws)
+		defer server.Close()
+
+		u, err := url.Parse(server.URL)
+		assert.NoError(t, err)
+		u.Scheme = "ws"
+
+		client, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+		assert.NoError(t, err)
+
+		assert.NoError(t, client.WriteJSON(domain.Request{ID: "req-orphan", Subject: "test", Payload: []byte(`{}`)}))
+
+		// wait for the server to handle the request before disconnecting
+		<-requestProcessed
+
+		// disconnect WITHOUT waiting for a reply — the registry entry is now orphaned
+		client.Close()
+
+		select {
+		case <-swept:
+		case <-time.After(2 * time.Second):
+			t.Fatal("DeleteByServerSideID was not called after client disconnect; sweep did not run")
+		}
+
+		requestRegistryMock.AssertExpectations(t)
+		produceConsumerMock.AssertExpectations(t)
+		publishSubscriberMock.AssertExpectations(t)
+	})
+
+	t.Run("retries reply when GetClientSideID returns transient error", func(t *testing.T) {
+		t.Parallel()
+
+		var (
+			requestRegistryMock   MockRequestRegistry
+			produceConsumerMock   messagingMock.MockProduceConsumer
+			publishSubscriberMock messagingMock.MockPublishSubscriber
+			translatorMock        translator.TranslatorMock
+		)
+
+		transientErr := errors.New("transient registry error")
+		requestRegistryMock.On("GetClientSideID", "server-1").Return("", transientErr).Once()
+		requestRegistryMock.On("GetClientSideID", "server-1").Return("client-1", nil).Once()
+		requestRegistryMock.On("DeleteByServerSideID", "server-1").Return(nil).Once()
+		defer requestRegistryMock.AssertExpectations(t)
+
+		var replyHandler domain.MessageHandler
+		publishSubscriberMock.On("Subscribe", mock.Anything, "websocket_replies", mock.Anything).
+			Run(func(args mock.Arguments) {
+				replyHandler = args.Get(2).(domain.MessageHandler)
+			}).Return(nil)
+		publishSubscriberMock.On("Publish", mock.Anything, "websocket_replies", mock.Anything).
+			Run(func(args mock.Arguments) {
+				payload := args.Get(2).([]byte)
+				replyHandler.Handle(payload)
+			}).Return(nil)
+
+		ws, err := NewWebsocket(&requestRegistryMock, &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies")
+		assert.NoError(t, err)
+		defer ws.Close()
+
+		server := httptest.NewServer(ws)
+		defer server.Close()
+
+		u, err := url.Parse(server.URL)
+		assert.NoError(t, err)
+		u.Scheme = "ws"
+
+		client, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+		assert.NoError(t, err)
+		defer client.Close()
+
+		// give the server time to register this connection's responseChan
+		// with the fanout before publishing the reply.
+		time.Sleep(50 * time.Millisecond)
+
+		assert.NoError(t, ws.Reply(context.Background(), &domain.Reply{
+			RequestID: "server-1",
+			Payload:   []byte("retry-success"),
+		}))
+
+		var response domain.Reply
+		assert.NoError(t, client.ReadJSON(&response))
+		assert.Equal(t, "client-1", response.RequestID)
+		assert.Equal(t, []byte("retry-success"), response.Payload)
+	})
+
+	t.Run("concurrent connect and disconnect does not corrupt replyChans", func(t *testing.T) {
+		t.Parallel()
+
+		var (
+			requestRegistryMock   MockRequestRegistry
+			produceConsumerMock   messagingMock.MockProduceConsumer
+			publishSubscriberMock messagingMock.MockPublishSubscriber
+			translatorMock        translator.TranslatorMock
+		)
+
+		publishSubscriberMock.On("Subscribe", mock.Anything, "websocket_replies", mock.Anything).Return(nil)
+
+		ws, err := NewWebsocket(&requestRegistryMock, &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies")
+		assert.NoError(t, err)
+		defer ws.Close()
+
+		server := httptest.NewServer(ws)
+		defer server.Close()
+
+		u, err := url.Parse(server.URL)
+		assert.NoError(t, err)
+		u.Scheme = "ws"
+
+		const N = 30
+		var wg sync.WaitGroup
+		for i := 0; i < N; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				client, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+				if err != nil {
+					t.Errorf("dial: %v", err)
+					return
+				}
+				client.Close()
+			}()
+		}
+		wg.Wait()
+
+		// the server cleans up replyChans asynchronously after each disconnect;
+		// poll until the slice drains or the deadline expires.
+		deadline := time.Now().Add(2 * time.Second)
+		for time.Now().Before(deadline) {
+			ws.lock.RLock()
+			leftover := len(ws.replyChans)
+			ws.lock.RUnlock()
+			if leftover == 0 {
+				return
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+
+		ws.lock.RLock()
+		leftover := len(ws.replyChans)
+		ws.lock.RUnlock()
+		t.Fatalf("replyChans not cleaned up after all clients disconnected: %d entries remain", leftover)
+	})
+}
+
+func TestNoGoroutineLeak(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
+	var (
+		requestRegistryMock   MockRequestRegistry
+		produceConsumerMock   messagingMock.MockProduceConsumer
+		publishSubscriberMock messagingMock.MockPublishSubscriber
+		translatorMock        translator.TranslatorMock
+	)
+
+	publishSubscriberMock.On("Subscribe", mock.Anything, "websocket_replies", mock.Anything).Return(nil)
+
+	ws, err := NewWebsocket(&requestRegistryMock, &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies")
+	assert.NoError(t, err)
+
+	server := httptest.NewServer(ws)
+
+	u, err := url.Parse(server.URL)
+	assert.NoError(t, err)
+	u.Scheme = "ws"
+
+	client, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	assert.NoError(t, err)
+
+	client.Close()
+	server.Close()
+	assert.NoError(t, ws.Close())
 }

@@ -18,6 +18,7 @@ require (
 	github.com/swaggo/http-swagger/v2 v2.0.2
 	github.com/swaggo/swag v1.16.6
 	go.mongodb.org/mongo-driver/v2 v2.6.0
+	go.uber.org/goleak v1.3.0
 	golang.org/x/crypto v0.50.0
 )
 

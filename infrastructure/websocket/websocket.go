@@ -242,7 +242,11 @@ func (w *Websocket) writeResponses(ws *websocket.Conn, responseChan <-chan *doma
 			continue
 		} else if err != nil {
 			log.Println("error on getting client side request id:", err)
-			w.publish.ch <- reply // retry the reply
+			select {
+			case w.publish.ch <- reply: // retry the reply
+			case <-w.publish.done:
+				return
+			}
 			continue
 		}
 
@@ -250,6 +254,7 @@ func (w *Websocket) writeResponses(ws *websocket.Conn, responseChan <-chan *doma
 		serverSideID := reply.RequestID
 		reply.RequestID = clientSideID
 
+		_ = ws.SetWriteDeadline(time.Now().Add(w.websocketWriteWait))
 		_ = ws.WriteJSON(reply)
 
 		// delete the request from registry after sending the response.
@@ -258,6 +263,14 @@ func (w *Websocket) writeResponses(ws *websocket.Conn, responseChan <-chan *doma
 }
 
 func (w *Websocket) handleRequests(ctx context.Context, ws *websocket.Conn) {
+	// track in-flight server-side IDs and sweep them on disconnect
+	var pendingServerSideIDs []string
+	defer func() {
+		for _, id := range pendingServerSideIDs {
+			w.requestRegistry.DeleteByServerSideID(id)
+		}
+	}()
+
 	for ctx.Err() == nil {
 		var request domain.Request
 
@@ -289,8 +302,7 @@ func (w *Websocket) handleRequests(ctx context.Context, ws *websocket.Conn) {
 		// to be more informative, keep the client-side request id in a variable.
 		clientSideID := request.ID
 
-		// delete the request from registry if the client gets disconnected.
-		defer w.requestRegistry.DeleteByServerSideID(serverSideID)
+		pendingServerSideIDs = append(pendingServerSideIDs, serverSideID)
 
 		// inject the server-side request id to the payload.
 		payload, err := injectRequestId(request.Payload, serverSideID)
@@ -349,18 +361,27 @@ func (w *Websocket) validate(request *domain.Request) (domain.ValidationErrors, 
 }
 
 func (w *Websocket) fanoutRepliesToAllResponseChannels() {
-	for reply := range w.publish.ch {
-		log.Println("publishing reply to all response channels", reply.RequestID)
-
-		w.lock.RLock()
-		for _, replyChan := range w.replyChans {
-			select {
-			case replyChan <- reply:
-			default:
-				log.Println("response channel is full due to slow connection, skipping the reply for request id:", reply.RequestID)
+	for {
+		select {
+		case <-w.publish.done:
+			return
+		case reply, ok := <-w.publish.ch:
+			if !ok {
+				return
 			}
+
+			log.Println("publishing reply to all response channels", reply.RequestID)
+
+			w.lock.RLock()
+			for _, replyChan := range w.replyChans {
+				select {
+				case replyChan <- reply:
+				default:
+					log.Println("response channel is full due to slow connection, skipping the reply for request id:", reply.RequestID)
+				}
+			}
+			w.lock.RUnlock()
 		}
-		w.lock.RUnlock()
 	}
 }
 
@@ -371,16 +392,13 @@ func (w *Websocket) newResponseChan() (<-chan *domain.Reply, func(w *Websocket))
 	closeResponseChan := func(w *Websocket) {
 		defer close(replyChan)
 
-		w.lock.RLock()
-		index := slices.Index(w.replyChans, replyChan)
-		w.lock.RUnlock()
+		w.lock.Lock()
+		defer w.lock.Unlock()
 
+		index := slices.Index(w.replyChans, replyChan)
 		if index == -1 {
 			return
 		}
-
-		w.lock.Lock()
-		defer w.lock.Unlock()
 		w.replyChans = slices.Delete(w.replyChans, index, index+1)
 	}
 
@@ -419,6 +437,7 @@ func (w *Websocket) writeErrorResponse(
 		Payload:   payload,
 	}
 
+	_ = ws.SetWriteDeadline(time.Now().Add(w.websocketWriteWait))
 	_ = ws.WriteJSON(reply)
 }
 
