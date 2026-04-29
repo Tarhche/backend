@@ -6,10 +6,21 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"io"
+	"log"
+	"net/http"
 	"sync"
 
 	"github.com/khanzadimahdi/testproject/domain"
 )
+
+// the interface that should be implemented by a decorator
+type ws interface {
+	domain.Consumer
+	domain.Replyer
+	http.Handler
+	io.Closer
+}
 
 // CacheDecorator wraps a Consumer and a Replyer to add transparent
 // payload-based caching for a specified set of subjects. On a cache hit the
@@ -18,27 +29,39 @@ import (
 // stored in the cache before being sent. Subjects not in the allowlist are
 // consumed without caching.
 type CacheDecorator struct {
-	consumer domain.Consumer
-	replyer  domain.Replyer
+	parent   ws
 	cache    domain.Cache
 	subjects map[string]struct{}
 
-	mu      sync.Mutex
+	mu sync.RWMutex
+
+	// We need this to associate the reply with the original request's checksum key when it replies back.
 	pending map[string]string // serverSideRequestID -> checksumKey
 }
 
-var _ domain.Consumer = (*CacheDecorator)(nil)
-var _ domain.Replyer = (*CacheDecorator)(nil)
+// Ensure CacheDecorator implements the ws interface
+var _ ws = &CacheDecorator{}
 
-func NewCacheDecorator(consumer domain.Consumer, replyer domain.Replyer, cache domain.Cache, subjects ...string) *CacheDecorator {
+// Ensure Websocket implements the domain.Consumer interface
+var _ domain.Consumer = &Websocket{}
+
+// Ensure Websocket implements the domain.Replyer interface
+var _ domain.Replyer = &Websocket{}
+
+// make sure the websocket implements the http.Handler interface
+var _ http.Handler = &Websocket{}
+
+// make sure the websocket implements the io.Closer interface
+var _ io.Closer = &Websocket{}
+
+func NewCacheDecorator(ws ws, cache domain.Cache, subjects ...string) *CacheDecorator {
 	s := make(map[string]struct{}, len(subjects))
 	for _, subject := range subjects {
 		s[subject] = struct{}{}
 	}
 
 	return &CacheDecorator{
-		consumer: consumer,
-		replyer:  replyer,
+		parent:   ws,
 		cache:    cache,
 		subjects: s,
 		pending:  make(map[string]string),
@@ -47,47 +70,63 @@ func NewCacheDecorator(consumer domain.Consumer, replyer domain.Replyer, cache d
 
 func (d *CacheDecorator) Consume(ctx context.Context, subject string, handler domain.MessageHandler) error {
 	if _, ok := d.subjects[subject]; !ok {
-		return d.consumer.Consume(ctx, subject, handler)
+		return d.parent.Consume(ctx, subject, handler)
 	}
 
-	return d.consumer.Consume(ctx, subject, domain.MessageHandlerFunc(func(payload []byte) error {
-		checksum, requestID, err := payloadChecksum(payload)
-		if err != nil {
+	return d.parent.Consume(
+		ctx,
+		subject,
+		domain.MessageHandlerFunc(func(payload []byte) error {
+			checksum, requestID, err := payloadChecksum(payload)
+			if err != nil {
+				return handler.Handle(payload)
+			}
+
+			// if we have cached reply, return it immediately.
+			if cached, err := d.cache.Get(checksum); err == nil {
+				return d.parent.Reply(context.Background(), &domain.Reply{
+					RequestID: requestID,
+					Payload:   cached,
+				})
+			}
+
+			d.mu.Lock()
+			d.pending[requestID] = checksum
+			d.mu.Unlock()
+
 			return handler.Handle(payload)
-		}
-
-		if cached, err := d.cache.Get(checksum); err == nil {
-			return d.replyer.Reply(context.Background(), &domain.Reply{
-				RequestID: requestID,
-				Payload:   cached,
-			})
-		}
-
-		d.mu.Lock()
-		d.pending[requestID] = checksum
-		d.mu.Unlock()
-
-		return handler.Handle(payload)
-	}))
+		}),
+	)
 }
 
 func (d *CacheDecorator) Reply(ctx context.Context, reply *domain.Reply) error {
-	d.mu.Lock()
+	d.mu.RLock()
 	checksum, ok := d.pending[reply.RequestID]
+	d.mu.RUnlock()
+
 	if ok {
+		if err := d.cache.Set(checksum, reply.Payload); err != nil {
+			log.Println("WS cache set error:", err)
+		}
+
+		d.mu.Lock()
 		delete(d.pending, reply.RequestID)
-	}
-	d.mu.Unlock()
-
-	if ok {
-		_ = d.cache.Set(checksum, reply.Payload)
+		d.mu.Unlock()
 	}
 
-	return d.replyer.Reply(ctx, reply)
+	return d.parent.Reply(ctx, reply)
+}
+
+func (d *CacheDecorator) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	d.parent.ServeHTTP(w, r)
+}
+
+func (d *CacheDecorator) Close() error {
+	return d.parent.Close()
 }
 
 // payloadChecksum strips the injected server-side "id" field from the JSON payload
-// and returns a SHA-256 hex digest of the remaining fields as a stable cache key,
+// and returns a hex digest of the remaining fields as a stable cache key,
 // along with the request ID itself.
 func payloadChecksum(payload []byte) (checksum, requestID string, err error) {
 	var m map[string]any

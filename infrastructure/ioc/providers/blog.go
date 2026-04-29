@@ -19,7 +19,7 @@ import (
 	"github.com/khanzadimahdi/testproject/application/bookmark/bookmarkExists"
 	"github.com/khanzadimahdi/testproject/application/bookmark/updateBookmark"
 	"github.com/khanzadimahdi/testproject/application/code/heartbeat"
-	runCode "github.com/khanzadimahdi/testproject/application/code/runCode"
+	"github.com/khanzadimahdi/testproject/application/code/runCode"
 	"github.com/khanzadimahdi/testproject/application/comment/createComment"
 	"github.com/khanzadimahdi/testproject/application/comment/getComments"
 	dashboardCreateArticle "github.com/khanzadimahdi/testproject/application/dashboard/article/createArticle"
@@ -192,6 +192,17 @@ func (p *blogProvider) Boot(app *ioc.Application) error {
 
 	ps := pubsub.NewPublishSubscriber(natsConnection)
 
+	runCodeCache, err := cache.NewNatsCache(
+		natsConnection,
+		BlogWebSocketCacheBucketName,
+		cache.WithTTL(1*time.Hour),
+		cache.WithLimitMarkerTTL(1*time.Second),
+		cache.WithCompression(true),
+	)
+	if err != nil {
+		return err
+	}
+
 	ws, err := websocketHandler.NewWebsocket(
 		websocketHandler.NewInMemoryRequestRegistry(100),
 		pc,
@@ -202,12 +213,14 @@ func (p *blogProvider) Boot(app *ioc.Application) error {
 	if err != nil {
 		return err
 	}
+	cachedDecoratedWS := websocketHandler.NewCacheDecorator(ws, runCodeCache, runCode.RunCodeRequest)
 
 	app.Container.Singleton(func() domain.Producer { return pc })
 	app.Container.Singleton(func() domain.Consumer { return pc })
 	app.Container.Singleton(func() domain.ProduceConsumer { return pc })
 	app.Container.Singleton(func() domain.PublishSubscriber { return ps })
 	app.Container.Singleton(func() *websocketHandler.Websocket { return ws })
+	app.Container.Singleton(func() *websocketHandler.CacheDecorator { return cachedDecoratedWS })
 
 	p.terminate = func() {
 		defer pc.Wait()
@@ -241,7 +254,7 @@ func blog(
 	authorizer domain.Authorizer,
 	mailer domain.Mailer,
 	renderer domain.Renderer,
-	ws *websocketHandler.Websocket,
+	cachedDecoratedWS *websocketHandler.CacheDecorator,
 	iocContainer ioc.ServiceContainer,
 ) (http.Handler, error) {
 	var mailFromAddress string
@@ -297,23 +310,10 @@ func blog(
 	bookmarkExistsUseCase := bookmarkExists.NewUseCase(bookmarkRepository, validator)
 	updateABookmark := updateBookmark.NewUseCase(bookmarkRepository, validator)
 
-	runCodeCache, err := cache.NewNatsCache(
-		natsConnection,
-		BlogWebSocketCacheBucketName,
-		cache.WithTTL(24*time.Hour),
-		cache.WithLimitMarkerTTL(1*time.Second),
-		cache.WithCompression(true),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	cachedWs := websocketHandler.NewCacheDecorator(ws, ws, runCodeCache, runCode.RunCodeRequest)
-
-	if err := cachedWs.Consume(
+	if err := cachedDecoratedWS.Consume(
 		context.Background(),
 		runCode.RunCodeRequest,
-		runCode.NewRunCodeHandler(validator, asyncProduceConsumer, cachedWs),
+		runCode.NewRunCodeHandler(validator, asyncProduceConsumer, cachedDecoratedWS),
 	); err != nil {
 		return nil, err
 	}
@@ -384,7 +384,7 @@ func blog(
 	// ---- public HTTP API ----
 
 	// websocket
-	mux.Handle("GET /api/ws", ws)
+	mux.Handle("GET /api/ws", cachedDecoratedWS)
 
 	// home
 	mux.Handle("GET /api/home", middleware.NewCacheMiddleware(homeapi.NewHomeHandler(homeUseCase), httpCache))
@@ -492,7 +492,7 @@ func blog(
 	subscribers := map[string]domain.MessageHandler{
 		forgetpassword.SendForgetPasswordEmailName: forgetpassword.NewSendForgetPasswordEmailHandler(userRepository, authTokenGenerator, mailer, mailFromAddress, renderer),
 		register.SendRegisterationEmailName:        register.NewSendRegisterationEmailHandler(authTokenGenerator, mailer, mailFromAddress, renderer),
-		taskEvents.HeartbeatName:                   heartbeat.NewHeartbeatHandler(cachedWs),
+		taskEvents.HeartbeatName:                   heartbeat.NewHeartbeatHandler(cachedDecoratedWS),
 	}
 
 	if err := iocContainer.Singleton(func() map[string]domain.MessageHandler {
