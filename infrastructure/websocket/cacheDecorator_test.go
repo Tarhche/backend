@@ -109,6 +109,7 @@ func TestCacheDecorator(t *testing.T) {
 			}).Return(nil)
 
 		cacheMock.On("Get", mock.AnythingOfType("string")).Return([]byte(nil), domain.ErrNotExists)
+		cacheMock.On("Set", "pending.server-1", mock.AnythingOfType("[]uint8")).Return(nil)
 		messageHandlerMock.On("Handle", payload).Return(nil)
 
 		defer wsMock.AssertExpectations(t)
@@ -133,27 +134,26 @@ func TestCacheDecorator(t *testing.T) {
 		payload := []byte(`{"id":"server-1","data":"hello"}`)
 		replyPayload := []byte(`{"result":"hi"}`)
 
-		var (
-			wrappedHandler domain.MessageHandler
-			capturedKey    string
-		)
+		checksum, _, err := payloadChecksum(payload)
+		assert.NoError(t, err)
+
+		var wrappedHandler domain.MessageHandler
 
 		wsMock.On("Consume", mock.Anything, cachedSubject, mock.Anything).
 			Run(func(args mock.Arguments) {
 				wrappedHandler = args.Get(2).(domain.MessageHandler)
 			}).Return(nil)
 
-		cacheMock.On("Get", mock.AnythingOfType("string")).
-			Run(func(args mock.Arguments) {
-				capturedKey = args.String(0)
-			}).Return([]byte(nil), domain.ErrNotExists)
-
+		// checksum lookup on Consume — miss
+		cacheMock.On("Get", "cached."+checksum).Return([]byte(nil), domain.ErrNotExists).Once()
+		// pending entry written so a different replica can resolve the reply
+		cacheMock.On("Set", "pending.server-1", []byte(checksum)).Return(nil)
 		messageHandlerMock.On("Handle", payload).Return(nil)
 
-		// the cache key used on Set must match the one looked up on Get
-		cacheMock.On("Set", mock.MatchedBy(func(key string) bool {
-			return key == capturedKey
-		}), replyPayload).Return(nil)
+		// pending lookup on Reply — returns the checksum the Consume side stored
+		cacheMock.On("Get", "pending.server-1").Return([]byte(checksum), nil).Once()
+		cacheMock.On("Set", "cached."+checksum, replyPayload).Return(nil)
+		cacheMock.On("Purge", "pending.server-1").Return(nil)
 
 		wsMock.On("Reply", mock.Anything, mock.MatchedBy(func(r *domain.Reply) bool {
 			return r.RequestID == "server-1" && string(r.Payload) == string(replyPayload)
@@ -183,9 +183,10 @@ func TestCacheDecorator(t *testing.T) {
 		)
 
 		reply := &domain.Reply{RequestID: "unknown", Payload: []byte("data")}
+		cacheMock.On("Get", "pending.unknown").Return([]byte(nil), domain.ErrNotExists)
 		wsMock.On("Reply", mock.Anything, reply).Return(nil)
 		defer wsMock.AssertExpectations(t)
-		defer cacheMock.AssertExpectations(t) // no cache calls expected
+		defer cacheMock.AssertExpectations(t)
 
 		decorator := NewCacheDecorator(&wsMock, &cacheMock, cachedSubject)
 
@@ -202,6 +203,7 @@ func TestCacheDecorator(t *testing.T) {
 
 		expectedErr := errors.New("reply failed")
 		reply := &domain.Reply{RequestID: "unknown", Payload: []byte("data")}
+		cacheMock.On("Get", "pending.unknown").Return([]byte(nil), domain.ErrNotExists)
 		wsMock.On("Reply", mock.Anything, reply).Return(expectedErr)
 		defer wsMock.AssertExpectations(t)
 		defer cacheMock.AssertExpectations(t)
@@ -224,15 +226,21 @@ func TestCacheDecorator(t *testing.T) {
 		payload := []byte(`{"id":"server-1","data":"hello"}`)
 		replyPayload := []byte(`{"result":"hi"}`)
 
+		checksum, _, err := payloadChecksum(payload)
+		assert.NoError(t, err)
+
 		var wrappedHandler domain.MessageHandler
 		wsMock.On("Consume", mock.Anything, cachedSubject, mock.Anything).
 			Run(func(args mock.Arguments) {
 				wrappedHandler = args.Get(2).(domain.MessageHandler)
 			}).Return(nil)
 
-		cacheMock.On("Get", mock.AnythingOfType("string")).Return([]byte(nil), domain.ErrNotExists)
+		cacheMock.On("Get", "cached."+checksum).Return([]byte(nil), domain.ErrNotExists).Once()
+		cacheMock.On("Set", "pending.server-1", []byte(checksum)).Return(nil)
 		messageHandlerMock.On("Handle", payload).Return(nil)
-		cacheMock.On("Set", mock.AnythingOfType("string"), replyPayload).Return(errors.New("cache down"))
+		cacheMock.On("Get", "pending.server-1").Return([]byte(checksum), nil).Once()
+		cacheMock.On("Set", "cached."+checksum, replyPayload).Return(errors.New("cache down"))
+		cacheMock.On("Purge", "pending.server-1").Return(nil)
 		wsMock.On("Reply", mock.Anything, mock.Anything).Return(nil)
 
 		defer wsMock.AssertExpectations(t)
@@ -303,11 +311,16 @@ func TestCacheDecorator(t *testing.T) {
 				wrappedHandler = args.Get(2).(domain.MessageHandler)
 			}).Return(nil)
 
-		// first invocation: miss
-		cacheMock.On("Get", mock.AnythingOfType("string")).
-			Run(func(args mock.Arguments) {
-				firstKey = args.String(0)
-			}).Return([]byte(nil), domain.ErrNotExists).Once()
+		// first invocation: miss; pending entry stored under server-1
+		cacheMock.On("Get", mock.MatchedBy(func(key string) bool {
+			return key != "pending.server-1" && key != "pending.server-2"
+		})).Run(func(args mock.Arguments) {
+			firstKey = args.String(0)
+		}).Return([]byte(nil), domain.ErrNotExists).Once()
+		cacheMock.On("Set", "pending.server-1", mock.MatchedBy(func(value []byte) bool {
+			// Set on pending stores the bare checksum; the cache lookup key prefixes it with "cached."
+			return "cached."+string(value) == firstKey
+		})).Return(nil)
 		messageHandlerMock.On("Handle", first).Return(nil)
 
 		// second invocation: must look up the same key as the first

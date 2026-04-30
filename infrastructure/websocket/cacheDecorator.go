@@ -9,9 +9,17 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"sync"
 
 	"github.com/khanzadimahdi/testproject/domain"
+)
+
+const (
+	// pendingKeyPrefix namespaces requestID -> checksum entries in the shared
+	// cache so they don't collide with checksum -> reply entries.
+	pendingKeyPrefix = "pending."
+
+	// cachedKeyPrefix namespaces checksum -> reply payload entries.
+	cachedKeyPrefix = "cached."
 )
 
 // the interface that should be implemented by a decorator
@@ -32,11 +40,6 @@ type CacheDecorator struct {
 	parent   ws
 	cache    domain.Cache
 	subjects map[string]struct{}
-
-	mu sync.RWMutex
-
-	// We need this to associate the reply with the original request's checksum key when it replies back.
-	pending map[string]string // serverSideRequestID -> checksumKey
 }
 
 // Ensure CacheDecorator implements the ws interface
@@ -64,7 +67,6 @@ func NewCacheDecorator(ws ws, cache domain.Cache, subjects ...string) *CacheDeco
 		parent:   ws,
 		cache:    cache,
 		subjects: s,
-		pending:  make(map[string]string),
 	}
 }
 
@@ -83,18 +85,19 @@ func (d *CacheDecorator) Consume(ctx context.Context, subject string, handler do
 			}
 
 			// if we have cached reply, return it immediately.
-			log.Println("checking cache for checksum key:", checksum, "for request ID:", requestID)
-			if cached, err := d.cache.Get(checksum); err == nil {
-				log.Println("cache hit for checksum key:", checksum, "for request ID:", requestID)
+			cachedKey := cachedKeyPrefix + checksum
+			log.Println("checking cache for checksum key:", cachedKey, "for request ID:", requestID)
+			if cached, err := d.cache.Get(cachedKey); err == nil {
+				log.Println("cache hit for checksum key:", cachedKey, "for request ID:", requestID)
 				return d.parent.Reply(context.Background(), &domain.Reply{
 					RequestID: requestID,
 					Payload:   cached,
 				})
 			}
 
-			d.mu.Lock()
-			d.pending[requestID] = checksum
-			d.mu.Unlock()
+			if err := d.cache.Set(pendingKeyPrefix+requestID, []byte(checksum)); err != nil {
+				log.Println("WS pending set error:", err)
+			}
 
 			return handler.Handle(payload)
 		}),
@@ -102,20 +105,20 @@ func (d *CacheDecorator) Consume(ctx context.Context, subject string, handler do
 }
 
 func (d *CacheDecorator) Reply(ctx context.Context, reply *domain.Reply) error {
-	d.mu.RLock()
-	checksum, ok := d.pending[reply.RequestID]
-	d.mu.RUnlock()
+	pendingKey := pendingKeyPrefix + reply.RequestID
+	checksum, err := d.cache.Get(pendingKey)
 
-	log.Println("pending checksum key:", checksum, "for request ID:", reply.RequestID, "exists:", ok)
-	if ok {
-		log.Println("caching reply with checksum key:", checksum)
-		if err := d.cache.Set(checksum, reply.Payload); err != nil {
+	log.Println("pending checksum key:", string(checksum), "for request ID:", reply.RequestID, "exists:", err == nil)
+	if err == nil {
+		cachedKey := cachedKeyPrefix + string(checksum)
+		log.Println("caching reply with checksum key:", cachedKey)
+		if err := d.cache.Set(cachedKey, reply.Payload); err != nil {
 			log.Println("WS cache set error:", err)
 		}
 
-		d.mu.Lock()
-		delete(d.pending, reply.RequestID)
-		d.mu.Unlock()
+		if err := d.cache.Purge(pendingKey); err != nil {
+			log.Println("WS pending purge error:", err)
+		}
 	}
 
 	return d.parent.Reply(ctx, reply)
