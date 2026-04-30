@@ -4,8 +4,6 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/role"
 )
 
-const limit = 10
-
 type UseCase struct {
 	roleRepository role.Repository
 }

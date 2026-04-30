@@ -43,7 +43,13 @@ func (r *RolesRepository) GetAll(offset uint, limit uint) ([]role.Role, error) {
 	l := int64(limit)
 	desc := bson.D{{Key: "_id", Value: -1}}
 
-	cur, err := r.collection.Find(ctx, bson.D{}, options.Find().SetSkip(o).SetLimit(l).SetSort(desc))
+	opts := options.Find().
+		SetSkip(o).
+		SetLimit(l).
+		SetSort(desc).
+		SetProjection(bson.D{{Key: "user_uuids", Value: 0}})
+
+	cur, err := r.collection.Find(ctx, bson.D{}, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -197,12 +203,17 @@ func (r *RolesRepository) UserHasPermission(userUUID string, permission string) 
 		},
 	}
 
-	c, err := r.collection.CountDocuments(ctx, filter)
-	if err != nil {
-		return c > 0, err
-	}
+	opts := options.FindOne().SetProjection(bson.D{{Key: "_id", Value: 1}})
 
-	return c > 0, nil
+	err := r.collection.FindOne(ctx, filter, opts).Err()
+	switch {
+	case errors.Is(err, mongo.ErrNoDocuments):
+		return false, nil
+	case err != nil:
+		return false, err
+	default:
+		return true, nil
+	}
 }
 
 func (r *RolesRepository) GetByUserUUID(userUUID string) ([]role.Role, error) {
@@ -210,8 +221,9 @@ func (r *RolesRepository) GetByUserUUID(userUUID string) ([]role.Role, error) {
 	defer cancel()
 
 	filter := bson.D{{Key: "user_uuids", Value: userUUID}}
+	opts := options.Find().SetProjection(bson.D{{Key: "user_uuids", Value: 0}})
 
-	cur, err := r.collection.Find(ctx, filter)
+	cur, err := r.collection.Find(ctx, filter, opts)
 	if err != nil {
 		return nil, err
 	}
