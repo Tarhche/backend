@@ -67,6 +67,7 @@ func (r *UsersRepository) GetAll(offset uint, limit uint) ([]user.User, error) {
 				Value: a.PasswordHash.Value,
 				Salt:  a.PasswordHash.Salt,
 			},
+			CreatedAt: a.CreatedAt,
 		})
 	}
 
@@ -106,6 +107,7 @@ func (r *UsersRepository) GetByUUIDs(UUIDs []string) ([]user.User, error) {
 				Value: a.PasswordHash.Value,
 				Salt:  a.PasswordHash.Salt,
 			},
+			CreatedAt: a.CreatedAt,
 		})
 	}
 
@@ -138,6 +140,7 @@ func (r *UsersRepository) GetOne(UUID string) (user.User, error) {
 			Value: a.PasswordHash.Value,
 			Salt:  a.PasswordHash.Salt,
 		},
+		CreatedAt: a.CreatedAt,
 	}, nil
 }
 
@@ -175,6 +178,7 @@ func (r *UsersRepository) GetOneByIdentity(identity string) (user.User, error) {
 			Value: a.PasswordHash.Value,
 			Salt:  a.PasswordHash.Salt,
 		},
+		CreatedAt: a.CreatedAt,
 	}, nil
 }
 

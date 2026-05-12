@@ -48,7 +48,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 
 	userUUIDs := make([]string, len(c))
 	for i := range c {
-		userUUIDs[i] = c[i].Author.UUID
+		userUUIDs[i] = c[i].AuthorUUID
 	}
 
 	u, err := uc.userRepository.GetByUUIDs(userUUIDs)
@@ -56,16 +56,5 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		return nil, err
 	}
 
-	for i := range c {
-		for j := range u {
-			if c[i].Author.UUID != u[j].UUID {
-				continue
-			}
-
-			c[i].Author.Name = u[j].Name
-			c[i].Author.Avatar = u[j].Avatar
-		}
-	}
-
-	return NewResponse(c, totalPages, currentPage), nil
+	return NewResponse(c, u, totalPages, currentPage), nil
 }

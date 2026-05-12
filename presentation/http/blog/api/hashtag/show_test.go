@@ -13,8 +13,9 @@ import (
 	getArticlesByHashtag "github.com/khanzadimahdi/testproject/application/article/getArticlesByHashtag"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/article"
-	"github.com/khanzadimahdi/testproject/domain/author"
+	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/articles"
+	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
 	"github.com/khanzadimahdi/testproject/infrastructure/validator"
 )
 
@@ -26,6 +27,7 @@ func TestShowHandler(t *testing.T) {
 
 		var (
 			articlesRepository articles.MockArticlesRepository
+			userRepository     users.MockUsersRepository
 			requestValidator   validator.MockValidator
 		)
 
@@ -41,37 +43,25 @@ func TestShowHandler(t *testing.T) {
 				Excerpt:     "article-excerpt-1",
 				Body:        "article-body-1",
 				PublishedAt: publishedAt,
-				Author: author.Author{
-					UUID:   "author-uuid-1",
-					Name:   "author-name",
-					Avatar: "author-avatar",
-				},
-				Tags:      []string{"tag-1", "tag-2", "tag-3"},
-				ViewCount: 123,
+				AuthorUUID:  "author-uuid-1",
+				Tags:        []string{"tag-1", "tag-2", "tag-3"},
+				ViewCount:   123,
 			},
 			{
-				UUID:    "article-uuid-2",
-				Cover:   "article-cover-2",
-				Title:   "article-title-2",
-				Excerpt: "article-excerpt-2",
-				Body:    "article-body-2",
-				Author: author.Author{
-					UUID:   "author-uuid-1",
-					Name:   "author-name",
-					Avatar: "author-avatar",
-				},
+				UUID:       "article-uuid-2",
+				Cover:      "article-cover-2",
+				Title:      "article-title-2",
+				Excerpt:    "article-excerpt-2",
+				Body:       "article-body-2",
+				AuthorUUID: "author-uuid-1",
 			},
 			{
-				UUID:    "article-uuid-3",
-				Cover:   "article-cover-3",
-				Title:   "article-title-3",
-				Excerpt: "article-excerpt-3",
-				Body:    "article-body-3",
-				Author: author.Author{
-					UUID:   "author-uuid-2",
-					Name:   "author-name",
-					Avatar: "author-avatar",
-				},
+				UUID:       "article-uuid-3",
+				Cover:      "article-cover-3",
+				Title:      "article-title-3",
+				Excerpt:    "article-excerpt-3",
+				Body:       "article-body-3",
+				AuthorUUID: "author-uuid-2",
 			},
 		}
 
@@ -82,16 +72,24 @@ func TestShowHandler(t *testing.T) {
 			Hashtag: hashtag,
 		}
 
+		users := []user.User{
+			{UUID: "author-uuid-1", Name: "author-name", Avatar: "author-avatar", Username: "author-username-1"},
+			{UUID: "author-uuid-2", Name: "author-name", Avatar: "author-avatar", Username: "author-username-2"},
+		}
+
 		articlesRepository.On("CountPublishedByHashtags", []string{hashtag}).Once().Return(uint(len(articles)), nil)
 		defer articlesRepository.AssertExpectations(t)
 
 		articlesRepository.On("GetPublishedByHashtags", []string{hashtag}, uint(0), uint(10)).Once().Return(articles, nil)
 		defer articlesRepository.AssertExpectations(t)
 
+		userRepository.On("GetByUUIDs", []string{"author-uuid-1", "author-uuid-1", "author-uuid-2"}).Once().Return(users, nil)
+		defer userRepository.AssertExpectations(t)
+
 		requestValidator.On("Validate", r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
-		useCase := getArticlesByHashtag.NewUseCase(&articlesRepository, &requestValidator)
+		useCase := getArticlesByHashtag.NewUseCase(&articlesRepository, &userRepository, &requestValidator)
 		handler := NewShowHandler(useCase)
 
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -114,6 +112,7 @@ func TestShowHandler(t *testing.T) {
 
 		var (
 			articlesRepository articles.MockArticlesRepository
+			userRepository     users.MockUsersRepository
 			requestValidator   validator.MockValidator
 		)
 
@@ -128,7 +127,7 @@ func TestShowHandler(t *testing.T) {
 		requestValidator.On("Validate", r).Once().Return(validationErrors)
 		defer requestValidator.AssertExpectations(t)
 
-		useCase := getArticlesByHashtag.NewUseCase(&articlesRepository, &requestValidator)
+		useCase := getArticlesByHashtag.NewUseCase(&articlesRepository, &userRepository, &requestValidator)
 		handler := NewShowHandler(useCase)
 
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -153,6 +152,7 @@ func TestShowHandler(t *testing.T) {
 
 		var (
 			articlesRepository articles.MockArticlesRepository
+			userRepository     users.MockUsersRepository
 			requestValidator   validator.MockValidator
 		)
 
@@ -169,10 +169,13 @@ func TestShowHandler(t *testing.T) {
 		articlesRepository.On("GetPublishedByHashtags", []string{hashtag}, uint(0), uint(10)).Once().Return(nil, nil)
 		defer articlesRepository.AssertExpectations(t)
 
+		userRepository.On("GetByUUIDs", []string{}).Once().Return([]user.User{}, nil)
+		defer userRepository.AssertExpectations(t)
+
 		requestValidator.On("Validate", r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
-		useCase := getArticlesByHashtag.NewUseCase(&articlesRepository, &requestValidator)
+		useCase := getArticlesByHashtag.NewUseCase(&articlesRepository, &userRepository, &requestValidator)
 		handler := NewShowHandler(useCase)
 
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -195,6 +198,7 @@ func TestShowHandler(t *testing.T) {
 
 		var (
 			articlesRepository articles.MockArticlesRepository
+			userRepository     users.MockUsersRepository
 			requestValidator   validator.MockValidator
 		)
 
@@ -214,7 +218,7 @@ func TestShowHandler(t *testing.T) {
 		requestValidator.On("Validate", r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
-		useCase := getArticlesByHashtag.NewUseCase(&articlesRepository, &requestValidator)
+		useCase := getArticlesByHashtag.NewUseCase(&articlesRepository, &userRepository, &requestValidator)
 		handler := NewShowHandler(useCase)
 
 		request := httptest.NewRequest(http.MethodGet, "/", nil)

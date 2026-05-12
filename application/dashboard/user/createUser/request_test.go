@@ -29,6 +29,7 @@ func TestRequest_Validate(t *testing.T) {
 			request: Request{
 				Email:    "user@example.com",
 				Name:     "John Doe",
+				Username: "johndoe",
 				Password: "password123",
 			},
 			want: domain.ValidationErrors{},
@@ -38,6 +39,7 @@ func TestRequest_Validate(t *testing.T) {
 			request: Request{
 				Email:    "",
 				Name:     "John Doe",
+				Username: "johndoe",
 				Password: "password123",
 			},
 			want: domain.ValidationErrors{
@@ -45,10 +47,23 @@ func TestRequest_Validate(t *testing.T) {
 			},
 		},
 		{
+			name: "invalid request with malformed email",
+			request: Request{
+				Email:    "not-an-email",
+				Name:     "John Doe",
+				Username: "johndoe",
+				Password: "password123",
+			},
+			want: domain.ValidationErrors{
+				"email": "invalid_email",
+			},
+		},
+		{
 			name: "invalid request with empty name",
 			request: Request{
 				Email:    "user@example.com",
 				Name:     "",
+				Username: "johndoe",
 				Password: "password123",
 			},
 			want: domain.ValidationErrors{
@@ -56,10 +71,47 @@ func TestRequest_Validate(t *testing.T) {
 			},
 		},
 		{
+			name: "invalid request with empty username",
+			request: Request{
+				Email:    "user@example.com",
+				Name:     "John Doe",
+				Username: "",
+				Password: "password123",
+			},
+			want: domain.ValidationErrors{
+				"username": "required_field",
+			},
+		},
+		{
+			name: "invalid request with malformed username",
+			request: Request{
+				Email:    "user@example.com",
+				Name:     "John Doe",
+				Username: "John Doe!",
+				Password: "password123",
+			},
+			want: domain.ValidationErrors{
+				"username": "invalid_value",
+			},
+		},
+		{
+			name: "invalid request with username having no alphanumerics",
+			request: Request{
+				Email:    "user@example.com",
+				Name:     "John Doe",
+				Username: "...",
+				Password: "password123",
+			},
+			want: domain.ValidationErrors{
+				"username": "invalid_value",
+			},
+		},
+		{
 			name: "invalid request with empty password",
 			request: Request{
 				Email:    "user@example.com",
 				Name:     "John Doe",
+				Username: "johndoe",
 				Password: "",
 			},
 			want: domain.ValidationErrors{
@@ -71,11 +123,13 @@ func TestRequest_Validate(t *testing.T) {
 			request: Request{
 				Email:    "",
 				Name:     "",
+				Username: "",
 				Password: "",
 			},
 			want: domain.ValidationErrors{
 				"email":    "required_field",
 				"name":     "required_field",
+				"username": "required_field",
 				"password": "required_field",
 			},
 		},

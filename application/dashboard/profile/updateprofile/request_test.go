@@ -72,6 +72,18 @@ func TestRequest_Validate(t *testing.T) {
 			},
 		},
 		{
+			name: "invalid request with malformed email",
+			request: Request{
+				UserUUID: "user-uuid-123",
+				Name:     "John Doe",
+				Email:    "not-an-email",
+				Username: "johndoe",
+			},
+			wantErr: domain.ValidationErrors{
+				"email": "invalid_email",
+			},
+		},
+		{
 			name: "invalid request with empty username",
 			request: Request{
 				UserUUID: "user-uuid-123",

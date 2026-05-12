@@ -12,7 +12,6 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/application/dashboard/comment/getComments"
-	"github.com/khanzadimahdi/testproject/domain/author"
 	"github.com/khanzadimahdi/testproject/domain/comment"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/comments"
@@ -41,35 +40,29 @@ func TestIndexHandler(t *testing.T) {
 
 			a = []comment.Comment{
 				{
-					UUID: "article-uuid-1",
-					Body: "body-1",
-					Author: author.Author{
-						UUID: "author-uuid-1",
-					},
+					UUID:       "article-uuid-1",
+					Body:       "body-1",
+					AuthorUUID: "author-uuid-1",
 					ObjectUUID: "object-uuid-1",
 					ObjectType: "article",
 				},
 				{
-					UUID: "article-uuid-2",
-					Author: author.Author{
-						UUID: "author-uuid-2",
-					},
+					UUID:       "article-uuid-2",
+					AuthorUUID: "author-uuid-2",
 				},
 				{
-					UUID: "article-uuid-3",
-					Author: author.Author{
-						UUID: "author-uuid-2",
-					},
+					UUID:       "article-uuid-3",
+					AuthorUUID: "author-uuid-2",
 					ApprovedAt: createdAt,
 					CreatedAt:  createdAt,
 				},
 			}
 
-			userUUIDs = []string{a[0].Author.UUID, a[1].Author.UUID, a[2].Author.UUID}
+			userUUIDs = []string{a[0].AuthorUUID, a[1].AuthorUUID, a[2].AuthorUUID}
 
 			users = []user.User{
-				{UUID: userUUIDs[0]},
-				{UUID: userUUIDs[1]},
+				{UUID: userUUIDs[0], Username: "author-username-1"},
+				{UUID: userUUIDs[1], Username: "author-username-2"},
 			}
 		)
 

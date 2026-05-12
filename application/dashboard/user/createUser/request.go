@@ -1,6 +1,9 @@
 package createuser
 
-import "github.com/khanzadimahdi/testproject/domain"
+import (
+	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/user"
+)
 
 type Request struct {
 	Email    string `json:"email"`
@@ -17,10 +20,18 @@ func (r *Request) Validate() domain.ValidationErrors {
 
 	if len(r.Email) == 0 {
 		validationErrors["email"] = "required_field"
+	} else if !user.IsValidEmail(r.Email) {
+		validationErrors["email"] = "invalid_email"
 	}
 
 	if len(r.Name) == 0 {
 		validationErrors["name"] = "required_field"
+	}
+
+	if len(r.Username) == 0 {
+		validationErrors["username"] = "required_field"
+	} else if !user.IsValidUsername(r.Username) {
+		validationErrors["username"] = "invalid_value"
 	}
 
 	if len(r.Password) == 0 {

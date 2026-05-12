@@ -4,26 +4,28 @@ import (
 	"time"
 
 	"github.com/khanzadimahdi/testproject/domain/comment"
+	"github.com/khanzadimahdi/testproject/domain/user"
 )
 
 type commentResponse struct {
-	UUID       string         `json:"uuid"`
-	Body       string         `json:"body"`
-	Author     authorResponse `json:"author"`
-	ParentUUID string         `json:"parent_uuid,omitempty"`
-	ObjectType string         `json:"object_type"`
-	ObjectUUID string         `json:"object_uuid"`
-	ApprovedAt string         `json:"approved_at,omitempty"`
-	CreatedAt  string         `json:"created_at"`
+	UUID       string `json:"uuid"`
+	Body       string `json:"body"`
+	ParentUUID string `json:"parent_uuid,omitempty"`
+	ObjectType string `json:"object_type"`
+	ObjectUUID string `json:"object_uuid"`
+	ApprovedAt string `json:"approved_at,omitempty"`
+	CreatedAt  string `json:"created_at"`
 }
 
 type authorResponse struct {
-	UUID   string `json:"uuid"`
-	Name   string `json:"name"`
-	Avatar string `json:"avatar"`
+	UUID     string `json:"uuid"`
+	Name     string `json:"name"`
+	Avatar   string `json:"avatar"`
+	Username string `json:"username"`
 }
 
 type Response struct {
+	Author     authorResponse    `json:"author"`
 	Items      []commentResponse `json:"items"`
 	Pagination pagination        `json:"pagination"`
 }
@@ -33,7 +35,7 @@ type pagination struct {
 	CurrentPage uint `json:"current_page"`
 }
 
-func NewResponse(c []comment.Comment, totalPages, currentPage uint) *Response {
+func NewResponse(c []comment.Comment, u user.User, totalPages, currentPage uint) *Response {
 	items := make([]commentResponse, len(c))
 
 	for i := range c {
@@ -44,15 +46,15 @@ func NewResponse(c []comment.Comment, totalPages, currentPage uint) *Response {
 		items[i].ObjectUUID = c[i].ObjectUUID
 		items[i].CreatedAt = c[i].CreatedAt.Format(time.RFC3339)
 		items[i].ApprovedAt = c[i].ApprovedAt.Format(time.RFC3339)
-
-		items[i].Author = authorResponse{
-			UUID:   c[i].Author.UUID,
-			Name:   c[i].Author.Name,
-			Avatar: c[i].Author.Avatar,
-		}
 	}
 
 	return &Response{
+		Author: authorResponse{
+			UUID:     u.UUID,
+			Name:     u.Name,
+			Avatar:   u.Avatar,
+			Username: u.Username,
+		},
 		Items: items,
 		Pagination: pagination{
 			TotalPages:  totalPages,

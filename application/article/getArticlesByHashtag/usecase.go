@@ -3,21 +3,25 @@ package getArticlesByHashtag
 import (
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/article"
+	"github.com/khanzadimahdi/testproject/domain/user"
 )
 
 const limit = 10
 
 type UseCase struct {
 	articleRepository article.Repository
+	userRepository    user.Repository
 	validator         domain.Validator
 }
 
 func NewUseCase(
 	articleRepository article.Repository,
+	userRepository user.Repository,
 	validator domain.Validator,
 ) *UseCase {
 	return &UseCase{
 		articleRepository: articleRepository,
+		userRepository:    userRepository,
 		validator:         validator,
 	}
 }
@@ -57,5 +61,15 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		return nil, err
 	}
 
-	return NewResponse(a, totalPages, currentPage), nil
+	userUUIDs := make([]string, len(a))
+	for i := range a {
+		userUUIDs[i] = a[i].AuthorUUID
+	}
+
+	u, err := uc.userRepository.GetByUUIDs(userUUIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	return NewResponse(a, u, totalPages, currentPage), nil
 }

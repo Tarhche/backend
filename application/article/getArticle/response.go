@@ -5,6 +5,7 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/element"
 	"github.com/khanzadimahdi/testproject/domain/article"
+	"github.com/khanzadimahdi/testproject/domain/user"
 )
 
 type Response struct {
@@ -15,18 +16,20 @@ type Response struct {
 	Excerpt     string             `json:"excerpt"`
 	Body        string             `json:"body"`
 	PublishedAt string             `json:"published_at"`
-	Author      authorResponse     `json:"avatar"`
+	Author      authorResponse     `json:"author"`
 	Tags        []string           `json:"tags"`
 	ViewCount   uint               `json:"view_count"`
 	Elements    []element.Response `json:"elements"`
 }
 
 type authorResponse struct {
-	Name   string `json:"name"`
-	Avatar string `json:"avatar"`
+	UUID     string `json:"uuid"`
+	Name     string `json:"name"`
+	Avatar   string `json:"avatar"`
+	Username string `json:"username"`
 }
 
-func NewResponse(a article.Article, elementsResponse []element.Response) *Response {
+func NewResponse(a article.Article, author user.User, elementsResponse []element.Response) *Response {
 	tags := make([]string, len(a.Tags))
 	copy(tags, a.Tags)
 
@@ -39,8 +42,10 @@ func NewResponse(a article.Article, elementsResponse []element.Response) *Respon
 		Body:        a.Body,
 		PublishedAt: a.PublishedAt.Format(time.RFC3339),
 		Author: authorResponse{
-			Name:   a.Author.Name,
-			Avatar: a.Author.Avatar,
+			UUID:     author.UUID,
+			Name:     author.Name,
+			Avatar:   author.Avatar,
+			Username: author.Username,
 		},
 		Tags:      tags,
 		ViewCount: a.ViewCount,

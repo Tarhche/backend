@@ -3,7 +3,6 @@ package updatearticle
 import (
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/article"
-	"github.com/khanzadimahdi/testproject/domain/author"
 )
 
 type UseCase struct {
@@ -36,10 +35,8 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		Excerpt:     request.Excerpt,
 		Body:        request.Body,
 		PublishedAt: request.PublishedAt,
-		Author: author.Author{
-			UUID: request.AuthorUUID,
-		},
-		Tags: request.Tags,
+		AuthorUUID:  request.AuthorUUID,
+		Tags:        request.Tags,
 	}
 
 	if _, err := uc.articleRepository.Save(&a); err != nil {

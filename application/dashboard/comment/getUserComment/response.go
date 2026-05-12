@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/khanzadimahdi/testproject/domain/comment"
+	"github.com/khanzadimahdi/testproject/domain/user"
 )
 
 type Response struct {
@@ -18,19 +19,21 @@ type Response struct {
 }
 
 type author struct {
-	UUID   string `json:"uuid"`
-	Name   string `json:"name"`
-	Avatar string `json:"avatar"`
+	UUID     string `json:"uuid"`
+	Name     string `json:"name"`
+	Avatar   string `json:"avatar"`
+	Username string `json:"username"`
 }
 
-func NewResponse(c comment.Comment) *Response {
+func NewResponse(c comment.Comment, u user.User) *Response {
 	return &Response{
 		UUID: c.UUID,
 		Body: c.Body,
 		Author: author{
-			UUID:   c.Author.UUID,
-			Name:   c.Author.Name,
-			Avatar: c.Author.Avatar,
+			UUID:     u.UUID,
+			Name:     u.Name,
+			Avatar:   u.Avatar,
+			Username: u.Username,
 		},
 		ParentUUID: c.ParentUUID,
 		ObjectType: c.ObjectType,

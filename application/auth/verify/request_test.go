@@ -64,6 +64,32 @@ func TestRequest_Validate(t *testing.T) {
 			},
 		},
 		{
+			name: "invalid request with malformed username",
+			request: Request{
+				Token:      "valid-token",
+				Name:       "John Doe",
+				Username:   "John Doe!",
+				Password:   "password123",
+				Repassword: "password123",
+			},
+			want: domain.ValidationErrors{
+				"username": "invalid_value",
+			},
+		},
+		{
+			name: "invalid request with username having no alphanumerics",
+			request: Request{
+				Token:      "valid-token",
+				Name:       "John Doe",
+				Username:   "...",
+				Password:   "password123",
+				Repassword: "password123",
+			},
+			want: domain.ValidationErrors{
+				"username": "invalid_value",
+			},
+		},
+		{
 			name: "invalid request with empty password",
 			request: Request{
 				Token:      "valid-token",

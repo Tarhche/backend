@@ -8,6 +8,7 @@ import (
 
 	getArticle "github.com/khanzadimahdi/testproject/application/article/getArticle"
 	getArticles "github.com/khanzadimahdi/testproject/application/article/getArticles"
+	"github.com/khanzadimahdi/testproject/application/article/getArticlesByAuthor"
 	"github.com/khanzadimahdi/testproject/application/article/getArticlesByHashtag"
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/application/auth/forgetpassword"
@@ -93,6 +94,7 @@ import (
 	websocketHandler "github.com/khanzadimahdi/testproject/infrastructure/websocket"
 	articleAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/article"
 	authAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/auth"
+	authorArticleAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/author/article"
 	bookmarkAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/bookmark"
 	commentAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/comment"
 	dashboardArticleAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/article"
@@ -289,10 +291,10 @@ func blog(
 	configRepository := configrepository.NewRepository(database)
 
 	authTokenGenerator := auth.NewTokenGenerator(jwt, rolesRepository)
-	elementRetriever := element.NewRetriever(articlesRepository, elementsRepository)
+	elementRetriever := element.NewRetriever(articlesRepository, elementsRepository, userRepository)
 
 	// ---- public ----
-	homeUseCase := home.NewUseCase(articlesRepository, elementRetriever)
+	homeUseCase := home.NewUseCase(articlesRepository, userRepository, elementRetriever)
 
 	loginUseCase := login.NewUseCase(userRepository, authTokenGenerator, hasher, translator, validator)
 	refreshUseCase := refresh.NewUseCase(userRepository, jwt, authTokenGenerator, translator, validator)
@@ -301,9 +303,10 @@ func blog(
 	registerUseCase := register.NewUseCase(userRepository, asyncProduceConsumer, translator, validator)
 	verifyUseCase := verify.NewUseCase(userRepository, rolesRepository, configRepository, hasher, jwt, translator, validator)
 
-	getArticleUsecase := getArticle.NewUseCase(articlesRepository, elementRetriever)
-	getArticlesUsecase := getArticles.NewUseCase(articlesRepository)
-	getArticlesByHashtagUseCase := getArticlesByHashtag.NewUseCase(articlesRepository, validator)
+	getArticleUsecase := getArticle.NewUseCase(articlesRepository, userRepository, elementRetriever)
+	getArticlesUsecase := getArticles.NewUseCase(articlesRepository, userRepository)
+	getArticlesByHashtagUseCase := getArticlesByHashtag.NewUseCase(articlesRepository, userRepository, validator)
+	getArticlesByAuthorUseCase := getArticlesByAuthor.NewUseCase(articlesRepository, userRepository, validator)
 	getFileUseCase := getFile.NewUseCase(filesRepository, fileStorage)
 	getCommentsUseCase := getComments.NewUseCase(commentsRepository, userRepository, validator)
 	createCommentUseCase := createComment.NewUseCase(commentsRepository, validator)
@@ -326,8 +329,8 @@ func blog(
 
 	dashboardCreateArticleUsecase := dashboardCreateArticle.NewUseCase(articlesRepository, validator)
 	dashboardDeleteArticleUsecase := dashboardDeleteArticle.NewUseCase(articlesRepository)
-	dashboardGetArticleUsecase := dashboardGetArticle.NewUseCase(articlesRepository)
-	dashboardGetArticlesUsecase := dashboardGetArticles.NewUseCase(articlesRepository)
+	dashboardGetArticleUsecase := dashboardGetArticle.NewUseCase(articlesRepository, userRepository)
+	dashboardGetArticlesUsecase := dashboardGetArticles.NewUseCase(articlesRepository, userRepository)
 	dashboardUpdateArticleUsecase := dashboardUpdateArticle.NewUseCase(articlesRepository, validator)
 
 	dashboardCreateCommentUsecase := dashboardCreateComment.NewUseCase(commentsRepository, validator)
@@ -411,6 +414,9 @@ func blog(
 
 	// hashtags
 	mux.Handle("GET /api/hashtags/{hashtag}", middleware.NewCacheMiddleware(hashtagAPI.NewShowHandler(getArticlesByHashtagUseCase), httpCache))
+
+	// authors
+	mux.Handle("GET /api/authors/{identity}/articles", middleware.NewCacheMiddleware(authorArticleAPI.NewIndexHandler(getArticlesByAuthorUseCase), httpCache))
 
 	// files
 	mux.Handle("GET /files/{uuid}", middleware.NewCacheMiddleware(fileAPI.NewShowHandler(getFileUseCase), httpCache))

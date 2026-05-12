@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/khanzadimahdi/testproject/domain/article"
+	"github.com/khanzadimahdi/testproject/domain/user"
 )
 
 type Response struct {
@@ -21,8 +22,10 @@ type articleResponse struct {
 }
 
 type author struct {
-	Name   string `json:"name"`
-	Avatar string `json:"avatar"`
+	UUID     string `json:"uuid"`
+	Name     string `json:"name"`
+	Avatar   string `json:"avatar"`
+	Username string `json:"username"`
 }
 
 type pagination struct {
@@ -30,7 +33,12 @@ type pagination struct {
 	CurrentPage uint `json:"current_page"`
 }
 
-func NewResponse(a []article.Article, totalPages, currentPage uint) *Response {
+func NewResponse(a []article.Article, authors []user.User, totalPages, currentPage uint) *Response {
+	authorByUUID := make(map[string]user.User, len(authors))
+	for i := range authors {
+		authorByUUID[authors[i].UUID] = authors[i]
+	}
+
 	items := make([]articleResponse, len(a))
 
 	for i := range a {
@@ -40,8 +48,12 @@ func NewResponse(a []article.Article, totalPages, currentPage uint) *Response {
 		items[i].Title = a[i].Title
 		items[i].PublishedAt = a[i].PublishedAt.Format(time.RFC3339)
 
-		items[i].Author.Name = a[i].Author.Name
-		items[i].Author.Avatar = a[i].Author.Avatar
+		if u, ok := authorByUUID[a[i].AuthorUUID]; ok {
+			items[i].Author.UUID = u.UUID
+			items[i].Author.Name = u.Name
+			items[i].Author.Avatar = u.Avatar
+			items[i].Author.Username = u.Username
+		}
 	}
 
 	return &Response{

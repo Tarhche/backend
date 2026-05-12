@@ -6,7 +6,8 @@
             "author": {
                 "uuid": "author-uuid-1",
                 "name": "",
-                "avatar": ""
+                "avatar": "",
+                "username": "author-username-1"
             },
             "object_type": "article",
             "object_uuid": "object-uuid-1",
@@ -19,7 +20,8 @@
             "author": {
                 "uuid": "author-uuid-2",
                 "name": "",
-                "avatar": ""
+                "avatar": "",
+                "username": "author-username-2"
             },
             "object_type": "",
             "object_uuid": "",
@@ -32,7 +34,8 @@
             "author": {
                 "uuid": "author-uuid-2",
                 "name": "",
-                "avatar": ""
+                "avatar": "",
+                "username": "author-username-2"
             },
             "object_type": "",
             "object_uuid": "",

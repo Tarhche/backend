@@ -397,6 +397,66 @@ const docTemplate = `{
                 }
             }
         },
+        "/authors/{identity}/articles": {
+            "get": {
+                "description": "return a page of the most recent published articles for the given author identity (UUID or username)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "authors"
+                ],
+                "summary": "List articles by author",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Author UUID or username",
+                        "name": "identity",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/getArticlesByAuthor.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/bookmarks": {
             "put": {
                 "description": "create or update an article bookmark for authenticated user",
@@ -2995,29 +3055,6 @@ const docTemplate = `{
                     }
                 }
             }
-        },
-        "/ws": {
-            "get": {
-                "description": "upgrade HTTP connection to WebSocket",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "websocket"
-                ],
-                "summary": "Websocket endpoint",
-                "responses": {
-                    "101": {
-                        "description": "Switching Protocols",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                }
-            }
         }
     },
     "definitions": {
@@ -3266,6 +3303,80 @@ const docTemplate = `{
                 }
             }
         },
+        "getArticlesByAuthor.Response": {
+            "type": "object",
+            "properties": {
+                "author": {
+                    "$ref": "#/definitions/getArticlesByAuthor.authorResponse"
+                },
+                "errors": {
+                    "$ref": "#/definitions/domain.ValidationErrors"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/getArticlesByAuthor.articleResponse"
+                    }
+                },
+                "pagination": {
+                    "$ref": "#/definitions/getArticlesByAuthor.paginationResponse"
+                }
+            }
+        },
+        "getArticlesByAuthor.articleResponse": {
+            "type": "object",
+            "properties": {
+                "cover": {
+                    "type": "string"
+                },
+                "excerpt": {
+                    "type": "string"
+                },
+                "published_at": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                },
+                "video": {
+                    "type": "string"
+                }
+            }
+        },
+        "getArticlesByAuthor.authorResponse": {
+            "type": "object",
+            "properties": {
+                "avatar": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                }
+            }
+        },
+        "getArticlesByAuthor.paginationResponse": {
+            "type": "object",
+            "properties": {
+                "current_page": {
+                    "type": "integer"
+                },
+                "total_pages": {
+                    "type": "integer"
+                }
+            }
+        },
         "getArticlesByHashtag.Response": {
             "type": "object",
             "properties": {
@@ -3286,7 +3397,7 @@ const docTemplate = `{
         "getArticlesByHashtag.articleResponse": {
             "type": "object",
             "properties": {
-                "authorResponse": {
+                "author": {
                     "$ref": "#/definitions/getArticlesByHashtag.authorResponse"
                 },
                 "cover": {
@@ -3316,6 +3427,12 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "name": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                },
+                "uuid": {
                     "type": "string"
                 }
             }
@@ -3369,6 +3486,9 @@ const docTemplate = `{
                 "name": {
                     "type": "string"
                 },
+                "username": {
+                    "type": "string"
+                },
                 "uuid": {
                     "type": "string"
                 }
@@ -3388,109 +3508,6 @@ const docTemplate = `{
                 }
             }
         },
-        "getNode.CPU": {
-            "type": "object",
-            "properties": {
-                "guest": {
-                    "type": "integer"
-                },
-                "guest_nice": {
-                    "type": "integer"
-                },
-                "idle": {
-                    "type": "integer"
-                },
-                "io_wait": {
-                    "type": "integer"
-                },
-                "irq": {
-                    "type": "integer"
-                },
-                "nice": {
-                    "type": "integer"
-                },
-                "soft_irq": {
-                    "type": "integer"
-                },
-                "steal": {
-                    "type": "integer"
-                },
-                "system": {
-                    "type": "integer"
-                },
-                "user": {
-                    "type": "integer"
-                }
-            }
-        },
-        "getNode.Disk": {
-            "type": "object",
-            "properties": {
-                "available": {
-                    "type": "integer"
-                },
-                "free_inodes": {
-                    "type": "integer"
-                },
-                "total": {
-                    "type": "integer"
-                },
-                "used": {
-                    "type": "integer"
-                }
-            }
-        },
-        "getNode.Load": {
-            "type": "object",
-            "properties": {
-                "last_15_min": {
-                    "type": "number"
-                },
-                "last_1_min": {
-                    "type": "number"
-                },
-                "last_5_min": {
-                    "type": "number"
-                },
-                "last_pid": {
-                    "type": "integer"
-                },
-                "process_running": {
-                    "type": "integer"
-                },
-                "process_total": {
-                    "type": "integer"
-                }
-            }
-        },
-        "getNode.Memory": {
-            "type": "object",
-            "properties": {
-                "available": {
-                    "type": "integer"
-                },
-                "total": {
-                    "type": "integer"
-                },
-                "used": {
-                    "type": "integer"
-                }
-            }
-        },
-        "getNode.Resource": {
-            "type": "object",
-            "properties": {
-                "cpu": {
-                    "type": "number"
-                },
-                "disk": {
-                    "type": "integer"
-                },
-                "memory": {
-                    "type": "integer"
-                }
-            }
-        },
         "getNode.Response": {
             "type": "object",
             "properties": {
@@ -3503,9 +3520,6 @@ const docTemplate = `{
                 "name": {
                     "type": "string"
                 },
-                "resources": {
-                    "$ref": "#/definitions/getNode.Resource"
-                },
                 "stats": {
                     "$ref": "#/definitions/getNode.Stats"
                 }
@@ -3514,17 +3528,32 @@ const docTemplate = `{
         "getNode.Stats": {
             "type": "object",
             "properties": {
-                "cpu": {
-                    "$ref": "#/definitions/getNode.CPU"
+                "block_input": {
+                    "type": "integer"
                 },
-                "disk": {
-                    "$ref": "#/definitions/getNode.Disk"
+                "block_output": {
+                    "type": "integer"
                 },
-                "load": {
-                    "$ref": "#/definitions/getNode.Load"
+                "cpu_percent": {
+                    "type": "number"
                 },
-                "memory": {
-                    "$ref": "#/definitions/getNode.Memory"
+                "memory_limit": {
+                    "type": "integer"
+                },
+                "memory_percent": {
+                    "type": "number"
+                },
+                "memory_usage": {
+                    "type": "integer"
+                },
+                "network_input": {
+                    "type": "integer"
+                },
+                "network_output": {
+                    "type": "integer"
+                },
+                "pids": {
+                    "type": "integer"
                 }
             }
         },
@@ -3539,9 +3568,6 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
-                },
-                "resources": {
-                    "$ref": "#/definitions/getNodes.Resource"
                 }
             }
         },
@@ -3552,20 +3578,6 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "total_pages": {
-                    "type": "integer"
-                }
-            }
-        },
-        "getNodes.Resource": {
-            "type": "object",
-            "properties": {
-                "cpu": {
-                    "type": "number"
-                },
-                "disk": {
-                    "type": "integer"
-                },
-                "memory": {
                     "type": "integer"
                 }
             }
@@ -3667,6 +3679,9 @@ const docTemplate = `{
                 "name": {
                     "type": "string"
                 },
+                "username": {
+                    "type": "string"
+                },
                 "uuid": {
                     "type": "string"
                 }
@@ -3675,6 +3690,9 @@ const docTemplate = `{
         "getUserComments.Response": {
             "type": "object",
             "properties": {
+                "author": {
+                    "$ref": "#/definitions/getUserComments.authorResponse"
+                },
                 "items": {
                     "type": "array",
                     "items": {
@@ -3695,6 +3713,9 @@ const docTemplate = `{
                 "name": {
                     "type": "string"
                 },
+                "username": {
+                    "type": "string"
+                },
                 "uuid": {
                     "type": "string"
                 }
@@ -3705,9 +3726,6 @@ const docTemplate = `{
             "properties": {
                 "approved_at": {
                     "type": "string"
-                },
-                "author": {
-                    "$ref": "#/definitions/getUserComments.authorResponse"
                 },
                 "body": {
                     "type": "string"
@@ -3748,6 +3766,12 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
                 }
             }
         },
@@ -3758,6 +3782,12 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "name": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                },
+                "uuid": {
                     "type": "string"
                 }
             }
@@ -3770,6 +3800,12 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
                 }
             }
         },
@@ -3780,6 +3816,12 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "name": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                },
+                "uuid": {
                     "type": "string"
                 }
             }
@@ -4180,7 +4222,7 @@ const docTemplate = `{
         "github_com_khanzadimahdi_testproject_application_article_getArticle.Response": {
             "type": "object",
             "properties": {
-                "avatar": {
+                "author": {
                     "$ref": "#/definitions/getarticle.authorResponse"
                 },
                 "body": {
@@ -4304,6 +4346,9 @@ const docTemplate = `{
                 "name": {
                     "type": "string"
                 },
+                "username": {
+                    "type": "string"
+                },
                 "uuid": {
                     "type": "string"
                 }
@@ -4343,7 +4388,7 @@ const docTemplate = `{
         "github_com_khanzadimahdi_testproject_application_dashboard_article_getArticle.Response": {
             "type": "object",
             "properties": {
-                "avatar": {
+                "author": {
                     "$ref": "#/definitions/getarticle.author"
                 },
                 "body": {
@@ -4459,6 +4504,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "name": {
+                    "type": "string"
+                },
+                "username": {
                     "type": "string"
                 },
                 "uuid": {
@@ -4876,6 +4924,12 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "name": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                },
+                "uuid": {
                     "type": "string"
                 }
             }

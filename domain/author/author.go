@@ -1,9 +1,10 @@
 package author
 
 type Author struct {
-	UUID   string
-	Name   string
-	Avatar string
+	UUID     string
+	Name     string
+	Avatar   string
+	Username string
 }
 
 type Repository interface {

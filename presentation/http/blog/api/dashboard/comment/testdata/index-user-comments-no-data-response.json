@@ -1,4 +1,10 @@
 {
+    "author": {
+        "uuid": "auth-user-uuid",
+        "name": "",
+        "avatar": "",
+        "username": "auth-user-username"
+    },
     "items": [],
     "pagination": {
         "total_pages": 0,

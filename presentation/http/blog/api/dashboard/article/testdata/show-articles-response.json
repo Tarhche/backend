@@ -7,8 +7,10 @@
             "title": "article-title-1",
             "published_at": "0001-01-01T00:00:00Z",
             "author": {
+                "uuid": "",
                 "name": "",
-                "avatar": ""
+                "avatar": "",
+                "username": ""
             }
         },
         {
@@ -18,8 +20,10 @@
             "title": "",
             "published_at": "0001-01-01T00:00:00Z",
             "author": {
+                "uuid": "",
                 "name": "",
-                "avatar": ""
+                "avatar": "",
+                "username": ""
             }
         },
         {
@@ -29,8 +33,10 @@
             "title": "",
             "published_at": "2024-10-11T04:27:44Z",
             "author": {
+                "uuid": "",
                 "name": "",
-                "avatar": ""
+                "avatar": "",
+                "username": ""
             }
         }
     ],

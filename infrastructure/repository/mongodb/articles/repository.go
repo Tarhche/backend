@@ -12,7 +12,6 @@ import (
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/article"
-	"github.com/khanzadimahdi/testproject/domain/author"
 )
 
 const (
@@ -65,9 +64,7 @@ func (r *ArticlesRepository) GetAll(offset uint, limit uint) ([]article.Article,
 			Excerpt:     a.Excerpt,
 			Tags:        a.Tags,
 			PublishedAt: a.PublishedAt,
-			Author: author.Author{
-				UUID: a.AuthorUUID,
-			},
+			AuthorUUID:  a.AuthorUUID,
 		})
 	}
 
@@ -114,9 +111,7 @@ func (r *ArticlesRepository) GetAllPublished(offset uint, limit uint) ([]article
 			Excerpt:     a.Excerpt,
 			Tags:        a.Tags,
 			PublishedAt: a.PublishedAt,
-			Author: author.Author{
-				UUID: a.AuthorUUID,
-			},
+			AuthorUUID:  a.AuthorUUID,
 		})
 	}
 
@@ -156,9 +151,7 @@ func (r *ArticlesRepository) GetByUUIDs(UUIDs []string) ([]article.Article, erro
 			Excerpt:     a.Excerpt,
 			Tags:        a.Tags,
 			PublishedAt: a.PublishedAt,
-			Author: author.Author{
-				UUID: a.AuthorUUID,
-			},
+			AuthorUUID:  a.AuthorUUID,
 		})
 	}
 
@@ -203,9 +196,7 @@ func (r *ArticlesRepository) GetMostViewed(limit uint) ([]article.Article, error
 			Excerpt:     a.Excerpt,
 			Tags:        a.Tags,
 			PublishedAt: a.PublishedAt,
-			Author: author.Author{
-				UUID: a.AuthorUUID,
-			},
+			AuthorUUID:  a.AuthorUUID,
 		})
 	}
 
@@ -281,9 +272,79 @@ func (r *ArticlesRepository) GetPublishedByHashtags(hashtags []string, offset ui
 			Excerpt:     a.Excerpt,
 			Tags:        a.Tags,
 			PublishedAt: a.PublishedAt,
-			Author: author.Author{
-				UUID: a.AuthorUUID,
-			},
+			AuthorUUID:  a.AuthorUUID,
+		})
+	}
+
+	if err := cur.Err(); err != nil {
+		return nil, err
+	}
+
+	return items, nil
+}
+
+func (r *ArticlesRepository) CountPublishedByAuthor(authorUUID string) (uint, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+	defer cancel()
+
+	filter := bson.M{
+		"author_uuid": authorUUID,
+		"published_at": bson.M{
+			"$lte": bson.NewDateTimeFromTime(time.Now()),
+			"$ne":  time.Time{},
+		},
+	}
+
+	c, err := r.collection.CountDocuments(ctx, filter)
+	if err != nil {
+		return uint(c), err
+	}
+
+	return uint(c), nil
+}
+
+func (r *ArticlesRepository) GetPublishedByAuthor(authorUUID string, offset uint, limit uint) ([]article.Article, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+	defer cancel()
+
+	o := int64(offset)
+	l := int64(limit)
+	desc := bson.D{{Key: "published_at", Value: -1}}
+	filter := bson.M{
+		"author_uuid": authorUUID,
+		"published_at": bson.M{
+			"$lte": bson.NewDateTimeFromTime(time.Now()),
+			"$ne":  time.Time{},
+		},
+	}
+
+	cur, err := r.collection.Find(
+		ctx,
+		filter,
+		options.Find().SetLimit(l).SetSkip(o).SetSort(desc),
+	)
+
+	if err != nil {
+		return nil, err
+	}
+	defer cur.Close(ctx)
+
+	items := make([]article.Article, 0, limit)
+	for cur.Next(ctx) {
+		var a ArticleBson
+
+		if err := cur.Decode(&a); err != nil {
+			return nil, err
+		}
+		items = append(items, article.Article{
+			UUID:        a.UUID,
+			Cover:       a.Cover,
+			Video:       a.Video,
+			Title:       a.Title,
+			Excerpt:     a.Excerpt,
+			Tags:        a.Tags,
+			PublishedAt: a.PublishedAt,
+			AuthorUUID:  a.AuthorUUID,
 		})
 	}
 
@@ -316,11 +377,9 @@ func (r *ArticlesRepository) GetOne(UUID string) (article.Article, error) {
 		Excerpt:     a.Excerpt,
 		Body:        a.Body,
 		PublishedAt: a.PublishedAt,
-		Author: author.Author{
-			UUID: a.AuthorUUID,
-		},
-		Tags:      a.Tags,
-		ViewCount: a.ViewCount,
+		AuthorUUID:  a.AuthorUUID,
+		Tags:        a.Tags,
+		ViewCount:   a.ViewCount,
 	}, nil
 }
 
@@ -352,11 +411,9 @@ func (r *ArticlesRepository) GetOnePublished(UUID string) (article.Article, erro
 		Excerpt:     a.Excerpt,
 		Body:        a.Body,
 		PublishedAt: a.PublishedAt,
-		Author: author.Author{
-			UUID: a.AuthorUUID,
-		},
-		Tags:      a.Tags,
-		ViewCount: a.ViewCount,
+		AuthorUUID:  a.AuthorUUID,
+		Tags:        a.Tags,
+		ViewCount:   a.ViewCount,
 	}, nil
 }
 
@@ -411,7 +468,7 @@ func (r *ArticlesRepository) Save(a *article.Article) (string, error) {
 		Excerpt:     a.Excerpt,
 		Body:        a.Body,
 		PublishedAt: a.PublishedAt,
-		AuthorUUID:  a.Author.UUID,
+		AuthorUUID:  a.AuthorUUID,
 		Tags:        a.Tags,
 		ViewCount:   a.ViewCount,
 		CreatedAt:   time.Now(),

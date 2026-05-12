@@ -80,6 +80,22 @@ func (r *MockArticlesRepository) GetPublishedByHashtags(hashtags []string, offse
 	return nil, args.Error(1)
 }
 
+func (r *MockArticlesRepository) CountPublishedByAuthor(authorUUID string) (uint, error) {
+	args := r.Mock.Called(authorUUID)
+
+	return args.Get(0).(uint), args.Error(1)
+}
+
+func (r *MockArticlesRepository) GetPublishedByAuthor(authorUUID string, offset uint, limit uint) ([]article.Article, error) {
+	args := r.Mock.Called(authorUUID, offset, limit)
+
+	if a, ok := args.Get(0).([]article.Article); ok {
+		return a, args.Error(1)
+	}
+
+	return nil, args.Error(1)
+}
+
 func (r *MockArticlesRepository) Count() (uint, error) {
 	args := r.Mock.Called()
 

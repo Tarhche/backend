@@ -11,7 +11,6 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/author"
 	"github.com/khanzadimahdi/testproject/domain/comment"
 )
 
@@ -58,11 +57,9 @@ func (r *CommentsRepository) GetAll(offset uint, limit uint) ([]comment.Comment,
 			return nil, err
 		}
 		items = append(items, comment.Comment{
-			UUID: c.UUID,
-			Body: c.Body,
-			Author: author.Author{
-				UUID: c.AuthorUUID,
-			},
+			UUID:       c.UUID,
+			Body:       c.Body,
+			AuthorUUID: c.AuthorUUID,
 			ParentUUID: c.ParentUUID,
 			ObjectUUID: c.ObjectUUID,
 			ObjectType: c.ObjectType,
@@ -93,11 +90,9 @@ func (r *CommentsRepository) GetOne(UUID string) (comment.Comment, error) {
 	}
 
 	return comment.Comment{
-		UUID: c.UUID,
-		Body: c.Body,
-		Author: author.Author{
-			UUID: c.AuthorUUID,
-		},
+		UUID:       c.UUID,
+		Body:       c.Body,
+		AuthorUUID: c.AuthorUUID,
 		ParentUUID: c.ParentUUID,
 		ObjectUUID: c.ObjectUUID,
 		ObjectType: c.ObjectType,
@@ -134,7 +129,7 @@ func (r *CommentsRepository) Save(c *comment.Comment) (string, error) {
 	update := CommentBson{
 		UUID:       c.UUID,
 		Body:       c.Body,
-		AuthorUUID: c.Author.UUID,
+		AuthorUUID: c.AuthorUUID,
 		ParentUUID: c.ParentUUID,
 		ObjectUUID: c.ObjectUUID,
 		ObjectType: c.ObjectType,
@@ -205,11 +200,9 @@ func (r *CommentsRepository) GetApprovedByObjectUUID(objectType string, UUID str
 			return nil, err
 		}
 		items = append(items, comment.Comment{
-			UUID: c.UUID,
-			Body: c.Body,
-			Author: author.Author{
-				UUID: c.AuthorUUID,
-			},
+			UUID:       c.UUID,
+			Body:       c.Body,
+			AuthorUUID: c.AuthorUUID,
 			ParentUUID: c.ParentUUID,
 			ObjectUUID: c.ObjectUUID,
 			ObjectType: c.ObjectType,
@@ -282,11 +275,9 @@ func (r *CommentsRepository) GetAllByAuthorUUID(authorUUID string, offset uint, 
 			return nil, err
 		}
 		items = append(items, comment.Comment{
-			UUID: c.UUID,
-			Body: c.Body,
-			Author: author.Author{
-				UUID: c.AuthorUUID,
-			},
+			UUID:       c.UUID,
+			Body:       c.Body,
+			AuthorUUID: c.AuthorUUID,
 			ParentUUID: c.ParentUUID,
 			ObjectUUID: c.ObjectUUID,
 			ObjectType: c.ObjectType,
@@ -320,11 +311,9 @@ func (r *CommentsRepository) GetOneByAuthorUUID(UUID string, authorUUID string) 
 	}
 
 	return comment.Comment{
-		UUID: c.UUID,
-		Body: c.Body,
-		Author: author.Author{
-			UUID: c.AuthorUUID,
-		},
+		UUID:       c.UUID,
+		Body:       c.Body,
+		AuthorUUID: c.AuthorUUID,
 		ParentUUID: c.ParentUUID,
 		ObjectUUID: c.ObjectUUID,
 		ObjectType: c.ObjectType,

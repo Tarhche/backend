@@ -5,6 +5,7 @@ import (
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/comment"
+	"github.com/khanzadimahdi/testproject/domain/user"
 )
 
 type commentResponse struct {
@@ -16,9 +17,10 @@ type commentResponse struct {
 }
 
 type authorResponse struct {
-	UUID   string `json:"uuid"`
-	Name   string `json:"name"`
-	Avatar string `json:"avatar"`
+	UUID     string `json:"uuid"`
+	Name     string `json:"name"`
+	Avatar   string `json:"avatar"`
+	Username string `json:"username"`
 }
 
 type Response struct {
@@ -33,7 +35,12 @@ type pagination struct {
 	CurrentPage uint `json:"current_page"`
 }
 
-func NewResponse(c []comment.Comment, totalPages, currentPage uint) *Response {
+func NewResponse(c []comment.Comment, users []user.User, totalPages, currentPage uint) *Response {
+	usersByUUID := make(map[string]user.User, len(users))
+	for i := range users {
+		usersByUUID[users[i].UUID] = users[i]
+	}
+
 	items := make([]commentResponse, len(c))
 
 	for i := range c {
@@ -42,10 +49,12 @@ func NewResponse(c []comment.Comment, totalPages, currentPage uint) *Response {
 		items[i].ParentUUID = c[i].ParentUUID
 		items[i].CreatedAt = c[i].CreatedAt.Format(time.RFC3339)
 
+		u := usersByUUID[c[i].AuthorUUID]
 		items[i].Author = authorResponse{
-			UUID:   c[i].Author.UUID,
-			Name:   c[i].Author.Name,
-			Avatar: c[i].Author.Avatar,
+			UUID:     u.UUID,
+			Name:     u.Name,
+			Avatar:   u.Avatar,
+			Username: u.Username,
 		}
 	}
 

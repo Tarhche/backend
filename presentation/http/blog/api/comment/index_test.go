@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/khanzadimahdi/testproject/application/comment/getComments"
-	"github.com/khanzadimahdi/testproject/domain/author"
 	"github.com/khanzadimahdi/testproject/domain/comment"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/comments"
@@ -40,13 +39,15 @@ func TestIndexHandler(t *testing.T) {
 
 		u := []user.User{
 			{
-				UUID: "user-uuid-1",
-				Name: "user-name-1",
+				UUID:     "user-uuid-1",
+				Name:     "user-name-1",
+				Username: "user-username-1",
 			},
 			{
-				UUID:   "user-uuid-2",
-				Name:   "user-name-2",
-				Avatar: "user-avatar-2",
+				UUID:     "user-uuid-2",
+				Name:     "user-name-2",
+				Avatar:   "user-avatar-2",
+				Username: "user-username-2",
 			},
 		}
 
@@ -55,39 +56,27 @@ func TestIndexHandler(t *testing.T) {
 
 		c := []comment.Comment{
 			{
-				UUID: "comment-uuid-1",
-				Body: "comment-body-1",
-				Author: author.Author{
-					UUID:   u[0].UUID,
-					Name:   u[0].Name,
-					Avatar: u[0].Avatar,
-				},
+				UUID:       "comment-uuid-1",
+				Body:       "comment-body-1",
+				AuthorUUID: u[0].UUID,
 				ObjectUUID: data.ObjectUUID,
 				ObjectType: data.ObjectType,
 				ApprovedAt: now,
 				CreatedAt:  now,
 			},
 			{
-				UUID: "comment-uuid-2",
-				Body: "comment-body-2",
-				Author: author.Author{
-					UUID:   u[1].UUID,
-					Name:   u[1].Name,
-					Avatar: u[1].Avatar,
-				},
+				UUID:       "comment-uuid-2",
+				Body:       "comment-body-2",
+				AuthorUUID: u[1].UUID,
 				ObjectUUID: data.ObjectUUID,
 				ObjectType: data.ObjectType,
 				ApprovedAt: now,
 				CreatedAt:  now,
 			},
 			{
-				UUID: "comment-uuid-3",
-				Body: "comment-body-3",
-				Author: author.Author{
-					UUID:   u[1].UUID,
-					Name:   u[1].Name,
-					Avatar: u[1].Avatar,
-				},
+				UUID:       "comment-uuid-3",
+				Body:       "comment-body-3",
+				AuthorUUID: u[1].UUID,
 				ParentUUID: "comment-uuid-1",
 				ObjectUUID: data.ObjectUUID,
 				ObjectType: data.ObjectType,

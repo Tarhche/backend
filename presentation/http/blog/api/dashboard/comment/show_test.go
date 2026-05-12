@@ -11,7 +11,6 @@ import (
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/application/dashboard/comment/getComment"
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/author"
 	"github.com/khanzadimahdi/testproject/domain/comment"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/comments"
@@ -28,21 +27,19 @@ func TestShowHandler(t *testing.T) {
 			commentRepository comments.MockCommentsRepository
 			userRepository    users.MockUsersRepository
 
-			u = user.User{UUID: "auth-user-uuid"}
+			u = user.User{UUID: "auth-user-uuid", Username: "auth-user-username"}
 
 			commentUUID = "role-uuid"
 			a           = comment.Comment{
-				UUID: commentUUID,
-				Author: author.Author{
-					UUID: u.UUID,
-				},
+				UUID:       commentUUID,
+				AuthorUUID: u.UUID,
 			}
 		)
 
 		commentRepository.On("GetOne", commentUUID).Return(a, nil)
 		defer commentRepository.AssertExpectations(t)
 
-		userRepository.On("GetOne", a.Author.UUID).Once().Return(u, nil)
+		userRepository.On("GetOne", a.AuthorUUID).Once().Return(u, nil)
 		defer userRepository.AssertExpectations(t)
 
 		handler := NewShowHandler(getComment.NewUseCase(&commentRepository, &userRepository))

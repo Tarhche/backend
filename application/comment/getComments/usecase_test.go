@@ -6,7 +6,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/khanzadimahdi/testproject/domain/author"
 	"github.com/khanzadimahdi/testproject/domain/comment"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/comments"
@@ -31,10 +30,10 @@ func TestUseCase_Execute(t *testing.T) {
 			}
 
 			c = []comment.Comment{
-				{UUID: "comment-uuid-01", Author: author.Author{UUID: "user-uuid-01"}},
-				{UUID: "comment-uuid-02", Author: author.Author{UUID: "user-uuid-02"}},
-				{UUID: "comment-uuid-03", Author: author.Author{UUID: "user-uuid-same"}},
-				{UUID: "comment-uuid-04", Author: author.Author{UUID: "user-uuid-same"}},
+				{UUID: "comment-uuid-01", AuthorUUID: "user-uuid-01"},
+				{UUID: "comment-uuid-02", AuthorUUID: "user-uuid-02"},
+				{UUID: "comment-uuid-03", AuthorUUID: "user-uuid-same"},
+				{UUID: "comment-uuid-04", AuthorUUID: "user-uuid-same"},
 			}
 			authorUUIDs = []string{
 				"user-uuid-01",
@@ -142,10 +141,10 @@ func TestUseCase_Execute(t *testing.T) {
 			}
 
 			c = []comment.Comment{
-				{UUID: "comment-uuid-01", Author: author.Author{UUID: "user-uuid-01"}},
-				{UUID: "comment-uuid-02", Author: author.Author{UUID: "user-uuid-02"}},
-				{UUID: "comment-uuid-03", Author: author.Author{UUID: "user-uuid-same"}},
-				{UUID: "comment-uuid-04", Author: author.Author{UUID: "user-uuid-same"}},
+				{UUID: "comment-uuid-01", AuthorUUID: "user-uuid-01"},
+				{UUID: "comment-uuid-02", AuthorUUID: "user-uuid-02"},
+				{UUID: "comment-uuid-03", AuthorUUID: "user-uuid-same"},
+				{UUID: "comment-uuid-04", AuthorUUID: "user-uuid-same"},
 			}
 			authorUUIDs = []string{
 				"user-uuid-01",

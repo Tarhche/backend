@@ -7,7 +7,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/khanzadimahdi/testproject/domain/author"
 	"github.com/khanzadimahdi/testproject/domain/comment"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/comments"
@@ -26,25 +25,19 @@ func TestUseCase_Execute(t *testing.T) {
 
 			a = []comment.Comment{
 				{
-					UUID: "article-uuid-1",
-					Body: "body-1",
-					Author: author.Author{
-						UUID: "author-uuid-1",
-					},
+					UUID:       "article-uuid-1",
+					Body:       "body-1",
+					AuthorUUID: "author-uuid-1",
 					ObjectUUID: "object-uuid-1",
 					ObjectType: "article",
 				},
 				{
-					UUID: "article-uuid-2",
-					Author: author.Author{
-						UUID: "author-uuid-2",
-					},
+					UUID:       "article-uuid-2",
+					AuthorUUID: "author-uuid-2",
 				},
 				{
-					UUID: "article-uuid-3",
-					Author: author.Author{
-						UUID: "author-uuid-2",
-					},
+					UUID:       "article-uuid-3",
+					AuthorUUID: "author-uuid-2",
 					ApprovedAt: time.Now(),
 					CreatedAt:  time.Now(),
 				},
@@ -56,31 +49,26 @@ func TestUseCase_Execute(t *testing.T) {
 			}
 
 			expectedResponse = Response{
+				Author: authorResponse{
+					UUID:     "user-uuid-1",
+					Username: "user-username-1",
+				},
 				Items: []commentResponse{
 					{
-						UUID: a[0].UUID,
-						Body: a[0].Body,
-						Author: authorResponse{
-							UUID: a[0].Author.UUID,
-						},
+						UUID:       a[0].UUID,
+						Body:       a[0].Body,
 						ObjectUUID: "object-uuid-1",
 						ObjectType: "article",
 						ApprovedAt: a[1].ApprovedAt.Format(time.RFC3339),
 						CreatedAt:  a[1].CreatedAt.Format(time.RFC3339),
 					},
 					{
-						UUID: a[1].UUID,
-						Author: authorResponse{
-							UUID: a[1].Author.UUID,
-						},
+						UUID:       a[1].UUID,
 						ApprovedAt: a[1].ApprovedAt.Format(time.RFC3339),
 						CreatedAt:  a[1].CreatedAt.Format(time.RFC3339),
 					},
 					{
-						UUID: a[2].UUID,
-						Author: authorResponse{
-							UUID: a[2].Author.UUID,
-						},
+						UUID:       a[2].UUID,
 						ApprovedAt: a[2].ApprovedAt.Format(time.RFC3339),
 						CreatedAt:  a[2].CreatedAt.Format(time.RFC3339),
 					},
@@ -92,7 +80,8 @@ func TestUseCase_Execute(t *testing.T) {
 			}
 
 			u = user.User{
-				UUID: r.UserUUID,
+				UUID:     r.UserUUID,
+				Username: "user-username-1",
 			}
 		)
 
@@ -167,25 +156,19 @@ func TestUseCase_Execute(t *testing.T) {
 
 			a = []comment.Comment{
 				{
-					UUID: "article-uuid-1",
-					Body: "body-1",
-					Author: author.Author{
-						UUID: "author-uuid-1",
-					},
+					UUID:       "article-uuid-1",
+					Body:       "body-1",
+					AuthorUUID: "author-uuid-1",
 					ObjectUUID: "object-uuid-1",
 					ObjectType: "article",
 				},
 				{
-					UUID: "article-uuid-2",
-					Author: author.Author{
-						UUID: "author-uuid-2",
-					},
+					UUID:       "article-uuid-2",
+					AuthorUUID: "author-uuid-2",
 				},
 				{
-					UUID: "article-uuid-3",
-					Author: author.Author{
-						UUID: "author-uuid-2",
-					},
+					UUID:       "article-uuid-3",
+					AuthorUUID: "author-uuid-2",
 					ApprovedAt: time.Now(),
 					CreatedAt:  time.Now(),
 				},

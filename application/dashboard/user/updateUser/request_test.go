@@ -30,6 +30,7 @@ func TestRequest_Validate(t *testing.T) {
 				UserUUID: "user-uuid-123",
 				Email:    "user@example.com",
 				Name:     "John Doe",
+				Username: "johndoe",
 			},
 			want: domain.ValidationErrors{},
 		},
@@ -39,6 +40,7 @@ func TestRequest_Validate(t *testing.T) {
 				UserUUID: "",
 				Email:    "user@example.com",
 				Name:     "John Doe",
+				Username: "johndoe",
 			},
 			want: domain.ValidationErrors{
 				"uuid": "required_field",
@@ -50,9 +52,22 @@ func TestRequest_Validate(t *testing.T) {
 				UserUUID: "user-uuid-123",
 				Email:    "",
 				Name:     "John Doe",
+				Username: "johndoe",
 			},
 			want: domain.ValidationErrors{
 				"email": "required_field",
+			},
+		},
+		{
+			name: "invalid request with malformed email",
+			request: Request{
+				UserUUID: "user-uuid-123",
+				Email:    "not-an-email",
+				Name:     "John Doe",
+				Username: "johndoe",
+			},
+			want: domain.ValidationErrors{
+				"email": "invalid_email",
 			},
 		},
 		{
@@ -61,9 +76,46 @@ func TestRequest_Validate(t *testing.T) {
 				UserUUID: "user-uuid-123",
 				Email:    "user@example.com",
 				Name:     "",
+				Username: "johndoe",
 			},
 			want: domain.ValidationErrors{
 				"name": "required_field",
+			},
+		},
+		{
+			name: "invalid request with empty username",
+			request: Request{
+				UserUUID: "user-uuid-123",
+				Email:    "user@example.com",
+				Name:     "John Doe",
+				Username: "",
+			},
+			want: domain.ValidationErrors{
+				"username": "required_field",
+			},
+		},
+		{
+			name: "invalid request with malformed username",
+			request: Request{
+				UserUUID: "user-uuid-123",
+				Email:    "user@example.com",
+				Name:     "John Doe",
+				Username: "John Doe!",
+			},
+			want: domain.ValidationErrors{
+				"username": "invalid_value",
+			},
+		},
+		{
+			name: "invalid request with username having no alphanumerics",
+			request: Request{
+				UserUUID: "user-uuid-123",
+				Email:    "user@example.com",
+				Name:     "John Doe",
+				Username: "...",
+			},
+			want: domain.ValidationErrors{
+				"username": "invalid_value",
 			},
 		},
 		{
@@ -72,11 +124,13 @@ func TestRequest_Validate(t *testing.T) {
 				UserUUID: "",
 				Email:    "",
 				Name:     "",
+				Username: "",
 			},
 			want: domain.ValidationErrors{
-				"uuid":  "required_field",
-				"email": "required_field",
-				"name":  "required_field",
+				"uuid":     "required_field",
+				"email":    "required_field",
+				"name":     "required_field",
+				"username": "required_field",
 			},
 		},
 	}

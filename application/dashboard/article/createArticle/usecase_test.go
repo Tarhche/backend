@@ -8,7 +8,6 @@ import (
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/article"
-	"github.com/khanzadimahdi/testproject/domain/author"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/articles"
 	"github.com/khanzadimahdi/testproject/infrastructure/validator"
 )
@@ -37,10 +36,8 @@ func TestUseCase_Execute(t *testing.T) {
 				Excerpt:     r.Excerpt,
 				Body:        r.Body,
 				PublishedAt: r.PublishedAt,
-				Author: author.Author{
-					UUID: r.AuthorUUID,
-				},
-				Tags: r.Tags,
+				AuthorUUID:  r.AuthorUUID,
+				Tags:        r.Tags,
 			}
 
 			u                = "article-uuid"
@@ -109,10 +106,8 @@ func TestUseCase_Execute(t *testing.T) {
 				Excerpt:     r.Excerpt,
 				Body:        r.Body,
 				PublishedAt: r.PublishedAt,
-				Author: author.Author{
-					UUID: r.AuthorUUID,
-				},
-				Tags: r.Tags,
+				AuthorUUID:  r.AuthorUUID,
+				Tags:        r.Tags,
 			}
 
 			expectedErr = errors.New("error happened")

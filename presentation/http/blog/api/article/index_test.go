@@ -12,8 +12,9 @@ import (
 
 	getarticles "github.com/khanzadimahdi/testproject/application/article/getArticles"
 	"github.com/khanzadimahdi/testproject/domain/article"
-	"github.com/khanzadimahdi/testproject/domain/author"
+	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/articles"
+	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
 )
 
 func TestIndexHandler(t *testing.T) {
@@ -24,6 +25,7 @@ func TestIndexHandler(t *testing.T) {
 
 		var (
 			articlesRepository articles.MockArticlesRepository
+			userRepository     users.MockUsersRepository
 		)
 
 		publishedAt, err := time.Parse(time.RFC3339, "2024-09-29T15:56:25Z")
@@ -38,45 +40,41 @@ func TestIndexHandler(t *testing.T) {
 				Excerpt:     "article-excerpt-1",
 				Body:        "article-body-1",
 				PublishedAt: publishedAt,
-				Author: author.Author{
-					UUID:   "author-uuid-1",
-					Name:   "author-name",
-					Avatar: "author-avatar",
-				},
-				Tags:      []string{"tag-1", "tag-2", "tag-3"},
-				ViewCount: 123,
+				AuthorUUID:  "author-uuid-1",
+				Tags:        []string{"tag-1", "tag-2", "tag-3"},
+				ViewCount:   123,
 			},
 			{
-				UUID:    "article-uuid-2",
-				Cover:   "article-cover-2",
-				Title:   "article-title-2",
-				Excerpt: "article-excerpt-2",
-				Body:    "article-body-2",
-				Author: author.Author{
-					UUID:   "author-uuid-1",
-					Name:   "author-name",
-					Avatar: "author-avatar",
-				},
+				UUID:       "article-uuid-2",
+				Cover:      "article-cover-2",
+				Title:      "article-title-2",
+				Excerpt:    "article-excerpt-2",
+				Body:       "article-body-2",
+				AuthorUUID: "author-uuid-1",
 			},
 			{
-				UUID:    "article-uuid-3",
-				Cover:   "article-cover-3",
-				Title:   "article-title-3",
-				Excerpt: "article-excerpt-3",
-				Body:    "article-body-3",
-				Author: author.Author{
-					UUID:   "author-uuid-2",
-					Name:   "author-name",
-					Avatar: "author-avatar",
-				},
+				UUID:       "article-uuid-3",
+				Cover:      "article-cover-3",
+				Title:      "article-title-3",
+				Excerpt:    "article-excerpt-3",
+				Body:       "article-body-3",
+				AuthorUUID: "author-uuid-2",
 			},
+		}
+
+		users := []user.User{
+			{UUID: "author-uuid-1", Name: "author-name", Avatar: "author-avatar", Username: "author-username-1"},
+			{UUID: "author-uuid-2", Name: "author-name", Avatar: "author-avatar", Username: "author-username-2"},
 		}
 
 		articlesRepository.On("CountPublished").Once().Return(uint(len(articles)), nil)
 		articlesRepository.On("GetAllPublished", uint(0), uint(10)).Once().Return(articles, nil)
 		defer articlesRepository.AssertExpectations(t)
 
-		handler := NewIndexHandler(getarticles.NewUseCase(&articlesRepository))
+		userRepository.On("GetByUUIDs", []string{"author-uuid-1", "author-uuid-1", "author-uuid-2"}).Once().Return(users, nil)
+		defer userRepository.AssertExpectations(t)
+
+		handler := NewIndexHandler(getarticles.NewUseCase(&articlesRepository, &userRepository))
 
 		request := httptest.NewRequest(http.MethodGet, "/?page=1", nil)
 		response := httptest.NewRecorder()
@@ -96,13 +94,17 @@ func TestIndexHandler(t *testing.T) {
 
 		var (
 			articlesRepository articles.MockArticlesRepository
+			userRepository     users.MockUsersRepository
 		)
 
 		articlesRepository.On("CountPublished").Once().Return(uint(0), nil)
 		articlesRepository.On("GetAllPublished", uint(0), uint(10)).Once().Return(nil, nil)
 		defer articlesRepository.AssertExpectations(t)
 
-		handler := NewIndexHandler(getarticles.NewUseCase(&articlesRepository))
+		userRepository.On("GetByUUIDs", []string{}).Once().Return([]user.User{}, nil)
+		defer userRepository.AssertExpectations(t)
+
+		handler := NewIndexHandler(getarticles.NewUseCase(&articlesRepository, &userRepository))
 
 		request := httptest.NewRequest(http.MethodGet, "/?page=1", nil)
 		response := httptest.NewRecorder()
@@ -122,12 +124,13 @@ func TestIndexHandler(t *testing.T) {
 
 		var (
 			articlesRepository articles.MockArticlesRepository
+			userRepository     users.MockUsersRepository
 		)
 
 		articlesRepository.On("CountPublished").Once().Return(uint(0), errors.New("something faulty has happened"))
 		defer articlesRepository.AssertExpectations(t)
 
-		handler := NewIndexHandler(getarticles.NewUseCase(&articlesRepository))
+		handler := NewIndexHandler(getarticles.NewUseCase(&articlesRepository, &userRepository))
 
 		request := httptest.NewRequest(http.MethodGet, "/?page=1", nil)
 		response := httptest.NewRecorder()

@@ -7,9 +7,11 @@
             "title": "article-title-1",
             "excerpt": "article-excerpt-1",
             "published_at": "2024-09-29T15:56:25Z",
-            "authorResponse": {
+            "author": {
+                "uuid": "author-uuid-1",
                 "name": "author-name",
-                "avatar": "author-avatar"
+                "avatar": "author-avatar",
+                "username": "author-username-1"
             }
         },
         {
@@ -19,9 +21,11 @@
             "title": "article-title-2",
             "excerpt": "article-excerpt-2",
             "published_at": "0001-01-01T00:00:00Z",
-            "authorResponse": {
+            "author": {
+                "uuid": "author-uuid-1",
                 "name": "author-name",
-                "avatar": "author-avatar"
+                "avatar": "author-avatar",
+                "username": "author-username-1"
             }
         },
         {
@@ -31,9 +35,11 @@
             "title": "article-title-3",
             "excerpt": "article-excerpt-3",
             "published_at": "0001-01-01T00:00:00Z",
-            "authorResponse": {
+            "author": {
+                "uuid": "author-uuid-2",
                 "name": "author-name",
-                "avatar": "author-avatar"
+                "avatar": "author-avatar",
+                "username": "author-username-2"
             }
         }
     ],

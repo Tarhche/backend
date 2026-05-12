@@ -13,7 +13,6 @@ import (
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/application/dashboard/comment/updateUserComment"
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/author"
 	"github.com/khanzadimahdi/testproject/domain/comment"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/comments"
@@ -33,9 +32,7 @@ func TestUpdateUserHandler(t *testing.T) {
 				ParentUUID: "parent-uuid-1",
 				ObjectUUID: "object-uuid-test",
 				ObjectType: "article",
-				Author: author.Author{
-					UUID: u.UUID,
-				},
+				AuthorUUID: u.UUID,
 			}
 		)
 

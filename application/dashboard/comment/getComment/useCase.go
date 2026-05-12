@@ -23,13 +23,10 @@ func (uc *UseCase) Execute(UUID string) (*Response, error) {
 		return nil, err
 	}
 
-	u, err := uc.userRepository.GetOne(c.Author.UUID)
+	u, err := uc.userRepository.GetOne(c.AuthorUUID)
 	if err != nil {
 		return nil, err
 	}
 
-	c.Author.Name = u.Name
-	c.Author.Avatar = u.Avatar
-
-	return NewResponse(c), nil
+	return NewResponse(c, u), nil
 }

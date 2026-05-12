@@ -36,13 +36,14 @@ func TestUseCase_Execute(t *testing.T) {
 			}
 		)
 
-		a.Author.UUID = "author-uuid"
-		expectedResponse.Author.UUID = a.Author.UUID
+		a.AuthorUUID = "author-uuid"
+		expectedResponse.Author.UUID = a.AuthorUUID
+		expectedResponse.Author.Username = "author-username"
 
 		commentRepository.On("GetOneByAuthorUUID", commentUUID, userUUID).Return(a, nil)
 		defer commentRepository.AssertExpectations(t)
 
-		userRepository.On("GetOne", a.Author.UUID).Once().Return(user.User{UUID: a.Author.UUID}, nil)
+		userRepository.On("GetOne", a.AuthorUUID).Once().Return(user.User{UUID: a.AuthorUUID, Username: "author-username"}, nil)
 		defer userRepository.AssertExpectations(t)
 
 		response, err := NewUseCase(&commentRepository, &userRepository).Execute(commentUUID, userUUID)
@@ -92,12 +93,12 @@ func TestUseCase_Execute(t *testing.T) {
 			expectedError = errors.New("error")
 		)
 
-		a.Author.UUID = "author-uuid"
+		a.AuthorUUID = "author-uuid"
 
 		commentRepository.On("GetOneByAuthorUUID", commentUUID, userUUID).Return(a, nil)
 		defer commentRepository.AssertExpectations(t)
 
-		userRepository.On("GetOne", a.Author.UUID).Once().Return(user.User{}, expectedError)
+		userRepository.On("GetOne", a.AuthorUUID).Once().Return(user.User{}, expectedError)
 		defer userRepository.AssertExpectations(t)
 
 		response, err := NewUseCase(&commentRepository, &userRepository).Execute(commentUUID, userUUID)

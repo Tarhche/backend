@@ -2,7 +2,6 @@ package updateComment
 
 import (
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/author"
 	"github.com/khanzadimahdi/testproject/domain/comment"
 )
 
@@ -29,11 +28,9 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 	}
 
 	c := comment.Comment{
-		UUID: request.UUID,
-		Body: request.Body,
-		Author: author.Author{
-			UUID: request.AuthorUUID,
-		},
+		UUID:       request.UUID,
+		Body:       request.Body,
+		AuthorUUID: request.AuthorUUID,
 		ParentUUID: request.ParentUUID,
 		ObjectUUID: request.ObjectUUID,
 		ObjectType: request.ObjectType,

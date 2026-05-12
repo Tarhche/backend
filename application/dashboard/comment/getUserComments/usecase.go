@@ -51,10 +51,5 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		return nil, err
 	}
 
-	for i := range c {
-		c[i].Author.Name = u.Name
-		c[i].Author.Avatar = u.Avatar
-	}
-
-	return NewResponse(c, totalPages, currentPage), nil
+	return NewResponse(c, u, totalPages, currentPage), nil
 }

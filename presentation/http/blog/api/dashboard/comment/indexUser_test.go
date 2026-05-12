@@ -13,7 +13,6 @@ import (
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/application/dashboard/comment/getComments"
 	"github.com/khanzadimahdi/testproject/application/dashboard/comment/getUserComments"
-	"github.com/khanzadimahdi/testproject/domain/author"
 	"github.com/khanzadimahdi/testproject/domain/comment"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/comments"
@@ -30,7 +29,7 @@ func TestIndexUserHandler(t *testing.T) {
 			commentRepository comments.MockCommentsRepository
 			userRepository    users.MockUsersRepository
 
-			u = user.User{UUID: "auth-user-uuid"}
+			u = user.User{UUID: "auth-user-uuid", Username: "auth-user-username"}
 
 			r = getComments.Request{
 				Page:       1,
@@ -42,25 +41,19 @@ func TestIndexUserHandler(t *testing.T) {
 
 			a = []comment.Comment{
 				{
-					UUID: "article-uuid-1",
-					Body: "body-1",
-					Author: author.Author{
-						UUID: "author-uuid-1",
-					},
+					UUID:       "article-uuid-1",
+					Body:       "body-1",
+					AuthorUUID: "author-uuid-1",
 					ObjectUUID: "object-uuid-1",
 					ObjectType: "article",
 				},
 				{
-					UUID: "article-uuid-2",
-					Author: author.Author{
-						UUID: "author-uuid-2",
-					},
+					UUID:       "article-uuid-2",
+					AuthorUUID: "author-uuid-2",
 				},
 				{
-					UUID: "article-uuid-3",
-					Author: author.Author{
-						UUID: "author-uuid-2",
-					},
+					UUID:       "article-uuid-3",
+					AuthorUUID: "author-uuid-2",
 					ApprovedAt: createdAt,
 					CreatedAt:  createdAt,
 				},
@@ -98,7 +91,7 @@ func TestIndexUserHandler(t *testing.T) {
 			commentRepository comments.MockCommentsRepository
 			userRepository    users.MockUsersRepository
 
-			u = user.User{UUID: "auth-user-uuid"}
+			u = user.User{UUID: "auth-user-uuid", Username: "auth-user-username"}
 
 			r = getComments.Request{
 				Page:       1,

@@ -3,8 +3,6 @@ package comment
 import (
 	"errors"
 	"time"
-
-	"github.com/khanzadimahdi/testproject/domain/author"
 )
 
 const (
@@ -14,7 +12,7 @@ const (
 type Comment struct {
 	UUID       string
 	Body       string
-	Author     author.Author
+	AuthorUUID string
 	ParentUUID string
 	ObjectUUID string
 	ObjectType string

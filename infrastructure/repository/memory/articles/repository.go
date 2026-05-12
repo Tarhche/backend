@@ -98,6 +98,14 @@ func (r *ArticlesRepository) GetPublishedByHashtags(hashtags []string, offset ui
 	return nil, nil
 }
 
+func (r *ArticlesRepository) CountPublishedByAuthor(authorUUID string) (uint, error) {
+	return 0, nil
+}
+
+func (r *ArticlesRepository) GetPublishedByAuthor(authorUUID string, offset uint, limit uint) ([]article.Article, error) {
+	return nil, nil
+}
+
 func (r *ArticlesRepository) GetOne(UUID string) (article.Article, error) {
 	a, ok := r.datastore.Load(UUID)
 	if !ok {

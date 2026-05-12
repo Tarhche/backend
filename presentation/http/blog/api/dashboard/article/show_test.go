@@ -12,7 +12,9 @@ import (
 	getarticle "github.com/khanzadimahdi/testproject/application/dashboard/article/getArticle"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/article"
+	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/articles"
+	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
 )
 
 func TestShowHandler(t *testing.T) {
@@ -23,6 +25,7 @@ func TestShowHandler(t *testing.T) {
 
 		var (
 			articleRepository articles.MockArticlesRepository
+			userRepository    users.MockUsersRepository
 
 			publishedAt, _ = time.Parse(time.RFC3339, "2024-10-11T04:27:44Z")
 
@@ -39,7 +42,10 @@ func TestShowHandler(t *testing.T) {
 		articleRepository.On("GetOne", a.UUID).Return(a, nil)
 		defer articleRepository.AssertExpectations(t)
 
-		handler := NewShowHandler(getarticle.NewUseCase(&articleRepository))
+		userRepository.On("GetOne", "").Return(user.User{}, nil)
+		defer userRepository.AssertExpectations(t)
+
+		handler := NewShowHandler(getarticle.NewUseCase(&articleRepository, &userRepository))
 
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
 		request.SetPathValue("uuid", a.UUID)
@@ -60,6 +66,7 @@ func TestShowHandler(t *testing.T) {
 
 		var (
 			articleRepository articles.MockArticlesRepository
+			userRepository    users.MockUsersRepository
 
 			a = article.Article{
 				UUID: "article-uuid-1",
@@ -69,13 +76,15 @@ func TestShowHandler(t *testing.T) {
 		articleRepository.On("GetOne", a.UUID).Return(article.Article{}, domain.ErrNotExists)
 		defer articleRepository.AssertExpectations(t)
 
-		handler := NewShowHandler(getarticle.NewUseCase(&articleRepository))
+		handler := NewShowHandler(getarticle.NewUseCase(&articleRepository, &userRepository))
 
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
 		request.SetPathValue("uuid", a.UUID)
 		response := httptest.NewRecorder()
 
 		handler.ServeHTTP(response, request)
+
+		userRepository.AssertNotCalled(t, "GetOne")
 
 		assert.Len(t, response.Body.Bytes(), 0)
 		assert.Equal(t, http.StatusNotFound, response.Code)

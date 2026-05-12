@@ -4,22 +4,26 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/article"
 	"github.com/khanzadimahdi/testproject/domain/element"
 	"github.com/khanzadimahdi/testproject/domain/element/component"
+	"github.com/khanzadimahdi/testproject/domain/user"
 )
 
 // ElementRetriever is a service that retrieves elements by venues.
 type Retriever struct {
 	articleRepository article.Repository
 	elementRepository element.Repository
+	userRepository    user.Repository
 }
 
 // NewRetriever creates a new Retriever.
 func NewRetriever(
 	articleRepository article.Repository,
 	elementRepository element.Repository,
+	userRepository user.Repository,
 ) *Retriever {
 	return &Retriever{
 		articleRepository: articleRepository,
 		elementRepository: elementRepository,
+		userRepository:    userRepository,
 	}
 }
 
@@ -45,5 +49,15 @@ func (r *Retriever) RetrieveByVenues(venues []string) ([]Response, error) {
 		return nil, err
 	}
 
-	return NewResponse(elements, articles), nil
+	userUUIDs := make([]string, len(articles))
+	for i := range articles {
+		userUUIDs[i] = articles[i].AuthorUUID
+	}
+
+	users, err := r.userRepository.GetByUUIDs(userUUIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	return NewResponse(elements, articles, users), nil
 }

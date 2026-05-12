@@ -11,7 +11,9 @@ import (
 
 	getarticles "github.com/khanzadimahdi/testproject/application/dashboard/article/getArticles"
 	"github.com/khanzadimahdi/testproject/domain/article"
+	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/articles"
+	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
 )
 
 func TestIndexHandler(t *testing.T) {
@@ -22,6 +24,7 @@ func TestIndexHandler(t *testing.T) {
 
 		var (
 			articleRepository articles.MockArticlesRepository
+			userRepository    users.MockUsersRepository
 
 			publishedAt, _ = time.Parse(time.RFC3339, "2024-10-11T04:27:44Z")
 
@@ -48,7 +51,10 @@ func TestIndexHandler(t *testing.T) {
 		articleRepository.On("GetAll", uint(0), uint(20)).Return(a, nil)
 		defer articleRepository.AssertExpectations(t)
 
-		handler := NewIndexHandler(getarticles.NewUseCase(&articleRepository))
+		userRepository.On("GetByUUIDs", []string{"", "", ""}).Return([]user.User{}, nil)
+		defer userRepository.AssertExpectations(t)
+
+		handler := NewIndexHandler(getarticles.NewUseCase(&articleRepository, &userRepository))
 
 		request := httptest.NewRequest(http.MethodGet, "/?page=1", nil)
 		response := httptest.NewRecorder()
@@ -68,13 +74,17 @@ func TestIndexHandler(t *testing.T) {
 
 		var (
 			articleRepository articles.MockArticlesRepository
+			userRepository    users.MockUsersRepository
 		)
 
 		articleRepository.On("Count").Once().Return(uint(0), nil)
 		articleRepository.On("GetAll", uint(0), uint(20)).Return(nil, nil)
 		defer articleRepository.AssertExpectations(t)
 
-		handler := NewIndexHandler(getarticles.NewUseCase(&articleRepository))
+		userRepository.On("GetByUUIDs", []string{}).Return([]user.User{}, nil)
+		defer userRepository.AssertExpectations(t)
+
+		handler := NewIndexHandler(getarticles.NewUseCase(&articleRepository, &userRepository))
 
 		request := httptest.NewRequest(http.MethodGet, "/?page=1", nil)
 		response := httptest.NewRecorder()

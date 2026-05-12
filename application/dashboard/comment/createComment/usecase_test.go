@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/author"
 	"github.com/khanzadimahdi/testproject/domain/comment"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/comments"
 	"github.com/khanzadimahdi/testproject/infrastructure/validator"
@@ -31,10 +30,8 @@ func TestUseCase_Execute(t *testing.T) {
 			}
 
 			c = comment.Comment{
-				Body: r.Body,
-				Author: author.Author{
-					UUID: r.AuthorUUID,
-				},
+				Body:       r.Body,
+				AuthorUUID: r.AuthorUUID,
 				ObjectUUID: r.ObjectUUID,
 				ObjectType: r.ObjectType,
 			}
@@ -95,10 +92,8 @@ func TestUseCase_Execute(t *testing.T) {
 			}
 
 			c = comment.Comment{
-				Body: r.Body,
-				Author: author.Author{
-					UUID: r.AuthorUUID,
-				},
+				Body:       r.Body,
+				AuthorUUID: r.AuthorUUID,
 				ObjectUUID: r.ObjectUUID,
 				ObjectType: r.ObjectType,
 			}

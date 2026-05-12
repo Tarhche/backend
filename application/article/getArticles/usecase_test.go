@@ -7,17 +7,25 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/khanzadimahdi/testproject/domain/article"
+	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/articles"
+	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
 )
 
 func TestUseCase_Execute(t *testing.T) {
 	t.Run("returns articles", func(t *testing.T) {
 		var (
 			articlesRepository articles.MockArticlesRepository
-			a                  = []article.Article{
-				{UUID: "test-article-1"},
-				{UUID: "test-article-2"},
-				{UUID: "test-article-3"},
+			userRepository     users.MockUsersRepository
+
+			a = []article.Article{
+				{UUID: "test-article-1", AuthorUUID: "author-uuid-1"},
+				{UUID: "test-article-2", AuthorUUID: "author-uuid-2"},
+				{UUID: "test-article-3", AuthorUUID: "author-uuid-1"},
+			}
+			u = []user.User{
+				{UUID: "author-uuid-1", Name: "author-name-1", Avatar: "author-avatar-1"},
+				{UUID: "author-uuid-2", Name: "author-name-2", Avatar: "author-avatar-2"},
 			}
 		)
 
@@ -25,7 +33,10 @@ func TestUseCase_Execute(t *testing.T) {
 		articlesRepository.On("GetAllPublished", uint(0), uint(10)).Once().Return(a, nil)
 		defer articlesRepository.AssertExpectations(t)
 
-		usecase := NewUseCase(&articlesRepository)
+		userRepository.On("GetByUUIDs", []string{"author-uuid-1", "author-uuid-2", "author-uuid-1"}).Once().Return(u, nil)
+		defer userRepository.AssertExpectations(t)
+
+		usecase := NewUseCase(&articlesRepository, &userRepository)
 		request := Request{Page: 1}
 		response, err := usecase.Execute(&request)
 
@@ -36,17 +47,19 @@ func TestUseCase_Execute(t *testing.T) {
 	t.Run("returns an error on counting items", func(t *testing.T) {
 		var (
 			articlesRepository articles.MockArticlesRepository
+			userRepository     users.MockUsersRepository
 			expectedErr        = errors.New("test error")
 		)
 
 		articlesRepository.On("CountPublished").Once().Return(uint(1), expectedErr)
 		defer articlesRepository.AssertExpectations(t)
 
-		usecase := NewUseCase(&articlesRepository)
+		usecase := NewUseCase(&articlesRepository, &userRepository)
 		request := Request{Page: 1}
 		response, err := usecase.Execute(&request)
 
 		articlesRepository.AssertNotCalled(t, "GetAllPublished")
+		userRepository.AssertNotCalled(t, "GetByUUIDs")
 
 		assert.Nil(t, response, "unexpected response")
 		assert.ErrorIs(t, err, expectedErr)
@@ -55,6 +68,7 @@ func TestUseCase_Execute(t *testing.T) {
 	t.Run("returns an error on getting items", func(t *testing.T) {
 		var (
 			articlesRepository articles.MockArticlesRepository
+			userRepository     users.MockUsersRepository
 			expectedErr        = errors.New("test error")
 		)
 
@@ -62,7 +76,35 @@ func TestUseCase_Execute(t *testing.T) {
 		articlesRepository.On("GetAllPublished", uint(0), uint(10)).Once().Return(nil, expectedErr)
 		defer articlesRepository.AssertExpectations(t)
 
-		usecase := NewUseCase(&articlesRepository)
+		usecase := NewUseCase(&articlesRepository, &userRepository)
+		request := Request{Page: 1}
+		response, err := usecase.Execute(&request)
+
+		userRepository.AssertNotCalled(t, "GetByUUIDs")
+
+		assert.Nil(t, response, "unexpected response")
+		assert.ErrorIs(t, err, expectedErr)
+	})
+
+	t.Run("returns an error on getting authors", func(t *testing.T) {
+		var (
+			articlesRepository articles.MockArticlesRepository
+			userRepository     users.MockUsersRepository
+			expectedErr        = errors.New("test error")
+
+			a = []article.Article{
+				{UUID: "test-article-1", AuthorUUID: "author-uuid-1"},
+			}
+		)
+
+		articlesRepository.On("CountPublished").Once().Return(uint(1), nil)
+		articlesRepository.On("GetAllPublished", uint(0), uint(10)).Once().Return(a, nil)
+		defer articlesRepository.AssertExpectations(t)
+
+		userRepository.On("GetByUUIDs", []string{"author-uuid-1"}).Once().Return(nil, expectedErr)
+		defer userRepository.AssertExpectations(t)
+
+		usecase := NewUseCase(&articlesRepository, &userRepository)
 		request := Request{Page: 1}
 		response, err := usecase.Execute(&request)
 

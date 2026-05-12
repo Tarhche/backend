@@ -6,9 +6,11 @@
     "excerpt": "",
     "body": "test body",
     "published_at": "2024-09-29T15:56:25Z",
-    "avatar": {
+    "author": {
+        "uuid": "author-uuid",
         "name": "test name",
-        "avatar": "test avatar"
+        "avatar": "test avatar",
+        "username": "author-username"
     },
     "tags": [],
     "view_count": 11,

@@ -1,6 +1,9 @@
 package updateprofile
 
-import "github.com/khanzadimahdi/testproject/domain"
+import (
+	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/user"
+)
 
 type Request struct {
 	UserUUID string `json:"-"`
@@ -25,6 +28,8 @@ func (r *Request) Validate() domain.ValidationErrors {
 
 	if len(r.Email) == 0 {
 		validationErrors["email"] = "required_field"
+	} else if !user.IsValidEmail(r.Email) {
+		validationErrors["email"] = "invalid_email"
 	}
 
 	if len(r.Username) == 0 {

@@ -15,9 +15,10 @@ import (
 	"github.com/khanzadimahdi/testproject/application/element"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/article"
-	"github.com/khanzadimahdi/testproject/domain/author"
+	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/articles"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/elements"
+	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
 )
 
 func TestShowHandler(t *testing.T) {
@@ -29,6 +30,7 @@ func TestShowHandler(t *testing.T) {
 		var (
 			articlesRepository articles.MockArticlesRepository
 			elementsRepository elements.MockElementsRepository
+			userRepository     users.MockUsersRepository
 		)
 
 		publishedAt, err := time.Parse(time.RFC3339, "2024-09-29T15:56:25Z")
@@ -39,12 +41,14 @@ func TestShowHandler(t *testing.T) {
 			Title:       "test title",
 			Body:        "test body",
 			PublishedAt: publishedAt,
-			Author: author.Author{
-				UUID:   "author-uuid",
-				Name:   "test name",
-				Avatar: "test avatar",
-			},
-			ViewCount: 11,
+			AuthorUUID:  "author-uuid",
+			ViewCount:   11,
+		}
+		u := user.User{
+			UUID:     "author-uuid",
+			Name:     "test name",
+			Avatar:   "test avatar",
+			Username: "author-username",
 		}
 
 		articlesRepository.On("GetOnePublished", a.UUID).Once().Return(a, nil)
@@ -52,11 +56,15 @@ func TestShowHandler(t *testing.T) {
 		articlesRepository.On("GetByUUIDs", []string{}).Once().Return(nil, nil)
 		defer articlesRepository.AssertExpectations(t)
 
+		userRepository.On("GetOne", "author-uuid").Once().Return(u, nil)
+		userRepository.On("GetByUUIDs", []string{}).Once().Return([]user.User{}, nil)
+		defer userRepository.AssertExpectations(t)
+
 		elementsRepository.On("GetByVenues", []string{"articles/*", fmt.Sprintf("articles/%s", a.UUID)}).Once().Return(nil, nil)
 		defer elementsRepository.AssertExpectations(t)
 
-		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository)
-		handler := NewShowHandler(getarticle.NewUseCase(&articlesRepository, elementRetriever))
+		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository)
+		handler := NewShowHandler(getarticle.NewUseCase(&articlesRepository, &userRepository, elementRetriever))
 
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
 		request.SetPathValue("uuid", a.UUID)
@@ -79,6 +87,7 @@ func TestShowHandler(t *testing.T) {
 		var (
 			articlesRepository articles.MockArticlesRepository
 			elementsRepository elements.MockElementsRepository
+			userRepository     users.MockUsersRepository
 		)
 
 		a := article.Article{
@@ -88,8 +97,8 @@ func TestShowHandler(t *testing.T) {
 		articlesRepository.On("GetOnePublished", a.UUID).Once().Return(article.Article{}, domain.ErrNotExists)
 		defer articlesRepository.AssertExpectations(t)
 
-		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository)
-		handler := NewShowHandler(getarticle.NewUseCase(&articlesRepository, elementRetriever))
+		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository)
+		handler := NewShowHandler(getarticle.NewUseCase(&articlesRepository, &userRepository, elementRetriever))
 
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
 		request.SetPathValue("uuid", a.UUID)
@@ -100,6 +109,7 @@ func TestShowHandler(t *testing.T) {
 
 		articlesRepository.AssertNotCalled(t, "IncreaseView")
 		articlesRepository.AssertNotCalled(t, "GetByUUIDs")
+		userRepository.AssertNotCalled(t, "GetOne")
 		elementsRepository.AssertNotCalled(t, "GetByVenues")
 
 		assert.Len(t, response.Body.Bytes(), 0)
@@ -112,6 +122,7 @@ func TestShowHandler(t *testing.T) {
 		var (
 			articlesRepository articles.MockArticlesRepository
 			elementsRepository elements.MockElementsRepository
+			userRepository     users.MockUsersRepository
 		)
 
 		a := article.Article{
@@ -121,8 +132,8 @@ func TestShowHandler(t *testing.T) {
 		articlesRepository.On("GetOnePublished", a.UUID).Once().Return(article.Article{}, errors.New("an error has happened"))
 		defer articlesRepository.AssertExpectations(t)
 
-		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository)
-		handler := NewShowHandler(getarticle.NewUseCase(&articlesRepository, elementRetriever))
+		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository)
+		handler := NewShowHandler(getarticle.NewUseCase(&articlesRepository, &userRepository, elementRetriever))
 
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
 		request.SetPathValue("uuid", a.UUID)
@@ -133,6 +144,7 @@ func TestShowHandler(t *testing.T) {
 
 		articlesRepository.AssertNotCalled(t, "IncreaseView")
 		articlesRepository.AssertNotCalled(t, "GetByUUIDs")
+		userRepository.AssertNotCalled(t, "GetOne")
 		elementsRepository.AssertNotCalled(t, "GetByVenues")
 
 		assert.Len(t, response.Body.Bytes(), 0)

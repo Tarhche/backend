@@ -13,9 +13,10 @@ import (
 	"github.com/khanzadimahdi/testproject/application/element"
 	"github.com/khanzadimahdi/testproject/application/home"
 	"github.com/khanzadimahdi/testproject/domain/article"
-	"github.com/khanzadimahdi/testproject/domain/author"
+	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/articles"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/elements"
+	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
 )
 
 func TestHomeHandler(t *testing.T) {
@@ -27,6 +28,7 @@ func TestHomeHandler(t *testing.T) {
 		var (
 			articlesRepository articles.MockArticlesRepository
 			elementsRepository elements.MockElementsRepository
+			userRepository     users.MockUsersRepository
 		)
 
 		publishedAt, err := time.Parse(time.RFC3339, "2024-09-29T15:56:25Z")
@@ -41,38 +43,31 @@ func TestHomeHandler(t *testing.T) {
 				Excerpt:     "article-excerpt-1",
 				Body:        "article-body-1",
 				PublishedAt: publishedAt,
-				Author: author.Author{
-					UUID:   "author-uuid-1",
-					Name:   "author-name",
-					Avatar: "author-avatar",
-				},
-				Tags:      []string{"tag-1", "tag-2", "tag-3"},
-				ViewCount: 123,
+				AuthorUUID:  "author-uuid-1",
+				Tags:        []string{"tag-1", "tag-2", "tag-3"},
+				ViewCount:   123,
 			},
 			{
-				UUID:    "article-uuid-2",
-				Cover:   "article-cover-2",
-				Title:   "article-title-2",
-				Excerpt: "article-excerpt-2",
-				Body:    "article-body-2",
-				Author: author.Author{
-					UUID:   "author-uuid-1",
-					Name:   "author-name",
-					Avatar: "author-avatar",
-				},
+				UUID:       "article-uuid-2",
+				Cover:      "article-cover-2",
+				Title:      "article-title-2",
+				Excerpt:    "article-excerpt-2",
+				Body:       "article-body-2",
+				AuthorUUID: "author-uuid-1",
 			},
 			{
-				UUID:    "article-uuid-3",
-				Cover:   "article-cover-3",
-				Title:   "article-title-3",
-				Excerpt: "article-excerpt-3",
-				Body:    "article-body-3",
-				Author: author.Author{
-					UUID:   "author-uuid-2",
-					Name:   "author-name",
-					Avatar: "author-avatar",
-				},
+				UUID:       "article-uuid-3",
+				Cover:      "article-cover-3",
+				Title:      "article-title-3",
+				Excerpt:    "article-excerpt-3",
+				Body:       "article-body-3",
+				AuthorUUID: "author-uuid-2",
 			},
+		}
+
+		users := []user.User{
+			{UUID: "author-uuid-1", Name: "author-name", Avatar: "author-avatar", Username: "author-username-1"},
+			{UUID: "author-uuid-2", Name: "author-name", Avatar: "author-avatar", Username: "author-username-2"},
 		}
 
 		articlesRepository.On("GetMostViewed", uint(4)).Once().Return(articles, nil)
@@ -80,11 +75,15 @@ func TestHomeHandler(t *testing.T) {
 		articlesRepository.On("GetByUUIDs", []string{}).Once().Return(nil, nil)
 		defer articlesRepository.AssertExpectations(t)
 
+		userRepository.On("GetByUUIDs", []string{"author-uuid-1", "author-uuid-1", "author-uuid-2", "author-uuid-1", "author-uuid-1", "author-uuid-2"}).Once().Return(users, nil)
+		userRepository.On("GetByUUIDs", []string{}).Once().Return([]user.User{}, nil)
+		defer userRepository.AssertExpectations(t)
+
 		elementsRepository.On("GetByVenues", []string{"home"}).Once().Return(nil, nil)
 		defer elementsRepository.AssertExpectations(t)
 
-		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository)
-		useCase := home.NewUseCase(&articlesRepository, elementRetriever)
+		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository)
+		useCase := home.NewUseCase(&articlesRepository, &userRepository, elementRetriever)
 		handler := NewHomeHandler(useCase)
 
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -106,6 +105,7 @@ func TestHomeHandler(t *testing.T) {
 		var (
 			articlesRepository articles.MockArticlesRepository
 			elementsRepository elements.MockElementsRepository
+			userRepository     users.MockUsersRepository
 		)
 
 		articlesRepository.On("GetMostViewed", uint(4)).Once().Return([]article.Article{}, nil)
@@ -113,11 +113,14 @@ func TestHomeHandler(t *testing.T) {
 		articlesRepository.On("GetByUUIDs", []string{}).Once().Return([]article.Article{}, nil)
 		defer articlesRepository.AssertExpectations(t)
 
+		userRepository.On("GetByUUIDs", []string{}).Return([]user.User{}, nil)
+		defer userRepository.AssertExpectations(t)
+
 		elementsRepository.On("GetByVenues", []string{"home"}).Once().Return(nil, nil)
 		defer elementsRepository.AssertExpectations(t)
 
-		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository)
-		useCase := home.NewUseCase(&articlesRepository, elementRetriever)
+		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository)
+		useCase := home.NewUseCase(&articlesRepository, &userRepository, elementRetriever)
 		handler := NewHomeHandler(useCase)
 
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -137,13 +140,14 @@ func TestHomeHandler(t *testing.T) {
 		var (
 			articlesRepository articles.MockArticlesRepository
 			elementsRepository elements.MockElementsRepository
+			userRepository     users.MockUsersRepository
 		)
 
 		articlesRepository.On("GetMostViewed", uint(4)).Once().Return(nil, errors.New("an error has happened"))
 		defer articlesRepository.AssertExpectations(t)
 
-		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository)
-		useCase := home.NewUseCase(&articlesRepository, elementRetriever)
+		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository)
+		useCase := home.NewUseCase(&articlesRepository, &userRepository, elementRetriever)
 		handler := NewHomeHandler(useCase)
 
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -153,6 +157,7 @@ func TestHomeHandler(t *testing.T) {
 
 		articlesRepository.AssertNotCalled(t, "GetAllPublished")
 		articlesRepository.AssertNotCalled(t, "GetByUUIDs")
+		userRepository.AssertNotCalled(t, "GetByUUIDs")
 		elementsRepository.AssertNotCalled(t, "GetByVenues")
 
 		assert.Len(t, response.Body.Bytes(), 0)

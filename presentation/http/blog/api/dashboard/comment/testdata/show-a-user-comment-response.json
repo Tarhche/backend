@@ -4,7 +4,8 @@
     "author": {
         "uuid": "auth-user-uuid",
         "name": "",
-        "avatar": ""
+        "avatar": "",
+        "username": "auth-user-username"
     },
     "object_type": "",
     "object_uuid": "",

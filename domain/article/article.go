@@ -2,8 +2,6 @@ package article
 
 import (
 	"time"
-
-	"github.com/khanzadimahdi/testproject/domain/author"
 )
 
 type Article struct {
@@ -14,7 +12,7 @@ type Article struct {
 	Excerpt     string
 	Body        string
 	PublishedAt time.Time
-	Author      author.Author
+	AuthorUUID  string
 	Tags        []string
 	ViewCount   uint
 }
@@ -28,6 +26,8 @@ type Repository interface {
 	GetMostViewed(limit uint) ([]Article, error)
 	CountPublishedByHashtags(hashtags []string) (uint, error)
 	GetPublishedByHashtags(hashtags []string, offset uint, limit uint) ([]Article, error)
+	CountPublishedByAuthor(authorUUID string) (uint, error)
+	GetPublishedByAuthor(authorUUID string, offset uint, limit uint) ([]Article, error)
 	Count() (uint, error)
 	CountPublished() (uint, error)
 	Save(*Article) (string, error)

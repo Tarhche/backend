@@ -14,7 +14,6 @@ import (
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/application/comment/createComment"
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/author"
 	"github.com/khanzadimahdi/testproject/domain/comment"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/comments"
@@ -38,9 +37,7 @@ func TestCreateHandler(t *testing.T) {
 			ParentUUID: "parent-uuid-1",
 			ObjectUUID: "object-uuid-test",
 			ObjectType: "article",
-			Author: author.Author{
-				UUID: u.UUID,
-			},
+			AuthorUUID: u.UUID,
 		}
 
 		body := createComment.Request{
@@ -131,9 +128,7 @@ func TestCreateHandler(t *testing.T) {
 			ParentUUID: "parent-uuid-1",
 			ObjectUUID: "object-uuid-test",
 			ObjectType: "article",
-			Author: author.Author{
-				UUID: u.UUID,
-			},
+			AuthorUUID: u.UUID,
 		}
 
 		commentRepository.On("Save", &c).Once().Return(c.UUID, errors.New("some unwanted error"))
