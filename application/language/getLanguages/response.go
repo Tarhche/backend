@@ -3,7 +3,8 @@ package getlanguages
 import "github.com/khanzadimahdi/testproject/domain/language"
 
 type Response struct {
-	Items []languageResponse `json:"items"`
+	Items           []languageResponse `json:"items"`
+	DefaultLanguage languageResponse   `json:"default_language"`
 }
 
 type languageResponse struct {
@@ -11,7 +12,7 @@ type languageResponse struct {
 	Name string `json:"name"`
 }
 
-func NewResponse(l []language.Language) *Response {
+func NewResponse(l []language.Language, defaultLanguage language.Language) *Response {
 	items := make([]languageResponse, len(l))
 
 	for i := range l {
@@ -21,5 +22,9 @@ func NewResponse(l []language.Language) *Response {
 
 	return &Response{
 		Items: items,
+		DefaultLanguage: languageResponse{
+			Code: defaultLanguage.Code,
+			Name: defaultLanguage.Name,
+		},
 	}
 }

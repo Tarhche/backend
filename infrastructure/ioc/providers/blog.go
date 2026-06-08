@@ -319,7 +319,7 @@ func blog(
 	getArticlesUsecase := getArticles.NewUseCase(articlesRepository, userRepository, languageResolver)
 	getArticlesByHashtagUseCase := getArticlesByHashtag.NewUseCase(articlesRepository, userRepository, languageResolver, validator)
 	getArticlesByAuthorUseCase := getArticlesByAuthor.NewUseCase(articlesRepository, userRepository, languageResolver, validator)
-	getLanguagesUseCase := getLanguages.NewUseCase(languageRepository)
+	getLanguagesUseCase := getLanguages.NewUseCase(languageRepository, languageResolver)
 	getFileUseCase := getFile.NewUseCase(filesRepository, fileStorage)
 	getCommentsUseCase := getComments.NewUseCase(commentsRepository, userRepository, validator)
 	createCommentUseCase := createComment.NewUseCase(commentsRepository, validator)

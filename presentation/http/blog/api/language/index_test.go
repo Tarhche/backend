@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	getlanguages "github.com/khanzadimahdi/testproject/application/language/getLanguages"
+	"github.com/khanzadimahdi/testproject/application/language/resolver"
 	"github.com/khanzadimahdi/testproject/domain/language"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/languages"
 )
@@ -21,6 +22,7 @@ func TestIndexHandler(t *testing.T) {
 
 		var (
 			languageRepository languages.MockLanguagesRepository
+			languageResolver   resolver.MockResolver
 
 			l = []language.Language{
 				{Code: "EN", Name: "English"},
@@ -32,7 +34,11 @@ func TestIndexHandler(t *testing.T) {
 		languageRepository.On("GetAll", uint(0), uint(len(l))).Once().Return(l, nil)
 		defer languageRepository.AssertExpectations(t)
 
-		handler := NewIndexHandler(getlanguages.NewUseCase(&languageRepository))
+		languageResolver.On("DefaultCode").Once().Return(l[0].Code, nil)
+		languageResolver.On("Resolve", l[0].Code).Once().Return(l[0], nil)
+		defer languageResolver.AssertExpectations(t)
+
+		handler := NewIndexHandler(getlanguages.NewUseCase(&languageRepository, &languageResolver))
 
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
 		response := httptest.NewRecorder()
@@ -52,12 +58,13 @@ func TestIndexHandler(t *testing.T) {
 
 		var (
 			languageRepository languages.MockLanguagesRepository
+			languageResolver   resolver.MockResolver
 		)
 
 		languageRepository.On("Count").Once().Return(uint(0), assert.AnError)
 		defer languageRepository.AssertExpectations(t)
 
-		handler := NewIndexHandler(getlanguages.NewUseCase(&languageRepository))
+		handler := NewIndexHandler(getlanguages.NewUseCase(&languageRepository, &languageResolver))
 
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
 		response := httptest.NewRecorder()
