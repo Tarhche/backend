@@ -25,9 +25,13 @@ definitions:
     properties:
       body:
         type: string
+      correlation_uuid:
+        type: string
       cover:
         type: string
       excerpt:
+        type: string
+      language_code:
         type: string
       published_at:
         type: string
@@ -62,6 +66,20 @@ definitions:
         $ref: '#/definitions/domain.ValidationErrors'
       uuid:
         type: string
+    type: object
+  createlanguage.Request:
+    properties:
+      code:
+        type: string
+      name:
+        type: string
+    type: object
+  createlanguage.Response:
+    properties:
+      code:
+        type: string
+      errors:
+        $ref: '#/definitions/domain.ValidationErrors'
     type: object
   createrole.Request:
     properties:
@@ -168,11 +186,17 @@ definitions:
         items:
           $ref: '#/definitions/getArticlesByAuthor.articleResponse'
         type: array
+      language_code:
+        $ref: '#/definitions/getArticlesByAuthor.languageResponse'
       pagination:
         $ref: '#/definitions/getArticlesByAuthor.paginationResponse'
     type: object
   getArticlesByAuthor.articleResponse:
     properties:
+      available_languages:
+        items:
+          $ref: '#/definitions/getArticlesByAuthor.languageResponse'
+        type: array
       cover:
         type: string
       excerpt:
@@ -199,6 +223,13 @@ definitions:
       uuid:
         type: string
     type: object
+  getArticlesByAuthor.languageResponse:
+    properties:
+      code:
+        type: string
+      name:
+        type: string
+    type: object
   getArticlesByAuthor.paginationResponse:
     properties:
       current_page:
@@ -214,6 +245,8 @@ definitions:
         items:
           $ref: '#/definitions/getArticlesByHashtag.articleResponse'
         type: array
+      language_code:
+        $ref: '#/definitions/getArticlesByHashtag.languageResponse'
       pagination:
         $ref: '#/definitions/getArticlesByHashtag.paginationResponse'
     type: object
@@ -221,6 +254,10 @@ definitions:
     properties:
       author:
         $ref: '#/definitions/getArticlesByHashtag.authorResponse'
+      available_languages:
+        items:
+          $ref: '#/definitions/getArticlesByHashtag.languageResponse'
+        type: array
       cover:
         type: string
       excerpt:
@@ -243,6 +280,13 @@ definitions:
       username:
         type: string
       uuid:
+        type: string
+    type: object
+  getArticlesByHashtag.languageResponse:
+    properties:
+      code:
+        type: string
+      name:
         type: string
     type: object
   getArticlesByHashtag.paginationResponse:
@@ -284,6 +328,8 @@ definitions:
     type: object
   getConfig.Response:
     properties:
+      default_language_code:
+        type: string
       revision:
         type: integer
       user_default_roles:
@@ -475,6 +521,13 @@ definitions:
       uuid:
         type: string
     type: object
+  getarticle.languageResponse:
+    properties:
+      code:
+        type: string
+      name:
+        type: string
+    type: object
   getarticles.author:
     properties:
       avatar:
@@ -495,6 +548,13 @@ definitions:
       username:
         type: string
       uuid:
+        type: string
+    type: object
+  getarticles.languageResponse:
+    properties:
+      code:
+        type: string
+      name:
         type: string
     type: object
   getarticles.pagination:
@@ -554,6 +614,20 @@ definitions:
       total_pages:
         type: integer
     type: object
+  getlanguage.Response:
+    properties:
+      code:
+        type: string
+      name:
+        type: string
+    type: object
+  getlanguages.pagination:
+    properties:
+      current_page:
+        type: integer
+      total_pages:
+        type: integer
+    type: object
   getpermissions.Response:
     properties:
       items:
@@ -573,6 +647,8 @@ definitions:
       avatar:
         type: string
       email:
+        type: string
+      language_code:
         type: string
       name:
         type: string
@@ -687,6 +763,8 @@ definitions:
         type: string
       email:
         type: string
+      language_code:
+        type: string
       name:
         type: string
       username:
@@ -756,7 +834,13 @@ definitions:
     properties:
       author:
         $ref: '#/definitions/getarticle.authorResponse'
+      available_languages:
+        items:
+          $ref: '#/definitions/getarticle.languageResponse'
+        type: array
       body:
+        type: string
+      correlation_uuid:
         type: string
       cover:
         type: string
@@ -766,6 +850,8 @@ definitions:
         type: array
       excerpt:
         type: string
+      language_code:
+        $ref: '#/definitions/getarticle.languageResponse'
       published_at:
         type: string
       tags:
@@ -774,8 +860,10 @@ definitions:
         type: array
       title:
         type: string
-      uuid:
-        type: string
+      validation_errors:
+        additionalProperties:
+          type: string
+        type: object
       video:
         type: string
       view_count:
@@ -787,6 +875,8 @@ definitions:
         items:
           $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_article_getArticles.articleResponse'
         type: array
+      language_code:
+        $ref: '#/definitions/getarticles.languageResponse'
       pagination:
         $ref: '#/definitions/getarticles.paginationResponse'
     type: object
@@ -794,6 +884,10 @@ definitions:
     properties:
       author:
         $ref: '#/definitions/getarticles.authorResponse'
+      available_languages:
+        items:
+          $ref: '#/definitions/getarticles.languageResponse'
+        type: array
       cover:
         type: string
       excerpt:
@@ -870,6 +964,8 @@ definitions:
         type: string
       excerpt:
         type: string
+      language_code:
+        type: string
       published_at:
         type: string
       tags:
@@ -877,6 +973,8 @@ definitions:
           type: string
         type: array
       title:
+        type: string
+      translation_correlation_id:
         type: string
       uuid:
         type: string
@@ -969,6 +1067,38 @@ definitions:
         type: integer
       total_pages:
         type: integer
+    type: object
+  github_com_khanzadimahdi_testproject_application_dashboard_language_getLanguages.Response:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_language_getLanguages.languageResponse'
+        type: array
+      pagination:
+        $ref: '#/definitions/getlanguages.pagination'
+    type: object
+  github_com_khanzadimahdi_testproject_application_dashboard_language_getLanguages.languageResponse:
+    properties:
+      code:
+        type: string
+      name:
+        type: string
+    type: object
+  github_com_khanzadimahdi_testproject_application_language_getLanguages.Response:
+    properties:
+      default_language:
+        $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_language_getLanguages.languageResponse'
+      items:
+        items:
+          $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_language_getLanguages.languageResponse'
+        type: array
+    type: object
+  github_com_khanzadimahdi_testproject_application_language_getLanguages.languageResponse:
+    properties:
+      code:
+        type: string
+      name:
+        type: string
     type: object
   github_com_khanzadimahdi_testproject_application_runner_manager_task_getTasks.Response:
     properties:
@@ -1183,6 +1313,8 @@ definitions:
         items:
           $ref: '#/definitions/element.Response'
         type: array
+      language_code:
+        $ref: '#/definitions/home.languageResponse'
       popular:
         items:
           $ref: '#/definitions/home.articleResponse'
@@ -1216,6 +1348,13 @@ definitions:
       username:
         type: string
       uuid:
+        type: string
+    type: object
+  home.languageResponse:
+    properties:
+      code:
+        type: string
+      name:
         type: string
     type: object
   login.Request:
@@ -1290,6 +1429,8 @@ definitions:
     type: object
   updateConfig.Request:
     properties:
+      default_language_code:
+        type: string
       user_default_roles:
         items:
           type: string
@@ -1306,9 +1447,13 @@ definitions:
     properties:
       body:
         type: string
+      correlation_uuid:
+        type: string
       cover:
         type: string
       excerpt:
+        type: string
+      language_code:
         type: string
       published_at:
         type: string
@@ -1325,11 +1470,20 @@ definitions:
     type: object
   updateelement.Request:
     type: object
+  updatelanguage.Request:
+    properties:
+      code:
+        type: string
+      name:
+        type: string
+    type: object
   updateprofile.Request:
     properties:
       avatar:
         type: string
       email:
+        type: string
+      language_code:
         type: string
       name:
         type: string
@@ -1375,6 +1529,8 @@ definitions:
     type: object
   verify.Request:
     properties:
+      language_code:
+        type: string
       name:
         type: string
       password:
@@ -1407,6 +1563,11 @@ paths:
         in: query
         name: page
         type: integer
+      - default: EN
+        description: Language key (e.g. EN, FA)
+        in: query
+        name: language_code
+        type: string
       produces:
       - application/json
       responses:
@@ -1432,6 +1593,11 @@ paths:
         in: path
         name: uuid
         required: true
+        type: string
+      - default: EN
+        description: Language key (e.g. EN, FA)
+        in: query
+        name: language_code
         type: string
       produces:
       - application/json
@@ -1666,6 +1832,11 @@ paths:
         in: query
         name: page
         type: integer
+      - default: EN
+        description: Language key (e.g. EN, FA)
+        in: query
+        name: language_code
+        type: string
       produces:
       - application/json
       responses:
@@ -2584,6 +2755,156 @@ paths:
       summary: List own files
       tags:
       - dashboard files
+  /dashboard/languages:
+    get:
+      consumes:
+      - application/json
+      description: paginated list of languages
+      parameters:
+      - default: 1
+        description: Page
+        in: query
+        name: page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_language_getLanguages.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List languages
+      tags:
+      - dashboard languages
+    post:
+      consumes:
+      - application/json
+      description: add a new language via dashboard
+      parameters:
+      - description: Language data
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/createlanguage.Request'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/createlanguage.Response'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Create language
+      tags:
+      - dashboard languages
+    put:
+      consumes:
+      - application/json
+      description: modify an existing language
+      parameters:
+      - description: Language update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/updatelanguage.Request'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Update language
+      tags:
+      - dashboard languages
+  /dashboard/languages/{code}:
+    delete:
+      consumes:
+      - application/json
+      description: remove a language by code
+      parameters:
+      - description: Language code
+        in: path
+        name: code
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Delete language
+      tags:
+      - dashboard languages
+    get:
+      consumes:
+      - application/json
+      description: fetch language by code
+      parameters:
+      - description: Language code
+        in: path
+        name: code
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getlanguage.Response'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get language
+      tags:
+      - dashboard languages
   /dashboard/my/bookmarks:
     delete:
       consumes:
@@ -3198,6 +3519,11 @@ paths:
         in: query
         name: page
         type: integer
+      - default: EN
+        description: Language key (e.g. EN, FA)
+        in: query
+        name: language_code
+        type: string
       produces:
       - application/json
       responses:
@@ -3223,6 +3549,12 @@ paths:
       consumes:
       - application/json
       description: returns the contents used for home page
+      parameters:
+      - default: EN
+        description: Language key (e.g. EN, FA)
+        in: query
+        name: language
+        type: string
       produces:
       - application/json
       responses:
@@ -3238,6 +3570,26 @@ paths:
       summary: Application home endpoint
       tags:
       - home
+  /languages:
+    get:
+      consumes:
+      - application/json
+      description: retrieve all available languages
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_language_getLanguages.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List languages
+      tags:
+      - languages
   /nodes:
     get:
       consumes:
