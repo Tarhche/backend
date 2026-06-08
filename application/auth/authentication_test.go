@@ -76,7 +76,9 @@ func TestGenerateAccessToken(t *testing.T) {
 
 		authTokenGenerator := NewTokenGenerator(j, &roleRepository)
 
-		accessToken, err := authTokenGenerator.GenerateAccessToken(userUUID)
+		u := user.User{UUID: userUUID, LanguageCode: "EN"}
+
+		accessToken, err := authTokenGenerator.GenerateAccessToken(&u)
 		assert.NoError(t, err)
 		assert.NotEmpty(t, accessToken)
 
@@ -90,6 +92,30 @@ func TestGenerateAccessToken(t *testing.T) {
 
 		assert.ElementsMatch(t, []string{"role-1", "role-2", "role-3"}, claimsMap["roles"])
 		assert.ElementsMatch(t, []string{"permission-1", "permission-2", "permission-5"}, claimsMap["permissions"])
+		assert.Equal(t, u.LanguageCode, claimsMap["lang"])
+	})
+
+	t.Run("generating access token with an empty language code sets an empty lang claim", func(t *testing.T) {
+		t.Parallel()
+
+		var roleRepository roles.MockRolesRepository
+
+		roleRepository.On("GetByUserUUID", userUUID).Once().Return(rl, nil)
+		defer roleRepository.AssertExpectations(t)
+
+		authTokenGenerator := NewTokenGenerator(j, &roleRepository)
+
+		accessToken, err := authTokenGenerator.GenerateAccessToken(&user.User{UUID: userUUID})
+		assert.NoError(t, err)
+		assert.NotEmpty(t, accessToken)
+
+		claims, err := j.Verify(accessToken)
+		assert.NoError(t, err)
+
+		claimsMap, ok := claims.(jwtv5.MapClaims)
+		assert.True(t, ok)
+
+		assert.Equal(t, "", claimsMap["lang"])
 	})
 
 	t.Run("generating access token fails", func(t *testing.T) {
@@ -104,7 +130,7 @@ func TestGenerateAccessToken(t *testing.T) {
 
 		authTokenGenerator := NewTokenGenerator(j, &roleRepository)
 
-		accessToken, err := authTokenGenerator.GenerateAccessToken(userUUID)
+		accessToken, err := authTokenGenerator.GenerateAccessToken(&user.User{UUID: userUUID})
 		assert.ErrorIs(t, err, expectedErr)
 		assert.Empty(t, accessToken)
 	})

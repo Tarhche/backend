@@ -58,7 +58,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		}, nil
 	}
 
-	accessToken, err := uc.authTokenGenerator.GenerateAccessToken(u.UUID)
+	accessToken, err := uc.authTokenGenerator.GenerateAccessToken(&u)
 	if err != nil {
 		return nil, err
 	}

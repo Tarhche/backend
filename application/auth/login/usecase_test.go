@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"testing"
 
+	jwtv5 "github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/assert"
 	mock2 "github.com/stretchr/testify/mock"
 
@@ -71,7 +72,8 @@ func TestUseCase_Execute(t *testing.T) {
 			}
 
 			u = user.User{
-				UUID: request.Identity,
+				UUID:         request.Identity,
+				LanguageCode: "EN",
 				PasswordHash: password.Hash{
 					Value: []byte("hashed-value"),
 					Salt:  []byte("salt-value"),
@@ -108,6 +110,10 @@ func TestUseCase_Execute(t *testing.T) {
 		audience, err := accessTokenClaims.GetAudience()
 		assert.NoError(t, err)
 		assert.Equal(t, "permission", audience[0])
+
+		accessClaimsMap, ok := accessTokenClaims.(jwtv5.MapClaims)
+		assert.True(t, ok)
+		assert.Equal(t, u.LanguageCode, accessClaimsMap["lang"])
 
 		refreshTokenClaims, err := j.Verify(response.RefreshToken)
 		assert.NoError(t, err)
