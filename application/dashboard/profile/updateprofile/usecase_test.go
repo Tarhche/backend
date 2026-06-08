@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
+	"github.com/khanzadimahdi/testproject/application/language/resolver"
 	"github.com/khanzadimahdi/testproject/domain"
 	translatorContract "github.com/khanzadimahdi/testproject/domain/translator"
 	"github.com/khanzadimahdi/testproject/domain/user"
@@ -25,29 +26,35 @@ func TestUseCase_Execute(t *testing.T) {
 		t.Parallel()
 
 		var (
-			userRepository users.MockUsersRepository
-			validator      validator.MockValidator
-			translator     translator.TranslatorMock
+			userRepository   users.MockUsersRepository
+			languageResolver resolver.MockResolver
+			validator        validator.MockValidator
+			translator       translator.TranslatorMock
 
 			r = Request{
-				UserUUID: "test-user-uuid",
-				Name:     "John Doe",
-				Avatar:   "test-avatar",
-				Email:    "test@test.com",
-				Username: "john.doe",
+				UserUUID:     "test-user-uuid",
+				Name:         "John Doe",
+				Avatar:       "test-avatar",
+				Email:        "test@test.com",
+				Username:     "john.doe",
+				LanguageCode: "EN",
 			}
 
 			u = user.User{
-				UUID:     r.UserUUID,
-				Name:     r.Name,
-				Avatar:   r.Avatar,
-				Email:    r.Email,
-				Username: r.Username,
+				UUID:         r.UserUUID,
+				Name:         r.Name,
+				Avatar:       r.Avatar,
+				Email:        r.Email,
+				Username:     r.Username,
+				LanguageCode: r.LanguageCode,
 			}
 		)
 
 		validator.On("Validate", &r).Once().Return(nil)
 		defer validator.AssertExpectations(t)
+
+		languageResolver.On("Verify", r.LanguageCode).Once().Return(true)
+		defer languageResolver.AssertExpectations(t)
 
 		userRepository.On("GetOneByIdentity", r.Email).Once().Return(u, nil)
 		userRepository.On("GetOneByIdentity", r.Username).Once().Return(u, nil)
@@ -55,7 +62,7 @@ func TestUseCase_Execute(t *testing.T) {
 		userRepository.On("Save", &u).Once().Return(r.UserUUID, nil)
 		defer userRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&userRepository, &validator, &translator).Execute(&r)
+		response, err := NewUseCase(&userRepository, &languageResolver, &validator, &translator).Execute(&r)
 
 		translator.AssertNotCalled(t, "Translate")
 
@@ -67,18 +74,20 @@ func TestUseCase_Execute(t *testing.T) {
 		t.Parallel()
 
 		var (
-			userRepository users.MockUsersRepository
-			validator      validator.MockValidator
-			translator     translator.TranslatorMock
+			userRepository   users.MockUsersRepository
+			languageResolver resolver.MockResolver
+			validator        validator.MockValidator
+			translator       translator.TranslatorMock
 
 			r = Request{}
 
 			expectedResponse = Response{
 				ValidationErrors: domain.ValidationErrors{
-					"uuid":     "universal unique identifier (uuid) is required",
-					"name":     "name is required",
-					"email":    "email is required",
-					"username": "username is required",
+					"uuid":          "universal unique identifier (uuid) is required",
+					"name":          "name is required",
+					"email":         "email is required",
+					"username":      "username is required",
+					"language_code": "language is required",
 				},
 			}
 		)
@@ -86,9 +95,10 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(expectedResponse.ValidationErrors)
 		defer validator.AssertExpectations(t)
 
-		response, err := NewUseCase(&userRepository, &validator, &translator).Execute(&r)
+		response, err := NewUseCase(&userRepository, &languageResolver, &validator, &translator).Execute(&r)
 
 		translator.AssertNotCalled(t, "Translate")
+		languageResolver.AssertNotCalled(t, "Verify")
 		userRepository.AssertNotCalled(t, "GetOneByIdentity")
 		userRepository.AssertNotCalled(t, "GetOne")
 		userRepository.AssertNotCalled(t, "Save")
@@ -101,16 +111,18 @@ func TestUseCase_Execute(t *testing.T) {
 		t.Parallel()
 
 		var (
-			userRepository users.MockUsersRepository
-			validator      validator.MockValidator
-			translator     translator.TranslatorMock
+			userRepository   users.MockUsersRepository
+			languageResolver resolver.MockResolver
+			validator        validator.MockValidator
+			translator       translator.TranslatorMock
 
 			r = Request{
-				UserUUID: "test-user-uuid",
-				Name:     "John Doe",
-				Avatar:   "test-avatar",
-				Email:    "test@test.com",
-				Username: "john.doe",
+				UserUUID:     "test-user-uuid",
+				Name:         "John Doe",
+				Avatar:       "test-avatar",
+				Email:        "test@test.com",
+				Username:     "john.doe",
+				LanguageCode: "EN",
 			}
 
 			u = user.User{
@@ -141,8 +153,9 @@ func TestUseCase_Execute(t *testing.T) {
 		userRepository.On("GetOneByIdentity", r.Email).Once().Return(u, nil)
 		defer userRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&userRepository, &validator, &translator).Execute(&r)
+		response, err := NewUseCase(&userRepository, &languageResolver, &validator, &translator).Execute(&r)
 
+		languageResolver.AssertNotCalled(t, "Verify")
 		userRepository.AssertNotCalled(t, "GetOneByIdentity", r.Username)
 		userRepository.AssertNotCalled(t, "GetOne")
 		userRepository.AssertNotCalled(t, "Save")
@@ -155,16 +168,18 @@ func TestUseCase_Execute(t *testing.T) {
 		t.Parallel()
 
 		var (
-			userRepository users.MockUsersRepository
-			validator      validator.MockValidator
-			translator     translator.TranslatorMock
+			userRepository   users.MockUsersRepository
+			languageResolver resolver.MockResolver
+			validator        validator.MockValidator
+			translator       translator.TranslatorMock
 
 			r = Request{
-				UserUUID: "test-user-uuid",
-				Name:     "John Doe",
-				Avatar:   "test-avatar",
-				Email:    "test@test.com",
-				Username: "john.doe",
+				UserUUID:     "test-user-uuid",
+				Name:         "John Doe",
+				Avatar:       "test-avatar",
+				Email:        "test@test.com",
+				Username:     "john.doe",
+				LanguageCode: "EN",
 			}
 
 			u = user.User{
@@ -204,8 +219,62 @@ func TestUseCase_Execute(t *testing.T) {
 		userRepository.On("GetOneByIdentity", r.Username).Once().Return(anotherUserWithSameUsername, nil)
 		defer userRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&userRepository, &validator, &translator).Execute(&r)
+		response, err := NewUseCase(&userRepository, &languageResolver, &validator, &translator).Execute(&r)
 
+		languageResolver.AssertNotCalled(t, "Verify")
+		userRepository.AssertNotCalled(t, "GetOne")
+		userRepository.AssertNotCalled(t, "Save")
+
+		assert.NoError(t, err)
+		assert.Equal(t, &expectedResponse, response)
+	})
+
+	t.Run("failure because the chosen language does not exist", func(t *testing.T) {
+		t.Parallel()
+
+		var (
+			userRepository   users.MockUsersRepository
+			languageResolver resolver.MockResolver
+			validator        validator.MockValidator
+			translator       translator.TranslatorMock
+
+			r = Request{
+				UserUUID:     "test-user-uuid",
+				Name:         "John Doe",
+				Avatar:       "test-avatar",
+				Email:        "test@test.com",
+				Username:     "john.doe",
+				LanguageCode: "DE",
+			}
+
+			u = user.User{
+				UUID:     r.UserUUID,
+				Name:     r.Name,
+				Avatar:   r.Avatar,
+				Email:    r.Email,
+				Username: r.Username,
+			}
+
+			expectedResponse = Response{
+				ValidationErrors: domain.ValidationErrors{
+					"language_code": "invalid_value",
+				},
+			}
+		)
+
+		validator.On("Validate", &r).Once().Return(nil)
+		defer validator.AssertExpectations(t)
+
+		languageResolver.On("Verify", r.LanguageCode).Once().Return(false)
+		defer languageResolver.AssertExpectations(t)
+
+		userRepository.On("GetOneByIdentity", r.Email).Once().Return(u, nil)
+		userRepository.On("GetOneByIdentity", r.Username).Once().Return(u, nil)
+		defer userRepository.AssertExpectations(t)
+
+		response, err := NewUseCase(&userRepository, &languageResolver, &validator, &translator).Execute(&r)
+
+		translator.AssertNotCalled(t, "Translate")
 		userRepository.AssertNotCalled(t, "GetOne")
 		userRepository.AssertNotCalled(t, "Save")
 
@@ -217,16 +286,18 @@ func TestUseCase_Execute(t *testing.T) {
 		t.Parallel()
 
 		var (
-			userRepository users.MockUsersRepository
-			validator      validator.MockValidator
-			translator     translator.TranslatorMock
+			userRepository   users.MockUsersRepository
+			languageResolver resolver.MockResolver
+			validator        validator.MockValidator
+			translator       translator.TranslatorMock
 
 			r = Request{
-				UserUUID: "test-user-uuid",
-				Name:     "John Doe",
-				Avatar:   "test-avatar",
-				Email:    "test@test.com",
-				Username: "john.doe",
+				UserUUID:     "test-user-uuid",
+				Name:         "John Doe",
+				Avatar:       "test-avatar",
+				Email:        "test@test.com",
+				Username:     "john.doe",
+				LanguageCode: "EN",
 			}
 
 			u = user.User{
@@ -243,12 +314,15 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
+		languageResolver.On("Verify", r.LanguageCode).Once().Return(true)
+		defer languageResolver.AssertExpectations(t)
+
 		userRepository.On("GetOneByIdentity", r.Email).Once().Return(u, nil)
 		userRepository.On("GetOneByIdentity", r.Username).Once().Return(u, nil)
 		userRepository.On("GetOne", r.UserUUID).Once().Return(user.User{}, expectedErr)
 		defer userRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&userRepository, &validator, &translator).Execute(&r)
+		response, err := NewUseCase(&userRepository, &languageResolver, &validator, &translator).Execute(&r)
 
 		translator.AssertNotCalled(t, "Translate")
 		userRepository.AssertNotCalled(t, "Save")
@@ -261,24 +335,27 @@ func TestUseCase_Execute(t *testing.T) {
 		t.Parallel()
 
 		var (
-			userRepository users.MockUsersRepository
-			validator      validator.MockValidator
-			translator     translator.TranslatorMock
+			userRepository   users.MockUsersRepository
+			languageResolver resolver.MockResolver
+			validator        validator.MockValidator
+			translator       translator.TranslatorMock
 
 			r = Request{
-				UserUUID: "test-user-uuid",
-				Name:     "John Doe",
-				Avatar:   "test-avatar",
-				Email:    "test@test.com",
-				Username: "john.doe",
+				UserUUID:     "test-user-uuid",
+				Name:         "John Doe",
+				Avatar:       "test-avatar",
+				Email:        "test@test.com",
+				Username:     "john.doe",
+				LanguageCode: "EN",
 			}
 
 			u = user.User{
-				UUID:     r.UserUUID,
-				Name:     r.Name,
-				Avatar:   r.Avatar,
-				Email:    r.Email,
-				Username: r.Username,
+				UUID:         r.UserUUID,
+				Name:         r.Name,
+				Avatar:       r.Avatar,
+				Email:        r.Email,
+				Username:     r.Username,
+				LanguageCode: r.LanguageCode,
 			}
 
 			expectedErr = errors.New("save user info error")
@@ -287,13 +364,16 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
+		languageResolver.On("Verify", r.LanguageCode).Once().Return(true)
+		defer languageResolver.AssertExpectations(t)
+
 		userRepository.On("GetOneByIdentity", r.Email).Once().Return(u, nil)
 		userRepository.On("GetOneByIdentity", r.Username).Once().Return(u, nil)
 		userRepository.On("GetOne", r.UserUUID).Once().Return(u, nil)
 		userRepository.On("Save", &u).Once().Return("", expectedErr)
 		defer userRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&userRepository, &validator, &translator).Execute(&r)
+		response, err := NewUseCase(&userRepository, &languageResolver, &validator, &translator).Execute(&r)
 
 		translator.AssertNotCalled(t, "Translate")
 

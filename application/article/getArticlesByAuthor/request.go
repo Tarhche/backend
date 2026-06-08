@@ -8,9 +8,10 @@ import (
 )
 
 type Request struct {
-	AuthorUUID string
-	Username   string
-	Page       uint
+	AuthorUUID   string
+	Username     string
+	Page         uint
+	LanguageCode string
 }
 
 var _ domain.Validatable = &Request{}
@@ -24,7 +25,7 @@ func (r *Request) Validate() domain.ValidationErrors {
 
 	if len(r.AuthorUUID) > 0 {
 		if _, err := uuid.FromString(r.AuthorUUID); err != nil {
-			validationErrors["uuid"] = "invalid_value"
+			validationErrors["author_uuid"] = "invalid_value"
 		}
 	}
 

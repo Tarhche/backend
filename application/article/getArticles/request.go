@@ -1,5 +1,6 @@
 package getarticles
 
 type Request struct {
-	Page uint
+	LanguageCode string
+	Page         uint
 }

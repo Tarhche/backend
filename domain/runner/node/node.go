@@ -35,6 +35,5 @@ type Repository interface {
 	GetAll(offset uint, limit uint) ([]Node, error)
 	GetOne(name string) (Node, error)
 	Save(*Node) (string, error)
-	Delete(name string) error
 	Count() (uint, error)
 }

@@ -1,5 +1,5 @@
 {
-    "uuid": "test-uuid-1",
+    "correlation_uuid": "test-uuid-1",
     "cover": "",
     "video": "",
     "title": "test title",
@@ -14,5 +14,15 @@
     },
     "tags": [],
     "view_count": 11,
+    "language_code": {
+        "code": "EN",
+        "name": "English"
+    },
+    "available_languages": [
+        {
+            "code": "EN",
+            "name": "English"
+        }
+    ],
     "elements": []
 }

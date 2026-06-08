@@ -17,6 +17,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/article"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/articles"
+	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/languages"
 	"github.com/khanzadimahdi/testproject/infrastructure/validator"
 )
 
@@ -27,27 +28,31 @@ func TestUpdateHandler(t *testing.T) {
 		t.Parallel()
 
 		var (
-			articleRepository articles.MockArticlesRepository
-			requestValidator  validator.MockValidator
+			articleRepository  articles.MockArticlesRepository
+			languageRepository languages.MockLanguagesRepository
+			requestValidator   validator.MockValidator
 
 			r = updatearticle.Request{
-				UUID:       "test-article-uuid",
-				Title:      "test title",
-				Excerpt:    "test excerpt",
-				Body:       "test body",
-				AuthorUUID: "test-author-uuid",
-				Tags:       []string{"tag1", "tag2"},
+				UUID:         "test-article-uuid",
+				Title:        "test title",
+				Excerpt:      "test excerpt",
+				Body:         "test body",
+				AuthorUUID:   "test-author-uuid",
+				Tags:         []string{"tag1", "tag2"},
+				LanguageCode: "EN",
 			}
-			a = article.Article{
-				UUID:        r.UUID,
-				Cover:       r.Cover,
-				Video:       r.Video,
-				Title:       r.Title,
-				Excerpt:     r.Excerpt,
-				Body:        r.Body,
-				PublishedAt: r.PublishedAt,
-				AuthorUUID:  r.AuthorUUID,
-				Tags:        r.Tags,
+			existing = article.Article{UUID: r.UUID, LanguageCode: "EN"}
+			a        = article.Article{
+				UUID:         r.UUID,
+				Cover:        r.Cover,
+				Video:        r.Video,
+				Title:        r.Title,
+				Excerpt:      r.Excerpt,
+				Body:         r.Body,
+				PublishedAt:  r.PublishedAt,
+				AuthorUUID:   r.AuthorUUID,
+				Tags:         r.Tags,
+				LanguageCode: r.LanguageCode,
 			}
 
 			u = user.User{
@@ -58,10 +63,14 @@ func TestUpdateHandler(t *testing.T) {
 		requestValidator.On("Validate", &r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
+		languageRepository.On("Exists", "EN").Once().Return(true)
+		defer languageRepository.AssertExpectations(t)
+
+		articleRepository.On("GetOne", r.UUID).Once().Return(existing, nil)
 		articleRepository.On("Save", &a).Once().Return(a.UUID, nil)
 		defer articleRepository.AssertExpectations(t)
 
-		handler := NewUpdateHandler(updatearticle.NewUseCase(&articleRepository, &requestValidator))
+		handler := NewUpdateHandler(updatearticle.NewUseCase(&articleRepository, &languageRepository, &requestValidator))
 
 		var payload bytes.Buffer
 		err := json.NewEncoder(&payload).Encode(r)
@@ -81,8 +90,9 @@ func TestUpdateHandler(t *testing.T) {
 		t.Parallel()
 
 		var (
-			articleRepository articles.MockArticlesRepository
-			requestValidator  validator.MockValidator
+			articleRepository  articles.MockArticlesRepository
+			languageRepository languages.MockLanguagesRepository
+			requestValidator   validator.MockValidator
 
 			u = user.User{
 				UUID: "test-author-uuid",
@@ -90,13 +100,14 @@ func TestUpdateHandler(t *testing.T) {
 		)
 
 		requestValidator.On("Validate", &updatearticle.Request{AuthorUUID: u.UUID}).Once().Return(domain.ValidationErrors{
-			"body":    "body is required",
-			"excerpt": "excerpt is required",
-			"title":   "title is required",
+			"body":          "body is required",
+			"excerpt":       "excerpt is required",
+			"title":         "title is required",
+			"language_code": "language is required",
 		})
 		defer requestValidator.AssertExpectations(t)
 
-		handler := NewUpdateHandler(updatearticle.NewUseCase(&articleRepository, &requestValidator))
+		handler := NewUpdateHandler(updatearticle.NewUseCase(&articleRepository, &languageRepository, &requestValidator))
 
 		request := httptest.NewRequest(http.MethodPatch, "/", bytes.NewBufferString("{}"))
 		request = request.WithContext(auth.ToContext(request.Context(), &u))
@@ -118,27 +129,31 @@ func TestUpdateHandler(t *testing.T) {
 		t.Parallel()
 
 		var (
-			articleRepository articles.MockArticlesRepository
-			requestValidator  validator.MockValidator
+			articleRepository  articles.MockArticlesRepository
+			languageRepository languages.MockLanguagesRepository
+			requestValidator   validator.MockValidator
 
 			r = updatearticle.Request{
-				UUID:       "test-article-uuid",
-				Title:      "test title",
-				Excerpt:    "test excerpt",
-				Body:       "test body",
-				AuthorUUID: "test-author-uuid",
-				Tags:       []string{"tag1", "tag2"},
+				UUID:         "test-article-uuid",
+				Title:        "test title",
+				Excerpt:      "test excerpt",
+				Body:         "test body",
+				AuthorUUID:   "test-author-uuid",
+				Tags:         []string{"tag1", "tag2"},
+				LanguageCode: "EN",
 			}
-			a = article.Article{
-				UUID:        r.UUID,
-				Cover:       r.Cover,
-				Video:       r.Video,
-				Title:       r.Title,
-				Excerpt:     r.Excerpt,
-				Body:        r.Body,
-				PublishedAt: r.PublishedAt,
-				AuthorUUID:  r.AuthorUUID,
-				Tags:        r.Tags,
+			existing = article.Article{UUID: r.UUID, LanguageCode: "EN"}
+			a        = article.Article{
+				UUID:         r.UUID,
+				Cover:        r.Cover,
+				Video:        r.Video,
+				Title:        r.Title,
+				Excerpt:      r.Excerpt,
+				Body:         r.Body,
+				PublishedAt:  r.PublishedAt,
+				AuthorUUID:   r.AuthorUUID,
+				Tags:         r.Tags,
+				LanguageCode: r.LanguageCode,
 			}
 
 			u = user.User{
@@ -149,10 +164,14 @@ func TestUpdateHandler(t *testing.T) {
 		requestValidator.On("Validate", &r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
+		languageRepository.On("Exists", "EN").Once().Return(true)
+		defer languageRepository.AssertExpectations(t)
+
+		articleRepository.On("GetOne", r.UUID).Once().Return(existing, nil)
 		articleRepository.On("Save", &a).Once().Return("", errors.New("unexpected error"))
 		defer articleRepository.AssertExpectations(t)
 
-		handler := NewUpdateHandler(updatearticle.NewUseCase(&articleRepository, &requestValidator))
+		handler := NewUpdateHandler(updatearticle.NewUseCase(&articleRepository, &languageRepository, &requestValidator))
 
 		var payload bytes.Buffer
 		err := json.NewEncoder(&payload).Encode(r)

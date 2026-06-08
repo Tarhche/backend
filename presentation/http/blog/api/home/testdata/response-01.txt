@@ -95,5 +95,9 @@
             "tags": null
         }
     ],
-    "elements": []
+    "elements": [],
+    "language_code": {
+        "code": "EN",
+        "name": "English"
+    }
 }

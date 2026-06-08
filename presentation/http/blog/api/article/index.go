@@ -21,12 +21,13 @@ func NewIndexHandler(useCase *getarticles.UseCase) *indexHandler {
 
 // @Summary		List published articles
 // @Description	return a page of the most recent published articles
-// @Tags			articles
-// @Accept			json
+// @Tags		articles
+// @Accept		json
 // @Produce		json
-// @Param			page	query		int	false	"Page number"	default(1)
-// @Success		200		{object}	getarticles.Response
-// @Failure		500		{object}	map[string]interface{}
+// @Param		page		    query		int		false	"Page number"	default(1)
+// @Param		language_code	query		string	false	"Language key (e.g. EN, FA)"	default(EN)
+// @Success		200			{object}	getarticles.Response
+// @Failure		500			{object}	map[string]interface{}
 // @Router			/articles [get]
 func (h *indexHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	var page uint = 1
@@ -38,7 +39,8 @@ func (h *indexHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	}
 
 	request := &getarticles.Request{
-		Page: page,
+		Page:         page,
+		LanguageCode: r.URL.Query().Get("language_code"),
 	}
 
 	response, err := h.useCase.Execute(request)

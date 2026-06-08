@@ -58,11 +58,12 @@ func (r *UsersRepository) GetAll(offset uint, limit uint) ([]user.User, error) {
 			return nil, err
 		}
 		items = append(items, user.User{
-			UUID:     a.UUID,
-			Name:     a.Name,
-			Avatar:   a.Avatar,
-			Email:    a.Email,
-			Username: a.Username,
+			UUID:         a.UUID,
+			Name:         a.Name,
+			Avatar:       a.Avatar,
+			Email:        a.Email,
+			Username:     a.Username,
+			LanguageCode: a.LanguageCode,
 			PasswordHash: password.Hash{
 				Value: a.PasswordHash.Value,
 				Salt:  a.PasswordHash.Salt,
@@ -98,11 +99,12 @@ func (r *UsersRepository) GetByUUIDs(UUIDs []string) ([]user.User, error) {
 			return nil, err
 		}
 		items = append(items, user.User{
-			UUID:     a.UUID,
-			Name:     a.Name,
-			Avatar:   a.Avatar,
-			Email:    a.Email,
-			Username: a.Username,
+			UUID:         a.UUID,
+			Name:         a.Name,
+			Avatar:       a.Avatar,
+			Email:        a.Email,
+			Username:     a.Username,
+			LanguageCode: a.LanguageCode,
 			PasswordHash: password.Hash{
 				Value: a.PasswordHash.Value,
 				Salt:  a.PasswordHash.Salt,
@@ -131,11 +133,12 @@ func (r *UsersRepository) GetOne(UUID string) (user.User, error) {
 	}
 
 	return user.User{
-		UUID:     a.UUID,
-		Name:     a.Name,
-		Avatar:   a.Avatar,
-		Email:    a.Email,
-		Username: a.Username,
+		UUID:         a.UUID,
+		Name:         a.Name,
+		Avatar:       a.Avatar,
+		Email:        a.Email,
+		Username:     a.Username,
+		LanguageCode: a.LanguageCode,
 		PasswordHash: password.Hash{
 			Value: a.PasswordHash.Value,
 			Salt:  a.PasswordHash.Salt,
@@ -169,11 +172,12 @@ func (r *UsersRepository) GetOneByIdentity(identity string) (user.User, error) {
 	}
 
 	return user.User{
-		UUID:     a.UUID,
-		Name:     a.Name,
-		Avatar:   a.Avatar,
-		Email:    a.Email,
-		Username: a.Username,
+		UUID:         a.UUID,
+		Name:         a.Name,
+		Avatar:       a.Avatar,
+		Email:        a.Email,
+		Username:     a.Username,
+		LanguageCode: a.LanguageCode,
 		PasswordHash: password.Hash{
 			Value: a.PasswordHash.Value,
 			Salt:  a.PasswordHash.Salt,
@@ -195,11 +199,12 @@ func (r *UsersRepository) Save(a *user.User) (string, error) {
 	}
 
 	update := UserBson{
-		UUID:     a.UUID,
-		Name:     a.Name,
-		Avatar:   a.Avatar,
-		Email:    a.Email,
-		Username: a.Username,
+		UUID:         a.UUID,
+		Name:         a.Name,
+		Avatar:       a.Avatar,
+		Email:        a.Email,
+		Username:     a.Username,
+		LanguageCode: a.LanguageCode,
 		PasswordHash: PasswordHashBson{
 			Value: a.PasswordHash.Value,
 			Salt:  a.PasswordHash.Salt,

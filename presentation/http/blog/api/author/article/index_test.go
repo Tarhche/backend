@@ -11,8 +11,10 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	getArticlesByAuthor "github.com/khanzadimahdi/testproject/application/article/getArticlesByAuthor"
+	"github.com/khanzadimahdi/testproject/application/language/resolver"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/article"
+	"github.com/khanzadimahdi/testproject/domain/language"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/articles"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
@@ -33,6 +35,7 @@ func TestIndexHandler(t *testing.T) {
 		var (
 			articlesRepository articles.MockArticlesRepository
 			userRepository     users.MockUsersRepository
+			languageResolver   resolver.MockResolver
 			requestValidator   validator.MockValidator
 		)
 
@@ -66,14 +69,19 @@ func TestIndexHandler(t *testing.T) {
 		requestValidator.On("Validate", r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
+		languageResolver.On("DefaultCode").Once().Return("EN", nil)
+		languageResolver.On("Resolve", "EN").Once().Return(language.Language{Code: "EN", Name: "English"}, nil)
+		defer languageResolver.AssertExpectations(t)
+
 		userRepository.On("GetOneByIdentity", testUsername).Once().Return(u, nil)
 		defer userRepository.AssertExpectations(t)
 
-		articlesRepository.On("CountPublishedByAuthor", testAuthorUUID).Once().Return(uint(len(fetched)), nil)
-		articlesRepository.On("GetPublishedByAuthor", testAuthorUUID, uint(0), uint(10)).Once().Return(fetched, nil)
+		articlesRepository.On("CountPublishedByAuthor", testAuthorUUID, "EN").Once().Return(uint(len(fetched)), nil)
+		articlesRepository.On("GetPublishedByAuthor", testAuthorUUID, "EN", uint(0), uint(10)).Once().Return(fetched, nil)
+		articlesRepository.On("GetPublishedLanguages", "").Return([]language.Language{}, nil)
 		defer articlesRepository.AssertExpectations(t)
 
-		useCase := getArticlesByAuthor.NewUseCase(&articlesRepository, &userRepository, &requestValidator)
+		useCase := getArticlesByAuthor.NewUseCase(&articlesRepository, &userRepository, &languageResolver, &requestValidator)
 		handler := NewIndexHandler(useCase)
 
 		request := httptest.NewRequest(http.MethodGet, "/?page=1", nil)
@@ -97,6 +105,7 @@ func TestIndexHandler(t *testing.T) {
 		var (
 			articlesRepository articles.MockArticlesRepository
 			userRepository     users.MockUsersRepository
+			languageResolver   resolver.MockResolver
 			requestValidator   validator.MockValidator
 		)
 
@@ -110,15 +119,19 @@ func TestIndexHandler(t *testing.T) {
 		requestValidator.On("Validate", r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
+		languageResolver.On("DefaultCode").Once().Return("EN", nil)
+		languageResolver.On("Resolve", "EN").Once().Return(language.Language{Code: "EN", Name: "English"}, nil)
+		defer languageResolver.AssertExpectations(t)
+
 		userRepository.On("GetOne", testAuthorUUID).Once().Return(u, nil)
 		userRepository.AssertNotCalled(t, "GetOneByIdentity")
 		defer userRepository.AssertExpectations(t)
 
-		articlesRepository.On("CountPublishedByAuthor", testAuthorUUID).Once().Return(uint(0), nil)
-		articlesRepository.On("GetPublishedByAuthor", testAuthorUUID, uint(0), uint(10)).Once().Return(nil, nil)
+		articlesRepository.On("CountPublishedByAuthor", testAuthorUUID, "EN").Once().Return(uint(0), nil)
+		articlesRepository.On("GetPublishedByAuthor", testAuthorUUID, "EN", uint(0), uint(10)).Once().Return(nil, nil)
 		defer articlesRepository.AssertExpectations(t)
 
-		useCase := getArticlesByAuthor.NewUseCase(&articlesRepository, &userRepository, &requestValidator)
+		useCase := getArticlesByAuthor.NewUseCase(&articlesRepository, &userRepository, &languageResolver, &requestValidator)
 		handler := NewIndexHandler(useCase)
 
 		request := httptest.NewRequest(http.MethodGet, "/?page=1", nil)
@@ -138,6 +151,7 @@ func TestIndexHandler(t *testing.T) {
 		var (
 			articlesRepository articles.MockArticlesRepository
 			userRepository     users.MockUsersRepository
+			languageResolver   resolver.MockResolver
 			requestValidator   validator.MockValidator
 		)
 
@@ -149,10 +163,14 @@ func TestIndexHandler(t *testing.T) {
 		requestValidator.On("Validate", r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
+		languageResolver.On("DefaultCode").Once().Return("EN", nil)
+		languageResolver.On("Resolve", "EN").Once().Return(language.Language{Code: "EN", Name: "English"}, nil)
+		defer languageResolver.AssertExpectations(t)
+
 		userRepository.On("GetOneByIdentity", "ghost").Once().Return(user.User{}, domain.ErrNotExists)
 		defer userRepository.AssertExpectations(t)
 
-		useCase := getArticlesByAuthor.NewUseCase(&articlesRepository, &userRepository, &requestValidator)
+		useCase := getArticlesByAuthor.NewUseCase(&articlesRepository, &userRepository, &languageResolver, &requestValidator)
 		handler := NewIndexHandler(useCase)
 
 		request := httptest.NewRequest(http.MethodGet, "/?page=1", nil)
@@ -175,6 +193,7 @@ func TestIndexHandler(t *testing.T) {
 		var (
 			articlesRepository articles.MockArticlesRepository
 			userRepository     users.MockUsersRepository
+			languageResolver   resolver.MockResolver
 			requestValidator   validator.MockValidator
 		)
 
@@ -186,10 +205,14 @@ func TestIndexHandler(t *testing.T) {
 		requestValidator.On("Validate", r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
+		languageResolver.On("DefaultCode").Once().Return("EN", nil)
+		languageResolver.On("Resolve", "EN").Once().Return(language.Language{Code: "EN", Name: "English"}, nil)
+		defer languageResolver.AssertExpectations(t)
+
 		userRepository.On("GetOneByIdentity", testUsername).Once().Return(user.User{}, errors.New("boom"))
 		defer userRepository.AssertExpectations(t)
 
-		useCase := getArticlesByAuthor.NewUseCase(&articlesRepository, &userRepository, &requestValidator)
+		useCase := getArticlesByAuthor.NewUseCase(&articlesRepository, &userRepository, &languageResolver, &requestValidator)
 		handler := NewIndexHandler(useCase)
 
 		request := httptest.NewRequest(http.MethodGet, "/?page=1", nil)

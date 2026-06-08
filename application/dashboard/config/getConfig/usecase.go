@@ -24,8 +24,9 @@ func (uc *UseCase) Execute() (*Response, error) {
 	}
 
 	response := Response{
-		Revision:         c.Revision,
-		UserDefaultRoles: c.UserDefaultRoleUUIDs,
+		Revision:            c.Revision,
+		UserDefaultRoles:    c.UserDefaultRoleUUIDs,
+		DefaultLanguageCode: c.DefaultLanguageCode,
 	}
 
 	if response.UserDefaultRoles == nil {

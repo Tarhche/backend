@@ -29,6 +29,7 @@ func TestShowHandler(t *testing.T) {
 			loadedConfig = config.Config{
 				Revision:             1,
 				UserDefaultRoleUUIDs: []string{"role1"},
+				DefaultLanguageCode:  "EN",
 			}
 		)
 

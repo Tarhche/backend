@@ -10,6 +10,7 @@ type UserBson struct {
 	Avatar       string           `bson:"avatar"`
 	Email        string           `bson:"email"`
 	Username     string           `bson:"username"`
+	LanguageCode string           `bson:"language_code"`
 	PasswordHash PasswordHashBson `bson:"hash,omitempty"`
 	CreatedAt    time.Time        `bson:"created_at,omitempty"`
 }

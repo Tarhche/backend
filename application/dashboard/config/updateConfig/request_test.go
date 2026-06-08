@@ -16,21 +16,24 @@ func TestRequest_Validate(t *testing.T) {
 		{
 			name: "valid request",
 			request: Request{
-				UserDefaultRoles: []string{"user", "editor"},
+				UserDefaultRoles:    []string{"user", "editor"},
+				DefaultLanguageCode: "EN",
 			},
 			want: domain.ValidationErrors{},
 		},
 		{
 			name: "valid request with single role",
 			request: Request{
-				UserDefaultRoles: []string{"user"},
+				UserDefaultRoles:    []string{"user"},
+				DefaultLanguageCode: "FA",
 			},
 			want: domain.ValidationErrors{},
 		},
 		{
 			name: "invalid request with empty user default roles",
 			request: Request{
-				UserDefaultRoles: []string{},
+				UserDefaultRoles:    []string{},
+				DefaultLanguageCode: "EN",
 			},
 			want: domain.ValidationErrors{
 				"user_default_roles": "required_field",
@@ -39,10 +42,21 @@ func TestRequest_Validate(t *testing.T) {
 		{
 			name: "invalid request with nil user default roles",
 			request: Request{
-				UserDefaultRoles: nil,
+				UserDefaultRoles:    nil,
+				DefaultLanguageCode: "EN",
 			},
 			want: domain.ValidationErrors{
 				"user_default_roles": "required_field",
+			},
+		},
+		{
+			name: "invalid request with empty default language",
+			request: Request{
+				UserDefaultRoles:    []string{"user"},
+				DefaultLanguageCode: "",
+			},
+			want: domain.ValidationErrors{
+				"default_language_code": "required_field",
 			},
 		},
 	}

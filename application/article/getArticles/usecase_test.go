@@ -6,7 +6,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/khanzadimahdi/testproject/application/language/resolver"
 	"github.com/khanzadimahdi/testproject/domain/article"
+	"github.com/khanzadimahdi/testproject/domain/language"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/articles"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
@@ -17,6 +19,7 @@ func TestUseCase_Execute(t *testing.T) {
 		var (
 			articlesRepository articles.MockArticlesRepository
 			userRepository     users.MockUsersRepository
+			languageResolver   resolver.MockResolver
 
 			a = []article.Article{
 				{UUID: "test-article-1", AuthorUUID: "author-uuid-1"},
@@ -29,14 +32,20 @@ func TestUseCase_Execute(t *testing.T) {
 			}
 		)
 
-		articlesRepository.On("CountPublished").Once().Return(uint(1), nil)
-		articlesRepository.On("GetAllPublished", uint(0), uint(10)).Once().Return(a, nil)
+		articlesRepository.On("CountPublished", "EN").Once().Return(uint(1), nil)
+		articlesRepository.On("GetAllPublished", "EN", uint(0), uint(10)).Once().Return(a, nil)
 		defer articlesRepository.AssertExpectations(t)
 
 		userRepository.On("GetByUUIDs", []string{"author-uuid-1", "author-uuid-2", "author-uuid-1"}).Once().Return(u, nil)
 		defer userRepository.AssertExpectations(t)
 
-		usecase := NewUseCase(&articlesRepository, &userRepository)
+		articlesRepository.On("GetPublishedLanguages", "").Return([]language.Language{}, nil)
+
+		languageResolver.On("DefaultCode").Once().Return("EN", nil)
+		languageResolver.On("Resolve", "EN").Once().Return(language.Language{Code: "EN"}, nil)
+		defer languageResolver.AssertExpectations(t)
+
+		usecase := NewUseCase(&articlesRepository, &userRepository, &languageResolver)
 		request := Request{Page: 1}
 		response, err := usecase.Execute(&request)
 
@@ -48,13 +57,18 @@ func TestUseCase_Execute(t *testing.T) {
 		var (
 			articlesRepository articles.MockArticlesRepository
 			userRepository     users.MockUsersRepository
+			languageResolver   resolver.MockResolver
 			expectedErr        = errors.New("test error")
 		)
 
-		articlesRepository.On("CountPublished").Once().Return(uint(1), expectedErr)
+		articlesRepository.On("CountPublished", "EN").Once().Return(uint(1), expectedErr)
 		defer articlesRepository.AssertExpectations(t)
 
-		usecase := NewUseCase(&articlesRepository, &userRepository)
+		languageResolver.On("DefaultCode").Once().Return("EN", nil)
+		languageResolver.On("Resolve", "EN").Once().Return(language.Language{Code: "EN"}, nil)
+		defer languageResolver.AssertExpectations(t)
+
+		usecase := NewUseCase(&articlesRepository, &userRepository, &languageResolver)
 		request := Request{Page: 1}
 		response, err := usecase.Execute(&request)
 
@@ -69,14 +83,19 @@ func TestUseCase_Execute(t *testing.T) {
 		var (
 			articlesRepository articles.MockArticlesRepository
 			userRepository     users.MockUsersRepository
+			languageResolver   resolver.MockResolver
 			expectedErr        = errors.New("test error")
 		)
 
-		articlesRepository.On("CountPublished").Once().Return(uint(1), nil)
-		articlesRepository.On("GetAllPublished", uint(0), uint(10)).Once().Return(nil, expectedErr)
+		articlesRepository.On("CountPublished", "EN").Once().Return(uint(1), nil)
+		articlesRepository.On("GetAllPublished", "EN", uint(0), uint(10)).Once().Return(nil, expectedErr)
 		defer articlesRepository.AssertExpectations(t)
 
-		usecase := NewUseCase(&articlesRepository, &userRepository)
+		languageResolver.On("DefaultCode").Once().Return("EN", nil)
+		languageResolver.On("Resolve", "EN").Once().Return(language.Language{Code: "EN"}, nil)
+		defer languageResolver.AssertExpectations(t)
+
+		usecase := NewUseCase(&articlesRepository, &userRepository, &languageResolver)
 		request := Request{Page: 1}
 		response, err := usecase.Execute(&request)
 
@@ -90,6 +109,7 @@ func TestUseCase_Execute(t *testing.T) {
 		var (
 			articlesRepository articles.MockArticlesRepository
 			userRepository     users.MockUsersRepository
+			languageResolver   resolver.MockResolver
 			expectedErr        = errors.New("test error")
 
 			a = []article.Article{
@@ -97,14 +117,18 @@ func TestUseCase_Execute(t *testing.T) {
 			}
 		)
 
-		articlesRepository.On("CountPublished").Once().Return(uint(1), nil)
-		articlesRepository.On("GetAllPublished", uint(0), uint(10)).Once().Return(a, nil)
+		articlesRepository.On("CountPublished", "EN").Once().Return(uint(1), nil)
+		articlesRepository.On("GetAllPublished", "EN", uint(0), uint(10)).Once().Return(a, nil)
 		defer articlesRepository.AssertExpectations(t)
 
 		userRepository.On("GetByUUIDs", []string{"author-uuid-1"}).Once().Return(nil, expectedErr)
 		defer userRepository.AssertExpectations(t)
 
-		usecase := NewUseCase(&articlesRepository, &userRepository)
+		languageResolver.On("DefaultCode").Once().Return("EN", nil)
+		languageResolver.On("Resolve", "EN").Once().Return(language.Language{Code: "EN"}, nil)
+		defer languageResolver.AssertExpectations(t)
+
+		usecase := NewUseCase(&articlesRepository, &userRepository, &languageResolver)
 		request := Request{Page: 1}
 		response, err := usecase.Execute(&request)
 

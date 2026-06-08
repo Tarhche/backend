@@ -5,8 +5,9 @@ import (
 )
 
 type Request struct {
-	Hashtag string
-	Page    uint
+	Hashtag      string
+	LanguageCode string
+	Page         uint
 }
 
 var _ domain.Validatable = &Request{}

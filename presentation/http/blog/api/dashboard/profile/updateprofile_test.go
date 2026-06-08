@@ -13,6 +13,7 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/application/dashboard/profile/updateprofile"
+	"github.com/khanzadimahdi/testproject/application/language/resolver"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
@@ -28,23 +29,26 @@ func TestUpdateProfileHandler(t *testing.T) {
 
 		var (
 			userRepository   users.MockUsersRepository
+			languageResolver resolver.MockResolver
 			requestValidator validator.MockValidator
 			translator       translator.TranslatorMock
 
 			r = updateprofile.Request{
-				UserUUID: "test-user-uuid",
-				Name:     "John Doe",
-				Avatar:   "test-avatar",
-				Email:    "test@test.com",
-				Username: "john.doe",
+				UserUUID:     "test-user-uuid",
+				Name:         "John Doe",
+				Avatar:       "test-avatar",
+				Email:        "test@test.com",
+				Username:     "john.doe",
+				LanguageCode: "EN",
 			}
 
 			u = user.User{
-				UUID:     r.UserUUID,
-				Name:     r.Name,
-				Avatar:   r.Avatar,
-				Email:    r.Email,
-				Username: r.Username,
+				UUID:         r.UserUUID,
+				Name:         r.Name,
+				Avatar:       r.Avatar,
+				Email:        r.Email,
+				Username:     r.Username,
+				LanguageCode: r.LanguageCode,
 			}
 		)
 
@@ -57,7 +61,10 @@ func TestUpdateProfileHandler(t *testing.T) {
 		userRepository.On("Save", &u).Once().Return(r.UserUUID, nil)
 		defer userRepository.AssertExpectations(t)
 
-		handler := NewUpdateProfileHandler(updateprofile.NewUseCase(&userRepository, &requestValidator, &translator))
+		languageResolver.On("Verify", r.LanguageCode).Once().Return(true)
+		defer languageResolver.AssertExpectations(t)
+
+		handler := NewUpdateProfileHandler(updateprofile.NewUseCase(&userRepository, &languageResolver, &requestValidator, &translator))
 
 		var payload bytes.Buffer
 		err := json.NewEncoder(&payload).Encode(r)
@@ -80,6 +87,7 @@ func TestUpdateProfileHandler(t *testing.T) {
 
 		var (
 			userRepository   users.MockUsersRepository
+			languageResolver resolver.MockResolver
 			requestValidator validator.MockValidator
 			translator       translator.TranslatorMock
 
@@ -95,7 +103,9 @@ func TestUpdateProfileHandler(t *testing.T) {
 		})
 		defer requestValidator.AssertExpectations(t)
 
-		handler := NewUpdateProfileHandler(updateprofile.NewUseCase(&userRepository, &requestValidator, &translator))
+		languageResolver.AssertNotCalled(t, "Verify")
+
+		handler := NewUpdateProfileHandler(updateprofile.NewUseCase(&userRepository, &languageResolver, &requestValidator, &translator))
 
 		request := httptest.NewRequest(http.MethodPatch, "/", bytes.NewBufferString("{}"))
 		request = request.WithContext(auth.ToContext(request.Context(), &u))
@@ -122,23 +132,26 @@ func TestUpdateProfileHandler(t *testing.T) {
 
 		var (
 			userRepository   users.MockUsersRepository
+			languageResolver resolver.MockResolver
 			requestValidator validator.MockValidator
 			translator       translator.TranslatorMock
 
 			r = updateprofile.Request{
-				UserUUID: "test-user-uuid",
-				Name:     "John Doe",
-				Avatar:   "test-avatar",
-				Email:    "test@test.com",
-				Username: "john.doe",
+				UserUUID:     "test-user-uuid",
+				Name:         "John Doe",
+				Avatar:       "test-avatar",
+				Email:        "test@test.com",
+				Username:     "john.doe",
+				LanguageCode: "EN",
 			}
 
 			u = user.User{
-				UUID:     r.UserUUID,
-				Name:     r.Name,
-				Avatar:   r.Avatar,
-				Email:    r.Email,
-				Username: r.Username,
+				UUID:         r.UserUUID,
+				Name:         r.Name,
+				Avatar:       r.Avatar,
+				Email:        r.Email,
+				Username:     r.Username,
+				LanguageCode: r.LanguageCode,
 			}
 		)
 
@@ -150,7 +163,10 @@ func TestUpdateProfileHandler(t *testing.T) {
 		userRepository.On("GetOne", r.UserUUID).Once().Return(u, domain.ErrNotExists)
 		defer userRepository.AssertExpectations(t)
 
-		handler := NewUpdateProfileHandler(updateprofile.NewUseCase(&userRepository, &requestValidator, &translator))
+		languageResolver.On("Verify", r.LanguageCode).Once().Return(true)
+		defer languageResolver.AssertExpectations(t)
+
+		handler := NewUpdateProfileHandler(updateprofile.NewUseCase(&userRepository, &languageResolver, &requestValidator, &translator))
 
 		var payload bytes.Buffer
 		err := json.NewEncoder(&payload).Encode(r)
@@ -174,23 +190,26 @@ func TestUpdateProfileHandler(t *testing.T) {
 
 		var (
 			userRepository   users.MockUsersRepository
+			languageResolver resolver.MockResolver
 			requestValidator validator.MockValidator
 			translator       translator.TranslatorMock
 
 			r = updateprofile.Request{
-				UserUUID: "test-user-uuid",
-				Name:     "John Doe",
-				Avatar:   "test-avatar",
-				Email:    "test@test.com",
-				Username: "john.doe",
+				UserUUID:     "test-user-uuid",
+				Name:         "John Doe",
+				Avatar:       "test-avatar",
+				Email:        "test@test.com",
+				Username:     "john.doe",
+				LanguageCode: "EN",
 			}
 
 			u = user.User{
-				UUID:     r.UserUUID,
-				Name:     r.Name,
-				Avatar:   r.Avatar,
-				Email:    r.Email,
-				Username: r.Username,
+				UUID:         r.UserUUID,
+				Name:         r.Name,
+				Avatar:       r.Avatar,
+				Email:        r.Email,
+				Username:     r.Username,
+				LanguageCode: r.LanguageCode,
 			}
 		)
 
@@ -200,7 +219,9 @@ func TestUpdateProfileHandler(t *testing.T) {
 		userRepository.On("GetOneByIdentity", r.Email).Once().Return(u, errors.New("unexpected error"))
 		defer userRepository.AssertExpectations(t)
 
-		handler := NewUpdateProfileHandler(updateprofile.NewUseCase(&userRepository, &requestValidator, &translator))
+		languageResolver.AssertNotCalled(t, "Verify")
+
+		handler := NewUpdateProfileHandler(updateprofile.NewUseCase(&userRepository, &languageResolver, &requestValidator, &translator))
 
 		var payload bytes.Buffer
 		err := json.NewEncoder(&payload).Encode(r)

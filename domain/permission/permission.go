@@ -7,7 +7,6 @@ type Permission struct {
 
 type Repository interface {
 	GetAll() []Permission
-	GetOne(value string) (Permission, error)
 	Get(values []string) ([]Permission, error)
 }
 
@@ -53,6 +52,12 @@ const (
 
 	ConfigShow   = "config.show"
 	ConfigUpdate = "config.update"
+
+	LanguagesIndex  = "languages.index"
+	LanguagesCreate = "languages.create"
+	LanguagesShow   = "languages.show"
+	LanguagesUpdate = "languages.update"
+	LanguagesDelete = "languages.delete"
 )
 
 // user's self related accesses

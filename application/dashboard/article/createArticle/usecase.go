@@ -3,20 +3,24 @@ package createarticle
 import (
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/article"
+	"github.com/khanzadimahdi/testproject/domain/language"
 )
 
 type UseCase struct {
-	articleRepository article.Repository
-	validator         domain.Validator
+	articleRepository  article.Repository
+	languageRepository language.Repository
+	validator          domain.Validator
 }
 
 func NewUseCase(
 	articleRepository article.Repository,
+	languageRepository language.Repository,
 	validator domain.Validator,
 ) *UseCase {
 	return &UseCase{
-		articleRepository: articleRepository,
-		validator:         validator,
+		articleRepository:  articleRepository,
+		languageRepository: languageRepository,
+		validator:          validator,
 	}
 }
 
@@ -27,15 +31,40 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		}, nil
 	}
 
+	if !uc.languageRepository.Exists(request.LanguageCode) {
+		return &Response{
+			ValidationErrors: domain.ValidationErrors{
+				"language_code": "invalid_value",
+			},
+		}, nil
+	}
+
+	if len(request.CorrelationUUID) > 0 {
+		exist, err := uc.articleRepository.CorrelationExist(request.CorrelationUUID)
+		if err != nil {
+			return nil, err
+		}
+
+		if !exist {
+			return &Response{
+				ValidationErrors: domain.ValidationErrors{
+					"correlation_uuid": "invalid_value",
+				},
+			}, nil
+		}
+	}
+
 	a := article.Article{
-		Cover:       request.Cover,
-		Video:       request.Video,
-		Title:       request.Title,
-		Excerpt:     request.Excerpt,
-		Body:        request.Body,
-		PublishedAt: request.PublishedAt,
-		AuthorUUID:  request.AuthorUUID,
-		Tags:        request.Tags,
+		Cover:           request.Cover,
+		Video:           request.Video,
+		Title:           request.Title,
+		Excerpt:         request.Excerpt,
+		Body:            request.Body,
+		PublishedAt:     request.PublishedAt,
+		AuthorUUID:      request.AuthorUUID,
+		Tags:            request.Tags,
+		LanguageCode:    request.LanguageCode,
+		CorrelationUUID: request.CorrelationUUID,
 	}
 
 	uuid, err := uc.articleRepository.Save(&a)

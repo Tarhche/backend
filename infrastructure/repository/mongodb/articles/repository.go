@@ -12,6 +12,7 @@ import (
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/article"
+	"github.com/khanzadimahdi/testproject/domain/language"
 )
 
 const (
@@ -32,6 +33,23 @@ func NewRepository(database *mongo.Database) *ArticlesRepository {
 
 	return &ArticlesRepository{
 		collection: database.Collection(collectionName),
+	}
+}
+
+func toDomain(a ArticleBson) article.Article {
+	return article.Article{
+		UUID:            a.UUID,
+		Cover:           a.Cover,
+		Video:           a.Video,
+		Title:           a.Title,
+		Excerpt:         a.Excerpt,
+		Body:            a.Body,
+		PublishedAt:     a.PublishedAt,
+		AuthorUUID:      a.AuthorUUID,
+		Tags:            a.Tags,
+		ViewCount:       a.ViewCount,
+		LanguageCode:    a.LanguageCode,
+		CorrelationUUID: a.CorrelationUUID,
 	}
 }
 
@@ -56,16 +74,7 @@ func (r *ArticlesRepository) GetAll(offset uint, limit uint) ([]article.Article,
 		if err := cur.Decode(&a); err != nil {
 			return nil, err
 		}
-		items = append(items, article.Article{
-			UUID:        a.UUID,
-			Cover:       a.Cover,
-			Video:       a.Video,
-			Title:       a.Title,
-			Excerpt:     a.Excerpt,
-			Tags:        a.Tags,
-			PublishedAt: a.PublishedAt,
-			AuthorUUID:  a.AuthorUUID,
-		})
+		items = append(items, toDomain(a))
 	}
 
 	if err := cur.Err(); err != nil {
@@ -75,7 +84,7 @@ func (r *ArticlesRepository) GetAll(offset uint, limit uint) ([]article.Article,
 	return items, nil
 }
 
-func (r *ArticlesRepository) GetAllPublished(offset uint, limit uint) ([]article.Article, error) {
+func (r *ArticlesRepository) GetAllPublished(language string, offset uint, limit uint) ([]article.Article, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
 	defer cancel()
 
@@ -84,10 +93,10 @@ func (r *ArticlesRepository) GetAllPublished(offset uint, limit uint) ([]article
 	desc := bson.D{{Key: "published_at", Value: -1}}
 
 	filter := bson.M{
-		"published_at": bson.M{
-			"$lte": bson.NewDateTimeFromTime(time.Now()),
-			"$ne":  time.Time{},
-		},
+		"published_at": publishedFilter(),
+	}
+	if len(language) > 0 {
+		filter["language_code"] = language
 	}
 
 	cur, err := r.collection.Find(ctx, filter, options.Find().SetLimit(l).SetSkip(o).SetSort(desc))
@@ -103,16 +112,7 @@ func (r *ArticlesRepository) GetAllPublished(offset uint, limit uint) ([]article
 		if err := cur.Decode(&a); err != nil {
 			return nil, err
 		}
-		items = append(items, article.Article{
-			UUID:        a.UUID,
-			Cover:       a.Cover,
-			Video:       a.Video,
-			Title:       a.Title,
-			Excerpt:     a.Excerpt,
-			Tags:        a.Tags,
-			PublishedAt: a.PublishedAt,
-			AuthorUUID:  a.AuthorUUID,
-		})
+		items = append(items, toDomain(a))
 	}
 
 	if err := cur.Err(); err != nil {
@@ -122,12 +122,15 @@ func (r *ArticlesRepository) GetAllPublished(offset uint, limit uint) ([]article
 	return items, nil
 }
 
-func (r *ArticlesRepository) GetByUUIDs(UUIDs []string) ([]article.Article, error) {
+func (r *ArticlesRepository) GetByCorrelationUUIDs(correlationUUIDs []string, languageCode string) ([]article.Article, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
 	defer cancel()
 
 	desc := bson.D{{Key: "published_at", Value: -1}}
-	filter := bson.M{"_id": bson.M{"$in": UUIDs}}
+	filter := bson.M{"correlation_uuid": bson.M{"$in": correlationUUIDs}}
+	if len(languageCode) > 0 {
+		filter["language_code"] = languageCode
+	}
 
 	cur, err := r.collection.Find(ctx, filter, options.Find().SetSort(desc))
 	if err != nil {
@@ -135,24 +138,14 @@ func (r *ArticlesRepository) GetByUUIDs(UUIDs []string) ([]article.Article, erro
 	}
 	defer cur.Close(ctx)
 
-	items := make([]article.Article, 0, len(UUIDs))
+	items := make([]article.Article, 0, len(correlationUUIDs))
 	for cur.Next(ctx) {
 		var a ArticleBson
 
 		if err := cur.Decode(&a); err != nil {
 			return nil, err
 		}
-		items = append(items, article.Article{
-			UUID:        a.UUID,
-			Cover:       a.Cover,
-			Video:       a.Video,
-			Title:       a.Title,
-			Body:        a.Body,
-			Excerpt:     a.Excerpt,
-			Tags:        a.Tags,
-			PublishedAt: a.PublishedAt,
-			AuthorUUID:  a.AuthorUUID,
-		})
+		items = append(items, toDomain(a))
 	}
 
 	if err := cur.Err(); err != nil {
@@ -162,17 +155,61 @@ func (r *ArticlesRepository) GetByUUIDs(UUIDs []string) ([]article.Article, erro
 	return items, nil
 }
 
-func (r *ArticlesRepository) GetMostViewed(limit uint) ([]article.Article, error) {
+func (r *ArticlesRepository) GetPublishedLanguages(correlationUUID string) ([]language.Language, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+	defer cancel()
+
+	if len(correlationUUID) == 0 {
+		return []language.Language{}, nil
+	}
+
+	filter := bson.M{
+		"correlation_uuid": correlationUUID,
+		"published_at":     publishedFilter(),
+	}
+
+	var languageCodes []string
+	if err := r.collection.Distinct(ctx, "language_code", filter).Decode(&languageCodes); err != nil {
+		return nil, err
+	}
+
+	languages := make([]language.Language, 0, len(languageCodes))
+	for _, code := range languageCodes {
+		languages = append(languages, language.Language{Code: code})
+	}
+
+	return languages, nil
+}
+
+func (r *ArticlesRepository) CorrelationExist(correlationUUID string) (bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+	defer cancel()
+
+	if len(correlationUUID) == 0 {
+		return false, nil
+	}
+
+	filter := bson.M{"correlation_uuid": correlationUUID}
+
+	c, err := r.collection.CountDocuments(ctx, filter, options.Count().SetLimit(1))
+	if err != nil {
+		return false, err
+	}
+
+	return c > 0, nil
+}
+
+func (r *ArticlesRepository) GetMostViewed(language string, limit uint) ([]article.Article, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
 	defer cancel()
 
 	l := int64(limit)
 	desc := bson.D{{Key: "view_count", Value: -1}}
 	filter := bson.M{
-		"published_at": bson.M{
-			"$lte": bson.NewDateTimeFromTime(time.Now()),
-			"$ne":  time.Time{},
-		},
+		"published_at": publishedFilter(),
+	}
+	if len(language) > 0 {
+		filter["language_code"] = language
 	}
 
 	cur, err := r.collection.Find(ctx, filter, options.Find().SetLimit(l).SetSort(desc))
@@ -188,16 +225,7 @@ func (r *ArticlesRepository) GetMostViewed(limit uint) ([]article.Article, error
 		if err := cur.Decode(&a); err != nil {
 			return nil, err
 		}
-		items = append(items, article.Article{
-			UUID:        a.UUID,
-			Cover:       a.Cover,
-			Video:       a.Video,
-			Title:       a.Title,
-			Excerpt:     a.Excerpt,
-			Tags:        a.Tags,
-			PublishedAt: a.PublishedAt,
-			AuthorUUID:  a.AuthorUUID,
-		})
+		items = append(items, toDomain(a))
 	}
 
 	if err := cur.Err(); err != nil {
@@ -207,18 +235,16 @@ func (r *ArticlesRepository) GetMostViewed(limit uint) ([]article.Article, error
 	return items, nil
 }
 
-func (r *ArticlesRepository) CountPublishedByHashtags(hashtags []string) (uint, error) {
+func (r *ArticlesRepository) CountPublishedByHashtags(hashtags []string, language string) (uint, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
 	defer cancel()
 
 	filter := bson.M{
-		"tags": bson.M{
-			"$in": hashtags,
-		},
-		"published_at": bson.M{
-			"$lte": bson.NewDateTimeFromTime(time.Now()),
-			"$ne":  time.Time{},
-		},
+		"tags":         bson.M{"$in": hashtags},
+		"published_at": publishedFilter(),
+	}
+	if len(language) > 0 {
+		filter["language_code"] = language
 	}
 
 	c, err := r.collection.CountDocuments(ctx, filter)
@@ -229,7 +255,7 @@ func (r *ArticlesRepository) CountPublishedByHashtags(hashtags []string) (uint, 
 	return uint(c), nil
 }
 
-func (r *ArticlesRepository) GetPublishedByHashtags(hashtags []string, offset uint, limit uint) ([]article.Article, error) {
+func (r *ArticlesRepository) GetPublishedByHashtags(hashtags []string, language string, offset uint, limit uint) ([]article.Article, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
 	defer cancel()
 
@@ -237,13 +263,11 @@ func (r *ArticlesRepository) GetPublishedByHashtags(hashtags []string, offset ui
 	l := int64(limit)
 	desc := bson.D{{Key: "published_at", Value: -1}}
 	filter := bson.M{
-		"tags": bson.M{
-			"$in": hashtags,
-		},
-		"published_at": bson.M{
-			"$lte": bson.NewDateTimeFromTime(time.Now()),
-			"$ne":  time.Time{},
-		},
+		"tags":         bson.M{"$in": hashtags},
+		"published_at": publishedFilter(),
+	}
+	if len(language) > 0 {
+		filter["language_code"] = language
 	}
 
 	cur, err := r.collection.Find(
@@ -264,16 +288,7 @@ func (r *ArticlesRepository) GetPublishedByHashtags(hashtags []string, offset ui
 		if err := cur.Decode(&a); err != nil {
 			return nil, err
 		}
-		items = append(items, article.Article{
-			UUID:        a.UUID,
-			Cover:       a.Cover,
-			Video:       a.Video,
-			Title:       a.Title,
-			Excerpt:     a.Excerpt,
-			Tags:        a.Tags,
-			PublishedAt: a.PublishedAt,
-			AuthorUUID:  a.AuthorUUID,
-		})
+		items = append(items, toDomain(a))
 	}
 
 	if err := cur.Err(); err != nil {
@@ -283,16 +298,16 @@ func (r *ArticlesRepository) GetPublishedByHashtags(hashtags []string, offset ui
 	return items, nil
 }
 
-func (r *ArticlesRepository) CountPublishedByAuthor(authorUUID string) (uint, error) {
+func (r *ArticlesRepository) CountPublishedByAuthor(authorUUID string, language string) (uint, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
 	defer cancel()
 
 	filter := bson.M{
-		"author_uuid": authorUUID,
-		"published_at": bson.M{
-			"$lte": bson.NewDateTimeFromTime(time.Now()),
-			"$ne":  time.Time{},
-		},
+		"author_uuid":  authorUUID,
+		"published_at": publishedFilter(),
+	}
+	if len(language) > 0 {
+		filter["language_code"] = language
 	}
 
 	c, err := r.collection.CountDocuments(ctx, filter)
@@ -303,7 +318,7 @@ func (r *ArticlesRepository) CountPublishedByAuthor(authorUUID string) (uint, er
 	return uint(c), nil
 }
 
-func (r *ArticlesRepository) GetPublishedByAuthor(authorUUID string, offset uint, limit uint) ([]article.Article, error) {
+func (r *ArticlesRepository) GetPublishedByAuthor(authorUUID string, language string, offset uint, limit uint) ([]article.Article, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
 	defer cancel()
 
@@ -311,11 +326,11 @@ func (r *ArticlesRepository) GetPublishedByAuthor(authorUUID string, offset uint
 	l := int64(limit)
 	desc := bson.D{{Key: "published_at", Value: -1}}
 	filter := bson.M{
-		"author_uuid": authorUUID,
-		"published_at": bson.M{
-			"$lte": bson.NewDateTimeFromTime(time.Now()),
-			"$ne":  time.Time{},
-		},
+		"author_uuid":  authorUUID,
+		"published_at": publishedFilter(),
+	}
+	if len(language) > 0 {
+		filter["language_code"] = language
 	}
 
 	cur, err := r.collection.Find(
@@ -336,16 +351,7 @@ func (r *ArticlesRepository) GetPublishedByAuthor(authorUUID string, offset uint
 		if err := cur.Decode(&a); err != nil {
 			return nil, err
 		}
-		items = append(items, article.Article{
-			UUID:        a.UUID,
-			Cover:       a.Cover,
-			Video:       a.Video,
-			Title:       a.Title,
-			Excerpt:     a.Excerpt,
-			Tags:        a.Tags,
-			PublishedAt: a.PublishedAt,
-			AuthorUUID:  a.AuthorUUID,
-		})
+		items = append(items, toDomain(a))
 	}
 
 	if err := cur.Err(); err != nil {
@@ -369,30 +375,19 @@ func (r *ArticlesRepository) GetOne(UUID string) (article.Article, error) {
 		return article.Article{}, err
 	}
 
-	return article.Article{
-		UUID:        a.UUID,
-		Cover:       a.Cover,
-		Video:       a.Video,
-		Title:       a.Title,
-		Excerpt:     a.Excerpt,
-		Body:        a.Body,
-		PublishedAt: a.PublishedAt,
-		AuthorUUID:  a.AuthorUUID,
-		Tags:        a.Tags,
-		ViewCount:   a.ViewCount,
-	}, nil
+	return toDomain(a), nil
 }
 
-func (r *ArticlesRepository) GetOnePublished(UUID string) (article.Article, error) {
+func (r *ArticlesRepository) GetOnePublished(correlationUUID string, languageCode string) (article.Article, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
 	defer cancel()
 
 	filter := bson.M{
-		"_id": UUID,
-		"published_at": bson.M{
-			"$lte": bson.NewDateTimeFromTime(time.Now()),
-			"$ne":  time.Time{},
-		},
+		"correlation_uuid": correlationUUID,
+		"published_at":     publishedFilter(),
+	}
+	if len(languageCode) > 0 {
+		filter["language_code"] = languageCode
 	}
 
 	var a ArticleBson
@@ -403,18 +398,7 @@ func (r *ArticlesRepository) GetOnePublished(UUID string) (article.Article, erro
 		return article.Article{}, err
 	}
 
-	return article.Article{
-		UUID:        a.UUID,
-		Cover:       a.Cover,
-		Video:       a.Video,
-		Title:       a.Title,
-		Excerpt:     a.Excerpt,
-		Body:        a.Body,
-		PublishedAt: a.PublishedAt,
-		AuthorUUID:  a.AuthorUUID,
-		Tags:        a.Tags,
-		ViewCount:   a.ViewCount,
-	}, nil
+	return toDomain(a), nil
 }
 
 func (r *ArticlesRepository) Count() (uint, error) {
@@ -429,15 +413,15 @@ func (r *ArticlesRepository) Count() (uint, error) {
 	return uint(c), nil
 }
 
-func (r *ArticlesRepository) CountPublished() (uint, error) {
+func (r *ArticlesRepository) CountPublished(language string) (uint, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
 	defer cancel()
 
 	filter := bson.M{
-		"published_at": bson.M{
-			"$lte": bson.NewDateTimeFromTime(time.Now()),
-			"$ne":  time.Time{},
-		},
+		"published_at": publishedFilter(),
+	}
+	if len(language) > 0 {
+		filter["language_code"] = language
 	}
 
 	c, err := r.collection.CountDocuments(ctx, filter)
@@ -460,19 +444,25 @@ func (r *ArticlesRepository) Save(a *article.Article) (string, error) {
 		a.UUID = UUID.String()
 	}
 
+	if len(a.CorrelationUUID) == 0 {
+		a.CorrelationUUID = a.UUID
+	}
+
 	update := ArticleBson{
-		UUID:        a.UUID,
-		Cover:       a.Cover,
-		Title:       a.Title,
-		Video:       a.Video,
-		Excerpt:     a.Excerpt,
-		Body:        a.Body,
-		PublishedAt: a.PublishedAt,
-		AuthorUUID:  a.AuthorUUID,
-		Tags:        a.Tags,
-		ViewCount:   a.ViewCount,
-		CreatedAt:   time.Now(),
-		UpdatedAt:   time.Now(),
+		UUID:            a.UUID,
+		Cover:           a.Cover,
+		Title:           a.Title,
+		Video:           a.Video,
+		Excerpt:         a.Excerpt,
+		Body:            a.Body,
+		PublishedAt:     a.PublishedAt,
+		AuthorUUID:      a.AuthorUUID,
+		Tags:            a.Tags,
+		ViewCount:       a.ViewCount,
+		LanguageCode:    a.LanguageCode,
+		CorrelationUUID: a.CorrelationUUID,
+		CreatedAt:       time.Now(),
+		UpdatedAt:       time.Now(),
 	}
 
 	if _, err := r.collection.UpdateOne(
@@ -507,4 +497,11 @@ func (r *ArticlesRepository) IncreaseView(uuid string, inc uint) error {
 	)
 
 	return err
+}
+
+func publishedFilter() bson.M {
+	return bson.M{
+		"$lte": bson.NewDateTimeFromTime(time.Now()),
+		"$ne":  time.Time{},
+	}
 }

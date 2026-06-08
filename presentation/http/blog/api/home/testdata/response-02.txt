@@ -1,5 +1,9 @@
 {
     "all": [],
     "popular": [],
-    "elements": []
+    "elements": [],
+    "language_code": {
+        "code": "EN",
+        "name": "English"
+    }
 }

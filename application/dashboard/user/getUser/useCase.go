@@ -21,10 +21,11 @@ func (uc *UseCase) Execute(UUID string) (*Response, error) {
 	}
 
 	return &Response{
-		UUID:     UUID,
-		Name:     u.Name,
-		Avatar:   u.Avatar,
-		Email:    u.Email,
-		Username: u.Username,
+		UUID:         UUID,
+		Name:         u.Name,
+		Avatar:       u.Avatar,
+		Email:        u.Email,
+		Username:     u.Username,
+		LanguageCode: u.LanguageCode,
 	}, err
 }

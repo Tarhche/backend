@@ -8,16 +8,18 @@ import (
 )
 
 type Response struct {
-	UUID        string   `json:"uuid"`
-	Cover       string   `json:"cover"`
-	Video       string   `json:"video"`
-	Title       string   `json:"title"`
-	Excerpt     string   `json:"excerpt"`
-	Body        string   `json:"body"`
-	PublishedAt string   `json:"published_at"`
-	Author      author   `json:"author"`
-	Tags        []string `json:"tags"`
-	ViewCount   uint     `json:"view_count"`
+	UUID          string   `json:"uuid"`
+	Cover         string   `json:"cover"`
+	Video         string   `json:"video"`
+	Title         string   `json:"title"`
+	Excerpt       string   `json:"excerpt"`
+	Body          string   `json:"body"`
+	PublishedAt   string   `json:"published_at"`
+	Author        author   `json:"author"`
+	Tags          []string `json:"tags"`
+	ViewCount     uint     `json:"view_count"`
+	LanguageCode  string   `json:"language_code"`
+	CorrelationID string   `json:"translation_correlation_id,omitempty"`
 }
 
 type author struct {
@@ -45,7 +47,9 @@ func NewResponse(a article.Article, u user.User) *Response {
 			Avatar:   u.Avatar,
 			Username: u.Username,
 		},
-		Tags:      tags,
-		ViewCount: a.ViewCount,
+		Tags:          tags,
+		ViewCount:     a.ViewCount,
+		LanguageCode:  a.LanguageCode,
+		CorrelationID: a.CorrelationUUID,
 	}
 }

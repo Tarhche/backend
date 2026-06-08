@@ -3,26 +3,30 @@ package updateprofile
 import (
 	"errors"
 
+	"github.com/khanzadimahdi/testproject/application/language/resolver"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/translator"
 	"github.com/khanzadimahdi/testproject/domain/user"
 )
 
 type UseCase struct {
-	userRepository user.Repository
-	validator      domain.Validator
-	translator     translator.Translator
+	userRepository   user.Repository
+	languageResolver resolver.Resolver
+	validator        domain.Validator
+	translator       translator.Translator
 }
 
 func NewUseCase(
 	userRepository user.Repository,
+	languageResolver resolver.Resolver,
 	validator domain.Validator,
 	translator translator.Translator,
 ) *UseCase {
 	return &UseCase{
-		userRepository: userRepository,
-		validator:      validator,
-		translator:     translator,
+		userRepository:   userRepository,
+		languageResolver: languageResolver,
+		validator:        validator,
+		translator:       translator,
 	}
 }
 
@@ -57,6 +61,14 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		}, nil
 	}
 
+	if !uc.languageResolver.Verify(request.LanguageCode) {
+		return &Response{
+			ValidationErrors: domain.ValidationErrors{
+				"language_code": "invalid_value",
+			},
+		}, nil
+	}
+
 	u, err := uc.userRepository.GetOne(request.UserUUID)
 	if err != nil {
 		return nil, err
@@ -66,6 +78,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 	u.Avatar = request.Avatar
 	u.Email = request.Email
 	u.Username = request.Username
+	u.LanguageCode = request.LanguageCode
 
 	_, err = uc.userRepository.Save(&u)
 

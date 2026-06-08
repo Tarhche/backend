@@ -72,7 +72,7 @@ func TestRequest_Validate(t *testing.T) {
 				Page:       1,
 			},
 			want: domain.ValidationErrors{
-				"uuid": "invalid_value",
+				"author_uuid": "invalid_value",
 			},
 		},
 		{
@@ -83,8 +83,8 @@ func TestRequest_Validate(t *testing.T) {
 				Page:       1,
 			},
 			want: domain.ValidationErrors{
-				"uuid":     "invalid_value",
-				"username": "invalid_value",
+				"author_uuid": "invalid_value",
+				"username":    "invalid_value",
 			},
 		},
 	}

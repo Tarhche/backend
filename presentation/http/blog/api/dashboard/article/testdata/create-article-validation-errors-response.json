@@ -2,6 +2,7 @@
     "errors": {
         "body": "body is required",
         "excerpt": "excerpt is required",
-        "title": "title is required"
+        "title": "title is required",
+        "language_code": "language is required"
     }
 }

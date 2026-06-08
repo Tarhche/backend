@@ -53,6 +53,7 @@ func (r *ConfigRepository) GetLatestRevision() (config.Config, error) {
 	return config.Config{
 		Revision:             c.Revision,
 		UserDefaultRoleUUIDs: c.UserDefaultRoleUUIDs,
+		DefaultLanguageCode:  c.DefaultLanguageCode,
 	}, nil
 }
 
@@ -69,6 +70,7 @@ func (r *ConfigRepository) Save(a *config.Config) (string, error) {
 		UUID:                 UUID.String(),
 		Revision:             a.Revision + 1,
 		UserDefaultRoleUUIDs: a.UserDefaultRoleUUIDs,
+		DefaultLanguageCode:  a.DefaultLanguageCode,
 		CreatedAt:            time.Now(),
 	}
 

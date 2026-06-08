@@ -12,7 +12,8 @@
                 "name": "author-name",
                 "avatar": "author-avatar",
                 "username": "author-username-1"
-            }
+            },
+            "available_languages": null
         },
         {
             "uuid": "article-uuid-2",
@@ -26,7 +27,8 @@
                 "name": "author-name",
                 "avatar": "author-avatar",
                 "username": "author-username-1"
-            }
+            },
+            "available_languages": null
         },
         {
             "uuid": "article-uuid-3",
@@ -40,9 +42,14 @@
                 "name": "author-name",
                 "avatar": "author-avatar",
                 "username": "author-username-2"
-            }
+            },
+            "available_languages": null
         }
     ],
+    "language_code": {
+        "code": "EN",
+        "name": "English"
+    },
     "pagination": {
         "total_pages": 1,
         "current_page": 1
