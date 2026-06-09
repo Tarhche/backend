@@ -35,10 +35,10 @@ runs:
 
   steps:
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
 
     - name: Login to GitHub Container Registry
-      uses: docker/login-action@v3
+      uses: docker/login-action@v4
       if: ${{ inputs.push == 'true' }}
       with:
         logout: false
@@ -47,13 +47,13 @@ runs:
         password: ${{ inputs.container-registry-password }}
 
     - name: Set up QEMU
-      uses: docker/setup-qemu-action@v3
+      uses: docker/setup-qemu-action@v4
 
     - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
+      uses: docker/setup-buildx-action@v4
 
     - name: Cache Docker layers
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: ${{ runner.temp }}/.buildx-cache
         key: ${{ runner.os }}-buildx-${{ github.sha }}
@@ -62,7 +62,7 @@ runs:
 
     - name: Extract metadata (tags, labels) for Docker image
       id: meta
-      uses: docker/metadata-action@v5
+      uses: docker/metadata-action@v6
       with:
         images: |
           ${{ inputs.container-registry }}/${{ github.repository_owner }}/${{ inputs.image-name }}
