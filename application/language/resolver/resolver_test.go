@@ -30,11 +30,12 @@ func TestResolver_DefaultCode(t *testing.T) {
 		code, err := New(&languageRepository, &configRepository).DefaultCode()
 
 		languageRepository.AssertNotCalled(t, "GetOne")
+		languageRepository.AssertNotCalled(t, "GetAll")
 		assert.NoError(t, err)
 		assert.Equal(t, "FA", code)
 	})
 
-	t.Run("errors when no default is configured", func(t *testing.T) {
+	t.Run("falls back to the first language when no default is configured", func(t *testing.T) {
 		t.Parallel()
 
 		var (
@@ -44,6 +45,32 @@ func TestResolver_DefaultCode(t *testing.T) {
 
 		configRepository.On("GetLatestRevision").Once().Return(config.Config{}, domain.ErrNotExists)
 		defer configRepository.AssertExpectations(t)
+
+		languageRepository.On("GetAll", uint(0), uint(1)).Once().Return([]language.Language{
+			{Code: "EN", Name: "English"},
+			{Code: "FA", Name: "فارسی"},
+		}, nil)
+		defer languageRepository.AssertExpectations(t)
+
+		code, err := New(&languageRepository, &configRepository).DefaultCode()
+
+		assert.NoError(t, err)
+		assert.Equal(t, "EN", code)
+	})
+
+	t.Run("errors when no default is configured and no languages exist", func(t *testing.T) {
+		t.Parallel()
+
+		var (
+			languageRepository languages.MockLanguagesRepository
+			configRepository   configMocks.MockConfigRepository
+		)
+
+		configRepository.On("GetLatestRevision").Once().Return(config.Config{}, domain.ErrNotExists)
+		defer configRepository.AssertExpectations(t)
+
+		languageRepository.On("GetAll", uint(0), uint(1)).Once().Return([]language.Language{}, nil)
+		defer languageRepository.AssertExpectations(t)
 
 		code, err := New(&languageRepository, &configRepository).DefaultCode()
 

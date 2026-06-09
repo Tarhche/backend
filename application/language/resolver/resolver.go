@@ -42,6 +42,13 @@ func (r *LanguageResolver) DefaultCode() (string, error) {
 		return c.DefaultLanguageCode, nil
 	}
 
+	// fallback to first language in the respository
+	// incase config is not set or default code is empty
+	languages, err := r.languageRepository.GetAll(0, 1)
+	if err == nil && len(languages) > 0 {
+		return languages[0].Code, nil
+	}
+
 	return "", domain.ErrNotExists
 }
 

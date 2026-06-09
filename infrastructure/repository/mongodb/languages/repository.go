@@ -3,6 +3,7 @@ package languages
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/v2/bson"
@@ -108,6 +109,9 @@ func (r *LanguagesRepository) Save(l *language.Language) (string, error) {
 		Name:      l.Name,
 		UpdatedAt: at,
 	}
+
+	// language code should be always uppercase
+	l.Code = strings.ToUpper(l.Code)
 
 	_, err := r.collection.UpdateOne(
 		ctx,
