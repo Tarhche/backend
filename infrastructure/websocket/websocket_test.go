@@ -694,7 +694,9 @@ func TestWebsocket(t *testing.T) {
 		transientErr := errors.New("transient registry error")
 		requestRegistryMock.On("GetClientSideID", "server-1").Return("", transientErr).Once()
 		requestRegistryMock.On("GetClientSideID", "server-1").Return("client-1", nil).Once()
-		requestRegistryMock.On("DeleteByServerSideID", "server-1").Return(nil).Once()
+
+		deleted := make(chan struct{}, 1)
+		requestRegistryMock.On("DeleteByServerSideID", "server-1").Run(func(args mock.Arguments) { deleted <- struct{}{} }).Return(nil).Once()
 		defer requestRegistryMock.AssertExpectations(t)
 
 		var replyHandler domain.MessageHandler
@@ -736,6 +738,14 @@ func TestWebsocket(t *testing.T) {
 		assert.NoError(t, client.ReadJSON(&response))
 		assert.Equal(t, "client-1", response.RequestID)
 		assert.Equal(t, []byte("retry-success"), response.Payload)
+
+		// DeleteByServerSideID runs after the reply is written to the client, so
+		// wait for it before the deferred AssertExpectations checks the mock.
+		select {
+		case <-deleted:
+		case <-time.After(time.Second):
+			t.Fatal("DeleteByServerSideID was not called after the reply was sent")
+		}
 	})
 
 	t.Run("concurrent connect and disconnect does not corrupt replyChans", func(t *testing.T) {

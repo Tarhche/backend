@@ -7,9 +7,11 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/khanzadimahdi/testproject/application/element"
+	"github.com/khanzadimahdi/testproject/application/language/resolver"
 	"github.com/khanzadimahdi/testproject/domain/article"
 	domainElement "github.com/khanzadimahdi/testproject/domain/element"
 	"github.com/khanzadimahdi/testproject/domain/element/component"
+	"github.com/khanzadimahdi/testproject/domain/language"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/articles"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/elements"
@@ -26,6 +28,7 @@ func TestUseCase_Execute(t *testing.T) {
 			articlesRepository articles.MockArticlesRepository
 			elementsRepository elements.MockElementsRepository
 			userRepository     users.MockUsersRepository
+			languageResolver   resolver.MockResolver
 			mockComponent      component.MockComponent
 
 			a = []article.Article{
@@ -60,9 +63,9 @@ func TestUseCase_Execute(t *testing.T) {
 			elementAuthorUUIDs = []string{"author-uuid-1", "author-uuid-2"}
 		)
 
-		articlesRepository.On("GetMostViewed", uint(4)).Once().Return(a, nil)
-		articlesRepository.On("GetAllPublished", uint(0), uint(3)).Once().Return(a, nil)
-		articlesRepository.On("GetByUUIDs", articleUUIDs).Once().Return(va, nil)
+		articlesRepository.On("GetMostViewed", "EN", uint(4)).Once().Return(a, nil)
+		articlesRepository.On("GetAllPublished", "EN", uint(0), uint(3)).Once().Return(a, nil)
+		articlesRepository.On("GetByCorrelationUUIDs", articleUUIDs, "EN").Once().Return(va, nil)
 		defer articlesRepository.AssertExpectations(t)
 
 		userRepository.On("GetByUUIDs", homeAuthorUUIDs).Once().Return(u, nil)
@@ -80,9 +83,13 @@ func TestUseCase_Execute(t *testing.T) {
 		elementsRepository.On("GetByVenues", []string{"home"}).Once().Return(v, nil)
 		defer elementsRepository.AssertExpectations(t)
 
+		languageResolver.On("DefaultCode").Once().Return("EN", nil)
+		languageResolver.On("Resolve", "EN").Once().Return(language.Language{Code: "EN"}, nil)
+		defer languageResolver.AssertExpectations(t)
+
 		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository)
-		usecase := NewUseCase(&articlesRepository, &userRepository, elementRetriever)
-		response, err := usecase.Execute()
+		usecase := NewUseCase(&articlesRepository, &userRepository, elementRetriever, &languageResolver)
+		response, err := usecase.Execute(&Request{})
 
 		assert.NotNil(t, response, "unexpected response")
 		assert.NoError(t, err)
@@ -95,19 +102,24 @@ func TestUseCase_Execute(t *testing.T) {
 			articlesRepository articles.MockArticlesRepository
 			elementsRepository elements.MockElementsRepository
 			userRepository     users.MockUsersRepository
+			languageResolver   resolver.MockResolver
 
 			expectedErr = errors.New("some error")
 		)
 
-		articlesRepository.On("GetMostViewed", uint(4)).Once().Return(nil, expectedErr)
+		articlesRepository.On("GetMostViewed", "EN", uint(4)).Once().Return(nil, expectedErr)
 		defer articlesRepository.AssertExpectations(t)
 
+		languageResolver.On("DefaultCode").Once().Return("EN", nil)
+		languageResolver.On("Resolve", "EN").Once().Return(language.Language{Code: "EN"}, nil)
+		defer languageResolver.AssertExpectations(t)
+
 		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository)
-		usecase := NewUseCase(&articlesRepository, &userRepository, elementRetriever)
-		response, err := usecase.Execute()
+		usecase := NewUseCase(&articlesRepository, &userRepository, elementRetriever, &languageResolver)
+		response, err := usecase.Execute(&Request{})
 
 		articlesRepository.AssertNotCalled(t, "GetAllPublished")
-		articlesRepository.AssertNotCalled(t, "GetByUUIDs")
+		articlesRepository.AssertNotCalled(t, "GetByCorrelationUUIDs")
 		userRepository.AssertNotCalled(t, "GetByUUIDs")
 		elementsRepository.AssertNotCalled(t, "GetByVenues")
 
@@ -122,6 +134,7 @@ func TestUseCase_Execute(t *testing.T) {
 			articlesRepository articles.MockArticlesRepository
 			elementsRepository elements.MockElementsRepository
 			userRepository     users.MockUsersRepository
+			languageResolver   resolver.MockResolver
 
 			a = []article.Article{
 				{UUID: "test-article-1"},
@@ -132,16 +145,20 @@ func TestUseCase_Execute(t *testing.T) {
 			expectedErr = errors.New("some error")
 		)
 
-		articlesRepository.On("GetMostViewed", uint(4)).Once().Return(a, nil)
-		articlesRepository.On("GetAllPublished", uint(0), uint(3)).Return(nil, expectedErr)
+		articlesRepository.On("GetMostViewed", "EN", uint(4)).Once().Return(a, nil)
+		articlesRepository.On("GetAllPublished", "EN", uint(0), uint(3)).Return(nil, expectedErr)
 		defer articlesRepository.AssertExpectations(t)
 
+		languageResolver.On("DefaultCode").Once().Return("EN", nil)
+		languageResolver.On("Resolve", "EN").Once().Return(language.Language{Code: "EN"}, nil)
+		defer languageResolver.AssertExpectations(t)
+
 		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository)
-		usecase := NewUseCase(&articlesRepository, &userRepository, elementRetriever)
-		response, err := usecase.Execute()
+		usecase := NewUseCase(&articlesRepository, &userRepository, elementRetriever, &languageResolver)
+		response, err := usecase.Execute(&Request{})
 
 		elementsRepository.AssertNotCalled(t, "GetByVenues")
-		articlesRepository.AssertNotCalled(t, "GetByUUIDs")
+		articlesRepository.AssertNotCalled(t, "GetByCorrelationUUIDs")
 		userRepository.AssertNotCalled(t, "GetByUUIDs")
 
 		assert.Nil(t, response, "unexpected response")
@@ -155,6 +172,7 @@ func TestUseCase_Execute(t *testing.T) {
 			articlesRepository articles.MockArticlesRepository
 			elementsRepository elements.MockElementsRepository
 			userRepository     users.MockUsersRepository
+			languageResolver   resolver.MockResolver
 
 			a = []article.Article{
 				{UUID: "test-article-1", AuthorUUID: "author-uuid-1"},
@@ -163,18 +181,22 @@ func TestUseCase_Execute(t *testing.T) {
 			expectedErr = errors.New("some error")
 		)
 
-		articlesRepository.On("GetMostViewed", uint(4)).Once().Return(a, nil)
-		articlesRepository.On("GetAllPublished", uint(0), uint(3)).Once().Return(a, nil)
+		articlesRepository.On("GetMostViewed", "EN", uint(4)).Once().Return(a, nil)
+		articlesRepository.On("GetAllPublished", "EN", uint(0), uint(3)).Once().Return(a, nil)
 		defer articlesRepository.AssertExpectations(t)
 
 		userRepository.On("GetByUUIDs", []string{"author-uuid-1", "author-uuid-1"}).Once().Return(nil, expectedErr)
 		defer userRepository.AssertExpectations(t)
 
-		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository)
-		usecase := NewUseCase(&articlesRepository, &userRepository, elementRetriever)
-		response, err := usecase.Execute()
+		languageResolver.On("DefaultCode").Once().Return("EN", nil)
+		languageResolver.On("Resolve", "EN").Once().Return(language.Language{Code: "EN"}, nil)
+		defer languageResolver.AssertExpectations(t)
 
-		articlesRepository.AssertNotCalled(t, "GetByUUIDs")
+		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository)
+		usecase := NewUseCase(&articlesRepository, &userRepository, elementRetriever, &languageResolver)
+		response, err := usecase.Execute(&Request{})
+
+		articlesRepository.AssertNotCalled(t, "GetByCorrelationUUIDs")
 		elementsRepository.AssertNotCalled(t, "GetByVenues")
 
 		assert.Nil(t, response, "unexpected response")
@@ -188,6 +210,7 @@ func TestUseCase_Execute(t *testing.T) {
 			articlesRepository articles.MockArticlesRepository
 			elementsRepository elements.MockElementsRepository
 			userRepository     users.MockUsersRepository
+			languageResolver   resolver.MockResolver
 
 			a = []article.Article{
 				{UUID: "test-article-1", AuthorUUID: "author-uuid-1"},
@@ -199,8 +222,8 @@ func TestUseCase_Execute(t *testing.T) {
 			expectedErr = errors.New("some error")
 		)
 
-		articlesRepository.On("GetMostViewed", uint(4)).Once().Return(a, nil)
-		articlesRepository.On("GetAllPublished", uint(0), uint(3)).Return(a, nil)
+		articlesRepository.On("GetMostViewed", "EN", uint(4)).Once().Return(a, nil)
+		articlesRepository.On("GetAllPublished", "EN", uint(0), uint(3)).Return(a, nil)
 		defer articlesRepository.AssertExpectations(t)
 
 		userRepository.On("GetByUUIDs", []string{"author-uuid-1", "author-uuid-1"}).Once().Return(u, nil)
@@ -209,11 +232,15 @@ func TestUseCase_Execute(t *testing.T) {
 		elementsRepository.On("GetByVenues", []string{"home"}).Once().Return(nil, expectedErr)
 		defer elementsRepository.AssertExpectations(t)
 
-		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository)
-		usecase := NewUseCase(&articlesRepository, &userRepository, elementRetriever)
-		response, err := usecase.Execute()
+		languageResolver.On("DefaultCode").Once().Return("EN", nil)
+		languageResolver.On("Resolve", "EN").Once().Return(language.Language{Code: "EN"}, nil)
+		defer languageResolver.AssertExpectations(t)
 
-		articlesRepository.AssertNotCalled(t, "GetByUUIDs")
+		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository)
+		usecase := NewUseCase(&articlesRepository, &userRepository, elementRetriever, &languageResolver)
+		response, err := usecase.Execute(&Request{})
+
+		articlesRepository.AssertNotCalled(t, "GetByCorrelationUUIDs")
 
 		assert.Nil(t, response, "unexpected response")
 		assert.ErrorIs(t, err, expectedErr)
@@ -226,6 +253,7 @@ func TestUseCase_Execute(t *testing.T) {
 			articlesRepository articles.MockArticlesRepository
 			elementsRepository elements.MockElementsRepository
 			userRepository     users.MockUsersRepository
+			languageResolver   resolver.MockResolver
 			mockComponent      component.MockComponent
 
 			a = []article.Article{
@@ -261,9 +289,9 @@ func TestUseCase_Execute(t *testing.T) {
 			expectedErr = errors.New("some error")
 		)
 
-		articlesRepository.On("GetMostViewed", uint(4)).Once().Return(a, nil)
-		articlesRepository.On("GetAllPublished", uint(0), uint(3)).Once().Return(a, nil)
-		articlesRepository.On("GetByUUIDs", articleUUIDs).Once().Return(nil, expectedErr)
+		articlesRepository.On("GetMostViewed", "EN", uint(4)).Once().Return(a, nil)
+		articlesRepository.On("GetAllPublished", "EN", uint(0), uint(3)).Once().Return(a, nil)
+		articlesRepository.On("GetByCorrelationUUIDs", articleUUIDs, "EN").Once().Return(nil, expectedErr)
 		defer articlesRepository.AssertExpectations(t)
 
 		userRepository.On("GetByUUIDs", homeAuthorUUIDs).Once().Return(u, nil)
@@ -279,9 +307,13 @@ func TestUseCase_Execute(t *testing.T) {
 		elementsRepository.On("GetByVenues", []string{"home"}).Once().Return(v, nil)
 		defer elementsRepository.AssertExpectations(t)
 
+		languageResolver.On("DefaultCode").Once().Return("EN", nil)
+		languageResolver.On("Resolve", "EN").Once().Return(language.Language{Code: "EN"}, nil)
+		defer languageResolver.AssertExpectations(t)
+
 		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository)
-		usecase := NewUseCase(&articlesRepository, &userRepository, elementRetriever)
-		response, err := usecase.Execute()
+		usecase := NewUseCase(&articlesRepository, &userRepository, elementRetriever, &languageResolver)
+		response, err := usecase.Execute(&Request{})
 
 		assert.Nil(t, response, "unexpected response")
 		assert.ErrorIs(t, err, expectedErr)

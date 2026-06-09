@@ -52,6 +52,11 @@ import (
 	dashboardGetFiles "github.com/khanzadimahdi/testproject/application/dashboard/file/getFiles"
 	dashboardGetUserFiles "github.com/khanzadimahdi/testproject/application/dashboard/file/getUserFiles"
 	dashboardUploadFile "github.com/khanzadimahdi/testproject/application/dashboard/file/uploadFile"
+	dashboardCreateLanguage "github.com/khanzadimahdi/testproject/application/dashboard/language/createLanguage"
+	dashboardDeleteLanguage "github.com/khanzadimahdi/testproject/application/dashboard/language/deleteLanguage"
+	dashboardGetLanguage "github.com/khanzadimahdi/testproject/application/dashboard/language/getLanguage"
+	dashboardGetLanguages "github.com/khanzadimahdi/testproject/application/dashboard/language/getLanguages"
+	dashboardUpdateLanguage "github.com/khanzadimahdi/testproject/application/dashboard/language/updateLanguage"
 	dashboardGetPermissions "github.com/khanzadimahdi/testproject/application/dashboard/permission/getPermissions"
 	"github.com/khanzadimahdi/testproject/application/dashboard/profile/changepassword"
 	"github.com/khanzadimahdi/testproject/application/dashboard/profile/getRoles"
@@ -71,6 +76,8 @@ import (
 	"github.com/khanzadimahdi/testproject/application/element"
 	getFile "github.com/khanzadimahdi/testproject/application/file/getFile"
 	"github.com/khanzadimahdi/testproject/application/home"
+	getLanguages "github.com/khanzadimahdi/testproject/application/language/getLanguages"
+	languageresolver "github.com/khanzadimahdi/testproject/application/language/resolver"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/file"
 	"github.com/khanzadimahdi/testproject/domain/password"
@@ -88,6 +95,7 @@ import (
 	configrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/config"
 	elementsrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/elements"
 	filesrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/files"
+	languagesrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/languages"
 	permissionsrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/permissions"
 	rolesrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/roles"
 	userrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/users"
@@ -103,6 +111,7 @@ import (
 	dashboardConfigAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/config"
 	dashboardElementAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/element"
 	dashboardFileAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/file"
+	dashboardLanguageAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/language"
 	dashboardPermissionAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/permission"
 	"github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/profile"
 	dashboardRoleAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/role"
@@ -110,6 +119,7 @@ import (
 	fileAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/file"
 	hashtagAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/hashtag"
 	homeapi "github.com/khanzadimahdi/testproject/presentation/http/blog/api/home"
+	languageAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/language"
 	"github.com/khanzadimahdi/testproject/presentation/http/blog/openapi"
 	"github.com/khanzadimahdi/testproject/presentation/http/middleware"
 	"github.com/nats-io/nats.go"
@@ -289,24 +299,27 @@ func blog(
 	rolesRepository := rolesrepository.NewRepository(database)
 	bookmarkRepository := bookmarksrepository.NewRepository(database)
 	configRepository := configrepository.NewRepository(database)
+	languageRepository := languagesrepository.NewRepository(database)
+	languageResolver := languageresolver.New(languageRepository, configRepository)
 
 	authTokenGenerator := auth.NewTokenGenerator(jwt, rolesRepository)
 	elementRetriever := element.NewRetriever(articlesRepository, elementsRepository, userRepository)
 
 	// ---- public ----
-	homeUseCase := home.NewUseCase(articlesRepository, userRepository, elementRetriever)
+	homeUseCase := home.NewUseCase(articlesRepository, userRepository, elementRetriever, languageResolver)
 
 	loginUseCase := login.NewUseCase(userRepository, authTokenGenerator, hasher, translator, validator)
 	refreshUseCase := refresh.NewUseCase(userRepository, jwt, authTokenGenerator, translator, validator)
 	forgetPasswordUseCase := forgetpassword.NewUseCase(userRepository, asyncProduceConsumer, translator, validator)
 	resetPasswordUseCase := resetpassword.NewUseCase(userRepository, hasher, jwt, translator, validator)
 	registerUseCase := register.NewUseCase(userRepository, asyncProduceConsumer, translator, validator)
-	verifyUseCase := verify.NewUseCase(userRepository, rolesRepository, configRepository, hasher, jwt, translator, validator)
+	verifyUseCase := verify.NewUseCase(userRepository, rolesRepository, configRepository, languageResolver, hasher, jwt, translator, validator)
 
-	getArticleUsecase := getArticle.NewUseCase(articlesRepository, userRepository, elementRetriever)
-	getArticlesUsecase := getArticles.NewUseCase(articlesRepository, userRepository)
-	getArticlesByHashtagUseCase := getArticlesByHashtag.NewUseCase(articlesRepository, userRepository, validator)
-	getArticlesByAuthorUseCase := getArticlesByAuthor.NewUseCase(articlesRepository, userRepository, validator)
+	getArticleUsecase := getArticle.NewUseCase(articlesRepository, userRepository, languageRepository, languageResolver, elementRetriever, validator)
+	getArticlesUsecase := getArticles.NewUseCase(articlesRepository, userRepository, languageRepository, languageResolver)
+	getArticlesByHashtagUseCase := getArticlesByHashtag.NewUseCase(articlesRepository, userRepository, languageRepository, languageResolver, validator)
+	getArticlesByAuthorUseCase := getArticlesByAuthor.NewUseCase(articlesRepository, userRepository, languageRepository, languageResolver, validator)
+	getLanguagesUseCase := getLanguages.NewUseCase(languageRepository, languageResolver)
 	getFileUseCase := getFile.NewUseCase(filesRepository, fileStorage)
 	getCommentsUseCase := getComments.NewUseCase(commentsRepository, userRepository, validator)
 	createCommentUseCase := createComment.NewUseCase(commentsRepository, validator)
@@ -323,15 +336,15 @@ func blog(
 
 	// ---- dashboard ----
 	getProfileUseCase := getprofile.NewUseCase(userRepository)
-	updateProfileUseCase := updateprofile.NewUseCase(userRepository, validator, translator)
+	updateProfileUseCase := updateprofile.NewUseCase(userRepository, languageResolver, validator, translator)
 	dashboardProfileChangePasswordUseCase := changepassword.NewUseCase(userRepository, hasher, validator, translator)
 	dashboardProfileGetRolesUseCase := getRoles.NewUseCase(rolesRepository)
 
-	dashboardCreateArticleUsecase := dashboardCreateArticle.NewUseCase(articlesRepository, validator)
+	dashboardCreateArticleUsecase := dashboardCreateArticle.NewUseCase(articlesRepository, languageRepository, validator)
 	dashboardDeleteArticleUsecase := dashboardDeleteArticle.NewUseCase(articlesRepository)
 	dashboardGetArticleUsecase := dashboardGetArticle.NewUseCase(articlesRepository, userRepository)
 	dashboardGetArticlesUsecase := dashboardGetArticles.NewUseCase(articlesRepository, userRepository)
-	dashboardUpdateArticleUsecase := dashboardUpdateArticle.NewUseCase(articlesRepository, validator)
+	dashboardUpdateArticleUsecase := dashboardUpdateArticle.NewUseCase(articlesRepository, languageRepository, validator)
 
 	dashboardCreateCommentUsecase := dashboardCreateComment.NewUseCase(commentsRepository, validator)
 	dashboardDeleteCommentUsecase := dashboardDeleteComment.NewUseCase(commentsRepository)
@@ -362,6 +375,12 @@ func blog(
 	dashboardGetRolesUsecase := dashboardGetRoles.NewUseCase(rolesRepository)
 	dashboardUpdateRoleUsecase := dashboardUpdateRole.NewUseCase(rolesRepository, permissionRepository, validator, translator)
 
+	dashboardCreateLanguageUsecase := dashboardCreateLanguage.NewUseCase(languageRepository, validator)
+	dashboardDeleteLanguageUsecase := dashboardDeleteLanguage.NewUseCase(languageRepository)
+	dashboardGetLanguageUsecase := dashboardGetLanguage.NewUseCase(languageRepository)
+	dashboardGetLanguagesUsecase := dashboardGetLanguages.NewUseCase(languageRepository)
+	dashboardUpdateLanguageUsecase := dashboardUpdateLanguage.NewUseCase(languageRepository, validator)
+
 	dashboardGetFilesUseCase := dashboardGetFiles.NewUseCase(filesRepository)
 	dashboardGetFileUseCase := dashboardGetFile.NewUseCase(filesRepository, fileStorage)
 	dashboardUploadFileUseCase := dashboardUploadFile.NewUseCase(filesRepository, fileStorage, validator)
@@ -377,7 +396,7 @@ func blog(
 	dashboardUpdateElementUsecase := dashboardUpdateElement.NewUseCase(elementsRepository, validator)
 
 	dashboardGetConfigUsecase := dashboardGetConfig.NewUseCase(configRepository)
-	dashboardUpdateConfigUsecase := dashboardUpdateConfig.NewUseCase(configRepository, validator)
+	dashboardUpdateConfigUsecase := dashboardUpdateConfig.NewUseCase(configRepository, languageRepository, validator)
 
 	mux := http.NewServeMux()
 
@@ -411,6 +430,9 @@ func blog(
 	// bookmark
 	mux.Handle("POST /api/bookmarks/exists", middleware.NewAuthenticateMiddleware(bookmarkAPI.NewExistsHandler(bookmarkExistsUseCase), jwt, userRepository))
 	mux.Handle("PUT /api/bookmarks", middleware.NewAuthenticateMiddleware(bookmarkAPI.NewUpdateHandler(updateABookmark), jwt, userRepository))
+
+	// languages
+	mux.Handle("GET /api/languages", middleware.NewCacheMiddleware(languageAPI.NewIndexHandler(getLanguagesUseCase), httpCache))
 
 	// hashtags
 	mux.Handle("GET /api/hashtags/{hashtag}", middleware.NewCacheMiddleware(hashtagAPI.NewShowHandler(getArticlesByHashtagUseCase), httpCache))
@@ -446,6 +468,13 @@ func blog(
 	mux.Handle("GET /api/dashboard/roles", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardRoleAPI.NewIndexHandler(dashboardGetRolesUsecase), authorizer, permission.RolesIndex), jwt, userRepository))
 	mux.Handle("GET /api/dashboard/roles/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardRoleAPI.NewShowHandler(dashboardGetRoleUsecase), authorizer, permission.RolesShow), jwt, userRepository))
 	mux.Handle("PUT /api/dashboard/roles", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardRoleAPI.NewUpdateHandler(dashboardUpdateRoleUsecase), authorizer, permission.RolesUpdate), jwt, userRepository))
+
+	// languages
+	mux.Handle("POST /api/dashboard/languages", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardLanguageAPI.NewCreateHandler(dashboardCreateLanguageUsecase), authorizer, permission.LanguagesCreate), jwt, userRepository))
+	mux.Handle("DELETE /api/dashboard/languages/{code}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardLanguageAPI.NewDeleteHandler(dashboardDeleteLanguageUsecase), authorizer, permission.LanguagesDelete), jwt, userRepository))
+	mux.Handle("GET /api/dashboard/languages", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardLanguageAPI.NewIndexHandler(dashboardGetLanguagesUsecase), authorizer, permission.LanguagesIndex), jwt, userRepository))
+	mux.Handle("GET /api/dashboard/languages/{code}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardLanguageAPI.NewShowHandler(dashboardGetLanguageUsecase), authorizer, permission.LanguagesShow), jwt, userRepository))
+	mux.Handle("PUT /api/dashboard/languages", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardLanguageAPI.NewUpdateHandler(dashboardUpdateLanguageUsecase), authorizer, permission.LanguagesUpdate), jwt, userRepository))
 
 	// articles
 	mux.Handle("POST /api/dashboard/articles", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardArticleAPI.NewCreateHandler(dashboardCreateArticleUsecase), authorizer, permission.ArticlesCreate), jwt, userRepository))

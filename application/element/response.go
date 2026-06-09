@@ -22,13 +22,13 @@ type authorResponse struct {
 }
 
 type articleResponse struct {
-	UUID        string         `json:"uuid"`
-	Cover       string         `json:"cover"`
-	Title       string         `json:"title"`
-	Author      authorResponse `json:"author"`
-	PublishedAt string         `json:"published_at"`
-	Excerpt     string         `json:"excerpt"`
-	Tags        []string       `json:"tags"`
+	CorrelationUUID string         `json:"correlation_uuid"`
+	Cover           string         `json:"cover"`
+	Title           string         `json:"title"`
+	Author          authorResponse `json:"author"`
+	PublishedAt     string         `json:"published_at"`
+	Excerpt         string         `json:"excerpt"`
+	Tags            []string       `json:"tags"`
 }
 
 type itemComponentResponse struct {
@@ -139,7 +139,7 @@ func toArticleResponse(a []article.Article, authors map[string]user.User) []arti
 	items := make([]articleResponse, len(a))
 
 	for i := range a {
-		items[i].UUID = a[i].UUID
+		items[i].CorrelationUUID = a[i].CorrelationUUID
 		items[i].Cover = a[i].Cover
 		items[i].Title = a[i].Title
 		items[i].Excerpt = a[i].Excerpt

@@ -1,5 +1,6 @@
 {
     "errors": {
-        "user_default_roles": "user_default_roles is required"
+        "user_default_roles": "user_default_roles is required",
+        "default_language_code": "default_language_code is required"
     }
 }

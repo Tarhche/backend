@@ -48,8 +48,8 @@ func NewTokenGenerator(jwt *jwt.JWT, roleRepository role.Repository) *AuthTokenG
 	}
 }
 
-func (t *AuthTokenGenerator) GenerateAccessToken(userUUID string) (string, error) {
-	roles, err := t.roleRepository.GetByUserUUID(userUUID)
+func (t *AuthTokenGenerator) GenerateAccessToken(u *user.User) (string, error) {
+	roles, err := t.roleRepository.GetByUserUUID(u.UUID)
 	if err != nil {
 		return "", err
 	}
@@ -79,13 +79,14 @@ func (t *AuthTokenGenerator) GenerateAccessToken(userUUID string) (string, error
 	}
 
 	b := jwt.NewClaimsBuilder()
-	b.SetSubject(userUUID)
+	b.SetSubject(u.UUID)
 	b.SetNotBefore(time.Now())
 	b.SetExpirationTime(time.Now().Add(AccessTokenExpirationTime))
 	b.SetIssuedAt(time.Now())
 	b.SetAudience([]string{AccessToken})
 	b.SetRoles(roleNames)
 	b.SetPermissions(permissionNames)
+	b.SetLanguage(u.LanguageCode)
 
 	return t.jwt.Generate(b.Build())
 }

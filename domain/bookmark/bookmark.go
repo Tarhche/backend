@@ -19,7 +19,6 @@ type Bookmark struct {
 
 type Repository interface {
 	Save(*Bookmark) (string, error)
-	Count(objectType string, objectUUID string) (uint, error)
 
 	GetAllByOwnerUUID(ownerUUID string, offset uint, limit uint) ([]Bookmark, error)
 	CountByOwnerUUID(ownerUUID string) (uint, error)

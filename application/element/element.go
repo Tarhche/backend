@@ -28,7 +28,7 @@ func NewRetriever(
 }
 
 // RetrieveByVenues retrieves elements by venues.
-func (r *Retriever) RetrieveByVenues(venues []string) ([]Response, error) {
+func (r *Retriever) RetrieveByVenues(venues []string, languageCode string) ([]Response, error) {
 	elements, err := r.elementRepository.GetByVenues(venues)
 	if err != nil {
 		return nil, err
@@ -44,7 +44,7 @@ func (r *Retriever) RetrieveByVenues(venues []string) ([]Response, error) {
 		uuids[i] = items[i].ContentUUID
 	}
 
-	articles, err := r.articleRepository.GetByUUIDs(uuids)
+	articles, err := r.articleRepository.GetByCorrelationUUIDs(uuids, languageCode)
 	if err != nil {
 		return nil, err
 	}

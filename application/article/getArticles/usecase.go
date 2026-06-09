@@ -1,29 +1,52 @@
 package getarticles
 
 import (
+	"github.com/khanzadimahdi/testproject/application/language/resolver"
 	"github.com/khanzadimahdi/testproject/domain/article"
+	"github.com/khanzadimahdi/testproject/domain/language"
 	"github.com/khanzadimahdi/testproject/domain/user"
 )
 
 const limit = 10
 
 type UseCase struct {
-	articleRepository article.Repository
-	userRepository    user.Repository
+	articleRepository  article.Repository
+	userRepository     user.Repository
+	languageRepository language.Repository
+	languageResolver   resolver.Resolver
 }
 
 func NewUseCase(
 	articleRepository article.Repository,
 	userRepository user.Repository,
+	languageRepository language.Repository,
+	languageResolver resolver.Resolver,
 ) *UseCase {
 	return &UseCase{
-		articleRepository: articleRepository,
-		userRepository:    userRepository,
+		articleRepository:  articleRepository,
+		userRepository:     userRepository,
+		languageRepository: languageRepository,
+		languageResolver:   languageResolver,
 	}
 }
 
 func (uc *UseCase) Execute(request *Request) (*Response, error) {
-	totalArticles, err := uc.articleRepository.CountPublished()
+	languageCode := request.LanguageCode
+	if len(languageCode) == 0 {
+		code, err := uc.languageResolver.DefaultCode()
+		if err != nil {
+			return nil, err
+		}
+
+		languageCode = code
+	}
+
+	l, err := uc.languageResolver.Resolve(languageCode)
+	if err != nil {
+		return nil, err
+	}
+
+	totalArticles, err := uc.articleRepository.CountPublished(languageCode)
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +67,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		totalPages++
 	}
 
-	a, err := uc.articleRepository.GetAllPublished(offset, limit)
+	a, err := uc.articleRepository.GetAllPublished(languageCode, offset, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -59,5 +82,19 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		return nil, err
 	}
 
-	return NewResponse(a, authors, totalPages, currentPage), nil
+	publishedLanguages := make(map[string][]language.Language, len(a))
+	for i := range a {
+		codes, err := uc.articleRepository.GetPublishedLanguageCodes(a[i].CorrelationUUID)
+		if err != nil {
+			return nil, err
+		}
+
+		al, err := uc.languageRepository.GetByCodes(codes)
+		if err != nil {
+			return nil, err
+		}
+		publishedLanguages[a[i].UUID] = al
+	}
+
+	return NewResponse(a, authors, publishedLanguages, l, totalPages, currentPage), nil
 }

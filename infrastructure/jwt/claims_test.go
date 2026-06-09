@@ -22,8 +22,9 @@ func TestBuilder(t *testing.T) {
 		"aud": []string{"test-audience-1", "test-audience-2"},
 		"exp": exp.Unix(),
 		"nbf": nbf.Unix(),
-		"iat": iat.Unix(),
-		"jti": "test-id",
+		"iat":  iat.Unix(),
+		"jti":  "test-id",
+		"lang": "EN",
 	}
 
 	builder.SetIssuer(expectedClaims["iss"].(string))
@@ -33,6 +34,7 @@ func TestBuilder(t *testing.T) {
 	builder.SetNotBefore(nbf)
 	builder.SetIssuedAt(iat)
 	builder.SetID(expectedClaims["jti"].(string))
+	builder.SetLanguage(expectedClaims["lang"].(string))
 
 	claims := builder.Build()
 

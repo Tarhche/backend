@@ -18,12 +18,6 @@ func (r *MockPermissionsRepository) GetAll() []permission.Permission {
 	return args.Get(0).([]permission.Permission)
 }
 
-func (r *MockPermissionsRepository) GetOne(value string) (permission.Permission, error) {
-	args := r.Called(value)
-
-	return args.Get(0).(permission.Permission), args.Error(1)
-}
-
 func (r *MockPermissionsRepository) Get(values []string) ([]permission.Permission, error) {
 	args := r.Mock.Called(values)
 

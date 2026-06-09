@@ -5,23 +5,25 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/element"
 	"github.com/khanzadimahdi/testproject/domain/article"
+	"github.com/khanzadimahdi/testproject/domain/language"
 	"github.com/khanzadimahdi/testproject/domain/user"
 )
 
 type Response struct {
-	All      []articleResponse  `json:"all"`
-	Popular  []articleResponse  `json:"popular"`
-	Elements []element.Response `json:"elements"`
+	All          []articleResponse  `json:"all"`
+	Popular      []articleResponse  `json:"popular"`
+	Elements     []element.Response `json:"elements"`
+	LanguageCode languageResponse   `json:"language_code"`
 }
 
 type articleResponse struct {
-	UUID        string   `json:"uuid"`
-	Cover       string   `json:"cover"`
-	Title       string   `json:"title"`
-	Author      author   `json:"author"`
-	PublishedAt string   `json:"published_at"`
-	Excerpt     string   `json:"excerpt"`
-	Tags        []string `json:"tags"`
+	CorrelationUUID string   `json:"correlation_uuid"`
+	Cover           string   `json:"cover"`
+	Title           string   `json:"title"`
+	Author          author   `json:"author"`
+	PublishedAt     string   `json:"published_at"`
+	Excerpt         string   `json:"excerpt"`
+	Tags            []string `json:"tags"`
 }
 
 type author struct {
@@ -31,7 +33,12 @@ type author struct {
 	Username string `json:"username"`
 }
 
-func NewResponse(all, popular []article.Article, authors []user.User, elementsResponse []element.Response) *Response {
+type languageResponse struct {
+	Code string `json:"code"`
+	Name string `json:"name"`
+}
+
+func NewResponse(all, popular []article.Article, authors []user.User, requestedLanguage language.Language, elementsResponse []element.Response) *Response {
 	authorByUUID := make(map[string]user.User, len(authors))
 	for i := range authors {
 		authorByUUID[authors[i].UUID] = authors[i]
@@ -41,6 +48,10 @@ func NewResponse(all, popular []article.Article, authors []user.User, elementsRe
 		All:      toArticleResponse(all, authorByUUID),
 		Popular:  toArticleResponse(popular, authorByUUID),
 		Elements: elementsResponse,
+		LanguageCode: languageResponse{
+			Code: requestedLanguage.Code,
+			Name: requestedLanguage.Name,
+		},
 	}
 }
 
@@ -48,7 +59,7 @@ func toArticleResponse(a []article.Article, authors map[string]user.User) []arti
 	items := make([]articleResponse, len(a))
 
 	for i := range a {
-		items[i].UUID = a[i].UUID
+		items[i].CorrelationUUID = a[i].CorrelationUUID
 		items[i].Cover = a[i].Cover
 		items[i].Title = a[i].Title
 		items[i].Excerpt = a[i].Excerpt

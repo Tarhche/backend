@@ -18,12 +18,6 @@ func (r *MockBookmarksRepository) Save(b *bookmark.Bookmark) (string, error) {
 	return args.String(0), args.Error(1)
 }
 
-func (r *MockBookmarksRepository) Count(objectType string, objectUUID string) (uint, error) {
-	args := r.Mock.Called(objectType, objectUUID)
-
-	return args.Get(0).(uint), args.Error(1)
-}
-
 func (r *MockBookmarksRepository) GetAllByOwnerUUID(ownerUUID string, offset uint, limit uint) ([]bookmark.Bookmark, error) {
 	args := r.Mock.Called(ownerUUID, offset, limit)
 

@@ -16,6 +16,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/config"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	configMocks "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/config"
+	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/languages"
 	"github.com/khanzadimahdi/testproject/infrastructure/validator"
 )
 
@@ -26,13 +27,15 @@ func TestUpdateHandler(t *testing.T) {
 		t.Parallel()
 
 		var (
-			configRepository configMocks.MockConfigRepository
-			requestValidator validator.MockValidator
+			configRepository   configMocks.MockConfigRepository
+			languageRepository languages.MockLanguagesRepository
+			requestValidator   validator.MockValidator
 
 			u = user.User{UUID: "auth-user-uuid"}
 
 			r = updateConfig.Request{
-				UserDefaultRoles: []string{"role1", "role2"},
+				UserDefaultRoles:    []string{"role1", "role2"},
+				DefaultLanguageCode: "EN",
 			}
 
 			loadedConfig = config.Config{
@@ -43,17 +46,21 @@ func TestUpdateHandler(t *testing.T) {
 			savedConfig = config.Config{
 				Revision:             loadedConfig.Revision,
 				UserDefaultRoleUUIDs: r.UserDefaultRoles,
+				DefaultLanguageCode:  r.DefaultLanguageCode,
 			}
 		)
 
 		requestValidator.On("Validate", &r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
+		languageRepository.On("Exists", r.DefaultLanguageCode).Once().Return(true)
+		defer languageRepository.AssertExpectations(t)
+
 		configRepository.On("GetLatestRevision").Once().Return(loadedConfig, nil)
 		configRepository.On("Save", &savedConfig).Once().Return("new-revision-uuid", nil)
 		defer configRepository.AssertExpectations(t)
 
-		handler := NewUpdateHandler(updateConfig.NewUseCase(&configRepository, &requestValidator))
+		handler := NewUpdateHandler(updateConfig.NewUseCase(&configRepository, &languageRepository, &requestValidator))
 
 		var payload bytes.Buffer
 		json.NewEncoder(&payload).Encode(r)
@@ -72,18 +79,20 @@ func TestUpdateHandler(t *testing.T) {
 		t.Parallel()
 
 		var (
-			configRepository configMocks.MockConfigRepository
-			requestValidator validator.MockValidator
+			configRepository   configMocks.MockConfigRepository
+			languageRepository languages.MockLanguagesRepository
+			requestValidator   validator.MockValidator
 
 			u = user.User{UUID: "auth-user-uuid"}
 		)
 
 		requestValidator.On("Validate", &updateConfig.Request{}).Once().Return(domain.ValidationErrors{
-			"user_default_roles": "user_default_roles is required",
+			"user_default_roles":    "user_default_roles is required",
+			"default_language_code": "default_language_code is required",
 		})
 		defer requestValidator.AssertExpectations(t)
 
-		handler := NewUpdateHandler(updateConfig.NewUseCase(&configRepository, &requestValidator))
+		handler := NewUpdateHandler(updateConfig.NewUseCase(&configRepository, &languageRepository, &requestValidator))
 
 		request := httptest.NewRequest(http.MethodPut, "/", bytes.NewBufferString("{}"))
 		request = request.WithContext(auth.ToContext(request.Context(), &u))

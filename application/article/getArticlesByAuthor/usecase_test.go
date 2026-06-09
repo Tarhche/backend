@@ -5,10 +5,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/khanzadimahdi/testproject/application/language/resolver"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/article"
+	"github.com/khanzadimahdi/testproject/domain/language"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/articles"
+	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/languages"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
 	"github.com/khanzadimahdi/testproject/infrastructure/validator"
 	"github.com/stretchr/testify/assert"
@@ -21,9 +24,11 @@ func TestUseCase_Execute(t *testing.T) {
 		t.Parallel()
 
 		var (
-			articleRepository articles.MockArticlesRepository
-			userRepository    users.MockUsersRepository
-			requestValidator  validator.MockValidator
+			articleRepository   articles.MockArticlesRepository
+			userRepository      users.MockUsersRepository
+			languagesRepository languages.MockLanguagesRepository
+			languageResolver    resolver.MockResolver
+			requestValidator    validator.MockValidator
 
 			authorUUID = "author-uuid"
 			createdAt  = time.Date(2024, time.January, 2, 3, 4, 5, 0, time.UTC)
@@ -45,14 +50,20 @@ func TestUseCase_Execute(t *testing.T) {
 		requestValidator.On("Validate", &request).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
+		languageResolver.On("DefaultCode").Once().Return("EN", nil)
+		languageResolver.On("Resolve", "EN").Once().Return(language.Language{Code: "EN"}, nil)
+		defer languageResolver.AssertExpectations(t)
+
 		userRepository.On("GetOneByIdentity", u.Username).Once().Return(u, nil)
 		defer userRepository.AssertExpectations(t)
 
-		articleRepository.On("CountPublishedByAuthor", authorUUID).Once().Return(uint(len(a)), nil)
-		articleRepository.On("GetPublishedByAuthor", authorUUID, uint(0), uint(10)).Once().Return(a, nil)
+		articleRepository.On("CountPublishedByAuthor", authorUUID, "EN").Once().Return(uint(len(a)), nil)
+		articleRepository.On("GetPublishedByAuthor", authorUUID, "EN", uint(0), uint(10)).Once().Return(a, nil)
+		articleRepository.On("GetPublishedLanguageCodes", "").Return([]string{}, nil)
+		languagesRepository.On("GetByCodes", []string{}).Return([]language.Language{}, nil)
 		defer articleRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&articleRepository, &userRepository, &requestValidator).Execute(&request)
+		response, err := NewUseCase(&articleRepository, &userRepository, &languagesRepository, &languageResolver, &requestValidator).Execute(&request)
 
 		assert.NoError(t, err)
 		assert.NotNil(t, response)
@@ -68,9 +79,11 @@ func TestUseCase_Execute(t *testing.T) {
 		t.Parallel()
 
 		var (
-			articleRepository articles.MockArticlesRepository
-			userRepository    users.MockUsersRepository
-			requestValidator  validator.MockValidator
+			articleRepository   articles.MockArticlesRepository
+			userRepository      users.MockUsersRepository
+			languagesRepository languages.MockLanguagesRepository
+			languageResolver    resolver.MockResolver
+			requestValidator    validator.MockValidator
 
 			authorUUID = "author-uuid"
 			u          = user.User{
@@ -88,14 +101,20 @@ func TestUseCase_Execute(t *testing.T) {
 		requestValidator.On("Validate", &request).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
+		languageResolver.On("DefaultCode").Once().Return("EN", nil)
+		languageResolver.On("Resolve", "EN").Once().Return(language.Language{Code: "EN"}, nil)
+		defer languageResolver.AssertExpectations(t)
+
 		userRepository.On("GetOne", authorUUID).Once().Return(u, nil)
 		defer userRepository.AssertExpectations(t)
 
-		articleRepository.On("CountPublishedByAuthor", authorUUID).Once().Return(uint(len(a)), nil)
-		articleRepository.On("GetPublishedByAuthor", authorUUID, uint(0), uint(10)).Once().Return(a, nil)
+		articleRepository.On("CountPublishedByAuthor", authorUUID, "EN").Once().Return(uint(len(a)), nil)
+		articleRepository.On("GetPublishedByAuthor", authorUUID, "EN", uint(0), uint(10)).Once().Return(a, nil)
+		articleRepository.On("GetPublishedLanguageCodes", "").Return([]string{}, nil)
+		languagesRepository.On("GetByCodes", []string{}).Return([]language.Language{}, nil)
 		defer articleRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&articleRepository, &userRepository, &requestValidator).Execute(&request)
+		response, err := NewUseCase(&articleRepository, &userRepository, &languagesRepository, &languageResolver, &requestValidator).Execute(&request)
 
 		userRepository.AssertNotCalled(t, "GetOneByIdentity")
 
@@ -108,9 +127,11 @@ func TestUseCase_Execute(t *testing.T) {
 		t.Parallel()
 
 		var (
-			articleRepository articles.MockArticlesRepository
-			userRepository    users.MockUsersRepository
-			requestValidator  validator.MockValidator
+			articleRepository   articles.MockArticlesRepository
+			userRepository      users.MockUsersRepository
+			languagesRepository languages.MockLanguagesRepository
+			languageResolver    resolver.MockResolver
+			requestValidator    validator.MockValidator
 
 			request          = Request{Page: 1}
 			expectedResponse = Response{
@@ -123,7 +144,7 @@ func TestUseCase_Execute(t *testing.T) {
 		requestValidator.On("Validate", &request).Once().Return(expectedResponse.ValidationErrors)
 		defer requestValidator.AssertExpectations(t)
 
-		response, err := NewUseCase(&articleRepository, &userRepository, &requestValidator).Execute(&request)
+		response, err := NewUseCase(&articleRepository, &userRepository, &languagesRepository, &languageResolver, &requestValidator).Execute(&request)
 
 		userRepository.AssertNotCalled(t, "GetOne")
 		userRepository.AssertNotCalled(t, "GetOneByIdentity")
@@ -138,9 +159,11 @@ func TestUseCase_Execute(t *testing.T) {
 		t.Parallel()
 
 		var (
-			articleRepository articles.MockArticlesRepository
-			userRepository    users.MockUsersRepository
-			requestValidator  validator.MockValidator
+			articleRepository   articles.MockArticlesRepository
+			userRepository      users.MockUsersRepository
+			languagesRepository languages.MockLanguagesRepository
+			languageResolver    resolver.MockResolver
+			requestValidator    validator.MockValidator
 
 			request = Request{Username: "ghost", Page: 1}
 		)
@@ -148,10 +171,14 @@ func TestUseCase_Execute(t *testing.T) {
 		requestValidator.On("Validate", &request).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
+		languageResolver.On("DefaultCode").Once().Return("EN", nil)
+		languageResolver.On("Resolve", "EN").Once().Return(language.Language{Code: "EN"}, nil)
+		defer languageResolver.AssertExpectations(t)
+
 		userRepository.On("GetOneByIdentity", request.Username).Once().Return(user.User{}, domain.ErrNotExists)
 		defer userRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&articleRepository, &userRepository, &requestValidator).Execute(&request)
+		response, err := NewUseCase(&articleRepository, &userRepository, &languagesRepository, &languageResolver, &requestValidator).Execute(&request)
 
 		articleRepository.AssertNotCalled(t, "CountPublishedByAuthor")
 		articleRepository.AssertNotCalled(t, "GetPublishedByAuthor")
@@ -164,9 +191,11 @@ func TestUseCase_Execute(t *testing.T) {
 		t.Parallel()
 
 		var (
-			articleRepository articles.MockArticlesRepository
-			userRepository    users.MockUsersRepository
-			requestValidator  validator.MockValidator
+			articleRepository   articles.MockArticlesRepository
+			userRepository      users.MockUsersRepository
+			languagesRepository languages.MockLanguagesRepository
+			languageResolver    resolver.MockResolver
+			requestValidator    validator.MockValidator
 
 			expectedErr = errors.New("user repo failure")
 			request     = Request{Username: "johndoe", Page: 1}
@@ -175,10 +204,14 @@ func TestUseCase_Execute(t *testing.T) {
 		requestValidator.On("Validate", &request).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
+		languageResolver.On("DefaultCode").Once().Return("EN", nil)
+		languageResolver.On("Resolve", "EN").Once().Return(language.Language{Code: "EN"}, nil)
+		defer languageResolver.AssertExpectations(t)
+
 		userRepository.On("GetOneByIdentity", request.Username).Once().Return(user.User{}, expectedErr)
 		defer userRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&articleRepository, &userRepository, &requestValidator).Execute(&request)
+		response, err := NewUseCase(&articleRepository, &userRepository, &languagesRepository, &languageResolver, &requestValidator).Execute(&request)
 
 		articleRepository.AssertNotCalled(t, "CountPublishedByAuthor")
 		articleRepository.AssertNotCalled(t, "GetPublishedByAuthor")
@@ -191,9 +224,11 @@ func TestUseCase_Execute(t *testing.T) {
 		t.Parallel()
 
 		var (
-			articleRepository articles.MockArticlesRepository
-			userRepository    users.MockUsersRepository
-			requestValidator  validator.MockValidator
+			articleRepository   articles.MockArticlesRepository
+			userRepository      users.MockUsersRepository
+			languagesRepository languages.MockLanguagesRepository
+			languageResolver    resolver.MockResolver
+			requestValidator    validator.MockValidator
 
 			authorUUID  = "author-uuid"
 			u           = user.User{UUID: authorUUID, Username: "johndoe"}
@@ -204,13 +239,17 @@ func TestUseCase_Execute(t *testing.T) {
 		requestValidator.On("Validate", &request).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
+		languageResolver.On("DefaultCode").Once().Return("EN", nil)
+		languageResolver.On("Resolve", "EN").Once().Return(language.Language{Code: "EN"}, nil)
+		defer languageResolver.AssertExpectations(t)
+
 		userRepository.On("GetOneByIdentity", u.Username).Once().Return(u, nil)
 		defer userRepository.AssertExpectations(t)
 
-		articleRepository.On("CountPublishedByAuthor", authorUUID).Once().Return(uint(0), expectedErr)
+		articleRepository.On("CountPublishedByAuthor", authorUUID, "EN").Once().Return(uint(0), expectedErr)
 		defer articleRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&articleRepository, &userRepository, &requestValidator).Execute(&request)
+		response, err := NewUseCase(&articleRepository, &userRepository, &languagesRepository, &languageResolver, &requestValidator).Execute(&request)
 
 		articleRepository.AssertNotCalled(t, "GetPublishedByAuthor")
 
@@ -222,9 +261,11 @@ func TestUseCase_Execute(t *testing.T) {
 		t.Parallel()
 
 		var (
-			articleRepository articles.MockArticlesRepository
-			userRepository    users.MockUsersRepository
-			requestValidator  validator.MockValidator
+			articleRepository   articles.MockArticlesRepository
+			userRepository      users.MockUsersRepository
+			languagesRepository languages.MockLanguagesRepository
+			languageResolver    resolver.MockResolver
+			requestValidator    validator.MockValidator
 
 			authorUUID  = "author-uuid"
 			u           = user.User{UUID: authorUUID, Username: "johndoe"}
@@ -235,14 +276,18 @@ func TestUseCase_Execute(t *testing.T) {
 		requestValidator.On("Validate", &request).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
+		languageResolver.On("DefaultCode").Once().Return("EN", nil)
+		languageResolver.On("Resolve", "EN").Once().Return(language.Language{Code: "EN"}, nil)
+		defer languageResolver.AssertExpectations(t)
+
 		userRepository.On("GetOneByIdentity", u.Username).Once().Return(u, nil)
 		defer userRepository.AssertExpectations(t)
 
-		articleRepository.On("CountPublishedByAuthor", authorUUID).Once().Return(uint(5), nil)
-		articleRepository.On("GetPublishedByAuthor", authorUUID, uint(0), uint(10)).Once().Return(nil, expectedErr)
+		articleRepository.On("CountPublishedByAuthor", authorUUID, "EN").Once().Return(uint(5), nil)
+		articleRepository.On("GetPublishedByAuthor", authorUUID, "EN", uint(0), uint(10)).Once().Return(nil, expectedErr)
 		defer articleRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&articleRepository, &userRepository, &requestValidator).Execute(&request)
+		response, err := NewUseCase(&articleRepository, &userRepository, &languagesRepository, &languageResolver, &requestValidator).Execute(&request)
 
 		assert.ErrorIs(t, err, expectedErr)
 		assert.Nil(t, response)

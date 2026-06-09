@@ -28,11 +28,12 @@ func TestGetProfileHandler(t *testing.T) {
 			userUUID = "user-uuid"
 
 			u = user.User{
-				UUID:     userUUID,
-				Name:     "test name",
-				Avatar:   "test-avatar",
-				Email:    "test@test.com",
-				Username: "test-username",
+				UUID:         userUUID,
+				Name:         "test name",
+				Avatar:       "test-avatar",
+				Email:        "test@test.com",
+				Username:     "test-username",
+				LanguageCode: "EN",
 			}
 		)
 

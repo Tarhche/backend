@@ -28,7 +28,7 @@ type Element struct {
 // Repository represents a repository of elements.
 type Repository interface {
 	GetAll(offset uint, limit uint) ([]Element, error)
-	GetByVenues(Venues []string) ([]Element, error)
+	GetByVenues(venues []string) ([]Element, error)
 	GetOne(UUID string) (Element, error)
 	Count() (uint, error)
 	Save(*Element) (string, error)

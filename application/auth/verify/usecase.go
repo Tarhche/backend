@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
+	"github.com/khanzadimahdi/testproject/application/language/resolver"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/config"
 	"github.com/khanzadimahdi/testproject/domain/password"
@@ -19,6 +20,7 @@ type UseCase struct {
 	userRepository   user.Repository
 	roleRepository   role.Repository
 	configRepository config.Repository
+	languageResolver resolver.Resolver
 	hasher           password.Hasher
 	jwt              *jwt.JWT
 	translator       translator.Translator
@@ -29,6 +31,7 @@ func NewUseCase(
 	userRepository user.Repository,
 	roleRepository role.Repository,
 	configRepository config.Repository,
+	languageResolver resolver.Resolver,
 	hasher password.Hasher,
 	JWT *jwt.JWT,
 	translator translator.Translator,
@@ -38,6 +41,7 @@ func NewUseCase(
 		userRepository:   userRepository,
 		roleRepository:   roleRepository,
 		configRepository: configRepository,
+		languageResolver: languageResolver,
 		hasher:           hasher,
 		jwt:              JWT,
 		translator:       translator,
@@ -108,10 +112,19 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		return nil, err
 	}
 
+	if !uc.languageResolver.Verify(request.LanguageCode) {
+		return &Response{
+			ValidationErrors: domain.ValidationErrors{
+				"language_code": "invalid_value",
+			},
+		}, nil
+	}
+
 	u := user.User{
-		Name:     request.Name,
-		Username: request.Username,
-		Email:    identity,
+		Name:         request.Name,
+		Username:     request.Username,
+		Email:        identity,
+		LanguageCode: request.LanguageCode,
 		PasswordHash: password.Hash{
 			Value: uc.hasher.Hash([]byte(request.Password), salt),
 			Salt:  salt,

@@ -48,7 +48,7 @@ func (r *ArticlesRepository) GetAll(offset uint, limit uint) ([]article.Article,
 	return a, nil
 }
 
-func (r *ArticlesRepository) GetAllPublished(offset uint, limit uint) ([]article.Article, error) {
+func (r *ArticlesRepository) GetAllPublished(languageCode string, offset uint, limit uint) ([]article.Article, error) {
 	var (
 		a []article.Article
 		i uint
@@ -61,10 +61,16 @@ func (r *ArticlesRepository) GetAllPublished(offset uint, limit uint) ([]article
 			return true
 		}
 
-		if article := value.(article.Article); article.PublishedAt.Before(time.Now()) {
-			a = append(a, article)
-			j++
+		article := value.(article.Article)
+		if !article.PublishedAt.Before(time.Now()) {
+			return true
 		}
+		if len(languageCode) > 0 && article.LanguageCode != languageCode {
+			return true
+		}
+
+		a = append(a, article)
+		j++
 
 		return j < limit
 	})
@@ -72,13 +78,19 @@ func (r *ArticlesRepository) GetAllPublished(offset uint, limit uint) ([]article
 	return a, nil
 }
 
-func (r *ArticlesRepository) GetByUUIDs(UUIDs []string) ([]article.Article, error) {
-	a := make([]article.Article, 0, len(UUIDs))
+func (r *ArticlesRepository) GetByCorrelationUUIDs(correlationUUIDs []string, languageCode string) ([]article.Article, error) {
+	a := make([]article.Article, 0, len(correlationUUIDs))
 
 	r.datastore.Range(func(key, value any) bool {
-		if v := value.(article.Article); slices.Contains(UUIDs, v.UUID) {
-			a = append(a, value.(article.Article))
+		v := value.(article.Article)
+		if !slices.Contains(correlationUUIDs, v.CorrelationUUID) {
+			return true
 		}
+		if len(languageCode) > 0 && v.LanguageCode != languageCode {
+			return true
+		}
+
+		a = append(a, v)
 
 		return true
 	})
@@ -86,23 +98,71 @@ func (r *ArticlesRepository) GetByUUIDs(UUIDs []string) ([]article.Article, erro
 	return a, nil
 }
 
-func (r *ArticlesRepository) GetMostViewed(limit uint) ([]article.Article, error) {
+func (r *ArticlesRepository) GetPublishedLanguageCodes(correlationUUID string) ([]string, error) {
+	if len(correlationUUID) == 0 {
+		return []string{}, nil
+	}
+
+	seen := make(map[string]struct{})
+	codes := make([]string, 0, 2)
+
+	r.datastore.Range(func(_, value any) bool {
+		v := value.(article.Article)
+		if v.CorrelationUUID != correlationUUID {
+			return true
+		}
+		if v.PublishedAt.After(time.Now()) {
+			return true
+		}
+		if _, ok := seen[v.LanguageCode]; ok {
+			return true
+		}
+
+		seen[v.LanguageCode] = struct{}{}
+		codes = append(codes, v.LanguageCode)
+
+		return true
+	})
+
+	return codes, nil
+}
+
+func (r *ArticlesRepository) CorrelationExist(correlationUUID string) (bool, error) {
+	if len(correlationUUID) == 0 {
+		return false, nil
+	}
+
+	exist := false
+
+	r.datastore.Range(func(_, value any) bool {
+		if v := value.(article.Article); v.CorrelationUUID == correlationUUID {
+			exist = true
+			return false
+		}
+
+		return true
+	})
+
+	return exist, nil
+}
+
+func (r *ArticlesRepository) GetMostViewed(languageCode string, limit uint) ([]article.Article, error) {
 	return nil, nil
 }
 
-func (r *ArticlesRepository) CountPublishedByHashtags(hashtags []string) (uint, error) {
+func (r *ArticlesRepository) CountPublishedByHashtags(hashtags []string, languageCode string) (uint, error) {
 	return 0, nil
 }
 
-func (r *ArticlesRepository) GetPublishedByHashtags(hashtags []string, offset uint, limit uint) ([]article.Article, error) {
+func (r *ArticlesRepository) GetPublishedByHashtags(hashtags []string, languageCode string, offset uint, limit uint) ([]article.Article, error) {
 	return nil, nil
 }
 
-func (r *ArticlesRepository) CountPublishedByAuthor(authorUUID string) (uint, error) {
+func (r *ArticlesRepository) CountPublishedByAuthor(authorUUID string, languageCode string) (uint, error) {
 	return 0, nil
 }
 
-func (r *ArticlesRepository) GetPublishedByAuthor(authorUUID string, offset uint, limit uint) ([]article.Article, error) {
+func (r *ArticlesRepository) GetPublishedByAuthor(authorUUID string, languageCode string, offset uint, limit uint) ([]article.Article, error) {
 	return nil, nil
 }
 
@@ -115,18 +175,35 @@ func (r *ArticlesRepository) GetOne(UUID string) (article.Article, error) {
 	return a.(article.Article), nil
 }
 
-func (r *ArticlesRepository) GetOnePublished(UUID string) (article.Article, error) {
-	a, ok := r.datastore.Load(UUID)
+func (r *ArticlesRepository) GetOnePublished(correlationUUID string, languageCode string) (article.Article, error) {
+	var (
+		found article.Article
+		ok    bool
+	)
+
+	r.datastore.Range(func(_, value any) bool {
+		item := value.(article.Article)
+		if item.CorrelationUUID != correlationUUID {
+			return true
+		}
+		if item.PublishedAt.After(time.Now()) {
+			return true
+		}
+		if len(languageCode) > 0 && item.LanguageCode != languageCode {
+			return true
+		}
+
+		found = item
+		ok = true
+
+		return false
+	})
+
 	if !ok {
 		return article.Article{}, domain.ErrNotExists
 	}
 
-	item := a.(article.Article)
-	if item.PublishedAt.After(time.Now()) {
-		return article.Article{}, domain.ErrNotExists
-	}
-
-	return item, nil
+	return found, nil
 }
 
 func (r *ArticlesRepository) Count() (uint, error) {
@@ -141,13 +218,18 @@ func (r *ArticlesRepository) Count() (uint, error) {
 	return c, nil
 }
 
-func (r *ArticlesRepository) CountPublished() (uint, error) {
+func (r *ArticlesRepository) CountPublished(languageCode string) (uint, error) {
 	var c uint
 
 	r.datastore.Range(func(_, value any) bool {
-		if article := value.(article.Article); article.PublishedAt.Before(time.Now()) {
-			c++
+		article := value.(article.Article)
+		if !article.PublishedAt.Before(time.Now()) {
+			return true
 		}
+		if len(languageCode) > 0 && article.LanguageCode != languageCode {
+			return true
+		}
+		c++
 
 		return true
 	})
@@ -162,6 +244,10 @@ func (r *ArticlesRepository) Save(a *article.Article) (string, error) {
 			return "", err
 		}
 		a.UUID = UUID.String()
+	}
+
+	if len(a.CorrelationUUID) == 0 {
+		a.CorrelationUUID = a.UUID
 	}
 
 	r.datastore.Store(a.UUID, *a)

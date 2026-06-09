@@ -1,5 +1,9 @@
 {
     "items": [],
+    "language_code": {
+        "code": "EN",
+        "name": "English"
+    },
     "pagination": {
         "total_pages": 0,
         "current_page": 1

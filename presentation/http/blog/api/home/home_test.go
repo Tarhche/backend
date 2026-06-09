@@ -12,7 +12,9 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/element"
 	"github.com/khanzadimahdi/testproject/application/home"
+	"github.com/khanzadimahdi/testproject/application/language/resolver"
 	"github.com/khanzadimahdi/testproject/domain/article"
+	"github.com/khanzadimahdi/testproject/domain/language"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/articles"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/elements"
@@ -29,6 +31,7 @@ func TestHomeHandler(t *testing.T) {
 			articlesRepository articles.MockArticlesRepository
 			elementsRepository elements.MockElementsRepository
 			userRepository     users.MockUsersRepository
+			languageResolver   resolver.MockResolver
 		)
 
 		publishedAt, err := time.Parse(time.RFC3339, "2024-09-29T15:56:25Z")
@@ -36,32 +39,35 @@ func TestHomeHandler(t *testing.T) {
 
 		articles := []article.Article{
 			{
-				UUID:        "article-uuid-1",
-				Cover:       "article-cover-1",
-				Video:       "article-video-1",
-				Title:       "article-title-1",
-				Excerpt:     "article-excerpt-1",
-				Body:        "article-body-1",
-				PublishedAt: publishedAt,
-				AuthorUUID:  "author-uuid-1",
-				Tags:        []string{"tag-1", "tag-2", "tag-3"},
-				ViewCount:   123,
+				UUID:            "article-uuid-1",
+				CorrelationUUID: "article-correlation-uuid-1",
+				Cover:           "article-cover-1",
+				Video:           "article-video-1",
+				Title:           "article-title-1",
+				Excerpt:         "article-excerpt-1",
+				Body:            "article-body-1",
+				PublishedAt:     publishedAt,
+				AuthorUUID:      "author-uuid-1",
+				Tags:            []string{"tag-1", "tag-2", "tag-3"},
+				ViewCount:       123,
 			},
 			{
-				UUID:       "article-uuid-2",
-				Cover:      "article-cover-2",
-				Title:      "article-title-2",
-				Excerpt:    "article-excerpt-2",
-				Body:       "article-body-2",
-				AuthorUUID: "author-uuid-1",
+				UUID:            "article-uuid-2",
+				CorrelationUUID: "article-correlation-uuid-2",
+				Cover:           "article-cover-2",
+				Title:           "article-title-2",
+				Excerpt:         "article-excerpt-2",
+				Body:            "article-body-2",
+				AuthorUUID:      "author-uuid-1",
 			},
 			{
-				UUID:       "article-uuid-3",
-				Cover:      "article-cover-3",
-				Title:      "article-title-3",
-				Excerpt:    "article-excerpt-3",
-				Body:       "article-body-3",
-				AuthorUUID: "author-uuid-2",
+				UUID:            "article-uuid-3",
+				CorrelationUUID: "article-correlation-uuid-3",
+				Cover:           "article-cover-3",
+				Title:           "article-title-3",
+				Excerpt:         "article-excerpt-3",
+				Body:            "article-body-3",
+				AuthorUUID:      "author-uuid-2",
 			},
 		}
 
@@ -70,9 +76,9 @@ func TestHomeHandler(t *testing.T) {
 			{UUID: "author-uuid-2", Name: "author-name", Avatar: "author-avatar", Username: "author-username-2"},
 		}
 
-		articlesRepository.On("GetMostViewed", uint(4)).Once().Return(articles, nil)
-		articlesRepository.On("GetAllPublished", uint(0), uint(3)).Once().Return(articles, nil)
-		articlesRepository.On("GetByUUIDs", []string{}).Once().Return(nil, nil)
+		articlesRepository.On("GetMostViewed", "EN", uint(4)).Once().Return(articles, nil)
+		articlesRepository.On("GetAllPublished", "EN", uint(0), uint(3)).Once().Return(articles, nil)
+		articlesRepository.On("GetByCorrelationUUIDs", []string{}, "EN").Once().Return(nil, nil)
 		defer articlesRepository.AssertExpectations(t)
 
 		userRepository.On("GetByUUIDs", []string{"author-uuid-1", "author-uuid-1", "author-uuid-2", "author-uuid-1", "author-uuid-1", "author-uuid-2"}).Once().Return(users, nil)
@@ -82,8 +88,12 @@ func TestHomeHandler(t *testing.T) {
 		elementsRepository.On("GetByVenues", []string{"home"}).Once().Return(nil, nil)
 		defer elementsRepository.AssertExpectations(t)
 
+		languageResolver.On("DefaultCode").Once().Return("EN", nil)
+		languageResolver.On("Resolve", "EN").Once().Return(language.Language{Code: "EN", Name: "English"}, nil)
+		defer languageResolver.AssertExpectations(t)
+
 		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository)
-		useCase := home.NewUseCase(&articlesRepository, &userRepository, elementRetriever)
+		useCase := home.NewUseCase(&articlesRepository, &userRepository, elementRetriever, &languageResolver)
 		handler := NewHomeHandler(useCase)
 
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -106,11 +116,12 @@ func TestHomeHandler(t *testing.T) {
 			articlesRepository articles.MockArticlesRepository
 			elementsRepository elements.MockElementsRepository
 			userRepository     users.MockUsersRepository
+			languageResolver   resolver.MockResolver
 		)
 
-		articlesRepository.On("GetMostViewed", uint(4)).Once().Return([]article.Article{}, nil)
-		articlesRepository.On("GetAllPublished", uint(0), uint(3)).Once().Return([]article.Article{}, nil)
-		articlesRepository.On("GetByUUIDs", []string{}).Once().Return([]article.Article{}, nil)
+		articlesRepository.On("GetMostViewed", "EN", uint(4)).Once().Return([]article.Article{}, nil)
+		articlesRepository.On("GetAllPublished", "EN", uint(0), uint(3)).Once().Return([]article.Article{}, nil)
+		articlesRepository.On("GetByCorrelationUUIDs", []string{}, "EN").Once().Return([]article.Article{}, nil)
 		defer articlesRepository.AssertExpectations(t)
 
 		userRepository.On("GetByUUIDs", []string{}).Return([]user.User{}, nil)
@@ -119,8 +130,12 @@ func TestHomeHandler(t *testing.T) {
 		elementsRepository.On("GetByVenues", []string{"home"}).Once().Return(nil, nil)
 		defer elementsRepository.AssertExpectations(t)
 
+		languageResolver.On("DefaultCode").Once().Return("EN", nil)
+		languageResolver.On("Resolve", "EN").Once().Return(language.Language{Code: "EN", Name: "English"}, nil)
+		defer languageResolver.AssertExpectations(t)
+
 		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository)
-		useCase := home.NewUseCase(&articlesRepository, &userRepository, elementRetriever)
+		useCase := home.NewUseCase(&articlesRepository, &userRepository, elementRetriever, &languageResolver)
 		handler := NewHomeHandler(useCase)
 
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -141,13 +156,18 @@ func TestHomeHandler(t *testing.T) {
 			articlesRepository articles.MockArticlesRepository
 			elementsRepository elements.MockElementsRepository
 			userRepository     users.MockUsersRepository
+			languageResolver   resolver.MockResolver
 		)
 
-		articlesRepository.On("GetMostViewed", uint(4)).Once().Return(nil, errors.New("an error has happened"))
+		articlesRepository.On("GetMostViewed", "EN", uint(4)).Once().Return(nil, errors.New("an error has happened"))
 		defer articlesRepository.AssertExpectations(t)
 
+		languageResolver.On("DefaultCode").Once().Return("EN", nil)
+		languageResolver.On("Resolve", "EN").Once().Return(language.Language{Code: "EN", Name: "English"}, nil)
+		defer languageResolver.AssertExpectations(t)
+
 		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository)
-		useCase := home.NewUseCase(&articlesRepository, &userRepository, elementRetriever)
+		useCase := home.NewUseCase(&articlesRepository, &userRepository, elementRetriever, &languageResolver)
 		handler := NewHomeHandler(useCase)
 
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -156,7 +176,7 @@ func TestHomeHandler(t *testing.T) {
 		handler.ServeHTTP(response, request)
 
 		articlesRepository.AssertNotCalled(t, "GetAllPublished")
-		articlesRepository.AssertNotCalled(t, "GetByUUIDs")
+		articlesRepository.AssertNotCalled(t, "GetByCorrelationUUIDs")
 		userRepository.AssertNotCalled(t, "GetByUUIDs")
 		elementsRepository.AssertNotCalled(t, "GetByVenues")
 

@@ -1,28 +1,36 @@
 package getArticlesByHashtag
 
 import (
+	"github.com/khanzadimahdi/testproject/application/language/resolver"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/article"
+	"github.com/khanzadimahdi/testproject/domain/language"
 	"github.com/khanzadimahdi/testproject/domain/user"
 )
 
 const limit = 10
 
 type UseCase struct {
-	articleRepository article.Repository
-	userRepository    user.Repository
-	validator         domain.Validator
+	articleRepository  article.Repository
+	userRepository     user.Repository
+	languageRepository language.Repository
+	languageResolver   resolver.Resolver
+	validator          domain.Validator
 }
 
 func NewUseCase(
 	articleRepository article.Repository,
 	userRepository user.Repository,
+	languageRepository language.Repository,
+	languageResolver resolver.Resolver,
 	validator domain.Validator,
 ) *UseCase {
 	return &UseCase{
-		articleRepository: articleRepository,
-		userRepository:    userRepository,
-		validator:         validator,
+		articleRepository:  articleRepository,
+		userRepository:     userRepository,
+		languageRepository: languageRepository,
+		languageResolver:   languageResolver,
+		validator:          validator,
 	}
 }
 
@@ -35,7 +43,22 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 
 	hashtags := []string{request.Hashtag}
 
-	totalArticles, err := uc.articleRepository.CountPublishedByHashtags(hashtags)
+	languageCode := request.LanguageCode
+	if len(languageCode) == 0 {
+		code, err := uc.languageResolver.DefaultCode()
+		if err != nil {
+			return nil, err
+		}
+
+		languageCode = code
+	}
+
+	l, err := uc.languageResolver.Resolve(languageCode)
+	if err != nil {
+		return nil, err
+	}
+
+	totalArticles, err := uc.articleRepository.CountPublishedByHashtags(hashtags, languageCode)
 	if err != nil {
 		return nil, err
 	}
@@ -56,7 +79,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		totalPages++
 	}
 
-	a, err := uc.articleRepository.GetPublishedByHashtags(hashtags, offset, limit)
+	a, err := uc.articleRepository.GetPublishedByHashtags(hashtags, languageCode, offset, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -66,10 +89,24 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		userUUIDs[i] = a[i].AuthorUUID
 	}
 
-	u, err := uc.userRepository.GetByUUIDs(userUUIDs)
+	authors, err := uc.userRepository.GetByUUIDs(userUUIDs)
 	if err != nil {
 		return nil, err
 	}
 
-	return NewResponse(a, u, totalPages, currentPage), nil
+	publishedLanguages := make(map[string][]language.Language, len(a))
+	for i := range a {
+		codes, err := uc.articleRepository.GetPublishedLanguageCodes(a[i].CorrelationUUID)
+		if err != nil {
+			return nil, err
+		}
+
+		al, err := uc.languageRepository.GetByCodes(codes)
+		if err != nil {
+			return nil, err
+		}
+		publishedLanguages[a[i].UUID] = al
+	}
+
+	return NewResponse(a, authors, publishedLanguages, l, totalPages, currentPage), nil
 }

@@ -11,9 +11,12 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	getarticles "github.com/khanzadimahdi/testproject/application/article/getArticles"
+	"github.com/khanzadimahdi/testproject/application/language/resolver"
 	"github.com/khanzadimahdi/testproject/domain/article"
+	"github.com/khanzadimahdi/testproject/domain/language"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/articles"
+	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/languages"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
 )
 
@@ -24,8 +27,10 @@ func TestIndexHandler(t *testing.T) {
 		t.Parallel()
 
 		var (
-			articlesRepository articles.MockArticlesRepository
-			userRepository     users.MockUsersRepository
+			articlesRepository  articles.MockArticlesRepository
+			userRepository      users.MockUsersRepository
+			languagesRepository languages.MockLanguagesRepository
+			languageResolver    resolver.MockResolver
 		)
 
 		publishedAt, err := time.Parse(time.RFC3339, "2024-09-29T15:56:25Z")
@@ -67,14 +72,21 @@ func TestIndexHandler(t *testing.T) {
 			{UUID: "author-uuid-2", Name: "author-name", Avatar: "author-avatar", Username: "author-username-2"},
 		}
 
-		articlesRepository.On("CountPublished").Once().Return(uint(len(articles)), nil)
-		articlesRepository.On("GetAllPublished", uint(0), uint(10)).Once().Return(articles, nil)
+		articlesRepository.On("CountPublished", "EN").Once().Return(uint(len(articles)), nil)
+		articlesRepository.On("GetAllPublished", "EN", uint(0), uint(10)).Once().Return(articles, nil)
 		defer articlesRepository.AssertExpectations(t)
 
 		userRepository.On("GetByUUIDs", []string{"author-uuid-1", "author-uuid-1", "author-uuid-2"}).Once().Return(users, nil)
 		defer userRepository.AssertExpectations(t)
 
-		handler := NewIndexHandler(getarticles.NewUseCase(&articlesRepository, &userRepository))
+		articlesRepository.On("GetPublishedLanguageCodes", "").Return([]string{}, nil)
+		languagesRepository.On("GetByCodes", []string{}).Return([]language.Language{}, nil)
+
+		languageResolver.On("DefaultCode").Once().Return("EN", nil)
+		languageResolver.On("Resolve", "EN").Once().Return(language.Language{Code: "EN", Name: "English"}, nil)
+		defer languageResolver.AssertExpectations(t)
+
+		handler := NewIndexHandler(getarticles.NewUseCase(&articlesRepository, &userRepository, &languagesRepository, &languageResolver))
 
 		request := httptest.NewRequest(http.MethodGet, "/?page=1", nil)
 		response := httptest.NewRecorder()
@@ -93,18 +105,24 @@ func TestIndexHandler(t *testing.T) {
 		t.Parallel()
 
 		var (
-			articlesRepository articles.MockArticlesRepository
-			userRepository     users.MockUsersRepository
+			articlesRepository  articles.MockArticlesRepository
+			userRepository      users.MockUsersRepository
+			languagesRepository languages.MockLanguagesRepository
+			languageResolver    resolver.MockResolver
 		)
 
-		articlesRepository.On("CountPublished").Once().Return(uint(0), nil)
-		articlesRepository.On("GetAllPublished", uint(0), uint(10)).Once().Return(nil, nil)
+		articlesRepository.On("CountPublished", "EN").Once().Return(uint(0), nil)
+		articlesRepository.On("GetAllPublished", "EN", uint(0), uint(10)).Once().Return(nil, nil)
 		defer articlesRepository.AssertExpectations(t)
 
 		userRepository.On("GetByUUIDs", []string{}).Once().Return([]user.User{}, nil)
 		defer userRepository.AssertExpectations(t)
 
-		handler := NewIndexHandler(getarticles.NewUseCase(&articlesRepository, &userRepository))
+		languageResolver.On("DefaultCode").Once().Return("EN", nil)
+		languageResolver.On("Resolve", "EN").Once().Return(language.Language{Code: "EN", Name: "English"}, nil)
+		defer languageResolver.AssertExpectations(t)
+
+		handler := NewIndexHandler(getarticles.NewUseCase(&articlesRepository, &userRepository, &languagesRepository, &languageResolver))
 
 		request := httptest.NewRequest(http.MethodGet, "/?page=1", nil)
 		response := httptest.NewRecorder()
@@ -123,14 +141,20 @@ func TestIndexHandler(t *testing.T) {
 		t.Parallel()
 
 		var (
-			articlesRepository articles.MockArticlesRepository
-			userRepository     users.MockUsersRepository
+			articlesRepository  articles.MockArticlesRepository
+			userRepository      users.MockUsersRepository
+			languagesRepository languages.MockLanguagesRepository
+			languageResolver    resolver.MockResolver
 		)
 
-		articlesRepository.On("CountPublished").Once().Return(uint(0), errors.New("something faulty has happened"))
+		articlesRepository.On("CountPublished", "EN").Once().Return(uint(0), errors.New("something faulty has happened"))
 		defer articlesRepository.AssertExpectations(t)
 
-		handler := NewIndexHandler(getarticles.NewUseCase(&articlesRepository, &userRepository))
+		languageResolver.On("DefaultCode").Once().Return("EN", nil)
+		languageResolver.On("Resolve", "EN").Once().Return(language.Language{Code: "EN", Name: "English"}, nil)
+		defer languageResolver.AssertExpectations(t)
+
+		handler := NewIndexHandler(getarticles.NewUseCase(&articlesRepository, &userRepository, &languagesRepository, &languageResolver))
 
 		request := httptest.NewRequest(http.MethodGet, "/?page=1", nil)
 		response := httptest.NewRecorder()

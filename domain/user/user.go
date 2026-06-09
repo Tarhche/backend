@@ -13,6 +13,7 @@ type User struct {
 	Avatar       string
 	Email        string
 	Username     string
+	LanguageCode string
 	PasswordHash password.Hash
 	CreatedAt    time.Time
 }

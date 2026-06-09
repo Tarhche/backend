@@ -21,18 +21,22 @@ func NewShowHandler(useCase *getarticle.UseCase) *showHandler {
 
 // @Summary		Retrieve a single article
 // @Description	get one published article by UUID
-// @Tags			articles
-// @Accept			json
+// @Tags		articles
+// @Accept		json
 // @Produce		json
-// @Param			uuid	path		string	true	"Article UUID"
-// @Success		200		{object}	getarticle.Response
-// @Failure		404		{object}	map[string]interface{}
-// @Failure		500		{object}	map[string]interface{}
+// @Param		uuid		    path		string	true	"Article UUID"
+// @Param		language_code	query		string	false	"Language key (e.g. EN, FA)"	default(EN)
+// @Success		200			{object}	getarticle.Response
+// @Failure		404			{object}	map[string]interface{}
+// @Failure		500			{object}	map[string]interface{}
 // @Router			/articles/{uuid} [get]
 func (h *showHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	UUID := r.PathValue("uuid")
 
-	response, err := h.useCase.Execute(UUID)
+	response, err := h.useCase.Execute(&getarticle.Request{
+		CorrelationUUID: UUID,
+		LanguageCode:    r.URL.Query().Get("language_code"),
+	})
 
 	switch {
 	case errors.Is(err, domain.ErrNotExists):

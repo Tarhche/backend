@@ -1,0 +1,16 @@
+{
+  "items": [
+    {
+      "code": "EN",
+      "name": "English"
+    },
+    {
+      "code": "FA",
+      "name": "فارسی"
+    }
+  ],
+  "default_language": {
+    "code": "EN",
+    "name": "English"
+  }
+}

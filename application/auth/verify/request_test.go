@@ -16,22 +16,24 @@ func TestRequest_Validate(t *testing.T) {
 		{
 			name: "valid request",
 			request: Request{
-				Token:      "valid-token",
-				Name:       "John Doe",
-				Username:   "johndoe",
-				Password:   "password123",
-				Repassword: "password123",
+				Token:        "valid-token",
+				Name:         "John Doe",
+				Username:     "johndoe",
+				LanguageCode: "EN",
+				Password:     "password123",
+				Repassword:   "password123",
 			},
 			want: domain.ValidationErrors{},
 		},
 		{
 			name: "invalid request with empty token",
 			request: Request{
-				Token:      "",
-				Name:       "John Doe",
-				Username:   "johndoe",
-				Password:   "password123",
-				Repassword: "password123",
+				Token:        "",
+				Name:         "John Doe",
+				Username:     "johndoe",
+				LanguageCode: "EN",
+				Password:     "password123",
+				Repassword:   "password123",
 			},
 			want: domain.ValidationErrors{
 				"token": "required_field",
@@ -40,11 +42,12 @@ func TestRequest_Validate(t *testing.T) {
 		{
 			name: "invalid request with empty name",
 			request: Request{
-				Token:      "valid-token",
-				Name:       "",
-				Username:   "johndoe",
-				Password:   "password123",
-				Repassword: "password123",
+				Token:        "valid-token",
+				Name:         "",
+				Username:     "johndoe",
+				LanguageCode: "EN",
+				Password:     "password123",
+				Repassword:   "password123",
 			},
 			want: domain.ValidationErrors{
 				"name": "required_field",
@@ -53,11 +56,12 @@ func TestRequest_Validate(t *testing.T) {
 		{
 			name: "invalid request with empty username",
 			request: Request{
-				Token:      "valid-token",
-				Name:       "John Doe",
-				Username:   "",
-				Password:   "password123",
-				Repassword: "password123",
+				Token:        "valid-token",
+				Name:         "John Doe",
+				Username:     "",
+				LanguageCode: "EN",
+				Password:     "password123",
+				Repassword:   "password123",
 			},
 			want: domain.ValidationErrors{
 				"username": "required_field",
@@ -66,11 +70,12 @@ func TestRequest_Validate(t *testing.T) {
 		{
 			name: "invalid request with malformed username",
 			request: Request{
-				Token:      "valid-token",
-				Name:       "John Doe",
-				Username:   "John Doe!",
-				Password:   "password123",
-				Repassword: "password123",
+				Token:        "valid-token",
+				Name:         "John Doe",
+				Username:     "John Doe!",
+				LanguageCode: "EN",
+				Password:     "password123",
+				Repassword:   "password123",
 			},
 			want: domain.ValidationErrors{
 				"username": "invalid_value",
@@ -79,24 +84,40 @@ func TestRequest_Validate(t *testing.T) {
 		{
 			name: "invalid request with username having no alphanumerics",
 			request: Request{
-				Token:      "valid-token",
-				Name:       "John Doe",
-				Username:   "...",
-				Password:   "password123",
-				Repassword: "password123",
+				Token:        "valid-token",
+				Name:         "John Doe",
+				Username:     "...",
+				LanguageCode: "EN",
+				Password:     "password123",
+				Repassword:   "password123",
 			},
 			want: domain.ValidationErrors{
 				"username": "invalid_value",
 			},
 		},
 		{
+			name: "invalid request with empty language",
+			request: Request{
+				Token:        "valid-token",
+				Name:         "John Doe",
+				Username:     "johndoe",
+				LanguageCode: "",
+				Password:     "password123",
+				Repassword:   "password123",
+			},
+			want: domain.ValidationErrors{
+				"language_code": "required_field",
+			},
+		},
+		{
 			name: "invalid request with empty password",
 			request: Request{
-				Token:      "valid-token",
-				Name:       "John Doe",
-				Username:   "johndoe",
-				Password:   "",
-				Repassword: "password123",
+				Token:        "valid-token",
+				Name:         "John Doe",
+				Username:     "johndoe",
+				LanguageCode: "EN",
+				Password:     "",
+				Repassword:   "password123",
 			},
 			want: domain.ValidationErrors{
 				"password":   "required_field",
@@ -106,11 +127,12 @@ func TestRequest_Validate(t *testing.T) {
 		{
 			name: "invalid request with empty repassword",
 			request: Request{
-				Token:      "valid-token",
-				Name:       "John Doe",
-				Username:   "johndoe",
-				Password:   "password123",
-				Repassword: "",
+				Token:        "valid-token",
+				Name:         "John Doe",
+				Username:     "johndoe",
+				LanguageCode: "EN",
+				Password:     "password123",
+				Repassword:   "",
 			},
 			want: domain.ValidationErrors{
 				"repassword": "repassword",
@@ -119,11 +141,12 @@ func TestRequest_Validate(t *testing.T) {
 		{
 			name: "invalid request with mismatched passwords",
 			request: Request{
-				Token:      "valid-token",
-				Name:       "John Doe",
-				Username:   "johndoe",
-				Password:   "password123",
-				Repassword: "password456",
+				Token:        "valid-token",
+				Name:         "John Doe",
+				Username:     "johndoe",
+				LanguageCode: "EN",
+				Password:     "password123",
+				Repassword:   "password456",
 			},
 			want: domain.ValidationErrors{
 				"repassword": "repassword",
@@ -132,11 +155,12 @@ func TestRequest_Validate(t *testing.T) {
 		{
 			name: "invalid request with different length passwords",
 			request: Request{
-				Token:      "valid-token",
-				Name:       "John Doe",
-				Username:   "johndoe",
-				Password:   "password123",
-				Repassword: "password1234",
+				Token:        "valid-token",
+				Name:         "John Doe",
+				Username:     "johndoe",
+				LanguageCode: "EN",
+				Password:     "password123",
+				Repassword:   "password1234",
 			},
 			want: domain.ValidationErrors{
 				"repassword": "repassword",
@@ -145,18 +169,20 @@ func TestRequest_Validate(t *testing.T) {
 		{
 			name: "invalid request with multiple errors",
 			request: Request{
-				Token:      "",
-				Name:       "",
-				Username:   "",
-				Password:   "",
-				Repassword: "",
+				Token:        "",
+				Name:         "",
+				Username:     "",
+				LanguageCode: "",
+				Password:     "",
+				Repassword:   "",
 			},
 			want: domain.ValidationErrors{
-				"token":      "required_field",
-				"name":       "required_field",
-				"username":   "required_field",
-				"password":   "required_field",
-				"repassword": "repassword",
+				"token":         "required_field",
+				"name":          "required_field",
+				"username":      "required_field",
+				"language_code": "required_field",
+				"password":      "required_field",
+				"repassword":    "repassword",
 			},
 		},
 	}

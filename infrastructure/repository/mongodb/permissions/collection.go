@@ -52,6 +52,13 @@ var collection []permission.Permission = []permission.Permission{
 	{Name: "show configuration", Value: permission.ConfigShow},
 	{Name: "update configuration", Value: permission.ConfigUpdate},
 
+	// languages
+	{Name: "list of languages", Value: permission.LanguagesIndex},
+	{Name: "create a language", Value: permission.LanguagesCreate},
+	{Name: "show a language", Value: permission.LanguagesShow},
+	{Name: "update a language", Value: permission.LanguagesUpdate},
+	{Name: "delete a language", Value: permission.LanguagesDelete},
+
 	// self bookmarks
 	{Name: "list of self bookmarks", Value: permission.SelfBookmarksIndex},
 	{Name: "delete a self bookmark", Value: permission.SelfBookmarksDelete},

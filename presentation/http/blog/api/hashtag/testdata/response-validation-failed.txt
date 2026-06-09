@@ -3,6 +3,10 @@
         "hashtag": "this field is required"
     },
     "items": null,
+    "language_code": {
+        "code": "",
+        "name": ""
+    },
     "pagination": {
         "total_pages": 0,
         "current_page": 0

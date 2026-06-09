@@ -28,8 +28,9 @@ func NewIndexHandler(useCase *getArticlesByAuthor.UseCase) *indexHandler {
 // @Tags		authors
 // @Accept		json
 // @Produce		json
-// @Param		identity	path		string	true	"Author UUID or username"
-// @Param		page		query		int		false	"Page number"	default(1)
+// @Param		identity	    path		string	true	"Author UUID or username"
+// @Param		page		    query		int		false	"Page number"	default(1)
+// @Param		language_code	query		string	false	"Language key (e.g. EN, FA)"	default(EN)
 // @Success		200			{object}	getArticlesByAuthor.Response
 // @Failure		400			{object}	map[string]interface{}
 // @Failure		404			{object}	map[string]interface{}
@@ -44,7 +45,11 @@ func (h *indexHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	request := &getArticlesByAuthor.Request{Page: page}
+	request := &getArticlesByAuthor.Request{
+		Page:         page,
+		LanguageCode: r.URL.Query().Get("language_code"),
+	}
+
 	identity := r.PathValue("identity")
 	if _, err := uuid.FromString(identity); err == nil {
 		request.AuthorUUID = identity

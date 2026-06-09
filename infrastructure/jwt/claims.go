@@ -48,6 +48,10 @@ func (b builder) SetPermissions(value []string) {
 	b.Set("permissions", value)
 }
 
+func (b builder) SetLanguage(code string) {
+	b.Set("lang", code)
+}
+
 func (c builder) Set(name string, value any) {
 	c[name] = value
 }

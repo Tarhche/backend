@@ -69,23 +69,6 @@ func (r *BookmarksRepository) Save(b *bookmark.Bookmark) (string, error) {
 	return b.ObjectUUID, nil
 }
 
-func (r *BookmarksRepository) Count(objectType string, objectUUID string) (uint, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
-	defer cancel()
-
-	filter := bson.M{
-		"object_uuid": objectUUID,
-		"object_type": objectType,
-	}
-
-	c, err := r.collection.CountDocuments(ctx, filter)
-	if err != nil {
-		return uint(c), err
-	}
-
-	return uint(c), nil
-}
-
 func (r *BookmarksRepository) GetAllByOwnerUUID(ownerUUID string, offset uint, limit uint) ([]bookmark.Bookmark, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
 	defer cancel()

@@ -19,14 +19,17 @@ func NewHomeHandler(useCase *home.UseCase) *homeHandler {
 
 // @Summary		Application home endpoint
 // @Description	returns the contents used for home page
-// @Tags			home
-// @Accept			json
+// @Tags		home
+// @Accept		json
 // @Produce		json
-// @Success		200	{object}	home.Response
-// @Failure		500	{object}	map[string]interface{}
+// @Param		language	query	string	false	"Language key (e.g. EN, FA)"	default(EN)
+// @Success		200			{object}	home.Response
+// @Failure		500			{object}	map[string]interface{}
 // @Router			/home [get]
 func (h *homeHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
-	response, err := h.useCase.Execute()
+	response, err := h.useCase.Execute(&home.Request{
+		LanguageCode: r.URL.Query().Get("language_code"),
+	})
 
 	switch {
 	case err != nil:

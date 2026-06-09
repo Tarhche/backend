@@ -21,11 +21,12 @@ func NewShowHandler(useCase *getArticlesByHashtag.UseCase) *showHandler {
 
 // @Summary		List articles by hashtag
 // @Description	return a page of the most recent published articles with the given hashtag
-// @Tags			hashtags
-// @Accept			json
+// @Tags		hashtags
+// @Accept		json
 // @Produce		json
-// @Param			hashtag	path		string	true	"Hashtag"
-// @Param			page	query		int		false	"Page number"	default(1)
+// @Param		hashtag			path		string	true	"Hashtag"
+// @Param		page		    query		int		false	"Page number"	default(1)
+// @Param		language_code	query		string	false	"Language key (e.g. EN, FA)"	default(EN)
 // @Success		200		{object}	getArticlesByHashtag.Response
 // @Failure		400		{object}	map[string]interface{}
 // @Failure		500		{object}	map[string]interface{}
@@ -42,8 +43,9 @@ func (h *showHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	hashtag := r.PathValue("hashtag")
 
 	request := &getArticlesByHashtag.Request{
-		Page:    page,
-		Hashtag: hashtag,
+		Page:         page,
+		Hashtag:      hashtag,
+		LanguageCode: r.URL.Query().Get("language_code"),
 	}
 
 	response, err := h.useCase.Execute(request)

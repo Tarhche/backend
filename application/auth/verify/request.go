@@ -6,11 +6,12 @@ import (
 )
 
 type Request struct {
-	Token      string `json:"token"`
-	Name       string `json:"name"`
-	Username   string `json:"username"`
-	Password   string `json:"password"`
-	Repassword string `json:"repassword"`
+	Token        string `json:"token"`
+	Name         string `json:"name"`
+	Username     string `json:"username"`
+	LanguageCode string `json:"language_code"`
+	Password     string `json:"password"`
+	Repassword   string `json:"repassword"`
 }
 
 var _ domain.Validatable = &Request{}
@@ -30,6 +31,10 @@ func (r *Request) Validate() domain.ValidationErrors {
 		validationErrors["username"] = "required_field"
 	} else if !user.IsValidUsername(r.Username) {
 		validationErrors["username"] = "invalid_value"
+	}
+
+	if len(r.LanguageCode) == 0 {
+		validationErrors["language_code"] = "required_field"
 	}
 
 	if len(r.Password) == 0 {

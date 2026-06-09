@@ -147,15 +147,6 @@ func (r *NodesRepository) Save(n *node.Node) (string, error) {
 	return n.Name, nil
 }
 
-func (r *NodesRepository) Delete(UUID string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
-	defer cancel()
-
-	_, err := r.collection.DeleteOne(ctx, bson.D{{Key: "_id", Value: UUID}})
-
-	return err
-}
-
 func (r *NodesRepository) Count() (uint, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
 	defer cancel()
