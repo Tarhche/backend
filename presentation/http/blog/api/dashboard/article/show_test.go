@@ -30,16 +30,18 @@ func TestShowHandler(t *testing.T) {
 			publishedAt, _ = time.Parse(time.RFC3339, "2024-10-11T04:27:44Z")
 
 			a = article.Article{
-				Title:       "article-title-1",
-				UUID:        "article-uuid-1",
-				Body:        "body-1",
-				Excerpt:     "excerpt-1",
-				Tags:        []string{"tag-1", "tag-2"},
-				PublishedAt: publishedAt,
+				Title:           "article-title-1",
+				UUID:            "article-uuid-1",
+				CorrelationUUID: "correlation-uuid-1",
+				LanguageCode:    "EN",
+				Body:            "body-1",
+				Excerpt:         "excerpt-1",
+				Tags:            []string{"tag-1", "tag-2"},
+				PublishedAt:     publishedAt,
 			}
 		)
 
-		articleRepository.On("GetOne", a.UUID).Return(a, nil)
+		articleRepository.On("GetByCorrelationUUIDAndLanguage", a.CorrelationUUID, a.LanguageCode).Return(a, nil)
 		defer articleRepository.AssertExpectations(t)
 
 		userRepository.On("GetOne", "").Return(user.User{}, nil)
@@ -48,7 +50,8 @@ func TestShowHandler(t *testing.T) {
 		handler := NewShowHandler(getarticle.NewUseCase(&articleRepository, &userRepository))
 
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
-		request.SetPathValue("uuid", a.UUID)
+		request.SetPathValue("correlationUUID", a.CorrelationUUID)
+		request.SetPathValue("language_code", a.LanguageCode)
 		response := httptest.NewRecorder()
 
 		handler.ServeHTTP(response, request)
@@ -69,17 +72,19 @@ func TestShowHandler(t *testing.T) {
 			userRepository    users.MockUsersRepository
 
 			a = article.Article{
-				UUID: "article-uuid-1",
+				CorrelationUUID: "correlation-uuid-1",
+				LanguageCode:    "EN",
 			}
 		)
 
-		articleRepository.On("GetOne", a.UUID).Return(article.Article{}, domain.ErrNotExists)
+		articleRepository.On("GetByCorrelationUUIDAndLanguage", a.CorrelationUUID, a.LanguageCode).Return(article.Article{}, domain.ErrNotExists)
 		defer articleRepository.AssertExpectations(t)
 
 		handler := NewShowHandler(getarticle.NewUseCase(&articleRepository, &userRepository))
 
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
-		request.SetPathValue("uuid", a.UUID)
+		request.SetPathValue("correlationUUID", a.CorrelationUUID)
+		request.SetPathValue("language_code", a.LanguageCode)
 		response := httptest.NewRecorder()
 
 		handler.ServeHTTP(response, request)

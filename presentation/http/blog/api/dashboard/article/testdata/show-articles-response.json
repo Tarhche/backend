@@ -1,43 +1,62 @@
 {
     "items": [
         {
-            "uuid": "article-uuid-1",
-            "cover": "",
-            "video": "",
-            "title": "article-title-1",
-            "published_at": "0001-01-01T00:00:00Z",
-            "author": {
-                "uuid": "",
-                "name": "",
-                "avatar": "",
-                "username": ""
-            }
+            "correlation_uuid": "correlation-uuid-1",
+            "corrolated_items": [
+                {
+                    "cover": "",
+                    "video": "",
+                    "title": "title-1-en",
+                    "published_at": "0001-01-01T00:00:00Z",
+                    "author": {
+                        "uuid": "author-1",
+                        "name": "Author One",
+                        "avatar": "a1.png",
+                        "username": "author_one"
+                    },
+                    "language": {
+                        "code": "EN",
+                        "name": "English"
+                    }
+                },
+                {
+                    "cover": "",
+                    "video": "",
+                    "title": "title-1-fa",
+                    "published_at": "0001-01-01T00:00:00Z",
+                    "author": {
+                        "uuid": "author-1",
+                        "name": "Author One",
+                        "avatar": "a1.png",
+                        "username": "author_one"
+                    },
+                    "language": {
+                        "code": "FA",
+                        "name": "Persian"
+                    }
+                }
+            ]
         },
         {
-            "uuid": "article-uuid-2",
-            "cover": "",
-            "video": "",
-            "title": "",
-            "published_at": "0001-01-01T00:00:00Z",
-            "author": {
-                "uuid": "",
-                "name": "",
-                "avatar": "",
-                "username": ""
-            }
-        },
-        {
-            "uuid": "article-uuid-3",
-            "cover": "",
-            "video": "",
-            "title": "",
-            "published_at": "2024-10-11T04:27:44Z",
-            "author": {
-                "uuid": "",
-                "name": "",
-                "avatar": "",
-                "username": ""
-            }
+            "correlation_uuid": "correlation-uuid-2",
+            "corrolated_items": [
+                {
+                    "cover": "",
+                    "video": "",
+                    "title": "title-2-en",
+                    "published_at": "0001-01-01T00:00:00Z",
+                    "author": {
+                        "uuid": "author-2",
+                        "name": "Author Two",
+                        "avatar": "a2.png",
+                        "username": "author_two"
+                    },
+                    "language": {
+                        "code": "EN",
+                        "name": "English"
+                    }
+                }
+            ]
         }
     ],
     "pagination": {

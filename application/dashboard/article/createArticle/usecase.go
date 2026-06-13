@@ -1,6 +1,7 @@
 package createarticle
 
 import (
+	"github.com/gofrs/uuid/v5"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/article"
 	"github.com/khanzadimahdi/testproject/domain/language"
@@ -58,6 +59,15 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		}
 	}
 
+	// Generate a new CorrelationUUID if it's not provided in the request
+	if len(request.CorrelationUUID) == 0 {
+		correlationUUID, err := uuid.NewV7()
+		if err != nil {
+			return nil, err
+		}
+		request.CorrelationUUID = correlationUUID.String()
+	}
+
 	a := article.Article{
 		Cover:           request.Cover,
 		Video:           request.Video,
@@ -71,10 +81,13 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		CorrelationUUID: request.CorrelationUUID,
 	}
 
-	uuid, err := uc.articleRepository.Save(&a)
+	_, err := uc.articleRepository.Save(&a)
 	if err != nil {
 		return nil, err
 	}
 
-	return &Response{UUID: uuid}, err
+	return &Response{
+		CorrelationUUID: request.CorrelationUUID,
+		LanguageCode:    a.LanguageCode,
+	}, nil
 }

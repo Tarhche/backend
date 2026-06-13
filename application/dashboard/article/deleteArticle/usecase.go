@@ -15,5 +15,5 @@ func NewUseCase(articleRepository article.Repository) *UseCase {
 }
 
 func (uc *UseCase) Execute(request *Request) error {
-	return uc.articleRepository.Delete(request.ArticleUUID)
+	return uc.articleRepository.DeleteByCorrelationUUIDAndLanguage(request.CorrelationUUID, request.LanguageCode)
 }

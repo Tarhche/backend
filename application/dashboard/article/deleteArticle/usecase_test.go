@@ -18,10 +18,10 @@ func TestUseCase_Execute(t *testing.T) {
 		var (
 			articleRepository articles.MockArticlesRepository
 
-			r = Request{ArticleUUID: "article-uuid"}
+			r = Request{CorrelationUUID: "correlation-uuid", LanguageCode: "EN"}
 		)
 
-		articleRepository.On("Delete", r.ArticleUUID).Return(nil)
+		articleRepository.On("DeleteByCorrelationUUIDAndLanguage", r.CorrelationUUID, r.LanguageCode).Return(nil)
 		defer articleRepository.AssertExpectations(t)
 
 		err := NewUseCase(&articleRepository).Execute(&r)
@@ -35,11 +35,11 @@ func TestUseCase_Execute(t *testing.T) {
 		var (
 			articleRepository articles.MockArticlesRepository
 
-			r             = Request{ArticleUUID: "article-uuid"}
+			r             = Request{CorrelationUUID: "correlation-uuid", LanguageCode: "EN"}
 			expectedError = errors.New("article deletion failed")
 		)
 
-		articleRepository.On("Delete", r.ArticleUUID).Return(expectedError)
+		articleRepository.On("DeleteByCorrelationUUIDAndLanguage", r.CorrelationUUID, r.LanguageCode).Return(expectedError)
 		defer articleRepository.AssertExpectations(t)
 
 		err := NewUseCase(&articleRepository).Execute(&r)

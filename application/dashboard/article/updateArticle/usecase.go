@@ -43,28 +43,13 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		}, nil
 	}
 
-	existing, err := uc.articleRepository.GetOne(request.UUID)
+	existing, err := uc.articleRepository.GetByCorrelationUUIDAndLanguage(request.CorrelationUUID, request.LanguageCode)
 	if err != nil {
 		return nil, err
 	}
 
-	if len(request.CorrelationUUID) > 0 {
-		exist, err := uc.articleRepository.CorrelationExist(request.CorrelationUUID)
-		if err != nil {
-			return nil, err
-		}
-
-		if !exist {
-			return &Response{
-				ValidationErrors: domain.ValidationErrors{
-					"correlation_uuid": uc.translator.Translate("invalid_value"),
-				},
-			}, nil
-		}
-	}
-
 	a := article.Article{
-		UUID:            request.UUID,
+		UUID:            existing.UUID,
 		Cover:           request.Cover,
 		Video:           request.Video,
 		Title:           request.Title,

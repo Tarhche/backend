@@ -24,16 +24,19 @@ func TestUseCase_Execute(t *testing.T) {
 			articleRepository articles.MockArticlesRepository
 			userRepository    users.MockUsersRepository
 
-			articleUUID = "article-uuid"
-			authorUUID  = "author-uuid"
-			a           = article.Article{
-				UUID:       articleUUID,
-				AuthorUUID: authorUUID,
+			authorUUID = "author-uuid"
+			r          = Request{CorrelationUUID: "correlation-uuid", LanguageCode: "EN"}
+			a          = article.Article{
+				UUID:            "article-uuid",
+				CorrelationUUID: r.CorrelationUUID,
+				LanguageCode:    r.LanguageCode,
+				AuthorUUID:      authorUUID,
 			}
 			u = user.User{UUID: authorUUID, Name: "author-name", Avatar: "author-avatar", Username: "author-username"}
 
 			expectedResponse = Response{
-				UUID: articleUUID,
+				CorrelationUUID: r.CorrelationUUID,
+				LanguageCode:    r.LanguageCode,
 				Author: author{
 					UUID:     authorUUID,
 					Name:     "author-name",
@@ -45,13 +48,13 @@ func TestUseCase_Execute(t *testing.T) {
 			}
 		)
 
-		articleRepository.On("GetOne", articleUUID).Return(a, nil)
+		articleRepository.On("GetByCorrelationUUIDAndLanguage", r.CorrelationUUID, r.LanguageCode).Return(a, nil)
 		defer articleRepository.AssertExpectations(t)
 
 		userRepository.On("GetOne", authorUUID).Return(u, nil)
 		defer userRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&articleRepository, &userRepository).Execute(articleUUID)
+		response, err := NewUseCase(&articleRepository, &userRepository).Execute(&r)
 
 		assert.NoError(t, err)
 		assert.Equal(t, &expectedResponse, response)
@@ -64,14 +67,14 @@ func TestUseCase_Execute(t *testing.T) {
 			articleRepository articles.MockArticlesRepository
 			userRepository    users.MockUsersRepository
 
-			articleUUID   = "article-uuid"
+			r             = Request{CorrelationUUID: "correlation-uuid", LanguageCode: "EN"}
 			expectedError = errors.New("error")
 		)
 
-		articleRepository.On("GetOne", articleUUID).Return(article.Article{}, expectedError)
+		articleRepository.On("GetByCorrelationUUIDAndLanguage", r.CorrelationUUID, r.LanguageCode).Return(article.Article{}, expectedError)
 		defer articleRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&articleRepository, &userRepository).Execute(articleUUID)
+		response, err := NewUseCase(&articleRepository, &userRepository).Execute(&r)
 
 		userRepository.AssertNotCalled(t, "GetOne")
 
@@ -86,22 +89,24 @@ func TestUseCase_Execute(t *testing.T) {
 			articleRepository articles.MockArticlesRepository
 			userRepository    users.MockUsersRepository
 
-			articleUUID   = "article-uuid"
 			authorUUID    = "author-uuid"
 			expectedError = errors.New("error")
+			r             = Request{CorrelationUUID: "correlation-uuid", LanguageCode: "EN"}
 			a             = article.Article{
-				UUID:       articleUUID,
-				AuthorUUID: authorUUID,
+				UUID:            "article-uuid",
+				CorrelationUUID: r.CorrelationUUID,
+				LanguageCode:    r.LanguageCode,
+				AuthorUUID:      authorUUID,
 			}
 		)
 
-		articleRepository.On("GetOne", articleUUID).Return(a, nil)
+		articleRepository.On("GetByCorrelationUUIDAndLanguage", r.CorrelationUUID, r.LanguageCode).Return(a, nil)
 		defer articleRepository.AssertExpectations(t)
 
 		userRepository.On("GetOne", authorUUID).Return(user.User{}, expectedError)
 		defer userRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&articleRepository, &userRepository).Execute(articleUUID)
+		response, err := NewUseCase(&articleRepository, &userRepository).Execute(&r)
 
 		assert.ErrorIs(t, err, expectedError)
 		assert.Nil(t, response)
@@ -114,28 +119,31 @@ func TestUseCase_Execute(t *testing.T) {
 			articleRepository articles.MockArticlesRepository
 			userRepository    users.MockUsersRepository
 
-			articleUUID = "article-uuid"
-			authorUUID  = "missing-author-uuid"
-			a           = article.Article{
-				UUID:       articleUUID,
-				AuthorUUID: authorUUID,
+			authorUUID = "missing-author-uuid"
+			r          = Request{CorrelationUUID: "correlation-uuid", LanguageCode: "EN"}
+			a          = article.Article{
+				UUID:            "article-uuid",
+				CorrelationUUID: r.CorrelationUUID,
+				LanguageCode:    r.LanguageCode,
+				AuthorUUID:      authorUUID,
 			}
 
 			expectedResponse = Response{
-				UUID:        articleUUID,
-				Author:      author{},
-				Tags:        []string{},
-				PublishedAt: a.PublishedAt.Format(time.RFC3339),
+				CorrelationUUID: r.CorrelationUUID,
+				LanguageCode:    r.LanguageCode,
+				Author:          author{},
+				Tags:            []string{},
+				PublishedAt:     a.PublishedAt.Format(time.RFC3339),
 			}
 		)
 
-		articleRepository.On("GetOne", articleUUID).Return(a, nil)
+		articleRepository.On("GetByCorrelationUUIDAndLanguage", r.CorrelationUUID, r.LanguageCode).Return(a, nil)
 		defer articleRepository.AssertExpectations(t)
 
 		userRepository.On("GetOne", authorUUID).Return(user.User{}, domain.ErrNotExists)
 		defer userRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&articleRepository, &userRepository).Execute(articleUUID)
+		response, err := NewUseCase(&articleRepository, &userRepository).Execute(&r)
 
 		assert.NoError(t, err)
 		assert.Equal(t, &expectedResponse, response)

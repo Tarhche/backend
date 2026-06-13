@@ -52,35 +52,49 @@ func toDomain(a ArticleBson) article.Article {
 	}
 }
 
-func (r *ArticlesRepository) GetAll(offset uint, limit uint) ([]article.Article, error) {
+func (r *ArticlesRepository) GetCorrelationUUIDs(offset uint, limit uint) ([]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
 	defer cancel()
 
-	o := int64(offset)
-	l := int64(limit)
-	desc := bson.D{{Key: "_id", Value: -1}}
+	// One entry per correlation group, ordered by the newest article in the
+	// group (its max _id, which is time-ordered) so paging is deterministic.
+	// "$gt: \"\"" keeps only non-empty strings (excluding "", null and missing)
+	// and, being a range predicate, can use an index unlike $ne/$nin/$expr.
+	pipeline := mongo.Pipeline{
+		bson.D{{Key: "$match", Value: bson.M{"correlation_uuid": bson.M{"$gt": ""}}}},
+		bson.D{{Key: "$sort", Value: bson.D{{Key: "_id", Value: -1}}}},
+		bson.D{{Key: "$group", Value: bson.M{
+			"_id":    "$correlation_uuid",
+			"max_id": bson.M{"$first": "$_id"},
+		}}},
+		bson.D{{Key: "$sort", Value: bson.D{{Key: "max_id", Value: -1}}}},
+		bson.D{{Key: "$skip", Value: int64(offset)}},
+		bson.D{{Key: "$limit", Value: int64(limit)}},
+	}
 
-	cur, err := r.collection.Find(ctx, bson.D{}, options.Find().SetLimit(l).SetSkip(o).SetSort(desc))
+	cur, err := r.collection.Aggregate(ctx, pipeline)
 	if err != nil {
 		return nil, err
 	}
 	defer cur.Close(ctx)
 
-	items := make([]article.Article, 0, limit)
+	correlationUUIDs := make([]string, 0, limit)
 	for cur.Next(ctx) {
-		var a ArticleBson
+		var doc struct {
+			CorrelationUUID string `bson:"_id"`
+		}
 
-		if err := cur.Decode(&a); err != nil {
+		if err := cur.Decode(&doc); err != nil {
 			return nil, err
 		}
-		items = append(items, toDomain(a))
+		correlationUUIDs = append(correlationUUIDs, doc.CorrelationUUID)
 	}
 
 	if err := cur.Err(); err != nil {
 		return nil, err
 	}
 
-	return items, nil
+	return correlationUUIDs, nil
 }
 
 func (r *ArticlesRepository) GetAllPublished(language string, offset uint, limit uint) ([]article.Article, error) {
@@ -355,11 +369,14 @@ func (r *ArticlesRepository) GetPublishedByAuthor(authorUUID string, language st
 	return items, nil
 }
 
-func (r *ArticlesRepository) GetOne(UUID string) (article.Article, error) {
+func (r *ArticlesRepository) GetByCorrelationUUIDAndLanguage(correlationUUID string, languageCode string) (article.Article, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
 	defer cancel()
 
-	filter := bson.D{{Key: "_id", Value: UUID}}
+	filter := bson.M{"correlation_uuid": correlationUUID}
+	if len(languageCode) > 0 {
+		filter["language_code"] = languageCode
+	}
 
 	var a ArticleBson
 	if err := r.collection.FindOne(ctx, filter).Decode(&a); err != nil {
@@ -395,16 +412,36 @@ func (r *ArticlesRepository) GetOnePublished(correlationUUID string, languageCod
 	return toDomain(a), nil
 }
 
-func (r *ArticlesRepository) Count() (uint, error) {
+func (r *ArticlesRepository) CountByCorrelation() (uint, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
 	defer cancel()
 
-	c, err := r.collection.CountDocuments(ctx, bson.D{})
-	if err != nil {
-		return uint(c), err
+	pipeline := mongo.Pipeline{
+		bson.D{{Key: "$match", Value: bson.M{"correlation_uuid": bson.M{"$gt": ""}}}},
+		bson.D{{Key: "$group", Value: bson.M{"_id": "$correlation_uuid"}}},
+		bson.D{{Key: "$count", Value: "count"}},
 	}
 
-	return uint(c), nil
+	cur, err := r.collection.Aggregate(ctx, pipeline)
+	if err != nil {
+		return 0, err
+	}
+	defer cur.Close(ctx)
+
+	var result struct {
+		Count uint `bson:"count"`
+	}
+	if cur.Next(ctx) {
+		if err := cur.Decode(&result); err != nil {
+			return 0, err
+		}
+	}
+
+	if err := cur.Err(); err != nil {
+		return 0, err
+	}
+
+	return result.Count, nil
 }
 
 func (r *ArticlesRepository) CountPublished(language string) (uint, error) {
@@ -438,10 +475,6 @@ func (r *ArticlesRepository) Save(a *article.Article) (string, error) {
 		a.UUID = UUID.String()
 	}
 
-	if len(a.CorrelationUUID) == 0 {
-		a.CorrelationUUID = a.UUID
-	}
-
 	update := ArticleBson{
 		UUID:            a.UUID,
 		Cover:           a.Cover,
@@ -471,11 +504,16 @@ func (r *ArticlesRepository) Save(a *article.Article) (string, error) {
 	return a.UUID, nil
 }
 
-func (r *ArticlesRepository) Delete(UUID string) error {
+func (r *ArticlesRepository) DeleteByCorrelationUUIDAndLanguage(correlationUUID string, languageCode string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
 	defer cancel()
 
-	_, err := r.collection.DeleteOne(ctx, bson.D{{Key: "_id", Value: UUID}})
+	filter := bson.M{"correlation_uuid": correlationUUID}
+	if len(languageCode) > 0 {
+		filter["language_code"] = languageCode
+	}
+
+	_, err := r.collection.DeleteOne(ctx, filter)
 
 	return err
 }

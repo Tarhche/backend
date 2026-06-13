@@ -46,9 +46,11 @@ definitions:
     type: object
   createarticle.Response:
     properties:
+      correlation_uuid:
+        type: string
       errors:
         $ref: '#/definitions/domain.ValidationErrors'
-      uuid:
+      language_code:
         type: string
     type: object
   createelement.Request:
@@ -552,11 +554,19 @@ definitions:
       uuid:
         type: string
     type: object
-  getarticles.languageResponse:
+  getarticles.corrolatedArticleResponse:
     properties:
-      code:
+      author:
+        $ref: '#/definitions/getarticles.author'
+      cover:
         type: string
-      name:
+      language:
+        $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_article_getArticles.languageResponse'
+      published_at:
+        type: string
+      title:
+        type: string
+      video:
         type: string
     type: object
   getarticles.pagination:
@@ -878,7 +888,7 @@ definitions:
           $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_article_getArticles.articleResponse'
         type: array
       language_code:
-        $ref: '#/definitions/getarticles.languageResponse'
+        $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_article_getArticles.languageResponse'
       pagination:
         $ref: '#/definitions/getarticles.paginationResponse'
     type: object
@@ -888,7 +898,7 @@ definitions:
         $ref: '#/definitions/getarticles.authorResponse'
       available_languages:
         items:
-          $ref: '#/definitions/getarticles.languageResponse'
+          $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_article_getArticles.languageResponse'
         type: array
       cover:
         type: string
@@ -901,6 +911,13 @@ definitions:
       uuid:
         type: string
       video:
+        type: string
+    type: object
+  github_com_khanzadimahdi_testproject_application_article_getArticles.languageResponse:
+    properties:
+      code:
+        type: string
+      name:
         type: string
     type: object
   github_com_khanzadimahdi_testproject_application_comment_createComment.Request:
@@ -978,8 +995,6 @@ definitions:
         type: array
       title:
         type: string
-      uuid:
-        type: string
       video:
         type: string
       view_count:
@@ -996,17 +1011,18 @@ definitions:
     type: object
   github_com_khanzadimahdi_testproject_application_dashboard_article_getArticles.articleResponse:
     properties:
-      author:
-        $ref: '#/definitions/getarticles.author'
-      cover:
+      correlation_uuid:
         type: string
-      published_at:
+      corrolated_items:
+        items:
+          $ref: '#/definitions/getarticles.corrolatedArticleResponse'
+        type: array
+    type: object
+  github_com_khanzadimahdi_testproject_application_dashboard_article_getArticles.languageResponse:
+    properties:
+      code:
         type: string
-      title:
-        type: string
-      uuid:
-        type: string
-      video:
+      name:
         type: string
     type: object
   github_com_khanzadimahdi_testproject_application_dashboard_comment_createComment.Request:
@@ -1464,8 +1480,6 @@ definitions:
           type: string
         type: array
       title:
-        type: string
-      uuid:
         type: string
       video:
         type: string
@@ -2006,7 +2020,7 @@ paths:
     get:
       consumes:
       - application/json
-      description: page through articles in dashboard
+      description: page through articles in dashboard, grouped by correlation uuid
       parameters:
       - default: 1
         description: Page
@@ -2093,15 +2107,20 @@ paths:
       summary: Update a dashboard article
       tags:
       - dashboard articles
-  /dashboard/articles/{uuid}:
+  /dashboard/articles/{correlationUUID}/{language_code}:
     delete:
       consumes:
       - application/json
-      description: remove an article by UUID
+      description: remove an article by correlation uuid and language
       parameters:
-      - description: Article UUID
+      - description: Article correlation UUID
         in: path
-        name: uuid
+        name: correlationUUID
+        required: true
+        type: string
+      - description: Language code
+        in: path
+        name: language_code
         required: true
         type: string
       produces:
@@ -2120,11 +2139,16 @@ paths:
     get:
       consumes:
       - application/json
-      description: retrieve one article by UUID
+      description: retrieve one article by correlation uuid and language
       parameters:
-      - description: Article UUID
+      - description: Article correlation UUID
         in: path
-        name: uuid
+        name: correlationUUID
+        required: true
+        type: string
+      - description: Language code
+        in: path
+        name: language_code
         required: true
         type: string
       produces:
@@ -3555,9 +3579,9 @@ paths:
       description: returns the contents used for home page
       parameters:
       - default: EN
-        description: Language key (e.g. EN, FA)
+        description: Language code (e.g. EN, FA)
         in: query
-        name: language
+        name: language_code
         type: string
       produces:
       - application/json

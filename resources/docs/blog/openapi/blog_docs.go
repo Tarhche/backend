@@ -682,7 +682,7 @@ const docTemplateblog = `{
         },
         "/dashboard/articles": {
             "get": {
-                "description": "page through articles in dashboard",
+                "description": "page through articles in dashboard, grouped by correlation uuid",
                 "consumes": [
                     "application/json"
                 ],
@@ -815,9 +815,9 @@ const docTemplateblog = `{
                 }
             }
         },
-        "/dashboard/articles/{uuid}": {
+        "/dashboard/articles/{correlationUUID}/{language_code}": {
             "get": {
-                "description": "retrieve one article by UUID",
+                "description": "retrieve one article by correlation uuid and language",
                 "consumes": [
                     "application/json"
                 ],
@@ -831,8 +831,15 @@ const docTemplateblog = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Article UUID",
-                        "name": "uuid",
+                        "description": "Article correlation UUID",
+                        "name": "correlationUUID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Language code",
+                        "name": "language_code",
                         "in": "path",
                         "required": true
                     }
@@ -861,7 +868,7 @@ const docTemplateblog = `{
                 }
             },
             "delete": {
-                "description": "remove an article by UUID",
+                "description": "remove an article by correlation uuid and language",
                 "consumes": [
                     "application/json"
                 ],
@@ -875,8 +882,15 @@ const docTemplateblog = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Article UUID",
-                        "name": "uuid",
+                        "description": "Article correlation UUID",
+                        "name": "correlationUUID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Language code",
+                        "name": "language_code",
                         "in": "path",
                         "required": true
                     }
@@ -2984,8 +2998,8 @@ const docTemplateblog = `{
                     {
                         "type": "string",
                         "default": "EN",
-                        "description": "Language key (e.g. EN, FA)",
-                        "name": "language",
+                        "description": "Language code (e.g. EN, FA)",
+                        "name": "language_code",
                         "in": "query"
                     }
                 ],
@@ -3418,10 +3432,13 @@ const docTemplateblog = `{
         "createarticle.Response": {
             "type": "object",
             "properties": {
+                "correlation_uuid": {
+                    "type": "string"
+                },
                 "errors": {
                     "$ref": "#/definitions/domain.ValidationErrors"
                 },
-                "uuid": {
+                "language_code": {
                     "type": "string"
                 }
             }
@@ -4200,13 +4217,25 @@ const docTemplateblog = `{
                 }
             }
         },
-        "getarticles.languageResponse": {
+        "getarticles.corrolatedArticleResponse": {
             "type": "object",
             "properties": {
-                "code": {
+                "author": {
+                    "$ref": "#/definitions/getarticles.author"
+                },
+                "cover": {
                     "type": "string"
                 },
-                "name": {
+                "language": {
+                    "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_article_getArticles.languageResponse"
+                },
+                "published_at": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "video": {
                     "type": "string"
                 }
             }
@@ -4701,7 +4730,7 @@ const docTemplateblog = `{
                     }
                 },
                 "language_code": {
-                    "$ref": "#/definitions/getarticles.languageResponse"
+                    "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_article_getArticles.languageResponse"
                 },
                 "pagination": {
                     "$ref": "#/definitions/getarticles.paginationResponse"
@@ -4717,7 +4746,7 @@ const docTemplateblog = `{
                 "available_languages": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/getarticles.languageResponse"
+                        "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_article_getArticles.languageResponse"
                     }
                 },
                 "cover": {
@@ -4736,6 +4765,17 @@ const docTemplateblog = `{
                     "type": "string"
                 },
                 "video": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_khanzadimahdi_testproject_application_article_getArticles.languageResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "name": {
                     "type": "string"
                 }
             }
@@ -4855,9 +4895,6 @@ const docTemplateblog = `{
                 "title": {
                     "type": "string"
                 },
-                "uuid": {
-                    "type": "string"
-                },
                 "video": {
                     "type": "string"
                 },
@@ -4883,22 +4920,24 @@ const docTemplateblog = `{
         "github_com_khanzadimahdi_testproject_application_dashboard_article_getArticles.articleResponse": {
             "type": "object",
             "properties": {
-                "author": {
-                    "$ref": "#/definitions/getarticles.author"
-                },
-                "cover": {
+                "correlation_uuid": {
                     "type": "string"
                 },
-                "published_at": {
+                "corrolated_items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/getarticles.corrolatedArticleResponse"
+                    }
+                }
+            }
+        },
+        "github_com_khanzadimahdi_testproject_application_dashboard_article_getArticles.languageResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
                     "type": "string"
                 },
-                "title": {
-                    "type": "string"
-                },
-                "uuid": {
-                    "type": "string"
-                },
-                "video": {
+                "name": {
                     "type": "string"
                 }
             }
@@ -5603,9 +5642,6 @@ const docTemplateblog = `{
                     }
                 },
                 "title": {
-                    "type": "string"
-                },
-                "uuid": {
                     "type": "string"
                 },
                 "video": {

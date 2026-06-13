@@ -22,7 +22,7 @@ func NewHomeHandler(useCase *home.UseCase) *homeHandler {
 // @Tags		home
 // @Accept		json
 // @Produce		json
-// @Param		language	query	string	false	"Language key (e.g. EN, FA)"	default(EN)
+// @Param		language_code	query	string	false	"Language code (e.g. EN, FA)"	default(EN)
 // @Success		200			{object}	home.Response
 // @Failure		500			{object}	map[string]interface{}
 // @Router			/home [get]

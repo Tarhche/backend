@@ -1,4 +1,4 @@
-package deletearticle
+package getarticle
 
 type Request struct {
 	CorrelationUUID string

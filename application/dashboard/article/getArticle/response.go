@@ -8,7 +8,6 @@ import (
 )
 
 type Response struct {
-	UUID            string   `json:"uuid"`
 	Cover           string   `json:"cover"`
 	Video           string   `json:"video"`
 	Title           string   `json:"title"`
@@ -34,7 +33,6 @@ func NewResponse(a article.Article, u user.User) *Response {
 	copy(tags, a.Tags)
 
 	return &Response{
-		UUID:        a.UUID,
 		Cover:       a.Cover,
 		Video:       a.Video,
 		Title:       a.Title,

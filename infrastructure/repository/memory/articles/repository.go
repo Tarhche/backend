@@ -2,6 +2,7 @@ package repository
 
 import (
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -26,26 +27,41 @@ func NewArticlesRepository(datastore *sync.Map) *ArticlesRepository {
 	}
 }
 
-func (r *ArticlesRepository) GetAll(offset uint, limit uint) ([]article.Article, error) {
-	var (
-		a []article.Article
-		i uint
-		j uint
-	)
-
-	r.datastore.Range(func(key, value any) bool {
-		if i < offset {
-			i++
+func (r *ArticlesRepository) GetCorrelationUUIDs(offset uint, limit uint) ([]string, error) {
+	// track the newest article (max UUID, which is time-ordered) per correlation
+	// so groups can be ordered deterministically.
+	maxUUID := make(map[string]string)
+	r.datastore.Range(func(_, value any) bool {
+		v := value.(article.Article)
+		if len(v.CorrelationUUID) == 0 {
 			return true
 		}
-
-		a = append(a, value.(article.Article))
-		j++
-
-		return j < limit
+		if cur, ok := maxUUID[v.CorrelationUUID]; !ok || strings.Compare(v.UUID, cur) > 0 {
+			maxUUID[v.CorrelationUUID] = v.UUID
+		}
+		return true
 	})
 
-	return a, nil
+	correlationUUIDs := make([]string, 0, len(maxUUID))
+	for correlationUUID := range maxUUID {
+		correlationUUIDs = append(correlationUUIDs, correlationUUID)
+	}
+
+	// newest group first
+	slices.SortFunc(correlationUUIDs, func(a, b string) int {
+		return strings.Compare(maxUUID[b], maxUUID[a])
+	})
+
+	if offset >= uint(len(correlationUUIDs)) {
+		return []string{}, nil
+	}
+
+	end := offset + limit
+	if end > uint(len(correlationUUIDs)) {
+		end = uint(len(correlationUUIDs))
+	}
+
+	return correlationUUIDs[offset:end], nil
 }
 
 func (r *ArticlesRepository) GetAllPublished(languageCode string, offset uint, limit uint) ([]article.Article, error) {
@@ -166,13 +182,32 @@ func (r *ArticlesRepository) GetPublishedByAuthor(authorUUID string, languageCod
 	return nil, nil
 }
 
-func (r *ArticlesRepository) GetOne(UUID string) (article.Article, error) {
-	a, ok := r.datastore.Load(UUID)
+func (r *ArticlesRepository) GetByCorrelationUUIDAndLanguage(correlationUUID string, languageCode string) (article.Article, error) {
+	var (
+		found article.Article
+		ok    bool
+	)
+
+	r.datastore.Range(func(_, value any) bool {
+		item := value.(article.Article)
+		if item.CorrelationUUID != correlationUUID {
+			return true
+		}
+		if len(languageCode) > 0 && item.LanguageCode != languageCode {
+			return true
+		}
+
+		found = item
+		ok = true
+
+		return false
+	})
+
 	if !ok {
 		return article.Article{}, domain.ErrNotExists
 	}
 
-	return a.(article.Article), nil
+	return found, nil
 }
 
 func (r *ArticlesRepository) GetOnePublished(correlationUUID string, languageCode string) (article.Article, error) {
@@ -206,16 +241,20 @@ func (r *ArticlesRepository) GetOnePublished(correlationUUID string, languageCod
 	return found, nil
 }
 
-func (r *ArticlesRepository) Count() (uint, error) {
-	var c uint
+func (r *ArticlesRepository) CountByCorrelation() (uint, error) {
+	seen := make(map[string]struct{})
 
-	r.datastore.Range(func(_, _ any) bool {
-		c++
+	r.datastore.Range(func(_, value any) bool {
+		v := value.(article.Article)
+		if len(v.CorrelationUUID) == 0 {
+			return true
+		}
+		seen[v.CorrelationUUID] = struct{}{}
 
 		return true
 	})
 
-	return c, nil
+	return uint(len(seen)), nil
 }
 
 func (r *ArticlesRepository) CountPublished(languageCode string) (uint, error) {
@@ -246,17 +285,25 @@ func (r *ArticlesRepository) Save(a *article.Article) (string, error) {
 		a.UUID = UUID.String()
 	}
 
-	if len(a.CorrelationUUID) == 0 {
-		a.CorrelationUUID = a.UUID
-	}
-
 	r.datastore.Store(a.UUID, *a)
 
 	return a.UUID, nil
 }
 
-func (r *ArticlesRepository) Delete(UUID string) error {
-	r.datastore.Delete(UUID)
+func (r *ArticlesRepository) DeleteByCorrelationUUIDAndLanguage(correlationUUID string, languageCode string) error {
+	r.datastore.Range(func(key, value any) bool {
+		item := value.(article.Article)
+		if item.CorrelationUUID != correlationUUID {
+			return true
+		}
+		if len(languageCode) > 0 && item.LanguageCode != languageCode {
+			return true
+		}
+
+		r.datastore.Delete(key)
+
+		return true
+	})
 
 	return nil
 }

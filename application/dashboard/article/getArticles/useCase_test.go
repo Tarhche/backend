@@ -3,13 +3,14 @@ package getarticles
 import (
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 
 	"github.com/khanzadimahdi/testproject/domain/article"
+	"github.com/khanzadimahdi/testproject/domain/language"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/articles"
+	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/languages"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
 )
 
@@ -20,113 +21,153 @@ func TestUseCase_Execute(t *testing.T) {
 		t.Parallel()
 
 		var (
-			articleRepository articles.MockArticlesRepository
-			userRepository    users.MockUsersRepository
+			articleRepository  articles.MockArticlesRepository
+			userRepository     users.MockUsersRepository
+			languageRepository languages.MockLanguagesRepository
+
+			correlationUUIDs = []string{"correlation-1", "correlation-2"}
 
 			a = []article.Article{
-				{
-					Title:      "article-title-1",
-					UUID:       "article-uuid-1",
-					Body:       "body-1",
-					Excerpt:    "excerpt-1",
-					AuthorUUID: "author-uuid-1",
-				},
-				{
-					UUID:       "article-uuid-2",
-					Tags:       []string{"tag-1", "tag-2"},
-					AuthorUUID: "author-uuid-2",
-				},
-				{
-					UUID:        "article-uuid-3",
-					Tags:        []string{},
-					PublishedAt: time.Now(),
-					AuthorUUID:  "author-uuid-1",
-				},
+				{UUID: "a1", CorrelationUUID: "correlation-1", LanguageCode: "EN", Cover: "cover-1", Title: "title-1-en", AuthorUUID: "author-1"},
+				{UUID: "a2", CorrelationUUID: "correlation-1", LanguageCode: "FA", Title: "title-1-fa", AuthorUUID: "author-1"},
+				{UUID: "a3", CorrelationUUID: "correlation-2", LanguageCode: "EN", Title: "title-2-en", AuthorUUID: "author-2"},
 			}
 			u = []user.User{
-				{UUID: "author-uuid-1", Name: "author-name-1", Avatar: "author-avatar-1", Username: "author-username-1"},
-				{UUID: "author-uuid-2", Name: "author-name-2", Avatar: "author-avatar-2", Username: "author-username-2"},
+				{UUID: "author-1", Name: "Author One", Avatar: "a1.png", Username: "author_one"},
+				{UUID: "author-2", Name: "Author Two", Avatar: "a2.png", Username: "author_two"},
+			}
+			l = []language.Language{
+				{Code: "EN", Name: "English"},
+				{Code: "FA", Name: "Persian"},
 			}
 
-			r = Request{
-				Page: 0,
-			}
+			r = Request{Page: 0}
 
 			expectedResponse = Response{
 				Items: []articleResponse{
 					{
-						UUID:        a[0].UUID,
-						Title:       a[0].Title,
-						PublishedAt: "0001-01-01T00:00:00Z",
-						Author: author{
-							UUID:     "author-uuid-1",
-							Name:     "author-name-1",
-							Avatar:   "author-avatar-1",
-							Username: "author-username-1",
+						CorrelationUUID: "correlation-1",
+						CorrolatedItems: []corrolatedArticleResponse{
+							{
+								Cover:       "cover-1",
+								Title:       "title-1-en",
+								PublishedAt: "0001-01-01T00:00:00Z",
+								Author:      author{UUID: "author-1", Name: "Author One", Avatar: "a1.png", Username: "author_one"},
+								Language:    languageResponse{Code: "EN", Name: "English"},
+							},
+							{
+								Title:       "title-1-fa",
+								PublishedAt: "0001-01-01T00:00:00Z",
+								Author:      author{UUID: "author-1", Name: "Author One", Avatar: "a1.png", Username: "author_one"},
+								Language:    languageResponse{Code: "FA", Name: "Persian"},
+							},
 						},
 					},
 					{
-						UUID:        a[1].UUID,
-						PublishedAt: "0001-01-01T00:00:00Z",
-						Author: author{
-							UUID:     "author-uuid-2",
-							Name:     "author-name-2",
-							Avatar:   "author-avatar-2",
-							Username: "author-username-2",
-						},
-					},
-					{
-						UUID:        a[2].UUID,
-						PublishedAt: a[2].PublishedAt.Format(time.RFC3339),
-						Author: author{
-							UUID:     "author-uuid-1",
-							Name:     "author-name-1",
-							Avatar:   "author-avatar-1",
-							Username: "author-username-1",
+						CorrelationUUID: "correlation-2",
+						CorrolatedItems: []corrolatedArticleResponse{
+							{
+								Title:       "title-2-en",
+								PublishedAt: "0001-01-01T00:00:00Z",
+								Author:      author{UUID: "author-2", Name: "Author Two", Avatar: "a2.png", Username: "author_two"},
+								Language:    languageResponse{Code: "EN", Name: "English"},
+							},
 						},
 					},
 				},
-				Pagination: pagination{
-					CurrentPage: 1,
-					TotalPages:  1,
-				},
+				Pagination: pagination{CurrentPage: 1, TotalPages: 1},
 			}
 		)
 
-		articleRepository.On("Count").Once().Return(uint(len(a)), nil)
-		articleRepository.On("GetAll", uint(0), uint(20)).Return(a, nil)
+		articleRepository.On("CountByCorrelation").Once().Return(uint(2), nil)
+		articleRepository.On("GetCorrelationUUIDs", uint(0), uint(20)).Once().Return(correlationUUIDs, nil)
+		articleRepository.On("GetByCorrelationUUIDs", correlationUUIDs, "").Once().Return(a, nil)
 		defer articleRepository.AssertExpectations(t)
 
-		userRepository.On("GetByUUIDs", []string{"author-uuid-1", "author-uuid-2", "author-uuid-1"}).Return(u, nil)
+		userRepository.On("GetByUUIDs", []string{"author-1", "author-1", "author-2"}).Once().Return(u, nil)
 		defer userRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&articleRepository, &userRepository).Execute(&r)
+		languageRepository.On("GetByCodes", []string{"EN", "FA", "EN"}).Once().Return(l, nil)
+		defer languageRepository.AssertExpectations(t)
+
+		response, err := NewUseCase(&articleRepository, &userRepository, &languageRepository).Execute(&r)
 
 		assert.NoError(t, err)
 		assert.Equal(t, &expectedResponse, response)
 	})
 
-	t.Run("counting articles fails", func(t *testing.T) {
+	t.Run("no data", func(t *testing.T) {
 		t.Parallel()
 
 		var (
-			articleRepository articles.MockArticlesRepository
-			userRepository    users.MockUsersRepository
+			articleRepository  articles.MockArticlesRepository
+			userRepository     users.MockUsersRepository
+			languageRepository languages.MockLanguagesRepository
 
-			r = Request{
-				Page: 0,
+			r = Request{Page: 0}
+
+			expectedResponse = Response{
+				Items:      []articleResponse{},
+				Pagination: pagination{CurrentPage: 1, TotalPages: 0},
 			}
-
-			expectedErr = errors.New("get articles failed")
 		)
 
-		articleRepository.On("Count").Once().Return(uint(0), expectedErr)
+		articleRepository.On("CountByCorrelation").Once().Return(uint(0), nil)
+		articleRepository.On("GetCorrelationUUIDs", uint(0), uint(20)).Once().Return([]string{}, nil)
 		defer articleRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&articleRepository, &userRepository).Execute(&r)
+		response, err := NewUseCase(&articleRepository, &userRepository, &languageRepository).Execute(&r)
 
-		articleRepository.AssertNotCalled(t, "GetAll")
+		articleRepository.AssertNotCalled(t, "GetByCorrelationUUIDs")
 		userRepository.AssertNotCalled(t, "GetByUUIDs")
+		languageRepository.AssertNotCalled(t, "GetByCodes")
+
+		assert.NoError(t, err)
+		assert.Equal(t, &expectedResponse, response)
+	})
+
+	t.Run("counting correlations fails", func(t *testing.T) {
+		t.Parallel()
+
+		var (
+			articleRepository  articles.MockArticlesRepository
+			userRepository     users.MockUsersRepository
+			languageRepository languages.MockLanguagesRepository
+
+			r           = Request{Page: 0}
+			expectedErr = errors.New("count failed")
+		)
+
+		articleRepository.On("CountByCorrelation").Once().Return(uint(0), expectedErr)
+		defer articleRepository.AssertExpectations(t)
+
+		response, err := NewUseCase(&articleRepository, &userRepository, &languageRepository).Execute(&r)
+
+		articleRepository.AssertNotCalled(t, "GetCorrelationUUIDs")
+
+		assert.ErrorIs(t, err, expectedErr)
+		assert.Nil(t, response)
+	})
+
+	t.Run("getting correlation uuids fails", func(t *testing.T) {
+		t.Parallel()
+
+		var (
+			articleRepository  articles.MockArticlesRepository
+			userRepository     users.MockUsersRepository
+			languageRepository languages.MockLanguagesRepository
+
+			r           = Request{Page: 0}
+			expectedErr = errors.New("get correlations failed")
+		)
+
+		articleRepository.On("CountByCorrelation").Once().Return(uint(2), nil)
+		articleRepository.On("GetCorrelationUUIDs", uint(0), uint(20)).Once().Return(nil, expectedErr)
+		defer articleRepository.AssertExpectations(t)
+
+		response, err := NewUseCase(&articleRepository, &userRepository, &languageRepository).Execute(&r)
+
+		articleRepository.AssertNotCalled(t, "GetByCorrelationUUIDs")
 
 		assert.ErrorIs(t, err, expectedErr)
 		assert.Nil(t, response)
@@ -136,21 +177,21 @@ func TestUseCase_Execute(t *testing.T) {
 		t.Parallel()
 
 		var (
-			articleRepository articles.MockArticlesRepository
-			userRepository    users.MockUsersRepository
+			articleRepository  articles.MockArticlesRepository
+			userRepository     users.MockUsersRepository
+			languageRepository languages.MockLanguagesRepository
 
-			r = Request{
-				Page: 0,
-			}
-
-			expectedErr = errors.New("get articles failed")
+			correlationUUIDs = []string{"correlation-1"}
+			r                = Request{Page: 0}
+			expectedErr      = errors.New("get articles failed")
 		)
 
-		articleRepository.On("Count").Once().Return(uint(3), nil)
-		articleRepository.On("GetAll", uint(0), uint(20)).Return(nil, expectedErr)
+		articleRepository.On("CountByCorrelation").Once().Return(uint(1), nil)
+		articleRepository.On("GetCorrelationUUIDs", uint(0), uint(20)).Once().Return(correlationUUIDs, nil)
+		articleRepository.On("GetByCorrelationUUIDs", correlationUUIDs, "").Once().Return(nil, expectedErr)
 		defer articleRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&articleRepository, &userRepository).Execute(&r)
+		response, err := NewUseCase(&articleRepository, &userRepository, &languageRepository).Execute(&r)
 
 		userRepository.AssertNotCalled(t, "GetByUUIDs")
 
@@ -162,27 +203,58 @@ func TestUseCase_Execute(t *testing.T) {
 		t.Parallel()
 
 		var (
-			articleRepository articles.MockArticlesRepository
-			userRepository    users.MockUsersRepository
+			articleRepository  articles.MockArticlesRepository
+			userRepository     users.MockUsersRepository
+			languageRepository languages.MockLanguagesRepository
 
-			a = []article.Article{
-				{UUID: "article-uuid-1", AuthorUUID: "author-uuid-1"},
-			}
-			r = Request{
-				Page: 0,
-			}
-
-			expectedErr = errors.New("get authors failed")
+			correlationUUIDs = []string{"correlation-1"}
+			a                = []article.Article{{UUID: "a1", CorrelationUUID: "correlation-1", LanguageCode: "EN", AuthorUUID: "author-1"}}
+			r                = Request{Page: 0}
+			expectedErr      = errors.New("get authors failed")
 		)
 
-		articleRepository.On("Count").Once().Return(uint(1), nil)
-		articleRepository.On("GetAll", uint(0), uint(20)).Return(a, nil)
+		articleRepository.On("CountByCorrelation").Once().Return(uint(1), nil)
+		articleRepository.On("GetCorrelationUUIDs", uint(0), uint(20)).Once().Return(correlationUUIDs, nil)
+		articleRepository.On("GetByCorrelationUUIDs", correlationUUIDs, "").Once().Return(a, nil)
 		defer articleRepository.AssertExpectations(t)
 
-		userRepository.On("GetByUUIDs", []string{"author-uuid-1"}).Return(nil, expectedErr)
+		userRepository.On("GetByUUIDs", []string{"author-1"}).Once().Return(nil, expectedErr)
 		defer userRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&articleRepository, &userRepository).Execute(&r)
+		response, err := NewUseCase(&articleRepository, &userRepository, &languageRepository).Execute(&r)
+
+		languageRepository.AssertNotCalled(t, "GetByCodes")
+
+		assert.ErrorIs(t, err, expectedErr)
+		assert.Nil(t, response)
+	})
+
+	t.Run("getting languages fails", func(t *testing.T) {
+		t.Parallel()
+
+		var (
+			articleRepository  articles.MockArticlesRepository
+			userRepository     users.MockUsersRepository
+			languageRepository languages.MockLanguagesRepository
+
+			correlationUUIDs = []string{"correlation-1"}
+			a                = []article.Article{{UUID: "a1", CorrelationUUID: "correlation-1", LanguageCode: "EN", AuthorUUID: "author-1"}}
+			r                = Request{Page: 0}
+			expectedErr      = errors.New("get languages failed")
+		)
+
+		articleRepository.On("CountByCorrelation").Once().Return(uint(1), nil)
+		articleRepository.On("GetCorrelationUUIDs", uint(0), uint(20)).Once().Return(correlationUUIDs, nil)
+		articleRepository.On("GetByCorrelationUUIDs", correlationUUIDs, "").Once().Return(a, nil)
+		defer articleRepository.AssertExpectations(t)
+
+		userRepository.On("GetByUUIDs", []string{"author-1"}).Once().Return([]user.User{}, nil)
+		defer userRepository.AssertExpectations(t)
+
+		languageRepository.On("GetByCodes", []string{"EN"}).Once().Return(nil, expectedErr)
+		defer languageRepository.AssertExpectations(t)
+
+		response, err := NewUseCase(&articleRepository, &userRepository, &languageRepository).Execute(&r)
 
 		assert.ErrorIs(t, err, expectedErr)
 		assert.Nil(t, response)

@@ -343,7 +343,7 @@ func blog(
 	dashboardCreateArticleUsecase := dashboardCreateArticle.NewUseCase(articlesRepository, languageRepository, validator, translator)
 	dashboardDeleteArticleUsecase := dashboardDeleteArticle.NewUseCase(articlesRepository)
 	dashboardGetArticleUsecase := dashboardGetArticle.NewUseCase(articlesRepository, userRepository)
-	dashboardGetArticlesUsecase := dashboardGetArticles.NewUseCase(articlesRepository, userRepository)
+	dashboardGetArticlesUsecase := dashboardGetArticles.NewUseCase(articlesRepository, userRepository, languageRepository)
 	dashboardUpdateArticleUsecase := dashboardUpdateArticle.NewUseCase(articlesRepository, languageRepository, validator, translator)
 
 	dashboardCreateCommentUsecase := dashboardCreateComment.NewUseCase(commentsRepository, validator)
@@ -478,9 +478,9 @@ func blog(
 
 	// articles
 	mux.Handle("POST /api/dashboard/articles", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardArticleAPI.NewCreateHandler(dashboardCreateArticleUsecase), authorizer, permission.ArticlesCreate), jwt, userRepository))
-	mux.Handle("DELETE /api/dashboard/articles/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardArticleAPI.NewDeleteHandler(dashboardDeleteArticleUsecase), authorizer, permission.ArticlesDelete), jwt, userRepository))
+	mux.Handle("DELETE /api/dashboard/articles/{correlationUUID}/{language_code}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardArticleAPI.NewDeleteHandler(dashboardDeleteArticleUsecase), authorizer, permission.ArticlesDelete), jwt, userRepository))
 	mux.Handle("GET /api/dashboard/articles", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardArticleAPI.NewIndexHandler(dashboardGetArticlesUsecase), authorizer, permission.ArticlesIndex), jwt, userRepository))
-	mux.Handle("GET /api/dashboard/articles/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardArticleAPI.NewShowHandler(dashboardGetArticleUsecase), authorizer, permission.ArticlesShow), jwt, userRepository))
+	mux.Handle("GET /api/dashboard/articles/{correlationUUID}/{language_code}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardArticleAPI.NewShowHandler(dashboardGetArticleUsecase), authorizer, permission.ArticlesShow), jwt, userRepository))
 	mux.Handle("PUT /api/dashboard/articles", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardArticleAPI.NewUpdateHandler(dashboardUpdateArticleUsecase), authorizer, permission.ArticlesUpdate), jwt, userRepository))
 
 	// comments

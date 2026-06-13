@@ -12,10 +12,10 @@ type MockArticlesRepository struct {
 
 var _ article.Repository = &MockArticlesRepository{}
 
-func (r *MockArticlesRepository) GetAll(offset uint, limit uint) ([]article.Article, error) {
+func (r *MockArticlesRepository) GetCorrelationUUIDs(offset uint, limit uint) ([]string, error) {
 	args := r.Mock.Called(offset, limit)
 
-	if a, ok := args.Get(0).([]article.Article); ok {
+	if a, ok := args.Get(0).([]string); ok {
 		return a, args.Error(1)
 	}
 
@@ -32,8 +32,8 @@ func (r *MockArticlesRepository) GetAllPublished(language string, offset uint, l
 	return nil, args.Error(1)
 }
 
-func (r *MockArticlesRepository) GetOne(UUID string) (article.Article, error) {
-	args := r.Mock.Called(UUID)
+func (r *MockArticlesRepository) GetByCorrelationUUIDAndLanguage(correlationUUID string, languageCode string) (article.Article, error) {
+	args := r.Mock.Called(correlationUUID, languageCode)
 
 	return args.Get(0).(article.Article), args.Error(1)
 }
@@ -112,7 +112,7 @@ func (r *MockArticlesRepository) GetPublishedByAuthor(authorUUID string, languag
 	return nil, args.Error(1)
 }
 
-func (r *MockArticlesRepository) Count() (uint, error) {
+func (r *MockArticlesRepository) CountByCorrelation() (uint, error) {
 	args := r.Mock.Called()
 
 	return args.Get(0).(uint), args.Error(1)
@@ -130,8 +130,8 @@ func (r *MockArticlesRepository) Save(a *article.Article) (string, error) {
 	return args.Get(0).(string), args.Error(1)
 }
 
-func (r *MockArticlesRepository) Delete(UUID string) error {
-	args := r.Mock.Called(UUID)
+func (r *MockArticlesRepository) DeleteByCorrelationUUIDAndLanguage(correlationUUID string, languageCode string) error {
+	args := r.Mock.Called(correlationUUID, languageCode)
 
 	return args.Error(0)
 }

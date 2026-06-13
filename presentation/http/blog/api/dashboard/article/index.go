@@ -20,14 +20,14 @@ func NewIndexHandler(useCase *getarticles.UseCase) *indexHandler {
 }
 
 // @Summary		List dashboard articles
-// @Description	page through articles in dashboard
-// @Tags			dashboard articles
-// @Accept			json
+// @Description	page through articles in dashboard, grouped by correlation uuid
+// @Tags		dashboard articles
+// @Accept		json
 // @Produce		json
-// @Param			page	query		int	false	"Page"	default(1)
+// @Param		page		query		int		false	"Page"	default(1)
 // @Success		200		{object}	getarticles.Response
 // @Failure		500		{object}	map[string]interface{}
-// @Router			/dashboard/articles [get]
+// @Router		/dashboard/articles [get]
 func (h *indexHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	var page uint = 1
 	if r.URL.Query().Has("page") {

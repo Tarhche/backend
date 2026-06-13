@@ -32,32 +32,34 @@ func TestUseCase_Execute(t *testing.T) {
 			translator         translator.TranslatorMock
 
 			r = Request{
-				UUID:         "test-article-uuid",
-				Title:        "test title",
-				Excerpt:      "test excerpt",
-				Body:         "test body",
-				AuthorUUID:   "test-author-uuid",
-				Tags:         []string{"tag1", "tag2"},
-				LanguageCode: "EN",
+				CorrelationUUID: "test-correlation-uuid",
+				Title:           "test title",
+				Excerpt:         "test excerpt",
+				Body:            "test body",
+				AuthorUUID:      "test-author-uuid",
+				Tags:            []string{"tag1", "tag2"},
+				LanguageCode:    "EN",
 			}
 			existing = article.Article{
-				UUID:         r.UUID,
-				Title:        "old title",
-				LanguageCode: "EN",
-				ViewCount:    7,
+				UUID:            "test-article-uuid",
+				CorrelationUUID: r.CorrelationUUID,
+				Title:           "old title",
+				LanguageCode:    "EN",
+				ViewCount:       7,
 			}
 			a = article.Article{
-				UUID:         r.UUID,
-				Cover:        r.Cover,
-				Video:        r.Video,
-				Title:        r.Title,
-				Excerpt:      r.Excerpt,
-				Body:         r.Body,
-				PublishedAt:  r.PublishedAt,
-				AuthorUUID:   r.AuthorUUID,
-				Tags:         r.Tags,
-				LanguageCode: r.LanguageCode,
-				ViewCount:    existing.ViewCount,
+				UUID:            existing.UUID,
+				Cover:           r.Cover,
+				Video:           r.Video,
+				Title:           r.Title,
+				Excerpt:         r.Excerpt,
+				Body:            r.Body,
+				PublishedAt:     r.PublishedAt,
+				AuthorUUID:      r.AuthorUUID,
+				Tags:            r.Tags,
+				LanguageCode:    r.LanguageCode,
+				CorrelationUUID: r.CorrelationUUID,
+				ViewCount:       existing.ViewCount,
 			}
 		)
 
@@ -67,7 +69,7 @@ func TestUseCase_Execute(t *testing.T) {
 		languageRepository.On("Exists", "EN").Once().Return(true)
 		defer languageRepository.AssertExpectations(t)
 
-		articleRepository.On("GetOne", r.UUID).Once().Return(existing, nil)
+		articleRepository.On("GetByCorrelationUUIDAndLanguage", r.CorrelationUUID, r.LanguageCode).Once().Return(existing, nil)
 		articleRepository.On("Save", &a).Once().Return(a.UUID, nil)
 		defer articleRepository.AssertExpectations(t)
 
@@ -89,11 +91,12 @@ func TestUseCase_Execute(t *testing.T) {
 			r                = Request{}
 			expectedResponse = Response{
 				ValidationErrors: domain.ValidationErrors{
-					"title":         "title is required",
-					"excerpt":       "excerpt is required",
-					"body":          "body is required",
-					"author":        "author is required",
-					"language_code": "language is required",
+					"correlation_uuid": "correlation uuid is required",
+					"title":            "title is required",
+					"excerpt":          "excerpt is required",
+					"body":             "body is required",
+					"author":           "author is required",
+					"language_code":    "language is required",
 				},
 			}
 		)
@@ -104,7 +107,7 @@ func TestUseCase_Execute(t *testing.T) {
 		response, err := NewUseCase(&articleRepository, &languageRepository, &validator, &translator).Execute(&r)
 
 		articleRepository.AssertNotCalled(t, "Save")
-		articleRepository.AssertNotCalled(t, "GetOne")
+		articleRepository.AssertNotCalled(t, "GetByCorrelationUUIDAndLanguage")
 
 		assert.NoError(t, err)
 		assert.Equal(t, &expectedResponse, response)
@@ -120,12 +123,12 @@ func TestUseCase_Execute(t *testing.T) {
 			translator         translator.TranslatorMock
 
 			r = Request{
-				UUID:         "test-article-uuid",
-				Title:        "test title",
-				Excerpt:      "test excerpt",
-				Body:         "test body",
-				AuthorUUID:   "test-author-uuid",
-				LanguageCode: "DE",
+				CorrelationUUID: "test-correlation-uuid",
+				Title:           "test title",
+				Excerpt:         "test excerpt",
+				Body:            "test body",
+				AuthorUUID:      "test-author-uuid",
+				LanguageCode:    "DE",
 			}
 		)
 
@@ -145,6 +148,7 @@ func TestUseCase_Execute(t *testing.T) {
 		response, err := NewUseCase(&articleRepository, &languageRepository, &validator, &translator).Execute(&r)
 
 		articleRepository.AssertNotCalled(t, "Save")
+		articleRepository.AssertNotCalled(t, "GetByCorrelationUUIDAndLanguage")
 
 		assert.NoError(t, err)
 		assert.NotNil(t, response)
@@ -161,26 +165,27 @@ func TestUseCase_Execute(t *testing.T) {
 			translator         translator.TranslatorMock
 
 			r = Request{
-				UUID:         "test-article-uuid",
-				Title:        "test title",
-				Excerpt:      "test excerpt",
-				Body:         "test body",
-				AuthorUUID:   "test-author-uuid",
-				Tags:         []string{"tag1", "tag2"},
-				LanguageCode: "EN",
+				CorrelationUUID: "test-correlation-uuid",
+				Title:           "test title",
+				Excerpt:         "test excerpt",
+				Body:            "test body",
+				AuthorUUID:      "test-author-uuid",
+				Tags:            []string{"tag1", "tag2"},
+				LanguageCode:    "EN",
 			}
-			existing = article.Article{UUID: r.UUID, LanguageCode: "EN"}
+			existing = article.Article{UUID: "test-article-uuid", CorrelationUUID: r.CorrelationUUID, LanguageCode: "EN"}
 			a        = article.Article{
-				UUID:         r.UUID,
-				Cover:        r.Cover,
-				Video:        r.Video,
-				Title:        r.Title,
-				Excerpt:      r.Excerpt,
-				Body:         r.Body,
-				PublishedAt:  r.PublishedAt,
-				AuthorUUID:   r.AuthorUUID,
-				Tags:         r.Tags,
-				LanguageCode: r.LanguageCode,
+				UUID:            existing.UUID,
+				Cover:           r.Cover,
+				Video:           r.Video,
+				Title:           r.Title,
+				Excerpt:         r.Excerpt,
+				Body:            r.Body,
+				PublishedAt:     r.PublishedAt,
+				AuthorUUID:      r.AuthorUUID,
+				Tags:            r.Tags,
+				LanguageCode:    r.LanguageCode,
+				CorrelationUUID: r.CorrelationUUID,
 			}
 
 			expectedErr = errors.New("error happened")
@@ -192,7 +197,7 @@ func TestUseCase_Execute(t *testing.T) {
 		languageRepository.On("Exists", "EN").Once().Return(true)
 		defer languageRepository.AssertExpectations(t)
 
-		articleRepository.On("GetOne", r.UUID).Once().Return(existing, nil)
+		articleRepository.On("GetByCorrelationUUIDAndLanguage", r.CorrelationUUID, r.LanguageCode).Once().Return(existing, nil)
 		articleRepository.On("Save", &a).Once().Return("", expectedErr)
 		defer articleRepository.AssertExpectations(t)
 

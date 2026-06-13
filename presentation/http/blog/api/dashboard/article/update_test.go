@@ -35,26 +35,27 @@ func TestUpdateHandler(t *testing.T) {
 			translator         translator.TranslatorMock
 
 			r = updatearticle.Request{
-				UUID:         "test-article-uuid",
-				Title:        "test title",
-				Excerpt:      "test excerpt",
-				Body:         "test body",
-				AuthorUUID:   "test-author-uuid",
-				Tags:         []string{"tag1", "tag2"},
-				LanguageCode: "EN",
+				CorrelationUUID: "test-correlation-uuid",
+				Title:           "test title",
+				Excerpt:         "test excerpt",
+				Body:            "test body",
+				AuthorUUID:      "test-author-uuid",
+				Tags:            []string{"tag1", "tag2"},
+				LanguageCode:    "EN",
 			}
-			existing = article.Article{UUID: r.UUID, LanguageCode: "EN"}
+			existing = article.Article{UUID: "test-article-uuid", CorrelationUUID: r.CorrelationUUID, LanguageCode: "EN"}
 			a        = article.Article{
-				UUID:         r.UUID,
-				Cover:        r.Cover,
-				Video:        r.Video,
-				Title:        r.Title,
-				Excerpt:      r.Excerpt,
-				Body:         r.Body,
-				PublishedAt:  r.PublishedAt,
-				AuthorUUID:   r.AuthorUUID,
-				Tags:         r.Tags,
-				LanguageCode: r.LanguageCode,
+				UUID:            existing.UUID,
+				Cover:           r.Cover,
+				Video:           r.Video,
+				Title:           r.Title,
+				Excerpt:         r.Excerpt,
+				Body:            r.Body,
+				PublishedAt:     r.PublishedAt,
+				AuthorUUID:      r.AuthorUUID,
+				Tags:            r.Tags,
+				LanguageCode:    r.LanguageCode,
+				CorrelationUUID: r.CorrelationUUID,
 			}
 
 			u = user.User{
@@ -68,7 +69,7 @@ func TestUpdateHandler(t *testing.T) {
 		languageRepository.On("Exists", "EN").Once().Return(true)
 		defer languageRepository.AssertExpectations(t)
 
-		articleRepository.On("GetOne", r.UUID).Once().Return(existing, nil)
+		articleRepository.On("GetByCorrelationUUIDAndLanguage", r.CorrelationUUID, r.LanguageCode).Once().Return(existing, nil)
 		articleRepository.On("Save", &a).Once().Return(a.UUID, nil)
 		defer articleRepository.AssertExpectations(t)
 
@@ -138,26 +139,27 @@ func TestUpdateHandler(t *testing.T) {
 			translator         translator.TranslatorMock
 
 			r = updatearticle.Request{
-				UUID:         "test-article-uuid",
-				Title:        "test title",
-				Excerpt:      "test excerpt",
-				Body:         "test body",
-				AuthorUUID:   "test-author-uuid",
-				Tags:         []string{"tag1", "tag2"},
-				LanguageCode: "EN",
+				CorrelationUUID: "test-correlation-uuid",
+				Title:           "test title",
+				Excerpt:         "test excerpt",
+				Body:            "test body",
+				AuthorUUID:      "test-author-uuid",
+				Tags:            []string{"tag1", "tag2"},
+				LanguageCode:    "EN",
 			}
-			existing = article.Article{UUID: r.UUID, LanguageCode: "EN"}
+			existing = article.Article{UUID: "test-article-uuid", CorrelationUUID: r.CorrelationUUID, LanguageCode: "EN"}
 			a        = article.Article{
-				UUID:         r.UUID,
-				Cover:        r.Cover,
-				Video:        r.Video,
-				Title:        r.Title,
-				Excerpt:      r.Excerpt,
-				Body:         r.Body,
-				PublishedAt:  r.PublishedAt,
-				AuthorUUID:   r.AuthorUUID,
-				Tags:         r.Tags,
-				LanguageCode: r.LanguageCode,
+				UUID:            existing.UUID,
+				Cover:           r.Cover,
+				Video:           r.Video,
+				Title:           r.Title,
+				Excerpt:         r.Excerpt,
+				Body:            r.Body,
+				PublishedAt:     r.PublishedAt,
+				AuthorUUID:      r.AuthorUUID,
+				Tags:            r.Tags,
+				LanguageCode:    r.LanguageCode,
+				CorrelationUUID: r.CorrelationUUID,
 			}
 
 			u = user.User{
@@ -171,7 +173,7 @@ func TestUpdateHandler(t *testing.T) {
 		languageRepository.On("Exists", "EN").Once().Return(true)
 		defer languageRepository.AssertExpectations(t)
 
-		articleRepository.On("GetOne", r.UUID).Once().Return(existing, nil)
+		articleRepository.On("GetByCorrelationUUIDAndLanguage", r.CorrelationUUID, r.LanguageCode).Once().Return(existing, nil)
 		articleRepository.On("Save", &a).Once().Return("", errors.New("unexpected error"))
 		defer articleRepository.AssertExpectations(t)
 

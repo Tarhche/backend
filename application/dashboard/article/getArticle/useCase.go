@@ -20,8 +20,8 @@ func NewUseCase(articleRepository article.Repository, userRepository user.Reposi
 	}
 }
 
-func (uc *UseCase) Execute(UUID string) (*Response, error) {
-	a, err := uc.articleRepository.GetOne(UUID)
+func (uc *UseCase) Execute(request *Request) (*Response, error) {
+	a, err := uc.articleRepository.GetByCorrelationUUIDAndLanguage(request.CorrelationUUID, request.LanguageCode)
 	if err != nil {
 		return nil, err
 	}

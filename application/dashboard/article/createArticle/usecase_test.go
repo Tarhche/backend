@@ -39,20 +39,6 @@ func TestUseCase_Execute(t *testing.T) {
 				Tags:         []string{"tag1", "tag2"},
 				LanguageCode: "EN",
 			}
-			a = article.Article{
-				Cover:        r.Cover,
-				Video:        r.Video,
-				Title:        r.Title,
-				Excerpt:      r.Excerpt,
-				Body:         r.Body,
-				PublishedAt:  r.PublishedAt,
-				AuthorUUID:   r.AuthorUUID,
-				Tags:         r.Tags,
-				LanguageCode: r.LanguageCode,
-			}
-
-			u                = "article-uuid"
-			expectedResponse = Response{UUID: u}
 		)
 
 		validator.On("Validate", &r).Once().Return(nil)
@@ -61,13 +47,25 @@ func TestUseCase_Execute(t *testing.T) {
 		languageRepository.On("Exists", "EN").Once().Return(true)
 		defer languageRepository.AssertExpectations(t)
 
-		articleRepository.On("Save", &a).Once().Return(u, nil)
+		// no correlation uuid is provided, so the use case generates one and the
+		// repository stores the article with it (it is not derived from the uuid).
+		articleRepository.On("Save", mock2.MatchedBy(func(a *article.Article) bool {
+			return a.Title == r.Title &&
+				a.Excerpt == r.Excerpt &&
+				a.Body == r.Body &&
+				a.AuthorUUID == r.AuthorUUID &&
+				a.LanguageCode == r.LanguageCode &&
+				len(a.CorrelationUUID) > 0
+		})).Once().Return("article-uuid", nil)
 		defer articleRepository.AssertExpectations(t)
 
 		response, err := NewUseCase(&articleRepository, &languageRepository, &validator, &translator).Execute(&r)
 
 		assert.NoError(t, err)
-		assert.Equal(t, &expectedResponse, response)
+		assert.NotNil(t, response)
+		assert.NotEmpty(t, response.CorrelationUUID)
+		assert.Equal(t, r.CorrelationUUID, response.CorrelationUUID)
+		assert.Equal(t, r.LanguageCode, response.LanguageCode)
 	})
 
 	t.Run("validation fails", func(t *testing.T) {
@@ -160,17 +158,6 @@ func TestUseCase_Execute(t *testing.T) {
 				Tags:         []string{"tag1", "tag2"},
 				LanguageCode: "EN",
 			}
-			a = article.Article{
-				Cover:        r.Cover,
-				Video:        r.Video,
-				Title:        r.Title,
-				Excerpt:      r.Excerpt,
-				Body:         r.Body,
-				PublishedAt:  r.PublishedAt,
-				AuthorUUID:   r.AuthorUUID,
-				Tags:         r.Tags,
-				LanguageCode: r.LanguageCode,
-			}
 
 			expectedErr = errors.New("error happened")
 		)
@@ -181,7 +168,7 @@ func TestUseCase_Execute(t *testing.T) {
 		languageRepository.On("Exists", "EN").Once().Return(true)
 		defer languageRepository.AssertExpectations(t)
 
-		articleRepository.On("Save", &a).Once().Return("", expectedErr)
+		articleRepository.On("Save", mock2.AnythingOfType("*article.Article")).Once().Return("", expectedErr)
 		defer articleRepository.AssertExpectations(t)
 
 		response, err := NewUseCase(&articleRepository, &languageRepository, &validator, &translator).Execute(&r)
@@ -237,7 +224,8 @@ func TestUseCase_Execute(t *testing.T) {
 
 		assert.NoError(t, err)
 		assert.NotNil(t, response)
-		assert.Equal(t, "new-uuid", response.UUID)
+		assert.Equal(t, correlationUUID, response.CorrelationUUID)
+		assert.Equal(t, r.LanguageCode, response.LanguageCode)
 	})
 
 	t.Run("correlation uuid does not exist", func(t *testing.T) {

@@ -7,7 +7,7 @@ import (
 )
 
 type Request struct {
-	UUID            string    `json:"uuid"`
+	CorrelationUUID string    `json:"correlation_uuid"`
 	Cover           string    `json:"cover"`
 	Video           string    `json:"video"`
 	Title           string    `json:"title"`
@@ -17,13 +17,16 @@ type Request struct {
 	AuthorUUID      string    `json:"-"`
 	Tags            []string  `json:"tags"`
 	LanguageCode    string    `json:"language_code"`
-	CorrelationUUID string    `json:"correlation_uuid"`
 }
 
 var _ domain.Validatable = &Request{}
 
 func (r *Request) Validate() domain.ValidationErrors {
 	validationErrors := make(domain.ValidationErrors)
+
+	if len(r.CorrelationUUID) == 0 {
+		validationErrors["correlation_uuid"] = "required_field"
+	}
 
 	if len(r.Title) == 0 {
 		validationErrors["title"] = "required_field"

@@ -2,28 +2,32 @@ package getarticles
 
 import (
 	"github.com/khanzadimahdi/testproject/domain/article"
+	"github.com/khanzadimahdi/testproject/domain/language"
 	"github.com/khanzadimahdi/testproject/domain/user"
 )
 
 const limit = 20
 
 type UseCase struct {
-	articleRepository article.Repository
-	userRepository    user.Repository
+	articleRepository  article.Repository
+	userRepository     user.Repository
+	languageRepository language.Repository
 }
 
 func NewUseCase(
 	articleRepository article.Repository,
 	userRepository user.Repository,
+	languageRepository language.Repository,
 ) *UseCase {
 	return &UseCase{
-		articleRepository: articleRepository,
-		userRepository:    userRepository,
+		articleRepository:  articleRepository,
+		userRepository:     userRepository,
+		languageRepository: languageRepository,
 	}
 }
 
 func (uc *UseCase) Execute(request *Request) (*Response, error) {
-	totalArticles, err := uc.articleRepository.Count()
+	totalArticles, err := uc.articleRepository.CountByCorrelation()
 	if err != nil {
 		return nil, err
 	}
@@ -44,20 +48,36 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		totalPages++
 	}
 
-	a, err := uc.articleRepository.GetAll(offset, limit)
+	correlationUUIDs, err := uc.articleRepository.GetCorrelationUUIDs(offset, limit)
 	if err != nil {
 		return nil, err
 	}
 
-	userUUIDs := make([]string, len(a))
-	for i := range a {
-		userUUIDs[i] = a[i].AuthorUUID
+	if len(correlationUUIDs) == 0 {
+		return NewResponse(correlationUUIDs, nil, nil, nil, totalPages, currentPage), nil
 	}
 
-	u, err := uc.userRepository.GetByUUIDs(userUUIDs)
+	articles, err := uc.articleRepository.GetByCorrelationUUIDs(correlationUUIDs, "")
 	if err != nil {
 		return nil, err
 	}
 
-	return NewResponse(a, u, totalPages, currentPage), nil
+	userUUIDs := make([]string, len(articles))
+	languageCodes := make([]string, len(articles))
+	for i := range articles {
+		userUUIDs[i] = articles[i].AuthorUUID
+		languageCodes[i] = articles[i].LanguageCode
+	}
+
+	authors, err := uc.userRepository.GetByUUIDs(userUUIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	languages, err := uc.languageRepository.GetByCodes(languageCodes)
+	if err != nil {
+		return nil, err
+	}
+
+	return NewResponse(correlationUUIDs, articles, authors, languages, totalPages, currentPage), nil
 }

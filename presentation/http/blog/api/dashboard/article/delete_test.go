@@ -20,16 +20,17 @@ func TestDeleteHandler(t *testing.T) {
 		var (
 			articleRepository articles.MockArticlesRepository
 
-			r = deletearticle.Request{ArticleUUID: "article-uuid"}
+			r = deletearticle.Request{CorrelationUUID: "correlation-uuid", LanguageCode: "EN"}
 		)
 
-		articleRepository.On("Delete", r.ArticleUUID).Return(nil)
+		articleRepository.On("DeleteByCorrelationUUIDAndLanguage", r.CorrelationUUID, r.LanguageCode).Return(nil)
 		defer articleRepository.AssertExpectations(t)
 
 		handler := NewDeleteHandler(deletearticle.NewUseCase(&articleRepository))
 
 		request := httptest.NewRequest(http.MethodPost, "/", nil)
-		request.SetPathValue("uuid", r.ArticleUUID)
+		request.SetPathValue("correlationUUID", r.CorrelationUUID)
+		request.SetPathValue("language_code", r.LanguageCode)
 		response := httptest.NewRecorder()
 
 		handler.ServeHTTP(response, request)
