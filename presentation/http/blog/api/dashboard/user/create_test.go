@@ -13,6 +13,7 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	createuser "github.com/khanzadimahdi/testproject/application/dashboard/user/createUser"
+	"github.com/khanzadimahdi/testproject/application/language/resolver"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/mock"
@@ -29,6 +30,7 @@ func TestCreateHandler(t *testing.T) {
 
 		var (
 			userRepository   users.MockUsersRepository
+			languageResolver resolver.MockResolver
 			hasher           mock.MockCrypto
 			requestValidator validator.MockValidator
 			translator       translator.TranslatorMock
@@ -38,10 +40,11 @@ func TestCreateHandler(t *testing.T) {
 			}
 
 			r = createuser.Request{
-				Name:     "test name",
-				Email:    "test@test.com",
-				Username: "test-username",
-				Password: "test",
+				Name:         "test name",
+				Email:        "test@test.com",
+				Username:     "test-username",
+				Password:     "test",
+				LanguageCode: "en",
 			}
 
 			userUUID = "test-user-uuid"
@@ -49,6 +52,9 @@ func TestCreateHandler(t *testing.T) {
 
 		requestValidator.On("Validate", &r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
+
+		languageResolver.On("Verify", r.LanguageCode).Once().Return(true)
+		defer languageResolver.AssertExpectations(t)
 
 		userRepository.On("GetOneByIdentity", r.Email).Once().Return(user.User{}, domain.ErrNotExists)
 		userRepository.On("GetOneByIdentity", r.Username).Once().Return(user.User{}, domain.ErrNotExists)
@@ -58,7 +64,7 @@ func TestCreateHandler(t *testing.T) {
 		hasher.On("Hash", []byte(r.Password), mock2.AnythingOfType("[]uint8")).Once().Return([]byte("hashed-password"))
 		defer hasher.AssertExpectations(t)
 
-		handler := NewCreateHandler(createuser.NewUseCase(&userRepository, &hasher, &requestValidator, &translator))
+		handler := NewCreateHandler(createuser.NewUseCase(&userRepository, &languageResolver, &hasher, &requestValidator, &translator))
 
 		var payload bytes.Buffer
 		err := json.NewEncoder(&payload).Encode(r)
@@ -85,6 +91,7 @@ func TestCreateHandler(t *testing.T) {
 
 		var (
 			userRepository   users.MockUsersRepository
+			languageResolver resolver.MockResolver
 			hasher           mock.MockCrypto
 			requestValidator validator.MockValidator
 			translator       translator.TranslatorMock
@@ -103,7 +110,7 @@ func TestCreateHandler(t *testing.T) {
 		requestValidator.On("Validate", &createuser.Request{}).Once().Return(validationErrors)
 		defer requestValidator.AssertExpectations(t)
 
-		handler := NewCreateHandler(createuser.NewUseCase(&userRepository, &hasher, &requestValidator, &translator))
+		handler := NewCreateHandler(createuser.NewUseCase(&userRepository, &languageResolver, &hasher, &requestValidator, &translator))
 
 		request := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString("{}"))
 		request = request.WithContext(auth.ToContext(request.Context(), &u))

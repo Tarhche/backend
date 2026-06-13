@@ -3,17 +3,20 @@ package createlanguage
 import (
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/language"
+	"github.com/khanzadimahdi/testproject/domain/translator"
 )
 
 type UseCase struct {
 	languageRepository language.Repository
 	validator          domain.Validator
+	translator         translator.Translator
 }
 
-func NewUseCase(languageRepository language.Repository, validator domain.Validator) *UseCase {
+func NewUseCase(languageRepository language.Repository, validator domain.Validator, translator translator.Translator) *UseCase {
 	return &UseCase{
 		languageRepository: languageRepository,
 		validator:          validator,
+		translator:         translator,
 	}
 }
 
@@ -27,7 +30,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 	if uc.languageRepository.Exists(request.Code) {
 		return &Response{
 			ValidationErrors: domain.ValidationErrors{
-				"code": "already_exists",
+				"code": uc.translator.Translate("already_exists"),
 			},
 		}, nil
 	}

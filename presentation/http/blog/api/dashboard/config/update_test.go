@@ -17,6 +17,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/user"
 	configMocks "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/config"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/languages"
+	"github.com/khanzadimahdi/testproject/infrastructure/translator"
 	"github.com/khanzadimahdi/testproject/infrastructure/validator"
 )
 
@@ -30,6 +31,7 @@ func TestUpdateHandler(t *testing.T) {
 			configRepository   configMocks.MockConfigRepository
 			languageRepository languages.MockLanguagesRepository
 			requestValidator   validator.MockValidator
+			translator         translator.TranslatorMock
 
 			u = user.User{UUID: "auth-user-uuid"}
 
@@ -60,7 +62,7 @@ func TestUpdateHandler(t *testing.T) {
 		configRepository.On("Save", &savedConfig).Once().Return("new-revision-uuid", nil)
 		defer configRepository.AssertExpectations(t)
 
-		handler := NewUpdateHandler(updateConfig.NewUseCase(&configRepository, &languageRepository, &requestValidator))
+		handler := NewUpdateHandler(updateConfig.NewUseCase(&configRepository, &languageRepository, &requestValidator, &translator))
 
 		var payload bytes.Buffer
 		json.NewEncoder(&payload).Encode(r)
@@ -82,6 +84,7 @@ func TestUpdateHandler(t *testing.T) {
 			configRepository   configMocks.MockConfigRepository
 			languageRepository languages.MockLanguagesRepository
 			requestValidator   validator.MockValidator
+			translator         translator.TranslatorMock
 
 			u = user.User{UUID: "auth-user-uuid"}
 		)
@@ -92,7 +95,7 @@ func TestUpdateHandler(t *testing.T) {
 		})
 		defer requestValidator.AssertExpectations(t)
 
-		handler := NewUpdateHandler(updateConfig.NewUseCase(&configRepository, &languageRepository, &requestValidator))
+		handler := NewUpdateHandler(updateConfig.NewUseCase(&configRepository, &languageRepository, &requestValidator, &translator))
 
 		request := httptest.NewRequest(http.MethodPut, "/", bytes.NewBufferString("{}"))
 		request = request.WithContext(auth.ToContext(request.Context(), &u))

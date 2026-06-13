@@ -18,6 +18,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/articles"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/languages"
+	"github.com/khanzadimahdi/testproject/infrastructure/translator"
 	"github.com/khanzadimahdi/testproject/infrastructure/validator"
 )
 
@@ -31,6 +32,7 @@ func TestUpdateHandler(t *testing.T) {
 			articleRepository  articles.MockArticlesRepository
 			languageRepository languages.MockLanguagesRepository
 			requestValidator   validator.MockValidator
+			translator         translator.TranslatorMock
 
 			r = updatearticle.Request{
 				UUID:         "test-article-uuid",
@@ -70,7 +72,7 @@ func TestUpdateHandler(t *testing.T) {
 		articleRepository.On("Save", &a).Once().Return(a.UUID, nil)
 		defer articleRepository.AssertExpectations(t)
 
-		handler := NewUpdateHandler(updatearticle.NewUseCase(&articleRepository, &languageRepository, &requestValidator))
+		handler := NewUpdateHandler(updatearticle.NewUseCase(&articleRepository, &languageRepository, &requestValidator, &translator))
 
 		var payload bytes.Buffer
 		err := json.NewEncoder(&payload).Encode(r)
@@ -93,6 +95,7 @@ func TestUpdateHandler(t *testing.T) {
 			articleRepository  articles.MockArticlesRepository
 			languageRepository languages.MockLanguagesRepository
 			requestValidator   validator.MockValidator
+			translator         translator.TranslatorMock
 
 			u = user.User{
 				UUID: "test-author-uuid",
@@ -107,7 +110,7 @@ func TestUpdateHandler(t *testing.T) {
 		})
 		defer requestValidator.AssertExpectations(t)
 
-		handler := NewUpdateHandler(updatearticle.NewUseCase(&articleRepository, &languageRepository, &requestValidator))
+		handler := NewUpdateHandler(updatearticle.NewUseCase(&articleRepository, &languageRepository, &requestValidator, &translator))
 
 		request := httptest.NewRequest(http.MethodPatch, "/", bytes.NewBufferString("{}"))
 		request = request.WithContext(auth.ToContext(request.Context(), &u))
@@ -132,6 +135,7 @@ func TestUpdateHandler(t *testing.T) {
 			articleRepository  articles.MockArticlesRepository
 			languageRepository languages.MockLanguagesRepository
 			requestValidator   validator.MockValidator
+			translator         translator.TranslatorMock
 
 			r = updatearticle.Request{
 				UUID:         "test-article-uuid",
@@ -171,7 +175,7 @@ func TestUpdateHandler(t *testing.T) {
 		articleRepository.On("Save", &a).Once().Return("", errors.New("unexpected error"))
 		defer articleRepository.AssertExpectations(t)
 
-		handler := NewUpdateHandler(updatearticle.NewUseCase(&articleRepository, &languageRepository, &requestValidator))
+		handler := NewUpdateHandler(updatearticle.NewUseCase(&articleRepository, &languageRepository, &requestValidator, &translator))
 
 		var payload bytes.Buffer
 		err := json.NewEncoder(&payload).Encode(r)

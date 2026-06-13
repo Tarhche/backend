@@ -3513,6 +3513,9 @@
                 "email": {
                     "type": "string"
                 },
+                "language_code": {
+                    "type": "string"
+                },
                 "name": {
                     "type": "string"
                 },
@@ -4825,6 +4828,9 @@
                 "body": {
                     "type": "string"
                 },
+                "correlation_uuid": {
+                    "type": "string"
+                },
                 "cover": {
                     "type": "string"
                 },
@@ -4844,9 +4850,6 @@
                     }
                 },
                 "title": {
-                    "type": "string"
-                },
-                "correlation_uuid": {
                     "type": "string"
                 },
                 "uuid": {
@@ -5384,6 +5387,9 @@
                 "author": {
                     "$ref": "#/definitions/home.author"
                 },
+                "correlation_uuid": {
+                    "type": "string"
+                },
                 "cover": {
                     "type": "string"
                 },
@@ -5400,9 +5406,6 @@
                     }
                 },
                 "title": {
-                    "type": "string"
-                },
-                "uuid": {
                     "type": "string"
                 }
             }
@@ -5674,6 +5677,9 @@
                     "type": "string"
                 },
                 "email": {
+                    "type": "string"
+                },
+                "language_code": {
                     "type": "string"
                 },
                 "name": {

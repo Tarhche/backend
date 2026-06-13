@@ -2,19 +2,25 @@ package updateConfig
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	mock2 "github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/config"
+	translatorContract "github.com/khanzadimahdi/testproject/domain/translator"
 	configMocks "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/config"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/languages"
+	"github.com/khanzadimahdi/testproject/infrastructure/translator"
 	"github.com/khanzadimahdi/testproject/infrastructure/validator"
 )
 
 func TestUseCase_Execute(t *testing.T) {
 	t.Parallel()
+
+	var translatorOptionsType = reflect.TypeFor[func(*translatorContract.Params)]().Name()
 
 	t.Run("updates config", func(t *testing.T) {
 		t.Parallel()
@@ -23,6 +29,7 @@ func TestUseCase_Execute(t *testing.T) {
 			configRepository   configMocks.MockConfigRepository
 			languageRepository languages.MockLanguagesRepository
 			validator          validator.MockValidator
+			translator         translator.TranslatorMock
 
 			r = Request{
 				UserDefaultRoles:    []string{"role1", "role2"},
@@ -51,7 +58,7 @@ func TestUseCase_Execute(t *testing.T) {
 		configRepository.On("Save", &savedConfig).Once().Return("new-revision-uuid", nil)
 		defer configRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&configRepository, &languageRepository, &validator).Execute(&r)
+		response, err := NewUseCase(&configRepository, &languageRepository, &validator, &translator).Execute(&r)
 		assert.NoError(t, err)
 		assert.Nil(t, response)
 	})
@@ -63,6 +70,7 @@ func TestUseCase_Execute(t *testing.T) {
 			configRepository   configMocks.MockConfigRepository
 			languageRepository languages.MockLanguagesRepository
 			validator          validator.MockValidator
+			translator         translator.TranslatorMock
 
 			r                = Request{}
 			expectedResponse = Response{
@@ -76,7 +84,7 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(expectedResponse.ValidationErrors)
 		defer validator.AssertExpectations(t)
 
-		response, err := NewUseCase(&configRepository, &languageRepository, &validator).Execute(&r)
+		response, err := NewUseCase(&configRepository, &languageRepository, &validator, &translator).Execute(&r)
 
 		languageRepository.AssertNotCalled(t, "Exists")
 		configRepository.AssertNotCalled(t, "GetLatestRevision")
@@ -93,6 +101,7 @@ func TestUseCase_Execute(t *testing.T) {
 			configRepository   configMocks.MockConfigRepository
 			languageRepository languages.MockLanguagesRepository
 			validator          validator.MockValidator
+			translator         translator.TranslatorMock
 
 			r = Request{
 				UserDefaultRoles:    []string{"role1", "role2"},
@@ -101,7 +110,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 			expectedResponse = Response{
 				ValidationErrors: domain.ValidationErrors{
-					"default_language_code": "invalid_value",
+					"default_language_code": "default language code is invalid",
 				},
 			}
 		)
@@ -109,10 +118,17 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
+		translator.On(
+			"Translate",
+			"invalid_value",
+			mock2.AnythingOfType(translatorOptionsType),
+		).Once().Return(expectedResponse.ValidationErrors["default_language_code"])
+		defer translator.AssertExpectations(t)
+
 		languageRepository.On("Exists", r.DefaultLanguageCode).Once().Return(false)
 		defer languageRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&configRepository, &languageRepository, &validator).Execute(&r)
+		response, err := NewUseCase(&configRepository, &languageRepository, &validator, &translator).Execute(&r)
 
 		configRepository.AssertNotCalled(t, "GetLatestRevision")
 		configRepository.AssertNotCalled(t, "Save")
@@ -128,6 +144,7 @@ func TestUseCase_Execute(t *testing.T) {
 			configRepository   configMocks.MockConfigRepository
 			languageRepository languages.MockLanguagesRepository
 			validator          validator.MockValidator
+			translator         translator.TranslatorMock
 
 			r = Request{
 				UserDefaultRoles:    []string{"role1", "role2"},
@@ -146,7 +163,7 @@ func TestUseCase_Execute(t *testing.T) {
 		configRepository.On("GetLatestRevision").Once().Return(config.Config{}, expectedErr)
 		defer configRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&configRepository, &languageRepository, &validator).Execute(&r)
+		response, err := NewUseCase(&configRepository, &languageRepository, &validator, &translator).Execute(&r)
 
 		configRepository.AssertNotCalled(t, "Save")
 
@@ -161,6 +178,7 @@ func TestUseCase_Execute(t *testing.T) {
 			configRepository   configMocks.MockConfigRepository
 			languageRepository languages.MockLanguagesRepository
 			validator          validator.MockValidator
+			translator         translator.TranslatorMock
 
 			r = Request{
 				UserDefaultRoles:    []string{"role1", "role2"},
@@ -191,7 +209,7 @@ func TestUseCase_Execute(t *testing.T) {
 		configRepository.On("Save", &savedConfig).Once().Return("", expectedErr)
 		defer configRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&configRepository, &languageRepository, &validator).Execute(&r)
+		response, err := NewUseCase(&configRepository, &languageRepository, &validator, &translator).Execute(&r)
 
 		assert.ErrorIs(t, err, expectedErr)
 		assert.Nil(t, response)

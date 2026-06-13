@@ -4,23 +4,27 @@ import (
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/article"
 	"github.com/khanzadimahdi/testproject/domain/language"
+	"github.com/khanzadimahdi/testproject/domain/translator"
 )
 
 type UseCase struct {
 	articleRepository  article.Repository
 	languageRepository language.Repository
 	validator          domain.Validator
+	translator         translator.Translator
 }
 
 func NewUseCase(
 	articleRepository article.Repository,
 	languageRepository language.Repository,
 	validator domain.Validator,
+	translator translator.Translator,
 ) *UseCase {
 	return &UseCase{
 		articleRepository:  articleRepository,
 		languageRepository: languageRepository,
 		validator:          validator,
+		translator:         translator,
 	}
 }
 
@@ -34,7 +38,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 	if !uc.languageRepository.Exists(request.LanguageCode) {
 		return &Response{
 			ValidationErrors: domain.ValidationErrors{
-				"language_code": "invalid_value",
+				"language_code": uc.translator.Translate("invalid_value"),
 			},
 		}, nil
 	}
@@ -53,7 +57,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		if !exist {
 			return &Response{
 				ValidationErrors: domain.ValidationErrors{
-					"correlation_uuid": "invalid_value",
+					"correlation_uuid": uc.translator.Translate("invalid_value"),
 				},
 			}, nil
 		}

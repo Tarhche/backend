@@ -40,6 +40,13 @@ const docTemplateblog = `{
                         "description": "Page number",
                         "name": "page",
                         "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "default": "EN",
+                        "description": "Language key (e.g. EN, FA)",
+                        "name": "language_code",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -79,6 +86,13 @@ const docTemplateblog = `{
                         "name": "uuid",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "type": "string",
+                        "default": "EN",
+                        "description": "Language key (e.g. EN, FA)",
+                        "name": "language_code",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -382,6 +396,73 @@ const docTemplateblog = `{
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/authors/{identity}/articles": {
+            "get": {
+                "description": "return a page of the most recent published articles for the given author identity (UUID or username)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "authors"
+                ],
+                "summary": "List articles by author",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Author UUID or username",
+                        "name": "identity",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "default": "EN",
+                        "description": "Language key (e.g. EN, FA)",
+                        "name": "language_code",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/getArticlesByAuthor.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -1720,6 +1801,228 @@ const docTemplateblog = `{
                 }
             }
         },
+        "/dashboard/languages": {
+            "get": {
+                "description": "paginated list of languages",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard languages"
+                ],
+                "summary": "List languages",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page",
+                        "name": "page",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_language_getLanguages.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "modify an existing language",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard languages"
+                ],
+                "summary": "Update language",
+                "parameters": [
+                    {
+                        "description": "Language update",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/updatelanguage.Request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "add a new language via dashboard",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard languages"
+                ],
+                "summary": "Create language",
+                "parameters": [
+                    {
+                        "description": "Language data",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/createlanguage.Request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/createlanguage.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/languages/{code}": {
+            "get": {
+                "description": "fetch language by code",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard languages"
+                ],
+                "summary": "Get language",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Language code",
+                        "name": "code",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/getlanguage.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "remove a language by code",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard languages"
+                ],
+                "summary": "Delete language",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Language code",
+                        "name": "code",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/dashboard/my/bookmarks": {
             "get": {
                 "description": "paginated list of bookmarks for authenticated user",
@@ -2631,6 +2934,13 @@ const docTemplateblog = `{
                         "description": "Page number",
                         "name": "page",
                         "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "default": "EN",
+                        "description": "Language key (e.g. EN, FA)",
+                        "name": "language_code",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -2670,11 +2980,50 @@ const docTemplateblog = `{
                     "home"
                 ],
                 "summary": "Application home endpoint",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "default": "EN",
+                        "description": "Language key (e.g. EN, FA)",
+                        "name": "language",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/home.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/languages": {
+            "get": {
+                "description": "retrieve all available languages",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "languages"
+                ],
+                "summary": "List languages",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_language_getLanguages.Response"
                         }
                     },
                     "500": {
@@ -2995,29 +3344,6 @@ const docTemplateblog = `{
                     }
                 }
             }
-        },
-        "/ws": {
-            "get": {
-                "description": "upgrade HTTP connection to WebSocket",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "websocket"
-                ],
-                "summary": "Websocket endpoint",
-                "responses": {
-                    "101": {
-                        "description": "Switching Protocols",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                }
-            }
         }
     },
     "definitions": {
@@ -3060,10 +3386,16 @@ const docTemplateblog = `{
                 "body": {
                     "type": "string"
                 },
+                "correlation_uuid": {
+                    "type": "string"
+                },
                 "cover": {
                     "type": "string"
                 },
                 "excerpt": {
+                    "type": "string"
+                },
+                "language_code": {
                     "type": "string"
                 },
                 "published_at": {
@@ -3119,6 +3451,28 @@ const docTemplateblog = `{
                 }
             }
         },
+        "createlanguage.Request": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "createlanguage.Response": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "errors": {
+                    "$ref": "#/definitions/domain.ValidationErrors"
+                }
+            }
+        },
         "createrole.Request": {
             "type": "object",
             "properties": {
@@ -3160,6 +3514,9 @@ const docTemplateblog = `{
                     "type": "string"
                 },
                 "email": {
+                    "type": "string"
+                },
+                "language_code": {
                     "type": "string"
                 },
                 "name": {
@@ -3266,6 +3623,100 @@ const docTemplateblog = `{
                 }
             }
         },
+        "getArticlesByAuthor.Response": {
+            "type": "object",
+            "properties": {
+                "author": {
+                    "$ref": "#/definitions/getArticlesByAuthor.authorResponse"
+                },
+                "errors": {
+                    "$ref": "#/definitions/domain.ValidationErrors"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/getArticlesByAuthor.articleResponse"
+                    }
+                },
+                "language_code": {
+                    "$ref": "#/definitions/getArticlesByAuthor.languageResponse"
+                },
+                "pagination": {
+                    "$ref": "#/definitions/getArticlesByAuthor.paginationResponse"
+                }
+            }
+        },
+        "getArticlesByAuthor.articleResponse": {
+            "type": "object",
+            "properties": {
+                "available_languages": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/getArticlesByAuthor.languageResponse"
+                    }
+                },
+                "cover": {
+                    "type": "string"
+                },
+                "excerpt": {
+                    "type": "string"
+                },
+                "published_at": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                },
+                "video": {
+                    "type": "string"
+                }
+            }
+        },
+        "getArticlesByAuthor.authorResponse": {
+            "type": "object",
+            "properties": {
+                "avatar": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                }
+            }
+        },
+        "getArticlesByAuthor.languageResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "getArticlesByAuthor.paginationResponse": {
+            "type": "object",
+            "properties": {
+                "current_page": {
+                    "type": "integer"
+                },
+                "total_pages": {
+                    "type": "integer"
+                }
+            }
+        },
         "getArticlesByHashtag.Response": {
             "type": "object",
             "properties": {
@@ -3278,6 +3729,9 @@ const docTemplateblog = `{
                         "$ref": "#/definitions/getArticlesByHashtag.articleResponse"
                     }
                 },
+                "language_code": {
+                    "$ref": "#/definitions/getArticlesByHashtag.languageResponse"
+                },
                 "pagination": {
                     "$ref": "#/definitions/getArticlesByHashtag.paginationResponse"
                 }
@@ -3286,8 +3740,14 @@ const docTemplateblog = `{
         "getArticlesByHashtag.articleResponse": {
             "type": "object",
             "properties": {
-                "authorResponse": {
+                "author": {
                     "$ref": "#/definitions/getArticlesByHashtag.authorResponse"
+                },
+                "available_languages": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/getArticlesByHashtag.languageResponse"
+                    }
                 },
                 "cover": {
                     "type": "string"
@@ -3313,6 +3773,23 @@ const docTemplateblog = `{
             "type": "object",
             "properties": {
                 "avatar": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                }
+            }
+        },
+        "getArticlesByHashtag.languageResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
                     "type": "string"
                 },
                 "name": {
@@ -3369,6 +3846,9 @@ const docTemplateblog = `{
                 "name": {
                     "type": "string"
                 },
+                "username": {
+                    "type": "string"
+                },
                 "uuid": {
                     "type": "string"
                 }
@@ -3377,6 +3857,9 @@ const docTemplateblog = `{
         "getConfig.Response": {
             "type": "object",
             "properties": {
+                "default_language_code": {
+                    "type": "string"
+                },
                 "revision": {
                     "type": "integer"
                 },
@@ -3385,109 +3868,6 @@ const docTemplateblog = `{
                     "items": {
                         "type": "string"
                     }
-                }
-            }
-        },
-        "getNode.CPU": {
-            "type": "object",
-            "properties": {
-                "guest": {
-                    "type": "integer"
-                },
-                "guest_nice": {
-                    "type": "integer"
-                },
-                "idle": {
-                    "type": "integer"
-                },
-                "io_wait": {
-                    "type": "integer"
-                },
-                "irq": {
-                    "type": "integer"
-                },
-                "nice": {
-                    "type": "integer"
-                },
-                "soft_irq": {
-                    "type": "integer"
-                },
-                "steal": {
-                    "type": "integer"
-                },
-                "system": {
-                    "type": "integer"
-                },
-                "user": {
-                    "type": "integer"
-                }
-            }
-        },
-        "getNode.Disk": {
-            "type": "object",
-            "properties": {
-                "available": {
-                    "type": "integer"
-                },
-                "free_inodes": {
-                    "type": "integer"
-                },
-                "total": {
-                    "type": "integer"
-                },
-                "used": {
-                    "type": "integer"
-                }
-            }
-        },
-        "getNode.Load": {
-            "type": "object",
-            "properties": {
-                "last_15_min": {
-                    "type": "number"
-                },
-                "last_1_min": {
-                    "type": "number"
-                },
-                "last_5_min": {
-                    "type": "number"
-                },
-                "last_pid": {
-                    "type": "integer"
-                },
-                "process_running": {
-                    "type": "integer"
-                },
-                "process_total": {
-                    "type": "integer"
-                }
-            }
-        },
-        "getNode.Memory": {
-            "type": "object",
-            "properties": {
-                "available": {
-                    "type": "integer"
-                },
-                "total": {
-                    "type": "integer"
-                },
-                "used": {
-                    "type": "integer"
-                }
-            }
-        },
-        "getNode.Resource": {
-            "type": "object",
-            "properties": {
-                "cpu": {
-                    "type": "number"
-                },
-                "disk": {
-                    "type": "integer"
-                },
-                "memory": {
-                    "type": "integer"
                 }
             }
         },
@@ -3503,9 +3883,6 @@ const docTemplateblog = `{
                 "name": {
                     "type": "string"
                 },
-                "resources": {
-                    "$ref": "#/definitions/getNode.Resource"
-                },
                 "stats": {
                     "$ref": "#/definitions/getNode.Stats"
                 }
@@ -3514,17 +3891,32 @@ const docTemplateblog = `{
         "getNode.Stats": {
             "type": "object",
             "properties": {
-                "cpu": {
-                    "$ref": "#/definitions/getNode.CPU"
+                "block_input": {
+                    "type": "integer"
                 },
-                "disk": {
-                    "$ref": "#/definitions/getNode.Disk"
+                "block_output": {
+                    "type": "integer"
                 },
-                "load": {
-                    "$ref": "#/definitions/getNode.Load"
+                "cpu_percent": {
+                    "type": "number"
                 },
-                "memory": {
-                    "$ref": "#/definitions/getNode.Memory"
+                "memory_limit": {
+                    "type": "integer"
+                },
+                "memory_percent": {
+                    "type": "number"
+                },
+                "memory_usage": {
+                    "type": "integer"
+                },
+                "network_input": {
+                    "type": "integer"
+                },
+                "network_output": {
+                    "type": "integer"
+                },
+                "pids": {
+                    "type": "integer"
                 }
             }
         },
@@ -3539,9 +3931,6 @@ const docTemplateblog = `{
                 },
                 "name": {
                     "type": "string"
-                },
-                "resources": {
-                    "$ref": "#/definitions/getNodes.Resource"
                 }
             }
         },
@@ -3552,20 +3941,6 @@ const docTemplateblog = `{
                     "type": "integer"
                 },
                 "total_pages": {
-                    "type": "integer"
-                }
-            }
-        },
-        "getNodes.Resource": {
-            "type": "object",
-            "properties": {
-                "cpu": {
-                    "type": "number"
-                },
-                "disk": {
-                    "type": "integer"
-                },
-                "memory": {
                     "type": "integer"
                 }
             }
@@ -3667,6 +4042,9 @@ const docTemplateblog = `{
                 "name": {
                     "type": "string"
                 },
+                "username": {
+                    "type": "string"
+                },
                 "uuid": {
                     "type": "string"
                 }
@@ -3675,6 +4053,9 @@ const docTemplateblog = `{
         "getUserComments.Response": {
             "type": "object",
             "properties": {
+                "author": {
+                    "$ref": "#/definitions/getUserComments.authorResponse"
+                },
                 "items": {
                     "type": "array",
                     "items": {
@@ -3695,6 +4076,9 @@ const docTemplateblog = `{
                 "name": {
                     "type": "string"
                 },
+                "username": {
+                    "type": "string"
+                },
                 "uuid": {
                     "type": "string"
                 }
@@ -3705,9 +4089,6 @@ const docTemplateblog = `{
             "properties": {
                 "approved_at": {
                     "type": "string"
-                },
-                "author": {
-                    "$ref": "#/definitions/getUserComments.authorResponse"
                 },
                 "body": {
                     "type": "string"
@@ -3748,6 +4129,12 @@ const docTemplateblog = `{
                 },
                 "name": {
                     "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
                 }
             }
         },
@@ -3755,6 +4142,23 @@ const docTemplateblog = `{
             "type": "object",
             "properties": {
                 "avatar": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                }
+            }
+        },
+        "getarticle.languageResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
                     "type": "string"
                 },
                 "name": {
@@ -3770,6 +4174,12 @@ const docTemplateblog = `{
                 },
                 "name": {
                     "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
                 }
             }
         },
@@ -3777,6 +4187,23 @@ const docTemplateblog = `{
             "type": "object",
             "properties": {
                 "avatar": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                }
+            }
+        },
+        "getarticles.languageResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
                     "type": "string"
                 },
                 "name": {
@@ -3872,6 +4299,28 @@ const docTemplateblog = `{
                 }
             }
         },
+        "getlanguage.Response": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "getlanguages.pagination": {
+            "type": "object",
+            "properties": {
+                "current_page": {
+                    "type": "integer"
+                },
+                "total_pages": {
+                    "type": "integer"
+                }
+            }
+        },
         "getpermissions.Response": {
             "type": "object",
             "properties": {
@@ -3901,6 +4350,9 @@ const docTemplateblog = `{
                     "type": "string"
                 },
                 "email": {
+                    "type": "string"
+                },
+                "language_code": {
                     "type": "string"
                 },
                 "name": {
@@ -4076,6 +4528,9 @@ const docTemplateblog = `{
                 "email": {
                     "type": "string"
                 },
+                "language_code": {
+                    "type": "string"
+                },
                 "name": {
                     "type": "string"
                 },
@@ -4180,10 +4635,19 @@ const docTemplateblog = `{
         "github_com_khanzadimahdi_testproject_application_article_getArticle.Response": {
             "type": "object",
             "properties": {
-                "avatar": {
+                "author": {
                     "$ref": "#/definitions/getarticle.authorResponse"
                 },
+                "available_languages": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/getarticle.languageResponse"
+                    }
+                },
                 "body": {
+                    "type": "string"
+                },
+                "correlation_uuid": {
                     "type": "string"
                 },
                 "cover": {
@@ -4198,6 +4662,9 @@ const docTemplateblog = `{
                 "excerpt": {
                     "type": "string"
                 },
+                "language_code": {
+                    "$ref": "#/definitions/getarticle.languageResponse"
+                },
                 "published_at": {
                     "type": "string"
                 },
@@ -4210,8 +4677,11 @@ const docTemplateblog = `{
                 "title": {
                     "type": "string"
                 },
-                "uuid": {
-                    "type": "string"
+                "validation_errors": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
                 },
                 "video": {
                     "type": "string"
@@ -4230,6 +4700,9 @@ const docTemplateblog = `{
                         "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_article_getArticles.articleResponse"
                     }
                 },
+                "language_code": {
+                    "$ref": "#/definitions/getarticles.languageResponse"
+                },
                 "pagination": {
                     "$ref": "#/definitions/getarticles.paginationResponse"
                 }
@@ -4240,6 +4713,12 @@ const docTemplateblog = `{
             "properties": {
                 "author": {
                     "$ref": "#/definitions/getarticles.authorResponse"
+                },
+                "available_languages": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/getarticles.languageResponse"
+                    }
                 },
                 "cover": {
                     "type": "string"
@@ -4304,6 +4783,9 @@ const docTemplateblog = `{
                 "name": {
                     "type": "string"
                 },
+                "username": {
+                    "type": "string"
+                },
                 "uuid": {
                     "type": "string"
                 }
@@ -4343,16 +4825,22 @@ const docTemplateblog = `{
         "github_com_khanzadimahdi_testproject_application_dashboard_article_getArticle.Response": {
             "type": "object",
             "properties": {
-                "avatar": {
+                "author": {
                     "$ref": "#/definitions/getarticle.author"
                 },
                 "body": {
+                    "type": "string"
+                },
+                "correlation_uuid": {
                     "type": "string"
                 },
                 "cover": {
                     "type": "string"
                 },
                 "excerpt": {
+                    "type": "string"
+                },
+                "language_code": {
                     "type": "string"
                 },
                 "published_at": {
@@ -4461,6 +4949,9 @@ const docTemplateblog = `{
                 "name": {
                     "type": "string"
                 },
+                "username": {
+                    "type": "string"
+                },
                 "uuid": {
                     "type": "string"
                 }
@@ -4503,6 +4994,56 @@ const docTemplateblog = `{
                 },
                 "total_pages": {
                     "type": "integer"
+                }
+            }
+        },
+        "github_com_khanzadimahdi_testproject_application_dashboard_language_getLanguages.Response": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_language_getLanguages.languageResponse"
+                    }
+                },
+                "pagination": {
+                    "$ref": "#/definitions/getlanguages.pagination"
+                }
+            }
+        },
+        "github_com_khanzadimahdi_testproject_application_dashboard_language_getLanguages.languageResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_khanzadimahdi_testproject_application_language_getLanguages.Response": {
+            "type": "object",
+            "properties": {
+                "default_language": {
+                    "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_language_getLanguages.languageResponse"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_language_getLanguages.languageResponse"
+                    }
+                }
+            }
+        },
+        "github_com_khanzadimahdi_testproject_application_language_getLanguages.languageResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
                 }
             }
         },
@@ -4832,6 +5373,9 @@ const docTemplateblog = `{
                         "$ref": "#/definitions/element.Response"
                     }
                 },
+                "language_code": {
+                    "$ref": "#/definitions/home.languageResponse"
+                },
                 "popular": {
                     "type": "array",
                     "items": {
@@ -4845,6 +5389,9 @@ const docTemplateblog = `{
             "properties": {
                 "author": {
                     "$ref": "#/definitions/home.author"
+                },
+                "correlation_uuid": {
+                    "type": "string"
                 },
                 "cover": {
                     "type": "string"
@@ -4863,9 +5410,6 @@ const docTemplateblog = `{
                 },
                 "title": {
                     "type": "string"
-                },
-                "uuid": {
-                    "type": "string"
                 }
             }
         },
@@ -4873,6 +5417,23 @@ const docTemplateblog = `{
             "type": "object",
             "properties": {
                 "avatar": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                }
+            }
+        },
+        "home.languageResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
                     "type": "string"
                 },
                 "name": {
@@ -4992,6 +5553,9 @@ const docTemplateblog = `{
         "updateConfig.Request": {
             "type": "object",
             "properties": {
+                "default_language_code": {
+                    "type": "string"
+                },
                 "user_default_roles": {
                     "type": "array",
                     "items": {
@@ -5017,10 +5581,16 @@ const docTemplateblog = `{
                 "body": {
                     "type": "string"
                 },
+                "correlation_uuid": {
+                    "type": "string"
+                },
                 "cover": {
                     "type": "string"
                 },
                 "excerpt": {
+                    "type": "string"
+                },
+                "language_code": {
                     "type": "string"
                 },
                 "published_at": {
@@ -5046,6 +5616,17 @@ const docTemplateblog = `{
         "updateelement.Request": {
             "type": "object"
         },
+        "updatelanguage.Request": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
         "updateprofile.Request": {
             "type": "object",
             "properties": {
@@ -5053,6 +5634,9 @@ const docTemplateblog = `{
                     "type": "string"
                 },
                 "email": {
+                    "type": "string"
+                },
+                "language_code": {
                     "type": "string"
                 },
                 "name": {
@@ -5098,6 +5682,9 @@ const docTemplateblog = `{
                 "email": {
                     "type": "string"
                 },
+                "language_code": {
+                    "type": "string"
+                },
                 "name": {
                     "type": "string"
                 },
@@ -5123,6 +5710,9 @@ const docTemplateblog = `{
         "verify.Request": {
             "type": "object",
             "properties": {
+                "language_code": {
+                    "type": "string"
+                },
                 "name": {
                     "type": "string"
                 },
@@ -5146,9 +5736,9 @@ const docTemplateblog = `{
 // SwaggerInfoblog holds exported Swagger Info so clients can modify it
 var SwaggerInfoblog = &swag.Spec{
 	Version:          "1.0",
-	Host:             "0.0.0.0:80",
+	Host:             "",
 	BasePath:         "/api",
-	Schemes:          []string{"http"},
+	Schemes:          []string{"http", "https"},
 	Title:            "Backend API",
 	Description:      "Swagger/OpenAPI documentation for the backend service.",
 	InfoInstanceName: "blog",

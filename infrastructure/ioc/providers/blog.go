@@ -340,11 +340,11 @@ func blog(
 	dashboardProfileChangePasswordUseCase := changepassword.NewUseCase(userRepository, hasher, validator, translator)
 	dashboardProfileGetRolesUseCase := getRoles.NewUseCase(rolesRepository)
 
-	dashboardCreateArticleUsecase := dashboardCreateArticle.NewUseCase(articlesRepository, languageRepository, validator)
+	dashboardCreateArticleUsecase := dashboardCreateArticle.NewUseCase(articlesRepository, languageRepository, validator, translator)
 	dashboardDeleteArticleUsecase := dashboardDeleteArticle.NewUseCase(articlesRepository)
 	dashboardGetArticleUsecase := dashboardGetArticle.NewUseCase(articlesRepository, userRepository)
 	dashboardGetArticlesUsecase := dashboardGetArticles.NewUseCase(articlesRepository, userRepository)
-	dashboardUpdateArticleUsecase := dashboardUpdateArticle.NewUseCase(articlesRepository, languageRepository, validator)
+	dashboardUpdateArticleUsecase := dashboardUpdateArticle.NewUseCase(articlesRepository, languageRepository, validator, translator)
 
 	dashboardCreateCommentUsecase := dashboardCreateComment.NewUseCase(commentsRepository, validator)
 	dashboardDeleteCommentUsecase := dashboardDeleteComment.NewUseCase(commentsRepository)
@@ -360,11 +360,11 @@ func blog(
 	dashboardDeleteUserBookmarkUsecase := dashboardDeleteUserBookmark.NewUseCase(bookmarkRepository, validator)
 	dashboardGetUserBookmarksUsecase := dashboardGetUserBookmarks.NewUseCase(bookmarkRepository, validator)
 
-	dashboardCreateUserUsecase := createuser.NewUseCase(userRepository, hasher, validator, translator)
+	dashboardCreateUserUsecase := createuser.NewUseCase(userRepository, languageResolver, hasher, validator, translator)
 	dashboardDeleteUserUsecase := deleteuser.NewUseCase(userRepository)
 	dashboardGetUserUsecase := getuser.NewUseCase(userRepository)
 	dashboardGetUsersUsecase := getusers.NewUseCase(userRepository)
-	dashboardUpdateUserUsecase := updateuser.NewUseCase(userRepository, validator)
+	dashboardUpdateUserUsecase := updateuser.NewUseCase(userRepository, languageResolver, validator, translator)
 	dashboardUpdateUserChangePasswordUsecase := userchangepassword.NewUseCase(userRepository, hasher, validator)
 
 	dashboardGetPermissionsUseCase := dashboardGetPermissions.NewUseCase(permissionRepository)
@@ -375,7 +375,7 @@ func blog(
 	dashboardGetRolesUsecase := dashboardGetRoles.NewUseCase(rolesRepository)
 	dashboardUpdateRoleUsecase := dashboardUpdateRole.NewUseCase(rolesRepository, permissionRepository, validator, translator)
 
-	dashboardCreateLanguageUsecase := dashboardCreateLanguage.NewUseCase(languageRepository, validator)
+	dashboardCreateLanguageUsecase := dashboardCreateLanguage.NewUseCase(languageRepository, validator, translator)
 	dashboardDeleteLanguageUsecase := dashboardDeleteLanguage.NewUseCase(languageRepository)
 	dashboardGetLanguageUsecase := dashboardGetLanguage.NewUseCase(languageRepository)
 	dashboardGetLanguagesUsecase := dashboardGetLanguages.NewUseCase(languageRepository)
@@ -396,7 +396,7 @@ func blog(
 	dashboardUpdateElementUsecase := dashboardUpdateElement.NewUseCase(elementsRepository, validator)
 
 	dashboardGetConfigUsecase := dashboardGetConfig.NewUseCase(configRepository)
-	dashboardUpdateConfigUsecase := dashboardUpdateConfig.NewUseCase(configRepository, languageRepository, validator)
+	dashboardUpdateConfigUsecase := dashboardUpdateConfig.NewUseCase(configRepository, languageRepository, validator, translator)
 
 	mux := http.NewServeMux()
 

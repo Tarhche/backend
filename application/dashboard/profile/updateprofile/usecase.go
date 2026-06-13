@@ -64,7 +64,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 	if !uc.languageResolver.Verify(request.LanguageCode) {
 		return &Response{
 			ValidationErrors: domain.ValidationErrors{
-				"language_code": "invalid_value",
+				"language_code": uc.translator.Translate("invalid_value"),
 			},
 		}, nil
 	}

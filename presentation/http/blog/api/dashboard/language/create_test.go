@@ -16,6 +16,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/languages"
+	"github.com/khanzadimahdi/testproject/infrastructure/translator"
 	"github.com/khanzadimahdi/testproject/infrastructure/validator"
 )
 
@@ -28,6 +29,7 @@ func TestCreateHandler(t *testing.T) {
 		var (
 			languageRepository languages.MockLanguagesRepository
 			requestValidator   validator.MockValidator
+			translator         translator.TranslatorMock
 
 			u = user.User{UUID: "auth-user-uuid"}
 
@@ -41,7 +43,7 @@ func TestCreateHandler(t *testing.T) {
 		languageRepository.On("Save", mock.AnythingOfType("*language.Language")).Once().Return(r.Code, nil)
 		defer languageRepository.AssertExpectations(t)
 
-		handler := NewCreateHandler(createlanguage.NewUseCase(&languageRepository, &requestValidator))
+		handler := NewCreateHandler(createlanguage.NewUseCase(&languageRepository, &requestValidator, &translator))
 
 		var payload bytes.Buffer
 		err := json.NewEncoder(&payload).Encode(r)
@@ -67,6 +69,7 @@ func TestCreateHandler(t *testing.T) {
 		var (
 			languageRepository languages.MockLanguagesRepository
 			requestValidator   validator.MockValidator
+			translator         translator.TranslatorMock
 
 			u = user.User{UUID: "auth-user-uuid"}
 
@@ -81,7 +84,7 @@ func TestCreateHandler(t *testing.T) {
 		requestValidator.On("Validate", &r).Once().Return(validationErrors)
 		defer requestValidator.AssertExpectations(t)
 
-		handler := NewCreateHandler(createlanguage.NewUseCase(&languageRepository, &requestValidator))
+		handler := NewCreateHandler(createlanguage.NewUseCase(&languageRepository, &requestValidator, &translator))
 
 		var payload bytes.Buffer
 		err := json.NewEncoder(&payload).Encode(r)

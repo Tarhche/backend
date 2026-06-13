@@ -16,31 +16,34 @@ func TestRequest_Validate(t *testing.T) {
 		{
 			name: "valid request",
 			request: Request{
-				Email:    "user@example.com",
-				Name:     "John Doe",
-				Avatar:   "avatar.jpg",
-				Username: "johndoe",
-				Password: "password123",
+				Email:        "user@example.com",
+				Name:         "John Doe",
+				Avatar:       "avatar.jpg",
+				Username:     "johndoe",
+				Password:     "password123",
+				LanguageCode: "en",
 			},
 			want: domain.ValidationErrors{},
 		},
 		{
 			name: "valid request with empty optional fields",
 			request: Request{
-				Email:    "user@example.com",
-				Name:     "John Doe",
-				Username: "johndoe",
-				Password: "password123",
+				Email:        "user@example.com",
+				Name:         "John Doe",
+				Username:     "johndoe",
+				Password:     "password123",
+				LanguageCode: "en",
 			},
 			want: domain.ValidationErrors{},
 		},
 		{
 			name: "invalid request with empty email",
 			request: Request{
-				Email:    "",
-				Name:     "John Doe",
-				Username: "johndoe",
-				Password: "password123",
+				Email:        "",
+				Name:         "John Doe",
+				Username:     "johndoe",
+				Password:     "password123",
+				LanguageCode: "en",
 			},
 			want: domain.ValidationErrors{
 				"email": "required_field",
@@ -49,10 +52,11 @@ func TestRequest_Validate(t *testing.T) {
 		{
 			name: "invalid request with malformed email",
 			request: Request{
-				Email:    "not-an-email",
-				Name:     "John Doe",
-				Username: "johndoe",
-				Password: "password123",
+				Email:        "not-an-email",
+				Name:         "John Doe",
+				Username:     "johndoe",
+				Password:     "password123",
+				LanguageCode: "en",
 			},
 			want: domain.ValidationErrors{
 				"email": "invalid_email",
@@ -61,10 +65,11 @@ func TestRequest_Validate(t *testing.T) {
 		{
 			name: "invalid request with empty name",
 			request: Request{
-				Email:    "user@example.com",
-				Name:     "",
-				Username: "johndoe",
-				Password: "password123",
+				Email:        "user@example.com",
+				Name:         "",
+				Username:     "johndoe",
+				Password:     "password123",
+				LanguageCode: "en",
 			},
 			want: domain.ValidationErrors{
 				"name": "required_field",
@@ -73,10 +78,11 @@ func TestRequest_Validate(t *testing.T) {
 		{
 			name: "invalid request with empty username",
 			request: Request{
-				Email:    "user@example.com",
-				Name:     "John Doe",
-				Username: "",
-				Password: "password123",
+				Email:        "user@example.com",
+				Name:         "John Doe",
+				Username:     "",
+				Password:     "password123",
+				LanguageCode: "en",
 			},
 			want: domain.ValidationErrors{
 				"username": "required_field",
@@ -85,10 +91,11 @@ func TestRequest_Validate(t *testing.T) {
 		{
 			name: "invalid request with malformed username",
 			request: Request{
-				Email:    "user@example.com",
-				Name:     "John Doe",
-				Username: "John Doe!",
-				Password: "password123",
+				Email:        "user@example.com",
+				Name:         "John Doe",
+				Username:     "John Doe!",
+				Password:     "password123",
+				LanguageCode: "en",
 			},
 			want: domain.ValidationErrors{
 				"username": "invalid_value",
@@ -97,10 +104,11 @@ func TestRequest_Validate(t *testing.T) {
 		{
 			name: "invalid request with username having no alphanumerics",
 			request: Request{
-				Email:    "user@example.com",
-				Name:     "John Doe",
-				Username: "...",
-				Password: "password123",
+				Email:        "user@example.com",
+				Name:         "John Doe",
+				Username:     "...",
+				Password:     "password123",
+				LanguageCode: "en",
 			},
 			want: domain.ValidationErrors{
 				"username": "invalid_value",
@@ -109,28 +117,43 @@ func TestRequest_Validate(t *testing.T) {
 		{
 			name: "invalid request with empty password",
 			request: Request{
-				Email:    "user@example.com",
-				Name:     "John Doe",
-				Username: "johndoe",
-				Password: "",
+				Email:        "user@example.com",
+				Name:         "John Doe",
+				Username:     "johndoe",
+				Password:     "",
+				LanguageCode: "en",
 			},
 			want: domain.ValidationErrors{
 				"password": "required_field",
 			},
 		},
 		{
-			name: "invalid request with multiple errors",
+			name: "invalid request with empty language code",
 			request: Request{
-				Email:    "",
-				Name:     "",
-				Username: "",
-				Password: "",
+				Email:    "user@example.com",
+				Name:     "John Doe",
+				Username: "johndoe",
+				Password: "password123",
 			},
 			want: domain.ValidationErrors{
-				"email":    "required_field",
-				"name":     "required_field",
-				"username": "required_field",
-				"password": "required_field",
+				"language_code": "required_field",
+			},
+		},
+		{
+			name: "invalid request with multiple errors",
+			request: Request{
+				Email:        "",
+				Name:         "",
+				Username:     "",
+				Password:     "",
+				LanguageCode: "",
+			},
+			want: domain.ValidationErrors{
+				"email":         "required_field",
+				"name":          "required_field",
+				"username":      "required_field",
+				"password":      "required_field",
+				"language_code": "required_field",
 			},
 		},
 	}

@@ -3516,6 +3516,9 @@ const docTemplate = `{
                 "email": {
                     "type": "string"
                 },
+                "language_code": {
+                    "type": "string"
+                },
                 "name": {
                     "type": "string"
                 },
@@ -4828,6 +4831,9 @@ const docTemplate = `{
                 "body": {
                     "type": "string"
                 },
+                "correlation_uuid": {
+                    "type": "string"
+                },
                 "cover": {
                     "type": "string"
                 },
@@ -4847,9 +4853,6 @@ const docTemplate = `{
                     }
                 },
                 "title": {
-                    "type": "string"
-                },
-                "correlation_uuid": {
                     "type": "string"
                 },
                 "uuid": {
@@ -5387,6 +5390,9 @@ const docTemplate = `{
                 "author": {
                     "$ref": "#/definitions/home.author"
                 },
+                "correlation_uuid": {
+                    "type": "string"
+                },
                 "cover": {
                     "type": "string"
                 },
@@ -5403,9 +5409,6 @@ const docTemplate = `{
                     }
                 },
                 "title": {
-                    "type": "string"
-                },
-                "uuid": {
                     "type": "string"
                 }
             }
@@ -5677,6 +5680,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "email": {
+                    "type": "string"
+                },
+                "language_code": {
                     "type": "string"
                 },
                 "name": {

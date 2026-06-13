@@ -257,13 +257,20 @@ func TestUseCase_Execute(t *testing.T) {
 
 			expectedResponse = Response{
 				ValidationErrors: domain.ValidationErrors{
-					"language_code": "invalid_value",
+					"language_code": "language code is invalid",
 				},
 			}
 		)
 
 		validator.On("Validate", &r).Once().Return(nil)
 		defer validator.AssertExpectations(t)
+
+		translator.On(
+			"Translate",
+			"invalid_value",
+			mock.AnythingOfType(translatorOptionsType),
+		).Once().Return(expectedResponse.ValidationErrors["language_code"])
+		defer translator.AssertExpectations(t)
 
 		languageResolver.On("Verify", r.LanguageCode).Once().Return(false)
 		defer languageResolver.AssertExpectations(t)
@@ -274,7 +281,6 @@ func TestUseCase_Execute(t *testing.T) {
 
 		response, err := NewUseCase(&userRepository, &languageResolver, &validator, &translator).Execute(&r)
 
-		translator.AssertNotCalled(t, "Translate")
 		userRepository.AssertNotCalled(t, "GetOne")
 		userRepository.AssertNotCalled(t, "Save")
 

@@ -3,22 +3,30 @@ package updateuser
 import (
 	"errors"
 
+	"github.com/khanzadimahdi/testproject/application/language/resolver"
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/translator"
 	"github.com/khanzadimahdi/testproject/domain/user"
 )
 
 type UseCase struct {
-	userRepository user.Repository
-	validator      domain.Validator
+	userRepository   user.Repository
+	languageResolver resolver.Resolver
+	validator        domain.Validator
+	translator       translator.Translator
 }
 
 func NewUseCase(
 	userRepository user.Repository,
+	languageResolver resolver.Resolver,
 	validator domain.Validator,
+	translator translator.Translator,
 ) *UseCase {
 	return &UseCase{
-		userRepository: userRepository,
-		validator:      validator,
+		userRepository:   userRepository,
+		languageResolver: languageResolver,
+		validator:        validator,
+		translator:       translator,
 	}
 }
 
@@ -35,8 +43,8 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		return nil, err
 	} else if exists {
 		return &Response{
-			ValidationErrors: map[string]string{
-				"email": "email_already_exists",
+			ValidationErrors: domain.ValidationErrors{
+				"email": uc.translator.Translate("email_already_exists"),
 			},
 		}, nil
 	}
@@ -47,8 +55,16 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		return nil, err
 	} else if exists {
 		return &Response{
-			ValidationErrors: map[string]string{
-				"username": "username_already_exists",
+			ValidationErrors: domain.ValidationErrors{
+				"username": uc.translator.Translate("username_already_exists"),
+			},
+		}, nil
+	}
+
+	if !uc.languageResolver.Verify(request.LanguageCode) {
+		return &Response{
+			ValidationErrors: domain.ValidationErrors{
+				"language_code": uc.translator.Translate("invalid_value"),
 			},
 		}, nil
 	}
@@ -62,6 +78,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 	u.Avatar = request.Avatar
 	u.Email = request.Email
 	u.Username = request.Username
+	u.LanguageCode = request.LanguageCode
 
 	_, err = uc.userRepository.Save(&u)
 

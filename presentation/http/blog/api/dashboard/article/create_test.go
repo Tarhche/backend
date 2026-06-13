@@ -17,6 +17,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/articles"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/languages"
+	"github.com/khanzadimahdi/testproject/infrastructure/translator"
 	"github.com/khanzadimahdi/testproject/infrastructure/validator"
 )
 
@@ -30,6 +31,7 @@ func TestCreateHandler(t *testing.T) {
 			articleRepository  articles.MockArticlesRepository
 			languageRepository languages.MockLanguagesRepository
 			requestValidator   validator.MockValidator
+			translator         translator.TranslatorMock
 
 			r = createarticle.Request{
 				Title:        "test title",
@@ -68,7 +70,7 @@ func TestCreateHandler(t *testing.T) {
 		articleRepository.On("Save", &a).Once().Return(au, nil)
 		defer articleRepository.AssertExpectations(t)
 
-		handler := NewCreateHandler(createarticle.NewUseCase(&articleRepository, &languageRepository, &requestValidator))
+		handler := NewCreateHandler(createarticle.NewUseCase(&articleRepository, &languageRepository, &requestValidator, &translator))
 
 		var payload bytes.Buffer
 		err := json.NewEncoder(&payload).Encode(r)
@@ -95,6 +97,7 @@ func TestCreateHandler(t *testing.T) {
 			articleRepository  articles.MockArticlesRepository
 			languageRepository languages.MockLanguagesRepository
 			requestValidator   validator.MockValidator
+			translator         translator.TranslatorMock
 
 			u = user.User{
 				UUID: "test-author-uuid",
@@ -109,7 +112,7 @@ func TestCreateHandler(t *testing.T) {
 		})
 		defer requestValidator.AssertExpectations(t)
 
-		handler := NewCreateHandler(createarticle.NewUseCase(&articleRepository, &languageRepository, &requestValidator))
+		handler := NewCreateHandler(createarticle.NewUseCase(&articleRepository, &languageRepository, &requestValidator, &translator))
 
 		request := httptest.NewRequest(http.MethodGet, "/", bytes.NewBufferString("{}"))
 		request = request.WithContext(auth.ToContext(request.Context(), &u))

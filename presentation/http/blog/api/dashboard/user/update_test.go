@@ -13,9 +13,11 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	updateuser "github.com/khanzadimahdi/testproject/application/dashboard/user/updateUser"
+	"github.com/khanzadimahdi/testproject/application/language/resolver"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
+	"github.com/khanzadimahdi/testproject/infrastructure/translator"
 	"github.com/khanzadimahdi/testproject/infrastructure/validator"
 )
 
@@ -27,29 +29,36 @@ func TestUpdateHandler(t *testing.T) {
 
 		var (
 			userRepository   users.MockUsersRepository
+			languageResolver resolver.MockResolver
 			requestValidator validator.MockValidator
+			translator       translator.TranslatorMock
 
 			u = user.User{
 				UUID: "user-uuid",
 			}
 
 			r = updateuser.Request{
-				UserUUID: "test-user-uuid",
-				Name:     "test name",
-				Email:    "test@test.com",
-				Username: "test-username",
+				UserUUID:     "test-user-uuid",
+				Name:         "test name",
+				Email:        "test@test.com",
+				Username:     "test-username",
+				LanguageCode: "en",
 			}
 
 			updatedUser = user.User{
-				UUID:     r.UserUUID,
-				Name:     r.Name,
-				Email:    r.Email,
-				Username: r.Username,
+				UUID:         r.UserUUID,
+				Name:         r.Name,
+				Email:        r.Email,
+				Username:     r.Username,
+				LanguageCode: r.LanguageCode,
 			}
 		)
 
 		requestValidator.On("Validate", &r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
+
+		languageResolver.On("Verify", r.LanguageCode).Once().Return(true)
+		defer languageResolver.AssertExpectations(t)
 
 		userRepository.On("GetOneByIdentity", r.Email).Once().Return(user.User{}, domain.ErrNotExists)
 		userRepository.On("GetOneByIdentity", r.Username).Once().Return(user.User{}, domain.ErrNotExists)
@@ -57,7 +66,7 @@ func TestUpdateHandler(t *testing.T) {
 		userRepository.On("Save", mock2.Anything).Once().Return(r.UserUUID, nil)
 		defer userRepository.AssertExpectations(t)
 
-		handler := NewUpdateHandler(updateuser.NewUseCase(&userRepository, &requestValidator))
+		handler := NewUpdateHandler(updateuser.NewUseCase(&userRepository, &languageResolver, &requestValidator, &translator))
 
 		var payload bytes.Buffer
 		err := json.NewEncoder(&payload).Encode(r)
@@ -78,7 +87,9 @@ func TestUpdateHandler(t *testing.T) {
 
 		var (
 			userRepository   users.MockUsersRepository
+			languageResolver resolver.MockResolver
 			requestValidator validator.MockValidator
+			translator       translator.TranslatorMock
 
 			u = user.User{
 				UUID: "user-uuid",
@@ -92,7 +103,7 @@ func TestUpdateHandler(t *testing.T) {
 		})
 		defer requestValidator.AssertExpectations(t)
 
-		handler := NewUpdateHandler(updateuser.NewUseCase(&userRepository, &requestValidator))
+		handler := NewUpdateHandler(updateuser.NewUseCase(&userRepository, &languageResolver, &requestValidator, &translator))
 
 		request := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString("{}"))
 		request = request.WithContext(auth.ToContext(request.Context(), &u))

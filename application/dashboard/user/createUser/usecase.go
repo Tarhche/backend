@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"errors"
 
+	"github.com/khanzadimahdi/testproject/application/language/resolver"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/password"
 	"github.com/khanzadimahdi/testproject/domain/translator"
@@ -11,23 +12,26 @@ import (
 )
 
 type UseCase struct {
-	userRepository user.Repository
-	hasher         password.Hasher
-	validator      domain.Validator
-	translator     translator.Translator
+	userRepository   user.Repository
+	languageResolver resolver.Resolver
+	hasher           password.Hasher
+	validator        domain.Validator
+	translator       translator.Translator
 }
 
 func NewUseCase(
 	userRepository user.Repository,
+	languageResolver resolver.Resolver,
 	hasher password.Hasher,
 	validator domain.Validator,
 	translator translator.Translator,
 ) *UseCase {
 	return &UseCase{
-		userRepository: userRepository,
-		hasher:         hasher,
-		validator:      validator,
-		translator:     translator,
+		userRepository:   userRepository,
+		languageResolver: languageResolver,
+		hasher:           hasher,
+		validator:        validator,
+		translator:       translator,
 	}
 }
 
@@ -58,6 +62,14 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		}, nil
 	}
 
+	if !uc.languageResolver.Verify(request.LanguageCode) {
+		return &Response{
+			ValidationErrors: domain.ValidationErrors{
+				"language_code": uc.translator.Translate("invalid_value"),
+			},
+		}, nil
+	}
+
 	UUID, err := uc.createUser(request)
 	if err != nil {
 		return nil, err
@@ -84,10 +96,11 @@ func (uc *UseCase) createUser(request *Request) (string, error) {
 	}
 
 	u := user.User{
-		Name:     request.Name,
-		Avatar:   request.Avatar,
-		Email:    request.Email,
-		Username: request.Username,
+		Name:         request.Name,
+		Avatar:       request.Avatar,
+		Email:        request.Email,
+		Username:     request.Username,
+		LanguageCode: request.LanguageCode,
 		PasswordHash: password.Hash{
 			Value: uc.hasher.Hash([]byte(request.Password), salt),
 			Salt:  salt,

@@ -6,23 +6,27 @@ import (
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/config"
 	"github.com/khanzadimahdi/testproject/domain/language"
+	"github.com/khanzadimahdi/testproject/domain/translator"
 )
 
 type UseCase struct {
 	configRepository   config.Repository
 	languageRepository language.Repository
 	validator          domain.Validator
+	translator         translator.Translator
 }
 
 func NewUseCase(
 	configRepository config.Repository,
 	languageRepository language.Repository,
 	validator domain.Validator,
+	translator translator.Translator,
 ) *UseCase {
 	return &UseCase{
 		configRepository:   configRepository,
 		languageRepository: languageRepository,
 		validator:          validator,
+		translator:         translator,
 	}
 }
 
@@ -36,7 +40,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 	if !uc.languageRepository.Exists(request.DefaultLanguageCode) {
 		return &Response{
 			ValidationErrors: domain.ValidationErrors{
-				"default_language_code": "invalid_value",
+				"default_language_code": uc.translator.Translate("invalid_value"),
 			},
 		}, nil
 	}

@@ -2,19 +2,25 @@ package updatearticle
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	mock2 "github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/article"
+	translatorContract "github.com/khanzadimahdi/testproject/domain/translator"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/articles"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/languages"
+	"github.com/khanzadimahdi/testproject/infrastructure/translator"
 	"github.com/khanzadimahdi/testproject/infrastructure/validator"
 )
 
 func TestUseCase_Execute(t *testing.T) {
 	t.Parallel()
+
+	var translatorOptionsType = reflect.TypeFor[func(*translatorContract.Params)]().Name()
 
 	t.Run("updating an articles succeeds", func(t *testing.T) {
 		t.Parallel()
@@ -23,6 +29,7 @@ func TestUseCase_Execute(t *testing.T) {
 			articleRepository  articles.MockArticlesRepository
 			languageRepository languages.MockLanguagesRepository
 			validator          validator.MockValidator
+			translator         translator.TranslatorMock
 
 			r = Request{
 				UUID:         "test-article-uuid",
@@ -64,7 +71,7 @@ func TestUseCase_Execute(t *testing.T) {
 		articleRepository.On("Save", &a).Once().Return(a.UUID, nil)
 		defer articleRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&articleRepository, &languageRepository, &validator).Execute(&r)
+		response, err := NewUseCase(&articleRepository, &languageRepository, &validator, &translator).Execute(&r)
 
 		assert.NoError(t, err)
 		assert.Nil(t, response)
@@ -77,6 +84,7 @@ func TestUseCase_Execute(t *testing.T) {
 			articleRepository  articles.MockArticlesRepository
 			languageRepository languages.MockLanguagesRepository
 			validator          validator.MockValidator
+			translator         translator.TranslatorMock
 
 			r                = Request{}
 			expectedResponse = Response{
@@ -93,7 +101,7 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(expectedResponse.ValidationErrors)
 		defer validator.AssertExpectations(t)
 
-		response, err := NewUseCase(&articleRepository, &languageRepository, &validator).Execute(&r)
+		response, err := NewUseCase(&articleRepository, &languageRepository, &validator, &translator).Execute(&r)
 
 		articleRepository.AssertNotCalled(t, "Save")
 		articleRepository.AssertNotCalled(t, "GetOne")
@@ -109,6 +117,7 @@ func TestUseCase_Execute(t *testing.T) {
 			articleRepository  articles.MockArticlesRepository
 			languageRepository languages.MockLanguagesRepository
 			validator          validator.MockValidator
+			translator         translator.TranslatorMock
 
 			r = Request{
 				UUID:         "test-article-uuid",
@@ -123,16 +132,23 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
+		translator.On(
+			"Translate",
+			"invalid_value",
+			mock2.AnythingOfType(translatorOptionsType),
+		).Once().Return("language code is invalid")
+		defer translator.AssertExpectations(t)
+
 		languageRepository.On("Exists", "DE").Once().Return(false)
 		defer languageRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&articleRepository, &languageRepository, &validator).Execute(&r)
+		response, err := NewUseCase(&articleRepository, &languageRepository, &validator, &translator).Execute(&r)
 
 		articleRepository.AssertNotCalled(t, "Save")
 
 		assert.NoError(t, err)
 		assert.NotNil(t, response)
-		assert.Equal(t, "invalid_value", response.ValidationErrors["language_code"])
+		assert.Equal(t, "language code is invalid", response.ValidationErrors["language_code"])
 	})
 
 	t.Run("updating an article fails", func(t *testing.T) {
@@ -142,6 +158,7 @@ func TestUseCase_Execute(t *testing.T) {
 			articleRepository  articles.MockArticlesRepository
 			languageRepository languages.MockLanguagesRepository
 			validator          validator.MockValidator
+			translator         translator.TranslatorMock
 
 			r = Request{
 				UUID:         "test-article-uuid",
@@ -179,7 +196,7 @@ func TestUseCase_Execute(t *testing.T) {
 		articleRepository.On("Save", &a).Once().Return("", expectedErr)
 		defer articleRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&articleRepository, &languageRepository, &validator).Execute(&r)
+		response, err := NewUseCase(&articleRepository, &languageRepository, &validator, &translator).Execute(&r)
 
 		assert.ErrorIs(t, err, expectedErr)
 		assert.Nil(t, response)
