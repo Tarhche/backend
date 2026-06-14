@@ -4,18 +4,21 @@
             "title": "title-1",
             "object_uuid": "title-uuid-1",
             "object_type": "article",
+            "language_code": "en",
             "created_at": "2024-10-11T04:27:44Z"
         },
         {
             "title": "title-2",
             "object_uuid": "title-uuid-2",
             "object_type": "article",
+            "language_code": "fr",
             "created_at": "2024-10-11T04:27:44Z"
         },
         {
             "title": "title-3",
             "object_uuid": "title-uui-3",
             "object_type": "article",
+            "language_code": "de",
             "created_at": "2024-10-11T04:27:44Z"
         }
     ],

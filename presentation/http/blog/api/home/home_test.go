@@ -16,6 +16,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/article"
 	"github.com/khanzadimahdi/testproject/domain/language"
 	"github.com/khanzadimahdi/testproject/domain/user"
+	"github.com/khanzadimahdi/testproject/infrastructure/matcher"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/articles"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/elements"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
@@ -78,21 +79,19 @@ func TestHomeHandler(t *testing.T) {
 
 		articlesRepository.On("GetMostViewed", "EN", uint(4)).Once().Return(articles, nil)
 		articlesRepository.On("GetAllPublished", "EN", uint(0), uint(3)).Once().Return(articles, nil)
-		articlesRepository.On("GetByCorrelationUUIDs", []string{}, "EN").Once().Return(nil, nil)
 		defer articlesRepository.AssertExpectations(t)
 
 		userRepository.On("GetByUUIDs", []string{"author-uuid-1", "author-uuid-1", "author-uuid-2", "author-uuid-1", "author-uuid-1", "author-uuid-2"}).Once().Return(users, nil)
-		userRepository.On("GetByUUIDs", []string{}).Once().Return([]user.User{}, nil)
 		defer userRepository.AssertExpectations(t)
 
-		elementsRepository.On("GetByVenues", []string{"home"}).Once().Return(nil, nil)
+		elementsRepository.On("Count").Once().Return(uint(0), nil)
 		defer elementsRepository.AssertExpectations(t)
 
 		languageResolver.On("DefaultCode").Once().Return("EN", nil)
 		languageResolver.On("Resolve", "EN").Once().Return(language.Language{Code: "EN", Name: "English"}, nil)
 		defer languageResolver.AssertExpectations(t)
 
-		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository)
+		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository, matcher.New())
 		useCase := home.NewUseCase(&articlesRepository, &userRepository, elementRetriever, &languageResolver)
 		handler := NewHomeHandler(useCase)
 
@@ -121,20 +120,19 @@ func TestHomeHandler(t *testing.T) {
 
 		articlesRepository.On("GetMostViewed", "EN", uint(4)).Once().Return([]article.Article{}, nil)
 		articlesRepository.On("GetAllPublished", "EN", uint(0), uint(3)).Once().Return([]article.Article{}, nil)
-		articlesRepository.On("GetByCorrelationUUIDs", []string{}, "EN").Once().Return([]article.Article{}, nil)
 		defer articlesRepository.AssertExpectations(t)
 
 		userRepository.On("GetByUUIDs", []string{}).Return([]user.User{}, nil)
 		defer userRepository.AssertExpectations(t)
 
-		elementsRepository.On("GetByVenues", []string{"home"}).Once().Return(nil, nil)
+		elementsRepository.On("Count").Once().Return(uint(0), nil)
 		defer elementsRepository.AssertExpectations(t)
 
 		languageResolver.On("DefaultCode").Once().Return("EN", nil)
 		languageResolver.On("Resolve", "EN").Once().Return(language.Language{Code: "EN", Name: "English"}, nil)
 		defer languageResolver.AssertExpectations(t)
 
-		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository)
+		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository, matcher.New())
 		useCase := home.NewUseCase(&articlesRepository, &userRepository, elementRetriever, &languageResolver)
 		handler := NewHomeHandler(useCase)
 
@@ -166,7 +164,7 @@ func TestHomeHandler(t *testing.T) {
 		languageResolver.On("Resolve", "EN").Once().Return(language.Language{Code: "EN", Name: "English"}, nil)
 		defer languageResolver.AssertExpectations(t)
 
-		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository)
+		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository, matcher.New())
 		useCase := home.NewUseCase(&articlesRepository, &userRepository, elementRetriever, &languageResolver)
 		handler := NewHomeHandler(useCase)
 
@@ -178,7 +176,7 @@ func TestHomeHandler(t *testing.T) {
 		articlesRepository.AssertNotCalled(t, "GetAllPublished")
 		articlesRepository.AssertNotCalled(t, "GetByCorrelationUUIDs")
 		userRepository.AssertNotCalled(t, "GetByUUIDs")
-		elementsRepository.AssertNotCalled(t, "GetByVenues")
+		elementsRepository.AssertNotCalled(t, "Count")
 
 		assert.Len(t, response.Body.Bytes(), 0)
 		assert.Equal(t, http.StatusInternalServerError, response.Code)

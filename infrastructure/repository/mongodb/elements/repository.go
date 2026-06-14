@@ -72,40 +72,6 @@ func (r *ElementsRepository) GetAll(offset uint, limit uint) ([]element.Element,
 	return items, nil
 }
 
-func (r *ElementsRepository) GetByVenues(venues []string) ([]element.Element, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
-	defer cancel()
-
-	filter := bson.M{"venues": bson.M{"$in": venues}}
-	cur, err := r.collection.Find(ctx, filter)
-	if err != nil {
-		return nil, err
-	}
-	defer cur.Close(ctx)
-
-	items := make([]element.Element, 0, 2)
-	for cur.Next(ctx) {
-		var a ElementBson
-
-		if err := cur.Decode(&a); err != nil {
-			return nil, err
-		}
-
-		e, err := bsonToElement(&a)
-		if err != nil {
-			return nil, err
-		}
-
-		items = append(items, e)
-	}
-
-	if err := cur.Err(); err != nil {
-		return nil, err
-	}
-
-	return items, nil
-}
-
 func (r *ElementsRepository) GetOne(UUID string) (element.Element, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
 	defer cancel()

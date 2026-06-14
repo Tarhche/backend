@@ -1,6 +1,9 @@
 package getArticlesByAuthor
 
 import (
+	"fmt"
+
+	"github.com/khanzadimahdi/testproject/application/element"
 	"github.com/khanzadimahdi/testproject/application/language/resolver"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/article"
@@ -15,6 +18,7 @@ type UseCase struct {
 	userRepository     user.Repository
 	languageRepository language.Repository
 	languageResolver   resolver.Resolver
+	elementRetriever   *element.Retriever
 	validator          domain.Validator
 }
 
@@ -23,6 +27,7 @@ func NewUseCase(
 	userRepository user.Repository,
 	languageRepository language.Repository,
 	languageResolver resolver.Resolver,
+	elementRetriever *element.Retriever,
 	validator domain.Validator,
 ) *UseCase {
 	return &UseCase{
@@ -30,6 +35,7 @@ func NewUseCase(
 		userRepository:     userRepository,
 		languageRepository: languageRepository,
 		languageResolver:   languageResolver,
+		elementRetriever:   elementRetriever,
 		validator:          validator,
 	}
 }
@@ -87,6 +93,14 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		return nil, err
 	}
 
+	elementsResponse, err := uc.elementRetriever.RetrieveByVenues(
+		[]string{fmt.Sprintf("/%s/authors/%s/articles", languageCode, author.UUID)},
+		languageCode,
+	)
+	if err != nil {
+		return nil, err
+	}
+
 	publishedLanguages := make(map[string][]language.Language, len(a))
 	for i := range a {
 		codes, err := uc.articleRepository.GetPublishedLanguageCodes(a[i].CorrelationUUID)
@@ -101,7 +115,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		publishedLanguages[a[i].UUID] = al
 	}
 
-	return NewResponse(author, a, publishedLanguages, l, totalPages, currentPage), nil
+	return NewResponse(author, a, publishedLanguages, l, elementsResponse, totalPages, currentPage), nil
 }
 
 func (uc *UseCase) resolveAuthor(request *Request) (user.User, error) {

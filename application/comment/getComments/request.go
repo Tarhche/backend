@@ -6,9 +6,10 @@ import (
 )
 
 type Request struct {
-	Page       uint
-	ObjectUUID string
-	ObjectType string
+	Page         uint
+	ObjectUUID   string
+	ObjectType   string
+	LanguageCode string
 }
 
 var _ domain.Validatable = &Request{}
@@ -22,6 +23,10 @@ func (r *Request) Validate() domain.ValidationErrors {
 
 	if len(r.ObjectUUID) == 0 {
 		validationErrors["object_uuid"] = "required_field"
+	}
+
+	if len(r.LanguageCode) == 0 {
+		validationErrors["language_code"] = "required_field"
 	}
 
 	return validationErrors

@@ -9,14 +9,18 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	getArticlesByHashtag "github.com/khanzadimahdi/testproject/application/article/getArticlesByHashtag"
+	"github.com/khanzadimahdi/testproject/application/element"
 	"github.com/khanzadimahdi/testproject/application/language/resolver"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/article"
 	"github.com/khanzadimahdi/testproject/domain/language"
 	"github.com/khanzadimahdi/testproject/domain/user"
+	"github.com/khanzadimahdi/testproject/infrastructure/matcher"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/articles"
+	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/elements"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/languages"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
 	"github.com/khanzadimahdi/testproject/infrastructure/validator"
@@ -30,6 +34,7 @@ func TestShowHandler(t *testing.T) {
 
 		var (
 			articlesRepository  articles.MockArticlesRepository
+			elementsRepository  elements.MockElementsRepository
 			userRepository      users.MockUsersRepository
 			languagesRepository languages.MockLanguagesRepository
 			languageResolver    resolver.MockResolver
@@ -41,32 +46,35 @@ func TestShowHandler(t *testing.T) {
 
 		articles := []article.Article{
 			{
-				UUID:        "article-uuid-1",
-				Cover:       "article-cover-1",
-				Video:       "article-video-1",
-				Title:       "article-title-1",
-				Excerpt:     "article-excerpt-1",
-				Body:        "article-body-1",
-				PublishedAt: publishedAt,
-				AuthorUUID:  "author-uuid-1",
-				Tags:        []string{"tag-1", "tag-2", "tag-3"},
-				ViewCount:   123,
+				UUID:            "article-uuid-1",
+				CorrelationUUID: "article-correlation-uuid-1",
+				Cover:           "article-cover-1",
+				Video:           "article-video-1",
+				Title:           "article-title-1",
+				Excerpt:         "article-excerpt-1",
+				Body:            "article-body-1",
+				PublishedAt:     publishedAt,
+				AuthorUUID:      "author-uuid-1",
+				Tags:            []string{"tag-1", "tag-2", "tag-3"},
+				ViewCount:       123,
 			},
 			{
-				UUID:       "article-uuid-2",
-				Cover:      "article-cover-2",
-				Title:      "article-title-2",
-				Excerpt:    "article-excerpt-2",
-				Body:       "article-body-2",
-				AuthorUUID: "author-uuid-1",
+				UUID:            "article-uuid-2",
+				CorrelationUUID: "article-correlation-uuid-2",
+				Cover:           "article-cover-2",
+				Title:           "article-title-2",
+				Excerpt:         "article-excerpt-2",
+				Body:            "article-body-2",
+				AuthorUUID:      "author-uuid-1",
 			},
 			{
-				UUID:       "article-uuid-3",
-				Cover:      "article-cover-3",
-				Title:      "article-title-3",
-				Excerpt:    "article-excerpt-3",
-				Body:       "article-body-3",
-				AuthorUUID: "author-uuid-2",
+				UUID:            "article-uuid-3",
+				CorrelationUUID: "article-correlation-uuid-3",
+				Cover:           "article-cover-3",
+				Title:           "article-title-3",
+				Excerpt:         "article-excerpt-3",
+				Body:            "article-body-3",
+				AuthorUUID:      "author-uuid-2",
 			},
 		}
 
@@ -86,12 +94,13 @@ func TestShowHandler(t *testing.T) {
 		defer articlesRepository.AssertExpectations(t)
 
 		articlesRepository.On("GetPublishedByHashtags", []string{hashtag}, "EN", uint(0), uint(10)).Once().Return(articles, nil)
+		elementsRepository.On("Count").Once().Return(uint(0), nil)
 		defer articlesRepository.AssertExpectations(t)
 
 		userRepository.On("GetByUUIDs", []string{"author-uuid-1", "author-uuid-1", "author-uuid-2"}).Once().Return(users, nil)
 		defer userRepository.AssertExpectations(t)
 
-		articlesRepository.On("GetPublishedLanguageCodes", "").Return([]string{}, nil)
+		articlesRepository.On("GetPublishedLanguageCodes", mock.Anything).Return([]string{}, nil)
 		languagesRepository.On("GetByCodes", []string{}).Return([]language.Language{}, nil)
 
 		requestValidator.On("Validate", r).Once().Return(nil)
@@ -101,7 +110,7 @@ func TestShowHandler(t *testing.T) {
 		languageResolver.On("Resolve", "EN").Once().Return(language.Language{Code: "EN", Name: "English"}, nil)
 		defer languageResolver.AssertExpectations(t)
 
-		useCase := getArticlesByHashtag.NewUseCase(&articlesRepository, &userRepository, &languagesRepository, &languageResolver, &requestValidator)
+		useCase := getArticlesByHashtag.NewUseCase(&articlesRepository, &userRepository, &languagesRepository, &languageResolver, element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository, matcher.New()), &requestValidator)
 		handler := NewShowHandler(useCase)
 
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -124,6 +133,7 @@ func TestShowHandler(t *testing.T) {
 
 		var (
 			articlesRepository  articles.MockArticlesRepository
+			elementsRepository  elements.MockElementsRepository
 			userRepository      users.MockUsersRepository
 			languagesRepository languages.MockLanguagesRepository
 			languageResolver    resolver.MockResolver
@@ -141,7 +151,7 @@ func TestShowHandler(t *testing.T) {
 		requestValidator.On("Validate", r).Once().Return(validationErrors)
 		defer requestValidator.AssertExpectations(t)
 
-		useCase := getArticlesByHashtag.NewUseCase(&articlesRepository, &userRepository, &languagesRepository, &languageResolver, &requestValidator)
+		useCase := getArticlesByHashtag.NewUseCase(&articlesRepository, &userRepository, &languagesRepository, &languageResolver, element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository, matcher.New()), &requestValidator)
 		handler := NewShowHandler(useCase)
 
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -166,6 +176,7 @@ func TestShowHandler(t *testing.T) {
 
 		var (
 			articlesRepository  articles.MockArticlesRepository
+			elementsRepository  elements.MockElementsRepository
 			userRepository      users.MockUsersRepository
 			languagesRepository languages.MockLanguagesRepository
 			languageResolver    resolver.MockResolver
@@ -183,6 +194,7 @@ func TestShowHandler(t *testing.T) {
 		defer articlesRepository.AssertExpectations(t)
 
 		articlesRepository.On("GetPublishedByHashtags", []string{hashtag}, "EN", uint(0), uint(10)).Once().Return(nil, nil)
+		elementsRepository.On("Count").Once().Return(uint(0), nil)
 		defer articlesRepository.AssertExpectations(t)
 
 		userRepository.On("GetByUUIDs", []string{}).Once().Return([]user.User{}, nil)
@@ -195,7 +207,7 @@ func TestShowHandler(t *testing.T) {
 		languageResolver.On("Resolve", "EN").Once().Return(language.Language{Code: "EN", Name: "English"}, nil)
 		defer languageResolver.AssertExpectations(t)
 
-		useCase := getArticlesByHashtag.NewUseCase(&articlesRepository, &userRepository, &languagesRepository, &languageResolver, &requestValidator)
+		useCase := getArticlesByHashtag.NewUseCase(&articlesRepository, &userRepository, &languagesRepository, &languageResolver, element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository, matcher.New()), &requestValidator)
 		handler := NewShowHandler(useCase)
 
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -218,6 +230,7 @@ func TestShowHandler(t *testing.T) {
 
 		var (
 			articlesRepository  articles.MockArticlesRepository
+			elementsRepository  elements.MockElementsRepository
 			userRepository      users.MockUsersRepository
 			languagesRepository languages.MockLanguagesRepository
 			languageResolver    resolver.MockResolver
@@ -244,7 +257,7 @@ func TestShowHandler(t *testing.T) {
 		languageResolver.On("Resolve", "EN").Once().Return(language.Language{Code: "EN", Name: "English"}, nil)
 		defer languageResolver.AssertExpectations(t)
 
-		useCase := getArticlesByHashtag.NewUseCase(&articlesRepository, &userRepository, &languagesRepository, &languageResolver, &requestValidator)
+		useCase := getArticlesByHashtag.NewUseCase(&articlesRepository, &userRepository, &languagesRepository, &languageResolver, element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository, matcher.New()), &requestValidator)
 		handler := NewShowHandler(useCase)
 
 		request := httptest.NewRequest(http.MethodGet, "/", nil)

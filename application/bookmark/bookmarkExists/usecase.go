@@ -29,7 +29,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		}, nil
 	}
 
-	if _, err := uc.bookmarkRepository.GetByOwnerUUID(request.OwnerUUID, request.ObjectType, request.ObjectUUID); errors.Is(err, domain.ErrNotExists) {
+	if _, err := uc.bookmarkRepository.GetByOwnerUUID(request.OwnerUUID, request.ObjectType, request.ObjectUUID, request.LanguageCode); errors.Is(err, domain.ErrNotExists) {
 		return &Response{
 			Exist: false,
 		}, nil

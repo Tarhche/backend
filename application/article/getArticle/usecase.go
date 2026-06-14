@@ -82,7 +82,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 	}
 
 	elementsResponse, err := uc.elementRetriever.RetrieveByVenues(
-		[]string{"articles/*", fmt.Sprintf("articles/%s", a.CorrelationUUID)},
+		[]string{fmt.Sprintf("/%s/articles/%s", languageCode, a.CorrelationUUID)},
 		languageCode,
 	)
 	if err != nil {

@@ -6,9 +6,10 @@ import (
 )
 
 type Request struct {
-	ObjectType string `json:"object_type"`
-	ObjectUUID string `json:"object_uuid"`
-	OwnerUUID  string `json:"-"`
+	ObjectType   string `json:"object_type"`
+	ObjectUUID   string `json:"object_uuid"`
+	LanguageCode string `json:"language_code"`
+	OwnerUUID    string `json:"-"`
 }
 
 func (r *Request) Validate() domain.ValidationErrors {
@@ -20,6 +21,10 @@ func (r *Request) Validate() domain.ValidationErrors {
 
 	if len(r.ObjectUUID) == 0 {
 		errors["object_uuid"] = "required_field"
+	}
+
+	if len(r.LanguageCode) == 0 {
+		errors["language_code"] = "required_field"
 	}
 
 	if len(r.OwnerUUID) == 0 {

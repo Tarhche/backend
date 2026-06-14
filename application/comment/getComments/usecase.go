@@ -33,7 +33,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		}, nil
 	}
 
-	totalComments, err := uc.commentRepository.CountApprovedByObjectUUID(request.ObjectType, request.ObjectUUID)
+	totalComments, err := uc.commentRepository.CountApprovedByObjectUUID(request.ObjectType, request.ObjectUUID, request.LanguageCode)
 	if err != nil {
 		return nil, err
 	}
@@ -57,6 +57,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 	c, err := uc.commentRepository.GetApprovedByObjectUUID(
 		request.ObjectType,
 		request.ObjectUUID,
+		request.LanguageCode,
 		offset, limit,
 	)
 	if err != nil {

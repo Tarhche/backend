@@ -12,7 +12,8 @@
             "object_type": "article",
             "object_uuid": "object-uuid-1",
             "approved_at": "0001-01-01T00:00:00Z",
-            "created_at": "0001-01-01T00:00:00Z"
+            "created_at": "0001-01-01T00:00:00Z",
+            "language_code": ""
         },
         {
             "uuid": "article-uuid-2",
@@ -20,7 +21,8 @@
             "object_type": "",
             "object_uuid": "",
             "approved_at": "0001-01-01T00:00:00Z",
-            "created_at": "0001-01-01T00:00:00Z"
+            "created_at": "0001-01-01T00:00:00Z",
+            "language_code": ""
         },
         {
             "uuid": "article-uuid-3",
@@ -28,7 +30,8 @@
             "object_type": "",
             "object_uuid": "",
             "approved_at": "2024-10-11T04:27:44Z",
-            "created_at": "2024-10-11T04:27:44Z"
+            "created_at": "2024-10-11T04:27:44Z",
+            "language_code": ""
         }
     ],
     "pagination": {

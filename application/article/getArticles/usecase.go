@@ -1,6 +1,9 @@
 package getarticles
 
 import (
+	"fmt"
+
+	"github.com/khanzadimahdi/testproject/application/element"
 	"github.com/khanzadimahdi/testproject/application/language/resolver"
 	"github.com/khanzadimahdi/testproject/domain/article"
 	"github.com/khanzadimahdi/testproject/domain/language"
@@ -14,6 +17,7 @@ type UseCase struct {
 	userRepository     user.Repository
 	languageRepository language.Repository
 	languageResolver   resolver.Resolver
+	elementRetriever   *element.Retriever
 }
 
 func NewUseCase(
@@ -21,12 +25,14 @@ func NewUseCase(
 	userRepository user.Repository,
 	languageRepository language.Repository,
 	languageResolver resolver.Resolver,
+	elementRetriever *element.Retriever,
 ) *UseCase {
 	return &UseCase{
 		articleRepository:  articleRepository,
 		userRepository:     userRepository,
 		languageRepository: languageRepository,
 		languageResolver:   languageResolver,
+		elementRetriever:   elementRetriever,
 	}
 }
 
@@ -82,6 +88,14 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		return nil, err
 	}
 
+	elementsResponse, err := uc.elementRetriever.RetrieveByVenues(
+		[]string{fmt.Sprintf("/%s/articles", languageCode)},
+		languageCode,
+	)
+	if err != nil {
+		return nil, err
+	}
+
 	publishedLanguages := make(map[string][]language.Language, len(a))
 	for i := range a {
 		codes, err := uc.articleRepository.GetPublishedLanguageCodes(a[i].CorrelationUUID)
@@ -96,5 +110,5 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		publishedLanguages[a[i].UUID] = al
 	}
 
-	return NewResponse(a, authors, publishedLanguages, l, totalPages, currentPage), nil
+	return NewResponse(a, authors, publishedLanguages, l, elementsResponse, totalPages, currentPage), nil
 }

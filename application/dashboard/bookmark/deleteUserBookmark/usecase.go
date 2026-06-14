@@ -31,6 +31,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		request.OwnerUUID,
 		request.ObjectType,
 		request.ObjectUUID,
+		request.LanguageCode,
 	)
 
 	return nil, err

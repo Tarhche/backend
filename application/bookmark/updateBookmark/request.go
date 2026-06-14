@@ -6,11 +6,12 @@ import (
 )
 
 type Request struct {
-	Keep       bool   `json:"keep"`
-	Title      string `json:"title"`
-	ObjectType string `json:"object_type"`
-	ObjectUUID string `json:"object_uuid"`
-	OwnerUUID  string `json:"-"`
+	Keep         bool   `json:"keep"`
+	Title        string `json:"title"`
+	ObjectType   string `json:"object_type"`
+	ObjectUUID   string `json:"object_uuid"`
+	LanguageCode string `json:"language_code"`
+	OwnerUUID    string `json:"-"`
 }
 
 var _ domain.Validatable = &Request{}
@@ -28,6 +29,10 @@ func (r *Request) Validate() domain.ValidationErrors {
 
 	if len(r.ObjectUUID) == 0 {
 		validationErrors["object_uuid"] = "required_field"
+	}
+
+	if len(r.LanguageCode) == 0 {
+		validationErrors["language_code"] = "required_field"
 	}
 
 	if len(r.OwnerUUID) == 0 {

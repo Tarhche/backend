@@ -8,7 +8,7 @@
     },
     "items": [
         {
-            "uuid": "article-uuid-1",
+            "correlation_uuid": "article-correlation-uuid-1",
             "cover": "article-cover-1",
             "video": "article-video-1",
             "title": "article-title-1",
@@ -21,6 +21,7 @@
         "code": "EN",
         "name": "English"
     },
+    "elements": [],
     "pagination": {
         "total_pages": 1,
         "current_page": 1

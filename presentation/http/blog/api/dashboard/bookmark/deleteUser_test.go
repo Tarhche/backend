@@ -31,16 +31,17 @@ func TestDeleteUserHandler(t *testing.T) {
 			}
 
 			r = deleteUserBookmark.Request{
-				ObjectType: "article",
-				ObjectUUID: "article-uuid",
-				OwnerUUID:  u.UUID,
+				ObjectType:   "article",
+				ObjectUUID:   "article-uuid",
+				LanguageCode: "en",
+				OwnerUUID:    u.UUID,
 			}
 		)
 
 		requestValidator.On("Validate", &r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
-		bookmarkRepository.On("DeleteByOwnerUUID", r.OwnerUUID, r.ObjectType, r.ObjectUUID).Return(nil)
+		bookmarkRepository.On("DeleteByOwnerUUID", r.OwnerUUID, r.ObjectType, r.ObjectUUID, r.LanguageCode).Return(nil)
 		defer bookmarkRepository.AssertExpectations(t)
 
 		handler := NewDeleteUserBookmarkHandler(deleteUserBookmark.NewUseCase(&bookmarkRepository, &requestValidator))

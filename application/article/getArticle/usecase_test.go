@@ -14,6 +14,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/element/component"
 	"github.com/khanzadimahdi/testproject/domain/language"
 	"github.com/khanzadimahdi/testproject/domain/user"
+	"github.com/khanzadimahdi/testproject/infrastructure/matcher"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/articles"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/elements"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/languages"
@@ -35,7 +36,7 @@ func TestUseCase_Execute(t *testing.T) {
 			correlationUUID string   = "test-correlation-uuid"
 			articleUUID     string   = "test-uuid"
 			authorUUID      string   = "author-uuid"
-			venues          []string = []string{"articles/*", fmt.Sprintf("articles/%s", correlationUUID)}
+			venues          []string = []string{fmt.Sprintf("/EN/articles/%s", correlationUUID)}
 			increaseView    uint     = 1
 
 			a = article.Article{
@@ -90,13 +91,14 @@ func TestUseCase_Execute(t *testing.T) {
 		defer mockComponent.AssertExpectations(t)
 
 		v := []domainElement.Element{
-			{Body: &mockComponent},
+			{Body: &mockComponent, Venues: venues},
 		}
 
-		elementsRepository.On("GetByVenues", venues).Once().Return(v, nil)
+		elementsRepository.On("Count").Once().Return(uint(len(v)), nil)
+		elementsRepository.On("GetAll", uint(0), uint(len(v))).Once().Return(v, nil)
 		defer elementsRepository.AssertExpectations(t)
 
-		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository)
+		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository, matcher.New())
 		response, err := NewUseCase(&articlesRepository, &userRepository, &languagesRepository, &languageResolver, elementRetriever, &requestValidator).Execute(&request)
 
 		assert.NotNil(t, response, "unexpected response")
@@ -128,13 +130,13 @@ func TestUseCase_Execute(t *testing.T) {
 		articlesRepository.On("GetOnePublished", correlationUUID, "EN").Once().Return(article.Article{}, expectedErr)
 		defer articlesRepository.AssertExpectations(t)
 
-		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository)
+		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository, matcher.New())
 		usecase := NewUseCase(&articlesRepository, &userRepository, &languagesRepository, &languageResolver, elementRetriever, &requestValidator)
 		response, err := usecase.Execute(&request)
 
 		userRepository.AssertNotCalled(t, "GetOne")
 		articlesRepository.AssertNotCalled(t, "GetPublishedLanguageCodes")
-		elementsRepository.AssertNotCalled(t, "GetByVenues")
+		elementsRepository.AssertNotCalled(t, "GetAll")
 		articlesRepository.AssertNotCalled(t, "GetByCorrelationUUIDs")
 		articlesRepository.AssertNotCalled(t, "IncreaseView")
 
@@ -155,7 +157,7 @@ func TestUseCase_Execute(t *testing.T) {
 			correlationUUID string   = "test-correlation-uuid"
 			articleUUID     string   = "test-uuid"
 			authorUUID      string   = "missing-author-uuid"
-			venues          []string = []string{"articles/*", fmt.Sprintf("articles/%s", correlationUUID)}
+			venues          []string = []string{fmt.Sprintf("/EN/articles/%s", correlationUUID)}
 			increaseView    uint     = 1
 
 			a = article.Article{
@@ -191,13 +193,14 @@ func TestUseCase_Execute(t *testing.T) {
 		defer mockComponent.AssertExpectations(t)
 
 		v := []domainElement.Element{
-			{Body: &mockComponent},
+			{Body: &mockComponent, Venues: venues},
 		}
 
-		elementsRepository.On("GetByVenues", venues).Once().Return(v, nil)
+		elementsRepository.On("Count").Once().Return(uint(len(v)), nil)
+		elementsRepository.On("GetAll", uint(0), uint(len(v))).Once().Return(v, nil)
 		defer elementsRepository.AssertExpectations(t)
 
-		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository)
+		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository, matcher.New())
 		response, err := NewUseCase(&articlesRepository, &userRepository, &languagesRepository, &languageResolver, elementRetriever, &requestValidator).Execute(&request)
 
 		assert.NotNil(t, response, "unexpected response")
@@ -213,11 +216,10 @@ func TestUseCase_Execute(t *testing.T) {
 			languageResolver    resolver.MockResolver
 			requestValidator    validator.MockValidator
 
-			correlationUUID string   = "test-correlation-uuid"
-			articleUUID     string   = "test-uuid"
-			authorUUID      string   = "author-uuid"
-			venues          []string = []string{"articles/*", fmt.Sprintf("articles/%s", correlationUUID)}
-			expectedErr              = domain.ErrNotExists
+			correlationUUID string = "test-correlation-uuid"
+			articleUUID     string = "test-uuid"
+			authorUUID      string = "author-uuid"
+			expectedErr            = domain.ErrNotExists
 
 			a = article.Article{
 				UUID:            articleUUID,
@@ -245,10 +247,11 @@ func TestUseCase_Execute(t *testing.T) {
 		userRepository.On("GetOne", authorUUID).Once().Return(au, nil)
 		defer userRepository.AssertExpectations(t)
 
-		elementsRepository.On("GetByVenues", venues).Once().Return(nil, expectedErr)
+		elementsRepository.On("Count").Once().Return(uint(1), nil)
+		elementsRepository.On("GetAll", uint(0), uint(1)).Once().Return(nil, expectedErr)
 		defer elementsRepository.AssertExpectations(t)
 
-		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository)
+		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository, matcher.New())
 		usecase := NewUseCase(&articlesRepository, &userRepository, &languagesRepository, &languageResolver, elementRetriever, &requestValidator)
 		response, err := usecase.Execute(&request)
 
@@ -272,7 +275,7 @@ func TestUseCase_Execute(t *testing.T) {
 			correlationUUID string   = "test-correlation-uuid"
 			articleUUID     string   = "test-uuid"
 			authorUUID      string   = "author-uuid"
-			venues          []string = []string{"articles/*", fmt.Sprintf("articles/%s", correlationUUID)}
+			venues          []string = []string{fmt.Sprintf("/EN/articles/%s", correlationUUID)}
 			expectedErr              = domain.ErrNotExists
 
 			a = article.Article{
@@ -320,13 +323,14 @@ func TestUseCase_Execute(t *testing.T) {
 		defer mockComponent.AssertExpectations(t)
 
 		v := []domainElement.Element{
-			{Body: &mockComponent},
+			{Body: &mockComponent, Venues: venues},
 		}
 
-		elementsRepository.On("GetByVenues", venues).Once().Return(v, nil)
+		elementsRepository.On("Count").Once().Return(uint(len(v)), nil)
+		elementsRepository.On("GetAll", uint(0), uint(len(v))).Once().Return(v, nil)
 		defer elementsRepository.AssertExpectations(t)
 
-		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository)
+		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository, matcher.New())
 		response, err := NewUseCase(&articlesRepository, &userRepository, &languagesRepository, &languageResolver, elementRetriever, &requestValidator).Execute(&request)
 
 		articlesRepository.AssertNotCalled(t, "IncreaseView")
@@ -348,7 +352,7 @@ func TestUseCase_Execute(t *testing.T) {
 			correlationUUID string   = "test-correlation-uuid"
 			articleUUID     string   = "test-uuid"
 			authorUUID      string   = "author-uuid"
-			venues          []string = []string{"articles/*", fmt.Sprintf("articles/%s", correlationUUID)}
+			venues          []string = []string{fmt.Sprintf("/EN/articles/%s", correlationUUID)}
 			increaseView    uint     = 1
 			expectedErr              = domain.ErrNotExists
 
@@ -400,13 +404,14 @@ func TestUseCase_Execute(t *testing.T) {
 		defer mockComponent.AssertExpectations(t)
 
 		v := []domainElement.Element{
-			{Body: &mockComponent},
+			{Body: &mockComponent, Venues: venues},
 		}
 
-		elementsRepository.On("GetByVenues", venues).Once().Return(v, nil)
+		elementsRepository.On("Count").Once().Return(uint(len(v)), nil)
+		elementsRepository.On("GetAll", uint(0), uint(len(v))).Once().Return(v, nil)
 		defer elementsRepository.AssertExpectations(t)
 
-		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository)
+		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository, matcher.New())
 		response, err := NewUseCase(&articlesRepository, &userRepository, &languagesRepository, &languageResolver, elementRetriever, &requestValidator).Execute(&request)
 
 		assert.NotNil(t, response, "unexpected response")
@@ -445,20 +450,15 @@ func TestUseCase_Execute(t *testing.T) {
 		articlesRepository.On("GetPublishedLanguageCodes", correlationUUID).Once().Return([]string{"EN", "FA"}, nil)
 		languagesRepository.On("GetByCodes", []string{"EN", "FA"}).Once().Return([]language.Language{{Code: "EN"}, {Code: "FA"}}, nil)
 		articlesRepository.On("IncreaseView", "fa-uuid", uint(1)).Once().Return(nil)
-		articlesRepository.On("GetByCorrelationUUIDs", []string{}, "FA").Once().Return(nil, nil)
 		defer articlesRepository.AssertExpectations(t)
 
 		userRepository.On("GetOne", "author-fa").Once().Return(au, nil)
-		userRepository.On("GetByUUIDs", []string{}).Once().Return([]user.User{}, nil)
 		defer userRepository.AssertExpectations(t)
 
-		elementsRepository.On(
-			"GetByVenues",
-			[]string{"articles/*", "articles/translation-uuid"},
-		).Once().Return([]domainElement.Element{}, nil)
+		elementsRepository.On("Count").Once().Return(uint(0), nil)
 		defer elementsRepository.AssertExpectations(t)
 
-		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository)
+		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository, matcher.New())
 		response, err := NewUseCase(&articlesRepository, &userRepository, &languagesRepository, &languageResolver, elementRetriever, &requestValidator).Execute(&request)
 
 		assert.NoError(t, err)

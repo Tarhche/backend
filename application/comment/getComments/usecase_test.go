@@ -25,8 +25,9 @@ func TestUseCase_Execute(t *testing.T) {
 			validator         validator.MockValidator
 
 			r = Request{
-				ObjectType: "article",
-				ObjectUUID: "test-uuid",
+				ObjectType:   "article",
+				ObjectUUID:   "test-uuid",
+				LanguageCode: "en",
 			}
 
 			c = []comment.Comment{
@@ -51,8 +52,8 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		commentRepository.On("CountApprovedByObjectUUID", r.ObjectType, r.ObjectUUID).Once().Return(uint(len(c)), nil)
-		commentRepository.On("GetApprovedByObjectUUID", r.ObjectType, r.ObjectUUID, uint(0), uint(10)).Once().Return(c, nil)
+		commentRepository.On("CountApprovedByObjectUUID", r.ObjectType, r.ObjectUUID, r.LanguageCode).Once().Return(uint(len(c)), nil)
+		commentRepository.On("GetApprovedByObjectUUID", r.ObjectType, r.ObjectUUID, r.LanguageCode, uint(0), uint(10)).Once().Return(c, nil)
 		defer commentRepository.AssertExpectations(t)
 
 		userRepository.On("GetByUUIDs", authorUUIDs).Once().Return(u, nil)
@@ -73,8 +74,9 @@ func TestUseCase_Execute(t *testing.T) {
 			validator         validator.MockValidator
 
 			r = Request{
-				ObjectType: "article",
-				ObjectUUID: "test-uuid",
+				ObjectType:   "article",
+				ObjectUUID:   "test-uuid",
+				LanguageCode: "en",
 			}
 
 			expectedErr = errors.New("test error")
@@ -83,7 +85,7 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		commentRepository.On("CountApprovedByObjectUUID", r.ObjectType, r.ObjectUUID).Once().Return(uint(0), expectedErr)
+		commentRepository.On("CountApprovedByObjectUUID", r.ObjectType, r.ObjectUUID, r.LanguageCode).Once().Return(uint(0), expectedErr)
 		defer commentRepository.AssertExpectations(t)
 
 		response, err := NewUseCase(&commentRepository, &userRepository, &validator).Execute(&r)
@@ -104,8 +106,9 @@ func TestUseCase_Execute(t *testing.T) {
 			validator         validator.MockValidator
 
 			r = Request{
-				ObjectType: "article",
-				ObjectUUID: "test-uuid",
+				ObjectType:   "article",
+				ObjectUUID:   "test-uuid",
+				LanguageCode: "en",
 			}
 
 			approvedCommentsCount = uint(10)
@@ -115,8 +118,8 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		commentRepository.On("CountApprovedByObjectUUID", r.ObjectType, r.ObjectUUID).Once().Return(approvedCommentsCount, nil)
-		commentRepository.On("GetApprovedByObjectUUID", r.ObjectType, r.ObjectUUID, uint(0), uint(10)).Once().Return(nil, expectedErr)
+		commentRepository.On("CountApprovedByObjectUUID", r.ObjectType, r.ObjectUUID, r.LanguageCode).Once().Return(approvedCommentsCount, nil)
+		commentRepository.On("GetApprovedByObjectUUID", r.ObjectType, r.ObjectUUID, r.LanguageCode, uint(0), uint(10)).Once().Return(nil, expectedErr)
 		defer commentRepository.AssertExpectations(t)
 
 		response, err := NewUseCase(&commentRepository, &userRepository, &validator).Execute(&r)
@@ -136,8 +139,9 @@ func TestUseCase_Execute(t *testing.T) {
 			validator         validator.MockValidator
 
 			r = Request{
-				ObjectType: "article",
-				ObjectUUID: "test-uuid",
+				ObjectType:   "article",
+				ObjectUUID:   "test-uuid",
+				LanguageCode: "en",
 			}
 
 			c = []comment.Comment{
@@ -159,8 +163,8 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		commentRepository.On("CountApprovedByObjectUUID", r.ObjectType, r.ObjectUUID).Once().Return(uint(len(c)), nil)
-		commentRepository.On("GetApprovedByObjectUUID", r.ObjectType, r.ObjectUUID, uint(0), uint(10)).Once().Return(c, nil)
+		commentRepository.On("CountApprovedByObjectUUID", r.ObjectType, r.ObjectUUID, r.LanguageCode).Once().Return(uint(len(c)), nil)
+		commentRepository.On("GetApprovedByObjectUUID", r.ObjectType, r.ObjectUUID, r.LanguageCode, uint(0), uint(10)).Once().Return(c, nil)
 		defer commentRepository.AssertExpectations(t)
 
 		userRepository.On("GetByUUIDs", authorUUIDs).Once().Return(nil, expectedErr)

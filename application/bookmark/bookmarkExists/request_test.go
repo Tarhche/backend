@@ -17,18 +17,20 @@ func TestRequest_Validate(t *testing.T) {
 		{
 			name: "valid request",
 			request: Request{
-				ObjectType: bookmark.ObjectTypeArticle,
-				ObjectUUID: "article-uuid-123",
-				OwnerUUID:  "owner-uuid-456",
+				ObjectType:   bookmark.ObjectTypeArticle,
+				ObjectUUID:   "article-uuid-123",
+				LanguageCode: "en",
+				OwnerUUID:    "owner-uuid-456",
 			},
 			want: domain.ValidationErrors{},
 		},
 		{
 			name: "invalid request with invalid object type",
 			request: Request{
-				ObjectType: "invalid-type",
-				ObjectUUID: "article-uuid-123",
-				OwnerUUID:  "owner-uuid-456",
+				ObjectType:   "invalid-type",
+				ObjectUUID:   "article-uuid-123",
+				LanguageCode: "en",
+				OwnerUUID:    "owner-uuid-456",
 			},
 			want: domain.ValidationErrors{
 				"object_type": "invalid_value",
@@ -37,20 +39,34 @@ func TestRequest_Validate(t *testing.T) {
 		{
 			name: "invalid request with empty object uuid",
 			request: Request{
-				ObjectType: bookmark.ObjectTypeArticle,
-				ObjectUUID: "",
-				OwnerUUID:  "owner-uuid-456",
+				ObjectType:   bookmark.ObjectTypeArticle,
+				ObjectUUID:   "",
+				LanguageCode: "en",
+				OwnerUUID:    "owner-uuid-456",
 			},
 			want: domain.ValidationErrors{
 				"object_uuid": "required_field",
 			},
 		},
 		{
+			name: "invalid request with empty language code",
+			request: Request{
+				ObjectType:   bookmark.ObjectTypeArticle,
+				ObjectUUID:   "article-uuid-123",
+				LanguageCode: "",
+				OwnerUUID:    "owner-uuid-456",
+			},
+			want: domain.ValidationErrors{
+				"language_code": "required_field",
+			},
+		},
+		{
 			name: "invalid request with empty owner uuid",
 			request: Request{
-				ObjectType: bookmark.ObjectTypeArticle,
-				ObjectUUID: "article-uuid-123",
-				OwnerUUID:  "",
+				ObjectType:   bookmark.ObjectTypeArticle,
+				ObjectUUID:   "article-uuid-123",
+				LanguageCode: "en",
+				OwnerUUID:    "",
 			},
 			want: domain.ValidationErrors{
 				"owner_uuid": "required_field",
@@ -64,9 +80,10 @@ func TestRequest_Validate(t *testing.T) {
 				OwnerUUID:  "",
 			},
 			want: domain.ValidationErrors{
-				"object_type": "invalid_value",
-				"object_uuid": "required_field",
-				"owner_uuid":  "required_field",
+				"object_type":   "invalid_value",
+				"object_uuid":   "required_field",
+				"language_code": "required_field",
+				"owner_uuid":    "required_field",
 			},
 		},
 	}

@@ -8,14 +8,15 @@ import (
 )
 
 type Response struct {
-	UUID       string `json:"uuid"`
-	Body       string `json:"body"`
-	Author     author `json:"author"`
-	ParentUUID string `json:"parent_uuid,omitempty"`
-	ObjectType string `json:"object_type"`
-	ObjectUUID string `json:"object_uuid"`
-	CreatedAt  string `json:"created_at"`
-	ApprovedAt string `json:"approved_at"`
+	UUID         string `json:"uuid"`
+	Body         string `json:"body"`
+	Author       author `json:"author"`
+	ParentUUID   string `json:"parent_uuid,omitempty"`
+	ObjectType   string `json:"object_type"`
+	ObjectUUID   string `json:"object_uuid"`
+	LanguageCode string `json:"language_code"`
+	CreatedAt    string `json:"created_at"`
+	ApprovedAt   string `json:"approved_at"`
 }
 
 type author struct {
@@ -35,10 +36,11 @@ func NewResponse(c comment.Comment, u user.User) *Response {
 			Avatar:   u.Avatar,
 			Username: u.Username,
 		},
-		ParentUUID: c.ParentUUID,
-		ObjectType: c.ObjectType,
-		ObjectUUID: c.ObjectUUID,
-		CreatedAt:  c.CreatedAt.Format(time.RFC3339),
-		ApprovedAt: c.ApprovedAt.Format(time.RFC3339),
+		ParentUUID:   c.ParentUUID,
+		ObjectType:   c.ObjectType,
+		ObjectUUID:   c.ObjectUUID,
+		LanguageCode: c.LanguageCode,
+		CreatedAt:    c.CreatedAt.Format(time.RFC3339),
+		ApprovedAt:   c.ApprovedAt.Format(time.RFC3339),
 	}
 }

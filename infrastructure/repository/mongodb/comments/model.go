@@ -9,9 +9,10 @@ type CommentBson struct {
 	Body       string    `bson:"body"`
 	AuthorUUID string    `bson:"author_uuid"`
 	ParentUUID string    `bson:"parent_uuid"`
-	ObjectUUID string    `bson:"object_uuid,omitempty"`
-	ObjectType string    `bson:"object_type,omitempty"`
-	ApprovedAt time.Time `bson:"approved_at"`
+	ObjectUUID   string    `bson:"object_uuid,omitempty"`
+	ObjectType   string    `bson:"object_type,omitempty"`
+	LanguageCode string    `bson:"language_code,omitempty"`
+	ApprovedAt   time.Time `bson:"approved_at"`
 	CreatedAt  time.Time `bson:"created_at,omitempty"`
 	UpdatedAt  time.Time `bson:"updated_at,omitempty"`
 }

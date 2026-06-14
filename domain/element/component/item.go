@@ -3,6 +3,7 @@ package component
 const ComponentTypeItem = "item"
 
 type Item struct {
+	// ContentUUID references the article by its correlation uuid (stable across translations).
 	ContentUUID string
 	ContentType string
 }

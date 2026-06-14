@@ -4,12 +4,15 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/khanzadimahdi/testproject/application/element"
 	"github.com/khanzadimahdi/testproject/application/language/resolver"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/article"
 	"github.com/khanzadimahdi/testproject/domain/language"
 	"github.com/khanzadimahdi/testproject/domain/user"
+	"github.com/khanzadimahdi/testproject/infrastructure/matcher"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/articles"
+	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/elements"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/languages"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
 	"github.com/khanzadimahdi/testproject/infrastructure/validator"
@@ -24,6 +27,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		var (
 			repository          articles.MockArticlesRepository
+			elementsRepository  elements.MockElementsRepository
 			userRepository      users.MockUsersRepository
 			languagesRepository languages.MockLanguagesRepository
 			languageResolver    resolver.MockResolver
@@ -51,6 +55,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		repository.On("CountPublishedByHashtags", []string{hashtag}, "EN").Once().Return(uint(len(a)), nil)
 		repository.On("GetPublishedByHashtags", []string{hashtag}, "EN", uint(0), uint(10)).Once().Return(a, nil)
+		elementsRepository.On("Count").Once().Return(uint(0), nil)
 		defer repository.AssertExpectations(t)
 
 		userRepository.On("GetByUUIDs", []string{"author-uuid-1", "author-uuid-2", "author-uuid-1"}).Once().Return(u, nil)
@@ -59,7 +64,7 @@ func TestUseCase_Execute(t *testing.T) {
 		repository.On("GetPublishedLanguageCodes", "").Return([]string{}, nil)
 		languagesRepository.On("GetByCodes", []string{}).Return([]language.Language{}, nil)
 
-		usecase := NewUseCase(&repository, &userRepository, &languagesRepository, &languageResolver, &validator)
+		usecase := NewUseCase(&repository, &userRepository, &languagesRepository, &languageResolver, element.NewRetriever(&repository, &elementsRepository, &userRepository, matcher.New()), &validator)
 		response, err := usecase.Execute(&request)
 
 		assert.NoError(t, err, "unexpected error")
@@ -71,6 +76,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		var (
 			repository          articles.MockArticlesRepository
+			elementsRepository  elements.MockElementsRepository
 			userRepository      users.MockUsersRepository
 			languagesRepository languages.MockLanguagesRepository
 			languageResolver    resolver.MockResolver
@@ -89,7 +95,7 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &request).Once().Return(expectedResponse.ValidationErrors)
 		defer validator.AssertExpectations(t)
 
-		usecase := NewUseCase(&repository, &userRepository, &languagesRepository, &languageResolver, &validator)
+		usecase := NewUseCase(&repository, &userRepository, &languagesRepository, &languageResolver, element.NewRetriever(&repository, &elementsRepository, &userRepository, matcher.New()), &validator)
 		response, err := usecase.Execute(&request)
 
 		repository.AssertNotCalled(t, "CountPublishedByHashtags")
@@ -105,6 +111,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		var (
 			repository          articles.MockArticlesRepository
+			elementsRepository  elements.MockElementsRepository
 			userRepository      users.MockUsersRepository
 			languagesRepository languages.MockLanguagesRepository
 			languageResolver    resolver.MockResolver
@@ -125,7 +132,7 @@ func TestUseCase_Execute(t *testing.T) {
 		repository.On("CountPublishedByHashtags", []string{hashtag}, "EN").Once().Return(uint(0), expectedErr)
 		defer repository.AssertExpectations(t)
 
-		usecase := NewUseCase(&repository, &userRepository, &languagesRepository, &languageResolver, &validator)
+		usecase := NewUseCase(&repository, &userRepository, &languagesRepository, &languageResolver, element.NewRetriever(&repository, &elementsRepository, &userRepository, matcher.New()), &validator)
 		response, err := usecase.Execute(&request)
 
 		repository.AssertNotCalled(t, "GetPublishedByHashtags")
@@ -140,6 +147,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		var (
 			repository          articles.MockArticlesRepository
+			elementsRepository  elements.MockElementsRepository
 			userRepository      users.MockUsersRepository
 			languagesRepository languages.MockLanguagesRepository
 			languageResolver    resolver.MockResolver
@@ -161,7 +169,7 @@ func TestUseCase_Execute(t *testing.T) {
 		repository.On("GetPublishedByHashtags", []string{hashtag}, "EN", uint(0), uint(10)).Once().Return(nil, expectedErr)
 		defer repository.AssertExpectations(t)
 
-		usecase := NewUseCase(&repository, &userRepository, &languagesRepository, &languageResolver, &validator)
+		usecase := NewUseCase(&repository, &userRepository, &languagesRepository, &languageResolver, element.NewRetriever(&repository, &elementsRepository, &userRepository, matcher.New()), &validator)
 		response, err := usecase.Execute(&request)
 
 		userRepository.AssertNotCalled(t, "GetByUUIDs")
@@ -175,6 +183,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		var (
 			repository          articles.MockArticlesRepository
+			elementsRepository  elements.MockElementsRepository
 			userRepository      users.MockUsersRepository
 			languagesRepository languages.MockLanguagesRepository
 			languageResolver    resolver.MockResolver
@@ -197,12 +206,13 @@ func TestUseCase_Execute(t *testing.T) {
 
 		repository.On("CountPublishedByHashtags", []string{hashtag}, "EN").Once().Return(uint(1), nil)
 		repository.On("GetPublishedByHashtags", []string{hashtag}, "EN", uint(0), uint(10)).Once().Return(a, nil)
+		elementsRepository.On("Count").Once().Return(uint(0), nil)
 		defer repository.AssertExpectations(t)
 
 		userRepository.On("GetByUUIDs", []string{"author-uuid-1"}).Once().Return(nil, expectedErr)
 		defer userRepository.AssertExpectations(t)
 
-		usecase := NewUseCase(&repository, &userRepository, &languagesRepository, &languageResolver, &validator)
+		usecase := NewUseCase(&repository, &userRepository, &languagesRepository, &languageResolver, element.NewRetriever(&repository, &elementsRepository, &userRepository, matcher.New()), &validator)
 		response, err := usecase.Execute(&request)
 
 		assert.ErrorIs(t, err, expectedErr)

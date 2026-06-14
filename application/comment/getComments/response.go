@@ -9,11 +9,12 @@ import (
 )
 
 type commentResponse struct {
-	UUID       string         `json:"uuid"`
-	Body       string         `json:"body"`
-	Author     authorResponse `json:"author"`
-	ParentUUID string         `json:"parent_uuid,omitempty"`
-	CreatedAt  string         `json:"created_at"`
+	UUID         string         `json:"uuid"`
+	Body         string         `json:"body"`
+	Author       authorResponse `json:"author"`
+	ParentUUID   string         `json:"parent_uuid,omitempty"`
+	LanguageCode string         `json:"language_code"`
+	CreatedAt    string         `json:"created_at"`
 }
 
 type authorResponse struct {
@@ -47,6 +48,7 @@ func NewResponse(c []comment.Comment, users []user.User, totalPages, currentPage
 		items[i].UUID = c[i].UUID
 		items[i].Body = c[i].Body
 		items[i].ParentUUID = c[i].ParentUUID
+		items[i].LanguageCode = c[i].LanguageCode
 		items[i].CreatedAt = c[i].CreatedAt.Format(time.RFC3339)
 
 		u := usersByUUID[c[i].AuthorUUID]

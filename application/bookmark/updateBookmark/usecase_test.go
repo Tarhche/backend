@@ -23,18 +23,19 @@ func TestUseCase_Execute(t *testing.T) {
 			validator          validator.MockValidator
 
 			request = Request{
-				Keep:       false,
-				Title:      "test",
-				OwnerUUID:  "owner-uuid",
-				ObjectType: "article",
-				ObjectUUID: "object-uuid",
+				Keep:         false,
+				Title:        "test",
+				OwnerUUID:    "owner-uuid",
+				ObjectType:   "article",
+				ObjectUUID:   "object-uuid",
+				LanguageCode: "en",
 			}
 		)
 
 		validator.On("Validate", &request).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		bookmarkRepository.On("DeleteByOwnerUUID", request.OwnerUUID, request.ObjectType, request.ObjectUUID).Once().Return(nil)
+		bookmarkRepository.On("DeleteByOwnerUUID", request.OwnerUUID, request.ObjectType, request.ObjectUUID, request.LanguageCode).Once().Return(nil)
 		defer bookmarkRepository.AssertExpectations(t)
 
 		response, err := NewUseCase(&bookmarkRepository, &validator).Execute(&request)
@@ -53,18 +54,20 @@ func TestUseCase_Execute(t *testing.T) {
 			validator          validator.MockValidator
 
 			request = Request{
-				Keep:       true,
-				Title:      "test",
-				OwnerUUID:  "owner-uuid",
-				ObjectType: "article",
-				ObjectUUID: "object-uuid",
+				Keep:         true,
+				Title:        "test",
+				OwnerUUID:    "owner-uuid",
+				ObjectType:   "article",
+				ObjectUUID:   "object-uuid",
+				LanguageCode: "en",
 			}
 
 			b = bookmark.Bookmark{
-				Title:      request.Title,
-				ObjectUUID: request.ObjectUUID,
-				ObjectType: request.ObjectType,
-				OwnerUUID:  request.OwnerUUID,
+				Title:        request.Title,
+				ObjectUUID:   request.ObjectUUID,
+				ObjectType:   request.ObjectType,
+				LanguageCode: request.LanguageCode,
+				OwnerUUID:    request.OwnerUUID,
 			}
 		)
 
@@ -135,7 +138,7 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &request).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		bookmarkRepository.On("DeleteByOwnerUUID", request.OwnerUUID, request.ObjectType, request.ObjectUUID).Once().Return(expectedErr)
+		bookmarkRepository.On("DeleteByOwnerUUID", request.OwnerUUID, request.ObjectType, request.ObjectUUID, request.LanguageCode).Once().Return(expectedErr)
 		defer bookmarkRepository.AssertExpectations(t)
 
 		response, err := NewUseCase(&bookmarkRepository, &validator).Execute(&request)
@@ -154,18 +157,20 @@ func TestUseCase_Execute(t *testing.T) {
 			validator          validator.MockValidator
 
 			request = Request{
-				Keep:       true,
-				Title:      "test",
-				OwnerUUID:  "owner-uuid",
-				ObjectType: "article",
-				ObjectUUID: "object-uuid",
+				Keep:         true,
+				Title:        "test",
+				OwnerUUID:    "owner-uuid",
+				ObjectType:   "article",
+				ObjectUUID:   "object-uuid",
+				LanguageCode: "en",
 			}
 
 			b = bookmark.Bookmark{
-				Title:      request.Title,
-				ObjectUUID: request.ObjectUUID,
-				ObjectType: request.ObjectType,
-				OwnerUUID:  request.OwnerUUID,
+				Title:        request.Title,
+				ObjectUUID:   request.ObjectUUID,
+				ObjectType:   request.ObjectType,
+				LanguageCode: request.LanguageCode,
+				OwnerUUID:    request.OwnerUUID,
 			}
 
 			expectedErr = errors.New("error")

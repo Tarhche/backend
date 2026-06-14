@@ -57,14 +57,15 @@ func (r *CommentsRepository) GetAll(offset uint, limit uint) ([]comment.Comment,
 			return nil, err
 		}
 		items = append(items, comment.Comment{
-			UUID:       c.UUID,
-			Body:       c.Body,
-			AuthorUUID: c.AuthorUUID,
-			ParentUUID: c.ParentUUID,
-			ObjectUUID: c.ObjectUUID,
-			ObjectType: c.ObjectType,
-			ApprovedAt: c.ApprovedAt,
-			CreatedAt:  c.CreatedAt,
+			UUID:         c.UUID,
+			Body:         c.Body,
+			AuthorUUID:   c.AuthorUUID,
+			ParentUUID:   c.ParentUUID,
+			ObjectUUID:   c.ObjectUUID,
+			ObjectType:   c.ObjectType,
+			LanguageCode: c.LanguageCode,
+			ApprovedAt:   c.ApprovedAt,
+			CreatedAt:    c.CreatedAt,
 		})
 	}
 
@@ -90,14 +91,15 @@ func (r *CommentsRepository) GetOne(UUID string) (comment.Comment, error) {
 	}
 
 	return comment.Comment{
-		UUID:       c.UUID,
-		Body:       c.Body,
-		AuthorUUID: c.AuthorUUID,
-		ParentUUID: c.ParentUUID,
-		ObjectUUID: c.ObjectUUID,
-		ObjectType: c.ObjectType,
-		ApprovedAt: c.ApprovedAt,
-		CreatedAt:  c.CreatedAt,
+		UUID:         c.UUID,
+		Body:         c.Body,
+		AuthorUUID:   c.AuthorUUID,
+		ParentUUID:   c.ParentUUID,
+		ObjectUUID:   c.ObjectUUID,
+		ObjectType:   c.ObjectType,
+		LanguageCode: c.LanguageCode,
+		ApprovedAt:   c.ApprovedAt,
+		CreatedAt:    c.CreatedAt,
 	}, nil
 }
 
@@ -127,15 +129,16 @@ func (r *CommentsRepository) Save(c *comment.Comment) (string, error) {
 	}
 
 	update := CommentBson{
-		UUID:       c.UUID,
-		Body:       c.Body,
-		AuthorUUID: c.AuthorUUID,
-		ParentUUID: c.ParentUUID,
-		ObjectUUID: c.ObjectUUID,
-		ObjectType: c.ObjectType,
-		ApprovedAt: c.ApprovedAt,
-		CreatedAt:  c.CreatedAt,
-		UpdatedAt:  time.Now(),
+		UUID:         c.UUID,
+		Body:         c.Body,
+		AuthorUUID:   c.AuthorUUID,
+		ParentUUID:   c.ParentUUID,
+		ObjectUUID:   c.ObjectUUID,
+		ObjectType:   c.ObjectType,
+		LanguageCode: c.LanguageCode,
+		ApprovedAt:   c.ApprovedAt,
+		CreatedAt:    c.CreatedAt,
+		UpdatedAt:    time.Now(),
 	}
 
 	if _, err := r.collection.UpdateOne(
@@ -159,7 +162,7 @@ func (r *CommentsRepository) Delete(UUID string) error {
 	return err
 }
 
-func (r *CommentsRepository) GetApprovedByObjectUUID(objectType string, UUID string, offset uint, limit uint) ([]comment.Comment, error) {
+func (r *CommentsRepository) GetApprovedByObjectUUID(objectType string, UUID string, languageCode string, offset uint, limit uint) ([]comment.Comment, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
 	defer cancel()
 
@@ -173,6 +176,7 @@ func (r *CommentsRepository) GetApprovedByObjectUUID(objectType string, UUID str
 			Value: bson.A{
 				bson.D{{Key: "object_uuid", Value: UUID}},
 				bson.D{{Key: "object_type", Value: objectType}},
+				bson.D{{Key: "language_code", Value: languageCode}},
 				bson.D{
 					{
 						Key: "approved_at",
@@ -200,14 +204,15 @@ func (r *CommentsRepository) GetApprovedByObjectUUID(objectType string, UUID str
 			return nil, err
 		}
 		items = append(items, comment.Comment{
-			UUID:       c.UUID,
-			Body:       c.Body,
-			AuthorUUID: c.AuthorUUID,
-			ParentUUID: c.ParentUUID,
-			ObjectUUID: c.ObjectUUID,
-			ObjectType: c.ObjectType,
-			ApprovedAt: c.ApprovedAt,
-			CreatedAt:  c.CreatedAt,
+			UUID:         c.UUID,
+			Body:         c.Body,
+			AuthorUUID:   c.AuthorUUID,
+			ParentUUID:   c.ParentUUID,
+			ObjectUUID:   c.ObjectUUID,
+			ObjectType:   c.ObjectType,
+			LanguageCode: c.LanguageCode,
+			ApprovedAt:   c.ApprovedAt,
+			CreatedAt:    c.CreatedAt,
 		})
 	}
 
@@ -218,7 +223,7 @@ func (r *CommentsRepository) GetApprovedByObjectUUID(objectType string, UUID str
 	return items, nil
 }
 
-func (r *CommentsRepository) CountApprovedByObjectUUID(objectType string, UUID string) (uint, error) {
+func (r *CommentsRepository) CountApprovedByObjectUUID(objectType string, UUID string, languageCode string) (uint, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
 	defer cancel()
 
@@ -228,6 +233,7 @@ func (r *CommentsRepository) CountApprovedByObjectUUID(objectType string, UUID s
 			Value: bson.A{
 				bson.D{{Key: "object_uuid", Value: UUID}},
 				bson.D{{Key: "object_type", Value: objectType}},
+				bson.D{{Key: "language_code", Value: languageCode}},
 				bson.D{
 					{
 						Key: "approved_at",
@@ -275,14 +281,15 @@ func (r *CommentsRepository) GetAllByAuthorUUID(authorUUID string, offset uint, 
 			return nil, err
 		}
 		items = append(items, comment.Comment{
-			UUID:       c.UUID,
-			Body:       c.Body,
-			AuthorUUID: c.AuthorUUID,
-			ParentUUID: c.ParentUUID,
-			ObjectUUID: c.ObjectUUID,
-			ObjectType: c.ObjectType,
-			ApprovedAt: c.ApprovedAt,
-			CreatedAt:  c.CreatedAt,
+			UUID:         c.UUID,
+			Body:         c.Body,
+			AuthorUUID:   c.AuthorUUID,
+			ParentUUID:   c.ParentUUID,
+			ObjectUUID:   c.ObjectUUID,
+			ObjectType:   c.ObjectType,
+			LanguageCode: c.LanguageCode,
+			ApprovedAt:   c.ApprovedAt,
+			CreatedAt:    c.CreatedAt,
 		})
 	}
 
@@ -311,14 +318,15 @@ func (r *CommentsRepository) GetOneByAuthorUUID(UUID string, authorUUID string) 
 	}
 
 	return comment.Comment{
-		UUID:       c.UUID,
-		Body:       c.Body,
-		AuthorUUID: c.AuthorUUID,
-		ParentUUID: c.ParentUUID,
-		ObjectUUID: c.ObjectUUID,
-		ObjectType: c.ObjectType,
-		ApprovedAt: c.ApprovedAt,
-		CreatedAt:  c.CreatedAt,
+		UUID:         c.UUID,
+		Body:         c.Body,
+		AuthorUUID:   c.AuthorUUID,
+		ParentUUID:   c.ParentUUID,
+		ObjectUUID:   c.ObjectUUID,
+		ObjectType:   c.ObjectType,
+		LanguageCode: c.LanguageCode,
+		ApprovedAt:   c.ApprovedAt,
+		CreatedAt:    c.CreatedAt,
 	}, nil
 }
 

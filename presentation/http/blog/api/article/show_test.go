@@ -2,7 +2,6 @@ package article
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -18,6 +17,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/article"
 	"github.com/khanzadimahdi/testproject/domain/language"
 	"github.com/khanzadimahdi/testproject/domain/user"
+	"github.com/khanzadimahdi/testproject/infrastructure/matcher"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/articles"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/elements"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/languages"
@@ -71,17 +71,15 @@ func TestShowHandler(t *testing.T) {
 		articlesRepository.On("GetPublishedLanguageCodes", a.CorrelationUUID).Once().Return([]string{"EN"}, nil)
 		languagesRepository.On("GetByCodes", []string{"EN"}).Once().Return([]language.Language{{Code: "EN", Name: "English"}}, nil)
 		articlesRepository.On("IncreaseView", a.UUID, uint(1)).Once().Return(nil)
-		articlesRepository.On("GetByCorrelationUUIDs", []string{}, "EN").Once().Return(nil, nil)
 		defer articlesRepository.AssertExpectations(t)
 
 		userRepository.On("GetOne", "author-uuid").Once().Return(u, nil)
-		userRepository.On("GetByUUIDs", []string{}).Once().Return([]user.User{}, nil)
 		defer userRepository.AssertExpectations(t)
 
-		elementsRepository.On("GetByVenues", []string{"articles/*", fmt.Sprintf("articles/%s", a.UUID)}).Once().Return(nil, nil)
+		elementsRepository.On("Count").Once().Return(uint(0), nil)
 		defer elementsRepository.AssertExpectations(t)
 
-		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository)
+		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository, matcher.New())
 		handler := NewShowHandler(getarticle.NewUseCase(&articlesRepository, &userRepository, &languagesRepository, &languageResolver, elementRetriever, &requestValidator))
 
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -123,7 +121,7 @@ func TestShowHandler(t *testing.T) {
 		articlesRepository.On("GetOnePublished", correlationUUID, "EN").Once().Return(article.Article{}, domain.ErrNotExists)
 		defer articlesRepository.AssertExpectations(t)
 
-		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository)
+		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository, matcher.New())
 		handler := NewShowHandler(getarticle.NewUseCase(&articlesRepository, &userRepository, &languagesRepository, &languageResolver, elementRetriever, &requestValidator))
 
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -136,7 +134,7 @@ func TestShowHandler(t *testing.T) {
 		articlesRepository.AssertNotCalled(t, "IncreaseView")
 		articlesRepository.AssertNotCalled(t, "GetByCorrelationUUIDs")
 		userRepository.AssertNotCalled(t, "GetOne")
-		elementsRepository.AssertNotCalled(t, "GetByVenues")
+		elementsRepository.AssertNotCalled(t, "Count")
 
 		assert.Len(t, response.Body.Bytes(), 0)
 		assert.Equal(t, http.StatusNotFound, response.Code)
@@ -166,7 +164,7 @@ func TestShowHandler(t *testing.T) {
 		articlesRepository.On("GetOnePublished", correlationUUID, "EN").Once().Return(article.Article{}, errors.New("an error has happened"))
 		defer articlesRepository.AssertExpectations(t)
 
-		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository)
+		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository, matcher.New())
 		handler := NewShowHandler(getarticle.NewUseCase(&articlesRepository, &userRepository, &languagesRepository, &languageResolver, elementRetriever, &requestValidator))
 
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -179,7 +177,7 @@ func TestShowHandler(t *testing.T) {
 		articlesRepository.AssertNotCalled(t, "IncreaseView")
 		articlesRepository.AssertNotCalled(t, "GetByCorrelationUUIDs")
 		userRepository.AssertNotCalled(t, "GetOne")
-		elementsRepository.AssertNotCalled(t, "GetByVenues")
+		elementsRepository.AssertNotCalled(t, "Count")
 
 		assert.Len(t, response.Body.Bytes(), 0)
 		assert.Equal(t, http.StatusInternalServerError, response.Code)

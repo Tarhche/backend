@@ -23,17 +23,19 @@ func TestUseCase_Execute(t *testing.T) {
 			validator         validator.MockValidator
 
 			r = Request{
-				Body:       "test body",
-				AuthorUUID: "test-author-uuid",
-				ObjectUUID: "test-object-uuid",
-				ObjectType: "article",
+				Body:         "test body",
+				AuthorUUID:   "test-author-uuid",
+				ObjectUUID:   "test-object-uuid",
+				ObjectType:   "article",
+				LanguageCode: "en",
 			}
 
 			c = comment.Comment{
-				Body:       r.Body,
-				AuthorUUID: r.AuthorUUID,
-				ObjectUUID: r.ObjectUUID,
-				ObjectType: r.ObjectType,
+				Body:         r.Body,
+				AuthorUUID:   r.AuthorUUID,
+				ObjectUUID:   r.ObjectUUID,
+				ObjectType:   r.ObjectType,
+				LanguageCode: r.LanguageCode,
 			}
 		)
 
@@ -85,17 +87,19 @@ func TestUseCase_Execute(t *testing.T) {
 			validator         validator.MockValidator
 
 			r = Request{
-				Body:       "test body",
-				AuthorUUID: "test-author-uuid",
-				ObjectUUID: "test-object-uuid",
-				ObjectType: "article",
+				Body:         "test body",
+				AuthorUUID:   "test-author-uuid",
+				ObjectUUID:   "test-object-uuid",
+				ObjectType:   "article",
+				LanguageCode: "en",
 			}
 
 			c = comment.Comment{
-				Body:       r.Body,
-				AuthorUUID: r.AuthorUUID,
-				ObjectUUID: r.ObjectUUID,
-				ObjectType: r.ObjectType,
+				Body:         r.Body,
+				AuthorUUID:   r.AuthorUUID,
+				ObjectUUID:   r.ObjectUUID,
+				ObjectType:   r.ObjectType,
+				LanguageCode: r.LanguageCode,
 			}
 
 			expectedErr = errors.New("error happened")

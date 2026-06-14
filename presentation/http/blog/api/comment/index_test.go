@@ -32,9 +32,10 @@ func TestIndexHandler(t *testing.T) {
 		)
 
 		data := getComments.Request{
-			Page:       1,
-			ObjectUUID: "test-uuid",
-			ObjectType: "test-type",
+			Page:         1,
+			ObjectUUID:   "test-uuid",
+			ObjectType:   "test-type",
+			LanguageCode: "en",
 		}
 
 		u := []user.User{
@@ -88,8 +89,8 @@ func TestIndexHandler(t *testing.T) {
 		requestValidator.On("Validate", &data).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
-		commentsRepository.On("CountApprovedByObjectUUID", data.ObjectType, data.ObjectUUID).Once().Return(uint(len(c)), nil)
-		commentsRepository.On("GetApprovedByObjectUUID", data.ObjectType, data.ObjectUUID, uint(0), uint(10)).Once().Return(c, nil)
+		commentsRepository.On("CountApprovedByObjectUUID", data.ObjectType, data.ObjectUUID, data.LanguageCode).Once().Return(uint(len(c)), nil)
+		commentsRepository.On("GetApprovedByObjectUUID", data.ObjectType, data.ObjectUUID, data.LanguageCode, uint(0), uint(10)).Once().Return(c, nil)
 		defer commentsRepository.AssertExpectations(t)
 
 		usersRepository.On("GetByUUIDs", []string{u[0].UUID, u[1].UUID, u[1].UUID}).Once().Return(u, nil)
@@ -97,7 +98,7 @@ func TestIndexHandler(t *testing.T) {
 
 		handler := NewIndexHandler(getComments.NewUseCase(&commentsRepository, &usersRepository, &requestValidator))
 
-		url := fmt.Sprintf("/?object_uuid=%s&object_type=%s&page=%d", data.ObjectUUID, data.ObjectType, data.Page)
+		url := fmt.Sprintf("/?object_uuid=%s&object_type=%s&language_code=%s&page=%d", data.ObjectUUID, data.ObjectType, data.LanguageCode, data.Page)
 		request := httptest.NewRequest(http.MethodGet, url, nil)
 		response := httptest.NewRecorder()
 
@@ -121,16 +122,17 @@ func TestIndexHandler(t *testing.T) {
 		)
 
 		data := getComments.Request{
-			Page:       1,
-			ObjectUUID: "test-uuid",
-			ObjectType: "test-type",
+			Page:         1,
+			ObjectUUID:   "test-uuid",
+			ObjectType:   "test-type",
+			LanguageCode: "en",
 		}
 
 		requestValidator.On("Validate", &data).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
-		commentsRepository.On("CountApprovedByObjectUUID", data.ObjectType, data.ObjectUUID).Once().Return(uint(0), nil)
-		commentsRepository.On("GetApprovedByObjectUUID", data.ObjectType, data.ObjectUUID, uint(0), uint(10)).Once().Return(nil, nil)
+		commentsRepository.On("CountApprovedByObjectUUID", data.ObjectType, data.ObjectUUID, data.LanguageCode).Once().Return(uint(0), nil)
+		commentsRepository.On("GetApprovedByObjectUUID", data.ObjectType, data.ObjectUUID, data.LanguageCode, uint(0), uint(10)).Once().Return(nil, nil)
 		defer commentsRepository.AssertExpectations(t)
 
 		usersRepository.On("GetByUUIDs", []string{}).Once().Return(nil, nil)
@@ -138,7 +140,7 @@ func TestIndexHandler(t *testing.T) {
 
 		handler := NewIndexHandler(getComments.NewUseCase(&commentsRepository, &usersRepository, &requestValidator))
 
-		url := fmt.Sprintf("/?object_uuid=%s&object_type=%s&page=%d", data.ObjectUUID, data.ObjectType, data.Page)
+		url := fmt.Sprintf("/?object_uuid=%s&object_type=%s&language_code=%s&page=%d", data.ObjectUUID, data.ObjectType, data.LanguageCode, data.Page)
 		request := httptest.NewRequest(http.MethodGet, url, nil)
 		response := httptest.NewRecorder()
 
@@ -162,20 +164,21 @@ func TestIndexHandler(t *testing.T) {
 		)
 
 		data := getComments.Request{
-			Page:       1,
-			ObjectUUID: "test-uuid",
-			ObjectType: "test-type",
+			Page:         1,
+			ObjectUUID:   "test-uuid",
+			ObjectType:   "test-type",
+			LanguageCode: "en",
 		}
 
 		requestValidator.On("Validate", &data).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
-		commentsRepository.On("CountApprovedByObjectUUID", data.ObjectType, data.ObjectUUID).Once().Return(uint(0), errors.New("something doesn't work"))
+		commentsRepository.On("CountApprovedByObjectUUID", data.ObjectType, data.ObjectUUID, data.LanguageCode).Once().Return(uint(0), errors.New("something doesn't work"))
 		defer commentsRepository.AssertExpectations(t)
 
 		handler := NewIndexHandler(getComments.NewUseCase(&commentsRepository, &usersRepository, &requestValidator))
 
-		url := fmt.Sprintf("/?object_uuid=%s&object_type=%s&page=%d", data.ObjectUUID, data.ObjectType, data.Page)
+		url := fmt.Sprintf("/?object_uuid=%s&object_type=%s&language_code=%s&page=%d", data.ObjectUUID, data.ObjectType, data.LanguageCode, data.Page)
 		request := httptest.NewRequest(http.MethodGet, url, nil)
 		response := httptest.NewRecorder()
 

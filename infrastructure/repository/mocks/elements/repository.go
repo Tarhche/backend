@@ -22,16 +22,6 @@ func (r *MockElementsRepository) GetAll(offset uint, limit uint) ([]element.Elem
 	return nil, args.Error(1)
 }
 
-func (r *MockElementsRepository) GetByVenues(venues []string) ([]element.Element, error) {
-	args := r.Mock.Called(venues)
-
-	if e, ok := args.Get(0).([]element.Element); ok {
-		return e, args.Error(1)
-	}
-
-	return nil, args.Error(1)
-}
-
 func (r *MockElementsRepository) GetOne(UUID string) (element.Element, error) {
 	args := r.Mock.Called(UUID)
 

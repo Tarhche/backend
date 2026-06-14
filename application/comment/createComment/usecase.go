@@ -28,11 +28,12 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 	}
 
 	c := comment.Comment{
-		Body:       request.Body,
-		AuthorUUID: request.AuthorUUID,
-		ParentUUID: request.ParentUUID,
-		ObjectUUID: request.ObjectUUID,
-		ObjectType: request.ObjectType,
+		Body:         request.Body,
+		AuthorUUID:   request.AuthorUUID,
+		ParentUUID:   request.ParentUUID,
+		ObjectUUID:   request.ObjectUUID,
+		ObjectType:   request.ObjectType,
+		LanguageCode: request.LanguageCode,
 	}
 
 	_, err := uc.commentRepository.Save(&c)

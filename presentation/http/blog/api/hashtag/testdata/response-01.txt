@@ -1,7 +1,7 @@
 {
     "items": [
         {
-            "uuid": "article-uuid-1",
+            "correlation_uuid": "article-correlation-uuid-1",
             "cover": "article-cover-1",
             "video": "article-video-1",
             "title": "article-title-1",
@@ -16,7 +16,7 @@
             "available_languages": null
         },
         {
-            "uuid": "article-uuid-2",
+            "correlation_uuid": "article-correlation-uuid-2",
             "cover": "article-cover-2",
             "video": "",
             "title": "article-title-2",
@@ -31,7 +31,7 @@
             "available_languages": null
         },
         {
-            "uuid": "article-uuid-3",
+            "correlation_uuid": "article-correlation-uuid-3",
             "cover": "article-cover-3",
             "video": "",
             "title": "article-title-3",
@@ -50,6 +50,7 @@
         "code": "EN",
         "name": "English"
     },
+    "elements": [],
     "pagination": {
         "total_pages": 1,
         "current_page": 1

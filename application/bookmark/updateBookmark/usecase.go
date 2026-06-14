@@ -32,6 +32,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 			request.OwnerUUID,
 			request.ObjectType,
 			request.ObjectUUID,
+			request.LanguageCode,
 		); err != nil {
 			return nil, err
 		}
@@ -40,10 +41,11 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 	}
 
 	b := bookmark.Bookmark{
-		Title:      request.Title,
-		ObjectUUID: request.ObjectUUID,
-		ObjectType: request.ObjectType,
-		OwnerUUID:  request.OwnerUUID,
+		Title:        request.Title,
+		ObjectUUID:   request.ObjectUUID,
+		ObjectType:   request.ObjectType,
+		LanguageCode: request.LanguageCode,
+		OwnerUUID:    request.OwnerUUID,
 	}
 
 	if _, err := uc.bookmarkRepository.Save(&b); err != nil {

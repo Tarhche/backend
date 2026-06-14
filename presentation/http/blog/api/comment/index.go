@@ -27,6 +27,7 @@ func NewIndexHandler(getCommentsUseCase *getComments.UseCase) *indexHandler {
 // @Param			page		query		int		false	"Page number"	default(1)
 // @Param			object_uuid	query		string	false	"Object UUID"
 // @Param			object_type	query		string	false	"Object type"
+// @Param			language_code	query		string	false	"Language code (e.g. EN, FA)"
 // @Success		200			{object}	getComments.Response
 // @Failure		400			{object}	map[string]interface{}
 // @Failure		500			{object}	map[string]interface{}
@@ -50,10 +51,16 @@ func (h *indexHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		objectType = r.URL.Query().Get("object_type")
 	}
 
+	var languageCode string
+	if r.URL.Query().Has("language_code") {
+		languageCode = r.URL.Query().Get("language_code")
+	}
+
 	request := &getComments.Request{
-		Page:       page,
-		ObjectUUID: objectUUID,
-		ObjectType: objectType,
+		Page:         page,
+		ObjectUUID:   objectUUID,
+		ObjectType:   objectType,
+		LanguageCode: languageCode,
 	}
 
 	response, err := h.getCommentsUseCase.Execute(request)

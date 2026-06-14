@@ -123,7 +123,7 @@ func toCardsResponse(c component.Cards, elementsContent []article.Article, autho
 func toItemResponse(c component.Item, elementsContent []article.Article, authors map[string]user.User) itemComponentResponse {
 	var body any
 	for i := range elementsContent {
-		if elementsContent[i].UUID == c.ContentUUID {
+		if elementsContent[i].CorrelationUUID == c.ContentUUID {
 			body = toArticleResponse([]article.Article{elementsContent[i]}, authors)[0]
 			break
 		}

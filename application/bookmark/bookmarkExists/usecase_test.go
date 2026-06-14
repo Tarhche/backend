@@ -23,9 +23,10 @@ func TestUseCase_Execute(t *testing.T) {
 			validator          validator.MockValidator
 
 			r = Request{
-				OwnerUUID:  "test-user-uuid",
-				ObjectType: "article",
-				ObjectUUID: "test-uuid",
+				OwnerUUID:    "test-user-uuid",
+				ObjectType:   "article",
+				ObjectUUID:   "test-uuid",
+				LanguageCode: "en",
 			}
 
 			b bookmark.Bookmark
@@ -34,7 +35,7 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		boomkarkRepository.On("GetByOwnerUUID", r.OwnerUUID, r.ObjectType, r.ObjectUUID).Once().Return(b, nil)
+		boomkarkRepository.On("GetByOwnerUUID", r.OwnerUUID, r.ObjectType, r.ObjectUUID, r.LanguageCode).Once().Return(b, nil)
 		defer boomkarkRepository.AssertExpectations(t)
 
 		response, err := NewUseCase(&boomkarkRepository, &validator).Execute(&r)
@@ -53,9 +54,10 @@ func TestUseCase_Execute(t *testing.T) {
 			validator          validator.MockValidator
 
 			r = Request{
-				OwnerUUID:  "test-user-uuid",
-				ObjectType: "article",
-				ObjectUUID: "test-uuid",
+				OwnerUUID:    "test-user-uuid",
+				ObjectType:   "article",
+				ObjectUUID:   "test-uuid",
+				LanguageCode: "en",
 			}
 
 			b bookmark.Bookmark
@@ -64,7 +66,7 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		boomkarkRepository.On("GetByOwnerUUID", r.OwnerUUID, r.ObjectType, r.ObjectUUID).Once().Return(b, domain.ErrNotExists)
+		boomkarkRepository.On("GetByOwnerUUID", r.OwnerUUID, r.ObjectType, r.ObjectUUID, r.LanguageCode).Once().Return(b, domain.ErrNotExists)
 		defer boomkarkRepository.AssertExpectations(t)
 
 		response, err := NewUseCase(&boomkarkRepository, &validator).Execute(&r)
@@ -113,9 +115,10 @@ func TestUseCase_Execute(t *testing.T) {
 			validator          validator.MockValidator
 
 			r = Request{
-				OwnerUUID:  "test-user-uuid",
-				ObjectType: "article",
-				ObjectUUID: "test-uuid",
+				OwnerUUID:    "test-user-uuid",
+				ObjectType:   "article",
+				ObjectUUID:   "test-uuid",
+				LanguageCode: "en",
 			}
 
 			expectedErr = errors.New("some error")
@@ -126,7 +129,7 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		boomkarkRepository.On("GetByOwnerUUID", r.OwnerUUID, r.ObjectType, r.ObjectUUID).Once().Return(b, expectedErr)
+		boomkarkRepository.On("GetByOwnerUUID", r.OwnerUUID, r.ObjectType, r.ObjectUUID, r.LanguageCode).Once().Return(b, expectedErr)
 		defer boomkarkRepository.AssertExpectations(t)
 
 		response, err := NewUseCase(&boomkarkRepository, &validator).Execute(&r)

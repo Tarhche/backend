@@ -17,33 +17,36 @@ func TestRequest_Validate(t *testing.T) {
 		{
 			name: "valid request",
 			request: Request{
-				Body:       "This is a comment",
-				AuthorUUID: "author-uuid-123",
-				ParentUUID: "parent-uuid-456",
-				ObjectUUID: "article-uuid-789",
-				ObjectType: comment.ObjectTypeArticle,
+				Body:         "This is a comment",
+				AuthorUUID:   "author-uuid-123",
+				ParentUUID:   "parent-uuid-456",
+				ObjectUUID:   "article-uuid-789",
+				ObjectType:   comment.ObjectTypeArticle,
+				LanguageCode: "en",
 			},
 			want: domain.ValidationErrors{},
 		},
 		{
 			name: "valid request without parent",
 			request: Request{
-				Body:       "This is a comment",
-				AuthorUUID: "author-uuid-123",
-				ParentUUID: "",
-				ObjectUUID: "article-uuid-789",
-				ObjectType: comment.ObjectTypeArticle,
+				Body:         "This is a comment",
+				AuthorUUID:   "author-uuid-123",
+				ParentUUID:   "",
+				ObjectUUID:   "article-uuid-789",
+				ObjectType:   comment.ObjectTypeArticle,
+				LanguageCode: "en",
 			},
 			want: domain.ValidationErrors{},
 		},
 		{
 			name: "invalid request with empty body",
 			request: Request{
-				Body:       "",
-				AuthorUUID: "author-uuid-123",
-				ParentUUID: "parent-uuid-456",
-				ObjectUUID: "article-uuid-789",
-				ObjectType: comment.ObjectTypeArticle,
+				Body:         "",
+				AuthorUUID:   "author-uuid-123",
+				ParentUUID:   "parent-uuid-456",
+				ObjectUUID:   "article-uuid-789",
+				ObjectType:   comment.ObjectTypeArticle,
+				LanguageCode: "en",
 			},
 			want: domain.ValidationErrors{
 				"body": "required_field",
@@ -52,11 +55,12 @@ func TestRequest_Validate(t *testing.T) {
 		{
 			name: "invalid request with invalid object type",
 			request: Request{
-				Body:       "This is a comment",
-				AuthorUUID: "author-uuid-123",
-				ParentUUID: "parent-uuid-456",
-				ObjectUUID: "article-uuid-789",
-				ObjectType: "invalid-type",
+				Body:         "This is a comment",
+				AuthorUUID:   "author-uuid-123",
+				ParentUUID:   "parent-uuid-456",
+				ObjectUUID:   "article-uuid-789",
+				ObjectType:   "invalid-type",
+				LanguageCode: "en",
 			},
 			want: domain.ValidationErrors{
 				"object_type": "invalid_value",
@@ -65,14 +69,29 @@ func TestRequest_Validate(t *testing.T) {
 		{
 			name: "invalid request with empty object uuid",
 			request: Request{
-				Body:       "This is a comment",
-				AuthorUUID: "author-uuid-123",
-				ParentUUID: "parent-uuid-456",
-				ObjectUUID: "",
-				ObjectType: comment.ObjectTypeArticle,
+				Body:         "This is a comment",
+				AuthorUUID:   "author-uuid-123",
+				ParentUUID:   "parent-uuid-456",
+				ObjectUUID:   "",
+				ObjectType:   comment.ObjectTypeArticle,
+				LanguageCode: "en",
 			},
 			want: domain.ValidationErrors{
 				"object_uuid": "required_field",
+			},
+		},
+		{
+			name: "invalid request with empty language code",
+			request: Request{
+				Body:         "This is a comment",
+				AuthorUUID:   "author-uuid-123",
+				ParentUUID:   "parent-uuid-456",
+				ObjectUUID:   "article-uuid-789",
+				ObjectType:   comment.ObjectTypeArticle,
+				LanguageCode: "",
+			},
+			want: domain.ValidationErrors{
+				"language_code": "required_field",
 			},
 		},
 		{
@@ -85,9 +104,10 @@ func TestRequest_Validate(t *testing.T) {
 				ObjectType: "invalid-type",
 			},
 			want: domain.ValidationErrors{
-				"body":        "required_field",
-				"object_type": "invalid_value",
-				"object_uuid": "required_field",
+				"body":          "required_field",
+				"object_type":   "invalid_value",
+				"object_uuid":   "required_field",
+				"language_code": "required_field",
 			},
 		},
 	}

@@ -36,20 +36,22 @@ func TestUpdateHandler(t *testing.T) {
 		}
 
 		b := bookmark.Bookmark{
-			Title:      "test title",
-			ObjectUUID: "object-uuid-1",
-			ObjectType: "article",
-			OwnerUUID:  u.UUID,
+			Title:        "test title",
+			ObjectUUID:   "object-uuid-1",
+			ObjectType:   "article",
+			LanguageCode: "en",
+			OwnerUUID:    u.UUID,
 		}
 
-		bookmarkRepository.On("DeleteByOwnerUUID", b.OwnerUUID, b.ObjectType, b.ObjectUUID).Once().Return(nil)
+		bookmarkRepository.On("DeleteByOwnerUUID", b.OwnerUUID, b.ObjectType, b.ObjectUUID, b.LanguageCode).Once().Return(nil)
 		defer bookmarkRepository.AssertExpectations(t)
 
 		r := updateBookmark.Request{
-			Keep:       false,
-			Title:      b.Title,
-			ObjectType: b.ObjectType,
-			ObjectUUID: b.ObjectUUID,
+			Keep:         false,
+			Title:        b.Title,
+			ObjectType:   b.ObjectType,
+			ObjectUUID:   b.ObjectUUID,
+			LanguageCode: b.LanguageCode,
 		}
 
 		var payload bytes.Buffer
@@ -122,20 +124,22 @@ func TestUpdateHandler(t *testing.T) {
 		}
 
 		b := bookmark.Bookmark{
-			Title:      "test title",
-			ObjectUUID: "object-uuid-1",
-			ObjectType: "article",
-			OwnerUUID:  u.UUID,
+			Title:        "test title",
+			ObjectUUID:   "object-uuid-1",
+			ObjectType:   "article",
+			LanguageCode: "en",
+			OwnerUUID:    u.UUID,
 		}
 
-		bookmarkRepository.On("DeleteByOwnerUUID", b.OwnerUUID, b.ObjectType, b.ObjectUUID).Once().Return(errors.New("something wrong has happened"))
+		bookmarkRepository.On("DeleteByOwnerUUID", b.OwnerUUID, b.ObjectType, b.ObjectUUID, b.LanguageCode).Once().Return(errors.New("something wrong has happened"))
 		defer bookmarkRepository.AssertExpectations(t)
 
 		r := updateBookmark.Request{
-			Keep:       false,
-			Title:      b.Title,
-			ObjectType: b.ObjectType,
-			ObjectUUID: b.ObjectUUID,
+			Keep:         false,
+			Title:        b.Title,
+			ObjectType:   b.ObjectType,
+			ObjectUUID:   b.ObjectUUID,
+			LanguageCode: b.LanguageCode,
 		}
 
 		var payload bytes.Buffer

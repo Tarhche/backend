@@ -34,14 +34,14 @@ func (r *MockBookmarksRepository) CountByOwnerUUID(ownerUUID string) (uint, erro
 	return args.Get(0).(uint), args.Error(1)
 }
 
-func (r *MockBookmarksRepository) GetByOwnerUUID(ownerUUID string, objectType string, objectUUID string) (bookmark.Bookmark, error) {
-	args := r.Mock.Called(ownerUUID, objectType, objectUUID)
+func (r *MockBookmarksRepository) GetByOwnerUUID(ownerUUID string, objectType string, objectUUID string, languageCode string) (bookmark.Bookmark, error) {
+	args := r.Mock.Called(ownerUUID, objectType, objectUUID, languageCode)
 
 	return args.Get(0).(bookmark.Bookmark), args.Error(1)
 }
 
-func (r *MockBookmarksRepository) DeleteByOwnerUUID(ownerUUID string, objectType string, objectUUID string) error {
-	args := r.Mock.Called(ownerUUID, objectType, objectUUID)
+func (r *MockBookmarksRepository) DeleteByOwnerUUID(ownerUUID string, objectType string, objectUUID string, languageCode string) error {
+	args := r.Mock.Called(ownerUUID, objectType, objectUUID, languageCode)
 
 	return args.Error(0)
 }

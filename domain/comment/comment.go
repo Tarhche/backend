@@ -10,14 +10,15 @@ const (
 )
 
 type Comment struct {
-	UUID       string
-	Body       string
-	AuthorUUID string
-	ParentUUID string
-	ObjectUUID string
-	ObjectType string
-	ApprovedAt time.Time
-	CreatedAt  time.Time
+	UUID         string
+	Body         string
+	AuthorUUID   string
+	ParentUUID   string
+	ObjectUUID   string
+	ObjectType   string
+	LanguageCode string
+	ApprovedAt   time.Time
+	CreatedAt    time.Time
 }
 
 type Repository interface {
@@ -27,8 +28,8 @@ type Repository interface {
 	Save(*Comment) (string, error)
 	Delete(UUID string) error
 
-	GetApprovedByObjectUUID(objectType string, UUID string, offset uint, limit uint) ([]Comment, error)
-	CountApprovedByObjectUUID(objectType string, UUID string) (uint, error)
+	GetApprovedByObjectUUID(objectType string, UUID string, languageCode string, offset uint, limit uint) ([]Comment, error)
+	CountApprovedByObjectUUID(objectType string, UUID string, languageCode string) (uint, error)
 
 	GetAllByAuthorUUID(authorUUID string, offset uint, limit uint) ([]Comment, error)
 	GetOneByAuthorUUID(UUID string, authorUUID string) (Comment, error)

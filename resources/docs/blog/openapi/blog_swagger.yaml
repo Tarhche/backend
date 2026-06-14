@@ -2,6 +2,8 @@ basePath: /api
 definitions:
   bookmarkExists.Request:
     properties:
+      language_code:
+        type: string
       object_type:
         type: string
       object_uuid:
@@ -129,6 +131,8 @@ definitions:
     type: object
   deleteUserBookmark.Request:
     properties:
+      language_code:
+        type: string
       object_type:
         type: string
       object_uuid:
@@ -184,6 +188,10 @@ definitions:
     properties:
       author:
         $ref: '#/definitions/getArticlesByAuthor.authorResponse'
+      elements:
+        items:
+          $ref: '#/definitions/element.Response'
+        type: array
       errors:
         $ref: '#/definitions/domain.ValidationErrors'
       items:
@@ -201,6 +209,8 @@ definitions:
         items:
           $ref: '#/definitions/getArticlesByAuthor.languageResponse'
         type: array
+      correlation_uuid:
+        type: string
       cover:
         type: string
       excerpt:
@@ -208,8 +218,6 @@ definitions:
       published_at:
         type: string
       title:
-        type: string
-      uuid:
         type: string
       video:
         type: string
@@ -243,6 +251,10 @@ definitions:
     type: object
   getArticlesByHashtag.Response:
     properties:
+      elements:
+        items:
+          $ref: '#/definitions/element.Response'
+        type: array
       errors:
         $ref: '#/definitions/domain.ValidationErrors'
       items:
@@ -262,6 +274,8 @@ definitions:
         items:
           $ref: '#/definitions/getArticlesByHashtag.languageResponse'
         type: array
+      correlation_uuid:
+        type: string
       cover:
         type: string
       excerpt:
@@ -269,8 +283,6 @@ definitions:
       published_at:
         type: string
       title:
-        type: string
-      uuid:
         type: string
       video:
         type: string
@@ -309,6 +321,8 @@ definitions:
       body:
         type: string
       created_at:
+        type: string
+      language_code:
         type: string
       object_type:
         type: string
@@ -413,6 +427,8 @@ definitions:
     properties:
       created_at:
         type: string
+      language_code:
+        type: string
       object_type:
         type: string
       object_uuid:
@@ -436,6 +452,8 @@ definitions:
       body:
         type: string
       created_at:
+        type: string
+      language_code:
         type: string
       object_type:
         type: string
@@ -486,6 +504,8 @@ definitions:
       body:
         type: string
       created_at:
+        type: string
+      language_code:
         type: string
       object_type:
         type: string
@@ -883,6 +903,10 @@ definitions:
     type: object
   github_com_khanzadimahdi_testproject_application_article_getArticles.Response:
     properties:
+      elements:
+        items:
+          $ref: '#/definitions/element.Response'
+        type: array
       items:
         items:
           $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_article_getArticles.articleResponse'
@@ -900,6 +924,8 @@ definitions:
         items:
           $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_article_getArticles.languageResponse'
         type: array
+      correlation_uuid:
+        type: string
       cover:
         type: string
       excerpt:
@@ -907,8 +933,6 @@ definitions:
       published_at:
         type: string
       title:
-        type: string
-      uuid:
         type: string
       video:
         type: string
@@ -923,6 +947,8 @@ definitions:
   github_com_khanzadimahdi_testproject_application_comment_createComment.Request:
     properties:
       body:
+        type: string
+      language_code:
         type: string
       object_type:
         type: string
@@ -960,6 +986,8 @@ definitions:
       body:
         type: string
       created_at:
+        type: string
+      language_code:
         type: string
       parent_uuid:
         type: string
@@ -1033,6 +1061,8 @@ definitions:
         type: string
       body:
         type: string
+      language_code:
+        type: string
       object_type:
         type: string
       object_uuid:
@@ -1069,6 +1099,8 @@ definitions:
       body:
         type: string
       created_at:
+        type: string
+      language_code:
         type: string
       object_type:
         type: string
@@ -1421,6 +1453,8 @@ definitions:
     properties:
       keep:
         type: boolean
+      language_code:
+        type: string
       object_type:
         type: string
       object_uuid:
@@ -1963,6 +1997,10 @@ paths:
       - description: Object type
         in: query
         name: object_type
+        type: string
+      - description: Language code (e.g. EN, FA)
+        in: query
+        name: language_code
         type: string
       produces:
       - application/json

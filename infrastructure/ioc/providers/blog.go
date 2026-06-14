@@ -87,6 +87,7 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/cache"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc"
 	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
+	"github.com/khanzadimahdi/testproject/infrastructure/matcher"
 	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/core/pubsub"
 	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/jetstream/produceConsumer"
 	articlesrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/articles"
@@ -303,7 +304,7 @@ func blog(
 	languageResolver := languageresolver.New(languageRepository, configRepository)
 
 	authTokenGenerator := auth.NewTokenGenerator(jwt, rolesRepository)
-	elementRetriever := element.NewRetriever(articlesRepository, elementsRepository, userRepository)
+	elementRetriever := element.NewRetriever(articlesRepository, elementsRepository, userRepository, matcher.New())
 
 	// ---- public ----
 	homeUseCase := home.NewUseCase(articlesRepository, userRepository, elementRetriever, languageResolver)
@@ -316,9 +317,9 @@ func blog(
 	verifyUseCase := verify.NewUseCase(userRepository, rolesRepository, configRepository, languageResolver, hasher, jwt, translator, validator)
 
 	getArticleUsecase := getArticle.NewUseCase(articlesRepository, userRepository, languageRepository, languageResolver, elementRetriever, validator)
-	getArticlesUsecase := getArticles.NewUseCase(articlesRepository, userRepository, languageRepository, languageResolver)
-	getArticlesByHashtagUseCase := getArticlesByHashtag.NewUseCase(articlesRepository, userRepository, languageRepository, languageResolver, validator)
-	getArticlesByAuthorUseCase := getArticlesByAuthor.NewUseCase(articlesRepository, userRepository, languageRepository, languageResolver, validator)
+	getArticlesUsecase := getArticles.NewUseCase(articlesRepository, userRepository, languageRepository, languageResolver, elementRetriever)
+	getArticlesByHashtagUseCase := getArticlesByHashtag.NewUseCase(articlesRepository, userRepository, languageRepository, languageResolver, elementRetriever, validator)
+	getArticlesByAuthorUseCase := getArticlesByAuthor.NewUseCase(articlesRepository, userRepository, languageRepository, languageResolver, elementRetriever, validator)
 	getLanguagesUseCase := getLanguages.NewUseCase(languageRepository, languageResolver)
 	getFileUseCase := getFile.NewUseCase(filesRepository, fileStorage)
 	getCommentsUseCase := getComments.NewUseCase(commentsRepository, userRepository, validator)

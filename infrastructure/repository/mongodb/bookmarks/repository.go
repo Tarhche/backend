@@ -49,12 +49,13 @@ func (r *BookmarksRepository) Save(b *bookmark.Bookmark) (string, error) {
 	}
 
 	update := BookmarkBson{
-		UUID:       b.UUID,
-		Title:      b.Title,
-		ObjectUUID: b.ObjectUUID,
-		ObjectType: b.ObjectType,
-		OwnerUUID:  b.OwnerUUID,
-		CreatedAt:  b.CreatedAt,
+		UUID:         b.UUID,
+		Title:        b.Title,
+		ObjectUUID:   b.ObjectUUID,
+		ObjectType:   b.ObjectType,
+		LanguageCode: b.LanguageCode,
+		OwnerUUID:    b.OwnerUUID,
+		CreatedAt:    b.CreatedAt,
 	}
 
 	if _, err := r.collection.UpdateOne(
@@ -95,12 +96,13 @@ func (r *BookmarksRepository) GetAllByOwnerUUID(ownerUUID string, offset uint, l
 			return nil, err
 		}
 		items = append(items, bookmark.Bookmark{
-			UUID:       b.ObjectUUID,
-			Title:      b.Title,
-			ObjectUUID: b.ObjectUUID,
-			ObjectType: b.ObjectType,
-			OwnerUUID:  b.OwnerUUID,
-			CreatedAt:  b.CreatedAt,
+			UUID:         b.ObjectUUID,
+			Title:        b.Title,
+			ObjectUUID:   b.ObjectUUID,
+			ObjectType:   b.ObjectType,
+			LanguageCode: b.LanguageCode,
+			OwnerUUID:    b.OwnerUUID,
+			CreatedAt:    b.CreatedAt,
 		})
 	}
 
@@ -127,14 +129,15 @@ func (r *BookmarksRepository) CountByOwnerUUID(ownerUUID string) (uint, error) {
 	return uint(c), nil
 }
 
-func (r *BookmarksRepository) GetByOwnerUUID(ownerUUID string, objectType string, objectUUID string) (bookmark.Bookmark, error) {
+func (r *BookmarksRepository) GetByOwnerUUID(ownerUUID string, objectType string, objectUUID string, languageCode string) (bookmark.Bookmark, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
 	defer cancel()
 
 	filter := bson.M{
-		"object_uuid": objectUUID,
-		"object_type": objectType,
-		"owner_uuid":  ownerUUID,
+		"object_uuid":   objectUUID,
+		"object_type":   objectType,
+		"language_code": languageCode,
+		"owner_uuid":    ownerUUID,
 	}
 
 	var b BookmarkBson
@@ -146,23 +149,25 @@ func (r *BookmarksRepository) GetByOwnerUUID(ownerUUID string, objectType string
 	}
 
 	return bookmark.Bookmark{
-		UUID:       b.ObjectUUID,
-		Title:      b.Title,
-		ObjectUUID: b.ObjectUUID,
-		ObjectType: b.ObjectType,
-		OwnerUUID:  b.OwnerUUID,
-		CreatedAt:  b.CreatedAt,
+		UUID:         b.ObjectUUID,
+		Title:        b.Title,
+		ObjectUUID:   b.ObjectUUID,
+		ObjectType:   b.ObjectType,
+		LanguageCode: b.LanguageCode,
+		OwnerUUID:    b.OwnerUUID,
+		CreatedAt:    b.CreatedAt,
 	}, nil
 }
 
-func (r *BookmarksRepository) DeleteByOwnerUUID(ownerUUID string, objectType string, objectUUID string) error {
+func (r *BookmarksRepository) DeleteByOwnerUUID(ownerUUID string, objectType string, objectUUID string, languageCode string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
 	defer cancel()
 
 	filter := bson.M{
-		"object_uuid": objectUUID,
-		"object_type": objectType,
-		"owner_uuid":  ownerUUID,
+		"object_uuid":   objectUUID,
+		"object_type":   objectType,
+		"language_code": languageCode,
+		"owner_uuid":    ownerUUID,
 	}
 
 	_, err := r.collection.DeleteOne(ctx, filter)

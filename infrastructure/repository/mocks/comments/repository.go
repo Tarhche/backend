@@ -46,8 +46,8 @@ func (r *MockCommentsRepository) Delete(UUID string) error {
 	return args.Error(0)
 }
 
-func (r *MockCommentsRepository) GetApprovedByObjectUUID(objectType string, UUID string, offset uint, limit uint) ([]comment.Comment, error) {
-	args := r.Called(objectType, UUID, offset, limit)
+func (r *MockCommentsRepository) GetApprovedByObjectUUID(objectType string, UUID string, languageCode string, offset uint, limit uint) ([]comment.Comment, error) {
+	args := r.Called(objectType, UUID, languageCode, offset, limit)
 
 	if c, ok := args.Get(0).([]comment.Comment); ok {
 		return c, args.Error(1)
@@ -56,8 +56,8 @@ func (r *MockCommentsRepository) GetApprovedByObjectUUID(objectType string, UUID
 	return nil, args.Error(1)
 }
 
-func (r *MockCommentsRepository) CountApprovedByObjectUUID(objectType string, UUID string) (uint, error) {
-	args := r.Called(objectType, UUID)
+func (r *MockCommentsRepository) CountApprovedByObjectUUID(objectType string, UUID string, languageCode string) (uint, error) {
+	args := r.Called(objectType, UUID, languageCode)
 
 	return args.Get(0).(uint), args.Error(1)
 }

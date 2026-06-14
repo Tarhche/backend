@@ -607,6 +607,12 @@ const docTemplateblog = `{
                         "description": "Object type",
                         "name": "object_type",
                         "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Language code (e.g. EN, FA)",
+                        "name": "language_code",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -3364,6 +3370,9 @@ const docTemplateblog = `{
         "bookmarkExists.Request": {
             "type": "object",
             "properties": {
+                "language_code": {
+                    "type": "string"
+                },
                 "object_type": {
                     "type": "string"
                 },
@@ -3561,6 +3570,9 @@ const docTemplateblog = `{
         "deleteUserBookmark.Request": {
             "type": "object",
             "properties": {
+                "language_code": {
+                    "type": "string"
+                },
                 "object_type": {
                     "type": "string"
                 },
@@ -3646,6 +3658,12 @@ const docTemplateblog = `{
                 "author": {
                     "$ref": "#/definitions/getArticlesByAuthor.authorResponse"
                 },
+                "elements": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/element.Response"
+                    }
+                },
                 "errors": {
                     "$ref": "#/definitions/domain.ValidationErrors"
                 },
@@ -3672,6 +3690,9 @@ const docTemplateblog = `{
                         "$ref": "#/definitions/getArticlesByAuthor.languageResponse"
                     }
                 },
+                "correlation_uuid": {
+                    "type": "string"
+                },
                 "cover": {
                     "type": "string"
                 },
@@ -3682,9 +3703,6 @@ const docTemplateblog = `{
                     "type": "string"
                 },
                 "title": {
-                    "type": "string"
-                },
-                "uuid": {
                     "type": "string"
                 },
                 "video": {
@@ -3737,6 +3755,12 @@ const docTemplateblog = `{
         "getArticlesByHashtag.Response": {
             "type": "object",
             "properties": {
+                "elements": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/element.Response"
+                    }
+                },
                 "errors": {
                     "$ref": "#/definitions/domain.ValidationErrors"
                 },
@@ -3766,6 +3790,9 @@ const docTemplateblog = `{
                         "$ref": "#/definitions/getArticlesByHashtag.languageResponse"
                     }
                 },
+                "correlation_uuid": {
+                    "type": "string"
+                },
                 "cover": {
                     "type": "string"
                 },
@@ -3776,9 +3803,6 @@ const docTemplateblog = `{
                     "type": "string"
                 },
                 "title": {
-                    "type": "string"
-                },
-                "uuid": {
                     "type": "string"
                 },
                 "video": {
@@ -3838,6 +3862,9 @@ const docTemplateblog = `{
                     "type": "string"
                 },
                 "created_at": {
+                    "type": "string"
+                },
+                "language_code": {
                     "type": "string"
                 },
                 "object_type": {
@@ -3999,6 +4026,9 @@ const docTemplateblog = `{
                 "created_at": {
                     "type": "string"
                 },
+                "language_code": {
+                    "type": "string"
+                },
                 "object_type": {
                     "type": "string"
                 },
@@ -4034,6 +4064,9 @@ const docTemplateblog = `{
                     "type": "string"
                 },
                 "created_at": {
+                    "type": "string"
+                },
+                "language_code": {
                     "type": "string"
                 },
                 "object_type": {
@@ -4111,6 +4144,9 @@ const docTemplateblog = `{
                     "type": "string"
                 },
                 "created_at": {
+                    "type": "string"
+                },
+                "language_code": {
                     "type": "string"
                 },
                 "object_type": {
@@ -4723,6 +4759,12 @@ const docTemplateblog = `{
         "github_com_khanzadimahdi_testproject_application_article_getArticles.Response": {
             "type": "object",
             "properties": {
+                "elements": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/element.Response"
+                    }
+                },
                 "items": {
                     "type": "array",
                     "items": {
@@ -4749,6 +4791,9 @@ const docTemplateblog = `{
                         "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_article_getArticles.languageResponse"
                     }
                 },
+                "correlation_uuid": {
+                    "type": "string"
+                },
                 "cover": {
                     "type": "string"
                 },
@@ -4759,9 +4804,6 @@ const docTemplateblog = `{
                     "type": "string"
                 },
                 "title": {
-                    "type": "string"
-                },
-                "uuid": {
                     "type": "string"
                 },
                 "video": {
@@ -4784,6 +4826,9 @@ const docTemplateblog = `{
             "type": "object",
             "properties": {
                 "body": {
+                    "type": "string"
+                },
+                "language_code": {
                     "type": "string"
                 },
                 "object_type": {
@@ -4841,6 +4886,9 @@ const docTemplateblog = `{
                     "type": "string"
                 },
                 "created_at": {
+                    "type": "string"
+                },
+                "language_code": {
                     "type": "string"
                 },
                 "parent_uuid": {
@@ -4954,6 +5002,9 @@ const docTemplateblog = `{
                 "body": {
                     "type": "string"
                 },
+                "language_code": {
+                    "type": "string"
+                },
                 "object_type": {
                     "type": "string"
                 },
@@ -5009,6 +5060,9 @@ const docTemplateblog = `{
                     "type": "string"
                 },
                 "created_at": {
+                    "type": "string"
+                },
+                "language_code": {
                     "type": "string"
                 },
                 "object_type": {
@@ -5551,6 +5605,9 @@ const docTemplateblog = `{
             "properties": {
                 "keep": {
                     "type": "boolean"
+                },
+                "language_code": {
+                    "type": "string"
                 },
                 "object_type": {
                     "type": "string"

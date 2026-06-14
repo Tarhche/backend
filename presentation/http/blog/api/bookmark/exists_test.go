@@ -37,22 +37,24 @@ func TestExistsHandler(t *testing.T) {
 		}
 
 		b := bookmark.Bookmark{
-			UUID:       "bookmark-uuid",
-			Title:      "bookmark-title",
-			ObjectUUID: "object-uuid",
-			ObjectType: "article",
-			OwnerUUID:  u.UUID,
-			CreatedAt:  time.Now(),
+			UUID:         "bookmark-uuid",
+			Title:        "bookmark-title",
+			ObjectUUID:   "object-uuid",
+			ObjectType:   "article",
+			LanguageCode: "en",
+			OwnerUUID:    u.UUID,
+			CreatedAt:    time.Now(),
 		}
 
-		bookmarkRepository.On("GetByOwnerUUID", b.OwnerUUID, b.ObjectType, b.ObjectUUID).Once().Return(b, nil)
+		bookmarkRepository.On("GetByOwnerUUID", b.OwnerUUID, b.ObjectType, b.ObjectUUID, b.LanguageCode).Once().Return(b, nil)
 		defer bookmarkRepository.AssertExpectations(t)
 
 		handler := NewExistsHandler(bookmarkExists.NewUseCase(&bookmarkRepository, &requestValidator))
 
 		r := bookmarkExists.Request{
-			ObjectType: b.ObjectType,
-			ObjectUUID: b.ObjectUUID,
+			ObjectType:   b.ObjectType,
+			ObjectUUID:   b.ObjectUUID,
+			LanguageCode: b.LanguageCode,
 		}
 
 		var paylaod bytes.Buffer
@@ -126,22 +128,24 @@ func TestExistsHandler(t *testing.T) {
 		}
 
 		b := bookmark.Bookmark{
-			UUID:       "bookmark-uuid",
-			Title:      "bookmark-title",
-			ObjectUUID: "object-uuid",
-			ObjectType: "article",
-			OwnerUUID:  u.UUID,
-			CreatedAt:  time.Now(),
+			UUID:         "bookmark-uuid",
+			Title:        "bookmark-title",
+			ObjectUUID:   "object-uuid",
+			ObjectType:   "article",
+			LanguageCode: "en",
+			OwnerUUID:    u.UUID,
+			CreatedAt:    time.Now(),
 		}
 
-		bookmarkRepository.On("GetByOwnerUUID", b.OwnerUUID, b.ObjectType, b.ObjectUUID).Once().Return(bookmark.Bookmark{}, errors.New("something went wrong"))
+		bookmarkRepository.On("GetByOwnerUUID", b.OwnerUUID, b.ObjectType, b.ObjectUUID, b.LanguageCode).Once().Return(bookmark.Bookmark{}, errors.New("something went wrong"))
 		defer bookmarkRepository.AssertExpectations(t)
 
 		handler := NewExistsHandler(bookmarkExists.NewUseCase(&bookmarkRepository, &requestValidator))
 
 		r := bookmarkExists.Request{
-			ObjectType: b.ObjectType,
-			ObjectUUID: b.ObjectUUID,
+			ObjectType:   b.ObjectType,
+			ObjectUUID:   b.ObjectUUID,
+			LanguageCode: b.LanguageCode,
 		}
 
 		var paylaod bytes.Buffer

@@ -7,6 +7,7 @@
         "code": "",
         "name": ""
     },
+    "elements": null,
     "pagination": {
         "total_pages": 0,
         "current_page": 0

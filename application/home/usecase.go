@@ -1,6 +1,8 @@
 package home
 
 import (
+	"fmt"
+
 	"github.com/khanzadimahdi/testproject/application/element"
 	"github.com/khanzadimahdi/testproject/application/language/resolver"
 	"github.com/khanzadimahdi/testproject/domain/article"
@@ -67,7 +69,10 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		return nil, err
 	}
 
-	elementsResponse, err := uc.elementRetriever.RetrieveByVenues([]string{"home"}, languageCode)
+	elementsResponse, err := uc.elementRetriever.RetrieveByVenues(
+		[]string{fmt.Sprintf("/%s/home", languageCode)},
+		languageCode,
+	)
 	if err != nil {
 		return nil, err
 	}

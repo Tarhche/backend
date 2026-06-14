@@ -21,16 +21,17 @@ func TestUseCase_Execute(t *testing.T) {
 			validator          validator.MockValidator
 
 			r = Request{
-				ObjectType: "article",
-				ObjectUUID: "article-uuid",
-				OwnerUUID:  "user-uuid",
+				ObjectType:   "article",
+				ObjectUUID:   "article-uuid",
+				LanguageCode: "en",
+				OwnerUUID:    "user-uuid",
 			}
 		)
 
 		validator.On("Validate", &r).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		bookmarkRepository.On("DeleteByOwnerUUID", r.OwnerUUID, r.ObjectType, r.ObjectUUID).Return(nil)
+		bookmarkRepository.On("DeleteByOwnerUUID", r.OwnerUUID, r.ObjectType, r.ObjectUUID, r.LanguageCode).Return(nil)
 		defer bookmarkRepository.AssertExpectations(t)
 
 		response, err := NewUseCase(&bookmarkRepository, &validator).Execute(&r)
@@ -76,9 +77,10 @@ func TestUseCase_Execute(t *testing.T) {
 			validator          validator.MockValidator
 
 			r = Request{
-				ObjectType: "article",
-				ObjectUUID: "article-uuid",
-				OwnerUUID:  "user-uuid",
+				ObjectType:   "article",
+				ObjectUUID:   "article-uuid",
+				LanguageCode: "en",
+				OwnerUUID:    "user-uuid",
 			}
 
 			expectedErr = errors.New("undexpected error")
@@ -87,7 +89,7 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		bookmarkRepository.On("DeleteByOwnerUUID", r.OwnerUUID, r.ObjectType, r.ObjectUUID).Return(expectedErr)
+		bookmarkRepository.On("DeleteByOwnerUUID", r.OwnerUUID, r.ObjectType, r.ObjectUUID, r.LanguageCode).Return(expectedErr)
 		defer bookmarkRepository.AssertExpectations(t)
 
 		response, err := NewUseCase(&bookmarkRepository, &validator).Execute(&r)

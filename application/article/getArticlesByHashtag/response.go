@@ -3,6 +3,7 @@ package getArticlesByHashtag
 import (
 	"time"
 
+	"github.com/khanzadimahdi/testproject/application/element"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/article"
 	"github.com/khanzadimahdi/testproject/domain/language"
@@ -14,11 +15,12 @@ type Response struct {
 
 	Items        []articleResponse  `json:"items"`
 	LanguageCode languageResponse   `json:"language_code"`
+	Elements     []element.Response `json:"elements"`
 	Pagination   paginationResponse `json:"pagination"`
 }
 
 type articleResponse struct {
-	UUID               string             `json:"uuid"`
+	CorrelationUUID    string             `json:"correlation_uuid"`
 	Cover              string             `json:"cover"`
 	Video              string             `json:"video"`
 	Title              string             `json:"title"`
@@ -45,7 +47,7 @@ type paginationResponse struct {
 	CurrentPage uint `json:"current_page"`
 }
 
-func NewResponse(a []article.Article, authors []user.User, articlesPublishedLanguages map[string][]language.Language, requestedLanguage language.Language, totalPages, currentPage uint) *Response {
+func NewResponse(a []article.Article, authors []user.User, articlesPublishedLanguages map[string][]language.Language, requestedLanguage language.Language, elementsResponse []element.Response, totalPages, currentPage uint) *Response {
 	authorByUUID := make(map[string]user.User, len(authors))
 	for i := range authors {
 		authorByUUID[authors[i].UUID] = authors[i]
@@ -54,7 +56,7 @@ func NewResponse(a []article.Article, authors []user.User, articlesPublishedLang
 	items := make([]articleResponse, len(a))
 
 	for i := range a {
-		items[i].UUID = a[i].UUID
+		items[i].CorrelationUUID = a[i].CorrelationUUID
 		items[i].Cover = a[i].Cover
 		items[i].Video = a[i].Video
 		items[i].Title = a[i].Title
@@ -84,6 +86,7 @@ func NewResponse(a []article.Article, authors []user.User, articlesPublishedLang
 			Code: requestedLanguage.Code,
 			Name: requestedLanguage.Name,
 		},
+		Elements: elementsResponse,
 		Pagination: paginationResponse{
 			TotalPages:  totalPages,
 			CurrentPage: currentPage,
