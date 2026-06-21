@@ -17,11 +17,11 @@ func TestBuilder(t *testing.T) {
 	iat := time.Now()
 
 	expectedClaims := jwt.MapClaims{
-		"iss": "test-issuer",
-		"sub": "test-subject",
-		"aud": []string{"test-audience-1", "test-audience-2"},
-		"exp": exp.Unix(),
-		"nbf": nbf.Unix(),
+		"iss":  "test-issuer",
+		"sub":  "test-subject",
+		"aud":  []string{"test-audience-1", "test-audience-2"},
+		"exp":  exp.Unix(),
+		"nbf":  nbf.Unix(),
 		"iat":  iat.Unix(),
 		"jti":  "test-id",
 		"lang": "EN",
