@@ -8,9 +8,11 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/danceable/container/resolve"
+	"github.com/danceable/provider"
+
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/infrastructure/console"
-	"github.com/khanzadimahdi/testproject/infrastructure/ioc"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers"
 )
 
@@ -19,23 +21,20 @@ const (
 )
 
 type ServeCommand struct {
-	port            int
-	handler         http.Handler
-	consumer        domain.Consumer
-	consumers       map[string]domain.MessageHandler
-	serviceProvider ioc.ServiceProvider
+	port      int
+	handler   http.Handler
+	consumer  domain.Consumer
+	consumers map[string]domain.MessageHandler
 }
 
 // insures it implements console.Command
 var _ console.Command = &ServeCommand{}
 
-// insures it implements ioc.ServiceProvider
-var _ ioc.ServiceProvider = &ServeCommand{}
+// insures it implements console.Service
+var _ console.Service = &ServeCommand{}
 
-func NewServeCommand(serviceProvider ioc.ServiceProvider) *ServeCommand {
-	return &ServeCommand{
-		serviceProvider: serviceProvider,
-	}
+func NewServeCommand() *ServeCommand {
+	return &ServeCommand{}
 }
 
 // Name returns the name of the command which is used to identify it.
@@ -58,35 +57,25 @@ func (c *ServeCommand) Configure(flagSet *flag.FlagSet) {
 	flagSet.IntVar(&c.port, "port", 80, "specifies which port server should listen to.")
 }
 
-func (c *ServeCommand) Register(app *ioc.Application) error {
-	return c.serviceProvider.Register(app)
+// Providers returns the service providers required to serve the blog service.
+func (c *ServeCommand) Providers() []provider.Provider {
+	return providers.BlogProviders()
 }
 
-func (c *ServeCommand) Boot(app *ioc.Application) error {
-	if err := c.serviceProvider.Boot(app); err != nil {
+// Boot resolves the command's dependencies from the booted container.
+func (c *ServeCommand) Boot(ctx context.Context, container provider.Container) error {
+	if err := container.Resolve(&c.handler); err != nil {
 		return err
 	}
 
-	if err := app.Container.Resolve(&c.handler, ioc.WithNameResolving(providers.BlogHandler)); err != nil {
+	if err := container.Resolve(&c.consumer); err != nil {
 		return err
 	}
 
-	if err := app.Container.Resolve(&c.consumer); err != nil {
-		return err
-	}
-
-	if err := app.Container.Resolve(&c.consumers, ioc.WithNameResolving(providers.BlogSubscribers)); err != nil {
-		return err
-	}
-
-	return nil
+	return container.Resolve(&c.consumers, resolve.WithName(providers.BlogSubscribers))
 }
 
-func (c *ServeCommand) Terminate() error {
-	return c.serviceProvider.Terminate()
-}
-
-// @title			Backend API
+// @title		Backend API
 // @version		1.0
 // @description	Swagger/OpenAPI documentation for the backend service.
 // @termsOfService	http://swagger.io/terms/
@@ -119,7 +108,7 @@ func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 		return console.ExitFailure
 	}
 
-	if err := server.ListenAndServe(); err != nil {
+	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Println(err)
 		return console.ExitFailure
 	}

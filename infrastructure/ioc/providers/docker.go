@@ -1,24 +1,27 @@
 package providers
 
 import (
+	"context"
 	"os"
+
+	"github.com/danceable/container/bind"
+	"github.com/danceable/provider"
 
 	containerContract "github.com/khanzadimahdi/testproject/domain/runner/container"
 	"github.com/khanzadimahdi/testproject/domain/runner/node"
-	"github.com/khanzadimahdi/testproject/infrastructure/ioc"
 	"github.com/khanzadimahdi/testproject/infrastructure/runner/container"
 	infraNode "github.com/khanzadimahdi/testproject/infrastructure/runner/node"
 )
 
 type dockerProvider struct{}
 
-var _ ioc.ServiceProvider = &dockerProvider{}
+var _ provider.Provider = &dockerProvider{}
 
 func NewDockerProvider() *dockerProvider {
 	return &dockerProvider{}
 }
 
-func (p *dockerProvider) Register(app *ioc.Application) error {
+func (p *dockerProvider) Register(ctx context.Context, c provider.Container) error {
 	dockerHost := os.Getenv("DOCKER_HOST")
 
 	containerManager, err := container.NewDockerManager(dockerHost)
@@ -31,17 +34,17 @@ func (p *dockerProvider) Register(app *ioc.Application) error {
 		return err
 	}
 
-	if err := app.Container.Singleton(func() containerContract.Manager { return containerManager }); err != nil {
+	if err := c.Bind(func() containerContract.Manager { return containerManager }, bind.Singleton()); err != nil {
 		return err
 	}
 
-	return app.Container.Singleton(func() node.Manager { return nodeManager })
+	return c.Bind(func() node.Manager { return nodeManager }, bind.Singleton())
 }
 
-func (p *dockerProvider) Boot(app *ioc.Application) error {
+func (p *dockerProvider) Boot(ctx context.Context, c provider.Container) error {
 	return nil
 }
 
-func (p *dockerProvider) Terminate() error {
+func (p *dockerProvider) Terminate(ctx context.Context) error {
 	return nil
 }

@@ -7,18 +7,21 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/domain"
+	translatorcontract "github.com/khanzadimahdi/testproject/domain/translator"
 )
 
 const (
 	SendRegisterationEmailName = "sendRegistrationEmail"
 
-	templateName    = "mail/auth/register"
-	registrationURL = "https://tarhche.com/auth/verify?token="
+	templateName             = "mail/auth/register"
+	registrationEmailSubject = "registration_email_subject"
+	registrationURL          = "https://tarhche.com/auth/verify?token="
 )
 
 // SendRegistrationEmail command
 type SendRegistrationEmail struct {
-	Identity string `json:"identity"`
+	Identity     string `json:"identity"`
+	LanguageCode string `json:"language_code"`
 }
 
 // SendRegisterationEmailHandler handles SendMail command
@@ -27,6 +30,7 @@ type sendRegisterationEmailHandler struct {
 	mailer             domain.Mailer
 	mailFrom           string
 	template           domain.Renderer
+	translator         translatorcontract.Translator
 }
 
 var _ domain.MessageHandler = &sendRegisterationEmailHandler{}
@@ -36,12 +40,14 @@ func NewSendRegisterationEmailHandler(
 	mailer domain.Mailer,
 	mailFrom string,
 	template domain.Renderer,
+	translator translatorcontract.Translator,
 ) *sendRegisterationEmailHandler {
 	return &sendRegisterationEmailHandler{
 		authTokenGenerator: authTokenGenerator,
 		mailer:             mailer,
 		mailFrom:           mailFrom,
 		template:           template,
+		translator:         translator,
 	}
 }
 
@@ -60,9 +66,11 @@ func (h *sendRegisterationEmailHandler) Handle(data []byte) error {
 
 	var msg bytes.Buffer
 	viewData := map[string]string{"registrationURL": registrationURL + registrationToken}
-	if err := h.template.Render(&msg, templateName, viewData); err != nil {
+	if err := h.template.Render(&msg, templateName+"."+command.LanguageCode, viewData); err != nil {
 		return err
 	}
 
-	return h.mailer.SendMail(h.mailFrom, command.Identity, "Registration", msg.Bytes())
+	subject := h.translator.Translate(registrationEmailSubject, translatorcontract.WithLocale(command.LanguageCode))
+
+	return h.mailer.SendMail(h.mailFrom, command.Identity, subject, msg.Bytes())
 }

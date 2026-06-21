@@ -49,7 +49,8 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 	}
 
 	command := &SendRegistrationEmail{
-		Identity: request.Identity,
+		Identity:     request.Identity,
+		LanguageCode: request.LanguageCode,
 	}
 
 	payload, err := json.Marshal(command)

@@ -6,10 +6,9 @@ import (
 	"os/signal"
 	"path"
 
+	"github.com/danceable/provider"
+
 	"github.com/khanzadimahdi/testproject/infrastructure/console"
-	"github.com/khanzadimahdi/testproject/infrastructure/ioc"
-	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers"
-	runnerProviders "github.com/khanzadimahdi/testproject/infrastructure/ioc/providers/runner"
 	"github.com/khanzadimahdi/testproject/presentation/commands/blog"
 	"github.com/khanzadimahdi/testproject/presentation/commands/runner/manager"
 	"github.com/khanzadimahdi/testproject/presentation/commands/runner/worker"
@@ -24,12 +23,12 @@ func main() {
 		path.Base(os.Args[0]),
 		"Application description",
 		os.Stderr,
-		ioc.NewContainer(),
+		provider.Default,
 	)
 
-	c.Register(blog.NewServeCommand(providers.NewBlogProvider()))
-	c.Register(manager.NewServeCommand(runnerProviders.NewManagerProvider()))
-	c.Register(worker.NewServeCommand(runnerProviders.NewWorkerProvider()))
+	c.Register(blog.NewServeCommand())
+	c.Register(manager.NewServeCommand())
+	c.Register(worker.NewServeCommand())
 
 	code := c.Run(ctx, os.Args)
 

@@ -1,23 +1,26 @@
 package providers
 
 import (
+	"context"
 	"os"
 	"strconv"
 
+	"github.com/danceable/container/bind"
+	"github.com/danceable/provider"
+
 	"github.com/khanzadimahdi/testproject/domain/file"
-	"github.com/khanzadimahdi/testproject/infrastructure/ioc"
 	"github.com/khanzadimahdi/testproject/infrastructure/storage/minio"
 )
 
 type storageProvider struct{}
 
-var _ ioc.ServiceProvider = &storageProvider{}
+var _ provider.Provider = &storageProvider{}
 
 func NewStorageProvider() *storageProvider {
 	return &storageProvider{}
 }
 
-func (p *storageProvider) Register(app *ioc.Application) error {
+func (p *storageProvider) Register(ctx context.Context, c provider.Container) error {
 	useSSL, err := strconv.ParseBool(os.Getenv("S3_USE_SSL"))
 	if err != nil {
 		return err
@@ -34,13 +37,13 @@ func (p *storageProvider) Register(app *ioc.Application) error {
 		return err
 	}
 
-	return app.Container.Singleton(func() file.Storage { return fileStorage })
+	return c.Bind(func() file.Storage { return fileStorage }, bind.Singleton())
 }
 
-func (p *storageProvider) Boot(app *ioc.Application) error {
+func (p *storageProvider) Boot(ctx context.Context, c provider.Container) error {
 	return nil
 }
 
-func (p *storageProvider) Terminate() error {
+func (p *storageProvider) Terminate(ctx context.Context) error {
 	return nil
 }

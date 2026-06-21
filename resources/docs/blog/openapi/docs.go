@@ -40,13 +40,6 @@ const docTemplate = `{
                         "description": "Page number",
                         "name": "page",
                         "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "default": "EN",
-                        "description": "Language key (e.g. EN, FA)",
-                        "name": "language_code",
-                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -86,13 +79,6 @@ const docTemplate = `{
                         "name": "uuid",
                         "in": "path",
                         "required": true
-                    },
-                    {
-                        "type": "string",
-                        "default": "EN",
-                        "description": "Language key (e.g. EN, FA)",
-                        "name": "language_code",
-                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -438,13 +424,6 @@ const docTemplate = `{
                         "description": "Page number",
                         "name": "page",
                         "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "default": "EN",
-                        "description": "Language key (e.g. EN, FA)",
-                        "name": "language_code",
-                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -606,12 +585,6 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Object type",
                         "name": "object_type",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Language code (e.g. EN, FA)",
-                        "name": "language_code",
                         "in": "query"
                     }
                 ],
@@ -2954,13 +2927,6 @@ const docTemplate = `{
                         "description": "Page number",
                         "name": "page",
                         "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "default": "EN",
-                        "description": "Language key (e.g. EN, FA)",
-                        "name": "language_code",
-                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -3000,15 +2966,6 @@ const docTemplate = `{
                     "home"
                 ],
                 "summary": "Application home endpoint",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "default": "EN",
-                        "description": "Language code (e.g. EN, FA)",
-                        "name": "language_code",
-                        "in": "query"
-                    }
-                ],
                 "responses": {
                     "200": {
                         "description": "OK",

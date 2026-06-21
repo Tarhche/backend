@@ -1,10 +1,13 @@
 package runner
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"time"
 
+	"github.com/danceable/container/bind"
+	"github.com/danceable/provider"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	managerGetNode "github.com/khanzadimahdi/testproject/application/runner/manager/node/getNode"
@@ -20,7 +23,6 @@ import (
 	nodeEvents "github.com/khanzadimahdi/testproject/domain/runner/node/events"
 	taskEvents "github.com/khanzadimahdi/testproject/domain/runner/task/events"
 	translatorContract "github.com/khanzadimahdi/testproject/domain/translator"
-	"github.com/khanzadimahdi/testproject/infrastructure/ioc"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers"
 	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/jetstream/produceConsumer"
 	noderepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/runner/nodes"
@@ -34,51 +36,42 @@ import (
 
 const (
 	ManagerSubscribers = "runner:manager:subscribers"
-	ManagerHandler     = "runner:manager:handler"
 )
 
-var managerDependencies = []ioc.ServiceProvider{
-	providers.NewMongodbProvider(),
-	providers.NewNatsProvider(),
-	providers.NewTranslationProvider(),
-	providers.NewValidationProvider(),
-	providers.NewContainerProvider(),
+// ManagerProviders returns the full, ordered set of service providers required
+// by the runner manager service.
+func ManagerProviders() []provider.Provider {
+	return []provider.Provider{
+		providers.NewMongodbProvider(),
+		providers.NewNatsProvider(),
+		providers.NewTranslationProvider(),
+		providers.NewValidationProvider(),
+		providers.NewContainerProvider(),
+		NewManagerProvider(),
+	}
 }
 
+// managerProvider builds the runner manager's messaging singleton, HTTP handler
+// and message subscribers.
 type managerProvider struct {
-	dependencies []ioc.ServiceProvider
-	terminate    func()
+	terminate func()
 }
 
-var _ ioc.ServiceProvider = &managerProvider{}
+var _ provider.Provider = &managerProvider{}
 
 func NewManagerProvider() *managerProvider {
-	return &managerProvider{
-		dependencies: managerDependencies,
-	}
+	return &managerProvider{}
 }
 
-func (p *managerProvider) Register(app *ioc.Application) error {
+func (p *managerProvider) Register(ctx context.Context, c provider.Container) error {
 	log.SetFlags(log.LstdFlags | log.Llongfile)
-
-	for _, dependency := range p.dependencies {
-		if err := dependency.Register(app); err != nil {
-			return err
-		}
-	}
 
 	return nil
 }
 
-func (p *managerProvider) Boot(app *ioc.Application) error {
-	for _, dependency := range p.dependencies {
-		if err := dependency.Boot(app); err != nil {
-			return err
-		}
-	}
-
+func (p *managerProvider) Boot(ctx context.Context, c provider.Container) error {
 	var natsConnection *nats.Conn
-	if err := app.Container.Resolve(&natsConnection); err != nil {
+	if err := c.Resolve(&natsConnection); err != nil {
 		return err
 	}
 
@@ -87,22 +80,18 @@ func (p *managerProvider) Boot(app *ioc.Application) error {
 		return err
 	}
 
-	app.Container.Singleton(func() domain.Producer { return pc })
-	app.Container.Singleton(func() domain.Consumer { return pc })
-	app.Container.Singleton(func() domain.ProduceConsumer { return pc })
+	c.Bind(func() domain.Producer { return pc }, bind.Singleton())
+	c.Bind(func() domain.Consumer { return pc }, bind.Singleton())
+	c.Bind(func() domain.ProduceConsumer { return pc }, bind.Singleton())
 
 	p.terminate = func() {
 		defer pc.Wait()
 	}
 
-	return app.Container.Singleton(managerConsoleCommand, ioc.WithNameBinding(ManagerHandler))
+	return c.Bind(managerConsoleCommand, bind.Singleton())
 }
 
-func (p *managerProvider) Terminate() error {
-	for _, dependency := range p.dependencies {
-		defer dependency.Terminate()
-	}
-
+func (p *managerProvider) Terminate(ctx context.Context) error {
 	if p.terminate != nil {
 		p.terminate()
 	}
@@ -115,7 +104,7 @@ func managerConsoleCommand(
 	jetStreamProduceConsumer domain.ProduceConsumer,
 	validator domain.Validator,
 	translator translatorContract.Translator,
-	iocContainer ioc.ServiceContainer,
+	iocContainer provider.Container,
 ) (http.Handler, error) {
 	taskScheduler := roundrobin.New()
 
@@ -156,9 +145,9 @@ func managerConsoleCommand(
 	}
 
 	// manager subscribers
-	if err := iocContainer.Singleton(func() map[string]domain.MessageHandler {
+	if err := iocContainer.Bind(func() map[string]domain.MessageHandler {
 		return subscribers
-	}, ioc.WithNameBinding(ManagerSubscribers)); err != nil {
+	}, bind.Singleton(), bind.WithName(ManagerSubscribers)); err != nil {
 		return nil, err
 	}
 

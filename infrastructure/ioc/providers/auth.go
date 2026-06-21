@@ -1,37 +1,41 @@
 package providers
 
 import (
+	"context"
+
+	"github.com/danceable/container/bind"
+	"github.com/danceable/provider"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+
 	"github.com/khanzadimahdi/testproject/domain"
 	roleContract "github.com/khanzadimahdi/testproject/domain/role"
-	"github.com/khanzadimahdi/testproject/infrastructure/ioc"
 	rolesrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/roles"
-	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
 type authProvider struct{}
 
-var _ ioc.ServiceProvider = &authProvider{}
+var _ provider.Provider = &authProvider{}
 
 func NewAuthProvider() *authProvider {
 	return &authProvider{}
 }
 
-func (p *authProvider) Register(app *ioc.Application) error {
-	if err := app.Container.Singleton(func(database *mongo.Database) roleContract.Repository {
+func (p *authProvider) Register(ctx context.Context, c provider.Container) error {
+	if err := c.Bind(func(database *mongo.Database) roleContract.Repository {
 		return rolesrepository.NewRepository(database)
-	}); err != nil {
+	}, bind.Singleton()); err != nil {
 		return err
 	}
 
-	return app.Container.Singleton(func(roleRepository roleContract.Repository) domain.Authorizer {
+	return c.Bind(func(roleRepository roleContract.Repository) domain.Authorizer {
 		return domain.NewRoleBasedAccessControl(roleRepository)
-	})
+	}, bind.Singleton())
 }
 
-func (p *authProvider) Boot(app *ioc.Application) error {
+func (p *authProvider) Boot(ctx context.Context, c provider.Container) error {
 	return nil
 }
 
-func (p *authProvider) Terminate() error {
+func (p *authProvider) Terminate(ctx context.Context) error {
 	return nil
 }

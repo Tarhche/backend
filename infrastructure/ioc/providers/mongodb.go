@@ -5,24 +5,24 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/danceable/container/bind"
+	"github.com/danceable/provider"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
-
-	"github.com/khanzadimahdi/testproject/infrastructure/ioc"
 )
 
 type mongodbProvider struct {
 	terminate func()
 }
 
-var _ ioc.ServiceProvider = &mongodbProvider{}
+var _ provider.Provider = &mongodbProvider{}
 
 func NewMongodbProvider() *mongodbProvider {
 	return &mongodbProvider{}
 }
 
-func (p *mongodbProvider) Register(app *ioc.Application) error {
+func (p *mongodbProvider) Register(ctx context.Context, c provider.Container) error {
 	uri := fmt.Sprintf(
 		"%s://%s:%s@%s:%s",
 		os.Getenv("MONGO_SCHEME"),
@@ -40,14 +40,14 @@ func (p *mongodbProvider) Register(app *ioc.Application) error {
 		return err
 	}
 
-	if err := mongoClient.Ping(app.Ctx, nil); err != nil {
+	if err := mongoClient.Ping(ctx, nil); err != nil {
 		return err
 	}
 
 	database := mongoClient.Database(os.Getenv("MONGO_DATABASE_NAME"))
 
 	var result bson.M
-	if err := database.RunCommand(app.Ctx, bson.D{{Key: "ping", Value: 1}}).Decode(&result); err != nil {
+	if err := database.RunCommand(ctx, bson.D{{Key: "ping", Value: 1}}).Decode(&result); err != nil {
 		return err
 	}
 
@@ -55,14 +55,14 @@ func (p *mongodbProvider) Register(app *ioc.Application) error {
 		mongoClient.Disconnect(context.Background())
 	}
 
-	return app.Container.Singleton(func() *mongo.Database { return database })
+	return c.Bind(func() *mongo.Database { return database }, bind.Singleton())
 }
 
-func (p *mongodbProvider) Boot(app *ioc.Application) error {
+func (p *mongodbProvider) Boot(ctx context.Context, c provider.Container) error {
 	return nil
 }
 
-func (p *mongodbProvider) Terminate() error {
+func (p *mongodbProvider) Terminate(ctx context.Context) error {
 	if p.terminate != nil {
 		p.terminate()
 	}

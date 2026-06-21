@@ -10,6 +10,7 @@ import (
 	"github.com/gofrs/uuid/v5"
 
 	getArticlesByAuthor "github.com/khanzadimahdi/testproject/application/article/getArticlesByAuthor"
+	"github.com/khanzadimahdi/testproject/application/localize"
 	"github.com/khanzadimahdi/testproject/domain"
 )
 
@@ -30,7 +31,6 @@ func NewIndexHandler(useCase *getArticlesByAuthor.UseCase) *indexHandler {
 // @Produce		json
 // @Param		identity	    path		string	true	"Author UUID or username"
 // @Param		page		    query		int		false	"Page number"	default(1)
-// @Param		language_code	query		string	false	"Language key (e.g. EN, FA)"	default(EN)
 // @Success		200			{object}	getArticlesByAuthor.Response
 // @Failure		400			{object}	map[string]interface{}
 // @Failure		404			{object}	map[string]interface{}
@@ -47,7 +47,7 @@ func (h *indexHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 	request := &getArticlesByAuthor.Request{
 		Page:         page,
-		LanguageCode: r.URL.Query().Get("language_code"),
+		LanguageCode: localize.FromContext(r.Context()),
 	}
 
 	identity := r.PathValue("identity")

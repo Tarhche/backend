@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/khanzadimahdi/testproject/application/home"
+	"github.com/khanzadimahdi/testproject/application/localize"
 )
 
 type homeHandler struct {
@@ -22,13 +23,12 @@ func NewHomeHandler(useCase *home.UseCase) *homeHandler {
 // @Tags		home
 // @Accept		json
 // @Produce		json
-// @Param		language_code	query	string	false	"Language code (e.g. EN, FA)"	default(EN)
 // @Success		200			{object}	home.Response
 // @Failure		500			{object}	map[string]interface{}
-// @Router			/home [get]
+// @Router		/home [get]
 func (h *homeHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	response, err := h.useCase.Execute(&home.Request{
-		LanguageCode: r.URL.Query().Get("language_code"),
+		LanguageCode: localize.FromContext(r.Context()),
 	})
 
 	switch {

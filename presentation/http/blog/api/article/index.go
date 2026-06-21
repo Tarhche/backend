@@ -7,6 +7,7 @@ import (
 	"unsafe"
 
 	getarticles "github.com/khanzadimahdi/testproject/application/article/getArticles"
+	"github.com/khanzadimahdi/testproject/application/localize"
 )
 
 type indexHandler struct {
@@ -24,11 +25,10 @@ func NewIndexHandler(useCase *getarticles.UseCase) *indexHandler {
 // @Tags		articles
 // @Accept		json
 // @Produce		json
-// @Param		page		    query		int		false	"Page number"	default(1)
-// @Param		language_code	query		string	false	"Language key (e.g. EN, FA)"	default(EN)
+// @Param		page		query		int		false	"Page number"	default(1)
 // @Success		200			{object}	getarticles.Response
 // @Failure		500			{object}	map[string]interface{}
-// @Router			/articles [get]
+// @Router		/articles [get]
 func (h *indexHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	var page uint = 1
 	if r.URL.Query().Has("page") {
@@ -40,7 +40,7 @@ func (h *indexHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 	request := &getarticles.Request{
 		Page:         page,
-		LanguageCode: r.URL.Query().Get("language_code"),
+		LanguageCode: localize.FromContext(r.Context()),
 	}
 
 	response, err := h.useCase.Execute(request)

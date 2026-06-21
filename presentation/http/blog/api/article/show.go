@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	getarticle "github.com/khanzadimahdi/testproject/application/article/getArticle"
+	"github.com/khanzadimahdi/testproject/application/localize"
 	"github.com/khanzadimahdi/testproject/domain"
 )
 
@@ -25,17 +26,16 @@ func NewShowHandler(useCase *getarticle.UseCase) *showHandler {
 // @Accept		json
 // @Produce		json
 // @Param		uuid		    path		string	true	"Article UUID"
-// @Param		language_code	query		string	false	"Language key (e.g. EN, FA)"	default(EN)
 // @Success		200			{object}	getarticle.Response
 // @Failure		404			{object}	map[string]interface{}
 // @Failure		500			{object}	map[string]interface{}
-// @Router			/articles/{uuid} [get]
+// @Router		/articles/{uuid} [get]
 func (h *showHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	UUID := r.PathValue("uuid")
 
 	response, err := h.useCase.Execute(&getarticle.Request{
 		CorrelationUUID: UUID,
-		LanguageCode:    r.URL.Query().Get("language_code"),
+		LanguageCode:    localize.FromContext(r.Context()),
 	})
 
 	switch {

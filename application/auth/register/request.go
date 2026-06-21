@@ -7,6 +7,10 @@ import (
 
 type Request struct {
 	Identity string `json:"identity"`
+
+	// LanguageCode is the language the registration email should be sent in. It
+	// is resolved from the request (not the JSON body) by the handler.
+	LanguageCode string `json:"-"`
 }
 
 var _ domain.Validatable = &Request{}

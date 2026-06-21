@@ -1615,11 +1615,6 @@ paths:
         in: query
         name: page
         type: integer
-      - default: EN
-        description: Language key (e.g. EN, FA)
-        in: query
-        name: language_code
-        type: string
       produces:
       - application/json
       responses:
@@ -1645,11 +1640,6 @@ paths:
         in: path
         name: uuid
         required: true
-        type: string
-      - default: EN
-        description: Language key (e.g. EN, FA)
-        in: query
-        name: language_code
         type: string
       produces:
       - application/json
@@ -1884,11 +1874,6 @@ paths:
         in: query
         name: page
         type: integer
-      - default: EN
-        description: Language key (e.g. EN, FA)
-        in: query
-        name: language_code
-        type: string
       produces:
       - application/json
       responses:
@@ -1997,10 +1982,6 @@ paths:
       - description: Object type
         in: query
         name: object_type
-        type: string
-      - description: Language code (e.g. EN, FA)
-        in: query
-        name: language_code
         type: string
       produces:
       - application/json
@@ -3585,11 +3566,6 @@ paths:
         in: query
         name: page
         type: integer
-      - default: EN
-        description: Language key (e.g. EN, FA)
-        in: query
-        name: language_code
-        type: string
       produces:
       - application/json
       responses:
@@ -3615,12 +3591,6 @@ paths:
       consumes:
       - application/json
       description: returns the contents used for home page
-      parameters:
-      - default: EN
-        description: Language code (e.g. EN, FA)
-        in: query
-        name: language_code
-        type: string
       produces:
       - application/json
       responses:

@@ -37,13 +37,6 @@
                         "description": "Page number",
                         "name": "page",
                         "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "default": "EN",
-                        "description": "Language key (e.g. EN, FA)",
-                        "name": "language_code",
-                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -83,13 +76,6 @@
                         "name": "uuid",
                         "in": "path",
                         "required": true
-                    },
-                    {
-                        "type": "string",
-                        "default": "EN",
-                        "description": "Language key (e.g. EN, FA)",
-                        "name": "language_code",
-                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -435,13 +421,6 @@
                         "description": "Page number",
                         "name": "page",
                         "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "default": "EN",
-                        "description": "Language key (e.g. EN, FA)",
-                        "name": "language_code",
-                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -603,12 +582,6 @@
                         "type": "string",
                         "description": "Object type",
                         "name": "object_type",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Language code (e.g. EN, FA)",
-                        "name": "language_code",
                         "in": "query"
                     }
                 ],
@@ -2951,13 +2924,6 @@
                         "description": "Page number",
                         "name": "page",
                         "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "default": "EN",
-                        "description": "Language key (e.g. EN, FA)",
-                        "name": "language_code",
-                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -2997,15 +2963,6 @@
                     "home"
                 ],
                 "summary": "Application home endpoint",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "default": "EN",
-                        "description": "Language code (e.g. EN, FA)",
-                        "name": "language_code",
-                        "in": "query"
-                    }
-                ],
                 "responses": {
                     "200": {
                         "description": "OK",

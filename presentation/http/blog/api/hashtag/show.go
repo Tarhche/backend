@@ -7,6 +7,7 @@ import (
 	"unsafe"
 
 	getArticlesByHashtag "github.com/khanzadimahdi/testproject/application/article/getArticlesByHashtag"
+	"github.com/khanzadimahdi/testproject/application/localize"
 )
 
 type showHandler struct {
@@ -26,11 +27,10 @@ func NewShowHandler(useCase *getArticlesByHashtag.UseCase) *showHandler {
 // @Produce		json
 // @Param		hashtag			path		string	true	"Hashtag"
 // @Param		page		    query		int		false	"Page number"	default(1)
-// @Param		language_code	query		string	false	"Language key (e.g. EN, FA)"	default(EN)
 // @Success		200		{object}	getArticlesByHashtag.Response
 // @Failure		400		{object}	map[string]interface{}
 // @Failure		500		{object}	map[string]interface{}
-// @Router			/hashtags/{hashtag} [get]
+// @Router		/hashtags/{hashtag} [get]
 func (h *showHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	var page uint = 1
 	if r.URL.Query().Has("page") {
@@ -45,7 +45,7 @@ func (h *showHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	request := &getArticlesByHashtag.Request{
 		Page:         page,
 		Hashtag:      hashtag,
-		LanguageCode: r.URL.Query().Get("language_code"),
+		LanguageCode: localize.FromContext(r.Context()),
 	}
 
 	response, err := h.useCase.Execute(request)

@@ -6,14 +6,15 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 	"time"
+
+	"github.com/danceable/container/resolve"
+	"github.com/danceable/provider"
 
 	workerHeartbeat "github.com/khanzadimahdi/testproject/application/runner/worker/beatHeart"
 	taskHeartbeat "github.com/khanzadimahdi/testproject/application/runner/worker/task/beatHeart"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/infrastructure/console"
-	"github.com/khanzadimahdi/testproject/infrastructure/ioc"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers/runner"
 )
 
@@ -29,7 +30,6 @@ type ServeCommand struct {
 	handler         http.Handler
 	consumer        domain.Consumer
 	consumers       map[string]domain.MessageHandler
-	serviceProvider ioc.ServiceProvider
 	taskHeartBeat   *taskHeartbeat.UseCase
 	workerHeartBeat *workerHeartbeat.UseCase
 }
@@ -37,13 +37,11 @@ type ServeCommand struct {
 // insures it implements console.Command
 var _ console.Command = &ServeCommand{}
 
-// insures it implements ioc.ServiceProvider
-var _ ioc.ServiceProvider = &ServeCommand{}
+// insures it implements console.Service
+var _ console.Service = &ServeCommand{}
 
-func NewServeCommand(serviceProvider ioc.ServiceProvider) *ServeCommand {
-	return &ServeCommand{
-		serviceProvider: serviceProvider,
-	}
+func NewServeCommand() *ServeCommand {
+	return &ServeCommand{}
 }
 
 // Name returns the name of the command which is used to identify it.
@@ -67,47 +65,32 @@ func (c *ServeCommand) Configure(flagSet *flag.FlagSet) {
 	flagSet.StringVar(&c.name, "name", "", "specifies the unique name of the worker.")
 }
 
-func (c *ServeCommand) Register(app *ioc.Application) error {
-	return c.serviceProvider.Register(app)
+// Providers returns the service providers required to serve the runner worker.
+// The worker name (configured by flag or environment) is bound into the
+// container so the worker providers can resolve it.
+func (c *ServeCommand) Providers() []provider.Provider {
+	return runner.WorkerProviders(&c.name)
 }
 
-func (c *ServeCommand) Boot(app *ioc.Application) error {
-	if len(c.name) == 0 {
-		c.name = os.Getenv("RUNNER_WORKER_NAME")
-	}
-
-	if err := app.Container.Singleton(
-		func() string { return c.name },
-		ioc.WithNameBinding(runner.WorkerName),
-	); err != nil {
+// Boot resolves the command's dependencies from the booted container.
+func (c *ServeCommand) Boot(ctx context.Context, container provider.Container) error {
+	if err := container.Resolve(&c.handler); err != nil {
 		return err
 	}
 
-	if err := c.serviceProvider.Boot(app); err != nil {
+	if err := container.Resolve(&c.consumer); err != nil {
 		return err
 	}
 
-	if err := app.Container.Resolve(&c.handler, ioc.WithNameResolving(runner.WorkerHandler)); err != nil {
+	if err := container.Resolve(&c.taskHeartBeat); err != nil {
 		return err
 	}
 
-	if err := app.Container.Resolve(&c.consumer); err != nil {
+	if err := container.Resolve(&c.workerHeartBeat); err != nil {
 		return err
 	}
 
-	if err := app.Container.Resolve(&c.taskHeartBeat); err != nil {
-		return err
-	}
-
-	if err := app.Container.Resolve(&c.workerHeartBeat); err != nil {
-		return err
-	}
-
-	return app.Container.Resolve(&c.consumers, ioc.WithNameResolving(runner.WorkerSubscribers))
-}
-
-func (c *ServeCommand) Terminate() error {
-	return c.serviceProvider.Terminate()
+	return container.Resolve(&c.consumers, resolve.WithName(runner.WorkerSubscribers))
 }
 
 // @title			Runner Worker API
@@ -149,7 +132,7 @@ func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 	go c.tasksHeartbeat(ctx)
 	go c.workerHeartbeat(ctx)
 
-	if err := server.ListenAndServe(); err != nil {
+	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Println(err)
 		return console.ExitFailure
 	}

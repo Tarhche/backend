@@ -127,6 +127,7 @@ func generateCacheKey(r *http.Request) string {
 	hash := fnv.New64a()
 	hash.Write([]byte(r.Method))
 	hash.Write([]byte(r.URL.String()))
+	hash.Write([]byte(languageCodeHeader + "=" + r.Header.Get(languageCodeHeader)))
 
 	return strconv.FormatUint(hash.Sum64(), 16)
 }

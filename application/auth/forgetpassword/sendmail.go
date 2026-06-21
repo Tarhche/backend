@@ -7,10 +7,15 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/domain"
+	translatorcontract "github.com/khanzadimahdi/testproject/domain/translator"
 	"github.com/khanzadimahdi/testproject/domain/user"
 )
 
-const SendForgetPasswordEmailName = "sendForgetPasswordEmail"
+const (
+	SendForgetPasswordEmailName = "sendForgetPasswordEmail"
+
+	resetPasswordEmailSubject = "reset_password_email_subject"
+)
 
 // SendForgetPasswordEmail command
 type SendForgetPasswordEmail struct {
@@ -24,6 +29,7 @@ type sendForgetPasswordEmailHandler struct {
 	mailer             domain.Mailer
 	mailFrom           string
 	template           domain.Renderer
+	translator         translatorcontract.Translator
 }
 
 var _ domain.MessageHandler = &sendForgetPasswordEmailHandler{}
@@ -34,6 +40,7 @@ func NewSendForgetPasswordEmailHandler(
 	mailer domain.Mailer,
 	mailFrom string,
 	template domain.Renderer,
+	translator translatorcontract.Translator,
 ) *sendForgetPasswordEmailHandler {
 	return &sendForgetPasswordEmailHandler{
 		userRepository:     userRepository,
@@ -41,6 +48,7 @@ func NewSendForgetPasswordEmailHandler(
 		mailer:             mailer,
 		mailFrom:           mailFrom,
 		template:           template,
+		translator:         translator,
 	}
 }
 
@@ -66,9 +74,11 @@ func (h *sendForgetPasswordEmailHandler) Handle(data []byte) error {
 
 	var msg bytes.Buffer
 	viewData := map[string]string{"resetPasswordURL": resetPasswordURL + resetPasswordToken}
-	if err := h.template.Render(&msg, templateName, viewData); err != nil {
+	if err := h.template.Render(&msg, templateName+"."+u.LanguageCode, viewData); err != nil {
 		return err
 	}
 
-	return h.mailer.SendMail(h.mailFrom, u.Email, "Reset Password", msg.Bytes())
+	subject := h.translator.Translate(resetPasswordEmailSubject, translatorcontract.WithLocale(u.LanguageCode))
+
+	return h.mailer.SendMail(h.mailFrom, u.Email, subject, msg.Bytes())
 }

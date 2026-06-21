@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/khanzadimahdi/testproject/application/auth/register"
+	"github.com/khanzadimahdi/testproject/application/localize"
 )
 
 type registerHandler struct {
@@ -19,20 +20,22 @@ func NewRegisterHandler(useCase *register.UseCase) *registerHandler {
 
 // @Summary		Register new user
 // @Description	create a new user account
-// @Tags			auth
-// @Accept			json
+// @Tags		auth
+// @Accept		json
 // @Produce		json
-// @Param			body	body		register.Request	true	"Registration details"
+// @Param		body	body		register.Request	true	"Registration details"
 // @Success		204		{object}	map[string]interface{}
 // @Failure		400		{object}	map[string]interface{}
 // @Failure		500		{object}	map[string]interface{}
-// @Router			/auth/register [post]
+// @Router		/auth/register [post]
 func (h *registerHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	var request register.Request
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		rw.WriteHeader(http.StatusBadRequest)
 		return
 	}
+
+	request.LanguageCode = localize.FromContext(r.Context())
 
 	response, err := h.useCase.Execute(&request)
 

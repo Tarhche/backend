@@ -1,22 +1,27 @@
 package providers
 
 import (
+	"context"
 	"os"
+
+	"github.com/danceable/container/bind"
+	"github.com/danceable/provider"
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/infrastructure/email"
-	"github.com/khanzadimahdi/testproject/infrastructure/ioc"
 )
+
+const MailFromAddress = "mailFromAddress"
 
 type emailProvider struct{}
 
-var _ ioc.ServiceProvider = &emailProvider{}
+var _ provider.Provider = &emailProvider{}
 
 func NewEmailProvider() *emailProvider {
 	return &emailProvider{}
 }
 
-func (p *emailProvider) Register(app *ioc.Application) error {
+func (p *emailProvider) Register(ctx context.Context, c provider.Container) error {
 	mailFromAddress := os.Getenv("MAIL_SMTP_FROM")
 	mailer := email.NewSMTP(email.Config{
 		Auth: email.Auth{
@@ -27,16 +32,17 @@ func (p *emailProvider) Register(app *ioc.Application) error {
 		Port: os.Getenv("MAIL_SMTP_PORT"),
 	})
 
-	app.Container.Singleton(func() domain.Mailer { return mailer })
-	app.Container.Singleton(func() string { return mailFromAddress }, ioc.WithNameBinding("mailFromAddress"))
+	if err := c.Bind(func() domain.Mailer { return mailer }, bind.Singleton()); err != nil {
+		return err
+	}
 
+	return c.Bind(func() string { return mailFromAddress }, bind.Singleton(), bind.WithName(MailFromAddress))
+}
+
+func (p *emailProvider) Boot(ctx context.Context, c provider.Container) error {
 	return nil
 }
 
-func (p *emailProvider) Boot(app *ioc.Application) error {
-	return nil
-}
-
-func (p *emailProvider) Terminate() error {
+func (p *emailProvider) Terminate(ctx context.Context) error {
 	return nil
 }

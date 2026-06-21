@@ -1,6 +1,6 @@
 package translation
 
-const FA = "FA"
+const FA = "fa"
 
 var farsi = map[string]string{
 	"error_on_processing_the_request":   "خطا در پردازش درخواست رخ داده است",
@@ -18,4 +18,6 @@ var farsi = map[string]string{
 	"invalid_identity_or_password":      "هویت (ایمیل/نام کاربری) یا رمز عبور اشتباه است",
 	"one_or_more_permissions_not_exist": "یک یا چند مجوز وجود ندارد",
 	"invalid_state_transition":          "تغییر وضعیت غیر ممکن است",
+	"registration_email_subject":        "ثبت نام",
+	"reset_password_email_subject":      "بازیابی کلمه عبور",
 }

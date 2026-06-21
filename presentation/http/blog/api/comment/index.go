@@ -7,6 +7,7 @@ import (
 	"unsafe"
 
 	"github.com/khanzadimahdi/testproject/application/comment/getComments"
+	"github.com/khanzadimahdi/testproject/application/localize"
 )
 
 type indexHandler struct {
@@ -21,17 +22,16 @@ func NewIndexHandler(getCommentsUseCase *getComments.UseCase) *indexHandler {
 
 // @Summary		List comments
 // @Description	list comments optionally filtered by object and paginated
-// @Tags			comments
-// @Accept			json
+// @Tags		comments
+// @Accept		json
 // @Produce		json
-// @Param			page		query		int		false	"Page number"	default(1)
-// @Param			object_uuid	query		string	false	"Object UUID"
-// @Param			object_type	query		string	false	"Object type"
-// @Param			language_code	query		string	false	"Language code (e.g. EN, FA)"
+// @Param		page		query		int		false	"Page number"	default(1)
+// @Param		object_uuid	query		string	false	"Object UUID"
+// @Param		object_type	query		string	false	"Object type"
 // @Success		200			{object}	getComments.Response
 // @Failure		400			{object}	map[string]interface{}
 // @Failure		500			{object}	map[string]interface{}
-// @Router			/comments [get]
+// @Router		/comments [get]
 func (h *indexHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	var page uint = 1
 	if r.URL.Query().Has("page") {
@@ -51,16 +51,11 @@ func (h *indexHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		objectType = r.URL.Query().Get("object_type")
 	}
 
-	var languageCode string
-	if r.URL.Query().Has("language_code") {
-		languageCode = r.URL.Query().Get("language_code")
-	}
-
 	request := &getComments.Request{
 		Page:         page,
 		ObjectUUID:   objectUUID,
 		ObjectType:   objectType,
-		LanguageCode: languageCode,
+		LanguageCode: localize.FromContext(r.Context()),
 	}
 
 	response, err := h.getCommentsUseCase.Execute(request)

@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/infrastructure/ioc"
 	messaging "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -29,7 +28,7 @@ func findAvailablePort() int {
 
 func TestServe(t *testing.T) {
 	t.Run("name", func(t *testing.T) {
-		command := NewServeCommand(nil)
+		command := NewServeCommand()
 
 		want := "serve-blog"
 		got := command.Name()
@@ -40,7 +39,7 @@ func TestServe(t *testing.T) {
 	})
 
 	t.Run("description", func(t *testing.T) {
-		command := NewServeCommand(nil)
+		command := NewServeCommand()
 
 		want := "serves a http server."
 		got := command.Description()
@@ -51,7 +50,7 @@ func TestServe(t *testing.T) {
 	})
 
 	t.Run("usage", func(t *testing.T) {
-		command := NewServeCommand(nil)
+		command := NewServeCommand()
 
 		want := "serve-blog [arguments]"
 		got := command.Usage()
@@ -62,7 +61,7 @@ func TestServe(t *testing.T) {
 	})
 
 	t.Run("configure", func(t *testing.T) {
-		command := NewServeCommand(nil)
+		command := NewServeCommand()
 
 		flagSet := flag.NewFlagSet(command.Name(), flag.ContinueOnError)
 
@@ -108,12 +107,7 @@ func TestServe(t *testing.T) {
 		consumer.On("Consume", ctx, mock.Anything, mock.Anything).Times(len(subscribers)).Return(nil)
 		defer consumer.AssertExpectations(t)
 
-		var serviceProvider ioc.ServiceProviderMock
-		defer serviceProvider.AssertNotCalled(t, "Register")
-		defer serviceProvider.AssertNotCalled(t, "Boot")
-		defer serviceProvider.AssertNotCalled(t, "Terminate")
-
-		command := NewServeCommand(&serviceProvider)
+		command := NewServeCommand()
 		command.port = findAvailablePort()
 		command.handler = handler
 		command.consumer = &consumer

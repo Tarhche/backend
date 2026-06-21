@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
-	"github.com/khanzadimahdi/testproject/infrastructure/ioc"
+	"github.com/danceable/provider"
 )
 
 // ExitStatus represents a Posix exit status that a command expects to be returned to the shell.
@@ -22,6 +23,14 @@ const (
 
 	// ExitUsageError is the exit status for a usage error.
 	ExitUsageError ExitStatus = 2
+)
+
+const (
+	// terminationDelay is the grace period before service providers are terminated.
+	terminationDelay = 1 * time.Second
+
+	// terminationDeadline is the maximum duration allowed for providers to terminate.
+	terminationDeadline = 10 * time.Second
 )
 
 // Command represents a single command.
@@ -42,6 +51,18 @@ type Command interface {
 	Run(context.Context) ExitStatus
 }
 
+// Service is an optional interface that a Command can implement to provide
+// service providers whose lifecycle (register, boot and terminate) is managed
+// by the danceable service provider manager. Boot is called once all providers
+// have been booted, allowing the command to resolve its dependencies before Run.
+type Service interface {
+	// Providers returns the service providers required by the command.
+	Providers() []provider.Provider
+
+	// Boot resolves the command's dependencies from the booted container.
+	Boot(ctx context.Context, container provider.Container) error
+}
+
 // Console represents a set of commands.
 type Console struct {
 	name        string // normally path.Base(os.Args[0])
@@ -49,17 +70,17 @@ type Console struct {
 	commands    map[string]Command
 
 	errWriter io.Writer // specifies where should write errors (default: os.Stderr).
-	container ioc.ServiceContainer
+	manager   *provider.Manager
 }
 
 // NewConsole returns a new Console.
-func NewConsole(name, description string, errWriter io.Writer, container ioc.ServiceContainer) *Console {
+func NewConsole(name, description string, errWriter io.Writer, manager *provider.Manager) *Console {
 	return &Console{
 		name:        name,
 		description: description,
 		commands:    make(map[string]Command),
 		errWriter:   errWriter,
-		container:   container,
+		manager:     manager,
 	}
 }
 
@@ -97,37 +118,47 @@ func (c *Console) Run(ctx context.Context, arguments []string) ExitStatus {
 		return ExitUsageError
 	}
 
-	flags := make(map[string]string)
-	flagSet.VisitAll(func(f *flag.Flag) {
-		flags[f.Name] = f.Value.String()
-	})
-
-	app := ioc.Application{
-		Name:        c.name,
-		Description: c.description,
-		Arguments:   inputArgs,
-		Flags:       flags,
-		Container:   c.container,
-		Ctx:         ctx,
-	}
-
-	serviceProvider, providesServices := cmd.(ioc.ServiceProvider)
-	if providesServices {
-		if err := serviceProvider.Register(&app); err != nil {
-			fmt.Println(err)
-			return ExitFailure
-		}
-		defer serviceProvider.Terminate()
-	}
-
-	if providesServices {
-		if err := serviceProvider.Boot(&app); err != nil {
-			fmt.Println(err)
-			return ExitFailure
-		}
+	if service, providesServices := cmd.(Service); providesServices {
+		return c.runService(ctx, cmd, service)
 	}
 
 	return cmd.Run(ctx)
+}
+
+// runService registers the command's service providers on the manager, boots
+// them, runs the command and finally terminates the providers gracefully.
+func (c *Console) runService(ctx context.Context, cmd Command, service Service) ExitStatus {
+	for _, p := range service.Providers() {
+		c.manager.Register(p)
+	}
+
+	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	exitStatus := make(chan ExitStatus, 1)
+
+	err := c.manager.Run(
+		runCtx,
+		provider.WithTerminationDelay(terminationDelay),
+		provider.WithTerminationDeadline(terminationDeadline),
+		provider.WithCallback(func(callbackCtx context.Context, container provider.Container) {
+			if err := service.Boot(callbackCtx, container); err != nil {
+				fmt.Fprintln(c.errWriter, err)
+				exitStatus <- ExitFailure
+				cancel()
+				return
+			}
+
+			exitStatus <- cmd.Run(callbackCtx)
+			cancel()
+		}),
+	)
+	if err != nil {
+		fmt.Fprintln(c.errWriter, err)
+		return ExitFailure
+	}
+
+	return <-exitStatus
 }
 
 // explain writes a brief description of console commands.

@@ -1,6 +1,6 @@
 package translation
 
-const EN = "EN"
+const EN = "en"
 
 var english = map[string]string{
 	"error_on_processing_the_request":   "error on processing the request",
@@ -18,4 +18,6 @@ var english = map[string]string{
 	"invalid_identity_or_password":      "identity (email/username) or password is wrong",
 	"one_or_more_permissions_not_exist": "one or more of permissions not exist",
 	"invalid_state_transition":          "invalid state transition",
+	"registration_email_subject":        "Registration",
+	"reset_password_email_subject":      "Reset Password",
 }

@@ -1,10 +1,17 @@
 package runner
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"time"
+
+	"github.com/danceable/container/bind"
+	"github.com/danceable/container/resolve"
+	"github.com/danceable/provider"
+	"github.com/nats-io/nats.go"
 
 	workerHeartbeat "github.com/khanzadimahdi/testproject/application/runner/worker/beatHeart"
 	workerTaskHeartbeat "github.com/khanzadimahdi/testproject/application/runner/worker/task/beatHeart"
@@ -16,69 +23,90 @@ import (
 	containerContract "github.com/khanzadimahdi/testproject/domain/runner/container"
 	nodeContract "github.com/khanzadimahdi/testproject/domain/runner/node"
 	taskEvents "github.com/khanzadimahdi/testproject/domain/runner/task/events"
-	"github.com/khanzadimahdi/testproject/infrastructure/ioc"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers"
 	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/jetstream/produceConsumer"
 	"github.com/khanzadimahdi/testproject/presentation/http/middleware"
 	workerTaskAPI "github.com/khanzadimahdi/testproject/presentation/http/runner/worker/api/task"
-	"github.com/nats-io/nats.go"
 )
 
 const (
 	WorkerSubscribers = "runner:worker:subscribers"
-	WorkerHandler     = "runner:worker:handler"
 	WorkerName        = "runner:worker:name"
 
 	consumerNamePrefix string = "runner-worker-%s"
 )
 
-var workerDependencies = []ioc.ServiceProvider{
-	providers.NewNatsProvider(),
-	providers.NewDockerProvider(),
-	providers.NewTranslationProvider(),
-	providers.NewValidationProvider(),
-	providers.NewContainerProvider(),
+// WorkerProviders returns the full, ordered set of service providers required
+// by the runner worker service. name points at the worker name configured by
+// the command (flag), which is bound into the container by workerNameProvider.
+func WorkerProviders(name *string) []provider.Provider {
+	return []provider.Provider{
+		newWorkerNameProvider(name),
+		providers.NewNatsProvider(),
+		providers.NewDockerProvider(),
+		providers.NewTranslationProvider(),
+		providers.NewValidationProvider(),
+		providers.NewContainerProvider(),
+		NewWorkerProvider(),
+	}
 }
 
+// workerNameProvider binds the worker name, falling back to the
+// RUNNER_WORKER_NAME environment variable when the flag is empty.
+type workerNameProvider struct {
+	name *string
+}
+
+var _ provider.Provider = &workerNameProvider{}
+
+func newWorkerNameProvider(name *string) *workerNameProvider {
+	return &workerNameProvider{name: name}
+}
+
+func (p *workerNameProvider) Register(ctx context.Context, c provider.Container) error {
+	if len(*p.name) == 0 {
+		*p.name = os.Getenv("RUNNER_WORKER_NAME")
+	}
+
+	name := *p.name
+
+	return c.Bind(func() string { return name }, bind.Singleton(), bind.WithName(WorkerName))
+}
+
+func (p *workerNameProvider) Boot(ctx context.Context, c provider.Container) error {
+	return nil
+}
+
+func (p *workerNameProvider) Terminate(ctx context.Context) error {
+	return nil
+}
+
+// workerProvider builds the runner worker's messaging singleton, HTTP handler,
+// message subscribers and heartbeat use cases.
 type workerProvider struct {
-	dependencies []ioc.ServiceProvider
-	terminate    func()
+	terminate func()
 }
 
-var _ ioc.ServiceProvider = &workerProvider{}
+var _ provider.Provider = &workerProvider{}
 
 func NewWorkerProvider() *workerProvider {
-	return &workerProvider{
-		dependencies: workerDependencies,
-	}
+	return &workerProvider{}
 }
 
-func (p *workerProvider) Register(app *ioc.Application) error {
+func (p *workerProvider) Register(ctx context.Context, c provider.Container) error {
 	log.SetFlags(log.LstdFlags | log.Llongfile)
-
-	for _, dependency := range p.dependencies {
-		if err := dependency.Register(app); err != nil {
-			return err
-		}
-	}
 
 	return nil
 }
 
-func (p *workerProvider) Boot(app *ioc.Application) error {
-	for _, dependency := range p.dependencies {
-		if err := dependency.Boot(app); err != nil {
-			return err
-		}
-	}
-
+func (p *workerProvider) Boot(ctx context.Context, c provider.Container) error {
 	var nodeName string
-	if err := app.Container.Resolve(&nodeName, ioc.WithNameResolving(WorkerName)); err != nil {
+	if err := c.Resolve(&nodeName, resolve.WithName(WorkerName)); err != nil {
 		return err
 	}
 
 	var natsConnection *nats.Conn
-	if err := app.Container.Resolve(&natsConnection); err != nil {
+	if err := c.Resolve(&natsConnection); err != nil {
 		return err
 	}
 
@@ -89,22 +117,18 @@ func (p *workerProvider) Boot(app *ioc.Application) error {
 		return err
 	}
 
-	app.Container.Singleton(func() domain.Producer { return pc })
-	app.Container.Singleton(func() domain.Consumer { return pc })
-	app.Container.Singleton(func() domain.ProduceConsumer { return pc })
+	c.Bind(func() domain.Producer { return pc }, bind.Singleton())
+	c.Bind(func() domain.Consumer { return pc }, bind.Singleton())
+	c.Bind(func() domain.ProduceConsumer { return pc }, bind.Singleton())
 
 	p.terminate = func() {
 		defer pc.Wait()
 	}
 
-	return app.Container.Singleton(workerConsoleCommand, ioc.WithNameBinding(WorkerHandler))
+	return c.Bind(workerConsoleCommand, bind.Singleton())
 }
 
-func (p *workerProvider) Terminate() error {
-	for _, dependency := range p.dependencies {
-		defer dependency.Terminate()
-	}
-
+func (p *workerProvider) Terminate(ctx context.Context) error {
 	if p.terminate != nil {
 		p.terminate()
 	}
@@ -117,10 +141,10 @@ func workerConsoleCommand(
 	nodeManager nodeContract.Manager,
 	asyncProduceConsumer domain.ProduceConsumer,
 	validator domain.Validator,
-	iocContainer ioc.ServiceContainer,
+	iocContainer provider.Container,
 ) (http.Handler, error) {
 	var nodeName string
-	if err := iocContainer.Resolve(&nodeName, ioc.WithNameResolving(WorkerName)); err != nil {
+	if err := iocContainer.Resolve(&nodeName, resolve.WithName(WorkerName)); err != nil {
 		return nil, err
 	}
 
@@ -145,23 +169,23 @@ func workerConsoleCommand(
 	}
 
 	// worker subscribers
-	if err := iocContainer.Singleton(func() map[string]domain.MessageHandler {
+	if err := iocContainer.Bind(func() map[string]domain.MessageHandler {
 		return subscribers
-	}, ioc.WithNameBinding(WorkerSubscribers)); err != nil {
+	}, bind.Singleton(), bind.WithName(WorkerSubscribers)); err != nil {
 		return nil, err
 	}
 
 	// worker heartbeat
-	if err := iocContainer.Singleton(func() *workerHeartbeat.UseCase {
+	if err := iocContainer.Bind(func() *workerHeartbeat.UseCase {
 		return workerHeartbeat.NewUseCase(asyncProduceConsumer, nodeManager, nodeName)
-	}); err != nil {
+	}, bind.Singleton()); err != nil {
 		return nil, err
 	}
 
 	// task heartbeat
-	if err := iocContainer.Singleton(func() *workerTaskHeartbeat.UseCase {
+	if err := iocContainer.Bind(func() *workerTaskHeartbeat.UseCase {
 		return workerTaskHeartbeat.NewUseCase(containerManager, asyncProduceConsumer, nodeName)
-	}); err != nil {
+	}, bind.Singleton()); err != nil {
 		return nil, err
 	}
 

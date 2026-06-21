@@ -14,6 +14,7 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/roles"
 	"github.com/khanzadimahdi/testproject/infrastructure/template"
+	"github.com/khanzadimahdi/testproject/infrastructure/translator"
 )
 
 func TestHandler_Execute(t *testing.T) {
@@ -26,6 +27,12 @@ func TestHandler_Execute(t *testing.T) {
 
 	mailFrom := "info@noreply.nowhere.loc"
 
+	const (
+		languageCode = "en"
+		subject      = "Registration"
+	)
+	localizedTemplate := templateName + "." + languageCode
+
 	t.Run("sends registration mail", func(t *testing.T) {
 		t.Parallel()
 
@@ -33,16 +40,21 @@ func TestHandler_Execute(t *testing.T) {
 			mailer         email.MockMailer
 			roleRepository roles.MockRolesRepository
 			renderer       template.MockRenderer
+			translatorMock translator.TranslatorMock
 
 			command = SendRegistrationEmail{
-				Identity: "test@mail.com",
+				Identity:     "test@mail.com",
+				LanguageCode: languageCode,
 			}
 		)
 
-		renderer.On("Render", mock.Anything, templateName, mock.Anything).Once().Return(nil)
+		renderer.On("Render", mock.Anything, localizedTemplate, mock.Anything).Once().Return(nil)
 		defer renderer.AssertExpectations(t)
 
-		mailer.On("SendMail", mailFrom, command.Identity, "Registration", mock.AnythingOfType("[]uint8")).Once().Return(nil)
+		translatorMock.On("Translate", registrationEmailSubject, mock.Anything).Once().Return(subject)
+		defer translatorMock.AssertExpectations(t)
+
+		mailer.On("SendMail", mailFrom, command.Identity, subject, mock.AnythingOfType("[]uint8")).Once().Return(nil)
 		defer mailer.AssertExpectations(t)
 
 		payload, err := json.Marshal(command)
@@ -50,7 +62,7 @@ func TestHandler_Execute(t *testing.T) {
 
 		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
 
-		err = NewSendRegisterationEmailHandler(authTokenGenerator, &mailer, mailFrom, &renderer).Handle(payload)
+		err = NewSendRegisterationEmailHandler(authTokenGenerator, &mailer, mailFrom, &renderer, &translatorMock).Handle(payload)
 
 		assert.NoError(t, err)
 	})
@@ -62,15 +74,17 @@ func TestHandler_Execute(t *testing.T) {
 			mailer         email.MockMailer
 			roleRepository roles.MockRolesRepository
 			renderer       template.MockRenderer
+			translatorMock translator.TranslatorMock
 
 			command = SendRegistrationEmail{
-				Identity: "test@mail.com",
+				Identity:     "test@mail.com",
+				LanguageCode: languageCode,
 			}
 
 			expectedError = errors.New("some error")
 		)
 
-		renderer.On("Render", mock.Anything, templateName, mock.Anything).Once().Return(expectedError)
+		renderer.On("Render", mock.Anything, localizedTemplate, mock.Anything).Once().Return(expectedError)
 		defer renderer.AssertExpectations(t)
 
 		payload, err := json.Marshal(command)
@@ -78,7 +92,7 @@ func TestHandler_Execute(t *testing.T) {
 
 		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
 
-		err = NewSendRegisterationEmailHandler(authTokenGenerator, &mailer, mailFrom, &renderer).Handle(payload)
+		err = NewSendRegisterationEmailHandler(authTokenGenerator, &mailer, mailFrom, &renderer, &translatorMock).Handle(payload)
 
 		mailer.AssertNotCalled(t, "SendMail")
 
@@ -92,18 +106,23 @@ func TestHandler_Execute(t *testing.T) {
 			mailer         email.MockMailer
 			roleRepository roles.MockRolesRepository
 			renderer       template.MockRenderer
+			translatorMock translator.TranslatorMock
 
 			command = SendRegistrationEmail{
-				Identity: "test@mail.com",
+				Identity:     "test@mail.com",
+				LanguageCode: languageCode,
 			}
 
 			expectedError = errors.New("some error")
 		)
 
-		renderer.On("Render", mock.Anything, templateName, mock.Anything).Once().Return(nil)
+		renderer.On("Render", mock.Anything, localizedTemplate, mock.Anything).Once().Return(nil)
 		defer renderer.AssertExpectations(t)
 
-		mailer.On("SendMail", mailFrom, command.Identity, "Registration", mock.AnythingOfType("[]uint8")).Once().Return(expectedError)
+		translatorMock.On("Translate", registrationEmailSubject, mock.Anything).Once().Return(subject)
+		defer translatorMock.AssertExpectations(t)
+
+		mailer.On("SendMail", mailFrom, command.Identity, subject, mock.AnythingOfType("[]uint8")).Once().Return(expectedError)
 		defer mailer.AssertExpectations(t)
 
 		payload, err := json.Marshal(command)
@@ -111,7 +130,7 @@ func TestHandler_Execute(t *testing.T) {
 
 		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
 
-		err = NewSendRegisterationEmailHandler(authTokenGenerator, &mailer, mailFrom, &renderer).Handle(payload)
+		err = NewSendRegisterationEmailHandler(authTokenGenerator, &mailer, mailFrom, &renderer, &translatorMock).Handle(payload)
 
 		assert.ErrorIs(t, err, expectedError)
 	})

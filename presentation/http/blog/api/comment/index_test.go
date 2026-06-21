@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/khanzadimahdi/testproject/application/comment/getComments"
+	"github.com/khanzadimahdi/testproject/application/localize"
 	"github.com/khanzadimahdi/testproject/domain/comment"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/comments"
@@ -98,8 +99,9 @@ func TestIndexHandler(t *testing.T) {
 
 		handler := NewIndexHandler(getComments.NewUseCase(&commentsRepository, &usersRepository, &requestValidator))
 
-		url := fmt.Sprintf("/?object_uuid=%s&object_type=%s&language_code=%s&page=%d", data.ObjectUUID, data.ObjectType, data.LanguageCode, data.Page)
+		url := fmt.Sprintf("/?object_uuid=%s&object_type=%s&page=%d", data.ObjectUUID, data.ObjectType, data.Page)
 		request := httptest.NewRequest(http.MethodGet, url, nil)
+		request = request.WithContext(localize.ToContext(request.Context(), data.LanguageCode))
 		response := httptest.NewRecorder()
 
 		handler.ServeHTTP(response, request)
@@ -140,8 +142,9 @@ func TestIndexHandler(t *testing.T) {
 
 		handler := NewIndexHandler(getComments.NewUseCase(&commentsRepository, &usersRepository, &requestValidator))
 
-		url := fmt.Sprintf("/?object_uuid=%s&object_type=%s&language_code=%s&page=%d", data.ObjectUUID, data.ObjectType, data.LanguageCode, data.Page)
+		url := fmt.Sprintf("/?object_uuid=%s&object_type=%s&page=%d", data.ObjectUUID, data.ObjectType, data.Page)
 		request := httptest.NewRequest(http.MethodGet, url, nil)
+		request = request.WithContext(localize.ToContext(request.Context(), data.LanguageCode))
 		response := httptest.NewRecorder()
 
 		handler.ServeHTTP(response, request)
@@ -178,8 +181,9 @@ func TestIndexHandler(t *testing.T) {
 
 		handler := NewIndexHandler(getComments.NewUseCase(&commentsRepository, &usersRepository, &requestValidator))
 
-		url := fmt.Sprintf("/?object_uuid=%s&object_type=%s&language_code=%s&page=%d", data.ObjectUUID, data.ObjectType, data.LanguageCode, data.Page)
+		url := fmt.Sprintf("/?object_uuid=%s&object_type=%s&page=%d", data.ObjectUUID, data.ObjectType, data.Page)
 		request := httptest.NewRequest(http.MethodGet, url, nil)
+		request = request.WithContext(localize.ToContext(request.Context(), data.LanguageCode))
 		response := httptest.NewRecorder()
 
 		handler.ServeHTTP(response, request)
