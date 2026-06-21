@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/domain"
@@ -15,7 +16,7 @@ const (
 
 	templateName             = "mail/auth/register"
 	registrationEmailSubject = "registration_email_subject"
-	registrationURL          = "https://tarhche.com/auth/verify?token="
+	registrationURLFormat    = "https://tarhche.com/%s/auth/verify?token=%s"
 )
 
 // SendRegistrationEmail command
@@ -65,7 +66,8 @@ func (h *sendRegisterationEmailHandler) Handle(data []byte) error {
 	registrationToken = base64.URLEncoding.EncodeToString([]byte(registrationToken))
 
 	var msg bytes.Buffer
-	viewData := map[string]string{"registrationURL": registrationURL + registrationToken}
+	registrationURL := fmt.Sprintf(registrationURLFormat, command.LanguageCode, registrationToken)
+	viewData := map[string]string{"registrationURL": registrationURL}
 	if err := h.template.Render(&msg, templateName+"."+command.LanguageCode, viewData); err != nil {
 		return err
 	}

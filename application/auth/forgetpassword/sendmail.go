@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/domain"
@@ -73,7 +74,8 @@ func (h *sendForgetPasswordEmailHandler) Handle(data []byte) error {
 	resetPasswordToken = base64.URLEncoding.EncodeToString([]byte(resetPasswordToken))
 
 	var msg bytes.Buffer
-	viewData := map[string]string{"resetPasswordURL": resetPasswordURL + resetPasswordToken}
+	resetPasswordURL := fmt.Sprintf(resetPasswordURLFormat, u.LanguageCode, resetPasswordToken)
+	viewData := map[string]string{"resetPasswordURL": resetPasswordURL}
 	if err := h.template.Render(&msg, templateName+"."+u.LanguageCode, viewData); err != nil {
 		return err
 	}

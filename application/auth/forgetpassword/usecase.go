@@ -10,8 +10,8 @@ import (
 )
 
 const (
-	templateName     = "mail/auth/reset-password"
-	resetPasswordURL = "https://tarhche.com/auth/reset-password?token="
+	templateName           = "mail/auth/reset-password"
+	resetPasswordURLFormat = "https://tarhche.com/%s/auth/reset-password?token=%s"
 )
 
 type UseCase struct {
