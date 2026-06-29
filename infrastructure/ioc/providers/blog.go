@@ -2,8 +2,10 @@ package providers
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/danceable/container/bind"
@@ -575,10 +577,15 @@ func blog(
 
 	handler := middleware.NewCORSMiddleware(middleware.NewRateLimitMiddleware(mux, 600, 1*time.Minute))
 
+	webURL := os.Getenv("WEB_URL")
+	if len(webURL) == 0 {
+		return nil, errors.New("WEB_URL environment variable is not set")
+	}
+
 	// subscribers
 	subscribers := map[string]domain.MessageHandler{
-		forgetpassword.SendForgetPasswordEmailName: forgetpassword.NewSendForgetPasswordEmailHandler(userRepository, authTokenGenerator, mailer, mailFromAddress, renderer, translator),
-		register.SendRegisterationEmailName:        register.NewSendRegisterationEmailHandler(authTokenGenerator, mailer, mailFromAddress, renderer, translator),
+		forgetpassword.SendForgetPasswordEmailName: forgetpassword.NewSendForgetPasswordEmailHandler(userRepository, authTokenGenerator, mailer, mailFromAddress, webURL, renderer, translator),
+		register.SendRegisterationEmailName:        register.NewSendRegisterationEmailHandler(authTokenGenerator, mailer, mailFromAddress, webURL, renderer, translator),
 		taskEvents.HeartbeatName:                   heartbeat.NewHeartbeatHandler(cachedDecoratedWS),
 	}
 

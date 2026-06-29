@@ -34,7 +34,10 @@ func NewSMTP(config Config) *client {
 }
 
 func (s *client) SendMail(from string, to string, subject string, body []byte) error {
-	auth := smtp.PlainAuth("", s.config.Auth.Username, s.config.Auth.Password, s.config.Host)
+	var auth smtp.Auth
+	if len(s.config.Auth.Username) > 0 || len(s.config.Auth.Password) > 0 {
+		auth = smtp.PlainAuth("", s.config.Auth.Username, s.config.Auth.Password, s.config.Host)
+	}
 
 	var msg bytes.Buffer
 

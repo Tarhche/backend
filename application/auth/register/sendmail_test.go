@@ -26,6 +26,7 @@ func TestHandler_Execute(t *testing.T) {
 	j := jwt.NewJWT(privateKey, privateKey.Public())
 
 	mailFrom := "info@noreply.nowhere.loc"
+	webURL := "https://tarhche.com"
 
 	const (
 		languageCode = "en"
@@ -62,7 +63,7 @@ func TestHandler_Execute(t *testing.T) {
 
 		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
 
-		err = NewSendRegisterationEmailHandler(authTokenGenerator, &mailer, mailFrom, &renderer, &translatorMock).Handle(payload)
+		err = NewSendRegisterationEmailHandler(authTokenGenerator, &mailer, mailFrom, webURL, &renderer, &translatorMock).Handle(payload)
 
 		assert.NoError(t, err)
 	})
@@ -92,7 +93,7 @@ func TestHandler_Execute(t *testing.T) {
 
 		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
 
-		err = NewSendRegisterationEmailHandler(authTokenGenerator, &mailer, mailFrom, &renderer, &translatorMock).Handle(payload)
+		err = NewSendRegisterationEmailHandler(authTokenGenerator, &mailer, mailFrom, webURL, &renderer, &translatorMock).Handle(payload)
 
 		mailer.AssertNotCalled(t, "SendMail")
 
@@ -130,7 +131,7 @@ func TestHandler_Execute(t *testing.T) {
 
 		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
 
-		err = NewSendRegisterationEmailHandler(authTokenGenerator, &mailer, mailFrom, &renderer, &translatorMock).Handle(payload)
+		err = NewSendRegisterationEmailHandler(authTokenGenerator, &mailer, mailFrom, webURL, &renderer, &translatorMock).Handle(payload)
 
 		assert.ErrorIs(t, err, expectedError)
 	})

@@ -9,11 +9,6 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/user"
 )
 
-const (
-	templateName           = "mail/auth/reset-password"
-	resetPasswordURLFormat = "https://tarhche.com/%s/auth/reset-password?token=%s"
-)
-
 type UseCase struct {
 	userRepository  user.Repository
 	asyncCommandBus domain.ProduceConsumer

@@ -129,6 +129,8 @@ jobs:
           ssh -q -i ~/hetzner-key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $HETZNER_SSH_ENDPOINT << 'EOF' >/dev/null 2>&1
             echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u ${{ github.actor }} --password-stdin > /dev/null 2>&1
 
+            export WEB_URL='${{ secrets.WEB_URL }}'
+
             export MONGO_USERNAME='${{ secrets.MONGO_USERNAME }}'
             export MONGO_PASSWORD='${{ secrets.MONGO_PASSWORD }}'
 

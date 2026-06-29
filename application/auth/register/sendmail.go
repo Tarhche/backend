@@ -16,7 +16,7 @@ const (
 
 	templateName             = "mail/auth/register"
 	registrationEmailSubject = "registration_email_subject"
-	registrationURLFormat    = "https://tarhche.com/%s/auth/verify?token=%s"
+	registrationURLFormat    = "%s/%s/auth/verify?token=%s"
 )
 
 // SendRegistrationEmail command
@@ -30,6 +30,7 @@ type sendRegisterationEmailHandler struct {
 	authTokenGenerator *auth.AuthTokenGenerator
 	mailer             domain.Mailer
 	mailFrom           string
+	webURL             string
 	template           domain.Renderer
 	translator         translatorcontract.Translator
 }
@@ -40,6 +41,7 @@ func NewSendRegisterationEmailHandler(
 	authTokenGenerator *auth.AuthTokenGenerator,
 	mailer domain.Mailer,
 	mailFrom string,
+	webURL string,
 	template domain.Renderer,
 	translator translatorcontract.Translator,
 ) *sendRegisterationEmailHandler {
@@ -47,6 +49,7 @@ func NewSendRegisterationEmailHandler(
 		authTokenGenerator: authTokenGenerator,
 		mailer:             mailer,
 		mailFrom:           mailFrom,
+		webURL:             webURL,
 		template:           template,
 		translator:         translator,
 	}
@@ -66,7 +69,7 @@ func (h *sendRegisterationEmailHandler) Handle(data []byte) error {
 	registrationToken = base64.URLEncoding.EncodeToString([]byte(registrationToken))
 
 	var msg bytes.Buffer
-	registrationURL := fmt.Sprintf(registrationURLFormat, command.LanguageCode, registrationToken)
+	registrationURL := fmt.Sprintf(registrationURLFormat, h.webURL, command.LanguageCode, registrationToken)
 	viewData := map[string]string{"registrationURL": registrationURL}
 	if err := h.template.Render(&msg, templateName+"."+command.LanguageCode, viewData); err != nil {
 		return err
