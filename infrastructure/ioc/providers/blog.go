@@ -575,7 +575,7 @@ func blog(
 		return dashboardConfigAPI.NewUpdateHandler(dashboardUpdateConfig.NewUseCase(configRepository, languageRepository, va(c), tr(c)))
 	}), authorizer, permission.ConfigUpdate), jwt, userRepository))
 
-	handler := middleware.NewCORSMiddleware(middleware.NewRateLimitMiddleware(mux, 600, 1*time.Minute))
+	handler := middleware.NewRecoveryMiddleware(middleware.NewCORSMiddleware(middleware.NewRateLimitMiddleware(mux, 600, 1*time.Minute)))
 
 	webURL := os.Getenv("WEB_URL")
 	if len(webURL) == 0 {
