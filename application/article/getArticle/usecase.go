@@ -1,6 +1,7 @@
 package getarticle
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -39,7 +40,7 @@ func NewUseCase(
 	}
 }
 
-func (uc *UseCase) Execute(request *Request) (*Response, error) {
+func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
 	if validationErrors := uc.validator.Validate(request); len(validationErrors) > 0 {
 		return &Response{
 			ValidationErrors: validationErrors,
@@ -48,7 +49,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 
 	languageCode := request.LanguageCode
 	if len(languageCode) == 0 {
-		code, err := uc.languageResolver.DefaultCode()
+		code, err := uc.languageResolver.DefaultCode(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -56,32 +57,33 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		languageCode = code
 	}
 
-	l, err := uc.languageResolver.Resolve(languageCode)
+	l, err := uc.languageResolver.Resolve(ctx, languageCode)
 	if err != nil {
 		return nil, err
 	}
 
-	a, err := uc.articleRepository.GetOnePublished(request.CorrelationUUID, languageCode)
+	a, err := uc.articleRepository.GetOnePublished(ctx, request.CorrelationUUID, languageCode)
 	if err != nil {
 		return nil, err
 	}
 
-	author, err := uc.userRepository.GetOne(a.AuthorUUID)
+	author, err := uc.userRepository.GetOne(ctx, a.AuthorUUID)
 	if err != nil && !errors.Is(err, domain.ErrNotExists) {
 		return nil, err
 	}
 
-	availableLanguageCodes, err := uc.articleRepository.GetPublishedLanguageCodes(a.CorrelationUUID)
+	availableLanguageCodes, err := uc.articleRepository.GetPublishedLanguageCodes(ctx, a.CorrelationUUID)
 	if err != nil {
 		return nil, err
 	}
 
-	availableLanguages, err := uc.languageRepository.GetByCodes(availableLanguageCodes)
+	availableLanguages, err := uc.languageRepository.GetByCodes(ctx, availableLanguageCodes)
 	if err != nil {
 		return nil, err
 	}
 
 	elementsResponse, err := uc.elementRetriever.RetrieveByVenues(
+		ctx,
 		[]string{fmt.Sprintf("/%s/articles/%s", languageCode, a.CorrelationUUID)},
 		languageCode,
 	)
@@ -89,7 +91,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		return nil, err
 	}
 
-	defer uc.articleRepository.IncreaseView(a.UUID, 1)
+	defer uc.articleRepository.IncreaseView(ctx, a.UUID, 1)
 
 	return NewResponse(a, l, author, availableLanguages, elementsResponse), nil
 }

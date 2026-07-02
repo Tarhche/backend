@@ -1,5 +1,7 @@
 package domain
 
+import "context"
+
 type Mailer interface {
-	SendMail(from string, to string, subject string, body []byte) error
+	SendMail(ctx context.Context, from string, to string, subject string, body []byte) error
 }

@@ -6,6 +6,8 @@ import (
 
 	deleterole "github.com/khanzadimahdi/testproject/application/dashboard/role/deleteRole"
 	"github.com/khanzadimahdi/testproject/domain"
+	infraTrace "github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type deleteHandler struct {
@@ -35,11 +37,12 @@ func (h *deleteHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		RoleUUID: UUID,
 	}
 
-	err := h.useCase.Execute(request)
+	err := h.useCase.Execute(r.Context(), request)
 	switch {
 	case errors.Is(err, domain.ErrNotExists):
 		rw.WriteHeader(http.StatusNotFound)
 	case err != nil:
+		infraTrace.RecordError(trace.SpanFromContext(r.Context()), err)
 		rw.WriteHeader(http.StatusInternalServerError)
 	default:
 		rw.WriteHeader(http.StatusNoContent)

@@ -7,12 +7,18 @@ import (
 	containerTypes "github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	oteltrace "go.opentelemetry.io/otel/trace"
+
 	"github.com/khanzadimahdi/testproject/domain/runner/container"
 	"github.com/khanzadimahdi/testproject/domain/runner/node"
+	"github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
 )
 
 type DockerManager struct {
 	client *client.Client
+	tracer oteltrace.Tracer
 
 	containerManager container.Manager
 }
@@ -28,24 +34,31 @@ func NewDockerManager(dockerHost string, containerManager container.Manager) (*D
 		return nil, fmt.Errorf("failed to create docker client: %w", err)
 	}
 
-	return &DockerManager{client: cli, containerManager: containerManager}, nil
+	return &DockerManager{client: cli, containerManager: containerManager, tracer: otel.Tracer("docker")}, nil
 }
 
-func (m *DockerManager) Stats(nodeName string) (node.Stats, error) {
+func (m *DockerManager) Stats(ctx context.Context, nodeName string) (node.Stats, error) {
+	ctx, span := m.tracer.Start(ctx, "docker.node.stats",
+		oteltrace.WithAttributes(attribute.String("node.name", nodeName)),
+	)
+	defer span.End()
+
 	filter := filters.NewArgs()
 	filter.Add("label", container.NodeNameLabelKey+"="+nodeName)
 	filter.Add("status", "running")
 
-	containers, err := m.client.ContainerList(context.Background(), containerTypes.ListOptions{Filters: filter})
+	containers, err := m.client.ContainerList(ctx, containerTypes.ListOptions{Filters: filter})
 	if err != nil {
-		return node.Stats{}, err
+		return node.Stats{}, trace.RecordError(span, err)
 	}
+
+	span.SetAttributes(attribute.Int("container.count", len(containers)))
 
 	var aggregate node.Stats
 	for _, c := range containers {
-		s, err := m.containerManager.Stats(c.ID)
+		s, err := m.containerManager.Stats(ctx, c.ID)
 		if err != nil {
-			return node.Stats{}, err
+			return node.Stats{}, trace.RecordError(span, err)
 		}
 
 		aggregate.PIDs += s.PIDs

@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -49,7 +51,7 @@ func TestWebsocket(t *testing.T) {
 
 		publishSubscriberMock.On("Subscribe", mock.Anything, "websocket_replies", mock.Anything).Return(nil)
 
-		ws, err := NewWebsocket(&requestRegistryMock, &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies")
+		ws, err := NewWebsocket(&requestRegistryMock, &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies", slog.New(slog.NewTextHandler(io.Discard, nil)))
 		assert.NoError(t, err)
 		defer ws.Close()
 
@@ -77,7 +79,7 @@ func TestWebsocket(t *testing.T) {
 
 		publishSubscriberMock.On("Subscribe", mock.Anything, "websocket_replies", mock.Anything).Return(nil)
 
-		ws, err := NewWebsocket(&requestRegistryMock, &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies")
+		ws, err := NewWebsocket(&requestRegistryMock, &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies", slog.New(slog.NewTextHandler(io.Discard, nil)))
 		assert.NoError(t, err)
 		defer ws.Close()
 
@@ -133,7 +135,7 @@ func TestWebsocket(t *testing.T) {
 		publishSubscriberMock.On("Publish", mock.Anything, "websocket_replies", mock.Anything).
 			Run(func(args mock.Arguments) {
 				payload := args.Get(2).([]byte)
-				replyHandler.Handle(payload)
+				replyHandler.Handle(context.Background(), payload)
 			}).Return(nil)
 		defer publishSubscriberMock.AssertExpectations(t)
 
@@ -150,7 +152,7 @@ func TestWebsocket(t *testing.T) {
 		}).Return(nil)
 		defer produceConsumerMock.AssertExpectations(t)
 
-		ws, err := NewWebsocket(&requestRegistryMock, &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies")
+		ws, err := NewWebsocket(&requestRegistryMock, &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies", slog.New(slog.NewTextHandler(io.Discard, nil)))
 		assert.NoError(t, err)
 		defer ws.Close()
 
@@ -202,7 +204,7 @@ func TestWebsocket(t *testing.T) {
 
 		publishSubscriberMock.On("Subscribe", mock.Anything, "websocket_replies", mock.Anything).Return(nil)
 
-		ws, err := NewWebsocket(&requestRegistryMock, &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies")
+		ws, err := NewWebsocket(&requestRegistryMock, &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies", slog.New(slog.NewTextHandler(io.Discard, nil)))
 		assert.NoError(t, err)
 		defer ws.Close()
 
@@ -269,7 +271,7 @@ func TestWebsocket(t *testing.T) {
 
 		publishSubscriberMock.On("Subscribe", mock.Anything, "websocket_replies", mock.Anything).Return(nil)
 
-		ws, err := NewWebsocket(&requestRegistryMock, &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies")
+		ws, err := NewWebsocket(&requestRegistryMock, &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies", slog.New(slog.NewTextHandler(io.Discard, nil)))
 		assert.NoError(t, err)
 		ws.Close()
 
@@ -291,7 +293,7 @@ func TestWebsocket(t *testing.T) {
 
 		publishSubscriberMock.On("Subscribe", mock.Anything, "websocket_replies", mock.Anything).Return(nil)
 
-		ws, err := NewWebsocket(&requestRegistryMock, &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies")
+		ws, err := NewWebsocket(&requestRegistryMock, &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies", slog.New(slog.NewTextHandler(io.Discard, nil)))
 		assert.NoError(t, err)
 		defer ws.Close()
 
@@ -316,7 +318,7 @@ func TestWebsocket(t *testing.T) {
 		produceConsumerMock.On("Consume", mock.Anything, "websocket_test", &messageHandlerMock).Return(expectedErr)
 		defer produceConsumerMock.AssertExpectations(t)
 
-		ws, err := NewWebsocket(&requestRegistryMock, &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies")
+		ws, err := NewWebsocket(&requestRegistryMock, &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies", slog.New(slog.NewTextHandler(io.Discard, nil)))
 		assert.NoError(t, err)
 		defer ws.Close()
 
@@ -345,7 +347,7 @@ func TestWebsocket(t *testing.T) {
 		requestRegistryMock.On("GetServerSideID", "req-1").Return("", domain.ErrNotExists)
 		defer requestRegistryMock.AssertExpectations(t)
 
-		ws, err := NewWebsocket(&requestRegistryMock, &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies")
+		ws, err := NewWebsocket(&requestRegistryMock, &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies", slog.New(slog.NewTextHandler(io.Discard, nil)))
 		assert.NoError(t, err)
 		defer ws.Close()
 
@@ -402,7 +404,7 @@ func TestWebsocket(t *testing.T) {
 		requestRegistryMock.On("GetServerSideID", "req-dup").Return("server-dup", nil).Once()
 		defer requestRegistryMock.AssertExpectations(t)
 
-		ws, err := NewWebsocket(&requestRegistryMock, &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies")
+		ws, err := NewWebsocket(&requestRegistryMock, &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies", slog.New(slog.NewTextHandler(io.Discard, nil)))
 		assert.NoError(t, err)
 		defer ws.Close()
 
@@ -446,7 +448,7 @@ func TestWebsocket(t *testing.T) {
 
 		publishSubscriberMock.On("Subscribe", mock.Anything, "websocket_replies", mock.Anything).Return(nil)
 
-		ws, err := NewWebsocket(&requestRegistryMock, &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies")
+		ws, err := NewWebsocket(&requestRegistryMock, &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies", slog.New(slog.NewTextHandler(io.Discard, nil)))
 		assert.NoError(t, err)
 
 		assert.NoError(t, ws.Close())
@@ -479,7 +481,7 @@ func TestWebsocket(t *testing.T) {
 		requestRegistryMock.On("DeleteByServerSideID", "server-1").Return(nil).Maybe()
 		defer requestRegistryMock.AssertExpectations(t)
 
-		ws, err := NewWebsocket(&requestRegistryMock, &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies")
+		ws, err := NewWebsocket(&requestRegistryMock, &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies", slog.New(slog.NewTextHandler(io.Discard, nil)))
 		assert.NoError(t, err)
 		defer ws.Close()
 
@@ -528,7 +530,7 @@ func TestWebsocket(t *testing.T) {
 		requestRegistryMock.On("Add", "req-1").Return("", addErr)
 		defer requestRegistryMock.AssertExpectations(t)
 
-		ws, err := NewWebsocket(&requestRegistryMock, &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies")
+		ws, err := NewWebsocket(&requestRegistryMock, &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies", slog.New(slog.NewTextHandler(io.Discard, nil)))
 		assert.NoError(t, err)
 		defer ws.Close()
 
@@ -646,7 +648,7 @@ func TestWebsocket(t *testing.T) {
 			Run(func(args mock.Arguments) { swept <- struct{}{} }).
 			Return(nil).Once()
 
-		ws, err := NewWebsocket(&requestRegistryMock, &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies")
+		ws, err := NewWebsocket(&requestRegistryMock, &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies", slog.New(slog.NewTextHandler(io.Discard, nil)))
 		assert.NoError(t, err)
 		defer ws.Close()
 
@@ -707,10 +709,10 @@ func TestWebsocket(t *testing.T) {
 		publishSubscriberMock.On("Publish", mock.Anything, "websocket_replies", mock.Anything).
 			Run(func(args mock.Arguments) {
 				payload := args.Get(2).([]byte)
-				replyHandler.Handle(payload)
+				replyHandler.Handle(context.Background(), payload)
 			}).Return(nil)
 
-		ws, err := NewWebsocket(&requestRegistryMock, &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies")
+		ws, err := NewWebsocket(&requestRegistryMock, &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies", slog.New(slog.NewTextHandler(io.Discard, nil)))
 		assert.NoError(t, err)
 		defer ws.Close()
 
@@ -760,7 +762,7 @@ func TestWebsocket(t *testing.T) {
 
 		publishSubscriberMock.On("Subscribe", mock.Anything, "websocket_replies", mock.Anything).Return(nil)
 
-		ws, err := NewWebsocket(&requestRegistryMock, &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies")
+		ws, err := NewWebsocket(&requestRegistryMock, &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies", slog.New(slog.NewTextHandler(io.Discard, nil)))
 		assert.NoError(t, err)
 		defer ws.Close()
 
@@ -819,7 +821,7 @@ func TestNoGoroutineLeak(t *testing.T) {
 
 	publishSubscriberMock.On("Subscribe", mock.Anything, "websocket_replies", mock.Anything).Return(nil)
 
-	ws, err := NewWebsocket(&requestRegistryMock, &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies")
+	ws, err := NewWebsocket(&requestRegistryMock, &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies", slog.New(slog.NewTextHandler(io.Discard, nil)))
 	assert.NoError(t, err)
 
 	server := httptest.NewServer(ws)

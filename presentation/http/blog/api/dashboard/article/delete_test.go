@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	deletearticle "github.com/khanzadimahdi/testproject/application/dashboard/article/deleteArticle"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/articles"
@@ -23,7 +24,7 @@ func TestDeleteHandler(t *testing.T) {
 			r = deletearticle.Request{CorrelationUUID: "correlation-uuid", LanguageCode: "EN"}
 		)
 
-		articleRepository.On("DeleteByCorrelationUUIDAndLanguage", r.CorrelationUUID, r.LanguageCode).Return(nil)
+		articleRepository.On("DeleteByCorrelationUUIDAndLanguage", mock.Anything, r.CorrelationUUID, r.LanguageCode).Return(nil)
 		defer articleRepository.AssertExpectations(t)
 
 		handler := NewDeleteHandler(deletearticle.NewUseCase(&articleRepository))

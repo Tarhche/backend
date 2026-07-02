@@ -1,6 +1,7 @@
 package createarticle
 
 import (
+	"context"
 	"errors"
 	"reflect"
 	"testing"
@@ -44,12 +45,12 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		languageRepository.On("Exists", "EN").Once().Return(true)
+		languageRepository.On("Exists", mock2.Anything, "EN").Once().Return(true)
 		defer languageRepository.AssertExpectations(t)
 
 		// no correlation uuid is provided, so the use case generates one and the
 		// repository stores the article with it (it is not derived from the uuid).
-		articleRepository.On("Save", mock2.MatchedBy(func(a *article.Article) bool {
+		articleRepository.On("Save", mock2.Anything, mock2.MatchedBy(func(a *article.Article) bool {
 			return a.Title == r.Title &&
 				a.Excerpt == r.Excerpt &&
 				a.Body == r.Body &&
@@ -59,7 +60,7 @@ func TestUseCase_Execute(t *testing.T) {
 		})).Once().Return("article-uuid", nil)
 		defer articleRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&articleRepository, &languageRepository, &validator, &translator).Execute(&r)
+		response, err := NewUseCase(&articleRepository, &languageRepository, &validator, &translator).Execute(context.Background(), &r)
 
 		assert.NoError(t, err)
 		assert.NotNil(t, response)
@@ -92,7 +93,7 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(expectedResponse.ValidationErrors)
 		defer validator.AssertExpectations(t)
 
-		response, err := NewUseCase(&articleRepository, &languageRepository, &validator, &translator).Execute(&r)
+		response, err := NewUseCase(&articleRepository, &languageRepository, &validator, &translator).Execute(context.Background(), &r)
 
 		articleRepository.AssertNotCalled(t, "Save")
 		languageRepository.AssertNotCalled(t, "Exists")
@@ -129,10 +130,10 @@ func TestUseCase_Execute(t *testing.T) {
 		).Once().Return("language code is invalid")
 		defer translator.AssertExpectations(t)
 
-		languageRepository.On("Exists", "DE").Once().Return(false)
+		languageRepository.On("Exists", mock2.Anything, "DE").Once().Return(false)
 		defer languageRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&articleRepository, &languageRepository, &validator, &translator).Execute(&r)
+		response, err := NewUseCase(&articleRepository, &languageRepository, &validator, &translator).Execute(context.Background(), &r)
 
 		articleRepository.AssertNotCalled(t, "Save")
 
@@ -165,13 +166,13 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		languageRepository.On("Exists", "EN").Once().Return(true)
+		languageRepository.On("Exists", mock2.Anything, "EN").Once().Return(true)
 		defer languageRepository.AssertExpectations(t)
 
-		articleRepository.On("Save", mock2.AnythingOfType("*article.Article")).Once().Return("", expectedErr)
+		articleRepository.On("Save", mock2.Anything, mock2.AnythingOfType("*article.Article")).Once().Return("", expectedErr)
 		defer articleRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&articleRepository, &languageRepository, &validator, &translator).Execute(&r)
+		response, err := NewUseCase(&articleRepository, &languageRepository, &validator, &translator).Execute(context.Background(), &r)
 
 		assert.ErrorIs(t, err, expectedErr)
 		assert.Nil(t, response)
@@ -213,14 +214,14 @@ func TestUseCase_Execute(t *testing.T) {
 		requestValidator.On("Validate", &r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
-		languageRepository.On("Exists", "FA").Once().Return(true)
+		languageRepository.On("Exists", mock2.Anything, "FA").Once().Return(true)
 		defer languageRepository.AssertExpectations(t)
 
-		articleRepository.On("CorrelationExist", correlationUUID).Once().Return(true, nil)
-		articleRepository.On("Save", &a).Once().Return("new-uuid", nil)
+		articleRepository.On("CorrelationExist", mock2.Anything, correlationUUID).Once().Return(true, nil)
+		articleRepository.On("Save", mock2.Anything, &a).Once().Return("new-uuid", nil)
 		defer articleRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&articleRepository, &languageRepository, &requestValidator, &translator).Execute(&r)
+		response, err := NewUseCase(&articleRepository, &languageRepository, &requestValidator, &translator).Execute(context.Background(), &r)
 
 		assert.NoError(t, err)
 		assert.NotNil(t, response)
@@ -259,13 +260,13 @@ func TestUseCase_Execute(t *testing.T) {
 		).Once().Return("correlation uuid is invalid")
 		defer translator.AssertExpectations(t)
 
-		languageRepository.On("Exists", "FA").Once().Return(true)
+		languageRepository.On("Exists", mock2.Anything, "FA").Once().Return(true)
 		defer languageRepository.AssertExpectations(t)
 
-		articleRepository.On("CorrelationExist", correlationUUID).Once().Return(false, nil)
+		articleRepository.On("CorrelationExist", mock2.Anything, correlationUUID).Once().Return(false, nil)
 		defer articleRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&articleRepository, &languageRepository, &requestValidator, &translator).Execute(&r)
+		response, err := NewUseCase(&articleRepository, &languageRepository, &requestValidator, &translator).Execute(context.Background(), &r)
 
 		articleRepository.AssertNotCalled(t, "Save")
 
@@ -299,13 +300,13 @@ func TestUseCase_Execute(t *testing.T) {
 		requestValidator.On("Validate", &r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
-		languageRepository.On("Exists", "FA").Once().Return(true)
+		languageRepository.On("Exists", mock2.Anything, "FA").Once().Return(true)
 		defer languageRepository.AssertExpectations(t)
 
-		articleRepository.On("CorrelationExist", correlationUUID).Once().Return(false, expectedErr)
+		articleRepository.On("CorrelationExist", mock2.Anything, correlationUUID).Once().Return(false, expectedErr)
 		defer articleRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&articleRepository, &languageRepository, &requestValidator, &translator).Execute(&r)
+		response, err := NewUseCase(&articleRepository, &languageRepository, &requestValidator, &translator).Execute(context.Background(), &r)
 
 		articleRepository.AssertNotCalled(t, "Save")
 

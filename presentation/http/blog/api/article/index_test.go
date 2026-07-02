@@ -80,19 +80,19 @@ func TestIndexHandler(t *testing.T) {
 			{UUID: "author-uuid-2", Name: "author-name", Avatar: "author-avatar", Username: "author-username-2"},
 		}
 
-		articlesRepository.On("CountPublished", "EN").Once().Return(uint(len(articles)), nil)
-		articlesRepository.On("GetAllPublished", "EN", uint(0), uint(10)).Once().Return(articles, nil)
-		elementsRepository.On("Count").Once().Return(uint(0), nil)
+		articlesRepository.On("CountPublished", mock.Anything, "EN").Once().Return(uint(len(articles)), nil)
+		articlesRepository.On("GetAllPublished", mock.Anything, "EN", uint(0), uint(10)).Once().Return(articles, nil)
+		elementsRepository.On("Count", mock.Anything).Once().Return(uint(0), nil)
 		defer articlesRepository.AssertExpectations(t)
 
-		userRepository.On("GetByUUIDs", []string{"author-uuid-1", "author-uuid-1", "author-uuid-2"}).Once().Return(users, nil)
+		userRepository.On("GetByUUIDs", mock.Anything, []string{"author-uuid-1", "author-uuid-1", "author-uuid-2"}).Once().Return(users, nil)
 		defer userRepository.AssertExpectations(t)
 
-		articlesRepository.On("GetPublishedLanguageCodes", mock.Anything).Return([]string{}, nil)
-		languagesRepository.On("GetByCodes", []string{}).Return([]language.Language{}, nil)
+		articlesRepository.On("GetPublishedLanguageCodes", mock.Anything, mock.Anything).Return([]string{}, nil)
+		languagesRepository.On("GetByCodes", mock.Anything, []string{}).Return([]language.Language{}, nil)
 
-		languageResolver.On("DefaultCode").Once().Return("EN", nil)
-		languageResolver.On("Resolve", "EN").Once().Return(language.Language{Code: "EN", Name: "English"}, nil)
+		languageResolver.On("DefaultCode", mock.Anything).Once().Return("EN", nil)
+		languageResolver.On("Resolve", mock.Anything, "EN").Once().Return(language.Language{Code: "EN", Name: "English"}, nil)
 		defer languageResolver.AssertExpectations(t)
 
 		handler := NewIndexHandler(getarticles.NewUseCase(&articlesRepository, &userRepository, &languagesRepository, &languageResolver, element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository, matcher.New())))
@@ -121,16 +121,16 @@ func TestIndexHandler(t *testing.T) {
 			languageResolver    resolver.MockResolver
 		)
 
-		articlesRepository.On("CountPublished", "EN").Once().Return(uint(0), nil)
-		articlesRepository.On("GetAllPublished", "EN", uint(0), uint(10)).Once().Return(nil, nil)
-		elementsRepository.On("Count").Once().Return(uint(0), nil)
+		articlesRepository.On("CountPublished", mock.Anything, "EN").Once().Return(uint(0), nil)
+		articlesRepository.On("GetAllPublished", mock.Anything, "EN", uint(0), uint(10)).Once().Return(nil, nil)
+		elementsRepository.On("Count", mock.Anything).Once().Return(uint(0), nil)
 		defer articlesRepository.AssertExpectations(t)
 
-		userRepository.On("GetByUUIDs", []string{}).Once().Return([]user.User{}, nil)
+		userRepository.On("GetByUUIDs", mock.Anything, []string{}).Once().Return([]user.User{}, nil)
 		defer userRepository.AssertExpectations(t)
 
-		languageResolver.On("DefaultCode").Once().Return("EN", nil)
-		languageResolver.On("Resolve", "EN").Once().Return(language.Language{Code: "EN", Name: "English"}, nil)
+		languageResolver.On("DefaultCode", mock.Anything).Once().Return("EN", nil)
+		languageResolver.On("Resolve", mock.Anything, "EN").Once().Return(language.Language{Code: "EN", Name: "English"}, nil)
 		defer languageResolver.AssertExpectations(t)
 
 		handler := NewIndexHandler(getarticles.NewUseCase(&articlesRepository, &userRepository, &languagesRepository, &languageResolver, element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository, matcher.New())))
@@ -159,11 +159,11 @@ func TestIndexHandler(t *testing.T) {
 			languageResolver    resolver.MockResolver
 		)
 
-		articlesRepository.On("CountPublished", "EN").Once().Return(uint(0), errors.New("something faulty has happened"))
+		articlesRepository.On("CountPublished", mock.Anything, "EN").Once().Return(uint(0), errors.New("something faulty has happened"))
 		defer articlesRepository.AssertExpectations(t)
 
-		languageResolver.On("DefaultCode").Once().Return("EN", nil)
-		languageResolver.On("Resolve", "EN").Once().Return(language.Language{Code: "EN", Name: "English"}, nil)
+		languageResolver.On("DefaultCode", mock.Anything).Once().Return("EN", nil)
+		languageResolver.On("Resolve", mock.Anything, "EN").Once().Return(language.Language{Code: "EN", Name: "English"}, nil)
 		defer languageResolver.AssertExpectations(t)
 
 		handler := NewIndexHandler(getarticles.NewUseCase(&articlesRepository, &userRepository, &languagesRepository, &languageResolver, element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository, matcher.New())))

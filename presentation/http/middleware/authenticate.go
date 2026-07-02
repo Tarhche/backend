@@ -31,7 +31,7 @@ func NewAuthenticateMiddleware(next http.Handler, j *jwt.JWT, userRepository use
 
 func (a *Authenticate) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	token := a.bearerToken(r)
-	claims, err := a.j.Verify(token)
+	claims, err := a.j.Verify(r.Context(), token)
 	if err != nil {
 		rw.WriteHeader(http.StatusUnauthorized)
 		return
@@ -48,7 +48,7 @@ func (a *Authenticate) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := a.userRepository.GetOne(userUUID)
+	user, err := a.userRepository.GetOne(r.Context(), userUUID)
 	if err != nil {
 		rw.WriteHeader(http.StatusUnauthorized)
 		return

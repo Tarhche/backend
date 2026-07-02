@@ -18,13 +18,13 @@ func NewUseCase(filesRepository file.Repository, storage file.Storage) *UseCase 
 	}
 }
 
-func (uc *UseCase) Execute(UUID string) (*Response, error) {
-	f, err := uc.filesRepository.GetOne(UUID)
+func (uc *UseCase) Execute(ctx context.Context, UUID string) (*Response, error) {
+	f, err := uc.filesRepository.GetOne(ctx, UUID)
 	if err != nil {
 		return nil, err
 	}
 
-	reader, err := uc.storage.Read(context.Background(), f.StoredName)
+	reader, err := uc.storage.Read(ctx, f.StoredName)
 	if err != nil {
 		return nil, err
 	}

@@ -18,15 +18,15 @@ func NewUseCase(filesRepository file.Repository, storage file.Storage) *UseCase 
 	}
 }
 
-func (uc *UseCase) Execute(request Request) error {
-	file, err := uc.filesRepository.GetOneByOwnerUUID(request.OwnerUUID, request.FileUUID)
+func (uc *UseCase) Execute(ctx context.Context, request Request) error {
+	file, err := uc.filesRepository.GetOneByOwnerUUID(ctx, request.OwnerUUID, request.FileUUID)
 	if err != nil {
 		return err
 	}
 
-	if err := uc.storage.Delete(context.Background(), file.StoredName); err != nil {
+	if err := uc.storage.Delete(ctx, file.StoredName); err != nil {
 		return err
 	}
 
-	return uc.filesRepository.DeleteByOwnerUUID(request.OwnerUUID, file.UUID)
+	return uc.filesRepository.DeleteByOwnerUUID(ctx, request.OwnerUUID, file.UUID)
 }

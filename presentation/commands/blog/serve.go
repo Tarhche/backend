@@ -4,7 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -25,6 +25,7 @@ type ServeCommand struct {
 	handler   http.Handler
 	consumer  domain.Consumer
 	consumers map[string]domain.MessageHandler
+	logger    *slog.Logger
 }
 
 // insures it implements console.Command
@@ -72,6 +73,10 @@ func (c *ServeCommand) Boot(ctx context.Context, container provider.Container) e
 		return err
 	}
 
+	if err := container.Resolve(&c.logger, resolve.WithParams("blog")); err != nil {
+		return err
+	}
+
 	return container.Resolve(&c.consumers, resolve.WithName(providers.BlogSubscribers))
 }
 
@@ -104,12 +109,12 @@ func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 	}()
 
 	if err := c.consumeTopics(ctx); err != nil {
-		log.Println(err)
+		c.logger.ErrorContext(ctx, "failed to consume topics", "error", err)
 		return console.ExitFailure
 	}
 
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Println(err)
+		c.logger.ErrorContext(ctx, "server failed", "error", err)
 		return console.ExitFailure
 	}
 

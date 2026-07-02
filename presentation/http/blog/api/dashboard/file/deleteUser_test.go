@@ -1,12 +1,12 @@
 package file
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	deleteuserfile "github.com/khanzadimahdi/testproject/application/dashboard/file/deleteUserFile"
@@ -40,11 +40,11 @@ func TestDeleteUserHandler(t *testing.T) {
 			}
 		)
 
-		filesRepository.On("GetOneByOwnerUUID", r.OwnerUUID, r.FileUUID).Once().Return(f, nil)
-		filesRepository.On("DeleteByOwnerUUID", r.OwnerUUID, r.FileUUID).Return(nil)
+		filesRepository.On("GetOneByOwnerUUID", mock.Anything, r.OwnerUUID, r.FileUUID).Once().Return(f, nil)
+		filesRepository.On("DeleteByOwnerUUID", mock.Anything, r.OwnerUUID, r.FileUUID).Return(nil)
 		defer filesRepository.AssertExpectations(t)
 
-		storage.On("Delete", context.Background(), f.StoredName).Once().Return(nil)
+		storage.On("Delete", mock.Anything, f.StoredName).Once().Return(nil)
 		defer storage.AssertExpectations(t)
 
 		handler := NewDeleteUserHandler(deleteuserfile.NewUseCase(&filesRepository, &storage))

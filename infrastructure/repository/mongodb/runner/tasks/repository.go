@@ -35,8 +35,8 @@ func NewRepository(database *mongo.Database) *TasksRepository {
 	}
 }
 
-func (r *TasksRepository) GetAll(offset uint, limit uint) ([]task.Task, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *TasksRepository) GetAll(ctx context.Context, offset uint, limit uint) ([]task.Task, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	o := int64(offset)
@@ -93,8 +93,8 @@ func (r *TasksRepository) GetAll(offset uint, limit uint) ([]task.Task, error) {
 	return items, nil
 }
 
-func (r *TasksRepository) GetOne(UUID string) (task.Task, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *TasksRepository) GetOne(ctx context.Context, UUID string) (task.Task, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	filter := bson.D{{Key: "_id", Value: UUID}}
@@ -138,8 +138,8 @@ func (r *TasksRepository) GetOne(UUID string) (task.Task, error) {
 	}, nil
 }
 
-func (r *TasksRepository) Save(t *task.Task) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *TasksRepository) Save(ctx context.Context, t *task.Task) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	if len(t.UUID) == 0 {
@@ -202,8 +202,8 @@ func (r *TasksRepository) Save(t *task.Task) (string, error) {
 	return t.UUID, nil
 }
 
-func (r *TasksRepository) Delete(UUID string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *TasksRepository) Delete(ctx context.Context, UUID string) error {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	_, err := r.collection.DeleteOne(ctx, bson.D{{Key: "_id", Value: UUID}})
@@ -211,8 +211,8 @@ func (r *TasksRepository) Delete(UUID string) error {
 	return err
 }
 
-func (r *TasksRepository) Count() (uint, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *TasksRepository) Count(ctx context.Context) (uint, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	c, err := r.collection.CountDocuments(ctx, bson.D{})

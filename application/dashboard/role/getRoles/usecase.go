@@ -1,6 +1,8 @@
 package getroles
 
 import (
+	"context"
+
 	"github.com/khanzadimahdi/testproject/domain/role"
 )
 
@@ -16,8 +18,8 @@ func NewUseCase(roleRepository role.Repository) *UseCase {
 	}
 }
 
-func (uc *UseCase) Execute(request *Request) (*Response, error) {
-	totalRoles, err := uc.roleRepository.Count()
+func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
+	totalRoles, err := uc.roleRepository.Count(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -38,7 +40,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		totalPages++
 	}
 
-	roles, err := uc.roleRepository.GetAll(offset, limit)
+	roles, err := uc.roleRepository.GetAll(ctx, offset, limit)
 	if err != nil {
 		return nil, err
 	}

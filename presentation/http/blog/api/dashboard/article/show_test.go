@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	getarticle "github.com/khanzadimahdi/testproject/application/dashboard/article/getArticle"
 	"github.com/khanzadimahdi/testproject/domain"
@@ -41,10 +42,10 @@ func TestShowHandler(t *testing.T) {
 			}
 		)
 
-		articleRepository.On("GetByCorrelationUUIDAndLanguage", a.CorrelationUUID, a.LanguageCode).Return(a, nil)
+		articleRepository.On("GetByCorrelationUUIDAndLanguage", mock.Anything, a.CorrelationUUID, a.LanguageCode).Return(a, nil)
 		defer articleRepository.AssertExpectations(t)
 
-		userRepository.On("GetOne", "").Return(user.User{}, nil)
+		userRepository.On("GetOne", mock.Anything, "").Return(user.User{}, nil)
 		defer userRepository.AssertExpectations(t)
 
 		handler := NewShowHandler(getarticle.NewUseCase(&articleRepository, &userRepository))
@@ -77,7 +78,7 @@ func TestShowHandler(t *testing.T) {
 			}
 		)
 
-		articleRepository.On("GetByCorrelationUUIDAndLanguage", a.CorrelationUUID, a.LanguageCode).Return(article.Article{}, domain.ErrNotExists)
+		articleRepository.On("GetByCorrelationUUIDAndLanguage", mock.Anything, a.CorrelationUUID, a.LanguageCode).Return(article.Article{}, domain.ErrNotExists)
 		defer articleRepository.AssertExpectations(t)
 
 		handler := NewShowHandler(getarticle.NewUseCase(&articleRepository, &userRepository))

@@ -26,7 +26,7 @@ func NewHeartbeatHandler(
 	}
 }
 
-func (h *Heartbeat) Handle(data []byte) error {
+func (h *Heartbeat) Handle(ctx context.Context, data []byte) error {
 	var heartbeat events.Heartbeat
 
 	err := json.Unmarshal(data, &heartbeat)
@@ -34,7 +34,7 @@ func (h *Heartbeat) Handle(data []byte) error {
 		return err
 	}
 
-	t, err := h.taskRepository.GetOne(heartbeat.UUID)
+	t, err := h.taskRepository.GetOne(ctx, heartbeat.UUID)
 	if err == domain.ErrNotExists {
 		return nil
 	} else if err != nil {
@@ -42,7 +42,7 @@ func (h *Heartbeat) Handle(data []byte) error {
 	}
 
 	t.ContainerLogs = heartbeat.Logs
-	_, err = h.taskRepository.Save(&t)
+	_, err = h.taskRepository.Save(ctx, &t)
 	if err != nil {
 		return err
 	}
@@ -51,13 +51,13 @@ func (h *Heartbeat) Handle(data []byte) error {
 
 	switch taskState {
 	case task.Running:
-		err = h.publishTaskRan(&heartbeat)
+		err = h.publishTaskRan(ctx, &heartbeat)
 	case task.Stopped:
-		err = h.publishTaskStopped(&heartbeat)
+		err = h.publishTaskStopped(ctx, &heartbeat)
 	case task.Completed:
-		err = h.publishTaskCompleted(&heartbeat)
+		err = h.publishTaskCompleted(ctx, &heartbeat)
 	case task.Failed:
-		err = h.publishTaskFailed(&heartbeat)
+		err = h.publishTaskFailed(ctx, &heartbeat)
 	}
 
 	if err != nil {
@@ -65,13 +65,13 @@ func (h *Heartbeat) Handle(data []byte) error {
 	}
 
 	if task.IsTerminalState(taskState) && t.AutoRemove {
-		return h.publishTaskDeleted(&heartbeat)
+		return h.publishTaskDeleted(ctx, &heartbeat)
 	}
 
 	return nil
 }
 
-func (uc *Heartbeat) publishTaskRan(heartbeat *events.Heartbeat) error {
+func (uc *Heartbeat) publishTaskRan(ctx context.Context, heartbeat *events.Heartbeat) error {
 	event := events.TaskRan{
 		UUID:          heartbeat.UUID,
 		NodeName:      heartbeat.NodeName,
@@ -84,10 +84,10 @@ func (uc *Heartbeat) publishTaskRan(heartbeat *events.Heartbeat) error {
 		return err
 	}
 
-	return uc.producer.Produce(context.Background(), events.TaskRanName, payload)
+	return uc.producer.Produce(ctx, events.TaskRanName, payload)
 }
 
-func (uc *Heartbeat) publishTaskStopped(heartbeat *events.Heartbeat) error {
+func (uc *Heartbeat) publishTaskStopped(ctx context.Context, heartbeat *events.Heartbeat) error {
 	event := events.TaskStopped{
 		UUID:     heartbeat.UUID,
 		NodeName: heartbeat.NodeName,
@@ -99,10 +99,10 @@ func (uc *Heartbeat) publishTaskStopped(heartbeat *events.Heartbeat) error {
 		return err
 	}
 
-	return uc.producer.Produce(context.Background(), events.TaskStoppedName, payload)
+	return uc.producer.Produce(ctx, events.TaskStoppedName, payload)
 }
 
-func (uc *Heartbeat) publishTaskCompleted(heartbeat *events.Heartbeat) error {
+func (uc *Heartbeat) publishTaskCompleted(ctx context.Context, heartbeat *events.Heartbeat) error {
 	event := events.TaskCompleted{
 		UUID:     heartbeat.UUID,
 		NodeName: heartbeat.NodeName,
@@ -114,10 +114,10 @@ func (uc *Heartbeat) publishTaskCompleted(heartbeat *events.Heartbeat) error {
 		return err
 	}
 
-	return uc.producer.Produce(context.Background(), events.TaskCompletedName, payload)
+	return uc.producer.Produce(ctx, events.TaskCompletedName, payload)
 }
 
-func (uc *Heartbeat) publishTaskFailed(heartbeat *events.Heartbeat) error {
+func (uc *Heartbeat) publishTaskFailed(ctx context.Context, heartbeat *events.Heartbeat) error {
 	event := events.TaskFailed{
 		UUID:          heartbeat.UUID,
 		ContainerUUID: heartbeat.ContainerUUID,
@@ -130,10 +130,10 @@ func (uc *Heartbeat) publishTaskFailed(heartbeat *events.Heartbeat) error {
 		return err
 	}
 
-	return uc.producer.Produce(context.Background(), events.TaskFailedName, payload)
+	return uc.producer.Produce(ctx, events.TaskFailedName, payload)
 }
 
-func (uc *Heartbeat) publishTaskDeleted(heartbeat *events.Heartbeat) error {
+func (uc *Heartbeat) publishTaskDeleted(ctx context.Context, heartbeat *events.Heartbeat) error {
 	event := events.TaskDeleted{
 		UUID: heartbeat.UUID,
 		At:   heartbeat.At,
@@ -144,5 +144,5 @@ func (uc *Heartbeat) publishTaskDeleted(heartbeat *events.Heartbeat) error {
 		return err
 	}
 
-	return uc.producer.Produce(context.Background(), events.TaskDeletedName, payload)
+	return uc.producer.Produce(ctx, events.TaskDeletedName, payload)
 }

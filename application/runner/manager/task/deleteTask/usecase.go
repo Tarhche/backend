@@ -24,8 +24,8 @@ func NewUseCase(taskRepository task.Repository, asyncCommandBus domain.Producer,
 	}
 }
 
-func (uc *UseCase) Execute(request *Request) (*Response, error) {
-	t, err := uc.taskRepository.GetOne(request.UUID)
+func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
+	t, err := uc.taskRepository.GetOne(ctx, request.UUID)
 	if err != nil {
 		return nil, err
 	}
@@ -38,14 +38,14 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		}, nil
 	}
 
-	if err := uc.publishTaskDeleted(request.UUID); err != nil {
+	if err := uc.publishTaskDeleted(ctx, request.UUID); err != nil {
 		return nil, err
 	}
 
-	return nil, uc.taskRepository.Delete(request.UUID)
+	return nil, uc.taskRepository.Delete(ctx, request.UUID)
 }
 
-func (uc *UseCase) publishTaskDeleted(uuid string) error {
+func (uc *UseCase) publishTaskDeleted(ctx context.Context, uuid string) error {
 	event := events.TaskDeleted{
 		UUID: uuid,
 	}
@@ -55,5 +55,5 @@ func (uc *UseCase) publishTaskDeleted(uuid string) error {
 		return err
 	}
 
-	return uc.asyncCommandBus.Produce(context.Background(), events.TaskDeletedName, payload)
+	return uc.asyncCommandBus.Produce(ctx, events.TaskDeletedName, payload)
 }

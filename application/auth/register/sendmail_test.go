@@ -1,6 +1,7 @@
 package register
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"testing"
@@ -55,7 +56,7 @@ func TestHandler_Execute(t *testing.T) {
 		translatorMock.On("Translate", registrationEmailSubject, mock.Anything).Once().Return(subject)
 		defer translatorMock.AssertExpectations(t)
 
-		mailer.On("SendMail", mailFrom, command.Identity, subject, mock.AnythingOfType("[]uint8")).Once().Return(nil)
+		mailer.On("SendMail", mock.Anything, mailFrom, command.Identity, subject, mock.AnythingOfType("[]uint8")).Once().Return(nil)
 		defer mailer.AssertExpectations(t)
 
 		payload, err := json.Marshal(command)
@@ -63,7 +64,7 @@ func TestHandler_Execute(t *testing.T) {
 
 		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
 
-		err = NewSendRegisterationEmailHandler(authTokenGenerator, &mailer, mailFrom, webURL, &renderer, &translatorMock).Handle(payload)
+		err = NewSendRegisterationEmailHandler(authTokenGenerator, &mailer, mailFrom, webURL, &renderer, &translatorMock).Handle(context.Background(), payload)
 
 		assert.NoError(t, err)
 	})
@@ -93,7 +94,7 @@ func TestHandler_Execute(t *testing.T) {
 
 		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
 
-		err = NewSendRegisterationEmailHandler(authTokenGenerator, &mailer, mailFrom, webURL, &renderer, &translatorMock).Handle(payload)
+		err = NewSendRegisterationEmailHandler(authTokenGenerator, &mailer, mailFrom, webURL, &renderer, &translatorMock).Handle(context.Background(), payload)
 
 		mailer.AssertNotCalled(t, "SendMail")
 
@@ -123,7 +124,7 @@ func TestHandler_Execute(t *testing.T) {
 		translatorMock.On("Translate", registrationEmailSubject, mock.Anything).Once().Return(subject)
 		defer translatorMock.AssertExpectations(t)
 
-		mailer.On("SendMail", mailFrom, command.Identity, subject, mock.AnythingOfType("[]uint8")).Once().Return(expectedError)
+		mailer.On("SendMail", mock.Anything, mailFrom, command.Identity, subject, mock.AnythingOfType("[]uint8")).Once().Return(expectedError)
 		defer mailer.AssertExpectations(t)
 
 		payload, err := json.Marshal(command)
@@ -131,7 +132,7 @@ func TestHandler_Execute(t *testing.T) {
 
 		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
 
-		err = NewSendRegisterationEmailHandler(authTokenGenerator, &mailer, mailFrom, webURL, &renderer, &translatorMock).Handle(payload)
+		err = NewSendRegisterationEmailHandler(authTokenGenerator, &mailer, mailFrom, webURL, &renderer, &translatorMock).Handle(context.Background(), payload)
 
 		assert.ErrorIs(t, err, expectedError)
 	})

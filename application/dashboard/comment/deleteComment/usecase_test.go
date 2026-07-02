@@ -1,11 +1,13 @@
 package deleteComment
 
 import (
+	"context"
 	"errors"
 	"testing"
 
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/comments"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
 func TestUseCase_Execute(t *testing.T) {
@@ -20,10 +22,10 @@ func TestUseCase_Execute(t *testing.T) {
 			r = Request{CommentUUID: "comment-uuid"}
 		)
 
-		commentRepository.On("Delete", r.CommentUUID).Return(nil)
+		commentRepository.On("Delete", mock.Anything, r.CommentUUID).Return(nil)
 		defer commentRepository.AssertExpectations(t)
 
-		err := NewUseCase(&commentRepository).Execute(&r)
+		err := NewUseCase(&commentRepository).Execute(context.Background(), &r)
 
 		assert.NoError(t, err)
 	})
@@ -38,10 +40,10 @@ func TestUseCase_Execute(t *testing.T) {
 			expectedError = errors.New("comment deletion failed")
 		)
 
-		commentRepository.On("Delete", r.CommentUUID).Return(expectedError)
+		commentRepository.On("Delete", mock.Anything, r.CommentUUID).Return(expectedError)
 		defer commentRepository.AssertExpectations(t)
 
-		err := NewUseCase(&commentRepository).Execute(&r)
+		err := NewUseCase(&commentRepository).Execute(context.Background(), &r)
 
 		assert.ErrorIs(t, err, expectedError)
 	})

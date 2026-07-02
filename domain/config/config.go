@@ -1,5 +1,7 @@
 package config
 
+import "context"
+
 type Config struct {
 	Revision             uint // to keep trace of config changes
 	UserDefaultRoleUUIDs []string
@@ -7,6 +9,6 @@ type Config struct {
 }
 
 type Repository interface {
-	GetLatestRevision() (Config, error)
-	Save(*Config) (string, error)
+	GetLatestRevision(ctx context.Context) (Config, error)
+	Save(ctx context.Context, c *Config) (string, error)
 }

@@ -2,7 +2,6 @@ package runCode
 
 import (
 	"fmt"
-	"log"
 	"slices"
 
 	"github.com/khanzadimahdi/testproject/domain"
@@ -52,8 +51,6 @@ func (r *Request) Validate() domain.ValidationErrors {
 	if !slices.Contains(supportedCodeRunners, r.Runner) {
 		validationErrors["runner"] = "invalid_value"
 	}
-
-	log.Printf("validation errors: %+v", validationErrors)
 
 	return validationErrors
 }

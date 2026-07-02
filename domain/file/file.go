@@ -17,16 +17,16 @@ type File struct {
 }
 
 type Repository interface {
-	GetAll(offset uint, limit uint) ([]File, error)
-	GetOne(UUID string) (File, error)
-	Save(*File) (string, error)
-	Delete(UUID string) error
-	Count() (uint, error)
+	GetAll(ctx context.Context, offset uint, limit uint) ([]File, error)
+	GetOne(ctx context.Context, UUID string) (File, error)
+	Save(ctx context.Context, f *File) (string, error)
+	Delete(ctx context.Context, UUID string) error
+	Count(ctx context.Context) (uint, error)
 
-	GetAllByOwnerUUID(ownerUUID string, offset uint, limit uint) ([]File, error)
-	GetOneByOwnerUUID(ownerUUID string, UUID string) (File, error)
-	DeleteByOwnerUUID(ownerUUID string, UUID string) error
-	CountByOwnerUUID(ownerUUID string) (uint, error)
+	GetAllByOwnerUUID(ctx context.Context, ownerUUID string, offset uint, limit uint) ([]File, error)
+	GetOneByOwnerUUID(ctx context.Context, ownerUUID string, UUID string) (File, error)
+	DeleteByOwnerUUID(ctx context.Context, ownerUUID string, UUID string) error
+	CountByOwnerUUID(ctx context.Context, ownerUUID string) (uint, error)
 }
 
 type Storage interface {

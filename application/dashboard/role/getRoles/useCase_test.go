@@ -1,10 +1,12 @@
 package getroles
 
 import (
+	"context"
 	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/domain/role"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/roles"
@@ -60,11 +62,11 @@ func TestUseCase_Execute(t *testing.T) {
 			}
 		)
 
-		rolesRepository.On("Count").Once().Return(uint(len(p)), nil)
-		rolesRepository.On("GetAll", uint(0), uint(10)).Once().Return(p, nil)
+		rolesRepository.On("Count", mock.Anything).Once().Return(uint(len(p)), nil)
+		rolesRepository.On("GetAll", mock.Anything, uint(0), uint(10)).Once().Return(p, nil)
 		defer rolesRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&rolesRepository).Execute(&r)
+		response, err := NewUseCase(&rolesRepository).Execute(context.Background(), &r)
 
 		assert.NoError(t, err)
 		assert.Equal(t, &expectedResponse, response)
@@ -83,10 +85,10 @@ func TestUseCase_Execute(t *testing.T) {
 			expectedError = errors.New("error")
 		)
 
-		rolesRepository.On("Count").Once().Return(uint(0), expectedError)
+		rolesRepository.On("Count", mock.Anything).Once().Return(uint(0), expectedError)
 		defer rolesRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&rolesRepository).Execute(&r)
+		response, err := NewUseCase(&rolesRepository).Execute(context.Background(), &r)
 
 		rolesRepository.AssertNotCalled(t, "GetAll")
 
@@ -107,11 +109,11 @@ func TestUseCase_Execute(t *testing.T) {
 			expectedError = errors.New("error")
 		)
 
-		rolesRepository.On("Count").Once().Return(uint(3), nil)
-		rolesRepository.On("GetAll", uint(0), uint(10)).Once().Return(nil, expectedError)
+		rolesRepository.On("Count", mock.Anything).Once().Return(uint(3), nil)
+		rolesRepository.On("GetAll", mock.Anything, uint(0), uint(10)).Once().Return(nil, expectedError)
 		defer rolesRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&rolesRepository).Execute(&r)
+		response, err := NewUseCase(&rolesRepository).Execute(context.Background(), &r)
 
 		assert.ErrorIs(t, err, expectedError)
 		assert.Nil(t, response)

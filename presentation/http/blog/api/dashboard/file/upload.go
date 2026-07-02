@@ -7,6 +7,8 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	uploadfile "github.com/khanzadimahdi/testproject/application/dashboard/file/uploadFile"
+	infraTrace "github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type createHandler struct {
@@ -31,6 +33,7 @@ func NewUploadHandler(useCase *uploadfile.UseCase) *createHandler {
 // @Router			/dashboard/files [post]
 func (h *createHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	if err := r.ParseMultipartForm(uploadfile.MaxFileSize); err != nil {
+		infraTrace.RecordError(trace.SpanFromContext(r.Context()), err)
 		rw.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -47,7 +50,7 @@ func (h *createHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response, err := h.useCase.Execute(&uploadfile.Request{
+	response, err := h.useCase.Execute(r.Context(), &uploadfile.Request{
 		Name:       header.Filename,
 		OwnerUUID:  auth.FromContext(r.Context()).UUID,
 		Size:       header.Size,
@@ -57,6 +60,7 @@ func (h *createHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 	switch {
 	case err != nil:
+		infraTrace.RecordError(trace.SpanFromContext(r.Context()), err)
 		rw.WriteHeader(http.StatusInternalServerError)
 	case response != nil && len(response.ValidationErrors) > 0:
 		rw.Header().Add("Content-Type", "application/json")

@@ -1,9 +1,11 @@
 package getlanguage
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/language"
@@ -24,10 +26,10 @@ func TestUseCase_Execute(t *testing.T) {
 			expectedResponse = Response{Code: l.Code, Name: l.Name}
 		)
 
-		languageRepository.On("GetOne", l.Code).Once().Return(l, nil)
+		languageRepository.On("GetOne", mock.Anything, l.Code).Once().Return(l, nil)
 		defer languageRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&languageRepository).Execute(l.Code)
+		response, err := NewUseCase(&languageRepository).Execute(context.Background(), l.Code)
 
 		assert.NoError(t, err)
 		assert.Equal(t, &expectedResponse, response)
@@ -40,10 +42,10 @@ func TestUseCase_Execute(t *testing.T) {
 			languageRepository languages.MockLanguagesRepository
 		)
 
-		languageRepository.On("GetOne", "DE").Once().Return(language.Language{}, domain.ErrNotExists)
+		languageRepository.On("GetOne", mock.Anything, "DE").Once().Return(language.Language{}, domain.ErrNotExists)
 		defer languageRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&languageRepository).Execute("DE")
+		response, err := NewUseCase(&languageRepository).Execute(context.Background(), "DE")
 
 		assert.Nil(t, response)
 		assert.ErrorIs(t, err, domain.ErrNotExists)

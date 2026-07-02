@@ -48,8 +48,8 @@ func NewTokenGenerator(jwt *jwt.JWT, roleRepository role.Repository) *AuthTokenG
 	}
 }
 
-func (t *AuthTokenGenerator) GenerateAccessToken(u *user.User) (string, error) {
-	roles, err := t.roleRepository.GetByUserUUID(u.UUID)
+func (t *AuthTokenGenerator) GenerateAccessToken(ctx context.Context, u *user.User) (string, error) {
+	roles, err := t.roleRepository.GetByUserUUID(ctx, u.UUID)
 	if err != nil {
 		return "", err
 	}
@@ -88,10 +88,10 @@ func (t *AuthTokenGenerator) GenerateAccessToken(u *user.User) (string, error) {
 	b.SetPermissions(permissionNames)
 	b.SetLanguage(u.LanguageCode)
 
-	return t.jwt.Generate(b.Build())
+	return t.jwt.Generate(ctx, b.Build())
 }
 
-func (t *AuthTokenGenerator) GenerateRefreshToken(userUUID string) (string, error) {
+func (t *AuthTokenGenerator) GenerateRefreshToken(ctx context.Context, userUUID string) (string, error) {
 	b := jwt.NewClaimsBuilder()
 	b.SetSubject(userUUID)
 	b.SetNotBefore(time.Now())
@@ -99,10 +99,10 @@ func (t *AuthTokenGenerator) GenerateRefreshToken(userUUID string) (string, erro
 	b.SetIssuedAt(time.Now())
 	b.SetAudience([]string{RefreshToken})
 
-	return t.jwt.Generate(b.Build())
+	return t.jwt.Generate(ctx, b.Build())
 }
 
-func (t *AuthTokenGenerator) GenerateResetPasswordToken(userUUID string) (string, error) {
+func (t *AuthTokenGenerator) GenerateResetPasswordToken(ctx context.Context, userUUID string) (string, error) {
 	b := jwt.NewClaimsBuilder()
 	b.SetSubject(userUUID)
 	b.SetNotBefore(time.Now())
@@ -110,10 +110,10 @@ func (t *AuthTokenGenerator) GenerateResetPasswordToken(userUUID string) (string
 	b.SetIssuedAt(time.Now())
 	b.SetAudience([]string{ResetPasswordToken})
 
-	return t.jwt.Generate(b.Build())
+	return t.jwt.Generate(ctx, b.Build())
 }
 
-func (t *AuthTokenGenerator) GenerateRegistrationToken(identity string) (string, error) {
+func (t *AuthTokenGenerator) GenerateRegistrationToken(ctx context.Context, identity string) (string, error) {
 	b := jwt.NewClaimsBuilder()
 	b.SetSubject(identity)
 	b.SetNotBefore(time.Now())
@@ -121,5 +121,5 @@ func (t *AuthTokenGenerator) GenerateRegistrationToken(identity string) (string,
 	b.SetIssuedAt(time.Now())
 	b.SetAudience([]string{RegistrationToken})
 
-	return t.jwt.Generate(b.Build())
+	return t.jwt.Generate(ctx, b.Build())
 }

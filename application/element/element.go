@@ -1,6 +1,8 @@
 package element
 
 import (
+	"context"
+
 	"github.com/khanzadimahdi/testproject/domain/article"
 	"github.com/khanzadimahdi/testproject/domain/element"
 	"github.com/khanzadimahdi/testproject/domain/element/component"
@@ -37,8 +39,8 @@ func NewRetriever(
 
 // RetrieveByVenues retrieves elements whose (possibly wildcard) venue patterns match any
 // of the given concrete venues.
-func (r *Retriever) RetrieveByVenues(venues []string, languageCode string) ([]Response, error) {
-	elements, err := r.matchingElements(venues)
+func (r *Retriever) RetrieveByVenues(ctx context.Context, venues []string, languageCode string) ([]Response, error) {
+	elements, err := r.matchingElements(ctx, venues)
 	if err != nil {
 		return nil, err
 	}
@@ -57,7 +59,7 @@ func (r *Retriever) RetrieveByVenues(venues []string, languageCode string) ([]Re
 		uuids[i] = items[i].ContentUUID
 	}
 
-	articles, err := r.articleRepository.GetByCorrelationUUIDs(uuids, languageCode)
+	articles, err := r.articleRepository.GetByCorrelationUUIDs(ctx, uuids, languageCode)
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +69,7 @@ func (r *Retriever) RetrieveByVenues(venues []string, languageCode string) ([]Re
 		userUUIDs[i] = articles[i].AuthorUUID
 	}
 
-	users, err := r.userRepository.GetByUUIDs(userUUIDs)
+	users, err := r.userRepository.GetByUUIDs(ctx, userUUIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -77,8 +79,8 @@ func (r *Retriever) RetrieveByVenues(venues []string, languageCode string) ([]Re
 
 // matchingElements loads all elements and keeps those whose venue patterns match any of the
 // given concrete venues.
-func (r *Retriever) matchingElements(venues []string) ([]element.Element, error) {
-	count, err := r.elementRepository.Count()
+func (r *Retriever) matchingElements(ctx context.Context, venues []string) ([]element.Element, error) {
+	count, err := r.elementRepository.Count(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -87,7 +89,7 @@ func (r *Retriever) matchingElements(venues []string) ([]element.Element, error)
 		return nil, nil
 	}
 
-	all, err := r.elementRepository.GetAll(0, count)
+	all, err := r.elementRepository.GetAll(ctx, 0, count)
 	if err != nil {
 		return nil, err
 	}

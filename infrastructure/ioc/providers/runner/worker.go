@@ -3,7 +3,7 @@ package runner
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"time"
@@ -25,6 +25,7 @@ import (
 	taskEvents "github.com/khanzadimahdi/testproject/domain/runner/task/events"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers"
 	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/jetstream/produceConsumer"
+	"github.com/khanzadimahdi/testproject/infrastructure/telemetry/profiler"
 	"github.com/khanzadimahdi/testproject/presentation/http/middleware"
 	workerTaskAPI "github.com/khanzadimahdi/testproject/presentation/http/runner/worker/api/task"
 )
@@ -42,6 +43,8 @@ const (
 func WorkerProviders(name *string) []provider.Provider {
 	return []provider.Provider{
 		newWorkerNameProvider(name),
+		providers.NewOpenTelemetryProvider("runner-worker", *name),
+		providers.NewProfilerProvider("runner-worker"),
 		providers.NewNatsProvider(),
 		providers.NewDockerProvider(),
 		providers.NewTranslationProvider(),
@@ -94,8 +97,6 @@ func NewWorkerProvider() *workerProvider {
 }
 
 func (p *workerProvider) Register(ctx context.Context, c provider.Container) error {
-	log.SetFlags(log.LstdFlags | log.Llongfile)
-
 	return nil
 }
 
@@ -110,9 +111,14 @@ func (p *workerProvider) Boot(ctx context.Context, c provider.Container) error {
 		return err
 	}
 
+	var logger *slog.Logger
+	if err := c.Resolve(&logger, resolve.WithParams("runner-worker-"+nodeName)); err != nil {
+		return err
+	}
+
 	consumerName := fmt.Sprintf(consumerNamePrefix, nodeName)
 
-	pc, err := produceConsumer.NewProduceConsumer(natsConnection, consumerName)
+	pc, err := produceConsumer.NewProduceConsumer(natsConnection, consumerName, logger)
 	if err != nil {
 		return err
 	}
@@ -148,6 +154,11 @@ func workerConsoleCommand(
 		return nil, err
 	}
 
+	var logger *slog.Logger
+	if err := iocContainer.Resolve(&logger, resolve.WithParams("runner-worker-"+nodeName)); err != nil {
+		return nil, err
+	}
+
 	// tasks
 	getTasksUseCase := workergettasks.NewUseCase(containerManager, nodeName)
 	runTaskUseCase := workerruntask.NewUseCase(containerManager, validator, nodeName)
@@ -160,7 +171,34 @@ func workerConsoleCommand(
 	mux.Handle("POST /api/tasks/run", workerTaskAPI.NewRunHandler(runTaskUseCase))
 	mux.Handle("POST /api/tasks/{uuid}/stop", workerTaskAPI.NewStopHandler(stopTaskUseCase))
 
-	handler := middleware.NewRecoveryMiddleware(middleware.NewCORSMiddleware(middleware.NewRateLimitMiddleware(mux, 600, 1*time.Minute)))
+	rateLimited, err := middleware.NewRateLimitMiddleware(mux, 600, 1*time.Minute)
+	if err != nil {
+		return nil, err
+	}
+
+	var tracedProfiler *profiler.TracedProfiler
+	if err := iocContainer.Resolve(&tracedProfiler); err != nil {
+		return nil, err
+	}
+
+	handler := middleware.NewRecoveryMiddleware(
+		middleware.NewRequestIDMiddleware(
+			middleware.NewTelemetryMiddleware(
+				"/runner/worker/"+nodeName,
+				// inside Telemetry so profile samples link to the request span
+				middleware.NewProfilingMiddleware(
+					middleware.NewLogMiddleware(
+						middleware.NewCORSMiddleware(
+							rateLimited,
+						),
+						logger,
+					),
+					tracedProfiler,
+				),
+			),
+		),
+		logger,
+	)
 
 	subscribers := map[string]domain.MessageHandler{
 		taskEvents.TaskScheduledName:         workerruntask.NewTaskScheduled(runTaskUseCase, nodeName),
@@ -184,7 +222,7 @@ func workerConsoleCommand(
 
 	// task heartbeat
 	if err := iocContainer.Bind(func() *workerTaskHeartbeat.UseCase {
-		return workerTaskHeartbeat.NewUseCase(containerManager, asyncProduceConsumer, nodeName)
+		return workerTaskHeartbeat.NewUseCase(containerManager, asyncProduceConsumer, nodeName, logger)
 	}, bind.Singleton()); err != nil {
 		return nil, err
 	}

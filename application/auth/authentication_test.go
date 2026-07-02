@@ -7,6 +7,7 @@ import (
 
 	jwtv5 "github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/domain/role"
 	"github.com/khanzadimahdi/testproject/domain/user"
@@ -71,18 +72,18 @@ func TestGenerateAccessToken(t *testing.T) {
 
 		var roleRepository roles.MockRolesRepository
 
-		roleRepository.On("GetByUserUUID", userUUID).Once().Return(rl, nil)
+		roleRepository.On("GetByUserUUID", mock.Anything, userUUID).Once().Return(rl, nil)
 		defer roleRepository.AssertExpectations(t)
 
 		authTokenGenerator := NewTokenGenerator(j, &roleRepository)
 
 		u := user.User{UUID: userUUID, LanguageCode: "EN"}
 
-		accessToken, err := authTokenGenerator.GenerateAccessToken(&u)
+		accessToken, err := authTokenGenerator.GenerateAccessToken(context.Background(), &u)
 		assert.NoError(t, err)
 		assert.NotEmpty(t, accessToken)
 
-		claims, err := j.Verify(accessToken)
+		claims, err := j.Verify(context.Background(), accessToken)
 		assert.NoError(t, err)
 
 		claimsMap, ok := claims.(jwtv5.MapClaims)
@@ -100,16 +101,16 @@ func TestGenerateAccessToken(t *testing.T) {
 
 		var roleRepository roles.MockRolesRepository
 
-		roleRepository.On("GetByUserUUID", userUUID).Once().Return(rl, nil)
+		roleRepository.On("GetByUserUUID", mock.Anything, userUUID).Once().Return(rl, nil)
 		defer roleRepository.AssertExpectations(t)
 
 		authTokenGenerator := NewTokenGenerator(j, &roleRepository)
 
-		accessToken, err := authTokenGenerator.GenerateAccessToken(&user.User{UUID: userUUID})
+		accessToken, err := authTokenGenerator.GenerateAccessToken(context.Background(), &user.User{UUID: userUUID})
 		assert.NoError(t, err)
 		assert.NotEmpty(t, accessToken)
 
-		claims, err := j.Verify(accessToken)
+		claims, err := j.Verify(context.Background(), accessToken)
 		assert.NoError(t, err)
 
 		claimsMap, ok := claims.(jwtv5.MapClaims)
@@ -125,12 +126,12 @@ func TestGenerateAccessToken(t *testing.T) {
 
 		expectedErr := errors.New("error")
 
-		roleRepository.On("GetByUserUUID", userUUID).Once().Return(nil, expectedErr)
+		roleRepository.On("GetByUserUUID", mock.Anything, userUUID).Once().Return(nil, expectedErr)
 		defer roleRepository.AssertExpectations(t)
 
 		authTokenGenerator := NewTokenGenerator(j, &roleRepository)
 
-		accessToken, err := authTokenGenerator.GenerateAccessToken(&user.User{UUID: userUUID})
+		accessToken, err := authTokenGenerator.GenerateAccessToken(context.Background(), &user.User{UUID: userUUID})
 		assert.ErrorIs(t, err, expectedErr)
 		assert.Empty(t, accessToken)
 	})
@@ -142,7 +143,7 @@ func TestGenerateAccessToken(t *testing.T) {
 
 		authTokenGenerator := NewTokenGenerator(j, &roleRepository)
 
-		refreshToken, err := authTokenGenerator.GenerateRefreshToken(userUUID)
+		refreshToken, err := authTokenGenerator.GenerateRefreshToken(context.Background(), userUUID)
 		assert.NoError(t, err)
 		assert.NotEmpty(t, refreshToken)
 	})
@@ -154,7 +155,7 @@ func TestGenerateAccessToken(t *testing.T) {
 
 		authTokenGenerator := NewTokenGenerator(j, &roleRepository)
 
-		resetPasswordToken, err := authTokenGenerator.GenerateResetPasswordToken(userUUID)
+		resetPasswordToken, err := authTokenGenerator.GenerateResetPasswordToken(context.Background(), userUUID)
 		assert.NoError(t, err)
 		assert.NotEmpty(t, resetPasswordToken)
 	})
@@ -166,7 +167,7 @@ func TestGenerateAccessToken(t *testing.T) {
 
 		authTokenGenerator := NewTokenGenerator(j, &roleRepository)
 
-		resetPasswordToken, err := authTokenGenerator.GenerateResetPasswordToken(userUUID)
+		resetPasswordToken, err := authTokenGenerator.GenerateResetPasswordToken(context.Background(), userUUID)
 		assert.NoError(t, err)
 		assert.NotEmpty(t, resetPasswordToken)
 	})

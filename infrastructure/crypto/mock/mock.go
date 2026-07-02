@@ -1,6 +1,8 @@
 package mock
 
 import (
+	"context"
+
 	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/domain/password"
@@ -15,14 +17,14 @@ var (
 	_ password.EncryptDecrypter = &MockCrypto{}
 )
 
-func (m *MockCrypto) Hash(value, salt []byte) []byte {
-	args := m.Called(value, salt)
+func (m *MockCrypto) Hash(ctx context.Context, value, salt []byte) []byte {
+	args := m.Called(ctx, value, salt)
 
 	return args.Get(0).([]byte)
 }
 
-func (m *MockCrypto) Equal(value, hash, salt []byte) bool {
-	args := m.Called(value, hash, salt)
+func (m *MockCrypto) Equal(ctx context.Context, value, hash, salt []byte) bool {
+	args := m.Called(ctx, value, hash, salt)
 
 	return args.Bool(0)
 }

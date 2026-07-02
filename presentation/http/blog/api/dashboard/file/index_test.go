@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	getfiles "github.com/khanzadimahdi/testproject/application/dashboard/file/getFiles"
@@ -43,8 +44,8 @@ func TestIndexHandler(t *testing.T) {
 			u = user.User{UUID: "user-test-uuid"}
 		)
 
-		filesRepository.On("Count").Once().Return(uint(len(f)), nil)
-		filesRepository.On("GetAll", uint(0), uint(20)).Once().Return(f, nil)
+		filesRepository.On("Count", mock.Anything).Once().Return(uint(len(f)), nil)
+		filesRepository.On("GetAll", mock.Anything, uint(0), uint(20)).Once().Return(f, nil)
 		defer filesRepository.AssertExpectations(t)
 
 		handler := NewIndexHandler(getfiles.NewUseCase(&filesRepository))
@@ -72,8 +73,8 @@ func TestIndexHandler(t *testing.T) {
 			u = user.User{UUID: "user-test-uuid"}
 		)
 
-		filesRepository.On("Count").Once().Return(uint(0), nil)
-		filesRepository.On("GetAll", uint(0), uint(20)).Once().Return(nil, nil)
+		filesRepository.On("Count", mock.Anything).Once().Return(uint(0), nil)
+		filesRepository.On("GetAll", mock.Anything, uint(0), uint(20)).Once().Return(nil, nil)
 		defer filesRepository.AssertExpectations(t)
 
 		handler := NewIndexHandler(getfiles.NewUseCase(&filesRepository))

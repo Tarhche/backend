@@ -3,7 +3,7 @@ package heartbeat
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"log/slog"
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
@@ -12,17 +12,19 @@ import (
 
 type heartbeat struct {
 	replyer domain.Replyer
+	logger  *slog.Logger
 }
 
 var _ domain.MessageHandler = &heartbeat{}
 
-func NewHeartbeatHandler(replyer domain.Replyer) *heartbeat {
+func NewHeartbeatHandler(replyer domain.Replyer, logger *slog.Logger) *heartbeat {
 	return &heartbeat{
 		replyer: replyer,
+		logger:  logger,
 	}
 }
 
-func (h *heartbeat) Handle(data []byte) error {
+func (h *heartbeat) Handle(ctx context.Context, data []byte) error {
 	var heartbeat events.Heartbeat
 	if err := json.Unmarshal(data, &heartbeat); err != nil {
 		return err
@@ -41,10 +43,10 @@ func (h *heartbeat) Handle(data []byte) error {
 	taskState := task.State(heartbeat.State)
 	requestID := heartbeat.Name
 
-	log.Printf("heartbeat: %+v", heartbeat)
+	h.logger.Info("heartbeat received", "heartbeat", heartbeat)
 
 	if task.IsTerminalState(taskState) {
-		if err := h.replyer.Reply(context.Background(), &domain.Reply{
+		if err := h.replyer.Reply(ctx, &domain.Reply{
 			RequestID: requestID,
 			Payload:   payload,
 		}); err != nil {

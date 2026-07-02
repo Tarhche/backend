@@ -1,6 +1,8 @@
 package updateUserComment
 
 import (
+	"context"
+
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/comment"
 )
@@ -20,14 +22,14 @@ func NewUseCase(
 	}
 }
 
-func (uc *UseCase) Execute(request *Request) (*Response, error) {
+func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
 	if validationErrors := uc.validator.Validate(request); len(validationErrors) > 0 {
 		return &Response{
 			ValidationErrors: validationErrors,
 		}, nil
 	}
 
-	c, err := uc.commentRepository.GetOneByAuthorUUID(request.UUID, request.UserUUID)
+	c, err := uc.commentRepository.GetOneByAuthorUUID(ctx, request.UUID, request.UserUUID)
 	if err != nil {
 		return nil, err
 	}
@@ -38,7 +40,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 
 	c.Body = request.Body
 
-	_, err = uc.commentRepository.Save(&c)
+	_, err = uc.commentRepository.Save(ctx, &c)
 
 	return nil, err
 }

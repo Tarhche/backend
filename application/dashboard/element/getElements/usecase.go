@@ -1,6 +1,10 @@
 package deleteelements
 
-import "github.com/khanzadimahdi/testproject/domain/element"
+import (
+	"context"
+
+	"github.com/khanzadimahdi/testproject/domain/element"
+)
 
 const limit = 10
 
@@ -14,8 +18,8 @@ func NewUseCase(elementRepository element.Repository) *UseCase {
 	}
 }
 
-func (uc *UseCase) Execute(request *Request) (*Response, error) {
-	totalElements, err := uc.elementRepository.Count()
+func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
+	totalElements, err := uc.elementRepository.Count(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -36,7 +40,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		totalPages++
 	}
 
-	a, err := uc.elementRepository.GetAll(offset, limit)
+	a, err := uc.elementRepository.GetAll(ctx, offset, limit)
 	if err != nil {
 		return nil, err
 	}

@@ -2,6 +2,7 @@ package auth
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -91,23 +92,23 @@ func TestVerifyHandler(t *testing.T) {
 		requestValidator.On("Validate", &r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
-		userRepository.On("GetOneByIdentity", u.UUID).Once().Return(user.User{}, domain.ErrNotExists)
-		userRepository.On("GetOneByIdentity", r.Username).Once().Return(user.User{}, domain.ErrNotExists)
-		userRepository.On("Save", mock.Anything).Once().Return(u.UUID, nil)
+		userRepository.On("GetOneByIdentity", mock.Anything, u.UUID).Once().Return(user.User{}, domain.ErrNotExists)
+		userRepository.On("GetOneByIdentity", mock.Anything, r.Username).Once().Return(user.User{}, domain.ErrNotExists)
+		userRepository.On("Save", mock.Anything, mock.Anything).Once().Return(u.UUID, nil)
 		defer userRepository.AssertExpectations(t)
 
-		languageResolver.On("Verify", r.LanguageCode).Once().Return(true)
+		languageResolver.On("Verify", mock.Anything, r.LanguageCode).Once().Return(true)
 		defer languageResolver.AssertExpectations(t)
 
-		hasher.On("Hash", []byte(r.Password), mock.AnythingOfType("[]uint8")).Once().Return([]byte("hashed-password"), nil)
+		hasher.On("Hash", mock.Anything, []byte(r.Password), mock.AnythingOfType("[]uint8")).Once().Return([]byte("hashed-password"), nil)
 		defer hasher.AssertExpectations(t)
 
-		configRepository.On("GetLatestRevision").Once().Return(c, nil)
+		configRepository.On("GetLatestRevision", mock.Anything).Once().Return(c, nil)
 		defer configRepository.AssertExpectations(t)
 
-		roleRepository.On("GetByUUIDs", c.UserDefaultRoleUUIDs).Once().Return(roles, nil)
-		roleRepository.On("Save", &expectedRoles[0]).Once().Return(expectedRoles[0].UUID, nil)
-		roleRepository.On("Save", &expectedRoles[1]).Once().Return(expectedRoles[1].UUID, nil)
+		roleRepository.On("GetByUUIDs", mock.Anything, c.UserDefaultRoleUUIDs).Once().Return(roles, nil)
+		roleRepository.On("Save", mock.Anything, &expectedRoles[0]).Once().Return(expectedRoles[0].UUID, nil)
+		roleRepository.On("Save", mock.Anything, &expectedRoles[1]).Once().Return(expectedRoles[1].UUID, nil)
 		defer roleRepository.AssertExpectations(t)
 
 		handler := NewVerifyHandler(
@@ -220,7 +221,7 @@ func TestVerifyHandler(t *testing.T) {
 			}
 		)
 
-		userRepository.On("GetOneByIdentity", u.UUID).Once().Return(user.User{}, errors.New("unexpected error"))
+		userRepository.On("GetOneByIdentity", mock.Anything, u.UUID).Once().Return(user.User{}, errors.New("unexpected error"))
 		defer userRepository.AssertExpectations(t)
 
 		handler := NewVerifyHandler(
@@ -269,7 +270,7 @@ func generateToken(t *testing.T, j *jwt.JWT, u user.User, expiresAt time.Time, a
 	b.SetIssuedAt(time.Now())
 	b.SetAudience([]string{audience})
 
-	token, err := j.Generate(b.Build())
+	token, err := j.Generate(context.Background(), b.Build())
 	assert.NoError(t, err)
 
 	return base64.URLEncoding.EncodeToString([]byte(token))

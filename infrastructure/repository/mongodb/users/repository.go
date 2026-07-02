@@ -36,8 +36,8 @@ func NewRepository(database *mongo.Database) *UsersRepository {
 	}
 }
 
-func (r *UsersRepository) GetAll(offset uint, limit uint) ([]user.User, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *UsersRepository) GetAll(ctx context.Context, offset uint, limit uint) ([]user.User, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	o := int64(offset)
@@ -79,8 +79,8 @@ func (r *UsersRepository) GetAll(offset uint, limit uint) ([]user.User, error) {
 	return items, nil
 }
 
-func (r *UsersRepository) GetByUUIDs(UUIDs []string) ([]user.User, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *UsersRepository) GetByUUIDs(ctx context.Context, UUIDs []string) ([]user.User, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	filter := bson.M{"_id": bson.M{"$in": UUIDs}}
@@ -120,8 +120,8 @@ func (r *UsersRepository) GetByUUIDs(UUIDs []string) ([]user.User, error) {
 	return items, nil
 }
 
-func (r *UsersRepository) GetOne(UUID string) (user.User, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *UsersRepository) GetOne(ctx context.Context, UUID string) (user.User, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	var a UserBson
@@ -148,8 +148,8 @@ func (r *UsersRepository) GetOne(UUID string) (user.User, error) {
 }
 
 // GetOneByIdentity returns a user which its email or username matches given identity
-func (r *UsersRepository) GetOneByIdentity(identity string) (user.User, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *UsersRepository) GetOneByIdentity(ctx context.Context, identity string) (user.User, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	filter := bson.D{
@@ -186,8 +186,8 @@ func (r *UsersRepository) GetOneByIdentity(identity string) (user.User, error) {
 	}, nil
 }
 
-func (r *UsersRepository) Save(a *user.User) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *UsersRepository) Save(ctx context.Context, a *user.User) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	if len(a.UUID) == 0 {
@@ -222,8 +222,8 @@ func (r *UsersRepository) Save(a *user.User) (string, error) {
 	return a.UUID, err
 }
 
-func (r *UsersRepository) Count() (uint, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *UsersRepository) Count(ctx context.Context) (uint, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	c, err := r.collection.CountDocuments(ctx, bson.D{})
@@ -234,8 +234,8 @@ func (r *UsersRepository) Count() (uint, error) {
 	return uint(c), nil
 }
 
-func (r *UsersRepository) Delete(UUID string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *UsersRepository) Delete(ctx context.Context, UUID string) error {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	_, err := r.collection.DeleteOne(ctx, bson.D{{Key: "_id", Value: UUID}})

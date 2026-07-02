@@ -1,6 +1,7 @@
 package updateConfig
 
 import (
+	"context"
 	"errors"
 	"reflect"
 	"testing"
@@ -51,14 +52,14 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		languageRepository.On("Exists", r.DefaultLanguageCode).Once().Return(true)
+		languageRepository.On("Exists", mock2.Anything, r.DefaultLanguageCode).Once().Return(true)
 		defer languageRepository.AssertExpectations(t)
 
-		configRepository.On("GetLatestRevision").Once().Return(loadedConfig, nil)
-		configRepository.On("Save", &savedConfig).Once().Return("new-revision-uuid", nil)
+		configRepository.On("GetLatestRevision", mock2.Anything).Once().Return(loadedConfig, nil)
+		configRepository.On("Save", mock2.Anything, &savedConfig).Once().Return("new-revision-uuid", nil)
 		defer configRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&configRepository, &languageRepository, &validator, &translator).Execute(&r)
+		response, err := NewUseCase(&configRepository, &languageRepository, &validator, &translator).Execute(context.Background(), &r)
 		assert.NoError(t, err)
 		assert.Nil(t, response)
 	})
@@ -84,7 +85,7 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(expectedResponse.ValidationErrors)
 		defer validator.AssertExpectations(t)
 
-		response, err := NewUseCase(&configRepository, &languageRepository, &validator, &translator).Execute(&r)
+		response, err := NewUseCase(&configRepository, &languageRepository, &validator, &translator).Execute(context.Background(), &r)
 
 		languageRepository.AssertNotCalled(t, "Exists")
 		configRepository.AssertNotCalled(t, "GetLatestRevision")
@@ -125,10 +126,10 @@ func TestUseCase_Execute(t *testing.T) {
 		).Once().Return(expectedResponse.ValidationErrors["default_language_code"])
 		defer translator.AssertExpectations(t)
 
-		languageRepository.On("Exists", r.DefaultLanguageCode).Once().Return(false)
+		languageRepository.On("Exists", mock2.Anything, r.DefaultLanguageCode).Once().Return(false)
 		defer languageRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&configRepository, &languageRepository, &validator, &translator).Execute(&r)
+		response, err := NewUseCase(&configRepository, &languageRepository, &validator, &translator).Execute(context.Background(), &r)
 
 		configRepository.AssertNotCalled(t, "GetLatestRevision")
 		configRepository.AssertNotCalled(t, "Save")
@@ -157,13 +158,13 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		languageRepository.On("Exists", r.DefaultLanguageCode).Once().Return(true)
+		languageRepository.On("Exists", mock2.Anything, r.DefaultLanguageCode).Once().Return(true)
 		defer languageRepository.AssertExpectations(t)
 
-		configRepository.On("GetLatestRevision").Once().Return(config.Config{}, expectedErr)
+		configRepository.On("GetLatestRevision", mock2.Anything).Once().Return(config.Config{}, expectedErr)
 		defer configRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&configRepository, &languageRepository, &validator, &translator).Execute(&r)
+		response, err := NewUseCase(&configRepository, &languageRepository, &validator, &translator).Execute(context.Background(), &r)
 
 		configRepository.AssertNotCalled(t, "Save")
 
@@ -202,14 +203,14 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		languageRepository.On("Exists", r.DefaultLanguageCode).Once().Return(true)
+		languageRepository.On("Exists", mock2.Anything, r.DefaultLanguageCode).Once().Return(true)
 		defer languageRepository.AssertExpectations(t)
 
-		configRepository.On("GetLatestRevision").Once().Return(loadedConfig, nil)
-		configRepository.On("Save", &savedConfig).Once().Return("", expectedErr)
+		configRepository.On("GetLatestRevision", mock2.Anything).Once().Return(loadedConfig, nil)
+		configRepository.On("Save", mock2.Anything, &savedConfig).Once().Return("", expectedErr)
 		defer configRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&configRepository, &languageRepository, &validator, &translator).Execute(&r)
+		response, err := NewUseCase(&configRepository, &languageRepository, &validator, &translator).Execute(context.Background(), &r)
 
 		assert.ErrorIs(t, err, expectedErr)
 		assert.Nil(t, response)

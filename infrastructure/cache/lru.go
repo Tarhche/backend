@@ -1,6 +1,8 @@
 package cache
 
 import (
+	"context"
+
 	lru "github.com/hashicorp/golang-lru/v2"
 	"github.com/khanzadimahdi/testproject/domain"
 )
@@ -23,13 +25,13 @@ func NewInMemoryLRU(size int) (*InMemoryLRU, error) {
 	return &InMemoryLRU{cache: c}, nil
 }
 
-func (l *InMemoryLRU) Set(key string, value []byte) error {
+func (l *InMemoryLRU) Set(ctx context.Context, key string, value []byte) error {
 	l.cache.Add(key, value)
 
 	return nil
 }
 
-func (l *InMemoryLRU) Get(key string) ([]byte, error) {
+func (l *InMemoryLRU) Get(ctx context.Context, key string) ([]byte, error) {
 	value, ok := l.cache.Get(key)
 	if !ok {
 		return nil, domain.ErrNotExists
@@ -38,7 +40,7 @@ func (l *InMemoryLRU) Get(key string) ([]byte, error) {
 	return value, nil
 }
 
-func (l *InMemoryLRU) Purge(key string) error {
+func (l *InMemoryLRU) Purge(ctx context.Context, key string) error {
 	l.cache.Remove(key)
 
 	return nil

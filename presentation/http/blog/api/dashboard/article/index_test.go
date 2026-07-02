@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	getarticles "github.com/khanzadimahdi/testproject/application/dashboard/article/getArticles"
 	"github.com/khanzadimahdi/testproject/domain/article"
@@ -45,15 +46,15 @@ func TestIndexHandler(t *testing.T) {
 			}
 		)
 
-		articleRepository.On("CountByCorrelation").Once().Return(uint(len(correlationUUIDs)), nil)
-		articleRepository.On("GetCorrelationUUIDs", uint(0), uint(20)).Once().Return(correlationUUIDs, nil)
-		articleRepository.On("GetByCorrelationUUIDs", correlationUUIDs, "").Once().Return(a, nil)
+		articleRepository.On("CountByCorrelation", mock.Anything).Once().Return(uint(len(correlationUUIDs)), nil)
+		articleRepository.On("GetCorrelationUUIDs", mock.Anything, uint(0), uint(20)).Once().Return(correlationUUIDs, nil)
+		articleRepository.On("GetByCorrelationUUIDs", mock.Anything, correlationUUIDs, "").Once().Return(a, nil)
 		defer articleRepository.AssertExpectations(t)
 
-		userRepository.On("GetByUUIDs", []string{"author-1", "author-1", "author-2"}).Once().Return(u, nil)
+		userRepository.On("GetByUUIDs", mock.Anything, []string{"author-1", "author-1", "author-2"}).Once().Return(u, nil)
 		defer userRepository.AssertExpectations(t)
 
-		languageRepository.On("GetByCodes", []string{"EN", "FA", "EN"}).Once().Return(l, nil)
+		languageRepository.On("GetByCodes", mock.Anything, []string{"EN", "FA", "EN"}).Once().Return(l, nil)
 		defer languageRepository.AssertExpectations(t)
 
 		handler := NewIndexHandler(getarticles.NewUseCase(&articleRepository, &userRepository, &languageRepository))
@@ -80,8 +81,8 @@ func TestIndexHandler(t *testing.T) {
 			languageRepository languages.MockLanguagesRepository
 		)
 
-		articleRepository.On("CountByCorrelation").Once().Return(uint(0), nil)
-		articleRepository.On("GetCorrelationUUIDs", uint(0), uint(20)).Once().Return([]string{}, nil)
+		articleRepository.On("CountByCorrelation", mock.Anything).Once().Return(uint(0), nil)
+		articleRepository.On("GetCorrelationUUIDs", mock.Anything, uint(0), uint(20)).Once().Return([]string{}, nil)
 		defer articleRepository.AssertExpectations(t)
 
 		handler := NewIndexHandler(getarticles.NewUseCase(&articleRepository, &userRepository, &languageRepository))

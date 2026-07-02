@@ -1,6 +1,8 @@
 package runTask
 
 import (
+	"context"
+
 	"github.com/gofrs/uuid/v5"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/runner/container"
@@ -27,7 +29,7 @@ func NewUseCase(
 }
 
 // Execute executes the use case
-func (uc *UseCase) Execute(request *Request) (*Response, error) {
+func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
 	if validationErrors := uc.validator.Validate(request); len(validationErrors) > 0 {
 		return &Response{
 			ValidationErrors: validationErrors,
@@ -59,12 +61,12 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		},
 	}
 
-	containerID, err := uc.containerManager.Create(c)
+	containerID, err := uc.containerManager.Create(ctx, c)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := uc.containerManager.Start(containerID); err != nil {
+	if err := uc.containerManager.Start(ctx, containerID); err != nil {
 		return nil, err
 	}
 

@@ -1,6 +1,8 @@
 package getprofile
 
 import (
+	"context"
+
 	"github.com/khanzadimahdi/testproject/domain/user"
 )
 
@@ -14,8 +16,8 @@ func NewUseCase(userRepository user.Repository) *UseCase {
 	}
 }
 
-func (uc *UseCase) Execute(UUID string) (*Response, error) {
-	u, err := uc.userRepository.GetOne(UUID)
+func (uc *UseCase) Execute(ctx context.Context, UUID string) (*Response, error) {
+	u, err := uc.userRepository.GetOne(ctx, UUID)
 	if err != nil {
 		return nil, err
 	}

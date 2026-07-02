@@ -55,10 +55,10 @@ func TestUseCase_Execute(t *testing.T) {
 			return f.Name == r.Name && f.Size == r.Size && f.OwnerUUID == r.OwnerUUID && f.MimeType == r.MimeType && filepath.Ext(f.Name) == filepath.Ext(f.StoredName)
 		})
 
-		filesRepository.On("Save", matchingFile).Once().Return(fileUUID, nil)
+		filesRepository.On("Save", mock.Anything, matchingFile).Once().Return(fileUUID, nil)
 		defer filesRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&filesRepository, &storage, &validator).Execute(&r)
+		response, err := NewUseCase(&filesRepository, &storage, &validator).Execute(context.Background(), &r)
 
 		assert.NoError(t, err)
 		assert.Equal(t, &expectedResponse, response)
@@ -86,7 +86,7 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(expectedResponse.ValidationErrors)
 		defer validator.AssertExpectations(t)
 
-		response, err := NewUseCase(&filesRepository, &storage, &validator).Execute(&r)
+		response, err := NewUseCase(&filesRepository, &storage, &validator).Execute(context.Background(), &r)
 
 		filesRepository.AssertNotCalled(t, "Save")
 		storage.AssertNotCalled(t, "Store")
@@ -124,7 +124,7 @@ func TestUseCase_Execute(t *testing.T) {
 		}), r.FileReader, r.Size).Once().Return(expectedErr)
 		defer storage.AssertExpectations(t)
 
-		response, err := NewUseCase(&filesRepository, &storage, &validator).Execute(&r)
+		response, err := NewUseCase(&filesRepository, &storage, &validator).Execute(context.Background(), &r)
 
 		filesRepository.AssertNotCalled(t, "Save")
 
@@ -165,10 +165,10 @@ func TestUseCase_Execute(t *testing.T) {
 			return f.Name == r.Name && f.Size == r.Size && f.OwnerUUID == r.OwnerUUID && f.MimeType == r.MimeType && filepath.Ext(f.Name) == filepath.Ext(f.StoredName)
 		})
 
-		filesRepository.On("Save", matchingFile).Once().Return("", expectedErr)
+		filesRepository.On("Save", mock.Anything, matchingFile).Once().Return("", expectedErr)
 		defer filesRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&filesRepository, &storage, &validator).Execute(&r)
+		response, err := NewUseCase(&filesRepository, &storage, &validator).Execute(context.Background(), &r)
 
 		assert.ErrorIs(t, err, expectedErr)
 		assert.Nil(t, response)

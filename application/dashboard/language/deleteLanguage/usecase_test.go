@@ -1,10 +1,12 @@
 package deletelanguage
 
 import (
+	"context"
 	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/languages"
 )
@@ -21,10 +23,10 @@ func TestUseCase_Execute(t *testing.T) {
 			r = Request{Code: "EN"}
 		)
 
-		languageRepository.On("Delete", r.Code).Once().Return(nil)
+		languageRepository.On("Delete", mock.Anything, r.Code).Once().Return(nil)
 		defer languageRepository.AssertExpectations(t)
 
-		err := NewUseCase(&languageRepository).Execute(&r)
+		err := NewUseCase(&languageRepository).Execute(context.Background(), &r)
 
 		assert.NoError(t, err)
 	})
@@ -39,10 +41,10 @@ func TestUseCase_Execute(t *testing.T) {
 			expectedError = errors.New("language deletion failed")
 		)
 
-		languageRepository.On("Delete", r.Code).Once().Return(expectedError)
+		languageRepository.On("Delete", mock.Anything, r.Code).Once().Return(expectedError)
 		defer languageRepository.AssertExpectations(t)
 
-		err := NewUseCase(&languageRepository).Execute(&r)
+		err := NewUseCase(&languageRepository).Execute(context.Background(), &r)
 
 		assert.ErrorIs(t, err, expectedError)
 	})

@@ -20,7 +20,7 @@ func TestBus(t *testing.T) {
 	command := &FakeEvent{Payload: payload}
 
 	var counter1 int
-	handler1 := func(payload []byte) error {
+	handler1 := func(ctx context.Context, payload []byte) error {
 		counter1++
 
 		if !bytes.Equal(payload, command.Payload) {
@@ -31,7 +31,7 @@ func TestBus(t *testing.T) {
 	}
 
 	var counter2 int
-	handler2 := func(payload []byte) error {
+	handler2 := func(ctx context.Context, payload []byte) error {
 		counter2++
 
 		if !bytes.Equal(payload, command.Payload) {

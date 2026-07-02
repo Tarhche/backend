@@ -1,6 +1,8 @@
 package deleteUserComment
 
 import (
+	"context"
+
 	"github.com/khanzadimahdi/testproject/domain/comment"
 )
 
@@ -14,6 +16,6 @@ func NewUseCase(commentRepository comment.Repository) *UseCase {
 	}
 }
 
-func (uc *UseCase) Execute(request *Request) error {
-	return uc.commentRepository.DeleteByAuthorUUID(request.CommentUUID, request.UserUUID)
+func (uc *UseCase) Execute(ctx context.Context, request *Request) error {
+	return uc.commentRepository.DeleteByAuthorUUID(ctx, request.CommentUUID, request.UserUUID)
 }

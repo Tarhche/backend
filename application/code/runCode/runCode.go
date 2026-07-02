@@ -3,7 +3,7 @@ package runCode
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"log/slog"
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/runner/task/events"
@@ -22,6 +22,7 @@ type runCode struct {
 	validator domain.Validator
 	producer  domain.Producer
 	response  domain.Replyer
+	logger    *slog.Logger
 }
 
 var _ domain.MessageHandler = &runCode{}
@@ -30,15 +31,17 @@ func NewRunCodeHandler(
 	validator domain.Validator,
 	producer domain.Producer,
 	replyer domain.Replyer,
+	logger *slog.Logger,
 ) *runCode {
 	return &runCode{
 		validator: validator,
 		producer:  producer,
 		response:  replyer,
+		logger:    logger,
 	}
 }
 
-func (h *runCode) Handle(data []byte) error {
+func (h *runCode) Handle(ctx context.Context, data []byte) error {
 	var request Request
 	if err := json.Unmarshal(data, &request); err != nil {
 		response := &Response{
@@ -52,13 +55,13 @@ func (h *runCode) Handle(data []byte) error {
 			return err
 		}
 
-		return h.response.Reply(context.Background(), &domain.Reply{
+		return h.response.Reply(ctx, &domain.Reply{
 			RequestID: request.ID,
 			Payload:   payload,
 		})
 	}
 
-	log.Printf("request: %+v", request)
+	h.logger.Info("request received", "request", request)
 
 	if validationErrors := h.validator.Validate(&request); len(validationErrors) > 0 {
 		response := &Response{
@@ -70,9 +73,9 @@ func (h *runCode) Handle(data []byte) error {
 			return err
 		}
 
-		log.Printf("validation errors: %+v", validationErrors)
+		h.logger.Warn("validation errors", "validationErrors", validationErrors)
 
-		return h.response.Reply(context.Background(), &domain.Reply{
+		return h.response.Reply(ctx, &domain.Reply{
 			RequestID: request.ID,
 			Payload:   payload,
 		})
@@ -91,12 +94,12 @@ func (h *runCode) Handle(data []byte) error {
 		OwnerUUID: CodeRunnerOwnerUUID,
 	}
 
-	log.Printf("event: %+v", event)
+	h.logger.Info("event produced", "event", event)
 
 	payload, err := json.Marshal(event)
 	if err != nil {
 		return err
 	}
 
-	return h.producer.Produce(context.Background(), events.TaskRunRequestedName, payload)
+	return h.producer.Produce(ctx, events.TaskRunRequestedName, payload)
 }

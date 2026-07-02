@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/application/dashboard/bookmark/getUserBookmarks"
@@ -72,8 +73,8 @@ func TestIndexUserHandler(t *testing.T) {
 		requestValidator.On("Validate", &r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
-		bookmarkRepository.On("CountByOwnerUUID", r.OwnerUUID).Once().Return(uint(len(b)), nil)
-		bookmarkRepository.On("GetAllByOwnerUUID", r.OwnerUUID, uint(0), uint(10)).Once().Return(b, nil)
+		bookmarkRepository.On("CountByOwnerUUID", mock.Anything, r.OwnerUUID).Once().Return(uint(len(b)), nil)
+		bookmarkRepository.On("GetAllByOwnerUUID", mock.Anything, r.OwnerUUID, uint(0), uint(10)).Once().Return(b, nil)
 		defer bookmarkRepository.AssertExpectations(t)
 
 		handler := NewIndexUserBookmarksHandler(getUserBookmarks.NewUseCase(&bookmarkRepository, &requestValidator))
@@ -112,8 +113,8 @@ func TestIndexUserHandler(t *testing.T) {
 		requestValidator.On("Validate", &r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
-		bookmarkRepository.On("CountByOwnerUUID", r.OwnerUUID).Once().Return(uint(0), nil)
-		bookmarkRepository.On("GetAllByOwnerUUID", r.OwnerUUID, uint(0), uint(10)).Once().Return(nil, nil)
+		bookmarkRepository.On("CountByOwnerUUID", mock.Anything, r.OwnerUUID).Once().Return(uint(0), nil)
+		bookmarkRepository.On("GetAllByOwnerUUID", mock.Anything, r.OwnerUUID, uint(0), uint(10)).Once().Return(nil, nil)
 		defer bookmarkRepository.AssertExpectations(t)
 
 		handler := NewIndexUserBookmarksHandler(getUserBookmarks.NewUseCase(&bookmarkRepository, &requestValidator))

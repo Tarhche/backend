@@ -2,8 +2,9 @@ package getTask
 
 import (
 	"bytes"
+	"context"
 	"errors"
-	"log"
+	"log/slog"
 
 	"github.com/khanzadimahdi/testproject/domain/runner/container"
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
@@ -11,16 +12,18 @@ import (
 
 type UseCase struct {
 	containerManager container.Manager
+	logger           *slog.Logger
 }
 
-func NewUseCase(containerManager container.Manager) *UseCase {
+func NewUseCase(containerManager container.Manager, logger *slog.Logger) *UseCase {
 	return &UseCase{
 		containerManager: containerManager,
+		logger:           logger,
 	}
 }
 
-func (uc *UseCase) Execute(uuid string) (*Response, error) {
-	containers, err := uc.containerManager.GetByLabel(container.TaskUUIDLabelKey, uuid)
+func (uc *UseCase) Execute(ctx context.Context, uuid string) (*Response, error) {
+	containers, err := uc.containerManager.GetByLabel(ctx, container.TaskUUIDLabelKey, uuid)
 	if err != nil {
 		return nil, err
 	}
@@ -32,8 +35,8 @@ func (uc *UseCase) Execute(uuid string) (*Response, error) {
 	c := containers[len(containers)-1]
 
 	var logsBuffer bytes.Buffer
-	if err := uc.containerManager.Logs(c.ID, &logsBuffer); err != nil {
-		log.Println(err) // there are some cases that the container is not started yet and we can't get the logs
+	if err := uc.containerManager.Logs(ctx, c.ID, &logsBuffer); err != nil {
+		uc.logger.Warn("failed to fetch container logs", "error", err) // there are some cases that the container is not started yet and we can't get the logs
 	}
 
 	var logs []byte

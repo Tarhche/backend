@@ -1,11 +1,13 @@
 package getelement
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/domain/element"
 	"github.com/khanzadimahdi/testproject/domain/element/component"
@@ -36,10 +38,10 @@ func TestUseCase_Execute(t *testing.T) {
 		mockComponent.On("Type").Return(component.ComponentTypeMock)
 		defer mockComponent.AssertExpectations(t)
 
-		elementRepository.On("GetOne", a.UUID).Return(a, nil)
+		elementRepository.On("GetOne", mock.Anything, a.UUID).Return(a, nil)
 		defer elementRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&elementRepository).Execute(a.UUID)
+		response, err := NewUseCase(&elementRepository).Execute(context.Background(), a.UUID)
 
 		assert.NoError(t, err)
 		assert.NotNil(t, response)
@@ -55,10 +57,10 @@ func TestUseCase_Execute(t *testing.T) {
 			expectedError = errors.New("error")
 		)
 
-		elementRepository.On("GetOne", elementUUID).Once().Return(element.Element{}, expectedError)
+		elementRepository.On("GetOne", mock.Anything, elementUUID).Once().Return(element.Element{}, expectedError)
 		defer elementRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&elementRepository).Execute(elementUUID)
+		response, err := NewUseCase(&elementRepository).Execute(context.Background(), elementUUID)
 
 		assert.ErrorIs(t, err, expectedError)
 		assert.Nil(t, response)

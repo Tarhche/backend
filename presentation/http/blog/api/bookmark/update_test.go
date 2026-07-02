@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/application/bookmark/updateBookmark"
@@ -43,7 +44,7 @@ func TestUpdateHandler(t *testing.T) {
 			OwnerUUID:    u.UUID,
 		}
 
-		bookmarkRepository.On("DeleteByOwnerUUID", b.OwnerUUID, b.ObjectType, b.ObjectUUID, b.LanguageCode).Once().Return(nil)
+		bookmarkRepository.On("DeleteByOwnerUUID", mock.Anything, b.OwnerUUID, b.ObjectType, b.ObjectUUID, b.LanguageCode).Once().Return(nil)
 		defer bookmarkRepository.AssertExpectations(t)
 
 		r := updateBookmark.Request{
@@ -131,7 +132,7 @@ func TestUpdateHandler(t *testing.T) {
 			OwnerUUID:    u.UUID,
 		}
 
-		bookmarkRepository.On("DeleteByOwnerUUID", b.OwnerUUID, b.ObjectType, b.ObjectUUID, b.LanguageCode).Once().Return(errors.New("something wrong has happened"))
+		bookmarkRepository.On("DeleteByOwnerUUID", mock.Anything, b.OwnerUUID, b.ObjectType, b.ObjectUUID, b.LanguageCode).Once().Return(errors.New("something wrong has happened"))
 		defer bookmarkRepository.AssertExpectations(t)
 
 		r := updateBookmark.Request{

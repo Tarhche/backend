@@ -1,6 +1,8 @@
 package deleterole
 
 import (
+	"context"
+
 	"github.com/khanzadimahdi/testproject/domain/role"
 )
 
@@ -14,6 +16,6 @@ func NewUseCase(roleRepository role.Repository) *UseCase {
 	}
 }
 
-func (uc *UseCase) Execute(request *Request) error {
-	return uc.roleRepository.Delete(request.RoleUUID)
+func (uc *UseCase) Execute(ctx context.Context, request *Request) error {
+	return uc.roleRepository.Delete(ctx, request.RoleUUID)
 }

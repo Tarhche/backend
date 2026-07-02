@@ -1,6 +1,8 @@
 package createarticle
 
 import (
+	"context"
+
 	"github.com/gofrs/uuid/v5"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/article"
@@ -29,14 +31,14 @@ func NewUseCase(
 	}
 }
 
-func (uc *UseCase) Execute(request *Request) (*Response, error) {
+func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
 	if validationErrors := uc.validator.Validate(request); len(validationErrors) > 0 {
 		return &Response{
 			ValidationErrors: validationErrors,
 		}, nil
 	}
 
-	if !uc.languageRepository.Exists(request.LanguageCode) {
+	if !uc.languageRepository.Exists(ctx, request.LanguageCode) {
 		return &Response{
 			ValidationErrors: domain.ValidationErrors{
 				"language_code": uc.translator.Translate("invalid_value"),
@@ -45,7 +47,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 	}
 
 	if len(request.CorrelationUUID) > 0 {
-		exist, err := uc.articleRepository.CorrelationExist(request.CorrelationUUID)
+		exist, err := uc.articleRepository.CorrelationExist(ctx, request.CorrelationUUID)
 		if err != nil {
 			return nil, err
 		}
@@ -81,7 +83,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		CorrelationUUID: request.CorrelationUUID,
 	}
 
-	_, err := uc.articleRepository.Save(&a)
+	_, err := uc.articleRepository.Save(ctx, &a)
 	if err != nil {
 		return nil, err
 	}

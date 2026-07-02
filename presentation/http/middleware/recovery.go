@@ -1,21 +1,23 @@
 package middleware
 
 import (
-	"fmt"
+	"log/slog"
 	"net/http"
 	"runtime"
 )
 
 type Recovery struct {
-	next http.Handler
+	next   http.Handler
+	logger *slog.Logger
 }
 
 // Ensure Recovery implements the http.Handler interface
 var _ http.Handler = &Recovery{}
 
-func NewRecoveryMiddleware(next http.Handler) *Recovery {
+func NewRecoveryMiddleware(next http.Handler, logger *slog.Logger) *Recovery {
 	return &Recovery{
-		next: next,
+		next:   next,
+		logger: logger,
 	}
 }
 
@@ -31,7 +33,7 @@ func (r *Recovery) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			n := runtime.Stack(buf, false)
 			buf = buf[:n]
 
-			fmt.Printf("panic recovered: %v\n %s", err, buf)
+			r.logger.ErrorContext(req.Context(), "panic recovered", slog.Any("error", err), slog.String("stack", string(buf)))
 			w.WriteHeader(500)
 
 			_, _ = w.Write([]byte{})

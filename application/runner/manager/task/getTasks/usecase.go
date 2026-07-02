@@ -1,6 +1,8 @@
 package gettasks
 
 import (
+	"context"
+
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
 )
 
@@ -16,8 +18,8 @@ func NewUseCase(taskRepository task.Repository) *UseCase {
 	}
 }
 
-func (uc *UseCase) Execute(request *Request) (*Response, error) {
-	totalTasks, err := uc.taskRepository.Count()
+func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
+	totalTasks, err := uc.taskRepository.Count(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -38,7 +40,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		totalPages++
 	}
 
-	tasks, err := uc.taskRepository.GetAll(offset, limit)
+	tasks, err := uc.taskRepository.GetAll(ctx, offset, limit)
 	if err != nil {
 		return nil, err
 	}

@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"hash/fnv"
 	"net/http"
@@ -38,11 +39,11 @@ func (c *Cache) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	cacheKey := generateCacheKey(r)
 	cachedResponse := response{Headers: make(http.Header)}
 
-	cachedValue, err := c.cache.Get(cacheKey)
+	cachedValue, err := c.cache.Get(r.Context(), cacheKey)
 	if err != nil {
 		c.next.ServeHTTP(newCacheWriter(&cachedResponse), r)
 
-		_ = c.persistCache(cacheKey, &cachedResponse)
+		_ = c.persistCache(r.Context(), cacheKey, &cachedResponse)
 
 		c.writeResponse(rw, &cachedResponse)
 
@@ -60,7 +61,7 @@ func (c *Cache) canBeCached(r *http.Request) bool {
 	return r.Method == http.MethodGet
 }
 
-func (c *Cache) persistCache(cacheKey string, cachedResponse *response) error {
+func (c *Cache) persistCache(ctx context.Context, cacheKey string, cachedResponse *response) error {
 	var buffer bytes.Buffer
 
 	err := json.NewEncoder(&buffer).Encode(&cachedResponse)
@@ -68,7 +69,7 @@ func (c *Cache) persistCache(cacheKey string, cachedResponse *response) error {
 		return err
 	}
 
-	return c.cache.Set(cacheKey, buffer.Bytes())
+	return c.cache.Set(ctx, cacheKey, buffer.Bytes())
 }
 
 func (c *Cache) writeResponse(rw http.ResponseWriter, cachedResponse *response) {

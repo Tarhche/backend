@@ -77,18 +77,18 @@ func TestIndexHandler(t *testing.T) {
 		requestValidator.On("Validate", r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
-		languageResolver.On("DefaultCode").Once().Return("EN", nil)
-		languageResolver.On("Resolve", "EN").Once().Return(language.Language{Code: "EN", Name: "English"}, nil)
+		languageResolver.On("DefaultCode", mock.Anything).Once().Return("EN", nil)
+		languageResolver.On("Resolve", mock.Anything, "EN").Once().Return(language.Language{Code: "EN", Name: "English"}, nil)
 		defer languageResolver.AssertExpectations(t)
 
-		userRepository.On("GetOneByIdentity", testUsername).Once().Return(u, nil)
+		userRepository.On("GetOneByIdentity", mock.Anything, testUsername).Once().Return(u, nil)
 		defer userRepository.AssertExpectations(t)
 
-		articlesRepository.On("CountPublishedByAuthor", testAuthorUUID, "EN").Once().Return(uint(len(fetched)), nil)
-		articlesRepository.On("GetPublishedByAuthor", testAuthorUUID, "EN", uint(0), uint(10)).Once().Return(fetched, nil)
-		elementsRepository.On("Count").Once().Return(uint(0), nil)
-		articlesRepository.On("GetPublishedLanguageCodes", mock.Anything).Return([]string{}, nil)
-		languagesRepository.On("GetByCodes", []string{}).Return([]language.Language{}, nil)
+		articlesRepository.On("CountPublishedByAuthor", mock.Anything, testAuthorUUID, "EN").Once().Return(uint(len(fetched)), nil)
+		articlesRepository.On("GetPublishedByAuthor", mock.Anything, testAuthorUUID, "EN", uint(0), uint(10)).Once().Return(fetched, nil)
+		elementsRepository.On("Count", mock.Anything).Once().Return(uint(0), nil)
+		articlesRepository.On("GetPublishedLanguageCodes", mock.Anything, mock.Anything).Return([]string{}, nil)
+		languagesRepository.On("GetByCodes", mock.Anything, []string{}).Return([]language.Language{}, nil)
 		defer articlesRepository.AssertExpectations(t)
 
 		useCase := getArticlesByAuthor.NewUseCase(&articlesRepository, &userRepository, &languagesRepository, &languageResolver, element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository, matcher.New()), &requestValidator)
@@ -131,17 +131,17 @@ func TestIndexHandler(t *testing.T) {
 		requestValidator.On("Validate", r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
-		languageResolver.On("DefaultCode").Once().Return("EN", nil)
-		languageResolver.On("Resolve", "EN").Once().Return(language.Language{Code: "EN", Name: "English"}, nil)
+		languageResolver.On("DefaultCode", mock.Anything).Once().Return("EN", nil)
+		languageResolver.On("Resolve", mock.Anything, "EN").Once().Return(language.Language{Code: "EN", Name: "English"}, nil)
 		defer languageResolver.AssertExpectations(t)
 
-		userRepository.On("GetOne", testAuthorUUID).Once().Return(u, nil)
+		userRepository.On("GetOne", mock.Anything, testAuthorUUID).Once().Return(u, nil)
 		userRepository.AssertNotCalled(t, "GetOneByIdentity")
 		defer userRepository.AssertExpectations(t)
 
-		articlesRepository.On("CountPublishedByAuthor", testAuthorUUID, "EN").Once().Return(uint(0), nil)
-		articlesRepository.On("GetPublishedByAuthor", testAuthorUUID, "EN", uint(0), uint(10)).Once().Return(nil, nil)
-		elementsRepository.On("Count").Once().Return(uint(0), nil)
+		articlesRepository.On("CountPublishedByAuthor", mock.Anything, testAuthorUUID, "EN").Once().Return(uint(0), nil)
+		articlesRepository.On("GetPublishedByAuthor", mock.Anything, testAuthorUUID, "EN", uint(0), uint(10)).Once().Return(nil, nil)
+		elementsRepository.On("Count", mock.Anything).Once().Return(uint(0), nil)
 		defer articlesRepository.AssertExpectations(t)
 
 		useCase := getArticlesByAuthor.NewUseCase(&articlesRepository, &userRepository, &languagesRepository, &languageResolver, element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository, matcher.New()), &requestValidator)
@@ -178,11 +178,11 @@ func TestIndexHandler(t *testing.T) {
 		requestValidator.On("Validate", r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
-		languageResolver.On("DefaultCode").Once().Return("EN", nil)
-		languageResolver.On("Resolve", "EN").Once().Return(language.Language{Code: "EN", Name: "English"}, nil)
+		languageResolver.On("DefaultCode", mock.Anything).Once().Return("EN", nil)
+		languageResolver.On("Resolve", mock.Anything, "EN").Once().Return(language.Language{Code: "EN", Name: "English"}, nil)
 		defer languageResolver.AssertExpectations(t)
 
-		userRepository.On("GetOneByIdentity", "ghost").Once().Return(user.User{}, domain.ErrNotExists)
+		userRepository.On("GetOneByIdentity", mock.Anything, "ghost").Once().Return(user.User{}, domain.ErrNotExists)
 		defer userRepository.AssertExpectations(t)
 
 		useCase := getArticlesByAuthor.NewUseCase(&articlesRepository, &userRepository, &languagesRepository, &languageResolver, element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository, matcher.New()), &requestValidator)
@@ -222,11 +222,11 @@ func TestIndexHandler(t *testing.T) {
 		requestValidator.On("Validate", r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
-		languageResolver.On("DefaultCode").Once().Return("EN", nil)
-		languageResolver.On("Resolve", "EN").Once().Return(language.Language{Code: "EN", Name: "English"}, nil)
+		languageResolver.On("DefaultCode", mock.Anything).Once().Return("EN", nil)
+		languageResolver.On("Resolve", mock.Anything, "EN").Once().Return(language.Language{Code: "EN", Name: "English"}, nil)
 		defer languageResolver.AssertExpectations(t)
 
-		userRepository.On("GetOneByIdentity", testUsername).Once().Return(user.User{}, errors.New("boom"))
+		userRepository.On("GetOneByIdentity", mock.Anything, testUsername).Once().Return(user.User{}, errors.New("boom"))
 		defer userRepository.AssertExpectations(t)
 
 		useCase := getArticlesByAuthor.NewUseCase(&articlesRepository, &userRepository, &languagesRepository, &languageResolver, element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository, matcher.New()), &requestValidator)

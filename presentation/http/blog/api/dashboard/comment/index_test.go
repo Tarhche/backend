@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/application/dashboard/comment/getComments"
@@ -66,11 +67,11 @@ func TestIndexHandler(t *testing.T) {
 			}
 		)
 
-		commentRepository.On("Count").Once().Return(uint(len(a)), nil)
-		commentRepository.On("GetAll", uint(0), uint(10)).Return(a, nil)
+		commentRepository.On("Count", mock.Anything).Once().Return(uint(len(a)), nil)
+		commentRepository.On("GetAll", mock.Anything, uint(0), uint(10)).Return(a, nil)
 		defer commentRepository.AssertExpectations(t)
 
-		userRepository.On("GetByUUIDs", userUUIDs).Once().Return(users, nil)
+		userRepository.On("GetByUUIDs", mock.Anything, userUUIDs).Once().Return(users, nil)
 		defer userRepository.AssertExpectations(t)
 
 		handler := NewIndexHandler(getComments.NewUseCase(&commentRepository, &userRepository))
@@ -106,11 +107,11 @@ func TestIndexHandler(t *testing.T) {
 			}
 		)
 
-		commentRepository.On("Count").Once().Return(uint(0), nil)
-		commentRepository.On("GetAll", uint(0), uint(10)).Return(nil, nil)
+		commentRepository.On("Count", mock.Anything).Once().Return(uint(0), nil)
+		commentRepository.On("GetAll", mock.Anything, uint(0), uint(10)).Return(nil, nil)
 		defer commentRepository.AssertExpectations(t)
 
-		userRepository.On("GetByUUIDs", []string{}).Once().Return(nil, nil)
+		userRepository.On("GetByUUIDs", mock.Anything, []string{}).Once().Return(nil, nil)
 		defer userRepository.AssertExpectations(t)
 
 		handler := NewIndexHandler(getComments.NewUseCase(&commentRepository, &userRepository))

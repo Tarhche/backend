@@ -8,6 +8,8 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/application/dashboard/comment/getUserComments"
+	infraTrace "github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type indexUserHandler struct {
@@ -45,9 +47,10 @@ func (h *indexUserHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		UserUUID: userUUID,
 	}
 
-	response, err := h.useCase.Execute(request)
+	response, err := h.useCase.Execute(r.Context(), request)
 	switch {
 	case err != nil:
+		infraTrace.RecordError(trace.SpanFromContext(r.Context()), err)
 		rw.WriteHeader(http.StatusInternalServerError)
 	default:
 		rw.Header().Add("Content-Type", "application/json")

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/application/dashboard/config/getConfig"
@@ -33,7 +34,7 @@ func TestShowHandler(t *testing.T) {
 			}
 		)
 
-		configRepository.On("GetLatestRevision").Once().Return(loadedConfig, nil)
+		configRepository.On("GetLatestRevision", mock.Anything).Once().Return(loadedConfig, nil)
 		defer configRepository.AssertExpectations(t)
 
 		handler := NewShowHandler(getConfig.NewUseCase(&configRepository))

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	getlanguage "github.com/khanzadimahdi/testproject/application/dashboard/language/getLanguage"
@@ -29,7 +30,7 @@ func TestShowHandler(t *testing.T) {
 			l = language.Language{Code: "EN", Name: "English"}
 		)
 
-		languageRepository.On("GetOne", l.Code).Once().Return(l, nil)
+		languageRepository.On("GetOne", mock.Anything, l.Code).Once().Return(l, nil)
 		defer languageRepository.AssertExpectations(t)
 
 		handler := NewShowHandler(getlanguage.NewUseCase(&languageRepository))
@@ -58,7 +59,7 @@ func TestShowHandler(t *testing.T) {
 			u = user.User{UUID: "auth-user-uuid"}
 		)
 
-		languageRepository.On("GetOne", "DE").Once().Return(language.Language{}, domain.ErrNotExists)
+		languageRepository.On("GetOne", mock.Anything, "DE").Once().Return(language.Language{}, domain.ErrNotExists)
 		defer languageRepository.AssertExpectations(t)
 
 		handler := NewShowHandler(getlanguage.NewUseCase(&languageRepository))

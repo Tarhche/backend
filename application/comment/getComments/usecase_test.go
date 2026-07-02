@@ -1,10 +1,12 @@
 package getComments
 
 import (
+	"context"
 	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/domain/comment"
 	"github.com/khanzadimahdi/testproject/domain/user"
@@ -52,14 +54,14 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		commentRepository.On("CountApprovedByObjectUUID", r.ObjectType, r.ObjectUUID, r.LanguageCode).Once().Return(uint(len(c)), nil)
-		commentRepository.On("GetApprovedByObjectUUID", r.ObjectType, r.ObjectUUID, r.LanguageCode, uint(0), uint(10)).Once().Return(c, nil)
+		commentRepository.On("CountApprovedByObjectUUID", mock.Anything, r.ObjectType, r.ObjectUUID, r.LanguageCode).Once().Return(uint(len(c)), nil)
+		commentRepository.On("GetApprovedByObjectUUID", mock.Anything, r.ObjectType, r.ObjectUUID, r.LanguageCode, uint(0), uint(10)).Once().Return(c, nil)
 		defer commentRepository.AssertExpectations(t)
 
-		userRepository.On("GetByUUIDs", authorUUIDs).Once().Return(u, nil)
+		userRepository.On("GetByUUIDs", mock.Anything, authorUUIDs).Once().Return(u, nil)
 		defer userRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&commentRepository, &userRepository, &validator).Execute(&r)
+		response, err := NewUseCase(&commentRepository, &userRepository, &validator).Execute(context.Background(), &r)
 
 		assert.NoError(t, err)
 		assert.NotNil(t, response)
@@ -85,10 +87,10 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		commentRepository.On("CountApprovedByObjectUUID", r.ObjectType, r.ObjectUUID, r.LanguageCode).Once().Return(uint(0), expectedErr)
+		commentRepository.On("CountApprovedByObjectUUID", mock.Anything, r.ObjectType, r.ObjectUUID, r.LanguageCode).Once().Return(uint(0), expectedErr)
 		defer commentRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&commentRepository, &userRepository, &validator).Execute(&r)
+		response, err := NewUseCase(&commentRepository, &userRepository, &validator).Execute(context.Background(), &r)
 
 		commentRepository.AssertNotCalled(t, "GetApprovedByObjectUUID")
 		userRepository.AssertNotCalled(t, "GetByUUIDs")
@@ -118,11 +120,11 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		commentRepository.On("CountApprovedByObjectUUID", r.ObjectType, r.ObjectUUID, r.LanguageCode).Once().Return(approvedCommentsCount, nil)
-		commentRepository.On("GetApprovedByObjectUUID", r.ObjectType, r.ObjectUUID, r.LanguageCode, uint(0), uint(10)).Once().Return(nil, expectedErr)
+		commentRepository.On("CountApprovedByObjectUUID", mock.Anything, r.ObjectType, r.ObjectUUID, r.LanguageCode).Once().Return(approvedCommentsCount, nil)
+		commentRepository.On("GetApprovedByObjectUUID", mock.Anything, r.ObjectType, r.ObjectUUID, r.LanguageCode, uint(0), uint(10)).Once().Return(nil, expectedErr)
 		defer commentRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&commentRepository, &userRepository, &validator).Execute(&r)
+		response, err := NewUseCase(&commentRepository, &userRepository, &validator).Execute(context.Background(), &r)
 
 		userRepository.AssertNotCalled(t, "GetByUUIDs")
 
@@ -163,14 +165,14 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		commentRepository.On("CountApprovedByObjectUUID", r.ObjectType, r.ObjectUUID, r.LanguageCode).Once().Return(uint(len(c)), nil)
-		commentRepository.On("GetApprovedByObjectUUID", r.ObjectType, r.ObjectUUID, r.LanguageCode, uint(0), uint(10)).Once().Return(c, nil)
+		commentRepository.On("CountApprovedByObjectUUID", mock.Anything, r.ObjectType, r.ObjectUUID, r.LanguageCode).Once().Return(uint(len(c)), nil)
+		commentRepository.On("GetApprovedByObjectUUID", mock.Anything, r.ObjectType, r.ObjectUUID, r.LanguageCode, uint(0), uint(10)).Once().Return(c, nil)
 		defer commentRepository.AssertExpectations(t)
 
-		userRepository.On("GetByUUIDs", authorUUIDs).Once().Return(nil, expectedErr)
+		userRepository.On("GetByUUIDs", mock.Anything, authorUUIDs).Once().Return(nil, expectedErr)
 		defer userRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&commentRepository, &userRepository, &validator).Execute(&r)
+		response, err := NewUseCase(&commentRepository, &userRepository, &validator).Execute(context.Background(), &r)
 
 		assert.ErrorIs(t, expectedErr, err)
 		assert.Nil(t, response)

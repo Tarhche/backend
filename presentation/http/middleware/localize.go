@@ -7,6 +7,8 @@ import (
 	"github.com/danceable/provider"
 
 	"github.com/khanzadimahdi/testproject/application/localize"
+	infraTrace "github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // languageCodeHeader is the HTTP header that explicitly selects the request language.
@@ -44,6 +46,7 @@ func (l *Localize) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 	scope, err := l.scoper.Scope(r.Context(), provider.WithValue(localize.LanguageCode, code))
 	if err != nil {
+		infraTrace.RecordError(trace.SpanFromContext(r.Context()), err)
 		rw.WriteHeader(http.StatusInternalServerError)
 		return
 	}

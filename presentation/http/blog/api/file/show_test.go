@@ -2,7 +2,6 @@ package file
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"io"
 	"net/http"
@@ -11,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	testifymock "github.com/stretchr/testify/mock"
 
 	getfile "github.com/khanzadimahdi/testproject/application/file/getFile"
 	"github.com/khanzadimahdi/testproject/domain"
@@ -39,10 +39,10 @@ func TestShowHandler(t *testing.T) {
 		fileData := []byte("this is the file payload")
 		reader := NewSeekReadCloser(fileData)
 
-		filesRepository.On("GetOne", f.UUID).Once().Return(f, nil)
+		filesRepository.On("GetOne", testifymock.Anything, f.UUID).Once().Return(f, nil)
 		defer filesRepository.AssertExpectations(t)
 
-		storage.On("Read", context.Background(), f.StoredName).Once().Return(reader, nil)
+		storage.On("Read", testifymock.Anything, f.StoredName).Once().Return(reader, nil)
 		defer storage.AssertExpectations(t)
 
 		useCase := getfile.NewUseCase(&filesRepository, &storage)
@@ -71,7 +71,7 @@ func TestShowHandler(t *testing.T) {
 			UUID: "file-test-uuid",
 		}
 
-		filesRepository.On("GetOne", f.UUID).Once().Return(file.File{}, domain.ErrNotExists)
+		filesRepository.On("GetOne", testifymock.Anything, f.UUID).Once().Return(file.File{}, domain.ErrNotExists)
 		defer filesRepository.AssertExpectations(t)
 
 		useCase := getfile.NewUseCase(&filesRepository, &storage)
@@ -107,10 +107,10 @@ func TestShowHandler(t *testing.T) {
 		fileData := "this is the file payload"
 		reader := io.NopCloser(strings.NewReader(fileData))
 
-		filesRepository.On("GetOne", file.UUID).Once().Return(file, nil)
+		filesRepository.On("GetOne", testifymock.Anything, file.UUID).Once().Return(file, nil)
 		defer filesRepository.AssertExpectations(t)
 
-		storage.On("Read", context.Background(), file.StoredName).Once().Return(reader, errors.New("some error"))
+		storage.On("Read", testifymock.Anything, file.StoredName).Once().Return(reader, errors.New("some error"))
 		defer storage.AssertExpectations(t)
 
 		useCase := getfile.NewUseCase(&filesRepository, &storage)

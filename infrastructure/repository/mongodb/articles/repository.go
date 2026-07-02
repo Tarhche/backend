@@ -52,8 +52,8 @@ func toDomain(a ArticleBson) article.Article {
 	}
 }
 
-func (r *ArticlesRepository) GetCorrelationUUIDs(offset uint, limit uint) ([]string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *ArticlesRepository) GetCorrelationUUIDs(ctx context.Context, offset uint, limit uint) ([]string, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	// One entry per correlation group, ordered by the newest article in the
@@ -97,8 +97,8 @@ func (r *ArticlesRepository) GetCorrelationUUIDs(offset uint, limit uint) ([]str
 	return correlationUUIDs, nil
 }
 
-func (r *ArticlesRepository) GetAllPublished(language string, offset uint, limit uint) ([]article.Article, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *ArticlesRepository) GetAllPublished(ctx context.Context, language string, offset uint, limit uint) ([]article.Article, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	o := int64(offset)
@@ -135,8 +135,8 @@ func (r *ArticlesRepository) GetAllPublished(language string, offset uint, limit
 	return items, nil
 }
 
-func (r *ArticlesRepository) GetByCorrelationUUIDs(correlationUUIDs []string, languageCode string) ([]article.Article, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *ArticlesRepository) GetByCorrelationUUIDs(ctx context.Context, correlationUUIDs []string, languageCode string) ([]article.Article, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	desc := bson.D{{Key: "published_at", Value: -1}}
@@ -168,8 +168,8 @@ func (r *ArticlesRepository) GetByCorrelationUUIDs(correlationUUIDs []string, la
 	return items, nil
 }
 
-func (r *ArticlesRepository) GetPublishedLanguageCodes(correlationUUID string) ([]string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *ArticlesRepository) GetPublishedLanguageCodes(ctx context.Context, correlationUUID string) ([]string, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	if len(correlationUUID) == 0 {
@@ -189,8 +189,8 @@ func (r *ArticlesRepository) GetPublishedLanguageCodes(correlationUUID string) (
 	return languageCodes, nil
 }
 
-func (r *ArticlesRepository) CorrelationExist(correlationUUID string) (bool, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *ArticlesRepository) CorrelationExist(ctx context.Context, correlationUUID string) (bool, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	if len(correlationUUID) == 0 {
@@ -207,8 +207,8 @@ func (r *ArticlesRepository) CorrelationExist(correlationUUID string) (bool, err
 	return c > 0, nil
 }
 
-func (r *ArticlesRepository) GetMostViewed(language string, limit uint) ([]article.Article, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *ArticlesRepository) GetMostViewed(ctx context.Context, language string, limit uint) ([]article.Article, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	l := int64(limit)
@@ -243,8 +243,8 @@ func (r *ArticlesRepository) GetMostViewed(language string, limit uint) ([]artic
 	return items, nil
 }
 
-func (r *ArticlesRepository) CountPublishedByHashtags(hashtags []string, language string) (uint, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *ArticlesRepository) CountPublishedByHashtags(ctx context.Context, hashtags []string, language string) (uint, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	filter := bson.M{
@@ -263,8 +263,8 @@ func (r *ArticlesRepository) CountPublishedByHashtags(hashtags []string, languag
 	return uint(c), nil
 }
 
-func (r *ArticlesRepository) GetPublishedByHashtags(hashtags []string, language string, offset uint, limit uint) ([]article.Article, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *ArticlesRepository) GetPublishedByHashtags(ctx context.Context, hashtags []string, language string, offset uint, limit uint) ([]article.Article, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	o := int64(offset)
@@ -306,8 +306,8 @@ func (r *ArticlesRepository) GetPublishedByHashtags(hashtags []string, language 
 	return items, nil
 }
 
-func (r *ArticlesRepository) CountPublishedByAuthor(authorUUID string, language string) (uint, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *ArticlesRepository) CountPublishedByAuthor(ctx context.Context, authorUUID string, language string) (uint, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	filter := bson.M{
@@ -326,8 +326,8 @@ func (r *ArticlesRepository) CountPublishedByAuthor(authorUUID string, language 
 	return uint(c), nil
 }
 
-func (r *ArticlesRepository) GetPublishedByAuthor(authorUUID string, language string, offset uint, limit uint) ([]article.Article, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *ArticlesRepository) GetPublishedByAuthor(ctx context.Context, authorUUID string, language string, offset uint, limit uint) ([]article.Article, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	o := int64(offset)
@@ -369,8 +369,8 @@ func (r *ArticlesRepository) GetPublishedByAuthor(authorUUID string, language st
 	return items, nil
 }
 
-func (r *ArticlesRepository) GetByCorrelationUUIDAndLanguage(correlationUUID string, languageCode string) (article.Article, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *ArticlesRepository) GetByCorrelationUUIDAndLanguage(ctx context.Context, correlationUUID string, languageCode string) (article.Article, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	filter := bson.M{"correlation_uuid": correlationUUID}
@@ -389,8 +389,8 @@ func (r *ArticlesRepository) GetByCorrelationUUIDAndLanguage(correlationUUID str
 	return toDomain(a), nil
 }
 
-func (r *ArticlesRepository) GetOnePublished(correlationUUID string, languageCode string) (article.Article, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *ArticlesRepository) GetOnePublished(ctx context.Context, correlationUUID string, languageCode string) (article.Article, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	filter := bson.M{
@@ -412,8 +412,8 @@ func (r *ArticlesRepository) GetOnePublished(correlationUUID string, languageCod
 	return toDomain(a), nil
 }
 
-func (r *ArticlesRepository) CountByCorrelation() (uint, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *ArticlesRepository) CountByCorrelation(ctx context.Context) (uint, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	pipeline := mongo.Pipeline{
@@ -444,8 +444,8 @@ func (r *ArticlesRepository) CountByCorrelation() (uint, error) {
 	return result.Count, nil
 }
 
-func (r *ArticlesRepository) CountPublished(language string) (uint, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *ArticlesRepository) CountPublished(ctx context.Context, language string) (uint, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	filter := bson.M{
@@ -463,8 +463,8 @@ func (r *ArticlesRepository) CountPublished(language string) (uint, error) {
 	return uint(c), nil
 }
 
-func (r *ArticlesRepository) Save(a *article.Article) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *ArticlesRepository) Save(ctx context.Context, a *article.Article) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	if len(a.UUID) == 0 {
@@ -504,8 +504,8 @@ func (r *ArticlesRepository) Save(a *article.Article) (string, error) {
 	return a.UUID, nil
 }
 
-func (r *ArticlesRepository) DeleteByCorrelationUUIDAndLanguage(correlationUUID string, languageCode string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *ArticlesRepository) DeleteByCorrelationUUIDAndLanguage(ctx context.Context, correlationUUID string, languageCode string) error {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	filter := bson.M{"correlation_uuid": correlationUUID}
@@ -518,8 +518,8 @@ func (r *ArticlesRepository) DeleteByCorrelationUUIDAndLanguage(correlationUUID 
 	return err
 }
 
-func (r *ArticlesRepository) IncreaseView(uuid string, inc uint) error {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *ArticlesRepository) IncreaseView(ctx context.Context, uuid string, inc uint) error {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	_, err := r.collection.UpdateOne(

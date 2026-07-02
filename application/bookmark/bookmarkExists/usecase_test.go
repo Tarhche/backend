@@ -1,10 +1,12 @@
 package bookmarkExists
 
 import (
+	"context"
 	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/bookmark"
@@ -35,10 +37,10 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		boomkarkRepository.On("GetByOwnerUUID", r.OwnerUUID, r.ObjectType, r.ObjectUUID, r.LanguageCode).Once().Return(b, nil)
+		boomkarkRepository.On("GetByOwnerUUID", mock.Anything, r.OwnerUUID, r.ObjectType, r.ObjectUUID, r.LanguageCode).Once().Return(b, nil)
 		defer boomkarkRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&boomkarkRepository, &validator).Execute(&r)
+		response, err := NewUseCase(&boomkarkRepository, &validator).Execute(context.Background(), &r)
 
 		assert.NoError(t, err)
 		assert.NotNil(t, response)
@@ -66,10 +68,10 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		boomkarkRepository.On("GetByOwnerUUID", r.OwnerUUID, r.ObjectType, r.ObjectUUID, r.LanguageCode).Once().Return(b, domain.ErrNotExists)
+		boomkarkRepository.On("GetByOwnerUUID", mock.Anything, r.OwnerUUID, r.ObjectType, r.ObjectUUID, r.LanguageCode).Once().Return(b, domain.ErrNotExists)
 		defer boomkarkRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&boomkarkRepository, &validator).Execute(&r)
+		response, err := NewUseCase(&boomkarkRepository, &validator).Execute(context.Background(), &r)
 
 		assert.NoError(t, err)
 		assert.NotNil(t, response)
@@ -98,7 +100,7 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(expectedResponse.ValidationErrors)
 		defer validator.AssertExpectations(t)
 
-		response, err := NewUseCase(&boomkarkRepository, &validator).Execute(&r)
+		response, err := NewUseCase(&boomkarkRepository, &validator).Execute(context.Background(), &r)
 
 		boomkarkRepository.AssertNotCalled(t, "GetByOwnerUUID")
 
@@ -129,10 +131,10 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		boomkarkRepository.On("GetByOwnerUUID", r.OwnerUUID, r.ObjectType, r.ObjectUUID, r.LanguageCode).Once().Return(b, expectedErr)
+		boomkarkRepository.On("GetByOwnerUUID", mock.Anything, r.OwnerUUID, r.ObjectType, r.ObjectUUID, r.LanguageCode).Once().Return(b, expectedErr)
 		defer boomkarkRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&boomkarkRepository, &validator).Execute(&r)
+		response, err := NewUseCase(&boomkarkRepository, &validator).Execute(context.Background(), &r)
 
 		assert.ErrorIs(t, err, expectedErr)
 		assert.Nil(t, response)

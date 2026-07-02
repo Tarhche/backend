@@ -1,6 +1,8 @@
 package deleteuser
 
 import (
+	"context"
+
 	"github.com/khanzadimahdi/testproject/domain/user"
 )
 
@@ -14,6 +16,6 @@ func NewUseCase(userRepository user.Repository) *UseCase {
 	}
 }
 
-func (uc *UseCase) Execute(request *Request) error {
-	return uc.userRepository.Delete(request.UserUUID)
+func (uc *UseCase) Execute(ctx context.Context, request *Request) error {
+	return uc.userRepository.Delete(ctx, request.UserUUID)
 }

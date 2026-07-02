@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	updaterole "github.com/khanzadimahdi/testproject/application/dashboard/role/updateRole"
@@ -62,10 +63,10 @@ func TestUpdateHandler(t *testing.T) {
 		requestValidator.On("Validate", &r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
-		permissionRepository.On("Get", r.Permissions).Once().Return(p, nil)
+		permissionRepository.On("Get", mock.Anything, r.Permissions).Once().Return(p, nil)
 		defer permissionRepository.AssertExpectations(t)
 
-		roleRepository.On("Save", &c).Once().Return(c.UUID, nil)
+		roleRepository.On("Save", mock.Anything, &c).Once().Return(c.UUID, nil)
 		defer roleRepository.AssertExpectations(t)
 
 		handler := NewUpdateHandler(updaterole.NewUseCase(&roleRepository, &permissionRepository, &requestValidator, &translator))

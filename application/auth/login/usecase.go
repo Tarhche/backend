@@ -1,6 +1,8 @@
 package login
 
 import (
+	"context"
+
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/password"
@@ -32,14 +34,14 @@ func NewUseCase(
 	}
 }
 
-func (uc *UseCase) Execute(request *Request) (*Response, error) {
+func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
 	if validationErrors := uc.validator.Validate(request); len(validationErrors) > 0 {
 		return &Response{
 			ValidationErrors: validationErrors,
 		}, nil
 	}
 
-	u, err := uc.userRepository.GetOneByIdentity(request.Identity)
+	u, err := uc.userRepository.GetOneByIdentity(ctx, request.Identity)
 	if err == domain.ErrNotExists {
 		return &Response{
 			ValidationErrors: domain.ValidationErrors{
@@ -50,7 +52,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		return nil, err
 	}
 
-	if !uc.passwordIsValid(u, []byte(request.Password)) {
+	if !uc.passwordIsValid(ctx, u, []byte(request.Password)) {
 		return &Response{
 			ValidationErrors: domain.ValidationErrors{
 				"identity": uc.translator.Translate("invalid_identity_or_password"),
@@ -58,12 +60,12 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		}, nil
 	}
 
-	accessToken, err := uc.authTokenGenerator.GenerateAccessToken(&u)
+	accessToken, err := uc.authTokenGenerator.GenerateAccessToken(ctx, &u)
 	if err != nil {
 		return nil, err
 	}
 
-	refreshToken, err := uc.authTokenGenerator.GenerateRefreshToken(u.UUID)
+	refreshToken, err := uc.authTokenGenerator.GenerateRefreshToken(ctx, u.UUID)
 	if err != nil {
 		return nil, err
 	}
@@ -74,6 +76,6 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 	}, nil
 }
 
-func (uc *UseCase) passwordIsValid(u user.User, password []byte) bool {
-	return uc.Hasher.Equal(password, u.PasswordHash.Value, u.PasswordHash.Salt)
+func (uc *UseCase) passwordIsValid(ctx context.Context, u user.User, password []byte) bool {
+	return uc.Hasher.Equal(ctx, password, u.PasswordHash.Value, u.PasswordHash.Salt)
 }

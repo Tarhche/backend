@@ -1,6 +1,8 @@
 package getRoles
 
 import (
+	"context"
+
 	"github.com/khanzadimahdi/testproject/domain/role"
 )
 
@@ -14,8 +16,8 @@ func NewUseCase(roleRepository role.Repository) *UseCase {
 	}
 }
 
-func (uc *UseCase) Execute(UUID string) (*Response, error) {
-	roles, err := uc.roleRepository.GetByUserUUID(UUID)
+func (uc *UseCase) Execute(ctx context.Context, UUID string) (*Response, error) {
+	roles, err := uc.roleRepository.GetByUserUUID(ctx, UUID)
 	if err != nil {
 		return nil, err
 	}

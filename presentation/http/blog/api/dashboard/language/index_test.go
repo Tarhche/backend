@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	getlanguages "github.com/khanzadimahdi/testproject/application/dashboard/language/getLanguages"
@@ -32,8 +33,8 @@ func TestIndexHandler(t *testing.T) {
 			}
 		)
 
-		languageRepository.On("Count").Once().Return(uint(len(l)), nil)
-		languageRepository.On("GetAll", uint(0), uint(10)).Once().Return(l, nil)
+		languageRepository.On("Count", mock.Anything).Once().Return(uint(len(l)), nil)
+		languageRepository.On("GetAll", mock.Anything, uint(0), uint(10)).Once().Return(l, nil)
 		defer languageRepository.AssertExpectations(t)
 
 		handler := NewIndexHandler(getlanguages.NewUseCase(&languageRepository))

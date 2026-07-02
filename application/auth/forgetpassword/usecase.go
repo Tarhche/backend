@@ -30,14 +30,14 @@ func NewUseCase(
 	}
 }
 
-func (uc *UseCase) Execute(request *Request) (*Response, error) {
+func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
 	if validationErrors := uc.validator.Validate(request); len(validationErrors) > 0 {
 		return &Response{
 			ValidationErrors: validationErrors,
 		}, nil
 	}
 
-	_, err := uc.userRepository.GetOneByIdentity(request.Identity)
+	_, err := uc.userRepository.GetOneByIdentity(ctx, request.Identity)
 	if err == domain.ErrNotExists {
 		return &Response{
 			ValidationErrors: domain.ValidationErrors{
@@ -57,7 +57,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		return nil, err
 	}
 
-	err = uc.asyncCommandBus.Produce(context.Background(), SendForgetPasswordEmailName, payload)
+	err = uc.asyncCommandBus.Produce(ctx, SendForgetPasswordEmailName, payload)
 
 	return nil, err
 }

@@ -1,6 +1,8 @@
 package refresh
 
 import (
+	"context"
+
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/translator"
@@ -32,14 +34,14 @@ func NewUseCase(
 	}
 }
 
-func (uc *UseCase) Execute(request *Request) (*Response, error) {
+func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
 	if validationErrors := uc.validator.Validate(request); len(validationErrors) > 0 {
 		return &Response{
 			ValidationErrors: validationErrors,
 		}, nil
 	}
 
-	claims, err := uc.jwt.Verify(request.Token)
+	claims, err := uc.jwt.Verify(ctx, request.Token)
 	if err != nil {
 		return &Response{
 			ValidationErrors: domain.ValidationErrors{
@@ -65,7 +67,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		}, nil
 	}
 
-	u, err := uc.userRepository.GetOne(userUUID)
+	u, err := uc.userRepository.GetOne(ctx, userUUID)
 	if err == domain.ErrNotExists {
 		return &Response{
 			ValidationErrors: domain.ValidationErrors{
@@ -76,12 +78,12 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		return nil, err
 	}
 
-	accessToken, err := uc.authTokenGenerator.GenerateAccessToken(&u)
+	accessToken, err := uc.authTokenGenerator.GenerateAccessToken(ctx, &u)
 	if err != nil {
 		return nil, err
 	}
 
-	refreshToken, err := uc.authTokenGenerator.GenerateRefreshToken(u.UUID)
+	refreshToken, err := uc.authTokenGenerator.GenerateRefreshToken(ctx, u.UUID)
 	if err != nil {
 		return nil, err
 	}

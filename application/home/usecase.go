@@ -1,6 +1,7 @@
 package home
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/khanzadimahdi/testproject/application/element"
@@ -30,10 +31,10 @@ func NewUseCase(
 	}
 }
 
-func (uc *UseCase) Execute(request *Request) (*Response, error) {
+func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
 	languageCode := request.LanguageCode
 	if len(languageCode) == 0 {
-		code, err := uc.languageResolver.DefaultCode()
+		code, err := uc.languageResolver.DefaultCode(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -41,17 +42,17 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		languageCode = code
 	}
 
-	l, err := uc.languageResolver.Resolve(languageCode)
+	l, err := uc.languageResolver.Resolve(ctx, languageCode)
 	if err != nil {
 		return nil, err
 	}
 
-	popular, err := uc.articleRepository.GetMostViewed(languageCode, 4)
+	popular, err := uc.articleRepository.GetMostViewed(ctx, languageCode, 4)
 	if err != nil {
 		return nil, err
 	}
 
-	all, err := uc.articleRepository.GetAllPublished(languageCode, 0, 3)
+	all, err := uc.articleRepository.GetAllPublished(ctx, languageCode, 0, 3)
 	if err != nil {
 		return nil, err
 	}
@@ -64,12 +65,13 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		userUUIDs = append(userUUIDs, all[i].AuthorUUID)
 	}
 
-	u, err := uc.userRepository.GetByUUIDs(userUUIDs)
+	u, err := uc.userRepository.GetByUUIDs(ctx, userUUIDs)
 	if err != nil {
 		return nil, err
 	}
 
 	elementsResponse, err := uc.elementRetriever.RetrieveByVenues(
+		ctx,
 		[]string{fmt.Sprintf("/%s/home", languageCode)},
 		languageCode,
 	)

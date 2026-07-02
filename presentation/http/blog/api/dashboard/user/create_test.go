@@ -53,15 +53,15 @@ func TestCreateHandler(t *testing.T) {
 		requestValidator.On("Validate", &r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
-		languageResolver.On("Verify", r.LanguageCode).Once().Return(true)
+		languageResolver.On("Verify", mock2.Anything, r.LanguageCode).Once().Return(true)
 		defer languageResolver.AssertExpectations(t)
 
-		userRepository.On("GetOneByIdentity", r.Email).Once().Return(user.User{}, domain.ErrNotExists)
-		userRepository.On("GetOneByIdentity", r.Username).Once().Return(user.User{}, domain.ErrNotExists)
-		userRepository.On("Save", mock2.Anything).Once().Return(userUUID, nil)
+		userRepository.On("GetOneByIdentity", mock2.Anything, r.Email).Once().Return(user.User{}, domain.ErrNotExists)
+		userRepository.On("GetOneByIdentity", mock2.Anything, r.Username).Once().Return(user.User{}, domain.ErrNotExists)
+		userRepository.On("Save", mock2.Anything, mock2.Anything).Once().Return(userUUID, nil)
 		defer userRepository.AssertExpectations(t)
 
-		hasher.On("Hash", []byte(r.Password), mock2.AnythingOfType("[]uint8")).Once().Return([]byte("hashed-password"))
+		hasher.On("Hash", mock2.Anything, []byte(r.Password), mock2.AnythingOfType("[]uint8")).Once().Return([]byte("hashed-password"))
 		defer hasher.AssertExpectations(t)
 
 		handler := NewCreateHandler(createuser.NewUseCase(&userRepository, &languageResolver, &hasher, &requestValidator, &translator))

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/application/dashboard/config/updateConfig"
@@ -55,11 +56,11 @@ func TestUpdateHandler(t *testing.T) {
 		requestValidator.On("Validate", &r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
-		languageRepository.On("Exists", r.DefaultLanguageCode).Once().Return(true)
+		languageRepository.On("Exists", mock.Anything, r.DefaultLanguageCode).Once().Return(true)
 		defer languageRepository.AssertExpectations(t)
 
-		configRepository.On("GetLatestRevision").Once().Return(loadedConfig, nil)
-		configRepository.On("Save", &savedConfig).Once().Return("new-revision-uuid", nil)
+		configRepository.On("GetLatestRevision", mock.Anything).Once().Return(loadedConfig, nil)
+		configRepository.On("Save", mock.Anything, &savedConfig).Once().Return("new-revision-uuid", nil)
 		defer configRepository.AssertExpectations(t)
 
 		handler := NewUpdateHandler(updateConfig.NewUseCase(&configRepository, &languageRepository, &requestValidator, &translator))

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	deleteuser "github.com/khanzadimahdi/testproject/application/dashboard/user/deleteUser"
@@ -29,7 +30,7 @@ func TestDeleteHandler(t *testing.T) {
 			r = deleteuser.Request{UserUUID: "user-uuid"}
 		)
 
-		userRepository.On("Delete", r.UserUUID).Return(nil)
+		userRepository.On("Delete", mock.Anything, r.UserUUID).Return(nil)
 		defer userRepository.AssertExpectations(t)
 		handler := NewDeleteHandler(deleteuser.NewUseCase(&userRepository))
 

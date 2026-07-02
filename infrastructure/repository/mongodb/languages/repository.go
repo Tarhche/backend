@@ -35,8 +35,8 @@ func NewRepository(database *mongo.Database) *LanguagesRepository {
 	}
 }
 
-func (r *LanguagesRepository) GetAll(offset uint, limit uint) ([]language.Language, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *LanguagesRepository) GetAll(ctx context.Context, offset uint, limit uint) ([]language.Language, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	o := int64(offset)
@@ -69,8 +69,8 @@ func (r *LanguagesRepository) GetAll(offset uint, limit uint) ([]language.Langua
 	return items, nil
 }
 
-func (r *LanguagesRepository) GetByCodes(codes []string) ([]language.Language, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *LanguagesRepository) GetByCodes(ctx context.Context, codes []string) ([]language.Language, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	if len(codes) == 0 {
@@ -105,8 +105,8 @@ func (r *LanguagesRepository) GetByCodes(codes []string) ([]language.Language, e
 	return items, nil
 }
 
-func (r *LanguagesRepository) GetOne(code string) (language.Language, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *LanguagesRepository) GetOne(ctx context.Context, code string) (language.Language, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	var lb LanguageBson
@@ -123,8 +123,8 @@ func (r *LanguagesRepository) GetOne(code string) (language.Language, error) {
 	}, nil
 }
 
-func (r *LanguagesRepository) Exists(code string) bool {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *LanguagesRepository) Exists(ctx context.Context, code string) bool {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	c, err := r.collection.CountDocuments(ctx, bson.D{{Key: "_id", Value: code}}, options.Count().SetLimit(1))
@@ -135,8 +135,8 @@ func (r *LanguagesRepository) Exists(code string) bool {
 	return c > 0
 }
 
-func (r *LanguagesRepository) Save(l *language.Language) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *LanguagesRepository) Save(ctx context.Context, l *language.Language) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	at := time.Now()
@@ -162,8 +162,8 @@ func (r *LanguagesRepository) Save(l *language.Language) (string, error) {
 	return l.Code, err
 }
 
-func (r *LanguagesRepository) Delete(code string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *LanguagesRepository) Delete(ctx context.Context, code string) error {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	_, err := r.collection.DeleteOne(ctx, bson.D{{Key: "_id", Value: code}})
@@ -171,8 +171,8 @@ func (r *LanguagesRepository) Delete(code string) error {
 	return err
 }
 
-func (r *LanguagesRepository) Count() (uint, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *LanguagesRepository) Count(ctx context.Context) (uint, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	c, err := r.collection.CountDocuments(ctx, bson.D{})

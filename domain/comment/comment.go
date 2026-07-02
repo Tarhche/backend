@@ -1,6 +1,7 @@
 package comment
 
 import (
+	"context"
 	"errors"
 	"time"
 )
@@ -22,19 +23,19 @@ type Comment struct {
 }
 
 type Repository interface {
-	GetAll(offset uint, limit uint) ([]Comment, error)
-	GetOne(UUID string) (Comment, error)
-	Count() (uint, error)
-	Save(*Comment) (string, error)
-	Delete(UUID string) error
+	GetAll(ctx context.Context, offset uint, limit uint) ([]Comment, error)
+	GetOne(ctx context.Context, UUID string) (Comment, error)
+	Count(ctx context.Context) (uint, error)
+	Save(ctx context.Context, c *Comment) (string, error)
+	Delete(ctx context.Context, UUID string) error
 
-	GetApprovedByObjectUUID(objectType string, UUID string, languageCode string, offset uint, limit uint) ([]Comment, error)
-	CountApprovedByObjectUUID(objectType string, UUID string, languageCode string) (uint, error)
+	GetApprovedByObjectUUID(ctx context.Context, objectType string, UUID string, languageCode string, offset uint, limit uint) ([]Comment, error)
+	CountApprovedByObjectUUID(ctx context.Context, objectType string, UUID string, languageCode string) (uint, error)
 
-	GetAllByAuthorUUID(authorUUID string, offset uint, limit uint) ([]Comment, error)
-	GetOneByAuthorUUID(UUID string, authorUUID string) (Comment, error)
-	CountByAuthorUUID(authorUUID string) (uint, error)
-	DeleteByAuthorUUID(UUID string, authorUUID string) error
+	GetAllByAuthorUUID(ctx context.Context, authorUUID string, offset uint, limit uint) ([]Comment, error)
+	GetOneByAuthorUUID(ctx context.Context, UUID string, authorUUID string) (Comment, error)
+	CountByAuthorUUID(ctx context.Context, authorUUID string) (uint, error)
+	DeleteByAuthorUUID(ctx context.Context, UUID string, authorUUID string) error
 }
 
 var (

@@ -1,6 +1,7 @@
 package resetpassword
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
@@ -36,7 +37,7 @@ func NewUseCase(
 	}
 }
 
-func (uc *UseCase) Execute(request *Request) (*Response, error) {
+func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
 	if validationErrors := uc.validator.Validate(request); len(validationErrors) > 0 {
 		return &Response{
 			ValidationErrors: validationErrors,
@@ -48,7 +49,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		return nil, err
 	}
 
-	claims, err := uc.jwt.Verify(string(resetPasswordToken))
+	claims, err := uc.jwt.Verify(ctx, string(resetPasswordToken))
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +64,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		return nil, errors.New("token is not valid")
 	}
 
-	u, err := uc.userRepository.GetOne(userUUID)
+	u, err := uc.userRepository.GetOne(ctx, userUUID)
 	if err == domain.ErrNotExists {
 		return &Response{
 			ValidationErrors: domain.ValidationErrors{
@@ -80,11 +81,11 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 	}
 
 	u.PasswordHash = password.Hash{
-		Value: uc.hasher.Hash([]byte(request.Password), salt),
+		Value: uc.hasher.Hash(ctx, []byte(request.Password), salt),
 		Salt:  salt,
 	}
 
-	if _, err := uc.userRepository.Save(&u); err != nil {
+	if _, err := uc.userRepository.Save(ctx, &u); err != nil {
 		return nil, err
 	}
 

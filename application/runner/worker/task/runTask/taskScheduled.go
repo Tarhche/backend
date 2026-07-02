@@ -1,6 +1,7 @@
 package runTask
 
 import (
+	"context"
 	"encoding/json"
 
 	"github.com/khanzadimahdi/testproject/domain"
@@ -24,7 +25,7 @@ func NewTaskScheduled(
 
 var _ domain.MessageHandler = &TaskScheduled{}
 
-func (uc *TaskScheduled) Handle(data []byte) error {
+func (uc *TaskScheduled) Handle(ctx context.Context, data []byte) error {
 	var taskScheduled events.TaskScheduled
 	if err := json.Unmarshal(data, &taskScheduled); err != nil {
 		return err
@@ -84,7 +85,7 @@ func (uc *TaskScheduled) Handle(data []byte) error {
 		},
 	}
 
-	_, err := uc.useCase.Execute(request)
+	_, err := uc.useCase.Execute(ctx, request)
 
 	return err
 }

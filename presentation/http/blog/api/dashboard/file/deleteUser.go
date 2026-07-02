@@ -7,6 +7,8 @@ import (
 	"github.com/khanzadimahdi/testproject/application/auth"
 	deleteuserfile "github.com/khanzadimahdi/testproject/application/dashboard/file/deleteUserFile"
 	"github.com/khanzadimahdi/testproject/domain"
+	infraTrace "github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type deleteUserHandler struct {
@@ -34,7 +36,7 @@ func (h *deleteUserHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 	UUID := r.PathValue("uuid")
 
-	err := h.useCase.Execute(deleteuserfile.Request{
+	err := h.useCase.Execute(r.Context(), deleteuserfile.Request{
 		OwnerUUID: userUUID,
 		FileUUID:  UUID,
 	})
@@ -43,6 +45,7 @@ func (h *deleteUserHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, domain.ErrNotExists):
 		rw.WriteHeader(http.StatusNotFound)
 	case err != nil:
+		infraTrace.RecordError(trace.SpanFromContext(r.Context()), err)
 		rw.WriteHeader(http.StatusInternalServerError)
 	default:
 		rw.WriteHeader(http.StatusNoContent)

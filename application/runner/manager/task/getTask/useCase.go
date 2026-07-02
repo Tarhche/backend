@@ -1,6 +1,10 @@
 package gettask
 
-import "github.com/khanzadimahdi/testproject/domain/runner/task"
+import (
+	"context"
+
+	"github.com/khanzadimahdi/testproject/domain/runner/task"
+)
 
 // UseCase retrieves a task
 type UseCase struct {
@@ -15,8 +19,8 @@ func NewUseCase(taskRepository task.Repository) *UseCase {
 }
 
 // Execute executes the use case
-func (uc *UseCase) Execute(UUID string) (*Response, error) {
-	t, err := uc.taskRepository.GetOne(UUID)
+func (uc *UseCase) Execute(ctx context.Context, UUID string) (*Response, error) {
+	t, err := uc.taskRepository.GetOne(ctx, UUID)
 	if err != nil {
 		return nil, err
 	}

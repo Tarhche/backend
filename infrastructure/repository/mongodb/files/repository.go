@@ -35,8 +35,8 @@ func NewRepository(database *mongo.Database) *FilesRepository {
 	}
 }
 
-func (r *FilesRepository) GetAll(offset uint, limit uint) ([]file.File, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *FilesRepository) GetAll(ctx context.Context, offset uint, limit uint) ([]file.File, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	o := int64(offset)
@@ -74,8 +74,8 @@ func (r *FilesRepository) GetAll(offset uint, limit uint) ([]file.File, error) {
 	return items, nil
 }
 
-func (r *FilesRepository) GetOne(UUID string) (file.File, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *FilesRepository) GetOne(ctx context.Context, UUID string) (file.File, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	var a FileBson
@@ -97,8 +97,8 @@ func (r *FilesRepository) GetOne(UUID string) (file.File, error) {
 	}, nil
 }
 
-func (r *FilesRepository) Save(a *file.File) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *FilesRepository) Save(ctx context.Context, a *file.File) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	if len(a.UUID) == 0 {
@@ -132,8 +132,8 @@ func (r *FilesRepository) Save(a *file.File) (string, error) {
 	return a.UUID, nil
 }
 
-func (r *FilesRepository) Delete(UUID string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *FilesRepository) Delete(ctx context.Context, UUID string) error {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	_, err := r.collection.DeleteOne(ctx, bson.D{{Key: "_id", Value: UUID}})
@@ -141,8 +141,8 @@ func (r *FilesRepository) Delete(UUID string) error {
 	return err
 }
 
-func (r *FilesRepository) Count() (uint, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *FilesRepository) Count(ctx context.Context) (uint, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	c, err := r.collection.CountDocuments(ctx, bson.D{})
@@ -153,8 +153,8 @@ func (r *FilesRepository) Count() (uint, error) {
 	return uint(c), nil
 }
 
-func (r *FilesRepository) GetAllByOwnerUUID(ownerUUID string, offset uint, limit uint) ([]file.File, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *FilesRepository) GetAllByOwnerUUID(ctx context.Context, ownerUUID string, offset uint, limit uint) ([]file.File, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	o := int64(offset)
@@ -195,8 +195,8 @@ func (r *FilesRepository) GetAllByOwnerUUID(ownerUUID string, offset uint, limit
 	return items, nil
 }
 
-func (r *FilesRepository) GetOneByOwnerUUID(ownerUUID string, UUID string) (file.File, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *FilesRepository) GetOneByOwnerUUID(ctx context.Context, ownerUUID string, UUID string) (file.File, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	filter := bson.D{
@@ -223,8 +223,8 @@ func (r *FilesRepository) GetOneByOwnerUUID(ownerUUID string, UUID string) (file
 	}, nil
 }
 
-func (r *FilesRepository) DeleteByOwnerUUID(ownerUUID string, UUID string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *FilesRepository) DeleteByOwnerUUID(ctx context.Context, ownerUUID string, UUID string) error {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	filter := bson.D{
@@ -237,8 +237,8 @@ func (r *FilesRepository) DeleteByOwnerUUID(ownerUUID string, UUID string) error
 	return err
 }
 
-func (r *FilesRepository) CountByOwnerUUID(ownerUUID string) (uint, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *FilesRepository) CountByOwnerUUID(ctx context.Context, ownerUUID string) (uint, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	filter := bson.M{

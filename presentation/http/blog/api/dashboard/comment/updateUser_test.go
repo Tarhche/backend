@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/application/dashboard/comment/updateUserComment"
@@ -36,8 +37,8 @@ func TestUpdateUserHandler(t *testing.T) {
 			}
 		)
 
-		commentRepository.On("GetOneByAuthorUUID", c.UUID, u.UUID).Once().Return(c, nil)
-		commentRepository.On("Save", &c).Once().Return(c.UUID, nil)
+		commentRepository.On("GetOneByAuthorUUID", mock.Anything, c.UUID, u.UUID).Once().Return(c, nil)
+		commentRepository.On("Save", mock.Anything, &c).Once().Return(c.UUID, nil)
 		defer commentRepository.AssertExpectations(t)
 
 		handler := NewUpdateUserCommentHandler(updateUserComment.NewUseCase(&commentRepository, &requestValidator))

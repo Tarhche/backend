@@ -1,6 +1,7 @@
 package getarticles
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/khanzadimahdi/testproject/application/element"
@@ -36,10 +37,10 @@ func NewUseCase(
 	}
 }
 
-func (uc *UseCase) Execute(request *Request) (*Response, error) {
+func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
 	languageCode := request.LanguageCode
 	if len(languageCode) == 0 {
-		code, err := uc.languageResolver.DefaultCode()
+		code, err := uc.languageResolver.DefaultCode(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -47,12 +48,12 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		languageCode = code
 	}
 
-	l, err := uc.languageResolver.Resolve(languageCode)
+	l, err := uc.languageResolver.Resolve(ctx, languageCode)
 	if err != nil {
 		return nil, err
 	}
 
-	totalArticles, err := uc.articleRepository.CountPublished(languageCode)
+	totalArticles, err := uc.articleRepository.CountPublished(ctx, languageCode)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +74,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		totalPages++
 	}
 
-	a, err := uc.articleRepository.GetAllPublished(languageCode, offset, limit)
+	a, err := uc.articleRepository.GetAllPublished(ctx, languageCode, offset, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -83,12 +84,13 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		userUUIDs[i] = a[i].AuthorUUID
 	}
 
-	authors, err := uc.userRepository.GetByUUIDs(userUUIDs)
+	authors, err := uc.userRepository.GetByUUIDs(ctx, userUUIDs)
 	if err != nil {
 		return nil, err
 	}
 
 	elementsResponse, err := uc.elementRetriever.RetrieveByVenues(
+		ctx,
 		[]string{fmt.Sprintf("/%s/articles", languageCode)},
 		languageCode,
 	)
@@ -98,12 +100,12 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 
 	publishedLanguages := make(map[string][]language.Language, len(a))
 	for i := range a {
-		codes, err := uc.articleRepository.GetPublishedLanguageCodes(a[i].CorrelationUUID)
+		codes, err := uc.articleRepository.GetPublishedLanguageCodes(ctx, a[i].CorrelationUUID)
 		if err != nil {
 			return nil, err
 		}
 
-		al, err := uc.languageRepository.GetByCodes(codes)
+		al, err := uc.languageRepository.GetByCodes(ctx, codes)
 		if err != nil {
 			return nil, err
 		}

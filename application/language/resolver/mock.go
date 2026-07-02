@@ -1,6 +1,8 @@
 package resolver
 
 import (
+	"context"
+
 	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/domain/language"
@@ -12,20 +14,20 @@ type MockResolver struct {
 
 var _ Resolver = &MockResolver{}
 
-func (m *MockResolver) DefaultCode() (string, error) {
-	args := m.Called()
+func (m *MockResolver) DefaultCode(ctx context.Context) (string, error) {
+	args := m.Called(ctx)
 
 	return args.String(0), args.Error(1)
 }
 
-func (m *MockResolver) Resolve(requestedCode string) (language.Language, error) {
-	args := m.Called(requestedCode)
+func (m *MockResolver) Resolve(ctx context.Context, requestedCode string) (language.Language, error) {
+	args := m.Called(ctx, requestedCode)
 
 	return args.Get(0).(language.Language), args.Error(1)
 }
 
-func (m *MockResolver) Verify(requestedCode string) bool {
-	args := m.Called(requestedCode)
+func (m *MockResolver) Verify(ctx context.Context, requestedCode string) bool {
+	args := m.Called(ctx, requestedCode)
 
 	return args.Bool(0)
 }

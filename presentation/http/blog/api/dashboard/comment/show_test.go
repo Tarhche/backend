@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/application/dashboard/comment/getComment"
@@ -36,10 +37,10 @@ func TestShowHandler(t *testing.T) {
 			}
 		)
 
-		commentRepository.On("GetOne", commentUUID).Return(a, nil)
+		commentRepository.On("GetOne", mock.Anything, commentUUID).Return(a, nil)
 		defer commentRepository.AssertExpectations(t)
 
-		userRepository.On("GetOne", a.AuthorUUID).Once().Return(u, nil)
+		userRepository.On("GetOne", mock.Anything, a.AuthorUUID).Once().Return(u, nil)
 		defer userRepository.AssertExpectations(t)
 
 		handler := NewShowHandler(getComment.NewUseCase(&commentRepository, &userRepository))
@@ -71,7 +72,7 @@ func TestShowHandler(t *testing.T) {
 			commentUUID = "role-uuid"
 		)
 
-		commentRepository.On("GetOne", commentUUID).Return(comment.Comment{}, domain.ErrNotExists)
+		commentRepository.On("GetOne", mock.Anything, commentUUID).Return(comment.Comment{}, domain.ErrNotExists)
 		defer commentRepository.AssertExpectations(t)
 
 		handler := NewShowHandler(getComment.NewUseCase(&commentRepository, &userRepository))

@@ -1,10 +1,12 @@
 package deletearticle
 
 import (
+	"context"
 	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/articles"
 )
@@ -21,10 +23,10 @@ func TestUseCase_Execute(t *testing.T) {
 			r = Request{CorrelationUUID: "correlation-uuid", LanguageCode: "EN"}
 		)
 
-		articleRepository.On("DeleteByCorrelationUUIDAndLanguage", r.CorrelationUUID, r.LanguageCode).Return(nil)
+		articleRepository.On("DeleteByCorrelationUUIDAndLanguage", mock.Anything, r.CorrelationUUID, r.LanguageCode).Return(nil)
 		defer articleRepository.AssertExpectations(t)
 
-		err := NewUseCase(&articleRepository).Execute(&r)
+		err := NewUseCase(&articleRepository).Execute(context.Background(), &r)
 
 		assert.NoError(t, err)
 	})
@@ -39,10 +41,10 @@ func TestUseCase_Execute(t *testing.T) {
 			expectedError = errors.New("article deletion failed")
 		)
 
-		articleRepository.On("DeleteByCorrelationUUIDAndLanguage", r.CorrelationUUID, r.LanguageCode).Return(expectedError)
+		articleRepository.On("DeleteByCorrelationUUIDAndLanguage", mock.Anything, r.CorrelationUUID, r.LanguageCode).Return(expectedError)
 		defer articleRepository.AssertExpectations(t)
 
-		err := NewUseCase(&articleRepository).Execute(&r)
+		err := NewUseCase(&articleRepository).Execute(context.Background(), &r)
 
 		assert.ErrorIs(t, err, expectedError)
 	})

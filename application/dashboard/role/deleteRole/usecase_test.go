@@ -1,10 +1,12 @@
 package deleterole
 
 import (
+	"context"
 	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/roles"
 )
@@ -21,10 +23,10 @@ func TestUseCase_Execute(t *testing.T) {
 			r = Request{RoleUUID: "role-uuid"}
 		)
 
-		roleRepository.On("Delete", r.RoleUUID).Return(nil)
+		roleRepository.On("Delete", mock.Anything, r.RoleUUID).Return(nil)
 		defer roleRepository.AssertExpectations(t)
 
-		err := NewUseCase(&roleRepository).Execute(&r)
+		err := NewUseCase(&roleRepository).Execute(context.Background(), &r)
 
 		assert.NoError(t, err)
 	})
@@ -39,10 +41,10 @@ func TestUseCase_Execute(t *testing.T) {
 			expectedError = errors.New("role deletion failed")
 		)
 
-		roleRepository.On("Delete", r.RoleUUID).Return(expectedError)
+		roleRepository.On("Delete", mock.Anything, r.RoleUUID).Return(expectedError)
 		defer roleRepository.AssertExpectations(t)
 
-		err := NewUseCase(&roleRepository).Execute(&r)
+		err := NewUseCase(&roleRepository).Execute(context.Background(), &r)
 
 		assert.ErrorIs(t, err, expectedError)
 	})

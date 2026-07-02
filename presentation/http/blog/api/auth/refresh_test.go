@@ -2,6 +2,7 @@ package auth
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -65,7 +66,7 @@ func TestRefreshHandler(t *testing.T) {
 		b.SetIssuedAt(time.Now())
 		b.SetAudience([]string{auth.RefreshToken})
 
-		return j.Generate(b.Build())
+		return j.Generate(context.Background(), b.Build())
 	}
 
 	t.Run("refresh token", func(t *testing.T) {
@@ -88,7 +89,7 @@ func TestRefreshHandler(t *testing.T) {
 			}
 		)
 
-		userRepository.On("GetOne", u.UUID).Once().Return(u, nil)
+		userRepository.On("GetOne", mock.Anything, u.UUID).Once().Return(u, nil)
 		defer userRepository.AssertExpectations(t)
 
 		refreshToken, err := generateRefreshToken(u)
@@ -105,7 +106,7 @@ func TestRefreshHandler(t *testing.T) {
 		requestValidator.On("Validate", &r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
-		roleRepository.On("GetByUserUUID", u.UUID).Once().Return(rl, nil)
+		roleRepository.On("GetByUserUUID", mock.Anything, u.UUID).Once().Return(rl, nil)
 		defer roleRepository.AssertExpectations(t)
 
 		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
@@ -181,7 +182,7 @@ func TestRefreshHandler(t *testing.T) {
 			}
 		)
 
-		userRepository.On("GetOne", u.UUID).Once().Return(user.User{}, domain.ErrNotExists)
+		userRepository.On("GetOne", mock.Anything, u.UUID).Once().Return(user.User{}, domain.ErrNotExists)
 		defer userRepository.AssertExpectations(t)
 
 		refreshToken, err := generateRefreshToken(u)
@@ -254,7 +255,7 @@ func TestRefreshHandler(t *testing.T) {
 		requestValidator.On("Validate", &r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
-		userRepository.On("GetOne", u.UUID).Once().Return(user.User{}, errors.New("something unexpected"))
+		userRepository.On("GetOne", mock.Anything, u.UUID).Once().Return(user.User{}, errors.New("something unexpected"))
 		defer userRepository.AssertExpectations(t)
 
 		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)

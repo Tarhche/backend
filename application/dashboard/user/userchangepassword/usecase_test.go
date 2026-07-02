@@ -1,6 +1,7 @@
 package userchangepassword
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -38,14 +39,14 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		userRepository.On("GetOne", r.UserUUID).Once().Return(u, nil)
-		userRepository.On("Save", mock.Anything).Return(u.UUID, nil)
+		userRepository.On("GetOne", mock.Anything, r.UserUUID).Once().Return(u, nil)
+		userRepository.On("Save", mock.Anything, mock.Anything).Return(u.UUID, nil)
 		defer userRepository.AssertExpectations(t)
 
-		hasher.On("Hash", []byte(r.NewPassword), mock.AnythingOfType("[]uint8")).Once().Return([]byte("hashed-new-password"), nil)
+		hasher.On("Hash", mock.Anything, []byte(r.NewPassword), mock.AnythingOfType("[]uint8")).Once().Return([]byte("hashed-new-password"), nil)
 		defer hasher.AssertExpectations(t)
 
-		response, err := NewUseCase(&userRepository, &hasher, &validator).Execute(&r)
+		response, err := NewUseCase(&userRepository, &hasher, &validator).Execute(context.Background(), &r)
 
 		assert.NoError(t, err)
 		assert.Nil(t, response)
@@ -72,7 +73,7 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(expectedResponse.ValidationErrors)
 		defer validator.AssertExpectations(t)
 
-		response, err := NewUseCase(&userRepository, &hasher, &validator).Execute(&r)
+		response, err := NewUseCase(&userRepository, &hasher, &validator).Execute(context.Background(), &r)
 
 		userRepository.AssertNotCalled(t, "GetOne")
 		userRepository.AssertNotCalled(t, "Save")
@@ -102,10 +103,10 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		userRepository.On("GetOne", r.UserUUID).Once().Return(user.User{}, expectedErr)
+		userRepository.On("GetOne", mock.Anything, r.UserUUID).Once().Return(user.User{}, expectedErr)
 		defer userRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&userRepository, &hasher, &validator).Execute(&r)
+		response, err := NewUseCase(&userRepository, &hasher, &validator).Execute(context.Background(), &r)
 
 		userRepository.AssertNotCalled(t, "Save")
 		hasher.AssertNotCalled(t, "Hash")
@@ -137,14 +138,14 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		userRepository.On("GetOne", r.UserUUID).Once().Return(u, nil)
-		userRepository.On("Save", mock.Anything).Return("", expectedErr)
+		userRepository.On("GetOne", mock.Anything, r.UserUUID).Once().Return(u, nil)
+		userRepository.On("Save", mock.Anything, mock.Anything).Return("", expectedErr)
 		defer userRepository.AssertExpectations(t)
 
-		hasher.On("Hash", []byte(r.NewPassword), mock.AnythingOfType("[]uint8")).Once().Return([]byte("hashed-new-password"), nil)
+		hasher.On("Hash", mock.Anything, []byte(r.NewPassword), mock.AnythingOfType("[]uint8")).Once().Return([]byte("hashed-new-password"), nil)
 		defer hasher.AssertExpectations(t)
 
-		response, err := NewUseCase(&userRepository, &hasher, &validator).Execute(&r)
+		response, err := NewUseCase(&userRepository, &hasher, &validator).Execute(context.Background(), &r)
 
 		assert.ErrorIs(t, err, expectedErr)
 		assert.Nil(t, response)

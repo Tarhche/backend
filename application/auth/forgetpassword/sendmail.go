@@ -2,6 +2,7 @@ package forgetpassword
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -58,20 +59,20 @@ func NewSendForgetPasswordEmailHandler(
 	}
 }
 
-func (h *sendForgetPasswordEmailHandler) Handle(data []byte) error {
+func (h *sendForgetPasswordEmailHandler) Handle(ctx context.Context, data []byte) error {
 	var command SendForgetPasswordEmail
 	if err := json.Unmarshal(data, &command); err != nil {
 		return err
 	}
 
-	u, err := h.userRepository.GetOneByIdentity(command.Identity)
+	u, err := h.userRepository.GetOneByIdentity(ctx, command.Identity)
 	if err == domain.ErrNotExists {
 		return nil
 	} else if err != nil {
 		return err
 	}
 
-	resetPasswordToken, err := h.authTokenGenerator.GenerateResetPasswordToken(u.UUID)
+	resetPasswordToken, err := h.authTokenGenerator.GenerateResetPasswordToken(ctx, u.UUID)
 	if err != nil {
 		return err
 	}
@@ -87,5 +88,5 @@ func (h *sendForgetPasswordEmailHandler) Handle(data []byte) error {
 
 	subject := h.translator.Translate(resetPasswordEmailSubject, translatorcontract.WithLocale(u.LanguageCode))
 
-	return h.mailer.SendMail(h.mailFrom, u.Email, subject, msg.Bytes())
+	return h.mailer.SendMail(ctx, h.mailFrom, u.Email, subject, msg.Bytes())
 }

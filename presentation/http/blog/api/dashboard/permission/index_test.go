@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	getpermissions "github.com/khanzadimahdi/testproject/application/dashboard/permission/getPermissions"
@@ -33,7 +34,7 @@ func TestIndexHandler(t *testing.T) {
 			}
 		)
 
-		permissionsRepository.On("GetAll").Once().Return(p)
+		permissionsRepository.On("GetAll", mock.Anything).Once().Return(p)
 		defer permissionsRepository.AssertExpectations(t)
 
 		handler := NewIndexHandler(getpermissions.NewUseCase(&permissionsRepository))

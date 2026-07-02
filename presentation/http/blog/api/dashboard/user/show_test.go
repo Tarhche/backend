@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	getuser "github.com/khanzadimahdi/testproject/application/dashboard/user/getUser"
@@ -34,7 +35,7 @@ func TestShowHandler(t *testing.T) {
 			}
 		)
 
-		userRepository.On("GetOne", userUUID).Return(a, nil)
+		userRepository.On("GetOne", mock.Anything, userUUID).Return(a, nil)
 		defer userRepository.AssertExpectations(t)
 
 		handler := NewShowHandler(getuser.NewUseCase(&userRepository))
@@ -70,7 +71,7 @@ func TestShowHandler(t *testing.T) {
 			}
 		)
 
-		userRepository.On("GetOne", userUUID).Return(user.User{}, domain.ErrNotExists)
+		userRepository.On("GetOne", mock.Anything, userUUID).Return(user.User{}, domain.ErrNotExists)
 		defer userRepository.AssertExpectations(t)
 
 		handler := NewShowHandler(getuser.NewUseCase(&userRepository))

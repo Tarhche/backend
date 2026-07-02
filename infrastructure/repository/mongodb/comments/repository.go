@@ -35,8 +35,8 @@ func NewRepository(database *mongo.Database) *CommentsRepository {
 	}
 }
 
-func (r *CommentsRepository) GetAll(offset uint, limit uint) ([]comment.Comment, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *CommentsRepository) GetAll(ctx context.Context, offset uint, limit uint) ([]comment.Comment, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	o := int64(offset)
@@ -76,8 +76,8 @@ func (r *CommentsRepository) GetAll(offset uint, limit uint) ([]comment.Comment,
 	return items, nil
 }
 
-func (r *CommentsRepository) GetOne(UUID string) (comment.Comment, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *CommentsRepository) GetOne(ctx context.Context, UUID string) (comment.Comment, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	filter := bson.D{{Key: "_id", Value: UUID}}
@@ -103,8 +103,8 @@ func (r *CommentsRepository) GetOne(UUID string) (comment.Comment, error) {
 	}, nil
 }
 
-func (r *CommentsRepository) Count() (uint, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *CommentsRepository) Count(ctx context.Context) (uint, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	c, err := r.collection.CountDocuments(ctx, bson.D{})
@@ -115,8 +115,8 @@ func (r *CommentsRepository) Count() (uint, error) {
 	return uint(c), nil
 }
 
-func (r *CommentsRepository) Save(c *comment.Comment) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *CommentsRepository) Save(ctx context.Context, c *comment.Comment) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	if len(c.UUID) == 0 {
@@ -153,8 +153,8 @@ func (r *CommentsRepository) Save(c *comment.Comment) (string, error) {
 	return c.UUID, nil
 }
 
-func (r *CommentsRepository) Delete(UUID string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *CommentsRepository) Delete(ctx context.Context, UUID string) error {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	_, err := r.collection.DeleteOne(ctx, bson.D{{Key: "_id", Value: UUID}})
@@ -162,8 +162,8 @@ func (r *CommentsRepository) Delete(UUID string) error {
 	return err
 }
 
-func (r *CommentsRepository) GetApprovedByObjectUUID(objectType string, UUID string, languageCode string, offset uint, limit uint) ([]comment.Comment, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *CommentsRepository) GetApprovedByObjectUUID(ctx context.Context, objectType string, UUID string, languageCode string, offset uint, limit uint) ([]comment.Comment, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	o := int64(offset)
@@ -223,8 +223,8 @@ func (r *CommentsRepository) GetApprovedByObjectUUID(objectType string, UUID str
 	return items, nil
 }
 
-func (r *CommentsRepository) CountApprovedByObjectUUID(objectType string, UUID string, languageCode string) (uint, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *CommentsRepository) CountApprovedByObjectUUID(ctx context.Context, objectType string, UUID string, languageCode string) (uint, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	filter := bson.D{
@@ -255,8 +255,8 @@ func (r *CommentsRepository) CountApprovedByObjectUUID(objectType string, UUID s
 	return uint(c), nil
 }
 
-func (r *CommentsRepository) GetAllByAuthorUUID(authorUUID string, offset uint, limit uint) ([]comment.Comment, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *CommentsRepository) GetAllByAuthorUUID(ctx context.Context, authorUUID string, offset uint, limit uint) ([]comment.Comment, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	o := int64(offset)
@@ -300,8 +300,8 @@ func (r *CommentsRepository) GetAllByAuthorUUID(authorUUID string, offset uint, 
 	return items, nil
 }
 
-func (r *CommentsRepository) GetOneByAuthorUUID(UUID string, authorUUID string) (comment.Comment, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *CommentsRepository) GetOneByAuthorUUID(ctx context.Context, UUID string, authorUUID string) (comment.Comment, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	filter := bson.D{
@@ -330,8 +330,8 @@ func (r *CommentsRepository) GetOneByAuthorUUID(UUID string, authorUUID string) 
 	}, nil
 }
 
-func (r *CommentsRepository) CountByAuthorUUID(authorUUID string) (uint, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *CommentsRepository) CountByAuthorUUID(ctx context.Context, authorUUID string) (uint, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	filter := bson.D{
@@ -346,8 +346,8 @@ func (r *CommentsRepository) CountByAuthorUUID(authorUUID string) (uint, error) 
 	return uint(c), nil
 }
 
-func (r *CommentsRepository) DeleteByAuthorUUID(UUID string, authorUUID string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *CommentsRepository) DeleteByAuthorUUID(ctx context.Context, UUID string, authorUUID string) error {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	filter := bson.D{

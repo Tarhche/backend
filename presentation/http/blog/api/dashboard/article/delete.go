@@ -4,6 +4,8 @@ import (
 	"net/http"
 
 	deletearticle "github.com/khanzadimahdi/testproject/application/dashboard/article/deleteArticle"
+	infraTrace "github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type deleteHandler struct {
@@ -32,9 +34,10 @@ func (h *deleteHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		LanguageCode:    r.PathValue("language_code"),
 	}
 
-	err := h.useCase.Execute(request)
+	err := h.useCase.Execute(r.Context(), request)
 	switch {
 	case err != nil:
+		infraTrace.RecordError(trace.SpanFromContext(r.Context()), err)
 		rw.WriteHeader(http.StatusInternalServerError)
 	default:
 		rw.WriteHeader(http.StatusNoContent)

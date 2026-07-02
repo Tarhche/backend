@@ -1,6 +1,7 @@
 package createuser
 
 import (
+	"context"
 	"crypto/rand"
 	"errors"
 
@@ -35,14 +36,14 @@ func NewUseCase(
 	}
 }
 
-func (uc *UseCase) Execute(request *Request) (*Response, error) {
+func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
 	if validationErrors := uc.validator.Validate(request); len(validationErrors) > 0 {
 		return &Response{
 			ValidationErrors: validationErrors,
 		}, nil
 	}
 
-	if ok, err := uc.anotherUserExists(request.Email); err != nil {
+	if ok, err := uc.anotherUserExists(ctx, request.Email); err != nil {
 		return nil, err
 	} else if ok {
 		return &Response{
@@ -52,7 +53,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		}, nil
 	}
 
-	if ok, err := uc.anotherUserExists(request.Username); err != nil {
+	if ok, err := uc.anotherUserExists(ctx, request.Username); err != nil {
 		return nil, err
 	} else if ok {
 		return &Response{
@@ -62,7 +63,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		}, nil
 	}
 
-	if !uc.languageResolver.Verify(request.LanguageCode) {
+	if !uc.languageResolver.Verify(ctx, request.LanguageCode) {
 		return &Response{
 			ValidationErrors: domain.ValidationErrors{
 				"language_code": uc.translator.Translate("invalid_value"),
@@ -70,7 +71,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		}, nil
 	}
 
-	UUID, err := uc.createUser(request)
+	UUID, err := uc.createUser(ctx, request)
 	if err != nil {
 		return nil, err
 	}
@@ -78,8 +79,8 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 	return &Response{UUID: UUID}, err
 }
 
-func (uc *UseCase) anotherUserExists(identity string) (bool, error) {
-	u, err := uc.userRepository.GetOneByIdentity(identity)
+func (uc *UseCase) anotherUserExists(ctx context.Context, identity string) (bool, error) {
+	u, err := uc.userRepository.GetOneByIdentity(ctx, identity)
 	if errors.Is(err, domain.ErrNotExists) {
 		return false, nil
 	} else if err != nil {
@@ -89,7 +90,7 @@ func (uc *UseCase) anotherUserExists(identity string) (bool, error) {
 	return u.Email == identity || u.Username == identity, nil
 }
 
-func (uc *UseCase) createUser(request *Request) (string, error) {
+func (uc *UseCase) createUser(ctx context.Context, request *Request) (string, error) {
 	salt := make([]byte, 64)
 	if _, err := rand.Read(salt); err != nil {
 		return "", err
@@ -102,10 +103,10 @@ func (uc *UseCase) createUser(request *Request) (string, error) {
 		Username:     request.Username,
 		LanguageCode: request.LanguageCode,
 		PasswordHash: password.Hash{
-			Value: uc.hasher.Hash([]byte(request.Password), salt),
+			Value: uc.hasher.Hash(ctx, []byte(request.Password), salt),
 			Salt:  salt,
 		},
 	}
 
-	return uc.userRepository.Save(&u)
+	return uc.userRepository.Save(ctx, &u)
 }

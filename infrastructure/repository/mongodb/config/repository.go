@@ -35,8 +35,8 @@ func NewRepository(database *mongo.Database) *ConfigRepository {
 	}
 }
 
-func (r *ConfigRepository) GetLatestRevision() (config.Config, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *ConfigRepository) GetLatestRevision(ctx context.Context) (config.Config, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	desc := bson.D{{Key: "_id", Value: -1}}
@@ -57,8 +57,8 @@ func (r *ConfigRepository) GetLatestRevision() (config.Config, error) {
 	}, nil
 }
 
-func (r *ConfigRepository) Save(a *config.Config) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *ConfigRepository) Save(ctx context.Context, a *config.Config) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	UUID, err := uuid.NewV7()

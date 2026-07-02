@@ -53,13 +53,13 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &request).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		userRepository.On("GetOneByIdentity", request.Identity).Once().Return(u, nil)
+		userRepository.On("GetOneByIdentity", mock2.Anything, request.Identity).Once().Return(u, nil)
 		defer userRepository.AssertExpectations(t)
 
 		asyncCommandBus.On("Produce", context.Background(), SendForgetPasswordEmailName, payload).Return(nil)
 		defer asyncCommandBus.AssertExpectations(t)
 
-		response, err := NewUseCase(&userRepository, &asyncCommandBus, &translator, &validator).Execute(&request)
+		response, err := NewUseCase(&userRepository, &asyncCommandBus, &translator, &validator).Execute(context.Background(), &request)
 
 		translator.AssertNotCalled(t, "Translate")
 
@@ -87,7 +87,7 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &request).Once().Return(expectedResponse.ValidationErrors)
 		defer validator.AssertExpectations(t)
 
-		response, err := NewUseCase(&userRepository, &asyncCommandBus, &translator, &validator).Execute(&request)
+		response, err := NewUseCase(&userRepository, &asyncCommandBus, &translator, &validator).Execute(context.Background(), &request)
 
 		translator.AssertNotCalled(t, "Translate")
 		userRepository.AssertNotCalled(t, "GetOneByIdentity")
@@ -127,10 +127,10 @@ func TestUseCase_Execute(t *testing.T) {
 		).Once().Return(expectedResponse.ValidationErrors["identity"])
 		defer translator.AssertExpectations(t)
 
-		userRepository.On("GetOneByIdentity", request.Identity).Once().Return(user.User{}, domain.ErrNotExists)
+		userRepository.On("GetOneByIdentity", mock2.Anything, request.Identity).Once().Return(user.User{}, domain.ErrNotExists)
 		defer userRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&userRepository, &asyncCommandBus, &translator, &validator).Execute(&request)
+		response, err := NewUseCase(&userRepository, &asyncCommandBus, &translator, &validator).Execute(context.Background(), &request)
 
 		asyncCommandBus.AssertNotCalled(t, "Produce")
 
@@ -158,10 +158,10 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &request).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		userRepository.On("GetOneByIdentity", request.Identity).Once().Return(user.User{}, expectedErr)
+		userRepository.On("GetOneByIdentity", mock2.Anything, request.Identity).Once().Return(user.User{}, expectedErr)
 		defer userRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&userRepository, &asyncCommandBus, &translator, &validator).Execute(&request)
+		response, err := NewUseCase(&userRepository, &asyncCommandBus, &translator, &validator).Execute(context.Background(), &request)
 
 		translator.AssertNotCalled(t, "Translate")
 
@@ -200,13 +200,13 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &request).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		userRepository.On("GetOneByIdentity", request.Identity).Once().Return(u, nil)
+		userRepository.On("GetOneByIdentity", mock2.Anything, request.Identity).Once().Return(u, nil)
 		defer userRepository.AssertExpectations(t)
 
 		asyncCommandBus.On("Produce", context.Background(), SendForgetPasswordEmailName, payload).Return(expectedErr)
 		defer asyncCommandBus.AssertExpectations(t)
 
-		response, err := NewUseCase(&userRepository, &asyncCommandBus, &translator, &validator).Execute(&request)
+		response, err := NewUseCase(&userRepository, &asyncCommandBus, &translator, &validator).Execute(context.Background(), &request)
 
 		translator.AssertNotCalled(t, "Translate")
 

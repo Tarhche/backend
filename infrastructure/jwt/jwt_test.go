@@ -1,6 +1,7 @@
 package jwt
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -35,11 +36,11 @@ func TestJWT(t *testing.T) {
 			"exp":  float64(now.Add(time.Hour * 1).Unix()), // Token expires in 1 hour
 		}
 
-		tokenString, err := JWTToken.Generate(claims)
+		tokenString, err := JWTToken.Generate(context.Background(), claims)
 		assert.NoError(t, err, "unexpected error")
 
 		// Verify the jwt token
-		tokenClaims, err := JWTToken.Verify(tokenString)
+		tokenClaims, err := JWTToken.Verify(context.Background(), tokenString)
 		assert.NoError(t, err, "unexpected error")
 
 		// Access the claims
@@ -59,11 +60,11 @@ func TestJWT(t *testing.T) {
 			"exp":  time.Now().Add(time.Hour * -1).Unix(), // Token expired
 		}
 
-		tokenString, err := JWTToken.Generate(claims)
+		tokenString, err := JWTToken.Generate(context.Background(), claims)
 		assert.NoError(t, err, "unexpected error")
 
 		// Verify the jwt token
-		tokenClaims, err := JWTToken.Verify(tokenString)
+		tokenClaims, err := JWTToken.Verify(context.Background(), tokenString)
 		assert.ErrorIs(t, err, jwt.ErrTokenExpired)
 		assert.Empty(t, tokenClaims)
 	})

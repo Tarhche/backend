@@ -1,6 +1,7 @@
 package runTask
 
 import (
+	"context"
 	"encoding/json"
 
 	"github.com/khanzadimahdi/testproject/domain"
@@ -20,13 +21,13 @@ func NewTaskFailed(
 	}
 }
 
-func (uc *TaskFailed) Handle(data []byte) error {
+func (uc *TaskFailed) Handle(ctx context.Context, data []byte) error {
 	var taskFailed events.TaskFailed
 	if err := json.Unmarshal(data, &taskFailed); err != nil {
 		return err
 	}
 
-	t, err := uc.taskRepository.GetOne(taskFailed.UUID)
+	t, err := uc.taskRepository.GetOne(ctx, taskFailed.UUID)
 	if err == domain.ErrNotExists {
 		return nil
 	} else if err != nil {
@@ -39,7 +40,7 @@ func (uc *TaskFailed) Handle(data []byte) error {
 	}
 
 	t.State = destinationState
-	_, err = uc.taskRepository.Save(&t)
+	_, err = uc.taskRepository.Save(ctx, &t)
 
 	return err
 }

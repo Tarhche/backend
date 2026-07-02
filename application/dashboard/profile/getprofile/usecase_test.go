@@ -1,10 +1,12 @@
 package getprofile
 
 import (
+	"context"
 	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
@@ -40,9 +42,9 @@ func TestUseCase_Execute(t *testing.T) {
 			}
 		)
 
-		userRepository.On("GetOne", userUUID).Once().Return(u, nil)
+		userRepository.On("GetOne", mock.Anything, userUUID).Once().Return(u, nil)
 
-		response, err := NewUseCase(&userRepository).Execute(userUUID)
+		response, err := NewUseCase(&userRepository).Execute(context.Background(), userUUID)
 
 		assert.NoError(t, err)
 		assert.Equal(t, &expectedResponse, response)
@@ -59,9 +61,9 @@ func TestUseCase_Execute(t *testing.T) {
 			expectedErr = errors.New("user not found")
 		)
 
-		userRepository.On("GetOne", userUUID).Once().Return(user.User{}, expectedErr)
+		userRepository.On("GetOne", mock.Anything, userUUID).Once().Return(user.User{}, expectedErr)
 
-		response, err := NewUseCase(&userRepository).Execute(userUUID)
+		response, err := NewUseCase(&userRepository).Execute(context.Background(), userUUID)
 
 		assert.ErrorIs(t, err, expectedErr)
 		assert.Nil(t, response)

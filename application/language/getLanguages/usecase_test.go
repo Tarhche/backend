@@ -1,10 +1,12 @@
 package getlanguages
 
 import (
+	"context"
 	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/application/language/resolver"
 	"github.com/khanzadimahdi/testproject/domain/language"
@@ -37,15 +39,15 @@ func TestUseCase_Execute(t *testing.T) {
 			}
 		)
 
-		languageRepository.On("Count").Once().Return(uint(len(l)), nil)
-		languageRepository.On("GetAll", uint(0), uint(len(l))).Once().Return(l, nil)
+		languageRepository.On("Count", mock.Anything).Once().Return(uint(len(l)), nil)
+		languageRepository.On("GetAll", mock.Anything, uint(0), uint(len(l))).Once().Return(l, nil)
 		defer languageRepository.AssertExpectations(t)
 
-		languageResolver.On("DefaultCode").Once().Return(defaultLanguage.Code, nil)
-		languageResolver.On("Resolve", defaultLanguage.Code).Once().Return(defaultLanguage, nil)
+		languageResolver.On("DefaultCode", mock.Anything).Once().Return(defaultLanguage.Code, nil)
+		languageResolver.On("Resolve", mock.Anything, defaultLanguage.Code).Once().Return(defaultLanguage, nil)
 		defer languageResolver.AssertExpectations(t)
 
-		response, err := NewUseCase(&languageRepository, &languageResolver).Execute()
+		response, err := NewUseCase(&languageRepository, &languageResolver).Execute(context.Background())
 
 		assert.NoError(t, err)
 		assert.Equal(t, &expectedResponse, response)
@@ -61,10 +63,10 @@ func TestUseCase_Execute(t *testing.T) {
 			expectedError = errors.New("counting failed")
 		)
 
-		languageRepository.On("Count").Once().Return(uint(0), expectedError)
+		languageRepository.On("Count", mock.Anything).Once().Return(uint(0), expectedError)
 		defer languageRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&languageRepository, &languageResolver).Execute()
+		response, err := NewUseCase(&languageRepository, &languageResolver).Execute(context.Background())
 
 		languageRepository.AssertNotCalled(t, "GetAll")
 		languageResolver.AssertNotCalled(t, "DefaultCode")
@@ -83,11 +85,11 @@ func TestUseCase_Execute(t *testing.T) {
 			expectedError = errors.New("getting failed")
 		)
 
-		languageRepository.On("Count").Once().Return(uint(2), nil)
-		languageRepository.On("GetAll", uint(0), uint(2)).Once().Return(nil, expectedError)
+		languageRepository.On("Count", mock.Anything).Once().Return(uint(2), nil)
+		languageRepository.On("GetAll", mock.Anything, uint(0), uint(2)).Once().Return(nil, expectedError)
 		defer languageRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&languageRepository, &languageResolver).Execute()
+		response, err := NewUseCase(&languageRepository, &languageResolver).Execute(context.Background())
 
 		languageResolver.AssertNotCalled(t, "DefaultCode")
 		languageResolver.AssertNotCalled(t, "Resolve")
@@ -109,14 +111,14 @@ func TestUseCase_Execute(t *testing.T) {
 			expectedError = errors.New("resolving default code failed")
 		)
 
-		languageRepository.On("Count").Once().Return(uint(len(l)), nil)
-		languageRepository.On("GetAll", uint(0), uint(len(l))).Once().Return(l, nil)
+		languageRepository.On("Count", mock.Anything).Once().Return(uint(len(l)), nil)
+		languageRepository.On("GetAll", mock.Anything, uint(0), uint(len(l))).Once().Return(l, nil)
 		defer languageRepository.AssertExpectations(t)
 
-		languageResolver.On("DefaultCode").Once().Return("", expectedError)
+		languageResolver.On("DefaultCode", mock.Anything).Once().Return("", expectedError)
 		defer languageResolver.AssertExpectations(t)
 
-		response, err := NewUseCase(&languageRepository, &languageResolver).Execute()
+		response, err := NewUseCase(&languageRepository, &languageResolver).Execute(context.Background())
 
 		languageResolver.AssertNotCalled(t, "Resolve")
 		assert.Nil(t, response)
@@ -137,15 +139,15 @@ func TestUseCase_Execute(t *testing.T) {
 			expectedError = errors.New("resolving default language failed")
 		)
 
-		languageRepository.On("Count").Once().Return(uint(len(l)), nil)
-		languageRepository.On("GetAll", uint(0), uint(len(l))).Once().Return(l, nil)
+		languageRepository.On("Count", mock.Anything).Once().Return(uint(len(l)), nil)
+		languageRepository.On("GetAll", mock.Anything, uint(0), uint(len(l))).Once().Return(l, nil)
 		defer languageRepository.AssertExpectations(t)
 
-		languageResolver.On("DefaultCode").Once().Return("EN", nil)
-		languageResolver.On("Resolve", "EN").Once().Return(language.Language{}, expectedError)
+		languageResolver.On("DefaultCode", mock.Anything).Once().Return("EN", nil)
+		languageResolver.On("Resolve", mock.Anything, "EN").Once().Return(language.Language{}, expectedError)
 		defer languageResolver.AssertExpectations(t)
 
-		response, err := NewUseCase(&languageRepository, &languageResolver).Execute()
+		response, err := NewUseCase(&languageRepository, &languageResolver).Execute(context.Background())
 
 		assert.Nil(t, response)
 		assert.ErrorIs(t, err, expectedError)

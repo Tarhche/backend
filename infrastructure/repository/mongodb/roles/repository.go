@@ -35,8 +35,8 @@ func NewRepository(database *mongo.Database) *RolesRepository {
 	}
 }
 
-func (r *RolesRepository) GetAll(offset uint, limit uint) ([]role.Role, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *RolesRepository) GetAll(ctx context.Context, offset uint, limit uint) ([]role.Role, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	o := int64(offset)
@@ -77,8 +77,8 @@ func (r *RolesRepository) GetAll(offset uint, limit uint) ([]role.Role, error) {
 	return items, nil
 }
 
-func (r *RolesRepository) GetByUUIDs(UUIDs []string) ([]role.Role, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *RolesRepository) GetByUUIDs(ctx context.Context, UUIDs []string) ([]role.Role, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	filter := bson.M{"_id": bson.M{"$in": UUIDs}}
@@ -112,8 +112,8 @@ func (r *RolesRepository) GetByUUIDs(UUIDs []string) ([]role.Role, error) {
 	return items, nil
 }
 
-func (r *RolesRepository) GetOne(UUID string) (role.Role, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *RolesRepository) GetOne(ctx context.Context, UUID string) (role.Role, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	var rb RoleBson
@@ -133,8 +133,8 @@ func (r *RolesRepository) GetOne(UUID string) (role.Role, error) {
 	}, nil
 }
 
-func (r *RolesRepository) Save(a *role.Role) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *RolesRepository) Save(ctx context.Context, a *role.Role) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	at := time.Now()
@@ -168,8 +168,8 @@ func (r *RolesRepository) Save(a *role.Role) (string, error) {
 	return a.UUID, err
 }
 
-func (r *RolesRepository) Count() (uint, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *RolesRepository) Count(ctx context.Context) (uint, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	c, err := r.collection.CountDocuments(ctx, bson.D{})
@@ -180,8 +180,8 @@ func (r *RolesRepository) Count() (uint, error) {
 	return uint(c), nil
 }
 
-func (r *RolesRepository) Delete(UUID string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *RolesRepository) Delete(ctx context.Context, UUID string) error {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	_, err := r.collection.DeleteOne(ctx, bson.D{{Key: "_id", Value: UUID}})
@@ -189,8 +189,8 @@ func (r *RolesRepository) Delete(UUID string) error {
 	return err
 }
 
-func (r *RolesRepository) UserHasPermission(userUUID string, permission string) (bool, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *RolesRepository) UserHasPermission(ctx context.Context, userUUID string, permission string) (bool, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	filter := bson.D{
@@ -216,8 +216,8 @@ func (r *RolesRepository) UserHasPermission(userUUID string, permission string) 
 	}
 }
 
-func (r *RolesRepository) GetByUserUUID(userUUID string) ([]role.Role, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *RolesRepository) GetByUserUUID(ctx context.Context, userUUID string) ([]role.Role, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	filter := bson.D{{Key: "user_uuids", Value: userUUID}}

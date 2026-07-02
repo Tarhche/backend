@@ -83,13 +83,13 @@ func TestLoginHandler(t *testing.T) {
 			}
 		)
 
-		userRepository.On("GetOneByIdentity", r.Identity).Once().Return(u, nil)
+		userRepository.On("GetOneByIdentity", mock.Anything, r.Identity).Once().Return(u, nil)
 		defer userRepository.AssertExpectations(t)
 
-		hasher.On("Equal", []byte(r.Password), u.PasswordHash.Value, u.PasswordHash.Salt).Once().Return(true)
+		hasher.On("Equal", mock.Anything, []byte(r.Password), u.PasswordHash.Value, u.PasswordHash.Salt).Once().Return(true)
 		defer hasher.AssertExpectations(t)
 
-		roleRepository.On("GetByUserUUID", u.UUID).Once().Return(rl, nil)
+		roleRepository.On("GetByUserUUID", mock.Anything, u.UUID).Once().Return(rl, nil)
 		defer roleRepository.AssertExpectations(t)
 
 		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
@@ -177,7 +177,7 @@ func TestLoginHandler(t *testing.T) {
 		translator.On("Translate", "invalid_identity_or_password", mock.Anything).Once().Return("identity (email/username) or password is wrong")
 		defer translator.AssertExpectations(t)
 
-		userRepository.On("GetOneByIdentity", r.Identity).Once().Return(user.User{}, domain.ErrNotExists)
+		userRepository.On("GetOneByIdentity", mock.Anything, r.Identity).Once().Return(user.User{}, domain.ErrNotExists)
 		defer userRepository.AssertExpectations(t)
 
 		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
@@ -223,7 +223,7 @@ func TestLoginHandler(t *testing.T) {
 		requestValidator.On("Validate", &r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
-		userRepository.On("GetOneByIdentity", r.Identity).Once().Return(user.User{}, errors.New("an unexpected error"))
+		userRepository.On("GetOneByIdentity", mock.Anything, r.Identity).Once().Return(user.User{}, errors.New("an unexpected error"))
 		defer userRepository.AssertExpectations(t)
 
 		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)

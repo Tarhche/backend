@@ -1,6 +1,8 @@
 package getlanguages
 
 import (
+	"context"
+
 	"github.com/khanzadimahdi/testproject/application/language/resolver"
 	"github.com/khanzadimahdi/testproject/domain/language"
 )
@@ -17,23 +19,23 @@ func NewUseCase(languageRepository language.Repository, languageResolver resolve
 	}
 }
 
-func (uc *UseCase) Execute() (*Response, error) {
-	total, err := uc.languageRepository.Count()
+func (uc *UseCase) Execute(ctx context.Context) (*Response, error) {
+	total, err := uc.languageRepository.Count(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	languages, err := uc.languageRepository.GetAll(0, total)
+	languages, err := uc.languageRepository.GetAll(ctx, 0, total)
 	if err != nil {
 		return nil, err
 	}
 
-	defaultCode, err := uc.languageResolver.DefaultCode()
+	defaultCode, err := uc.languageResolver.DefaultCode(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	defaultLanguage, err := uc.languageResolver.Resolve(defaultCode)
+	defaultLanguage, err := uc.languageResolver.Resolve(ctx, defaultCode)
 	if err != nil {
 		return nil, err
 	}

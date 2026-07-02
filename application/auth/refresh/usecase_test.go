@@ -1,6 +1,7 @@
 package refresh
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/translator"
 	"github.com/khanzadimahdi/testproject/infrastructure/validator"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
 func TestUseCase_Execute(t *testing.T) {
@@ -66,15 +68,15 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		userRepository.On("GetOne", u.UUID).Once().Return(u, nil)
+		userRepository.On("GetOne", mock.Anything, u.UUID).Once().Return(u, nil)
 		defer userRepository.AssertExpectations(t)
 
-		roleRepository.On("GetByUserUUID", u.UUID).Once().Return(rl, nil)
+		roleRepository.On("GetByUserUUID", mock.Anything, u.UUID).Once().Return(rl, nil)
 		defer roleRepository.AssertExpectations(t)
 
 		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
 
-		response, err := NewUseCase(&userRepository, j, authTokenGenerator, &translator, &validator).Execute(&r)
+		response, err := NewUseCase(&userRepository, j, authTokenGenerator, &translator, &validator).Execute(context.Background(), &r)
 
 		translator.AssertNotCalled(t, "Translate")
 
@@ -82,7 +84,7 @@ func TestUseCase_Execute(t *testing.T) {
 		assert.NotNil(t, response)
 		assert.Len(t, response.ValidationErrors, 0)
 
-		accessTokenClaims, err := j.Verify(response.AccessToken)
+		accessTokenClaims, err := j.Verify(context.Background(), response.AccessToken)
 		assert.NoError(t, err)
 		assert.NotNil(t, accessTokenClaims)
 
@@ -90,7 +92,7 @@ func TestUseCase_Execute(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, "permission", audience[0])
 
-		refreshTokenClaims, err := j.Verify(response.RefreshToken)
+		refreshTokenClaims, err := j.Verify(context.Background(), response.RefreshToken)
 		assert.NoError(t, err)
 		assert.NotNil(t, accessTokenClaims)
 
@@ -121,7 +123,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
 
-		response, err := NewUseCase(&userRepository, j, authTokenGenerator, &translator, &validator).Execute(&r)
+		response, err := NewUseCase(&userRepository, j, authTokenGenerator, &translator, &validator).Execute(context.Background(), &r)
 
 		roleRepository.AssertNotCalled(t, "GetByUserUUID")
 		translator.AssertNotCalled(t, "Translate")
@@ -158,7 +160,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
 
-		response, err := NewUseCase(&userRepository, j, authTokenGenerator, &translator, &validator).Execute(&r)
+		response, err := NewUseCase(&userRepository, j, authTokenGenerator, &translator, &validator).Execute(context.Background(), &r)
 
 		roleRepository.AssertNotCalled(t, "GetByUserUUID")
 		translator.AssertNotCalled(t, "Translate")
@@ -189,12 +191,12 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		userRepository.On("GetOne", u.UUID).Once().Return(user.User{}, expectedErr)
+		userRepository.On("GetOne", mock.Anything, u.UUID).Once().Return(user.User{}, expectedErr)
 		defer userRepository.AssertExpectations(t)
 
 		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
 
-		response, err := NewUseCase(&userRepository, j, authTokenGenerator, &translator, &validator).Execute(&r)
+		response, err := NewUseCase(&userRepository, j, authTokenGenerator, &translator, &validator).Execute(context.Background(), &r)
 
 		roleRepository.AssertNotCalled(t, "GetByUserUUID")
 		translator.AssertNotCalled(t, "Translate")
@@ -214,7 +216,7 @@ func generateRefreshToken(t *testing.T, j *jwt.JWT, u user.User, expiresAt time.
 	b.SetIssuedAt(time.Now())
 	b.SetAudience([]string{audience})
 
-	token, err := j.Generate(b.Build())
+	token, err := j.Generate(context.Background(), b.Build())
 
 	assert.NoError(t, err)
 

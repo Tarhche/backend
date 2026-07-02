@@ -1,6 +1,7 @@
 package forgetpassword
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"testing"
@@ -62,7 +63,7 @@ func TestHandler_Execute(t *testing.T) {
 			}
 		)
 
-		userRepository.On("GetOneByIdentity", request.Identity).Once().Return(u, nil)
+		userRepository.On("GetOneByIdentity", mock.Anything, request.Identity).Once().Return(u, nil)
 		defer userRepository.AssertExpectations(t)
 
 		renderer.On("Render", mock.Anything, localizedTemplate, mock.Anything).Once().Return(nil)
@@ -71,7 +72,7 @@ func TestHandler_Execute(t *testing.T) {
 		translatorMock.On("Translate", resetPasswordEmailSubject, mock.Anything).Once().Return(subject)
 		defer translatorMock.AssertExpectations(t)
 
-		mailer.On("SendMail", mailFrom, u.Email, subject, mock.AnythingOfType("[]uint8")).Once().Return(nil)
+		mailer.On("SendMail", mock.Anything, mailFrom, u.Email, subject, mock.AnythingOfType("[]uint8")).Once().Return(nil)
 		defer mailer.AssertExpectations(t)
 
 		payload, err := json.Marshal(command)
@@ -79,7 +80,7 @@ func TestHandler_Execute(t *testing.T) {
 
 		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
 
-		err = NewSendForgetPasswordEmailHandler(&userRepository, authTokenGenerator, &mailer, mailFrom, webURL, &renderer, &translatorMock).Handle(payload)
+		err = NewSendForgetPasswordEmailHandler(&userRepository, authTokenGenerator, &mailer, mailFrom, webURL, &renderer, &translatorMock).Handle(context.Background(), payload)
 		assert.NoError(t, err)
 	})
 
@@ -102,7 +103,7 @@ func TestHandler_Execute(t *testing.T) {
 			}
 		)
 
-		userRepository.On("GetOneByIdentity", request.Identity).Once().Return(user.User{}, domain.ErrNotExists)
+		userRepository.On("GetOneByIdentity", mock.Anything, request.Identity).Once().Return(user.User{}, domain.ErrNotExists)
 		defer userRepository.AssertExpectations(t)
 
 		payload, err := json.Marshal(command)
@@ -110,7 +111,7 @@ func TestHandler_Execute(t *testing.T) {
 
 		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
 
-		err = NewSendForgetPasswordEmailHandler(&userRepository, authTokenGenerator, &mailer, mailFrom, webURL, &renderer, &translatorMock).Handle(payload)
+		err = NewSendForgetPasswordEmailHandler(&userRepository, authTokenGenerator, &mailer, mailFrom, webURL, &renderer, &translatorMock).Handle(context.Background(), payload)
 
 		renderer.AssertNotCalled(t, "Render")
 		mailer.AssertNotCalled(t, "SendMail")
@@ -139,7 +140,7 @@ func TestHandler_Execute(t *testing.T) {
 			expectedErr = errors.New("something bad happened")
 		)
 
-		userRepository.On("GetOneByIdentity", request.Identity).Once().Return(user.User{}, expectedErr)
+		userRepository.On("GetOneByIdentity", mock.Anything, request.Identity).Once().Return(user.User{}, expectedErr)
 		defer userRepository.AssertExpectations(t)
 
 		payload, err := json.Marshal(command)
@@ -147,7 +148,7 @@ func TestHandler_Execute(t *testing.T) {
 
 		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
 
-		err = NewSendForgetPasswordEmailHandler(&userRepository, authTokenGenerator, &mailer, mailFrom, webURL, &renderer, &translatorMock).Handle(payload)
+		err = NewSendForgetPasswordEmailHandler(&userRepository, authTokenGenerator, &mailer, mailFrom, webURL, &renderer, &translatorMock).Handle(context.Background(), payload)
 
 		renderer.AssertNotCalled(t, "Render")
 		mailer.AssertNotCalled(t, "SendMail")
@@ -182,7 +183,7 @@ func TestHandler_Execute(t *testing.T) {
 			expectedErr = errors.New("something bad happened")
 		)
 
-		userRepository.On("GetOneByIdentity", request.Identity).Once().Return(u, nil)
+		userRepository.On("GetOneByIdentity", mock.Anything, request.Identity).Once().Return(u, nil)
 		defer userRepository.AssertExpectations(t)
 
 		renderer.On("Render", mock.Anything, localizedTemplate, mock.Anything).Once().Return(expectedErr)
@@ -193,7 +194,7 @@ func TestHandler_Execute(t *testing.T) {
 
 		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
 
-		err = NewSendForgetPasswordEmailHandler(&userRepository, authTokenGenerator, &mailer, mailFrom, webURL, &renderer, &translatorMock).Handle(payload)
+		err = NewSendForgetPasswordEmailHandler(&userRepository, authTokenGenerator, &mailer, mailFrom, webURL, &renderer, &translatorMock).Handle(context.Background(), payload)
 
 		mailer.AssertNotCalled(t, "SendMail")
 
@@ -227,7 +228,7 @@ func TestHandler_Execute(t *testing.T) {
 			expectedErr = errors.New("something bad happened")
 		)
 
-		userRepository.On("GetOneByIdentity", request.Identity).Once().Return(u, nil)
+		userRepository.On("GetOneByIdentity", mock.Anything, request.Identity).Once().Return(u, nil)
 		defer userRepository.AssertExpectations(t)
 
 		renderer.On("Render", mock.Anything, localizedTemplate, mock.Anything).Once().Return(nil)
@@ -236,7 +237,7 @@ func TestHandler_Execute(t *testing.T) {
 		translatorMock.On("Translate", resetPasswordEmailSubject, mock.Anything).Once().Return(subject)
 		defer translatorMock.AssertExpectations(t)
 
-		mailer.On("SendMail", mailFrom, u.Email, subject, mock.AnythingOfType("[]uint8")).Once().Return(expectedErr)
+		mailer.On("SendMail", mock.Anything, mailFrom, u.Email, subject, mock.AnythingOfType("[]uint8")).Once().Return(expectedErr)
 		defer mailer.AssertExpectations(t)
 
 		payload, err := json.Marshal(command)
@@ -244,7 +245,7 @@ func TestHandler_Execute(t *testing.T) {
 
 		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
 
-		err = NewSendForgetPasswordEmailHandler(&userRepository, authTokenGenerator, &mailer, mailFrom, webURL, &renderer, &translatorMock).Handle(payload)
+		err = NewSendForgetPasswordEmailHandler(&userRepository, authTokenGenerator, &mailer, mailFrom, webURL, &renderer, &translatorMock).Handle(context.Background(), payload)
 		assert.ErrorIs(t, expectedErr, err)
 	})
 }

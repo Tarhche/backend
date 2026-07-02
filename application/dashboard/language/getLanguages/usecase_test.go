@@ -1,10 +1,12 @@
 package getlanguages
 
 import (
+	"context"
 	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/domain/language"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/languages"
@@ -35,11 +37,11 @@ func TestUseCase_Execute(t *testing.T) {
 			}
 		)
 
-		languageRepository.On("Count").Once().Return(uint(len(l)), nil)
-		languageRepository.On("GetAll", uint(0), uint(limit)).Once().Return(l, nil)
+		languageRepository.On("Count", mock.Anything).Once().Return(uint(len(l)), nil)
+		languageRepository.On("GetAll", mock.Anything, uint(0), uint(limit)).Once().Return(l, nil)
 		defer languageRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&languageRepository).Execute(&request)
+		response, err := NewUseCase(&languageRepository).Execute(context.Background(), &request)
 
 		assert.NoError(t, err)
 		assert.Equal(t, &expectedResponse, response)
@@ -55,10 +57,10 @@ func TestUseCase_Execute(t *testing.T) {
 			expectedError = errors.New("counting failed")
 		)
 
-		languageRepository.On("Count").Once().Return(uint(0), expectedError)
+		languageRepository.On("Count", mock.Anything).Once().Return(uint(0), expectedError)
 		defer languageRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&languageRepository).Execute(&request)
+		response, err := NewUseCase(&languageRepository).Execute(context.Background(), &request)
 
 		languageRepository.AssertNotCalled(t, "GetAll")
 		assert.Nil(t, response)
@@ -75,11 +77,11 @@ func TestUseCase_Execute(t *testing.T) {
 			expectedError = errors.New("getting failed")
 		)
 
-		languageRepository.On("Count").Once().Return(uint(2), nil)
-		languageRepository.On("GetAll", uint(0), uint(limit)).Once().Return(nil, expectedError)
+		languageRepository.On("Count", mock.Anything).Once().Return(uint(2), nil)
+		languageRepository.On("GetAll", mock.Anything, uint(0), uint(limit)).Once().Return(nil, expectedError)
 		defer languageRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&languageRepository).Execute(&request)
+		response, err := NewUseCase(&languageRepository).Execute(context.Background(), &request)
 
 		assert.Nil(t, response)
 		assert.ErrorIs(t, err, expectedError)

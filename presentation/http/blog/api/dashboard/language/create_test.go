@@ -39,8 +39,8 @@ func TestCreateHandler(t *testing.T) {
 		requestValidator.On("Validate", &r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
-		languageRepository.On("Exists", r.Code).Once().Return(false)
-		languageRepository.On("Save", mock.AnythingOfType("*language.Language")).Once().Return(r.Code, nil)
+		languageRepository.On("Exists", mock.Anything, r.Code).Once().Return(false)
+		languageRepository.On("Save", mock.Anything, mock.AnythingOfType("*language.Language")).Once().Return(r.Code, nil)
 		defer languageRepository.AssertExpectations(t)
 
 		handler := NewCreateHandler(createlanguage.NewUseCase(&languageRepository, &requestValidator, &translator))

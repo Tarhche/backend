@@ -6,6 +6,8 @@ import (
 
 	deletefile "github.com/khanzadimahdi/testproject/application/dashboard/file/deleteFile"
 	"github.com/khanzadimahdi/testproject/domain"
+	infraTrace "github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type deleteHandler struct {
@@ -31,7 +33,7 @@ func NewDeleteHandler(useCase *deletefile.UseCase) *deleteHandler {
 func (h *deleteHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	UUID := r.PathValue("uuid")
 
-	err := h.useCase.Execute(deletefile.Request{
+	err := h.useCase.Execute(r.Context(), deletefile.Request{
 		FileUUID: UUID,
 	})
 
@@ -39,6 +41,7 @@ func (h *deleteHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, domain.ErrNotExists):
 		rw.WriteHeader(http.StatusNotFound)
 	case err != nil:
+		infraTrace.RecordError(trace.SpanFromContext(r.Context()), err)
 		rw.WriteHeader(http.StatusInternalServerError)
 	default:
 		rw.WriteHeader(http.StatusNoContent)

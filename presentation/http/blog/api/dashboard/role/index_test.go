@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	getroles "github.com/khanzadimahdi/testproject/application/dashboard/role/getRoles"
@@ -42,8 +43,8 @@ func TestIndexHandler(t *testing.T) {
 			}
 		)
 
-		rolesRepository.On("Count").Once().Return(uint(len(p)), nil)
-		rolesRepository.On("GetAll", uint(0), uint(10)).Once().Return(p, nil)
+		rolesRepository.On("Count", mock.Anything).Once().Return(uint(len(p)), nil)
+		rolesRepository.On("GetAll", mock.Anything, uint(0), uint(10)).Once().Return(p, nil)
 		defer rolesRepository.AssertExpectations(t)
 
 		handler := NewIndexHandler(getroles.NewUseCase(&rolesRepository))
@@ -71,8 +72,8 @@ func TestIndexHandler(t *testing.T) {
 			u = user.User{UUID: "auth-user-uuid"}
 		)
 
-		rolesRepository.On("Count").Once().Return(uint(0), nil)
-		rolesRepository.On("GetAll", uint(0), uint(10)).Once().Return(nil, nil)
+		rolesRepository.On("Count", mock.Anything).Once().Return(uint(0), nil)
+		rolesRepository.On("GetAll", mock.Anything, uint(0), uint(10)).Once().Return(nil, nil)
 		defer rolesRepository.AssertExpectations(t)
 
 		handler := NewIndexHandler(getroles.NewUseCase(&rolesRepository))

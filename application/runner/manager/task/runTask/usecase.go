@@ -27,7 +27,7 @@ func NewUseCase(
 	}
 }
 
-func (uc *UseCase) Execute(request *Request) (*Response, error) {
+func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
 	if validationErrors := uc.validator.Validate(request); len(validationErrors) > 0 {
 		return &Response{
 			ValidationErrors: validationErrors,
@@ -58,19 +58,19 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		OwnerUUID: request.OwnerUUID,
 	}
 
-	uuid, err := uc.taskRepository.Save(&t)
+	uuid, err := uc.taskRepository.Save(ctx, &t)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := uc.publishTaskCreated(uuid); err != nil {
+	if err := uc.publishTaskCreated(ctx, uuid); err != nil {
 		return nil, err
 	}
 
 	return &Response{UUID: uuid}, nil
 }
 
-func (uc *UseCase) publishTaskCreated(uuid string) error {
+func (uc *UseCase) publishTaskCreated(ctx context.Context, uuid string) error {
 	event := &events.TaskCreated{
 		UUID: uuid,
 	}
@@ -80,5 +80,5 @@ func (uc *UseCase) publishTaskCreated(uuid string) error {
 		return err
 	}
 
-	return uc.asyncCommandBus.Produce(context.Background(), events.TaskCreatedName, payload)
+	return uc.asyncCommandBus.Produce(ctx, events.TaskCreatedName, payload)
 }

@@ -2,11 +2,12 @@ package runner
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/danceable/container/bind"
+	"github.com/danceable/container/resolve"
 	"github.com/danceable/provider"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
@@ -28,6 +29,7 @@ import (
 	noderepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/runner/nodes"
 	taskrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/runner/tasks"
 	"github.com/khanzadimahdi/testproject/infrastructure/runner/scheduler/roundrobin"
+	"github.com/khanzadimahdi/testproject/infrastructure/telemetry/profiler"
 	"github.com/khanzadimahdi/testproject/presentation/http/middleware"
 	managerNodeAPI "github.com/khanzadimahdi/testproject/presentation/http/runner/manager/api/node"
 	managerTaskAPI "github.com/khanzadimahdi/testproject/presentation/http/runner/manager/api/task"
@@ -42,6 +44,8 @@ const (
 // by the runner manager service.
 func ManagerProviders() []provider.Provider {
 	return []provider.Provider{
+		providers.NewOpenTelemetryProvider("runner-manager", "runner-manager"),
+		providers.NewProfilerProvider("runner-manager"),
 		providers.NewMongodbProvider(),
 		providers.NewNatsProvider(),
 		providers.NewTranslationProvider(),
@@ -64,8 +68,6 @@ func NewManagerProvider() *managerProvider {
 }
 
 func (p *managerProvider) Register(ctx context.Context, c provider.Container) error {
-	log.SetFlags(log.LstdFlags | log.Llongfile)
-
 	return nil
 }
 
@@ -75,7 +77,12 @@ func (p *managerProvider) Boot(ctx context.Context, c provider.Container) error 
 		return err
 	}
 
-	pc, err := produceConsumer.NewProduceConsumer(natsConnection, "runner-manager")
+	var logger *slog.Logger
+	if err := c.Resolve(&logger, resolve.WithParams("runner-manager")); err != nil {
+		return err
+	}
+
+	pc, err := produceConsumer.NewProduceConsumer(natsConnection, "runner-manager", logger)
 	if err != nil {
 		return err
 	}
@@ -106,6 +113,11 @@ func managerConsoleCommand(
 	translator translatorContract.Translator,
 	iocContainer provider.Container,
 ) (http.Handler, error) {
+	var logger *slog.Logger
+	if err := iocContainer.Resolve(&logger, resolve.WithParams("runner-manager")); err != nil {
+		return nil, err
+	}
+
 	taskScheduler := roundrobin.New()
 
 	taskRepository := taskrepository.NewRepository(database)
@@ -131,12 +143,39 @@ func managerConsoleCommand(
 	mux.Handle("GET /api/nodes", managerNodeAPI.NewIndexHandler(managerGetNodesUseCase))
 	mux.Handle("GET /api/nodes/{name}", managerNodeAPI.NewShowHandler(managerGetNodeUseCase))
 
-	handler := middleware.NewRecoveryMiddleware(middleware.NewCORSMiddleware(middleware.NewRateLimitMiddleware(mux, 600, 1*time.Minute)))
+	rateLimited, err := middleware.NewRateLimitMiddleware(mux, 600, 1*time.Minute)
+	if err != nil {
+		return nil, err
+	}
+
+	var tracedProfiler *profiler.TracedProfiler
+	if err := iocContainer.Resolve(&tracedProfiler); err != nil {
+		return nil, err
+	}
+
+	handler := middleware.NewRecoveryMiddleware(
+		middleware.NewRequestIDMiddleware(
+			middleware.NewTelemetryMiddleware(
+				"/runner/manager",
+				// inside Telemetry so profile samples link to the request span
+				middleware.NewProfilingMiddleware(
+					middleware.NewLogMiddleware(
+						middleware.NewCORSMiddleware(
+							rateLimited,
+						),
+						logger,
+					),
+					tracedProfiler,
+				),
+			),
+		),
+		logger,
+	)
 
 	subscribers := map[string]domain.MessageHandler{
 		nodeEvents.HeartbeatName:        managerHeartbeatNode.NewHeartbeatHandler(nodeRepository),
 		taskEvents.HeartbeatName:        managerHeartbeatTask.NewHeartbeatHandler(taskRepository, jetStreamProduceConsumer),
-		taskEvents.TaskRunRequestedName: managerRunTask.NewTaskRunRequested(managerRunTaskUseCase),
+		taskEvents.TaskRunRequestedName: managerRunTask.NewTaskRunRequested(managerRunTaskUseCase, logger),
 		taskEvents.TaskCreatedName:      managerRunTask.NewTaskCreated(taskRepository, nodeRepository, taskScheduler, jetStreamProduceConsumer),
 		taskEvents.TaskRanName:          managerRunTask.NewTaskRan(taskRepository),
 		taskEvents.TaskCompletedName:    managerRunTask.NewTaskCompleted(taskRepository),

@@ -1,10 +1,12 @@
 package getfiles
 
 import (
+	"context"
 	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/domain/file"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/files"
@@ -65,11 +67,11 @@ func TestUseCase_Execute(t *testing.T) {
 			}
 		)
 
-		filesRepository.On("Count").Once().Return(uint(len(f)), nil)
-		filesRepository.On("GetAll", uint(0), uint(20)).Once().Return(f, nil)
+		filesRepository.On("Count", mock.Anything).Once().Return(uint(len(f)), nil)
+		filesRepository.On("GetAll", mock.Anything, uint(0), uint(20)).Once().Return(f, nil)
 		defer filesRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&filesRepository).Execute(&r)
+		response, err := NewUseCase(&filesRepository).Execute(context.Background(), &r)
 
 		assert.NoError(t, err)
 		assert.Equal(t, &expectedResponse, response)
@@ -88,10 +90,10 @@ func TestUseCase_Execute(t *testing.T) {
 			expectedError = errors.New("error")
 		)
 
-		filesRepository.On("Count").Once().Return(uint(0), expectedError)
+		filesRepository.On("Count", mock.Anything).Once().Return(uint(0), expectedError)
 		defer filesRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&filesRepository).Execute(&r)
+		response, err := NewUseCase(&filesRepository).Execute(context.Background(), &r)
 
 		filesRepository.AssertNotCalled(t, "GetAll")
 
@@ -112,11 +114,11 @@ func TestUseCase_Execute(t *testing.T) {
 			expectedError = errors.New("error")
 		)
 
-		filesRepository.On("Count").Once().Return(uint(3), nil)
-		filesRepository.On("GetAll", uint(0), uint(20)).Once().Return(nil, expectedError)
+		filesRepository.On("Count", mock.Anything).Once().Return(uint(3), nil)
+		filesRepository.On("GetAll", mock.Anything, uint(0), uint(20)).Once().Return(nil, expectedError)
 		defer filesRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&filesRepository).Execute(&r)
+		response, err := NewUseCase(&filesRepository).Execute(context.Background(), &r)
 
 		assert.ErrorIs(t, err, expectedError)
 		assert.Nil(t, response)

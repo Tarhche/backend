@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/application/dashboard/profile/getRoles"
@@ -52,7 +53,7 @@ func TestGetRolesHandler(t *testing.T) {
 			}
 		)
 
-		roleRepository.On("GetByUserUUID", u.UUID).Once().Return(rl, nil)
+		roleRepository.On("GetByUserUUID", mock.Anything, u.UUID).Once().Return(rl, nil)
 		defer roleRepository.AssertExpectations(t)
 
 		handler := NewGetRolesHandler(getRoles.NewUseCase(&roleRepository))
@@ -82,7 +83,7 @@ func TestGetRolesHandler(t *testing.T) {
 			}
 		)
 
-		roleRepository.On("GetByUserUUID", u.UUID).Once().Return(nil, nil)
+		roleRepository.On("GetByUserUUID", mock.Anything, u.UUID).Once().Return(nil, nil)
 		defer roleRepository.AssertExpectations(t)
 
 		handler := NewGetRolesHandler(getRoles.NewUseCase(&roleRepository))
@@ -112,7 +113,7 @@ func TestGetRolesHandler(t *testing.T) {
 			}
 		)
 
-		roleRepository.On("GetByUserUUID", u.UUID).Once().Return(nil, errors.New("unexpected error"))
+		roleRepository.On("GetByUserUUID", mock.Anything, u.UUID).Once().Return(nil, errors.New("unexpected error"))
 		defer roleRepository.AssertExpectations(t)
 
 		handler := NewGetRolesHandler(getRoles.NewUseCase(&roleRepository))

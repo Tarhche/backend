@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/khanzadimahdi/testproject/domain"
@@ -16,22 +16,25 @@ type UseCase struct {
 	containerManager container.Manager
 	messageProducer  domain.Producer
 	nodeName         string
+	logger           *slog.Logger
 }
 
 func NewUseCase(
 	containerManager container.Manager,
 	messageProducer domain.Producer,
 	nodeName string,
+	logger *slog.Logger,
 ) *UseCase {
 	return &UseCase{
 		containerManager: containerManager,
 		messageProducer:  messageProducer,
 		nodeName:         nodeName,
+		logger:           logger,
 	}
 }
 
 func (uc *UseCase) Execute(ctx context.Context) error {
-	allContainers, err := uc.containerManager.GetByLabel(container.NodeNameLabelKey, uc.nodeName)
+	allContainers, err := uc.containerManager.GetByLabel(ctx, container.NodeNameLabelKey, uc.nodeName)
 	if err != nil {
 		return err
 	}
@@ -40,8 +43,8 @@ func (uc *UseCase) Execute(ctx context.Context) error {
 	var logsBuffer bytes.Buffer
 
 	for _, c := range allContainers {
-		if err := uc.containerManager.Logs(c.ID, &logsBuffer); err != nil {
-			log.Println(err) // there are some cases that the container is not started yet and we can't get the logs
+		if err := uc.containerManager.Logs(ctx, c.ID, &logsBuffer); err != nil {
+			uc.logger.WarnContext(ctx, "failed to fetch container logs", "error", err) // there are some cases that the container is not started yet and we can't get the logs
 		}
 
 		var logs []byte
@@ -71,7 +74,7 @@ func (uc *UseCase) Execute(ctx context.Context) error {
 			return err
 		}
 
-		if err := uc.messageProducer.Produce(context.Background(), events.HeartbeatName, payload); err != nil {
+		if err := uc.messageProducer.Produce(ctx, events.HeartbeatName, payload); err != nil {
 			return err
 		}
 	}

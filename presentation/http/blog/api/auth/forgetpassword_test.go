@@ -48,7 +48,7 @@ func TestForgetPasswordHandler(t *testing.T) {
 		requestValidator.On("Validate", &r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
-		userRepository.On("GetOneByIdentity", r.Identity).Once().Return(u, nil)
+		userRepository.On("GetOneByIdentity", mock2.Anything, r.Identity).Once().Return(u, nil)
 		defer userRepository.AssertExpectations(t)
 
 		asyncCommandBus.On("Produce", context.Background(), forgetpassword.SendForgetPasswordEmailName, commandPayload).Return(nil)
@@ -123,7 +123,7 @@ func TestForgetPasswordHandler(t *testing.T) {
 		translator.On("Translate", "identity_not_exists", mock2.Anything).Once().Return("identity (email/username) not exists")
 		defer translator.AssertExpectations(t)
 
-		userRepository.On("GetOneByIdentity", r.Identity).Once().Return(user.User{}, domain.ErrNotExists)
+		userRepository.On("GetOneByIdentity", mock2.Anything, r.Identity).Once().Return(user.User{}, domain.ErrNotExists)
 		defer userRepository.AssertExpectations(t)
 
 		handler := NewForgetPasswordHandler(forgetpassword.NewUseCase(&userRepository, &asyncCommandBus, &translator, &requestValidator))
@@ -162,7 +162,7 @@ func TestForgetPasswordHandler(t *testing.T) {
 		requestValidator.On("Validate", &r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
-		userRepository.On("GetOneByIdentity", r.Identity).Once().Return(user.User{}, errors.New("some error"))
+		userRepository.On("GetOneByIdentity", mock2.Anything, r.Identity).Once().Return(user.User{}, errors.New("some error"))
 		defer userRepository.AssertExpectations(t)
 
 		handler := NewForgetPasswordHandler(forgetpassword.NewUseCase(&userRepository, &asyncCommandBus, &translator, &requestValidator))

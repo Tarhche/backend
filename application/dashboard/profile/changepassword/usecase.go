@@ -1,6 +1,7 @@
 package changepassword
 
 import (
+	"context"
 	"crypto/rand"
 
 	"github.com/khanzadimahdi/testproject/domain"
@@ -30,19 +31,19 @@ func NewUseCase(
 	}
 }
 
-func (uc *UseCase) Execute(request *Request) (*Response, error) {
+func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
 	if validationErrors := uc.validator.Validate(request); len(validationErrors) > 0 {
 		return &Response{
 			ValidationErrors: validationErrors,
 		}, nil
 	}
 
-	u, err := uc.userRepository.GetOne(request.UserUUID)
+	u, err := uc.userRepository.GetOne(ctx, request.UserUUID)
 	if err != nil {
 		return nil, err
 	}
 
-	if !uc.passwordIsValid(u, []byte(request.CurrentPassword)) {
+	if !uc.passwordIsValid(ctx, u, []byte(request.CurrentPassword)) {
 		return &Response{
 			ValidationErrors: domain.ValidationErrors{
 				"current_password": uc.translator.Translate("invalid_value"),
@@ -56,15 +57,15 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 	}
 
 	u.PasswordHash = password.Hash{
-		Value: uc.hasher.Hash([]byte(request.NewPassword), salt),
+		Value: uc.hasher.Hash(ctx, []byte(request.NewPassword), salt),
 		Salt:  salt,
 	}
 
-	_, err = uc.userRepository.Save(&u)
+	_, err = uc.userRepository.Save(ctx, &u)
 
 	return nil, err
 }
 
-func (uc *UseCase) passwordIsValid(u user.User, password []byte) bool {
-	return uc.hasher.Equal(password, u.PasswordHash.Value, u.PasswordHash.Salt)
+func (uc *UseCase) passwordIsValid(ctx context.Context, u user.User, password []byte) bool {
+	return uc.hasher.Equal(ctx, password, u.PasswordHash.Value, u.PasswordHash.Salt)
 }

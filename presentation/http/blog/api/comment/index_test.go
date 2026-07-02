@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/application/comment/getComments"
 	"github.com/khanzadimahdi/testproject/application/localize"
@@ -90,11 +91,11 @@ func TestIndexHandler(t *testing.T) {
 		requestValidator.On("Validate", &data).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
-		commentsRepository.On("CountApprovedByObjectUUID", data.ObjectType, data.ObjectUUID, data.LanguageCode).Once().Return(uint(len(c)), nil)
-		commentsRepository.On("GetApprovedByObjectUUID", data.ObjectType, data.ObjectUUID, data.LanguageCode, uint(0), uint(10)).Once().Return(c, nil)
+		commentsRepository.On("CountApprovedByObjectUUID", mock.Anything, data.ObjectType, data.ObjectUUID, data.LanguageCode).Once().Return(uint(len(c)), nil)
+		commentsRepository.On("GetApprovedByObjectUUID", mock.Anything, data.ObjectType, data.ObjectUUID, data.LanguageCode, uint(0), uint(10)).Once().Return(c, nil)
 		defer commentsRepository.AssertExpectations(t)
 
-		usersRepository.On("GetByUUIDs", []string{u[0].UUID, u[1].UUID, u[1].UUID}).Once().Return(u, nil)
+		usersRepository.On("GetByUUIDs", mock.Anything, []string{u[0].UUID, u[1].UUID, u[1].UUID}).Once().Return(u, nil)
 		defer usersRepository.AssertExpectations(t)
 
 		handler := NewIndexHandler(getComments.NewUseCase(&commentsRepository, &usersRepository, &requestValidator))
@@ -133,11 +134,11 @@ func TestIndexHandler(t *testing.T) {
 		requestValidator.On("Validate", &data).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
-		commentsRepository.On("CountApprovedByObjectUUID", data.ObjectType, data.ObjectUUID, data.LanguageCode).Once().Return(uint(0), nil)
-		commentsRepository.On("GetApprovedByObjectUUID", data.ObjectType, data.ObjectUUID, data.LanguageCode, uint(0), uint(10)).Once().Return(nil, nil)
+		commentsRepository.On("CountApprovedByObjectUUID", mock.Anything, data.ObjectType, data.ObjectUUID, data.LanguageCode).Once().Return(uint(0), nil)
+		commentsRepository.On("GetApprovedByObjectUUID", mock.Anything, data.ObjectType, data.ObjectUUID, data.LanguageCode, uint(0), uint(10)).Once().Return(nil, nil)
 		defer commentsRepository.AssertExpectations(t)
 
-		usersRepository.On("GetByUUIDs", []string{}).Once().Return(nil, nil)
+		usersRepository.On("GetByUUIDs", mock.Anything, []string{}).Once().Return(nil, nil)
 		defer usersRepository.AssertExpectations(t)
 
 		handler := NewIndexHandler(getComments.NewUseCase(&commentsRepository, &usersRepository, &requestValidator))
@@ -176,7 +177,7 @@ func TestIndexHandler(t *testing.T) {
 		requestValidator.On("Validate", &data).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
-		commentsRepository.On("CountApprovedByObjectUUID", data.ObjectType, data.ObjectUUID, data.LanguageCode).Once().Return(uint(0), errors.New("something doesn't work"))
+		commentsRepository.On("CountApprovedByObjectUUID", mock.Anything, data.ObjectType, data.ObjectUUID, data.LanguageCode).Once().Return(uint(0), errors.New("something doesn't work"))
 		defer commentsRepository.AssertExpectations(t)
 
 		handler := NewIndexHandler(getComments.NewUseCase(&commentsRepository, &usersRepository, &requestValidator))

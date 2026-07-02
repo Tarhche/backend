@@ -1,6 +1,7 @@
 package deleteUserBookmark
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -8,6 +9,7 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/bookmarks"
 	"github.com/khanzadimahdi/testproject/infrastructure/validator"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
 func TestUseCase_Execute(t *testing.T) {
@@ -31,10 +33,10 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		bookmarkRepository.On("DeleteByOwnerUUID", r.OwnerUUID, r.ObjectType, r.ObjectUUID, r.LanguageCode).Return(nil)
+		bookmarkRepository.On("DeleteByOwnerUUID", mock.Anything, r.OwnerUUID, r.ObjectType, r.ObjectUUID, r.LanguageCode).Return(nil)
 		defer bookmarkRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&bookmarkRepository, &validator).Execute(&r)
+		response, err := NewUseCase(&bookmarkRepository, &validator).Execute(context.Background(), &r)
 
 		assert.NoError(t, err)
 		assert.Nil(t, response)
@@ -61,7 +63,7 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(expectedResponse.ValidationErrors)
 		defer validator.AssertExpectations(t)
 
-		response, err := NewUseCase(&bookmarkRepository, &validator).Execute(&r)
+		response, err := NewUseCase(&bookmarkRepository, &validator).Execute(context.Background(), &r)
 
 		bookmarkRepository.AssertNotCalled(t, "DeleteByOwnerUUID")
 
@@ -89,10 +91,10 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		bookmarkRepository.On("DeleteByOwnerUUID", r.OwnerUUID, r.ObjectType, r.ObjectUUID, r.LanguageCode).Return(expectedErr)
+		bookmarkRepository.On("DeleteByOwnerUUID", mock.Anything, r.OwnerUUID, r.ObjectType, r.ObjectUUID, r.LanguageCode).Return(expectedErr)
 		defer bookmarkRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&bookmarkRepository, &validator).Execute(&r)
+		response, err := NewUseCase(&bookmarkRepository, &validator).Execute(context.Background(), &r)
 
 		assert.ErrorIs(t, err, expectedErr)
 		assert.Nil(t, response)

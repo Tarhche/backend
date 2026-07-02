@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	getuserfiles "github.com/khanzadimahdi/testproject/application/dashboard/file/getUserFiles"
@@ -43,8 +44,8 @@ func TestIndexUserHandler(t *testing.T) {
 			u = user.User{UUID: "user-test-uuid"}
 		)
 
-		filesRepository.On("CountByOwnerUUID", u.UUID).Once().Return(uint(len(f)), nil)
-		filesRepository.On("GetAllByOwnerUUID", u.UUID, uint(0), uint(20)).Once().Return(f, nil)
+		filesRepository.On("CountByOwnerUUID", mock.Anything, u.UUID).Once().Return(uint(len(f)), nil)
+		filesRepository.On("GetAllByOwnerUUID", mock.Anything, u.UUID, uint(0), uint(20)).Once().Return(f, nil)
 		defer filesRepository.AssertExpectations(t)
 
 		handler := NewIndexUserHandler(getuserfiles.NewUseCase(&filesRepository))
@@ -72,8 +73,8 @@ func TestIndexUserHandler(t *testing.T) {
 			u = user.User{UUID: "user-test-uuid"}
 		)
 
-		filesRepository.On("CountByOwnerUUID", u.UUID).Once().Return(uint(0), nil)
-		filesRepository.On("GetAllByOwnerUUID", u.UUID, uint(0), uint(20)).Once().Return(nil, nil)
+		filesRepository.On("CountByOwnerUUID", mock.Anything, u.UUID).Once().Return(uint(0), nil)
+		filesRepository.On("GetAllByOwnerUUID", mock.Anything, u.UUID, uint(0), uint(20)).Once().Return(nil, nil)
 		defer filesRepository.AssertExpectations(t)
 
 		handler := NewIndexUserHandler(getuserfiles.NewUseCase(&filesRepository))

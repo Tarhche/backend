@@ -1,6 +1,7 @@
 package argon2
 
 import (
+	"context"
 	"crypto/rand"
 	"testing"
 )
@@ -15,20 +16,20 @@ func TestArgon2(t *testing.T) {
 
 	t.Run("given value and its hash should match", func(t *testing.T) {
 		salt := []byte{2, 4, 6, 8, 10}
-		hash := argon2id.Hash(value, salt)
+		hash := argon2id.Hash(context.Background(), value, salt)
 
 		if int(keyLen) != len(hash) {
 			t.Errorf("expected hash length %d, but got %d", keyLen, len(hash))
 		}
 
-		if equal := argon2id.Equal(value, hash, salt); !equal {
+		if equal := argon2id.Equal(context.Background(), value, hash, salt); !equal {
 			t.Error("value and it's hash doesn't match")
 		}
 	})
 
 	t.Run("not identical value should not match", func(t *testing.T) {
 		salt := []byte{2, 4, 6, 8, 10}
-		hash := argon2id.Hash(value, salt)
+		hash := argon2id.Hash(context.Background(), value, salt)
 
 		if int(keyLen) != len(hash) {
 			t.Errorf("expected hash length %d, but got %d", keyLen, len(hash))
@@ -36,7 +37,7 @@ func TestArgon2(t *testing.T) {
 
 		nonIdenticalValue := append(value, 0)
 
-		if equal := argon2id.Equal(nonIdenticalValue, hash, salt); equal {
+		if equal := argon2id.Equal(context.Background(), nonIdenticalValue, hash, salt); equal {
 			t.Error("hash should not match a non-identical value")
 		}
 	})
@@ -53,6 +54,6 @@ func BenchmarkArgon2idHash(b *testing.B) {
 
 	b.ResetTimer()
 	for range b.N {
-		hasher.Hash(value, salt)
+		hasher.Hash(context.Background(), value, salt)
 	}
 }

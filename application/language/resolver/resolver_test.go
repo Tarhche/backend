@@ -1,10 +1,12 @@
 package resolver
 
 import (
+	"context"
 	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/config"
@@ -24,10 +26,10 @@ func TestResolver_DefaultCode(t *testing.T) {
 			configRepository   configMocks.MockConfigRepository
 		)
 
-		configRepository.On("GetLatestRevision").Once().Return(config.Config{DefaultLanguageCode: "FA"}, nil)
+		configRepository.On("GetLatestRevision", mock.Anything).Once().Return(config.Config{DefaultLanguageCode: "FA"}, nil)
 		defer configRepository.AssertExpectations(t)
 
-		code, err := New(&languageRepository, &configRepository).DefaultCode()
+		code, err := New(&languageRepository, &configRepository).DefaultCode(context.Background())
 
 		languageRepository.AssertNotCalled(t, "GetOne")
 		languageRepository.AssertNotCalled(t, "GetAll")
@@ -43,16 +45,16 @@ func TestResolver_DefaultCode(t *testing.T) {
 			configRepository   configMocks.MockConfigRepository
 		)
 
-		configRepository.On("GetLatestRevision").Once().Return(config.Config{}, domain.ErrNotExists)
+		configRepository.On("GetLatestRevision", mock.Anything).Once().Return(config.Config{}, domain.ErrNotExists)
 		defer configRepository.AssertExpectations(t)
 
-		languageRepository.On("GetAll", uint(0), uint(1)).Once().Return([]language.Language{
+		languageRepository.On("GetAll", mock.Anything, uint(0), uint(1)).Once().Return([]language.Language{
 			{Code: "EN", Name: "English"},
 			{Code: "FA", Name: "فارسی"},
 		}, nil)
 		defer languageRepository.AssertExpectations(t)
 
-		code, err := New(&languageRepository, &configRepository).DefaultCode()
+		code, err := New(&languageRepository, &configRepository).DefaultCode(context.Background())
 
 		assert.NoError(t, err)
 		assert.Equal(t, "EN", code)
@@ -66,13 +68,13 @@ func TestResolver_DefaultCode(t *testing.T) {
 			configRepository   configMocks.MockConfigRepository
 		)
 
-		configRepository.On("GetLatestRevision").Once().Return(config.Config{}, domain.ErrNotExists)
+		configRepository.On("GetLatestRevision", mock.Anything).Once().Return(config.Config{}, domain.ErrNotExists)
 		defer configRepository.AssertExpectations(t)
 
-		languageRepository.On("GetAll", uint(0), uint(1)).Once().Return([]language.Language{}, nil)
+		languageRepository.On("GetAll", mock.Anything, uint(0), uint(1)).Once().Return([]language.Language{}, nil)
 		defer languageRepository.AssertExpectations(t)
 
-		code, err := New(&languageRepository, &configRepository).DefaultCode()
+		code, err := New(&languageRepository, &configRepository).DefaultCode(context.Background())
 
 		assert.ErrorIs(t, err, domain.ErrNotExists)
 		assert.Empty(t, code)
@@ -90,10 +92,10 @@ func TestResolver_Resolve(t *testing.T) {
 			configRepository   configMocks.MockConfigRepository
 		)
 
-		languageRepository.On("GetOne", "FA").Once().Return(language.Language{Code: "FA", Name: "فارسی"}, nil)
+		languageRepository.On("GetOne", mock.Anything, "FA").Once().Return(language.Language{Code: "FA", Name: "فارسی"}, nil)
 		defer languageRepository.AssertExpectations(t)
 
-		lang, err := New(&languageRepository, &configRepository).Resolve("FA")
+		lang, err := New(&languageRepository, &configRepository).Resolve(context.Background(), "FA")
 
 		languageRepository.AssertNotCalled(t, "Exists")
 		configRepository.AssertNotCalled(t, "GetLatestRevision")
@@ -109,10 +111,10 @@ func TestResolver_Resolve(t *testing.T) {
 			configRepository   configMocks.MockConfigRepository
 		)
 
-		languageRepository.On("GetOne", "DE").Once().Return(language.Language{}, domain.ErrNotExists)
+		languageRepository.On("GetOne", mock.Anything, "DE").Once().Return(language.Language{}, domain.ErrNotExists)
 		defer languageRepository.AssertExpectations(t)
 
-		_, err := New(&languageRepository, &configRepository).Resolve("DE")
+		_, err := New(&languageRepository, &configRepository).Resolve(context.Background(), "DE")
 
 		assert.ErrorIs(t, err, domain.ErrNotExists)
 	})
@@ -127,10 +129,10 @@ func TestResolver_Resolve(t *testing.T) {
 			expectedErr = errors.New("db error")
 		)
 
-		languageRepository.On("GetOne", "EN").Once().Return(language.Language{}, expectedErr)
+		languageRepository.On("GetOne", mock.Anything, "EN").Once().Return(language.Language{}, expectedErr)
 		defer languageRepository.AssertExpectations(t)
 
-		_, err := New(&languageRepository, &configRepository).Resolve("EN")
+		_, err := New(&languageRepository, &configRepository).Resolve(context.Background(), "EN")
 
 		assert.ErrorIs(t, err, expectedErr)
 	})
@@ -147,10 +149,10 @@ func TestResolver_Verify(t *testing.T) {
 			configRepository   configMocks.MockConfigRepository
 		)
 
-		languageRepository.On("Exists", "FA").Once().Return(true)
+		languageRepository.On("Exists", mock.Anything, "FA").Once().Return(true)
 		defer languageRepository.AssertExpectations(t)
 
-		valid := New(&languageRepository, &configRepository).Verify("FA")
+		valid := New(&languageRepository, &configRepository).Verify(context.Background(), "FA")
 
 		languageRepository.AssertNotCalled(t, "GetOne")
 		configRepository.AssertNotCalled(t, "GetLatestRevision")
@@ -165,10 +167,10 @@ func TestResolver_Verify(t *testing.T) {
 			configRepository   configMocks.MockConfigRepository
 		)
 
-		languageRepository.On("Exists", "DE").Once().Return(false)
+		languageRepository.On("Exists", mock.Anything, "DE").Once().Return(false)
 		defer languageRepository.AssertExpectations(t)
 
-		valid := New(&languageRepository, &configRepository).Verify("DE")
+		valid := New(&languageRepository, &configRepository).Verify(context.Background(), "DE")
 
 		languageRepository.AssertNotCalled(t, "GetOne")
 		configRepository.AssertNotCalled(t, "GetLatestRevision")

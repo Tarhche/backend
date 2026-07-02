@@ -4,7 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -32,6 +32,7 @@ type ServeCommand struct {
 	consumers       map[string]domain.MessageHandler
 	taskHeartBeat   *taskHeartbeat.UseCase
 	workerHeartBeat *workerHeartbeat.UseCase
+	logger          *slog.Logger
 }
 
 // insures it implements console.Command
@@ -90,6 +91,10 @@ func (c *ServeCommand) Boot(ctx context.Context, container provider.Container) e
 		return err
 	}
 
+	if err := container.Resolve(&c.logger, resolve.WithParams("runner-worker-"+c.name)); err != nil {
+		return err
+	}
+
 	return container.Resolve(&c.consumers, resolve.WithName(runner.WorkerSubscribers))
 }
 
@@ -105,7 +110,9 @@ func (c *ServeCommand) Boot(ctx context.Context, container provider.Container) e
 // @basePath		/api
 // @schemes		http
 func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
-	c.validateParams()
+	if !c.validateParams() {
+		return console.ExitFailure
+	}
 
 	server := http.Server{
 		Addr:        fmt.Sprintf("0.0.0.0:%d", c.port),
@@ -125,7 +132,7 @@ func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 	}()
 
 	if err := c.consumeTopics(ctx); err != nil {
-		log.Println(err)
+		c.logger.ErrorContext(ctx, "failed to consume topics", "error", err)
 		return console.ExitFailure
 	}
 
@@ -133,17 +140,20 @@ func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 	go c.workerHeartbeat(ctx)
 
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Println(err)
+		c.logger.ErrorContext(ctx, "server failed", "error", err)
 		return console.ExitFailure
 	}
 
 	return console.ExitSuccess
 }
 
-func (c *ServeCommand) validateParams() {
+func (c *ServeCommand) validateParams() bool {
 	if len(c.name) == 0 {
-		log.Fatalf("name is required")
+		c.logger.Error("name is required")
+		return false
 	}
+
+	return true
 }
 
 func (c *ServeCommand) consumeTopics(ctx context.Context) error {
@@ -165,7 +175,7 @@ func (c *ServeCommand) tasksHeartbeat(ctx context.Context) {
 		case <-ticker.C:
 			err := c.taskHeartBeat.Execute(ctx)
 			if err != nil {
-				log.Println(err)
+				c.logger.ErrorContext(ctx, "task heartbeat failed", "error", err)
 			}
 		case <-ctx.Done():
 			return
@@ -180,9 +190,9 @@ func (c *ServeCommand) workerHeartbeat(ctx context.Context) {
 	for {
 		select {
 		case <-ticker.C:
-			err := c.workerHeartBeat.Execute()
+			err := c.workerHeartBeat.Execute(ctx)
 			if err != nil {
-				log.Println(err)
+				c.logger.ErrorContext(ctx, "worker heartbeat failed", "error", err)
 			}
 		case <-ctx.Done():
 			return

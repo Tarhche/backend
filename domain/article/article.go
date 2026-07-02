@@ -1,6 +1,7 @@
 package article
 
 import (
+	"context"
 	"time"
 )
 
@@ -20,21 +21,21 @@ type Article struct {
 }
 
 type Repository interface {
-	GetCorrelationUUIDs(offset uint, limit uint) ([]string, error)
-	GetAllPublished(languageCode string, offset uint, limit uint) ([]Article, error)
-	GetByCorrelationUUIDAndLanguage(correlationUUID string, languageCode string) (Article, error)
-	GetOnePublished(correlationUUID string, languageCode string) (Article, error)
-	GetByCorrelationUUIDs(correlationUUIDs []string, languageCode string) ([]Article, error)
-	GetPublishedLanguageCodes(correlationUUID string) ([]string, error)
-	GetMostViewed(languageCode string, limit uint) ([]Article, error)
-	CountPublishedByHashtags(hashtags []string, languageCode string) (uint, error)
-	GetPublishedByHashtags(hashtags []string, languageCode string, offset uint, limit uint) ([]Article, error)
-	CountPublishedByAuthor(authorUUID string, languageCode string) (uint, error)
-	GetPublishedByAuthor(authorUUID string, languageCode string, offset uint, limit uint) ([]Article, error)
-	CountByCorrelation() (uint, error)
-	CountPublished(languageCode string) (uint, error)
-	CorrelationExist(correlationUUID string) (bool, error)
-	Save(*Article) (string, error)
-	DeleteByCorrelationUUIDAndLanguage(correlationUUID string, languageCode string) error
-	IncreaseView(uuid string, inc uint) error
+	GetCorrelationUUIDs(ctx context.Context, offset uint, limit uint) ([]string, error)
+	GetAllPublished(ctx context.Context, languageCode string, offset uint, limit uint) ([]Article, error)
+	GetByCorrelationUUIDAndLanguage(ctx context.Context, correlationUUID string, languageCode string) (Article, error)
+	GetOnePublished(ctx context.Context, correlationUUID string, languageCode string) (Article, error)
+	GetByCorrelationUUIDs(ctx context.Context, correlationUUIDs []string, languageCode string) ([]Article, error)
+	GetPublishedLanguageCodes(ctx context.Context, correlationUUID string) ([]string, error)
+	GetMostViewed(ctx context.Context, languageCode string, limit uint) ([]Article, error)
+	CountPublishedByHashtags(ctx context.Context, hashtags []string, languageCode string) (uint, error)
+	GetPublishedByHashtags(ctx context.Context, hashtags []string, languageCode string, offset uint, limit uint) ([]Article, error)
+	CountPublishedByAuthor(ctx context.Context, authorUUID string, languageCode string) (uint, error)
+	GetPublishedByAuthor(ctx context.Context, authorUUID string, languageCode string, offset uint, limit uint) ([]Article, error)
+	CountByCorrelation(ctx context.Context) (uint, error)
+	CountPublished(ctx context.Context, languageCode string) (uint, error)
+	CorrelationExist(ctx context.Context, correlationUUID string) (bool, error)
+	Save(ctx context.Context, a *Article) (string, error)
+	DeleteByCorrelationUUIDAndLanguage(ctx context.Context, correlationUUID string, languageCode string) error
+	IncreaseView(ctx context.Context, uuid string, inc uint) error
 }

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/application/language/resolver"
@@ -42,7 +43,7 @@ func TestLocalizer_Resolve(t *testing.T) {
 		t.Parallel()
 
 		var resolverMock resolver.MockResolver
-		resolverMock.On("DefaultCode").Once().Return("en", nil)
+		resolverMock.On("DefaultCode", mock.Anything).Once().Return("en", nil)
 		defer resolverMock.AssertExpectations(t)
 
 		localizer := New(&resolverMock)
@@ -54,7 +55,7 @@ func TestLocalizer_Resolve(t *testing.T) {
 		t.Parallel()
 
 		var resolverMock resolver.MockResolver
-		resolverMock.On("DefaultCode").Once().Return("", assert.AnError)
+		resolverMock.On("DefaultCode", mock.Anything).Once().Return("", assert.AnError)
 		defer resolverMock.AssertExpectations(t)
 
 		localizer := New(&resolverMock)

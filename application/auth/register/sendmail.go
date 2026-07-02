@@ -2,6 +2,7 @@ package register
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -55,13 +56,13 @@ func NewSendRegisterationEmailHandler(
 	}
 }
 
-func (h *sendRegisterationEmailHandler) Handle(data []byte) error {
+func (h *sendRegisterationEmailHandler) Handle(ctx context.Context, data []byte) error {
 	var command SendRegistrationEmail
 	if err := json.Unmarshal(data, &command); err != nil {
 		return err
 	}
 
-	registrationToken, err := h.authTokenGenerator.GenerateRegistrationToken(command.Identity)
+	registrationToken, err := h.authTokenGenerator.GenerateRegistrationToken(ctx, command.Identity)
 	if err != nil {
 		return err
 	}
@@ -77,5 +78,5 @@ func (h *sendRegisterationEmailHandler) Handle(data []byte) error {
 
 	subject := h.translator.Translate(registrationEmailSubject, translatorcontract.WithLocale(command.LanguageCode))
 
-	return h.mailer.SendMail(h.mailFrom, command.Identity, subject, msg.Bytes())
+	return h.mailer.SendMail(ctx, h.mailFrom, command.Identity, subject, msg.Bytes())
 }

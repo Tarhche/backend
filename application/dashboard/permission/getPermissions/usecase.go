@@ -1,6 +1,8 @@
 package getpermissions
 
 import (
+	"context"
+
 	"github.com/khanzadimahdi/testproject/domain/permission"
 )
 
@@ -14,8 +16,8 @@ func NewUseCase(permissionRepository permission.Repository) *UseCase {
 	}
 }
 
-func (uc *UseCase) Execute() (*Response, error) {
-	items := uc.permissionRepository.GetAll()
+func (uc *UseCase) Execute(ctx context.Context) (*Response, error) {
+	items := uc.permissionRepository.GetAll(ctx)
 
 	return NewResponse(items), nil
 }

@@ -6,6 +6,8 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/auth/register"
 	"github.com/khanzadimahdi/testproject/application/localize"
+	infraTrace "github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type registerHandler struct {
@@ -37,10 +39,11 @@ func (h *registerHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 	request.LanguageCode = localize.FromContext(r.Context())
 
-	response, err := h.useCase.Execute(&request)
+	response, err := h.useCase.Execute(r.Context(), &request)
 
 	switch {
 	case err != nil:
+		infraTrace.RecordError(trace.SpanFromContext(r.Context()), err)
 		rw.WriteHeader(http.StatusInternalServerError)
 	case response != nil && len(response.ValidationErrors) > 0:
 		rw.Header().Add("Content-Type", "application/json")

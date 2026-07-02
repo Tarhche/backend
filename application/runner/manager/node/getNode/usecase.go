@@ -1,6 +1,8 @@
 package getNode
 
 import (
+	"context"
+
 	"github.com/khanzadimahdi/testproject/domain/runner/node"
 )
 
@@ -14,8 +16,8 @@ func NewUseCase(nodeRepository node.Repository) *UseCase {
 	}
 }
 
-func (uc *UseCase) Execute(request *Request) (*Response, error) {
-	n, err := uc.nodeRepository.GetOne(request.Name)
+func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
+	n, err := uc.nodeRepository.GetOne(ctx, request.Name)
 	if err != nil {
 		return nil, err
 	}

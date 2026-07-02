@@ -1,6 +1,7 @@
 package node
 
 import (
+	"context"
 	"time"
 )
 
@@ -16,7 +17,7 @@ type Node struct {
 
 // Manager represents a manager of nodes
 type Manager interface {
-	Stats(nodeName string) (Stats, error)
+	Stats(ctx context.Context, nodeName string) (Stats, error)
 }
 
 // Role represents the role of the node
@@ -32,8 +33,8 @@ const (
 
 // Repository is the interface for the node repository
 type Repository interface {
-	GetAll(offset uint, limit uint) ([]Node, error)
-	GetOne(name string) (Node, error)
-	Save(*Node) (string, error)
-	Count() (uint, error)
+	GetAll(ctx context.Context, offset uint, limit uint) ([]Node, error)
+	GetOne(ctx context.Context, name string) (Node, error)
+	Save(ctx context.Context, n *Node) (string, error)
+	Count(ctx context.Context) (uint, error)
 }

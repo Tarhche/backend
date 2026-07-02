@@ -1,6 +1,8 @@
 package getComments
 
 import (
+	"context"
+
 	"github.com/khanzadimahdi/testproject/domain/comment"
 	"github.com/khanzadimahdi/testproject/domain/user"
 )
@@ -19,8 +21,8 @@ func NewUseCase(commentRepository comment.Repository, userRepository user.Reposi
 	}
 }
 
-func (uc *UseCase) Execute(request *Request) (*Response, error) {
-	totalComments, err := uc.commentRepository.Count()
+func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
+	totalComments, err := uc.commentRepository.Count(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -41,7 +43,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		totalPages++
 	}
 
-	c, err := uc.commentRepository.GetAll(offset, limit)
+	c, err := uc.commentRepository.GetAll(ctx, offset, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +53,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		userUUIDs[i] = c[i].AuthorUUID
 	}
 
-	u, err := uc.userRepository.GetByUUIDs(userUUIDs)
+	u, err := uc.userRepository.GetByUUIDs(ctx, userUUIDs)
 	if err != nil {
 		return nil, err
 	}

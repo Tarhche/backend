@@ -1,6 +1,8 @@
 package getUserBookmarks
 
 import (
+	"context"
+
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/bookmark"
 )
@@ -22,14 +24,14 @@ func NewUseCase(
 	}
 }
 
-func (uc *UseCase) Execute(request *Request) (*Response, error) {
+func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
 	if validationErrors := uc.validator.Validate(request); len(validationErrors) > 0 {
 		return &Response{
 			ValidationErrors: validationErrors,
 		}, nil
 	}
 
-	totalArticles, err := uc.bookmarkRepository.CountByOwnerUUID(request.OwnerUUID)
+	totalArticles, err := uc.bookmarkRepository.CountByOwnerUUID(ctx, request.OwnerUUID)
 	if err != nil {
 		return nil, err
 	}
@@ -50,7 +52,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		totalPages++
 	}
 
-	b, err := uc.bookmarkRepository.GetAllByOwnerUUID(request.OwnerUUID, offset, limit)
+	b, err := uc.bookmarkRepository.GetAllByOwnerUUID(ctx, request.OwnerUUID, offset, limit)
 	if err != nil {
 		return nil, err
 	}

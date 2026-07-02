@@ -2,7 +2,6 @@ package file
 
 import (
 	"bytes"
-	"context"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -57,14 +56,14 @@ func TestUploadHandler(t *testing.T) {
 		requestValidator.On("Validate", mock.Anything).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
-		storage.On("Store", context.Background(), mock.Anything, mock.Anything, r.Size).Once().Return(nil)
+		storage.On("Store", mock.Anything, mock.Anything, mock.Anything, r.Size).Once().Return(nil)
 		defer storage.AssertExpectations(t)
 
 		matchingFile := mock.MatchedBy(func(f *file.File) bool {
 			return f.Name == r.Name && f.Size == r.Size && f.OwnerUUID == u.UUID && f.MimeType == "application/octet-stream" && filepath.Ext(f.Name) == filepath.Ext(f.StoredName)
 		})
 
-		filesRepository.On("Save", matchingFile).Once().Return(fileUUID, nil)
+		filesRepository.On("Save", mock.Anything, matchingFile).Once().Return(fileUUID, nil)
 		defer filesRepository.AssertExpectations(t)
 
 		handler := NewUploadHandler(createfile.NewUseCase(&filesRepository, &storage, &requestValidator))

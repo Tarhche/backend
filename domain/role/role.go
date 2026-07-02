@@ -1,5 +1,7 @@
 package role
 
+import "context"
+
 type Role struct {
 	UUID        string
 	Name        string
@@ -9,12 +11,12 @@ type Role struct {
 }
 
 type Repository interface {
-	GetAll(offset uint, limit uint) ([]Role, error)
-	GetByUUIDs(UUIDs []string) ([]Role, error)
-	GetOne(UUID string) (Role, error)
-	Save(*Role) (uuid string, err error)
-	Delete(UUID string) error
-	Count() (uint, error)
-	UserHasPermission(userUUID string, permission string) (bool, error)
-	GetByUserUUID(userUUID string) ([]Role, error)
+	GetAll(ctx context.Context, offset uint, limit uint) ([]Role, error)
+	GetByUUIDs(ctx context.Context, UUIDs []string) ([]Role, error)
+	GetOne(ctx context.Context, UUID string) (Role, error)
+	Save(ctx context.Context, r *Role) (uuid string, err error)
+	Delete(ctx context.Context, UUID string) error
+	Count(ctx context.Context) (uint, error)
+	UserHasPermission(ctx context.Context, userUUID string, permission string) (bool, error)
+	GetByUserUUID(ctx context.Context, userUUID string) ([]Role, error)
 }

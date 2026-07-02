@@ -1,6 +1,7 @@
 package createrole
 
 import (
+	"context"
 	"errors"
 	"reflect"
 	"testing"
@@ -58,13 +59,13 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		permissionRepository.On("Get", r.Permissions).Once().Return(p, nil)
+		permissionRepository.On("Get", mock.Anything, r.Permissions).Once().Return(p, nil)
 		defer permissionRepository.AssertExpectations(t)
 
-		roleRepository.On("Save", &c).Once().Return(roleUUID, nil)
+		roleRepository.On("Save", mock.Anything, &c).Once().Return(roleUUID, nil)
 		defer roleRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&roleRepository, &permissionRepository, &validator, &translator).Execute(&r)
+		response, err := NewUseCase(&roleRepository, &permissionRepository, &validator, &translator).Execute(context.Background(), &r)
 
 		translator.AssertNotCalled(t, "Translate")
 
@@ -93,7 +94,7 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(expectedResponse.ValidationErrors)
 		defer validator.AssertExpectations(t)
 
-		response, err := NewUseCase(&roleRepository, &permissionRepository, &validator, &translator).Execute(&r)
+		response, err := NewUseCase(&roleRepository, &permissionRepository, &validator, &translator).Execute(context.Background(), &r)
 
 		translator.AssertNotCalled(t, "Translate")
 		permissionRepository.AssertNotCalled(t, "Get")
@@ -141,10 +142,10 @@ func TestUseCase_Execute(t *testing.T) {
 		).Once().Return(expectedResponse.ValidationErrors["permissions"])
 		defer translator.AssertExpectations(t)
 
-		permissionRepository.On("Get", r.Permissions).Once().Return(p, nil)
+		permissionRepository.On("Get", mock.Anything, r.Permissions).Once().Return(p, nil)
 		defer permissionRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&roleRepository, &permissionRepository, &validator, &translator).Execute(&r)
+		response, err := NewUseCase(&roleRepository, &permissionRepository, &validator, &translator).Execute(context.Background(), &r)
 
 		roleRepository.AssertNotCalled(t, "Save")
 
@@ -174,10 +175,10 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		permissionRepository.On("Get", r.Permissions).Once().Return(nil, expectedErr)
+		permissionRepository.On("Get", mock.Anything, r.Permissions).Once().Return(nil, expectedErr)
 		defer permissionRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&roleRepository, &permissionRepository, &validator, &translator).Execute(&r)
+		response, err := NewUseCase(&roleRepository, &permissionRepository, &validator, &translator).Execute(context.Background(), &r)
 
 		translator.AssertNotCalled(t, "Translate")
 		roleRepository.AssertNotCalled(t, "Save")
@@ -216,16 +217,16 @@ func TestUseCase_Execute(t *testing.T) {
 			expectedErr = errors.New("error happened")
 		)
 
-		permissionRepository.On("Get", r.Permissions).Once().Return(p, nil)
+		permissionRepository.On("Get", mock.Anything, r.Permissions).Once().Return(p, nil)
 		defer permissionRepository.AssertExpectations(t)
 
-		roleRepository.On("Save", &c).Once().Return("", expectedErr)
+		roleRepository.On("Save", mock.Anything, &c).Once().Return("", expectedErr)
 		defer roleRepository.AssertExpectations(t)
 
 		validator.On("Validate", &r).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		response, err := NewUseCase(&roleRepository, &permissionRepository, &validator, &translator).Execute(&r)
+		response, err := NewUseCase(&roleRepository, &permissionRepository, &validator, &translator).Execute(context.Background(), &r)
 
 		translator.AssertNotCalled(t, "Translate")
 

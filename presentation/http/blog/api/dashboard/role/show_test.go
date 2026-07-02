@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	getrole "github.com/khanzadimahdi/testproject/application/dashboard/role/getRole"
@@ -35,7 +36,7 @@ func TestShowHandler(t *testing.T) {
 			}
 		)
 
-		roleRepository.On("GetOne", roleUUID).Return(a, nil)
+		roleRepository.On("GetOne", mock.Anything, roleUUID).Return(a, nil)
 		defer roleRepository.AssertExpectations(t)
 
 		handler := NewShowHandler(getrole.NewUseCase(&roleRepository))
@@ -66,7 +67,7 @@ func TestShowHandler(t *testing.T) {
 			roleUUID = "role-uuid"
 		)
 
-		roleRepository.On("GetOne", roleUUID).Return(role.Role{}, domain.ErrNotExists)
+		roleRepository.On("GetOne", mock.Anything, roleUUID).Return(role.Role{}, domain.ErrNotExists)
 		defer roleRepository.AssertExpectations(t)
 
 		handler := NewShowHandler(getrole.NewUseCase(&roleRepository))

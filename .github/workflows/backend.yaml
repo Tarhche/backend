@@ -162,6 +162,12 @@ jobs:
             export RUNNER_MANAGER_IMAGE='${{ secrets.RUNNER_MANAGER_IMAGE }}'
             export RUNNER_WORKER_IMAGE='${{ secrets.RUNNER_WORKER_IMAGE }}'
 
+            export OTEL_EXPORTER_OTLP_INSECURE='${{ secrets.OTEL_EXPORTER_OTLP_INSECURE }}'
+            export OTEL_EXPORTER_OTLP_PROTOCOL='${{ secrets.OTEL_EXPORTER_OTLP_PROTOCOL }}'
+            export OTEL_RESOURCE_ATTRIBUTES='${{ secrets.OTEL_RESOURCE_ATTRIBUTES }}'
+            export OTEL_EXPORTER_OTLP_ENDPOINT='${{ secrets.OTEL_EXPORTER_OTLP_ENDPOINT }}'
+            export OTEL_EXPORTER_OTLP_HEADERS='${{ secrets.OTEL_EXPORTER_OTLP_HEADERS }}'
+
             # Run Docker Compose
             cd /tmp/deployment_backend/
 

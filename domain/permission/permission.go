@@ -1,13 +1,15 @@
 package permission
 
+import "context"
+
 type Permission struct {
 	Name  string
 	Value string
 }
 
 type Repository interface {
-	GetAll() []Permission
-	Get(values []string) ([]Permission, error)
+	GetAll(ctx context.Context) []Permission
+	Get(ctx context.Context, values []string) ([]Permission, error)
 }
 
 // global accesses

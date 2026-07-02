@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	getusers "github.com/khanzadimahdi/testproject/application/dashboard/user/getUsers"
@@ -51,8 +52,8 @@ func TestIndexHandler(t *testing.T) {
 			}
 		)
 
-		userRepository.On("Count").Once().Return(uint(len(a)), nil)
-		userRepository.On("GetAll", uint(0), uint(10)).Return(a, nil)
+		userRepository.On("Count", mock.Anything).Once().Return(uint(len(a)), nil)
+		userRepository.On("GetAll", mock.Anything, uint(0), uint(10)).Return(a, nil)
 		defer userRepository.AssertExpectations(t)
 
 		handler := NewIndexHandler(getusers.NewUseCase(&userRepository))
@@ -82,8 +83,8 @@ func TestIndexHandler(t *testing.T) {
 			}
 		)
 
-		userRepository.On("Count").Once().Return(uint(0), nil)
-		userRepository.On("GetAll", uint(0), uint(10)).Return(nil, nil)
+		userRepository.On("Count", mock.Anything).Once().Return(uint(0), nil)
+		userRepository.On("GetAll", mock.Anything, uint(0), uint(10)).Return(nil, nil)
 		defer userRepository.AssertExpectations(t)
 
 		handler := NewIndexHandler(getusers.NewUseCase(&userRepository))

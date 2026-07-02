@@ -52,10 +52,10 @@ func TestCreateHandler(t *testing.T) {
 		requestValidator.On("Validate", &r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
-		languageRepository.On("Exists", "EN").Once().Return(true)
+		languageRepository.On("Exists", mock2.Anything, "EN").Once().Return(true)
 		defer languageRepository.AssertExpectations(t)
 
-		articleRepository.On("Save", mock2.AnythingOfType("*article.Article")).Once().Return(au, nil)
+		articleRepository.On("Save", mock2.Anything, mock2.AnythingOfType("*article.Article")).Once().Return(au, nil)
 		defer articleRepository.AssertExpectations(t)
 
 		handler := NewCreateHandler(createarticle.NewUseCase(&articleRepository, &languageRepository, &requestValidator, &translator))

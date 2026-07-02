@@ -1,6 +1,7 @@
 package stopTask
 
 import (
+	"context"
 	"encoding/json"
 
 	"github.com/khanzadimahdi/testproject/domain"
@@ -20,13 +21,13 @@ func NewTaskStopped(
 	}
 }
 
-func (uc *TaskStopped) Handle(data []byte) error {
+func (uc *TaskStopped) Handle(ctx context.Context, data []byte) error {
 	var taskStopped events.TaskStopped
 	if err := json.Unmarshal(data, &taskStopped); err != nil {
 		return err
 	}
 
-	t, err := uc.taskRepository.GetOne(taskStopped.UUID)
+	t, err := uc.taskRepository.GetOne(ctx, taskStopped.UUID)
 	if err == domain.ErrNotExists {
 		return nil
 	} else if err != nil {
@@ -39,7 +40,7 @@ func (uc *TaskStopped) Handle(data []byte) error {
 	}
 
 	t.State = destinationState
-	_, err = uc.taskRepository.Save(&t)
+	_, err = uc.taskRepository.Save(ctx, &t)
 
 	return err
 }

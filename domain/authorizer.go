@@ -1,12 +1,14 @@
 package domain
 
 import (
+	"context"
+
 	"github.com/khanzadimahdi/testproject/domain/role"
 	"github.com/stretchr/testify/mock"
 )
 
 type Authorizer interface {
-	Authorize(userUUID string, permission string) (bool, error)
+	Authorize(ctx context.Context, userUUID string, permission string) (bool, error)
 }
 
 type RoleBasedAccessControl struct {
@@ -21,8 +23,8 @@ func NewRoleBasedAccessControl(roleRepository role.Repository) *RoleBasedAccessC
 	}
 }
 
-func (a *RoleBasedAccessControl) Authorize(userUUID string, permission string) (bool, error) {
-	hasPermission, err := a.roleRepository.UserHasPermission(userUUID, permission)
+func (a *RoleBasedAccessControl) Authorize(ctx context.Context, userUUID string, permission string) (bool, error) {
+	hasPermission, err := a.roleRepository.UserHasPermission(ctx, userUUID, permission)
 	if err != nil {
 		return false, err
 	}
@@ -36,8 +38,8 @@ type MockAuthorizer struct {
 
 var _ Authorizer = &MockAuthorizer{}
 
-func (a *MockAuthorizer) Authorize(userUUID string, permission string) (bool, error) {
-	args := a.Called(userUUID, permission)
+func (a *MockAuthorizer) Authorize(ctx context.Context, userUUID string, permission string) (bool, error) {
+	args := a.Called(ctx, userUUID, permission)
 
 	return args.Bool(0), args.Error(1)
 }

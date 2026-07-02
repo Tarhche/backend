@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	deleterole "github.com/khanzadimahdi/testproject/application/dashboard/role/deleteRole"
@@ -27,7 +28,7 @@ func TestDeleteHandler(t *testing.T) {
 			r = deleterole.Request{RoleUUID: "role-uuid"}
 		)
 
-		roleRepository.On("Delete", r.RoleUUID).Return(nil)
+		roleRepository.On("Delete", mock.Anything, r.RoleUUID).Return(nil)
 		defer roleRepository.AssertExpectations(t)
 
 		handler := NewDeleteHandler(deleterole.NewUseCase(&roleRepository))

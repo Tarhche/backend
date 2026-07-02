@@ -40,7 +40,7 @@ func (m *bus) Publish(ctx context.Context, subject string, payload []byte) error
 	defer m.lock.RUnlock()
 
 	for i := range m.subscribers[subject] {
-		if err := m.subscribers[subject][i].handler.Handle(payload); err != nil {
+		if err := m.subscribers[subject][i].handler.Handle(ctx, payload); err != nil {
 			return err
 		}
 	}

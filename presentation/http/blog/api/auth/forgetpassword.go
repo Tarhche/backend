@@ -5,6 +5,8 @@ import (
 	"net/http"
 
 	"github.com/khanzadimahdi/testproject/application/auth/forgetpassword"
+	infraTrace "github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type forgetPasswordHandler struct {
@@ -34,10 +36,11 @@ func (h *forgetPasswordHandler) ServeHTTP(rw http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	response, err := h.useCase.Execute(&request)
+	response, err := h.useCase.Execute(r.Context(), &request)
 
 	switch {
 	case err != nil:
+		infraTrace.RecordError(trace.SpanFromContext(r.Context()), err)
 		rw.WriteHeader(http.StatusInternalServerError)
 	case response != nil && len(response.ValidationErrors) > 0:
 		rw.Header().Add("Content-Type", "application/json")

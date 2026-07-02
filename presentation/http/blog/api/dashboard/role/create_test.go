@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	createrole "github.com/khanzadimahdi/testproject/application/dashboard/role/createRole"
@@ -62,10 +63,10 @@ func TestCreateHandler(t *testing.T) {
 		requestValidator.On("Validate", &r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
-		permissionRepository.On("Get", r.Permissions).Once().Return(p, nil)
+		permissionRepository.On("Get", mock.Anything, r.Permissions).Once().Return(p, nil)
 		defer permissionRepository.AssertExpectations(t)
 
-		roleRepository.On("Save", &c).Once().Return(roleUUID, nil)
+		roleRepository.On("Save", mock.Anything, &c).Once().Return(roleUUID, nil)
 		defer roleRepository.AssertExpectations(t)
 
 		handler := NewCreateHandler(createrole.NewUseCase(&roleRepository, &permissionRepository, &requestValidator, &translator))

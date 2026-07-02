@@ -1,6 +1,7 @@
 package bookmarkExists
 
 import (
+	"context"
 	"errors"
 
 	"github.com/khanzadimahdi/testproject/domain"
@@ -22,14 +23,14 @@ func NewUseCase(
 	}
 }
 
-func (uc *UseCase) Execute(request *Request) (*Response, error) {
+func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
 	if validationErrors := uc.validator.Validate(request); len(validationErrors) > 0 {
 		return &Response{
 			ValidationErrors: validationErrors,
 		}, nil
 	}
 
-	if _, err := uc.bookmarkRepository.GetByOwnerUUID(request.OwnerUUID, request.ObjectType, request.ObjectUUID, request.LanguageCode); errors.Is(err, domain.ErrNotExists) {
+	if _, err := uc.bookmarkRepository.GetByOwnerUUID(ctx, request.OwnerUUID, request.ObjectType, request.ObjectUUID, request.LanguageCode); errors.Is(err, domain.ErrNotExists) {
 		return &Response{
 			Exist: false,
 		}, nil

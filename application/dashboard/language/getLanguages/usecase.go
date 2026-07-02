@@ -1,6 +1,10 @@
 package getlanguages
 
-import "github.com/khanzadimahdi/testproject/domain/language"
+import (
+	"context"
+
+	"github.com/khanzadimahdi/testproject/domain/language"
+)
 
 const limit = 10
 
@@ -14,8 +18,8 @@ func NewUseCase(languageRepository language.Repository) *UseCase {
 	}
 }
 
-func (uc *UseCase) Execute(request *Request) (*Response, error) {
-	totalLanguages, err := uc.languageRepository.Count()
+func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
+	totalLanguages, err := uc.languageRepository.Count(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -36,7 +40,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		totalPages++
 	}
 
-	languages, err := uc.languageRepository.GetAll(offset, limit)
+	languages, err := uc.languageRepository.GetAll(ctx, offset, limit)
 	if err != nil {
 		return nil, err
 	}

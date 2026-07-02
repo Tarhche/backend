@@ -1,10 +1,12 @@
 package updateBookmark
 
 import (
+	"context"
 	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/bookmark"
@@ -35,10 +37,10 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &request).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		bookmarkRepository.On("DeleteByOwnerUUID", request.OwnerUUID, request.ObjectType, request.ObjectUUID, request.LanguageCode).Once().Return(nil)
+		bookmarkRepository.On("DeleteByOwnerUUID", mock.Anything, request.OwnerUUID, request.ObjectType, request.ObjectUUID, request.LanguageCode).Once().Return(nil)
 		defer bookmarkRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&bookmarkRepository, &validator).Execute(&request)
+		response, err := NewUseCase(&bookmarkRepository, &validator).Execute(context.Background(), &request)
 
 		bookmarkRepository.AssertNotCalled(t, "Save")
 
@@ -74,10 +76,10 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &request).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		bookmarkRepository.On("Save", &b).Once().Return("test-uuid", nil)
+		bookmarkRepository.On("Save", mock.Anything, &b).Once().Return("test-uuid", nil)
 		defer bookmarkRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&bookmarkRepository, &validator).Execute(&request)
+		response, err := NewUseCase(&bookmarkRepository, &validator).Execute(context.Background(), &request)
 
 		bookmarkRepository.AssertNotCalled(t, "DeleteByOwnerUUID")
 
@@ -107,7 +109,7 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &request).Once().Return(expectedResponse.ValidationErrors)
 		defer validator.AssertExpectations(t)
 
-		response, err := NewUseCase(&bookmarkRepository, &validator).Execute(&request)
+		response, err := NewUseCase(&bookmarkRepository, &validator).Execute(context.Background(), &request)
 
 		bookmarkRepository.AssertNotCalled(t, "DeleteByOwnerUUID")
 		bookmarkRepository.AssertNotCalled(t, "Save")
@@ -138,10 +140,10 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &request).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		bookmarkRepository.On("DeleteByOwnerUUID", request.OwnerUUID, request.ObjectType, request.ObjectUUID, request.LanguageCode).Once().Return(expectedErr)
+		bookmarkRepository.On("DeleteByOwnerUUID", mock.Anything, request.OwnerUUID, request.ObjectType, request.ObjectUUID, request.LanguageCode).Once().Return(expectedErr)
 		defer bookmarkRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&bookmarkRepository, &validator).Execute(&request)
+		response, err := NewUseCase(&bookmarkRepository, &validator).Execute(context.Background(), &request)
 
 		bookmarkRepository.AssertNotCalled(t, "Save")
 
@@ -179,10 +181,10 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &request).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		bookmarkRepository.On("Save", &b).Once().Return("", expectedErr)
+		bookmarkRepository.On("Save", mock.Anything, &b).Once().Return("", expectedErr)
 		defer bookmarkRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&bookmarkRepository, &validator).Execute(&request)
+		response, err := NewUseCase(&bookmarkRepository, &validator).Execute(context.Background(), &request)
 
 		bookmarkRepository.AssertNotCalled(t, "DeleteByOwnerUUID")
 

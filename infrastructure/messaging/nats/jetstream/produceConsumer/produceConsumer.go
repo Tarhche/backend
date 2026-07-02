@@ -2,14 +2,19 @@ package produceConsumer
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"sync"
 	"time"
 
 	"github.com/khanzadimahdi/testproject/domain"
+	infranats "github.com/khanzadimahdi/testproject/infrastructure/messaging/nats"
+	"github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
 
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
 type produceConsumer struct {
@@ -19,11 +24,13 @@ type produceConsumer struct {
 	streams    map[string]jetstream.Stream
 	lock       sync.RWMutex
 	wg         sync.WaitGroup
+	logger     *slog.Logger
+	tracer     oteltrace.Tracer
 }
 
 var _ domain.ProduceConsumer = &produceConsumer{}
 
-func NewProduceConsumer(connection *nats.Conn, consumerID string) (*produceConsumer, error) {
+func NewProduceConsumer(connection *nats.Conn, consumerID string, logger *slog.Logger) (*produceConsumer, error) {
 	j, err := jetstream.New(connection)
 	if err != nil {
 		return nil, err
@@ -34,19 +41,30 @@ func NewProduceConsumer(connection *nats.Conn, consumerID string) (*produceConsu
 		jetstream:  j,
 		consumerID: consumerID,
 		streams:    make(map[string]jetstream.Stream),
+		logger:     logger,
+		tracer:     otel.Tracer("nats.jetstream"),
 	}
 
 	return s, nil
 }
 
 func (m *produceConsumer) Produce(ctx context.Context, subject string, payload []byte) error {
+	ctx, span := m.tracer.Start(ctx, "jetstream.publish "+subject,
+		oteltrace.WithSpanKind(oteltrace.SpanKindProducer),
+		oteltrace.WithAttributes(attribute.String("messaging.destination.name", subject)),
+	)
+	defer span.End()
+
 	if _, err := m.makeSureStreamExists(ctx, subject); err != nil {
-		return err
+		return trace.RecordError(span, err)
 	}
 
-	_, err := m.jetstream.Publish(ctx, subject, payload)
+	msg := &nats.Msg{Subject: subject, Data: payload, Header: nats.Header{}}
+	otel.GetTextMapPropagator().Inject(ctx, infranats.HeaderCarrier(msg.Header))
 
-	return err
+	_, err := m.jetstream.PublishMsg(ctx, msg)
+
+	return trace.RecordError(span, err)
 }
 
 func (m *produceConsumer) Consume(ctx context.Context, subject string, handler domain.MessageHandler) error {
@@ -95,21 +113,36 @@ func (m *produceConsumer) consumeInBackground(ctx context.Context, stream jetstr
 
 func (m *produceConsumer) consumeFunc(handler domain.MessageHandler) func(msg jetstream.Msg) {
 	return func(msg jetstream.Msg) {
+		// the producer's span context arrives in the traceparent header; the
+		// message is processed as a trace of its own that links back to the
+		// originating trace instead of continuing it
+		remoteCtx := otel.GetTextMapPropagator().Extract(context.Background(), infranats.HeaderCarrier(msg.Headers()))
+
+		msgCtx, span := m.tracer.Start(context.Background(), "jetstream.consume "+msg.Subject(),
+			oteltrace.WithSpanKind(oteltrace.SpanKindConsumer),
+			oteltrace.WithLinks(oteltrace.LinkFromContext(remoteCtx)),
+			oteltrace.WithAttributes(attribute.String("messaging.destination.name", msg.Subject())),
+		)
+		defer span.End()
+
 		if err := msg.InProgress(); err != nil {
-			log.Println("in progress error", err)
+			m.logger.Error("in progress error", "error", err)
 		}
 
-		if err := handler.Handle(msg.Data()); err != nil {
-			log.Println("consume error", err, string(msg.Subject()))
+		if err := trace.RecordError(span, handler.Handle(msgCtx, msg.Data())); err != nil {
+			m.logger.Error("consume error", "error", err, "subject", string(msg.Subject()))
 
 			if err := msg.Nak(); err != nil {
-				log.Println("nak error", err)
+				m.logger.Error("nak error", "error", err)
 			}
 			return
 		}
 
+		// Acking is a real infra call to NATS, not part of the traced unit of
+		// work above - keep it on its own background context rather than the
+		// (short-lived, span-scoped) message context.
 		if err := msg.DoubleAck(context.Background()); err != nil {
-			log.Println("double ack error", err)
+			m.logger.Error("double ack error", "error", err)
 		}
 	}
 }

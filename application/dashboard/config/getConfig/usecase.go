@@ -1,6 +1,7 @@
 package getConfig
 
 import (
+	"context"
 	"errors"
 
 	"github.com/khanzadimahdi/testproject/domain"
@@ -17,8 +18,8 @@ func NewUseCase(configRepository config.Repository) *UseCase {
 	}
 }
 
-func (uc *UseCase) Execute() (*Response, error) {
-	c, err := uc.configRepository.GetLatestRevision()
+func (uc *UseCase) Execute(ctx context.Context) (*Response, error) {
+	c, err := uc.configRepository.GetLatestRevision(ctx)
 	if err != nil && !errors.Is(err, domain.ErrNotExists) {
 		return nil, err
 	}

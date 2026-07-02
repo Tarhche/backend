@@ -1,6 +1,8 @@
 package getNodes
 
 import (
+	"context"
+
 	"github.com/khanzadimahdi/testproject/domain/runner/node"
 )
 
@@ -16,8 +18,8 @@ func NewUseCase(nodeRepository node.Repository) *UseCase {
 	}
 }
 
-func (uc *UseCase) Execute(request *Request) (*Response, error) {
-	totalNodes, err := uc.nodeRepository.Count()
+func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
+	totalNodes, err := uc.nodeRepository.Count(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -38,7 +40,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		totalPages++
 	}
 
-	nodes, err := uc.nodeRepository.GetAll(offset, limit)
+	nodes, err := uc.nodeRepository.GetAll(ctx, offset, limit)
 	if err != nil {
 		return nil, err
 	}

@@ -1,6 +1,8 @@
 package deleteelement
 
 import (
+	"context"
+
 	"github.com/khanzadimahdi/testproject/domain/element"
 )
 
@@ -14,6 +16,6 @@ func NewUseCase(elementRepository element.Repository) *UseCase {
 	}
 }
 
-func (uc *UseCase) Execute(request *Request) error {
-	return uc.elementRepository.Delete(request.ElementUUID)
+func (uc *UseCase) Execute(ctx context.Context, request *Request) error {
+	return uc.elementRepository.Delete(ctx, request.ElementUUID)
 }

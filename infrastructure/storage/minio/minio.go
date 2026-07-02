@@ -6,8 +6,12 @@ import (
 	"time"
 
 	"github.com/khanzadimahdi/testproject/domain/file"
+	"github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
 type Options struct {
@@ -21,6 +25,7 @@ type Options struct {
 type MinIO struct {
 	client     *minio.Client
 	bucketName string
+	tracer     oteltrace.Tracer
 }
 
 var _ file.Storage = &MinIO{}
@@ -45,26 +50,42 @@ func New(opt Options) (*MinIO, error) {
 	return &MinIO{
 		client:     minioClient,
 		bucketName: opt.BucketName,
+		tracer:     otel.Tracer("minio"),
 	}, nil
 }
 
 func (storage *MinIO) Store(ctx context.Context, objectName string, reader io.Reader, objectSize int64) error {
-	_, err := storage.client.PutObject(ctx, storage.bucketName, objectName, reader, objectSize, minio.PutObjectOptions{})
-	if err != nil {
-		return err
-	}
+	ctx, span := storage.tracer.Start(ctx, "minio.store",
+		oteltrace.WithSpanKind(oteltrace.SpanKindClient),
+		oteltrace.WithAttributes(attribute.String("object", objectName), attribute.Int64("size", objectSize)),
+	)
+	defer span.End()
 
-	return nil
+	_, err := storage.client.PutObject(ctx, storage.bucketName, objectName, reader, objectSize, minio.PutObjectOptions{})
+
+	return trace.RecordError(span, err)
 }
 
 func (storage *MinIO) Delete(ctx context.Context, objectName string) error {
-	return storage.client.RemoveObject(ctx, storage.bucketName, objectName, minio.RemoveObjectOptions{})
+	ctx, span := storage.tracer.Start(ctx, "minio.delete",
+		oteltrace.WithSpanKind(oteltrace.SpanKindClient),
+		oteltrace.WithAttributes(attribute.String("object", objectName)),
+	)
+	defer span.End()
+
+	return trace.RecordError(span, storage.client.RemoveObject(ctx, storage.bucketName, objectName, minio.RemoveObjectOptions{}))
 }
 
 func (storage *MinIO) Read(ctx context.Context, objectName string) (io.ReadSeekCloser, error) {
+	ctx, span := storage.tracer.Start(ctx, "minio.read",
+		oteltrace.WithSpanKind(oteltrace.SpanKindClient),
+		oteltrace.WithAttributes(attribute.String("object", objectName)),
+	)
+	defer span.End()
+
 	obj, err := storage.client.GetObject(ctx, storage.bucketName, objectName, minio.GetObjectOptions{})
 	if err != nil {
-		return nil, err
+		return nil, trace.RecordError(span, err)
 	}
 
 	return obj, nil

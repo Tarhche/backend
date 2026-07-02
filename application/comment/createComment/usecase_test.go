@@ -1,6 +1,7 @@
 package createComment
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/comment"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/comments"
 	"github.com/khanzadimahdi/testproject/infrastructure/validator"
+	"github.com/stretchr/testify/mock"
 )
 
 func TestUseCase_Execute(t *testing.T) {
@@ -43,10 +45,10 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		c.On("Save", &cm).Once().Return("comment-uuid", nil)
+		c.On("Save", mock.Anything, &cm).Once().Return("comment-uuid", nil)
 		defer c.AssertExpectations(t)
 
-		response, err := NewUseCase(&c, &validator).Execute(&r)
+		response, err := NewUseCase(&c, &validator).Execute(context.Background(), &r)
 
 		assert.NoError(t, err)
 		assert.Nil(t, response)
@@ -72,7 +74,7 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(expectedResponse.ValidationErrors)
 		defer validator.AssertExpectations(t)
 
-		response, err := NewUseCase(&c, &validator).Execute(&r)
+		response, err := NewUseCase(&c, &validator).Execute(context.Background(), &r)
 
 		c.AssertNotCalled(t, "Save")
 
@@ -111,10 +113,10 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		c.On("Save", &cm).Once().Return("", expectedErr)
+		c.On("Save", mock.Anything, &cm).Once().Return("", expectedErr)
 		defer c.AssertExpectations(t)
 
-		response, err := NewUseCase(&c, &validator).Execute(&r)
+		response, err := NewUseCase(&c, &validator).Execute(context.Background(), &r)
 
 		assert.ErrorIs(t, err, expectedErr)
 		assert.Nil(t, response)

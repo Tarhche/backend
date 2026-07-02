@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/application/bookmark/bookmarkExists"
@@ -46,7 +47,7 @@ func TestExistsHandler(t *testing.T) {
 			CreatedAt:    time.Now(),
 		}
 
-		bookmarkRepository.On("GetByOwnerUUID", b.OwnerUUID, b.ObjectType, b.ObjectUUID, b.LanguageCode).Once().Return(b, nil)
+		bookmarkRepository.On("GetByOwnerUUID", mock.Anything, b.OwnerUUID, b.ObjectType, b.ObjectUUID, b.LanguageCode).Once().Return(b, nil)
 		defer bookmarkRepository.AssertExpectations(t)
 
 		handler := NewExistsHandler(bookmarkExists.NewUseCase(&bookmarkRepository, &requestValidator))
@@ -137,7 +138,7 @@ func TestExistsHandler(t *testing.T) {
 			CreatedAt:    time.Now(),
 		}
 
-		bookmarkRepository.On("GetByOwnerUUID", b.OwnerUUID, b.ObjectType, b.ObjectUUID, b.LanguageCode).Once().Return(bookmark.Bookmark{}, errors.New("something went wrong"))
+		bookmarkRepository.On("GetByOwnerUUID", mock.Anything, b.OwnerUUID, b.ObjectType, b.ObjectUUID, b.LanguageCode).Once().Return(bookmark.Bookmark{}, errors.New("something went wrong"))
 		defer bookmarkRepository.AssertExpectations(t)
 
 		handler := NewExistsHandler(bookmarkExists.NewUseCase(&bookmarkRepository, &requestValidator))

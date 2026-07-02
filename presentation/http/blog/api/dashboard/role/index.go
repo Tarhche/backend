@@ -7,6 +7,8 @@ import (
 	"unsafe"
 
 	getroles "github.com/khanzadimahdi/testproject/application/dashboard/role/getRoles"
+	infraTrace "github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type indexHandler struct {
@@ -41,9 +43,10 @@ func (h *indexHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		Page: page,
 	}
 
-	response, err := h.useCase.Execute(request)
+	response, err := h.useCase.Execute(r.Context(), request)
 	switch {
 	case err != nil:
+		infraTrace.RecordError(trace.SpanFromContext(r.Context()), err)
 		rw.WriteHeader(http.StatusInternalServerError)
 	default:
 		rw.Header().Add("Content-Type", "application/json")

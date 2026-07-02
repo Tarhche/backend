@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/application/dashboard/profile/getprofile"
@@ -37,7 +38,7 @@ func TestGetProfileHandler(t *testing.T) {
 			}
 		)
 
-		userRepository.On("GetOne", userUUID).Once().Return(u, nil)
+		userRepository.On("GetOne", mock.Anything, userUUID).Once().Return(u, nil)
 
 		handler := NewGetProfileHandler(getprofile.NewUseCase(&userRepository))
 
@@ -72,7 +73,7 @@ func TestGetProfileHandler(t *testing.T) {
 			}
 		)
 
-		userRepository.On("GetOne", userUUID).Once().Return(user.User{}, domain.ErrNotExists)
+		userRepository.On("GetOne", mock.Anything, userUUID).Once().Return(user.User{}, domain.ErrNotExists)
 
 		handler := NewGetProfileHandler(getprofile.NewUseCase(&userRepository))
 
@@ -103,7 +104,7 @@ func TestGetProfileHandler(t *testing.T) {
 			}
 		)
 
-		userRepository.On("GetOne", userUUID).Once().Return(user.User{}, errors.New("unexpected error"))
+		userRepository.On("GetOne", mock.Anything, userUUID).Once().Return(user.User{}, errors.New("unexpected error"))
 
 		handler := NewGetProfileHandler(getprofile.NewUseCase(&userRepository))
 

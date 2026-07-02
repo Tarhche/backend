@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"log"
 	"net/http"
 	"time"
 
@@ -15,23 +14,22 @@ type RateLimit struct {
 
 var _ http.Handler = &RateLimit{}
 
-func NewRateLimitMiddleware(next http.Handler, tokens uint64, interval time.Duration) *RateLimit {
+func NewRateLimitMiddleware(next http.Handler, tokens uint64, interval time.Duration) (*RateLimit, error) {
 	store, err := memorystore.New(&memorystore.Config{
 		Tokens:   tokens,
 		Interval: interval,
 	})
-
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
 	// Create the HTTP middleware from the store, keying by IP address.
 	middleware, err := httplimit.NewMiddleware(store, httplimit.IPKeyFunc())
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
-	return &RateLimit{limiter: middleware.Handle(next)}
+	return &RateLimit{limiter: middleware.Handle(next)}, nil
 }
 
 func (a *RateLimit) ServeHTTP(rw http.ResponseWriter, r *http.Request) {

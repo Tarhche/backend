@@ -7,6 +7,8 @@ import (
 
 	getuser "github.com/khanzadimahdi/testproject/application/dashboard/user/getUser"
 	"github.com/khanzadimahdi/testproject/domain"
+	infraTrace "github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type showHandler struct {
@@ -31,12 +33,13 @@ func NewShowHandler(useCase *getuser.UseCase) *showHandler {
 // @Router			/dashboard/users/{uuid} [get]
 func (h *showHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	UUID := r.PathValue("uuid")
-	response, err := h.useCase.Execute(UUID)
+	response, err := h.useCase.Execute(r.Context(), UUID)
 
 	switch {
 	case errors.Is(err, domain.ErrNotExists):
 		rw.WriteHeader(http.StatusNotFound)
 	case err != nil:
+		infraTrace.RecordError(trace.SpanFromContext(r.Context()), err)
 		rw.WriteHeader(http.StatusInternalServerError)
 	default:
 		rw.Header().Add("Content-Type", "application/json")

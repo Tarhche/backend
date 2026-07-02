@@ -1,6 +1,7 @@
 package getarticle
 
 import (
+	"context"
 	"errors"
 
 	"github.com/khanzadimahdi/testproject/domain"
@@ -20,13 +21,13 @@ func NewUseCase(articleRepository article.Repository, userRepository user.Reposi
 	}
 }
 
-func (uc *UseCase) Execute(request *Request) (*Response, error) {
-	a, err := uc.articleRepository.GetByCorrelationUUIDAndLanguage(request.CorrelationUUID, request.LanguageCode)
+func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
+	a, err := uc.articleRepository.GetByCorrelationUUIDAndLanguage(ctx, request.CorrelationUUID, request.LanguageCode)
 	if err != nil {
 		return nil, err
 	}
 
-	u, err := uc.userRepository.GetOne(a.AuthorUUID)
+	u, err := uc.userRepository.GetOne(ctx, a.AuthorUUID)
 	if err != nil && !errors.Is(err, domain.ErrNotExists) {
 		return nil, err
 	}

@@ -1,6 +1,7 @@
 package task
 
 import (
+	"context"
 	"time"
 
 	"github.com/khanzadimahdi/testproject/domain/runner/node"
@@ -51,11 +52,11 @@ type ResourceLimits struct {
 
 // Repository represents a repository of tasks
 type Repository interface {
-	GetAll(offset uint, limit uint) ([]Task, error)
-	GetOne(UUID string) (Task, error)
-	Save(*Task) (uuid string, err error)
-	Delete(UUID string) error
-	Count() (uint, error)
+	GetAll(ctx context.Context, offset uint, limit uint) ([]Task, error)
+	GetOne(ctx context.Context, UUID string) (Task, error)
+	Save(ctx context.Context, t *Task) (uuid string, err error)
+	Delete(ctx context.Context, UUID string) error
+	Count(ctx context.Context) (uint, error)
 }
 
 type Scheduler interface {

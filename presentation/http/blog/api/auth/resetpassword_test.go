@@ -2,6 +2,7 @@ package auth
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -56,11 +57,11 @@ func TestResetPasswordHandler(t *testing.T) {
 		requestValidator.On("Validate", &r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
-		userRepository.On("GetOne", u.UUID).Return(u, nil)
-		userRepository.On("Save", mock.Anything).Return(u.UUID, nil)
+		userRepository.On("GetOne", mock.Anything, u.UUID).Return(u, nil)
+		userRepository.On("Save", mock.Anything, mock.Anything).Return(u.UUID, nil)
 		defer userRepository.AssertExpectations(t)
 
-		hasher.On("Hash", []byte(r.Password), mock.AnythingOfType("[]uint8")).Return([]byte("hashed-password"), nil)
+		hasher.On("Hash", mock.Anything, []byte(r.Password), mock.AnythingOfType("[]uint8")).Return([]byte("hashed-password"), nil)
 		defer hasher.AssertExpectations(t)
 
 		handler := NewResetPasswordHandler(resetpassword.NewUseCase(&userRepository, &hasher, j, &translator, &requestValidator))
@@ -138,7 +139,7 @@ func TestResetPasswordHandler(t *testing.T) {
 		translator.On("Translate", "identity_not_exists", mock.Anything).Once().Return("identity (email/username) not exists")
 		defer translator.AssertExpectations(t)
 
-		userRepository.On("GetOne", u.UUID).Return(user.User{}, domain.ErrNotExists)
+		userRepository.On("GetOne", mock.Anything, u.UUID).Return(user.User{}, domain.ErrNotExists)
 
 		handler := NewResetPasswordHandler(resetpassword.NewUseCase(&userRepository, &hasher, j, &translator, &requestValidator))
 
@@ -184,7 +185,7 @@ func TestResetPasswordHandler(t *testing.T) {
 		requestValidator.On("Validate", &r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
-		userRepository.On("GetOne", u.UUID).Return(user.User{}, errors.New("unexpected error"))
+		userRepository.On("GetOne", mock.Anything, u.UUID).Return(user.User{}, errors.New("unexpected error"))
 
 		handler := NewResetPasswordHandler(resetpassword.NewUseCase(&userRepository, &hasher, j, &translator, &requestValidator))
 
@@ -214,7 +215,7 @@ func resetPasswordToken(t *testing.T, j *jwt.JWT, u user.User, expiresAt time.Ti
 	b.SetIssuedAt(time.Now())
 	b.SetAudience([]string{audience})
 
-	token, err := j.Generate(b.Build())
+	token, err := j.Generate(context.Background(), b.Build())
 	assert.NoError(t, err)
 
 	return base64.URLEncoding.EncodeToString([]byte(token))

@@ -44,11 +44,11 @@ func TestChangePasswordHandler(t *testing.T) {
 		requestValidator.On("Validate", &r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
-		userRepository.On("GetOne", r.UserUUID).Once().Return(u, nil)
-		userRepository.On("Save", mock.Anything).Return(u.UUID, nil)
+		userRepository.On("GetOne", mock.Anything, r.UserUUID).Once().Return(u, nil)
+		userRepository.On("Save", mock.Anything, mock.Anything).Return(u.UUID, nil)
 		defer userRepository.AssertExpectations(t)
 
-		hasher.On("Hash", []byte(r.NewPassword), mock.AnythingOfType("[]uint8")).Once().Return([]byte("hashed-new-password"), nil)
+		hasher.On("Hash", mock.Anything, []byte(r.NewPassword), mock.AnythingOfType("[]uint8")).Once().Return([]byte("hashed-new-password"), nil)
 		defer hasher.AssertExpectations(t)
 
 		handler := NewChangePasswordHandler(userchangepassword.NewUseCase(&userRepository, &hasher, &requestValidator))

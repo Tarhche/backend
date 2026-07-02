@@ -1,6 +1,8 @@
 package deletearticle
 
 import (
+	"context"
+
 	"github.com/khanzadimahdi/testproject/domain/article"
 )
 
@@ -14,6 +16,6 @@ func NewUseCase(articleRepository article.Repository) *UseCase {
 	}
 }
 
-func (uc *UseCase) Execute(request *Request) error {
-	return uc.articleRepository.DeleteByCorrelationUUIDAndLanguage(request.CorrelationUUID, request.LanguageCode)
+func (uc *UseCase) Execute(ctx context.Context, request *Request) error {
+	return uc.articleRepository.DeleteByCorrelationUUIDAndLanguage(ctx, request.CorrelationUUID, request.LanguageCode)
 }

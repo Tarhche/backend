@@ -1,6 +1,8 @@
 package getarticles
 
 import (
+	"context"
+
 	"github.com/khanzadimahdi/testproject/domain/article"
 	"github.com/khanzadimahdi/testproject/domain/language"
 	"github.com/khanzadimahdi/testproject/domain/user"
@@ -26,8 +28,8 @@ func NewUseCase(
 	}
 }
 
-func (uc *UseCase) Execute(request *Request) (*Response, error) {
-	totalArticles, err := uc.articleRepository.CountByCorrelation()
+func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
+	totalArticles, err := uc.articleRepository.CountByCorrelation(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -48,7 +50,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		totalPages++
 	}
 
-	correlationUUIDs, err := uc.articleRepository.GetCorrelationUUIDs(offset, limit)
+	correlationUUIDs, err := uc.articleRepository.GetCorrelationUUIDs(ctx, offset, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -57,7 +59,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		return NewResponse(correlationUUIDs, nil, nil, nil, totalPages, currentPage), nil
 	}
 
-	articles, err := uc.articleRepository.GetByCorrelationUUIDs(correlationUUIDs, "")
+	articles, err := uc.articleRepository.GetByCorrelationUUIDs(ctx, correlationUUIDs, "")
 	if err != nil {
 		return nil, err
 	}
@@ -69,12 +71,12 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		languageCodes[i] = articles[i].LanguageCode
 	}
 
-	authors, err := uc.userRepository.GetByUUIDs(userUUIDs)
+	authors, err := uc.userRepository.GetByUUIDs(ctx, userUUIDs)
 	if err != nil {
 		return nil, err
 	}
 
-	languages, err := uc.languageRepository.GetByCodes(languageCodes)
+	languages, err := uc.languageRepository.GetByCodes(ctx, languageCodes)
 	if err != nil {
 		return nil, err
 	}

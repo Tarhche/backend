@@ -1,6 +1,7 @@
 package stopTask
 
 import (
+	"context"
 	"encoding/json"
 
 	"github.com/khanzadimahdi/testproject/domain"
@@ -24,7 +25,7 @@ func NewStoppageTaskHandler(useCase *UseCase) *StoppageTaskHandler {
 }
 
 // Handle handles the StopTask command
-func (h *StoppageTaskHandler) Handle(data []byte) error {
+func (h *StoppageTaskHandler) Handle(ctx context.Context, data []byte) error {
 	var taskStoppageRequested events.TaskStoppageRequested
 	if err := json.Unmarshal(data, &taskStoppageRequested); err != nil {
 		return err
@@ -32,7 +33,7 @@ func (h *StoppageTaskHandler) Handle(data []byte) error {
 
 	request := &Request{UUID: taskStoppageRequested.UUID}
 
-	_, err := h.useCase.Execute(request)
+	_, err := h.useCase.Execute(ctx, request)
 	if err == domain.ErrNotExists {
 		return nil
 	}

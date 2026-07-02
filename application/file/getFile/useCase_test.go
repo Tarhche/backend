@@ -8,10 +8,11 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/domain/file"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/files"
-	"github.com/khanzadimahdi/testproject/infrastructure/storage/mock"
+	storagemock "github.com/khanzadimahdi/testproject/infrastructure/storage/mock"
 )
 
 func TestUseCase_Execute(t *testing.T) {
@@ -22,7 +23,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		var (
 			filesRepository files.MockFilesRepository
-			storage         mock.MockStorage
+			storage         storagemock.MockStorage
 
 			fileContent = []byte("some file content")
 
@@ -48,13 +49,13 @@ func TestUseCase_Execute(t *testing.T) {
 			}
 		)
 
-		filesRepository.On("GetOne", uuid).Once().Return(f, nil)
+		filesRepository.On("GetOne", mock.Anything, uuid).Once().Return(f, nil)
 		defer filesRepository.AssertExpectations(t)
 
 		storage.On("Read", context.Background(), f.UUID).Return(reader, nil)
 		defer storage.AssertExpectations(t)
 
-		response, err := NewUseCase(&filesRepository, &storage).Execute(uuid)
+		response, err := NewUseCase(&filesRepository, &storage).Execute(context.Background(), uuid)
 
 		assert.NoError(t, err)
 		assert.Equal(t, &expectedResponse, response)
@@ -65,17 +66,17 @@ func TestUseCase_Execute(t *testing.T) {
 
 		var (
 			filesRepository files.MockFilesRepository
-			storage         mock.MockStorage
+			storage         storagemock.MockStorage
 
 			expectedErr = errors.New("some error")
 
 			uuid = "test-uuid"
 		)
 
-		filesRepository.On("GetOne", uuid).Once().Return(file.File{}, expectedErr)
+		filesRepository.On("GetOne", mock.Anything, uuid).Once().Return(file.File{}, expectedErr)
 		defer filesRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&filesRepository, &storage).Execute(uuid)
+		response, err := NewUseCase(&filesRepository, &storage).Execute(context.Background(), uuid)
 
 		storage.AssertNotCalled(t, "Read")
 
@@ -88,7 +89,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		var (
 			filesRepository files.MockFilesRepository
-			storage         mock.MockStorage
+			storage         storagemock.MockStorage
 
 			expectedErr = errors.New("some error")
 
@@ -98,13 +99,13 @@ func TestUseCase_Execute(t *testing.T) {
 			}
 		)
 
-		filesRepository.On("GetOne", uuid).Once().Return(f, nil)
+		filesRepository.On("GetOne", mock.Anything, uuid).Once().Return(f, nil)
 		defer filesRepository.AssertExpectations(t)
 
 		storage.On("Read", context.Background(), f.UUID).Return(nil, expectedErr)
 		defer storage.AssertExpectations(t)
 
-		response, err := NewUseCase(&filesRepository, &storage).Execute(uuid)
+		response, err := NewUseCase(&filesRepository, &storage).Execute(context.Background(), uuid)
 
 		assert.ErrorIs(t, err, expectedErr)
 		assert.Nil(t, response)

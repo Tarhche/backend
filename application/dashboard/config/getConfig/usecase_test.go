@@ -1,10 +1,12 @@
 package getConfig
 
 import (
+	"context"
 	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/domain/config"
 	configMocks "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/config"
@@ -30,10 +32,10 @@ func TestUseCase_Execute(t *testing.T) {
 			}
 		)
 
-		configRepository.On("GetLatestRevision").Once().Return(loadedConfig, nil)
+		configRepository.On("GetLatestRevision", mock.Anything).Once().Return(loadedConfig, nil)
 		defer configRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&configRepository).Execute()
+		response, err := NewUseCase(&configRepository).Execute(context.Background())
 		assert.NoError(t, err)
 		assert.Equal(t, &expectedResponse, response)
 	})
@@ -47,10 +49,10 @@ func TestUseCase_Execute(t *testing.T) {
 			expectedErr = errors.New("error")
 		)
 
-		configRepository.On("GetLatestRevision").Once().Return(config.Config{}, expectedErr)
+		configRepository.On("GetLatestRevision", mock.Anything).Once().Return(config.Config{}, expectedErr)
 		defer configRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&configRepository).Execute()
+		response, err := NewUseCase(&configRepository).Execute(context.Background())
 
 		assert.ErrorIs(t, err, expectedErr)
 		assert.Nil(t, response)

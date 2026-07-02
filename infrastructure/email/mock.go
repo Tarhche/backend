@@ -1,13 +1,17 @@
 package email
 
-import "github.com/stretchr/testify/mock"
+import (
+	"context"
+
+	"github.com/stretchr/testify/mock"
+)
 
 type MockMailer struct {
 	mock.Mock
 }
 
-func (m *MockMailer) SendMail(from string, to string, subject string, body []byte) error {
-	args := m.Called(from, to, subject, body)
+func (m *MockMailer) SendMail(ctx context.Context, from string, to string, subject string, body []byte) error {
+	args := m.Called(ctx, from, to, subject, body)
 
 	return args.Error(0)
 }

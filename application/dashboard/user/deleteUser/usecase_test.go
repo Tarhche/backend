@@ -1,10 +1,12 @@
 package deleteuser
 
 import (
+	"context"
 	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
 )
@@ -21,10 +23,10 @@ func TestUseCase_Execute(t *testing.T) {
 			r = Request{UserUUID: "user-uuid"}
 		)
 
-		userRepository.On("Delete", r.UserUUID).Return(nil)
+		userRepository.On("Delete", mock.Anything, r.UserUUID).Return(nil)
 		defer userRepository.AssertExpectations(t)
 
-		err := NewUseCase(&userRepository).Execute(&r)
+		err := NewUseCase(&userRepository).Execute(context.Background(), &r)
 
 		assert.NoError(t, err)
 	})
@@ -39,10 +41,10 @@ func TestUseCase_Execute(t *testing.T) {
 			expectedError = errors.New("user deletion failed")
 		)
 
-		userRepository.On("Delete", r.UserUUID).Return(expectedError)
+		userRepository.On("Delete", mock.Anything, r.UserUUID).Return(expectedError)
 		defer userRepository.AssertExpectations(t)
 
-		err := NewUseCase(&userRepository).Execute(&r)
+		err := NewUseCase(&userRepository).Execute(context.Background(), &r)
 
 		assert.ErrorIs(t, err, expectedError)
 	})

@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	testifymock "github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/application/auth/register"
 	"github.com/khanzadimahdi/testproject/domain"
@@ -48,7 +49,7 @@ func TestRegisterHandler(t *testing.T) {
 		requestValidator.On("Validate", &r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
-		userRepository.On("GetOneByIdentity", r.Identity).Once().Return(user.User{}, nil)
+		userRepository.On("GetOneByIdentity", testifymock.Anything, r.Identity).Once().Return(user.User{}, nil)
 		defer userRepository.AssertExpectations(t)
 
 		asyncCommandBus.On("Produce", context.Background(), register.SendRegisterationEmailName, commandPayload).Return(nil)
@@ -122,7 +123,7 @@ func TestRegisterHandler(t *testing.T) {
 		requestValidator.On("Validate", &r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
-		userRepository.On("GetOneByIdentity", r.Identity).Once().Return(user.User{}, errors.New("undexprected error"))
+		userRepository.On("GetOneByIdentity", testifymock.Anything, r.Identity).Once().Return(user.User{}, errors.New("undexprected error"))
 		defer userRepository.AssertExpectations(t)
 
 		handler := NewRegisterHandler(register.NewUseCase(&userRepository, &asyncCommandBus, &translator, &requestValidator))

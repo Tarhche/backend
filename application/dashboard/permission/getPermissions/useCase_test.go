@@ -1,9 +1,11 @@
 package getpermissions
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/domain/permission"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/permissions"
@@ -33,10 +35,10 @@ func TestUseCase_Execute(t *testing.T) {
 			}
 		)
 
-		permissionsRepository.On("GetAll").Once().Return(p)
+		permissionsRepository.On("GetAll", mock.Anything).Once().Return(p)
 		defer permissionsRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&permissionsRepository).Execute()
+		response, err := NewUseCase(&permissionsRepository).Execute(context.Background())
 
 		assert.NoError(t, err)
 		assert.Equal(t, &expectedResponse, response)

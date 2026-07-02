@@ -1,6 +1,8 @@
 package getusers
 
 import (
+	"context"
+
 	"github.com/khanzadimahdi/testproject/domain/user"
 )
 
@@ -16,8 +18,8 @@ func NewUseCase(articleRepository user.Repository) *UseCase {
 	}
 }
 
-func (uc *UseCase) Execute(request *Request) (*Response, error) {
-	totalArticles, err := uc.userRepository.Count()
+func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
+	totalArticles, err := uc.userRepository.Count(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -38,7 +40,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		totalPages++
 	}
 
-	a, err := uc.userRepository.GetAll(offset, limit)
+	a, err := uc.userRepository.GetAll(ctx, offset, limit)
 	if err != nil {
 		return nil, err
 	}

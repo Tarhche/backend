@@ -1,6 +1,7 @@
 package heartbeatNode
 
 import (
+	"context"
 	"encoding/json"
 
 	"github.com/khanzadimahdi/testproject/domain"
@@ -18,13 +19,13 @@ func NewHeartbeatHandler(nodeRepository node.Repository) *Heartbeat {
 	return &Heartbeat{nodeRepository: nodeRepository}
 }
 
-func (h *Heartbeat) Handle(data []byte) error {
+func (h *Heartbeat) Handle(ctx context.Context, data []byte) error {
 	var heartbeat events.Heartbeat
 	if err := json.Unmarshal(data, &heartbeat); err != nil {
 		return err
 	}
 
-	n, err := h.getNode(heartbeat.Name)
+	n, err := h.getNode(ctx, heartbeat.Name)
 	if err != nil {
 		return err
 	}
@@ -34,13 +35,13 @@ func (h *Heartbeat) Handle(data []byte) error {
 	n.Stats = heartbeat.Stats
 	n.LastHeartbeatAt = heartbeat.At
 
-	_, err = h.nodeRepository.Save(&n)
+	_, err = h.nodeRepository.Save(ctx, &n)
 
 	return err
 }
 
-func (h *Heartbeat) getNode(name string) (node.Node, error) {
-	if n, err := h.nodeRepository.GetOne(name); err == nil {
+func (h *Heartbeat) getNode(ctx context.Context, name string) (node.Node, error) {
+	if n, err := h.nodeRepository.GetOne(ctx, name); err == nil {
 		return n, nil
 	} else if err != nil && err != domain.ErrNotExists {
 		return node.Node{}, err

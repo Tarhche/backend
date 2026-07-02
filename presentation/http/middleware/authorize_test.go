@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/domain"
@@ -31,7 +32,7 @@ func TestAuthorizeMiddleware(t *testing.T) {
 			expectedResponse = "test response"
 		)
 
-		authorizer.On("Authorize", u.UUID, permission).Once().Return(true, nil)
+		authorizer.On("Authorize", mock.Anything, u.UUID, permission).Once().Return(true, nil)
 		defer authorizer.AssertExpectations(t)
 
 		next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -66,7 +67,7 @@ func TestAuthorizeMiddleware(t *testing.T) {
 			expectedResponse = "test response"
 		)
 
-		authorizer.On("Authorize", u.UUID, permission).Once().Return(false, errors.New("some error"))
+		authorizer.On("Authorize", mock.Anything, u.UUID, permission).Once().Return(false, errors.New("some error"))
 		defer authorizer.AssertExpectations(t)
 
 		next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -101,7 +102,7 @@ func TestAuthorizeMiddleware(t *testing.T) {
 			expectedResponse = "test response"
 		)
 
-		authorizer.On("Authorize", u.UUID, permission).Once().Return(false, nil)
+		authorizer.On("Authorize", mock.Anything, u.UUID, permission).Once().Return(false, nil)
 		defer authorizer.AssertExpectations(t)
 
 		next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

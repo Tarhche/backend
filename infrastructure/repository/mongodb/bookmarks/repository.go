@@ -35,8 +35,8 @@ func NewRepository(database *mongo.Database) *BookmarksRepository {
 	}
 }
 
-func (r *BookmarksRepository) Save(b *bookmark.Bookmark) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *BookmarksRepository) Save(ctx context.Context, b *bookmark.Bookmark) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	if len(b.UUID) == 0 {
@@ -70,8 +70,8 @@ func (r *BookmarksRepository) Save(b *bookmark.Bookmark) (string, error) {
 	return b.ObjectUUID, nil
 }
 
-func (r *BookmarksRepository) GetAllByOwnerUUID(ownerUUID string, offset uint, limit uint) ([]bookmark.Bookmark, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *BookmarksRepository) GetAllByOwnerUUID(ctx context.Context, ownerUUID string, offset uint, limit uint) ([]bookmark.Bookmark, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	o := int64(offset)
@@ -113,8 +113,8 @@ func (r *BookmarksRepository) GetAllByOwnerUUID(ownerUUID string, offset uint, l
 	return items, nil
 }
 
-func (r *BookmarksRepository) CountByOwnerUUID(ownerUUID string) (uint, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *BookmarksRepository) CountByOwnerUUID(ctx context.Context, ownerUUID string) (uint, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	filter := bson.M{
@@ -129,8 +129,8 @@ func (r *BookmarksRepository) CountByOwnerUUID(ownerUUID string) (uint, error) {
 	return uint(c), nil
 }
 
-func (r *BookmarksRepository) GetByOwnerUUID(ownerUUID string, objectType string, objectUUID string, languageCode string) (bookmark.Bookmark, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *BookmarksRepository) GetByOwnerUUID(ctx context.Context, ownerUUID string, objectType string, objectUUID string, languageCode string) (bookmark.Bookmark, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	filter := bson.M{
@@ -159,8 +159,8 @@ func (r *BookmarksRepository) GetByOwnerUUID(ownerUUID string, objectType string
 	}, nil
 }
 
-func (r *BookmarksRepository) DeleteByOwnerUUID(ownerUUID string, objectType string, objectUUID string, languageCode string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *BookmarksRepository) DeleteByOwnerUUID(ctx context.Context, ownerUUID string, objectType string, objectUUID string, languageCode string) error {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	filter := bson.M{

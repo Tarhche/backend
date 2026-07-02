@@ -30,13 +30,13 @@ type RequestRegistry interface {
 
 // publish/subscribe interfaces
 type MessageHandler interface {
-	Handle(payload []byte) error
+	Handle(ctx context.Context, payload []byte) error
 }
 
-type MessageHandlerFunc func(payload []byte) error
+type MessageHandlerFunc func(ctx context.Context, payload []byte) error
 
-func (handler MessageHandlerFunc) Handle(payload []byte) error {
-	return handler(payload)
+func (handler MessageHandlerFunc) Handle(ctx context.Context, payload []byte) error {
+	return handler(ctx, payload)
 }
 
 type Publisher interface {

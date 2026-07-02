@@ -1,6 +1,8 @@
 package createelement
 
 import (
+	"context"
+
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/element"
 )
@@ -17,14 +19,14 @@ func NewUseCase(elementRepository element.Repository, validator domain.Validator
 	}
 }
 
-func (uc *UseCase) Execute(request *Request) (*Response, error) {
+func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
 	if validationErrors := uc.validator.Validate(request); len(validationErrors) > 0 {
 		return &Response{
 			ValidationErrors: validationErrors,
 		}, nil
 	}
 
-	uuid, err := uc.elementRepository.Save(request.ToElement())
+	uuid, err := uc.elementRepository.Save(ctx, request.ToElement())
 	if err != nil {
 		return nil, err
 	}

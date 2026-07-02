@@ -1,30 +1,34 @@
 package runTask
 
 import (
+	"context"
 	"encoding/json"
-	"log"
+	"log/slog"
 
 	"github.com/khanzadimahdi/testproject/domain/runner/task/events"
 )
 
 type TaskRunRequested struct {
 	usecase *UseCase
+	logger  *slog.Logger
 }
 
 func NewTaskRunRequested(
 	usecase *UseCase,
+	logger *slog.Logger,
 ) *TaskRunRequested {
 	return &TaskRunRequested{
 		usecase: usecase,
+		logger:  logger,
 	}
 }
 
-func (uc *TaskRunRequested) Handle(data []byte) error {
-	log.Println("task run requested event received", string(data))
+func (uc *TaskRunRequested) Handle(ctx context.Context, data []byte) error {
+	uc.logger.Info("task run requested event received", "data", string(data))
 
 	var event events.TaskRunRequested
 	if err := json.Unmarshal(data, &event); err != nil {
-		log.Println("error unmarshalling request", err)
+		uc.logger.Error("error unmarshalling request", "error", err)
 
 		return nil
 	}
@@ -76,13 +80,13 @@ func (uc *TaskRunRequested) Handle(data []byte) error {
 	}
 
 	// TODO: using usecase in handler ? (is this a good idea?)
-	response, err := uc.usecase.Execute(request)
+	response, err := uc.usecase.Execute(ctx, request)
 	if len(response.ValidationErrors) > 0 {
-		log.Println("validation errors", response.ValidationErrors)
+		uc.logger.Warn("validation errors", "validationErrors", response.ValidationErrors)
 	}
 
 	if err != nil {
-		log.Println("error running task", err)
+		uc.logger.Error("error running task", "error", err)
 	}
 
 	return err

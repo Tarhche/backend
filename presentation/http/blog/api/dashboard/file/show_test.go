@@ -2,7 +2,6 @@ package file
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"io"
 	"net/http"
@@ -11,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	getfile "github.com/khanzadimahdi/testproject/application/dashboard/file/getFile"
@@ -18,7 +18,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/file"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/files"
-	"github.com/khanzadimahdi/testproject/infrastructure/storage/mock"
+	storagemock "github.com/khanzadimahdi/testproject/infrastructure/storage/mock"
 )
 
 func TestShowHandler(t *testing.T) {
@@ -29,7 +29,7 @@ func TestShowHandler(t *testing.T) {
 
 		var (
 			filesRepository files.MockFilesRepository
-			storage         mock.MockStorage
+			storage         storagemock.MockStorage
 
 			u = user.User{UUID: "auth-user-uuid"}
 
@@ -43,10 +43,10 @@ func TestShowHandler(t *testing.T) {
 		fileData := []byte("this is the file payload")
 		reader := NewSeekReadCloser(fileData)
 
-		filesRepository.On("GetOne", f.UUID).Once().Return(f, nil)
+		filesRepository.On("GetOne", mock.Anything, f.UUID).Once().Return(f, nil)
 		defer filesRepository.AssertExpectations(t)
 
-		storage.On("Read", context.Background(), f.StoredName).Once().Return(reader, nil)
+		storage.On("Read", mock.Anything, f.StoredName).Once().Return(reader, nil)
 		defer storage.AssertExpectations(t)
 
 		useCase := getfile.NewUseCase(&filesRepository, &storage)
@@ -69,7 +69,7 @@ func TestShowHandler(t *testing.T) {
 
 		var (
 			filesRepository files.MockFilesRepository
-			storage         mock.MockStorage
+			storage         storagemock.MockStorage
 
 			u = user.User{UUID: "auth-user-uuid"}
 
@@ -78,7 +78,7 @@ func TestShowHandler(t *testing.T) {
 			}
 		)
 
-		filesRepository.On("GetOne", f.UUID).Once().Return(file.File{}, domain.ErrNotExists)
+		filesRepository.On("GetOne", mock.Anything, f.UUID).Once().Return(file.File{}, domain.ErrNotExists)
 		defer filesRepository.AssertExpectations(t)
 
 		useCase := getfile.NewUseCase(&filesRepository, &storage)
@@ -103,7 +103,7 @@ func TestShowHandler(t *testing.T) {
 
 		var (
 			filesRepository files.MockFilesRepository
-			storage         mock.MockStorage
+			storage         storagemock.MockStorage
 
 			u = user.User{UUID: "auth-user-uuid"}
 
@@ -117,10 +117,10 @@ func TestShowHandler(t *testing.T) {
 		fileData := "this is the file payload"
 		reader := io.NopCloser(strings.NewReader(fileData))
 
-		filesRepository.On("GetOne", file.UUID).Once().Return(file, nil)
+		filesRepository.On("GetOne", mock.Anything, file.UUID).Once().Return(file, nil)
 		defer filesRepository.AssertExpectations(t)
 
-		storage.On("Read", context.Background(), file.StoredName).Once().Return(reader, errors.New("some error"))
+		storage.On("Read", mock.Anything, file.StoredName).Once().Return(reader, errors.New("some error"))
 		defer storage.AssertExpectations(t)
 
 		useCase := getfile.NewUseCase(&filesRepository, &storage)

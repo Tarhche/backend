@@ -7,6 +7,8 @@ import (
 
 	stoptask "github.com/khanzadimahdi/testproject/application/runner/manager/task/stopTask"
 	"github.com/khanzadimahdi/testproject/domain"
+	infraTrace "github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type stopHandler struct {
@@ -35,11 +37,12 @@ func (h *stopHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		UUID: UUID,
 	}
 
-	response, err := h.useCase.Execute(request)
+	response, err := h.useCase.Execute(r.Context(), request)
 	switch {
 	case errors.Is(err, domain.ErrNotExists):
 		rw.WriteHeader(http.StatusNotFound)
 	case err != nil:
+		infraTrace.RecordError(trace.SpanFromContext(r.Context()), err)
 		rw.WriteHeader(http.StatusInternalServerError)
 	case response != nil && len(response.ValidationErrors) > 0:
 		rw.Header().Add("Content-Type", "application/json")

@@ -1,11 +1,13 @@
 package getComments
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/domain/comment"
 	"github.com/khanzadimahdi/testproject/domain/user"
@@ -94,14 +96,14 @@ func TestUseCase_Execute(t *testing.T) {
 			}
 		)
 
-		commentRepository.On("Count").Once().Return(uint(len(a)), nil)
-		commentRepository.On("GetAll", uint(0), uint(10)).Return(a, nil)
+		commentRepository.On("Count", mock.Anything).Once().Return(uint(len(a)), nil)
+		commentRepository.On("GetAll", mock.Anything, uint(0), uint(10)).Return(a, nil)
 		defer commentRepository.AssertExpectations(t)
 
-		userRepository.On("GetByUUIDs", userUUIDs).Once().Return(users, nil)
+		userRepository.On("GetByUUIDs", mock.Anything, userUUIDs).Once().Return(users, nil)
 		defer userRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&commentRepository, &userRepository).Execute(&r)
+		response, err := NewUseCase(&commentRepository, &userRepository).Execute(context.Background(), &r)
 
 		assert.NoError(t, err)
 		assert.Equal(t, &expectedResponse, response)
@@ -121,10 +123,10 @@ func TestUseCase_Execute(t *testing.T) {
 			expectedErr = errors.New("get articles failed")
 		)
 
-		commentRepository.On("Count").Once().Return(uint(0), expectedErr)
+		commentRepository.On("Count", mock.Anything).Once().Return(uint(0), expectedErr)
 		defer commentRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&commentRepository, &userRepository).Execute(&r)
+		response, err := NewUseCase(&commentRepository, &userRepository).Execute(context.Background(), &r)
 
 		commentRepository.AssertNotCalled(t, "GetAll")
 
@@ -146,11 +148,11 @@ func TestUseCase_Execute(t *testing.T) {
 			expectedErr = errors.New("get articles failed")
 		)
 
-		commentRepository.On("Count").Once().Return(uint(3), nil)
-		commentRepository.On("GetAll", uint(0), uint(10)).Return(nil, expectedErr)
+		commentRepository.On("Count", mock.Anything).Once().Return(uint(3), nil)
+		commentRepository.On("GetAll", mock.Anything, uint(0), uint(10)).Return(nil, expectedErr)
 		defer commentRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&commentRepository, &userRepository).Execute(&r)
+		response, err := NewUseCase(&commentRepository, &userRepository).Execute(context.Background(), &r)
 
 		assert.ErrorIs(t, err, expectedErr)
 		assert.Nil(t, response)
@@ -192,14 +194,14 @@ func TestUseCase_Execute(t *testing.T) {
 			expectedErr = errors.New("get articles failed")
 		)
 
-		commentRepository.On("Count").Once().Return(uint(len(a)), nil)
-		commentRepository.On("GetAll", uint(0), uint(10)).Return(a, nil)
+		commentRepository.On("Count", mock.Anything).Once().Return(uint(len(a)), nil)
+		commentRepository.On("GetAll", mock.Anything, uint(0), uint(10)).Return(a, nil)
 		defer commentRepository.AssertExpectations(t)
 
-		userRepository.On("GetByUUIDs", userUUIDs).Once().Return(nil, expectedErr)
+		userRepository.On("GetByUUIDs", mock.Anything, userUUIDs).Once().Return(nil, expectedErr)
 		defer userRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&commentRepository, &userRepository).Execute(&r)
+		response, err := NewUseCase(&commentRepository, &userRepository).Execute(context.Background(), &r)
 
 		assert.ErrorIs(t, err, expectedErr)
 		assert.Nil(t, response)

@@ -1,7 +1,9 @@
 package domain
 
+import "context"
+
 type Cache interface {
-	Set(key string, value []byte) error
-	Get(key string) ([]byte, error)
-	Purge(key string) error
+	Set(ctx context.Context, key string, value []byte) error
+	Get(ctx context.Context, key string) ([]byte, error)
+	Purge(ctx context.Context, key string) error
 }

@@ -2,12 +2,14 @@ package middleware
 
 import (
 	"bytes"
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/domain/user"
@@ -35,7 +37,7 @@ func TestAuthenticateMiddleware(t *testing.T) {
 			token = generateToken(t, j, u, time.Now().Add(10*time.Second), auth.AccessToken)
 		)
 
-		userRepository.On("GetOne", u.UUID).Once().Return(u, nil)
+		userRepository.On("GetOne", mock.Anything, u.UUID).Once().Return(u, nil)
 		defer userRepository.AssertExpectations(t)
 
 		next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -102,7 +104,7 @@ func generateToken(t *testing.T, j *jwt.JWT, u user.User, expiresAt time.Time, a
 	b.SetIssuedAt(time.Now())
 	b.SetAudience([]string{audience})
 
-	token, err := j.Generate(b.Build())
+	token, err := j.Generate(context.Background(), b.Build())
 	assert.NoError(t, err)
 
 	return token

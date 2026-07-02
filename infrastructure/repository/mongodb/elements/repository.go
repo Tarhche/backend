@@ -35,8 +35,8 @@ func NewRepository(database *mongo.Database) *ElementsRepository {
 	}
 }
 
-func (r *ElementsRepository) GetAll(offset uint, limit uint) ([]element.Element, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *ElementsRepository) GetAll(ctx context.Context, offset uint, limit uint) ([]element.Element, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	o := int64(offset)
@@ -72,8 +72,8 @@ func (r *ElementsRepository) GetAll(offset uint, limit uint) ([]element.Element,
 	return items, nil
 }
 
-func (r *ElementsRepository) GetOne(UUID string) (element.Element, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *ElementsRepository) GetOne(ctx context.Context, UUID string) (element.Element, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	var a ElementBson
@@ -87,8 +87,8 @@ func (r *ElementsRepository) GetOne(UUID string) (element.Element, error) {
 	return bsonToElement(&a)
 }
 
-func (r *ElementsRepository) Count() (uint, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *ElementsRepository) Count(ctx context.Context) (uint, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	c, err := r.collection.CountDocuments(ctx, bson.D{})
@@ -99,8 +99,8 @@ func (r *ElementsRepository) Count() (uint, error) {
 	return uint(c), nil
 }
 
-func (r *ElementsRepository) Save(a *element.Element) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *ElementsRepository) Save(ctx context.Context, a *element.Element) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	if len(a.UUID) == 0 {
@@ -135,8 +135,8 @@ func (r *ElementsRepository) Save(a *element.Element) (string, error) {
 	return a.UUID, nil
 }
 
-func (r *ElementsRepository) Delete(UUID string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *ElementsRepository) Delete(ctx context.Context, UUID string) error {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	_, err := r.collection.DeleteOne(ctx, bson.D{{Key: "_id", Value: UUID}})

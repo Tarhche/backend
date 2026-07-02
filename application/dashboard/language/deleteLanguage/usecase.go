@@ -1,6 +1,10 @@
 package deletelanguage
 
-import "github.com/khanzadimahdi/testproject/domain/language"
+import (
+	"context"
+
+	"github.com/khanzadimahdi/testproject/domain/language"
+)
 
 type UseCase struct {
 	languageRepository language.Repository
@@ -12,6 +16,6 @@ func NewUseCase(languageRepository language.Repository) *UseCase {
 	}
 }
 
-func (uc *UseCase) Execute(request *Request) error {
-	return uc.languageRepository.Delete(request.Code)
+func (uc *UseCase) Execute(ctx context.Context, request *Request) error {
+	return uc.languageRepository.Delete(ctx, request.Code)
 }

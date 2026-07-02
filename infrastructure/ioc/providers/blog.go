@@ -3,7 +3,7 @@ package providers
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"time"
@@ -106,6 +106,7 @@ import (
 	permissionsrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/permissions"
 	rolesrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/roles"
 	userrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/users"
+	"github.com/khanzadimahdi/testproject/infrastructure/telemetry/profiler"
 	websocketHandler "github.com/khanzadimahdi/testproject/infrastructure/websocket"
 	articleAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/article"
 	authAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/auth"
@@ -152,6 +153,8 @@ const (
 // included so the manager runs them per request scope.
 func BlogProviders() []provider.Provider {
 	return []provider.Provider{
+		NewOpenTelemetryProvider("blog", "blog"),
+		NewProfilerProvider("blog"),
 		NewMongodbProvider(),
 		NewNatsProvider(),
 		NewTranslationProvider(),
@@ -182,8 +185,6 @@ func NewBlogProvider() *blogProvider {
 }
 
 func (p *blogProvider) Register(ctx context.Context, c provider.Container) error {
-	log.SetFlags(log.LstdFlags | log.Llongfile)
-
 	return nil
 }
 
@@ -198,12 +199,17 @@ func (p *blogProvider) Boot(ctx context.Context, c provider.Container) error {
 		return err
 	}
 
-	pc, err := produceConsumer.NewProduceConsumer(natsConnection, blogConsumerID)
+	var logger *slog.Logger
+	if err := c.Resolve(&logger, resolve.WithParams("blog")); err != nil {
+		return err
+	}
+
+	pc, err := produceConsumer.NewProduceConsumer(natsConnection, blogConsumerID, logger)
 	if err != nil {
 		return err
 	}
 
-	ps := pubsub.NewPublishSubscriber(natsConnection)
+	ps := pubsub.NewPublishSubscriber(natsConnection, logger)
 
 	runCodeCache, err := cache.NewNatsCache(
 		natsConnection,
@@ -222,11 +228,12 @@ func (p *blogProvider) Boot(ctx context.Context, c provider.Container) error {
 		ps,
 		translator,
 		"replies",
+		logger,
 	)
 	if err != nil {
 		return err
 	}
-	cachedDecoratedWS := websocketHandler.NewCacheDecorator(ws, runCodeCache, runCode.RunCodeRequest)
+	cachedDecoratedWS := websocketHandler.NewCacheDecorator(ws, runCodeCache, logger, runCode.RunCodeRequest)
 
 	c.Bind(func() domain.Producer { return pc }, bind.Singleton())
 	c.Bind(func() domain.Consumer { return pc }, bind.Singleton())
@@ -266,6 +273,11 @@ func blog(
 	cachedDecoratedWS *websocketHandler.CacheDecorator,
 	iocContainer provider.Container,
 ) (http.Handler, error) {
+	var logger *slog.Logger
+	if err := iocContainer.Resolve(&logger, resolve.WithParams("blog")); err != nil {
+		return nil, err
+	}
+
 	var mailFromAddress string
 	if err := iocContainer.Resolve(&mailFromAddress, resolve.WithName(MailFromAddress)); err != nil {
 		return nil, err
@@ -338,7 +350,7 @@ func blog(
 	if err := cachedDecoratedWS.Consume(
 		context.Background(),
 		runCode.RunCodeRequest,
-		runCode.NewRunCodeHandler(validator, asyncProduceConsumer, cachedDecoratedWS),
+		runCode.NewRunCodeHandler(validator, asyncProduceConsumer, cachedDecoratedWS, logger),
 	); err != nil {
 		return nil, err
 	}
@@ -575,7 +587,34 @@ func blog(
 		return dashboardConfigAPI.NewUpdateHandler(dashboardUpdateConfig.NewUseCase(configRepository, languageRepository, va(c), tr(c)))
 	}), authorizer, permission.ConfigUpdate), jwt, userRepository))
 
-	handler := middleware.NewRecoveryMiddleware(middleware.NewCORSMiddleware(middleware.NewRateLimitMiddleware(mux, 600, 1*time.Minute)))
+	rateLimited, err := middleware.NewRateLimitMiddleware(mux, 600, 1*time.Minute)
+	if err != nil {
+		return nil, err
+	}
+
+	var tracedProfiler *profiler.TracedProfiler
+	if err := iocContainer.Resolve(&tracedProfiler); err != nil {
+		return nil, err
+	}
+
+	handler := middleware.NewRecoveryMiddleware(
+		middleware.NewRequestIDMiddleware(
+			middleware.NewTelemetryMiddleware(
+				"/blog",
+				// inside Telemetry so profile samples link to the request span
+				middleware.NewProfilingMiddleware(
+					middleware.NewLogMiddleware(
+						middleware.NewCORSMiddleware(
+							rateLimited,
+						),
+						logger,
+					),
+					tracedProfiler,
+				),
+			),
+		),
+		logger,
+	)
 
 	webURL := os.Getenv("WEB_URL")
 	if len(webURL) == 0 {
@@ -586,7 +625,7 @@ func blog(
 	subscribers := map[string]domain.MessageHandler{
 		forgetpassword.SendForgetPasswordEmailName: forgetpassword.NewSendForgetPasswordEmailHandler(userRepository, authTokenGenerator, mailer, mailFromAddress, webURL, renderer, translator),
 		register.SendRegisterationEmailName:        register.NewSendRegisterationEmailHandler(authTokenGenerator, mailer, mailFromAddress, webURL, renderer, translator),
-		taskEvents.HeartbeatName:                   heartbeat.NewHeartbeatHandler(cachedDecoratedWS),
+		taskEvents.HeartbeatName:                   heartbeat.NewHeartbeatHandler(cachedDecoratedWS, logger),
 	}
 
 	if err := iocContainer.Bind(func() map[string]domain.MessageHandler {

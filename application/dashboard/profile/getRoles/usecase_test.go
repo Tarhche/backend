@@ -1,10 +1,12 @@
 package getRoles
 
 import (
+	"context"
 	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/domain/role"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/roles"
@@ -67,10 +69,10 @@ func TestUseCase_Execute(t *testing.T) {
 			}
 		)
 
-		roleRepository.On("GetByUserUUID", userUUID).Once().Return(rl, nil)
+		roleRepository.On("GetByUserUUID", mock.Anything, userUUID).Once().Return(rl, nil)
 		defer roleRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&roleRepository).Execute(userUUID)
+		response, err := NewUseCase(&roleRepository).Execute(context.Background(), userUUID)
 
 		assert.NoError(t, err)
 		assert.Equal(t, &expectedResponse, response)
@@ -87,10 +89,10 @@ func TestUseCase_Execute(t *testing.T) {
 			expectedErr = errors.New("some error")
 		)
 
-		roleRepository.On("GetByUserUUID", userUUID).Once().Return(nil, expectedErr)
+		roleRepository.On("GetByUserUUID", mock.Anything, userUUID).Once().Return(nil, expectedErr)
 		defer roleRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&roleRepository).Execute(userUUID)
+		response, err := NewUseCase(&roleRepository).Execute(context.Background(), userUUID)
 
 		assert.ErrorIs(t, err, expectedErr)
 		assert.Nil(t, response)

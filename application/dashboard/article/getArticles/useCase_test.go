@@ -1,10 +1,12 @@
 package getarticles
 
 import (
+	"context"
 	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/domain/article"
 	"github.com/khanzadimahdi/testproject/domain/language"
@@ -79,18 +81,18 @@ func TestUseCase_Execute(t *testing.T) {
 			}
 		)
 
-		articleRepository.On("CountByCorrelation").Once().Return(uint(2), nil)
-		articleRepository.On("GetCorrelationUUIDs", uint(0), uint(20)).Once().Return(correlationUUIDs, nil)
-		articleRepository.On("GetByCorrelationUUIDs", correlationUUIDs, "").Once().Return(a, nil)
+		articleRepository.On("CountByCorrelation", mock.Anything).Once().Return(uint(2), nil)
+		articleRepository.On("GetCorrelationUUIDs", mock.Anything, uint(0), uint(20)).Once().Return(correlationUUIDs, nil)
+		articleRepository.On("GetByCorrelationUUIDs", mock.Anything, correlationUUIDs, "").Once().Return(a, nil)
 		defer articleRepository.AssertExpectations(t)
 
-		userRepository.On("GetByUUIDs", []string{"author-1", "author-1", "author-2"}).Once().Return(u, nil)
+		userRepository.On("GetByUUIDs", mock.Anything, []string{"author-1", "author-1", "author-2"}).Once().Return(u, nil)
 		defer userRepository.AssertExpectations(t)
 
-		languageRepository.On("GetByCodes", []string{"EN", "FA", "EN"}).Once().Return(l, nil)
+		languageRepository.On("GetByCodes", mock.Anything, []string{"EN", "FA", "EN"}).Once().Return(l, nil)
 		defer languageRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&articleRepository, &userRepository, &languageRepository).Execute(&r)
+		response, err := NewUseCase(&articleRepository, &userRepository, &languageRepository).Execute(context.Background(), &r)
 
 		assert.NoError(t, err)
 		assert.Equal(t, &expectedResponse, response)
@@ -112,11 +114,11 @@ func TestUseCase_Execute(t *testing.T) {
 			}
 		)
 
-		articleRepository.On("CountByCorrelation").Once().Return(uint(0), nil)
-		articleRepository.On("GetCorrelationUUIDs", uint(0), uint(20)).Once().Return([]string{}, nil)
+		articleRepository.On("CountByCorrelation", mock.Anything).Once().Return(uint(0), nil)
+		articleRepository.On("GetCorrelationUUIDs", mock.Anything, uint(0), uint(20)).Once().Return([]string{}, nil)
 		defer articleRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&articleRepository, &userRepository, &languageRepository).Execute(&r)
+		response, err := NewUseCase(&articleRepository, &userRepository, &languageRepository).Execute(context.Background(), &r)
 
 		articleRepository.AssertNotCalled(t, "GetByCorrelationUUIDs")
 		userRepository.AssertNotCalled(t, "GetByUUIDs")
@@ -138,10 +140,10 @@ func TestUseCase_Execute(t *testing.T) {
 			expectedErr = errors.New("count failed")
 		)
 
-		articleRepository.On("CountByCorrelation").Once().Return(uint(0), expectedErr)
+		articleRepository.On("CountByCorrelation", mock.Anything).Once().Return(uint(0), expectedErr)
 		defer articleRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&articleRepository, &userRepository, &languageRepository).Execute(&r)
+		response, err := NewUseCase(&articleRepository, &userRepository, &languageRepository).Execute(context.Background(), &r)
 
 		articleRepository.AssertNotCalled(t, "GetCorrelationUUIDs")
 
@@ -161,11 +163,11 @@ func TestUseCase_Execute(t *testing.T) {
 			expectedErr = errors.New("get correlations failed")
 		)
 
-		articleRepository.On("CountByCorrelation").Once().Return(uint(2), nil)
-		articleRepository.On("GetCorrelationUUIDs", uint(0), uint(20)).Once().Return(nil, expectedErr)
+		articleRepository.On("CountByCorrelation", mock.Anything).Once().Return(uint(2), nil)
+		articleRepository.On("GetCorrelationUUIDs", mock.Anything, uint(0), uint(20)).Once().Return(nil, expectedErr)
 		defer articleRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&articleRepository, &userRepository, &languageRepository).Execute(&r)
+		response, err := NewUseCase(&articleRepository, &userRepository, &languageRepository).Execute(context.Background(), &r)
 
 		articleRepository.AssertNotCalled(t, "GetByCorrelationUUIDs")
 
@@ -186,12 +188,12 @@ func TestUseCase_Execute(t *testing.T) {
 			expectedErr      = errors.New("get articles failed")
 		)
 
-		articleRepository.On("CountByCorrelation").Once().Return(uint(1), nil)
-		articleRepository.On("GetCorrelationUUIDs", uint(0), uint(20)).Once().Return(correlationUUIDs, nil)
-		articleRepository.On("GetByCorrelationUUIDs", correlationUUIDs, "").Once().Return(nil, expectedErr)
+		articleRepository.On("CountByCorrelation", mock.Anything).Once().Return(uint(1), nil)
+		articleRepository.On("GetCorrelationUUIDs", mock.Anything, uint(0), uint(20)).Once().Return(correlationUUIDs, nil)
+		articleRepository.On("GetByCorrelationUUIDs", mock.Anything, correlationUUIDs, "").Once().Return(nil, expectedErr)
 		defer articleRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&articleRepository, &userRepository, &languageRepository).Execute(&r)
+		response, err := NewUseCase(&articleRepository, &userRepository, &languageRepository).Execute(context.Background(), &r)
 
 		userRepository.AssertNotCalled(t, "GetByUUIDs")
 
@@ -213,15 +215,15 @@ func TestUseCase_Execute(t *testing.T) {
 			expectedErr      = errors.New("get authors failed")
 		)
 
-		articleRepository.On("CountByCorrelation").Once().Return(uint(1), nil)
-		articleRepository.On("GetCorrelationUUIDs", uint(0), uint(20)).Once().Return(correlationUUIDs, nil)
-		articleRepository.On("GetByCorrelationUUIDs", correlationUUIDs, "").Once().Return(a, nil)
+		articleRepository.On("CountByCorrelation", mock.Anything).Once().Return(uint(1), nil)
+		articleRepository.On("GetCorrelationUUIDs", mock.Anything, uint(0), uint(20)).Once().Return(correlationUUIDs, nil)
+		articleRepository.On("GetByCorrelationUUIDs", mock.Anything, correlationUUIDs, "").Once().Return(a, nil)
 		defer articleRepository.AssertExpectations(t)
 
-		userRepository.On("GetByUUIDs", []string{"author-1"}).Once().Return(nil, expectedErr)
+		userRepository.On("GetByUUIDs", mock.Anything, []string{"author-1"}).Once().Return(nil, expectedErr)
 		defer userRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&articleRepository, &userRepository, &languageRepository).Execute(&r)
+		response, err := NewUseCase(&articleRepository, &userRepository, &languageRepository).Execute(context.Background(), &r)
 
 		languageRepository.AssertNotCalled(t, "GetByCodes")
 
@@ -243,18 +245,18 @@ func TestUseCase_Execute(t *testing.T) {
 			expectedErr      = errors.New("get languages failed")
 		)
 
-		articleRepository.On("CountByCorrelation").Once().Return(uint(1), nil)
-		articleRepository.On("GetCorrelationUUIDs", uint(0), uint(20)).Once().Return(correlationUUIDs, nil)
-		articleRepository.On("GetByCorrelationUUIDs", correlationUUIDs, "").Once().Return(a, nil)
+		articleRepository.On("CountByCorrelation", mock.Anything).Once().Return(uint(1), nil)
+		articleRepository.On("GetCorrelationUUIDs", mock.Anything, uint(0), uint(20)).Once().Return(correlationUUIDs, nil)
+		articleRepository.On("GetByCorrelationUUIDs", mock.Anything, correlationUUIDs, "").Once().Return(a, nil)
 		defer articleRepository.AssertExpectations(t)
 
-		userRepository.On("GetByUUIDs", []string{"author-1"}).Once().Return([]user.User{}, nil)
+		userRepository.On("GetByUUIDs", mock.Anything, []string{"author-1"}).Once().Return([]user.User{}, nil)
 		defer userRepository.AssertExpectations(t)
 
-		languageRepository.On("GetByCodes", []string{"EN"}).Once().Return(nil, expectedErr)
+		languageRepository.On("GetByCodes", mock.Anything, []string{"EN"}).Once().Return(nil, expectedErr)
 		defer languageRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&articleRepository, &userRepository, &languageRepository).Execute(&r)
+		response, err := NewUseCase(&articleRepository, &userRepository, &languageRepository).Execute(context.Background(), &r)
 
 		assert.ErrorIs(t, err, expectedErr)
 		assert.Nil(t, response)

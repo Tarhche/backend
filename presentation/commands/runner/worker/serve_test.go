@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"net"
@@ -88,9 +89,9 @@ func TestServe(t *testing.T) {
 		})
 
 		subscribers := map[string]domain.MessageHandler{
-			"test1": domain.MessageHandlerFunc(func(message []byte) error { return nil }),
-			"test2": domain.MessageHandlerFunc(func(message []byte) error { return nil }),
-			"test3": domain.MessageHandlerFunc(func(message []byte) error { return nil }),
+			"test1": domain.MessageHandlerFunc(func(ctx context.Context, message []byte) error { return nil }),
+			"test2": domain.MessageHandlerFunc(func(ctx context.Context, message []byte) error { return nil }),
+			"test3": domain.MessageHandlerFunc(func(ctx context.Context, message []byte) error { return nil }),
 		}
 
 		var consumer messaging.MockProduceConsumer

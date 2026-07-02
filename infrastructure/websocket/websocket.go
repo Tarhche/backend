@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"regexp"
 	"slices"
@@ -52,6 +52,8 @@ type Websocket struct {
 	lock               sync.RWMutex
 	replyChans         []chan *domain.Reply
 	subscribedSubjects map[string]struct{}
+
+	logger *slog.Logger
 }
 
 // Ensure Websocket implements the domain.Consumer interface
@@ -72,6 +74,7 @@ func NewWebsocket(
 	publishSubscriber domain.PublishSubscriber,
 	translator translator.Translator,
 	repliesSubject string,
+	logger *slog.Logger,
 ) (*Websocket, error) {
 	if pingPeriod >= pongWait {
 		panic("pingPeriod must be less than pongWait")
@@ -82,6 +85,7 @@ func NewWebsocket(
 		produceConsumer:   produceConsumer,
 		publishSubscriber: publishSubscriber,
 		translator:        translator,
+		logger:            logger,
 
 		websocketMaxMessageSize: maxMessageSize,
 		websocketWriteWait:      writeWait,
@@ -153,7 +157,7 @@ func (w *Websocket) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 	ws, err := upgrader.Upgrade(rw, r, nil)
 	if err != nil {
-		log.Println("upgrade:", err)
+		w.logger.Error("failed to upgrade websocket connection", "error", err)
 
 		return
 	}
@@ -166,11 +170,11 @@ func (w *Websocket) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		return nil
 	})
 	ws.SetCloseHandler(func(code int, text string) error {
-		log.Println("client disconnected.", "code:", code, "text:", text, "remote address:", ws.RemoteAddr().String())
+		w.logger.Info("client disconnected", "code", code, "text", text, "remoteAddress", ws.RemoteAddr().String())
 		return nil
 	})
 
-	log.Println("new client connected", ws.RemoteAddr().String())
+	w.logger.Info("new client connected", "remoteAddress", ws.RemoteAddr().String())
 	responseChan, closeResponseChan := w.newResponseChan()
 	defer closeResponseChan(w)
 
@@ -197,16 +201,16 @@ func (w *Websocket) subscribeToReplies() error {
 	return w.publishSubscriber.Subscribe(
 		context.Background(),
 		w.publish.subject,
-		domain.MessageHandlerFunc(func(payload []byte) error {
+		domain.MessageHandlerFunc(func(ctx context.Context, payload []byte) error {
 			var reply domain.Reply
 
 			if err := json.Unmarshal(payload, &reply); err != nil {
-				log.Println("error on unmarshalling reply:", err)
+				w.logger.Error("error on unmarshalling reply", "error", err)
 
 				return nil
 			}
 
-			log.Println(reply)
+			w.logger.Info("reply received", "reply", reply)
 
 			select {
 			case w.publish.ch <- &reply:
@@ -226,7 +230,7 @@ func (w *Websocket) heartbeat(ctx context.Context, ws *websocket.Conn) {
 		select {
 		case <-ticker.C:
 			if err := ws.WriteControl(websocket.PingMessage, []byte{}, time.Now().Add(w.websocketWriteWait)); err != nil {
-				log.Println("error on sending ping:", err)
+				w.logger.ErrorContext(ctx, "error on sending ping", "error", err)
 			}
 		case <-ctx.Done():
 			return
@@ -238,10 +242,10 @@ func (w *Websocket) writeResponses(ws *websocket.Conn, responseChan <-chan *doma
 	for reply := range responseChan {
 		clientSideID, err := w.requestRegistry.GetClientSideID(reply.RequestID)
 		if errors.Is(err, domain.ErrNotExists) {
-			log.Println("request id not found in pendings requests")
+			w.logger.Warn("request id not found in pending requests")
 			continue
 		} else if err != nil {
-			log.Println("error on getting client side request id:", err)
+			w.logger.Error("error on getting client side request id", "error", err)
 			select {
 			case w.publish.ch <- reply: // retry the reply
 			case <-w.publish.done:
@@ -275,13 +279,13 @@ func (w *Websocket) handleRequests(ctx context.Context, ws *websocket.Conn) {
 		var request domain.Request
 
 		if err := ws.ReadJSON(&request); err != nil {
-			log.Println("error on reading request:", err)
+			w.logger.ErrorContext(ctx, "error on reading request", "error", err)
 
 			break
 		}
 
 		if validationErrors, err := w.validate(&request); err != nil {
-			log.Println("error on validating request:", err)
+			w.logger.ErrorContext(ctx, "error on validating request", "error", err)
 			w.writeErrorResponse(ws, request.ID, nil, err)
 
 			continue
@@ -293,7 +297,7 @@ func (w *Websocket) handleRequests(ctx context.Context, ws *websocket.Conn) {
 
 		serverSideID, err := w.requestRegistry.Add(request.ID)
 		if err != nil {
-			log.Println("error on adding request to registry:", err)
+			w.logger.ErrorContext(ctx, "error on adding request to registry", "error", err)
 			w.writeErrorResponse(ws, request.ID, nil, err)
 
 			continue
@@ -307,7 +311,7 @@ func (w *Websocket) handleRequests(ctx context.Context, ws *websocket.Conn) {
 		// inject the server-side request id to the payload.
 		payload, err := injectRequestId(request.Payload, serverSideID)
 		if err != nil {
-			log.Println("error on marshalling request:", err)
+			w.logger.ErrorContext(ctx, "error on marshalling request", "error", err)
 			w.writeErrorResponse(ws, clientSideID, nil, err)
 
 			continue
@@ -315,7 +319,7 @@ func (w *Websocket) handleRequests(ctx context.Context, ws *websocket.Conn) {
 
 		// produce the request, so the message will be handled only once by the consumer a single replica of the application.
 		if err := w.produceConsumer.Produce(ctx, subscriptionsPrefix+request.Subject, payload); err != nil {
-			log.Println("error on publishing request:", err)
+			w.logger.ErrorContext(ctx, "error on publishing request", "error", err)
 			w.writeErrorResponse(ws, clientSideID, nil, err)
 
 			continue
@@ -370,14 +374,14 @@ func (w *Websocket) fanoutRepliesToAllResponseChannels() {
 				return
 			}
 
-			log.Println("publishing reply to all response channels", reply.RequestID)
+			w.logger.Info("publishing reply to all response channels", "requestID", reply.RequestID)
 
 			w.lock.RLock()
 			for _, replyChan := range w.replyChans {
 				select {
 				case replyChan <- reply:
 				default:
-					log.Println("response channel is full due to slow connection, skipping the reply for request id:", reply.RequestID)
+					w.logger.Warn("response channel is full due to slow connection, skipping the reply", "requestID", reply.RequestID)
 				}
 			}
 			w.lock.RUnlock()
@@ -415,7 +419,7 @@ func (w *Websocket) writeErrorResponse(
 	validationErrors domain.ValidationErrors,
 	err error,
 ) {
-	log.Println("writing failure response to client", requestID, validationErrors, err)
+	w.logger.Warn("writing failure response to client", "requestID", requestID, "validationErrors", validationErrors, "error", err)
 
 	response := &failureResponse{
 		ValidationErrors: validationErrors,
@@ -427,7 +431,7 @@ func (w *Websocket) writeErrorResponse(
 
 	payload, err := json.Marshal(response)
 	if err != nil {
-		log.Println("error marshalling failure payload:", err)
+		w.logger.Error("error marshalling failure payload", "error", err)
 
 		return
 	}

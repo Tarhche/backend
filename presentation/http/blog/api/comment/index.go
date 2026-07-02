@@ -8,6 +8,8 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/comment/getComments"
 	"github.com/khanzadimahdi/testproject/application/localize"
+	infraTrace "github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type indexHandler struct {
@@ -58,9 +60,10 @@ func (h *indexHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		LanguageCode: localize.FromContext(r.Context()),
 	}
 
-	response, err := h.getCommentsUseCase.Execute(request)
+	response, err := h.getCommentsUseCase.Execute(r.Context(), request)
 	switch {
 	case err != nil:
+		infraTrace.RecordError(trace.SpanFromContext(r.Context()), err)
 		rw.WriteHeader(http.StatusInternalServerError)
 	case len(response.ValidationErrors) > 0:
 		rw.Header().Add("Content-Type", "application/json")

@@ -28,8 +28,8 @@ func NewUseCase(
 	}
 }
 
-func (uc *UseCase) Execute(request *Request) (*Response, error) {
-	t, err := uc.taskRepository.GetOne(request.UUID)
+func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
+	t, err := uc.taskRepository.GetOne(ctx, request.UUID)
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +44,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 	}
 
 	t.State = destinationState
-	if _, err = uc.taskRepository.Save(&t); err != nil {
+	if _, err = uc.taskRepository.Save(ctx, &t); err != nil {
 		return nil, err
 	}
 
@@ -57,7 +57,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		return nil, err
 	}
 
-	if err = uc.asyncCommandBus.Produce(context.Background(), events.TaskStoppageRequestedName, payload); err != nil {
+	if err = uc.asyncCommandBus.Produce(ctx, events.TaskStoppageRequestedName, payload); err != nil {
 		return nil, err
 	}
 

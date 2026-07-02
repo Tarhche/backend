@@ -1,6 +1,8 @@
 package deleteUserBookmark
 
 import (
+	"context"
+
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/bookmark"
 )
@@ -20,7 +22,7 @@ func NewUseCase(
 	}
 }
 
-func (uc *UseCase) Execute(request *Request) (*Response, error) {
+func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
 	if validationErrors := uc.validator.Validate(request); len(validationErrors) > 0 {
 		return &Response{
 			ValidationErrors: validationErrors,
@@ -28,6 +30,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 	}
 
 	err := uc.bookmarkRepository.DeleteByOwnerUUID(
+		ctx,
 		request.OwnerUUID,
 		request.ObjectType,
 		request.ObjectUUID,

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	updatearticle "github.com/khanzadimahdi/testproject/application/dashboard/article/updateArticle"
@@ -66,11 +67,11 @@ func TestUpdateHandler(t *testing.T) {
 		requestValidator.On("Validate", &r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
-		languageRepository.On("Exists", "EN").Once().Return(true)
+		languageRepository.On("Exists", mock.Anything, "EN").Once().Return(true)
 		defer languageRepository.AssertExpectations(t)
 
-		articleRepository.On("GetByCorrelationUUIDAndLanguage", r.CorrelationUUID, r.LanguageCode).Once().Return(existing, nil)
-		articleRepository.On("Save", &a).Once().Return(a.UUID, nil)
+		articleRepository.On("GetByCorrelationUUIDAndLanguage", mock.Anything, r.CorrelationUUID, r.LanguageCode).Once().Return(existing, nil)
+		articleRepository.On("Save", mock.Anything, &a).Once().Return(a.UUID, nil)
 		defer articleRepository.AssertExpectations(t)
 
 		handler := NewUpdateHandler(updatearticle.NewUseCase(&articleRepository, &languageRepository, &requestValidator, &translator))
@@ -170,11 +171,11 @@ func TestUpdateHandler(t *testing.T) {
 		requestValidator.On("Validate", &r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
-		languageRepository.On("Exists", "EN").Once().Return(true)
+		languageRepository.On("Exists", mock.Anything, "EN").Once().Return(true)
 		defer languageRepository.AssertExpectations(t)
 
-		articleRepository.On("GetByCorrelationUUIDAndLanguage", r.CorrelationUUID, r.LanguageCode).Once().Return(existing, nil)
-		articleRepository.On("Save", &a).Once().Return("", errors.New("unexpected error"))
+		articleRepository.On("GetByCorrelationUUIDAndLanguage", mock.Anything, r.CorrelationUUID, r.LanguageCode).Once().Return(existing, nil)
+		articleRepository.On("Save", mock.Anything, &a).Once().Return("", errors.New("unexpected error"))
 		defer articleRepository.AssertExpectations(t)
 
 		handler := NewUpdateHandler(updatearticle.NewUseCase(&articleRepository, &languageRepository, &requestValidator, &translator))

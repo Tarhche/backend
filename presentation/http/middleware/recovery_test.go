@@ -2,6 +2,8 @@ package middleware
 
 import (
 	"bytes"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -21,7 +23,7 @@ func TestRecoveryMiddleware(t *testing.T) {
 			assert.NoError(t, err)
 		})
 
-		middleware := NewRecoveryMiddleware(next)
+		middleware := NewRecoveryMiddleware(next, slog.New(slog.NewTextHandler(io.Discard, nil)))
 
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
 		response := httptest.NewRecorder()
@@ -39,7 +41,7 @@ func TestRecoveryMiddleware(t *testing.T) {
 			panic(http.ErrHandlerTimeout)
 		})
 
-		middleware := NewRecoveryMiddleware(next)
+		middleware := NewRecoveryMiddleware(next, slog.New(slog.NewTextHandler(io.Discard, nil)))
 
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
 		response := httptest.NewRecorder()
@@ -57,7 +59,7 @@ func TestRecoveryMiddleware(t *testing.T) {
 			panic("boom")
 		})
 
-		middleware := NewRecoveryMiddleware(next)
+		middleware := NewRecoveryMiddleware(next, slog.New(slog.NewTextHandler(io.Discard, nil)))
 
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
 		response := httptest.NewRecorder()
@@ -75,7 +77,7 @@ func TestRecoveryMiddleware(t *testing.T) {
 			panic(http.ErrAbortHandler)
 		})
 
-		middleware := NewRecoveryMiddleware(next)
+		middleware := NewRecoveryMiddleware(next, slog.New(slog.NewTextHandler(io.Discard, nil)))
 
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
 		response := httptest.NewRecorder()

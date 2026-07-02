@@ -1,6 +1,8 @@
 package getfiles
 
 import (
+	"context"
+
 	"github.com/khanzadimahdi/testproject/domain/file"
 )
 
@@ -16,8 +18,8 @@ func NewUseCase(fileRepository file.Repository) *UseCase {
 	}
 }
 
-func (uc *UseCase) Execute(request *Request) (*Response, error) {
-	totalFiles, err := uc.fileRepository.Count()
+func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
+	totalFiles, err := uc.fileRepository.Count(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -38,7 +40,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		totalPages++
 	}
 
-	a, err := uc.fileRepository.GetAll(offset, limit)
+	a, err := uc.fileRepository.GetAll(ctx, offset, limit)
 	if err != nil {
 		return nil, err
 	}

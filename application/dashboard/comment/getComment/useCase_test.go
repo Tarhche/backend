@@ -1,11 +1,13 @@
 package getComment
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/domain/comment"
 	"github.com/khanzadimahdi/testproject/domain/user"
@@ -38,13 +40,13 @@ func TestUseCase_Execute(t *testing.T) {
 		expectedResponse.Author.UUID = a.AuthorUUID
 		expectedResponse.Author.Username = "author-username"
 
-		commentRepository.On("GetOne", commentUUID).Return(a, nil)
+		commentRepository.On("GetOne", mock.Anything, commentUUID).Return(a, nil)
 		defer commentRepository.AssertExpectations(t)
 
-		userRepository.On("GetOne", a.AuthorUUID).Once().Return(user.User{UUID: a.AuthorUUID, Username: "author-username"}, nil)
+		userRepository.On("GetOne", mock.Anything, a.AuthorUUID).Once().Return(user.User{UUID: a.AuthorUUID, Username: "author-username"}, nil)
 		defer userRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&commentRepository, &userRepository).Execute(commentUUID)
+		response, err := NewUseCase(&commentRepository, &userRepository).Execute(context.Background(), commentUUID)
 
 		assert.NoError(t, err)
 		assert.Equal(t, &expectedResponse, response)
@@ -61,10 +63,10 @@ func TestUseCase_Execute(t *testing.T) {
 			expectedError = errors.New("error")
 		)
 
-		commentRepository.On("GetOne", commentUUID).Once().Return(comment.Comment{}, expectedError)
+		commentRepository.On("GetOne", mock.Anything, commentUUID).Once().Return(comment.Comment{}, expectedError)
 		defer commentRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&commentRepository, &userRepository).Execute(commentUUID)
+		response, err := NewUseCase(&commentRepository, &userRepository).Execute(context.Background(), commentUUID)
 
 		userRepository.AssertNotCalled(t, "GetOne")
 
@@ -89,13 +91,13 @@ func TestUseCase_Execute(t *testing.T) {
 
 		a.AuthorUUID = "author-uuid"
 
-		commentRepository.On("GetOne", commentUUID).Once().Return(a, nil)
+		commentRepository.On("GetOne", mock.Anything, commentUUID).Once().Return(a, nil)
 		defer commentRepository.AssertExpectations(t)
 
-		userRepository.On("GetOne", a.AuthorUUID).Once().Return(user.User{}, expectedError)
+		userRepository.On("GetOne", mock.Anything, a.AuthorUUID).Once().Return(user.User{}, expectedError)
 		defer userRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&commentRepository, &userRepository).Execute(commentUUID)
+		response, err := NewUseCase(&commentRepository, &userRepository).Execute(context.Background(), commentUUID)
 
 		assert.ErrorIs(t, err, expectedError)
 		assert.Nil(t, response)

@@ -6,6 +6,8 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/home"
 	"github.com/khanzadimahdi/testproject/application/localize"
+	infraTrace "github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type homeHandler struct {
@@ -27,12 +29,13 @@ func NewHomeHandler(useCase *home.UseCase) *homeHandler {
 // @Failure		500			{object}	map[string]interface{}
 // @Router		/home [get]
 func (h *homeHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
-	response, err := h.useCase.Execute(&home.Request{
+	response, err := h.useCase.Execute(r.Context(), &home.Request{
 		LanguageCode: localize.FromContext(r.Context()),
 	})
 
 	switch {
 	case err != nil:
+		infraTrace.RecordError(trace.SpanFromContext(r.Context()), err)
 		rw.WriteHeader(http.StatusInternalServerError)
 	default:
 		rw.Header().Add("Content-Type", "application/json")

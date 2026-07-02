@@ -1,6 +1,7 @@
 package container
 
 import (
+	"context"
 	"io"
 	"time"
 
@@ -38,15 +39,15 @@ type ResourceLimits struct {
 
 // Manager represents a manager of containers
 type Manager interface {
-	GetAll() ([]Container, error)
-	GetByLabel(labelName string, labelValue string) ([]Container, error)
-	Create(container *Container) (containerUUID string, err error)
-	Start(containerUUID string) error
-	Stop(containerUUID string) error
-	Delete(containerUUID string) error
-	Inspect(containerUUID string) (Container, error)
-	Stats(containerUUID string) (Stats, error)
-	Logs(containerUUID string, writer io.Writer) error
+	GetAll(ctx context.Context) ([]Container, error)
+	GetByLabel(ctx context.Context, labelName string, labelValue string) ([]Container, error)
+	Create(ctx context.Context, container *Container) (containerUUID string, err error)
+	Start(ctx context.Context, containerUUID string) error
+	Stop(ctx context.Context, containerUUID string) error
+	Delete(ctx context.Context, containerUUID string) error
+	Inspect(ctx context.Context, containerUUID string) (Container, error)
+	Stats(ctx context.Context, containerUUID string) (Stats, error)
+	Logs(ctx context.Context, containerUUID string, writer io.Writer) error
 	EvaluateTaskState(status Status) task.State
 }
 

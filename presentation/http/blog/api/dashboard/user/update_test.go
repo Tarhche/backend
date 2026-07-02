@@ -57,13 +57,13 @@ func TestUpdateHandler(t *testing.T) {
 		requestValidator.On("Validate", &r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
-		languageResolver.On("Verify", r.LanguageCode).Once().Return(true)
+		languageResolver.On("Verify", mock2.Anything, r.LanguageCode).Once().Return(true)
 		defer languageResolver.AssertExpectations(t)
 
-		userRepository.On("GetOneByIdentity", r.Email).Once().Return(user.User{}, domain.ErrNotExists)
-		userRepository.On("GetOneByIdentity", r.Username).Once().Return(user.User{}, domain.ErrNotExists)
-		userRepository.On("GetOne", r.UserUUID).Once().Return(updatedUser, nil)
-		userRepository.On("Save", mock2.Anything).Once().Return(r.UserUUID, nil)
+		userRepository.On("GetOneByIdentity", mock2.Anything, r.Email).Once().Return(user.User{}, domain.ErrNotExists)
+		userRepository.On("GetOneByIdentity", mock2.Anything, r.Username).Once().Return(user.User{}, domain.ErrNotExists)
+		userRepository.On("GetOne", mock2.Anything, r.UserUUID).Once().Return(updatedUser, nil)
+		userRepository.On("Save", mock2.Anything, mock2.Anything).Once().Return(r.UserUUID, nil)
 		defer userRepository.AssertExpectations(t)
 
 		handler := NewUpdateHandler(updateuser.NewUseCase(&userRepository, &languageResolver, &requestValidator, &translator))

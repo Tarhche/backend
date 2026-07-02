@@ -51,7 +51,7 @@ func (l *Localizer) Resolve(ctx context.Context, requestedCode string) string {
 		return u.LanguageCode
 	}
 
-	code, _ := l.resolver.DefaultCode()
+	code, _ := l.resolver.DefaultCode(ctx)
 
 	return code
 }

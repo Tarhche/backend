@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"slices"
 	"strings"
 	"sync"
@@ -27,7 +28,7 @@ func NewArticlesRepository(datastore *sync.Map) *ArticlesRepository {
 	}
 }
 
-func (r *ArticlesRepository) GetCorrelationUUIDs(offset uint, limit uint) ([]string, error) {
+func (r *ArticlesRepository) GetCorrelationUUIDs(ctx context.Context, offset uint, limit uint) ([]string, error) {
 	// track the newest article (max UUID, which is time-ordered) per correlation
 	// so groups can be ordered deterministically.
 	maxUUID := make(map[string]string)
@@ -64,7 +65,7 @@ func (r *ArticlesRepository) GetCorrelationUUIDs(offset uint, limit uint) ([]str
 	return correlationUUIDs[offset:end], nil
 }
 
-func (r *ArticlesRepository) GetAllPublished(languageCode string, offset uint, limit uint) ([]article.Article, error) {
+func (r *ArticlesRepository) GetAllPublished(ctx context.Context, languageCode string, offset uint, limit uint) ([]article.Article, error) {
 	var (
 		a []article.Article
 		i uint
@@ -94,7 +95,7 @@ func (r *ArticlesRepository) GetAllPublished(languageCode string, offset uint, l
 	return a, nil
 }
 
-func (r *ArticlesRepository) GetByCorrelationUUIDs(correlationUUIDs []string, languageCode string) ([]article.Article, error) {
+func (r *ArticlesRepository) GetByCorrelationUUIDs(ctx context.Context, correlationUUIDs []string, languageCode string) ([]article.Article, error) {
 	a := make([]article.Article, 0, len(correlationUUIDs))
 
 	r.datastore.Range(func(key, value any) bool {
@@ -114,7 +115,7 @@ func (r *ArticlesRepository) GetByCorrelationUUIDs(correlationUUIDs []string, la
 	return a, nil
 }
 
-func (r *ArticlesRepository) GetPublishedLanguageCodes(correlationUUID string) ([]string, error) {
+func (r *ArticlesRepository) GetPublishedLanguageCodes(ctx context.Context, correlationUUID string) ([]string, error) {
 	if len(correlationUUID) == 0 {
 		return []string{}, nil
 	}
@@ -143,7 +144,7 @@ func (r *ArticlesRepository) GetPublishedLanguageCodes(correlationUUID string) (
 	return codes, nil
 }
 
-func (r *ArticlesRepository) CorrelationExist(correlationUUID string) (bool, error) {
+func (r *ArticlesRepository) CorrelationExist(ctx context.Context, correlationUUID string) (bool, error) {
 	if len(correlationUUID) == 0 {
 		return false, nil
 	}
@@ -162,27 +163,27 @@ func (r *ArticlesRepository) CorrelationExist(correlationUUID string) (bool, err
 	return exist, nil
 }
 
-func (r *ArticlesRepository) GetMostViewed(languageCode string, limit uint) ([]article.Article, error) {
+func (r *ArticlesRepository) GetMostViewed(ctx context.Context, languageCode string, limit uint) ([]article.Article, error) {
 	return nil, nil
 }
 
-func (r *ArticlesRepository) CountPublishedByHashtags(hashtags []string, languageCode string) (uint, error) {
+func (r *ArticlesRepository) CountPublishedByHashtags(ctx context.Context, hashtags []string, languageCode string) (uint, error) {
 	return 0, nil
 }
 
-func (r *ArticlesRepository) GetPublishedByHashtags(hashtags []string, languageCode string, offset uint, limit uint) ([]article.Article, error) {
+func (r *ArticlesRepository) GetPublishedByHashtags(ctx context.Context, hashtags []string, languageCode string, offset uint, limit uint) ([]article.Article, error) {
 	return nil, nil
 }
 
-func (r *ArticlesRepository) CountPublishedByAuthor(authorUUID string, languageCode string) (uint, error) {
+func (r *ArticlesRepository) CountPublishedByAuthor(ctx context.Context, authorUUID string, languageCode string) (uint, error) {
 	return 0, nil
 }
 
-func (r *ArticlesRepository) GetPublishedByAuthor(authorUUID string, languageCode string, offset uint, limit uint) ([]article.Article, error) {
+func (r *ArticlesRepository) GetPublishedByAuthor(ctx context.Context, authorUUID string, languageCode string, offset uint, limit uint) ([]article.Article, error) {
 	return nil, nil
 }
 
-func (r *ArticlesRepository) GetByCorrelationUUIDAndLanguage(correlationUUID string, languageCode string) (article.Article, error) {
+func (r *ArticlesRepository) GetByCorrelationUUIDAndLanguage(ctx context.Context, correlationUUID string, languageCode string) (article.Article, error) {
 	var (
 		found article.Article
 		ok    bool
@@ -210,7 +211,7 @@ func (r *ArticlesRepository) GetByCorrelationUUIDAndLanguage(correlationUUID str
 	return found, nil
 }
 
-func (r *ArticlesRepository) GetOnePublished(correlationUUID string, languageCode string) (article.Article, error) {
+func (r *ArticlesRepository) GetOnePublished(ctx context.Context, correlationUUID string, languageCode string) (article.Article, error) {
 	var (
 		found article.Article
 		ok    bool
@@ -241,7 +242,7 @@ func (r *ArticlesRepository) GetOnePublished(correlationUUID string, languageCod
 	return found, nil
 }
 
-func (r *ArticlesRepository) CountByCorrelation() (uint, error) {
+func (r *ArticlesRepository) CountByCorrelation(ctx context.Context) (uint, error) {
 	seen := make(map[string]struct{})
 
 	r.datastore.Range(func(_, value any) bool {
@@ -257,7 +258,7 @@ func (r *ArticlesRepository) CountByCorrelation() (uint, error) {
 	return uint(len(seen)), nil
 }
 
-func (r *ArticlesRepository) CountPublished(languageCode string) (uint, error) {
+func (r *ArticlesRepository) CountPublished(ctx context.Context, languageCode string) (uint, error) {
 	var c uint
 
 	r.datastore.Range(func(_, value any) bool {
@@ -276,7 +277,7 @@ func (r *ArticlesRepository) CountPublished(languageCode string) (uint, error) {
 	return c, nil
 }
 
-func (r *ArticlesRepository) Save(a *article.Article) (string, error) {
+func (r *ArticlesRepository) Save(ctx context.Context, a *article.Article) (string, error) {
 	if len(a.UUID) == 0 {
 		UUID, err := uuid.NewV7()
 		if err != nil {
@@ -290,7 +291,7 @@ func (r *ArticlesRepository) Save(a *article.Article) (string, error) {
 	return a.UUID, nil
 }
 
-func (r *ArticlesRepository) DeleteByCorrelationUUIDAndLanguage(correlationUUID string, languageCode string) error {
+func (r *ArticlesRepository) DeleteByCorrelationUUIDAndLanguage(ctx context.Context, correlationUUID string, languageCode string) error {
 	r.datastore.Range(func(key, value any) bool {
 		item := value.(article.Article)
 		if item.CorrelationUUID != correlationUUID {
@@ -308,7 +309,7 @@ func (r *ArticlesRepository) DeleteByCorrelationUUIDAndLanguage(correlationUUID 
 	return nil
 }
 
-func (r *ArticlesRepository) IncreaseView(uuid string, inc uint) error {
+func (r *ArticlesRepository) IncreaseView(ctx context.Context, uuid string, inc uint) error {
 
 	return nil
 }

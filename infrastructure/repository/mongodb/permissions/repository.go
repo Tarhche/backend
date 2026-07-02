@@ -2,6 +2,7 @@ package permissions
 
 import (
 	"cmp"
+	"context"
 	"errors"
 	"slices"
 
@@ -28,7 +29,7 @@ func NewRepository() *PermissionsRepository {
 	}
 }
 
-func (r *PermissionsRepository) GetAll() []permission.Permission {
+func (r *PermissionsRepository) GetAll(ctx context.Context) []permission.Permission {
 	return r.collection
 }
 
@@ -49,7 +50,7 @@ func (r *PermissionsRepository) GetOne(value string) (permission.Permission, err
 	return r.collection[index], nil
 }
 
-func (r *PermissionsRepository) Get(values []string) ([]permission.Permission, error) {
+func (r *PermissionsRepository) Get(ctx context.Context, values []string) ([]permission.Permission, error) {
 	result := make([]permission.Permission, 0, len(values))
 
 	for i := range values {

@@ -10,6 +10,8 @@ import (
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
+
+	tracing "github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
 )
 
 type mongodbProvider struct {
@@ -33,7 +35,10 @@ func (p *mongodbProvider) Register(ctx context.Context, c provider.Container) er
 	)
 
 	serverAPIVersion := options.ServerAPI(options.ServerAPIVersion1)
-	connectionOptions := options.Client().ApplyURI(uri).SetServerAPIOptions(serverAPIVersion)
+	connectionOptions := options.Client().
+		ApplyURI(uri).
+		SetServerAPIOptions(serverAPIVersion).
+		SetMonitor(tracing.NewMongoCommandMonitor("mongodb"))
 
 	mongoClient, err := mongo.Connect(connectionOptions)
 	if err != nil {

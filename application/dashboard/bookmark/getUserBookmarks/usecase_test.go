@@ -1,11 +1,13 @@
 package getUserBookmarks
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/bookmark"
@@ -85,11 +87,11 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &request).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		bookmarkRepository.On("CountByOwnerUUID", request.OwnerUUID).Once().Return(uint(len(b)), nil)
-		bookmarkRepository.On("GetAllByOwnerUUID", request.OwnerUUID, uint(0), uint(limit)).Once().Return(b, nil)
+		bookmarkRepository.On("CountByOwnerUUID", mock.Anything, request.OwnerUUID).Once().Return(uint(len(b)), nil)
+		bookmarkRepository.On("GetAllByOwnerUUID", mock.Anything, request.OwnerUUID, uint(0), uint(limit)).Once().Return(b, nil)
 		defer bookmarkRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&bookmarkRepository, &validator).Execute(&request)
+		response, err := NewUseCase(&bookmarkRepository, &validator).Execute(context.Background(), &request)
 		assert.NoError(t, err)
 
 		assert.Equal(t, &expectedResponse, response)
@@ -114,7 +116,7 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &request).Once().Return(expectedResponse.ValidationErrors)
 		defer validator.AssertExpectations(t)
 
-		response, err := NewUseCase(&bookmarkRepository, &validator).Execute(&request)
+		response, err := NewUseCase(&bookmarkRepository, &validator).Execute(context.Background(), &request)
 
 		bookmarkRepository.AssertNotCalled(t, "CountByOwnerUUID")
 		bookmarkRepository.AssertNotCalled(t, "GetAllByOwnerUUID")
@@ -146,11 +148,11 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &request).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		bookmarkRepository.On("CountByOwnerUUID", request.OwnerUUID).Once().Return(uint(0), nil)
-		bookmarkRepository.On("GetAllByOwnerUUID", request.OwnerUUID, uint(0), uint(limit)).Once().Return(nil, nil)
+		bookmarkRepository.On("CountByOwnerUUID", mock.Anything, request.OwnerUUID).Once().Return(uint(0), nil)
+		bookmarkRepository.On("GetAllByOwnerUUID", mock.Anything, request.OwnerUUID, uint(0), uint(limit)).Once().Return(nil, nil)
 		defer bookmarkRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&bookmarkRepository, &validator).Execute(&request)
+		response, err := NewUseCase(&bookmarkRepository, &validator).Execute(context.Background(), &request)
 
 		assert.NoError(t, err)
 		assert.Equal(t, &expectedResponse, response)
@@ -173,10 +175,10 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &request).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		bookmarkRepository.On("CountByOwnerUUID", request.OwnerUUID).Once().Return(uint(0), expectedError)
+		bookmarkRepository.On("CountByOwnerUUID", mock.Anything, request.OwnerUUID).Once().Return(uint(0), expectedError)
 		defer bookmarkRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&bookmarkRepository, &validator).Execute(&request)
+		response, err := NewUseCase(&bookmarkRepository, &validator).Execute(context.Background(), &request)
 
 		bookmarkRepository.AssertNotCalled(t, "GetAllByOwnerUUID")
 
@@ -201,11 +203,11 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &request).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		bookmarkRepository.On("CountByOwnerUUID", request.OwnerUUID).Once().Return(uint(0), nil)
-		bookmarkRepository.On("GetAllByOwnerUUID", request.OwnerUUID, uint(0), uint(limit)).Once().Return(nil, expectedError)
+		bookmarkRepository.On("CountByOwnerUUID", mock.Anything, request.OwnerUUID).Once().Return(uint(0), nil)
+		bookmarkRepository.On("GetAllByOwnerUUID", mock.Anything, request.OwnerUUID, uint(0), uint(limit)).Once().Return(nil, expectedError)
 		defer bookmarkRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&bookmarkRepository, &validator).Execute(&request)
+		response, err := NewUseCase(&bookmarkRepository, &validator).Execute(context.Background(), &request)
 
 		assert.ErrorIs(t, err, expectedError)
 		assert.Nil(t, nil, response)

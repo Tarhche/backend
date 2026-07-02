@@ -1,6 +1,10 @@
 package getlanguage
 
-import "github.com/khanzadimahdi/testproject/domain/language"
+import (
+	"context"
+
+	"github.com/khanzadimahdi/testproject/domain/language"
+)
 
 type UseCase struct {
 	languageRepository language.Repository
@@ -12,8 +16,8 @@ func NewUseCase(languageRepository language.Repository) *UseCase {
 	}
 }
 
-func (uc *UseCase) Execute(code string) (*Response, error) {
-	l, err := uc.languageRepository.GetOne(code)
+func (uc *UseCase) Execute(ctx context.Context, code string) (*Response, error) {
+	l, err := uc.languageRepository.GetOne(ctx, code)
 	if err != nil {
 		return nil, err
 	}

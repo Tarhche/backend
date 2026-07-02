@@ -28,8 +28,8 @@ func NewUseCase(
 	}
 }
 
-func (h *UseCase) Execute() error {
-	nodeStats, err := h.nodeManager.Stats(h.nodeName)
+func (h *UseCase) Execute(ctx context.Context) error {
+	nodeStats, err := h.nodeManager.Stats(ctx, h.nodeName)
 	if err != nil {
 		return err
 	}
@@ -46,5 +46,5 @@ func (h *UseCase) Execute() error {
 		return err
 	}
 
-	return h.producer.Produce(context.Background(), events.HeartbeatName, payload)
+	return h.producer.Produce(ctx, events.HeartbeatName, payload)
 }

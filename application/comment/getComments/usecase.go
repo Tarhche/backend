@@ -1,6 +1,8 @@
 package getComments
 
 import (
+	"context"
+
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/comment"
 	"github.com/khanzadimahdi/testproject/domain/user"
@@ -26,14 +28,14 @@ func NewUseCase(
 	}
 }
 
-func (uc *UseCase) Execute(request *Request) (*Response, error) {
+func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
 	if validationErrors := uc.validator.Validate(request); len(validationErrors) > 0 {
 		return &Response{
 			ValidationErrors: validationErrors,
 		}, nil
 	}
 
-	totalComments, err := uc.commentRepository.CountApprovedByObjectUUID(request.ObjectType, request.ObjectUUID, request.LanguageCode)
+	totalComments, err := uc.commentRepository.CountApprovedByObjectUUID(ctx, request.ObjectType, request.ObjectUUID, request.LanguageCode)
 	if err != nil {
 		return nil, err
 	}
@@ -55,6 +57,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 	}
 
 	c, err := uc.commentRepository.GetApprovedByObjectUUID(
+		ctx,
 		request.ObjectType,
 		request.ObjectUUID,
 		request.LanguageCode,
@@ -69,7 +72,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		userUUIDs[i] = c[i].AuthorUUID
 	}
 
-	u, err := uc.userRepository.GetByUUIDs(userUUIDs)
+	u, err := uc.userRepository.GetByUUIDs(ctx, userUUIDs)
 	if err != nil {
 		return nil, err
 	}

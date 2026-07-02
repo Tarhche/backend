@@ -38,8 +38,8 @@ func TestCacheMiddleware(t *testing.T) {
 		t.Parallel()
 
 		mockCache := new(cache.MockCache)
-		mockCache.On("Get", mock.Anything).Return([]byte{}, domain.ErrNotExists)
-		mockCache.On("Set", mock.Anything, mock.Anything).Return(nil)
+		mockCache.On("Get", mock.Anything, mock.Anything).Return([]byte{}, domain.ErrNotExists)
+		mockCache.On("Set", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 		defer mockCache.AssertExpectations(t)
 
 		nextHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -69,7 +69,7 @@ func TestCacheMiddleware(t *testing.T) {
 		}
 
 		responseBytes, _ := json.Marshal(cachedResponse)
-		mockCache.On("Get", mock.Anything).Return(responseBytes, nil)
+		mockCache.On("Get", mock.Anything, mock.Anything).Return(responseBytes, nil)
 
 		nextHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			t.Error("next handler should not be called when cache exists")
@@ -90,7 +90,7 @@ func TestCacheMiddleware(t *testing.T) {
 		t.Parallel()
 
 		mockCache := new(cache.MockCache)
-		mockCache.On("Get", mock.Anything).Return([]byte("invalid json"), nil)
+		mockCache.On("Get", mock.Anything, mock.Anything).Return([]byte("invalid json"), nil)
 
 		nextHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)

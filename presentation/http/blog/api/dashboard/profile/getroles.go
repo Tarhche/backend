@@ -6,6 +6,8 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	getroles "github.com/khanzadimahdi/testproject/application/dashboard/profile/getRoles"
+	infraTrace "github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type getRolesHandler struct {
@@ -29,9 +31,10 @@ func NewGetRolesHandler(useCase *getroles.UseCase) *getRolesHandler {
 func (h *getRolesHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	userUUID := auth.FromContext(r.Context()).UUID
 
-	response, err := h.useCase.Execute(userUUID)
+	response, err := h.useCase.Execute(r.Context(), userUUID)
 	switch {
 	case err != nil:
+		infraTrace.RecordError(trace.SpanFromContext(r.Context()), err)
 		rw.WriteHeader(http.StatusInternalServerError)
 	default:
 		rw.Header().Add("Content-Type", "application/json")

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/application/dashboard/profile/updateprofile"
@@ -55,13 +56,13 @@ func TestUpdateProfileHandler(t *testing.T) {
 		requestValidator.On("Validate", &r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
-		userRepository.On("GetOneByIdentity", r.Email).Once().Return(u, nil)
-		userRepository.On("GetOneByIdentity", r.Username).Once().Return(u, nil)
-		userRepository.On("GetOne", r.UserUUID).Once().Return(u, nil)
-		userRepository.On("Save", &u).Once().Return(r.UserUUID, nil)
+		userRepository.On("GetOneByIdentity", mock.Anything, r.Email).Once().Return(u, nil)
+		userRepository.On("GetOneByIdentity", mock.Anything, r.Username).Once().Return(u, nil)
+		userRepository.On("GetOne", mock.Anything, r.UserUUID).Once().Return(u, nil)
+		userRepository.On("Save", mock.Anything, &u).Once().Return(r.UserUUID, nil)
 		defer userRepository.AssertExpectations(t)
 
-		languageResolver.On("Verify", r.LanguageCode).Once().Return(true)
+		languageResolver.On("Verify", mock.Anything, r.LanguageCode).Once().Return(true)
 		defer languageResolver.AssertExpectations(t)
 
 		handler := NewUpdateProfileHandler(updateprofile.NewUseCase(&userRepository, &languageResolver, &requestValidator, &translator))
@@ -158,12 +159,12 @@ func TestUpdateProfileHandler(t *testing.T) {
 		requestValidator.On("Validate", &r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
-		userRepository.On("GetOneByIdentity", r.Email).Once().Return(u, nil)
-		userRepository.On("GetOneByIdentity", r.Username).Once().Return(u, nil)
-		userRepository.On("GetOne", r.UserUUID).Once().Return(u, domain.ErrNotExists)
+		userRepository.On("GetOneByIdentity", mock.Anything, r.Email).Once().Return(u, nil)
+		userRepository.On("GetOneByIdentity", mock.Anything, r.Username).Once().Return(u, nil)
+		userRepository.On("GetOne", mock.Anything, r.UserUUID).Once().Return(u, domain.ErrNotExists)
 		defer userRepository.AssertExpectations(t)
 
-		languageResolver.On("Verify", r.LanguageCode).Once().Return(true)
+		languageResolver.On("Verify", mock.Anything, r.LanguageCode).Once().Return(true)
 		defer languageResolver.AssertExpectations(t)
 
 		handler := NewUpdateProfileHandler(updateprofile.NewUseCase(&userRepository, &languageResolver, &requestValidator, &translator))
@@ -216,7 +217,7 @@ func TestUpdateProfileHandler(t *testing.T) {
 		requestValidator.On("Validate", &r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
-		userRepository.On("GetOneByIdentity", r.Email).Once().Return(u, errors.New("unexpected error"))
+		userRepository.On("GetOneByIdentity", mock.Anything, r.Email).Once().Return(u, errors.New("unexpected error"))
 		defer userRepository.AssertExpectations(t)
 
 		languageResolver.AssertNotCalled(t, "Verify")

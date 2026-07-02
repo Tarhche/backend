@@ -1,6 +1,7 @@
 package user
 
 import (
+	"context"
 	"regexp"
 	"time"
 
@@ -19,13 +20,13 @@ type User struct {
 }
 
 type Repository interface {
-	GetAll(offset uint, limit uint) ([]User, error)
-	GetByUUIDs(UUIDs []string) ([]User, error)
-	GetOne(UUID string) (User, error)
-	GetOneByIdentity(username string) (User, error)
-	Save(*User) (uuid string, err error)
-	Delete(UUID string) error
-	Count() (uint, error)
+	GetAll(ctx context.Context, offset uint, limit uint) ([]User, error)
+	GetByUUIDs(ctx context.Context, UUIDs []string) ([]User, error)
+	GetOne(ctx context.Context, UUID string) (User, error)
+	GetOneByIdentity(ctx context.Context, username string) (User, error)
+	Save(ctx context.Context, u *User) (uuid string, err error)
+	Delete(ctx context.Context, UUID string) error
+	Count(ctx context.Context) (uint, error)
 }
 
 var (

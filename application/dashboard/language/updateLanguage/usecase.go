@@ -1,6 +1,8 @@
 package updatelanguage
 
 import (
+	"context"
+
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/language"
 )
@@ -17,14 +19,14 @@ func NewUseCase(languageRepository language.Repository, validator domain.Validat
 	}
 }
 
-func (uc *UseCase) Execute(request *Request) (*Response, error) {
+func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
 	if validationErrors := uc.validator.Validate(request); len(validationErrors) > 0 {
 		return &Response{
 			ValidationErrors: validationErrors,
 		}, nil
 	}
 
-	if !uc.languageRepository.Exists(request.Code) {
+	if !uc.languageRepository.Exists(ctx, request.Code) {
 		return nil, domain.ErrNotExists
 	}
 
@@ -33,7 +35,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		Name: request.Name,
 	}
 
-	if _, err := uc.languageRepository.Save(&l); err != nil {
+	if _, err := uc.languageRepository.Save(ctx, &l); err != nil {
 		return nil, err
 	}
 

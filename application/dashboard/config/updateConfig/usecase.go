@@ -1,6 +1,7 @@
 package updateConfig
 
 import (
+	"context"
 	"errors"
 
 	"github.com/khanzadimahdi/testproject/domain"
@@ -30,14 +31,14 @@ func NewUseCase(
 	}
 }
 
-func (uc *UseCase) Execute(request *Request) (*Response, error) {
+func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
 	if validationErrors := uc.validator.Validate(request); len(validationErrors) > 0 {
 		return &Response{
 			ValidationErrors: validationErrors,
 		}, nil
 	}
 
-	if !uc.languageRepository.Exists(request.DefaultLanguageCode) {
+	if !uc.languageRepository.Exists(ctx, request.DefaultLanguageCode) {
 		return &Response{
 			ValidationErrors: domain.ValidationErrors{
 				"default_language_code": uc.translator.Translate("invalid_value"),
@@ -45,7 +46,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		}, nil
 	}
 
-	c, err := uc.configRepository.GetLatestRevision()
+	c, err := uc.configRepository.GetLatestRevision(ctx)
 	if err != nil && !errors.Is(err, domain.ErrNotExists) {
 		return nil, err
 	}
@@ -53,7 +54,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 	c.UserDefaultRoleUUIDs = request.UserDefaultRoles
 	c.DefaultLanguageCode = request.DefaultLanguageCode
 
-	_, err = uc.configRepository.Save(&c)
+	_, err = uc.configRepository.Save(ctx, &c)
 
 	return nil, err
 }

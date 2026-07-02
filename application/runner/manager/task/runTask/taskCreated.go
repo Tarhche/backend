@@ -37,13 +37,13 @@ func NewTaskCreated(
 	}
 }
 
-func (uc *TaskCreated) Handle(data []byte) error {
+func (uc *TaskCreated) Handle(ctx context.Context, data []byte) error {
 	var taskCreated events.TaskCreated
 	if err := json.Unmarshal(data, &taskCreated); err != nil {
 		return err
 	}
 
-	t, err := uc.taskRepository.GetOne(taskCreated.UUID)
+	t, err := uc.taskRepository.GetOne(ctx, taskCreated.UUID)
 	if err == domain.ErrNotExists {
 		return nil
 	} else if err != nil {
@@ -55,7 +55,7 @@ func (uc *TaskCreated) Handle(data []byte) error {
 		return nil
 	}
 
-	nodes, err := uc.getHealthyNodes()
+	nodes, err := uc.getHealthyNodes(ctx)
 	if err != nil {
 		return err
 	}
@@ -66,15 +66,15 @@ func (uc *TaskCreated) Handle(data []byte) error {
 	selectedNode := uc.scheduler.Pick(&t, nodes)
 
 	t.State = destinationState
-	if _, err = uc.taskRepository.Save(&t); err != nil {
+	if _, err = uc.taskRepository.Save(ctx, &t); err != nil {
 		return err
 	}
 
-	return uc.publishTaskScheduled(&t, &selectedNode)
+	return uc.publishTaskScheduled(ctx, &t, &selectedNode)
 }
 
-func (uc *TaskCreated) getHealthyNodes() ([]node.Node, error) {
-	nodes, err := uc.nodeRepository.GetAll(0, nominatedNodesLimit)
+func (uc *TaskCreated) getHealthyNodes(ctx context.Context) ([]node.Node, error) {
+	nodes, err := uc.nodeRepository.GetAll(ctx, 0, nominatedNodesLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +91,7 @@ func (uc *TaskCreated) getHealthyNodes() ([]node.Node, error) {
 	return nodes, nil
 }
 
-func (uc *TaskCreated) publishTaskScheduled(t *task.Task, selectedNode *node.Node) error {
+func (uc *TaskCreated) publishTaskScheduled(ctx context.Context, t *task.Task, selectedNode *node.Node) error {
 	event := events.TaskScheduled{
 		UUID:          t.UUID,
 		Name:          t.Name,
@@ -121,7 +121,7 @@ func (uc *TaskCreated) publishTaskScheduled(t *task.Task, selectedNode *node.Nod
 		return err
 	}
 
-	return uc.asyncCommandBus.Produce(context.Background(), events.TaskScheduledName, payload)
+	return uc.asyncCommandBus.Produce(ctx, events.TaskScheduledName, payload)
 }
 
 func convertPortBindings(domainPorts []port.PortMap) []events.PortMap {

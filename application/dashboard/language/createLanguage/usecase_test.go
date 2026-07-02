@@ -1,6 +1,7 @@
 package createlanguage
 
 import (
+	"context"
 	"errors"
 	"reflect"
 	"testing"
@@ -34,11 +35,11 @@ func TestUseCase_Execute(t *testing.T) {
 		requestValidator.On("Validate", &request).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
-		languageRepository.On("Exists", request.Code).Once().Return(false)
-		languageRepository.On("Save", mock.AnythingOfType("*language.Language")).Once().Return(request.Code, nil)
+		languageRepository.On("Exists", mock.Anything, request.Code).Once().Return(false)
+		languageRepository.On("Save", mock.Anything, mock.AnythingOfType("*language.Language")).Once().Return(request.Code, nil)
 		defer languageRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&languageRepository, &requestValidator, &translator).Execute(&request)
+		response, err := NewUseCase(&languageRepository, &requestValidator, &translator).Execute(context.Background(), &request)
 
 		assert.NoError(t, err)
 		assert.NotNil(t, response)
@@ -64,7 +65,7 @@ func TestUseCase_Execute(t *testing.T) {
 		requestValidator.On("Validate", &request).Once().Return(validationErrors)
 		defer requestValidator.AssertExpectations(t)
 
-		response, err := NewUseCase(&languageRepository, &requestValidator, &translator).Execute(&request)
+		response, err := NewUseCase(&languageRepository, &requestValidator, &translator).Execute(context.Background(), &request)
 
 		languageRepository.AssertNotCalled(t, "Exists")
 		languageRepository.AssertNotCalled(t, "Save")
@@ -94,10 +95,10 @@ func TestUseCase_Execute(t *testing.T) {
 		).Once().Return("language code already exists")
 		defer translator.AssertExpectations(t)
 
-		languageRepository.On("Exists", request.Code).Once().Return(true)
+		languageRepository.On("Exists", mock.Anything, request.Code).Once().Return(true)
 		defer languageRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&languageRepository, &requestValidator, &translator).Execute(&request)
+		response, err := NewUseCase(&languageRepository, &requestValidator, &translator).Execute(context.Background(), &request)
 
 		languageRepository.AssertNotCalled(t, "Save")
 
@@ -120,11 +121,11 @@ func TestUseCase_Execute(t *testing.T) {
 		requestValidator.On("Validate", &request).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
-		languageRepository.On("Exists", request.Code).Once().Return(false)
-		languageRepository.On("Save", mock.AnythingOfType("*language.Language")).Once().Return("", expectedError)
+		languageRepository.On("Exists", mock.Anything, request.Code).Once().Return(false)
+		languageRepository.On("Save", mock.Anything, mock.AnythingOfType("*language.Language")).Once().Return("", expectedError)
 		defer languageRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&languageRepository, &requestValidator, &translator).Execute(&request)
+		response, err := NewUseCase(&languageRepository, &requestValidator, &translator).Execute(context.Background(), &request)
 
 		assert.Nil(t, response)
 		assert.ErrorIs(t, err, expectedError)

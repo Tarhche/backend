@@ -1,6 +1,8 @@
 package gettasks
 
 import (
+	"context"
+
 	"github.com/khanzadimahdi/testproject/domain/runner/container"
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
 )
@@ -17,8 +19,8 @@ func NewUseCase(containerManager container.Manager, nodeName string) *UseCase {
 	}
 }
 
-func (uc *UseCase) Execute() (*Response, error) {
-	allContainers, err := uc.containerManager.GetByLabel(container.NodeNameLabelKey, uc.nodeName)
+func (uc *UseCase) Execute(ctx context.Context) (*Response, error) {
+	allContainers, err := uc.containerManager.GetByLabel(ctx, container.NodeNameLabelKey, uc.nodeName)
 	if err != nil {
 		return nil, err
 	}

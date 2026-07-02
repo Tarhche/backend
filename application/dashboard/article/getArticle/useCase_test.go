@@ -1,11 +1,13 @@
 package getarticle
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/article"
@@ -48,13 +50,13 @@ func TestUseCase_Execute(t *testing.T) {
 			}
 		)
 
-		articleRepository.On("GetByCorrelationUUIDAndLanguage", r.CorrelationUUID, r.LanguageCode).Return(a, nil)
+		articleRepository.On("GetByCorrelationUUIDAndLanguage", mock.Anything, r.CorrelationUUID, r.LanguageCode).Return(a, nil)
 		defer articleRepository.AssertExpectations(t)
 
-		userRepository.On("GetOne", authorUUID).Return(u, nil)
+		userRepository.On("GetOne", mock.Anything, authorUUID).Return(u, nil)
 		defer userRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&articleRepository, &userRepository).Execute(&r)
+		response, err := NewUseCase(&articleRepository, &userRepository).Execute(context.Background(), &r)
 
 		assert.NoError(t, err)
 		assert.Equal(t, &expectedResponse, response)
@@ -71,10 +73,10 @@ func TestUseCase_Execute(t *testing.T) {
 			expectedError = errors.New("error")
 		)
 
-		articleRepository.On("GetByCorrelationUUIDAndLanguage", r.CorrelationUUID, r.LanguageCode).Return(article.Article{}, expectedError)
+		articleRepository.On("GetByCorrelationUUIDAndLanguage", mock.Anything, r.CorrelationUUID, r.LanguageCode).Return(article.Article{}, expectedError)
 		defer articleRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&articleRepository, &userRepository).Execute(&r)
+		response, err := NewUseCase(&articleRepository, &userRepository).Execute(context.Background(), &r)
 
 		userRepository.AssertNotCalled(t, "GetOne")
 
@@ -100,13 +102,13 @@ func TestUseCase_Execute(t *testing.T) {
 			}
 		)
 
-		articleRepository.On("GetByCorrelationUUIDAndLanguage", r.CorrelationUUID, r.LanguageCode).Return(a, nil)
+		articleRepository.On("GetByCorrelationUUIDAndLanguage", mock.Anything, r.CorrelationUUID, r.LanguageCode).Return(a, nil)
 		defer articleRepository.AssertExpectations(t)
 
-		userRepository.On("GetOne", authorUUID).Return(user.User{}, expectedError)
+		userRepository.On("GetOne", mock.Anything, authorUUID).Return(user.User{}, expectedError)
 		defer userRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&articleRepository, &userRepository).Execute(&r)
+		response, err := NewUseCase(&articleRepository, &userRepository).Execute(context.Background(), &r)
 
 		assert.ErrorIs(t, err, expectedError)
 		assert.Nil(t, response)
@@ -137,13 +139,13 @@ func TestUseCase_Execute(t *testing.T) {
 			}
 		)
 
-		articleRepository.On("GetByCorrelationUUIDAndLanguage", r.CorrelationUUID, r.LanguageCode).Return(a, nil)
+		articleRepository.On("GetByCorrelationUUIDAndLanguage", mock.Anything, r.CorrelationUUID, r.LanguageCode).Return(a, nil)
 		defer articleRepository.AssertExpectations(t)
 
-		userRepository.On("GetOne", authorUUID).Return(user.User{}, domain.ErrNotExists)
+		userRepository.On("GetOne", mock.Anything, authorUUID).Return(user.User{}, domain.ErrNotExists)
 		defer userRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&articleRepository, &userRepository).Execute(&r)
+		response, err := NewUseCase(&articleRepository, &userRepository).Execute(context.Background(), &r)
 
 		assert.NoError(t, err)
 		assert.Equal(t, &expectedResponse, response)

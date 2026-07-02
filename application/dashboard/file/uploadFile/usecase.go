@@ -25,7 +25,7 @@ func NewUseCase(
 	}
 }
 
-func (uc *UseCase) Execute(request *Request) (*Response, error) {
+func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
 	if validationErrors := uc.validator.Validate(request); len(validationErrors) > 0 {
 		return &Response{
 			ValidationErrors: validationErrors,
@@ -37,11 +37,11 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		return nil, err
 	}
 
-	if err := uc.storage.Store(context.Background(), storedName, request.FileReader, request.Size); err != nil {
+	if err := uc.storage.Store(ctx, storedName, request.FileReader, request.Size); err != nil {
 		return nil, err
 	}
 
-	uuid, err := uc.filesRepository.Save(&file.File{
+	uuid, err := uc.filesRepository.Save(ctx, &file.File{
 		Name:       request.Name,
 		StoredName: storedName,
 		Size:       request.Size,

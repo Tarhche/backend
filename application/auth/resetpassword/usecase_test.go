@@ -1,6 +1,7 @@
 package resetpassword
 
 import (
+	"context"
 	"encoding/base64"
 	"errors"
 	"testing"
@@ -50,14 +51,14 @@ func TestUseCase_ResetPassword(t *testing.T) {
 		validator.On("Validate", &request).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		userRepository.On("GetOne", u.UUID).Return(u, nil)
-		userRepository.On("Save", mock.Anything).Return(u.UUID, nil)
+		userRepository.On("GetOne", mock.Anything, u.UUID).Return(u, nil)
+		userRepository.On("Save", mock.Anything, mock.Anything).Return(u.UUID, nil)
 		defer userRepository.AssertExpectations(t)
 
-		hasher.On("Hash", []byte(request.Password), mock.AnythingOfType("[]uint8")).Return([]byte("hashed-password"), nil)
+		hasher.On("Hash", mock.Anything, []byte(request.Password), mock.AnythingOfType("[]uint8")).Return([]byte("hashed-password"), nil)
 		defer hasher.AssertExpectations(t)
 
-		response, err := NewUseCase(&userRepository, &hasher, j, &translator, &validator).Execute(&request)
+		response, err := NewUseCase(&userRepository, &hasher, j, &translator, &validator).Execute(context.Background(), &request)
 
 		translator.AssertNotCalled(t, "Translate")
 
@@ -87,7 +88,7 @@ func TestUseCase_ResetPassword(t *testing.T) {
 		validator.On("Validate", &request).Once().Return(expectedResponse.ValidationErrors)
 		defer validator.AssertExpectations(t)
 
-		response, err := NewUseCase(&userRepository, &hasher, j, &translator, &validator).Execute(&request)
+		response, err := NewUseCase(&userRepository, &hasher, j, &translator, &validator).Execute(context.Background(), &request)
 
 		translator.AssertNotCalled(t, "Translate")
 		userRepository.AssertNotCalled(t, "GetOne")
@@ -116,7 +117,7 @@ func TestUseCase_ResetPassword(t *testing.T) {
 		validator.On("Validate", &request).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		response, err := NewUseCase(&userRepository, &hasher, j, &translator, &validator).Execute(&request)
+		response, err := NewUseCase(&userRepository, &hasher, j, &translator, &validator).Execute(context.Background(), &request)
 
 		translator.AssertNotCalled(t, "Translate")
 		userRepository.AssertNotCalled(t, "GetOne")
@@ -147,7 +148,7 @@ func TestUseCase_ResetPassword(t *testing.T) {
 		validator.On("Validate", &request).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		response, err := NewUseCase(&userRepository, &hasher, j, &translator, &validator).Execute(&request)
+		response, err := NewUseCase(&userRepository, &hasher, j, &translator, &validator).Execute(context.Background(), &request)
 
 		translator.AssertNotCalled(t, "Translate")
 		userRepository.AssertNotCalled(t, "GetOne")
@@ -180,10 +181,10 @@ func TestUseCase_ResetPassword(t *testing.T) {
 		validator.On("Validate", &request).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		userRepository.On("GetOne", u.UUID).Return(user.User{}, expectedErr)
+		userRepository.On("GetOne", mock.Anything, u.UUID).Return(user.User{}, expectedErr)
 		defer userRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&userRepository, &hasher, j, &translator, &validator).Execute(&request)
+		response, err := NewUseCase(&userRepository, &hasher, j, &translator, &validator).Execute(context.Background(), &request)
 
 		translator.AssertNotCalled(t, "Translate")
 		hasher.AssertNotCalled(t, "Hash")
@@ -215,14 +216,14 @@ func TestUseCase_ResetPassword(t *testing.T) {
 		validator.On("Validate", &request).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		userRepository.On("GetOne", u.UUID).Return(u, nil)
-		userRepository.On("Save", mock.Anything).Return("", expectedErr)
+		userRepository.On("GetOne", mock.Anything, u.UUID).Return(u, nil)
+		userRepository.On("Save", mock.Anything, mock.Anything).Return("", expectedErr)
 		defer userRepository.AssertExpectations(t)
 
-		hasher.On("Hash", []byte(request.Password), mock.AnythingOfType("[]uint8")).Return([]byte("hashed-password"), nil)
+		hasher.On("Hash", mock.Anything, []byte(request.Password), mock.AnythingOfType("[]uint8")).Return([]byte("hashed-password"), nil)
 		defer hasher.AssertExpectations(t)
 
-		response, err := NewUseCase(&userRepository, &hasher, j, &translator, &validator).Execute(&request)
+		response, err := NewUseCase(&userRepository, &hasher, j, &translator, &validator).Execute(context.Background(), &request)
 
 		translator.AssertNotCalled(t, "Translate")
 
@@ -239,7 +240,7 @@ func resetPasswordToken(t *testing.T, j *jwt.JWT, u user.User, expiresAt time.Ti
 	b.SetIssuedAt(time.Now())
 	b.SetAudience([]string{audience})
 
-	token, err := j.Generate(b.Build())
+	token, err := j.Generate(context.Background(), b.Build())
 	assert.NoError(t, err)
 
 	return base64.URLEncoding.EncodeToString([]byte(token))

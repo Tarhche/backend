@@ -1,6 +1,8 @@
 package getuserfiles
 
 import (
+	"context"
+
 	"github.com/khanzadimahdi/testproject/domain/file"
 )
 
@@ -16,8 +18,8 @@ func NewUseCase(fileRepository file.Repository) *UseCase {
 	}
 }
 
-func (uc *UseCase) Execute(request *Request) (*Response, error) {
-	totalFiles, err := uc.fileRepository.CountByOwnerUUID(request.OwnerUUID)
+func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
+	totalFiles, err := uc.fileRepository.CountByOwnerUUID(ctx, request.OwnerUUID)
 	if err != nil {
 		return nil, err
 	}
@@ -38,7 +40,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		totalPages++
 	}
 
-	a, err := uc.fileRepository.GetAllByOwnerUUID(request.OwnerUUID, offset, limit)
+	a, err := uc.fileRepository.GetAllByOwnerUUID(ctx, request.OwnerUUID, offset, limit)
 	if err != nil {
 		return nil, err
 	}

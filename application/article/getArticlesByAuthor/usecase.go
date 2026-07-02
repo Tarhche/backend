@@ -1,6 +1,7 @@
 package getArticlesByAuthor
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/khanzadimahdi/testproject/application/element"
@@ -40,7 +41,7 @@ func NewUseCase(
 	}
 }
 
-func (uc *UseCase) Execute(request *Request) (*Response, error) {
+func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
 	if validationErrors := uc.validator.Validate(request); len(validationErrors) > 0 {
 		return &Response{
 			ValidationErrors: validationErrors,
@@ -49,7 +50,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 
 	languageCode := request.LanguageCode
 	if len(languageCode) == 0 {
-		code, err := uc.languageResolver.DefaultCode()
+		code, err := uc.languageResolver.DefaultCode(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -57,17 +58,17 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		languageCode = code
 	}
 
-	l, err := uc.languageResolver.Resolve(languageCode)
+	l, err := uc.languageResolver.Resolve(ctx, languageCode)
 	if err != nil {
 		return nil, err
 	}
 
-	author, err := uc.resolveAuthor(request)
+	author, err := uc.resolveAuthor(ctx, request)
 	if err != nil {
 		return nil, err
 	}
 
-	totalArticles, err := uc.articleRepository.CountPublishedByAuthor(author.UUID, languageCode)
+	totalArticles, err := uc.articleRepository.CountPublishedByAuthor(ctx, author.UUID, languageCode)
 	if err != nil {
 		return nil, err
 	}
@@ -88,12 +89,13 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		totalPages++
 	}
 
-	a, err := uc.articleRepository.GetPublishedByAuthor(author.UUID, languageCode, offset, limit)
+	a, err := uc.articleRepository.GetPublishedByAuthor(ctx, author.UUID, languageCode, offset, limit)
 	if err != nil {
 		return nil, err
 	}
 
 	elementsResponse, err := uc.elementRetriever.RetrieveByVenues(
+		ctx,
 		[]string{fmt.Sprintf("/%s/authors/%s/articles", languageCode, author.UUID)},
 		languageCode,
 	)
@@ -103,12 +105,12 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 
 	publishedLanguages := make(map[string][]language.Language, len(a))
 	for i := range a {
-		codes, err := uc.articleRepository.GetPublishedLanguageCodes(a[i].CorrelationUUID)
+		codes, err := uc.articleRepository.GetPublishedLanguageCodes(ctx, a[i].CorrelationUUID)
 		if err != nil {
 			return nil, err
 		}
 
-		al, err := uc.languageRepository.GetByCodes(codes)
+		al, err := uc.languageRepository.GetByCodes(ctx, codes)
 		if err != nil {
 			return nil, err
 		}
@@ -118,10 +120,10 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 	return NewResponse(author, a, publishedLanguages, l, elementsResponse, totalPages, currentPage), nil
 }
 
-func (uc *UseCase) resolveAuthor(request *Request) (user.User, error) {
+func (uc *UseCase) resolveAuthor(ctx context.Context, request *Request) (user.User, error) {
 	if len(request.AuthorUUID) > 0 {
-		return uc.userRepository.GetOne(request.AuthorUUID)
+		return uc.userRepository.GetOne(ctx, request.AuthorUUID)
 	}
 
-	return uc.userRepository.GetOneByIdentity(request.Username)
+	return uc.userRepository.GetOneByIdentity(ctx, request.Username)
 }

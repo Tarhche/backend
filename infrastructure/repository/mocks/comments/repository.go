@@ -1,6 +1,8 @@
 package comments
 
 import (
+	"context"
+
 	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/domain/comment"
@@ -12,8 +14,8 @@ type MockCommentsRepository struct {
 
 var _ comment.Repository = &MockCommentsRepository{}
 
-func (r *MockCommentsRepository) GetAll(offset uint, limit uint) ([]comment.Comment, error) {
-	args := r.Called(offset, limit)
+func (r *MockCommentsRepository) GetAll(ctx context.Context, offset uint, limit uint) ([]comment.Comment, error) {
+	args := r.Called(ctx, offset, limit)
 
 	if c, ok := args.Get(0).([]comment.Comment); ok {
 		return c, args.Error(1)
@@ -22,32 +24,32 @@ func (r *MockCommentsRepository) GetAll(offset uint, limit uint) ([]comment.Comm
 	return nil, args.Error(1)
 }
 
-func (r *MockCommentsRepository) GetOne(UUID string) (comment.Comment, error) {
-	args := r.Called(UUID)
+func (r *MockCommentsRepository) GetOne(ctx context.Context, UUID string) (comment.Comment, error) {
+	args := r.Called(ctx, UUID)
 
 	return args.Get(0).(comment.Comment), args.Error(1)
 }
 
-func (r *MockCommentsRepository) Count() (uint, error) {
-	args := r.Called()
+func (r *MockCommentsRepository) Count(ctx context.Context) (uint, error) {
+	args := r.Called(ctx)
 
 	return args.Get(0).(uint), args.Error(1)
 }
 
-func (r *MockCommentsRepository) Save(c *comment.Comment) (string, error) {
-	args := r.Called(c)
+func (r *MockCommentsRepository) Save(ctx context.Context, c *comment.Comment) (string, error) {
+	args := r.Called(ctx, c)
 
 	return args.String(0), args.Error(1)
 }
 
-func (r *MockCommentsRepository) Delete(UUID string) error {
-	args := r.Called(UUID)
+func (r *MockCommentsRepository) Delete(ctx context.Context, UUID string) error {
+	args := r.Called(ctx, UUID)
 
 	return args.Error(0)
 }
 
-func (r *MockCommentsRepository) GetApprovedByObjectUUID(objectType string, UUID string, languageCode string, offset uint, limit uint) ([]comment.Comment, error) {
-	args := r.Called(objectType, UUID, languageCode, offset, limit)
+func (r *MockCommentsRepository) GetApprovedByObjectUUID(ctx context.Context, objectType string, UUID string, languageCode string, offset uint, limit uint) ([]comment.Comment, error) {
+	args := r.Called(ctx, objectType, UUID, languageCode, offset, limit)
 
 	if c, ok := args.Get(0).([]comment.Comment); ok {
 		return c, args.Error(1)
@@ -56,14 +58,14 @@ func (r *MockCommentsRepository) GetApprovedByObjectUUID(objectType string, UUID
 	return nil, args.Error(1)
 }
 
-func (r *MockCommentsRepository) CountApprovedByObjectUUID(objectType string, UUID string, languageCode string) (uint, error) {
-	args := r.Called(objectType, UUID, languageCode)
+func (r *MockCommentsRepository) CountApprovedByObjectUUID(ctx context.Context, objectType string, UUID string, languageCode string) (uint, error) {
+	args := r.Called(ctx, objectType, UUID, languageCode)
 
 	return args.Get(0).(uint), args.Error(1)
 }
 
-func (r *MockCommentsRepository) GetAllByAuthorUUID(authorUUID string, offset uint, limit uint) ([]comment.Comment, error) {
-	args := r.Called(authorUUID, offset, limit)
+func (r *MockCommentsRepository) GetAllByAuthorUUID(ctx context.Context, authorUUID string, offset uint, limit uint) ([]comment.Comment, error) {
+	args := r.Called(ctx, authorUUID, offset, limit)
 
 	if c, ok := args.Get(0).([]comment.Comment); ok {
 		return c, args.Error(1)
@@ -72,20 +74,20 @@ func (r *MockCommentsRepository) GetAllByAuthorUUID(authorUUID string, offset ui
 	return nil, args.Error(1)
 }
 
-func (r *MockCommentsRepository) GetOneByAuthorUUID(UUID string, authorUUID string) (comment.Comment, error) {
-	args := r.Called(UUID, authorUUID)
+func (r *MockCommentsRepository) GetOneByAuthorUUID(ctx context.Context, UUID string, authorUUID string) (comment.Comment, error) {
+	args := r.Called(ctx, UUID, authorUUID)
 
 	return args.Get(0).(comment.Comment), args.Error(1)
 }
 
-func (r *MockCommentsRepository) CountByAuthorUUID(authorUUID string) (uint, error) {
-	args := r.Called(authorUUID)
+func (r *MockCommentsRepository) CountByAuthorUUID(ctx context.Context, authorUUID string) (uint, error) {
+	args := r.Called(ctx, authorUUID)
 
 	return args.Get(0).(uint), args.Error(1)
 }
 
-func (r *MockCommentsRepository) DeleteByAuthorUUID(UUID string, authorUUID string) error {
-	args := r.Called(UUID, authorUUID)
+func (r *MockCommentsRepository) DeleteByAuthorUUID(ctx context.Context, UUID string, authorUUID string) error {
+	args := r.Called(ctx, UUID, authorUUID)
 
 	return args.Error(0)
 }

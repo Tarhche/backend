@@ -24,7 +24,8 @@ func TestRateLimitMiddleware(t *testing.T) {
 			assert.NoError(t, err)
 		})
 
-		middleware := NewRateLimitMiddleware(next, tokens, duration)
+		middleware, err := NewRateLimitMiddleware(next, tokens, duration)
+		assert.NoError(t, err)
 
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
 		response := httptest.NewRecorder()
@@ -50,7 +51,8 @@ func TestRateLimitMiddleware(t *testing.T) {
 			assert.NoError(t, err)
 		})
 
-		middleware := NewRateLimitMiddleware(next, tokens, duration)
+		middleware, err := NewRateLimitMiddleware(next, tokens, duration)
+		assert.NoError(t, err)
 
 		// first call
 		request1 := httptest.NewRequest(http.MethodGet, "/", nil)

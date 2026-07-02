@@ -1,6 +1,7 @@
 package element
 
 import (
+	"context"
 	"errors"
 	"time"
 
@@ -27,9 +28,9 @@ type Element struct {
 
 // Repository represents a repository of elements.
 type Repository interface {
-	GetAll(offset uint, limit uint) ([]Element, error)
-	GetOne(UUID string) (Element, error)
-	Count() (uint, error)
-	Save(*Element) (string, error)
-	Delete(UUID string) error
+	GetAll(ctx context.Context, offset uint, limit uint) ([]Element, error)
+	GetOne(ctx context.Context, UUID string) (Element, error)
+	Count(ctx context.Context) (uint, error)
+	Save(ctx context.Context, e *Element) (string, error)
+	Delete(ctx context.Context, UUID string) error
 }

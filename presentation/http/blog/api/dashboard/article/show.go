@@ -7,6 +7,8 @@ import (
 
 	getarticle "github.com/khanzadimahdi/testproject/application/dashboard/article/getArticle"
 	"github.com/khanzadimahdi/testproject/domain"
+	infraTrace "github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type showHandler struct {
@@ -36,12 +38,13 @@ func (h *showHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		LanguageCode:    r.PathValue("language_code"),
 	}
 
-	response, err := h.useCase.Execute(request)
+	response, err := h.useCase.Execute(r.Context(), request)
 
 	switch {
 	case errors.Is(err, domain.ErrNotExists):
 		rw.WriteHeader(http.StatusNotFound)
 	case err != nil:
+		infraTrace.RecordError(trace.SpanFromContext(r.Context()), err)
 		rw.WriteHeader(http.StatusInternalServerError)
 	default:
 		rw.Header().Add("Content-Type", "application/json")

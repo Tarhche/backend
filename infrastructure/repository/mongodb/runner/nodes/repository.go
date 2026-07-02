@@ -34,8 +34,8 @@ func NewRepository(database *mongo.Database) *NodesRepository {
 	}
 }
 
-func (r *NodesRepository) GetAll(offset uint, limit uint) ([]node.Node, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *NodesRepository) GetAll(ctx context.Context, offset uint, limit uint) ([]node.Node, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	o := int64(offset)
@@ -80,8 +80,8 @@ func (r *NodesRepository) GetAll(offset uint, limit uint) ([]node.Node, error) {
 	return items, nil
 }
 
-func (r *NodesRepository) GetOne(UUID string) (node.Node, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *NodesRepository) GetOne(ctx context.Context, UUID string) (node.Node, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	filter := bson.D{{Key: "_id", Value: UUID}}
@@ -112,8 +112,8 @@ func (r *NodesRepository) GetOne(UUID string) (node.Node, error) {
 	}, nil
 }
 
-func (r *NodesRepository) Save(n *node.Node) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *NodesRepository) Save(ctx context.Context, n *node.Node) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	update := NodeBson{
@@ -147,8 +147,8 @@ func (r *NodesRepository) Save(n *node.Node) (string, error) {
 	return n.Name, nil
 }
 
-func (r *NodesRepository) Count() (uint, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+func (r *NodesRepository) Count(ctx context.Context) (uint, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
 	c, err := r.collection.CountDocuments(ctx, bson.D{})

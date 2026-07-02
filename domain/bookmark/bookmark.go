@@ -1,6 +1,7 @@
 package bookmark
 
 import (
+	"context"
 	"time"
 )
 
@@ -19,10 +20,10 @@ type Bookmark struct {
 }
 
 type Repository interface {
-	Save(*Bookmark) (string, error)
+	Save(ctx context.Context, b *Bookmark) (string, error)
 
-	GetAllByOwnerUUID(ownerUUID string, offset uint, limit uint) ([]Bookmark, error)
-	CountByOwnerUUID(ownerUUID string) (uint, error)
-	GetByOwnerUUID(ownerUUID string, objectType string, objectUUID string, languageCode string) (Bookmark, error)
-	DeleteByOwnerUUID(ownerUUID string, objectType string, objectUUID string, languageCode string) error
+	GetAllByOwnerUUID(ctx context.Context, ownerUUID string, offset uint, limit uint) ([]Bookmark, error)
+	CountByOwnerUUID(ctx context.Context, ownerUUID string) (uint, error)
+	GetByOwnerUUID(ctx context.Context, ownerUUID string, objectType string, objectUUID string, languageCode string) (Bookmark, error)
+	DeleteByOwnerUUID(ctx context.Context, ownerUUID string, objectType string, objectUUID string, languageCode string) error
 }

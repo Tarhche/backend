@@ -31,14 +31,14 @@ func NewUseCase(
 	}
 }
 
-func (uc *UseCase) Execute(request *Request) (*Response, error) {
+func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
 	if validationErrors := uc.validator.Validate(request); len(validationErrors) > 0 {
 		return &Response{
 			ValidationErrors: validationErrors,
 		}, nil
 	}
 
-	if exists, err := uc.userExists(request.Identity); err != nil {
+	if exists, err := uc.userExists(ctx, request.Identity); err != nil {
 		return nil, err
 	} else if exists {
 		return &Response{
@@ -58,13 +58,13 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		return nil, err
 	}
 
-	err = uc.asyncCommandBus.Produce(context.Background(), SendRegisterationEmailName, payload)
+	err = uc.asyncCommandBus.Produce(ctx, SendRegisterationEmailName, payload)
 
 	return nil, err
 }
 
-func (uc *UseCase) userExists(identity string) (bool, error) {
-	u, err := uc.userRepository.GetOneByIdentity(identity)
+func (uc *UseCase) userExists(ctx context.Context, identity string) (bool, error) {
+	u, err := uc.userRepository.GetOneByIdentity(ctx, identity)
 	if errors.Is(err, domain.ErrNotExists) {
 		return false, nil
 	} else if err != nil {

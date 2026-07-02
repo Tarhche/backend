@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/application/element"
 	"github.com/khanzadimahdi/testproject/application/home"
@@ -77,18 +78,18 @@ func TestHomeHandler(t *testing.T) {
 			{UUID: "author-uuid-2", Name: "author-name", Avatar: "author-avatar", Username: "author-username-2"},
 		}
 
-		articlesRepository.On("GetMostViewed", "EN", uint(4)).Once().Return(articles, nil)
-		articlesRepository.On("GetAllPublished", "EN", uint(0), uint(3)).Once().Return(articles, nil)
+		articlesRepository.On("GetMostViewed", mock.Anything, "EN", uint(4)).Once().Return(articles, nil)
+		articlesRepository.On("GetAllPublished", mock.Anything, "EN", uint(0), uint(3)).Once().Return(articles, nil)
 		defer articlesRepository.AssertExpectations(t)
 
-		userRepository.On("GetByUUIDs", []string{"author-uuid-1", "author-uuid-1", "author-uuid-2", "author-uuid-1", "author-uuid-1", "author-uuid-2"}).Once().Return(users, nil)
+		userRepository.On("GetByUUIDs", mock.Anything, []string{"author-uuid-1", "author-uuid-1", "author-uuid-2", "author-uuid-1", "author-uuid-1", "author-uuid-2"}).Once().Return(users, nil)
 		defer userRepository.AssertExpectations(t)
 
-		elementsRepository.On("Count").Once().Return(uint(0), nil)
+		elementsRepository.On("Count", mock.Anything).Once().Return(uint(0), nil)
 		defer elementsRepository.AssertExpectations(t)
 
-		languageResolver.On("DefaultCode").Once().Return("EN", nil)
-		languageResolver.On("Resolve", "EN").Once().Return(language.Language{Code: "EN", Name: "English"}, nil)
+		languageResolver.On("DefaultCode", mock.Anything).Once().Return("EN", nil)
+		languageResolver.On("Resolve", mock.Anything, "EN").Once().Return(language.Language{Code: "EN", Name: "English"}, nil)
 		defer languageResolver.AssertExpectations(t)
 
 		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository, matcher.New())
@@ -118,18 +119,18 @@ func TestHomeHandler(t *testing.T) {
 			languageResolver   resolver.MockResolver
 		)
 
-		articlesRepository.On("GetMostViewed", "EN", uint(4)).Once().Return([]article.Article{}, nil)
-		articlesRepository.On("GetAllPublished", "EN", uint(0), uint(3)).Once().Return([]article.Article{}, nil)
+		articlesRepository.On("GetMostViewed", mock.Anything, "EN", uint(4)).Once().Return([]article.Article{}, nil)
+		articlesRepository.On("GetAllPublished", mock.Anything, "EN", uint(0), uint(3)).Once().Return([]article.Article{}, nil)
 		defer articlesRepository.AssertExpectations(t)
 
-		userRepository.On("GetByUUIDs", []string{}).Return([]user.User{}, nil)
+		userRepository.On("GetByUUIDs", mock.Anything, []string{}).Return([]user.User{}, nil)
 		defer userRepository.AssertExpectations(t)
 
-		elementsRepository.On("Count").Once().Return(uint(0), nil)
+		elementsRepository.On("Count", mock.Anything).Once().Return(uint(0), nil)
 		defer elementsRepository.AssertExpectations(t)
 
-		languageResolver.On("DefaultCode").Once().Return("EN", nil)
-		languageResolver.On("Resolve", "EN").Once().Return(language.Language{Code: "EN", Name: "English"}, nil)
+		languageResolver.On("DefaultCode", mock.Anything).Once().Return("EN", nil)
+		languageResolver.On("Resolve", mock.Anything, "EN").Once().Return(language.Language{Code: "EN", Name: "English"}, nil)
 		defer languageResolver.AssertExpectations(t)
 
 		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository, matcher.New())
@@ -157,11 +158,11 @@ func TestHomeHandler(t *testing.T) {
 			languageResolver   resolver.MockResolver
 		)
 
-		articlesRepository.On("GetMostViewed", "EN", uint(4)).Once().Return(nil, errors.New("an error has happened"))
+		articlesRepository.On("GetMostViewed", mock.Anything, "EN", uint(4)).Once().Return(nil, errors.New("an error has happened"))
 		defer articlesRepository.AssertExpectations(t)
 
-		languageResolver.On("DefaultCode").Once().Return("EN", nil)
-		languageResolver.On("Resolve", "EN").Once().Return(language.Language{Code: "EN", Name: "English"}, nil)
+		languageResolver.On("DefaultCode", mock.Anything).Once().Return("EN", nil)
+		languageResolver.On("Resolve", mock.Anything, "EN").Once().Return(language.Language{Code: "EN", Name: "English"}, nil)
 		defer languageResolver.AssertExpectations(t)
 
 		elementRetriever := element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository, matcher.New())

@@ -11,6 +11,7 @@ x-app: &app
     - minio_configure
     - docker
     - mailserver
+    - grafana
   volumes:
     - ./:/opt/app
 
@@ -41,6 +42,12 @@ services:
       MAIL_SMTP_HOST: ${MAIL_SMTP_HOST}
       MAIL_SMTP_PORT: ${MAIL_SMTP_PORT}
       NATS_URL: ${NATS_URL}
+      OTEL_EXPORTER_OTLP_INSECURE: ${OTEL_EXPORTER_OTLP_INSECURE}
+      OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL}
+      OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
+      OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
+      PROFILING_ENABLED: ${PROFILING_ENABLED:-true}
 
   runner-manager:
     <<: *app
@@ -56,7 +63,12 @@ services:
       MONGO_PORT: ${MONGO_PORT}
       MONGO_DATABASE_NAME: ${MONGO_DATABASE_NAME}
       NATS_URL: ${NATS_URL}
-
+      OTEL_EXPORTER_OTLP_INSECURE: ${OTEL_EXPORTER_OTLP_INSECURE}
+      OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL}
+      OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
+      OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
+      PROFILING_ENABLED: ${PROFILING_ENABLED:-true}
   runner-worker-01:
     <<: *app
     build:
@@ -67,7 +79,12 @@ services:
       RUNNER_WORKER_NAME: runner-worker-01
       NATS_URL: ${NATS_URL}
       DOCKER_HOST: ${BACKEND_DOCKER_HOST}
-
+      OTEL_EXPORTER_OTLP_INSECURE: ${OTEL_EXPORTER_OTLP_INSECURE}
+      OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL}
+      OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
+      OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
+      PROFILING_ENABLED: ${PROFILING_ENABLED:-true}
   runner-worker-02:
     <<: *app
     build:
@@ -78,7 +95,12 @@ services:
       RUNNER_WORKER_NAME: runner-worker-02
       NATS_URL: ${NATS_URL}
       DOCKER_HOST: ${BACKEND_DOCKER_HOST}
-
+      OTEL_EXPORTER_OTLP_INSECURE: ${OTEL_EXPORTER_OTLP_INSECURE}
+      OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL}
+      OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
+      OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
+      PROFILING_ENABLED: ${PROFILING_ENABLED:-true}
   runner-worker-03:
     <<: *app
     build:
@@ -89,6 +111,12 @@ services:
       RUNNER_WORKER_NAME: runner-worker-03
       NATS_URL: ${NATS_URL}
       DOCKER_HOST: ${BACKEND_DOCKER_HOST}
+      OTEL_EXPORTER_OTLP_INSECURE: ${OTEL_EXPORTER_OTLP_INSECURE}
+      OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL}
+      OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
+      OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
+      PROFILING_ENABLED: ${PROFILING_ENABLED:-true}
 
   mongodb:
     image: mongo
@@ -152,13 +180,15 @@ services:
       - "8082:31311"
 
   docker:
-    image: docker:27-dind
+    image: docker:28-dind
     restart: unless-stopped
     privileged: true
     ports:
       - "2375:2375"
     environment:
       DOCKER_TLS_CERTDIR: "" # disable certs
+    # dockerd's own Prometheus metrics endpoint on 0.0.0.0:9323
+    command: ["--metrics-addr=0.0.0.0:9323", "--experimental"]
 
   portainer:
     image: portainer/portainer-ce
@@ -185,3 +215,33 @@ services:
     environment:
       MP_MAX_MESSAGES: 5000
       MP_DATABASE: /data/mailpit.db
+
+  grafana:
+    image: grafana/otel-lgtm:0.28.0
+    restart: unless-stopped
+    ports:
+      - "3001:3000" # Grafana UI (host 3001: 3000 is already used by WEB_URL's frontend)
+      - "4317:4317" # OTLP gRPC
+      - "4318:4318" # OTLP HTTP
+    volumes:
+      - ./tmp/grafana-lgtm:/data
+      - ./prometheus.yaml:/otel-lgtm/prometheus.yaml:ro
+    depends_on:
+      - nats-exporter
+      - mongodb-exporter
+
+  nats-exporter:
+    image: natsio/prometheus-nats-exporter:0.19.1
+    restart: unless-stopped
+    depends_on:
+      - nats
+    command: ["-varz", "-connz", "-routez", "-subz", "-jsz", "all", "http://nats:8222"]
+
+  mongodb-exporter:
+    image: percona/mongodb_exporter:0.51.0
+    restart: unless-stopped
+    depends_on:
+      - mongodb
+    environment:
+      MONGODB_URI: ${MONGO_SCHEME}://${MONGO_USERNAME}:${MONGO_PASSWORD}@${MONGO_HOST}:${MONGO_PORT}/admin
+    command: ["--collector.diagnosticdata", "--collector.dbstats"]

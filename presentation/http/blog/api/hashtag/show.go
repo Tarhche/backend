@@ -8,6 +8,8 @@ import (
 
 	getArticlesByHashtag "github.com/khanzadimahdi/testproject/application/article/getArticlesByHashtag"
 	"github.com/khanzadimahdi/testproject/application/localize"
+	infraTrace "github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type showHandler struct {
@@ -48,10 +50,11 @@ func (h *showHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		LanguageCode: localize.FromContext(r.Context()),
 	}
 
-	response, err := h.useCase.Execute(request)
+	response, err := h.useCase.Execute(r.Context(), request)
 
 	switch {
 	case err != nil:
+		infraTrace.RecordError(trace.SpanFromContext(r.Context()), err)
 		rw.WriteHeader(http.StatusInternalServerError)
 	case len(response.ValidationErrors) > 0:
 		rw.Header().Add("Content-Type", "application/json")

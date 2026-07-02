@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 
 	"github.com/khanzadimahdi/testproject/domain"
@@ -40,6 +40,7 @@ type CacheDecorator struct {
 	parent   ws
 	cache    domain.Cache
 	subjects map[string]struct{}
+	logger   *slog.Logger
 }
 
 // Ensure CacheDecorator implements the ws interface
@@ -57,7 +58,7 @@ var _ http.Handler = &Websocket{}
 // make sure the websocket implements the io.Closer interface
 var _ io.Closer = &Websocket{}
 
-func NewCacheDecorator(ws ws, cache domain.Cache, subjects ...string) *CacheDecorator {
+func NewCacheDecorator(ws ws, cache domain.Cache, logger *slog.Logger, subjects ...string) *CacheDecorator {
 	s := make(map[string]struct{}, len(subjects))
 	for _, subject := range subjects {
 		s[subject] = struct{}{}
@@ -67,6 +68,7 @@ func NewCacheDecorator(ws ws, cache domain.Cache, subjects ...string) *CacheDeco
 		parent:   ws,
 		cache:    cache,
 		subjects: s,
+		logger:   logger,
 	}
 }
 
@@ -78,46 +80,46 @@ func (d *CacheDecorator) Consume(ctx context.Context, subject string, handler do
 	return d.parent.Consume(
 		ctx,
 		subject,
-		domain.MessageHandlerFunc(func(payload []byte) error {
+		domain.MessageHandlerFunc(func(ctx context.Context, payload []byte) error {
 			checksum, requestID, err := payloadChecksum(payload)
 			if err != nil {
-				return handler.Handle(payload)
+				return handler.Handle(ctx, payload)
 			}
 
 			// if we have cached reply, return it immediately.
 			cachedKey := cachedKeyPrefix + checksum
-			log.Println("checking cache for checksum key:", cachedKey, "for request ID:", requestID)
-			if cached, err := d.cache.Get(cachedKey); err == nil {
-				log.Println("cache hit for checksum key:", cachedKey, "for request ID:", requestID)
-				return d.parent.Reply(context.Background(), &domain.Reply{
+			d.logger.Info("checking cache for checksum key", "cachedKey", cachedKey, "requestID", requestID)
+			if cached, err := d.cache.Get(ctx, cachedKey); err == nil {
+				d.logger.Info("cache hit for checksum key", "cachedKey", cachedKey, "requestID", requestID)
+				return d.parent.Reply(ctx, &domain.Reply{
 					RequestID: requestID,
 					Payload:   cached,
 				})
 			}
 
-			if err := d.cache.Set(pendingKeyPrefix+requestID, []byte(checksum)); err != nil {
-				log.Println("WS pending set error:", err)
+			if err := d.cache.Set(ctx, pendingKeyPrefix+requestID, []byte(checksum)); err != nil {
+				d.logger.Error("WS pending set error", "error", err)
 			}
 
-			return handler.Handle(payload)
+			return handler.Handle(ctx, payload)
 		}),
 	)
 }
 
 func (d *CacheDecorator) Reply(ctx context.Context, reply *domain.Reply) error {
 	pendingKey := pendingKeyPrefix + reply.RequestID
-	checksum, err := d.cache.Get(pendingKey)
+	checksum, err := d.cache.Get(ctx, pendingKey)
 
-	log.Println("pending checksum key:", string(checksum), "for request ID:", reply.RequestID, "exists:", err == nil)
+	d.logger.Info("pending checksum key lookup", "checksum", string(checksum), "requestID", reply.RequestID, "exists", err == nil)
 	if err == nil {
 		cachedKey := cachedKeyPrefix + string(checksum)
-		log.Println("caching reply with checksum key:", cachedKey)
-		if err := d.cache.Set(cachedKey, reply.Payload); err != nil {
-			log.Println("WS cache set error:", err)
+		d.logger.Info("caching reply with checksum key", "cachedKey", cachedKey)
+		if err := d.cache.Set(ctx, cachedKey, reply.Payload); err != nil {
+			d.logger.Error("WS cache set error", "error", err)
 		}
 
-		if err := d.cache.Purge(pendingKey); err != nil {
-			log.Println("WS pending purge error:", err)
+		if err := d.cache.Purge(ctx, pendingKey); err != nil {
+			d.logger.Error("WS pending purge error", "error", err)
 		}
 	}
 

@@ -1,6 +1,7 @@
 package changepassword
 
 import (
+	"context"
 	"errors"
 	"reflect"
 	"testing"
@@ -50,15 +51,15 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		userRepository.On("GetOne", r.UserUUID).Once().Return(u, nil)
-		userRepository.On("Save", mock.Anything).Return(u.UUID, nil)
+		userRepository.On("GetOne", mock.Anything, r.UserUUID).Once().Return(u, nil)
+		userRepository.On("Save", mock.Anything, mock.Anything).Return(u.UUID, nil)
 		defer userRepository.AssertExpectations(t)
 
-		hasher.On("Equal", []byte(r.CurrentPassword), u.PasswordHash.Value, u.PasswordHash.Salt).Once().Return(true)
-		hasher.On("Hash", []byte(r.NewPassword), mock.AnythingOfType("[]uint8")).Once().Return([]byte("hashed-new-password"), nil)
+		hasher.On("Equal", mock.Anything, []byte(r.CurrentPassword), u.PasswordHash.Value, u.PasswordHash.Salt).Once().Return(true)
+		hasher.On("Hash", mock.Anything, []byte(r.NewPassword), mock.AnythingOfType("[]uint8")).Once().Return([]byte("hashed-new-password"), nil)
 		defer hasher.AssertExpectations(t)
 
-		response, err := NewUseCase(&userRepository, &hasher, &validator, &translator).Execute(&r)
+		response, err := NewUseCase(&userRepository, &hasher, &validator, &translator).Execute(context.Background(), &r)
 
 		translator.AssertNotCalled(t, "Translate")
 
@@ -89,7 +90,7 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(expectedResponse.ValidationErrors)
 		defer validator.AssertExpectations(t)
 
-		response, err := NewUseCase(&userRepository, &hasher, &validator, &translator).Execute(&r)
+		response, err := NewUseCase(&userRepository, &hasher, &validator, &translator).Execute(context.Background(), &r)
 
 		translator.AssertNotCalled(t, "Translate")
 		userRepository.AssertNotCalled(t, "GetOne")
@@ -123,10 +124,10 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		userRepository.On("GetOne", r.UserUUID).Once().Return(user.User{}, expectedErr)
+		userRepository.On("GetOne", mock.Anything, r.UserUUID).Once().Return(user.User{}, expectedErr)
 		defer userRepository.AssertExpectations(t)
 
-		response, err := NewUseCase(&userRepository, &hasher, &validator, &translator).Execute(&r)
+		response, err := NewUseCase(&userRepository, &hasher, &validator, &translator).Execute(context.Background(), &r)
 
 		translator.AssertNotCalled(t, "Translate")
 		userRepository.AssertNotCalled(t, "Save")
@@ -177,13 +178,13 @@ func TestUseCase_Execute(t *testing.T) {
 		).Once().Return(expectedResponse.ValidationErrors["current_password"])
 		defer translator.AssertExpectations(t)
 
-		userRepository.On("GetOne", r.UserUUID).Once().Return(u, nil)
+		userRepository.On("GetOne", mock.Anything, r.UserUUID).Once().Return(u, nil)
 		defer userRepository.AssertExpectations(t)
 
-		hasher.On("Equal", []byte(r.CurrentPassword), u.PasswordHash.Value, u.PasswordHash.Salt).Once().Return(false)
+		hasher.On("Equal", mock.Anything, []byte(r.CurrentPassword), u.PasswordHash.Value, u.PasswordHash.Salt).Once().Return(false)
 		defer hasher.AssertExpectations(t)
 
-		response, err := NewUseCase(&userRepository, &hasher, &validator, &translator).Execute(&r)
+		response, err := NewUseCase(&userRepository, &hasher, &validator, &translator).Execute(context.Background(), &r)
 
 		hasher.AssertNotCalled(t, "Hash")
 		userRepository.AssertNotCalled(t, "Save")
@@ -221,15 +222,15 @@ func TestUseCase_Execute(t *testing.T) {
 		validator.On("Validate", &r).Once().Return(nil)
 		defer validator.AssertExpectations(t)
 
-		userRepository.On("GetOne", r.UserUUID).Once().Return(u, nil)
-		userRepository.On("Save", mock.Anything).Return("", expectedError)
+		userRepository.On("GetOne", mock.Anything, r.UserUUID).Once().Return(u, nil)
+		userRepository.On("Save", mock.Anything, mock.Anything).Return("", expectedError)
 		defer userRepository.AssertExpectations(t)
 
-		hasher.On("Equal", []byte(r.CurrentPassword), u.PasswordHash.Value, u.PasswordHash.Salt).Once().Return(true)
-		hasher.On("Hash", []byte(r.NewPassword), mock.AnythingOfType("[]uint8")).Once().Return([]byte("hashed-new-password"), nil)
+		hasher.On("Equal", mock.Anything, []byte(r.CurrentPassword), u.PasswordHash.Value, u.PasswordHash.Salt).Once().Return(true)
+		hasher.On("Hash", mock.Anything, []byte(r.NewPassword), mock.AnythingOfType("[]uint8")).Once().Return([]byte("hashed-new-password"), nil)
 		defer hasher.AssertExpectations(t)
 
-		response, err := NewUseCase(&userRepository, &hasher, &validator, &translator).Execute(&r)
+		response, err := NewUseCase(&userRepository, &hasher, &validator, &translator).Execute(context.Background(), &r)
 
 		translator.AssertNotCalled(t, "Translate")
 

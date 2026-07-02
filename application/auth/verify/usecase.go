@@ -1,6 +1,7 @@
 package verify
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
@@ -49,7 +50,7 @@ func NewUseCase(
 	}
 }
 
-func (uc *UseCase) Execute(request *Request) (*Response, error) {
+func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
 	if validationErrors := uc.validator.Validate(request); len(validationErrors) > 0 {
 		return &Response{
 			ValidationErrors: validationErrors,
@@ -61,7 +62,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		return nil, err
 	}
 
-	claims, err := uc.jwt.Verify(string(registrationToken))
+	claims, err := uc.jwt.Verify(ctx, string(registrationToken))
 	if err != nil {
 		return &Response{
 			ValidationErrors: domain.ValidationErrors{
@@ -87,7 +88,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		}, nil
 	}
 
-	if exists, err := uc.identityExists(identity); err != nil {
+	if exists, err := uc.identityExists(ctx, identity); err != nil {
 		return nil, err
 	} else if exists {
 		return &Response{
@@ -97,7 +98,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		}, nil
 	}
 
-	if exists, err := uc.identityExists(request.Username); err != nil {
+	if exists, err := uc.identityExists(ctx, request.Username); err != nil {
 		return nil, err
 	} else if exists {
 		return &Response{
@@ -112,7 +113,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		return nil, err
 	}
 
-	if !uc.languageResolver.Verify(request.LanguageCode) {
+	if !uc.languageResolver.Verify(ctx, request.LanguageCode) {
 		return &Response{
 			ValidationErrors: domain.ValidationErrors{
 				"language_code": uc.translator.Translate("invalid_value"),
@@ -126,32 +127,32 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		Email:        identity,
 		LanguageCode: request.LanguageCode,
 		PasswordHash: password.Hash{
-			Value: uc.hasher.Hash([]byte(request.Password), salt),
+			Value: uc.hasher.Hash(ctx, []byte(request.Password), salt),
 			Salt:  salt,
 		},
 	}
 
-	userUUID, err := uc.userRepository.Save(&u)
+	userUUID, err := uc.userRepository.Save(ctx, &u)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := uc.assignDefaultRoles(userUUID); err != nil {
+	if err := uc.assignDefaultRoles(ctx, userUUID); err != nil {
 		return nil, err
 	}
 
 	return nil, nil
 }
 
-func (uc *UseCase) assignDefaultRoles(userUUID string) error {
-	c, err := uc.configRepository.GetLatestRevision()
+func (uc *UseCase) assignDefaultRoles(ctx context.Context, userUUID string) error {
+	c, err := uc.configRepository.GetLatestRevision(ctx)
 	if errors.Is(err, domain.ErrNotExists) {
 		return nil
 	} else if err != nil {
 		return err
 	}
 
-	roles, err := uc.roleRepository.GetByUUIDs(c.UserDefaultRoleUUIDs)
+	roles, err := uc.roleRepository.GetByUUIDs(ctx, c.UserDefaultRoleUUIDs)
 	if err != nil {
 		return err
 	}
@@ -163,7 +164,7 @@ func (uc *UseCase) assignDefaultRoles(userUUID string) error {
 
 		roles[i].UserUUIDs = userUUIDs
 
-		if _, err := uc.roleRepository.Save(&roles[i]); err != nil {
+		if _, err := uc.roleRepository.Save(ctx, &roles[i]); err != nil {
 			return err
 		}
 	}
@@ -171,8 +172,8 @@ func (uc *UseCase) assignDefaultRoles(userUUID string) error {
 	return nil
 }
 
-func (uc *UseCase) identityExists(identity string) (bool, error) {
-	u, err := uc.userRepository.GetOneByIdentity(identity)
+func (uc *UseCase) identityExists(ctx context.Context, identity string) (bool, error) {
+	u, err := uc.userRepository.GetOneByIdentity(ctx, identity)
 	if errors.Is(err, domain.ErrNotExists) {
 		return false, nil
 	} else if err != nil {

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/application/dashboard/bookmark/deleteUserBookmark"
@@ -41,7 +42,7 @@ func TestDeleteUserHandler(t *testing.T) {
 		requestValidator.On("Validate", &r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
-		bookmarkRepository.On("DeleteByOwnerUUID", r.OwnerUUID, r.ObjectType, r.ObjectUUID, r.LanguageCode).Return(nil)
+		bookmarkRepository.On("DeleteByOwnerUUID", mock.Anything, r.OwnerUUID, r.ObjectType, r.ObjectUUID, r.LanguageCode).Return(nil)
 		defer bookmarkRepository.AssertExpectations(t)
 
 		handler := NewDeleteUserBookmarkHandler(deleteUserBookmark.NewUseCase(&bookmarkRepository, &requestValidator))

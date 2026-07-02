@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/application/dashboard/comment/deleteUserComment"
@@ -28,7 +29,7 @@ func TestDeleteUserHandler(t *testing.T) {
 			}
 		)
 
-		commentRepository.On("DeleteByAuthorUUID", c.UUID, u.UUID).Once().Return(nil)
+		commentRepository.On("DeleteByAuthorUUID", mock.Anything, c.UUID, u.UUID).Once().Return(nil)
 		defer commentRepository.AssertExpectations(t)
 
 		handler := NewDeleteUserCommentHandler(deleteUserComment.NewUseCase(&commentRepository))

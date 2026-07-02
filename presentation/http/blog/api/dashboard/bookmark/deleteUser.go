@@ -6,6 +6,8 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/application/dashboard/bookmark/deleteUserBookmark"
+	infraTrace "github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type deleteUserHandler struct {
@@ -38,9 +40,10 @@ func (h *deleteUserHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	}
 	request.OwnerUUID = userUUID
 
-	response, err := h.useCase.Execute(&request)
+	response, err := h.useCase.Execute(r.Context(), &request)
 	switch {
 	case err != nil:
+		infraTrace.RecordError(trace.SpanFromContext(r.Context()), err)
 		rw.WriteHeader(http.StatusInternalServerError)
 	case response != nil && len(response.ValidationErrors) > 0:
 		rw.Header().Add("Content-Type", "application/json")

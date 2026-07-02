@@ -1,6 +1,7 @@
 package deleteTask
 
 import (
+	"context"
 	"encoding/json"
 
 	"github.com/khanzadimahdi/testproject/domain"
@@ -24,7 +25,7 @@ func NewDeleteTaskHandler(useCase *UseCase) *DeleteTaskHandler {
 }
 
 // Handle handles the DeleteTask command
-func (h *DeleteTaskHandler) Handle(data []byte) error {
+func (h *DeleteTaskHandler) Handle(ctx context.Context, data []byte) error {
 	var taskDeleted events.TaskDeleted
 	if err := json.Unmarshal(data, &taskDeleted); err != nil {
 		return err
@@ -32,7 +33,7 @@ func (h *DeleteTaskHandler) Handle(data []byte) error {
 
 	request := &Request{UUID: taskDeleted.UUID}
 
-	_, err := h.useCase.Execute(request)
+	_, err := h.useCase.Execute(ctx, request)
 	if err == domain.ErrNotExists {
 		return nil
 	}

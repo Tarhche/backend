@@ -1,6 +1,8 @@
 package updaterole
 
 import (
+	"context"
+
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/permission"
 	"github.com/khanzadimahdi/testproject/domain/role"
@@ -28,14 +30,14 @@ func NewUseCase(
 	}
 }
 
-func (uc *UseCase) Execute(request *Request) (*Response, error) {
+func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
 	if validationErrors := uc.validator.Validate(request); len(validationErrors) > 0 {
 		return &Response{
 			ValidationErrors: validationErrors,
 		}, nil
 	}
 
-	if permissions, err := uc.permissionRepository.Get(request.Permissions); err != nil {
+	if permissions, err := uc.permissionRepository.Get(ctx, request.Permissions); err != nil {
 		return nil, err
 	} else if len(permissions) < len(request.Permissions) {
 		return &Response{
@@ -53,7 +55,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		UserUUIDs:   request.UserUUIDs,
 	}
 
-	_, err := uc.roleRepository.Save(&r)
+	_, err := uc.roleRepository.Save(ctx, &r)
 
 	return nil, err
 }

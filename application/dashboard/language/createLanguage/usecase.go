@@ -1,6 +1,8 @@
 package createlanguage
 
 import (
+	"context"
+
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/language"
 	"github.com/khanzadimahdi/testproject/domain/translator"
@@ -20,14 +22,14 @@ func NewUseCase(languageRepository language.Repository, validator domain.Validat
 	}
 }
 
-func (uc *UseCase) Execute(request *Request) (*Response, error) {
+func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
 	if validationErrors := uc.validator.Validate(request); len(validationErrors) > 0 {
 		return &Response{
 			ValidationErrors: validationErrors,
 		}, nil
 	}
 
-	if uc.languageRepository.Exists(request.Code) {
+	if uc.languageRepository.Exists(ctx, request.Code) {
 		return &Response{
 			ValidationErrors: domain.ValidationErrors{
 				"code": uc.translator.Translate("already_exists"),
@@ -40,7 +42,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		Name: request.Name,
 	}
 
-	code, err := uc.languageRepository.Save(&l)
+	code, err := uc.languageRepository.Save(ctx, &l)
 	if err != nil {
 		return nil, err
 	}

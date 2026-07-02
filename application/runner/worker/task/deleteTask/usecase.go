@@ -1,6 +1,8 @@
 package deleteTask
 
 import (
+	"context"
+
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/runner/container"
 )
@@ -23,14 +25,14 @@ func NewUseCase(
 }
 
 // Execute executes the use case
-func (uc *UseCase) Execute(request *Request) (*Response, error) {
+func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
 	if validationErrors := uc.validator.Validate(request); len(validationErrors) > 0 {
 		return &Response{
 			ValidationErrors: validationErrors,
 		}, nil
 	}
 
-	containers, err := uc.containerManager.GetByLabel(container.TaskUUIDLabelKey, request.UUID)
+	containers, err := uc.containerManager.GetByLabel(ctx, container.TaskUUIDLabelKey, request.UUID)
 	if err != nil {
 		return nil, err
 	}
@@ -40,7 +42,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 	}
 
 	for _, c := range containers {
-		if err := uc.containerManager.Delete(c.ID); err != nil {
+		if err := uc.containerManager.Delete(ctx, c.ID); err != nil {
 			return nil, err
 		}
 	}

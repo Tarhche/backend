@@ -1,6 +1,7 @@
 package updateuser
 
 import (
+	"context"
 	"errors"
 
 	"github.com/khanzadimahdi/testproject/application/language/resolver"
@@ -30,7 +31,7 @@ func NewUseCase(
 	}
 }
 
-func (uc *UseCase) Execute(request *Request) (*Response, error) {
+func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
 	if validationErrors := uc.validator.Validate(request); len(validationErrors) > 0 {
 		return &Response{
 			ValidationErrors: validationErrors,
@@ -38,7 +39,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 	}
 
 	// make sure email is unique
-	exists, err := uc.anotherUserExists(request.Email, request.UserUUID)
+	exists, err := uc.anotherUserExists(ctx, request.Email, request.UserUUID)
 	if err != nil {
 		return nil, err
 	} else if exists {
@@ -50,7 +51,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 	}
 
 	// make sure username is unique
-	exists, err = uc.anotherUserExists(request.Username, request.UserUUID)
+	exists, err = uc.anotherUserExists(ctx, request.Username, request.UserUUID)
 	if err != nil {
 		return nil, err
 	} else if exists {
@@ -61,7 +62,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		}, nil
 	}
 
-	if !uc.languageResolver.Verify(request.LanguageCode) {
+	if !uc.languageResolver.Verify(ctx, request.LanguageCode) {
 		return &Response{
 			ValidationErrors: domain.ValidationErrors{
 				"language_code": uc.translator.Translate("invalid_value"),
@@ -69,7 +70,7 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 		}, nil
 	}
 
-	u, err := uc.userRepository.GetOne(request.UserUUID)
+	u, err := uc.userRepository.GetOne(ctx, request.UserUUID)
 	if err != nil {
 		return nil, err
 	}
@@ -80,13 +81,13 @@ func (uc *UseCase) Execute(request *Request) (*Response, error) {
 	u.Username = request.Username
 	u.LanguageCode = request.LanguageCode
 
-	_, err = uc.userRepository.Save(&u)
+	_, err = uc.userRepository.Save(ctx, &u)
 
 	return nil, err
 }
 
-func (uc *UseCase) anotherUserExists(identity string, userUUID string) (bool, error) {
-	u, err := uc.userRepository.GetOneByIdentity(identity)
+func (uc *UseCase) anotherUserExists(ctx context.Context, identity string, userUUID string) (bool, error) {
+	u, err := uc.userRepository.GetOneByIdentity(ctx, identity)
 	if errors.Is(err, domain.ErrNotExists) {
 		return false, nil
 	} else if err != nil {

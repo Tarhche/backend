@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/domain/file"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/files"
@@ -33,14 +34,14 @@ func TestUseCase_Execute(t *testing.T) {
 			}
 		)
 
-		filesRepository.On("GetOneByOwnerUUID", r.OwnerUUID, r.FileUUID).Once().Return(f, nil)
-		filesRepository.On("DeleteByOwnerUUID", r.OwnerUUID, r.FileUUID).Return(nil)
+		filesRepository.On("GetOneByOwnerUUID", mock.Anything, r.OwnerUUID, r.FileUUID).Once().Return(f, nil)
+		filesRepository.On("DeleteByOwnerUUID", mock.Anything, r.OwnerUUID, r.FileUUID).Return(nil)
 		defer filesRepository.AssertExpectations(t)
 
 		storage.On("Delete", context.Background(), f.StoredName).Once().Return(nil)
 		defer storage.AssertExpectations(t)
 
-		err := NewUseCase(&filesRepository, &storage).Execute(r)
+		err := NewUseCase(&filesRepository, &storage).Execute(context.Background(), r)
 
 		assert.NoError(t, err)
 	})
@@ -60,10 +61,10 @@ func TestUseCase_Execute(t *testing.T) {
 			expectedErr = errors.New("error")
 		)
 
-		filesRepository.On("GetOneByOwnerUUID", r.OwnerUUID, r.FileUUID).Once().Return(file.File{}, expectedErr)
+		filesRepository.On("GetOneByOwnerUUID", mock.Anything, r.OwnerUUID, r.FileUUID).Once().Return(file.File{}, expectedErr)
 		defer filesRepository.AssertExpectations(t)
 
-		err := NewUseCase(&filesRepository, &storage).Execute(r)
+		err := NewUseCase(&filesRepository, &storage).Execute(context.Background(), r)
 
 		storage.AssertNotCalled(t, "Delete")
 		filesRepository.AssertNotCalled(t, "DeleteByOwnerUUID")
@@ -93,13 +94,13 @@ func TestUseCase_Execute(t *testing.T) {
 			expectedErr = errors.New("error")
 		)
 
-		filesRepository.On("GetOneByOwnerUUID", r.OwnerUUID, r.FileUUID).Once().Return(f, nil)
+		filesRepository.On("GetOneByOwnerUUID", mock.Anything, r.OwnerUUID, r.FileUUID).Once().Return(f, nil)
 		defer filesRepository.AssertExpectations(t)
 
 		storage.On("Delete", context.Background(), f.StoredName).Once().Return(expectedErr)
 		defer storage.AssertExpectations(t)
 
-		err := NewUseCase(&filesRepository, &storage).Execute(r)
+		err := NewUseCase(&filesRepository, &storage).Execute(context.Background(), r)
 
 		filesRepository.AssertNotCalled(t, "DeleteByOwnerUUID")
 
@@ -128,14 +129,14 @@ func TestUseCase_Execute(t *testing.T) {
 			expectedErr = errors.New("error")
 		)
 
-		filesRepository.On("GetOneByOwnerUUID", r.OwnerUUID, r.FileUUID).Once().Return(f, nil)
-		filesRepository.On("DeleteByOwnerUUID", r.OwnerUUID, r.FileUUID).Return(expectedErr)
+		filesRepository.On("GetOneByOwnerUUID", mock.Anything, r.OwnerUUID, r.FileUUID).Once().Return(f, nil)
+		filesRepository.On("DeleteByOwnerUUID", mock.Anything, r.OwnerUUID, r.FileUUID).Return(expectedErr)
 		defer filesRepository.AssertExpectations(t)
 
 		storage.On("Delete", context.Background(), f.StoredName).Once().Return(nil)
 		defer storage.AssertExpectations(t)
 
-		err := NewUseCase(&filesRepository, &storage).Execute(r)
+		err := NewUseCase(&filesRepository, &storage).Execute(context.Background(), r)
 
 		assert.ErrorIs(t, err, expectedErr)
 	})

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	deletelanguage "github.com/khanzadimahdi/testproject/application/dashboard/language/deleteLanguage"
@@ -27,7 +28,7 @@ func TestDeleteHandler(t *testing.T) {
 			r = deletelanguage.Request{Code: "EN"}
 		)
 
-		languageRepository.On("Delete", r.Code).Once().Return(nil)
+		languageRepository.On("Delete", mock.Anything, r.Code).Once().Return(nil)
 		defer languageRepository.AssertExpectations(t)
 
 		handler := NewDeleteHandler(deletelanguage.NewUseCase(&languageRepository))
