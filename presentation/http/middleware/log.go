@@ -179,7 +179,7 @@ func (m *Log) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		)
 
 		if m.config.WithClientIP {
-			requestAttributes = append(requestAttributes, slog.String(requestIPKey, r.RemoteAddr))
+			requestAttributes = append(requestAttributes, slog.String(requestIPKey, infraHttp.ClientIP(r)))
 		}
 
 		requestAttributes = append(requestAttributes, slog.Int(requestLengthKey, br.Len()))

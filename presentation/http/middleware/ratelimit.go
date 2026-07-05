@@ -6,6 +6,8 @@ import (
 
 	"github.com/sethvargo/go-limiter/httplimit"
 	"github.com/sethvargo/go-limiter/memorystore"
+
+	infraHttp "github.com/khanzadimahdi/testproject/infrastructure/http"
 )
 
 type RateLimit struct {
@@ -23,8 +25,9 @@ func NewRateLimitMiddleware(next http.Handler, tokens uint64, interval time.Dura
 		return nil, err
 	}
 
-	// Create the HTTP middleware from the store, keying by IP address.
-	middleware, err := httplimit.NewMiddleware(store, httplimit.IPKeyFunc())
+	middleware, err := httplimit.NewMiddleware(store, func(r *http.Request) (string, error) {
+		return infraHttp.ClientIP(r), nil
+	})
 	if err != nil {
 		return nil, err
 	}
