@@ -204,7 +204,7 @@ func (p *blogProvider) Boot(ctx context.Context, c provider.Container) error {
 		return err
 	}
 
-	pc, err := produceConsumer.NewProduceConsumer(natsConnection, blogConsumerID, logger)
+	pc, err := produceConsumer.NewProduceConsumer(natsConnection, blogConsumerID, logger, produceConsumer.WithAckWait(120*time.Second))
 	if err != nil {
 		return err
 	}

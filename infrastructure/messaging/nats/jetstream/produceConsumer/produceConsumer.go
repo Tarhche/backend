@@ -17,10 +17,13 @@ import (
 	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
+const defaultAckWait = 30 * time.Second
+
 type produceConsumer struct {
 	connection *nats.Conn
 	jetstream  jetstream.JetStream
 	consumerID string
+	ackWait    time.Duration
 	streams    map[string]jetstream.Stream
 	lock       sync.RWMutex
 	wg         sync.WaitGroup
@@ -30,7 +33,18 @@ type produceConsumer struct {
 
 var _ domain.ProduceConsumer = &produceConsumer{}
 
-func NewProduceConsumer(connection *nats.Conn, consumerID string, logger *slog.Logger) (*produceConsumer, error) {
+type Option func(*produceConsumer)
+
+// WithAckWait sets how long JetStream waits for an ack before redelivering a
+// message; it must exceed the slowest handler, otherwise in-flight messages
+// are redelivered and processed more than once.
+func WithAckWait(d time.Duration) Option {
+	return func(m *produceConsumer) {
+		m.ackWait = d
+	}
+}
+
+func NewProduceConsumer(connection *nats.Conn, consumerID string, logger *slog.Logger, options ...Option) (*produceConsumer, error) {
 	j, err := jetstream.New(connection)
 	if err != nil {
 		return nil, err
@@ -40,9 +54,14 @@ func NewProduceConsumer(connection *nats.Conn, consumerID string, logger *slog.L
 		connection: connection,
 		jetstream:  j,
 		consumerID: consumerID,
+		ackWait:    defaultAckWait,
 		streams:    make(map[string]jetstream.Stream),
 		logger:     logger,
 		tracer:     otel.Tracer("nats.jetstream"),
+	}
+
+	for _, option := range options {
+		option(s)
 	}
 
 	return s, nil
@@ -87,7 +106,7 @@ func (m *produceConsumer) consumeInBackground(ctx context.Context, stream jetstr
 		Name:      m.consumerID,
 		Durable:   m.consumerID,
 		AckPolicy: jetstream.AckExplicitPolicy,
-		AckWait:   30 * time.Second,
+		AckWait:   m.ackWait,
 	})
 	if err != nil {
 		m.wg.Done()
