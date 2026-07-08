@@ -176,7 +176,7 @@ func (e *exporter) flush(batch []envelope) {
 
 	var compressed bytes.Buffer
 	zw := gzip.NewWriter(&compressed)
-	if _, err := zw.Write(body); err == nil {
+	if _, err = zw.Write(body); err == nil {
 		err = zw.Close()
 	}
 	if err != nil {

@@ -48,6 +48,13 @@
 //     AES-GCM does not apply to OTLP because the collector must be able to
 //     decode the message.
 //
+//   - Export batching: collections are merged into one OTLP request per
+//     flush window (PROFILING_EXPORT_BATCH_SIZE collections, default 40, or
+//     PROFILING_EXPORT_FLUSH_INTERVAL elapsed, default 5m, whichever comes
+//     first). Merging deduplicates the profile dictionaries — the symbol
+//     tables that make up most of every payload — so wider windows directly
+//     reduce egress.
+//
 //   - Delivery verification: OpenTelemetry metrics count collected, dropped,
 //     sent, delivered and failed profiles, observe export duration, payload
 //     size, retries, queue length, in-flight profiles, buffered bytes, the

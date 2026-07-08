@@ -103,8 +103,8 @@ const (
 
 	defaultExportTimeout = 10 * time.Second
 	defaultMaxRetries    = 3
-	defaultBatchSize     = 4
-	defaultFlushInterval = 5 * time.Second
+	defaultBatchSize     = 40
+	defaultFlushInterval = 5 * time.Minute
 	defaultQueueSize     = 64
 
 	// profilesURLPath is the OTLP/HTTP path of the profiles signal. While the
@@ -171,6 +171,12 @@ func ConfigFromEnv() (Config, error) {
 		return cfg, err
 	}
 	if cfg.RedactIPs, err = envBool("PROFILING_REDACT_IPS", false); err != nil {
+		return cfg, err
+	}
+	if cfg.BatchSize, err = envInt("PROFILING_EXPORT_BATCH_SIZE", defaultBatchSize); err != nil {
+		return cfg, err
+	}
+	if cfg.FlushInterval, err = envDuration("PROFILING_EXPORT_FLUSH_INTERVAL", defaultFlushInterval); err != nil {
 		return cfg, err
 	}
 	if cfg.Insecure, err = envBool("OTEL_EXPORTER_OTLP_INSECURE", false); err != nil {
