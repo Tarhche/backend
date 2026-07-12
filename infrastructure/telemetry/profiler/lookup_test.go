@@ -70,7 +70,7 @@ func TestProfilerProcessesGoroutineAndMutexProfiles(t *testing.T) {
 		done := make(chan struct{})
 		go func() {
 			mu.Lock() // contends until the main goroutine unlocks
-			mu.Unlock()
+			defer mu.Unlock()
 			close(done)
 		}()
 		time.Sleep(10 * time.Millisecond)

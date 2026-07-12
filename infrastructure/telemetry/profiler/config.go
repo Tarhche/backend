@@ -297,10 +297,11 @@ func endpointFromEnv() string {
 // used by OTEL_EXPORTER_OTLP_HEADERS.
 func headersFromEnv() map[string]string {
 	raw := strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_PROFILES_HEADERS"))
-	if raw == "" {
+	if len(raw) == 0 {
 		raw = strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_HEADERS"))
 	}
-	if raw == "" {
+
+	if len(raw) == 0 {
 		return nil
 	}
 
