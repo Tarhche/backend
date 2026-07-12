@@ -35,7 +35,7 @@ runs:
 
   steps:
     - name: Checkout
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
 
     - name: Login to GitHub Container Registry
       uses: docker/login-action@v4
@@ -53,7 +53,7 @@ runs:
       uses: docker/setup-buildx-action@v4
 
     - name: Cache Docker layers
-      uses: actions/cache@v5
+      uses: actions/cache@v6
       with:
         path: ${{ runner.temp }}/.buildx-cache
         key: ${{ runner.os }}-buildx-${{ github.sha }}
@@ -73,7 +73,7 @@ runs:
     - name: Build image and push (optional)
       uses: useblacksmith/build-push-action@v2
       with:
-        platforms: linux/amd64,linux/arm64
+        platforms: linux/amd64,linux/arm64,linux/arm/v7
         push: ${{ inputs.push == 'true' }}
         context: ${{ inputs.context }}
         file: ${{ inputs.dockerfile }}
