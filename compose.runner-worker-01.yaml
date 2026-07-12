@@ -18,6 +18,11 @@ services:
         limits:
           cpus: '0.10'
           memory: 50M
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
     environment:
       RUNNER_WORKER_NAME: runner-worker-01
       NATS_URL: ${BACKEND_NATS_URL}

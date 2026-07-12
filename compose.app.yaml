@@ -20,6 +20,11 @@ services:
         limits:
           cpus: '0.20'
           memory: 200M
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
     environment:
       WEB_URL: ${WEB_URL}
       PRIVATE_KEY: ${BACKEND_PRIVATE_KEY}

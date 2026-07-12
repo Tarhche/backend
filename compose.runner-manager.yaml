@@ -19,6 +19,11 @@ services:
         limits:
           cpus: '0.20'
           memory: 150M
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
     environment:
       MONGO_SCHEME: ${BACKEND_MONGO_SCHEME}
       MONGO_USERNAME: ${BACKEND_MONGO_USERNAME}
