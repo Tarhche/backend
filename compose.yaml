@@ -4,6 +4,8 @@ x-app: &app
     context: .
     dockerfile: Dockerfile
   restart: unless-stopped
+  security_opt:
+    - no-new-privileges:true
   depends_on:
     - mongodb
     - nats
@@ -121,6 +123,8 @@ services:
   mongodb:
     image: mongo
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     ports:
       - "27017:27017"
     volumes:
@@ -133,6 +137,8 @@ services:
   mongodashboard:
     image: mongo-express
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     depends_on:
       - mongodb
     ports:
@@ -145,6 +151,8 @@ services:
   minio:
     image: minio/minio
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     ports:
       - "9100:9000"
       - "9001:9001"
@@ -155,6 +163,8 @@ services:
 
   minio_configure:
     image: minio/mc
+    security_opt:
+      - no-new-privileges:true
     depends_on:
       - minio
     entrypoint: >
@@ -164,6 +174,8 @@ services:
 
   nats:
     image: nats:2.14-alpine3.22
+    security_opt:
+      - no-new-privileges:true
     command: ["--jetstream", "--http_port", "8222", "--port", "4222", "--store_dir", "/data"]
     ports:
       - "4222:4222" # client port
@@ -174,6 +186,8 @@ services:
 
   natsdashboard:
     image: ghcr.io/nats-nui/nui:0.7
+    security_opt:
+      - no-new-privileges:true
     depends_on:
       - nats
     ports:
@@ -193,6 +207,8 @@ services:
   portainer:
     image: portainer/portainer-ce
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     depends_on:
       - docker
     ports:
@@ -207,6 +223,8 @@ services:
   mailserver:
     image: axllent/mailpit
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     ports:
       - "8092:8025" # web interface
       - "${MAIL_SMTP_PORT:-1025}:1025" # SMTP
@@ -219,6 +237,8 @@ services:
   grafana:
     image: grafana/otel-lgtm:0.28.0
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     ports:
       - "3001:3000" # Grafana UI (host 3001: 3000 is already used by WEB_URL's frontend)
       - "4317:4317" # OTLP gRPC
@@ -233,6 +253,8 @@ services:
   nats-exporter:
     image: natsio/prometheus-nats-exporter:0.19.1
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     depends_on:
       - nats
     command: ["-varz", "-connz", "-routez", "-subz", "-jsz", "all", "http://nats:8222"]
@@ -240,6 +262,8 @@ services:
   mongodb-exporter:
     image: percona/mongodb_exporter:0.51.0
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     depends_on:
       - mongodb
     environment:

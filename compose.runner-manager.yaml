@@ -1,6 +1,8 @@
 services:
   runner-manager:
     image: ${RUNNER_MANAGER_IMAGE}
+    security_opt:
+      - no-new-privileges:true
     networks:
       - runner_manager
       - mongodb

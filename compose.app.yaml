@@ -1,6 +1,8 @@
 services:
   app:
     image: ${APP_IMAGE}
+    security_opt:
+      - no-new-privileges:true
     networks:
       - app
       - mongodb

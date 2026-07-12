@@ -1,6 +1,8 @@
 services:
   runner-worker-03:
     image: ${RUNNER_WORKER_IMAGE}
+    security_opt:
+      - no-new-privileges:true
     networks:
       - nats
       - docker
