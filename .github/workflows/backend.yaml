@@ -167,7 +167,7 @@ jobs:
             export OTEL_EXPORTER_OTLP_PROTOCOL='${{ secrets.OTEL_EXPORTER_OTLP_PROTOCOL }}'
             export OTEL_RESOURCE_ATTRIBUTES='${{ secrets.OTEL_RESOURCE_ATTRIBUTES }}'
             export OTEL_EXPORTER_OTLP_ENDPOINT='${{ secrets.OTEL_EXPORTER_OTLP_ENDPOINT }}'
-            export OTEL_EXPORTER_OTLP_HEADERS='${{ secrets.OTEL_EXPORTER_OTLP_HEADERS }}'
+            export OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT='${{ secrets.OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT }}'
 
             # Run Docker Compose
             cd /tmp/deployment_backend/

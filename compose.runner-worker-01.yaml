@@ -6,6 +6,7 @@ services:
     networks:
       - nats
       - docker
+      - monitoring
     deploy:
       mode: replicated
       replicas: 1
@@ -31,6 +32,7 @@ services:
       OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL}
       OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
+      OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT: ${OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT:-}
       OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
       PROFILING_ENABLED: ${PROFILING_ENABLED:-true}
 
@@ -40,4 +42,7 @@ networks:
     external: true
   docker:
     name: docker
+    external: true
+  monitoring:
+    name: monitoring
     external: true
