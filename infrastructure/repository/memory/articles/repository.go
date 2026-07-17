@@ -57,10 +57,7 @@ func (r *ArticlesRepository) GetCorrelationUUIDs(ctx context.Context, offset uin
 		return []string{}, nil
 	}
 
-	end := offset + limit
-	if end > uint(len(correlationUUIDs)) {
-		end = uint(len(correlationUUIDs))
-	}
+	end := min(offset+limit, uint(len(correlationUUIDs)))
 
 	return correlationUUIDs[offset:end], nil
 }

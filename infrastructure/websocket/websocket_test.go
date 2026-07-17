@@ -775,17 +775,15 @@ func TestWebsocket(t *testing.T) {
 
 		const N = 30
 		var wg sync.WaitGroup
-		for i := 0; i < N; i++ {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+		for range N {
+			wg.Go(func() {
 				client, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 				if err != nil {
 					t.Errorf("dial: %v", err)
 					return
 				}
 				client.Close()
-			}()
+			})
 		}
 		wg.Wait()
 

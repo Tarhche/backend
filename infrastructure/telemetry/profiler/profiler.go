@@ -93,11 +93,9 @@ func (p *Profiler) Start(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	p.cancel = cancel
 
-	p.wg.Add(1)
-	go func() {
-		defer p.wg.Done()
+	p.wg.Go(func() {
 		p.exporter.run()
-	}()
+	})
 
 	monitor := newCPUMonitor()
 
@@ -126,11 +124,9 @@ func (p *Profiler) Start(ctx context.Context) error {
 	}
 
 	for _, collector := range collectors {
-		p.wg.Add(1)
-		go func() {
-			defer p.wg.Done()
+		p.wg.Go(func() {
 			collector.run(ctx)
-		}()
+		})
 	}
 
 	p.logger.Info("profiler: continuous profiling started",

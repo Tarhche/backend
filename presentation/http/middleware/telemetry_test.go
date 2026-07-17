@@ -119,7 +119,7 @@ func TestTelemetryContextPropagation(t *testing.T) {
 		contextValue := "test-value"
 		ctx := context.WithValue(context.Background(), contextKey, contextValue)
 
-		var receivedValue interface{}
+		var receivedValue any
 
 		next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			receivedValue = r.Context().Value(contextKey)
@@ -474,7 +474,7 @@ func TestTelemetryMultipleRequests(t *testing.T) {
 		})
 		m := NewTelemetryMiddleware("test", next)
 
-		for i := 0; i < 3; i++ {
+		for range 3 {
 			req := httptest.NewRequest(http.MethodGet, "/", nil)
 			res := httptest.NewRecorder()
 			m.ServeHTTP(res, req)
