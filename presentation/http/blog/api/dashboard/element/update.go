@@ -36,6 +36,7 @@ func (h *updateHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	var request updateElement.Request
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		rw.WriteHeader(http.StatusBadRequest)
+
 		return
 	}
 

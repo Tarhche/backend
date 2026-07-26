@@ -39,6 +39,13 @@ type cardsComponentResponse struct {
 	Items      []itemComponentResponse `json:"items"`
 }
 
+type stackComponentResponse struct {
+	Type             string                  `json:"type"`
+	HighlightCurrent bool                    `json:"highlight_current"`
+	VisibleNeighbors uint                    `json:"visible_neighbors"`
+	Items            []itemComponentResponse `json:"items"`
+}
+
 func toComponentResponse(c element.Component) any {
 	switch c.Type() {
 	case component.ComponentTypeItem:
@@ -79,6 +86,19 @@ func toComponentResponse(c element.Component) any {
 			Title:      cards.Title,
 			IsCarousel: cards.IsCarousel,
 			Items:      items,
+		}
+	case component.ComponentTypeStack:
+		stack := c.(component.Stack)
+		items := make([]itemComponentResponse, len(stack.ItemsList))
+		for i := range stack.ItemsList {
+			items[i] = toComponentResponse(stack.ItemsList[i]).(itemComponentResponse)
+		}
+
+		return stackComponentResponse{
+			Type:             c.Type(),
+			HighlightCurrent: stack.HighlightCurrent,
+			VisibleNeighbors: stack.VisibleNeighbors,
+			Items:            items,
 		}
 	}
 

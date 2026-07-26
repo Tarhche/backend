@@ -76,6 +76,56 @@ func TestRequest_Validate(t *testing.T) {
 			t.Errorf("Validate() returned %d errors, want 0: %v", len(errs), errs)
 		}
 	})
+
+	t.Run("valid request with stack component", func(t *testing.T) {
+		req := Request{
+			Body: &stackComponentRequest{
+				Type:             component.ComponentTypeStack,
+				HighlightCurrent: true,
+				VisibleNeighbors: 2,
+				Items: []itemComponentRequest{
+					{
+						Type:        component.ComponentTypeItem,
+						ContentUUID: "test-uuid-1",
+						ContentType: "article",
+					},
+					{
+						Type:        component.ComponentTypeItem,
+						ContentUUID: "test-uuid-2",
+						ContentType: "article",
+					},
+				},
+			},
+			Venues: []string{"venue1"},
+		}
+
+		errs := req.Validate()
+
+		if len(errs) != 0 {
+			t.Errorf("Validate() returned %d errors, want 0: %v", len(errs), errs)
+		}
+	})
+
+	t.Run("invalid request with stack component", func(t *testing.T) {
+		req := Request{
+			Body: &stackComponentRequest{
+				Type: component.ComponentTypeStack,
+				Items: []itemComponentRequest{
+					{
+						Type:        component.ComponentTypeItem,
+						ContentType: "article",
+					},
+				},
+			},
+			Venues: []string{"venue1"},
+		}
+
+		errs := req.Validate()
+
+		if _, ok := errs["body.items.0.content_uuid"]; !ok {
+			t.Errorf("Validate() returned %v, want an error on body.items.0.content_uuid", errs)
+		}
+	})
 }
 
 func TestRequest_UnmarshalJSON(t *testing.T) {
@@ -122,10 +172,25 @@ func TestRequest_UnmarshalJSON(t *testing.T) {
 			},
 		},
 		{
-			name:    "returns error for unsupported component type",
+			name:    "unmarshals stack component",
+			json:    `{"body":{"type":"stack","highlight_current":true,"visible_neighbors":3,"items":[{"type":"item","content_uuid":"test-uuid","content_type":"article"}]},"venues":["venue1"]}`,
+			wantErr: false,
+			check: func(r *Request) bool {
+				stack, ok := r.Body.(*stackComponentRequest)
+				return ok && stack.Type == component.ComponentTypeStack &&
+					stack.HighlightCurrent && stack.VisibleNeighbors == 3 &&
+					len(stack.Items) == 1 && len(r.Venues) == 1
+			},
+		},
+		{
+			// Not a decode error: an unsupported type leaves the body unset and
+			// Validate reports it, so the caller gets a translated message.
+			name:    "leaves an unsupported component type for validation",
 			json:    `{"body":{"type":"unsupported"},"venues":["venue1"]}`,
-			wantErr: true,
-			check:   func(r *Request) bool { return true },
+			wantErr: false,
+			check: func(r *Request) bool {
+				return r.Body == nil && r.Validate()["body.type"] == "invalid_value"
+			},
 		},
 		{
 			name:    "returns error for malformed json",

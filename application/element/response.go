@@ -10,6 +10,7 @@ import (
 )
 
 type Response struct {
+	UUID string `json:"uuid"`
 	Type string `json:"type"`
 	Body any    `json:"body"`
 }
@@ -51,6 +52,12 @@ type cardsComponentResponse struct {
 	Items      []itemComponentResponse `json:"items"`
 }
 
+type stackComponentResponse struct {
+	HighlightCurrent bool                    `json:"highlight_current"`
+	VisibleNeighbors uint                    `json:"visible_neighbors"`
+	Items            []itemComponentResponse `json:"items"`
+}
+
 func NewResponse(elements []element.Element, elementsContent []article.Article, authors []user.User) []Response {
 	authorByUUID := make(map[string]user.User, len(authors))
 	for i := range authors {
@@ -59,6 +66,7 @@ func NewResponse(elements []element.Element, elementsContent []article.Article, 
 
 	response := make([]Response, len(elements))
 	for i := range elements {
+		response[i].UUID = elements[i].UUID
 		response[i].Type = elements[i].Body.Type()
 		response[i].Body = toComponentResponse(elements[i].Body, elementsContent, authorByUUID)
 	}
@@ -69,20 +77,17 @@ func NewResponse(elements []element.Element, elementsContent []article.Article, 
 func toComponentResponse(ec element.Component, elementsContent []article.Article, authors map[string]user.User) any {
 	var c any
 
-	if ec.Type() == component.ComponentTypeJumbotron {
+	switch ec.Type() {
+	case component.ComponentTypeJumbotron:
 		c = toJumbotronResponse(ec.(component.Jumbotron), elementsContent, authors)
-	}
-
-	if ec.Type() == component.ComponentTypeFeatured {
+	case component.ComponentTypeFeatured:
 		c = toFeaturedResponse(ec.(component.Featured), elementsContent, authors)
-	}
-
-	if ec.Type() == component.ComponentTypeItem {
+	case component.ComponentTypeItem:
 		c = toItemResponse(ec.(component.Item), elementsContent, authors)
-	}
-
-	if ec.Type() == component.ComponentTypeCards {
+	case component.ComponentTypeCards:
 		c = toCardsResponse(ec.(component.Cards), elementsContent, authors)
+	case component.ComponentTypeStack:
+		c = toStackResponse(ec.(component.Stack), elementsContent, authors)
 	}
 
 	return c
@@ -117,6 +122,19 @@ func toCardsResponse(c component.Cards, elementsContent []article.Article, autho
 		Title:      c.Title,
 		IsCarousel: c.IsCarousel,
 		Items:      items,
+	}
+}
+
+func toStackResponse(c component.Stack, elementsContent []article.Article, authors map[string]user.User) stackComponentResponse {
+	items := make([]itemComponentResponse, len(c.ItemsList))
+	for i := range c.ItemsList {
+		items[i] = toItemResponse(c.ItemsList[i], elementsContent, authors)
+	}
+
+	return stackComponentResponse{
+		HighlightCurrent: c.HighlightCurrent,
+		VisibleNeighbors: c.VisibleNeighbors,
+		Items:            items,
 	}
 }
 

@@ -41,6 +41,13 @@ type CardsBson struct {
 	Items      []ItemBson `bson:"items"`
 }
 
+type StackBson struct {
+	Type             string     `bson:"type"`
+	HighlightCurrent bool       `bson:"highlight_current"`
+	VisibleNeighbors uint       `bson:"visible_neighbors"`
+	Items            []ItemBson `bson:"items"`
+}
+
 func (e *ElementBson) UnmarshalBSON(data []byte) error {
 	var temporary struct {
 		Element   ElementBson `bson:",inline"`
@@ -88,6 +95,14 @@ func (e *ElementBson) UnmarshalBSON(data []byte) error {
 			return err
 		}
 		temporary.Element.Body = cards.Body
+	case component.ComponentTypeStack:
+		var stack struct {
+			Body StackBson `bson:"body"`
+		}
+		if err := bson.Unmarshal(data, &stack); err != nil {
+			return err
+		}
+		temporary.Element.Body = stack.Body
 	default:
 		return element.ErrUnSupportedComponent
 	}
@@ -193,6 +208,22 @@ func componentToBson(c element.Component) (any, error) {
 			IsCarousel: cards.IsCarousel,
 			Items:      items,
 		}
+	case component.ComponentTypeStack:
+		stack := c.(component.Stack)
+		items := make([]ItemBson, len(stack.ItemsList))
+		for i := range stack.ItemsList {
+			item, err := componentToBson(stack.ItemsList[i])
+			if err != nil {
+				return nil, err
+			}
+			items[i] = item.(ItemBson)
+		}
+		bson = StackBson{
+			Type:             stack.Type(),
+			HighlightCurrent: stack.HighlightCurrent,
+			VisibleNeighbors: stack.VisibleNeighbors,
+			Items:            items,
+		}
 	default:
 		return nil, element.ErrUnSupportedComponent
 	}
@@ -251,6 +282,20 @@ func bsonToComponent(b any) (element.Component, error) {
 			Title:      b.(CardsBson).Title,
 			IsCarousel: b.(CardsBson).IsCarousel,
 			ItemsList:  items,
+		}
+	case StackBson:
+		items := make([]component.Item, len(b.(StackBson).Items))
+		for i := range b.(StackBson).Items {
+			item, err := bsonToComponent(b.(StackBson).Items[i])
+			if err != nil {
+				return nil, err
+			}
+			items[i] = item.(component.Item)
+		}
+		c = component.Stack{
+			HighlightCurrent: b.(StackBson).HighlightCurrent,
+			VisibleNeighbors: b.(StackBson).VisibleNeighbors,
+			ItemsList:        items,
 		}
 	default:
 		return nil, element.ErrUnSupportedComponent

@@ -20,7 +20,9 @@ var _ json.Unmarshaler = &Request{}
 func (r *Request) Validate() domain.ValidationErrors {
 	validationErrors := make(domain.ValidationErrors)
 
-	if errs := r.Body.Validate(); len(errs) > 0 {
+	if r.Body == nil {
+		validationErrors["body.type"] = "invalid_value"
+	} else if errs := r.Body.Validate(); len(errs) > 0 {
 		for errKey, errValue := range errs {
 			validationErrors["body."+errKey] = errValue
 		}
@@ -153,6 +155,37 @@ func (r *cardsComponentRequest) Validate() domain.ValidationErrors {
 	return validationErrors
 }
 
+type stackComponentRequest struct {
+	Type             string                 `json:"type"`
+	HighlightCurrent bool                   `json:"highlight_current"`
+	VisibleNeighbors uint                   `json:"visible_neighbors"`
+	Items            []itemComponentRequest `json:"items"`
+}
+
+var _ domain.Validatable = &stackComponentRequest{}
+
+func (r *stackComponentRequest) Validate() domain.ValidationErrors {
+	validationErrors := make(domain.ValidationErrors)
+
+	if len(r.Type) == 0 {
+		validationErrors["type"] = "required_field"
+	}
+
+	if r.Type != component.ComponentTypeStack {
+		validationErrors["type"] = "invalid_value"
+	}
+
+	for i, item := range r.Items {
+		if errs := item.Validate(); len(errs) > 0 {
+			for errKey, errValue := range errs {
+				validationErrors["items."+strconv.Itoa(i)+"."+errKey] = errValue
+			}
+		}
+	}
+
+	return validationErrors
+}
+
 func (e *Request) UnmarshalJSON(data []byte) error {
 	var tmp struct {
 		Venues    []string `json:"venues"`
@@ -200,9 +233,18 @@ func (e *Request) UnmarshalJSON(data []byte) error {
 			return err
 		}
 		e.Body = &component.Body
-	default:
-		return element.ErrUnSupportedComponent
+	case component.ComponentTypeStack:
+		var component struct {
+			Body stackComponentRequest `json:"body"`
+		}
+		if err := json.Unmarshal(data, &component); err != nil {
+			return err
+		}
+		e.Body = &component.Body
 	}
+
+	// An unsupported type is left for Validate to report, so the caller gets a
+	// translated validation error instead of an undecodable request.
 
 	e.Venues = tmp.Venues
 
@@ -258,6 +300,20 @@ func (r *Request) ToElement() *element.Element {
 			Title:      r.Body.(*cardsComponentRequest).Title,
 			IsCarousel: r.Body.(*cardsComponentRequest).IsCarousel,
 			ItemsList:  items,
+		}
+	case *stackComponentRequest:
+		items := make([]component.Item, len(r.Body.(*stackComponentRequest).Items))
+		for i := range r.Body.(*stackComponentRequest).Items {
+			items[i] = component.Item{
+				ContentUUID: r.Body.(*stackComponentRequest).Items[i].ContentUUID,
+				ContentType: r.Body.(*stackComponentRequest).Items[i].ContentType,
+			}
+		}
+
+		e.Body = component.Stack{
+			HighlightCurrent: r.Body.(*stackComponentRequest).HighlightCurrent,
+			VisibleNeighbors: r.Body.(*stackComponentRequest).VisibleNeighbors,
+			ItemsList:        items,
 		}
 	}
 
