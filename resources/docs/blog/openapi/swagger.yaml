@@ -85,6 +85,30 @@ definitions:
       errors:
         $ref: '#/definitions/domain.ValidationErrors'
     type: object
+  createnote.Request:
+    properties:
+      body:
+        type: string
+      correlation_uuid:
+        type: string
+      language_code:
+        type: string
+      published_at:
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+    type: object
+  createnote.Response:
+    properties:
+      correlation_uuid:
+        type: string
+      errors:
+        $ref: '#/definitions/domain.ValidationErrors'
+      language_code:
+        type: string
+    type: object
   createrole.Request:
     properties:
       description:
@@ -178,6 +202,8 @@ definitions:
       body: {}
       type:
         type: string
+      uuid:
+        type: string
     type: object
   forgetpassword.Request:
     properties:
@@ -202,6 +228,12 @@ definitions:
         $ref: '#/definitions/getArticlesByAuthor.languageResponse'
       pagination:
         $ref: '#/definitions/getArticlesByAuthor.paginationResponse'
+      totals:
+        allOf:
+        - $ref: '#/definitions/getArticlesByAuthor.totalsResponse'
+        description: |-
+          How much of each kind the author has published, so the page can label both
+          content tabs without asking twice.
     type: object
   getArticlesByAuthor.articleResponse:
     properties:
@@ -249,67 +281,11 @@ definitions:
       total_pages:
         type: integer
     type: object
-  getArticlesByHashtag.Response:
+  getArticlesByAuthor.totalsResponse:
     properties:
-      elements:
-        items:
-          $ref: '#/definitions/element.Response'
-        type: array
-      errors:
-        $ref: '#/definitions/domain.ValidationErrors'
-      items:
-        items:
-          $ref: '#/definitions/getArticlesByHashtag.articleResponse'
-        type: array
-      language_code:
-        $ref: '#/definitions/getArticlesByHashtag.languageResponse'
-      pagination:
-        $ref: '#/definitions/getArticlesByHashtag.paginationResponse'
-    type: object
-  getArticlesByHashtag.articleResponse:
-    properties:
-      author:
-        $ref: '#/definitions/getArticlesByHashtag.authorResponse'
-      available_languages:
-        items:
-          $ref: '#/definitions/getArticlesByHashtag.languageResponse'
-        type: array
-      correlation_uuid:
-        type: string
-      cover:
-        type: string
-      excerpt:
-        type: string
-      published_at:
-        type: string
-      title:
-        type: string
-      video:
-        type: string
-    type: object
-  getArticlesByHashtag.authorResponse:
-    properties:
-      avatar:
-        type: string
-      name:
-        type: string
-      username:
-        type: string
-      uuid:
-        type: string
-    type: object
-  getArticlesByHashtag.languageResponse:
-    properties:
-      code:
-        type: string
-      name:
-        type: string
-    type: object
-  getArticlesByHashtag.paginationResponse:
-    properties:
-      current_page:
+      articles:
         type: integer
-      total_pages:
+      notes:
         type: integer
     type: object
   getComment.Response:
@@ -354,6 +330,97 @@ definitions:
         items:
           type: string
         type: array
+    type: object
+  getContentsByHashtag.Response:
+    properties:
+      elements:
+        items:
+          $ref: '#/definitions/element.Response'
+        type: array
+      errors:
+        $ref: '#/definitions/domain.ValidationErrors'
+      items:
+        items:
+          $ref: '#/definitions/getContentsByHashtag.contentResponse'
+        type: array
+      language_code:
+        $ref: '#/definitions/getContentsByHashtag.languageResponse'
+      pagination:
+        $ref: '#/definitions/getContentsByHashtag.paginationResponse'
+      totals:
+        allOf:
+        - $ref: '#/definitions/getContentsByHashtag.totalsResponse'
+        description: |-
+          How much of each kind the hashtag has, so the page can label both tabs
+          without asking twice.
+      type:
+        description: |-
+          Type is the kind of content Items holds, and the tab the page should show
+          as selected — the requested one, or the one picked on the caller's behalf.
+        type: string
+    type: object
+  getContentsByHashtag.authorResponse:
+    properties:
+      avatar:
+        type: string
+      name:
+        type: string
+      username:
+        type: string
+      uuid:
+        type: string
+    type: object
+  getContentsByHashtag.contentResponse:
+    properties:
+      author:
+        $ref: '#/definitions/getContentsByHashtag.authorResponse'
+      available_languages:
+        items:
+          $ref: '#/definitions/getContentsByHashtag.languageResponse'
+        type: array
+      body:
+        description: notes only
+        type: string
+      correlation_uuid:
+        type: string
+      cover:
+        description: articles only
+        type: string
+      excerpt:
+        type: string
+      published_at:
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+      title:
+        type: string
+      type:
+        type: string
+      video:
+        type: string
+    type: object
+  getContentsByHashtag.languageResponse:
+    properties:
+      code:
+        type: string
+      name:
+        type: string
+    type: object
+  getContentsByHashtag.paginationResponse:
+    properties:
+      current_page:
+        type: integer
+      total_pages:
+        type: integer
+    type: object
+  getContentsByHashtag.totalsResponse:
+    properties:
+      articles:
+        type: integer
+      notes:
+        type: integer
     type: object
   getNode.Response:
     properties:
@@ -411,6 +478,82 @@ definitions:
         type: array
       pagination:
         $ref: '#/definitions/getNodes.Pagination'
+    type: object
+  getNotesByAuthor.Response:
+    properties:
+      author:
+        $ref: '#/definitions/getNotesByAuthor.authorResponse'
+      elements:
+        items:
+          $ref: '#/definitions/element.Response'
+        type: array
+      errors:
+        $ref: '#/definitions/domain.ValidationErrors'
+      items:
+        items:
+          $ref: '#/definitions/getNotesByAuthor.noteResponse'
+        type: array
+      language_code:
+        $ref: '#/definitions/getNotesByAuthor.languageResponse'
+      pagination:
+        $ref: '#/definitions/getNotesByAuthor.paginationResponse'
+      totals:
+        allOf:
+        - $ref: '#/definitions/getNotesByAuthor.totalsResponse'
+        description: |-
+          How much of each kind the author has published, so the page can label both
+          content tabs without asking twice.
+    type: object
+  getNotesByAuthor.authorResponse:
+    properties:
+      avatar:
+        type: string
+      created_at:
+        type: string
+      name:
+        type: string
+      username:
+        type: string
+      uuid:
+        type: string
+    type: object
+  getNotesByAuthor.languageResponse:
+    properties:
+      code:
+        type: string
+      name:
+        type: string
+    type: object
+  getNotesByAuthor.noteResponse:
+    properties:
+      available_languages:
+        items:
+          $ref: '#/definitions/getNotesByAuthor.languageResponse'
+        type: array
+      body:
+        type: string
+      correlation_uuid:
+        type: string
+      published_at:
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+    type: object
+  getNotesByAuthor.paginationResponse:
+    properties:
+      current_page:
+        type: integer
+      total_pages:
+        type: integer
+    type: object
+  getNotesByAuthor.totalsResponse:
+    properties:
+      articles:
+        type: integer
+      notes:
+        type: integer
     type: object
   getUserBookmarks.Response:
     properties:
@@ -654,6 +797,89 @@ definitions:
         type: string
     type: object
   getlanguages.pagination:
+    properties:
+      current_page:
+        type: integer
+      total_pages:
+        type: integer
+    type: object
+  getnote.author:
+    properties:
+      avatar:
+        type: string
+      name:
+        type: string
+      username:
+        type: string
+      uuid:
+        type: string
+    type: object
+  getnote.authorResponse:
+    properties:
+      avatar:
+        type: string
+      name:
+        type: string
+      username:
+        type: string
+      uuid:
+        type: string
+    type: object
+  getnote.languageResponse:
+    properties:
+      code:
+        type: string
+      name:
+        type: string
+    type: object
+  getnotes.Response:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/getnotes.noteResponse'
+        type: array
+      pagination:
+        $ref: '#/definitions/getnotes.pagination'
+    type: object
+  getnotes.author:
+    properties:
+      avatar:
+        type: string
+      name:
+        type: string
+      username:
+        type: string
+      uuid:
+        type: string
+    type: object
+  getnotes.corrolatedNoteResponse:
+    properties:
+      author:
+        $ref: '#/definitions/getnotes.author'
+      body:
+        type: string
+      language:
+        $ref: '#/definitions/getnotes.languageResponse'
+      published_at:
+        type: string
+    type: object
+  getnotes.languageResponse:
+    properties:
+      code:
+        type: string
+      name:
+        type: string
+    type: object
+  getnotes.noteResponse:
+    properties:
+      correlation_uuid:
+        type: string
+      corrolated_items:
+        items:
+          $ref: '#/definitions/getnotes.corrolatedNoteResponse'
+        type: array
+    type: object
+  getnotes.pagination:
     properties:
       current_page:
         type: integer
@@ -1134,6 +1360,23 @@ definitions:
       name:
         type: string
     type: object
+  github_com_khanzadimahdi_testproject_application_dashboard_note_getNote.Response:
+    properties:
+      author:
+        $ref: '#/definitions/getnote.author'
+      body:
+        type: string
+      correlation_uuid:
+        type: string
+      language_code:
+        type: string
+      published_at:
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+    type: object
   github_com_khanzadimahdi_testproject_application_language_getLanguages.Response:
     properties:
       default_language:
@@ -1149,6 +1392,35 @@ definitions:
         type: string
       name:
         type: string
+    type: object
+  github_com_khanzadimahdi_testproject_application_note_getNote.Response:
+    properties:
+      author:
+        $ref: '#/definitions/getnote.authorResponse'
+      available_languages:
+        items:
+          $ref: '#/definitions/getnote.languageResponse'
+        type: array
+      body:
+        type: string
+      correlation_uuid:
+        type: string
+      elements:
+        items:
+          $ref: '#/definitions/element.Response'
+        type: array
+      language_code:
+        $ref: '#/definitions/getnote.languageResponse'
+      published_at:
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+      validation_errors:
+        additionalProperties:
+          type: string
+        type: object
     type: object
   github_com_khanzadimahdi_testproject_application_runner_manager_task_getTasks.Response:
     properties:
@@ -1527,6 +1799,21 @@ definitions:
       name:
         type: string
     type: object
+  updatenote.Request:
+    properties:
+      body:
+        type: string
+      correlation_uuid:
+        type: string
+      language_code:
+        type: string
+      published_at:
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+    type: object
   updateprofile.Request:
     properties:
       avatar:
@@ -1897,6 +2184,49 @@ paths:
             additionalProperties: true
             type: object
       summary: List articles by author
+      tags:
+      - authors
+  /authors/{identity}/notes:
+    get:
+      consumes:
+      - application/json
+      description: return a page of the most recent published notes for the given
+        author identity (UUID or username). Responds 404 when the author keeps their
+        notes private.
+      parameters:
+      - description: Author UUID or username
+        in: path
+        name: identity
+        required: true
+        type: string
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getNotesByAuthor.Response'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List notes by author
       tags:
       - authors
   /bookmarks:
@@ -3039,6 +3369,326 @@ paths:
       summary: Delete own file
       tags:
       - dashboard files
+  /dashboard/my/notes:
+    get:
+      consumes:
+      - application/json
+      description: page through notes in dashboard, grouped by correlation uuid
+      parameters:
+      - default: 1
+        description: Page
+        in: query
+        name: page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getnotes.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List dashboard notes
+      tags:
+      - dashboard notes
+    post:
+      consumes:
+      - application/json
+      description: create a new note in dashboard as current user
+      parameters:
+      - description: Note data
+        in: body
+        name: note
+        required: true
+        schema:
+          $ref: '#/definitions/createnote.Request'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/createnote.Response'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Create dashboard note
+      tags:
+      - dashboard notes
+    put:
+      consumes:
+      - application/json
+      description: update existing note fields, current user becomes the author
+      parameters:
+      - description: Note update payload
+        in: body
+        name: note
+        required: true
+        schema:
+          $ref: '#/definitions/updatenote.Request'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Update a dashboard note
+      tags:
+      - dashboard notes
+  /dashboard/my/notes/{correlationUUID}/{language_code}:
+    delete:
+      consumes:
+      - application/json
+      description: remove a note by correlation uuid and language
+      parameters:
+      - description: Note correlation UUID
+        in: path
+        name: correlationUUID
+        required: true
+        type: string
+      - description: Language code
+        in: path
+        name: language_code
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Delete dashboard note
+      tags:
+      - dashboard notes
+    get:
+      consumes:
+      - application/json
+      description: retrieve one note by correlation uuid and language
+      parameters:
+      - description: Note correlation UUID
+        in: path
+        name: correlationUUID
+        required: true
+        type: string
+      - description: Language code
+        in: path
+        name: language_code
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_note_getNote.Response'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get dashboard note
+      tags:
+      - dashboard notes
+  /dashboard/notes:
+    get:
+      consumes:
+      - application/json
+      description: page through notes in dashboard, grouped by correlation uuid
+      parameters:
+      - default: 1
+        description: Page
+        in: query
+        name: page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getnotes.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List dashboard notes
+      tags:
+      - dashboard notes
+    post:
+      consumes:
+      - application/json
+      description: create a new note in dashboard as current user
+      parameters:
+      - description: Note data
+        in: body
+        name: note
+        required: true
+        schema:
+          $ref: '#/definitions/createnote.Request'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/createnote.Response'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Create dashboard note
+      tags:
+      - dashboard notes
+    put:
+      consumes:
+      - application/json
+      description: update existing note fields, current user becomes the author
+      parameters:
+      - description: Note update payload
+        in: body
+        name: note
+        required: true
+        schema:
+          $ref: '#/definitions/updatenote.Request'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Update a dashboard note
+      tags:
+      - dashboard notes
+  /dashboard/notes/{correlationUUID}/{language_code}:
+    delete:
+      consumes:
+      - application/json
+      description: remove a note by correlation uuid and language
+      parameters:
+      - description: Note correlation UUID
+        in: path
+        name: correlationUUID
+        required: true
+        type: string
+      - description: Language code
+        in: path
+        name: language_code
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Delete dashboard note
+      tags:
+      - dashboard notes
+    get:
+      consumes:
+      - application/json
+      description: retrieve one note by correlation uuid and language
+      parameters:
+      - description: Note correlation UUID
+        in: path
+        name: correlationUUID
+        required: true
+        type: string
+      - description: Language code
+        in: path
+        name: language_code
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_note_getNote.Response'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get dashboard note
+      tags:
+      - dashboard notes
   /dashboard/permissions:
     get:
       consumes:
@@ -3553,13 +4203,21 @@ paths:
     get:
       consumes:
       - application/json
-      description: return a page of the most recent published articles with the given
-        hashtag
+      description: return a page of the most recent published articles or notes with
+        the given hashtag. Each type is paginated on its own count; omitting `type`
+        selects articles, or notes when the hashtag has no articles.
       parameters:
       - description: Hashtag
         in: path
         name: hashtag
         required: true
+        type: string
+      - description: Content type
+        enum:
+        - article
+        - note
+        in: query
+        name: type
         type: string
       - default: 1
         description: Page number
@@ -3572,7 +4230,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/getArticlesByHashtag.Response'
+            $ref: '#/definitions/getContentsByHashtag.Response'
         "400":
           description: Bad Request
           schema:
@@ -3583,7 +4241,7 @@ paths:
           schema:
             additionalProperties: true
             type: object
-      summary: List articles by hashtag
+      summary: List contents by hashtag
       tags:
       - hashtags
   /home:
@@ -3683,6 +4341,43 @@ paths:
       summary: Get node
       tags:
       - runner nodes
+  /notes/{uuid}:
+    get:
+      consumes:
+      - application/json
+      description: return a published note by its correlation uuid, in the requested
+        language
+      parameters:
+      - description: Note correlation UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_note_getNote.Response'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Show a published note
+      tags:
+      - notes
   /tasks:
     get:
       consumes:

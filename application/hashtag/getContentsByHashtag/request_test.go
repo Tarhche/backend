@@ -1,4 +1,4 @@
-package getArticlesByHashtag
+package getContentsByHashtag
 
 import (
 	"testing"
@@ -46,6 +46,32 @@ func TestRequest_Validate(t *testing.T) {
 				Page:    1,
 			},
 			want: domain.ValidationErrors{},
+		},
+		{
+			name: "valid request asking for the articles tab",
+			request: Request{
+				Hashtag: "golang",
+				Type:    TypeArticle,
+			},
+			want: domain.ValidationErrors{},
+		},
+		{
+			name: "valid request asking for the notes tab",
+			request: Request{
+				Hashtag: "golang",
+				Type:    TypeNote,
+			},
+			want: domain.ValidationErrors{},
+		},
+		{
+			name: "invalid request with an unknown type",
+			request: Request{
+				Hashtag: "golang",
+				Type:    "video",
+			},
+			want: domain.ValidationErrors{
+				"type": "invalid_value",
+			},
 		},
 	}
 

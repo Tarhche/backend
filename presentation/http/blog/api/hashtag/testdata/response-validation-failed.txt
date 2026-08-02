@@ -1,15 +1,1 @@
-{
-    "errors": {
-        "hashtag": "this field is required"
-    },
-    "items": null,
-    "language_code": {
-        "code": "",
-        "name": ""
-    },
-    "elements": null,
-    "pagination": {
-        "total_pages": 0,
-        "current_page": 0
-    }
-}
+{"errors":{"hashtag":"this field is required"},"type":"","totals":{"articles":0,"notes":0},"items":null,"language_code":{"code":"","name":""},"elements":null,"pagination":{"total_pages":0,"current_page":0}}

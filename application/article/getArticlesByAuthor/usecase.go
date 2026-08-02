@@ -9,6 +9,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/article"
 	"github.com/khanzadimahdi/testproject/domain/language"
+	"github.com/khanzadimahdi/testproject/domain/note"
 	"github.com/khanzadimahdi/testproject/domain/user"
 )
 
@@ -16,6 +17,7 @@ const limit = 10
 
 type UseCase struct {
 	articleRepository  article.Repository
+	noteRepository     note.Repository
 	userRepository     user.Repository
 	languageRepository language.Repository
 	languageResolver   resolver.Resolver
@@ -25,6 +27,7 @@ type UseCase struct {
 
 func NewUseCase(
 	articleRepository article.Repository,
+	noteRepository note.Repository,
 	userRepository user.Repository,
 	languageRepository language.Repository,
 	languageResolver resolver.Resolver,
@@ -33,6 +36,7 @@ func NewUseCase(
 ) *UseCase {
 	return &UseCase{
 		articleRepository:  articleRepository,
+		noteRepository:     noteRepository,
 		userRepository:     userRepository,
 		languageRepository: languageRepository,
 		languageResolver:   languageResolver,
@@ -69,6 +73,12 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 	}
 
 	totalArticles, err := uc.articleRepository.CountPublishedByAuthor(ctx, author.UUID, languageCode)
+	if err != nil {
+		return nil, err
+	}
+
+	// Only for the notes tab's label.
+	totalNotes, err := uc.noteRepository.CountPublishedByAuthor(ctx, author.UUID, languageCode)
 	if err != nil {
 		return nil, err
 	}
@@ -117,7 +127,7 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		publishedLanguages[a[i].UUID] = al
 	}
 
-	return NewResponse(author, a, publishedLanguages, l, elementsResponse, totalPages, currentPage), nil
+	return NewResponse(author, a, publishedLanguages, l, elementsResponse, totalArticles, totalNotes, totalPages, currentPage), nil
 }
 
 func (uc *UseCase) resolveAuthor(ctx context.Context, request *Request) (user.User, error) {

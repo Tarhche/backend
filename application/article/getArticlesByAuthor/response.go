@@ -13,7 +13,10 @@ import (
 type Response struct {
 	ValidationErrors domain.ValidationErrors `json:"errors,omitempty"`
 
-	Author       authorResponse     `json:"author"`
+	Author authorResponse `json:"author"`
+	// How much of each kind the author has published, so the page can label both
+	// content tabs without asking twice.
+	Totals       totalsResponse     `json:"totals"`
 	LanguageCode languageResponse   `json:"language_code"`
 	Items        []articleResponse  `json:"items"`
 	Elements     []element.Response `json:"elements"`
@@ -28,6 +31,11 @@ type articleResponse struct {
 	Excerpt            string             `json:"excerpt"`
 	PublishedAt        string             `json:"published_at"`
 	AvailableLanguages []languageResponse `json:"available_languages"`
+}
+
+type totalsResponse struct {
+	Articles uint `json:"articles"`
+	Notes    uint `json:"notes"`
 }
 
 type authorResponse struct {
@@ -48,7 +56,7 @@ type paginationResponse struct {
 	CurrentPage uint `json:"current_page"`
 }
 
-func NewResponse(author user.User, a []article.Article, articlesPublishedLanguages map[string][]language.Language, requestedLanguage language.Language, elementsResponse []element.Response, totalPages, currentPage uint) *Response {
+func NewResponse(author user.User, a []article.Article, articlesPublishedLanguages map[string][]language.Language, requestedLanguage language.Language, elementsResponse []element.Response, totalArticles, totalNotes uint, totalPages, currentPage uint) *Response {
 	items := make([]articleResponse, len(a))
 
 	for i := range a {
@@ -76,6 +84,10 @@ func NewResponse(author user.User, a []article.Article, articlesPublishedLanguag
 			Avatar:    author.Avatar,
 			Username:  author.Username,
 			CreatedAt: author.CreatedAt.Format(time.RFC3339),
+		},
+		Totals: totalsResponse{
+			Articles: totalArticles,
+			Notes:    totalNotes,
 		},
 		LanguageCode: languageResponse{
 			Code: requestedLanguage.Code,

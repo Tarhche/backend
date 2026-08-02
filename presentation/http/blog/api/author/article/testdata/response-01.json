@@ -6,6 +6,10 @@
         "username": "author-username",
         "created_at": "0001-01-01T00:00:00Z"
     },
+    "totals": {
+        "articles": 1,
+        "notes": 2
+    },
     "items": [
         {
             "correlation_uuid": "article-correlation-uuid-1",

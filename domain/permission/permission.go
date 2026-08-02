@@ -20,6 +20,12 @@ const (
 	ArticlesUpdate = "articles.update"
 	ArticlesDelete = "articles.delete"
 
+	NotesIndex  = "notes.index"
+	NotesCreate = "notes.create"
+	NotesShow   = "notes.show"
+	NotesUpdate = "notes.update"
+	NotesDelete = "notes.delete"
+
 	CommentsIndex  = "comments.index"
 	CommentsCreate = "comments.create"
 	CommentsShow   = "comments.show"
@@ -74,4 +80,10 @@ const (
 
 	SelfFilesIndex  = "self.files.index"
 	SelfFilesDelete = "self.files.delete"
+
+	SelfNotesIndex  = "self.notes.index"
+	SelfNotesCreate = "self.notes.create"
+	SelfNotesShow   = "self.notes.show"
+	SelfNotesUpdate = "self.notes.update"
+	SelfNotesDelete = "self.notes.delete"
 )

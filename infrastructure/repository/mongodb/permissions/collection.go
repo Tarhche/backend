@@ -10,6 +10,13 @@ var collection []permission.Permission = []permission.Permission{
 	{Name: "update an article", Value: permission.ArticlesUpdate},
 	{Name: "delete an article", Value: permission.ArticlesDelete},
 
+	// notes
+	{Name: "list of notes", Value: permission.NotesIndex},
+	{Name: "create a note", Value: permission.NotesCreate},
+	{Name: "show a note", Value: permission.NotesShow},
+	{Name: "update a note", Value: permission.NotesUpdate},
+	{Name: "delete a note", Value: permission.NotesDelete},
+
 	// comments
 	{Name: "list of comments", Value: permission.CommentsIndex},
 	{Name: "create an comment", Value: permission.CommentsCreate},
@@ -72,4 +79,11 @@ var collection []permission.Permission = []permission.Permission{
 	// self files
 	{Name: "list of self files", Value: permission.SelfFilesIndex},
 	{Name: "delete a self file", Value: permission.SelfFilesDelete},
+
+	// self notes
+	{Name: "list of self notes", Value: permission.SelfNotesIndex},
+	{Name: "create a self note", Value: permission.SelfNotesCreate},
+	{Name: "show a self note", Value: permission.SelfNotesShow},
+	{Name: "update a self note", Value: permission.SelfNotesUpdate},
+	{Name: "delete a self note", Value: permission.SelfNotesDelete},
 }

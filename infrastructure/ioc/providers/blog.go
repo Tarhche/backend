@@ -15,7 +15,6 @@ import (
 	getArticle "github.com/khanzadimahdi/testproject/application/article/getArticle"
 	getArticles "github.com/khanzadimahdi/testproject/application/article/getArticles"
 	"github.com/khanzadimahdi/testproject/application/article/getArticlesByAuthor"
-	"github.com/khanzadimahdi/testproject/application/article/getArticlesByHashtag"
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/application/auth/forgetpassword"
 	"github.com/khanzadimahdi/testproject/application/auth/login"
@@ -63,6 +62,11 @@ import (
 	dashboardGetLanguage "github.com/khanzadimahdi/testproject/application/dashboard/language/getLanguage"
 	dashboardGetLanguages "github.com/khanzadimahdi/testproject/application/dashboard/language/getLanguages"
 	dashboardUpdateLanguage "github.com/khanzadimahdi/testproject/application/dashboard/language/updateLanguage"
+	dashboardCreateNote "github.com/khanzadimahdi/testproject/application/dashboard/note/createNote"
+	dashboardDeleteNote "github.com/khanzadimahdi/testproject/application/dashboard/note/deleteNote"
+	dashboardGetNote "github.com/khanzadimahdi/testproject/application/dashboard/note/getNote"
+	dashboardGetNotes "github.com/khanzadimahdi/testproject/application/dashboard/note/getNotes"
+	dashboardUpdateNote "github.com/khanzadimahdi/testproject/application/dashboard/note/updateNote"
 	dashboardGetPermissions "github.com/khanzadimahdi/testproject/application/dashboard/permission/getPermissions"
 	"github.com/khanzadimahdi/testproject/application/dashboard/profile/changepassword"
 	"github.com/khanzadimahdi/testproject/application/dashboard/profile/getRoles"
@@ -81,10 +85,13 @@ import (
 	"github.com/khanzadimahdi/testproject/application/dashboard/user/userchangepassword"
 	"github.com/khanzadimahdi/testproject/application/element"
 	getFile "github.com/khanzadimahdi/testproject/application/file/getFile"
+	"github.com/khanzadimahdi/testproject/application/hashtag/getContentsByHashtag"
 	"github.com/khanzadimahdi/testproject/application/home"
 	getLanguages "github.com/khanzadimahdi/testproject/application/language/getLanguages"
 	languageresolver "github.com/khanzadimahdi/testproject/application/language/resolver"
 	"github.com/khanzadimahdi/testproject/application/localize"
+	getNote "github.com/khanzadimahdi/testproject/application/note/getNote"
+	"github.com/khanzadimahdi/testproject/application/note/getNotesByAuthor"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/file"
 	"github.com/khanzadimahdi/testproject/domain/password"
@@ -103,6 +110,7 @@ import (
 	elementsrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/elements"
 	filesrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/files"
 	languagesrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/languages"
+	notesrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/notes"
 	permissionsrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/permissions"
 	rolesrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/roles"
 	userrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/users"
@@ -111,6 +119,7 @@ import (
 	articleAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/article"
 	authAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/auth"
 	authorArticleAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/author/article"
+	authorNoteAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/author/note"
 	bookmarkAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/bookmark"
 	commentAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/comment"
 	dashboardArticleAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/article"
@@ -120,6 +129,7 @@ import (
 	dashboardElementAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/element"
 	dashboardFileAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/file"
 	dashboardLanguageAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/language"
+	dashboardNoteAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/note"
 	dashboardPermissionAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/permission"
 	"github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/profile"
 	dashboardRoleAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/role"
@@ -128,6 +138,7 @@ import (
 	hashtagAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/hashtag"
 	homeapi "github.com/khanzadimahdi/testproject/presentation/http/blog/api/home"
 	languageAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/language"
+	noteAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/note"
 	"github.com/khanzadimahdi/testproject/presentation/http/blog/openapi"
 	"github.com/khanzadimahdi/testproject/presentation/http/middleware"
 	"github.com/nats-io/nats.go"
@@ -300,6 +311,7 @@ func blog(
 	}
 
 	articlesRepository := articlesrepository.NewRepository(database)
+	notesRepository := notesrepository.NewRepository(database)
 	commentsRepository := commentsrepository.NewRepository(database)
 	filesRepository := filesrepository.NewRepository(database)
 	elementsRepository := elementsrepository.NewRepository(database)
@@ -362,6 +374,10 @@ func blog(
 	dashboardDeleteArticleUsecase := dashboardDeleteArticle.NewUseCase(articlesRepository)
 	dashboardGetArticleUsecase := dashboardGetArticle.NewUseCase(articlesRepository, userRepository)
 	dashboardGetArticlesUsecase := dashboardGetArticles.NewUseCase(articlesRepository, userRepository, languageRepository)
+
+	dashboardDeleteNoteUsecase := dashboardDeleteNote.NewUseCase(notesRepository)
+	dashboardGetNoteUsecase := dashboardGetNote.NewUseCase(notesRepository, userRepository)
+	dashboardGetNotesUsecase := dashboardGetNotes.NewUseCase(notesRepository, userRepository, languageRepository)
 
 	dashboardDeleteCommentUsecase := dashboardDeleteComment.NewUseCase(commentsRepository)
 	dashboardGetCommentUsecase := dashboardGetComment.NewUseCase(commentsRepository, userRepository)
@@ -437,6 +453,11 @@ func blog(
 		return articleAPI.NewShowHandler(getArticle.NewUseCase(articlesRepository, userRepository, languageRepository, languageResolver, elementRetriever, va(c)))
 	}), httpCache))
 
+	// notes
+	mux.Handle("GET /api/notes/{uuid}", middleware.NewCacheMiddleware(scoped(func(c provider.Container) http.Handler {
+		return noteAPI.NewShowHandler(getNote.NewUseCase(notesRepository, userRepository, languageRepository, languageResolver, elementRetriever, va(c)))
+	}), httpCache))
+
 	// comments
 	mux.Handle("POST /api/comments", middleware.NewAuthenticateMiddleware(scoped(func(c provider.Container) http.Handler {
 		return commentAPI.NewCreateHandler(createComment.NewUseCase(commentsRepository, va(c)))
@@ -458,12 +479,15 @@ func blog(
 
 	// hashtags
 	mux.Handle("GET /api/hashtags/{hashtag}", middleware.NewCacheMiddleware(scoped(func(c provider.Container) http.Handler {
-		return hashtagAPI.NewShowHandler(getArticlesByHashtag.NewUseCase(articlesRepository, userRepository, languageRepository, languageResolver, elementRetriever, va(c)))
+		return hashtagAPI.NewShowHandler(getContentsByHashtag.NewUseCase(articlesRepository, notesRepository, userRepository, languageRepository, languageResolver, elementRetriever, va(c)))
 	}), httpCache))
 
 	// authors
 	mux.Handle("GET /api/authors/{identity}/articles", middleware.NewCacheMiddleware(scoped(func(c provider.Container) http.Handler {
-		return authorArticleAPI.NewIndexHandler(getArticlesByAuthor.NewUseCase(articlesRepository, userRepository, languageRepository, languageResolver, elementRetriever, va(c)))
+		return authorArticleAPI.NewIndexHandler(getArticlesByAuthor.NewUseCase(articlesRepository, notesRepository, userRepository, languageRepository, languageResolver, elementRetriever, va(c)))
+	}), httpCache))
+	mux.Handle("GET /api/authors/{identity}/notes", middleware.NewCacheMiddleware(scoped(func(c provider.Container) http.Handler {
+		return authorNoteAPI.NewIndexHandler(getNotesByAuthor.NewUseCase(notesRepository, articlesRepository, userRepository, languageRepository, languageResolver, elementRetriever, va(c)))
 	}), httpCache))
 
 	// files
@@ -530,6 +554,28 @@ func blog(
 	mux.Handle("PUT /api/dashboard/articles", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
 		return dashboardArticleAPI.NewUpdateHandler(dashboardUpdateArticle.NewUseCase(articlesRepository, languageRepository, va(c), tr(c)))
 	}), authorizer, permission.ArticlesUpdate), jwt, userRepository))
+
+	// notes
+	mux.Handle("POST /api/dashboard/notes", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardNoteAPI.NewCreateHandler(dashboardCreateNote.NewUseCase(notesRepository, languageRepository, va(c), tr(c)))
+	}), authorizer, permission.NotesCreate), jwt, userRepository))
+	mux.Handle("DELETE /api/dashboard/notes/{correlationUUID}/{language_code}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardNoteAPI.NewDeleteHandler(dashboardDeleteNoteUsecase), authorizer, permission.NotesDelete), jwt, userRepository))
+	mux.Handle("GET /api/dashboard/notes", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardNoteAPI.NewIndexHandler(dashboardGetNotesUsecase), authorizer, permission.NotesIndex), jwt, userRepository))
+	mux.Handle("GET /api/dashboard/notes/{correlationUUID}/{language_code}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardNoteAPI.NewShowHandler(dashboardGetNoteUsecase), authorizer, permission.NotesShow), jwt, userRepository))
+	mux.Handle("PUT /api/dashboard/notes", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardNoteAPI.NewUpdateHandler(dashboardUpdateNote.NewUseCase(notesRepository, languageRepository, va(c), tr(c)))
+	}), authorizer, permission.NotesUpdate), jwt, userRepository))
+
+	// self notes: same operations, scoped to the current user's own notes
+	mux.Handle("POST /api/dashboard/my/notes", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardNoteAPI.NewCreateHandler(dashboardCreateNote.NewUseCase(notesRepository, languageRepository, va(c), tr(c)))
+	}), authorizer, permission.SelfNotesCreate), jwt, userRepository))
+	mux.Handle("DELETE /api/dashboard/my/notes/{correlationUUID}/{language_code}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardNoteAPI.NewDeleteUserNoteHandler(dashboardDeleteNoteUsecase), authorizer, permission.SelfNotesDelete), jwt, userRepository))
+	mux.Handle("GET /api/dashboard/my/notes", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardNoteAPI.NewIndexUserNotesHandler(dashboardGetNotesUsecase), authorizer, permission.SelfNotesIndex), jwt, userRepository))
+	mux.Handle("GET /api/dashboard/my/notes/{correlationUUID}/{language_code}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardNoteAPI.NewShowUserNoteHandler(dashboardGetNoteUsecase), authorizer, permission.SelfNotesShow), jwt, userRepository))
+	mux.Handle("PUT /api/dashboard/my/notes", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardNoteAPI.NewUpdateUserNoteHandler(dashboardUpdateNote.NewUseCase(notesRepository, languageRepository, va(c), tr(c)))
+	}), authorizer, permission.SelfNotesUpdate), jwt, userRepository))
 
 	// comments
 	mux.Handle("POST /api/dashboard/comments", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
