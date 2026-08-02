@@ -8,7 +8,14 @@ import (
 
 const (
 	ObjectTypeArticle = "article"
+	ObjectTypeNote    = "note"
 )
+
+// IsValidObjectType reports whether s names something comments can be attached
+// to.
+func IsValidObjectType(s string) bool {
+	return s == ObjectTypeArticle || s == ObjectTypeNote
+}
 
 type Comment struct {
 	UUID         string

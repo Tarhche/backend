@@ -17,7 +17,7 @@ var _ domain.Validatable = &Request{}
 func (r *Request) Validate() domain.ValidationErrors {
 	validationErrors := make(domain.ValidationErrors)
 
-	if r.ObjectType != bookmark.ObjectTypeArticle {
+	if !bookmark.IsValidObjectType(r.ObjectType) {
 		validationErrors["object_type"] = "invalid_value"
 	}
 

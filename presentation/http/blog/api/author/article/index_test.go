@@ -22,6 +22,7 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/articles"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/elements"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/languages"
+	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/notes"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
 	"github.com/khanzadimahdi/testproject/infrastructure/validator"
 )
@@ -39,6 +40,7 @@ func TestIndexHandler(t *testing.T) {
 
 		var (
 			articlesRepository  articles.MockArticlesRepository
+			notesRepository     notes.MockNotesRepository
 			elementsRepository  elements.MockElementsRepository
 			userRepository      users.MockUsersRepository
 			languagesRepository languages.MockLanguagesRepository
@@ -85,13 +87,14 @@ func TestIndexHandler(t *testing.T) {
 		defer userRepository.AssertExpectations(t)
 
 		articlesRepository.On("CountPublishedByAuthor", mock.Anything, testAuthorUUID, "EN").Once().Return(uint(len(fetched)), nil)
+		notesRepository.On("CountPublishedByAuthor", mock.Anything, testAuthorUUID, "EN").Once().Return(uint(2), nil)
 		articlesRepository.On("GetPublishedByAuthor", mock.Anything, testAuthorUUID, "EN", uint(0), uint(10)).Once().Return(fetched, nil)
 		elementsRepository.On("Count", mock.Anything).Once().Return(uint(0), nil)
 		articlesRepository.On("GetPublishedLanguageCodes", mock.Anything, mock.Anything).Return([]string{}, nil)
 		languagesRepository.On("GetByCodes", mock.Anything, []string{}).Return([]language.Language{}, nil)
 		defer articlesRepository.AssertExpectations(t)
 
-		useCase := getArticlesByAuthor.NewUseCase(&articlesRepository, &userRepository, &languagesRepository, &languageResolver, element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository, matcher.New()), &requestValidator)
+		useCase := getArticlesByAuthor.NewUseCase(&articlesRepository, &notesRepository, &userRepository, &languagesRepository, &languageResolver, element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository, matcher.New()), &requestValidator)
 		handler := NewIndexHandler(useCase)
 
 		request := httptest.NewRequest(http.MethodGet, "/?page=1", nil)
@@ -114,6 +117,7 @@ func TestIndexHandler(t *testing.T) {
 
 		var (
 			articlesRepository  articles.MockArticlesRepository
+			notesRepository     notes.MockNotesRepository
 			elementsRepository  elements.MockElementsRepository
 			userRepository      users.MockUsersRepository
 			languagesRepository languages.MockLanguagesRepository
@@ -140,11 +144,12 @@ func TestIndexHandler(t *testing.T) {
 		defer userRepository.AssertExpectations(t)
 
 		articlesRepository.On("CountPublishedByAuthor", mock.Anything, testAuthorUUID, "EN").Once().Return(uint(0), nil)
+		notesRepository.On("CountPublishedByAuthor", mock.Anything, testAuthorUUID, "EN").Once().Return(uint(2), nil)
 		articlesRepository.On("GetPublishedByAuthor", mock.Anything, testAuthorUUID, "EN", uint(0), uint(10)).Once().Return(nil, nil)
 		elementsRepository.On("Count", mock.Anything).Once().Return(uint(0), nil)
 		defer articlesRepository.AssertExpectations(t)
 
-		useCase := getArticlesByAuthor.NewUseCase(&articlesRepository, &userRepository, &languagesRepository, &languageResolver, element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository, matcher.New()), &requestValidator)
+		useCase := getArticlesByAuthor.NewUseCase(&articlesRepository, &notesRepository, &userRepository, &languagesRepository, &languageResolver, element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository, matcher.New()), &requestValidator)
 		handler := NewIndexHandler(useCase)
 
 		request := httptest.NewRequest(http.MethodGet, "/?page=1", nil)
@@ -163,6 +168,7 @@ func TestIndexHandler(t *testing.T) {
 
 		var (
 			articlesRepository  articles.MockArticlesRepository
+			notesRepository     notes.MockNotesRepository
 			elementsRepository  elements.MockElementsRepository
 			userRepository      users.MockUsersRepository
 			languagesRepository languages.MockLanguagesRepository
@@ -185,7 +191,7 @@ func TestIndexHandler(t *testing.T) {
 		userRepository.On("GetOneByIdentity", mock.Anything, "ghost").Once().Return(user.User{}, domain.ErrNotExists)
 		defer userRepository.AssertExpectations(t)
 
-		useCase := getArticlesByAuthor.NewUseCase(&articlesRepository, &userRepository, &languagesRepository, &languageResolver, element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository, matcher.New()), &requestValidator)
+		useCase := getArticlesByAuthor.NewUseCase(&articlesRepository, &notesRepository, &userRepository, &languagesRepository, &languageResolver, element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository, matcher.New()), &requestValidator)
 		handler := NewIndexHandler(useCase)
 
 		request := httptest.NewRequest(http.MethodGet, "/?page=1", nil)
@@ -207,6 +213,7 @@ func TestIndexHandler(t *testing.T) {
 
 		var (
 			articlesRepository  articles.MockArticlesRepository
+			notesRepository     notes.MockNotesRepository
 			elementsRepository  elements.MockElementsRepository
 			userRepository      users.MockUsersRepository
 			languagesRepository languages.MockLanguagesRepository
@@ -229,7 +236,7 @@ func TestIndexHandler(t *testing.T) {
 		userRepository.On("GetOneByIdentity", mock.Anything, testUsername).Once().Return(user.User{}, errors.New("boom"))
 		defer userRepository.AssertExpectations(t)
 
-		useCase := getArticlesByAuthor.NewUseCase(&articlesRepository, &userRepository, &languagesRepository, &languageResolver, element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository, matcher.New()), &requestValidator)
+		useCase := getArticlesByAuthor.NewUseCase(&articlesRepository, &notesRepository, &userRepository, &languagesRepository, &languageResolver, element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository, matcher.New()), &requestValidator)
 		handler := NewIndexHandler(useCase)
 
 		request := httptest.NewRequest(http.MethodGet, "/?page=1", nil)

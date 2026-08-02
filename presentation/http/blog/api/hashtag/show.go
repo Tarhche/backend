@@ -6,30 +6,31 @@ import (
 	"strconv"
 	"unsafe"
 
-	getArticlesByHashtag "github.com/khanzadimahdi/testproject/application/article/getArticlesByHashtag"
+	getContentsByHashtag "github.com/khanzadimahdi/testproject/application/hashtag/getContentsByHashtag"
 	"github.com/khanzadimahdi/testproject/application/localize"
 	infraTrace "github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
 	"go.opentelemetry.io/otel/trace"
 )
 
 type showHandler struct {
-	useCase *getArticlesByHashtag.UseCase
+	useCase *getContentsByHashtag.UseCase
 }
 
-func NewShowHandler(useCase *getArticlesByHashtag.UseCase) *showHandler {
+func NewShowHandler(useCase *getContentsByHashtag.UseCase) *showHandler {
 	return &showHandler{
 		useCase: useCase,
 	}
 }
 
-// @Summary		List articles by hashtag
-// @Description	return a page of the most recent published articles with the given hashtag
+// @Summary		List contents by hashtag
+// @Description	return a page of the most recent published articles or notes with the given hashtag. Each type is paginated on its own count; omitting `type` selects articles, or notes when the hashtag has no articles.
 // @Tags		hashtags
 // @Accept		json
 // @Produce		json
 // @Param		hashtag			path		string	true	"Hashtag"
+// @Param		type		    query		string	false	"Content type"	Enums(article, note)
 // @Param		page		    query		int		false	"Page number"	default(1)
-// @Success		200		{object}	getArticlesByHashtag.Response
+// @Success		200		{object}	getContentsByHashtag.Response
 // @Failure		400		{object}	map[string]interface{}
 // @Failure		500		{object}	map[string]interface{}
 // @Router		/hashtags/{hashtag} [get]
@@ -44,9 +45,10 @@ func (h *showHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 	hashtag := r.PathValue("hashtag")
 
-	request := &getArticlesByHashtag.Request{
+	request := &getContentsByHashtag.Request{
 		Page:         page,
 		Hashtag:      hashtag,
+		Type:         r.URL.Query().Get("type"),
 		LanguageCode: localize.FromContext(r.Context()),
 	}
 

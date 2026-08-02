@@ -7,7 +7,13 @@ import (
 
 const (
 	ObjectTypeArticle = "article"
+	ObjectTypeNote    = "note"
 )
+
+// IsValidObjectType reports whether s names something that can be bookmarked.
+func IsValidObjectType(s string) bool {
+	return s == ObjectTypeArticle || s == ObjectTypeNote
+}
 
 type Bookmark struct {
 	UUID         string

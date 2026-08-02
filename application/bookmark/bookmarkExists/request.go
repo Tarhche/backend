@@ -15,7 +15,7 @@ type Request struct {
 func (r *Request) Validate() domain.ValidationErrors {
 	errors := make(domain.ValidationErrors)
 
-	if r.ObjectType != bookmark.ObjectTypeArticle {
+	if !bookmark.IsValidObjectType(r.ObjectType) {
 		errors["object_type"] = "invalid_value"
 	}
 

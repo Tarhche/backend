@@ -1,4 +1,4 @@
-package getArticlesByHashtag
+package getContentsByHashtag
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/article"
 	"github.com/khanzadimahdi/testproject/domain/language"
+	"github.com/khanzadimahdi/testproject/domain/note"
 	"github.com/khanzadimahdi/testproject/domain/user"
 )
 
@@ -16,6 +17,7 @@ const limit = 10
 
 type UseCase struct {
 	articleRepository  article.Repository
+	noteRepository     note.Repository
 	userRepository     user.Repository
 	languageRepository language.Repository
 	languageResolver   resolver.Resolver
@@ -25,6 +27,7 @@ type UseCase struct {
 
 func NewUseCase(
 	articleRepository article.Repository,
+	noteRepository note.Repository,
 	userRepository user.Repository,
 	languageRepository language.Repository,
 	languageResolver resolver.Resolver,
@@ -33,6 +36,7 @@ func NewUseCase(
 ) *UseCase {
 	return &UseCase{
 		articleRepository:  articleRepository,
+		noteRepository:     noteRepository,
 		userRepository:     userRepository,
 		languageRepository: languageRepository,
 		languageResolver:   languageResolver,
@@ -70,6 +74,28 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		return nil, err
 	}
 
+	totalNotes, err := uc.noteRepository.CountPublishedByHashtags(ctx, hashtags, languageCode)
+	if err != nil {
+		return nil, err
+	}
+
+	// Each tab paginates on its own count. With no tab asked for, prefer
+	// articles, falling back to notes when the hashtag has none — so a hashtag
+	// used only on notes still opens on something.
+	selectedType := request.Type
+	if len(selectedType) == 0 {
+		if totalArticles == 0 && totalNotes > 0 {
+			selectedType = TypeNote
+		} else {
+			selectedType = TypeArticle
+		}
+	}
+
+	total := totalArticles
+	if selectedType == TypeNote {
+		total = totalNotes
+	}
+
 	currentPage := request.Page
 	if currentPage == 0 {
 		currentPage = 1
@@ -80,20 +106,38 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		offset = (currentPage - 1) * limit
 	}
 
-	totalPages := totalArticles / limit
+	totalPages := total / limit
 
-	if (totalPages * limit) != totalArticles {
+	if (totalPages * limit) != total {
 		totalPages++
 	}
 
-	a, err := uc.articleRepository.GetPublishedByHashtags(ctx, hashtags, languageCode, offset, limit)
-	if err != nil {
-		return nil, err
+	var contents []Content
+	if selectedType == TypeNote {
+		n, err := uc.noteRepository.GetPublishedByHashtags(ctx, hashtags, languageCode, offset, limit)
+		if err != nil {
+			return nil, err
+		}
+
+		contents = make([]Content, len(n))
+		for i := range n {
+			contents[i] = NewNoteContent(n[i])
+		}
+	} else {
+		a, err := uc.articleRepository.GetPublishedByHashtags(ctx, hashtags, languageCode, offset, limit)
+		if err != nil {
+			return nil, err
+		}
+
+		contents = make([]Content, len(a))
+		for i := range a {
+			contents[i] = NewArticleContent(a[i])
+		}
 	}
 
-	userUUIDs := make([]string, len(a))
-	for i := range a {
-		userUUIDs[i] = a[i].AuthorUUID
+	userUUIDs := make([]string, len(contents))
+	for i := range contents {
+		userUUIDs[i] = contents[i].AuthorUUID
 	}
 
 	authors, err := uc.userRepository.GetByUUIDs(ctx, userUUIDs)
@@ -110,19 +154,26 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		return nil, err
 	}
 
-	publishedLanguages := make(map[string][]language.Language, len(a))
-	for i := range a {
-		codes, err := uc.articleRepository.GetPublishedLanguageCodes(ctx, a[i].CorrelationUUID)
+	publishedLanguages := make(map[string][]language.Language, len(contents))
+	for i := range contents {
+		var codes []string
+		var err error
+
+		if contents[i].IsNote() {
+			codes, err = uc.noteRepository.GetPublishedLanguageCodes(ctx, contents[i].CorrelationUUID)
+		} else {
+			codes, err = uc.articleRepository.GetPublishedLanguageCodes(ctx, contents[i].CorrelationUUID)
+		}
 		if err != nil {
 			return nil, err
 		}
 
-		al, err := uc.languageRepository.GetByCodes(ctx, codes)
+		cl, err := uc.languageRepository.GetByCodes(ctx, codes)
 		if err != nil {
 			return nil, err
 		}
-		publishedLanguages[a[i].UUID] = al
+		publishedLanguages[contents[i].UUID] = cl
 	}
 
-	return NewResponse(a, authors, publishedLanguages, l, elementsResponse, totalPages, currentPage), nil
+	return NewResponse(selectedType, contents, authors, publishedLanguages, l, elementsResponse, totalArticles, totalNotes, totalPages, currentPage), nil
 }

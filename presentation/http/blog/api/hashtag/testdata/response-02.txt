@@ -1,12 +1,1 @@
-{
-    "items": [],
-    "language_code": {
-        "code": "EN",
-        "name": "English"
-    },
-    "elements": [],
-    "pagination": {
-        "total_pages": 0,
-        "current_page": 1
-    }
-}
+{"type":"article","totals":{"articles":0,"notes":0},"items":[],"language_code":{"code":"EN","name":"English"},"elements":[],"pagination":{"total_pages":0,"current_page":1}}

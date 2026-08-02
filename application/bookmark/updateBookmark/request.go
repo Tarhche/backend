@@ -23,7 +23,7 @@ func (r *Request) Validate() domain.ValidationErrors {
 		validationErrors["title"] = "required_field"
 	}
 
-	if r.ObjectType != bookmark.ObjectTypeArticle {
+	if !bookmark.IsValidObjectType(r.ObjectType) {
 		validationErrors["object_type"] = "invalid_value"
 	}
 

@@ -26,7 +26,7 @@ func (r *Request) Validate() domain.ValidationErrors {
 		validationErrors["body"] = "required_field"
 	}
 
-	if r.ObjectType != comment.ObjectTypeArticle {
+	if !comment.IsValidObjectType(r.ObjectType) {
 		validationErrors["object_type"] = "invalid_value"
 	}
 

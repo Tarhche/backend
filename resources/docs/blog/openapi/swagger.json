@@ -454,6 +454,66 @@
                 }
             }
         },
+        "/authors/{identity}/notes": {
+            "get": {
+                "description": "return a page of the most recent published notes for the given author identity (UUID or username). Responds 404 when the author keeps their notes private.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "authors"
+                ],
+                "summary": "List notes by author",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Author UUID or username",
+                        "name": "identity",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/getNotesByAuthor.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/bookmarks": {
             "put": {
                 "description": "create or update an article bookmark for authenticated user",
@@ -2142,6 +2202,478 @@
                 }
             }
         },
+        "/dashboard/my/notes": {
+            "get": {
+                "description": "page through notes in dashboard, grouped by correlation uuid",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard notes"
+                ],
+                "summary": "List dashboard notes",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page",
+                        "name": "page",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/getnotes.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "update existing note fields, current user becomes the author",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard notes"
+                ],
+                "summary": "Update a dashboard note",
+                "parameters": [
+                    {
+                        "description": "Note update payload",
+                        "name": "note",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/updatenote.Request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "create a new note in dashboard as current user",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard notes"
+                ],
+                "summary": "Create dashboard note",
+                "parameters": [
+                    {
+                        "description": "Note data",
+                        "name": "note",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/createnote.Request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/createnote.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/my/notes/{correlationUUID}/{language_code}": {
+            "get": {
+                "description": "retrieve one note by correlation uuid and language",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard notes"
+                ],
+                "summary": "Get dashboard note",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Note correlation UUID",
+                        "name": "correlationUUID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Language code",
+                        "name": "language_code",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_note_getNote.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "remove a note by correlation uuid and language",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard notes"
+                ],
+                "summary": "Delete dashboard note",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Note correlation UUID",
+                        "name": "correlationUUID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Language code",
+                        "name": "language_code",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/notes": {
+            "get": {
+                "description": "page through notes in dashboard, grouped by correlation uuid",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard notes"
+                ],
+                "summary": "List dashboard notes",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page",
+                        "name": "page",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/getnotes.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "update existing note fields, current user becomes the author",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard notes"
+                ],
+                "summary": "Update a dashboard note",
+                "parameters": [
+                    {
+                        "description": "Note update payload",
+                        "name": "note",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/updatenote.Request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "create a new note in dashboard as current user",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard notes"
+                ],
+                "summary": "Create dashboard note",
+                "parameters": [
+                    {
+                        "description": "Note data",
+                        "name": "note",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/createnote.Request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/createnote.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/notes/{correlationUUID}/{language_code}": {
+            "get": {
+                "description": "retrieve one note by correlation uuid and language",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard notes"
+                ],
+                "summary": "Get dashboard note",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Note correlation UUID",
+                        "name": "correlationUUID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Language code",
+                        "name": "language_code",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_note_getNote.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "remove a note by correlation uuid and language",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard notes"
+                ],
+                "summary": "Delete dashboard note",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Note correlation UUID",
+                        "name": "correlationUUID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Language code",
+                        "name": "language_code",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/dashboard/permissions": {
             "get": {
                 "description": "retrieve all permissions",
@@ -2899,7 +3431,7 @@
         },
         "/hashtags/{hashtag}": {
             "get": {
-                "description": "return a page of the most recent published articles with the given hashtag",
+                "description": "return a page of the most recent published articles or notes with the given hashtag. Each type is paginated on its own count; omitting `type` selects articles, or notes when the hashtag has no articles.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2909,7 +3441,7 @@
                 "tags": [
                     "hashtags"
                 ],
-                "summary": "List articles by hashtag",
+                "summary": "List contents by hashtag",
                 "parameters": [
                     {
                         "type": "string",
@@ -2917,6 +3449,16 @@
                         "name": "hashtag",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "enum": [
+                            "article",
+                            "note"
+                        ],
+                        "type": "string",
+                        "description": "Content type",
+                        "name": "type",
+                        "in": "query"
                     },
                     {
                         "type": "integer",
@@ -2930,7 +3472,7 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/getArticlesByHashtag.Response"
+                            "$ref": "#/definitions/getContentsByHashtag.Response"
                         }
                     },
                     "400": {
@@ -3076,6 +3618,59 @@
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/getNode.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/notes/{uuid}": {
+            "get": {
+                "description": "return a published note by its correlation uuid, in the requested language",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "notes"
+                ],
+                "summary": "Show a published note",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Note correlation UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_note_getNote.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
                         }
                     },
                     "404": {
@@ -3453,6 +4048,43 @@
                 }
             }
         },
+        "createnote.Request": {
+            "type": "object",
+            "properties": {
+                "body": {
+                    "type": "string"
+                },
+                "correlation_uuid": {
+                    "type": "string"
+                },
+                "language_code": {
+                    "type": "string"
+                },
+                "published_at": {
+                    "type": "string"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "createnote.Response": {
+            "type": "object",
+            "properties": {
+                "correlation_uuid": {
+                    "type": "string"
+                },
+                "errors": {
+                    "$ref": "#/definitions/domain.ValidationErrors"
+                },
+                "language_code": {
+                    "type": "string"
+                }
+            }
+        },
         "createrole.Request": {
             "type": "object",
             "properties": {
@@ -3595,6 +4227,9 @@
                 "body": {},
                 "type": {
                     "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
                 }
             }
         },
@@ -3632,6 +4267,14 @@
                 },
                 "pagination": {
                     "$ref": "#/definitions/getArticlesByAuthor.paginationResponse"
+                },
+                "totals": {
+                    "description": "How much of each kind the author has published, so the page can label both\ncontent tabs without asking twice.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/getArticlesByAuthor.totalsResponse"
+                        }
+                    ]
                 }
             }
         },
@@ -3706,99 +4349,13 @@
                 }
             }
         },
-        "getArticlesByHashtag.Response": {
+        "getArticlesByAuthor.totalsResponse": {
             "type": "object",
             "properties": {
-                "elements": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/element.Response"
-                    }
-                },
-                "errors": {
-                    "$ref": "#/definitions/domain.ValidationErrors"
-                },
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/getArticlesByHashtag.articleResponse"
-                    }
-                },
-                "language_code": {
-                    "$ref": "#/definitions/getArticlesByHashtag.languageResponse"
-                },
-                "pagination": {
-                    "$ref": "#/definitions/getArticlesByHashtag.paginationResponse"
-                }
-            }
-        },
-        "getArticlesByHashtag.articleResponse": {
-            "type": "object",
-            "properties": {
-                "author": {
-                    "$ref": "#/definitions/getArticlesByHashtag.authorResponse"
-                },
-                "available_languages": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/getArticlesByHashtag.languageResponse"
-                    }
-                },
-                "correlation_uuid": {
-                    "type": "string"
-                },
-                "cover": {
-                    "type": "string"
-                },
-                "excerpt": {
-                    "type": "string"
-                },
-                "published_at": {
-                    "type": "string"
-                },
-                "title": {
-                    "type": "string"
-                },
-                "video": {
-                    "type": "string"
-                }
-            }
-        },
-        "getArticlesByHashtag.authorResponse": {
-            "type": "object",
-            "properties": {
-                "avatar": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "username": {
-                    "type": "string"
-                },
-                "uuid": {
-                    "type": "string"
-                }
-            }
-        },
-        "getArticlesByHashtag.languageResponse": {
-            "type": "object",
-            "properties": {
-                "code": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                }
-            }
-        },
-        "getArticlesByHashtag.paginationResponse": {
-            "type": "object",
-            "properties": {
-                "current_page": {
+                "articles": {
                     "type": "integer"
                 },
-                "total_pages": {
+                "notes": {
                     "type": "integer"
                 }
             }
@@ -3866,6 +4423,140 @@
                     "items": {
                         "type": "string"
                     }
+                }
+            }
+        },
+        "getContentsByHashtag.Response": {
+            "type": "object",
+            "properties": {
+                "elements": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/element.Response"
+                    }
+                },
+                "errors": {
+                    "$ref": "#/definitions/domain.ValidationErrors"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/getContentsByHashtag.contentResponse"
+                    }
+                },
+                "language_code": {
+                    "$ref": "#/definitions/getContentsByHashtag.languageResponse"
+                },
+                "pagination": {
+                    "$ref": "#/definitions/getContentsByHashtag.paginationResponse"
+                },
+                "totals": {
+                    "description": "How much of each kind the hashtag has, so the page can label both tabs\nwithout asking twice.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/getContentsByHashtag.totalsResponse"
+                        }
+                    ]
+                },
+                "type": {
+                    "description": "Type is the kind of content Items holds, and the tab the page should show\nas selected — the requested one, or the one picked on the caller's behalf.",
+                    "type": "string"
+                }
+            }
+        },
+        "getContentsByHashtag.authorResponse": {
+            "type": "object",
+            "properties": {
+                "avatar": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                }
+            }
+        },
+        "getContentsByHashtag.contentResponse": {
+            "type": "object",
+            "properties": {
+                "author": {
+                    "$ref": "#/definitions/getContentsByHashtag.authorResponse"
+                },
+                "available_languages": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/getContentsByHashtag.languageResponse"
+                    }
+                },
+                "body": {
+                    "description": "notes only",
+                    "type": "string"
+                },
+                "correlation_uuid": {
+                    "type": "string"
+                },
+                "cover": {
+                    "description": "articles only",
+                    "type": "string"
+                },
+                "excerpt": {
+                    "type": "string"
+                },
+                "published_at": {
+                    "type": "string"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "title": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                },
+                "video": {
+                    "type": "string"
+                }
+            }
+        },
+        "getContentsByHashtag.languageResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "getContentsByHashtag.paginationResponse": {
+            "type": "object",
+            "properties": {
+                "current_page": {
+                    "type": "integer"
+                },
+                "total_pages": {
+                    "type": "integer"
+                }
+            }
+        },
+        "getContentsByHashtag.totalsResponse": {
+            "type": "object",
+            "properties": {
+                "articles": {
+                    "type": "integer"
+                },
+                "notes": {
+                    "type": "integer"
                 }
             }
         },
@@ -3954,6 +4645,122 @@
                 },
                 "pagination": {
                     "$ref": "#/definitions/getNodes.Pagination"
+                }
+            }
+        },
+        "getNotesByAuthor.Response": {
+            "type": "object",
+            "properties": {
+                "author": {
+                    "$ref": "#/definitions/getNotesByAuthor.authorResponse"
+                },
+                "elements": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/element.Response"
+                    }
+                },
+                "errors": {
+                    "$ref": "#/definitions/domain.ValidationErrors"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/getNotesByAuthor.noteResponse"
+                    }
+                },
+                "language_code": {
+                    "$ref": "#/definitions/getNotesByAuthor.languageResponse"
+                },
+                "pagination": {
+                    "$ref": "#/definitions/getNotesByAuthor.paginationResponse"
+                },
+                "totals": {
+                    "description": "How much of each kind the author has published, so the page can label both\ncontent tabs without asking twice.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/getNotesByAuthor.totalsResponse"
+                        }
+                    ]
+                }
+            }
+        },
+        "getNotesByAuthor.authorResponse": {
+            "type": "object",
+            "properties": {
+                "avatar": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                }
+            }
+        },
+        "getNotesByAuthor.languageResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "getNotesByAuthor.noteResponse": {
+            "type": "object",
+            "properties": {
+                "available_languages": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/getNotesByAuthor.languageResponse"
+                    }
+                },
+                "body": {
+                    "type": "string"
+                },
+                "correlation_uuid": {
+                    "type": "string"
+                },
+                "published_at": {
+                    "type": "string"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "getNotesByAuthor.paginationResponse": {
+            "type": "object",
+            "properties": {
+                "current_page": {
+                    "type": "integer"
+                },
+                "total_pages": {
+                    "type": "integer"
+                }
+            }
+        },
+        "getNotesByAuthor.totalsResponse": {
+            "type": "object",
+            "properties": {
+                "articles": {
+                    "type": "integer"
+                },
+                "notes": {
+                    "type": "integer"
                 }
             }
         },
@@ -4330,6 +5137,135 @@
             }
         },
         "getlanguages.pagination": {
+            "type": "object",
+            "properties": {
+                "current_page": {
+                    "type": "integer"
+                },
+                "total_pages": {
+                    "type": "integer"
+                }
+            }
+        },
+        "getnote.author": {
+            "type": "object",
+            "properties": {
+                "avatar": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                }
+            }
+        },
+        "getnote.authorResponse": {
+            "type": "object",
+            "properties": {
+                "avatar": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                }
+            }
+        },
+        "getnote.languageResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "getnotes.Response": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/getnotes.noteResponse"
+                    }
+                },
+                "pagination": {
+                    "$ref": "#/definitions/getnotes.pagination"
+                }
+            }
+        },
+        "getnotes.author": {
+            "type": "object",
+            "properties": {
+                "avatar": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                }
+            }
+        },
+        "getnotes.corrolatedNoteResponse": {
+            "type": "object",
+            "properties": {
+                "author": {
+                    "$ref": "#/definitions/getnotes.author"
+                },
+                "body": {
+                    "type": "string"
+                },
+                "language": {
+                    "$ref": "#/definitions/getnotes.languageResponse"
+                },
+                "published_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "getnotes.languageResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "getnotes.noteResponse": {
+            "type": "object",
+            "properties": {
+                "correlation_uuid": {
+                    "type": "string"
+                },
+                "corrolated_items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/getnotes.corrolatedNoteResponse"
+                    }
+                }
+            }
+        },
+        "getnotes.pagination": {
             "type": "object",
             "properties": {
                 "current_page": {
@@ -5069,6 +6005,32 @@
                 }
             }
         },
+        "github_com_khanzadimahdi_testproject_application_dashboard_note_getNote.Response": {
+            "type": "object",
+            "properties": {
+                "author": {
+                    "$ref": "#/definitions/getnote.author"
+                },
+                "body": {
+                    "type": "string"
+                },
+                "correlation_uuid": {
+                    "type": "string"
+                },
+                "language_code": {
+                    "type": "string"
+                },
+                "published_at": {
+                    "type": "string"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
         "github_com_khanzadimahdi_testproject_application_language_getLanguages.Response": {
             "type": "object",
             "properties": {
@@ -5091,6 +6053,50 @@
                 },
                 "name": {
                     "type": "string"
+                }
+            }
+        },
+        "github_com_khanzadimahdi_testproject_application_note_getNote.Response": {
+            "type": "object",
+            "properties": {
+                "author": {
+                    "$ref": "#/definitions/getnote.authorResponse"
+                },
+                "available_languages": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/getnote.languageResponse"
+                    }
+                },
+                "body": {
+                    "type": "string"
+                },
+                "correlation_uuid": {
+                    "type": "string"
+                },
+                "elements": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/element.Response"
+                    }
+                },
+                "language_code": {
+                    "$ref": "#/definitions/getnote.languageResponse"
+                },
+                "published_at": {
+                    "type": "string"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "validation_errors": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
                 }
             }
         },
@@ -5671,6 +6677,29 @@
                 },
                 "name": {
                     "type": "string"
+                }
+            }
+        },
+        "updatenote.Request": {
+            "type": "object",
+            "properties": {
+                "body": {
+                    "type": "string"
+                },
+                "correlation_uuid": {
+                    "type": "string"
+                },
+                "language_code": {
+                    "type": "string"
+                },
+                "published_at": {
+                    "type": "string"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },

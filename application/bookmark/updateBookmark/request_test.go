@@ -27,6 +27,18 @@ func TestRequest_Validate(t *testing.T) {
 			want: domain.ValidationErrors{},
 		},
 		{
+			name: "valid request bookmarking a note",
+			request: Request{
+				Keep:         true,
+				Title:        "My Bookmark",
+				ObjectType:   bookmark.ObjectTypeNote,
+				ObjectUUID:   "note-uuid-123",
+				LanguageCode: "en",
+				OwnerUUID:    "owner-uuid-456",
+			},
+			want: domain.ValidationErrors{},
+		},
+		{
 			name: "valid request with keep false",
 			request: Request{
 				Keep:         false,

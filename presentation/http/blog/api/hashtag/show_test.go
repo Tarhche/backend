@@ -11,17 +11,19 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	getArticlesByHashtag "github.com/khanzadimahdi/testproject/application/article/getArticlesByHashtag"
 	"github.com/khanzadimahdi/testproject/application/element"
+	getContentsByHashtag "github.com/khanzadimahdi/testproject/application/hashtag/getContentsByHashtag"
 	"github.com/khanzadimahdi/testproject/application/language/resolver"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/article"
 	"github.com/khanzadimahdi/testproject/domain/language"
+	"github.com/khanzadimahdi/testproject/domain/note"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/matcher"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/articles"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/elements"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/languages"
+	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/notes"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
 	"github.com/khanzadimahdi/testproject/infrastructure/validator"
 )
@@ -29,11 +31,12 @@ import (
 func TestShowHandler(t *testing.T) {
 	t.Parallel()
 
-	t.Run("show home data", func(t *testing.T) {
+	t.Run("shows the articles tab by default", func(t *testing.T) {
 		t.Parallel()
 
 		var (
 			articlesRepository  articles.MockArticlesRepository
+			notesRepository     notes.MockNotesRepository
 			elementsRepository  elements.MockElementsRepository
 			userRepository      users.MockUsersRepository
 			languagesRepository languages.MockLanguagesRepository
@@ -78,9 +81,20 @@ func TestShowHandler(t *testing.T) {
 			},
 		}
 
+		notes := []note.Note{
+			{
+				UUID:            "note-uuid-1",
+				CorrelationUUID: "note-correlation-uuid-1",
+				Body:            "note-body-1",
+				PublishedAt:     publishedAt.Add(-24 * time.Hour),
+				AuthorUUID:      "author-uuid-2",
+				Tags:            []string{"tag-1"},
+			},
+		}
+
 		hashtag := "a-test-hashtag"
 
-		r := &getArticlesByHashtag.Request{
+		r := &getContentsByHashtag.Request{
 			Page:    1,
 			Hashtag: hashtag,
 		}
@@ -97,6 +111,9 @@ func TestShowHandler(t *testing.T) {
 		elementsRepository.On("Count", mock.Anything).Once().Return(uint(0), nil)
 		defer articlesRepository.AssertExpectations(t)
 
+		notesRepository.On("CountPublishedByHashtags", mock.Anything, []string{hashtag}, "EN").Once().Return(uint(len(notes)), nil)
+		defer notesRepository.AssertExpectations(t)
+
 		userRepository.On("GetByUUIDs", mock.Anything, []string{"author-uuid-1", "author-uuid-1", "author-uuid-2"}).Once().Return(users, nil)
 		defer userRepository.AssertExpectations(t)
 
@@ -110,7 +127,7 @@ func TestShowHandler(t *testing.T) {
 		languageResolver.On("Resolve", mock.Anything, "EN").Once().Return(language.Language{Code: "EN", Name: "English"}, nil)
 		defer languageResolver.AssertExpectations(t)
 
-		useCase := getArticlesByHashtag.NewUseCase(&articlesRepository, &userRepository, &languagesRepository, &languageResolver, element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository, matcher.New()), &requestValidator)
+		useCase := getContentsByHashtag.NewUseCase(&articlesRepository, &notesRepository, &userRepository, &languagesRepository, &languageResolver, element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository, matcher.New()), &requestValidator)
 		handler := NewShowHandler(useCase)
 
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -128,11 +145,12 @@ func TestShowHandler(t *testing.T) {
 		assert.Equal(t, http.StatusOK, response.Code)
 	})
 
-	t.Run("validation failed", func(t *testing.T) {
+	t.Run("serves the notes tab from the type query parameter", func(t *testing.T) {
 		t.Parallel()
 
 		var (
 			articlesRepository  articles.MockArticlesRepository
+			notesRepository     notes.MockNotesRepository
 			elementsRepository  elements.MockElementsRepository
 			userRepository      users.MockUsersRepository
 			languagesRepository languages.MockLanguagesRepository
@@ -140,7 +158,76 @@ func TestShowHandler(t *testing.T) {
 			requestValidator    validator.MockValidator
 		)
 
-		r := &getArticlesByHashtag.Request{
+		hashtag := "a-test-hashtag"
+
+		r := &getContentsByHashtag.Request{
+			Page:    1,
+			Hashtag: hashtag,
+			Type:    getContentsByHashtag.TypeNote,
+		}
+
+		n := []note.Note{
+			{
+				UUID:            "note-uuid-1",
+				CorrelationUUID: "note-correlation-uuid-1",
+				Body:            "note-body-1",
+				AuthorUUID:      "author-uuid-1",
+				Tags:            []string{"tag-1"},
+			},
+		}
+
+		articlesRepository.On("CountPublishedByHashtags", mock.Anything, []string{hashtag}, "EN").Once().Return(uint(7), nil)
+		notesRepository.On("CountPublishedByHashtags", mock.Anything, []string{hashtag}, "EN").Once().Return(uint(len(n)), nil)
+		notesRepository.On("GetPublishedByHashtags", mock.Anything, []string{hashtag}, "EN", uint(0), uint(10)).Once().Return(n, nil)
+		notesRepository.On("GetPublishedLanguageCodes", mock.Anything, mock.Anything).Return([]string{}, nil)
+		defer notesRepository.AssertExpectations(t)
+
+		elementsRepository.On("Count", mock.Anything).Once().Return(uint(0), nil)
+		userRepository.On("GetByUUIDs", mock.Anything, []string{"author-uuid-1"}).Once().Return([]user.User{{UUID: "author-uuid-1"}}, nil)
+		languagesRepository.On("GetByCodes", mock.Anything, []string{}).Return([]language.Language{}, nil)
+
+		requestValidator.On("Validate", r).Once().Return(nil)
+		defer requestValidator.AssertExpectations(t)
+
+		languageResolver.On("DefaultCode", mock.Anything).Once().Return("EN", nil)
+		languageResolver.On("Resolve", mock.Anything, "EN").Once().Return(language.Language{Code: "EN", Name: "English"}, nil)
+
+		useCase := getContentsByHashtag.NewUseCase(&articlesRepository, &notesRepository, &userRepository, &languagesRepository, &languageResolver, element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository, matcher.New()), &requestValidator)
+		handler := NewShowHandler(useCase)
+
+		request := httptest.NewRequest(http.MethodGet, "/?type=note", nil)
+		request.SetPathValue("hashtag", hashtag)
+
+		response := httptest.NewRecorder()
+
+		handler.ServeHTTP(response, request)
+
+		// The articles tab is only counted, so its label stays right without
+		// fetching a page nobody asked for.
+		articlesRepository.AssertNotCalled(t, "GetPublishedByHashtags")
+
+		expected, err := os.ReadFile("testdata/response-notes-tab.txt")
+		assert.NoError(t, err)
+
+		assert.Equal(t, "application/json", response.Header().Get("content-type"))
+		assert.JSONEq(t, string(expected), response.Body.String())
+		assert.Equal(t, http.StatusOK, response.Code)
+	})
+
+	t.Run("validation failed", func(t *testing.T) {
+		t.Parallel()
+
+		var (
+			articlesRepository  articles.MockArticlesRepository
+			notesRepository     notes.MockNotesRepository
+			elementsRepository  elements.MockElementsRepository
+			userRepository      users.MockUsersRepository
+			languagesRepository languages.MockLanguagesRepository
+			languageResolver    resolver.MockResolver
+			requestValidator    validator.MockValidator
+		)
+
+		r := &getContentsByHashtag.Request{
 			Page: 1,
 		}
 
@@ -151,7 +238,7 @@ func TestShowHandler(t *testing.T) {
 		requestValidator.On("Validate", r).Once().Return(validationErrors)
 		defer requestValidator.AssertExpectations(t)
 
-		useCase := getArticlesByHashtag.NewUseCase(&articlesRepository, &userRepository, &languagesRepository, &languageResolver, element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository, matcher.New()), &requestValidator)
+		useCase := getContentsByHashtag.NewUseCase(&articlesRepository, &notesRepository, &userRepository, &languagesRepository, &languageResolver, element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository, matcher.New()), &requestValidator)
 		handler := NewShowHandler(useCase)
 
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -176,6 +263,7 @@ func TestShowHandler(t *testing.T) {
 
 		var (
 			articlesRepository  articles.MockArticlesRepository
+			notesRepository     notes.MockNotesRepository
 			elementsRepository  elements.MockElementsRepository
 			userRepository      users.MockUsersRepository
 			languagesRepository languages.MockLanguagesRepository
@@ -185,7 +273,7 @@ func TestShowHandler(t *testing.T) {
 
 		hashtag := "a-test-hashtag"
 
-		r := &getArticlesByHashtag.Request{
+		r := &getContentsByHashtag.Request{
 			Page:    1,
 			Hashtag: hashtag,
 		}
@@ -197,6 +285,9 @@ func TestShowHandler(t *testing.T) {
 		elementsRepository.On("Count", mock.Anything).Once().Return(uint(0), nil)
 		defer articlesRepository.AssertExpectations(t)
 
+		notesRepository.On("CountPublishedByHashtags", mock.Anything, []string{hashtag}, "EN").Once().Return(uint(0), nil)
+		defer notesRepository.AssertExpectations(t)
+
 		userRepository.On("GetByUUIDs", mock.Anything, []string{}).Once().Return([]user.User{}, nil)
 		defer userRepository.AssertExpectations(t)
 
@@ -207,7 +298,7 @@ func TestShowHandler(t *testing.T) {
 		languageResolver.On("Resolve", mock.Anything, "EN").Once().Return(language.Language{Code: "EN", Name: "English"}, nil)
 		defer languageResolver.AssertExpectations(t)
 
-		useCase := getArticlesByHashtag.NewUseCase(&articlesRepository, &userRepository, &languagesRepository, &languageResolver, element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository, matcher.New()), &requestValidator)
+		useCase := getContentsByHashtag.NewUseCase(&articlesRepository, &notesRepository, &userRepository, &languagesRepository, &languageResolver, element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository, matcher.New()), &requestValidator)
 		handler := NewShowHandler(useCase)
 
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -230,6 +321,7 @@ func TestShowHandler(t *testing.T) {
 
 		var (
 			articlesRepository  articles.MockArticlesRepository
+			notesRepository     notes.MockNotesRepository
 			elementsRepository  elements.MockElementsRepository
 			userRepository      users.MockUsersRepository
 			languagesRepository languages.MockLanguagesRepository
@@ -239,7 +331,7 @@ func TestShowHandler(t *testing.T) {
 
 		hashtag := "a-test-hashtag"
 
-		r := &getArticlesByHashtag.Request{
+		r := &getContentsByHashtag.Request{
 			Page:    1,
 			Hashtag: hashtag,
 		}
@@ -250,6 +342,9 @@ func TestShowHandler(t *testing.T) {
 		articlesRepository.On("GetPublishedByHashtags", mock.Anything, []string{hashtag}, "EN", uint(0), uint(10)).Once().Return(nil, errors.New("some error happened"))
 		defer articlesRepository.AssertExpectations(t)
 
+		notesRepository.On("CountPublishedByHashtags", mock.Anything, []string{hashtag}, "EN").Once().Return(uint(0), nil)
+		defer notesRepository.AssertExpectations(t)
+
 		requestValidator.On("Validate", r).Once().Return(nil)
 		defer requestValidator.AssertExpectations(t)
 
@@ -257,7 +352,7 @@ func TestShowHandler(t *testing.T) {
 		languageResolver.On("Resolve", mock.Anything, "EN").Once().Return(language.Language{Code: "EN", Name: "English"}, nil)
 		defer languageResolver.AssertExpectations(t)
 
-		useCase := getArticlesByHashtag.NewUseCase(&articlesRepository, &userRepository, &languagesRepository, &languageResolver, element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository, matcher.New()), &requestValidator)
+		useCase := getContentsByHashtag.NewUseCase(&articlesRepository, &notesRepository, &userRepository, &languagesRepository, &languageResolver, element.NewRetriever(&articlesRepository, &elementsRepository, &userRepository, matcher.New()), &requestValidator)
 		handler := NewShowHandler(useCase)
 
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
