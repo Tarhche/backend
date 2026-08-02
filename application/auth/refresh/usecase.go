@@ -78,6 +78,15 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		return nil, err
 	}
 
+	// The refresh token outlives the access token by days, so a ban applied in
+	// between has to be caught here too — otherwise the session renews itself.
+	if u.IsBanned() {
+		return &Response{
+			Code:    auth.BannedCode,
+			Message: uc.translator.Translate(auth.BannedTranslationKey),
+		}, nil
+	}
+
 	accessToken, err := uc.authTokenGenerator.GenerateAccessToken(ctx, &u)
 	if err != nil {
 		return nil, err

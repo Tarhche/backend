@@ -16,6 +16,7 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/ecdsa"
 	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
+	"github.com/khanzadimahdi/testproject/infrastructure/translator"
 )
 
 func TestAuthenticateMiddleware(t *testing.T) {
@@ -27,6 +28,7 @@ func TestAuthenticateMiddleware(t *testing.T) {
 	t.Run("authenticate and run next handler", func(t *testing.T) {
 		var (
 			userRepository users.MockUsersRepository
+			translatorMock translator.TranslatorMock
 
 			u = user.User{
 				UUID: "user-test-uuid",
@@ -48,7 +50,7 @@ func TestAuthenticateMiddleware(t *testing.T) {
 			assert.NoError(t, err)
 		})
 
-		middleware := NewAuthenticateMiddleware(next, j, &userRepository)
+		middleware := NewAuthenticateMiddleware(next, j, &userRepository, &translatorMock)
 
 		request := httptest.NewRequest(http.MethodPost, "/", nil)
 		request.Header.Set(authenticationHeaderName, authenticationHeaderPrefix+token)
@@ -60,9 +62,53 @@ func TestAuthenticateMiddleware(t *testing.T) {
 		assert.Equal(t, http.StatusOK, response.Code)
 	})
 
+	t.Run("banned user is refused", func(t *testing.T) {
+		var (
+			userRepository users.MockUsersRepository
+			translatorMock translator.TranslatorMock
+
+			u = user.User{
+				UUID:         "user-test-uuid",
+				LanguageCode: "fa",
+				BannedAt:     time.Now(),
+			}
+
+			bannedMessage = "your account has been suspended"
+
+			token = generateToken(t, j, u, time.Now().Add(10*time.Second), auth.AccessToken)
+		)
+
+		userRepository.On("GetOne", mock.Anything, u.UUID).Once().Return(u, nil)
+		defer userRepository.AssertExpectations(t)
+
+		translatorMock.On("Translate", auth.BannedTranslationKey, mock.Anything).Once().Return(bannedMessage)
+		defer translatorMock.AssertExpectations(t)
+
+		next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			t.Error("the next handler must not run for a banned user")
+		})
+
+		middleware := NewAuthenticateMiddleware(next, j, &userRepository, &translatorMock)
+
+		request := httptest.NewRequest(http.MethodPost, "/", nil)
+		request.Header.Set(authenticationHeaderName, authenticationHeaderPrefix+token)
+		response := httptest.NewRecorder()
+
+		middleware.ServeHTTP(response, request)
+
+		assert.Equal(t, http.StatusForbidden, response.Code)
+		assert.Equal(t, "application/json", response.Header().Get("content-type"))
+		assert.JSONEq(
+			t,
+			`{"code":"`+auth.BannedCode+`","message":"`+bannedMessage+`"}`,
+			response.Body.String(),
+		)
+	})
+
 	t.Run("authentication fails", func(t *testing.T) {
 		var (
 			userRepository users.MockUsersRepository
+			translatorMock translator.TranslatorMock
 
 			u = user.User{
 				UUID: "user-test-uuid",
@@ -81,7 +127,7 @@ func TestAuthenticateMiddleware(t *testing.T) {
 			assert.NoError(t, err)
 		})
 
-		middleware := NewAuthenticateMiddleware(next, j, &userRepository)
+		middleware := NewAuthenticateMiddleware(next, j, &userRepository, &translatorMock)
 
 		request := httptest.NewRequest(http.MethodPost, "/", nil)
 		request.Header.Set(authenticationHeaderName, authenticationHeaderPrefix+token)

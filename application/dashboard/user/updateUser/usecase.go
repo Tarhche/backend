@@ -80,6 +80,7 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 	u.Email = request.Email
 	u.Username = request.Username
 	u.LanguageCode = request.LanguageCode
+	u.SetBanned(request.Banned)
 
 	_, err = uc.userRepository.Save(ctx, &u)
 

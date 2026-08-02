@@ -1,6 +1,9 @@
 package user
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestIsValidEmail(t *testing.T) {
 	tests := []struct {
@@ -69,4 +72,47 @@ func TestIsValidUsername(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestSetBanned(t *testing.T) {
+	earlier := time.Date(2024, 3, 1, 12, 0, 0, 0, time.UTC)
+
+	t.Run("banning marks the moment", func(t *testing.T) {
+		u := User{}
+		u.SetBanned(true)
+
+		if !u.IsBanned() {
+			t.Fatal("expected the user to be banned")
+		}
+		if u.BannedAt.IsZero() {
+			t.Error("expected BannedAt to be set")
+		}
+	})
+
+	t.Run("banning again keeps the original moment", func(t *testing.T) {
+		u := User{BannedAt: earlier}
+		u.SetBanned(true)
+
+		if !u.BannedAt.Equal(earlier) {
+			t.Errorf("expected BannedAt to stay %v, got %v", earlier, u.BannedAt)
+		}
+	})
+
+	t.Run("lifting the ban clears the moment", func(t *testing.T) {
+		u := User{BannedAt: earlier}
+		u.SetBanned(false)
+
+		if u.IsBanned() {
+			t.Fatal("expected the user not to be banned")
+		}
+		if !u.BannedAt.IsZero() {
+			t.Errorf("expected BannedAt to be cleared, got %v", u.BannedAt)
+		}
+	})
+
+	t.Run("a new user is not banned", func(t *testing.T) {
+		if (User{}).IsBanned() {
+			t.Error("expected a new user not to be banned")
+		}
+	})
 }

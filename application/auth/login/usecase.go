@@ -60,6 +60,15 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		}, nil
 	}
 
+	// Checked after the password, so a wrong password can't be used to find out
+	// which accounts are banned. No tokens are issued either way.
+	if u.IsBanned() {
+		return &Response{
+			Code:    auth.BannedCode,
+			Message: uc.translator.Translate(auth.BannedTranslationKey),
+		}, nil
+	}
+
 	accessToken, err := uc.authTokenGenerator.GenerateAccessToken(ctx, &u)
 	if err != nil {
 		return nil, err

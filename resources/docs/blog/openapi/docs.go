@@ -143,6 +143,12 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/auth.BannedResponse"
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -336,6 +342,12 @@ const docTemplate = `{
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/auth.BannedResponse"
                         }
                     },
                     "500": {
@@ -3324,6 +3336,17 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "auth.BannedResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                }
+            }
+        },
         "bookmarkExists.Request": {
             "type": "object",
             "properties": {
@@ -3597,6 +3620,9 @@ const docTemplate = `{
             "properties": {
                 "body": {},
                 "type": {
+                    "type": "string"
+                },
+                "uuid": {
                     "type": "string"
                 }
             }
@@ -4545,6 +4571,13 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "avatar": {
+                    "type": "string"
+                },
+                "banned": {
+                    "description": "Not omitempty: \"not banned\" is a meaningful false, not an absent value.\nBannedAt rides along so the dashboard can show since when; it is the zero\ntime for an account that was never banned.",
+                    "type": "boolean"
+                },
+                "banned_at": {
                     "type": "string"
                 },
                 "email": {
@@ -5508,8 +5541,15 @@ const docTemplate = `{
                 "access_token": {
                     "type": "string"
                 },
+                "code": {
+                    "description": "Set when the account is banned: the handler answers 403 with this instead\nof tokens. Shaped like auth.BannedResponse, which every other refusal of a\nbanned user returns.",
+                    "type": "string"
+                },
                 "errors": {
                     "$ref": "#/definitions/domain.ValidationErrors"
+                },
+                "message": {
+                    "type": "string"
                 },
                 "refresh_token": {
                     "type": "string"
@@ -5530,8 +5570,15 @@ const docTemplate = `{
                 "access_token": {
                     "type": "string"
                 },
+                "code": {
+                    "description": "Set when the account was banned after the refresh token was issued: the\nhandler answers 403 with this instead of renewing the session.",
+                    "type": "string"
+                },
                 "errors": {
                     "$ref": "#/definitions/domain.ValidationErrors"
+                },
+                "message": {
+                    "type": "string"
                 },
                 "refresh_token": {
                     "type": "string"
@@ -5728,6 +5775,10 @@ const docTemplate = `{
             "properties": {
                 "avatar": {
                     "type": "string"
+                },
+                "banned": {
+                    "description": "Banned carries the intent only; the moment of the ban is the server's to\ndecide, so it is never taken from the client.",
+                    "type": "boolean"
                 },
                 "email": {
                     "type": "string"

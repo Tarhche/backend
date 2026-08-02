@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	applicationAuth "github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/application/auth/refresh"
 	infraTrace "github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
 	"go.opentelemetry.io/otel/trace"
@@ -27,6 +28,7 @@ func NewRefreshHandler(useCase *refresh.UseCase) *refreshHandler {
 // @Param			body	body		refresh.Request	true	"Refresh request"
 // @Success		200		{object}	refresh.Response
 // @Failure		400		{object}	map[string]interface{}
+// @Failure		403		{object}	auth.BannedResponse
 // @Failure		500		{object}	map[string]interface{}
 // @Router			/auth/token/refresh [post]
 func (h *refreshHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
@@ -44,6 +46,10 @@ func (h *refreshHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	case response != nil && len(response.ValidationErrors) > 0:
 		rw.Header().Add("Content-Type", "application/json")
 		rw.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(rw).Encode(response)
+	case response != nil && response.Code == applicationAuth.BannedCode:
+		rw.Header().Add("Content-Type", "application/json")
+		rw.WriteHeader(http.StatusForbidden)
 		json.NewEncoder(rw).Encode(response)
 	default:
 		rw.Header().Add("Content-Type", "application/json")

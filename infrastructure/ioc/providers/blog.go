@@ -440,7 +440,7 @@ func blog(
 	// comments
 	mux.Handle("POST /api/comments", middleware.NewAuthenticateMiddleware(scoped(func(c provider.Container) http.Handler {
 		return commentAPI.NewCreateHandler(createComment.NewUseCase(commentsRepository, va(c)))
-	}), jwt, userRepository))
+	}), jwt, userRepository, translator))
 	mux.Handle("GET /api/comments", scoped(func(c provider.Container) http.Handler {
 		return commentAPI.NewIndexHandler(getComments.NewUseCase(commentsRepository, userRepository, va(c)))
 	}))
@@ -448,10 +448,10 @@ func blog(
 	// bookmark
 	mux.Handle("POST /api/bookmarks/exists", middleware.NewAuthenticateMiddleware(scoped(func(c provider.Container) http.Handler {
 		return bookmarkAPI.NewExistsHandler(bookmarkExists.NewUseCase(bookmarkRepository, va(c)))
-	}), jwt, userRepository))
+	}), jwt, userRepository, translator))
 	mux.Handle("PUT /api/bookmarks", middleware.NewAuthenticateMiddleware(scoped(func(c provider.Container) http.Handler {
 		return bookmarkAPI.NewUpdateHandler(updateBookmark.NewUseCase(bookmarkRepository, va(c)))
-	}), jwt, userRepository))
+	}), jwt, userRepository, translator))
 
 	// languages
 	mux.Handle("GET /api/languages", middleware.NewCacheMiddleware(languageAPI.NewIndexHandler(getLanguagesUseCase), httpCache))
@@ -472,120 +472,120 @@ func blog(
 	// ---- dashboard HTTP API ----
 
 	// profile
-	mux.Handle("GET /api/dashboard/profile", middleware.NewAuthenticateMiddleware(profile.NewGetProfileHandler(getProfileUseCase), jwt, userRepository))
+	mux.Handle("GET /api/dashboard/profile", middleware.NewAuthenticateMiddleware(profile.NewGetProfileHandler(getProfileUseCase), jwt, userRepository, translator))
 	mux.Handle("PUT /api/dashboard/profile", middleware.NewAuthenticateMiddleware(scoped(func(c provider.Container) http.Handler {
 		return profile.NewUpdateProfileHandler(updateprofile.NewUseCase(userRepository, languageResolver, va(c), tr(c)))
-	}), jwt, userRepository))
+	}), jwt, userRepository, translator))
 	mux.Handle("PUT /api/dashboard/password", middleware.NewAuthenticateMiddleware(scoped(func(c provider.Container) http.Handler {
 		return profile.NewChangePasswordHandler(changepassword.NewUseCase(userRepository, hasher, va(c), tr(c)))
-	}), jwt, userRepository))
-	mux.Handle("GET /api/dashboard/profile/roles", middleware.NewAuthenticateMiddleware(profile.NewGetRolesHandler(dashboardProfileGetRolesUseCase), jwt, userRepository))
+	}), jwt, userRepository, translator))
+	mux.Handle("GET /api/dashboard/profile/roles", middleware.NewAuthenticateMiddleware(profile.NewGetRolesHandler(dashboardProfileGetRolesUseCase), jwt, userRepository, translator))
 
 	// user
 	mux.Handle("POST /api/dashboard/users", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
 		return dashboardUserAPI.NewCreateHandler(createuser.NewUseCase(userRepository, languageResolver, hasher, va(c), tr(c)))
-	}), authorizer, permission.UsersCreate), jwt, userRepository))
-	mux.Handle("DELETE /api/dashboard/users/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardUserAPI.NewDeleteHandler(dashboardDeleteUserUsecase), authorizer, permission.UsersDelete), jwt, userRepository))
-	mux.Handle("GET /api/dashboard/users", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardUserAPI.NewIndexHandler(dashboardGetUsersUsecase), authorizer, permission.UsersIndex), jwt, userRepository))
-	mux.Handle("GET /api/dashboard/users/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardUserAPI.NewShowHandler(dashboardGetUserUsecase), authorizer, permission.UsersShow), jwt, userRepository))
+	}), authorizer, permission.UsersCreate), jwt, userRepository, translator))
+	mux.Handle("DELETE /api/dashboard/users/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardUserAPI.NewDeleteHandler(dashboardDeleteUserUsecase), authorizer, permission.UsersDelete), jwt, userRepository, translator))
+	mux.Handle("GET /api/dashboard/users", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardUserAPI.NewIndexHandler(dashboardGetUsersUsecase), authorizer, permission.UsersIndex), jwt, userRepository, translator))
+	mux.Handle("GET /api/dashboard/users/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardUserAPI.NewShowHandler(dashboardGetUserUsecase), authorizer, permission.UsersShow), jwt, userRepository, translator))
 	mux.Handle("PUT /api/dashboard/users", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
 		return dashboardUserAPI.NewUpdateHandler(updateuser.NewUseCase(userRepository, languageResolver, va(c), tr(c)))
-	}), authorizer, permission.UsersUpdate), jwt, userRepository))
+	}), authorizer, permission.UsersUpdate), jwt, userRepository, translator))
 	mux.Handle("PUT /api/dashboard/users/password", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
 		return dashboardUserAPI.NewChangePasswordHandler(userchangepassword.NewUseCase(userRepository, hasher, va(c)))
-	}), authorizer, permission.UsersPasswordUpdate), jwt, userRepository))
+	}), authorizer, permission.UsersPasswordUpdate), jwt, userRepository, translator))
 
 	// permissions
-	mux.Handle("GET /api/dashboard/permissions", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardPermissionAPI.NewIndexHandler(dashboardGetPermissionsUseCase), authorizer, permission.PermissionsIndex), jwt, userRepository))
+	mux.Handle("GET /api/dashboard/permissions", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardPermissionAPI.NewIndexHandler(dashboardGetPermissionsUseCase), authorizer, permission.PermissionsIndex), jwt, userRepository, translator))
 
 	// roles
 	mux.Handle("POST /api/dashboard/roles", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
 		return dashboardRoleAPI.NewCreateHandler(dashboardCreateRole.NewUseCase(rolesRepository, permissionRepository, va(c), tr(c)))
-	}), authorizer, permission.RolesCreate), jwt, userRepository))
-	mux.Handle("DELETE /api/dashboard/roles/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardRoleAPI.NewDeleteHandler(dashboardDeleteRoleUsecase), authorizer, permission.RolesDelete), jwt, userRepository))
-	mux.Handle("GET /api/dashboard/roles", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardRoleAPI.NewIndexHandler(dashboardGetRolesUsecase), authorizer, permission.RolesIndex), jwt, userRepository))
-	mux.Handle("GET /api/dashboard/roles/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardRoleAPI.NewShowHandler(dashboardGetRoleUsecase), authorizer, permission.RolesShow), jwt, userRepository))
+	}), authorizer, permission.RolesCreate), jwt, userRepository, translator))
+	mux.Handle("DELETE /api/dashboard/roles/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardRoleAPI.NewDeleteHandler(dashboardDeleteRoleUsecase), authorizer, permission.RolesDelete), jwt, userRepository, translator))
+	mux.Handle("GET /api/dashboard/roles", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardRoleAPI.NewIndexHandler(dashboardGetRolesUsecase), authorizer, permission.RolesIndex), jwt, userRepository, translator))
+	mux.Handle("GET /api/dashboard/roles/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardRoleAPI.NewShowHandler(dashboardGetRoleUsecase), authorizer, permission.RolesShow), jwt, userRepository, translator))
 	mux.Handle("PUT /api/dashboard/roles", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
 		return dashboardRoleAPI.NewUpdateHandler(dashboardUpdateRole.NewUseCase(rolesRepository, permissionRepository, va(c), tr(c)))
-	}), authorizer, permission.RolesUpdate), jwt, userRepository))
+	}), authorizer, permission.RolesUpdate), jwt, userRepository, translator))
 
 	// languages
 	mux.Handle("POST /api/dashboard/languages", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
 		return dashboardLanguageAPI.NewCreateHandler(dashboardCreateLanguage.NewUseCase(languageRepository, va(c), tr(c)))
-	}), authorizer, permission.LanguagesCreate), jwt, userRepository))
-	mux.Handle("DELETE /api/dashboard/languages/{code}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardLanguageAPI.NewDeleteHandler(dashboardDeleteLanguageUsecase), authorizer, permission.LanguagesDelete), jwt, userRepository))
-	mux.Handle("GET /api/dashboard/languages", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardLanguageAPI.NewIndexHandler(dashboardGetLanguagesUsecase), authorizer, permission.LanguagesIndex), jwt, userRepository))
-	mux.Handle("GET /api/dashboard/languages/{code}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardLanguageAPI.NewShowHandler(dashboardGetLanguageUsecase), authorizer, permission.LanguagesShow), jwt, userRepository))
+	}), authorizer, permission.LanguagesCreate), jwt, userRepository, translator))
+	mux.Handle("DELETE /api/dashboard/languages/{code}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardLanguageAPI.NewDeleteHandler(dashboardDeleteLanguageUsecase), authorizer, permission.LanguagesDelete), jwt, userRepository, translator))
+	mux.Handle("GET /api/dashboard/languages", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardLanguageAPI.NewIndexHandler(dashboardGetLanguagesUsecase), authorizer, permission.LanguagesIndex), jwt, userRepository, translator))
+	mux.Handle("GET /api/dashboard/languages/{code}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardLanguageAPI.NewShowHandler(dashboardGetLanguageUsecase), authorizer, permission.LanguagesShow), jwt, userRepository, translator))
 	mux.Handle("PUT /api/dashboard/languages", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
 		return dashboardLanguageAPI.NewUpdateHandler(dashboardUpdateLanguage.NewUseCase(languageRepository, va(c)))
-	}), authorizer, permission.LanguagesUpdate), jwt, userRepository))
+	}), authorizer, permission.LanguagesUpdate), jwt, userRepository, translator))
 
 	// articles
 	mux.Handle("POST /api/dashboard/articles", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
 		return dashboardArticleAPI.NewCreateHandler(dashboardCreateArticle.NewUseCase(articlesRepository, languageRepository, va(c), tr(c)))
-	}), authorizer, permission.ArticlesCreate), jwt, userRepository))
-	mux.Handle("DELETE /api/dashboard/articles/{correlationUUID}/{language_code}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardArticleAPI.NewDeleteHandler(dashboardDeleteArticleUsecase), authorizer, permission.ArticlesDelete), jwt, userRepository))
-	mux.Handle("GET /api/dashboard/articles", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardArticleAPI.NewIndexHandler(dashboardGetArticlesUsecase), authorizer, permission.ArticlesIndex), jwt, userRepository))
-	mux.Handle("GET /api/dashboard/articles/{correlationUUID}/{language_code}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardArticleAPI.NewShowHandler(dashboardGetArticleUsecase), authorizer, permission.ArticlesShow), jwt, userRepository))
+	}), authorizer, permission.ArticlesCreate), jwt, userRepository, translator))
+	mux.Handle("DELETE /api/dashboard/articles/{correlationUUID}/{language_code}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardArticleAPI.NewDeleteHandler(dashboardDeleteArticleUsecase), authorizer, permission.ArticlesDelete), jwt, userRepository, translator))
+	mux.Handle("GET /api/dashboard/articles", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardArticleAPI.NewIndexHandler(dashboardGetArticlesUsecase), authorizer, permission.ArticlesIndex), jwt, userRepository, translator))
+	mux.Handle("GET /api/dashboard/articles/{correlationUUID}/{language_code}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardArticleAPI.NewShowHandler(dashboardGetArticleUsecase), authorizer, permission.ArticlesShow), jwt, userRepository, translator))
 	mux.Handle("PUT /api/dashboard/articles", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
 		return dashboardArticleAPI.NewUpdateHandler(dashboardUpdateArticle.NewUseCase(articlesRepository, languageRepository, va(c), tr(c)))
-	}), authorizer, permission.ArticlesUpdate), jwt, userRepository))
+	}), authorizer, permission.ArticlesUpdate), jwt, userRepository, translator))
 
 	// comments
 	mux.Handle("POST /api/dashboard/comments", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
 		return dashboardCommentAPI.NewCreateHandler(dashboardCreateComment.NewUseCase(commentsRepository, va(c)))
-	}), authorizer, permission.CommentsCreate), jwt, userRepository))
-	mux.Handle("DELETE /api/dashboard/comments/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardCommentAPI.NewDeleteHandler(dashboardDeleteCommentUsecase), authorizer, permission.CommentsDelete), jwt, userRepository))
-	mux.Handle("GET /api/dashboard/comments", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardCommentAPI.NewIndexHandler(dashboardGetCommentsUsecase), authorizer, permission.CommentsIndex), jwt, userRepository))
-	mux.Handle("GET /api/dashboard/comments/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardCommentAPI.NewShowHandler(dashboardGetCommentUsecase), authorizer, permission.CommentsShow), jwt, userRepository))
+	}), authorizer, permission.CommentsCreate), jwt, userRepository, translator))
+	mux.Handle("DELETE /api/dashboard/comments/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardCommentAPI.NewDeleteHandler(dashboardDeleteCommentUsecase), authorizer, permission.CommentsDelete), jwt, userRepository, translator))
+	mux.Handle("GET /api/dashboard/comments", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardCommentAPI.NewIndexHandler(dashboardGetCommentsUsecase), authorizer, permission.CommentsIndex), jwt, userRepository, translator))
+	mux.Handle("GET /api/dashboard/comments/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardCommentAPI.NewShowHandler(dashboardGetCommentUsecase), authorizer, permission.CommentsShow), jwt, userRepository, translator))
 	mux.Handle("PUT /api/dashboard/comments", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
 		return dashboardCommentAPI.NewUpdateHandler(dashboardUpdateComment.NewUseCase(commentsRepository, va(c)))
-	}), authorizer, permission.CommentsUpdate), jwt, userRepository))
+	}), authorizer, permission.CommentsUpdate), jwt, userRepository, translator))
 
 	// self comments
-	mux.Handle("DELETE /api/dashboard/my/comments/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardCommentAPI.NewDeleteUserCommentHandler(dashboardDeleteUserCommentUsecase), authorizer, permission.SelfCommentsDelete), jwt, userRepository))
-	mux.Handle("GET /api/dashboard/my/comments", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardCommentAPI.NewIndexUserCommentsHandler(dashboardGetUserCommentsUsecase), authorizer, permission.SelfCommentsIndex), jwt, userRepository))
-	mux.Handle("GET /api/dashboard/my/comments/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardCommentAPI.NewShowUserCommentHandler(dashboardGetUserCommentUsecase), authorizer, permission.SelfCommentsShow), jwt, userRepository))
+	mux.Handle("DELETE /api/dashboard/my/comments/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardCommentAPI.NewDeleteUserCommentHandler(dashboardDeleteUserCommentUsecase), authorizer, permission.SelfCommentsDelete), jwt, userRepository, translator))
+	mux.Handle("GET /api/dashboard/my/comments", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardCommentAPI.NewIndexUserCommentsHandler(dashboardGetUserCommentsUsecase), authorizer, permission.SelfCommentsIndex), jwt, userRepository, translator))
+	mux.Handle("GET /api/dashboard/my/comments/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardCommentAPI.NewShowUserCommentHandler(dashboardGetUserCommentUsecase), authorizer, permission.SelfCommentsShow), jwt, userRepository, translator))
 	mux.Handle("PUT /api/dashboard/my/comments", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
 		return dashboardCommentAPI.NewUpdateUserCommentHandler(dashboardUpdateUserComment.NewUseCase(commentsRepository, va(c)))
-	}), authorizer, permission.SelfCommentsUpdate), jwt, userRepository))
+	}), authorizer, permission.SelfCommentsUpdate), jwt, userRepository, translator))
 
 	// self bookmarks
 	mux.Handle("DELETE /api/dashboard/my/bookmarks", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
 		return dashboardBookmarkAPI.NewDeleteUserBookmarkHandler(dashboardDeleteUserBookmark.NewUseCase(bookmarkRepository, va(c)))
-	}), authorizer, permission.SelfBookmarksDelete), jwt, userRepository))
+	}), authorizer, permission.SelfBookmarksDelete), jwt, userRepository, translator))
 	mux.Handle("GET /api/dashboard/my/bookmarks", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
 		return dashboardBookmarkAPI.NewIndexUserBookmarksHandler(dashboardGetUserBookmarks.NewUseCase(bookmarkRepository, va(c)))
-	}), authorizer, permission.SelfBookmarksIndex), jwt, userRepository))
+	}), authorizer, permission.SelfBookmarksIndex), jwt, userRepository, translator))
 
 	// files
 	mux.Handle("POST /api/dashboard/files", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
 		return dashboardFileAPI.NewUploadHandler(dashboardUploadFile.NewUseCase(filesRepository, fileStorage, va(c)))
-	}), authorizer, permission.FilesCreate), jwt, userRepository))
-	mux.Handle("DELETE /api/dashboard/files/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardFileAPI.NewDeleteHandler(dashboardDeleteFileUseCase), authorizer, permission.FilesDelete), jwt, userRepository))
-	mux.Handle("GET /api/dashboard/files", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardFileAPI.NewIndexHandler(dashboardGetFilesUseCase), authorizer, permission.FilesIndex), jwt, userRepository))
-	mux.Handle("GET /dashboard/files/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardFileAPI.NewShowHandler(dashboardGetFileUseCase), authorizer, permission.FilesShow), jwt, userRepository))
+	}), authorizer, permission.FilesCreate), jwt, userRepository, translator))
+	mux.Handle("DELETE /api/dashboard/files/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardFileAPI.NewDeleteHandler(dashboardDeleteFileUseCase), authorizer, permission.FilesDelete), jwt, userRepository, translator))
+	mux.Handle("GET /api/dashboard/files", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardFileAPI.NewIndexHandler(dashboardGetFilesUseCase), authorizer, permission.FilesIndex), jwt, userRepository, translator))
+	mux.Handle("GET /dashboard/files/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardFileAPI.NewShowHandler(dashboardGetFileUseCase), authorizer, permission.FilesShow), jwt, userRepository, translator))
 
 	// self files
-	mux.Handle("DELETE /api/dashboard/my/files/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardFileAPI.NewDeleteUserHandler(dashboardDeleteUserFileUseCase), authorizer, permission.SelfFilesDelete), jwt, userRepository))
-	mux.Handle("GET /api/dashboard/my/files", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardFileAPI.NewIndexUserHandler(dashboardGetUserFilesUseCase), authorizer, permission.SelfFilesIndex), jwt, userRepository))
+	mux.Handle("DELETE /api/dashboard/my/files/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardFileAPI.NewDeleteUserHandler(dashboardDeleteUserFileUseCase), authorizer, permission.SelfFilesDelete), jwt, userRepository, translator))
+	mux.Handle("GET /api/dashboard/my/files", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardFileAPI.NewIndexUserHandler(dashboardGetUserFilesUseCase), authorizer, permission.SelfFilesIndex), jwt, userRepository, translator))
 
 	// elements
 	mux.Handle("POST /api/dashboard/elements", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
 		return dashboardElementAPI.NewCreateHandler(dashboardCreateElement.NewUseCase(elementsRepository, va(c)))
-	}), authorizer, permission.ElementsCreate), jwt, userRepository))
-	mux.Handle("DELETE /api/dashboard/elements/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardElementAPI.NewDeleteHandler(dashboardDeleteElementUsecase), authorizer, permission.ElementsDelete), jwt, userRepository))
-	mux.Handle("GET /api/dashboard/elements", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardElementAPI.NewIndexHandler(dashboardGetElementsUsecase), authorizer, permission.ElementsIndex), jwt, userRepository))
-	mux.Handle("GET /api/dashboard/elements/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardElementAPI.NewShowHandler(dashboardGetElementUsecase), authorizer, permission.ElementsShow), jwt, userRepository))
+	}), authorizer, permission.ElementsCreate), jwt, userRepository, translator))
+	mux.Handle("DELETE /api/dashboard/elements/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardElementAPI.NewDeleteHandler(dashboardDeleteElementUsecase), authorizer, permission.ElementsDelete), jwt, userRepository, translator))
+	mux.Handle("GET /api/dashboard/elements", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardElementAPI.NewIndexHandler(dashboardGetElementsUsecase), authorizer, permission.ElementsIndex), jwt, userRepository, translator))
+	mux.Handle("GET /api/dashboard/elements/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardElementAPI.NewShowHandler(dashboardGetElementUsecase), authorizer, permission.ElementsShow), jwt, userRepository, translator))
 	mux.Handle("PUT /api/dashboard/elements", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
 		return dashboardElementAPI.NewUpdateHandler(dashboardUpdateElement.NewUseCase(elementsRepository, va(c)))
-	}), authorizer, permission.ElementsUpdate), jwt, userRepository))
+	}), authorizer, permission.ElementsUpdate), jwt, userRepository, translator))
 
 	// config
-	mux.Handle("GET /api/dashboard/config", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardConfigAPI.NewShowHandler(dashboardGetConfigUsecase), authorizer, permission.ConfigShow), jwt, userRepository))
+	mux.Handle("GET /api/dashboard/config", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardConfigAPI.NewShowHandler(dashboardGetConfigUsecase), authorizer, permission.ConfigShow), jwt, userRepository, translator))
 	mux.Handle("PUT /api/dashboard/config", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
 		return dashboardConfigAPI.NewUpdateHandler(dashboardUpdateConfig.NewUseCase(configRepository, languageRepository, va(c), tr(c)))
-	}), authorizer, permission.ConfigUpdate), jwt, userRepository))
+	}), authorizer, permission.ConfigUpdate), jwt, userRepository, translator))
 
 	rateLimited, err := middleware.NewRateLimitMiddleware(mux, 600, 1*time.Minute)
 	if err != nil {
