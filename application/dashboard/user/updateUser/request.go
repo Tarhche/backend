@@ -12,6 +12,9 @@ type Request struct {
 	Avatar       string `json:"avatar"`
 	Username     string `json:"username"`
 	LanguageCode string `json:"language_code"`
+	// Banned carries the intent only; the moment of the ban is the server's to
+	// decide, so it is never taken from the client.
+	Banned bool `json:"banned"`
 }
 
 var _ domain.Validatable = &Request{}

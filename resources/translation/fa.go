@@ -16,6 +16,7 @@ var farsi = map[string]string{
 	"user_already_exists":               "کاربر از قبل وجود دارد",
 	"identity_not_exists":               "هویت (ایمیل/نام کاربری) وجود ندارد",
 	"invalid_identity_or_password":      "هویت (ایمیل/نام کاربری) یا رمز عبور اشتباه است",
+	"user_is_banned":                    "حساب کاربری شما مسدود شده است، اگر فکر می‌کنید اشتباهی رخ داده با پشتیبانی تماس بگیرید",
 	"one_or_more_permissions_not_exist": "یک یا چند مجوز وجود ندارد",
 	"invalid_state_transition":          "تغییر وضعیت غیر ممکن است",
 	"registration_email_subject":        "ثبت نام",

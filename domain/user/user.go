@@ -17,6 +17,26 @@ type User struct {
 	LanguageCode string
 	PasswordHash password.Hash
 	CreatedAt    time.Time
+	// BannedAt is the moment an administrator banned the user. The zero value
+	// means the account is in good standing.
+	BannedAt time.Time
+}
+
+// IsBanned reports whether the user is banned and must be kept out of the
+// application.
+func (u User) IsBanned() bool {
+	return !u.BannedAt.IsZero()
+}
+
+// SetBanned bans or lifts the ban on the user. Banning keeps the moment the ban
+// started, so saving an already banned user doesn't move the date.
+func (u *User) SetBanned(banned bool) {
+	switch {
+	case !banned:
+		u.BannedAt = time.Time{}
+	case !u.IsBanned():
+		u.BannedAt = time.Now()
+	}
 }
 
 type Repository interface {

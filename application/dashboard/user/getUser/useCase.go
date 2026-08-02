@@ -29,5 +29,7 @@ func (uc *UseCase) Execute(ctx context.Context, UUID string) (*Response, error) 
 		Email:        u.Email,
 		Username:     u.Username,
 		LanguageCode: u.LanguageCode,
+		Banned:       u.IsBanned(),
+		BannedAt:     u.BannedAt,
 	}, err
 }

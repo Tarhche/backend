@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	applicationAuth "github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/application/auth/login"
 	infraTrace "github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
 	"go.opentelemetry.io/otel/trace"
@@ -27,6 +28,7 @@ func NewLoginHandler(useCase *login.UseCase) *loginHandler {
 // @Param			body	body		login.Request	true	"Credentials"
 // @Success		200		{object}	login.Response
 // @Failure		400		{object}	map[string]interface{}
+// @Failure		403		{object}	auth.BannedResponse
 // @Failure		500		{object}	map[string]interface{}
 // @Router			/auth/login [post]
 func (h *loginHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
@@ -44,6 +46,10 @@ func (h *loginHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	case response != nil && len(response.ValidationErrors) > 0:
 		rw.Header().Add("Content-Type", "application/json")
 		rw.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(rw).Encode(response)
+	case response != nil && response.Code == applicationAuth.BannedCode:
+		rw.Header().Add("Content-Type", "application/json")
+		rw.WriteHeader(http.StatusForbidden)
 		json.NewEncoder(rw).Encode(response)
 	default:
 		rw.Header().Add("Content-Type", "application/json")
