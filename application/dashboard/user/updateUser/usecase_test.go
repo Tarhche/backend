@@ -5,6 +5,7 @@ import (
 	"errors"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	mock2 "github.com/stretchr/testify/mock"
@@ -64,6 +65,100 @@ func TestUseCase_Execute(t *testing.T) {
 		response, err := NewUseCase(&userRepository, &languageResolver, &validator, &translator).Execute(context.Background(), &r)
 
 		translator.AssertNotCalled(t, "Translate")
+
+		assert.NoError(t, err)
+		assert.Nil(t, response)
+	})
+
+	t.Run("banning a user", func(t *testing.T) {
+		t.Parallel()
+
+		var (
+			userRepository   users.MockUsersRepository
+			languageResolver resolver.MockResolver
+			validator        validator.MockValidator
+			translator       translator.TranslatorMock
+
+			r = Request{
+				UserUUID:     "test-user-uuid",
+				Name:         "test name",
+				Email:        "test@test.com",
+				Username:     "test-username",
+				LanguageCode: "en",
+				BannedAt:     time.Now(),
+			}
+
+			u = user.User{
+				UUID:         r.UserUUID,
+				Name:         r.Name,
+				Email:        r.Email,
+				Username:     r.Username,
+				LanguageCode: r.LanguageCode,
+			}
+		)
+
+		validator.On("Validate", &r).Once().Return(nil)
+		defer validator.AssertExpectations(t)
+
+		languageResolver.On("Verify", mock2.Anything, r.LanguageCode).Once().Return(true)
+		defer languageResolver.AssertExpectations(t)
+
+		userRepository.On("GetOneByIdentity", mock2.Anything, r.Email).Once().Return(user.User{}, domain.ErrNotExists)
+		userRepository.On("GetOneByIdentity", mock2.Anything, r.Username).Once().Return(user.User{}, domain.ErrNotExists)
+		userRepository.On("GetOne", mock2.Anything, r.UserUUID).Once().Return(u, nil)
+		userRepository.On("Save", mock2.Anything, mock2.MatchedBy(func(saved *user.User) bool {
+			return saved.BannedAt.Equal(r.BannedAt)
+		})).Once().Return(r.UserUUID, nil)
+		defer userRepository.AssertExpectations(t)
+
+		response, err := NewUseCase(&userRepository, &languageResolver, &validator, &translator).Execute(context.Background(), &r)
+
+		assert.NoError(t, err)
+		assert.Nil(t, response)
+	})
+
+	t.Run("lifting a ban clears it", func(t *testing.T) {
+		t.Parallel()
+
+		var (
+			userRepository   users.MockUsersRepository
+			languageResolver resolver.MockResolver
+			validator        validator.MockValidator
+			translator       translator.TranslatorMock
+
+			r = Request{
+				UserUUID:     "test-user-uuid",
+				Name:         "test name",
+				Email:        "test@test.com",
+				Username:     "test-username",
+				LanguageCode: "en",
+			}
+
+			u = user.User{
+				UUID:         r.UserUUID,
+				Name:         r.Name,
+				Email:        r.Email,
+				Username:     r.Username,
+				LanguageCode: r.LanguageCode,
+				BannedAt:     time.Now(),
+			}
+		)
+
+		validator.On("Validate", &r).Once().Return(nil)
+		defer validator.AssertExpectations(t)
+
+		languageResolver.On("Verify", mock2.Anything, r.LanguageCode).Once().Return(true)
+		defer languageResolver.AssertExpectations(t)
+
+		userRepository.On("GetOneByIdentity", mock2.Anything, r.Email).Once().Return(user.User{}, domain.ErrNotExists)
+		userRepository.On("GetOneByIdentity", mock2.Anything, r.Username).Once().Return(user.User{}, domain.ErrNotExists)
+		userRepository.On("GetOne", mock2.Anything, r.UserUUID).Once().Return(u, nil)
+		userRepository.On("Save", mock2.Anything, mock2.MatchedBy(func(saved *user.User) bool {
+			return saved.BannedAt.IsZero()
+		})).Once().Return(r.UserUUID, nil)
+		defer userRepository.AssertExpectations(t)
+
+		response, err := NewUseCase(&userRepository, &languageResolver, &validator, &translator).Execute(context.Background(), &r)
 
 		assert.NoError(t, err)
 		assert.Nil(t, response)

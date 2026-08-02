@@ -4874,6 +4874,9 @@ const docTemplate = `{
                 "avatar": {
                     "type": "string"
                 },
+                "banned_at": {
+                    "type": "string"
+                },
                 "email": {
                     "type": "string"
                 },
@@ -6074,6 +6077,9 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "avatar": {
+                    "type": "string"
+                },
+                "banned_at": {
                     "type": "string"
                 },
                 "email": {

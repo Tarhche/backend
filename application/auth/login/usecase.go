@@ -60,6 +60,14 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		}, nil
 	}
 
+	if u.IsBanned() {
+		return &Response{
+			ValidationErrors: domain.ValidationErrors{
+				"identity": uc.translator.Translate("user_is_banned"),
+			},
+		}, nil
+	}
+
 	accessToken, err := uc.authTokenGenerator.GenerateAccessToken(ctx, &u)
 	if err != nil {
 		return nil, err

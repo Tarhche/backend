@@ -7,4 +7,5 @@ type Response struct {
 	Email        string `json:"email,omitempty"`
 	Username     string `json:"username,omitempty"`
 	LanguageCode string `json:"language_code,omitempty"`
+	BannedAt     string `json:"banned_at"`
 }

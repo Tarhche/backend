@@ -36,6 +36,23 @@ func NewRepository(database *mongo.Database) *UsersRepository {
 	}
 }
 
+func toDomain(a UserBson) user.User {
+	return user.User{
+		UUID:         a.UUID,
+		Name:         a.Name,
+		Avatar:       a.Avatar,
+		Email:        a.Email,
+		Username:     a.Username,
+		LanguageCode: a.LanguageCode,
+		PasswordHash: password.Hash{
+			Value: a.PasswordHash.Value,
+			Salt:  a.PasswordHash.Salt,
+		},
+		CreatedAt: a.CreatedAt,
+		BannedAt:  a.BannedAt,
+	}
+}
+
 func (r *UsersRepository) GetAll(ctx context.Context, offset uint, limit uint) ([]user.User, error) {
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
@@ -57,19 +74,7 @@ func (r *UsersRepository) GetAll(ctx context.Context, offset uint, limit uint) (
 		if err := cur.Decode(&a); err != nil {
 			return nil, err
 		}
-		items = append(items, user.User{
-			UUID:         a.UUID,
-			Name:         a.Name,
-			Avatar:       a.Avatar,
-			Email:        a.Email,
-			Username:     a.Username,
-			LanguageCode: a.LanguageCode,
-			PasswordHash: password.Hash{
-				Value: a.PasswordHash.Value,
-				Salt:  a.PasswordHash.Salt,
-			},
-			CreatedAt: a.CreatedAt,
-		})
+		items = append(items, toDomain(a))
 	}
 
 	if err := cur.Err(); err != nil {
@@ -98,19 +103,7 @@ func (r *UsersRepository) GetByUUIDs(ctx context.Context, UUIDs []string) ([]use
 		if err := cur.Decode(&a); err != nil {
 			return nil, err
 		}
-		items = append(items, user.User{
-			UUID:         a.UUID,
-			Name:         a.Name,
-			Avatar:       a.Avatar,
-			Email:        a.Email,
-			Username:     a.Username,
-			LanguageCode: a.LanguageCode,
-			PasswordHash: password.Hash{
-				Value: a.PasswordHash.Value,
-				Salt:  a.PasswordHash.Salt,
-			},
-			CreatedAt: a.CreatedAt,
-		})
+		items = append(items, toDomain(a))
 	}
 
 	if err := cur.Err(); err != nil {
@@ -132,19 +125,7 @@ func (r *UsersRepository) GetOne(ctx context.Context, UUID string) (user.User, e
 		return user.User{}, err
 	}
 
-	return user.User{
-		UUID:         a.UUID,
-		Name:         a.Name,
-		Avatar:       a.Avatar,
-		Email:        a.Email,
-		Username:     a.Username,
-		LanguageCode: a.LanguageCode,
-		PasswordHash: password.Hash{
-			Value: a.PasswordHash.Value,
-			Salt:  a.PasswordHash.Salt,
-		},
-		CreatedAt: a.CreatedAt,
-	}, nil
+	return toDomain(a), nil
 }
 
 // GetOneByIdentity returns a user which its email or username matches given identity
@@ -171,19 +152,7 @@ func (r *UsersRepository) GetOneByIdentity(ctx context.Context, identity string)
 		return user.User{}, err
 	}
 
-	return user.User{
-		UUID:         a.UUID,
-		Name:         a.Name,
-		Avatar:       a.Avatar,
-		Email:        a.Email,
-		Username:     a.Username,
-		LanguageCode: a.LanguageCode,
-		PasswordHash: password.Hash{
-			Value: a.PasswordHash.Value,
-			Salt:  a.PasswordHash.Salt,
-		},
-		CreatedAt: a.CreatedAt,
-	}, nil
+	return toDomain(a), nil
 }
 
 func (r *UsersRepository) Save(ctx context.Context, a *user.User) (string, error) {
@@ -210,6 +179,7 @@ func (r *UsersRepository) Save(ctx context.Context, a *user.User) (string, error
 			Salt:  a.PasswordHash.Salt,
 		},
 		CreatedAt: time.Now(),
+		BannedAt:  a.BannedAt,
 	}
 
 	_, err := r.collection.UpdateOne(

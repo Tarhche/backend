@@ -13,6 +13,7 @@ type UserBson struct {
 	LanguageCode string           `bson:"language_code"`
 	PasswordHash PasswordHashBson `bson:"hash,omitempty"`
 	CreatedAt    time.Time        `bson:"created_at,omitempty"`
+	BannedAt     time.Time        `bson:"banned_at"`
 }
 
 type PasswordHashBson struct {

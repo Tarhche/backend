@@ -2,6 +2,7 @@ package getuser
 
 import (
 	"context"
+	"time"
 
 	"github.com/khanzadimahdi/testproject/domain/user"
 )
@@ -29,5 +30,6 @@ func (uc *UseCase) Execute(ctx context.Context, UUID string) (*Response, error) 
 		Email:        u.Email,
 		Username:     u.Username,
 		LanguageCode: u.LanguageCode,
+		BannedAt:     u.BannedAt.Format(time.RFC3339),
 	}, err
 }

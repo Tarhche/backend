@@ -5,6 +5,7 @@ import (
 	"errors"
 	"reflect"
 	"testing"
+	"time"
 
 	jwtv5 "github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/assert"
@@ -254,5 +255,65 @@ func TestUseCase_Execute(t *testing.T) {
 		assert.NoError(t, err)
 		assert.NotNil(t, response)
 		assert.Equal(t, &expectedResponse, response)
+	})
+
+	t.Run("banned user gets no tokens", func(t *testing.T) {
+		t.Parallel()
+
+		var (
+			userRepository users.MockUsersRepository
+			roleRepository roles.MockRolesRepository
+			hasher         mock.MockCrypto
+			validator      validator.MockValidator
+			translator     translator.TranslatorMock
+
+			request = Request{
+				Identity: "test-identity",
+				Password: "test-password",
+			}
+
+			u = user.User{
+				UUID: request.Identity,
+				PasswordHash: password.Hash{
+					Value: []byte("hashed-value"),
+					Salt:  []byte("salt-value"),
+				},
+				BannedAt: time.Now(),
+			}
+
+			expectedResponse = Response{
+				ValidationErrors: domain.ValidationErrors{
+					"identity": "your account has been blocked",
+				},
+			}
+		)
+
+		validator.On("Validate", &request).Once().Return(nil)
+		defer validator.AssertExpectations(t)
+
+		userRepository.On("GetOneByIdentity", mock2.Anything, request.Identity).Once().Return(u, nil)
+		defer userRepository.AssertExpectations(t)
+
+		hasher.On("Equal", mock2.Anything, []byte(request.Password), u.PasswordHash.Value, u.PasswordHash.Salt).Once().Return(true)
+		defer hasher.AssertExpectations(t)
+
+		translator.On(
+			"Translate",
+			"user_is_banned",
+			mock2.AnythingOfType(translatorOptionsType),
+		).Once().Return(expectedResponse.ValidationErrors["identity"])
+		defer translator.AssertExpectations(t)
+
+		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
+
+		response, err := NewUseCase(&userRepository, authTokenGenerator, &hasher, &translator, &validator).Execute(context.Background(), &request)
+
+		roleRepository.AssertNotCalled(t, "GetByUserUUID")
+
+		assert.NoError(t, err)
+		assert.NotNil(t, response)
+		assert.Equal(t, &expectedResponse, response)
+		assert.Empty(t, response.AccessToken)
+		assert.Empty(t, response.RefreshToken)
 	})
 }

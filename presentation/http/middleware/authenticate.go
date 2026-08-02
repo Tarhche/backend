@@ -54,6 +54,11 @@ func (a *Authenticate) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if user.IsBanned() {
+		rw.WriteHeader(http.StatusForbidden)
+		return
+	}
+
 	a.next.ServeHTTP(rw, r.WithContext(auth.ToContext(r.Context(), &user)))
 }
 

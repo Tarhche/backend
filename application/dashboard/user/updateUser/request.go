@@ -1,17 +1,20 @@
 package updateuser
 
 import (
+	"time"
+
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/infrastructure/validator/rules"
 )
 
 type Request struct {
-	UserUUID     string `json:"uuid"`
-	Email        string `json:"email"`
-	Name         string `json:"name"`
-	Avatar       string `json:"avatar"`
-	Username     string `json:"username"`
-	LanguageCode string `json:"language_code"`
+	UserUUID     string    `json:"uuid"`
+	Email        string    `json:"email"`
+	Name         string    `json:"name"`
+	Avatar       string    `json:"avatar"`
+	Username     string    `json:"username"`
+	LanguageCode string    `json:"language_code"`
+	BannedAt     time.Time `json:"banned_at"`
 }
 
 var _ domain.Validatable = &Request{}

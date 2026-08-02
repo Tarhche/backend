@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -26,7 +27,8 @@ func TestUseCase_Execute(t *testing.T) {
 				UUID: userUUID,
 			}
 			expectedResponse = Response{
-				UUID: userUUID,
+				UUID:     userUUID,
+				BannedAt: a.BannedAt.Format(time.RFC3339),
 			}
 		)
 

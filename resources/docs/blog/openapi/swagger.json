@@ -4871,6 +4871,9 @@
                 "avatar": {
                     "type": "string"
                 },
+                "banned_at": {
+                    "type": "string"
+                },
                 "email": {
                     "type": "string"
                 },
@@ -6071,6 +6074,9 @@
             "type": "object",
             "properties": {
                 "avatar": {
+                    "type": "string"
+                },
+                "banned_at": {
                     "type": "string"
                 },
                 "email": {
