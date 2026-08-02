@@ -656,6 +656,55 @@
                 }
             }
         },
+        "/contact-us": {
+            "post": {
+                "description": "send a message to the site owners; the sender needs no account",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "contact-us"
+                ],
+                "summary": "Send a contact-us message",
+                "parameters": [
+                    {
+                        "description": "Contact-us payload",
+                        "name": "message",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/createMessage.Request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/dashboard/articles": {
             "get": {
                 "description": "page through articles in dashboard, grouped by correlation uuid",
@@ -1338,6 +1387,187 @@
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/contact-us": {
+            "get": {
+                "description": "paginated list of contact-us messages",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard contact-us"
+                ],
+                "summary": "List contact-us messages",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page",
+                        "name": "page",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/getMessages.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/contact-us/{uuid}": {
+            "get": {
+                "description": "retrieve a contact-us message by UUID",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard contact-us"
+                ],
+                "summary": "Get a contact-us message",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Message UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/getMessage.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "delete a contact-us message by UUID",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard contact-us"
+                ],
+                "summary": "Delete a contact-us message",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Message UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/contact-us/{uuid}/read": {
+            "put": {
+                "description": "toggle the read state of a contact-us message; the read time is stamped by the server",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard contact-us"
+                ],
+                "summary": "Mark a contact-us message as read",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Message UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Read state",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/markAsRead.Request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/markAsRead.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -3357,6 +3587,23 @@
                 }
             }
         },
+        "createMessage.Request": {
+            "type": "object",
+            "properties": {
+                "body": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "phone": {
+                    "type": "string"
+                },
+                "subject": {
+                    "type": "string"
+                }
+            }
+        },
         "createarticle.Request": {
             "type": "object",
             "properties": {
@@ -3594,6 +3841,9 @@
             "properties": {
                 "body": {},
                 "type": {
+                    "type": "string"
+                },
+                "uuid": {
                     "type": "string"
                 }
             }
@@ -3866,6 +4116,83 @@
                     "items": {
                         "type": "string"
                     }
+                }
+            }
+        },
+        "getMessage.Response": {
+            "type": "object",
+            "properties": {
+                "body": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "phone": {
+                    "type": "string"
+                },
+                "read_at": {
+                    "type": "string"
+                },
+                "subject": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                }
+            }
+        },
+        "getMessages.Response": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/getMessages.messageResponse"
+                    }
+                },
+                "pagination": {
+                    "$ref": "#/definitions/getMessages.pagination"
+                }
+            }
+        },
+        "getMessages.messageResponse": {
+            "type": "object",
+            "properties": {
+                "body": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "phone": {
+                    "type": "string"
+                },
+                "read_at": {
+                    "type": "string"
+                },
+                "subject": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                }
+            }
+        },
+        "getMessages.pagination": {
+            "type": "object",
+            "properties": {
+                "current_page": {
+                    "type": "integer"
+                },
+                "total_pages": {
+                    "type": "integer"
                 }
             }
         },
@@ -5509,6 +5836,26 @@
                     "$ref": "#/definitions/domain.ValidationErrors"
                 },
                 "refresh_token": {
+                    "type": "string"
+                }
+            }
+        },
+        "markAsRead.Request": {
+            "type": "object",
+            "properties": {
+                "read": {
+                    "description": "Read carries the toggle's new state: true stamps the read time, false\nclears it back to unread.",
+                    "type": "boolean"
+                }
+            }
+        },
+        "markAsRead.Response": {
+            "type": "object",
+            "properties": {
+                "read_at": {
+                    "type": "string"
+                },
+                "uuid": {
                     "type": "string"
                 }
             }

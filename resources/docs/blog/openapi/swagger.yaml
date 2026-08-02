@@ -23,6 +23,17 @@ definitions:
       new_password:
         type: string
     type: object
+  createMessage.Request:
+    properties:
+      body:
+        type: string
+      email:
+        type: string
+      phone:
+        type: string
+      subject:
+        type: string
+    type: object
   createarticle.Request:
     properties:
       body:
@@ -177,6 +188,8 @@ definitions:
     properties:
       body: {}
       type:
+        type: string
+      uuid:
         type: string
     type: object
   forgetpassword.Request:
@@ -354,6 +367,56 @@ definitions:
         items:
           type: string
         type: array
+    type: object
+  getMessage.Response:
+    properties:
+      body:
+        type: string
+      created_at:
+        type: string
+      email:
+        type: string
+      phone:
+        type: string
+      read_at:
+        type: string
+      subject:
+        type: string
+      uuid:
+        type: string
+    type: object
+  getMessages.Response:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/getMessages.messageResponse'
+        type: array
+      pagination:
+        $ref: '#/definitions/getMessages.pagination'
+    type: object
+  getMessages.messageResponse:
+    properties:
+      body:
+        type: string
+      created_at:
+        type: string
+      email:
+        type: string
+      phone:
+        type: string
+      read_at:
+        type: string
+      subject:
+        type: string
+      uuid:
+        type: string
+    type: object
+  getMessages.pagination:
+    properties:
+      current_page:
+        type: integer
+      total_pages:
+        type: integer
     type: object
   getNode.Response:
     properties:
@@ -1423,6 +1486,21 @@ definitions:
       refresh_token:
         type: string
     type: object
+  markAsRead.Request:
+    properties:
+      read:
+        description: |-
+          Read carries the toggle's new state: true stamps the read time, false
+          clears it back to unread.
+        type: boolean
+    type: object
+  markAsRead.Response:
+    properties:
+      read_at:
+        type: string
+      uuid:
+        type: string
+    type: object
   refresh.Request:
     properties:
       token:
@@ -2035,6 +2113,39 @@ paths:
       summary: Create a new comment
       tags:
       - comments
+  /contact-us:
+    post:
+      consumes:
+      - application/json
+      description: send a message to the site owners; the sender needs no account
+      parameters:
+      - description: Contact-us payload
+        in: body
+        name: message
+        required: true
+        schema:
+          $ref: '#/definitions/createMessage.Request'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Send a contact-us message
+      tags:
+      - contact-us
   /dashboard/articles:
     get:
       consumes:
@@ -2506,6 +2617,129 @@ paths:
       summary: Update config
       tags:
       - dashboard config
+  /dashboard/contact-us:
+    get:
+      consumes:
+      - application/json
+      description: paginated list of contact-us messages
+      parameters:
+      - default: 1
+        description: Page
+        in: query
+        name: page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getMessages.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List contact-us messages
+      tags:
+      - dashboard contact-us
+  /dashboard/contact-us/{uuid}:
+    delete:
+      consumes:
+      - application/json
+      description: delete a contact-us message by UUID
+      parameters:
+      - description: Message UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Delete a contact-us message
+      tags:
+      - dashboard contact-us
+    get:
+      consumes:
+      - application/json
+      description: retrieve a contact-us message by UUID
+      parameters:
+      - description: Message UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getMessage.Response'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get a contact-us message
+      tags:
+      - dashboard contact-us
+  /dashboard/contact-us/{uuid}/read:
+    put:
+      consumes:
+      - application/json
+      description: toggle the read state of a contact-us message; the read time is
+        stamped by the server
+      parameters:
+      - description: Message UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      - description: Read state
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/markAsRead.Request'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/markAsRead.Response'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Mark a contact-us message as read
+      tags:
+      - dashboard contact-us
   /dashboard/elements:
     get:
       consumes:

@@ -2,7 +2,7 @@ package register
 
 import (
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/user"
+	"github.com/khanzadimahdi/testproject/infrastructure/validator/rules"
 )
 
 type Request struct {
@@ -18,7 +18,7 @@ var _ domain.Validatable = &Request{}
 func (r *Request) Validate() domain.ValidationErrors {
 	validationErrors := make(domain.ValidationErrors)
 
-	if !user.IsValidEmail(r.Identity) {
+	if !rules.IsValidEmail(r.Identity) {
 		validationErrors["identity"] = "invalid_email"
 	}
 

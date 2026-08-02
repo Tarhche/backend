@@ -1,0 +1,8 @@
+{
+    "errors": {
+        "subject": "this field is required",
+        "body": "this field is required",
+        "email": "either an email address or a phone number is required",
+        "phone": "either an email address or a phone number is required"
+    }
+}
