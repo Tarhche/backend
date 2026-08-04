@@ -8,6 +8,8 @@ var farsi = map[string]string{
 	"required_field":                    "این فیلد اجباری است",
 	"invalid_value":                     "مقدار ارائه شده نامعتبر است",
 	"invalid_email":                     "مقدار ارائه شده باید یک آدرس ایمیل معتبر باشد",
+	"invalid_phone_number":              "شماره تماس باید فقط شامل ارقام و حداقل ۴ رقم باشد",
+	"email_or_phone_required":           "وارد کردن ایمیل یا شماره تماس الزامی است",
 	"repassword":                        "کلمه عبور و تکرار آن باید یکسان باشند",
 	"greater_than_zero":                 "مقدار ارائه شده باید بزرگتر از صفر باشد",
 	"exceeds_limit":                     "مقدار ارائه شده بیش از حد است",

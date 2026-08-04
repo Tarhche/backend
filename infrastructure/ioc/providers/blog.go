@@ -29,6 +29,7 @@ import (
 	"github.com/khanzadimahdi/testproject/application/code/runCode"
 	"github.com/khanzadimahdi/testproject/application/comment/createComment"
 	"github.com/khanzadimahdi/testproject/application/comment/getComments"
+	"github.com/khanzadimahdi/testproject/application/contact/createMessage"
 	dashboardCreateArticle "github.com/khanzadimahdi/testproject/application/dashboard/article/createArticle"
 	dashboardDeleteArticle "github.com/khanzadimahdi/testproject/application/dashboard/article/deleteArticle"
 	dashboardGetArticle "github.com/khanzadimahdi/testproject/application/dashboard/article/getArticle"
@@ -47,6 +48,10 @@ import (
 	dashboardUpdateUserComment "github.com/khanzadimahdi/testproject/application/dashboard/comment/updateUserComment"
 	dashboardGetConfig "github.com/khanzadimahdi/testproject/application/dashboard/config/getConfig"
 	dashboardUpdateConfig "github.com/khanzadimahdi/testproject/application/dashboard/config/updateConfig"
+	dashboardDeleteContactMessage "github.com/khanzadimahdi/testproject/application/dashboard/contact/deleteMessage"
+	dashboardGetContactMessage "github.com/khanzadimahdi/testproject/application/dashboard/contact/getMessage"
+	dashboardGetContactMessages "github.com/khanzadimahdi/testproject/application/dashboard/contact/getMessages"
+	dashboardMarkContactMessageAsRead "github.com/khanzadimahdi/testproject/application/dashboard/contact/markAsRead"
 	dashboardCreateElement "github.com/khanzadimahdi/testproject/application/dashboard/element/createElement"
 	dashboardDeleteElement "github.com/khanzadimahdi/testproject/application/dashboard/element/deleteElement"
 	dashboardGetElement "github.com/khanzadimahdi/testproject/application/dashboard/element/getElement"
@@ -100,6 +105,7 @@ import (
 	bookmarksrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/bookmarks"
 	commentsrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/comments"
 	configrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/config"
+	contactsrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/contacts"
 	elementsrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/elements"
 	filesrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/files"
 	languagesrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/languages"
@@ -113,10 +119,12 @@ import (
 	authorArticleAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/author/article"
 	bookmarkAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/bookmark"
 	commentAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/comment"
+	contactAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/contact"
 	dashboardArticleAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/article"
 	dashboardBookmarkAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/bookmark"
 	dashboardCommentAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/comment"
 	dashboardConfigAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/config"
+	dashboardContactAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/contact"
 	dashboardElementAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/element"
 	dashboardFileAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/file"
 	dashboardLanguageAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/language"
@@ -301,6 +309,7 @@ func blog(
 
 	articlesRepository := articlesrepository.NewRepository(database)
 	commentsRepository := commentsrepository.NewRepository(database)
+	contactsRepository := contactsrepository.NewRepository(database)
 	filesRepository := filesrepository.NewRepository(database)
 	elementsRepository := elementsrepository.NewRepository(database)
 	userRepository := userrepository.NewRepository(database)
@@ -366,6 +375,11 @@ func blog(
 	dashboardDeleteCommentUsecase := dashboardDeleteComment.NewUseCase(commentsRepository)
 	dashboardGetCommentUsecase := dashboardGetComment.NewUseCase(commentsRepository, userRepository)
 	dashboardGetCommentsUsecase := dashboardGetComments.NewUseCase(commentsRepository, userRepository)
+
+	dashboardDeleteContactMessageUsecase := dashboardDeleteContactMessage.NewUseCase(contactsRepository)
+	dashboardGetContactMessageUsecase := dashboardGetContactMessage.NewUseCase(contactsRepository)
+	dashboardGetContactMessagesUsecase := dashboardGetContactMessages.NewUseCase(contactsRepository)
+	dashboardMarkContactMessageAsReadUsecase := dashboardMarkContactMessageAsRead.NewUseCase(contactsRepository)
 
 	dashboardDeleteUserCommentUsecase := dashboardDeleteUserComment.NewUseCase(commentsRepository)
 	dashboardGetUserCommentUsecase := dashboardGetUserComment.NewUseCase(commentsRepository, userRepository)
@@ -443,6 +457,11 @@ func blog(
 	}), jwt, userRepository))
 	mux.Handle("GET /api/comments", scoped(func(c provider.Container) http.Handler {
 		return commentAPI.NewIndexHandler(getComments.NewUseCase(commentsRepository, userRepository, va(c)))
+	}))
+
+	// contact us
+	mux.Handle("POST /api/contact-us", scoped(func(c provider.Container) http.Handler {
+		return contactAPI.NewCreateHandler(createMessage.NewUseCase(contactsRepository, va(c)))
 	}))
 
 	// bookmark
@@ -580,6 +599,12 @@ func blog(
 	mux.Handle("PUT /api/dashboard/elements", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
 		return dashboardElementAPI.NewUpdateHandler(dashboardUpdateElement.NewUseCase(elementsRepository, va(c)))
 	}), authorizer, permission.ElementsUpdate), jwt, userRepository))
+
+	// contact us
+	mux.Handle("DELETE /api/dashboard/contact-us/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardContactAPI.NewDeleteHandler(dashboardDeleteContactMessageUsecase), authorizer, permission.ContactUsDelete), jwt, userRepository))
+	mux.Handle("GET /api/dashboard/contact-us", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardContactAPI.NewIndexHandler(dashboardGetContactMessagesUsecase), authorizer, permission.ContactUsIndex), jwt, userRepository))
+	mux.Handle("GET /api/dashboard/contact-us/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardContactAPI.NewShowHandler(dashboardGetContactMessageUsecase), authorizer, permission.ContactUsShow), jwt, userRepository))
+	mux.Handle("PUT /api/dashboard/contact-us/{uuid}/read", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardContactAPI.NewMarkAsReadHandler(dashboardMarkContactMessageAsReadUsecase), authorizer, permission.ContactUsMarkAsRead), jwt, userRepository))
 
 	// config
 	mux.Handle("GET /api/dashboard/config", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardConfigAPI.NewShowHandler(dashboardGetConfigUsecase), authorizer, permission.ConfigShow), jwt, userRepository))

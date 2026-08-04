@@ -2,7 +2,7 @@ package createuser
 
 import (
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/user"
+	"github.com/khanzadimahdi/testproject/infrastructure/validator/rules"
 )
 
 type Request struct {
@@ -21,7 +21,7 @@ func (r *Request) Validate() domain.ValidationErrors {
 
 	if len(r.Email) == 0 {
 		validationErrors["email"] = "required_field"
-	} else if !user.IsValidEmail(r.Email) {
+	} else if !rules.IsValidEmail(r.Email) {
 		validationErrors["email"] = "invalid_email"
 	}
 
@@ -31,7 +31,7 @@ func (r *Request) Validate() domain.ValidationErrors {
 
 	if len(r.Username) == 0 {
 		validationErrors["username"] = "required_field"
-	} else if !user.IsValidUsername(r.Username) {
+	} else if !rules.IsValidUsername(r.Username) {
 		validationErrors["username"] = "invalid_value"
 	}
 

@@ -52,6 +52,11 @@ const (
 	RolesUpdate = "roles.update"
 	RolesDelete = "roles.delete"
 
+	ContactUsIndex      = "contactus.index"
+	ContactUsShow       = "contactus.show"
+	ContactUsDelete     = "contactus.delete"
+	ContactUsMarkAsRead = "contactus.markAsRead"
+
 	ConfigShow   = "config.show"
 	ConfigUpdate = "config.update"
 

@@ -48,6 +48,12 @@ var collection []permission.Permission = []permission.Permission{
 	{Name: "update a role", Value: permission.RolesUpdate},
 	{Name: "delete a role", Value: permission.RolesDelete},
 
+	// contact us
+	{Name: "list of contact-us messages", Value: permission.ContactUsIndex},
+	{Name: "show a contact-us message", Value: permission.ContactUsShow},
+	{Name: "delete a contact-us message", Value: permission.ContactUsDelete},
+	{Name: "mark a contact-us message as read", Value: permission.ContactUsMarkAsRead},
+
 	// config
 	{Name: "show configuration", Value: permission.ConfigShow},
 	{Name: "update configuration", Value: permission.ConfigUpdate},

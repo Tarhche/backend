@@ -2,7 +2,7 @@ package verify
 
 import (
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/user"
+	"github.com/khanzadimahdi/testproject/infrastructure/validator/rules"
 )
 
 type Request struct {
@@ -29,7 +29,7 @@ func (r *Request) Validate() domain.ValidationErrors {
 
 	if len(r.Username) == 0 {
 		validationErrors["username"] = "required_field"
-	} else if !user.IsValidUsername(r.Username) {
+	} else if !rules.IsValidUsername(r.Username) {
 		validationErrors["username"] = "invalid_value"
 	}
 
