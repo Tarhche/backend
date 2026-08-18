@@ -8,8 +8,6 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/sdk/resource"
 
-	"github.com/danceable/container/bind"
-	"github.com/danceable/container/resolve"
 	"github.com/danceable/provider"
 
 	"github.com/khanzadimahdi/testproject/infrastructure/telemetry/profiler"
@@ -39,7 +37,7 @@ func (p *profilerProvider) Register(ctx context.Context, c provider.Container) e
 	// even when continuous profiling is disabled, so bind it unconditionally.
 	tracedProfiler := profiler.NewTracedProfiler()
 
-	return c.Bind(func() *profiler.TracedProfiler { return tracedProfiler }, bind.Singleton())
+	return c.Bind(func() *profiler.TracedProfiler { return tracedProfiler }, provider.Singleton())
 }
 
 func (p *profilerProvider) Boot(ctx context.Context, c provider.Container) error {
@@ -58,7 +56,7 @@ func (p *profilerProvider) Boot(ctx context.Context, c provider.Container) error
 	}
 
 	var logger *slog.Logger
-	if err := c.Resolve(&logger, resolve.WithParams(p.serviceName)); err != nil {
+	if err := c.Resolve(&logger, provider.WithParams(p.serviceName)); err != nil {
 		return err
 	}
 

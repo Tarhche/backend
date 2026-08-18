@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 
-	"github.com/danceable/container/bind"
 	"github.com/danceable/provider"
 	"github.com/nats-io/nats.go"
 )
@@ -29,7 +28,7 @@ func (p *natsProvider) Register(ctx context.Context, c provider.Container) error
 		defer natsConnection.Drain()
 	}
 
-	return c.Bind(func() *nats.Conn { return natsConnection }, bind.Singleton())
+	return c.Bind(func() *nats.Conn { return natsConnection }, provider.Singleton())
 }
 
 func (p *natsProvider) Boot(ctx context.Context, c provider.Container) error {

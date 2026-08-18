@@ -3,8 +3,6 @@ package providers
 import (
 	"context"
 
-	"github.com/danceable/container/bind"
-	"github.com/danceable/container/resolve"
 	"github.com/danceable/provider"
 
 	"github.com/khanzadimahdi/testproject/application/localize"
@@ -33,13 +31,13 @@ func (p *scopedTranslationProvider) Scoped() bool {
 
 func (p *scopedTranslationProvider) Register(ctx context.Context, c provider.Container) error {
 	var code string
-	if err := c.Resolve(&code, resolve.WithName(localize.LanguageCode)); err != nil {
+	if err := c.Resolve(&code, provider.ResolveName(localize.LanguageCode)); err != nil {
 		return err
 	}
 
 	t := translator.New(translation.Translations, code)
 
-	return c.Bind(func() translatorContract.Translator { return t }, bind.Singleton())
+	return c.Bind(func() translatorContract.Translator { return t }, provider.Singleton())
 }
 
 func (p *scopedTranslationProvider) Boot(ctx context.Context, c provider.Container) error {

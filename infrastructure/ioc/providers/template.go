@@ -3,7 +3,6 @@ package providers
 import (
 	"context"
 
-	"github.com/danceable/container/bind"
 	"github.com/danceable/provider"
 
 	"github.com/khanzadimahdi/testproject/domain"
@@ -22,7 +21,7 @@ func NewTemplateProvider() *templateProvider {
 func (p *templateProvider) Register(ctx context.Context, c provider.Container) error {
 	templateRenderer := template.NewRenderer(view.Files, "tmpl")
 
-	return c.Bind(func() domain.Renderer { return templateRenderer }, bind.Singleton())
+	return c.Bind(func() domain.Renderer { return templateRenderer }, provider.Singleton())
 }
 
 func (p *templateProvider) Boot(ctx context.Context, c provider.Container) error {

@@ -3,7 +3,6 @@ package providers
 import (
 	"context"
 
-	"github.com/danceable/container/bind"
 	"github.com/danceable/provider"
 
 	"github.com/khanzadimahdi/testproject/domain/password"
@@ -21,7 +20,7 @@ func NewHasherProvider() *hasherProvider {
 func (p *hasherProvider) Register(ctx context.Context, c provider.Container) error {
 	hasher := argon2.NewArgon2id(3, 32*1024, 2, 64)
 
-	return c.Bind(func() password.Hasher { return hasher }, bind.Singleton())
+	return c.Bind(func() password.Hasher { return hasher }, provider.Singleton())
 }
 
 func (p *hasherProvider) Boot(ctx context.Context, c provider.Container) error {

@@ -5,8 +5,6 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/danceable/container/bind"
-	"github.com/danceable/container/resolve"
 	"github.com/danceable/provider"
 
 	containerContract "github.com/khanzadimahdi/testproject/domain/runner/container"
@@ -27,7 +25,7 @@ func (p *dockerProvider) Register(ctx context.Context, c provider.Container) err
 	dockerHost := os.Getenv("DOCKER_HOST")
 
 	var logger *slog.Logger
-	if err := c.Resolve(&logger, resolve.WithParams("runner-worker")); err != nil {
+	if err := c.Resolve(&logger, provider.WithParams("runner-worker")); err != nil {
 		return err
 	}
 
@@ -41,11 +39,11 @@ func (p *dockerProvider) Register(ctx context.Context, c provider.Container) err
 		return err
 	}
 
-	if err := c.Bind(func() containerContract.Manager { return containerManager }, bind.Singleton()); err != nil {
+	if err := c.Bind(func() containerContract.Manager { return containerManager }, provider.Singleton()); err != nil {
 		return err
 	}
 
-	return c.Bind(func() node.Manager { return nodeManager }, bind.Singleton())
+	return c.Bind(func() node.Manager { return nodeManager }, provider.Singleton())
 }
 
 func (p *dockerProvider) Boot(ctx context.Context, c provider.Container) error {

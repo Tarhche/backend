@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/danceable/container/bind"
 	"github.com/danceable/provider"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -60,7 +59,7 @@ func (p *mongodbProvider) Register(ctx context.Context, c provider.Container) er
 		mongoClient.Disconnect(context.Background())
 	}
 
-	return c.Bind(func() *mongo.Database { return database }, bind.Singleton())
+	return c.Bind(func() *mongo.Database { return database }, provider.Singleton())
 }
 
 func (p *mongodbProvider) Boot(ctx context.Context, c provider.Container) error {

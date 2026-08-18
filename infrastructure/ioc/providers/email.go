@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 
-	"github.com/danceable/container/bind"
 	"github.com/danceable/provider"
 
 	"github.com/khanzadimahdi/testproject/domain"
@@ -32,11 +31,11 @@ func (p *emailProvider) Register(ctx context.Context, c provider.Container) erro
 		Port: os.Getenv("MAIL_SMTP_PORT"),
 	})
 
-	if err := c.Bind(func() domain.Mailer { return mailer }, bind.Singleton()); err != nil {
+	if err := c.Bind(func() domain.Mailer { return mailer }, provider.Singleton()); err != nil {
 		return err
 	}
 
-	return c.Bind(func() string { return mailFromAddress }, bind.Singleton(), bind.WithName(MailFromAddress))
+	return c.Bind(func() string { return mailFromAddress }, provider.Singleton(), provider.WithName(MailFromAddress))
 }
 
 func (p *emailProvider) Boot(ctx context.Context, c provider.Container) error {

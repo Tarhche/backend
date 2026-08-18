@@ -3,7 +3,6 @@ package providers
 import (
 	"context"
 
-	"github.com/danceable/container/bind"
 	"github.com/danceable/provider"
 
 	"github.com/khanzadimahdi/testproject/domain"
@@ -25,7 +24,7 @@ func NewValidationProvider() *validationProvider {
 func (p *validationProvider) Register(ctx context.Context, c provider.Container) error {
 	return c.Bind(func(t translator.Translator) domain.Validator {
 		return validator.New(t)
-	}, bind.Singleton())
+	}, provider.Singleton())
 }
 
 func (p *validationProvider) Boot(ctx context.Context, c provider.Container) error {

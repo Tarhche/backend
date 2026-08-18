@@ -3,7 +3,6 @@ package providers
 import (
 	"context"
 
-	"github.com/danceable/container/bind"
 	"github.com/danceable/provider"
 
 	translatorContract "github.com/khanzadimahdi/testproject/domain/translator"
@@ -26,7 +25,7 @@ func NewTranslationProvider() *translationProvider {
 func (p *translationProvider) Register(ctx context.Context, c provider.Container) error {
 	translator := translator.New(translation.Translations, translation.EN)
 
-	return c.Bind(func() translatorContract.Translator { return translator }, bind.Singleton())
+	return c.Bind(func() translatorContract.Translator { return translator }, provider.Singleton())
 }
 
 func (p *translationProvider) Boot(ctx context.Context, c provider.Container) error {

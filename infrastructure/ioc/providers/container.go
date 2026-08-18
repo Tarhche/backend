@@ -3,7 +3,6 @@ package providers
 import (
 	"context"
 
-	"github.com/danceable/container/bind"
 	"github.com/danceable/provider"
 )
 
@@ -18,7 +17,7 @@ func NewContainerProvider() *containerProvider {
 }
 
 func (p *containerProvider) Register(ctx context.Context, c provider.Container) error {
-	return c.Bind(func() provider.Container { return c }, bind.Singleton())
+	return c.Bind(func() provider.Container { return c }, provider.Singleton())
 }
 
 func (p *containerProvider) Boot(ctx context.Context, c provider.Container) error {

@@ -6,7 +6,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/danceable/container/resolve"
 	"github.com/danceable/provider"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -30,7 +29,7 @@ func TestLocalize_ServeHTTP(t *testing.T) {
 	next := http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		gotContainer = ContainerFromContext(r.Context())
 		require.NotNil(t, gotContainer)
-		require.NoError(t, gotContainer.Resolve(&seededCode, resolve.WithName(localize.LanguageCode)))
+		require.NoError(t, gotContainer.Resolve(&seededCode, provider.ResolveName(localize.LanguageCode)))
 		contextCode = localize.FromContext(r.Context())
 		rw.WriteHeader(http.StatusOK)
 	})

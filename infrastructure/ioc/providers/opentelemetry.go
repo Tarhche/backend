@@ -18,7 +18,6 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.41.0"
 
-	"github.com/danceable/container/bind"
 	"github.com/danceable/provider"
 )
 
@@ -87,13 +86,13 @@ func (p *openTelemetryProvider) Register(ctx context.Context, c provider.Contain
 	}
 
 	// name should be provided on resolve step, so we bind a factory function that takes the name as an argument
-	if err := c.Bind(loggerResolver, bind.Lazy()); err != nil {
+	if err := c.Bind(loggerResolver, provider.Lazy()); err != nil {
 		return err
 	}
 
 	// the resource identifies this service instance on every signal; it is
 	// shared with providers that emit telemetry themselves (e.g. profiling)
-	return c.Bind(func() *resource.Resource { return res }, bind.Singleton())
+	return c.Bind(func() *resource.Resource { return res }, provider.Singleton())
 }
 
 func (p *openTelemetryProvider) Boot(ctx context.Context, c provider.Container) error {

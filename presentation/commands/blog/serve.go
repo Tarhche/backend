@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/danceable/container/resolve"
 	"github.com/danceable/provider"
 
 	"github.com/khanzadimahdi/testproject/domain"
@@ -73,11 +72,11 @@ func (c *ServeCommand) Boot(ctx context.Context, container provider.Container) e
 		return err
 	}
 
-	if err := container.Resolve(&c.logger, resolve.WithParams("blog")); err != nil {
+	if err := container.Resolve(&c.logger, provider.WithParams("blog")); err != nil {
 		return err
 	}
 
-	return container.Resolve(&c.consumers, resolve.WithName(providers.BlogSubscribers))
+	return container.Resolve(&c.consumers, provider.ResolveName(providers.BlogSubscribers))
 }
 
 // @title		Backend API

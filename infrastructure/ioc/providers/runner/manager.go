@@ -6,8 +6,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/danceable/container/bind"
-	"github.com/danceable/container/resolve"
 	"github.com/danceable/provider"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
@@ -78,7 +76,7 @@ func (p *managerProvider) Boot(ctx context.Context, c provider.Container) error 
 	}
 
 	var logger *slog.Logger
-	if err := c.Resolve(&logger, resolve.WithParams("runner-manager")); err != nil {
+	if err := c.Resolve(&logger, provider.WithParams("runner-manager")); err != nil {
 		return err
 	}
 
@@ -87,15 +85,15 @@ func (p *managerProvider) Boot(ctx context.Context, c provider.Container) error 
 		return err
 	}
 
-	c.Bind(func() domain.Producer { return pc }, bind.Singleton())
-	c.Bind(func() domain.Consumer { return pc }, bind.Singleton())
-	c.Bind(func() domain.ProduceConsumer { return pc }, bind.Singleton())
+	c.Bind(func() domain.Producer { return pc }, provider.Singleton())
+	c.Bind(func() domain.Consumer { return pc }, provider.Singleton())
+	c.Bind(func() domain.ProduceConsumer { return pc }, provider.Singleton())
 
 	p.terminate = func() {
 		defer pc.Wait()
 	}
 
-	return c.Bind(managerConsoleCommand, bind.Singleton())
+	return c.Bind(managerConsoleCommand, provider.Singleton())
 }
 
 func (p *managerProvider) Terminate(ctx context.Context) error {
@@ -114,7 +112,7 @@ func managerConsoleCommand(
 	iocContainer provider.Container,
 ) (http.Handler, error) {
 	var logger *slog.Logger
-	if err := iocContainer.Resolve(&logger, resolve.WithParams("runner-manager")); err != nil {
+	if err := iocContainer.Resolve(&logger, provider.WithParams("runner-manager")); err != nil {
 		return nil, err
 	}
 
@@ -186,7 +184,7 @@ func managerConsoleCommand(
 	// manager subscribers
 	if err := iocContainer.Bind(func() map[string]domain.MessageHandler {
 		return subscribers
-	}, bind.Singleton(), bind.WithName(ManagerSubscribers)); err != nil {
+	}, provider.Singleton(), provider.WithName(ManagerSubscribers)); err != nil {
 		return nil, err
 	}
 

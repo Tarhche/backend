@@ -3,7 +3,6 @@ package providers
 import (
 	"context"
 
-	"github.com/danceable/container/bind"
 	"github.com/danceable/provider"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
@@ -23,13 +22,13 @@ func NewAuthProvider() *authProvider {
 func (p *authProvider) Register(ctx context.Context, c provider.Container) error {
 	if err := c.Bind(func(database *mongo.Database) roleContract.Repository {
 		return rolesrepository.NewRepository(database)
-	}, bind.Singleton()); err != nil {
+	}, provider.Singleton()); err != nil {
 		return err
 	}
 
 	return c.Bind(func(roleRepository roleContract.Repository) domain.Authorizer {
 		return domain.NewRoleBasedAccessControl(roleRepository)
-	}, bind.Singleton())
+	}, provider.Singleton())
 }
 
 func (p *authProvider) Boot(ctx context.Context, c provider.Container) error {

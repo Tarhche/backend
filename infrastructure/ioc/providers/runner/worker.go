@@ -8,8 +8,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/danceable/container/bind"
-	"github.com/danceable/container/resolve"
 	"github.com/danceable/provider"
 	"github.com/nats-io/nats.go"
 
@@ -73,7 +71,7 @@ func (p *workerNameProvider) Register(ctx context.Context, c provider.Container)
 
 	name := *p.name
 
-	return c.Bind(func() string { return name }, bind.Singleton(), bind.WithName(WorkerName))
+	return c.Bind(func() string { return name }, provider.Singleton(), provider.WithName(WorkerName))
 }
 
 func (p *workerNameProvider) Boot(ctx context.Context, c provider.Container) error {
@@ -102,7 +100,7 @@ func (p *workerProvider) Register(ctx context.Context, c provider.Container) err
 
 func (p *workerProvider) Boot(ctx context.Context, c provider.Container) error {
 	var nodeName string
-	if err := c.Resolve(&nodeName, resolve.WithName(WorkerName)); err != nil {
+	if err := c.Resolve(&nodeName, provider.ResolveName(WorkerName)); err != nil {
 		return err
 	}
 
@@ -112,7 +110,7 @@ func (p *workerProvider) Boot(ctx context.Context, c provider.Container) error {
 	}
 
 	var logger *slog.Logger
-	if err := c.Resolve(&logger, resolve.WithParams("runner-worker-"+nodeName)); err != nil {
+	if err := c.Resolve(&logger, provider.WithParams("runner-worker-"+nodeName)); err != nil {
 		return err
 	}
 
@@ -123,15 +121,15 @@ func (p *workerProvider) Boot(ctx context.Context, c provider.Container) error {
 		return err
 	}
 
-	c.Bind(func() domain.Producer { return pc }, bind.Singleton())
-	c.Bind(func() domain.Consumer { return pc }, bind.Singleton())
-	c.Bind(func() domain.ProduceConsumer { return pc }, bind.Singleton())
+	c.Bind(func() domain.Producer { return pc }, provider.Singleton())
+	c.Bind(func() domain.Consumer { return pc }, provider.Singleton())
+	c.Bind(func() domain.ProduceConsumer { return pc }, provider.Singleton())
 
 	p.terminate = func() {
 		defer pc.Wait()
 	}
 
-	return c.Bind(workerConsoleCommand, bind.Singleton())
+	return c.Bind(workerConsoleCommand, provider.Singleton())
 }
 
 func (p *workerProvider) Terminate(ctx context.Context) error {
@@ -150,12 +148,12 @@ func workerConsoleCommand(
 	iocContainer provider.Container,
 ) (http.Handler, error) {
 	var nodeName string
-	if err := iocContainer.Resolve(&nodeName, resolve.WithName(WorkerName)); err != nil {
+	if err := iocContainer.Resolve(&nodeName, provider.ResolveName(WorkerName)); err != nil {
 		return nil, err
 	}
 
 	var logger *slog.Logger
-	if err := iocContainer.Resolve(&logger, resolve.WithParams("runner-worker-"+nodeName)); err != nil {
+	if err := iocContainer.Resolve(&logger, provider.WithParams("runner-worker-"+nodeName)); err != nil {
 		return nil, err
 	}
 
@@ -209,21 +207,21 @@ func workerConsoleCommand(
 	// worker subscribers
 	if err := iocContainer.Bind(func() map[string]domain.MessageHandler {
 		return subscribers
-	}, bind.Singleton(), bind.WithName(WorkerSubscribers)); err != nil {
+	}, provider.Singleton(), provider.WithName(WorkerSubscribers)); err != nil {
 		return nil, err
 	}
 
 	// worker heartbeat
 	if err := iocContainer.Bind(func() *workerHeartbeat.UseCase {
 		return workerHeartbeat.NewUseCase(asyncProduceConsumer, nodeManager, nodeName)
-	}, bind.Singleton()); err != nil {
+	}, provider.Singleton()); err != nil {
 		return nil, err
 	}
 
 	// task heartbeat
 	if err := iocContainer.Bind(func() *workerTaskHeartbeat.UseCase {
 		return workerTaskHeartbeat.NewUseCase(containerManager, asyncProduceConsumer, nodeName, logger)
-	}, bind.Singleton()); err != nil {
+	}, provider.Singleton()); err != nil {
 		return nil, err
 	}
 

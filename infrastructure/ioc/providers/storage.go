@@ -5,7 +5,6 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/danceable/container/bind"
 	"github.com/danceable/provider"
 
 	"github.com/khanzadimahdi/testproject/domain/file"
@@ -37,7 +36,7 @@ func (p *storageProvider) Register(ctx context.Context, c provider.Container) er
 		return err
 	}
 
-	return c.Bind(func() file.Storage { return fileStorage }, bind.Singleton())
+	return c.Bind(func() file.Storage { return fileStorage }, provider.Singleton())
 }
 
 func (p *storageProvider) Boot(ctx context.Context, c provider.Container) error {

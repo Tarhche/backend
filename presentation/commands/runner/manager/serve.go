@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/danceable/container/resolve"
 	"github.com/danceable/provider"
 
 	"github.com/khanzadimahdi/testproject/domain"
@@ -73,11 +72,11 @@ func (c *ServeCommand) Boot(ctx context.Context, container provider.Container) e
 		return err
 	}
 
-	if err := container.Resolve(&c.logger, resolve.WithParams("runner-manager")); err != nil {
+	if err := container.Resolve(&c.logger, provider.WithParams("runner-manager")); err != nil {
 		return err
 	}
 
-	return container.Resolve(&c.consumers, resolve.WithName(runner.ManagerSubscribers))
+	return container.Resolve(&c.consumers, provider.ResolveName(runner.ManagerSubscribers))
 }
 
 // @title			Runner Manager API

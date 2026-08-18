@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/danceable/container/resolve"
 	"github.com/danceable/provider"
 
 	workerHeartbeat "github.com/khanzadimahdi/testproject/application/runner/worker/beatHeart"
@@ -91,11 +90,11 @@ func (c *ServeCommand) Boot(ctx context.Context, container provider.Container) e
 		return err
 	}
 
-	if err := container.Resolve(&c.logger, resolve.WithParams("runner-worker-"+c.name)); err != nil {
+	if err := container.Resolve(&c.logger, provider.WithParams("runner-worker-"+c.name)); err != nil {
 		return err
 	}
 
-	return container.Resolve(&c.consumers, resolve.WithName(runner.WorkerSubscribers))
+	return container.Resolve(&c.consumers, provider.ResolveName(runner.WorkerSubscribers))
 }
 
 // @title			Runner Worker API

@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 
-	"github.com/danceable/container/bind"
 	"github.com/danceable/provider"
 
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/ecdsa"
@@ -28,7 +27,7 @@ func (p *jwtProvider) Register(ctx context.Context, c provider.Container) error 
 
 	j := jwt.NewJWT(privateKey, privateKey.Public())
 
-	return c.Bind(func() *jwt.JWT { return j }, bind.Singleton())
+	return c.Bind(func() *jwt.JWT { return j }, provider.Singleton())
 }
 
 func (p *jwtProvider) Boot(ctx context.Context, c provider.Container) error {

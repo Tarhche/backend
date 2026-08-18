@@ -8,8 +8,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/danceable/container/bind"
-	"github.com/danceable/container/resolve"
 	"github.com/danceable/provider"
 
 	getArticle "github.com/khanzadimahdi/testproject/application/article/getArticle"
@@ -208,7 +206,7 @@ func (p *blogProvider) Boot(ctx context.Context, c provider.Container) error {
 	}
 
 	var logger *slog.Logger
-	if err := c.Resolve(&logger, resolve.WithParams("blog")); err != nil {
+	if err := c.Resolve(&logger, provider.WithParams("blog")); err != nil {
 		return err
 	}
 
@@ -243,12 +241,12 @@ func (p *blogProvider) Boot(ctx context.Context, c provider.Container) error {
 	}
 	cachedDecoratedWS := websocketHandler.NewCacheDecorator(ws, runCodeCache, logger, runCode.RunCodeRequest)
 
-	c.Bind(func() domain.Producer { return pc }, bind.Singleton())
-	c.Bind(func() domain.Consumer { return pc }, bind.Singleton())
-	c.Bind(func() domain.ProduceConsumer { return pc }, bind.Singleton())
-	c.Bind(func() domain.PublishSubscriber { return ps }, bind.Singleton())
-	c.Bind(func() *websocketHandler.Websocket { return ws }, bind.Singleton())
-	c.Bind(func() *websocketHandler.CacheDecorator { return cachedDecoratedWS }, bind.Singleton())
+	c.Bind(func() domain.Producer { return pc }, provider.Singleton())
+	c.Bind(func() domain.Consumer { return pc }, provider.Singleton())
+	c.Bind(func() domain.ProduceConsumer { return pc }, provider.Singleton())
+	c.Bind(func() domain.PublishSubscriber { return ps }, provider.Singleton())
+	c.Bind(func() *websocketHandler.Websocket { return ws }, provider.Singleton())
+	c.Bind(func() *websocketHandler.CacheDecorator { return cachedDecoratedWS }, provider.Singleton())
 
 	p.terminate = func() {
 		defer pc.Wait()
@@ -256,7 +254,7 @@ func (p *blogProvider) Boot(ctx context.Context, c provider.Container) error {
 		defer ws.Close()
 	}
 
-	return c.Bind(blog, bind.Singleton())
+	return c.Bind(blog, provider.Singleton())
 }
 
 func (p *blogProvider) Terminate(ctx context.Context) error {
@@ -282,12 +280,12 @@ func blog(
 	iocContainer provider.Container,
 ) (http.Handler, error) {
 	var logger *slog.Logger
-	if err := iocContainer.Resolve(&logger, resolve.WithParams("blog")); err != nil {
+	if err := iocContainer.Resolve(&logger, provider.WithParams("blog")); err != nil {
 		return nil, err
 	}
 
 	var mailFromAddress string
-	if err := iocContainer.Resolve(&mailFromAddress, resolve.WithName(MailFromAddress)); err != nil {
+	if err := iocContainer.Resolve(&mailFromAddress, provider.ResolveName(MailFromAddress)); err != nil {
 		return nil, err
 	}
 
@@ -655,7 +653,7 @@ func blog(
 
 	if err := iocContainer.Bind(func() map[string]domain.MessageHandler {
 		return subscribers
-	}, bind.Singleton(), bind.WithName(BlogSubscribers)); err != nil {
+	}, provider.Singleton(), provider.WithName(BlogSubscribers)); err != nil {
 		return nil, err
 	}
 
