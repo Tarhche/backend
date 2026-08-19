@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/danceable/provider"
@@ -52,8 +51,8 @@ func WorkerProviders(name *string) []provider.Provider {
 	}
 }
 
-// workerNameProvider binds the worker name, falling back to the
-// RUNNER_WORKER_NAME environment variable when the flag is empty.
+// workerNameProvider binds the worker name, which the command loads from its
+// --name flag or from the RUNNER_WORKER_NAME environment variable.
 type workerNameProvider struct {
 	name *string
 }
@@ -65,10 +64,6 @@ func newWorkerNameProvider(name *string) *workerNameProvider {
 }
 
 func (p *workerNameProvider) Register(ctx context.Context, c provider.Container) error {
-	if len(*p.name) == 0 {
-		*p.name = os.Getenv("RUNNER_WORKER_NAME")
-	}
-
 	name := *p.name
 
 	return c.Bind(func() string { return name }, provider.Singleton(), provider.WithName(WorkerName))

@@ -2,13 +2,14 @@ package worker
 
 import (
 	"context"
-	"flag"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"testing"
 	"time"
 
+	"github.com/danceable/console"
 	"github.com/khanzadimahdi/testproject/domain"
 	messaging "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
 	"github.com/stretchr/testify/assert"
@@ -52,7 +53,7 @@ func TestServe(t *testing.T) {
 	t.Run("configure", func(t *testing.T) {
 		command := NewServeCommand()
 
-		flagSet := flag.NewFlagSet(command.Name(), flag.ContinueOnError)
+		flagSet := console.NewFlagSet(command.Name(), io.Discard)
 
 		command.Configure(flagSet)
 
@@ -61,20 +62,115 @@ func TestServe(t *testing.T) {
 			t.Fatal("port flag has not been configured")
 		}
 
-		if port.Usage != "specifies which port server should listen to." {
+		if port.Usage() != "specifies which port server should listen to." {
 			t.Error("unexpected port flag usage")
+		}
+
+		if port.Short() != "p" {
+			t.Error("unexpected port flag short name")
+		}
+
+		if port.Env() != "SERVER_PORT" {
+			t.Error("unexpected port flag environment variable")
 		}
 
 		if command.port != 80 {
 			t.Error("unexpected port flag default value")
 		}
 
-		if err := flagSet.Parse([]string{"-port", "100"}); err != nil {
+		if err := flagSet.Parse([]string{"--port", "100"}); err != nil {
 			t.Errorf("unexpected parsing error: %q", err)
 		}
 
 		if command.port != 100 {
 			t.Error("unexpected port flag default value")
+		}
+	})
+
+	t.Run("configure with the short flag", func(t *testing.T) {
+		command := NewServeCommand()
+
+		flagSet := console.NewFlagSet(command.Name(), io.Discard)
+
+		command.Configure(flagSet)
+
+		if err := flagSet.Parse([]string{"-p", "100"}); err != nil {
+			t.Errorf("unexpected parsing error: %q", err)
+		}
+
+		if command.port != 100 {
+			t.Error("unexpected port flag value")
+		}
+	})
+
+	t.Run("configure from the environment", func(t *testing.T) {
+		t.Setenv("SERVER_PORT", "100")
+
+		command := NewServeCommand()
+
+		flagSet := console.NewFlagSet(command.Name(), io.Discard)
+
+		command.Configure(flagSet)
+
+		if err := flagSet.Parse(nil); err != nil {
+			t.Errorf("unexpected parsing error: %q", err)
+		}
+
+		if command.port != 100 {
+			t.Error("unexpected port flag value")
+		}
+	})
+
+	t.Run("configure the worker name", func(t *testing.T) {
+		testCases := []struct {
+			name      string
+			arguments []string
+			env       string
+			want      string
+		}{
+			{
+				name:      "long flag",
+				arguments: []string{"--name", "runner-worker-01"},
+				want:      "runner-worker-01",
+			},
+			{
+				name:      "short flag",
+				arguments: []string{"-n", "runner-worker-01"},
+				want:      "runner-worker-01",
+			},
+			{
+				name: "environment variable",
+				env:  "runner-worker-01",
+				want: "runner-worker-01",
+			},
+			{
+				name:      "the flag wins over the environment variable",
+				arguments: []string{"--name", "runner-worker-02"},
+				env:       "runner-worker-01",
+				want:      "runner-worker-02",
+			},
+		}
+
+		for _, testCase := range testCases {
+			t.Run(testCase.name, func(t *testing.T) {
+				if testCase.env != "" {
+					t.Setenv("RUNNER_WORKER_NAME", testCase.env)
+				}
+
+				command := NewServeCommand()
+
+				flagSet := console.NewFlagSet(command.Name(), io.Discard)
+
+				command.Configure(flagSet)
+
+				if err := flagSet.Parse(testCase.arguments); err != nil {
+					t.Errorf("unexpected parsing error: %q", err)
+				}
+
+				if command.name != testCase.want {
+					t.Errorf("unexpected name flag value, want %q got %q", testCase.want, command.name)
+				}
+			})
 		}
 	})
 

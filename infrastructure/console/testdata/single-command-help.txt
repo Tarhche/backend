@@ -1,8 +1,0 @@
-description
-
-Usage:
-
-  usage
-
-  -port int
-        specifies which port server should listen to. (default 80)

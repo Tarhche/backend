@@ -2,18 +2,17 @@ package worker
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
 
+	"github.com/danceable/console"
 	"github.com/danceable/provider"
 
 	workerHeartbeat "github.com/khanzadimahdi/testproject/application/runner/worker/beatHeart"
 	taskHeartbeat "github.com/khanzadimahdi/testproject/application/runner/worker/task/beatHeart"
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/infrastructure/console"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers/runner"
 )
 
@@ -60,9 +59,9 @@ func (c *ServeCommand) Usage() string {
 	return fmt.Sprintf("%s [arguments]", serveName)
 }
 
-func (c *ServeCommand) Configure(flagSet *flag.FlagSet) {
-	flagSet.IntVar(&c.port, "port", 80, "specifies which port server should listen to.")
-	flagSet.StringVar(&c.name, "name", "", "specifies the unique name of the worker.")
+func (c *ServeCommand) Configure(flagSet *console.FlagSet) {
+	flagSet.IntVar(&c.port, 80, "specifies which port server should listen to.", console.Long("port"), console.Short("p"), console.Env("SERVER_PORT"))
+	flagSet.StringVar(&c.name, "", "specifies the unique name of the worker.", console.Long("name"), console.Short("n"), console.Env("RUNNER_WORKER_NAME"))
 }
 
 // Providers returns the service providers required to serve the runner worker.

@@ -2,16 +2,15 @@ package manager
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
 
+	"github.com/danceable/console"
 	"github.com/danceable/provider"
 
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/infrastructure/console"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers/runner"
 )
 
@@ -53,8 +52,8 @@ func (c *ServeCommand) Usage() string {
 	return fmt.Sprintf("%s [arguments]", serveName)
 }
 
-func (c *ServeCommand) Configure(flagSet *flag.FlagSet) {
-	flagSet.IntVar(&c.port, "port", 80, "specifies which port server should listen to.")
+func (c *ServeCommand) Configure(flagSet *console.FlagSet) {
+	flagSet.IntVar(&c.port, 80, "specifies which port server should listen to.", console.Long("port"), console.Short("p"), console.Env("SERVER_PORT"))
 }
 
 // Providers returns the service providers required to serve the runner manager.

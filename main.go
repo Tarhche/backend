@@ -6,9 +6,9 @@ import (
 	"os/signal"
 	"path"
 
+	"github.com/danceable/console"
 	"github.com/danceable/provider"
 
-	"github.com/khanzadimahdi/testproject/infrastructure/console"
 	"github.com/khanzadimahdi/testproject/presentation/commands/blog"
 	"github.com/khanzadimahdi/testproject/presentation/commands/runner/manager"
 	"github.com/khanzadimahdi/testproject/presentation/commands/runner/worker"
@@ -22,6 +22,7 @@ func main() {
 	c := console.NewConsole(
 		path.Base(os.Args[0]),
 		"Application description",
+		os.Stdout,
 		os.Stderr,
 		provider.Default,
 	)
