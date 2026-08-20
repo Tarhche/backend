@@ -10,6 +10,7 @@ import (
 
 	"github.com/danceable/provider"
 
+	checkhealth "github.com/khanzadimahdi/testproject/application/app/checkHealth"
 	getArticle "github.com/khanzadimahdi/testproject/application/article/getArticle"
 	getArticles "github.com/khanzadimahdi/testproject/application/article/getArticles"
 	"github.com/khanzadimahdi/testproject/application/article/getArticlesByAuthor"
@@ -95,6 +96,7 @@ import (
 	taskEvents "github.com/khanzadimahdi/testproject/domain/runner/task/events"
 	translatorContract "github.com/khanzadimahdi/testproject/domain/translator"
 	"github.com/khanzadimahdi/testproject/infrastructure/cache"
+	infraHealth "github.com/khanzadimahdi/testproject/infrastructure/health"
 	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
 	"github.com/khanzadimahdi/testproject/infrastructure/matcher"
 	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/core/pubsub"
@@ -135,6 +137,7 @@ import (
 	homeapi "github.com/khanzadimahdi/testproject/presentation/http/blog/api/home"
 	languageAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/language"
 	"github.com/khanzadimahdi/testproject/presentation/http/blog/openapi"
+	healthAPI "github.com/khanzadimahdi/testproject/presentation/http/health"
 	"github.com/khanzadimahdi/testproject/presentation/http/middleware"
 	"github.com/nats-io/nats.go"
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -410,7 +413,16 @@ func blog(
 
 	dashboardGetConfigUsecase := dashboardGetConfig.NewUseCase(configRepository)
 
+	checkHealthUseCase := checkhealth.NewUseCase(
+		checkhealth.Dependency{Name: "database", Pinger: infraHealth.NewMongodbPinger(database)},
+		checkhealth.Dependency{Name: "messaging", Pinger: infraHealth.NewNatsPinger(natsConnection)},
+	)
+
 	mux := http.NewServeMux()
+
+	// ---- health ----
+	// the container healthcheck probes this
+	mux.Handle("GET /health", healthAPI.NewHealthHandler(checkHealthUseCase))
 
 	// ---- openapi ----
 	mux.Handle("/openapi/", openapi.NewOpenAPIHandler())
