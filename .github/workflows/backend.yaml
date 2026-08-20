@@ -128,6 +128,10 @@ jobs:
 
           # Connect and deploy services
           ssh -q -i ~/hetzner-key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $HETZNER_SSH_ENDPOINT << 'EOF' >/dev/null 2>&1
+            # a failure surfaces through the exit status, which set -e propagates back through ssh
+            set -e
+            trap 'rm -rf /tmp/deployment_backend' EXIT
+
             echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u ${{ github.actor }} --password-stdin > /dev/null 2>&1
 
             export WEB_URL='${{ secrets.WEB_URL }}'
@@ -172,11 +176,12 @@ jobs:
             # Run Docker Compose
             cd /tmp/deployment_backend/
 
-            docker compose -f compose.app.yaml --project-name app up --pull always --detach > /dev/null 2>&1
-            docker compose -f compose.runner-manager.yaml --project-name runner-manager up --pull always --detach > /dev/null 2>&1
-            docker compose -f compose.runner-worker-01.yaml --project-name runner-worker-01 up --pull always --detach > /dev/null 2>&1
-            docker compose -f compose.runner-worker-02.yaml --project-name runner-worker-02 up --pull always --detach > /dev/null 2>&1
-            docker compose -f compose.runner-worker-03.yaml --project-name runner-worker-03 up --pull always --detach > /dev/null 2>&1
-
-            rm -rf /tmp/deployment_backend
+            # --wait holds the deploy until every replica passes the healthcheck
+            # defined in the compose file, so a version that cannot serve traffic
+            # fails the job instead of being reported as deployed
+            docker compose -f compose.app.yaml --project-name app up --pull always --detach --wait --wait-timeout 180 > /dev/null 2>&1
+            docker compose -f compose.runner-manager.yaml --project-name runner-manager up --pull always --detach --wait --wait-timeout 180 > /dev/null 2>&1
+            docker compose -f compose.runner-worker-01.yaml --project-name runner-worker-01 up --pull always --detach --wait --wait-timeout 180 > /dev/null 2>&1
+            docker compose -f compose.runner-worker-02.yaml --project-name runner-worker-02 up --pull always --detach --wait --wait-timeout 180 > /dev/null 2>&1
+            docker compose -f compose.runner-worker-03.yaml --project-name runner-worker-03 up --pull always --detach --wait --wait-timeout 180 > /dev/null 2>&1
           EOF

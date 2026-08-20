@@ -10,6 +10,7 @@ import (
 	"github.com/danceable/provider"
 	"github.com/nats-io/nats.go"
 
+	checkhealth "github.com/khanzadimahdi/testproject/application/app/checkHealth"
 	workerHeartbeat "github.com/khanzadimahdi/testproject/application/runner/worker/beatHeart"
 	workerTaskHeartbeat "github.com/khanzadimahdi/testproject/application/runner/worker/task/beatHeart"
 	workerDeleteTask "github.com/khanzadimahdi/testproject/application/runner/worker/task/deleteTask"
@@ -20,9 +21,11 @@ import (
 	containerContract "github.com/khanzadimahdi/testproject/domain/runner/container"
 	nodeContract "github.com/khanzadimahdi/testproject/domain/runner/node"
 	taskEvents "github.com/khanzadimahdi/testproject/domain/runner/task/events"
+	infraHealth "github.com/khanzadimahdi/testproject/infrastructure/health"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers"
 	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/jetstream/produceConsumer"
 	"github.com/khanzadimahdi/testproject/infrastructure/telemetry/profiler"
+	healthAPI "github.com/khanzadimahdi/testproject/presentation/http/health"
 	"github.com/khanzadimahdi/testproject/presentation/http/middleware"
 	workerTaskAPI "github.com/khanzadimahdi/testproject/presentation/http/runner/worker/api/task"
 )
@@ -136,6 +139,7 @@ func (p *workerProvider) Terminate(ctx context.Context) error {
 }
 
 func workerConsoleCommand(
+	natsConnection *nats.Conn,
 	containerManager containerContract.Manager,
 	nodeManager nodeContract.Manager,
 	asyncProduceConsumer domain.ProduceConsumer,
@@ -158,7 +162,15 @@ func workerConsoleCommand(
 	stopTaskUseCase := workerstoptask.NewUseCase(containerManager, validator)
 	deleteTaskUseCase := workerDeleteTask.NewUseCase(containerManager, validator)
 
+	// the worker talks to no database, so messaging is its only dependency
+	checkHealthUseCase := checkhealth.NewUseCase(
+		checkhealth.Dependency{Name: "messaging", Pinger: infraHealth.NewNatsPinger(natsConnection)},
+	)
+
 	mux := http.NewServeMux()
+
+	// the container healthcheck probes this
+	mux.Handle("GET /health", healthAPI.NewHealthHandler(checkHealthUseCase))
 
 	mux.Handle("GET /api/tasks", workerTaskAPI.NewIndexHandler(getTasksUseCase))
 	mux.Handle("POST /api/tasks/run", workerTaskAPI.NewRunHandler(runTaskUseCase))

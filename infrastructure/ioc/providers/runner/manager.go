@@ -9,6 +9,7 @@ import (
 	"github.com/danceable/provider"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
+	checkhealth "github.com/khanzadimahdi/testproject/application/app/checkHealth"
 	managerGetNode "github.com/khanzadimahdi/testproject/application/runner/manager/node/getNode"
 	managerGetNodes "github.com/khanzadimahdi/testproject/application/runner/manager/node/getNodes"
 	managerHeartbeatNode "github.com/khanzadimahdi/testproject/application/runner/manager/node/heartbeatNode"
@@ -22,12 +23,14 @@ import (
 	nodeEvents "github.com/khanzadimahdi/testproject/domain/runner/node/events"
 	taskEvents "github.com/khanzadimahdi/testproject/domain/runner/task/events"
 	translatorContract "github.com/khanzadimahdi/testproject/domain/translator"
+	infraHealth "github.com/khanzadimahdi/testproject/infrastructure/health"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers"
 	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/jetstream/produceConsumer"
 	noderepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/runner/nodes"
 	taskrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/runner/tasks"
 	"github.com/khanzadimahdi/testproject/infrastructure/runner/scheduler/roundrobin"
 	"github.com/khanzadimahdi/testproject/infrastructure/telemetry/profiler"
+	healthAPI "github.com/khanzadimahdi/testproject/presentation/http/health"
 	"github.com/khanzadimahdi/testproject/presentation/http/middleware"
 	managerNodeAPI "github.com/khanzadimahdi/testproject/presentation/http/runner/manager/api/node"
 	managerTaskAPI "github.com/khanzadimahdi/testproject/presentation/http/runner/manager/api/task"
@@ -106,6 +109,7 @@ func (p *managerProvider) Terminate(ctx context.Context) error {
 
 func managerConsoleCommand(
 	database *mongo.Database,
+	natsConnection *nats.Conn,
 	jetStreamProduceConsumer domain.ProduceConsumer,
 	validator domain.Validator,
 	translator translatorContract.Translator,
@@ -130,7 +134,15 @@ func managerConsoleCommand(
 	managerGetNodeUseCase := managerGetNode.NewUseCase(nodeRepository)
 	managerGetNodesUseCase := managerGetNodes.NewUseCase(nodeRepository)
 
+	checkHealthUseCase := checkhealth.NewUseCase(
+		checkhealth.Dependency{Name: "database", Pinger: infraHealth.NewMongodbPinger(database)},
+		checkhealth.Dependency{Name: "messaging", Pinger: infraHealth.NewNatsPinger(natsConnection)},
+	)
+
 	mux := http.NewServeMux()
+
+	// the container healthcheck probes this
+	mux.Handle("GET /health", healthAPI.NewHealthHandler(checkHealthUseCase))
 
 	mux.Handle("GET /api/tasks", managerTaskAPI.NewIndexHandler(managerGetTasksUseCase))
 	mux.Handle("GET /api/tasks/{uuid}", managerTaskAPI.NewShowHandler(managerGetTaskUseCase))

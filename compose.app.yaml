@@ -8,10 +8,29 @@ services:
       - mongodb
       - nats
       - monitoring
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:80/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    stop_grace_period: 30s
     deploy:
       mode: replicated
       replicas: 3
       endpoint_mode: vip
+      update_config:
+        parallelism: 1
+        order: start-first
+        monitor: 10s
+        delay: 5s
+        failure_action: rollback
+      rollback_config:
+        parallelism: 1
+        order: start-first
+        monitor: 10s
+        delay: 5s
+        failure_action: pause
       restart_policy:
         condition: on-failure
         delay: 5s
