@@ -16,6 +16,12 @@ type User struct {
 	LanguageCode string
 	PasswordHash password.Hash
 	CreatedAt    time.Time
+	BannedAt     time.Time
+}
+
+// IsBanned reports whether the user's ban has taken effect.
+func (u User) IsBanned() bool {
+	return !u.BannedAt.IsZero() && !u.BannedAt.After(time.Now())
 }
 
 type Repository interface {

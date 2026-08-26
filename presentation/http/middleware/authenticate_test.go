@@ -60,6 +60,37 @@ func TestAuthenticateMiddleware(t *testing.T) {
 		assert.Equal(t, http.StatusOK, response.Code)
 	})
 
+	t.Run("banned user is refused", func(t *testing.T) {
+		var (
+			userRepository users.MockUsersRepository
+
+			u = user.User{
+				UUID:     "user-test-uuid",
+				BannedAt: time.Now(),
+			}
+
+			token = generateToken(t, j, u, time.Now().Add(10*time.Second), auth.AccessToken)
+		)
+
+		userRepository.On("GetOne", mock.Anything, u.UUID).Once().Return(u, nil)
+		defer userRepository.AssertExpectations(t)
+
+		next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			t.Error("the next handler must not run for a banned user")
+		})
+
+		middleware := NewAuthenticateMiddleware(next, j, &userRepository)
+
+		request := httptest.NewRequest(http.MethodPost, "/", nil)
+		request.Header.Set(authenticationHeaderName, authenticationHeaderPrefix+token)
+		response := httptest.NewRecorder()
+
+		middleware.ServeHTTP(response, request)
+
+		assert.Equal(t, http.StatusForbidden, response.Code)
+		assert.Empty(t, response.Body.String())
+	})
+
 	t.Run("authentication fails", func(t *testing.T) {
 		var (
 			userRepository users.MockUsersRepository

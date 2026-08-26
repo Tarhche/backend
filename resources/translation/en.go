@@ -18,6 +18,7 @@ var english = map[string]string{
 	"user_already_exists":               "user already exists",
 	"identity_not_exists":               "identity (email/username) not exists",
 	"invalid_identity_or_password":      "identity (email/username) or password is wrong",
+	"user_is_banned":                    "your account has been blocked, you can reach us through the contact form",
 	"one_or_more_permissions_not_exist": "one or more of permissions not exist",
 	"invalid_state_transition":          "invalid state transition",
 	"registration_email_subject":        "Registration",

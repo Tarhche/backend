@@ -101,6 +101,53 @@ func TestUseCase_Execute(t *testing.T) {
 		assert.Equal(t, "refresh", audience[0])
 	})
 
+	t.Run("banned user's session is not renewed", func(t *testing.T) {
+		t.Parallel()
+
+		var (
+			userRepository users.MockUsersRepository
+			roleRepository roles.MockRolesRepository
+			validator      validator.MockValidator
+			translator     translator.TranslatorMock
+
+			u = user.User{UUID: "test-uuid", BannedAt: time.Now()}
+			r = Request{
+				Token: generateRefreshToken(t, j, u, time.Now().Add(15*time.Second), auth.RefreshToken),
+			}
+
+			expectedResponse = Response{
+				ValidationErrors: domain.ValidationErrors{
+					"identity": "your account has been blocked",
+				},
+			}
+		)
+
+		validator.On("Validate", &r).Once().Return(nil)
+		defer validator.AssertExpectations(t)
+
+		userRepository.On("GetOne", mock.Anything, u.UUID).Once().Return(u, nil)
+		defer userRepository.AssertExpectations(t)
+
+		translator.On(
+			"Translate",
+			"user_is_banned",
+			mock.Anything,
+		).Once().Return(expectedResponse.ValidationErrors["identity"])
+		defer translator.AssertExpectations(t)
+
+		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
+
+		response, err := NewUseCase(&userRepository, j, authTokenGenerator, &translator, &validator).Execute(context.Background(), &r)
+
+		roleRepository.AssertNotCalled(t, "GetByUserUUID")
+
+		assert.NoError(t, err)
+		assert.NotNil(t, response)
+		assert.Equal(t, &expectedResponse, response)
+		assert.Empty(t, response.AccessToken)
+		assert.Empty(t, response.RefreshToken)
+	})
+
 	t.Run("validation fails", func(t *testing.T) {
 		t.Parallel()
 
