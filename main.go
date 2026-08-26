@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"log"
 	"os"
 	"os/signal"
 	"path"
@@ -9,6 +10,7 @@ import (
 	"github.com/danceable/console"
 	"github.com/danceable/provider"
 
+	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	"github.com/khanzadimahdi/testproject/presentation/commands/blog"
 	"github.com/khanzadimahdi/testproject/presentation/commands/runner/manager"
 	"github.com/khanzadimahdi/testproject/presentation/commands/runner/worker"
@@ -26,6 +28,14 @@ func main() {
 		os.Stderr,
 		provider.Default,
 	)
+
+	// the settings every command reads are parsed before the command name, so
+	// they are defined on the console itself rather than on each command.
+	globalFlags, err := console.StructFlags(&configs.GlobalConfigs)
+	if err != nil {
+		log.Fatal(err)
+	}
+	c.Flags(globalFlags)
 
 	c.Register(blog.NewServeCommand())
 	c.Register(manager.NewServeCommand())

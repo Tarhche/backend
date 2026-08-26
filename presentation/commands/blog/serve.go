@@ -11,6 +11,7 @@ import (
 	"github.com/danceable/provider"
 
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers"
 )
 
@@ -19,21 +20,21 @@ const (
 )
 
 type ServeCommand struct {
-	port      int
+	configs   *configs.Blog
 	handler   http.Handler
 	consumer  domain.Consumer
 	consumers map[string]domain.MessageHandler
 	logger    *slog.Logger
 }
 
-// insures it implements console.Command
-var _ console.Command = &ServeCommand{}
-
-// insures it implements console.Service
-var _ console.Service = &ServeCommand{}
+var (
+	_ console.Command   = &ServeCommand{}
+	_ console.Service   = &ServeCommand{}
+	_ provider.Provider = &ServeCommand{}
+)
 
 func NewServeCommand() *ServeCommand {
-	return &ServeCommand{}
+	return &ServeCommand{configs: configs.NewBlog()}
 }
 
 // Name returns the name of the command which is used to identify it.
@@ -52,13 +53,20 @@ func (c *ServeCommand) Usage() string {
 	return fmt.Sprintf("%s [arguments]", serveName)
 }
 
+// Configure defines this command's flags, which are the fields of its
+// configuration struct. A struct which cannot be bound is a programming
+// mistake rather than user input, so it panics the way the console itself does
+// for a flag it cannot define.
 func (c *ServeCommand) Configure(flagSet *console.FlagSet) {
-	console.Var(flagSet, &c.port, console.Long("port"), "specifies which port server should listen to.", console.Short("p"), console.Env("SERVER_PORT"), console.Default(80))
+	if err := flagSet.Struct(c.configs); err != nil {
+		panic(err)
+	}
 }
 
 // Providers returns the service providers required to serve the blog service.
 func (c *ServeCommand) Providers() []provider.Provider {
 	return []provider.Provider{
+		providers.NewConfigsProvider(c.configs),
 		providers.NewOpenTelemetryProvider("blog", "blog"),
 		providers.NewProfilerProvider("blog"),
 		providers.NewMongodbProvider(),
@@ -75,7 +83,13 @@ func (c *ServeCommand) Providers() []provider.Provider {
 		providers.NewTemplateProvider(),
 		providers.NewContainerProvider(),
 		providers.NewBlogProvider(),
+		c,
 	}
+}
+
+// Register registers the command's own dependencies, of which it has none.
+func (c *ServeCommand) Register(ctx context.Context, container provider.Container) error {
+	return nil
 }
 
 // Boot resolves the command's dependencies from the booted container.
@@ -95,6 +109,12 @@ func (c *ServeCommand) Boot(ctx context.Context, container provider.Container) e
 	return container.Resolve(&c.consumers, provider.ResolveName(providers.BlogSubscribers))
 }
 
+// Terminate terminates the command's own resources, of which it has none. The
+// providers it returned are terminated by the manager.
+func (c *ServeCommand) Terminate(ctx context.Context) error {
+	return nil
+}
+
 // @title		Backend API
 // @version		1.0
 // @description	Swagger/OpenAPI documentation for the backend service.
@@ -107,7 +127,7 @@ func (c *ServeCommand) Boot(ctx context.Context, container provider.Container) e
 // @schemes		http https
 func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 	server := http.Server{
-		Addr:        fmt.Sprintf("0.0.0.0:%d", c.port),
+		Addr:        fmt.Sprintf("0.0.0.0:%d", c.configs.Port),
 		Handler:     c.handler,
 		ReadTimeout: 20 * time.Second,
 		IdleTimeout: 10 * time.Second,

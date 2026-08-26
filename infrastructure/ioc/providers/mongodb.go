@@ -2,14 +2,13 @@ package providers
 
 import (
 	"context"
-	"fmt"
-	"os"
 
 	"github.com/danceable/provider"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
+	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	tracing "github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
 )
 
@@ -24,14 +23,12 @@ func NewMongodbProvider() *mongodbProvider {
 }
 
 func (p *mongodbProvider) Register(ctx context.Context, c provider.Container) error {
-	uri := fmt.Sprintf(
-		"%s://%s:%s@%s:%s",
-		os.Getenv("MONGO_SCHEME"),
-		os.Getenv("MONGO_USERNAME"),
-		os.Getenv("MONGO_PASSWORD"),
-		os.Getenv("MONGO_HOST"),
-		os.Getenv("MONGO_PORT"),
-	)
+	var globalConfigs *configs.Global
+	if err := c.Resolve(&globalConfigs); err != nil {
+		return err
+	}
+
+	uri := globalConfigs.Mongo.URI()
 
 	serverAPIVersion := options.ServerAPI(options.ServerAPIVersion1)
 	connectionOptions := options.Client().
@@ -48,7 +45,7 @@ func (p *mongodbProvider) Register(ctx context.Context, c provider.Container) er
 		return err
 	}
 
-	database := mongoClient.Database(os.Getenv("MONGO_DATABASE_NAME"))
+	database := mongoClient.Database(globalConfigs.Mongo.DatabaseName)
 
 	var result bson.M
 	if err := database.RunCommand(ctx, bson.D{{Key: "ping", Value: 1}}).Decode(&result); err != nil {

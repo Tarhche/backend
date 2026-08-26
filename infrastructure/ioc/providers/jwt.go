@@ -2,10 +2,10 @@ package providers
 
 import (
 	"context"
-	"os"
 
 	"github.com/danceable/provider"
 
+	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/ecdsa"
 	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
 )
@@ -19,8 +19,12 @@ func NewJwtProvider() *jwtProvider {
 }
 
 func (p *jwtProvider) Register(ctx context.Context, c provider.Container) error {
-	privateKeyData := []byte(os.Getenv("PRIVATE_KEY"))
-	privateKey, err := ecdsa.ParsePrivateKey(privateKeyData)
+	var blogConfigs *configs.Blog
+	if err := c.Resolve(&blogConfigs); err != nil {
+		return err
+	}
+
+	privateKey, err := ecdsa.ParsePrivateKey([]byte(blogConfigs.PrivateKey))
 	if err != nil {
 		return err
 	}

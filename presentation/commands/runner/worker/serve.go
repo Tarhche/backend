@@ -13,6 +13,7 @@ import (
 	workerHeartbeat "github.com/khanzadimahdi/testproject/application/runner/worker/beatHeart"
 	taskHeartbeat "github.com/khanzadimahdi/testproject/application/runner/worker/task/beatHeart"
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers/runner"
 )
@@ -24,8 +25,7 @@ const (
 )
 
 type ServeCommand struct {
-	port            int
-	name            string
+	configs         *configs.RunnerWorker
 	handler         http.Handler
 	consumer        domain.Consumer
 	consumers       map[string]domain.MessageHandler
@@ -34,14 +34,14 @@ type ServeCommand struct {
 	logger          *slog.Logger
 }
 
-// insures it implements console.Command
-var _ console.Command = &ServeCommand{}
-
-// insures it implements console.Service
-var _ console.Service = &ServeCommand{}
+var (
+	_ console.Command   = &ServeCommand{}
+	_ console.Service   = &ServeCommand{}
+	_ provider.Provider = &ServeCommand{}
+)
 
 func NewServeCommand() *ServeCommand {
-	return &ServeCommand{}
+	return &ServeCommand{configs: configs.NewRunnerWorker()}
 }
 
 // Name returns the name of the command which is used to identify it.
@@ -60,9 +60,14 @@ func (c *ServeCommand) Usage() string {
 	return fmt.Sprintf("%s [arguments]", serveName)
 }
 
+// Configure defines this command's flags, which are the fields of its
+// configuration struct. A struct which cannot be bound is a programming
+// mistake rather than user input, so it panics the way the console itself does
+// for a flag it cannot define.
 func (c *ServeCommand) Configure(flagSet *console.FlagSet) {
-	console.Var(flagSet, &c.port, console.Long("port"), "specifies which port server should listen to.", console.Short("p"), console.Env("SERVER_PORT"), console.Default(80))
-	console.Var(flagSet, &c.name, console.Long("name"), "specifies the unique name of the worker.", console.Short("n"), console.Env("RUNNER_WORKER_NAME"))
+	if err := flagSet.Struct(c.configs); err != nil {
+		panic(err)
+	}
 }
 
 // Providers returns the service providers required to serve the runner worker.
@@ -70,8 +75,9 @@ func (c *ServeCommand) Configure(flagSet *console.FlagSet) {
 // container so the worker providers can resolve it.
 func (c *ServeCommand) Providers() []provider.Provider {
 	return []provider.Provider{
-		runner.NewWorkerNameProvider(&c.name),
-		providers.NewOpenTelemetryProvider("runner-worker", c.name),
+		providers.NewConfigsProvider(c.configs),
+		runner.NewWorkerNameProvider(),
+		providers.NewOpenTelemetryProvider("runner-worker", c.configs.Name),
 		providers.NewProfilerProvider("runner-worker"),
 		providers.NewNatsProvider(),
 		providers.NewDockerProvider(),
@@ -79,7 +85,13 @@ func (c *ServeCommand) Providers() []provider.Provider {
 		providers.NewValidationProvider(),
 		providers.NewContainerProvider(),
 		runner.NewWorkerProvider(),
+		c,
 	}
+}
+
+// Register registers the command's own dependencies, of which it has none.
+func (c *ServeCommand) Register(ctx context.Context, container provider.Container) error {
+	return nil
 }
 
 // Boot resolves the command's dependencies from the booted container.
@@ -100,11 +112,17 @@ func (c *ServeCommand) Boot(ctx context.Context, container provider.Container) e
 		return err
 	}
 
-	if err := container.Resolve(&c.logger, provider.WithParams("runner-worker-"+c.name)); err != nil {
+	if err := container.Resolve(&c.logger, provider.WithParams("runner-worker-"+c.configs.Name)); err != nil {
 		return err
 	}
 
 	return container.Resolve(&c.consumers, provider.ResolveName(runner.WorkerSubscribers))
+}
+
+// Terminate terminates the command's own resources, of which it has none. The
+// providers it returned are terminated by the manager.
+func (c *ServeCommand) Terminate(ctx context.Context) error {
+	return nil
 }
 
 // @title			Runner Worker API
@@ -124,7 +142,7 @@ func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 	}
 
 	server := http.Server{
-		Addr:        fmt.Sprintf("0.0.0.0:%d", c.port),
+		Addr:        fmt.Sprintf("0.0.0.0:%d", c.configs.Port),
 		Handler:     c.handler,
 		ReadTimeout: 20 * time.Second,
 		IdleTimeout: 10 * time.Second,
@@ -157,7 +175,7 @@ func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 }
 
 func (c *ServeCommand) validateParams() bool {
-	if len(c.name) == 0 {
+	if len(c.configs.Name) == 0 {
 		c.logger.Error("name is required")
 		return false
 	}

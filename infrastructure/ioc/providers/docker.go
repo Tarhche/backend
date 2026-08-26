@@ -3,12 +3,12 @@ package providers
 import (
 	"context"
 	"log/slog"
-	"os"
 
 	"github.com/danceable/provider"
 
 	containerContract "github.com/khanzadimahdi/testproject/domain/runner/container"
 	"github.com/khanzadimahdi/testproject/domain/runner/node"
+	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	"github.com/khanzadimahdi/testproject/infrastructure/runner/container"
 	infraNode "github.com/khanzadimahdi/testproject/infrastructure/runner/node"
 )
@@ -22,7 +22,12 @@ func NewDockerProvider() *dockerProvider {
 }
 
 func (p *dockerProvider) Register(ctx context.Context, c provider.Container) error {
-	dockerHost := os.Getenv("DOCKER_HOST")
+	var workerConfigs *configs.RunnerWorker
+	if err := c.Resolve(&workerConfigs); err != nil {
+		return err
+	}
+
+	dockerHost := workerConfigs.DockerHost
 
 	var logger *slog.Logger
 	if err := c.Resolve(&logger, provider.WithParams("runner-worker")); err != nil {

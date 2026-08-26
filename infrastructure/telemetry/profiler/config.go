@@ -3,8 +3,6 @@ package profiler
 import (
 	"fmt"
 	"net/url"
-	"os"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -115,78 +113,87 @@ const (
 	defaultEndpoint = "http://localhost:4318" + profilesURLPath
 )
 
-// ConfigFromEnv builds a Config from the PROFILING_* and standard
-// OTEL_EXPORTER_OTLP_* environment variables.
-func ConfigFromEnv() (Config, error) {
-	cfg := Config{Enabled: true}
+// DefaultConfig returns the configuration the profiler runs with when nothing
+// overrides it. It is the single source of the defaults: the configuration
+// layer seeds its flags from here, so the help of a flag and the value the
+// profiler falls back to can never drift apart.
+func DefaultConfig() Config {
+	return Config{
+		Enabled: true,
 
-	var err error
-	if cfg.Enabled, err = envBool("PROFILING_ENABLED", true); err != nil {
-		return cfg, err
+		CPUInterval:       defaultCPUInterval,
+		CPUDuration:       defaultCPUDuration,
+		MemoryInterval:    defaultMemoryInterval,
+		GoroutineInterval: defaultGoroutineInterval,
+		MutexInterval:     defaultMutexInterval,
+		MutexFraction:     defaultMutexFraction,
+		BlockInterval:     defaultBlockInterval,
+		BlockRate:         defaultBlockRate,
+
+		CPULoadThreshold: defaultCPULoadThreshold,
+		MinSamplingRate:  defaultMinSamplingRate,
+		MaxCPUPercent:    defaultMaxCPUPercent,
+
+		MaxProfilesPerMinute: defaultMaxProfilesPerMinute,
+		MaxBufferBytes:       defaultMaxBufferBytes,
+		ProfileTimeout:       defaultProfileTimeout,
+
+		Endpoint: defaultEndpoint,
+
+		ExportTimeout: defaultExportTimeout,
+		MaxRetries:    defaultMaxRetries,
+		BatchSize:     defaultBatchSize,
+		FlushInterval: defaultFlushInterval,
+		QueueSize:     defaultQueueSize,
 	}
-	if cfg.CPUInterval, err = envDuration("PROFILING_CPU_INTERVAL", defaultCPUInterval); err != nil {
-		return cfg, err
-	}
-	if cfg.CPUDuration, err = envDuration("PROFILING_CPU_DURATION", defaultCPUDuration); err != nil {
-		return cfg, err
-	}
-	if cfg.MemoryInterval, err = envDuration("PROFILING_MEMORY_INTERVAL", defaultMemoryInterval); err != nil {
-		return cfg, err
-	}
-	if cfg.GoroutineInterval, err = envDuration("PROFILING_GOROUTINE_INTERVAL", defaultGoroutineInterval); err != nil {
-		return cfg, err
-	}
-	if cfg.MutexInterval, err = envDuration("PROFILING_MUTEX_INTERVAL", defaultMutexInterval); err != nil {
-		return cfg, err
-	}
-	if cfg.MutexFraction, err = envInt("PROFILING_MUTEX_FRACTION", defaultMutexFraction); err != nil {
-		return cfg, err
-	}
-	if cfg.BlockInterval, err = envDuration("PROFILING_BLOCK_INTERVAL", defaultBlockInterval); err != nil {
-		return cfg, err
-	}
-	if cfg.BlockRate, err = envInt("PROFILING_BLOCK_RATE", defaultBlockRate); err != nil {
-		return cfg, err
-	}
-	if cfg.CPULoadThreshold, err = envFloat("PROFILING_CPU_LOAD_THRESHOLD", defaultCPULoadThreshold); err != nil {
-		return cfg, err
-	}
-	if cfg.MinSamplingRate, err = envFloat("PROFILING_MIN_SAMPLING_RATE", defaultMinSamplingRate); err != nil {
-		return cfg, err
-	}
-	if cfg.MaxCPUPercent, err = envFloat("PROFILING_MAX_CPU_PERCENT", defaultMaxCPUPercent); err != nil {
-		return cfg, err
-	}
-	if cfg.MaxProfilesPerMinute, err = envInt("PROFILING_MAX_PROFILES_PER_MINUTE", defaultMaxProfilesPerMinute); err != nil {
-		return cfg, err
-	}
-	maxBufferMB, err := envInt("PROFILING_MAX_BUFFER_MB", 0)
-	if err != nil {
-		return cfg, err
-	}
-	if maxBufferMB > 0 {
-		cfg.MaxBufferBytes = int64(maxBufferMB) << 20
-	}
-	if cfg.ProfileTimeout, err = envDuration("PROFILING_TIMEOUT", defaultProfileTimeout); err != nil {
-		return cfg, err
-	}
-	if cfg.RedactIPs, err = envBool("PROFILING_REDACT_IPS", false); err != nil {
-		return cfg, err
-	}
-	if cfg.BatchSize, err = envInt("PROFILING_EXPORT_BATCH_SIZE", defaultBatchSize); err != nil {
-		return cfg, err
-	}
-	if cfg.FlushInterval, err = envDuration("PROFILING_EXPORT_FLUSH_INTERVAL", defaultFlushInterval); err != nil {
-		return cfg, err
-	}
-	if cfg.Insecure, err = envBool("OTEL_EXPORTER_OTLP_INSECURE", false); err != nil {
-		return cfg, err
+}
+
+// ResolveEndpoint resolves the profiles endpoint the same way the OTLP
+// exporters do: the signal-specific endpoint is used verbatim while the generic
+// one gets the signal path appended. It falls back to the default endpoint when
+// neither is configured.
+func ResolveEndpoint(profilesEndpoint, otlpEndpoint string) string {
+	if v := strings.TrimSpace(profilesEndpoint); v != "" {
+		return v
 	}
 
-	cfg.Endpoint = endpointFromEnv()
-	cfg.Headers = headersFromEnv()
+	if v := strings.TrimSpace(otlpEndpoint); v != "" {
+		return strings.TrimRight(v, "/") + profilesURLPath
+	}
 
-	return cfg, cfg.normalize()
+	return defaultEndpoint
+}
+
+// ParseHeaders parses the W3C Correlation-Context style "k=v,k2=v2" list the
+// OTLP headers are configured as. The signal-specific list wins over the
+// generic one, and an empty list yields no headers at all.
+func ParseHeaders(profilesHeaders, otlpHeaders string) map[string]string {
+	raw := strings.TrimSpace(profilesHeaders)
+	if len(raw) == 0 {
+		raw = strings.TrimSpace(otlpHeaders)
+	}
+
+	if len(raw) == 0 {
+		return nil
+	}
+
+	headers := make(map[string]string)
+	for pair := range strings.SplitSeq(raw, ",") {
+		key, value, found := strings.Cut(pair, "=")
+		if !found {
+			continue
+		}
+
+		key = strings.TrimSpace(key)
+		if unescaped, err := url.QueryUnescape(strings.TrimSpace(value)); err == nil {
+			value = unescaped
+		}
+		if key != "" {
+			headers[key] = value
+		}
+	}
+
+	return headers
 }
 
 // normalize fills unset fields with defaults and validates the endpoint,
@@ -278,104 +285,4 @@ func (c *Config) normalize() error {
 	}
 
 	return nil
-}
-
-// endpointFromEnv resolves the profiles endpoint the same way the OTLP
-// exporters do: the signal-specific variable is used verbatim while the
-// generic one gets the signal path appended.
-func endpointFromEnv() string {
-	if v := strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT")); v != "" {
-		return v
-	}
-	if v := strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")); v != "" {
-		return strings.TrimRight(v, "/") + profilesURLPath
-	}
-	return defaultEndpoint
-}
-
-// headersFromEnv parses the W3C Correlation-Context style "k=v,k2=v2" list
-// used by OTEL_EXPORTER_OTLP_HEADERS.
-func headersFromEnv() map[string]string {
-	raw := strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_PROFILES_HEADERS"))
-	if len(raw) == 0 {
-		raw = strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_HEADERS"))
-	}
-
-	if len(raw) == 0 {
-		return nil
-	}
-
-	headers := make(map[string]string)
-	for pair := range strings.SplitSeq(raw, ",") {
-		key, value, found := strings.Cut(pair, "=")
-		if !found {
-			continue
-		}
-
-		key = strings.TrimSpace(key)
-		if unescaped, err := url.QueryUnescape(strings.TrimSpace(value)); err == nil {
-			value = unescaped
-		}
-		if key != "" {
-			headers[key] = value
-		}
-	}
-
-	return headers
-}
-
-func envBool(name string, fallback bool) (bool, error) {
-	v := strings.TrimSpace(os.Getenv(name))
-	if v == "" {
-		return fallback, nil
-	}
-
-	parsed, err := strconv.ParseBool(v)
-	if err != nil {
-		return fallback, fmt.Errorf("profiler: %s: %w", name, err)
-	}
-
-	return parsed, nil
-}
-
-func envDuration(name string, fallback time.Duration) (time.Duration, error) {
-	v := strings.TrimSpace(os.Getenv(name))
-	if v == "" {
-		return fallback, nil
-	}
-
-	parsed, err := time.ParseDuration(v)
-	if err != nil {
-		return fallback, fmt.Errorf("profiler: %s: %w", name, err)
-	}
-
-	return parsed, nil
-}
-
-func envInt(name string, fallback int) (int, error) {
-	v := strings.TrimSpace(os.Getenv(name))
-	if v == "" {
-		return fallback, nil
-	}
-
-	parsed, err := strconv.Atoi(v)
-	if err != nil {
-		return fallback, fmt.Errorf("profiler: %s: %w", name, err)
-	}
-
-	return parsed, nil
-}
-
-func envFloat(name string, fallback float64) (float64, error) {
-	v := strings.TrimSpace(os.Getenv(name))
-	if v == "" {
-		return fallback, nil
-	}
-
-	parsed, err := strconv.ParseFloat(v, 64)
-	if err != nil {
-		return fallback, fmt.Errorf("profiler: %s: %w", name, err)
-	}
-
-	return parsed, nil
 }

@@ -21,6 +21,7 @@ import (
 	containerContract "github.com/khanzadimahdi/testproject/domain/runner/container"
 	nodeContract "github.com/khanzadimahdi/testproject/domain/runner/node"
 	taskEvents "github.com/khanzadimahdi/testproject/domain/runner/task/events"
+	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	infraHealth "github.com/khanzadimahdi/testproject/infrastructure/health"
 	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/jetstream/produceConsumer"
 	"github.com/khanzadimahdi/testproject/infrastructure/telemetry/profiler"
@@ -37,22 +38,25 @@ const (
 )
 
 // workerNameProvider binds the worker name, which the command loads from its
-// --name flag or from the RUNNER_WORKER_NAME environment variable.
-type workerNameProvider struct {
-	name *string
-}
+// --name flag or from the RUNNER_WORKER_NAME environment variable, under the
+// name the worker providers resolve it by.
+type workerNameProvider struct{}
 
 var _ provider.Provider = &workerNameProvider{}
 
 // NewWorkerNameProvider binds the worker name into the container so the worker
-// providers can resolve it. name points at the name configured by the command,
-// which is read when the provider registers.
-func NewWorkerNameProvider(name *string) *workerNameProvider {
-	return &workerNameProvider{name: name}
+// providers can resolve it. It must be registered after the configs provider.
+func NewWorkerNameProvider() *workerNameProvider {
+	return &workerNameProvider{}
 }
 
 func (p *workerNameProvider) Register(ctx context.Context, c provider.Container) error {
-	name := *p.name
+	var workerConfigs *configs.RunnerWorker
+	if err := c.Resolve(&workerConfigs); err != nil {
+		return err
+	}
+
+	name := workerConfigs.Name
 
 	return c.Bind(func() string { return name }, provider.Singleton(), provider.WithName(WorkerName))
 }

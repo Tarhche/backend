@@ -10,6 +10,7 @@ import (
 
 	"github.com/danceable/provider"
 
+	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	"github.com/khanzadimahdi/testproject/infrastructure/telemetry/profiler"
 )
 
@@ -41,11 +42,12 @@ func (p *profilerProvider) Register(ctx context.Context, c provider.Container) e
 }
 
 func (p *profilerProvider) Boot(ctx context.Context, c provider.Container) error {
-	cfg, err := profiler.ConfigFromEnv()
-	if err != nil {
+	var globalConfigs *configs.Global
+	if err := c.Resolve(&globalConfigs); err != nil {
 		return err
 	}
 
+	cfg := globalConfigs.Profiling.ProfilerConfig()
 	if !cfg.Enabled {
 		return nil
 	}
@@ -60,10 +62,12 @@ func (p *profilerProvider) Boot(ctx context.Context, c provider.Container) error
 		return err
 	}
 
-	p.profiler, err = profiler.New(cfg, res, otel.GetMeterProvider(), logger)
+	continuousProfiler, err := profiler.New(cfg, res, otel.GetMeterProvider(), logger)
 	if err != nil {
 		return err
 	}
+
+	p.profiler = continuousProfiler
 
 	// the profiler outlives the boot call; it is stopped on Terminate
 	return p.profiler.Start(context.WithoutCancel(ctx))

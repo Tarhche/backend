@@ -42,6 +42,24 @@ console.Var(flagSet, &c.port, console.Long("port"), "specifies which port server
 
 `console.Var` is generic over the variable it binds to, so there are no per-type `IntVar`/`StringVar` helpers. The first name (a `console.Long`, `console.Short` or `console.Env`) is what defines the flag, and the rest are options; a flag defaults to whatever the variable already holds unless `console.Default` overrides it. Long name, short name and env name are each optional and only the defined ones are enabled; a flag falls back to its env var when it isn't provided (empty/unset env keeps the default), so commands don't read `os.Getenv` themselves. Commands are optionally organized in groups/subgroups (`console.NewGroup(...).Flags(...).Register(...).RegisterGroup(...)`), each with its own flags and its own `--help`; flags are parsed level by level (`app --username=admin pods --all list`) and belong only to the level that defines them. `NewConsole(name, description, writer, errWriter, manager)` takes two writers: a requested `--help` goes to `writer` (stdout), while usage errors, the help that follows them and service failures go to `errWriter` (stderr). Commands that also implement `console.Service` get their `provider.Provider`s registered, booted and terminated around the run. Full docs in the module's README; changes to the framework belong in that repo, not here.
 
+### Configuration
+
+Nothing in the application reads the environment for itself — there are no `os.Getenv` calls. Every setting is a field of a plain struct in `infrastructure/configs/`, tagged with the flag and the environment variable it is read from:
+
+```go
+Port     int    `usage:"specifies which port server should listen to." env:"SERVER_PORT" long:"port" short:"p"`
+S3UseSSL bool   `usage:"Whether the S3 endpoint is reached over TLS." env:"S3_USE_SSL" long:"s3-use-ssl"`
+```
+
+The console fills the structs while it parses the command line, and a flag falls back to its env var when it isn't provided, so both sources keep working. Defaults are the values the struct already holds when it is bound (set in the `New*` constructors), which is also what `--help` reports.
+
+- **`Global`** (`global.go`) holds what every command reads — Mongo, NATS and profiling/OTLP — as nested structs flattened into one flag set. `main.go` registers it on the console root with `console.StructFlags(&configs.GlobalConfigs)`, so its flags are given *before* the command name: `app --mongo-host=db serve-blog --port=8000`.
+- **Per-command structs** (`Blog`, `RunnerManager`, `RunnerWorker`) are created by `configs.New*()` in the command's constructor and bound in `Configure` with `flagSet.Struct(c.configs)`. Each command owns its own instance, so nothing it parses leaks into another command or another test.
+
+Configs reach their consumers through the container: every command lists `providers.NewConfigsProvider(c.configs)` **first**, which binds `*configs.Global` plus the command's own struct as singletons under their pointer types. A provider then resolves what it needs in `Register` (`var globalConfigs *configs.Global; c.Resolve(&globalConfigs)`) instead of reading the environment.
+
+Profiling settings are the one indirection: `configs.Profiling` carries the flag-able scalar forms (headers as a `k=v,k2=v2` string, the buffer ceiling in megabytes) and `ProfilerConfig()` turns them into a `profiler.Config`, seeded from `profiler.DefaultConfig()` so a flag's help and the profiler's fallback can't drift. Note that `OTEL_EXPORTER_OTLP_*` are also read straight from the environment by the OTel SDK's own exporters, so overriding those as *flags* only affects the profiler.
+
 ### Dependency injection and wiring
 
 DI uses `github.com/danceable/provider`, which fronts `github.com/danceable/container` behind its own backend-agnostic `provider.Container` contract — wiring code imports only `provider` and uses its neutral options (`provider.Singleton()`, `provider.Lazy()`, `provider.WithName()` at bind time, `provider.ResolveName()`/`provider.WithParams()` at resolve time). All wiring lives in `infrastructure/ioc/providers/`; `blog.go` is the main composition root — it binds every repository/use case and builds the `http.ServeMux` with all routes (Go 1.22 `"METHOD /path"` patterns). Runner services wire in `providers/runner/`. Each serve command declares its `Providers()` and resolves its handler, consumer map, and logger in `Boot()`.

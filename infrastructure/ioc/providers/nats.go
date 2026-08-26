@@ -2,10 +2,11 @@ package providers
 
 import (
 	"context"
-	"os"
 
 	"github.com/danceable/provider"
 	"github.com/nats-io/nats.go"
+
+	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 )
 
 type natsProvider struct {
@@ -19,7 +20,12 @@ func NewNatsProvider() *natsProvider {
 }
 
 func (p *natsProvider) Register(ctx context.Context, c provider.Container) error {
-	natsConnection, err := nats.Connect(os.Getenv("NATS_URL"))
+	var globalConfigs *configs.Global
+	if err := c.Resolve(&globalConfigs); err != nil {
+		return err
+	}
+
+	natsConnection, err := nats.Connect(globalConfigs.Nats.URL)
 	if err != nil {
 		return err
 	}

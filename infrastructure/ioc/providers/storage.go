@@ -2,12 +2,11 @@ package providers
 
 import (
 	"context"
-	"os"
-	"strconv"
 
 	"github.com/danceable/provider"
 
 	"github.com/khanzadimahdi/testproject/domain/file"
+	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	"github.com/khanzadimahdi/testproject/infrastructure/storage/minio"
 )
 
@@ -20,17 +19,17 @@ func NewStorageProvider() *storageProvider {
 }
 
 func (p *storageProvider) Register(ctx context.Context, c provider.Container) error {
-	useSSL, err := strconv.ParseBool(os.Getenv("S3_USE_SSL"))
-	if err != nil {
+	var blogConfigs *configs.Blog
+	if err := c.Resolve(&blogConfigs); err != nil {
 		return err
 	}
 
 	fileStorage, err := minio.New(minio.Options{
-		Endpoint:   os.Getenv("S3_ENDPOINT"),
-		AccessKey:  os.Getenv("S3_ACCESS_KEY"),
-		SecretKey:  os.Getenv("S3_SECRET_KEY"),
-		UseSSL:     useSSL,
-		BucketName: os.Getenv("S3_BUCKET_NAME"),
+		Endpoint:   blogConfigs.S3Endpoint,
+		AccessKey:  blogConfigs.S3AccessKey,
+		SecretKey:  blogConfigs.S3SecretKey,
+		UseSSL:     blogConfigs.S3UseSSL,
+		BucketName: blogConfigs.S3BucketName,
 	})
 	if err != nil {
 		return err

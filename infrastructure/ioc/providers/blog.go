@@ -5,7 +5,6 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/danceable/provider"
@@ -96,6 +95,7 @@ import (
 	taskEvents "github.com/khanzadimahdi/testproject/domain/runner/task/events"
 	translatorContract "github.com/khanzadimahdi/testproject/domain/translator"
 	"github.com/khanzadimahdi/testproject/infrastructure/cache"
+	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	infraHealth "github.com/khanzadimahdi/testproject/infrastructure/health"
 	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
 	"github.com/khanzadimahdi/testproject/infrastructure/matcher"
@@ -265,6 +265,11 @@ func blog(
 
 	var mailFromAddress string
 	if err := iocContainer.Resolve(&mailFromAddress, provider.ResolveName(MailFromAddress)); err != nil {
+		return nil, err
+	}
+
+	var blogConfigs *configs.Blog
+	if err := iocContainer.Resolve(&blogConfigs); err != nil {
 		return nil, err
 	}
 
@@ -627,9 +632,9 @@ func blog(
 		logger,
 	)
 
-	webURL := os.Getenv("WEB_URL")
+	webURL := blogConfigs.WebURL
 	if len(webURL) == 0 {
-		return nil, errors.New("WEB_URL environment variable is not set")
+		return nil, errors.New("the web url is not configured (--web-url, WEB_URL)")
 	}
 
 	// subscribers

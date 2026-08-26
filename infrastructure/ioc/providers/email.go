@@ -2,11 +2,11 @@ package providers
 
 import (
 	"context"
-	"os"
 
 	"github.com/danceable/provider"
 
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	"github.com/khanzadimahdi/testproject/infrastructure/email"
 )
 
@@ -21,14 +21,19 @@ func NewEmailProvider() *emailProvider {
 }
 
 func (p *emailProvider) Register(ctx context.Context, c provider.Container) error {
-	mailFromAddress := os.Getenv("MAIL_SMTP_FROM")
+	var blogConfigs *configs.Blog
+	if err := c.Resolve(&blogConfigs); err != nil {
+		return err
+	}
+
+	mailFromAddress := blogConfigs.MailFrom
 	mailer := email.NewSMTP(email.Config{
 		Auth: email.Auth{
-			Username: os.Getenv("MAIL_SMTP_USERNAME"),
-			Password: os.Getenv("MAIL_SMTP_PASSWORD"),
+			Username: blogConfigs.MailUsername,
+			Password: blogConfigs.MailPassword,
 		},
-		Host: os.Getenv("MAIL_SMTP_HOST"),
-		Port: os.Getenv("MAIL_SMTP_PORT"),
+		Host: blogConfigs.MailHost,
+		Port: blogConfigs.MailPort,
 	})
 
 	if err := c.Bind(func() domain.Mailer { return mailer }, provider.Singleton()); err != nil {

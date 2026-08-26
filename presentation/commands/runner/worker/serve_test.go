@@ -74,7 +74,7 @@ func TestServe(t *testing.T) {
 			t.Error("unexpected port flag environment variable")
 		}
 
-		if command.port != 80 {
+		if command.configs.Port != 80 {
 			t.Error("unexpected port flag default value")
 		}
 
@@ -82,7 +82,7 @@ func TestServe(t *testing.T) {
 			t.Errorf("unexpected parsing error: %q", err)
 		}
 
-		if command.port != 100 {
+		if command.configs.Port != 100 {
 			t.Error("unexpected port flag default value")
 		}
 	})
@@ -98,7 +98,7 @@ func TestServe(t *testing.T) {
 			t.Errorf("unexpected parsing error: %q", err)
 		}
 
-		if command.port != 100 {
+		if command.configs.Port != 100 {
 			t.Error("unexpected port flag value")
 		}
 	})
@@ -116,7 +116,7 @@ func TestServe(t *testing.T) {
 			t.Errorf("unexpected parsing error: %q", err)
 		}
 
-		if command.port != 100 {
+		if command.configs.Port != 100 {
 			t.Error("unexpected port flag value")
 		}
 	})
@@ -167,8 +167,8 @@ func TestServe(t *testing.T) {
 					t.Errorf("unexpected parsing error: %q", err)
 				}
 
-				if command.name != testCase.want {
-					t.Errorf("unexpected name flag value, want %q got %q", testCase.want, command.name)
+				if command.configs.Name != testCase.want {
+					t.Errorf("unexpected name flag value, want %q got %q", testCase.want, command.configs.Name)
 				}
 			})
 		}
@@ -195,8 +195,8 @@ func TestServe(t *testing.T) {
 		defer consumer.AssertExpectations(t)
 
 		command := NewServeCommand()
-		command.name = consumerName
-		command.port = findAvailablePort()
+		command.configs.Name = consumerName
+		command.configs.Port = findAvailablePort()
 		command.handler = handler
 		command.consumer = &consumer
 		command.consumers = subscribers
@@ -211,7 +211,7 @@ func TestServe(t *testing.T) {
 		<-serverStartedListening
 		time.Sleep(50 * time.Millisecond) // wait for server to start serving
 
-		req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://0.0.0.0:%d", command.port), nil)
+		req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://0.0.0.0:%d", command.configs.Port), nil)
 		assert.NoError(t, err)
 
 		c := http.Client{
