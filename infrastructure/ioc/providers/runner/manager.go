@@ -24,7 +24,6 @@ import (
 	taskEvents "github.com/khanzadimahdi/testproject/domain/runner/task/events"
 	translatorContract "github.com/khanzadimahdi/testproject/domain/translator"
 	infraHealth "github.com/khanzadimahdi/testproject/infrastructure/health"
-	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers"
 	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/jetstream/produceConsumer"
 	noderepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/runner/nodes"
 	taskrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/runner/tasks"
@@ -40,21 +39,6 @@ import (
 const (
 	ManagerSubscribers = "runner:manager:subscribers"
 )
-
-// ManagerProviders returns the full, ordered set of service providers required
-// by the runner manager service.
-func ManagerProviders() []provider.Provider {
-	return []provider.Provider{
-		providers.NewOpenTelemetryProvider("runner-manager", "runner-manager"),
-		providers.NewProfilerProvider("runner-manager"),
-		providers.NewMongodbProvider(),
-		providers.NewNatsProvider(),
-		providers.NewTranslationProvider(),
-		providers.NewValidationProvider(),
-		providers.NewContainerProvider(),
-		NewManagerProvider(),
-	}
-}
 
 // managerProvider builds the runner manager's messaging singleton, HTTP handler
 // and message subscribers.

@@ -22,7 +22,6 @@ import (
 	nodeContract "github.com/khanzadimahdi/testproject/domain/runner/node"
 	taskEvents "github.com/khanzadimahdi/testproject/domain/runner/task/events"
 	infraHealth "github.com/khanzadimahdi/testproject/infrastructure/health"
-	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers"
 	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/jetstream/produceConsumer"
 	"github.com/khanzadimahdi/testproject/infrastructure/telemetry/profiler"
 	healthAPI "github.com/khanzadimahdi/testproject/presentation/http/health"
@@ -37,23 +36,6 @@ const (
 	consumerNamePrefix string = "runner-worker-%s"
 )
 
-// WorkerProviders returns the full, ordered set of service providers required
-// by the runner worker service. name points at the worker name configured by
-// the command (flag), which is bound into the container by workerNameProvider.
-func WorkerProviders(name *string) []provider.Provider {
-	return []provider.Provider{
-		newWorkerNameProvider(name),
-		providers.NewOpenTelemetryProvider("runner-worker", *name),
-		providers.NewProfilerProvider("runner-worker"),
-		providers.NewNatsProvider(),
-		providers.NewDockerProvider(),
-		providers.NewTranslationProvider(),
-		providers.NewValidationProvider(),
-		providers.NewContainerProvider(),
-		NewWorkerProvider(),
-	}
-}
-
 // workerNameProvider binds the worker name, which the command loads from its
 // --name flag or from the RUNNER_WORKER_NAME environment variable.
 type workerNameProvider struct {
@@ -62,7 +44,10 @@ type workerNameProvider struct {
 
 var _ provider.Provider = &workerNameProvider{}
 
-func newWorkerNameProvider(name *string) *workerNameProvider {
+// NewWorkerNameProvider binds the worker name into the container so the worker
+// providers can resolve it. name points at the name configured by the command,
+// which is read when the provider registers.
+func NewWorkerNameProvider(name *string) *workerNameProvider {
 	return &workerNameProvider{name: name}
 }
 

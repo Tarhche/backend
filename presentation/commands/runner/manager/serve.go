@@ -11,6 +11,7 @@ import (
 	"github.com/danceable/provider"
 
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers/runner"
 )
 
@@ -53,12 +54,21 @@ func (c *ServeCommand) Usage() string {
 }
 
 func (c *ServeCommand) Configure(flagSet *console.FlagSet) {
-	flagSet.IntVar(&c.port, 80, "specifies which port server should listen to.", console.Long("port"), console.Short("p"), console.Env("SERVER_PORT"))
+	console.Var(flagSet, &c.port, console.Long("port"), "specifies which port server should listen to.", console.Short("p"), console.Env("SERVER_PORT"), console.Default(80))
 }
 
 // Providers returns the service providers required to serve the runner manager.
 func (c *ServeCommand) Providers() []provider.Provider {
-	return runner.ManagerProviders()
+	return []provider.Provider{
+		providers.NewOpenTelemetryProvider("runner-manager", "runner-manager"),
+		providers.NewProfilerProvider("runner-manager"),
+		providers.NewMongodbProvider(),
+		providers.NewNatsProvider(),
+		providers.NewTranslationProvider(),
+		providers.NewValidationProvider(),
+		providers.NewContainerProvider(),
+		runner.NewManagerProvider(),
+	}
 }
 
 // Boot resolves the command's dependencies from the booted container.

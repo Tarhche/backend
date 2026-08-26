@@ -53,12 +53,29 @@ func (c *ServeCommand) Usage() string {
 }
 
 func (c *ServeCommand) Configure(flagSet *console.FlagSet) {
-	flagSet.IntVar(&c.port, 80, "specifies which port server should listen to.", console.Long("port"), console.Short("p"), console.Env("SERVER_PORT"))
+	console.Var(flagSet, &c.port, console.Long("port"), "specifies which port server should listen to.", console.Short("p"), console.Env("SERVER_PORT"), console.Default(80))
 }
 
 // Providers returns the service providers required to serve the blog service.
 func (c *ServeCommand) Providers() []provider.Provider {
-	return providers.BlogProviders()
+	return []provider.Provider{
+		providers.NewOpenTelemetryProvider("blog", "blog"),
+		providers.NewProfilerProvider("blog"),
+		providers.NewMongodbProvider(),
+		providers.NewNatsProvider(),
+		providers.NewTranslationProvider(),
+		providers.NewValidationProvider(),
+		providers.NewScopedTranslationProvider(),
+		providers.NewScopedValidationProvider(),
+		providers.NewEmailProvider(),
+		providers.NewHasherProvider(),
+		providers.NewJwtProvider(),
+		providers.NewAuthProvider(),
+		providers.NewStorageProvider(),
+		providers.NewTemplateProvider(),
+		providers.NewContainerProvider(),
+		providers.NewBlogProvider(),
+	}
 }
 
 // Boot resolves the command's dependencies from the booted container.

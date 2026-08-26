@@ -157,30 +157,6 @@ const (
 	WebSocketCloseGracePeriod = 10 * time.Second
 )
 
-// BlogProviders returns the full, ordered set of service providers required by
-// the blog service. Request-scoped providers (translation, validation) are
-// included so the manager runs them per request scope.
-func BlogProviders() []provider.Provider {
-	return []provider.Provider{
-		NewOpenTelemetryProvider("blog", "blog"),
-		NewProfilerProvider("blog"),
-		NewMongodbProvider(),
-		NewNatsProvider(),
-		NewTranslationProvider(),
-		NewValidationProvider(),
-		NewScopedTranslationProvider(),
-		NewScopedValidationProvider(),
-		NewEmailProvider(),
-		NewHasherProvider(),
-		NewJwtProvider(),
-		NewAuthProvider(),
-		NewStorageProvider(),
-		NewTemplateProvider(),
-		NewContainerProvider(),
-		NewBlogProvider(),
-	}
-}
-
 // blogProvider builds the blog service's messaging singletons, HTTP handler and
 // message subscribers. It must be registered after its dependencies.
 type blogProvider struct {

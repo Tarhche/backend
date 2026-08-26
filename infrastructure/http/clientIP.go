@@ -4,6 +4,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"slices"
 	"strings"
 )
 
@@ -39,8 +40,8 @@ func ClientIP(r *http.Request) string {
 	entries := strings.Split(forwarded, ",")
 
 	var nearest netip.Addr
-	for i := len(entries) - 1; i >= 0; i-- {
-		addr, err := netip.ParseAddr(strings.TrimSpace(entries[i]))
+	for _, entrie := range slices.Backward(entries) {
+		addr, err := netip.ParseAddr(strings.TrimSpace(entrie))
 		if err != nil {
 			break
 		}

@@ -13,6 +13,7 @@ import (
 	workerHeartbeat "github.com/khanzadimahdi/testproject/application/runner/worker/beatHeart"
 	taskHeartbeat "github.com/khanzadimahdi/testproject/application/runner/worker/task/beatHeart"
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers/runner"
 )
 
@@ -60,15 +61,25 @@ func (c *ServeCommand) Usage() string {
 }
 
 func (c *ServeCommand) Configure(flagSet *console.FlagSet) {
-	flagSet.IntVar(&c.port, 80, "specifies which port server should listen to.", console.Long("port"), console.Short("p"), console.Env("SERVER_PORT"))
-	flagSet.StringVar(&c.name, "", "specifies the unique name of the worker.", console.Long("name"), console.Short("n"), console.Env("RUNNER_WORKER_NAME"))
+	console.Var(flagSet, &c.port, console.Long("port"), "specifies which port server should listen to.", console.Short("p"), console.Env("SERVER_PORT"), console.Default(80))
+	console.Var(flagSet, &c.name, console.Long("name"), "specifies the unique name of the worker.", console.Short("n"), console.Env("RUNNER_WORKER_NAME"))
 }
 
 // Providers returns the service providers required to serve the runner worker.
 // The worker name (configured by flag or environment) is bound into the
 // container so the worker providers can resolve it.
 func (c *ServeCommand) Providers() []provider.Provider {
-	return runner.WorkerProviders(&c.name)
+	return []provider.Provider{
+		runner.NewWorkerNameProvider(&c.name),
+		providers.NewOpenTelemetryProvider("runner-worker", c.name),
+		providers.NewProfilerProvider("runner-worker"),
+		providers.NewNatsProvider(),
+		providers.NewDockerProvider(),
+		providers.NewTranslationProvider(),
+		providers.NewValidationProvider(),
+		providers.NewContainerProvider(),
+		runner.NewWorkerProvider(),
+	}
 }
 
 // Boot resolves the command's dependencies from the booted container.
