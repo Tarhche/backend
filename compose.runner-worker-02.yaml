@@ -21,13 +21,13 @@ services:
       update_config:
         parallelism: 1
         order: start-first
-        monitor: 10s
+        monitor: 90s
         delay: 5s
         failure_action: rollback
       rollback_config:
         parallelism: 1
         order: start-first
-        monitor: 10s
+        monitor: 90s
         delay: 5s
         failure_action: pause
       restart_policy:
