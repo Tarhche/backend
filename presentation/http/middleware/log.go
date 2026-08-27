@@ -116,7 +116,7 @@ func DefaultLogConfig() LogConfig {
 
 		WithUserAgent:      false,
 		WithRequestBody:    false,
-		WithRequestHeader:  false,
+		WithRequestHeader:  true,
 		WithResponseBody:   false,
 		WithResponseHeader: false,
 		WithClientIP:       true,
