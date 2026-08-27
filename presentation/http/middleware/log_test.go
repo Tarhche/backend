@@ -20,7 +20,7 @@ func TestDefaultLogConfig(t *testing.T) {
 		assert.Equal(t, slog.LevelError, config.ServerErrorLevel)
 		assert.False(t, config.WithUserAgent)
 		assert.False(t, config.WithRequestBody)
-		assert.False(t, config.WithRequestHeader)
+		assert.True(t, config.WithRequestHeader)
 		assert.False(t, config.WithResponseBody)
 		assert.False(t, config.WithResponseHeader)
 		assert.True(t, config.WithClientIP)
