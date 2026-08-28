@@ -107,4 +107,56 @@ func TestCacheMiddleware(t *testing.T) {
 		assert.Equal(t, "fresh response", resp.Body.String())
 		mockCache.AssertExpectations(t)
 	})
+
+	t.Run("should not cache non 2xx responses", func(t *testing.T) {
+		t.Parallel()
+
+		for _, status := range []int{
+			http.StatusMovedPermanently,
+			http.StatusUnauthorized,
+			http.StatusNotFound,
+			http.StatusInternalServerError,
+		} {
+			mockCache := new(cache.MockCache)
+			mockCache.On("Get", mock.Anything, mock.Anything).Return([]byte{}, domain.ErrNotExists)
+
+			nextHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(status)
+				w.Write([]byte("error response"))
+			})
+
+			middleware := NewCacheMiddleware(nextHandler, mockCache)
+			req := httptest.NewRequest(http.MethodGet, "/test", nil)
+			resp := httptest.NewRecorder()
+
+			middleware.ServeHTTP(resp, req)
+
+			assert.Equal(t, status, resp.Code)
+			assert.Equal(t, "error response", resp.Body.String())
+			mockCache.AssertNotCalled(t, "Set")
+			mockCache.AssertExpectations(t)
+		}
+	})
+
+	t.Run("should cache a response whose handler does not call WriteHeader", func(t *testing.T) {
+		t.Parallel()
+
+		mockCache := new(cache.MockCache)
+		mockCache.On("Get", mock.Anything, mock.Anything).Return([]byte{}, domain.ErrNotExists)
+		mockCache.On("Set", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+		defer mockCache.AssertExpectations(t)
+
+		nextHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("implicit 200"))
+		})
+
+		middleware := NewCacheMiddleware(nextHandler, mockCache)
+		req := httptest.NewRequest(http.MethodGet, "/test", nil)
+		resp := httptest.NewRecorder()
+
+		middleware.ServeHTTP(resp, req)
+
+		assert.Equal(t, http.StatusOK, resp.Code)
+		assert.Equal(t, "implicit 200", resp.Body.String())
+	})
 }

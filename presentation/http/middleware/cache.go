@@ -43,7 +43,9 @@ func (c *Cache) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		c.next.ServeHTTP(newCacheWriter(&cachedResponse), r)
 
-		_ = c.persistCache(r.Context(), cacheKey, &cachedResponse)
+		if isSuccessful(cachedResponse.Status) {
+			_ = c.persistCache(r.Context(), cacheKey, &cachedResponse)
+		}
 
 		c.writeResponse(rw, &cachedResponse)
 
@@ -59,6 +61,12 @@ func (c *Cache) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 func (c *Cache) canBeCached(r *http.Request) bool {
 	return r.Method == http.MethodGet
+}
+
+// isSuccessful reports whether a response status is in the 2xx range,
+// which is the only range we store.
+func isSuccessful(status int) bool {
+	return status >= http.StatusOK && status < http.StatusMultipleChoices
 }
 
 func (c *Cache) persistCache(ctx context.Context, cacheKey string, cachedResponse *response) error {
@@ -96,6 +104,9 @@ type cacheWriter struct {
 var _ http.ResponseWriter = &cacheWriter{}
 
 func newCacheWriter(cachedResponse *response) *cacheWriter {
+	// a handler that writes a body without calling WriteHeader implies 200.
+	cachedResponse.Status = http.StatusOK
+
 	return &cacheWriter{
 		response: cachedResponse,
 	}
