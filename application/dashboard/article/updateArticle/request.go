@@ -14,7 +14,6 @@ type Request struct {
 	Excerpt         string    `json:"excerpt"`
 	Body            string    `json:"body"`
 	PublishedAt     time.Time `json:"published_at"`
-	AuthorUUID      string    `json:"-"`
 	Tags            []string  `json:"tags"`
 	LanguageCode    string    `json:"language_code"`
 }
@@ -38,10 +37,6 @@ func (r *Request) Validate() domain.ValidationErrors {
 
 	if len(r.Body) == 0 {
 		validationErrors["body"] = "required_field"
-	}
-
-	if len(r.AuthorUUID) == 0 {
-		validationErrors["author"] = "required_field"
 	}
 
 	if len(r.LanguageCode) == 0 {

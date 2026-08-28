@@ -40,11 +40,10 @@ func TestUpdateHandler(t *testing.T) {
 				Title:           "test title",
 				Excerpt:         "test excerpt",
 				Body:            "test body",
-				AuthorUUID:      "test-author-uuid",
 				Tags:            []string{"tag1", "tag2"},
 				LanguageCode:    "EN",
 			}
-			existing = article.Article{UUID: "test-article-uuid", CorrelationUUID: r.CorrelationUUID, LanguageCode: "EN"}
+			existing = article.Article{UUID: "test-article-uuid", CorrelationUUID: r.CorrelationUUID, AuthorUUID: "original-author-uuid", LanguageCode: "EN"}
 			a        = article.Article{
 				UUID:            existing.UUID,
 				Cover:           r.Cover,
@@ -53,14 +52,14 @@ func TestUpdateHandler(t *testing.T) {
 				Excerpt:         r.Excerpt,
 				Body:            r.Body,
 				PublishedAt:     r.PublishedAt,
-				AuthorUUID:      r.AuthorUUID,
+				AuthorUUID:      existing.AuthorUUID,
 				Tags:            r.Tags,
 				LanguageCode:    r.LanguageCode,
 				CorrelationUUID: r.CorrelationUUID,
 			}
 
 			u = user.User{
-				UUID: r.AuthorUUID,
+				UUID: "editor-uuid",
 			}
 		)
 
@@ -104,7 +103,7 @@ func TestUpdateHandler(t *testing.T) {
 			}
 		)
 
-		requestValidator.On("Validate", &updatearticle.Request{AuthorUUID: u.UUID}).Once().Return(domain.ValidationErrors{
+		requestValidator.On("Validate", &updatearticle.Request{}).Once().Return(domain.ValidationErrors{
 			"body":          "body is required",
 			"excerpt":       "excerpt is required",
 			"title":         "title is required",
@@ -144,11 +143,10 @@ func TestUpdateHandler(t *testing.T) {
 				Title:           "test title",
 				Excerpt:         "test excerpt",
 				Body:            "test body",
-				AuthorUUID:      "test-author-uuid",
 				Tags:            []string{"tag1", "tag2"},
 				LanguageCode:    "EN",
 			}
-			existing = article.Article{UUID: "test-article-uuid", CorrelationUUID: r.CorrelationUUID, LanguageCode: "EN"}
+			existing = article.Article{UUID: "test-article-uuid", CorrelationUUID: r.CorrelationUUID, AuthorUUID: "original-author-uuid", LanguageCode: "EN"}
 			a        = article.Article{
 				UUID:            existing.UUID,
 				Cover:           r.Cover,
@@ -157,14 +155,14 @@ func TestUpdateHandler(t *testing.T) {
 				Excerpt:         r.Excerpt,
 				Body:            r.Body,
 				PublishedAt:     r.PublishedAt,
-				AuthorUUID:      r.AuthorUUID,
+				AuthorUUID:      existing.AuthorUUID,
 				Tags:            r.Tags,
 				LanguageCode:    r.LanguageCode,
 				CorrelationUUID: r.CorrelationUUID,
 			}
 
 			u = user.User{
-				UUID: r.AuthorUUID,
+				UUID: "editor-uuid",
 			}
 		)
 

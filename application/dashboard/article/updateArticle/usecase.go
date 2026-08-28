@@ -58,7 +58,7 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		Excerpt:         request.Excerpt,
 		Body:            request.Body,
 		PublishedAt:     request.PublishedAt,
-		AuthorUUID:      request.AuthorUUID,
+		AuthorUUID:      existing.AuthorUUID,
 		Tags:            request.Tags,
 		LanguageCode:    request.LanguageCode,
 		CorrelationUUID: request.CorrelationUUID,

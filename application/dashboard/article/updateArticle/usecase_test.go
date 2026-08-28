@@ -37,13 +37,13 @@ func TestUseCase_Execute(t *testing.T) {
 				Title:           "test title",
 				Excerpt:         "test excerpt",
 				Body:            "test body",
-				AuthorUUID:      "test-author-uuid",
 				Tags:            []string{"tag1", "tag2"},
 				LanguageCode:    "EN",
 			}
 			existing = article.Article{
 				UUID:            "test-article-uuid",
 				CorrelationUUID: r.CorrelationUUID,
+				AuthorUUID:      "original-author-uuid",
 				Title:           "old title",
 				LanguageCode:    "EN",
 				ViewCount:       7,
@@ -56,7 +56,7 @@ func TestUseCase_Execute(t *testing.T) {
 				Excerpt:         r.Excerpt,
 				Body:            r.Body,
 				PublishedAt:     r.PublishedAt,
-				AuthorUUID:      r.AuthorUUID,
+				AuthorUUID:      existing.AuthorUUID,
 				Tags:            r.Tags,
 				LanguageCode:    r.LanguageCode,
 				CorrelationUUID: r.CorrelationUUID,
@@ -96,7 +96,6 @@ func TestUseCase_Execute(t *testing.T) {
 					"title":            "title is required",
 					"excerpt":          "excerpt is required",
 					"body":             "body is required",
-					"author":           "author is required",
 					"language_code":    "language is required",
 				},
 			}
@@ -128,7 +127,6 @@ func TestUseCase_Execute(t *testing.T) {
 				Title:           "test title",
 				Excerpt:         "test excerpt",
 				Body:            "test body",
-				AuthorUUID:      "test-author-uuid",
 				LanguageCode:    "DE",
 			}
 		)
@@ -170,11 +168,10 @@ func TestUseCase_Execute(t *testing.T) {
 				Title:           "test title",
 				Excerpt:         "test excerpt",
 				Body:            "test body",
-				AuthorUUID:      "test-author-uuid",
 				Tags:            []string{"tag1", "tag2"},
 				LanguageCode:    "EN",
 			}
-			existing = article.Article{UUID: "test-article-uuid", CorrelationUUID: r.CorrelationUUID, LanguageCode: "EN"}
+			existing = article.Article{UUID: "test-article-uuid", CorrelationUUID: r.CorrelationUUID, AuthorUUID: "original-author-uuid", LanguageCode: "EN"}
 			a        = article.Article{
 				UUID:            existing.UUID,
 				Cover:           r.Cover,
@@ -183,7 +180,7 @@ func TestUseCase_Execute(t *testing.T) {
 				Excerpt:         r.Excerpt,
 				Body:            r.Body,
 				PublishedAt:     r.PublishedAt,
-				AuthorUUID:      r.AuthorUUID,
+				AuthorUUID:      existing.AuthorUUID,
 				Tags:            r.Tags,
 				LanguageCode:    r.LanguageCode,
 				CorrelationUUID: r.CorrelationUUID,

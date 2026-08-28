@@ -24,7 +24,6 @@ func TestRequest_Validate(t *testing.T) {
 				Excerpt:         "This is an excerpt",
 				Body:            "This is the body",
 				PublishedAt:     time.Now(),
-				AuthorUUID:      "author-uuid-123",
 				Tags:            []string{"golang", "testing"},
 				LanguageCode:    "EN",
 			},
@@ -38,7 +37,6 @@ func TestRequest_Validate(t *testing.T) {
 				Excerpt:         "This is an excerpt",
 				Body:            "This is the body",
 				PublishedAt:     time.Now(),
-				AuthorUUID:      "author-uuid-123",
 				LanguageCode:    "FA",
 			},
 			want: domain.ValidationErrors{},
@@ -51,7 +49,6 @@ func TestRequest_Validate(t *testing.T) {
 				Excerpt:         "This is an excerpt",
 				Body:            "This is the body",
 				PublishedAt:     time.Now(),
-				AuthorUUID:      "author-uuid-123",
 				LanguageCode:    "EN",
 			},
 			want: domain.ValidationErrors{
@@ -66,7 +63,6 @@ func TestRequest_Validate(t *testing.T) {
 				Excerpt:         "This is an excerpt",
 				Body:            "This is the body",
 				PublishedAt:     time.Now(),
-				AuthorUUID:      "author-uuid-123",
 				LanguageCode:    "EN",
 			},
 			want: domain.ValidationErrors{
@@ -81,7 +77,6 @@ func TestRequest_Validate(t *testing.T) {
 				Excerpt:         "",
 				Body:            "This is the body",
 				PublishedAt:     time.Now(),
-				AuthorUUID:      "author-uuid-123",
 				LanguageCode:    "EN",
 			},
 			want: domain.ValidationErrors{
@@ -96,26 +91,10 @@ func TestRequest_Validate(t *testing.T) {
 				Excerpt:         "This is an excerpt",
 				Body:            "",
 				PublishedAt:     time.Now(),
-				AuthorUUID:      "author-uuid-123",
 				LanguageCode:    "EN",
 			},
 			want: domain.ValidationErrors{
 				"body": "required_field",
-			},
-		},
-		{
-			name: "invalid request with empty author uuid",
-			request: Request{
-				CorrelationUUID: "article-correlation-123",
-				Title:           "Test Article",
-				Excerpt:         "This is an excerpt",
-				Body:            "This is the body",
-				PublishedAt:     time.Now(),
-				AuthorUUID:      "",
-				LanguageCode:    "EN",
-			},
-			want: domain.ValidationErrors{
-				"author": "required_field",
 			},
 		},
 		{
@@ -126,7 +105,6 @@ func TestRequest_Validate(t *testing.T) {
 				Excerpt:         "This is an excerpt",
 				Body:            "This is the body",
 				PublishedAt:     time.Now(),
-				AuthorUUID:      "author-uuid-123",
 				LanguageCode:    "",
 			},
 			want: domain.ValidationErrors{
@@ -141,14 +119,12 @@ func TestRequest_Validate(t *testing.T) {
 				Excerpt:         "",
 				Body:            "",
 				PublishedAt:     time.Now(),
-				AuthorUUID:      "",
 				LanguageCode:    "",
 			},
 			want: domain.ValidationErrors{
 				"title":         "required_field",
 				"excerpt":       "required_field",
 				"body":          "required_field",
-				"author":        "required_field",
 				"language_code": "required_field",
 			},
 		},

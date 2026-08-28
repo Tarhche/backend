@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/khanzadimahdi/testproject/application/auth"
 	updatearticle "github.com/khanzadimahdi/testproject/application/dashboard/article/updateArticle"
 	"github.com/khanzadimahdi/testproject/domain"
 	infraTrace "github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
@@ -23,7 +22,7 @@ func NewUpdateHandler(useCase *updatearticle.UseCase) *updateHandler {
 }
 
 // @Summary		Update a dashboard article
-// @Description	update existing article fields, current user must be author
+// @Description	update existing article fields, the article author is preserved
 // @Tags			dashboard articles
 // @Accept			json
 // @Produce		json
@@ -34,14 +33,11 @@ func NewUpdateHandler(useCase *updatearticle.UseCase) *updateHandler {
 // @Failure		500	{object}	map[string]interface{}
 // @Router			/dashboard/articles [put]
 func (h *updateHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
-	userUUID := auth.FromContext(r.Context()).UUID
-
 	var request updatearticle.Request
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		rw.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	request.AuthorUUID = userUUID
 
 	response, err := h.useCase.Execute(r.Context(), &request)
 	switch {
