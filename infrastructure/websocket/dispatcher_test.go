@@ -1,4 +1,4 @@
-package routing
+package websocket
 
 import (
 	"context"
@@ -9,7 +9,6 @@ import (
 
 	"github.com/khanzadimahdi/testproject/domain"
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
-	"github.com/khanzadimahdi/testproject/infrastructure/websocket/protocol"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -65,22 +64,22 @@ func TestDispatcher(t *testing.T) {
 		require.Equal(t, []byte("null"), request.Payload)
 
 		var producerMock messagingMock.MockProduceConsumer
-		producerMock.On("Produce", mock.Anything, protocol.BrokerSubject("runCode"), mock.Anything).Return(nil).Once()
+		producerMock.On("Produce", mock.Anything, "websocket_runCode", mock.Anything).Return(nil).Once()
 		defer producerMock.AssertExpectations(t)
 
-		subjects := protocol.NewSubjects()
-		subjects.Add("runCode")
+		subjects := newSubjects()
+		subjects.add("runCode")
 
-		registry := NewInMemoryRegistry(8)
+		registry := NewInMemoryRequestRegistry(8)
 
-		d := &Dispatcher{
-			validator: protocol.NewValidator(registry, subjects, echoTranslator()),
+		d := &dispatcher{
+			validator: newRequestValidator(registry, subjects, echoTranslator()),
 			registry:  registry,
 			producer:  &producerMock,
 			logger:    logger,
 		}
 
-		serverSideID, validationErrors, err := d.Dispatch(context.Background(), &request)
+		serverSideID, validationErrors, err := d.dispatch(context.Background(), &request)
 
 		require.NoError(t, err)
 		assert.Empty(t, validationErrors)

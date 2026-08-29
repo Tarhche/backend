@@ -1,4 +1,4 @@
-package routing
+package websocket
 
 import (
 	"sync"
@@ -16,25 +16,25 @@ type RequestRegistry interface {
 	DeleteByServerSideID(serverSideID string) error
 }
 
-type InMemoryRegistry struct {
+type InMemoryRequestRegistry struct {
 	lock           sync.RWMutex
 	clientToServer map[string]string
 	serverToClient map[string]string
 }
 
-// make sure the InMemoryRegistry implements the RequestRegistry interface
-var _ RequestRegistry = &InMemoryRegistry{}
+// make sure the InMemoryRequestRegistry implements the RequestRegistry interface
+var _ RequestRegistry = &InMemoryRequestRegistry{}
 
-// NewInMemoryRegistry initializes a new InMemoryRegistry
-func NewInMemoryRegistry(initialSize int) *InMemoryRegistry {
-	return &InMemoryRegistry{
+// NewInMemoryRequestRegistry initializes a new InMemoryRequestRegistry
+func NewInMemoryRequestRegistry(initialSize int) *InMemoryRequestRegistry {
+	return &InMemoryRequestRegistry{
 		clientToServer: make(map[string]string, initialSize),
 		serverToClient: make(map[string]string, initialSize),
 	}
 }
 
 // Add registers a new client and generates a serverSideID
-func (r *InMemoryRegistry) Add(clientSideID string) (string, error) {
+func (r *InMemoryRequestRegistry) Add(clientSideID string) (string, error) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
@@ -54,7 +54,7 @@ func (r *InMemoryRegistry) Add(clientSideID string) (string, error) {
 }
 
 // GetClientSideID returns the clientSideID for a given serverSideID
-func (r *InMemoryRegistry) GetClientSideID(serverSideID string) (string, error) {
+func (r *InMemoryRequestRegistry) GetClientSideID(serverSideID string) (string, error) {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
 
@@ -67,7 +67,7 @@ func (r *InMemoryRegistry) GetClientSideID(serverSideID string) (string, error) 
 }
 
 // GetServerSideID returns the serverSideID for a given clientSideID
-func (r *InMemoryRegistry) GetServerSideID(clientSideID string) (string, error) {
+func (r *InMemoryRequestRegistry) GetServerSideID(clientSideID string) (string, error) {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
 
@@ -80,7 +80,7 @@ func (r *InMemoryRegistry) GetServerSideID(clientSideID string) (string, error) 
 }
 
 // DeleteByServerSideID removes the mapping by serverSideID
-func (r *InMemoryRegistry) DeleteByServerSideID(serverSideID string) error {
+func (r *InMemoryRequestRegistry) DeleteByServerSideID(serverSideID string) error {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 

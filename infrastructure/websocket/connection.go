@@ -1,4 +1,4 @@
-package transport
+package websocket
 
 import (
 	"log/slog"
@@ -8,21 +8,11 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// Config carries the socket's timings and limits.
-type Config struct {
-	MaxMessageSize   int64
-	WriteWait        time.Duration
-	PingPeriod       time.Duration
-	PongWait         time.Duration
-	OutboundBuffer   int
-	CloseGracePeriod time.Duration
-}
-
-// Connection owns a single client socket. Every write goes through writePump,
+// connection owns a single client socket. Every write goes through writePump,
 // which keeps gorilla's requirement of one writer at a time.
-type Connection struct {
+type connection struct {
 	conn     *websocket.Conn
-	config   Config
+	config   configuration
 	outbound chan any
 	done     chan struct{}
 	drained  chan struct{}
@@ -30,14 +20,17 @@ type Connection struct {
 	logger   *slog.Logger
 }
 
-// NewConnection prepares an upgraded socket and starts its write pump. The
+// make sure the connection implements the conn interface
+var _ conn = &connection{}
+
+// newConnection prepares an upgraded socket and starts its write pump. The
 // caller must call shutdown to stop it.
-func NewConnection(conn *websocket.Conn, config Config, logger *slog.Logger) *Connection {
-	conn.SetReadLimit(config.MaxMessageSize)
-	_ = conn.SetReadDeadline(time.Now().Add(config.PongWait))
+func newConnection(conn *websocket.Conn, config configuration, logger *slog.Logger) *connection {
+	conn.SetReadLimit(config.maxMessageSize)
+	_ = conn.SetReadDeadline(time.Now().Add(config.pongWait))
 
 	conn.SetPongHandler(func(string) error {
-		return conn.SetReadDeadline(time.Now().Add(config.PongWait))
+		return conn.SetReadDeadline(time.Now().Add(config.pongWait))
 	})
 
 	conn.SetCloseHandler(func(code int, text string) error {
@@ -46,10 +39,10 @@ func NewConnection(conn *websocket.Conn, config Config, logger *slog.Logger) *Co
 		return nil
 	})
 
-	c := &Connection{
+	c := &connection{
 		conn:     conn,
 		config:   config,
-		outbound: make(chan any, config.OutboundBuffer),
+		outbound: make(chan any, config.outboundBuffer),
 		done:     make(chan struct{}),
 		drained:  make(chan struct{}),
 		logger:   logger,
@@ -60,14 +53,14 @@ func NewConnection(conn *websocket.Conn, config Config, logger *slog.Logger) *Co
 	return c
 }
 
-func (c *Connection) Read(value any) error {
+func (c *connection) read(value any) error {
 	return c.conn.ReadJSON(value)
 }
 
 // send reports whether the message is now certain to be written or dropped by
 // the write pump. It drops the message once the client's queue is full, so a
 // client that is not keeping up never blocks whoever is sending to it.
-func (c *Connection) Send(value any) bool {
+func (c *connection) send(value any) bool {
 	select {
 	case <-c.done:
 		return false
@@ -96,10 +89,10 @@ func (c *Connection) Send(value any) bool {
 
 // writePump is the only goroutine that writes to the socket. It also sends the
 // pings that keep the client's read deadline alive.
-func (c *Connection) writePump() {
+func (c *connection) writePump() {
 	defer close(c.drained)
 
-	ticker := time.NewTicker(c.config.PingPeriod)
+	ticker := time.NewTicker(c.config.pingPeriod)
 	defer ticker.Stop()
 
 	for {
@@ -110,10 +103,10 @@ func (c *Connection) writePump() {
 			return
 
 		case message := <-c.outbound:
-			c.write(message, time.Now().Add(c.config.WriteWait))
+			c.write(message, time.Now().Add(c.config.writeWait))
 
 		case <-ticker.C:
-			_ = c.conn.SetWriteDeadline(time.Now().Add(c.config.WriteWait))
+			_ = c.conn.SetWriteDeadline(time.Now().Add(c.config.writeWait))
 			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				c.logger.Warn("error on sending ping", "error", err)
 			}
@@ -125,8 +118,8 @@ func (c *Connection) writePump() {
 // message handed over just before the connection closed still reaches it. The
 // grace period bounds it: a peer that has stopped reading cannot hold up the
 // shutdown.
-func (c *Connection) drain() {
-	deadline := time.Now().Add(c.config.CloseGracePeriod)
+func (c *connection) drain() {
+	deadline := time.Now().Add(c.config.closeGracePeriod)
 
 	for time.Now().Before(deadline) {
 		select {
@@ -140,7 +133,7 @@ func (c *Connection) drain() {
 	}
 }
 
-func (c *Connection) write(message any, deadline time.Time) error {
+func (c *connection) write(message any, deadline time.Time) error {
 	_ = c.conn.SetWriteDeadline(deadline)
 
 	err := c.conn.WriteJSON(message)
@@ -153,21 +146,21 @@ func (c *Connection) write(message any, deadline time.Time) error {
 
 // shutdown stops the write pump, lets it flush what is queued, and closes the
 // socket. It is safe to call more than once.
-func (c *Connection) Shutdown() error {
+func (c *connection) shutdown() error {
 	c.close.Do(func() {
 		close(c.done)
 	})
 
 	select {
 	case <-c.drained:
-	case <-time.After(c.config.CloseGracePeriod):
+	case <-time.After(c.config.closeGracePeriod):
 	}
 
 	// tell the client this was a normal close rather than a severed connection.
 	_ = c.conn.WriteControl(
 		websocket.CloseMessage,
 		websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""),
-		time.Now().Add(c.config.WriteWait),
+		time.Now().Add(c.config.writeWait),
 	)
 
 	return c.conn.Close()

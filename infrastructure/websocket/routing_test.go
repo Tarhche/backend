@@ -16,7 +16,6 @@ import (
 	"github.com/khanzadimahdi/testproject/domain"
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
 	"github.com/khanzadimahdi/testproject/infrastructure/translator"
-	"github.com/khanzadimahdi/testproject/infrastructure/websocket/routing"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -180,10 +179,10 @@ func TestReplyRouting(t *testing.T) {
 			&translatorMock,
 			"replies",
 			slog.New(slog.NewTextHandler(io.Discard, nil)),
-			WithRequestRegistry(func() routing.RequestRegistry {
+			WithRequestRegistry(func() RequestRegistry {
 				created.Add(1)
 
-				return routing.NewInMemoryRegistry(8)
+				return NewInMemoryRequestRegistry(8)
 			}),
 		)
 		assert.NoError(t, err)
