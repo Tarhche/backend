@@ -22,7 +22,8 @@ const (
 	cachedKeyPrefix = "cached."
 )
 
-// the interface that should be implemented by a decorator
+// ws is what a decorator wraps. A decorator embeds it and overrides only the
+// methods it cares about, so the rest pass through untouched.
 type ws interface {
 	domain.Consumer
 	domain.Replyer
@@ -37,7 +38,10 @@ type ws interface {
 // stored in the cache before being sent. Subjects not in the allowlist are
 // consumed without caching.
 type CacheDecorator struct {
-	parent   ws
+	// embedded, so ServeHTTP and Close reach the wrapped websocket without a
+	// pass-through method.
+	ws
+
 	cache    domain.Cache
 	subjects map[string]struct{}
 	logger   *slog.Logger
@@ -46,18 +50,6 @@ type CacheDecorator struct {
 // Ensure CacheDecorator implements the ws interface
 var _ ws = &CacheDecorator{}
 
-// Ensure Websocket implements the domain.Consumer interface
-var _ domain.Consumer = &Websocket{}
-
-// Ensure Websocket implements the domain.Replyer interface
-var _ domain.Replyer = &Websocket{}
-
-// make sure the websocket implements the http.Handler interface
-var _ http.Handler = &Websocket{}
-
-// make sure the websocket implements the io.Closer interface
-var _ io.Closer = &Websocket{}
-
 func NewCacheDecorator(ws ws, cache domain.Cache, logger *slog.Logger, subjects ...string) *CacheDecorator {
 	s := make(map[string]struct{}, len(subjects))
 	for _, subject := range subjects {
@@ -65,7 +57,7 @@ func NewCacheDecorator(ws ws, cache domain.Cache, logger *slog.Logger, subjects 
 	}
 
 	return &CacheDecorator{
-		parent:   ws,
+		ws:       ws,
 		cache:    cache,
 		subjects: s,
 		logger:   logger,
@@ -74,10 +66,10 @@ func NewCacheDecorator(ws ws, cache domain.Cache, logger *slog.Logger, subjects 
 
 func (d *CacheDecorator) Consume(ctx context.Context, subject string, handler domain.MessageHandler) error {
 	if _, ok := d.subjects[subject]; !ok {
-		return d.parent.Consume(ctx, subject, handler)
+		return d.ws.Consume(ctx, subject, handler)
 	}
 
-	return d.parent.Consume(
+	return d.ws.Consume(
 		ctx,
 		subject,
 		domain.MessageHandlerFunc(func(ctx context.Context, payload []byte) error {
@@ -91,7 +83,7 @@ func (d *CacheDecorator) Consume(ctx context.Context, subject string, handler do
 			d.logger.Info("checking cache for checksum key", "cachedKey", cachedKey, "requestID", requestID)
 			if cached, err := d.cache.Get(ctx, cachedKey); err == nil {
 				d.logger.Info("cache hit for checksum key", "cachedKey", cachedKey, "requestID", requestID)
-				return d.parent.Reply(ctx, &domain.Reply{
+				return d.ws.Reply(ctx, &domain.Reply{
 					RequestID: requestID,
 					Payload:   cached,
 				})
@@ -123,15 +115,7 @@ func (d *CacheDecorator) Reply(ctx context.Context, reply *domain.Reply) error {
 		}
 	}
 
-	return d.parent.Reply(ctx, reply)
-}
-
-func (d *CacheDecorator) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	d.parent.ServeHTTP(w, r)
-}
-
-func (d *CacheDecorator) Close() error {
-	return d.parent.Close()
+	return d.ws.Reply(ctx, reply)
 }
 
 // payloadChecksum strips the injected server-side "id" field from the JSON payload

@@ -149,12 +149,6 @@ const (
 	BlogSubscribers              = "blog:subscribers"
 	BlogHTTPCacheBucketName      = "blog_http_cache"
 	BlogWebSocketCacheBucketName = "blog_ws_cache"
-
-	WebSocketWriteWait        = 10 * time.Second
-	WebSocketMaxMessageSize   = 256 * 1024 // 256KB
-	WebSocketPongWait         = 60 * time.Second
-	WebSocketPingPeriod       = (WebSocketPongWait * 9) / 10
-	WebSocketCloseGracePeriod = 10 * time.Second
 )
 
 // blogProvider builds the blog service's messaging singletons, HTTP handler and

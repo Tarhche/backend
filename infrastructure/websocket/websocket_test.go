@@ -36,6 +36,51 @@ func (h *hijackableResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error)
 	return h.conn, h.bw, nil
 }
 
+// stalledClientConn upgrades a websocket over an in-memory pipe and returns the
+// server side of it. net.Pipe is unbuffered, so once the client has drained the
+// upgrade response and stopped reading, every server write blocks.
+func stalledClientConn(t *testing.T) *websocket.Conn {
+	t.Helper()
+
+	serverConn, clientConn := net.Pipe()
+	t.Cleanup(func() {
+		clientConn.Close()
+		serverConn.Close()
+	})
+
+	upgradeDrained := make(chan struct{})
+	go func() {
+		defer close(upgradeDrained)
+
+		buf := make([]byte, 4096)
+		_, _ = clientConn.Read(buf)
+	}()
+
+	recorder := &hijackableResponseWriter{
+		ResponseRecorder: httptest.NewRecorder(),
+		conn:             serverConn,
+		bw: bufio.NewReadWriter(
+			bufio.NewReader(serverConn),
+			bufio.NewWriter(serverConn),
+		),
+	}
+
+	request := httptest.NewRequest(http.MethodGet, "/", nil)
+	request.Header.Set("Connection", "Upgrade")
+	request.Header.Set("Upgrade", "websocket")
+	request.Header.Set("Sec-WebSocket-Version", "13")
+	request.Header.Set("Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ==")
+
+	upgrader := websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }}
+
+	conn, err := upgrader.Upgrade(recorder, request, nil)
+	assert.NoError(t, err)
+
+	<-upgradeDrained
+
+	return conn
+}
+
 func TestWebsocket(t *testing.T) {
 	t.Parallel()
 
@@ -65,6 +110,33 @@ func TestWebsocket(t *testing.T) {
 		client, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 		assert.NoError(t, err)
 		defer client.Close()
+	})
+
+	t.Run("refuses to be built with a configuration the protocol cannot work with", func(t *testing.T) {
+		t.Parallel()
+
+		var (
+			requestRegistryMock   MockRequestRegistry
+			produceConsumerMock   messagingMock.MockProduceConsumer
+			publishSubscriberMock messagingMock.MockPublishSubscriber
+			translatorMock        translator.TranslatorMock
+		)
+
+		ws, err := NewWebsocket(
+			&requestRegistryMock,
+			&produceConsumerMock,
+			&publishSubscriberMock,
+			&translatorMock,
+			"replies",
+			slog.New(slog.NewTextHandler(io.Discard, nil)),
+			// clients would be disconnected before they could answer a ping.
+			WithPingPeriod(30*time.Second),
+			WithPongWait(10*time.Second),
+		)
+
+		assert.Error(t, err)
+		assert.Nil(t, ws)
+		publishSubscriberMock.AssertNotCalled(t, "Subscribe", mock.Anything, mock.Anything, mock.Anything)
 	})
 
 	t.Run("gets error on http scheme request", func(t *testing.T) {
@@ -221,9 +293,16 @@ func TestWebsocket(t *testing.T) {
 			expectedReply domain.Reply
 		}{
 			{
+				// a missing id is reported as missing: the rule checking the
+				// id's shape does not overrule the one checking it is there.
 				name:          "empty_id",
 				request:       domain.Request{ID: "", Subject: "test", Payload: []byte("hello, world")},
-				expectedReply: domain.Reply{RequestID: "", Payload: []byte(`{"validationErrors":{"request_id":"invalid_value","subject":"invalid_value"}}`)},
+				expectedReply: domain.Reply{RequestID: "", Payload: []byte(`{"validationErrors":{"request_id":"required_field","subject":"invalid_value"}}`)},
+			},
+			{
+				name:          "malformed_id",
+				request:       domain.Request{ID: "not a valid id", Subject: "test", Payload: []byte("hello, world")},
+				expectedReply: domain.Reply{RequestID: "not a valid id", Payload: []byte(`{"validationErrors":{"request_id":"invalid_value","subject":"invalid_value"}}`)},
 			},
 			{
 				name:          "empty_subject",
@@ -555,7 +634,7 @@ func TestWebsocket(t *testing.T) {
 		assert.JSONEq(t, `{"error":"error_on_processing_the_request"}`, string(response.Payload))
 	})
 
-	t.Run("write deadline prevents writeResponses from blocking on slow client", func(t *testing.T) {
+	t.Run("a stalled client does not block the session writing replies", func(t *testing.T) {
 		t.Parallel()
 
 		var registry MockRequestRegistry
@@ -563,61 +642,74 @@ func TestWebsocket(t *testing.T) {
 		registry.On("DeleteByServerSideID", "server-1").Return(nil).Once()
 		defer registry.AssertExpectations(t)
 
-		w := &Websocket{
-			requestRegistry:    &registry,
-			websocketWriteWait: 50 * time.Millisecond,
-		}
+		logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
-		// net.Pipe is synchronous and unbuffered: writes block until the
-		// other end reads. We drain the HTTP 101 upgrade response on the
-		// client side, then stop reading so subsequent server writes block.
-		serverConn, clientConn := net.Pipe()
-		defer clientConn.Close()
-		defer serverConn.Close()
-
-		upgradeDrained := make(chan struct{})
-		go func() {
-			defer close(upgradeDrained)
-			buf := make([]byte, 4096)
-			_, _ = clientConn.Read(buf)
-		}()
-
-		rec := &hijackableResponseWriter{
-			ResponseRecorder: httptest.NewRecorder(),
-			conn:             serverConn,
-			bw: bufio.NewReadWriter(
-				bufio.NewReader(serverConn),
-				bufio.NewWriter(serverConn),
-			),
-		}
-
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
-		req.Header.Set("Connection", "Upgrade")
-		req.Header.Set("Upgrade", "websocket")
-		req.Header.Set("Sec-WebSocket-Version", "13")
-		req.Header.Set("Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ==")
-
-		upgrader := websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }}
-		wsConn, err := upgrader.Upgrade(rec, req, nil)
+		config, err := newConfiguration(WithWriteWait(50 * time.Millisecond))
 		assert.NoError(t, err)
-		<-upgradeDrained
 
-		responseChan := make(chan *domain.Reply, 1)
-		responseChan <- &domain.Reply{RequestID: "server-1", Payload: []byte("payload")}
-		close(responseChan)
+		s := &session{
+			conn:     newConnection(stalledClientConn(t), config, logger),
+			registry: &registry,
+			logger:   logger,
+		}
+		defer s.conn.shutdown()
+
+		replies := make(chan *domain.Reply, 1)
+		replies <- &domain.Reply{RequestID: "server-1", Payload: []byte("payload")}
+		close(replies)
 
 		done := make(chan struct{})
 		go func() {
-			w.writeResponses(wsConn, responseChan)
-			close(done)
+			defer close(done)
+
+			s.writeReplies(replies)
 		}()
 
 		select {
 		case <-done:
-			// PASS: the write deadline expired, the WriteJSON failed, and the
-			// loop drained responseChan and returned.
+			// PASS: handing the reply to the write pump did not wait on the
+			// client, so the loop drained replies and returned.
 		case <-time.After(time.Second):
-			t.Fatal("writeResponses blocked indefinitely; the write deadline did not fire")
+			t.Fatal("writeReplies blocked indefinitely on a client that never reads")
+		}
+	})
+
+	t.Run("a stalled client fills its own queue instead of blocking the sender", func(t *testing.T) {
+		t.Parallel()
+
+		logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+		config, err := newConfiguration(
+			WithWriteWait(50*time.Millisecond),
+			WithOutboundBuffer(2),
+		)
+		assert.NoError(t, err)
+
+		conn := newConnection(stalledClientConn(t), config, logger)
+		defer conn.shutdown()
+
+		// the client never reads, so the queue fills and then refuses more
+		// rather than waiting for room: at most its buffer plus the one
+		// message the write pump is stuck writing.
+		const attempts = 10
+
+		accepted := make(chan int, 1)
+		go func() {
+			count := 0
+			for range attempts {
+				if conn.send(&domain.Reply{RequestID: "server-1"}) {
+					count++
+				}
+			}
+			accepted <- count
+		}()
+
+		select {
+		case count := <-accepted:
+			assert.LessOrEqual(t, count, config.outboundBuffer+1, "send accepted more than the outbound queue can hold")
+			assert.Less(t, count, attempts, "send should start refusing messages once the queue is full")
+		case <-time.After(time.Second):
+			t.Fatal("send blocked on a client that never reads")
 		}
 	})
 
@@ -750,7 +842,7 @@ func TestWebsocket(t *testing.T) {
 		}
 	})
 
-	t.Run("concurrent connect and disconnect does not corrupt replyChans", func(t *testing.T) {
+	t.Run("concurrent connect and disconnect does not corrupt the hub", func(t *testing.T) {
 		t.Parallel()
 
 		var (
@@ -787,23 +879,18 @@ func TestWebsocket(t *testing.T) {
 		}
 		wg.Wait()
 
-		// the server cleans up replyChans asynchronously after each disconnect;
-		// poll until the slice drains or the deadline expires.
+		// the server unsubscribes each session from the hub asynchronously
+		// after its client disconnects; poll until the hub drains or the
+		// deadline expires.
 		deadline := time.Now().Add(2 * time.Second)
 		for time.Now().Before(deadline) {
-			ws.lock.RLock()
-			leftover := len(ws.replyChans)
-			ws.lock.RUnlock()
-			if leftover == 0 {
+			if ws.hub.size() == 0 {
 				return
 			}
 			time.Sleep(10 * time.Millisecond)
 		}
 
-		ws.lock.RLock()
-		leftover := len(ws.replyChans)
-		ws.lock.RUnlock()
-		t.Fatalf("replyChans not cleaned up after all clients disconnected: %d entries remain", leftover)
+		t.Fatalf("hub not cleaned up after all clients disconnected: %d subscribers remain", ws.hub.size())
 	})
 }
 
