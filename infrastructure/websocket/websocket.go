@@ -154,18 +154,20 @@ func (w *Websocket) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 			producer:  w.producer,
 			logger:    w.logger,
 		},
-		registry:   requests,
-		hub:        w.hub,
-		bus:        w.bus,
-		backoff:    w.config.replyBackoff,
-		translator: w.translator,
-		logger:     w.logger,
+		registry:     requests,
+		hub:          w.hub,
+		bus:          w.bus,
+		replyBackoff: w.config.replyBackoff,
+		queueBackoff: w.config.queueBackoff,
+		translator:   w.translator,
+		logger:       w.logger,
 	}
 
 	session.run(r.Context())
 }
 
-// Close stops carrying replies. Open connections end with their own requests.
+// Close stops carrying replies and releases the subscription that brought them
+// in. Open connections stay up, but the requests they read are refused.
 func (w *Websocket) Close() error {
 	return w.bus.shutdown()
 }

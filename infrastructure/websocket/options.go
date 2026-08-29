@@ -30,6 +30,7 @@ type configuration struct {
 	outboundBuffer   int
 	closeGracePeriod time.Duration
 	replyBackoff     Backoff
+	queueBackoff     Backoff
 	checkOrigin      func(r *http.Request) bool
 }
 
@@ -45,6 +46,7 @@ func newConfiguration(options ...Option) (configuration, error) {
 		outboundBuffer:   defaultOutboundBuffer,
 		closeGracePeriod: defaultCloseGracePeriod,
 		replyBackoff:     NewFixedBackoff(defaultReplyAttempts, defaultReplyWait),
+		queueBackoff:     NewFixedBackoff(defaultQueueAttempts, defaultQueueWait),
 		checkOrigin:      func(*http.Request) bool { return true },
 	}
 
@@ -78,6 +80,10 @@ func (c configuration) validate() error {
 
 	if c.replyBackoff == nil {
 		return errors.New("reply backoff cannot be nil")
+	}
+
+	if c.queueBackoff == nil {
+		return errors.New("queue backoff cannot be nil")
 	}
 
 	if c.checkOrigin == nil {
@@ -132,12 +138,21 @@ func WithCloseGracePeriod(d time.Duration) Option {
 	}
 }
 
-// WithReplyBackoff sets how a reply whose routing failed is retried. The default
-// makes three attempts, a second apart. Every connection shares the one given
-// here, so it must be safe for concurrent use.
+// WithReplyBackoff sets how a reply is retried when the registry cannot say who
+// it belongs to. The default makes three attempts, a second apart. Every
+// connection shares the one given here, so it must be safe for concurrent use.
 func WithReplyBackoff(backoff Backoff) Option {
 	return func(c *configuration) {
 		c.replyBackoff = backoff
+	}
+}
+
+// WithQueueBackoff sets how a reply is retried when the client's outbound queue
+// is full. The default makes three attempts, 50ms apart. Every connection shares
+// the one given here, so it must be safe for concurrent use.
+func WithQueueBackoff(backoff Backoff) Option {
+	return func(c *configuration) {
+		c.queueBackoff = backoff
 	}
 }
 

@@ -89,6 +89,10 @@ func TestConfiguration(t *testing.T) {
 			option: WithReplyBackoff(nil),
 		},
 		{
+			name:   "no queue backoff",
+			option: WithQueueBackoff(nil),
+		},
+		{
 			name:   "no origin checker",
 			option: WithOriginChecker(nil),
 		},

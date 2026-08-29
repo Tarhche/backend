@@ -67,6 +67,10 @@ func injectRequestID(payload []byte, requestID string) ([]byte, error) {
 		return nil, err
 	}
 
+	if request == nil {
+		request = make(map[string]any, 1)
+	}
+
 	request["id"] = requestID
 
 	return json.Marshal(request)

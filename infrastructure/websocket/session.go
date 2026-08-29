@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"runtime/debug"
 	"time"
 
 	"github.com/khanzadimahdi/testproject/domain"
@@ -38,14 +39,15 @@ type conn interface {
 // collide with another's, and a session can only ever resolve a reply to a
 // request it registered itself.
 type session struct {
-	conn       conn
-	dispatcher *dispatcher
-	registry   domain.RequestRegistry
-	hub        *hub
-	bus        *replyBus
-	backoff    Backoff
-	translator translator.Translator
-	logger     *slog.Logger
+	conn         conn
+	dispatcher   *dispatcher
+	registry     domain.RequestRegistry
+	hub          *hub
+	bus          *replyBus
+	replyBackoff Backoff
+	queueBackoff Backoff
+	translator   translator.Translator
+	logger       *slog.Logger
 
 	// done is closed when the client is gone, so work being retried on behalf
 	// of that client stops instead of being waited out. run owns it.
@@ -64,6 +66,12 @@ func (s *session) run(ctx context.Context) {
 	written := make(chan struct{})
 	go func() {
 		defer close(written)
+
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				s.logger.Error("recovered a panic while writing replies", "panic", recovered, "stack", string(debug.Stack()))
+			}
+		}()
 
 		s.writeReplies(replies)
 	}()
@@ -92,10 +100,22 @@ func (s *session) readRequests(ctx context.Context) {
 			return
 		}
 
-		_, validationErrors, err := s.dispatcher.dispatch(ctx, &request)
+		if s.bus.isClosed() {
+			s.writeFailure(request.ID, nil, ErrClosed)
+
+			continue
+		}
+
+		serverSideID, validationErrors, err := s.dispatcher.dispatch(ctx, &request)
 
 		switch {
 		case err != nil:
+			if len(serverSideID) > 0 {
+				if deleteErr := s.registry.DeleteByServerSideID(serverSideID); deleteErr != nil {
+					s.logger.ErrorContext(ctx, "error on removing a failed request from the registry", "error", deleteErr)
+				}
+			}
+
 			s.writeFailure(request.ID, nil, err)
 		case len(validationErrors) > 0:
 			s.writeFailure(request.ID, validationErrors, nil)
@@ -113,18 +133,28 @@ func (s *session) writeReplies(replies <-chan *domain.Reply) {
 
 // deliver writes one reply to the client that is waiting for it. A reply this
 // session does not own belongs to another connection and is left alone. A
-// lookup that fails outright, or a client whose queue is momentarily full, is
-// retried on the backoff until it runs out.
+// lookup that fails and a client whose queue is full are retried on their own
+// backoffs until those run out.
 func (s *session) deliver(reply *domain.Reply) {
-	for attempt := 1; ; attempt++ {
+	var lookupAttempt, queueAttempt int
+
+	for {
 		clientSideID, err := s.registry.GetClientSideID(reply.RequestID)
+
+		var (
+			backoff Backoff
+			attempt int
+		)
 
 		switch {
 		case errors.Is(err, domain.ErrNotExists):
 			return
 
 		case err != nil:
-			s.logger.Error("error on getting client side request id", "error", err, "attempt", attempt)
+			lookupAttempt++
+			s.logger.Error("error on getting client side request id", "error", err, "attempt", lookupAttempt)
+
+			backoff, attempt = s.replyBackoff, lookupAttempt
 
 		default:
 			// the reply is shared with every session, so answer with a copy
@@ -138,10 +168,13 @@ func (s *session) deliver(reply *domain.Reply) {
 			// the client's queue was full. Leave the request registered so the
 			// next attempt can still address it, rather than dropping both the
 			// reply and the means to deliver it.
-			s.logger.Warn("client queue is full, retrying the reply", "requestID", reply.RequestID, "attempt", attempt)
+			queueAttempt++
+			s.logger.Warn("client queue is full, retrying the reply", "requestID", reply.RequestID, "attempt", queueAttempt)
+
+			backoff, attempt = s.queueBackoff, queueAttempt
 		}
 
-		wait, retry := s.backoff.Next(attempt)
+		wait, retry := backoff.Next(attempt)
 		if !retry {
 			s.logger.Error("giving up on routing a reply", "requestID", reply.RequestID, "attempts", attempt)
 

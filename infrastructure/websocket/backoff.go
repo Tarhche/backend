@@ -5,6 +5,9 @@ import "time"
 const (
 	defaultReplyAttempts = 3
 	defaultReplyWait     = time.Second
+
+	defaultQueueAttempts = 3
+	defaultQueueWait     = 50 * time.Millisecond
 )
 
 // Backoff decides whether a reply whose routing failed is tried again, and how

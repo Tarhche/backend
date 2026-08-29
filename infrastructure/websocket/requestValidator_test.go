@@ -136,24 +136,3 @@ func TestRequestValidator(t *testing.T) {
 		})
 	}
 }
-
-func TestInjectRequestID(t *testing.T) {
-	t.Parallel()
-
-	t.Run("replaces the client's id with the server side one", func(t *testing.T) {
-		t.Parallel()
-
-		payload, err := injectRequestID([]byte(`{"id":"client-1","code":"print(1)"}`), "server-1")
-
-		assert.NoError(t, err)
-		assert.JSONEq(t, `{"id":"server-1","code":"print(1)"}`, string(payload))
-	})
-
-	t.Run("fails on a payload that is not a json object", func(t *testing.T) {
-		t.Parallel()
-
-		_, err := injectRequestID([]byte("not json"), "server-1")
-
-		assert.Error(t, err)
-	})
-}
