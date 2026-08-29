@@ -133,7 +133,8 @@ func WithCloseGracePeriod(d time.Duration) Option {
 }
 
 // WithReplyBackoff sets how a reply whose routing failed is retried. The default
-// makes three attempts, a second apart.
+// makes three attempts, a second apart. Every connection shares the one given
+// here, so it must be safe for concurrent use.
 func WithReplyBackoff(backoff Backoff) Option {
 	return func(c *configuration) {
 		c.replyBackoff = backoff

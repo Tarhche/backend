@@ -46,11 +46,17 @@ type session struct {
 	backoff    Backoff
 	translator translator.Translator
 	logger     *slog.Logger
+
+	// done is closed when the client is gone, so work being retried on behalf
+	// of that client stops instead of being waited out. run owns it.
+	done chan struct{}
 }
 
 // run drives the session until the client disconnects, then stops taking new
 // replies, writes out the ones in hand and closes the connection.
 func (s *session) run(ctx context.Context) {
+	s.done = make(chan struct{})
+
 	defer s.conn.shutdown()
 
 	replies, unsubscribe := s.hub.subscribe()
@@ -62,10 +68,17 @@ func (s *session) run(ctx context.Context) {
 		s.writeReplies(replies)
 	}()
 
-	s.readRequests(ctx)
+	// deferred, so that a panic in the read loop still unwinds the session:
+	// leaving the hub subscribed would block writeReplies on a channel nobody
+	// closes, stranding the goroutine and everything it holds. Defers run in
+	// reverse, so this still happens before the connection is shut down.
+	defer func() {
+		close(s.done)
+		unsubscribe()
+		<-written
+	}()
 
-	unsubscribe()
-	<-written
+	s.readRequests(ctx)
 }
 
 // readRequests reads client requests until the connection breaks or ctx is done.
@@ -137,6 +150,9 @@ func (s *session) deliver(reply *domain.Reply) {
 
 		select {
 		case <-time.After(wait):
+		case <-s.done:
+			// this client is gone; there is nobody left to deliver to.
+			return
 		case <-s.bus.closed():
 			return
 		}

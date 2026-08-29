@@ -146,6 +146,42 @@ func TestWebsocket(t *testing.T) {
 		publishSubscriberMock.AssertNotCalled(t, "Subscribe", mock.Anything, mock.Anything, mock.Anything)
 	})
 
+	t.Run("refuses new connections once it is closed", func(t *testing.T) {
+		t.Parallel()
+
+		var (
+			requestRegistryMock   MockRequestRegistry
+			produceConsumerMock   messagingMock.MockProduceConsumer
+			publishSubscriberMock messagingMock.MockPublishSubscriber
+			translatorMock        translator.TranslatorMock
+		)
+
+		publishSubscriberMock.On("Subscribe", mock.Anything, "websocket_replies", mock.Anything).Return(nil)
+
+		ws, err := NewWebsocket(staticRegistry(&requestRegistryMock), &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies", slog.New(slog.NewTextHandler(io.Discard, nil)))
+		assert.NoError(t, err)
+
+		server := httptest.NewServer(ws)
+		defer server.Close()
+
+		u, err := url.Parse(server.URL)
+		assert.NoError(t, err)
+		u.Scheme = "ws"
+
+		assert.NoError(t, ws.Close())
+
+		// accepting here would produce work whose reply could never be carried
+		// back, leaving the client waiting on an answer that cannot arrive.
+		_, response, err := websocket.DefaultDialer.Dial(u.String(), nil)
+		assert.Error(t, err)
+		if assert.NotNil(t, response) {
+			defer response.Body.Close()
+			assert.Equal(t, http.StatusServiceUnavailable, response.StatusCode)
+		}
+
+		produceConsumerMock.AssertNotCalled(t, "Produce", mock.Anything, mock.Anything, mock.Anything)
+	})
+
 	t.Run("gets error on http scheme request", func(t *testing.T) {
 		t.Parallel()
 

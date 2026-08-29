@@ -84,6 +84,16 @@ func (c *fakeConn) written() []*domain.Reply {
 	return append([]*domain.Reply(nil), c.outgoing...)
 }
 
+// panickingConn panics on read, standing in for a panic raised anywhere inside
+// the read loop: a validation rule, the producer, the registry.
+type panickingConn struct {
+	*fakeConn
+}
+
+func (c *panickingConn) read(value any) error {
+	panic("boom")
+}
+
 func TestSession(t *testing.T) {
 	t.Parallel()
 
@@ -182,6 +192,63 @@ func TestSession(t *testing.T) {
 		assert.Len(t, written, 1)
 		assert.Equal(t, "client-1", written[0].RequestID)
 		assert.Equal(t, []byte("done"), written[0].Payload)
+	})
+
+	t.Run("unwinds cleanly when the read loop panics", func(t *testing.T) {
+		t.Parallel()
+
+		var registryMock MockRequestRegistry
+
+		s := newTestSession(
+			&panickingConn{fakeConn: newFakeConn()},
+			&registryMock,
+			&messagingMock.MockProduceConsumer{},
+			echoTranslator(),
+			"runCode",
+		)
+
+		func() {
+			// net/http recovers a panic per connection, so the process lives on
+			// and anything the session left behind lives on with it.
+			defer func() { assert.NotNil(t, recover(), "expected the panic to reach the caller") }()
+
+			s.run(context.Background())
+		}()
+
+		assert.Equal(t, 0, s.hub.size(), "the hub still holds this session's channel, so its writeReplies goroutine can never be woken")
+	})
+
+	t.Run("stops retrying as soon as the client disconnects", func(t *testing.T) {
+		t.Parallel()
+
+		var registryMock MockRequestRegistry
+		registryMock.On("GetClientSideID", "server-1").Return("", errors.New("registry is unreachable"))
+
+		s := newTestSession(newFakeConn(), &registryMock, &messagingMock.MockProduceConsumer{}, echoTranslator(), "runCode")
+		// long enough that finishing quickly can only mean the disconnect was noticed
+		s.backoff = NewFixedBackoff(5, time.Minute)
+		s.done = make(chan struct{})
+
+		replies, unsubscribe := s.hub.subscribe()
+
+		written := make(chan struct{})
+		go func() {
+			defer close(written)
+
+			s.writeReplies(replies)
+		}()
+
+		// a reply arrives that cannot be routed, so the session starts backing off
+		s.hub.broadcast(&domain.Reply{RequestID: "server-1"})
+		time.Sleep(20 * time.Millisecond)
+
+		// the client goes away, which is what run does once readRequests returns
+		start := time.Now()
+		close(s.done)
+		unsubscribe()
+		<-written
+
+		assert.Less(t, time.Since(start), time.Second, "teardown waited out a backoff for a client that had already gone")
 	})
 
 	t.Run("gives up on a reply after the backoff runs out", func(t *testing.T) {

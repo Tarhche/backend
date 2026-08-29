@@ -122,6 +122,15 @@ func (w *Websocket) Consume(ctx context.Context, subject string, handler domain.
 }
 
 func (w *Websocket) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
+	// once the bus is closed nothing can carry a reply back, so accepting the
+	// client would produce work whose answer it could never receive.
+	if w.bus.isClosed() {
+		w.logger.Warn("refusing a websocket connection: the websocket is closed")
+		http.Error(rw, "the service is shutting down", http.StatusServiceUnavailable)
+
+		return
+	}
+
 	conn, err := w.upgrader.Upgrade(rw, r, nil)
 	if err != nil {
 		w.logger.Error("failed to upgrade websocket connection", "error", err)

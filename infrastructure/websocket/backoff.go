@@ -9,13 +9,18 @@ const (
 
 // Backoff decides whether a reply whose routing failed is tried again, and how
 // long to wait first.
+//
+// One Backoff is shared by every connection, so Next is called concurrently and
+// an implementation must be safe for concurrent use. The ones here hold no
+// state; anything that counts, jitters or adapts needs its own synchronisation.
 type Backoff interface {
 	// Next reports the wait before the given attempt, which is 1-based, and
 	// whether that attempt should be made at all.
 	Next(attempt int) (time.Duration, bool)
 }
 
-// fixedBackoff waits the same amount before every attempt.
+// fixedBackoff waits the same amount before every attempt. It is an immutable
+// value, so sharing one across connections is safe.
 type fixedBackoff struct {
 	attempts int
 	wait     time.Duration

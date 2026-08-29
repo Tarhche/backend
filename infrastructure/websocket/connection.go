@@ -57,8 +57,9 @@ func (c *connection) read(value any) error {
 	return c.conn.ReadJSON(value)
 }
 
-// send drops the message once the client's queue is full, so a client that is
-// not keeping up never blocks whoever is sending to it.
+// send reports whether the message is now certain to be written or dropped by
+// the write pump. It drops the message once the client's queue is full, so a
+// client that is not keeping up never blocks whoever is sending to it.
 func (c *connection) send(value any) bool {
 	select {
 	case <-c.done:
@@ -68,11 +69,21 @@ func (c *connection) send(value any) bool {
 
 	select {
 	case c.outbound <- value:
-		return true
 	default:
 		c.logger.Warn("outbound queue is full due to a slow connection, dropping the message", "remoteAddress", c.conn.RemoteAddr().String())
 
 		return false
+	}
+
+	// the connection may have begun closing while the message was being queued,
+	// in which case the pump can already have drained past it. Reporting a
+	// failure here is the safe way round: the caller keeps the request
+	// addressable instead of dropping a reply it believes was delivered.
+	select {
+	case <-c.done:
+		return false
+	default:
+		return true
 	}
 }
 
