@@ -136,6 +136,7 @@ import (
 	hashtagAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/hashtag"
 	homeapi "github.com/khanzadimahdi/testproject/presentation/http/blog/api/home"
 	languageAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/language"
+	websocketAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/websocket"
 	"github.com/khanzadimahdi/testproject/presentation/http/blog/openapi"
 	healthAPI "github.com/khanzadimahdi/testproject/presentation/http/health"
 	"github.com/khanzadimahdi/testproject/presentation/http/middleware"
@@ -405,7 +406,7 @@ func blog(
 	// ---- public HTTP API ----
 
 	// websocket
-	mux.Handle("GET /api/ws", cachedDecoratedWS)
+	mux.Handle("GET /api/ws", websocketAPI.NewWebsocketHandler(cachedDecoratedWS))
 
 	// home
 	mux.Handle("GET /api/home", middleware.NewCacheMiddleware(localized(homeapi.NewHomeHandler(homeUseCase)), httpCache))

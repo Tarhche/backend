@@ -2210,7 +2210,7 @@ paths:
     put:
       consumes:
       - application/json
-      description: update existing article fields, current user must be author
+      description: update existing article fields, the article author is preserved
       parameters:
       - description: Article update payload
         in: body
@@ -4073,6 +4073,24 @@ paths:
       summary: Run worker task
       tags:
       - runner tasks
+  /ws:
+    get:
+      description: upgrades the connection to a websocket. the client sends requests
+        as {"id", "subject", "payload"} and receives replies as {"request_id", "payload"};
+        the subject must be one the server consumes.
+      responses:
+        "101":
+          description: switching protocols
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Websocket endpoint
+      tags:
+      - websocket
 schemes:
 - http
 - https
