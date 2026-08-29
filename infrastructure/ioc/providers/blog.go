@@ -203,7 +203,8 @@ func (p *blogProvider) Boot(ctx context.Context, c provider.Container) error {
 	}
 
 	ws, err := websocketHandler.NewWebsocket(
-		websocketHandler.NewInMemoryRequestRegistry(100),
+		// one registry per connection: a client's request ids are its own.
+		func() domain.RequestRegistry { return websocketHandler.NewInMemoryRequestRegistry(8) },
 		pc,
 		ps,
 		translator,

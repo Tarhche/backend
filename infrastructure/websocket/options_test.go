@@ -22,6 +22,8 @@ func TestConfiguration(t *testing.T) {
 		assert.Equal(t, defaultPingPeriod, config.pingPeriod)
 		assert.Equal(t, defaultPongWait, config.pongWait)
 		assert.Equal(t, defaultOutboundBuffer, config.outboundBuffer)
+		assert.Equal(t, defaultCloseGracePeriod, config.closeGracePeriod)
+		assert.Equal(t, NewFixedBackoff(defaultReplyAttempts, defaultReplyWait), config.replyBackoff)
 		assert.True(t, config.checkOrigin(&http.Request{}), "the default accepts every origin")
 	})
 
@@ -34,6 +36,8 @@ func TestConfiguration(t *testing.T) {
 			WithPongWait(60*time.Second),
 			WithPingPeriod(54*time.Second),
 			WithOutboundBuffer(32),
+			WithCloseGracePeriod(5*time.Second),
+			WithReplyBackoff(NewFixedBackoff(7, time.Minute)),
 			WithOriginChecker(func(*http.Request) bool { return false }),
 		)
 
@@ -43,6 +47,8 @@ func TestConfiguration(t *testing.T) {
 		assert.Equal(t, 60*time.Second, config.pongWait)
 		assert.Equal(t, 54*time.Second, config.pingPeriod)
 		assert.Equal(t, 32, config.outboundBuffer)
+		assert.Equal(t, 5*time.Second, config.closeGracePeriod)
+		assert.Equal(t, NewFixedBackoff(7, time.Minute), config.replyBackoff)
 		assert.False(t, config.checkOrigin(&http.Request{}))
 	})
 
@@ -67,6 +73,20 @@ func TestConfiguration(t *testing.T) {
 		{
 			name:   "a negative outbound buffer",
 			option: WithOutboundBuffer(-1),
+		},
+		{
+			// at zero, a reply only lands when a session happens to be parked
+			// on the receive, so delivery becomes a coin flip.
+			name:   "an outbound buffer of zero",
+			option: WithOutboundBuffer(0),
+		},
+		{
+			name:   "a negative close grace period",
+			option: WithCloseGracePeriod(-time.Second),
+		},
+		{
+			name:   "no reply backoff",
+			option: WithReplyBackoff(nil),
 		},
 		{
 			name:   "no origin checker",

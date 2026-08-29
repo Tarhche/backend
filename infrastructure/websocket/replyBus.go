@@ -56,7 +56,7 @@ func (b *replyBus) start(ctx context.Context) error {
 
 			b.logger.Info("reply received", "reply", reply)
 
-			b.requeue(&reply)
+			b.push(&reply)
 
 			return nil
 		}),
@@ -78,9 +78,9 @@ func (b *replyBus) receive() <-chan *domain.Reply {
 	return b.replies
 }
 
-// requeue puts a reply back on the stream for another delivery attempt. It
-// blocks until the stream takes it, and reports false once the bus is closed.
-func (b *replyBus) requeue(reply *domain.Reply) bool {
+// push hands a reply to the local stream. It blocks until the stream takes it,
+// and reports false once the bus is closed.
+func (b *replyBus) push(reply *domain.Reply) bool {
 	select {
 	case b.replies <- reply:
 		return true

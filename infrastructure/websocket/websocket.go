@@ -2,6 +2,7 @@ package websocket
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -24,9 +25,13 @@ const subjectsPrefix = "websocket_"
 type Websocket struct {
 	// a ProduceConsumer is two roles: the websocket consumes, the dispatcher
 	// produces, so each holds the half it needs.
-	consumer   domain.Consumer
-	dispatcher *dispatcher
-	registry   domain.RequestRegistry
+	consumer domain.Consumer
+	producer domain.Producer
+
+	// newRequestRegistry is a factory rather than a registry because every
+	// connection gets its own: see ServeHTTP.
+	newRequestRegistry func() domain.RequestRegistry
+
 	subjects   *subjects
 	translator translator.Translator
 	hub        *hub
@@ -49,7 +54,7 @@ var _ http.Handler = &Websocket{}
 var _ io.Closer = &Websocket{}
 
 func NewWebsocket(
-	requestRegistry domain.RequestRegistry,
+	newRequestRegistry func() domain.RequestRegistry,
 	produceConsumer domain.ProduceConsumer,
 	publishSubscriber domain.PublishSubscriber,
 	translator translator.Translator,
@@ -62,24 +67,21 @@ func NewWebsocket(
 		return nil, err
 	}
 
-	subjects := newSubjects()
+	if newRequestRegistry == nil {
+		return nil, errors.New("a request registry factory is required")
+	}
 
 	w := &Websocket{
-		consumer: produceConsumer,
-		dispatcher: &dispatcher{
-			validator: newRequestValidator(requestRegistry, subjects, translator),
-			registry:  requestRegistry,
-			producer:  produceConsumer,
-			logger:    logger,
-		},
-		registry:   requestRegistry,
-		subjects:   subjects,
-		translator: translator,
-		hub:        newHub(config.outboundBuffer, logger),
-		bus:        newReplyBus(publishSubscriber, subjectsPrefix+repliesSubject, logger),
-		upgrader:   websocket.Upgrader{CheckOrigin: config.checkOrigin},
-		config:     config,
-		logger:     logger,
+		consumer:           produceConsumer,
+		producer:           produceConsumer,
+		newRequestRegistry: newRequestRegistry,
+		subjects:           newSubjects(),
+		translator:         translator,
+		hub:                newHub(config.outboundBuffer, logger),
+		bus:                newReplyBus(publishSubscriber, subjectsPrefix+repliesSubject, logger),
+		upgrader:           websocket.Upgrader{CheckOrigin: config.checkOrigin},
+		config:             config,
+		logger:             logger,
 	}
 
 	if err := w.bus.start(context.Background()); err != nil {
@@ -129,12 +131,24 @@ func (w *Websocket) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 	w.logger.Info("new client connected", "remoteAddress", conn.RemoteAddr().String())
 
+	// the registry is per connection: the request ids a client picks are its
+	// own, so two clients may use the same ones, and a session can only ever
+	// resolve a reply to a request it registered itself. The dispatcher and the
+	// validator hold that registry, so they are built per connection with it.
+	requests := w.newRequestRegistry()
+
 	session := &session{
-		conn:       newConnection(conn, w.config, w.logger),
-		dispatcher: w.dispatcher,
-		registry:   w.registry,
+		conn: newConnection(conn, w.config, w.logger),
+		dispatcher: &dispatcher{
+			validator: newRequestValidator(requests, w.subjects, w.translator),
+			registry:  requests,
+			producer:  w.producer,
+			logger:    w.logger,
+		},
+		registry:   requests,
 		hub:        w.hub,
 		bus:        w.bus,
+		backoff:    w.config.replyBackoff,
 		translator: w.translator,
 		logger:     w.logger,
 	}

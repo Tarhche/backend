@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"time"
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/translator"
@@ -32,17 +33,19 @@ type conn interface {
 
 // session is one client's conversation with the server: it reads requests, hands
 // them to the dispatcher, and writes back the replies for what it dispatched.
+//
+// Its registry is its own, so the client-side ids one client chooses cannot
+// collide with another's, and a session can only ever resolve a reply to a
+// request it registered itself.
 type session struct {
 	conn       conn
 	dispatcher *dispatcher
 	registry   domain.RequestRegistry
 	hub        *hub
 	bus        *replyBus
+	backoff    Backoff
 	translator translator.Translator
 	logger     *slog.Logger
-
-	// pending holds the server-side ids dispatched but not replied to yet.
-	pending []string
 }
 
 // run drives the session until the client disconnects, then stops taking new
@@ -67,8 +70,6 @@ func (s *session) run(ctx context.Context) {
 
 // readRequests reads client requests until the connection breaks or ctx is done.
 func (s *session) readRequests(ctx context.Context) {
-	defer s.sweepPending()
-
 	for ctx.Err() == nil {
 		var request domain.Request
 
@@ -78,13 +79,7 @@ func (s *session) readRequests(ctx context.Context) {
 			return
 		}
 
-		serverSideID, validationErrors, err := s.dispatcher.dispatch(ctx, &request)
-
-		// a registered request must be swept even when dispatching failed
-		// afterwards, because the registry entry already exists.
-		if len(serverSideID) > 0 {
-			s.pending = append(s.pending, serverSideID)
-		}
+		_, validationErrors, err := s.dispatcher.dispatch(ctx, &request)
 
 		switch {
 		case err != nil:
@@ -99,34 +94,52 @@ func (s *session) readRequests(ctx context.Context) {
 // leaving the rest to the session that registered them.
 func (s *session) writeReplies(replies <-chan *domain.Reply) {
 	for reply := range replies {
+		s.deliver(reply)
+	}
+}
+
+// deliver writes one reply to the client that is waiting for it. A reply this
+// session does not own belongs to another connection and is left alone. A
+// lookup that fails outright, or a client whose queue is momentarily full, is
+// retried on the backoff until it runs out.
+func (s *session) deliver(reply *domain.Reply) {
+	for attempt := 1; ; attempt++ {
 		clientSideID, err := s.registry.GetClientSideID(reply.RequestID)
 
 		switch {
 		case errors.Is(err, domain.ErrNotExists):
-			s.logger.Warn("request id not found in pending requests")
-
-			continue
+			return
 
 		case err != nil:
-			s.logger.Error("error on getting client side request id", "error", err)
+			s.logger.Error("error on getting client side request id", "error", err, "attempt", attempt)
 
-			// the lookup failed rather than came up empty, so the reply may
-			// still be deliverable.
-			if !s.bus.requeue(reply) {
+		default:
+			// the reply is shared with every session, so answer with a copy
+			// rather than rewriting the id on it.
+			if s.conn.send(&domain.Reply{RequestID: clientSideID, Payload: reply.Payload}) {
+				s.registry.DeleteByServerSideID(reply.RequestID)
+
 				return
 			}
 
-			continue
+			// the client's queue was full. Leave the request registered so the
+			// next attempt can still address it, rather than dropping both the
+			// reply and the means to deliver it.
+			s.logger.Warn("client queue is full, retrying the reply", "requestID", reply.RequestID, "attempt", attempt)
 		}
 
-		// the reply is shared with every session, so answer with a copy rather
-		// than rewriting the id on it.
-		s.conn.send(&domain.Reply{
-			RequestID: clientSideID,
-			Payload:   reply.Payload,
-		})
+		wait, retry := s.backoff.Next(attempt)
+		if !retry {
+			s.logger.Error("giving up on routing a reply", "requestID", reply.RequestID, "attempts", attempt)
 
-		s.registry.DeleteByServerSideID(reply.RequestID)
+			return
+		}
+
+		select {
+		case <-time.After(wait):
+		case <-s.bus.closed():
+			return
+		}
 	}
 }
 
@@ -154,14 +167,4 @@ func (s *session) writeFailure(requestID string, validationErrors domain.Validat
 		RequestID: requestID,
 		Payload:   payload,
 	})
-}
-
-// sweepPending drops the registry entries of requests the client disconnected
-// before receiving.
-func (s *session) sweepPending() {
-	for _, serverSideID := range s.pending {
-		s.registry.DeleteByServerSideID(serverSideID)
-	}
-
-	s.pending = nil
 }
