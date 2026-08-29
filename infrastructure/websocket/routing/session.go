@@ -1,4 +1,4 @@
-package websocket
+package routing
 
 import (
 	"context"
@@ -10,40 +10,36 @@ import (
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/translator"
+	"github.com/khanzadimahdi/testproject/infrastructure/websocket/protocol"
+	"github.com/khanzadimahdi/testproject/infrastructure/websocket/transport"
 )
 
-// failureResponse is sent when a request never reaches the queue.
-type failureResponse struct {
-	Error            string                  `json:"error,omitempty"`
-	ValidationErrors domain.ValidationErrors `json:"validationErrors,omitempty"`
-}
-
-// conn is the transport a session talks over. It carries whole messages in both
+// Conn is the transport a session talks over. It carries whole messages in both
 // directions; framing and keepalive are the transport's business.
-type conn interface {
-	// read blocks until the next client message is decoded into value.
-	read(value any) error
+type Conn interface {
+	// Read blocks until the next client message is decoded into value.
+	Read(value any) error
 
-	// send reports whether the transport took the message. It must not block on
+	// Send reports whether the transport took the message. It must not block on
 	// a peer that is not reading.
-	send(value any) bool
+	Send(value any) bool
 
-	// shutdown stops the transport and releases the connection.
-	shutdown() error
+	// Shutdown stops the transport and releases the connection.
+	Shutdown() error
 }
 
-// session is one client's conversation with the server: it reads requests, hands
+// Session is one client's conversation with the server: it reads requests, hands
 // them to the dispatcher, and writes back the replies for what it dispatched.
 //
 // Its registry is its own, so the client-side ids one client chooses cannot
 // collide with another's, and a session can only ever resolve a reply to a
 // request it registered itself.
-type session struct {
-	conn         conn
-	dispatcher   *dispatcher
-	registry     domain.RequestRegistry
-	hub          *hub
-	bus          *replyBus
+type Session struct {
+	conn         Conn
+	dispatcher   *Dispatcher
+	registry     RequestRegistry
+	hub          *transport.Hub
+	bus          *transport.ReplyBus
 	replyBackoff Backoff
 	queueBackoff Backoff
 	translator   translator.Translator
@@ -54,14 +50,14 @@ type session struct {
 	done chan struct{}
 }
 
-// run drives the session until the client disconnects, then stops taking new
+// Run drives the session until the client disconnects, then stops taking new
 // replies, writes out the ones in hand and closes the connection.
-func (s *session) run(ctx context.Context) {
+func (s *Session) Run(ctx context.Context) {
 	s.done = make(chan struct{})
 
-	defer s.conn.shutdown()
+	defer s.conn.Shutdown()
 
-	replies, unsubscribe := s.hub.subscribe()
+	replies, unsubscribe := s.hub.Subscribe()
 
 	written := make(chan struct{})
 	go func() {
@@ -90,23 +86,23 @@ func (s *session) run(ctx context.Context) {
 }
 
 // readRequests reads client requests until the connection breaks or ctx is done.
-func (s *session) readRequests(ctx context.Context) {
+func (s *Session) readRequests(ctx context.Context) {
 	for ctx.Err() == nil {
 		var request domain.Request
 
-		if err := s.conn.read(&request); err != nil {
+		if err := s.conn.Read(&request); err != nil {
 			s.logger.ErrorContext(ctx, "error on reading request", "error", err)
 
 			return
 		}
 
-		if s.bus.isClosed() {
-			s.writeFailure(request.ID, nil, ErrClosed)
+		if s.bus.IsClosed() {
+			s.writeFailure(request.ID, nil, transport.ErrClosed)
 
 			continue
 		}
 
-		serverSideID, validationErrors, err := s.dispatcher.dispatch(ctx, &request)
+		serverSideID, validationErrors, err := s.dispatcher.Dispatch(ctx, &request)
 
 		switch {
 		case err != nil:
@@ -125,7 +121,7 @@ func (s *session) readRequests(ctx context.Context) {
 
 // writeReplies writes out the replies addressed to this session's requests,
 // leaving the rest to the session that registered them.
-func (s *session) writeReplies(replies <-chan *domain.Reply) {
+func (s *Session) writeReplies(replies <-chan *domain.Reply) {
 	for reply := range replies {
 		s.deliver(reply)
 	}
@@ -135,7 +131,7 @@ func (s *session) writeReplies(replies <-chan *domain.Reply) {
 // session does not own belongs to another connection and is left alone. A
 // lookup that fails and a client whose queue is full are retried on their own
 // backoffs until those run out.
-func (s *session) deliver(reply *domain.Reply) {
+func (s *Session) deliver(reply *domain.Reply) {
 	var lookupAttempt, queueAttempt int
 
 	for {
@@ -159,7 +155,7 @@ func (s *session) deliver(reply *domain.Reply) {
 		default:
 			// the reply is shared with every session, so answer with a copy
 			// rather than rewriting the id on it.
-			if s.conn.send(&domain.Reply{RequestID: clientSideID, Payload: reply.Payload}) {
+			if s.conn.Send(&domain.Reply{RequestID: clientSideID, Payload: reply.Payload}) {
 				s.registry.DeleteByServerSideID(reply.RequestID)
 
 				return
@@ -186,7 +182,7 @@ func (s *session) deliver(reply *domain.Reply) {
 		case <-s.done:
 			// this client is gone; there is nobody left to deliver to.
 			return
-		case <-s.bus.closed():
+		case <-s.bus.Closed():
 			return
 		}
 	}
@@ -194,15 +190,15 @@ func (s *session) deliver(reply *domain.Reply) {
 
 // writeFailure tells the client its request was rejected. A server-side error is
 // reported without its details, which belong in the logs.
-func (s *session) writeFailure(requestID string, validationErrors domain.ValidationErrors, err error) {
+func (s *Session) writeFailure(requestID string, validationErrors domain.ValidationErrors, err error) {
 	s.logger.Warn("writing failure response to client", "requestID", requestID, "validationErrors", validationErrors, "error", err)
 
-	response := &failureResponse{
+	response := &protocol.FailureResponse{
 		ValidationErrors: validationErrors,
 	}
 
 	if err != nil {
-		response.Error = s.translator.Translate("error_on_processing_the_request")
+		response.Error = s.translator.Translate(protocol.ErrorOnProcessingMessage)
 	}
 
 	payload, marshalErr := json.Marshal(response)
@@ -212,7 +208,7 @@ func (s *session) writeFailure(requestID string, validationErrors domain.Validat
 		return
 	}
 
-	s.conn.send(&domain.Reply{
+	s.conn.Send(&domain.Reply{
 		RequestID: requestID,
 		Payload:   payload,
 	})

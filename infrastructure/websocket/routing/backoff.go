@@ -1,4 +1,4 @@
-package websocket
+package routing
 
 import "time"
 
@@ -44,4 +44,16 @@ func (b fixedBackoff) Next(attempt int) (time.Duration, bool) {
 	}
 
 	return b.wait, true
+}
+
+// DefaultReplyBackoff is how a reply is retried when the registry cannot say
+// who it belongs to.
+func DefaultReplyBackoff() Backoff {
+	return NewFixedBackoff(defaultReplyAttempts, defaultReplyWait)
+}
+
+// DefaultQueueBackoff is how a reply is retried when the client's outbound
+// queue is full.
+func DefaultQueueBackoff() Backoff {
+	return NewFixedBackoff(defaultQueueAttempts, defaultQueueWait)
 }

@@ -1,4 +1,4 @@
-package websocket
+package routing
 
 import (
 	"testing"

@@ -1,4 +1,4 @@
-package websocket
+package transport
 
 import (
 	"log/slog"
@@ -7,17 +7,17 @@ import (
 	"github.com/khanzadimahdi/testproject/domain"
 )
 
-// hub fans a reply out to every client connected to this replica. Recognising
-// which reply belongs to which client is the session's job, not the hub's.
-type hub struct {
+// Hub fans a reply out to every client connected to this replica. Recognising
+// which reply belongs to which client is the session's job, not the Hub's.
+type Hub struct {
 	lock        sync.RWMutex
 	subscribers map[chan *domain.Reply]struct{}
 	buffer      int
 	logger      *slog.Logger
 }
 
-func newHub(buffer int, logger *slog.Logger) *hub {
-	return &hub{
+func NewHub(buffer int, logger *slog.Logger) *Hub {
+	return &Hub{
 		subscribers: make(map[chan *domain.Reply]struct{}, 10),
 		buffer:      buffer,
 		logger:      logger,
@@ -26,7 +26,7 @@ func newHub(buffer int, logger *slog.Logger) *hub {
 
 // subscribe registers a reply channel and returns it with the function that
 // unregisters and closes it. Unsubscribing twice is a no-op.
-func (h *hub) subscribe() (<-chan *domain.Reply, func()) {
+func (h *Hub) Subscribe() (<-chan *domain.Reply, func()) {
 	replies := make(chan *domain.Reply, h.buffer)
 
 	h.lock.Lock()
@@ -50,7 +50,7 @@ func (h *hub) subscribe() (<-chan *domain.Reply, func()) {
 
 // broadcast delivers a reply to every subscriber with room for it, skipping
 // those whose buffer is full rather than waiting on them.
-func (h *hub) broadcast(reply *domain.Reply) {
+func (h *Hub) Broadcast(reply *domain.Reply) {
 	h.lock.RLock()
 	defer h.lock.RUnlock()
 
@@ -63,7 +63,7 @@ func (h *hub) broadcast(reply *domain.Reply) {
 	}
 }
 
-func (h *hub) size() int {
+func (h *Hub) Size() int {
 	h.lock.RLock()
 	defer h.lock.RUnlock()
 

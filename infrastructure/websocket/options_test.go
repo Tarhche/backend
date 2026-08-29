@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/khanzadimahdi/testproject/infrastructure/websocket/routing"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -23,7 +24,8 @@ func TestConfiguration(t *testing.T) {
 		assert.Equal(t, defaultPongWait, config.pongWait)
 		assert.Equal(t, defaultOutboundBuffer, config.outboundBuffer)
 		assert.Equal(t, defaultCloseGracePeriod, config.closeGracePeriod)
-		assert.Equal(t, NewFixedBackoff(defaultReplyAttempts, defaultReplyWait), config.replyBackoff)
+		assert.Equal(t, routing.DefaultReplyBackoff(), config.replyBackoff)
+		assert.Equal(t, routing.DefaultQueueBackoff(), config.queueBackoff)
 		assert.True(t, config.checkOrigin(&http.Request{}), "the default accepts every origin")
 	})
 

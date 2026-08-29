@@ -1,4 +1,4 @@
-package websocket
+package transport
 
 import (
 	"io"
@@ -18,13 +18,13 @@ func TestHub(t *testing.T) {
 	t.Run("a reply reaches every subscriber", func(t *testing.T) {
 		t.Parallel()
 
-		h := newHub(1, logger)
+		h := NewHub(1, logger)
 
-		first, _ := h.subscribe()
-		second, _ := h.subscribe()
+		first, _ := h.Subscribe()
+		second, _ := h.Subscribe()
 
 		reply := &domain.Reply{RequestID: "server-1"}
-		h.broadcast(reply)
+		h.Broadcast(reply)
 
 		assert.Equal(t, reply, <-first)
 		assert.Equal(t, reply, <-second)
@@ -33,38 +33,38 @@ func TestHub(t *testing.T) {
 	t.Run("unsubscribing removes and closes the channel", func(t *testing.T) {
 		t.Parallel()
 
-		h := newHub(1, logger)
+		h := NewHub(1, logger)
 
-		replies, unsubscribe := h.subscribe()
-		assert.Equal(t, 1, h.size())
+		replies, unsubscribe := h.Subscribe()
+		assert.Equal(t, 1, h.Size())
 
 		unsubscribe()
-		assert.Equal(t, 0, h.size())
+		assert.Equal(t, 0, h.Size())
 
 		_, open := <-replies
 		assert.False(t, open, "the channel should be closed so its reader can stop")
 
-		// the connection teardown path may run more than once; it must stay safe.
+		// the Connection teardown path may run more than once; it must stay safe.
 		assert.NotPanics(t, unsubscribe)
 	})
 
 	t.Run("a subscriber that is not keeping up is skipped, not waited on", func(t *testing.T) {
 		t.Parallel()
 
-		h := newHub(1, logger)
+		h := NewHub(1, logger)
 
-		slow, _ := h.subscribe()
-		fast, _ := h.subscribe()
+		slow, _ := h.Subscribe()
+		fast, _ := h.Subscribe()
 
 		// fill the slow subscriber's buffer and leave it unread.
-		h.broadcast(&domain.Reply{RequestID: "server-1"})
+		h.Broadcast(&domain.Reply{RequestID: "server-1"})
 		<-fast
 
 		broadcast := make(chan struct{})
 		go func() {
 			defer close(broadcast)
 
-			h.broadcast(&domain.Reply{RequestID: "server-2"})
+			h.Broadcast(&domain.Reply{RequestID: "server-2"})
 		}()
 
 		select {

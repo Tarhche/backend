@@ -4,7 +4,21 @@ import (
 	"errors"
 	"net/http"
 	"time"
+
+	"github.com/khanzadimahdi/testproject/infrastructure/websocket/routing"
+	"github.com/khanzadimahdi/testproject/infrastructure/websocket/transport"
 )
+
+// Backoff decides whether a reply whose routing failed is tried again, and how
+// long to wait first. One is shared by every connection, so an implementation
+// must be safe for concurrent use.
+type Backoff = routing.Backoff
+
+// NewFixedBackoff retries up to attempts times, waiting the same amount before
+// each one.
+func NewFixedBackoff(attempts int, wait time.Duration) Backoff {
+	return routing.NewFixedBackoff(attempts, wait)
+}
 
 const (
 	defaultMaxMessageSize = 1024 * 10 // 10kb
@@ -31,6 +45,7 @@ type configuration struct {
 	closeGracePeriod time.Duration
 	replyBackoff     Backoff
 	queueBackoff     Backoff
+	registries       func() routing.RequestRegistry
 	checkOrigin      func(r *http.Request) bool
 }
 
@@ -45,8 +60,9 @@ func newConfiguration(options ...Option) (configuration, error) {
 		pongWait:         defaultPongWait,
 		outboundBuffer:   defaultOutboundBuffer,
 		closeGracePeriod: defaultCloseGracePeriod,
-		replyBackoff:     NewFixedBackoff(defaultReplyAttempts, defaultReplyWait),
-		queueBackoff:     NewFixedBackoff(defaultQueueAttempts, defaultQueueWait),
+		replyBackoff:     routing.DefaultReplyBackoff(),
+		queueBackoff:     routing.DefaultQueueBackoff(),
+		registries:       routing.DefaultRegistries(),
 		checkOrigin:      func(*http.Request) bool { return true },
 	}
 
@@ -86,11 +102,35 @@ func (c configuration) validate() error {
 		return errors.New("queue backoff cannot be nil")
 	}
 
+	if c.registries == nil {
+		return errors.New("request registry factory cannot be nil")
+	}
+
 	if c.checkOrigin == nil {
 		return errors.New("origin checker cannot be nil")
 	}
 
 	return nil
+}
+
+// connection is the socket's share of the configuration.
+func (c configuration) connection() transport.Config {
+	return transport.Config{
+		MaxMessageSize:   c.maxMessageSize,
+		WriteWait:        c.writeWait,
+		PingPeriod:       c.pingPeriod,
+		PongWait:         c.pongWait,
+		OutboundBuffer:   c.outboundBuffer,
+		CloseGracePeriod: c.closeGracePeriod,
+	}
+}
+
+// backoffs are the delivery retry policies a session is given.
+func (c configuration) backoffs() routing.Backoffs {
+	return routing.Backoffs{
+		Reply: c.replyBackoff,
+		Queue: c.queueBackoff,
+	}
 }
 
 // WithMaxMessageSize limits the size of a single client message.
@@ -153,6 +193,17 @@ func WithReplyBackoff(backoff Backoff) Option {
 func WithQueueBackoff(backoff Backoff) Option {
 	return func(c *configuration) {
 		c.queueBackoff = backoff
+	}
+}
+
+// WithRequestRegistry replaces how a connection's request registry is built. The
+// default gives every connection one of its own, held in memory: the request ids
+// a client picks are private to it, and a session can only resolve a reply to a
+// request it registered itself. A shared or remote registry would give up that
+// guarantee, so it has to be asked for.
+func WithRequestRegistry(registries func() routing.RequestRegistry) Option {
+	return func(c *configuration) {
+		c.registries = registries
 	}
 }
 

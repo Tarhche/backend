@@ -1,4 +1,4 @@
-package websocket
+package routing
 
 import (
 	"testing"
@@ -7,13 +7,13 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestInMemoryRequestRegistry(t *testing.T) {
+func TestInMemoryRegistry(t *testing.T) {
 	t.Parallel()
 
 	t.Run("add and retrieve mappings", func(t *testing.T) {
 		t.Parallel()
 
-		registry := NewInMemoryRequestRegistry(10)
+		registry := NewInMemoryRegistry(10)
 
 		serverSideID, err := registry.Add("client-1")
 		assert.NoError(t, err)
@@ -31,7 +31,7 @@ func TestInMemoryRequestRegistry(t *testing.T) {
 	t.Run("add duplicate client ID returns error", func(t *testing.T) {
 		t.Parallel()
 
-		registry := NewInMemoryRequestRegistry(10)
+		registry := NewInMemoryRegistry(10)
 
 		serverSideID1, err := registry.Add("client-1")
 		assert.NoError(t, err)
@@ -45,7 +45,7 @@ func TestInMemoryRequestRegistry(t *testing.T) {
 	t.Run("get client side ID for non-existing server ID", func(t *testing.T) {
 		t.Parallel()
 
-		registry := NewInMemoryRequestRegistry(10)
+		registry := NewInMemoryRegistry(10)
 
 		clientSideID, err := registry.GetClientSideID("non-existing")
 		assert.ErrorIs(t, err, domain.ErrNotExists)
@@ -55,7 +55,7 @@ func TestInMemoryRequestRegistry(t *testing.T) {
 	t.Run("get server side ID for non-existing client ID", func(t *testing.T) {
 		t.Parallel()
 
-		registry := NewInMemoryRequestRegistry(10)
+		registry := NewInMemoryRegistry(10)
 
 		serverSideID, err := registry.GetServerSideID("non-existing")
 		assert.ErrorIs(t, err, domain.ErrNotExists)
@@ -65,7 +65,7 @@ func TestInMemoryRequestRegistry(t *testing.T) {
 	t.Run("delete by server side ID", func(t *testing.T) {
 		t.Parallel()
 
-		registry := NewInMemoryRequestRegistry(10)
+		registry := NewInMemoryRegistry(10)
 
 		serverSideID, err := registry.Add("client-1")
 		assert.NoError(t, err)
@@ -84,7 +84,7 @@ func TestInMemoryRequestRegistry(t *testing.T) {
 	t.Run("delete non-existing server side ID returns error", func(t *testing.T) {
 		t.Parallel()
 
-		registry := NewInMemoryRequestRegistry(10)
+		registry := NewInMemoryRegistry(10)
 
 		err := registry.DeleteByServerSideID("non-existing")
 		assert.ErrorIs(t, err, domain.ErrNotExists)
@@ -93,7 +93,7 @@ func TestInMemoryRequestRegistry(t *testing.T) {
 	t.Run("add generates unique server IDs", func(t *testing.T) {
 		t.Parallel()
 
-		registry := NewInMemoryRequestRegistry(10)
+		registry := NewInMemoryRegistry(10)
 
 		id1, err := registry.Add("client-1")
 		assert.NoError(t, err)

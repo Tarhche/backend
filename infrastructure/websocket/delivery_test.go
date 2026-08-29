@@ -16,6 +16,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain"
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
 	"github.com/khanzadimahdi/testproject/infrastructure/translator"
+	"github.com/khanzadimahdi/testproject/infrastructure/websocket/routing"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -90,7 +91,6 @@ func twoClientServer(t *testing.T) (*Websocket, *url.URL, *serverSideIDs) {
 		Return(nil)
 
 	ws, err := NewWebsocket(
-		func() domain.RequestRegistry { return NewInMemoryRequestRegistry(8) },
 		&produceConsumerMock,
 		&publishSubscriberMock,
 		&translatorMock,
@@ -175,16 +175,16 @@ func TestReplyRouting(t *testing.T) {
 		publishSubscriberMock.On("Subscribe", mock.Anything, "websocket_replies", mock.Anything).Return(nil)
 
 		ws, err := NewWebsocket(
-			func() domain.RequestRegistry {
-				created.Add(1)
-
-				return NewInMemoryRequestRegistry(8)
-			},
 			&produceConsumerMock,
 			&publishSubscriberMock,
 			&translatorMock,
 			"replies",
 			slog.New(slog.NewTextHandler(io.Discard, nil)),
+			WithRequestRegistry(func() routing.RequestRegistry {
+				created.Add(1)
+
+				return routing.NewInMemoryRegistry(8)
+			}),
 		)
 		assert.NoError(t, err)
 		defer ws.Close()

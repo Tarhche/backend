@@ -2,7 +2,6 @@ package websocket
 
 import (
 	"context"
-	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -10,35 +9,28 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/translator"
+	"github.com/khanzadimahdi/testproject/infrastructure/websocket/protocol"
+	"github.com/khanzadimahdi/testproject/infrastructure/websocket/routing"
+	"github.com/khanzadimahdi/testproject/infrastructure/websocket/transport"
 )
-
-// subjectsPrefix namespaces the websocket's subjects on the broker.
-const subjectsPrefix = "websocket_"
 
 // Websocket wires up the path a request takes and the path its reply takes back:
 //
 //	client -> session -> dispatcher -> broker (produced once, for one replica)
 //	broker (published to every replica) -> replyBus -> hub -> session -> client
 //
-// It performs none of those steps itself; it assembles them and gives every
-// connection its own session.
+// It performs none of those steps itself. transport carries the bytes, protocol
+// decides what a client may say, routing gets each reply back to the connection
+// that asked for it, and this assembles the three.
 type Websocket struct {
-	// a ProduceConsumer is two roles: the websocket consumes, the dispatcher
-	// produces, so each holds the half it needs.
 	consumer domain.Consumer
-	producer domain.Producer
-
-	// newRequestRegistry is a factory rather than a registry because every
-	// connection gets its own: see ServeHTTP.
-	newRequestRegistry func() domain.RequestRegistry
-
-	subjects   *subjects
-	translator translator.Translator
-	hub        *hub
-	bus        *replyBus
-	upgrader   websocket.Upgrader
-	config     configuration
-	logger     *slog.Logger
+	subjects *protocol.Subjects
+	hub      *transport.Hub
+	bus      *transport.ReplyBus
+	router   *routing.Router
+	upgrader websocket.Upgrader
+	config   configuration
+	logger   *slog.Logger
 }
 
 // Ensure Websocket implements the domain.Consumer interface
@@ -54,7 +46,6 @@ var _ http.Handler = &Websocket{}
 var _ io.Closer = &Websocket{}
 
 func NewWebsocket(
-	newRequestRegistry func() domain.RequestRegistry,
 	produceConsumer domain.ProduceConsumer,
 	publishSubscriber domain.PublishSubscriber,
 	translator translator.Translator,
@@ -67,24 +58,33 @@ func NewWebsocket(
 		return nil, err
 	}
 
-	if newRequestRegistry == nil {
-		return nil, errors.New("a request registry factory is required")
-	}
+	var (
+		subjects = protocol.NewSubjects()
+		hub      = transport.NewHub(config.outboundBuffer, logger)
+		bus      = transport.NewReplyBus(publishSubscriber, protocol.BrokerSubject(repliesSubject), logger)
+	)
 
 	w := &Websocket{
-		consumer:           produceConsumer,
-		producer:           produceConsumer,
-		newRequestRegistry: newRequestRegistry,
-		subjects:           newSubjects(),
-		translator:         translator,
-		hub:                newHub(config.outboundBuffer, logger),
-		bus:                newReplyBus(publishSubscriber, subjectsPrefix+repliesSubject, logger),
-		upgrader:           websocket.Upgrader{CheckOrigin: config.checkOrigin},
-		config:             config,
-		logger:             logger,
+		consumer: produceConsumer,
+		subjects: subjects,
+		hub:      hub,
+		bus:      bus,
+		router: &routing.Router{
+			Producer:   produceConsumer,
+			Subjects:   subjects,
+			Hub:        hub,
+			Bus:        bus,
+			Backoffs:   config.backoffs(),
+			Registries: config.registries,
+			Translator: translator,
+			Logger:     logger,
+		},
+		upgrader: websocket.Upgrader{CheckOrigin: config.checkOrigin},
+		config:   config,
+		logger:   logger,
 	}
 
-	if err := w.bus.start(context.Background()); err != nil {
+	if err := w.bus.Start(context.Background()); err != nil {
 		return nil, err
 	}
 
@@ -96,7 +96,7 @@ func NewWebsocket(
 // Reply hands a reply to every replica, because the waiting client may be
 // connected to any of them.
 func (w *Websocket) Reply(ctx context.Context, reply *domain.Reply) error {
-	if w.bus.isClosed() {
+	if w.bus.IsClosed() {
 		return ErrClosed
 	}
 
@@ -104,7 +104,7 @@ func (w *Websocket) Reply(ctx context.Context, reply *domain.Reply) error {
 		return ErrRequestIDRequired
 	}
 
-	return w.bus.publish(ctx, reply)
+	return w.bus.Publish(ctx, reply)
 }
 
 // Consume subscribes to the given subject and handles incoming messages using
@@ -112,11 +112,11 @@ func (w *Websocket) Reply(ctx context.Context, reply *domain.Reply) error {
 // replicas of the application running. Consuming a subject is also what allows
 // clients to send requests to it.
 func (w *Websocket) Consume(ctx context.Context, subject string, handler domain.MessageHandler) error {
-	if err := w.consumer.Consume(ctx, subjectsPrefix+subject, handler); err != nil {
+	if err := w.consumer.Consume(ctx, protocol.BrokerSubject(subject), handler); err != nil {
 		return err
 	}
 
-	w.subjects.add(subject)
+	w.subjects.Add(subject)
 
 	return nil
 }
@@ -124,7 +124,7 @@ func (w *Websocket) Consume(ctx context.Context, subject string, handler domain.
 func (w *Websocket) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	// once the bus is closed nothing can carry a reply back, so accepting the
 	// client would produce work whose answer it could never receive.
-	if w.bus.isClosed() {
+	if w.bus.IsClosed() {
 		w.logger.Warn("refusing a websocket connection: the websocket is closed")
 		http.Error(rw, "the service is shutting down", http.StatusServiceUnavailable)
 
@@ -140,49 +140,26 @@ func (w *Websocket) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 	w.logger.Info("new client connected", "remoteAddress", conn.RemoteAddr().String())
 
-	// the registry is per connection: the request ids a client picks are its
-	// own, so two clients may use the same ones, and a session can only ever
-	// resolve a reply to a request it registered itself. The dispatcher and the
-	// validator hold that registry, so they are built per connection with it.
-	requests := w.newRequestRegistry()
-
-	session := &session{
-		conn: newConnection(conn, w.config, w.logger),
-		dispatcher: &dispatcher{
-			validator: newRequestValidator(requests, w.subjects, w.translator),
-			registry:  requests,
-			producer:  w.producer,
-			logger:    w.logger,
-		},
-		registry:     requests,
-		hub:          w.hub,
-		bus:          w.bus,
-		replyBackoff: w.config.replyBackoff,
-		queueBackoff: w.config.queueBackoff,
-		translator:   w.translator,
-		logger:       w.logger,
-	}
-
-	session.run(r.Context())
+	w.router.NewSession(transport.NewConnection(conn, w.config.connection(), w.logger)).Run(r.Context())
 }
 
 // Close stops carrying replies and releases the subscription that brought them
 // in. Open connections stay up, but the requests they read are refused.
 func (w *Websocket) Close() error {
-	return w.bus.shutdown()
+	return w.bus.Shutdown()
 }
 
 // fanoutReplies hands every reply this replica receives to all of its sessions.
 func (w *Websocket) fanoutReplies() {
 	for {
 		select {
-		case <-w.bus.closed():
+		case <-w.bus.Closed():
 			return
 
-		case reply := <-w.bus.receive():
+		case reply := <-w.bus.Receive():
 			w.logger.Info("publishing reply to all response channels", "requestID", reply.RequestID)
 
-			w.hub.broadcast(reply)
+			w.hub.Broadcast(reply)
 		}
 	}
 }

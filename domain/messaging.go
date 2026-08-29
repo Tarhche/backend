@@ -21,13 +21,6 @@ type Replyer interface {
 	Reply(ctx context.Context, reply *Reply) error
 }
 
-type RequestRegistry interface {
-	Add(clientSideID string) (string, error)
-	GetClientSideID(serverSideID string) (string, error)
-	GetServerSideID(clientSideID string) (string, error)
-	DeleteByServerSideID(serverSideID string) error
-}
-
 // publish/subscribe interfaces
 type MessageHandler interface {
 	Handle(ctx context.Context, payload []byte) error

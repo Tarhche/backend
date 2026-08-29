@@ -1,4 +1,4 @@
-package websocket
+package routing
 
 import (
 	"context"
@@ -6,13 +6,14 @@ import (
 	"log/slog"
 
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/infrastructure/websocket/protocol"
 )
 
-// dispatcher validates a client request, registers it so its reply can be
+// Dispatcher validates a client request, registers it so its reply can be
 // routed back, and produces it onto the queue. It knows nothing about sockets.
-type dispatcher struct {
-	validator *requestValidator
-	registry  domain.RequestRegistry
+type Dispatcher struct {
+	validator *protocol.Validator
+	registry  RequestRegistry
 	producer  domain.Producer
 	logger    *slog.Logger
 }
@@ -20,8 +21,8 @@ type dispatcher struct {
 // dispatch reports the server-side id the request was registered under. A
 // non-empty id means the registry holds an entry the caller must delete, which
 // stays true when dispatch also returns an error.
-func (d *dispatcher) dispatch(ctx context.Context, request *domain.Request) (string, domain.ValidationErrors, error) {
-	validationErrors, err := d.validator.validate(request)
+func (d *Dispatcher) Dispatch(ctx context.Context, request *domain.Request) (string, domain.ValidationErrors, error) {
+	validationErrors, err := d.validator.Validate(request)
 	if err != nil {
 		d.logger.ErrorContext(ctx, "error on validating request", "error", err)
 
@@ -50,7 +51,7 @@ func (d *dispatcher) dispatch(ctx context.Context, request *domain.Request) (str
 
 	// produce, not publish: the request must be handled once, by a single
 	// replica, however many are running.
-	if err := d.producer.Produce(ctx, subjectsPrefix+request.Subject, payload); err != nil {
+	if err := d.producer.Produce(ctx, protocol.BrokerSubject(request.Subject), payload); err != nil {
 		d.logger.ErrorContext(ctx, "error on publishing request", "error", err)
 
 		return serverSideID, nil, err

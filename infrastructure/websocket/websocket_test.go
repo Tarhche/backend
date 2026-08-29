@@ -19,6 +19,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain"
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
 	"github.com/khanzadimahdi/testproject/infrastructure/translator"
+	"github.com/khanzadimahdi/testproject/infrastructure/websocket/routing"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"go.uber.org/goleak"
@@ -39,8 +40,13 @@ func (h *hijackableResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error)
 // staticRegistry hands every connection the same registry, so a test that dials
 // a single client can keep its expectations on one mock. Production hands out a
 // fresh registry per connection.
-func staticRegistry(registry domain.RequestRegistry) func() domain.RequestRegistry {
-	return func() domain.RequestRegistry { return registry }
+// discardLogger keeps the test output to the assertions.
+func discardLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
+
+func staticRegistry(registry routing.RequestRegistry) func() routing.RequestRegistry {
+	return func() routing.RequestRegistry { return registry }
 }
 
 // stalledClientConn upgrades a websocket over an in-memory pipe and returns the
@@ -95,7 +101,7 @@ func TestWebsocket(t *testing.T) {
 		t.Parallel()
 
 		var (
-			requestRegistryMock   MockRequestRegistry
+			requestRegistryMock   routing.MockRegistry
 			produceConsumerMock   messagingMock.MockProduceConsumer
 			publishSubscriberMock messagingMock.MockPublishSubscriber
 			translatorMock        translator.TranslatorMock
@@ -103,7 +109,7 @@ func TestWebsocket(t *testing.T) {
 
 		publishSubscriberMock.On("Subscribe", mock.Anything, "websocket_replies", mock.Anything).Return(nil)
 
-		ws, err := NewWebsocket(staticRegistry(&requestRegistryMock), &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies", slog.New(slog.NewTextHandler(io.Discard, nil)))
+		ws, err := NewWebsocket(&produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies", discardLogger(), WithRequestRegistry(staticRegistry(&requestRegistryMock)))
 		assert.NoError(t, err)
 		defer ws.Close()
 
@@ -123,22 +129,22 @@ func TestWebsocket(t *testing.T) {
 		t.Parallel()
 
 		var (
-			requestRegistryMock   MockRequestRegistry
+			requestRegistryMock   routing.MockRegistry
 			produceConsumerMock   messagingMock.MockProduceConsumer
 			publishSubscriberMock messagingMock.MockPublishSubscriber
 			translatorMock        translator.TranslatorMock
 		)
 
 		ws, err := NewWebsocket(
-			staticRegistry(&requestRegistryMock),
 			&produceConsumerMock,
 			&publishSubscriberMock,
 			&translatorMock,
 			"replies",
-			slog.New(slog.NewTextHandler(io.Discard, nil)),
+			discardLogger(),
 			// clients would be disconnected before they could answer a ping.
 			WithPingPeriod(30*time.Second),
 			WithPongWait(10*time.Second),
+			WithRequestRegistry(staticRegistry(&requestRegistryMock)),
 		)
 
 		assert.Error(t, err)
@@ -150,7 +156,7 @@ func TestWebsocket(t *testing.T) {
 		t.Parallel()
 
 		var (
-			requestRegistryMock   MockRequestRegistry
+			requestRegistryMock   routing.MockRegistry
 			produceConsumerMock   messagingMock.MockProduceConsumer
 			publishSubscriberMock messagingMock.MockPublishSubscriber
 			translatorMock        translator.TranslatorMock
@@ -158,7 +164,7 @@ func TestWebsocket(t *testing.T) {
 
 		publishSubscriberMock.On("Subscribe", mock.Anything, "websocket_replies", mock.Anything).Return(nil)
 
-		ws, err := NewWebsocket(staticRegistry(&requestRegistryMock), &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies", slog.New(slog.NewTextHandler(io.Discard, nil)))
+		ws, err := NewWebsocket(&produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies", discardLogger(), WithRequestRegistry(staticRegistry(&requestRegistryMock)))
 		assert.NoError(t, err)
 
 		server := httptest.NewServer(ws)
@@ -186,7 +192,7 @@ func TestWebsocket(t *testing.T) {
 		t.Parallel()
 
 		var (
-			requestRegistryMock   MockRequestRegistry
+			requestRegistryMock   routing.MockRegistry
 			produceConsumerMock   messagingMock.MockProduceConsumer
 			publishSubscriberMock messagingMock.MockPublishSubscriber
 			translatorMock        translator.TranslatorMock
@@ -194,7 +200,7 @@ func TestWebsocket(t *testing.T) {
 
 		publishSubscriberMock.On("Subscribe", mock.Anything, "websocket_replies", mock.Anything).Return(nil)
 
-		ws, err := NewWebsocket(staticRegistry(&requestRegistryMock), &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies", slog.New(slog.NewTextHandler(io.Discard, nil)))
+		ws, err := NewWebsocket(&produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies", discardLogger(), WithRequestRegistry(staticRegistry(&requestRegistryMock)))
 		assert.NoError(t, err)
 		defer ws.Close()
 
@@ -219,7 +225,7 @@ func TestWebsocket(t *testing.T) {
 		t.Parallel()
 
 		var (
-			requestRegistryMock   MockRequestRegistry
+			requestRegistryMock   routing.MockRegistry
 			produceConsumerMock   messagingMock.MockProduceConsumer
 			publishSubscriberMock messagingMock.MockPublishSubscriber
 			translatorMock        translator.TranslatorMock
@@ -267,7 +273,7 @@ func TestWebsocket(t *testing.T) {
 		}).Return(nil)
 		defer produceConsumerMock.AssertExpectations(t)
 
-		ws, err := NewWebsocket(staticRegistry(&requestRegistryMock), &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies", slog.New(slog.NewTextHandler(io.Discard, nil)))
+		ws, err := NewWebsocket(&produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies", discardLogger(), WithRequestRegistry(staticRegistry(&requestRegistryMock)))
 		assert.NoError(t, err)
 		defer ws.Close()
 
@@ -306,7 +312,7 @@ func TestWebsocket(t *testing.T) {
 		t.Parallel()
 
 		var (
-			requestRegistryMock   MockRequestRegistry
+			requestRegistryMock   routing.MockRegistry
 			produceConsumerMock   messagingMock.MockProduceConsumer
 			publishSubscriberMock messagingMock.MockPublishSubscriber
 			translatorMock        translator.TranslatorMock
@@ -319,7 +325,7 @@ func TestWebsocket(t *testing.T) {
 
 		publishSubscriberMock.On("Subscribe", mock.Anything, "websocket_replies", mock.Anything).Return(nil)
 
-		ws, err := NewWebsocket(staticRegistry(&requestRegistryMock), &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies", slog.New(slog.NewTextHandler(io.Discard, nil)))
+		ws, err := NewWebsocket(&produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies", discardLogger(), WithRequestRegistry(staticRegistry(&requestRegistryMock)))
 		assert.NoError(t, err)
 		defer ws.Close()
 
@@ -385,7 +391,7 @@ func TestWebsocket(t *testing.T) {
 		t.Parallel()
 
 		var (
-			requestRegistryMock   MockRequestRegistry
+			requestRegistryMock   routing.MockRegistry
 			produceConsumerMock   messagingMock.MockProduceConsumer
 			publishSubscriberMock messagingMock.MockPublishSubscriber
 			translatorMock        translator.TranslatorMock
@@ -393,7 +399,7 @@ func TestWebsocket(t *testing.T) {
 
 		publishSubscriberMock.On("Subscribe", mock.Anything, "websocket_replies", mock.Anything).Return(nil)
 
-		ws, err := NewWebsocket(staticRegistry(&requestRegistryMock), &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies", slog.New(slog.NewTextHandler(io.Discard, nil)))
+		ws, err := NewWebsocket(&produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies", discardLogger(), WithRequestRegistry(staticRegistry(&requestRegistryMock)))
 		assert.NoError(t, err)
 		ws.Close()
 
@@ -407,7 +413,7 @@ func TestWebsocket(t *testing.T) {
 		t.Parallel()
 
 		var (
-			requestRegistryMock   MockRequestRegistry
+			requestRegistryMock   routing.MockRegistry
 			produceConsumerMock   messagingMock.MockProduceConsumer
 			publishSubscriberMock messagingMock.MockPublishSubscriber
 			translatorMock        translator.TranslatorMock
@@ -415,7 +421,7 @@ func TestWebsocket(t *testing.T) {
 
 		publishSubscriberMock.On("Subscribe", mock.Anything, "websocket_replies", mock.Anything).Return(nil)
 
-		ws, err := NewWebsocket(staticRegistry(&requestRegistryMock), &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies", slog.New(slog.NewTextHandler(io.Discard, nil)))
+		ws, err := NewWebsocket(&produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies", discardLogger(), WithRequestRegistry(staticRegistry(&requestRegistryMock)))
 		assert.NoError(t, err)
 		defer ws.Close()
 
@@ -428,7 +434,7 @@ func TestWebsocket(t *testing.T) {
 		t.Parallel()
 
 		var (
-			requestRegistryMock   MockRequestRegistry
+			requestRegistryMock   routing.MockRegistry
 			produceConsumerMock   messagingMock.MockProduceConsumer
 			publishSubscriberMock messagingMock.MockPublishSubscriber
 			translatorMock        translator.TranslatorMock
@@ -440,7 +446,7 @@ func TestWebsocket(t *testing.T) {
 		produceConsumerMock.On("Consume", mock.Anything, "websocket_test", &messageHandlerMock).Return(expectedErr)
 		defer produceConsumerMock.AssertExpectations(t)
 
-		ws, err := NewWebsocket(staticRegistry(&requestRegistryMock), &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies", slog.New(slog.NewTextHandler(io.Discard, nil)))
+		ws, err := NewWebsocket(&produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies", discardLogger(), WithRequestRegistry(staticRegistry(&requestRegistryMock)))
 		assert.NoError(t, err)
 		defer ws.Close()
 
@@ -452,7 +458,7 @@ func TestWebsocket(t *testing.T) {
 		t.Parallel()
 
 		var (
-			requestRegistryMock   MockRequestRegistry
+			requestRegistryMock   routing.MockRegistry
 			produceConsumerMock   messagingMock.MockProduceConsumer
 			publishSubscriberMock messagingMock.MockPublishSubscriber
 			translatorMock        translator.TranslatorMock
@@ -469,7 +475,7 @@ func TestWebsocket(t *testing.T) {
 		requestRegistryMock.On("GetServerSideID", "req-1").Return("", domain.ErrNotExists)
 		defer requestRegistryMock.AssertExpectations(t)
 
-		ws, err := NewWebsocket(staticRegistry(&requestRegistryMock), &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies", slog.New(slog.NewTextHandler(io.Discard, nil)))
+		ws, err := NewWebsocket(&produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies", discardLogger(), WithRequestRegistry(staticRegistry(&requestRegistryMock)))
 		assert.NoError(t, err)
 		defer ws.Close()
 
@@ -503,7 +509,7 @@ func TestWebsocket(t *testing.T) {
 		t.Parallel()
 
 		var (
-			requestRegistryMock   MockRequestRegistry
+			requestRegistryMock   routing.MockRegistry
 			produceConsumerMock   messagingMock.MockProduceConsumer
 			publishSubscriberMock messagingMock.MockPublishSubscriber
 			translatorMock        translator.TranslatorMock
@@ -526,7 +532,7 @@ func TestWebsocket(t *testing.T) {
 		requestRegistryMock.On("GetServerSideID", "req-dup").Return("server-dup", nil).Once()
 		defer requestRegistryMock.AssertExpectations(t)
 
-		ws, err := NewWebsocket(staticRegistry(&requestRegistryMock), &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies", slog.New(slog.NewTextHandler(io.Discard, nil)))
+		ws, err := NewWebsocket(&produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies", discardLogger(), WithRequestRegistry(staticRegistry(&requestRegistryMock)))
 		assert.NoError(t, err)
 		defer ws.Close()
 
@@ -562,7 +568,7 @@ func TestWebsocket(t *testing.T) {
 		t.Parallel()
 
 		var (
-			requestRegistryMock   MockRequestRegistry
+			requestRegistryMock   routing.MockRegistry
 			produceConsumerMock   messagingMock.MockProduceConsumer
 			publishSubscriberMock messagingMock.MockPublishSubscriber
 			translatorMock        translator.TranslatorMock
@@ -570,7 +576,7 @@ func TestWebsocket(t *testing.T) {
 
 		publishSubscriberMock.On("Subscribe", mock.Anything, "websocket_replies", mock.Anything).Return(nil)
 
-		ws, err := NewWebsocket(staticRegistry(&requestRegistryMock), &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies", slog.New(slog.NewTextHandler(io.Discard, nil)))
+		ws, err := NewWebsocket(&produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies", discardLogger(), WithRequestRegistry(staticRegistry(&requestRegistryMock)))
 		assert.NoError(t, err)
 
 		assert.NoError(t, ws.Close())
@@ -581,7 +587,7 @@ func TestWebsocket(t *testing.T) {
 		t.Parallel()
 
 		var (
-			requestRegistryMock   MockRequestRegistry
+			requestRegistryMock   routing.MockRegistry
 			produceConsumerMock   messagingMock.MockProduceConsumer
 			publishSubscriberMock messagingMock.MockPublishSubscriber
 			translatorMock        translator.TranslatorMock
@@ -603,7 +609,7 @@ func TestWebsocket(t *testing.T) {
 		requestRegistryMock.On("DeleteByServerSideID", "server-1").Return(nil).Maybe()
 		defer requestRegistryMock.AssertExpectations(t)
 
-		ws, err := NewWebsocket(staticRegistry(&requestRegistryMock), &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies", slog.New(slog.NewTextHandler(io.Discard, nil)))
+		ws, err := NewWebsocket(&produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies", discardLogger(), WithRequestRegistry(staticRegistry(&requestRegistryMock)))
 		assert.NoError(t, err)
 		defer ws.Close()
 
@@ -632,7 +638,7 @@ func TestWebsocket(t *testing.T) {
 		t.Parallel()
 
 		var (
-			requestRegistryMock   MockRequestRegistry
+			requestRegistryMock   routing.MockRegistry
 			produceConsumerMock   messagingMock.MockProduceConsumer
 			publishSubscriberMock messagingMock.MockPublishSubscriber
 			translatorMock        translator.TranslatorMock
@@ -652,7 +658,7 @@ func TestWebsocket(t *testing.T) {
 		requestRegistryMock.On("Add", "req-1").Return("", addErr)
 		defer requestRegistryMock.AssertExpectations(t)
 
-		ws, err := NewWebsocket(staticRegistry(&requestRegistryMock), &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies", slog.New(slog.NewTextHandler(io.Discard, nil)))
+		ws, err := NewWebsocket(&produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies", discardLogger(), WithRequestRegistry(staticRegistry(&requestRegistryMock)))
 		assert.NoError(t, err)
 		defer ws.Close()
 
@@ -677,85 +683,6 @@ func TestWebsocket(t *testing.T) {
 		assert.JSONEq(t, `{"error":"error_on_processing_the_request"}`, string(response.Payload))
 	})
 
-	t.Run("a stalled client does not block the session writing replies", func(t *testing.T) {
-		t.Parallel()
-
-		var registry MockRequestRegistry
-		registry.On("GetClientSideID", "server-1").Return("client-1", nil).Once()
-		registry.On("DeleteByServerSideID", "server-1").Return(nil).Once()
-		defer registry.AssertExpectations(t)
-
-		logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-
-		config, err := newConfiguration(WithWriteWait(50 * time.Millisecond))
-		assert.NoError(t, err)
-
-		s := &session{
-			conn:     newConnection(stalledClientConn(t), config, logger),
-			registry: &registry,
-			logger:   logger,
-		}
-		defer s.conn.shutdown()
-
-		replies := make(chan *domain.Reply, 1)
-		replies <- &domain.Reply{RequestID: "server-1", Payload: []byte("payload")}
-		close(replies)
-
-		done := make(chan struct{})
-		go func() {
-			defer close(done)
-
-			s.writeReplies(replies)
-		}()
-
-		select {
-		case <-done:
-			// PASS: handing the reply to the write pump did not wait on the
-			// client, so the loop drained replies and returned.
-		case <-time.After(time.Second):
-			t.Fatal("writeReplies blocked indefinitely on a client that never reads")
-		}
-	})
-
-	t.Run("a stalled client fills its own queue instead of blocking the sender", func(t *testing.T) {
-		t.Parallel()
-
-		logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-
-		config, err := newConfiguration(
-			WithWriteWait(50*time.Millisecond),
-			WithOutboundBuffer(2),
-		)
-		assert.NoError(t, err)
-
-		conn := newConnection(stalledClientConn(t), config, logger)
-		defer conn.shutdown()
-
-		// the client never reads, so the queue fills and then refuses more
-		// rather than waiting for room: at most its buffer plus the one
-		// message the write pump is stuck writing.
-		const attempts = 10
-
-		accepted := make(chan int, 1)
-		go func() {
-			count := 0
-			for range attempts {
-				if conn.send(&domain.Reply{RequestID: "server-1"}) {
-					count++
-				}
-			}
-			accepted <- count
-		}()
-
-		select {
-		case count := <-accepted:
-			assert.LessOrEqual(t, count, config.outboundBuffer+1, "send accepted more than the outbound queue can hold")
-			assert.Less(t, count, attempts, "send should start refusing messages once the queue is full")
-		case <-time.After(time.Second):
-			t.Fatal("send blocked on a client that never reads")
-		}
-	})
-
 	t.Run("a disconnected client's request ids do not follow it to the next connection", func(t *testing.T) {
 		t.Parallel()
 
@@ -776,12 +703,11 @@ func TestWebsocket(t *testing.T) {
 
 		// a real registry per connection, which is what production does.
 		ws, err := NewWebsocket(
-			func() domain.RequestRegistry { return NewInMemoryRequestRegistry(8) },
 			&produceConsumerMock,
 			&publishSubscriberMock,
 			&translatorMock,
 			"replies",
-			slog.New(slog.NewTextHandler(io.Discard, nil)),
+			discardLogger(),
 		)
 		assert.NoError(t, err)
 		defer ws.Close()
@@ -825,7 +751,7 @@ func TestWebsocket(t *testing.T) {
 		t.Parallel()
 
 		var (
-			requestRegistryMock   MockRequestRegistry
+			requestRegistryMock   routing.MockRegistry
 			produceConsumerMock   messagingMock.MockProduceConsumer
 			publishSubscriberMock messagingMock.MockPublishSubscriber
 			translatorMock        translator.TranslatorMock
@@ -850,7 +776,7 @@ func TestWebsocket(t *testing.T) {
 				replyHandler.Handle(context.Background(), payload)
 			}).Return(nil)
 
-		ws, err := NewWebsocket(staticRegistry(&requestRegistryMock), &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies", slog.New(slog.NewTextHandler(io.Discard, nil)))
+		ws, err := NewWebsocket(&produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies", discardLogger(), WithRequestRegistry(staticRegistry(&requestRegistryMock)))
 		assert.NoError(t, err)
 		defer ws.Close()
 
@@ -892,7 +818,7 @@ func TestWebsocket(t *testing.T) {
 		t.Parallel()
 
 		var (
-			requestRegistryMock   MockRequestRegistry
+			requestRegistryMock   routing.MockRegistry
 			produceConsumerMock   messagingMock.MockProduceConsumer
 			publishSubscriberMock messagingMock.MockPublishSubscriber
 			translatorMock        translator.TranslatorMock
@@ -900,7 +826,7 @@ func TestWebsocket(t *testing.T) {
 
 		publishSubscriberMock.On("Subscribe", mock.Anything, "websocket_replies", mock.Anything).Return(nil)
 
-		ws, err := NewWebsocket(staticRegistry(&requestRegistryMock), &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies", slog.New(slog.NewTextHandler(io.Discard, nil)))
+		ws, err := NewWebsocket(&produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies", discardLogger(), WithRequestRegistry(staticRegistry(&requestRegistryMock)))
 		assert.NoError(t, err)
 		defer ws.Close()
 
@@ -930,13 +856,13 @@ func TestWebsocket(t *testing.T) {
 		// deadline expires.
 		deadline := time.Now().Add(2 * time.Second)
 		for time.Now().Before(deadline) {
-			if ws.hub.size() == 0 {
+			if ws.hub.Size() == 0 {
 				return
 			}
 			time.Sleep(10 * time.Millisecond)
 		}
 
-		t.Fatalf("hub not cleaned up after all clients disconnected: %d subscribers remain", ws.hub.size())
+		t.Fatalf("hub not cleaned up after all clients disconnected: %d subscribers remain", ws.hub.Size())
 	})
 }
 
@@ -944,7 +870,7 @@ func TestNoGoroutineLeak(t *testing.T) {
 	defer goleak.VerifyNone(t)
 
 	var (
-		requestRegistryMock   MockRequestRegistry
+		requestRegistryMock   routing.MockRegistry
 		produceConsumerMock   messagingMock.MockProduceConsumer
 		publishSubscriberMock messagingMock.MockPublishSubscriber
 		translatorMock        translator.TranslatorMock
@@ -952,7 +878,7 @@ func TestNoGoroutineLeak(t *testing.T) {
 
 	publishSubscriberMock.On("Subscribe", mock.Anything, "websocket_replies", mock.Anything).Return(nil)
 
-	ws, err := NewWebsocket(staticRegistry(&requestRegistryMock), &produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	ws, err := NewWebsocket(&produceConsumerMock, &publishSubscriberMock, &translatorMock, "replies", discardLogger(), WithRequestRegistry(staticRegistry(&requestRegistryMock)))
 	assert.NoError(t, err)
 
 	server := httptest.NewServer(ws)

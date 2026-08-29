@@ -1,4 +1,4 @@
-package websocket
+package transport
 
 import (
 	"context"
@@ -18,9 +18,9 @@ var (
 	ErrRequestIDRequired = errors.New("request id is required")
 )
 
-// replyBus carries replies between replicas. A client is connected to one
+// ReplyBus carries replies between replicas. A client is connected to one
 // replica, but the reply to its request may be produced on any of them.
-type replyBus struct {
+type ReplyBus struct {
 	publishSubscriber domain.PublishSubscriber
 	subject           string
 	replies           chan *domain.Reply
@@ -30,8 +30,8 @@ type replyBus struct {
 	logger            *slog.Logger
 }
 
-func newReplyBus(publishSubscriber domain.PublishSubscriber, subject string, logger *slog.Logger) *replyBus {
-	return &replyBus{
+func NewReplyBus(publishSubscriber domain.PublishSubscriber, subject string, logger *slog.Logger) *ReplyBus {
+	return &ReplyBus{
 		publishSubscriber: publishSubscriber,
 		subject:           subject,
 		replies:           make(chan *domain.Reply),
@@ -41,7 +41,7 @@ func newReplyBus(publishSubscriber domain.PublishSubscriber, subject string, log
 }
 
 // start subscribes to the replies subject, which every replica receives.
-func (b *replyBus) start(ctx context.Context) error {
+func (b *ReplyBus) Start(ctx context.Context) error {
 	ctx, b.unsubscribe = context.WithCancel(ctx)
 
 	err := b.publishSubscriber.Subscribe(
@@ -72,7 +72,7 @@ func (b *replyBus) start(ctx context.Context) error {
 }
 
 // publish hands a reply to every replica, this one included.
-func (b *replyBus) publish(ctx context.Context, reply *domain.Reply) error {
+func (b *ReplyBus) Publish(ctx context.Context, reply *domain.Reply) error {
 	payload, err := json.Marshal(reply)
 	if err != nil {
 		return err
@@ -82,13 +82,13 @@ func (b *replyBus) publish(ctx context.Context, reply *domain.Reply) error {
 }
 
 // receive is the stream of replies this replica has to deliver.
-func (b *replyBus) receive() <-chan *domain.Reply {
+func (b *ReplyBus) Receive() <-chan *domain.Reply {
 	return b.replies
 }
 
 // push hands a reply to the local stream. It blocks until the stream takes it,
 // and reports false once the bus is closed.
-func (b *replyBus) push(reply *domain.Reply) bool {
+func (b *ReplyBus) push(reply *domain.Reply) bool {
 	select {
 	case b.replies <- reply:
 		return true
@@ -98,11 +98,11 @@ func (b *replyBus) push(reply *domain.Reply) bool {
 }
 
 // closed returns a channel that is closed when the bus shuts down.
-func (b *replyBus) closed() <-chan struct{} {
+func (b *ReplyBus) Closed() <-chan struct{} {
 	return b.done
 }
 
-func (b *replyBus) isClosed() bool {
+func (b *ReplyBus) IsClosed() bool {
 	select {
 	case <-b.done:
 		return true
@@ -112,7 +112,7 @@ func (b *replyBus) isClosed() bool {
 }
 
 // shutdown stops the bus. It is safe to call more than once.
-func (b *replyBus) shutdown() error {
+func (b *ReplyBus) Shutdown() error {
 	b.close.Do(func() {
 		close(b.done)
 

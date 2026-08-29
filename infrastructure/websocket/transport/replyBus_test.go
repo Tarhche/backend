@@ -1,4 +1,4 @@
-package websocket
+package transport
 
 import (
 	"context"
@@ -29,13 +29,13 @@ func TestReplyBus(t *testing.T) {
 			Once()
 		defer publishSubscriberMock.AssertExpectations(t)
 
-		bus := newReplyBus(&publishSubscriberMock, "replies", logger)
+		bus := NewReplyBus(&publishSubscriberMock, "replies", logger)
 
-		require.NoError(t, bus.start(context.Background()))
+		require.NoError(t, bus.Start(context.Background()))
 		require.NotNil(t, subscribed)
 		require.NoError(t, subscribed.Err(), "the subscription should start out live")
 
-		require.NoError(t, bus.shutdown())
+		require.NoError(t, bus.Shutdown())
 
 		assert.Error(t, subscribed.Err(), "shutdown left the reply subscription running")
 	})
@@ -43,9 +43,9 @@ func TestReplyBus(t *testing.T) {
 	t.Run("shuts down when it never subscribed", func(t *testing.T) {
 		t.Parallel()
 
-		bus := newReplyBus(&messagingMock.MockPublishSubscriber{}, "replies", logger)
+		bus := NewReplyBus(&messagingMock.MockPublishSubscriber{}, "replies", logger)
 
-		assert.NoError(t, bus.shutdown())
-		assert.NoError(t, bus.shutdown())
+		assert.NoError(t, bus.Shutdown())
+		assert.NoError(t, bus.Shutdown())
 	})
 }

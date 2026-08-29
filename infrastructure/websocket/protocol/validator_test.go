@@ -1,4 +1,4 @@
-package websocket
+package protocol
 
 import (
 	"errors"
@@ -10,18 +10,31 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
+// mockRequestLookup stands in for the registry the validator consults.
+type mockRequestLookup struct {
+	mock.Mock
+}
+
+var _ RequestLookup = &mockRequestLookup{}
+
+func (m *mockRequestLookup) GetServerSideID(clientSideID string) (string, error) {
+	args := m.Called(clientSideID)
+
+	return args.Get(0).(string), args.Error(1)
+}
+
 // echoTranslator returns every message key unchanged.
 func echoTranslator() *translator.TranslatorMock {
 	translatorMock := &translator.TranslatorMock{}
 
-	for _, key := range []string{requiredFieldMessage, invalidValueMessage, requestAlreadyExistsMessage} {
+	for _, key := range []string{RequiredFieldMessage, InvalidValueMessage, RequestAlreadyExistsMessage} {
 		translatorMock.On("Translate", key, mock.AnythingOfType("[]func(*translator.Params)")).Return(key).Maybe()
 	}
 
 	return translatorMock
 }
 
-func TestRequestValidator(t *testing.T) {
+func TestValidator(t *testing.T) {
 	t.Parallel()
 
 	const consumedSubject = "runCode"
@@ -29,14 +42,14 @@ func TestRequestValidator(t *testing.T) {
 	testcases := []struct {
 		name             string
 		request          domain.Request
-		registry         func(*MockRequestRegistry)
+		registry         func(*mockRequestLookup)
 		validationErrors domain.ValidationErrors
 		expectsError     bool
 	}{
 		{
 			name:    "a well formed request on a consumed subject passes",
 			request: domain.Request{ID: "req-1", Subject: consumedSubject},
-			registry: func(r *MockRequestRegistry) {
+			registry: func(r *mockRequestLookup) {
 				r.On("GetServerSideID", "req-1").Return("", domain.ErrNotExists)
 			},
 			validationErrors: domain.ValidationErrors{},
@@ -45,61 +58,61 @@ func TestRequestValidator(t *testing.T) {
 			name:    "a missing id is reported as missing, not as malformed",
 			request: domain.Request{Subject: consumedSubject},
 			validationErrors: domain.ValidationErrors{
-				requestIDField: requiredFieldMessage,
+				RequestIDField: RequiredFieldMessage,
 			},
 		},
 		{
 			name:    "an id outside the allowed characters is rejected",
 			request: domain.Request{ID: "req 1!", Subject: consumedSubject},
-			registry: func(r *MockRequestRegistry) {
+			registry: func(r *mockRequestLookup) {
 				r.On("GetServerSideID", "req 1!").Return("", domain.ErrNotExists)
 			},
 			validationErrors: domain.ValidationErrors{
-				requestIDField: invalidValueMessage,
+				RequestIDField: InvalidValueMessage,
 			},
 		},
 		{
 			name:    "an id that is already waiting for a reply is rejected",
 			request: domain.Request{ID: "req-1", Subject: consumedSubject},
-			registry: func(r *MockRequestRegistry) {
+			registry: func(r *mockRequestLookup) {
 				r.On("GetServerSideID", "req-1").Return("server-1", nil)
 			},
 			validationErrors: domain.ValidationErrors{
-				requestIDField: requestAlreadyExistsMessage,
+				RequestIDField: RequestAlreadyExistsMessage,
 			},
 		},
 		{
 			name:    "a missing subject is rejected",
 			request: domain.Request{ID: "req-1"},
-			registry: func(r *MockRequestRegistry) {
+			registry: func(r *mockRequestLookup) {
 				r.On("GetServerSideID", "req-1").Return("", domain.ErrNotExists)
 			},
 			validationErrors: domain.ValidationErrors{
-				subjectField: requiredFieldMessage,
+				SubjectField: RequiredFieldMessage,
 			},
 		},
 		{
 			name:    "a subject nothing consumes is rejected",
 			request: domain.Request{ID: "req-1", Subject: "nobody-listens-here"},
-			registry: func(r *MockRequestRegistry) {
+			registry: func(r *mockRequestLookup) {
 				r.On("GetServerSideID", "req-1").Return("", domain.ErrNotExists)
 			},
 			validationErrors: domain.ValidationErrors{
-				subjectField: invalidValueMessage,
+				SubjectField: InvalidValueMessage,
 			},
 		},
 		{
 			name:    "every rejected field is reported, not just the first",
 			request: domain.Request{},
 			validationErrors: domain.ValidationErrors{
-				requestIDField: requiredFieldMessage,
-				subjectField:   requiredFieldMessage,
+				RequestIDField: RequiredFieldMessage,
+				SubjectField:   RequiredFieldMessage,
 			},
 		},
 		{
 			name:    "a registry that cannot answer fails the validation instead of rejecting the request",
 			request: domain.Request{ID: "req-1", Subject: consumedSubject},
-			registry: func(r *MockRequestRegistry) {
+			registry: func(r *mockRequestLookup) {
 				r.On("GetServerSideID", "req-1").Return("", errors.New("registry is unreachable"))
 			},
 			expectsError: true,
@@ -110,7 +123,7 @@ func TestRequestValidator(t *testing.T) {
 		t.Run(testcase.name, func(t *testing.T) {
 			t.Parallel()
 
-			var registryMock MockRequestRegistry
+			var registryMock mockRequestLookup
 			if testcase.registry != nil {
 				testcase.registry(&registryMock)
 			}
@@ -119,10 +132,10 @@ func TestRequestValidator(t *testing.T) {
 			translatorMock := echoTranslator()
 			defer translatorMock.AssertExpectations(t)
 
-			subjects := newSubjects()
-			subjects.add(consumedSubject)
+			subjects := NewSubjects()
+			subjects.Add(consumedSubject)
 
-			validationErrors, err := newRequestValidator(&registryMock, subjects, translatorMock).validate(&testcase.request)
+			validationErrors, err := NewValidator(&registryMock, subjects, translatorMock).Validate(&testcase.request)
 
 			if testcase.expectsError {
 				assert.Error(t, err)
