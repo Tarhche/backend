@@ -1,4 +1,4 @@
-package websocket
+package gateway
 
 import "github.com/stretchr/testify/mock"
 
@@ -35,4 +35,11 @@ func (m *MockRequestRegistry) DeleteByServerSideID(serverSideID string) error {
 	args := m.Called(serverSideID)
 
 	return args.Error(0)
+}
+
+// Len returns how many requests are waiting for a reply.
+func (m *MockRequestRegistry) Len() int {
+	args := m.Called()
+
+	return args.Int(0)
 }

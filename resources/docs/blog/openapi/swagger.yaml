@@ -4088,6 +4088,10 @@ paths:
           schema:
             additionalProperties: true
             type: object
+        "503":
+          description: the service is shutting down
+          schema:
+            type: string
       summary: Websocket endpoint
       tags:
       - websocket

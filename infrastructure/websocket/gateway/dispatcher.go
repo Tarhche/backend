@@ -1,4 +1,4 @@
-package websocket
+package gateway
 
 import (
 	"context"
@@ -9,12 +9,14 @@ import (
 )
 
 // dispatcher validates a client request, registers it so its reply can be
-// routed back, and produces it onto the queue. It knows nothing about sockets.
+// routed back, and produces it onto the queue. It knows nothing about
+// transports.
 type dispatcher struct {
-	validator *requestValidator
-	registry  RequestRegistry
-	producer  domain.Producer
-	logger    *slog.Logger
+	validator     *requestValidator
+	registry      RequestRegistry
+	producer      domain.Producer
+	subjectPrefix string
+	logger        *slog.Logger
 }
 
 // dispatch reports the server-side id the request was registered under. A
@@ -50,7 +52,7 @@ func (d *dispatcher) dispatch(ctx context.Context, request *domain.Request) (str
 
 	// produce, not publish: the request must be handled once, by a single
 	// replica, however many are running.
-	if err := d.producer.Produce(ctx, subjectsPrefix+request.Subject, payload); err != nil {
+	if err := d.producer.Produce(ctx, d.subjectPrefix+request.Subject, payload); err != nil {
 		d.logger.ErrorContext(ctx, "error on publishing request", "error", err)
 
 		return serverSideID, nil, err

@@ -1,8 +1,8 @@
-package websocket
+package gateway
 
 import "sync"
 
-// subjects is the set of subjects the websocket consumes. Clients may only send
+// subjects is the set of subjects the gateway consumes. Clients may only send
 // requests to a subject in the set.
 type subjects struct {
 	lock sync.RWMutex

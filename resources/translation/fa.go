@@ -5,6 +5,7 @@ const FA = "fa"
 var farsi = map[string]string{
 	"error_on_processing_the_request":   "خطا در پردازش درخواست رخ داده است",
 	"request_already_exists":            "درخواست قبلا ارسال شده است",
+	"too_many_requests":                 "تعداد درخواست‌های در انتظار پاسخ بیش از حد مجاز است",
 	"required_field":                    "این فیلد اجباری است",
 	"invalid_value":                     "مقدار ارائه شده نامعتبر است",
 	"invalid_email":                     "مقدار ارائه شده باید یک آدرس ایمیل معتبر باشد",

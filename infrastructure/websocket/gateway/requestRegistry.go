@@ -1,4 +1,4 @@
-package websocket
+package gateway
 
 import (
 	"sync"
@@ -14,6 +14,9 @@ type RequestRegistry interface {
 	GetClientSideID(serverSideID string) (string, error)
 	GetServerSideID(clientSideID string) (string, error)
 	DeleteByServerSideID(serverSideID string) error
+
+	// Len reports how many requests are still waiting for a reply.
+	Len() int
 }
 
 type InMemoryRequestRegistry struct {
@@ -93,6 +96,14 @@ func (r *InMemoryRequestRegistry) DeleteByServerSideID(serverSideID string) erro
 	delete(r.clientToServer, clientSideID)
 
 	return nil
+}
+
+// Len returns how many requests are waiting for a reply.
+func (r *InMemoryRequestRegistry) Len() int {
+	r.lock.RLock()
+	defer r.lock.RUnlock()
+
+	return len(r.serverToClient)
 }
 
 // generateServerID creates a unique random server ID

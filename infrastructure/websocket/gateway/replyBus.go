@@ -1,21 +1,12 @@
-package websocket
+package gateway
 
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"log/slog"
 	"sync"
 
 	"github.com/khanzadimahdi/testproject/domain"
-)
-
-var (
-	// ErrClosed is returned when replying on a websocket that is already closed.
-	ErrClosed = errors.New("connection is closed")
-
-	// ErrRequestIDRequired is returned for a reply that names no request.
-	ErrRequestIDRequired = errors.New("request id is required")
 )
 
 // replyBus carries replies between replicas. A client is connected to one

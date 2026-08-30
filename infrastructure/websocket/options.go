@@ -12,10 +12,6 @@ const (
 	defaultPingPeriod     = 2 * time.Second
 	defaultPongWait       = 6 * time.Second
 
-	// defaultRegistrySize is what one connection is expected to have in flight
-	// at once.
-	defaultRegistrySize = 8
-
 	// defaultOutboundBuffer absorbs short bursts without making the sender wait.
 	defaultOutboundBuffer = 10
 
@@ -25,7 +21,8 @@ const (
 	defaultCloseGracePeriod = time.Second
 )
 
-// configuration holds a Websocket's tunables. Every field has a working default.
+// configuration holds the transport's tunables. Every field has a working
+// default.
 type configuration struct {
 	maxMessageSize   int64
 	writeWait        time.Duration
@@ -33,13 +30,10 @@ type configuration struct {
 	pongWait         time.Duration
 	outboundBuffer   int
 	closeGracePeriod time.Duration
-	replyBackoff     Backoff
-	queueBackoff     Backoff
-	registries       func() RequestRegistry
 	checkOrigin      func(r *http.Request) bool
 }
 
-// Option overrides one of a Websocket's defaults.
+// Option overrides one of the transport's defaults.
 type Option func(*configuration)
 
 func newConfiguration(options ...Option) (configuration, error) {
@@ -50,9 +44,6 @@ func newConfiguration(options ...Option) (configuration, error) {
 		pongWait:         defaultPongWait,
 		outboundBuffer:   defaultOutboundBuffer,
 		closeGracePeriod: defaultCloseGracePeriod,
-		replyBackoff:     NewFixedBackoff(defaultReplyAttempts, defaultReplyWait),
-		queueBackoff:     NewFixedBackoff(defaultQueueAttempts, defaultQueueWait),
-		registries:       func() RequestRegistry { return NewInMemoryRequestRegistry(defaultRegistrySize) },
 		checkOrigin:      func(*http.Request) bool { return true },
 	}
 
@@ -82,18 +73,6 @@ func (c configuration) validate() error {
 
 	if c.closeGracePeriod < 0 {
 		return errors.New("close grace period cannot be negative")
-	}
-
-	if c.replyBackoff == nil {
-		return errors.New("reply backoff cannot be nil")
-	}
-
-	if c.queueBackoff == nil {
-		return errors.New("queue backoff cannot be nil")
-	}
-
-	if c.registries == nil {
-		return errors.New("request registry factory cannot be nil")
 	}
 
 	if c.checkOrigin == nil {
@@ -132,8 +111,8 @@ func WithPongWait(d time.Duration) Option {
 	}
 }
 
-// WithOutboundBuffer sets how many messages may queue up for a client before
-// further ones are dropped.
+// WithOutboundBuffer sets how many replies may queue up for a client before
+// further ones are refused.
 func WithOutboundBuffer(size int) Option {
 	return func(c *configuration) {
 		c.outboundBuffer = size
@@ -145,35 +124,6 @@ func WithOutboundBuffer(size int) Option {
 func WithCloseGracePeriod(d time.Duration) Option {
 	return func(c *configuration) {
 		c.closeGracePeriod = d
-	}
-}
-
-// WithReplyBackoff sets how a reply is retried when the registry cannot say who
-// it belongs to. The default makes three attempts, a second apart. Every
-// connection shares the one given here, so it must be safe for concurrent use.
-func WithReplyBackoff(backoff Backoff) Option {
-	return func(c *configuration) {
-		c.replyBackoff = backoff
-	}
-}
-
-// WithQueueBackoff sets how a reply is retried when the client's outbound queue
-// is full. The default makes three attempts, 50ms apart. Every connection shares
-// the one given here, so it must be safe for concurrent use.
-func WithQueueBackoff(backoff Backoff) Option {
-	return func(c *configuration) {
-		c.queueBackoff = backoff
-	}
-}
-
-// WithRequestRegistry replaces how a connection's request registry is built. The
-// default gives every connection one of its own, held in memory: the request ids
-// a client picks are private to it, and a session can only resolve a reply to a
-// request it registered itself. A shared or remote registry gives up that
-// guarantee, so it has to be asked for.
-func WithRequestRegistry(registries func() RequestRegistry) Option {
-	return func(c *configuration) {
-		c.registries = registries
 	}
 }
 

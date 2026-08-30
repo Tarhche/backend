@@ -26,6 +26,7 @@ func NewWebsocketHandler(handler http.Handler) *websocketHandler {
 // @Tags		websocket
 // @Success		101	{string}	string	"switching protocols"
 // @Failure		400	{object}	map[string]interface{}
+// @Failure		503	{string}	string	"the service is shutting down"
 // @Router		/ws [get]
 func (h *websocketHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	h.handler.ServeHTTP(rw, r)

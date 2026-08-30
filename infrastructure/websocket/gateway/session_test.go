@@ -1,4 +1,4 @@
-package websocket
+package gateway
 
 import (
 	"context"
@@ -19,44 +19,62 @@ import (
 )
 
 // fakeConn is an in-memory transport, so a session can be driven without a
-// socket, an upgrade handshake or a port.
+// socket, an upgrade handshake or a port. It is also the shortest example of
+// what a new transport has to implement.
 type fakeConn struct {
 	incoming chan domain.Request
+	shut     chan struct{}
 
 	lock     sync.Mutex
 	outgoing []*domain.Reply
 	closed   bool
 
-	// refuse makes send report a full queue, the way a client that is not
+	// refuse makes Send report a full queue, the way a client that is not
 	// keeping up does.
 	refuse bool
 }
 
-var _ conn = &fakeConn{}
+var _ Conn = &fakeConn{}
 
+// newFakeConn plays a fixed script and then hangs up, the way a client that
+// says its piece and leaves does.
 func newFakeConn(requests ...domain.Request) *fakeConn {
-	incoming := make(chan domain.Request, len(requests))
+	c := newIdleConn(requests...)
+	close(c.incoming)
+
+	return c
+}
+
+// newIdleConn plays its requests and then stays connected, waiting, until
+// something closes it.
+func newIdleConn(requests ...domain.Request) *fakeConn {
+	incoming := make(chan domain.Request, len(requests)+1)
 	for _, request := range requests {
 		incoming <- request
 	}
-	close(incoming)
 
-	return &fakeConn{incoming: incoming}
+	return &fakeConn{incoming: incoming, shut: make(chan struct{})}
 }
 
-// read drains the queued requests, then reports the peer as gone.
-func (c *fakeConn) read(value any) error {
-	request, ok := <-c.incoming
-	if !ok {
+// Read drains the queued requests, then waits for the next one or for the
+// connection to be closed.
+func (c *fakeConn) Read(request *domain.Request) error {
+	select {
+	case queued, ok := <-c.incoming:
+		if !ok {
+			return io.EOF
+		}
+
+		*request = queued
+
+		return nil
+
+	case <-c.shut:
 		return io.EOF
 	}
-
-	*(value.(*domain.Request)) = request
-
-	return nil
 }
 
-func (c *fakeConn) send(value any) bool {
+func (c *fakeConn) Send(reply *domain.Reply) bool {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -64,16 +82,21 @@ func (c *fakeConn) send(value any) bool {
 		return false
 	}
 
-	c.outgoing = append(c.outgoing, value.(*domain.Reply))
+	c.outgoing = append(c.outgoing, reply)
 
 	return true
 }
 
-func (c *fakeConn) shutdown() error {
+func (c *fakeConn) Close() error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	c.closed = true
+	if !c.closed {
+		c.closed = true
+
+		// closing the transport is what releases a client parked in Read.
+		close(c.shut)
+	}
 
 	return nil
 }
@@ -91,7 +114,7 @@ type panickingConn struct {
 	*fakeConn
 }
 
-func (c *panickingConn) read(value any) error {
+func (c *panickingConn) Read(*domain.Request) error {
 	panic("boom")
 }
 
@@ -110,21 +133,25 @@ func TestSession(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
-	newTestSession := func(c conn, registry RequestRegistry, producer domain.Producer, tr *translator.TranslatorMock, consumedSubject string) *session {
+	newTestSession := func(c Conn, registry RequestRegistry, producer domain.Producer, tr *translator.TranslatorMock, consumedSubject string) *session {
 		subjects := newSubjects()
 		subjects.add(consumedSubject)
 
 		return &session{
 			conn: c,
 			dispatcher: &dispatcher{
-				validator: newRequestValidator(registry, subjects, tr),
-				registry:  registry,
-				producer:  producer,
-				logger:    logger,
+				validator:     newRequestValidator(registry, subjects, tr, defaultMaxInFlightRequests),
+				registry:      registry,
+				producer:      producer,
+				subjectPrefix: defaultSubjectPrefix,
+				logger:        logger,
 			},
 			registry:     registry,
-			hub:          newHub(defaultOutboundBuffer, logger),
+			hub:          newHub(logger),
 			bus:          newReplyBus(&messagingMock.MockPublishSubscriber{}, "replies", logger),
+			replies:      make(chan *domain.Reply, defaultReplyBuffer),
+			done:         make(chan struct{}),
+			gone:         make(chan struct{}),
 			replyBackoff: NewFixedBackoff(defaultReplyAttempts, 0),
 			queueBackoff: NewFixedBackoff(defaultQueueAttempts, 0),
 			translator:   tr,
@@ -132,11 +159,23 @@ func TestSession(t *testing.T) {
 		}
 	}
 
+	// deliverAll hands the session the replies it would have received from the
+	// hub and lets its writer run to completion.
+	deliverAll := func(s *session, replies ...*domain.Reply) {
+		for _, reply := range replies {
+			s.replies <- reply
+		}
+		close(s.replies)
+
+		s.writeReplies()
+	}
+
 	t.Run("dispatches a valid request onto the queue", func(t *testing.T) {
 		t.Parallel()
 
 		var registryMock MockRequestRegistry
 		registryMock.On("GetServerSideID", "req-1").Return("", domain.ErrNotExists)
+		registryMock.On("Len").Return(0)
 		registryMock.On("Add", "req-1").Return("server-1", nil)
 		defer registryMock.AssertExpectations(t)
 
@@ -162,7 +201,7 @@ func TestSession(t *testing.T) {
 		t.Parallel()
 
 		var registryMock MockRequestRegistry
-		defer registryMock.AssertExpectations(t)
+		registryMock.On("Len").Return(0)
 
 		var producerMock messagingMock.MockProduceConsumer
 		defer producerMock.AssertExpectations(t)
@@ -183,6 +222,28 @@ func TestSession(t *testing.T) {
 		producerMock.AssertNotCalled(t, "Produce", mock.Anything, mock.Anything, mock.Anything)
 	})
 
+	t.Run("refuses a request once the connection has more in flight than it may", func(t *testing.T) {
+		t.Parallel()
+
+		var registryMock MockRequestRegistry
+		registryMock.On("GetServerSideID", "req-1").Return("", domain.ErrNotExists)
+		registryMock.On("Len").Return(defaultMaxInFlightRequests)
+
+		var producerMock messagingMock.MockProduceConsumer
+		defer producerMock.AssertExpectations(t)
+
+		c := newFakeConn(domain.Request{ID: "req-1", Subject: "runCode", Payload: []byte(`{}`)})
+
+		newTestSession(c, &registryMock, &producerMock, echoTranslator(), "runCode").run(context.Background())
+
+		written := c.written()
+		require.Len(t, written, 1)
+		assert.JSONEq(t, `{"validationErrors":{"request":"too_many_requests"}}`, string(written[0].Payload))
+
+		producerMock.AssertNotCalled(t, "Produce", mock.Anything, mock.Anything, mock.Anything)
+		registryMock.AssertNotCalled(t, "Add", mock.Anything)
+	})
+
 	t.Run("writes back the reply under the id the client chose", func(t *testing.T) {
 		t.Parallel()
 
@@ -194,11 +255,7 @@ func TestSession(t *testing.T) {
 		c := newFakeConn()
 		s := newTestSession(c, &registryMock, &messagingMock.MockProduceConsumer{}, echoTranslator(), "runCode")
 
-		replies := make(chan *domain.Reply, 1)
-		replies <- &domain.Reply{RequestID: "server-1", Payload: []byte("done")}
-		close(replies)
-
-		s.writeReplies(replies)
+		deliverAll(s, &domain.Reply{RequestID: "server-1", Payload: []byte("done")})
 
 		written := c.written()
 		assert.Len(t, written, 1)
@@ -227,7 +284,7 @@ func TestSession(t *testing.T) {
 			s.run(context.Background())
 		}()
 
-		assert.Equal(t, 0, s.hub.size(), "the hub still holds this session's channel, so its writeReplies goroutine can never be woken")
+		assert.Equal(t, 0, s.hub.size(), "the hub still holds this session, so its writeReplies goroutine can never be woken")
 	})
 
 	t.Run("stops retrying as soon as the client disconnects", func(t *testing.T) {
@@ -239,15 +296,15 @@ func TestSession(t *testing.T) {
 		s := newTestSession(newFakeConn(), &registryMock, &messagingMock.MockProduceConsumer{}, echoTranslator(), "runCode")
 		// long enough that finishing quickly can only mean the disconnect was noticed
 		s.replyBackoff = NewFixedBackoff(5, time.Minute)
-		s.done = make(chan struct{})
 
-		replies, unsubscribe := s.hub.subscribe()
+		leave, joined := s.hub.join(s)
+		require.True(t, joined)
 
 		written := make(chan struct{})
 		go func() {
 			defer close(written)
 
-			s.writeReplies(replies)
+			s.writeReplies()
 		}()
 
 		// a reply arrives that cannot be routed, so the session starts backing off
@@ -256,14 +313,14 @@ func TestSession(t *testing.T) {
 
 		// the client goes away, which is what run does once readRequests returns
 		start := time.Now()
-		close(s.done)
-		unsubscribe()
+		s.finish()
+		leave()
 		<-written
 
 		assert.Less(t, time.Since(start), time.Second, "teardown waited out a backoff for a client that had already gone")
 	})
 
-	t.Run("gives up on a reply after the backoff runs out", func(t *testing.T) {
+	t.Run("gives up on a reply after the backoff runs out, and forgets the request", func(t *testing.T) {
 		t.Parallel()
 
 		unreachable := errors.New("registry is unreachable")
@@ -272,21 +329,20 @@ func TestSession(t *testing.T) {
 		// three attempts, then the reply is dropped: a fourth call would fail
 		// the mock, which is the assertion.
 		registryMock.On("GetClientSideID", "server-1").Return("", unreachable).Times(3)
+		// nothing is going to answer this request now, so its id is freed for
+		// the client to use again.
+		registryMock.On("DeleteByServerSideID", "server-1").Return(nil).Once()
 		defer registryMock.AssertExpectations(t)
 
 		c := newFakeConn()
 		s := newTestSession(c, &registryMock, &messagingMock.MockProduceConsumer{}, echoTranslator(), "runCode")
 		s.replyBackoff = NewFixedBackoff(3, 0)
 
-		replies := make(chan *domain.Reply, 1)
-		replies <- &domain.Reply{RequestID: "server-1"}
-		close(replies)
-
 		done := make(chan struct{})
 		go func() {
 			defer close(done)
 
-			s.writeReplies(replies)
+			deliverAll(s, &domain.Reply{RequestID: "server-1"})
 		}()
 
 		select {
@@ -296,14 +352,16 @@ func TestSession(t *testing.T) {
 		}
 
 		assert.Empty(t, c.written(), "an undeliverable reply should be dropped, not written to the wrong client")
-		registryMock.AssertNotCalled(t, "DeleteByServerSideID", "server-1")
 	})
 
-	t.Run("keeps the request addressable when the client's queue is full", func(t *testing.T) {
+	t.Run("keeps the request addressable while the client's queue is full", func(t *testing.T) {
 		t.Parallel()
 
 		var registryMock MockRequestRegistry
+		// the entry survives every attempt: a lookup that came back empty would
+		// have ended the retries after the first one.
 		registryMock.On("GetClientSideID", "server-1").Return("client-1", nil).Times(3)
+		registryMock.On("DeleteByServerSideID", "server-1").Return(nil).Once()
 		defer registryMock.AssertExpectations(t)
 
 		c := newFakeConn()
@@ -312,15 +370,9 @@ func TestSession(t *testing.T) {
 		s := newTestSession(c, &registryMock, &messagingMock.MockProduceConsumer{}, echoTranslator(), "runCode")
 		s.queueBackoff = NewFixedBackoff(3, 0)
 
-		replies := make(chan *domain.Reply, 1)
-		replies <- &domain.Reply{RequestID: "server-1", Payload: []byte("done")}
-		close(replies)
+		deliverAll(s, &domain.Reply{RequestID: "server-1", Payload: []byte("done")})
 
-		s.writeReplies(replies)
-
-		// the reply never reached the client, so deleting the entry would throw
-		// away the only means of ever delivering it.
-		registryMock.AssertNotCalled(t, "DeleteByServerSideID", "server-1")
+		assert.Empty(t, c.written())
 	})
 
 	t.Run("does not hold up the replies behind a client whose queue is full", func(t *testing.T) {
@@ -328,6 +380,7 @@ func TestSession(t *testing.T) {
 
 		var registryMock MockRequestRegistry
 		registryMock.On("GetClientSideID", mock.Anything).Return("client-1", nil)
+		registryMock.On("DeleteByServerSideID", mock.Anything).Return(nil)
 		defer registryMock.AssertExpectations(t)
 
 		c := newFakeConn()
@@ -337,14 +390,12 @@ func TestSession(t *testing.T) {
 		s.replyBackoff = NewFixedBackoff(defaultReplyAttempts, defaultReplyWait)
 		s.queueBackoff = NewFixedBackoff(defaultQueueAttempts, defaultQueueWait)
 
-		replies := make(chan *domain.Reply, 3)
-		for _, id := range []string{"server-1", "server-2", "server-3"} {
-			replies <- &domain.Reply{RequestID: id, Payload: []byte("done")}
-		}
-		close(replies)
-
 		start := time.Now()
-		s.writeReplies(replies)
+		deliverAll(s,
+			&domain.Reply{RequestID: "server-1", Payload: []byte("done")},
+			&domain.Reply{RequestID: "server-2", Payload: []byte("done")},
+			&domain.Reply{RequestID: "server-3", Payload: []byte("done")},
+		)
 
 		assert.Less(t, time.Since(start), time.Second, "a full queue was waited out on the reply backoff")
 	})
@@ -363,15 +414,11 @@ func TestSession(t *testing.T) {
 		s := newTestSession(c, &registryMock, &messagingMock.MockProduceConsumer{}, echoTranslator(), "runCode")
 		s.queueBackoff = NewFixedBackoff(5, 10*time.Millisecond)
 
-		replies := make(chan *domain.Reply, 1)
-		replies <- &domain.Reply{RequestID: "server-1", Payload: []byte("done")}
-		close(replies)
-
 		done := make(chan struct{})
 		go func() {
 			defer close(done)
 
-			s.writeReplies(replies)
+			deliverAll(s, &domain.Reply{RequestID: "server-1", Payload: []byte("done")})
 		}()
 
 		// the client catches up before the attempts run out.
@@ -391,7 +438,7 @@ func TestSession(t *testing.T) {
 		assert.Equal(t, "client-1", written[0].RequestID)
 	})
 
-	t.Run("stops waiting out the backoff once the websocket closes", func(t *testing.T) {
+	t.Run("stops waiting out the backoff once the gateway closes", func(t *testing.T) {
 		t.Parallel()
 
 		var registryMock MockRequestRegistry
@@ -402,15 +449,11 @@ func TestSession(t *testing.T) {
 		// long enough that finishing on time can only mean the close was noticed
 		s.replyBackoff = NewFixedBackoff(10, time.Minute)
 
-		replies := make(chan *domain.Reply, 1)
-		replies <- &domain.Reply{RequestID: "server-1"}
-		close(replies)
-
 		done := make(chan struct{})
 		go func() {
 			defer close(done)
 
-			s.writeReplies(replies)
+			deliverAll(s, &domain.Reply{RequestID: "server-1"})
 		}()
 
 		s.bus.shutdown()
@@ -418,7 +461,7 @@ func TestSession(t *testing.T) {
 		select {
 		case <-done:
 		case <-time.After(2 * time.Second):
-			t.Fatal("a closing websocket had to wait out the full backoff")
+			t.Fatal("a closing gateway had to wait out the full backoff")
 		}
 	})
 
@@ -432,15 +475,11 @@ func TestSession(t *testing.T) {
 		c := newFakeConn()
 		s := newTestSession(c, &registryMock, &messagingMock.MockProduceConsumer{}, echoTranslator(), "runCode")
 
-		replies := make(chan *domain.Reply, 1)
-		replies <- &domain.Reply{RequestID: "someone-elses-request"}
-		close(replies)
-
 		done := make(chan struct{})
 		go func() {
 			defer close(done)
 
-			s.writeReplies(replies)
+			deliverAll(s, &domain.Reply{RequestID: "someone-elses-request"})
 		}()
 
 		select {
@@ -517,7 +556,7 @@ func TestSession(t *testing.T) {
 	t.Run("survives a panic while writing replies", func(t *testing.T) {
 		t.Parallel()
 
-		c := &fakeConn{incoming: make(chan domain.Request)}
+		c := newIdleConn()
 
 		s := newTestSession(c, panickingRegistry{}, &messagingMock.MockProduceConsumer{}, echoTranslator(), "runCode")
 
@@ -532,7 +571,7 @@ func TestSession(t *testing.T) {
 
 		s.hub.broadcast(&domain.Reply{RequestID: "server-1"})
 
-		close(c.incoming)
+		c.Close()
 
 		select {
 		case <-done:
@@ -540,6 +579,33 @@ func TestSession(t *testing.T) {
 			t.Fatal("the session never unwound after its reply goroutine panicked")
 		}
 
-		assert.Equal(t, 0, s.hub.size(), "the session left its channel subscribed")
+		assert.Equal(t, 0, s.hub.size(), "the session stayed in the hub")
+	})
+
+	t.Run("is stopped from outside by closing its connection", func(t *testing.T) {
+		t.Parallel()
+
+		c := newIdleConn()
+
+		s := newTestSession(c, NewInMemoryRequestRegistry(8), &messagingMock.MockProduceConsumer{}, echoTranslator(), "runCode")
+
+		go s.run(context.Background())
+
+		require.Eventually(t, func() bool { return s.hub.size() == 1 }, time.Second, 5*time.Millisecond)
+
+		stopped := make(chan struct{})
+		go func() {
+			defer close(stopped)
+
+			s.stop()
+		}()
+
+		select {
+		case <-stopped:
+		case <-time.After(2 * time.Second):
+			t.Fatal("stop never released the session")
+		}
+
+		assert.Equal(t, 0, s.hub.size())
 	})
 }

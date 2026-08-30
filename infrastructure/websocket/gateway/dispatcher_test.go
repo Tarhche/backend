@@ -1,4 +1,4 @@
-package websocket
+package gateway
 
 import (
 	"context"
@@ -73,10 +73,11 @@ func TestDispatcher(t *testing.T) {
 		registry := NewInMemoryRequestRegistry(8)
 
 		d := &dispatcher{
-			validator: newRequestValidator(registry, subjects, echoTranslator()),
-			registry:  registry,
-			producer:  &producerMock,
-			logger:    logger,
+			validator:     newRequestValidator(registry, subjects, echoTranslator(), defaultMaxInFlightRequests),
+			registry:      registry,
+			producer:      &producerMock,
+			subjectPrefix: defaultSubjectPrefix,
+			logger:        logger,
 		}
 
 		serverSideID, validationErrors, err := d.dispatch(context.Background(), &request)

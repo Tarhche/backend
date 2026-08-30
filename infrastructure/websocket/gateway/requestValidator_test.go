@@ -1,4 +1,4 @@
-package websocket
+package gateway
 
 import (
 	"errors"
@@ -14,7 +14,7 @@ import (
 func echoTranslator() *translator.TranslatorMock {
 	translatorMock := &translator.TranslatorMock{}
 
-	for _, key := range []string{requiredFieldMessage, invalidValueMessage, requestAlreadyExistsMessage} {
+	for _, key := range []string{requiredFieldMessage, invalidValueMessage, requestAlreadyExistsMessage, tooManyRequestsMessage} {
 		translatorMock.On("Translate", key, mock.AnythingOfType("[]func(*translator.Params)")).Return(key).Maybe()
 	}
 
@@ -30,6 +30,7 @@ func TestRequestValidator(t *testing.T) {
 		name             string
 		request          domain.Request
 		registry         func(*MockRequestRegistry)
+		inFlight         int
 		validationErrors domain.ValidationErrors
 		expectsError     bool
 	}{
@@ -104,6 +105,18 @@ func TestRequestValidator(t *testing.T) {
 			},
 			expectsError: true,
 		},
+		{
+			// a request is only forgotten once its reply arrives or is given up
+			// on, so without a ceiling a client that is never answered grows
+			// its registry for as long as it stays connected.
+			name:     "a connection with too many requests already waiting is refused",
+			request:  domain.Request{ID: "req-1", Subject: consumedSubject},
+			inFlight: defaultMaxInFlightRequests,
+			registry: func(r *MockRequestRegistry) {
+				r.On("GetServerSideID", "req-1").Return("", domain.ErrNotExists)
+			},
+			validationErrors: domain.ValidationErrors{requestField: tooManyRequestsMessage},
+		},
 	}
 
 	for _, testcase := range testcases {
@@ -114,6 +127,7 @@ func TestRequestValidator(t *testing.T) {
 			if testcase.registry != nil {
 				testcase.registry(&registryMock)
 			}
+			registryMock.On("Len").Return(testcase.inFlight).Maybe()
 			defer registryMock.AssertExpectations(t)
 
 			translatorMock := echoTranslator()
@@ -122,7 +136,7 @@ func TestRequestValidator(t *testing.T) {
 			subjects := newSubjects()
 			subjects.add(consumedSubject)
 
-			validationErrors, err := newRequestValidator(&registryMock, subjects, translatorMock).validate(&testcase.request)
+			validationErrors, err := newRequestValidator(&registryMock, subjects, translatorMock, defaultMaxInFlightRequests).validate(&testcase.request)
 
 			if testcase.expectsError {
 				assert.Error(t, err)

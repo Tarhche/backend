@@ -3572,6 +3572,12 @@ const docTemplate = `{
                             "type": "object",
                             "additionalProperties": true
                         }
+                    },
+                    "503": {
+                        "description": "the service is shutting down",
+                        "schema": {
+                            "type": "string"
+                        }
                     }
                 }
             }

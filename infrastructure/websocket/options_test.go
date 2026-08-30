@@ -23,7 +23,6 @@ func TestConfiguration(t *testing.T) {
 		assert.Equal(t, defaultPongWait, config.pongWait)
 		assert.Equal(t, defaultOutboundBuffer, config.outboundBuffer)
 		assert.Equal(t, defaultCloseGracePeriod, config.closeGracePeriod)
-		assert.Equal(t, NewFixedBackoff(defaultReplyAttempts, defaultReplyWait), config.replyBackoff)
 		assert.True(t, config.checkOrigin(&http.Request{}), "the default accepts every origin")
 	})
 
@@ -37,7 +36,6 @@ func TestConfiguration(t *testing.T) {
 			WithPingPeriod(54*time.Second),
 			WithOutboundBuffer(32),
 			WithCloseGracePeriod(5*time.Second),
-			WithReplyBackoff(NewFixedBackoff(7, time.Minute)),
 			WithOriginChecker(func(*http.Request) bool { return false }),
 		)
 
@@ -48,61 +46,28 @@ func TestConfiguration(t *testing.T) {
 		assert.Equal(t, 54*time.Second, config.pingPeriod)
 		assert.Equal(t, 32, config.outboundBuffer)
 		assert.Equal(t, 5*time.Second, config.closeGracePeriod)
-		assert.Equal(t, NewFixedBackoff(7, time.Minute), config.replyBackoff)
 		assert.False(t, config.checkOrigin(&http.Request{}))
 	})
 
-	testcases := []struct {
-		name   string
-		option Option
-	}{
-		{
-			// pinging no more often than the client is given to answer would
-			// disconnect it between pings.
-			name:   "a ping period that is not shorter than the pong wait",
-			option: WithPingPeriod(defaultPongWait),
-		},
-		{
-			name:   "a message size limit of zero",
-			option: WithMaxMessageSize(0),
-		},
-		{
-			name:   "a write wait of zero",
-			option: WithWriteWait(0),
-		},
-		{
-			name:   "a negative outbound buffer",
-			option: WithOutboundBuffer(-1),
-		},
-		{
-			// at zero, a reply only lands when a session happens to be parked
-			// on the receive, so delivery becomes a coin flip.
-			name:   "an outbound buffer of zero",
-			option: WithOutboundBuffer(0),
-		},
-		{
-			name:   "a negative close grace period",
-			option: WithCloseGracePeriod(-time.Second),
-		},
-		{
-			name:   "no reply backoff",
-			option: WithReplyBackoff(nil),
-		},
-		{
-			name:   "no queue backoff",
-			option: WithQueueBackoff(nil),
-		},
-		{
-			name:   "no origin checker",
-			option: WithOriginChecker(nil),
-		},
+	testcases := map[string]Option{
+		// pinging no more often than the client is given to answer would
+		// disconnect it between pings.
+		"a ping period that is not shorter than the pong wait": WithPingPeriod(defaultPongWait),
+		"a message size limit of zero":                         WithMaxMessageSize(0),
+		"a write wait of zero":                                 WithWriteWait(0),
+		"a negative outbound buffer":                           WithOutboundBuffer(-1),
+		// at zero, a reply only lands when the pump happens to be parked on the
+		// receive, so delivery becomes a coin flip.
+		"an outbound buffer of zero":    WithOutboundBuffer(0),
+		"a negative close grace period": WithCloseGracePeriod(-time.Second),
+		"no origin checker":             WithOriginChecker(nil),
 	}
 
-	for _, testcase := range testcases {
-		t.Run(testcase.name+" is rejected", func(t *testing.T) {
+	for name, option := range testcases {
+		t.Run(name+" is rejected", func(t *testing.T) {
 			t.Parallel()
 
-			_, err := newConfiguration(testcase.option)
+			_, err := newConfiguration(option)
 
 			assert.Error(t, err)
 		})

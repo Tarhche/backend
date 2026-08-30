@@ -1,11 +1,13 @@
-package websocket
+package gateway
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"runtime/debug"
+	"sync"
 	"time"
 
 	"github.com/khanzadimahdi/testproject/domain"
@@ -18,28 +20,11 @@ type failureResponse struct {
 	ValidationErrors domain.ValidationErrors `json:"validationErrors,omitempty"`
 }
 
-// conn is the transport a session talks over. It carries whole messages in both
-// directions; framing and keepalive are the transport's business.
-type conn interface {
-	// read blocks until the next client message is decoded into value.
-	read(value any) error
-
-	// send reports whether the transport took the message. It must not block on
-	// a peer that is not reading.
-	send(value any) bool
-
-	// shutdown stops the transport and releases the connection.
-	shutdown() error
-}
-
-// session is one client's conversation with the server: it reads requests, hands
-// them to the dispatcher, and writes back the replies for what it dispatched.
-//
-// Its registry is its own, so the client-side ids one client chooses cannot
-// collide with another's, and a session can only ever resolve a reply to a
-// request it registered itself.
+// session is one client's conversation with the server: it reads requests,
+// hands them to the dispatcher, and writes back the replies for what it
+// dispatched.
 type session struct {
-	conn         conn
+	conn         Conn
 	dispatcher   *dispatcher
 	registry     RequestRegistry
 	hub          *hub
@@ -49,19 +34,38 @@ type session struct {
 	translator   translator.Translator
 	logger       *slog.Logger
 
-	// done is closed when the client is gone, so work being retried on behalf
-	// of that client stops instead of being waited out. run owns it.
+	// replies is this session's share of the fanout. The hub fills it and
+	// closes it when the session leaves.
+	replies chan *domain.Reply
+
+	// done is closed when the client is gone, so that work being retried on
+	// behalf of that client stops instead of being waited out.
 	done chan struct{}
+
+	// gone is closed once run has returned, so a shutdown can wait for the
+	// session it just stopped.
+	gone chan struct{}
+
+	halt sync.Once
 }
 
-// run drives the session until the client disconnects, then stops taking new
-// replies, writes out the ones in hand and closes the connection.
+// run drives the session until the client disconnects or the gateway shuts it
+// down, then stops taking new replies, writes out the ones in hand, and closes
+// the connection.
 func (s *session) run(ctx context.Context) {
-	s.done = make(chan struct{})
+	defer close(s.gone)
 
-	defer s.conn.shutdown()
+	// last, so that the replies still in hand are written before the transport
+	// goes away.
+	defer s.conn.Close()
 
-	replies, unsubscribe := s.hub.subscribe()
+	leave, joined := s.hub.join(s)
+	if !joined {
+		// the gateway shut down between accepting this client and serving it.
+		s.finish()
+
+		return
+	}
 
 	written := make(chan struct{})
 	go func() {
@@ -73,29 +77,54 @@ func (s *session) run(ctx context.Context) {
 			}
 		}()
 
-		s.writeReplies(replies)
+		s.writeReplies()
 	}()
 
 	// deferred, so that a panic in the read loop still unwinds the session:
-	// leaving the hub subscribed would block writeReplies on a channel nobody
-	// closes, stranding the goroutine and everything it holds. Defers run in
-	// reverse, so this still happens before the connection is shut down.
+	// staying in the hub would block writeReplies on a channel nobody closes,
+	// stranding the goroutine and everything it holds. Defers run in reverse,
+	// so this still happens before the connection is closed.
 	defer func() {
-		close(s.done)
-		unsubscribe()
+		s.finish()
+		leave()
 		<-written
 	}()
 
 	s.readRequests(ctx)
 }
 
-// readRequests reads client requests until the connection breaks or ctx is done.
+// finish stops work being done on this client's behalf, without touching the
+// connection.
+func (s *session) finish() {
+	s.halt.Do(func() {
+		close(s.done)
+	})
+}
+
+// stop disconnects the client from outside its own goroutine. Closing the
+// connection is what breaks the read the session is parked on, after which run
+// unwinds on its own; waiting on gone is how a caller knows it has.
+func (s *session) stop() {
+	s.finish()
+
+	if err := s.conn.Close(); err != nil {
+		s.logger.Warn("error on closing a client connection", "error", err)
+	}
+
+	<-s.gone
+}
+
+// readRequests reads client requests until the connection ends or ctx is done.
 func (s *session) readRequests(ctx context.Context) {
 	for ctx.Err() == nil {
 		var request domain.Request
 
-		if err := s.conn.read(&request); err != nil {
-			s.logger.ErrorContext(ctx, "error on reading request", "error", err)
+		if err := s.conn.Read(&request); err != nil {
+			if errors.Is(err, io.EOF) {
+				s.logger.InfoContext(ctx, "client disconnected")
+			} else {
+				s.logger.ErrorContext(ctx, "error on reading request", "error", err)
+			}
 
 			return
 		}
@@ -111,9 +140,7 @@ func (s *session) readRequests(ctx context.Context) {
 		switch {
 		case err != nil:
 			if len(serverSideID) > 0 {
-				if deleteErr := s.registry.DeleteByServerSideID(serverSideID); deleteErr != nil {
-					s.logger.ErrorContext(ctx, "error on removing a failed request from the registry", "error", deleteErr)
-				}
+				s.forget(serverSideID)
 			}
 
 			s.writeFailure(request.ID, nil, err)
@@ -125,8 +152,8 @@ func (s *session) readRequests(ctx context.Context) {
 
 // writeReplies writes out the replies addressed to this session's requests,
 // leaving the rest to the session that registered them.
-func (s *session) writeReplies(replies <-chan *domain.Reply) {
-	for reply := range replies {
+func (s *session) writeReplies() {
+	for reply := range s.replies {
 		s.deliver(reply)
 	}
 }
@@ -134,7 +161,8 @@ func (s *session) writeReplies(replies <-chan *domain.Reply) {
 // deliver writes one reply to the client that is waiting for it. A reply this
 // session does not own belongs to another connection and is left alone. A
 // lookup that fails and a client whose queue is full are retried on their own
-// backoffs until those run out.
+// backoffs; when those run out the request is forgotten, because nothing is
+// going to answer it now.
 func (s *session) deliver(reply *domain.Reply) {
 	var lookupAttempt, queueAttempt int
 
@@ -159,8 +187,8 @@ func (s *session) deliver(reply *domain.Reply) {
 		default:
 			// the reply is shared with every session, so answer with a copy
 			// rather than rewriting the id on it.
-			if s.conn.send(&domain.Reply{RequestID: clientSideID, Payload: reply.Payload}) {
-				s.registry.DeleteByServerSideID(reply.RequestID)
+			if s.conn.Send(&domain.Reply{RequestID: clientSideID, Payload: reply.Payload}) {
+				s.forget(reply.RequestID)
 
 				return
 			}
@@ -177,6 +205,7 @@ func (s *session) deliver(reply *domain.Reply) {
 		wait, retry := backoff.Next(attempt)
 		if !retry {
 			s.logger.Error("giving up on routing a reply", "requestID", reply.RequestID, "attempts", attempt)
+			s.forget(reply.RequestID)
 
 			return
 		}
@@ -192,8 +221,16 @@ func (s *session) deliver(reply *domain.Reply) {
 	}
 }
 
-// writeFailure tells the client its request was rejected. A server-side error is
-// reported without its details, which belong in the logs.
+// forget releases a request that has been answered or given up on, so its
+// client-side id is free to be used again.
+func (s *session) forget(serverSideID string) {
+	if err := s.registry.DeleteByServerSideID(serverSideID); err != nil && !errors.Is(err, domain.ErrNotExists) {
+		s.logger.Error("error on removing a request from the registry", "error", err, "requestID", serverSideID)
+	}
+}
+
+// writeFailure tells the client its request was rejected. A server-side error
+// is reported without its details, which belong in the logs.
 func (s *session) writeFailure(requestID string, validationErrors domain.ValidationErrors, err error) {
 	s.logger.Warn("writing failure response to client", "requestID", requestID, "validationErrors", validationErrors, "error", err)
 
@@ -212,8 +249,7 @@ func (s *session) writeFailure(requestID string, validationErrors domain.Validat
 		return
 	}
 
-	s.conn.send(&domain.Reply{
-		RequestID: requestID,
-		Payload:   payload,
-	})
+	if !s.conn.Send(&domain.Reply{RequestID: requestID, Payload: payload}) {
+		s.logger.Warn("could not deliver a failure response to the client", "requestID", requestID)
+	}
 }

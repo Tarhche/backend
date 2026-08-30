@@ -113,7 +113,8 @@ import (
 	rolesrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/roles"
 	userrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/users"
 	"github.com/khanzadimahdi/testproject/infrastructure/telemetry/profiler"
-	websocketHandler "github.com/khanzadimahdi/testproject/infrastructure/websocket"
+	infraWebsocket "github.com/khanzadimahdi/testproject/infrastructure/websocket"
+	"github.com/khanzadimahdi/testproject/infrastructure/websocket/gateway"
 	articleAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/article"
 	authAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/auth"
 	authorArticleAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/author/article"
@@ -202,7 +203,10 @@ func (p *blogProvider) Boot(ctx context.Context, c provider.Container) error {
 		return err
 	}
 
-	ws, err := websocketHandler.NewWebsocket(
+	// the gateway carries requests to the broker and replies back; the websocket
+	// is one transport it is reachable on. A second protocol is a second
+	// transport over the same gateway, not a second gateway.
+	messageGateway, err := gateway.New(
 		pc,
 		ps,
 		translator,
@@ -212,19 +216,26 @@ func (p *blogProvider) Boot(ctx context.Context, c provider.Container) error {
 	if err != nil {
 		return err
 	}
-	cachedDecoratedWS := websocketHandler.NewCacheDecorator(ws, runCodeCache, logger, runCode.RunCodeRequest)
+
+	cachedGateway := gateway.NewCacheDecorator(messageGateway, runCodeCache, logger, runCode.RunCodeRequest)
+
+	websocketTransport, err := infraWebsocket.NewHandler(messageGateway, logger)
+	if err != nil {
+		return err
+	}
 
 	c.Bind(func() domain.Producer { return pc }, provider.Singleton())
 	c.Bind(func() domain.Consumer { return pc }, provider.Singleton())
 	c.Bind(func() domain.ProduceConsumer { return pc }, provider.Singleton())
 	c.Bind(func() domain.PublishSubscriber { return ps }, provider.Singleton())
-	c.Bind(func() *websocketHandler.Websocket { return ws }, provider.Singleton())
-	c.Bind(func() *websocketHandler.CacheDecorator { return cachedDecoratedWS }, provider.Singleton())
+	c.Bind(func() *gateway.Gateway { return messageGateway }, provider.Singleton())
+	c.Bind(func() *gateway.CacheDecorator { return cachedGateway }, provider.Singleton())
+	c.Bind(func() *infraWebsocket.Handler { return websocketTransport }, provider.Singleton())
 
 	p.terminate = func() {
 		defer pc.Wait()
 		defer ps.Wait()
-		defer ws.Close()
+		defer messageGateway.Close()
 	}
 
 	return c.Bind(blog, provider.Singleton())
@@ -249,7 +260,8 @@ func blog(
 	authorizer domain.Authorizer,
 	mailer domain.Mailer,
 	renderer domain.Renderer,
-	cachedDecoratedWS *websocketHandler.CacheDecorator,
+	cachedGateway *gateway.CacheDecorator,
+	websocketTransport *infraWebsocket.Handler,
 	iocContainer provider.Container,
 ) (http.Handler, error) {
 	var logger *slog.Logger
@@ -332,10 +344,10 @@ func blog(
 	getLanguagesUseCase := getLanguages.NewUseCase(languageRepository, languageResolver)
 	getFileUseCase := getFile.NewUseCase(filesRepository, fileStorage)
 
-	if err := cachedDecoratedWS.Consume(
+	if err := cachedGateway.Consume(
 		context.Background(),
 		runCode.RunCodeRequest,
-		runCode.NewRunCodeHandler(validator, asyncProduceConsumer, cachedDecoratedWS, logger),
+		runCode.NewRunCodeHandler(validator, asyncProduceConsumer, cachedGateway, logger),
 	); err != nil {
 		return nil, err
 	}
@@ -405,7 +417,7 @@ func blog(
 	// ---- public HTTP API ----
 
 	// websocket
-	mux.Handle("GET /api/ws", websocketAPI.NewWebsocketHandler(cachedDecoratedWS))
+	mux.Handle("GET /api/ws", websocketAPI.NewWebsocketHandler(websocketTransport))
 
 	// home
 	mux.Handle("GET /api/home", middleware.NewCacheMiddleware(localized(homeapi.NewHomeHandler(homeUseCase)), httpCache))
@@ -635,7 +647,7 @@ func blog(
 	subscribers := map[string]domain.MessageHandler{
 		forgetpassword.SendForgetPasswordEmailName: forgetpassword.NewSendForgetPasswordEmailHandler(userRepository, authTokenGenerator, mailer, mailFromAddress, webURL, renderer, translator),
 		register.SendRegisterationEmailName:        register.NewSendRegisterationEmailHandler(authTokenGenerator, mailer, mailFromAddress, webURL, renderer, translator),
-		taskEvents.HeartbeatName:                   heartbeat.NewHeartbeatHandler(cachedDecoratedWS, logger),
+		taskEvents.HeartbeatName:                   heartbeat.NewHeartbeatHandler(cachedGateway, logger),
 	}
 
 	if err := iocContainer.Bind(func() map[string]domain.MessageHandler {

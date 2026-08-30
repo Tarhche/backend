@@ -1,4 +1,4 @@
-package websocket
+package gateway
 
 import (
 	"errors"
@@ -13,6 +13,7 @@ var IDRegex = regexp.MustCompile("^[a-zA-Z0-9-]+$")
 
 // the fields a rule can reject, as the client sees them.
 const (
+	requestField   = "request"
 	requestIDField = "request_id"
 	subjectField   = "subject"
 )
@@ -22,6 +23,7 @@ const (
 	requiredFieldMessage        = "required_field"
 	invalidValueMessage         = "invalid_value"
 	requestAlreadyExistsMessage = "request_already_exists"
+	tooManyRequestsMessage      = "too_many_requests"
 )
 
 // rule reports the field it rejects and the translation key of the reason, or
@@ -37,7 +39,12 @@ type requestValidator struct {
 	rules      []rule
 }
 
-func newRequestValidator(registry RequestRegistry, subjects *subjects, translator translator.Translator) *requestValidator {
+func newRequestValidator(
+	registry RequestRegistry,
+	subjects *subjects,
+	translator translator.Translator,
+	maxInFlight int,
+) *requestValidator {
 	return &requestValidator{
 		translator: translator,
 		rules: []rule{
@@ -46,6 +53,7 @@ func newRequestValidator(registry RequestRegistry, subjects *subjects, translato
 			requestIDIsUnused(registry),
 			subjectIsPresent,
 			subjectIsConsumed(subjects),
+			inFlightRequestsAreUnderLimit(registry, maxInFlight),
 		},
 	}
 }
@@ -123,6 +131,20 @@ func subjectIsConsumed(subjects *subjects) rule {
 	return func(request *domain.Request) (string, string, error) {
 		if len(request.Subject) > 0 && !subjects.has(request.Subject) {
 			return subjectField, invalidValueMessage, nil
+		}
+
+		return "", "", nil
+	}
+}
+
+// inFlightRequestsAreUnderLimit caps what one connection may have waiting at
+// once. A registry entry only goes away when its reply arrives or is given up
+// on, so without a ceiling a client that asks and never gets answered grows its
+// registry for as long as it stays connected.
+func inFlightRequestsAreUnderLimit(registry RequestRegistry, limit int) rule {
+	return func(*domain.Request) (string, string, error) {
+		if registry.Len() >= limit {
+			return requestField, tooManyRequestsMessage, nil
 		}
 
 		return "", "", nil
