@@ -1,4 +1,4 @@
-package websocket
+package gateway
 
 import (
 	"context"
@@ -6,9 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"io"
 	"log/slog"
-	"net/http"
 
 	"github.com/khanzadimahdi/testproject/domain"
 )
@@ -22,62 +20,53 @@ const (
 	cachedKeyPrefix = "cached."
 )
 
-// the interface that should be implemented by a decorator
-type ws interface {
+// Messaging is the half of a Gateway a decorator wraps: the subjects it
+// consumes and the replies it carries. Serving clients is not a decorator's
+// business, so no transport appears here — a decorated gateway is still handed
+// to a transport as the Sessions it already was.
+type Messaging interface {
 	domain.Consumer
 	domain.Replyer
-	http.Handler
-	io.Closer
 }
 
-// CacheDecorator wraps a Consumer and a Replyer to add transparent
-// payload-based caching for a specified set of subjects. On a cache hit the
-// reply is returned immediately without dispatching a message to the queue.
-// On a cache miss the request is forwarded normally and the reply payload is
-// stored in the cache before being sent. Subjects not in the allowlist are
-// consumed without caching.
+// CacheDecorator wraps a Messaging to add transparent payload-based caching for
+// a given set of subjects. On a cache hit the reply is returned immediately
+// without dispatching a message to the queue. On a cache miss the request is
+// forwarded normally and the reply payload is stored in the cache before being
+// sent. Subjects not in the allowlist are consumed without caching.
 type CacheDecorator struct {
-	parent   ws
+	// embedded, so that anything a decorator does not care about reaches the
+	// gateway without a pass-through method.
+	Messaging
+
 	cache    domain.Cache
 	subjects map[string]struct{}
 	logger   *slog.Logger
 }
 
-// Ensure CacheDecorator implements the ws interface
-var _ ws = &CacheDecorator{}
+// Ensure CacheDecorator implements the Messaging interface
+var _ Messaging = &CacheDecorator{}
 
-// Ensure Websocket implements the domain.Consumer interface
-var _ domain.Consumer = &Websocket{}
-
-// Ensure Websocket implements the domain.Replyer interface
-var _ domain.Replyer = &Websocket{}
-
-// make sure the websocket implements the http.Handler interface
-var _ http.Handler = &Websocket{}
-
-// make sure the websocket implements the io.Closer interface
-var _ io.Closer = &Websocket{}
-
-func NewCacheDecorator(ws ws, cache domain.Cache, logger *slog.Logger, subjects ...string) *CacheDecorator {
+func NewCacheDecorator(messaging Messaging, cache domain.Cache, logger *slog.Logger, subjects ...string) *CacheDecorator {
 	s := make(map[string]struct{}, len(subjects))
 	for _, subject := range subjects {
 		s[subject] = struct{}{}
 	}
 
 	return &CacheDecorator{
-		parent:   ws,
-		cache:    cache,
-		subjects: s,
-		logger:   logger,
+		Messaging: messaging,
+		cache:     cache,
+		subjects:  s,
+		logger:    logger,
 	}
 }
 
 func (d *CacheDecorator) Consume(ctx context.Context, subject string, handler domain.MessageHandler) error {
 	if _, ok := d.subjects[subject]; !ok {
-		return d.parent.Consume(ctx, subject, handler)
+		return d.Messaging.Consume(ctx, subject, handler)
 	}
 
-	return d.parent.Consume(
+	return d.Messaging.Consume(
 		ctx,
 		subject,
 		domain.MessageHandlerFunc(func(ctx context.Context, payload []byte) error {
@@ -91,14 +80,14 @@ func (d *CacheDecorator) Consume(ctx context.Context, subject string, handler do
 			d.logger.Info("checking cache for checksum key", "cachedKey", cachedKey, "requestID", requestID)
 			if cached, err := d.cache.Get(ctx, cachedKey); err == nil {
 				d.logger.Info("cache hit for checksum key", "cachedKey", cachedKey, "requestID", requestID)
-				return d.parent.Reply(ctx, &domain.Reply{
+				return d.Messaging.Reply(ctx, &domain.Reply{
 					RequestID: requestID,
 					Payload:   cached,
 				})
 			}
 
 			if err := d.cache.Set(ctx, pendingKeyPrefix+requestID, []byte(checksum)); err != nil {
-				d.logger.Error("WS pending set error", "error", err)
+				d.logger.Error("error on storing a pending request", "error", err)
 			}
 
 			return handler.Handle(ctx, payload)
@@ -115,23 +104,15 @@ func (d *CacheDecorator) Reply(ctx context.Context, reply *domain.Reply) error {
 		cachedKey := cachedKeyPrefix + string(checksum)
 		d.logger.Info("caching reply with checksum key", "cachedKey", cachedKey)
 		if err := d.cache.Set(ctx, cachedKey, reply.Payload); err != nil {
-			d.logger.Error("WS cache set error", "error", err)
+			d.logger.Error("error on caching a reply", "error", err)
 		}
 
 		if err := d.cache.Purge(ctx, pendingKey); err != nil {
-			d.logger.Error("WS pending purge error", "error", err)
+			d.logger.Error("error on purging a pending request", "error", err)
 		}
 	}
 
-	return d.parent.Reply(ctx, reply)
-}
-
-func (d *CacheDecorator) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	d.parent.ServeHTTP(w, r)
-}
-
-func (d *CacheDecorator) Close() error {
-	return d.parent.Close()
+	return d.Messaging.Reply(ctx, reply)
 }
 
 // payloadChecksum strips the injected server-side "id" field from the JSON payload

@@ -747,7 +747,7 @@ const docTemplate = `{
                 }
             },
             "put": {
-                "description": "update existing article fields, current user must be author",
+                "description": "update existing article fields, the article author is preserved",
                 "consumes": [
                     "application/json"
                 ],
@@ -3547,6 +3547,36 @@ const docTemplate = `{
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/ws": {
+            "get": {
+                "description": "upgrades the connection to a websocket. the client sends requests as {\"id\", \"subject\", \"payload\"} and receives replies as {\"request_id\", \"payload\"}; the subject must be one the server consumes.",
+                "tags": [
+                    "websocket"
+                ],
+                "summary": "Websocket endpoint",
+                "responses": {
+                    "101": {
+                        "description": "switching protocols",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "503": {
+                        "description": "the service is shutting down",
+                        "schema": {
+                            "type": "string"
                         }
                     }
                 }

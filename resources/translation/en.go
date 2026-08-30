@@ -5,6 +5,7 @@ const EN = "en"
 var english = map[string]string{
 	"error_on_processing_the_request":   "error on processing the request",
 	"request_already_exists":            "request already exists",
+	"too_many_requests":                 "too many requests are waiting for a reply",
 	"required_field":                    "this field is required",
 	"invalid_value":                     "the provided value is invalid",
 	"invalid_email":                     "should be a valid email address",

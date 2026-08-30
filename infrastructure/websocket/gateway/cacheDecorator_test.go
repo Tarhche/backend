@@ -1,11 +1,10 @@
-package websocket
+package gateway
 
 import (
 	"context"
 	"errors"
 	"io"
 	"log/slog"
-	"net/http/httptest"
 	"testing"
 
 	"github.com/khanzadimahdi/testproject/domain"
@@ -24,7 +23,7 @@ func TestCacheDecorator(t *testing.T) {
 		t.Parallel()
 
 		var (
-			wsMock             MockWebsocket
+			wsMock             MockMessaging
 			cacheMock          cache.MockCache
 			messageHandlerMock messagingMock.MockMessageHandler
 		)
@@ -43,7 +42,7 @@ func TestCacheDecorator(t *testing.T) {
 		t.Parallel()
 
 		var (
-			wsMock             MockWebsocket
+			wsMock             MockMessaging
 			cacheMock          cache.MockCache
 			messageHandlerMock messagingMock.MockMessageHandler
 		)
@@ -63,7 +62,7 @@ func TestCacheDecorator(t *testing.T) {
 		t.Parallel()
 
 		var (
-			wsMock             MockWebsocket
+			wsMock             MockMessaging
 			cacheMock          cache.MockCache
 			messageHandlerMock messagingMock.MockMessageHandler
 		)
@@ -97,7 +96,7 @@ func TestCacheDecorator(t *testing.T) {
 		t.Parallel()
 
 		var (
-			wsMock             MockWebsocket
+			wsMock             MockMessaging
 			cacheMock          cache.MockCache
 			messageHandlerMock messagingMock.MockMessageHandler
 		)
@@ -128,7 +127,7 @@ func TestCacheDecorator(t *testing.T) {
 		t.Parallel()
 
 		var (
-			wsMock             MockWebsocket
+			wsMock             MockMessaging
 			cacheMock          cache.MockCache
 			messageHandlerMock messagingMock.MockMessageHandler
 		)
@@ -180,7 +179,7 @@ func TestCacheDecorator(t *testing.T) {
 		t.Parallel()
 
 		var (
-			wsMock    MockWebsocket
+			wsMock    MockMessaging
 			cacheMock cache.MockCache
 		)
 
@@ -199,7 +198,7 @@ func TestCacheDecorator(t *testing.T) {
 		t.Parallel()
 
 		var (
-			wsMock    MockWebsocket
+			wsMock    MockMessaging
 			cacheMock cache.MockCache
 		)
 
@@ -220,7 +219,7 @@ func TestCacheDecorator(t *testing.T) {
 		t.Parallel()
 
 		var (
-			wsMock             MockWebsocket
+			wsMock             MockMessaging
 			cacheMock          cache.MockCache
 			messageHandlerMock messagingMock.MockMessageHandler
 		)
@@ -264,7 +263,7 @@ func TestCacheDecorator(t *testing.T) {
 		t.Parallel()
 
 		var (
-			wsMock             MockWebsocket
+			wsMock             MockMessaging
 			cacheMock          cache.MockCache
 			messageHandlerMock messagingMock.MockMessageHandler
 		)
@@ -293,7 +292,7 @@ func TestCacheDecorator(t *testing.T) {
 		t.Parallel()
 
 		var (
-			wsMock             MockWebsocket
+			wsMock             MockMessaging
 			cacheMock          cache.MockCache
 			messageHandlerMock messagingMock.MockMessageHandler
 		)
@@ -344,37 +343,4 @@ func TestCacheDecorator(t *testing.T) {
 		assert.NoError(t, wrappedHandler.Handle(context.Background(), second))
 	})
 
-	t.Run("serve http delegates to parent", func(t *testing.T) {
-		t.Parallel()
-
-		var (
-			wsMock    MockWebsocket
-			cacheMock cache.MockCache
-		)
-
-		recorder := httptest.NewRecorder()
-		request := httptest.NewRequest("GET", "/", nil)
-
-		wsMock.On("ServeHTTP", mock.Anything, mock.Anything).Return()
-		defer wsMock.AssertExpectations(t)
-
-		decorator := NewCacheDecorator(&wsMock, &cacheMock, slog.New(slog.NewTextHandler(io.Discard, nil)), cachedSubject)
-		decorator.ServeHTTP(recorder, request)
-	})
-
-	t.Run("close delegates to parent", func(t *testing.T) {
-		t.Parallel()
-
-		var (
-			wsMock    MockWebsocket
-			cacheMock cache.MockCache
-		)
-
-		expectedErr := errors.New("close failed")
-		wsMock.On("Close").Return(expectedErr)
-		defer wsMock.AssertExpectations(t)
-
-		decorator := NewCacheDecorator(&wsMock, &cacheMock, slog.New(slog.NewTextHandler(io.Discard, nil)), cachedSubject)
-		assert.ErrorIs(t, decorator.Close(), expectedErr)
-	})
 }

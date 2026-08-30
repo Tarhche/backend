@@ -1,16 +1,13 @@
-package websocket
+package gateway
 
-import (
-	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/stretchr/testify/mock"
-)
+import "github.com/stretchr/testify/mock"
 
 type MockRequestRegistry struct {
 	mock.Mock
 }
 
-// make sure the MockRequestRegistry implements the domain.RequestRegistry interface
-var _ domain.RequestRegistry = &MockRequestRegistry{}
+// make sure the MockRequestRegistry implements the RequestRegistry interface
+var _ RequestRegistry = &MockRequestRegistry{}
 
 // Add registers a new client and generates a serverSideID
 func (m *MockRequestRegistry) Add(clientSideID string) (string, error) {
@@ -38,4 +35,11 @@ func (m *MockRequestRegistry) DeleteByServerSideID(serverSideID string) error {
 	args := m.Called(serverSideID)
 
 	return args.Error(0)
+}
+
+// Len returns how many requests are waiting for a reply.
+func (m *MockRequestRegistry) Len() int {
+	args := m.Called()
+
+	return args.Int(0)
 }
