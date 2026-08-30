@@ -55,6 +55,10 @@ func newConfiguration(options ...Option) (configuration, error) {
 }
 
 func (c configuration) validate() error {
+	if c.pingPeriod <= 0 {
+		return errors.New("ping period must be greater than zero, otherwise the keepalive ticker panics and takes the process down with it")
+	}
+
 	if c.pingPeriod >= c.pongWait {
 		return errors.New("ping period must be less than pong wait, otherwise a client is disconnected before it can answer a ping")
 	}

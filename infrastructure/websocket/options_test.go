@@ -53,9 +53,13 @@ func TestConfiguration(t *testing.T) {
 		// pinging no more often than the client is given to answer would
 		// disconnect it between pings.
 		"a ping period that is not shorter than the pong wait": WithPingPeriod(defaultPongWait),
-		"a message size limit of zero":                         WithMaxMessageSize(0),
-		"a write wait of zero":                                 WithWriteWait(0),
-		"a negative outbound buffer":                           WithOutboundBuffer(-1),
+		// a non-positive period panics time.NewTicker on the keepalive
+		// goroutine, which takes the process down rather than the connection.
+		"a ping period of zero":        WithPingPeriod(0),
+		"a negative ping period":       WithPingPeriod(-time.Second),
+		"a message size limit of zero": WithMaxMessageSize(0),
+		"a write wait of zero":         WithWriteWait(0),
+		"a negative outbound buffer":   WithOutboundBuffer(-1),
 		// at zero, a reply only lands when the pump happens to be parked on the
 		// receive, so delivery becomes a coin flip.
 		"an outbound buffer of zero":    WithOutboundBuffer(0),

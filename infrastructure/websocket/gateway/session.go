@@ -74,6 +74,14 @@ func (s *session) run(ctx context.Context) {
 		defer func() {
 			if recovered := recover(); recovered != nil {
 				s.logger.Error("recovered a panic while writing replies", "panic", recovered, "stack", string(debug.Stack()))
+
+				// nothing is left to answer this client, so end the session
+				// instead of leaving it taking requests it cannot reply to.
+				s.finish()
+
+				if err := s.conn.Close(); err != nil {
+					s.logger.Warn("error on closing a client connection", "error", err)
+				}
 			}
 		}()
 
