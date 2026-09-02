@@ -39,6 +39,10 @@ var statusMap = map[string]container.Status{
 const (
 	readOperation  = "read"
 	writeOperation = "write"
+
+	// stopTimeout is how long a container is given to shut down on its own
+	// before docker kills it.
+	stopTimeout = 10
 )
 
 type DockerManager struct {
@@ -169,13 +173,21 @@ func (m *DockerManager) Create(ctx context.Context, c *container.Container) (str
 		},
 		PortBindings: convertPortMap(c.PortBindings),
 		AutoRemove:   c.AutoRemove,
+		NetworkMode:  networkMode(c.Networks),
 	}
 
-	m.logger.Info("creating container", "name", c.Name)
-	resp, err := m.client.ContainerCreate(ctx, config, hostConfig, nil, nil, c.Name)
+	m.logger.Info("creating container", "name", c.Name, "networks", c.Networks)
+	resp, err := m.client.ContainerCreate(ctx, config, hostConfig, endpointsConfig(c.Networks), nil, c.Name)
 	if err != nil {
 		return "", trace.RecordError(span, err)
 	}
+
+	// a container that reaches both its own stack and the internet sits on two
+	// networks, and docker only takes one of them at create time.
+	if err := m.connectRemainingNetworks(ctx, resp.ID, c.Networks); err != nil {
+		return "", trace.RecordError(span, err)
+	}
+
 	m.logger.Info("container created", "image", c.Image, "containerID", resp.ID)
 
 	return resp.ID, nil
@@ -216,10 +228,38 @@ func (m *DockerManager) Stop(ctx context.Context, containerUUID string) error {
 	)
 	defer span.End()
 
-	timeout := 10
+	timeout := stopTimeout
 	err := m.client.ContainerStop(ctx, containerUUID, containerTypes.StopOptions{
 		Timeout: &timeout,
 	})
+
+	return trace.RecordError(span, err)
+}
+
+// Restart stops the container and starts it again. The container keeps its
+// identity, so its logs, its published ports and its name all survive.
+func (m *DockerManager) Restart(ctx context.Context, containerUUID string) error {
+	ctx, span := m.tracer.Start(ctx, "docker.container.restart",
+		oteltrace.WithAttributes(attribute.String("container.id", containerUUID)),
+	)
+	defer span.End()
+
+	timeout := stopTimeout
+	err := m.client.ContainerRestart(ctx, containerUUID, containerTypes.StopOptions{
+		Timeout: &timeout,
+	})
+
+	return trace.RecordError(span, err)
+}
+
+// Kill stops the container at once, without the grace period Stop gives it.
+func (m *DockerManager) Kill(ctx context.Context, containerUUID string) error {
+	ctx, span := m.tracer.Start(ctx, "docker.container.kill",
+		oteltrace.WithAttributes(attribute.String("container.id", containerUUID)),
+	)
+	defer span.End()
+
+	err := m.client.ContainerKill(ctx, containerUUID, "SIGKILL")
 
 	return trace.RecordError(span, err)
 }
@@ -273,6 +313,7 @@ func (m *DockerManager) Inspect(ctx context.Context, containerUUID string) (cont
 			Cpu:    float64(info.HostConfig.Resources.NanoCPUs) / 1e9,
 		},
 		AutoRemove: info.HostConfig.AutoRemove,
+		Networks:   inspectedNetworks(info.NetworkSettings),
 	}, nil
 }
 
@@ -396,15 +437,24 @@ func convertPortSet(ports port.PortSet) nat.PortSet {
 	return result
 }
 
+// convertPortMap turns the bindings a container asks for into docker's own
+// shape. A binding with no host port asks docker to pick a free one, which is
+// how the runner publishes a container's ports without having to keep track of
+// what is already taken on the node.
 func convertPortMap(bindings port.PortMap) nat.PortMap {
 	result := make(nat.PortMap)
 	for p, bindings := range bindings {
 		portStr := fmt.Sprintf("%d/tcp", p)
 		result[nat.Port(portStr)] = make([]nat.PortBinding, len(bindings))
 		for i, b := range bindings {
+			hostPort := ""
+			if b.HostPort > 0 {
+				hostPort = fmt.Sprintf("%d", b.HostPort)
+			}
+
 			result[nat.Port(portStr)][i] = nat.PortBinding{
 				HostIP:   b.HostIP,
-				HostPort: fmt.Sprintf("%d", b.HostPort),
+				HostPort: hostPort,
 			}
 		}
 	}

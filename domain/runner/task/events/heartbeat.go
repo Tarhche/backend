@@ -13,6 +13,7 @@ type Heartbeat struct {
 	ContainerUUID string
 	State         int
 	NodeName      string
+	Endpoints     []Endpoint
 	Logs          []byte
 	At            time.Time
 }

@@ -6,6 +6,12 @@ import (
 
 type Request struct {
 	UUID string `json:"uuid"`
+
+	// Force removes a container that is still running, rather than refusing
+	// until it has stopped. The worker takes a running container down either
+	// way, so this is about what the caller asked for: "delete this" rather
+	// than "delete this once it is finished".
+	Force bool `json:"-"`
 }
 
 var _ domain.Validatable = &Request{}

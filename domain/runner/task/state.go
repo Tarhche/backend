@@ -23,6 +23,8 @@ func (s State) String() string {
 		return "completed"
 	case Failed:
 		return "failed"
+	case Restarting:
+		return "restarting"
 	}
 
 	return "unknown"
@@ -49,17 +51,23 @@ const (
 
 	// Failed is the state of a task that is failed
 	Failed State = 7
+
+	// Restarting is the state of a task whose container is being restarted in
+	// place. The container keeps its identity, so this is not a trip back
+	// through scheduling.
+	Restarting State = 8
 )
 
 // stateTransitionMap is a map of state transitions
 var stateTransitionMap = map[State][]State{
-	Created:   {Scheduled},
-	Scheduled: {Running, Stopping, Failed},
-	Running:   {Stopping, Completed, Failed},
-	Stopping:  {Stopped, Completed, Failed},
-	Stopped:   {Scheduled},
-	Completed: {Scheduled},
-	Failed:    {Scheduled},
+	Created:    {Scheduled},
+	Scheduled:  {Running, Stopping, Failed},
+	Running:    {Stopping, Restarting, Completed, Failed},
+	Stopping:   {Stopped, Completed, Failed},
+	Stopped:    {Scheduled, Restarting},
+	Completed:  {Scheduled},
+	Failed:     {Scheduled},
+	Restarting: {Running, Failed},
 }
 
 // terminalStates is a list of terminal states

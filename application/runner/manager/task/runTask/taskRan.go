@@ -34,14 +34,33 @@ func (uc *TaskRan) Handle(ctx context.Context, data []byte) error {
 		return err
 	}
 
+	// the endpoints are worth recording even when the state has not moved: a
+	// restarted container is published on new host ports.
+	t.NodeName = taskRan.NodeName
+	t.ContainerID = taskRan.ContainerUUID
+	t.Endpoints = toEndpoints(taskRan.Endpoints)
+
 	destinationState := task.Running
-	if t.State == destinationState {
-		return nil
+	if t.State != destinationState {
+		t.State = destinationState
+		t.StartedAt = taskRan.StartedAt
 	}
 
-	t.State = destinationState
-	t.StartedAt = taskRan.StartedAt
 	_, err = uc.taskRepository.Save(ctx, &t)
 
 	return err
+}
+
+// toEndpoints reads the addresses a worker published a container on.
+func toEndpoints(endpoints []events.Endpoint) []task.Endpoint {
+	result := make([]task.Endpoint, len(endpoints))
+	for i, e := range endpoints {
+		result[i] = task.Endpoint{
+			ContainerPort: e.ContainerPort,
+			Host:          e.Host,
+			HostPort:      e.HostPort,
+		}
+	}
+
+	return result
 }

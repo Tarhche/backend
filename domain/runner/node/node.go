@@ -7,8 +7,14 @@ import (
 
 // Node represents a node in the cluster
 type Node struct {
-	Name            string
-	Role            Role
+	Name string
+	Role Role
+
+	// APIAddress is the host:port of this node's own HTTP API. The manager
+	// proxies attach and log streams there, so it has to be an address the
+	// manager can dial rather than one a browser can.
+	APIAddress string
+
 	Stats           Stats
 	LastHeartbeatAt time.Time
 	CreatedAt       time.Time

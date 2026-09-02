@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -27,6 +28,11 @@ type Gateway struct {
 	// may send to, while a session's dispatcher produces onto them.
 	consumer domain.Consumer
 	producer domain.Producer
+
+	// cancellations travel the same way replies do: published to every
+	// replica, because the client that walked away and the handler producing
+	// its stream need not be on the same one.
+	publishSubscriber domain.PublishSubscriber
 
 	subjects   *subjects
 	hub        *hub
@@ -68,8 +74,10 @@ func New(
 	}
 
 	g := &Gateway{
-		consumer:   produceConsumer,
-		producer:   produceConsumer,
+		consumer:          produceConsumer,
+		producer:          produceConsumer,
+		publishSubscriber: publishSubscriber,
+
 		subjects:   newSubjects(),
 		hub:        newHub(logger),
 		bus:        newReplyBus(publishSubscriber, config.subjectPrefix+repliesSubject, logger),
@@ -98,6 +106,29 @@ func (g *Gateway) Consume(ctx context.Context, subject string, handler domain.Me
 	g.subjects.add(subject)
 
 	return nil
+}
+
+// WatchStreamCancellations tells handler about the streams whose clients have
+// stopped listening, so that whatever is producing one can stop. A *Streams is
+// the handler to pass here.
+func (g *Gateway) WatchStreamCancellations(ctx context.Context, handler domain.MessageHandler) error {
+	return g.publishSubscriber.Subscribe(ctx, g.config.subjectPrefix+cancellationsSubject, handler)
+}
+
+// cancelStream announces that nobody is listening to a stream any more. It is
+// best effort: a cancellation that cannot be published costs a stream that runs
+// until its own source ends, not a broken client.
+func (g *Gateway) cancelStream(ctx context.Context, requestID string) {
+	payload, err := json.Marshal(&StreamCancelled{RequestID: requestID})
+	if err != nil {
+		g.logger.Error("error on marshalling a stream cancellation", "error", err, "requestID", requestID)
+
+		return
+	}
+
+	if err := g.publishSubscriber.Publish(ctx, g.config.subjectPrefix+cancellationsSubject, payload); err != nil {
+		g.logger.Error("error on publishing a stream cancellation", "error", err, "requestID", requestID)
+	}
 }
 
 // Reply hands a reply to every replica, because the client waiting for it may
@@ -168,6 +199,7 @@ func (g *Gateway) newSession(conn Conn) *session {
 			logger:        g.logger,
 		},
 		registry:     requests,
+		cancelStream: g.cancelStream,
 		hub:          g.hub,
 		bus:          g.bus,
 		replies:      make(chan *domain.Reply, g.config.replyBuffer),

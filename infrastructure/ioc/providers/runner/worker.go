@@ -12,14 +12,21 @@ import (
 
 	checkhealth "github.com/khanzadimahdi/testproject/application/app/checkHealth"
 	workerHeartbeat "github.com/khanzadimahdi/testproject/application/runner/worker/beatHeart"
+	workerDeleteStack "github.com/khanzadimahdi/testproject/application/runner/worker/stack/deleteStack"
+	workerAttachTask "github.com/khanzadimahdi/testproject/application/runner/worker/task/attachTask"
 	workerTaskHeartbeat "github.com/khanzadimahdi/testproject/application/runner/worker/task/beatHeart"
 	workerDeleteTask "github.com/khanzadimahdi/testproject/application/runner/worker/task/deleteTask"
 	workergettasks "github.com/khanzadimahdi/testproject/application/runner/worker/task/getTasks"
+	workerkilltask "github.com/khanzadimahdi/testproject/application/runner/worker/task/killTask"
+	workerrestarttask "github.com/khanzadimahdi/testproject/application/runner/worker/task/restartTask"
 	workerruntask "github.com/khanzadimahdi/testproject/application/runner/worker/task/runTask"
+	workerShipLogs "github.com/khanzadimahdi/testproject/application/runner/worker/task/shipLogs"
 	workerstoptask "github.com/khanzadimahdi/testproject/application/runner/worker/task/stopTask"
 	"github.com/khanzadimahdi/testproject/domain"
 	containerContract "github.com/khanzadimahdi/testproject/domain/runner/container"
+	networkContract "github.com/khanzadimahdi/testproject/domain/runner/network"
 	nodeContract "github.com/khanzadimahdi/testproject/domain/runner/node"
+	stackEvents "github.com/khanzadimahdi/testproject/domain/runner/stack/events"
 	taskEvents "github.com/khanzadimahdi/testproject/domain/runner/task/events"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	infraHealth "github.com/khanzadimahdi/testproject/infrastructure/health"
@@ -130,6 +137,7 @@ func (p *workerProvider) Terminate(ctx context.Context) error {
 func workerConsoleCommand(
 	natsConnection *nats.Conn,
 	containerManager containerContract.Manager,
+	networkManager networkContract.Manager,
 	nodeManager nodeContract.Manager,
 	asyncProduceConsumer domain.ProduceConsumer,
 	validator domain.Validator,
@@ -145,11 +153,25 @@ func workerConsoleCommand(
 		return nil, err
 	}
 
+	var workerConfigs *configs.RunnerWorker
+	if err := iocContainer.Resolve(&workerConfigs); err != nil {
+		return nil, err
+	}
+
+	// the network standalone isolated containers share is this node's to make,
+	// and it has to be there before the first container tries to join it.
+	if err := networkManager.EnsureIsolatedNetwork(context.Background()); err != nil {
+		return nil, err
+	}
+
 	// tasks
 	getTasksUseCase := workergettasks.NewUseCase(containerManager, nodeName)
-	runTaskUseCase := workerruntask.NewUseCase(containerManager, validator, nodeName)
+	runTaskUseCase := workerruntask.NewUseCase(containerManager, networkManager, validator, nodeName)
 	stopTaskUseCase := workerstoptask.NewUseCase(containerManager, validator)
+	killTaskUseCase := workerkilltask.NewUseCase(containerManager, validator)
+	restartTaskUseCase := workerrestarttask.NewUseCase(containerManager, validator)
 	deleteTaskUseCase := workerDeleteTask.NewUseCase(containerManager, validator)
+	attachTaskUseCase := workerAttachTask.NewUseCase(containerManager, validator)
 
 	// the worker talks to no database, so messaging is its only dependency
 	checkHealthUseCase := checkhealth.NewUseCase(
@@ -164,6 +186,12 @@ func workerConsoleCommand(
 	mux.Handle("GET /api/tasks", workerTaskAPI.NewIndexHandler(getTasksUseCase))
 	mux.Handle("POST /api/tasks/run", workerTaskAPI.NewRunHandler(runTaskUseCase))
 	mux.Handle("POST /api/tasks/{uuid}/stop", workerTaskAPI.NewStopHandler(stopTaskUseCase))
+	mux.Handle("POST /api/tasks/{uuid}/kill", workerTaskAPI.NewKillHandler(killTaskUseCase))
+	mux.Handle("POST /api/tasks/{uuid}/restart", workerTaskAPI.NewRestartHandler(restartTaskUseCase))
+
+	// a terminal inside a container. Only the manager reaches this, and it is
+	// what decides who may open one.
+	mux.Handle("GET /api/tasks/{uuid}/attach", workerTaskAPI.NewAttachHandler(attachTaskUseCase, logger))
 
 	rateLimited, err := middleware.NewRateLimitMiddleware(mux, 600, 1*time.Minute)
 	if err != nil {
@@ -197,7 +225,10 @@ func workerConsoleCommand(
 	subscribers := map[string]domain.MessageHandler{
 		taskEvents.TaskScheduledName:         workerruntask.NewTaskScheduled(runTaskUseCase, nodeName),
 		taskEvents.TaskStoppageRequestedName: workerstoptask.NewStoppageTaskHandler(stopTaskUseCase),
+		taskEvents.TaskKillRequestedName:     workerkilltask.NewKillTaskHandler(killTaskUseCase),
+		taskEvents.TaskRestartRequestedName:  workerrestarttask.NewRestartTaskHandler(restartTaskUseCase),
 		taskEvents.TaskDeletedName:           workerDeleteTask.NewDeleteTaskHandler(deleteTaskUseCase),
+		stackEvents.StackDeletedName:         workerDeleteStack.NewStackDeletedHandler(networkManager, nodeName, logger),
 	}
 
 	// worker subscribers
@@ -209,14 +240,22 @@ func workerConsoleCommand(
 
 	// worker heartbeat
 	if err := iocContainer.Bind(func() *workerHeartbeat.UseCase {
-		return workerHeartbeat.NewUseCase(asyncProduceConsumer, nodeManager, nodeName)
+		return workerHeartbeat.NewUseCase(asyncProduceConsumer, nodeManager, nodeName, workerConfigs.APIAddress)
 	}, provider.Singleton()); err != nil {
 		return nil, err
 	}
 
 	// task heartbeat
 	if err := iocContainer.Bind(func() *workerTaskHeartbeat.UseCase {
-		return workerTaskHeartbeat.NewUseCase(containerManager, asyncProduceConsumer, nodeName, logger)
+		return workerTaskHeartbeat.NewUseCase(containerManager, asyncProduceConsumer, nodeName, workerConfigs.AdvertiseHost, logger)
+	}, provider.Singleton()); err != nil {
+		return nil, err
+	}
+
+	// log shipping, which is what makes a long-running container's output
+	// outlive the container.
+	if err := iocContainer.Bind(func() *workerShipLogs.UseCase {
+		return workerShipLogs.NewUseCase(containerManager, asyncProduceConsumer, nodeName, logger)
 	}, provider.Singleton()); err != nil {
 		return nil, err
 	}

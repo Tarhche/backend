@@ -98,6 +98,10 @@ func testGateway(t *testing.T, options ...Option) (*Gateway, *produced) {
 			_ = replyHandler.Handle(context.Background(), args.Get(2).([]byte))
 		}).Return(nil)
 
+	// a session that ends tells the producers of whatever it still had open
+	// that nobody is listening any more.
+	publishSubscriberMock.On("Publish", mock.Anything, "websocket_"+cancellationsSubject, mock.Anything).Return(nil).Maybe()
+
 	produceConsumerMock.On("Consume", mock.Anything, "websocket_"+testSubject, &messageHandlerMock).Return(nil)
 	produceConsumerMock.On("Produce", mock.Anything, "websocket_"+testSubject, mock.Anything).
 		Run(func(args mock.Arguments) { requests.record(args.Get(2).([]byte)) }).
@@ -181,6 +185,7 @@ func TestGateway(t *testing.T) {
 		expected := errors.New("the broker is unreachable")
 
 		publishSubscriberMock.On("Subscribe", mock.Anything, "websocket_replies", mock.Anything).Return(nil)
+		publishSubscriberMock.On("Publish", mock.Anything, "websocket_"+cancellationsSubject, mock.Anything).Return(nil).Maybe()
 		produceConsumerMock.On("Consume", mock.Anything, "websocket_"+testSubject, &messageHandlerMock).Return(expected)
 
 		g, err := New(&produceConsumerMock, &publishSubscriberMock, echoTranslator(), "replies", discardLogger())

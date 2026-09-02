@@ -12,6 +12,7 @@ import (
 
 	workerHeartbeat "github.com/khanzadimahdi/testproject/application/runner/worker/beatHeart"
 	taskHeartbeat "github.com/khanzadimahdi/testproject/application/runner/worker/task/beatHeart"
+	shipLogs "github.com/khanzadimahdi/testproject/application/runner/worker/task/shipLogs"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers"
@@ -22,6 +23,11 @@ const (
 	serveName               string = "serve-runner-worker"
 	workerHeartbeatInterval        = 1 * time.Second
 	taskHeartbeatInterval          = 300 * time.Millisecond
+
+	// logShippingInterval is how often the followers are brought in line with
+	// what is running. A container that has just started is followed within
+	// this long, and one that has gone is let go.
+	logShippingInterval = 1 * time.Second
 )
 
 type ServeCommand struct {
@@ -31,6 +37,7 @@ type ServeCommand struct {
 	consumers       map[string]domain.MessageHandler
 	taskHeartBeat   *taskHeartbeat.UseCase
 	workerHeartBeat *workerHeartbeat.UseCase
+	logShipper      *shipLogs.UseCase
 	logger          *slog.Logger
 }
 
@@ -112,6 +119,10 @@ func (c *ServeCommand) Boot(ctx context.Context, container provider.Container) e
 		return err
 	}
 
+	if err := container.Resolve(&c.logShipper); err != nil {
+		return err
+	}
+
 	if err := container.Resolve(&c.logger, provider.WithParams("runner-worker-"+c.configs.Name)); err != nil {
 		return err
 	}
@@ -165,6 +176,7 @@ func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 
 	go c.tasksHeartbeat(ctx)
 	go c.workerHeartbeat(ctx)
+	go c.shipLogs(ctx)
 
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		c.logger.ErrorContext(ctx, "server failed", "error", err)
@@ -203,6 +215,26 @@ func (c *ServeCommand) tasksHeartbeat(ctx context.Context) {
 			err := c.taskHeartBeat.Execute(ctx)
 			if err != nil {
 				c.logger.ErrorContext(ctx, "task heartbeat failed", "error", err)
+			}
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+// shipLogs keeps a follower on every long-running container this node holds, so
+// what they write reaches the manager as it is written.
+func (c *ServeCommand) shipLogs(ctx context.Context) {
+	defer c.logShipper.Close()
+
+	ticker := time.NewTicker(logShippingInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			if err := c.logShipper.Execute(ctx); err != nil {
+				c.logger.ErrorContext(ctx, "log shipping failed", "error", err)
 			}
 		case <-ctx.Done():
 			return

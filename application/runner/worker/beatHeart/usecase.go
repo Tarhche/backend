@@ -14,17 +14,24 @@ type UseCase struct {
 	producer    domain.Producer
 	nodeManager node.Manager
 	nodeName    string
+
+	// apiAddress is where this node's own HTTP API can be reached. The manager
+	// proxies attach and log streams there, so it has to be an address the
+	// manager can dial.
+	apiAddress string
 }
 
 func NewUseCase(
 	producer domain.Producer,
 	nodeManager node.Manager,
 	nodeName string,
+	apiAddress string,
 ) *UseCase {
 	return &UseCase{
 		producer:    producer,
 		nodeManager: nodeManager,
 		nodeName:    nodeName,
+		apiAddress:  apiAddress,
 	}
 }
 
@@ -35,10 +42,11 @@ func (h *UseCase) Execute(ctx context.Context) error {
 	}
 
 	heartbeat := events.Heartbeat{
-		Name:  h.nodeName,
-		Role:  node.WorkerRole,
-		Stats: nodeStats,
-		At:    time.Now(),
+		Name:       h.nodeName,
+		Role:       node.WorkerRole,
+		APIAddress: h.apiAddress,
+		Stats:      nodeStats,
+		At:         time.Now(),
 	}
 
 	payload, err := json.Marshal(heartbeat)
