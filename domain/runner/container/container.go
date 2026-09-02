@@ -7,7 +7,6 @@ import (
 
 	"github.com/khanzadimahdi/testproject/domain/runner/network"
 	"github.com/khanzadimahdi/testproject/domain/runner/port"
-	"github.com/khanzadimahdi/testproject/domain/runner/task"
 )
 
 // Container represents a container specification
@@ -77,7 +76,6 @@ type Manager interface {
 	Logs(ctx context.Context, containerUUID string, writer io.Writer) error
 	StreamLogs(ctx context.Context, containerUUID string, since time.Time, emit func(LogLine) error) error
 	Exec(ctx context.Context, containerUUID string, options ExecOptions) (ExecSession, error)
-	EvaluateTaskState(status Status) task.State
 }
 
 const (

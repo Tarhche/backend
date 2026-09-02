@@ -39,7 +39,7 @@ type UseCase struct {
 	logger           *slog.Logger
 
 	lock      sync.Mutex
-	following map[string]context.CancelFunc
+	followers map[string]context.CancelFunc
 }
 
 func NewUseCase(
@@ -53,7 +53,7 @@ func NewUseCase(
 		producer:         producer,
 		nodeName:         nodeName,
 		logger:           logger,
-		following:        make(map[string]context.CancelFunc),
+		followers:        make(map[string]context.CancelFunc),
 	}
 }
 
@@ -94,24 +94,32 @@ func (uc *UseCase) Close() {
 	uc.releaseAbsent(nil)
 }
 
+// following reports how many containers this node is currently following.
+func (uc *UseCase) following() int {
+	uc.lock.Lock()
+	defer uc.lock.Unlock()
+
+	return len(uc.followers)
+}
+
 // follow starts one follower for a container, if there is not one already.
 func (uc *UseCase) follow(ctx context.Context, containerID string, taskUUID string) {
 	uc.lock.Lock()
 	defer uc.lock.Unlock()
 
-	if _, following := uc.following[containerID]; following {
+	if _, already := uc.followers[containerID]; already {
 		return
 	}
 
 	// detached from the call that discovered the container: a follower lives
 	// for as long as the container does, not for the length of one sweep.
 	followerCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	uc.following[containerID] = cancel
+	uc.followers[containerID] = cancel
 
 	go func() {
 		defer func() {
 			uc.lock.Lock()
-			delete(uc.following, containerID)
+			delete(uc.followers, containerID)
 			uc.lock.Unlock()
 		}()
 
@@ -122,8 +130,8 @@ func (uc *UseCase) follow(ctx context.Context, containerID string, taskUUID stri
 // releaseAbsent stops following whatever is no longer present.
 func (uc *UseCase) releaseAbsent(present map[string]struct{}) {
 	uc.lock.Lock()
-	cancels := make([]context.CancelFunc, 0, len(uc.following))
-	for containerID, cancel := range uc.following {
+	cancels := make([]context.CancelFunc, 0, len(uc.followers))
+	for containerID, cancel := range uc.followers {
 		if _, still := present[containerID]; !still {
 			cancels = append(cancels, cancel)
 		}
@@ -146,12 +154,19 @@ func (uc *UseCase) stream(ctx context.Context, containerID string, taskUUID stri
 	for ctx.Err() == nil {
 		batch := newBatch(uc, containerID, taskUUID)
 
+		// a batch is sent when it is full or when it has waited long enough,
+		// and the waiting has to be its own clock: a container that writes a
+		// burst and then goes quiet would otherwise hold its last lines until
+		// it happened to write again.
+		sending := uc.sendPeriodically(ctx, batch)
+
 		err := uc.containerManager.StreamLogs(ctx, containerID, since, func(line container.LogLine) error {
 			since = line.At
 
 			return batch.add(ctx, line)
 		})
 
+		sending()
 		batch.flush(ctx)
 
 		if ctx.Err() != nil {
@@ -170,14 +185,38 @@ func (uc *UseCase) stream(ctx context.Context, containerID string, taskUUID stri
 	}
 }
 
+// sendPeriodically keeps sending whatever a batch has gathered, until the
+// returned function is called.
+func (uc *UseCase) sendPeriodically(ctx context.Context, b *batch) func() {
+	ticking, stop := context.WithCancel(ctx)
+
+	go func() {
+		ticker := time.NewTicker(batchWait)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				b.flush(ctx)
+			case <-ticking.Done():
+				return
+			}
+		}
+	}()
+
+	return stop
+}
+
 // batch gathers lines so a chatty container costs one message rather than one
-// per line.
+// per line. It is filled by the goroutine reading the container's output and
+// emptied by that one or by the clock, so it holds a lock of its own.
 type batch struct {
 	useCase     *UseCase
 	containerID string
 	taskUUID    string
-	lines       []events.LogLine
-	oldest      time.Time
+
+	lock  sync.Mutex
+	lines []events.LogLine
 }
 
 func newBatch(useCase *UseCase, containerID string, taskUUID string) *batch {
@@ -190,25 +229,30 @@ func newBatch(useCase *UseCase, containerID string, taskUUID string) *batch {
 }
 
 func (b *batch) add(ctx context.Context, line container.LogLine) error {
-	if len(b.lines) == 0 {
-		b.oldest = time.Now()
-	}
-
+	b.lock.Lock()
 	b.lines = append(b.lines, events.LogLine{
 		Stream:  uint8(line.Stream),
 		Content: line.Content,
 		At:      line.At,
 	})
+	full := len(b.lines) >= batchSize
+	b.lock.Unlock()
 
-	if len(b.lines) >= batchSize || time.Since(b.oldest) >= batchWait {
+	if full {
 		b.flush(ctx)
 	}
 
 	return ctx.Err()
 }
 
+// flush sends what has been gathered, if anything has.
 func (b *batch) flush(ctx context.Context) {
-	if len(b.lines) == 0 {
+	b.lock.Lock()
+	lines := b.lines
+	b.lines = make([]events.LogLine, 0, batchSize)
+	b.lock.Unlock()
+
+	if len(lines) == 0 {
 		return
 	}
 
@@ -216,10 +260,8 @@ func (b *batch) flush(ctx context.Context) {
 		UUID:          b.taskUUID,
 		ContainerUUID: b.containerID,
 		NodeName:      b.useCase.nodeName,
-		Lines:         b.lines,
+		Lines:         lines,
 	}
-
-	b.lines = make([]events.LogLine, 0, batchSize)
 
 	payload, err := json.Marshal(event)
 	if err != nil {

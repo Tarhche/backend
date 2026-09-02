@@ -24,24 +24,49 @@ func networkMode(attachments []network.Attachment) containerTypes.NetworkMode {
 // endpointsConfig carries the names a container answers to on the network it is
 // created on, so its neighbours reach it by service name.
 func endpointsConfig(attachments []network.Attachment) *networkTypes.NetworkingConfig {
-	if len(attachments) == 0 || len(attachments[0].Aliases) == 0 {
+	if len(attachments) == 0 {
+		return nil
+	}
+
+	settings := endpointSettings(attachments[0])
+	if settings == nil {
 		return nil
 	}
 
 	return &networkTypes.NetworkingConfig{
 		EndpointsConfig: map[string]*networkTypes.EndpointSettings{
-			attachments[0].Name: {Aliases: attachments[0].Aliases},
+			attachments[0].Name: settings,
 		},
 	}
+}
+
+// gatewayPriority puts the network that routes out ahead of the ones that do
+// not, so a container on several of them has its default route through the one
+// that can actually carry traffic off the node.
+const gatewayPriority = 100
+
+// endpointSettings is what a container is joined to one network with, or nil
+// when there is nothing to say about it.
+func endpointSettings(attachment network.Attachment) *networkTypes.EndpointSettings {
+	if len(attachment.Aliases) == 0 && !attachment.Gateway {
+		return nil
+	}
+
+	settings := &networkTypes.EndpointSettings{Aliases: attachment.Aliases}
+	if attachment.Gateway {
+		settings.GwPriority = gatewayPriority
+	}
+
+	return settings
 }
 
 // connectRemainingNetworks joins the container to everything beyond the network
 // it was created on.
 func (m *DockerManager) connectRemainingNetworks(ctx context.Context, containerID string, attachments []network.Attachment) error {
 	for _, attachment := range attachments[min(1, len(attachments)):] {
-		settings := &networkTypes.EndpointSettings{}
-		if len(attachment.Aliases) > 0 {
-			settings.Aliases = attachment.Aliases
+		settings := endpointSettings(attachment)
+		if settings == nil {
+			settings = &networkTypes.EndpointSettings{}
 		}
 
 		if err := m.client.NetworkConnect(ctx, attachment.Name, containerID, settings); err != nil {

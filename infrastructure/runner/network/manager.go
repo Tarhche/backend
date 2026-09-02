@@ -65,11 +65,16 @@ func (m *Manager) RemoveStackNetwork(ctx context.Context, stackSlug string) erro
 	return nil
 }
 
-// ensure creates an internal bridge, if one of that name is not there already.
-// It is internal, so containers on it reach each other and the runner still
-// publishes their ports — the host is attached to the bridge — while nothing on
-// it can route out. A container that is meant to reach the internet joins the
-// default bridge as well.
+// ensure creates the bridge containers are isolated on, if one of that name is
+// not there already.
+//
+// The isolation comes from having no masquerade rule rather than from docker's
+// own internal flag. Both stop a container reaching the internet — without
+// masquerading its packets leave carrying a private address and nothing comes
+// back — but an internal network cannot have its ports published at all, and
+// publishing them is the point. With masquerading off, the host still reaches
+// the containers on the bridge, so a published port works and the containers
+// still reach each other, while none of them can call out.
 func (m *Manager) ensure(ctx context.Context, name string) error {
 	existing, err := m.client.NetworkList(ctx, networkTypes.ListOptions{
 		Filters: filters.NewArgs(filters.Arg("name", name)),
@@ -85,8 +90,8 @@ func (m *Manager) ensure(ctx context.Context, name string) error {
 	}
 
 	if _, err := m.client.NetworkCreate(ctx, name, networkTypes.CreateOptions{
-		Driver:   "bridge",
-		Internal: true,
+		Driver:  "bridge",
+		Options: map[string]string{"com.docker.network.bridge.enable_ip_masquerade": "false"},
 	}); err != nil {
 		// another worker on the same daemon may have won the race, which
 		// leaves exactly the network this was asking for.

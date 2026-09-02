@@ -169,8 +169,11 @@ func (uc *UseCase) HandleInput(ctx context.Context, data []byte) error {
 
 	attachment, ok := uc.terminals.get(input.ID)
 	if !ok {
-		// the terminal belongs to another replica, which has it and will write
-		// this itself.
+		// the terminal has ended, or was opened on another replica. Either way
+		// there is nothing here to write to, and redelivering would not find
+		// it.
+		uc.logger.WarnContext(ctx, "input for a terminal this replica does not hold", "streamID", input.ID)
+
 		return nil
 	}
 

@@ -3,6 +3,7 @@ package runTask
 import (
 	"context"
 	"encoding/json"
+	"slices"
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
@@ -34,16 +35,28 @@ func (uc *TaskRan) Handle(ctx context.Context, data []byte) error {
 		return err
 	}
 
-	// the endpoints are worth recording even when the state has not moved: a
-	// restarted container is published on new host ports.
+	endpoints := toEndpoints(taskRan.Endpoints)
+
+	// a running container heartbeats several times a second, and each beat
+	// reaches here. Only what has actually changed is worth a write: the
+	// endpoints, because a restarted container comes back on new host ports,
+	// and the state, the first time it comes up.
+	changed := t.NodeName != taskRan.NodeName ||
+		t.ContainerID != taskRan.ContainerUUID ||
+		!slices.Equal(t.Endpoints, endpoints)
+
 	t.NodeName = taskRan.NodeName
 	t.ContainerID = taskRan.ContainerUUID
-	t.Endpoints = toEndpoints(taskRan.Endpoints)
+	t.Endpoints = endpoints
 
-	destinationState := task.Running
-	if t.State != destinationState {
-		t.State = destinationState
+	if t.State != task.Running {
+		t.State = task.Running
 		t.StartedAt = taskRan.StartedAt
+		changed = true
+	}
+
+	if !changed {
+		return nil
 	}
 
 	_, err = uc.taskRepository.Save(ctx, &t)

@@ -40,7 +40,14 @@ func newNodeProxy(tasks *gettask.UseCase, nodes *managerGetNode.UseCase, path st
 
 	p.proxy = &httputil.ReverseProxy{
 		Rewrite: func(r *httputil.ProxyRequest) {
-			r.SetURL(r.In.Context().Value(upstreamKey{}).(*url.URL))
+			upstream := r.In.Context().Value(upstreamKey{}).(*url.URL)
+
+			r.SetURL(&url.URL{Scheme: upstream.Scheme, Host: upstream.Host})
+
+			// set after SetURL, which joins the target's path onto the inbound
+			// one. The node is asked for its own route, not for the manager's.
+			r.Out.URL.Path = upstream.Path
+			r.Out.URL.RawQuery = r.In.URL.RawQuery
 			r.Out.Host = r.In.Host
 		},
 		ErrorHandler: func(rw http.ResponseWriter, _ *http.Request, err error) {

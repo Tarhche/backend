@@ -264,3 +264,51 @@ func TestStackValidate(t *testing.T) {
 		assert.Equal(t, domain.ValidationErrors{"services": "too_many_services"}, (&Stack{Name: "big", Services: services}).Validate())
 	})
 }
+
+func TestServiceRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	// a specification is read by the service the browser talks to and passed on
+	// to the one that runs it, so it has to survive being written back out.
+	var read Service
+	require.NoError(t, json.Unmarshal([]byte(`{
+		"image": "nginx:1.27-alpine",
+		"command": "nginx -g 'daemon off;'",
+		"environment": {"TZ": "UTC"},
+		"ports": ["8080:80", 443],
+		"network_mode": "public",
+		"restart": "always",
+		"deploy": {"resources": {"limits": {"cpus": "0.5", "memory": "256M"}}}
+	}`), &read))
+
+	written, err := json.Marshal(read)
+	require.NoError(t, err)
+
+	var back Service
+	require.NoError(t, json.Unmarshal(written, &back))
+
+	assert.Equal(t, read, back)
+	assert.Equal(t, []port.Port{80, 443}, back.ExposedPorts())
+	assert.Equal(t, network.PolicyPublic, back.NetworkPolicy())
+	assert.Equal(t, task.ResourceLimits{Cpu: 0.5, Memory: 256 << 20, Disk: 7},
+		back.ResourceLimits(task.ResourceLimits{Disk: 7}))
+}
+
+func TestStackRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	var read Stack
+	require.NoError(t, json.Unmarshal([]byte(`{
+		"name": "myapp",
+		"services": {"web": {"image": "nginx:alpine", "ports": ["80"]}}
+	}`), &read))
+
+	written, err := json.Marshal(read)
+	require.NoError(t, err)
+
+	var back Stack
+	require.NoError(t, json.Unmarshal(written, &back))
+
+	assert.Equal(t, read, back)
+	assert.Empty(t, back.Validate())
+}

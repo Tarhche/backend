@@ -83,7 +83,17 @@ type Port struct {
 // Ports is a compose ports list.
 type Ports []Port
 
-var _ json.Unmarshaler = &Port{}
+var (
+	_ json.Unmarshaler = &Port{}
+	_ json.Marshaler   = Port{}
+)
+
+// MarshalJSON writes a port back as the number it is, so a specification that
+// was read in one place and passed on to another survives the journey. Without
+// it a port would go out as the struct it is held in and come back as nothing.
+func (p Port) MarshalJSON() ([]byte, error) {
+	return json.Marshal(uint16(p.Container))
+}
 
 func (p *Port) UnmarshalJSON(data []byte) error {
 	var number uint16

@@ -65,8 +65,8 @@ var stateTransitionMap = map[State][]State{
 	Running:    {Stopping, Restarting, Completed, Failed},
 	Stopping:   {Stopped, Completed, Failed},
 	Stopped:    {Scheduled, Restarting},
-	Completed:  {Scheduled},
-	Failed:     {Scheduled},
+	Completed:  {Scheduled, Restarting},
+	Failed:     {Scheduled, Restarting},
 	Restarting: {Running, Failed},
 }
 

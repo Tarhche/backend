@@ -22,7 +22,6 @@ import (
 
 	"github.com/khanzadimahdi/testproject/domain/runner/container"
 	"github.com/khanzadimahdi/testproject/domain/runner/port"
-	"github.com/khanzadimahdi/testproject/domain/runner/task"
 	"github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
 )
 
@@ -408,25 +407,6 @@ func (m *DockerManager) Logs(ctx context.Context, containerUUID string, writer i
 	_, err = stdcopy.StdCopy(writer, writer, readCloser)
 
 	return trace.RecordError(span, err)
-}
-
-func (m *DockerManager) EvaluateTaskState(status container.Status) task.State {
-	switch status {
-	case container.StatusCreated:
-		return task.Scheduled
-	case container.StatusRunning:
-		return task.Running
-	case container.StatusRestarting:
-		return task.Stopping
-	case container.StatusPaused:
-		return task.Stopped
-	case container.StatusDead:
-		return task.Failed
-	case container.StatusExited, container.StatusRemoving:
-		return task.Completed
-	default:
-		return task.Failed
-	}
 }
 
 func convertPortSet(ports port.PortSet) nat.PortSet {

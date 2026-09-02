@@ -168,7 +168,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		assert.Equal(t, []network.Attachment{
 			{Name: network.IsolatedNetworkName},
-			{Name: network.PublicNetworkName},
+			{Name: network.PublicNetworkName, Gateway: true},
 		}, created.Networks)
 	})
 

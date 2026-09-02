@@ -10,7 +10,6 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/runner/container"
 	"github.com/khanzadimahdi/testproject/domain/runner/network"
 	"github.com/khanzadimahdi/testproject/domain/runner/node"
-	"github.com/khanzadimahdi/testproject/domain/runner/task"
 )
 
 // MockContainerManager stands in for the docker daemon.
@@ -84,10 +83,6 @@ func (m *MockContainerManager) Exec(ctx context.Context, containerUUID string, o
 	session, _ := args.Get(0).(container.ExecSession)
 
 	return session, args.Error(1)
-}
-
-func (m *MockContainerManager) EvaluateTaskState(status container.Status) task.State {
-	return m.Called(status).Get(0).(task.State)
 }
 
 // MockNetworkManager stands in for the networks the runner owns.

@@ -9,10 +9,10 @@ const (
 	// and a service under it cannot talk to the rest of its stack either.
 	PolicyNone Policy = "none"
 
-	// PolicyIsolated puts the container on an internal network. It reaches the
-	// other containers there — the rest of its stack, for a service — and the
-	// runner publishes its ports, but the network has no route out, so the
-	// internet is unreachable.
+	// PolicyIsolated puts the container on a network that does not route out.
+	// It reaches the other containers there — the rest of its stack, for a
+	// service — and the runner publishes its ports, but nothing on that network
+	// can reach the internet.
 	PolicyIsolated Policy = "isolated"
 
 	// PolicyPublic is PolicyIsolated plus the default bridge, which routes out
@@ -51,6 +51,13 @@ func StackNetworkName(stackSlug string) string {
 type Attachment struct {
 	Name    string
 	Aliases []string
+
+	// Gateway marks the network the container's default route goes through. A
+	// container on more than one network has to be told which, because only
+	// one of them routes out — reaching its own stack and reaching the internet
+	// are different networks, and the wrong default is a container that cannot
+	// call out at all.
+	Gateway bool
 }
 
 // Attachments resolves the networks a container joins.
@@ -75,7 +82,7 @@ func Attachments(policy Policy, stackSlug string, serviceName string) []Attachme
 	}
 
 	if policy == PolicyPublic {
-		return []Attachment{private, {Name: PublicNetworkName}}
+		return []Attachment{private, {Name: PublicNetworkName, Gateway: true}}
 	}
 
 	return []Attachment{private}

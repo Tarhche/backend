@@ -52,7 +52,7 @@ func TestAttachments(t *testing.T) {
 		{
 			name:   "a standalone public container also joins the bridge, which is what routes out",
 			policy: PolicyPublic,
-			want:   []Attachment{{Name: IsolatedNetworkName}, {Name: PublicNetworkName}},
+			want:   []Attachment{{Name: IsolatedNetworkName}, {Name: PublicNetworkName, Gateway: true}},
 		},
 		{
 			name:   "a container with no network joins nothing",
@@ -73,7 +73,7 @@ func TestAttachments(t *testing.T) {
 			serviceName: "web",
 			want: []Attachment{
 				{Name: "runner-stack-myapp-xkfqz", Aliases: []string{"web"}},
-				{Name: PublicNetworkName},
+				{Name: PublicNetworkName, Gateway: true},
 			},
 		},
 		{
@@ -97,6 +97,30 @@ func TestAttachments(t *testing.T) {
 
 			assert.Equal(t, tt.want, Attachments(tt.policy, tt.stackSlug, tt.serviceName))
 		})
+	}
+}
+
+func TestAttachmentsGateway(t *testing.T) {
+	t.Parallel()
+
+	// only one network can provide the default route, and it has to be the one
+	// that routes out — the private networks deliberately do not.
+	for _, stackSlug := range []string{"", "myapp-xkfqz"} {
+		attachments := Attachments(PolicyPublic, stackSlug, "web")
+
+		var gateways []string
+		for _, attachment := range attachments {
+			if attachment.Gateway {
+				gateways = append(gateways, attachment.Name)
+			}
+		}
+
+		assert.Equal(t, []string{PublicNetworkName}, gateways)
+	}
+
+	// a container that cannot reach the internet needs no default route at all.
+	for _, attachment := range Attachments(PolicyIsolated, "myapp-xkfqz", "web") {
+		assert.False(t, attachment.Gateway)
 	}
 }
 

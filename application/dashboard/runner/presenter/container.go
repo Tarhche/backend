@@ -91,7 +91,10 @@ func NewEndpoints(t task.Task, ingressDomain string) []Endpoint {
 	endpoints := make([]Endpoint, 0, len(t.Endpoints))
 
 	for i, e := range t.Endpoints {
-		if e.HostPort == 0 || len(t.Slug) == 0 {
+		// the runner reports only the ports it actually published, and keeps
+		// the node and host port behind them to itself, so there is nothing
+		// here to filter on beyond having a name to serve them under.
+		if len(t.Slug) == 0 {
 			continue
 		}
 

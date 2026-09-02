@@ -57,7 +57,7 @@ func (uc *UseCase) Execute(ctx context.Context) error {
 			Name:          c.Labels[container.TaskNameLabelKey],
 			Image:         c.Image,
 			ContainerUUID: c.ID,
-			State:         int(uc.containerManager.EvaluateTaskState(c.Status)),
+			State:         int(container.EvaluateTaskState(c.Status, kindOf(&c))),
 			NodeName:      uc.nodeName,
 			Endpoints:     uc.endpoints(&c),
 			Logs:          uc.logs(ctx, &c),
@@ -77,6 +77,17 @@ func (uc *UseCase) Execute(ctx context.Context) error {
 	return nil
 }
 
+// kindOf reads what a container is running from the label it was created with.
+// A container from before there were kinds is a job, which is what every one of
+// them was.
+func kindOf(c *container.Container) task.Kind {
+	if kind := task.Kind(c.Labels[container.TaskKindLabelKey]); kind.IsValid() {
+		return kind
+	}
+
+	return task.DefaultKind
+}
+
 // logs collects a container's whole output for the heartbeat to carry.
 //
 // Only a one-shot job's log travels this way: it is what the caller waiting on
@@ -84,7 +95,7 @@ func (uc *UseCase) Execute(ctx context.Context) error {
 // heartbeat carry its entire history, so its output is streamed line by line
 // and kept by the manager instead.
 func (uc *UseCase) logs(ctx context.Context, c *container.Container) []byte {
-	if task.Kind(c.Labels[container.TaskKindLabelKey]) == task.KindService {
+	if kindOf(c) == task.KindService {
 		return nil
 	}
 
