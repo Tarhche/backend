@@ -368,6 +368,74 @@ definitions:
           type: string
         type: array
     type: object
+  getContainer.Response:
+    properties:
+      command:
+        items:
+          type: string
+        type: array
+      created_at:
+        type: string
+      endpoints:
+        items:
+          $ref: '#/definitions/presenter.Endpoint'
+        type: array
+      entrypoint:
+        items:
+          type: string
+        type: array
+      environment:
+        items:
+          type: string
+        type: array
+      finished_at:
+        type: string
+      image:
+        type: string
+      name:
+        type: string
+      resource_limits:
+        $ref: '#/definitions/presenter.Limits'
+      service_name:
+        type: string
+      slug:
+        type: string
+      stack_uuid:
+        type: string
+      started_at:
+        type: string
+      state:
+        type: string
+      uuid:
+        type: string
+      working_dir:
+        type: string
+    type: object
+  getContainerLogs.LogResponse:
+    properties:
+      at:
+        type: string
+      content:
+        type: string
+      stream:
+        type: string
+    type: object
+  getContainerLogs.Response:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/getContainerLogs.LogResponse'
+        type: array
+    type: object
+  getContainers.Response:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/presenter.Container'
+        type: array
+      pagination:
+        $ref: '#/definitions/presenter.Pagination'
+    type: object
   getMessage.Response:
     properties:
       body:
@@ -417,63 +485,6 @@ definitions:
         type: integer
       total_pages:
         type: integer
-    type: object
-  getNode.Response:
-    properties:
-      created_at:
-        type: string
-      last_heartbeat_at:
-        type: string
-      name:
-        type: string
-      stats:
-        $ref: '#/definitions/getNode.Stats'
-    type: object
-  getNode.Stats:
-    properties:
-      block_input:
-        type: integer
-      block_output:
-        type: integer
-      cpu_percent:
-        type: number
-      memory_limit:
-        type: integer
-      memory_percent:
-        type: number
-      memory_usage:
-        type: integer
-      network_input:
-        type: integer
-      network_output:
-        type: integer
-      pids:
-        type: integer
-    type: object
-  getNodes.NodeResponse:
-    properties:
-      created_at:
-        type: string
-      last_heartbeat_at:
-        type: string
-      name:
-        type: string
-    type: object
-  getNodes.Pagination:
-    properties:
-      current_page:
-        type: integer
-      total_pages:
-        type: integer
-    type: object
-  getNodes.Response:
-    properties:
-      items:
-        items:
-          $ref: '#/definitions/getNodes.NodeResponse'
-        type: array
-      pagination:
-        $ref: '#/definitions/getNodes.Pagination'
     type: object
   getUserBookmarks.Response:
     properties:
@@ -793,64 +804,6 @@ definitions:
         type: string
       uuid:
         type: string
-    type: object
-  gettask.Response:
-    properties:
-      attach_stderr:
-        type: boolean
-      attach_stdin:
-        type: boolean
-      attach_stdout:
-        type: boolean
-      auto_remove:
-        type: boolean
-      command:
-        items:
-          type: string
-        type: array
-      container_id:
-        type: string
-      container_logs:
-        items:
-          type: integer
-        type: array
-      created_at:
-        type: string
-      entrypoint:
-        items:
-          type: string
-        type: array
-      environment:
-        items:
-          type: string
-        type: array
-      finished_at:
-        type: string
-      health_check:
-        type: string
-      image:
-        type: string
-      name:
-        type: string
-      owner_uuid:
-        type: string
-      restart_count:
-        type: integer
-      restart_policy:
-        type: string
-      started_at:
-        type: string
-      state:
-        type: string
-      uuid:
-        type: string
-    type: object
-  gettasks.Pagination:
-    properties:
-      current_page:
-        type: integer
-      total_pages:
-        type: integer
     type: object
   getuser.Response:
     properties:
@@ -1199,6 +1152,60 @@ definitions:
       name:
         type: string
     type: object
+  github_com_khanzadimahdi_testproject_application_dashboard_runner_stack_getStack.Response:
+    properties:
+      created_at:
+        type: string
+      name:
+        type: string
+      services:
+        items:
+          $ref: '#/definitions/presenter.Container'
+        type: array
+      slug:
+        type: string
+      state:
+        type: string
+      uuid:
+        type: string
+    type: object
+  github_com_khanzadimahdi_testproject_application_dashboard_runner_stack_getStacks.Response:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/presenter.Stack'
+        type: array
+      pagination:
+        $ref: '#/definitions/presenter.Pagination'
+    type: object
+  github_com_khanzadimahdi_testproject_application_dashboard_runner_stack_runStack.Request:
+    properties:
+      name:
+        type: string
+      services:
+        additionalProperties:
+          $ref: '#/definitions/spec.Service'
+        type: object
+    type: object
+  github_com_khanzadimahdi_testproject_application_dashboard_runner_stack_runStack.Response:
+    properties:
+      created_at:
+        type: string
+      errors:
+        $ref: '#/definitions/domain.ValidationErrors'
+      name:
+        type: string
+      services:
+        items:
+          $ref: '#/definitions/presenter.Container'
+        type: array
+      slug:
+        type: string
+      state:
+        type: string
+      uuid:
+        type: string
+    type: object
   github_com_khanzadimahdi_testproject_application_language_getLanguages.Response:
     properties:
       default_language:
@@ -1214,209 +1221,6 @@ definitions:
         type: string
       name:
         type: string
-    type: object
-  github_com_khanzadimahdi_testproject_application_runner_manager_task_getTasks.Response:
-    properties:
-      items:
-        items:
-          $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_runner_manager_task_getTasks.TaskResponse'
-        type: array
-      pagination:
-        $ref: '#/definitions/gettasks.Pagination'
-    type: object
-  github_com_khanzadimahdi_testproject_application_runner_manager_task_getTasks.TaskResponse:
-    properties:
-      created_at:
-        type: string
-      finished_at:
-        type: string
-      image:
-        type: string
-      name:
-        type: string
-      started_at:
-        type: string
-      state:
-        type: string
-      uuid:
-        type: string
-    type: object
-  github_com_khanzadimahdi_testproject_application_runner_manager_task_runTask.Mount:
-    properties:
-      read_only:
-        type: boolean
-      source:
-        type: string
-      target:
-        type: string
-      type:
-        type: string
-    type: object
-  github_com_khanzadimahdi_testproject_application_runner_manager_task_runTask.PortBinding:
-    properties:
-      host_ip:
-        type: string
-      host_port:
-        type: integer
-    type: object
-  github_com_khanzadimahdi_testproject_application_runner_manager_task_runTask.Request:
-    properties:
-      attach_stderr:
-        type: boolean
-      attach_stdin:
-        type: boolean
-      attach_stdout:
-        type: boolean
-      auto_remove:
-        type: boolean
-      command:
-        items:
-          type: string
-        type: array
-      entrypoint:
-        items:
-          type: string
-        type: array
-      environment:
-        items:
-          type: string
-        type: array
-      health_check:
-        type: string
-      image:
-        type: string
-      mounts:
-        items:
-          $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_runner_manager_task_runTask.Mount'
-        type: array
-      name:
-        type: string
-      port_bindings:
-        additionalProperties:
-          items:
-            $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_runner_manager_task_runTask.PortBinding'
-          type: array
-        type: object
-      resource_limits:
-        $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_runner_manager_task_runTask.ResourceLimits'
-      restart_count:
-        type: integer
-      restart_policy:
-        type: string
-    type: object
-  github_com_khanzadimahdi_testproject_application_runner_manager_task_runTask.ResourceLimits:
-    properties:
-      cpu:
-        type: number
-      disk:
-        type: integer
-      memory:
-        type: integer
-    type: object
-  github_com_khanzadimahdi_testproject_application_runner_manager_task_runTask.Response:
-    properties:
-      errors:
-        $ref: '#/definitions/domain.ValidationErrors'
-      uuid:
-        type: string
-    type: object
-  github_com_khanzadimahdi_testproject_application_runner_worker_task_getTasks.Response:
-    properties:
-      items:
-        items:
-          $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_runner_worker_task_getTasks.TaskResponse'
-        type: array
-    type: object
-  github_com_khanzadimahdi_testproject_application_runner_worker_task_getTasks.TaskResponse:
-    properties:
-      created_at:
-        type: string
-      finished_at:
-        type: string
-      image:
-        type: string
-      name:
-        type: string
-      started_at:
-        type: string
-      state:
-        type: string
-      uuid:
-        type: string
-    type: object
-  github_com_khanzadimahdi_testproject_application_runner_worker_task_runTask.Mount:
-    properties:
-      read_only:
-        type: boolean
-      source:
-        type: string
-      target:
-        type: string
-      type:
-        type: string
-    type: object
-  github_com_khanzadimahdi_testproject_application_runner_worker_task_runTask.PortBinding:
-    properties:
-      host_ip:
-        type: string
-      host_port:
-        type: integer
-    type: object
-  github_com_khanzadimahdi_testproject_application_runner_worker_task_runTask.Request:
-    properties:
-      attach_stderr:
-        type: boolean
-      attach_stdin:
-        type: boolean
-      attach_stdout:
-        type: boolean
-      auto_remove:
-        type: boolean
-      command:
-        items:
-          type: string
-        type: array
-      entrypoint:
-        items:
-          type: string
-        type: array
-      environment:
-        items:
-          type: string
-        type: array
-      health_check:
-        type: string
-      image:
-        type: string
-      mounts:
-        items:
-          $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_runner_worker_task_runTask.Mount'
-        type: array
-      name:
-        type: string
-      port_bindings:
-        additionalProperties:
-          items:
-            $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_runner_worker_task_runTask.PortBinding'
-          type: array
-        type: object
-      resource_limits:
-        $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_runner_worker_task_runTask.ResourceLimits'
-      restart_count:
-        type: integer
-      restart_policy:
-        type: string
-      uuid:
-        type: string
-    type: object
-  github_com_khanzadimahdi_testproject_application_runner_worker_task_runTask.ResourceLimits:
-    properties:
-      cpu:
-        type: number
-      disk:
-        type: integer
-      memory:
-        type: integer
     type: object
   home.Response:
     properties:
@@ -1503,6 +1307,91 @@ definitions:
       uuid:
         type: string
     type: object
+  presenter.Container:
+    properties:
+      command:
+        items:
+          type: string
+        type: array
+      created_at:
+        type: string
+      endpoints:
+        items:
+          $ref: '#/definitions/presenter.Endpoint'
+        type: array
+      entrypoint:
+        items:
+          type: string
+        type: array
+      environment:
+        items:
+          type: string
+        type: array
+      finished_at:
+        type: string
+      image:
+        type: string
+      name:
+        type: string
+      resource_limits:
+        $ref: '#/definitions/presenter.Limits'
+      service_name:
+        type: string
+      slug:
+        type: string
+      stack_uuid:
+        type: string
+      started_at:
+        type: string
+      state:
+        type: string
+      uuid:
+        type: string
+      working_dir:
+        type: string
+    type: object
+  presenter.Endpoint:
+    properties:
+      container_port:
+        type: integer
+      host:
+        type: string
+      url:
+        type: string
+    type: object
+  presenter.Limits:
+    properties:
+      cpu:
+        type: number
+      disk:
+        type: integer
+      memory:
+        type: integer
+    type: object
+  presenter.Pagination:
+    properties:
+      current_page:
+        type: integer
+      total_pages:
+        type: integer
+    type: object
+  presenter.Stack:
+    properties:
+      created_at:
+        type: string
+      name:
+        type: string
+      services:
+        items:
+          $ref: '#/definitions/presenter.Container'
+        type: array
+      slug:
+        type: string
+      state:
+        type: string
+      uuid:
+        type: string
+    type: object
   refresh.Request:
     properties:
       token:
@@ -1527,6 +1416,145 @@ definitions:
       password:
         type: string
       token:
+        type: string
+    type: object
+  runContainer.Request:
+    properties:
+      command:
+        items:
+          type: string
+        type: array
+      deploy:
+        $ref: '#/definitions/spec.Deploy'
+      entrypoint:
+        items:
+          type: string
+        type: array
+      environment:
+        items:
+          type: string
+        type: array
+      image:
+        type: string
+      name:
+        type: string
+      network_mode:
+        description: |-
+          NetworkMode is how much of the network the container reaches: "none",
+          "isolated" or "public". It is not docker's own network_mode — the runner
+          decides which networks a container joins — but it sits in the same place
+          a compose file puts that decision.
+        type: string
+      ports:
+        items:
+          $ref: '#/definitions/spec.Port'
+        type: array
+      restart:
+        type: string
+      working_dir:
+        type: string
+    type: object
+  runContainer.Response:
+    properties:
+      command:
+        items:
+          type: string
+        type: array
+      created_at:
+        type: string
+      endpoints:
+        items:
+          $ref: '#/definitions/presenter.Endpoint'
+        type: array
+      entrypoint:
+        items:
+          type: string
+        type: array
+      environment:
+        items:
+          type: string
+        type: array
+      errors:
+        $ref: '#/definitions/domain.ValidationErrors'
+      finished_at:
+        type: string
+      image:
+        type: string
+      name:
+        type: string
+      resource_limits:
+        $ref: '#/definitions/presenter.Limits'
+      service_name:
+        type: string
+      slug:
+        type: string
+      stack_uuid:
+        type: string
+      started_at:
+        type: string
+      state:
+        type: string
+      uuid:
+        type: string
+      working_dir:
+        type: string
+    type: object
+  spec.Deploy:
+    properties:
+      resources:
+        $ref: '#/definitions/spec.Resources'
+    type: object
+  spec.Limits:
+    properties:
+      cpus:
+        type: number
+      disk:
+        type: integer
+      memory:
+        type: integer
+    type: object
+  spec.Port:
+    properties:
+      container:
+        type: integer
+    type: object
+  spec.Resources:
+    properties:
+      limits:
+        $ref: '#/definitions/spec.Limits'
+    type: object
+  spec.Service:
+    properties:
+      command:
+        items:
+          type: string
+        type: array
+      deploy:
+        $ref: '#/definitions/spec.Deploy'
+      entrypoint:
+        items:
+          type: string
+        type: array
+      environment:
+        items:
+          type: string
+        type: array
+      image:
+        type: string
+      network_mode:
+        description: |-
+          NetworkMode is how much of the network the container reaches: "none",
+          "isolated" or "public". It is not docker's own network_mode — the runner
+          decides which networks a container joins — but it sits in the same place
+          a compose file puts that decision.
+        type: string
+      ports:
+        items:
+          $ref: '#/definitions/spec.Port'
+        type: array
+      restart:
+        type: string
+      working_dir:
         type: string
     type: object
   updateBookmark.Request:
@@ -3566,6 +3594,402 @@ paths:
       summary: Get role
       tags:
       - dashboard roles
+  /dashboard/runner/containers:
+    get:
+      consumes:
+      - application/json
+      description: paginated list of the containers the runner is holding
+      parameters:
+      - default: 1
+        description: Page
+        in: query
+        name: page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getContainers.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List containers
+      tags:
+      - dashboard runner
+    post:
+      consumes:
+      - application/json
+      description: run one long-running container from a docker compose service specification
+      parameters:
+      - description: Container specification
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/runContainer.Request'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/runContainer.Response'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Run a container
+      tags:
+      - dashboard runner
+  /dashboard/runner/containers/{uuid}:
+    delete:
+      description: 'remove a container and everything it holds: its ports, its log
+        and the container itself'
+      parameters:
+      - description: Container UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Delete container
+      tags:
+      - dashboard runner
+    get:
+      consumes:
+      - application/json
+      description: retrieve one container, with the addresses its ports are served
+        on
+      parameters:
+      - description: Container UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getContainer.Response'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get container
+      tags:
+      - dashboard runner
+  /dashboard/runner/containers/{uuid}/kill:
+    post:
+      description: stop a container at once, without a grace period
+      parameters:
+      - description: Container UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Kill container
+      tags:
+      - dashboard runner
+  /dashboard/runner/containers/{uuid}/logs:
+    get:
+      consumes:
+      - application/json
+      description: read what a container has written, from its first line onward
+      parameters:
+      - description: Container UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      - description: Only lines written after this moment (RFC3339)
+        in: query
+        name: after
+        type: string
+      - description: How many lines to return
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getContainerLogs.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Container logs
+      tags:
+      - dashboard runner
+  /dashboard/runner/containers/{uuid}/restart:
+    post:
+      description: stop a container and start it again in place
+      parameters:
+      - description: Container UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Restart container
+      tags:
+      - dashboard runner
+  /dashboard/runner/containers/{uuid}/stop:
+    post:
+      description: stop a container, giving it a moment to shut down on its own
+      parameters:
+      - description: Container UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Stop container
+      tags:
+      - dashboard runner
+  /dashboard/runner/stacks:
+    get:
+      consumes:
+      - application/json
+      description: paginated list of the stacks the runner is holding
+      parameters:
+      - default: 1
+        description: Page
+        in: query
+        name: page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_runner_stack_getStacks.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List stacks
+      tags:
+      - dashboard runner
+    post:
+      consumes:
+      - application/json
+      description: run a set of connected services from a docker compose specification
+      parameters:
+      - description: Stack specification
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_runner_stack_runStack.Request'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_runner_stack_runStack.Response'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Run a stack
+      tags:
+      - dashboard runner
+  /dashboard/runner/stacks/{uuid}:
+    delete:
+      description: 'remove a stack and everything it holds: its ports, its log and
+        the container itself'
+      parameters:
+      - description: Stack UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Delete stack
+      tags:
+      - dashboard runner
+    get:
+      consumes:
+      - application/json
+      description: retrieve a stack and the services in it
+      parameters:
+      - description: Stack UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_runner_stack_getStack.Response'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get stack
+      tags:
+      - dashboard runner
+  /dashboard/runner/stacks/{uuid}/kill:
+    post:
+      description: stop every service of a stack at once, without a grace period
+      parameters:
+      - description: Stack UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Kill stack
+      tags:
+      - dashboard runner
+  /dashboard/runner/stacks/{uuid}/restart:
+    post:
+      description: restart every service of a stack
+      parameters:
+      - description: Stack UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Restart stack
+      tags:
+      - dashboard runner
+  /dashboard/runner/stacks/{uuid}/stop:
+    post:
+      description: stop every service of a stack, giving each a moment to shut down
+        on its own
+      parameters:
+      - description: Stack UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Stop stack
+      tags:
+      - dashboard runner
   /dashboard/users:
     get:
       consumes:
@@ -3864,215 +4288,6 @@ paths:
       summary: List languages
       tags:
       - languages
-  /nodes:
-    get:
-      consumes:
-      - application/json
-      description: return a page of runner nodes
-      parameters:
-      - default: 1
-        description: Page number
-        in: query
-        name: page
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/getNodes.Response'
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: List nodes
-      tags:
-      - runner nodes
-  /nodes/{name}:
-    get:
-      consumes:
-      - application/json
-      description: retrieve information about a runner node
-      parameters:
-      - description: Node name
-        in: path
-        name: name
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/getNode.Response'
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get node
-      tags:
-      - runner nodes
-  /tasks:
-    get:
-      consumes:
-      - application/json
-      description: return tasks scheduled for this worker
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_runner_worker_task_getTasks.Response'
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: List worker tasks
-      tags:
-      - runner tasks
-  /tasks/{uuid}:
-    delete:
-      consumes:
-      - application/json
-      description: remove a task by UUID
-      parameters:
-      - description: Task UUID
-        in: path
-        name: uuid
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "204":
-          description: No Content
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Delete task
-      tags:
-      - runner tasks
-    get:
-      consumes:
-      - application/json
-      description: retrieve details of a task
-      parameters:
-      - description: Task UUID
-        in: path
-        name: uuid
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/gettask.Response'
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get task
-      tags:
-      - runner tasks
-  /tasks/{uuid}/stop:
-    post:
-      consumes:
-      - application/json
-      description: instruct worker to halt a task
-      parameters:
-      - description: Task UUID
-        in: path
-        name: uuid
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "202":
-          description: Accepted
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Stop worker task
-      tags:
-      - runner tasks
-  /tasks/run:
-    post:
-      consumes:
-      - application/json
-      description: accept a task result or status update from worker
-      parameters:
-      - description: Task operation
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_runner_worker_task_runTask.Request'
-      produces:
-      - application/json
-      responses:
-        "202":
-          description: Accepted
-          schema:
-            additionalProperties: true
-            type: object
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Run worker task
-      tags:
-      - runner tasks
   /ws:
     get:
       description: upgrades the connection to a websocket. the client sends requests

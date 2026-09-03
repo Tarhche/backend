@@ -2800,6 +2800,587 @@
                 }
             }
         },
+        "/dashboard/runner/containers": {
+            "get": {
+                "description": "paginated list of the containers the runner is holding",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard runner"
+                ],
+                "summary": "List containers",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page",
+                        "name": "page",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/getContainers.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "run one long-running container from a docker compose service specification",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard runner"
+                ],
+                "summary": "Run a container",
+                "parameters": [
+                    {
+                        "description": "Container specification",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/runContainer.Request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/runContainer.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/runner/containers/{uuid}": {
+            "get": {
+                "description": "retrieve one container, with the addresses its ports are served on",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard runner"
+                ],
+                "summary": "Get container",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Container UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/getContainer.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "remove a container and everything it holds: its ports, its log and the container itself",
+                "tags": [
+                    "dashboard runner"
+                ],
+                "summary": "Delete container",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Container UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/runner/containers/{uuid}/kill": {
+            "post": {
+                "description": "stop a container at once, without a grace period",
+                "tags": [
+                    "dashboard runner"
+                ],
+                "summary": "Kill container",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Container UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/runner/containers/{uuid}/logs": {
+            "get": {
+                "description": "read what a container has written, from its first line onward",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard runner"
+                ],
+                "summary": "Container logs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Container UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Only lines written after this moment (RFC3339)",
+                        "name": "after",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "How many lines to return",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/getContainerLogs.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/runner/containers/{uuid}/restart": {
+            "post": {
+                "description": "stop a container and start it again in place",
+                "tags": [
+                    "dashboard runner"
+                ],
+                "summary": "Restart container",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Container UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/runner/containers/{uuid}/stop": {
+            "post": {
+                "description": "stop a container, giving it a moment to shut down on its own",
+                "tags": [
+                    "dashboard runner"
+                ],
+                "summary": "Stop container",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Container UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/runner/stacks": {
+            "get": {
+                "description": "paginated list of the stacks the runner is holding",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard runner"
+                ],
+                "summary": "List stacks",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page",
+                        "name": "page",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_runner_stack_getStacks.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "run a set of connected services from a docker compose specification",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard runner"
+                ],
+                "summary": "Run a stack",
+                "parameters": [
+                    {
+                        "description": "Stack specification",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_runner_stack_runStack.Request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_runner_stack_runStack.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/runner/stacks/{uuid}": {
+            "get": {
+                "description": "retrieve a stack and the services in it",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard runner"
+                ],
+                "summary": "Get stack",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Stack UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_runner_stack_getStack.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "remove a stack and everything it holds: its ports, its log and the container itself",
+                "tags": [
+                    "dashboard runner"
+                ],
+                "summary": "Delete stack",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Stack UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/runner/stacks/{uuid}/kill": {
+            "post": {
+                "description": "stop every service of a stack at once, without a grace period",
+                "tags": [
+                    "dashboard runner"
+                ],
+                "summary": "Kill stack",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Stack UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/runner/stacks/{uuid}/restart": {
+            "post": {
+                "description": "restart every service of a stack",
+                "tags": [
+                    "dashboard runner"
+                ],
+                "summary": "Restart stack",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Stack UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/runner/stacks/{uuid}/stop": {
+            "post": {
+                "description": "stop every service of a stack, giving each a moment to shut down on its own",
+                "tags": [
+                    "dashboard runner"
+                ],
+                "summary": "Stop stack",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Stack UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/dashboard/users": {
             "get": {
                 "description": "paginated list of users",
@@ -3228,315 +3809,6 @@
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_language_getLanguages.Response"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/nodes": {
-            "get": {
-                "description": "return a page of runner nodes",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "runner nodes"
-                ],
-                "summary": "List nodes",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "default": 1,
-                        "description": "Page number",
-                        "name": "page",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/getNodes.Response"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/nodes/{name}": {
-            "get": {
-                "description": "retrieve information about a runner node",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "runner nodes"
-                ],
-                "summary": "Get node",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Node name",
-                        "name": "name",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/getNode.Response"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/tasks": {
-            "get": {
-                "description": "return tasks scheduled for this worker",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "runner tasks"
-                ],
-                "summary": "List worker tasks",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_runner_worker_task_getTasks.Response"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/tasks/run": {
-            "post": {
-                "description": "accept a task result or status update from worker",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "runner tasks"
-                ],
-                "summary": "Run worker task",
-                "parameters": [
-                    {
-                        "description": "Task operation",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_runner_worker_task_runTask.Request"
-                        }
-                    }
-                ],
-                "responses": {
-                    "202": {
-                        "description": "Accepted",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/tasks/{uuid}": {
-            "get": {
-                "description": "retrieve details of a task",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "runner tasks"
-                ],
-                "summary": "Get task",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Task UUID",
-                        "name": "uuid",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/gettask.Response"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "description": "remove a task by UUID",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "runner tasks"
-                ],
-                "summary": "Delete task",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Task UUID",
-                        "name": "uuid",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "204": {
-                        "description": "No Content",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/tasks/{uuid}/stop": {
-            "post": {
-                "description": "instruct worker to halt a task",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "runner tasks"
-                ],
-                "summary": "Stop worker task",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Task UUID",
-                        "name": "uuid",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "202": {
-                        "description": "Accepted",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
                         }
                     },
                     "500": {
@@ -4149,6 +4421,110 @@
                 }
             }
         },
+        "getContainer.Response": {
+            "type": "object",
+            "properties": {
+                "command": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "endpoints": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/presenter.Endpoint"
+                    }
+                },
+                "entrypoint": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "environment": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "finished_at": {
+                    "type": "string"
+                },
+                "image": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "resource_limits": {
+                    "$ref": "#/definitions/presenter.Limits"
+                },
+                "service_name": {
+                    "type": "string"
+                },
+                "slug": {
+                    "type": "string"
+                },
+                "stack_uuid": {
+                    "type": "string"
+                },
+                "started_at": {
+                    "type": "string"
+                },
+                "state": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                },
+                "working_dir": {
+                    "type": "string"
+                }
+            }
+        },
+        "getContainerLogs.LogResponse": {
+            "type": "object",
+            "properties": {
+                "at": {
+                    "type": "string"
+                },
+                "content": {
+                    "type": "string"
+                },
+                "stream": {
+                    "type": "string"
+                }
+            }
+        },
+        "getContainerLogs.Response": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/getContainerLogs.LogResponse"
+                    }
+                }
+            }
+        },
+        "getContainers.Response": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/presenter.Container"
+                    }
+                },
+                "pagination": {
+                    "$ref": "#/definitions/presenter.Pagination"
+                }
+            }
+        },
         "getMessage.Response": {
             "type": "object",
             "properties": {
@@ -4223,94 +4599,6 @@
                 },
                 "total_pages": {
                     "type": "integer"
-                }
-            }
-        },
-        "getNode.Response": {
-            "type": "object",
-            "properties": {
-                "created_at": {
-                    "type": "string"
-                },
-                "last_heartbeat_at": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "stats": {
-                    "$ref": "#/definitions/getNode.Stats"
-                }
-            }
-        },
-        "getNode.Stats": {
-            "type": "object",
-            "properties": {
-                "block_input": {
-                    "type": "integer"
-                },
-                "block_output": {
-                    "type": "integer"
-                },
-                "cpu_percent": {
-                    "type": "number"
-                },
-                "memory_limit": {
-                    "type": "integer"
-                },
-                "memory_percent": {
-                    "type": "number"
-                },
-                "memory_usage": {
-                    "type": "integer"
-                },
-                "network_input": {
-                    "type": "integer"
-                },
-                "network_output": {
-                    "type": "integer"
-                },
-                "pids": {
-                    "type": "integer"
-                }
-            }
-        },
-        "getNodes.NodeResponse": {
-            "type": "object",
-            "properties": {
-                "created_at": {
-                    "type": "string"
-                },
-                "last_heartbeat_at": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                }
-            }
-        },
-        "getNodes.Pagination": {
-            "type": "object",
-            "properties": {
-                "current_page": {
-                    "type": "integer"
-                },
-                "total_pages": {
-                    "type": "integer"
-                }
-            }
-        },
-        "getNodes.Response": {
-            "type": "object",
-            "properties": {
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/getNodes.NodeResponse"
-                    }
-                },
-                "pagination": {
-                    "$ref": "#/definitions/getNodes.Pagination"
                 }
             }
         },
@@ -4804,94 +5092,6 @@
                 },
                 "uuid": {
                     "type": "string"
-                }
-            }
-        },
-        "gettask.Response": {
-            "type": "object",
-            "properties": {
-                "attach_stderr": {
-                    "type": "boolean"
-                },
-                "attach_stdin": {
-                    "type": "boolean"
-                },
-                "attach_stdout": {
-                    "type": "boolean"
-                },
-                "auto_remove": {
-                    "type": "boolean"
-                },
-                "command": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "container_id": {
-                    "type": "string"
-                },
-                "container_logs": {
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
-                },
-                "created_at": {
-                    "type": "string"
-                },
-                "entrypoint": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "environment": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "finished_at": {
-                    "type": "string"
-                },
-                "health_check": {
-                    "type": "string"
-                },
-                "image": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "owner_uuid": {
-                    "type": "string"
-                },
-                "restart_count": {
-                    "type": "integer"
-                },
-                "restart_policy": {
-                    "type": "string"
-                },
-                "started_at": {
-                    "type": "string"
-                },
-                "state": {
-                    "type": "string"
-                },
-                "uuid": {
-                    "type": "string"
-                }
-            }
-        },
-        "gettasks.Pagination": {
-            "type": "object",
-            "properties": {
-                "current_page": {
-                    "type": "integer"
-                },
-                "total_pages": {
-                    "type": "integer"
                 }
             }
         },
@@ -5429,6 +5629,89 @@
                 }
             }
         },
+        "github_com_khanzadimahdi_testproject_application_dashboard_runner_stack_getStack.Response": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "services": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/presenter.Container"
+                    }
+                },
+                "slug": {
+                    "type": "string"
+                },
+                "state": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_khanzadimahdi_testproject_application_dashboard_runner_stack_getStacks.Response": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/presenter.Stack"
+                    }
+                },
+                "pagination": {
+                    "$ref": "#/definitions/presenter.Pagination"
+                }
+            }
+        },
+        "github_com_khanzadimahdi_testproject_application_dashboard_runner_stack_runStack.Request": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "services": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/spec.Service"
+                    }
+                }
+            }
+        },
+        "github_com_khanzadimahdi_testproject_application_dashboard_runner_stack_runStack.Response": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "errors": {
+                    "$ref": "#/definitions/domain.ValidationErrors"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "services": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/presenter.Container"
+                    }
+                },
+                "slug": {
+                    "type": "string"
+                },
+                "state": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                }
+            }
+        },
         "github_com_khanzadimahdi_testproject_application_language_getLanguages.Response": {
             "type": "object",
             "properties": {
@@ -5451,317 +5734,6 @@
                 },
                 "name": {
                     "type": "string"
-                }
-            }
-        },
-        "github_com_khanzadimahdi_testproject_application_runner_manager_task_getTasks.Response": {
-            "type": "object",
-            "properties": {
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_runner_manager_task_getTasks.TaskResponse"
-                    }
-                },
-                "pagination": {
-                    "$ref": "#/definitions/gettasks.Pagination"
-                }
-            }
-        },
-        "github_com_khanzadimahdi_testproject_application_runner_manager_task_getTasks.TaskResponse": {
-            "type": "object",
-            "properties": {
-                "created_at": {
-                    "type": "string"
-                },
-                "finished_at": {
-                    "type": "string"
-                },
-                "image": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "started_at": {
-                    "type": "string"
-                },
-                "state": {
-                    "type": "string"
-                },
-                "uuid": {
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_khanzadimahdi_testproject_application_runner_manager_task_runTask.Mount": {
-            "type": "object",
-            "properties": {
-                "read_only": {
-                    "type": "boolean"
-                },
-                "source": {
-                    "type": "string"
-                },
-                "target": {
-                    "type": "string"
-                },
-                "type": {
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_khanzadimahdi_testproject_application_runner_manager_task_runTask.PortBinding": {
-            "type": "object",
-            "properties": {
-                "host_ip": {
-                    "type": "string"
-                },
-                "host_port": {
-                    "type": "integer"
-                }
-            }
-        },
-        "github_com_khanzadimahdi_testproject_application_runner_manager_task_runTask.Request": {
-            "type": "object",
-            "properties": {
-                "attach_stderr": {
-                    "type": "boolean"
-                },
-                "attach_stdin": {
-                    "type": "boolean"
-                },
-                "attach_stdout": {
-                    "type": "boolean"
-                },
-                "auto_remove": {
-                    "type": "boolean"
-                },
-                "command": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "entrypoint": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "environment": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "health_check": {
-                    "type": "string"
-                },
-                "image": {
-                    "type": "string"
-                },
-                "mounts": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_runner_manager_task_runTask.Mount"
-                    }
-                },
-                "name": {
-                    "type": "string"
-                },
-                "port_bindings": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "array",
-                        "items": {
-                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_runner_manager_task_runTask.PortBinding"
-                        }
-                    }
-                },
-                "resource_limits": {
-                    "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_runner_manager_task_runTask.ResourceLimits"
-                },
-                "restart_count": {
-                    "type": "integer"
-                },
-                "restart_policy": {
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_khanzadimahdi_testproject_application_runner_manager_task_runTask.ResourceLimits": {
-            "type": "object",
-            "properties": {
-                "cpu": {
-                    "type": "number"
-                },
-                "disk": {
-                    "type": "integer"
-                },
-                "memory": {
-                    "type": "integer"
-                }
-            }
-        },
-        "github_com_khanzadimahdi_testproject_application_runner_manager_task_runTask.Response": {
-            "type": "object",
-            "properties": {
-                "errors": {
-                    "$ref": "#/definitions/domain.ValidationErrors"
-                },
-                "uuid": {
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_khanzadimahdi_testproject_application_runner_worker_task_getTasks.Response": {
-            "type": "object",
-            "properties": {
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_runner_worker_task_getTasks.TaskResponse"
-                    }
-                }
-            }
-        },
-        "github_com_khanzadimahdi_testproject_application_runner_worker_task_getTasks.TaskResponse": {
-            "type": "object",
-            "properties": {
-                "created_at": {
-                    "type": "string"
-                },
-                "finished_at": {
-                    "type": "string"
-                },
-                "image": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "started_at": {
-                    "type": "string"
-                },
-                "state": {
-                    "type": "string"
-                },
-                "uuid": {
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_khanzadimahdi_testproject_application_runner_worker_task_runTask.Mount": {
-            "type": "object",
-            "properties": {
-                "read_only": {
-                    "type": "boolean"
-                },
-                "source": {
-                    "type": "string"
-                },
-                "target": {
-                    "type": "string"
-                },
-                "type": {
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_khanzadimahdi_testproject_application_runner_worker_task_runTask.PortBinding": {
-            "type": "object",
-            "properties": {
-                "host_ip": {
-                    "type": "string"
-                },
-                "host_port": {
-                    "type": "integer"
-                }
-            }
-        },
-        "github_com_khanzadimahdi_testproject_application_runner_worker_task_runTask.Request": {
-            "type": "object",
-            "properties": {
-                "attach_stderr": {
-                    "type": "boolean"
-                },
-                "attach_stdin": {
-                    "type": "boolean"
-                },
-                "attach_stdout": {
-                    "type": "boolean"
-                },
-                "auto_remove": {
-                    "type": "boolean"
-                },
-                "command": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "entrypoint": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "environment": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "health_check": {
-                    "type": "string"
-                },
-                "image": {
-                    "type": "string"
-                },
-                "mounts": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_runner_worker_task_runTask.Mount"
-                    }
-                },
-                "name": {
-                    "type": "string"
-                },
-                "port_bindings": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "array",
-                        "items": {
-                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_runner_worker_task_runTask.PortBinding"
-                        }
-                    }
-                },
-                "resource_limits": {
-                    "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_runner_worker_task_runTask.ResourceLimits"
-                },
-                "restart_count": {
-                    "type": "integer"
-                },
-                "restart_policy": {
-                    "type": "string"
-                },
-                "uuid": {
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_khanzadimahdi_testproject_application_runner_worker_task_runTask.ResourceLimits": {
-            "type": "object",
-            "properties": {
-                "cpu": {
-                    "type": "number"
-                },
-                "disk": {
-                    "type": "integer"
-                },
-                "memory": {
-                    "type": "integer"
                 }
             }
         },
@@ -5893,6 +5865,136 @@
                 }
             }
         },
+        "presenter.Container": {
+            "type": "object",
+            "properties": {
+                "command": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "endpoints": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/presenter.Endpoint"
+                    }
+                },
+                "entrypoint": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "environment": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "finished_at": {
+                    "type": "string"
+                },
+                "image": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "resource_limits": {
+                    "$ref": "#/definitions/presenter.Limits"
+                },
+                "service_name": {
+                    "type": "string"
+                },
+                "slug": {
+                    "type": "string"
+                },
+                "stack_uuid": {
+                    "type": "string"
+                },
+                "started_at": {
+                    "type": "string"
+                },
+                "state": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                },
+                "working_dir": {
+                    "type": "string"
+                }
+            }
+        },
+        "presenter.Endpoint": {
+            "type": "object",
+            "properties": {
+                "container_port": {
+                    "type": "integer"
+                },
+                "host": {
+                    "type": "string"
+                },
+                "url": {
+                    "type": "string"
+                }
+            }
+        },
+        "presenter.Limits": {
+            "type": "object",
+            "properties": {
+                "cpu": {
+                    "type": "number"
+                },
+                "disk": {
+                    "type": "integer"
+                },
+                "memory": {
+                    "type": "integer"
+                }
+            }
+        },
+        "presenter.Pagination": {
+            "type": "object",
+            "properties": {
+                "current_page": {
+                    "type": "integer"
+                },
+                "total_pages": {
+                    "type": "integer"
+                }
+            }
+        },
+        "presenter.Stack": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "services": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/presenter.Container"
+                    }
+                },
+                "slug": {
+                    "type": "string"
+                },
+                "state": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                }
+            }
+        },
         "refresh.Request": {
             "type": "object",
             "properties": {
@@ -5930,6 +6032,205 @@
                     "type": "string"
                 },
                 "token": {
+                    "type": "string"
+                }
+            }
+        },
+        "runContainer.Request": {
+            "type": "object",
+            "properties": {
+                "command": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "deploy": {
+                    "$ref": "#/definitions/spec.Deploy"
+                },
+                "entrypoint": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "environment": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "image": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "network_mode": {
+                    "description": "NetworkMode is how much of the network the container reaches: \"none\",\n\"isolated\" or \"public\". It is not docker's own network_mode — the runner\ndecides which networks a container joins — but it sits in the same place\na compose file puts that decision.",
+                    "type": "string"
+                },
+                "ports": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/spec.Port"
+                    }
+                },
+                "restart": {
+                    "type": "string"
+                },
+                "working_dir": {
+                    "type": "string"
+                }
+            }
+        },
+        "runContainer.Response": {
+            "type": "object",
+            "properties": {
+                "command": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "endpoints": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/presenter.Endpoint"
+                    }
+                },
+                "entrypoint": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "environment": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "errors": {
+                    "$ref": "#/definitions/domain.ValidationErrors"
+                },
+                "finished_at": {
+                    "type": "string"
+                },
+                "image": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "resource_limits": {
+                    "$ref": "#/definitions/presenter.Limits"
+                },
+                "service_name": {
+                    "type": "string"
+                },
+                "slug": {
+                    "type": "string"
+                },
+                "stack_uuid": {
+                    "type": "string"
+                },
+                "started_at": {
+                    "type": "string"
+                },
+                "state": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                },
+                "working_dir": {
+                    "type": "string"
+                }
+            }
+        },
+        "spec.Deploy": {
+            "type": "object",
+            "properties": {
+                "resources": {
+                    "$ref": "#/definitions/spec.Resources"
+                }
+            }
+        },
+        "spec.Limits": {
+            "type": "object",
+            "properties": {
+                "cpus": {
+                    "type": "number"
+                },
+                "disk": {
+                    "type": "integer"
+                },
+                "memory": {
+                    "type": "integer"
+                }
+            }
+        },
+        "spec.Port": {
+            "type": "object",
+            "properties": {
+                "container": {
+                    "type": "integer"
+                }
+            }
+        },
+        "spec.Resources": {
+            "type": "object",
+            "properties": {
+                "limits": {
+                    "$ref": "#/definitions/spec.Limits"
+                }
+            }
+        },
+        "spec.Service": {
+            "type": "object",
+            "properties": {
+                "command": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "deploy": {
+                    "$ref": "#/definitions/spec.Deploy"
+                },
+                "entrypoint": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "environment": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "image": {
+                    "type": "string"
+                },
+                "network_mode": {
+                    "description": "NetworkMode is how much of the network the container reaches: \"none\",\n\"isolated\" or \"public\". It is not docker's own network_mode — the runner\ndecides which networks a container joins — but it sits in the same place\na compose file puts that decision.",
+                    "type": "string"
+                },
+                "ports": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/spec.Port"
+                    }
+                },
+                "restart": {
+                    "type": "string"
+                },
+                "working_dir": {
                     "type": "string"
                 }
             }
