@@ -102,6 +102,11 @@ const (
 	SelfFilesIndex  = "self.files.index"
 	SelfFilesDelete = "self.files.delete"
 
+	SelfArticlesIndex  = "self.articles.index"
+	SelfArticlesShow   = "self.articles.show"
+	SelfArticlesUpdate = "self.articles.update"
+	SelfArticlesDelete = "self.articles.delete"
+
 	SelfRunnerContainersIndex  = "self.runner.containers.index"
 	SelfRunnerContainersShow   = "self.runner.containers.show"
 	SelfRunnerContainersLogs   = "self.runner.containers.logs"

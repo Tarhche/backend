@@ -845,6 +845,102 @@ definitions:
       uuid:
         type: string
     type: object
+  getuserarticle.Response:
+    properties:
+      author:
+        $ref: '#/definitions/getuserarticle.author'
+      body:
+        type: string
+      correlation_uuid:
+        type: string
+      cover:
+        type: string
+      excerpt:
+        type: string
+      language_code:
+        type: string
+      published_at:
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+      title:
+        type: string
+      video:
+        type: string
+      view_count:
+        type: integer
+    type: object
+  getuserarticle.author:
+    properties:
+      avatar:
+        type: string
+      name:
+        type: string
+      username:
+        type: string
+      uuid:
+        type: string
+    type: object
+  getuserarticles.Response:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/getuserarticles.articleResponse'
+        type: array
+      pagination:
+        $ref: '#/definitions/getuserarticles.pagination'
+    type: object
+  getuserarticles.articleResponse:
+    properties:
+      correlation_uuid:
+        type: string
+      corrolated_items:
+        items:
+          $ref: '#/definitions/getuserarticles.corrolatedArticleResponse'
+        type: array
+    type: object
+  getuserarticles.author:
+    properties:
+      avatar:
+        type: string
+      name:
+        type: string
+      username:
+        type: string
+      uuid:
+        type: string
+    type: object
+  getuserarticles.corrolatedArticleResponse:
+    properties:
+      author:
+        $ref: '#/definitions/getuserarticles.author'
+      cover:
+        type: string
+      language:
+        $ref: '#/definitions/getuserarticles.languageResponse'
+      published_at:
+        type: string
+      title:
+        type: string
+      video:
+        type: string
+    type: object
+  getuserarticles.languageResponse:
+    properties:
+      code:
+        type: string
+      name:
+        type: string
+    type: object
+  getuserarticles.pagination:
+    properties:
+      current_page:
+        type: integer
+      total_pages:
+        type: integer
+    type: object
   getuserfiles.Response:
     properties:
       items:
@@ -1808,6 +1904,29 @@ definitions:
       username:
         type: string
       uuid:
+        type: string
+    type: object
+  updateuserarticle.Request:
+    properties:
+      body:
+        type: string
+      correlation_uuid:
+        type: string
+      cover:
+        type: string
+      excerpt:
+        type: string
+      language_code:
+        type: string
+      published_at:
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+      title:
+        type: string
+      video:
         type: string
     type: object
   userchangepassword.Request:
@@ -3346,6 +3465,138 @@ paths:
       summary: Get language
       tags:
       - dashboard languages
+  /dashboard/my/articles:
+    get:
+      consumes:
+      - application/json
+      description: page through the articles the authenticated user wrote, grouped
+        by correlation uuid
+      parameters:
+      - default: 1
+        description: Page
+        in: query
+        name: page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getuserarticles.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List own articles
+      tags:
+      - dashboard articles
+    put:
+      consumes:
+      - application/json
+      description: change an article the authenticated user wrote
+      parameters:
+      - description: Article update payload
+        in: body
+        name: article
+        required: true
+        schema:
+          $ref: '#/definitions/updateuserarticle.Request'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Update own article
+      tags:
+      - dashboard articles
+  /dashboard/my/articles/{correlationUUID}/{language_code}:
+    delete:
+      consumes:
+      - application/json
+      description: remove an article the authenticated user wrote, by correlation
+        uuid and language
+      parameters:
+      - description: Article correlation UUID
+        in: path
+        name: correlationUUID
+        required: true
+        type: string
+      - description: Language code
+        in: path
+        name: language_code
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Delete own article
+      tags:
+      - dashboard articles
+    get:
+      consumes:
+      - application/json
+      description: an article the authenticated user wrote, by correlation uuid and
+        language
+      parameters:
+      - description: Article correlation UUID
+        in: path
+        name: correlationUUID
+        required: true
+        type: string
+      - description: Language code
+        in: path
+        name: language_code
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getuserarticle.Response'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Show own article
+      tags:
+      - dashboard articles
   /dashboard/my/bookmarks:
     delete:
       consumes:

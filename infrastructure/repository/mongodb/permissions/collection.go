@@ -79,6 +79,12 @@ var collection []permission.Permission = []permission.Permission{
 	{Name: "list of self files", Value: permission.SelfFilesIndex},
 	{Name: "delete a self file", Value: permission.SelfFilesDelete},
 
+	// self articles
+	{Name: "list of self articles", Value: permission.SelfArticlesIndex},
+	{Name: "show a self article", Value: permission.SelfArticlesShow},
+	{Name: "update a self article", Value: permission.SelfArticlesUpdate},
+	{Name: "delete a self article", Value: permission.SelfArticlesDelete},
+
 	// self containers
 	{Name: "list of self containers", Value: permission.SelfRunnerContainersIndex},
 	{Name: "show a self container", Value: permission.SelfRunnerContainersShow},

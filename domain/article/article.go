@@ -22,6 +22,7 @@ type Article struct {
 
 type Repository interface {
 	GetCorrelationUUIDs(ctx context.Context, offset uint, limit uint) ([]string, error)
+
 	GetAllPublished(ctx context.Context, languageCode string, offset uint, limit uint) ([]Article, error)
 	GetByCorrelationUUIDAndLanguage(ctx context.Context, correlationUUID string, languageCode string) (Article, error)
 	GetOnePublished(ctx context.Context, correlationUUID string, languageCode string) (Article, error)
@@ -38,4 +39,13 @@ type Repository interface {
 	Save(ctx context.Context, a *Article) (string, error)
 	DeleteByCorrelationUUIDAndLanguage(ctx context.Context, correlationUUID string, languageCode string) error
 	IncreaseView(ctx context.Context, uuid string, inc uint) error
+
+	// what one person wrote. An article that is not theirs is not there at all
+	// as far as these are concerned, so somebody who may only reach their own
+	// asks for it this way and is told the same thing about an article that
+	// does not exist and one that is not theirs.
+	GetCorrelationUUIDsByAuthor(ctx context.Context, authorUUID string, offset uint, limit uint) ([]string, error)
+	CountByCorrelationAndAuthor(ctx context.Context, authorUUID string) (uint, error)
+	GetByCorrelationUUIDAndLanguageAndAuthor(ctx context.Context, correlationUUID string, languageCode string, authorUUID string) (Article, error)
+	DeleteByCorrelationUUIDAndLanguageAndAuthor(ctx context.Context, correlationUUID string, languageCode string, authorUUID string) error
 }

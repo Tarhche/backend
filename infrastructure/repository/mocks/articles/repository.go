@@ -24,6 +24,22 @@ func (r *MockArticlesRepository) GetCorrelationUUIDs(ctx context.Context, offset
 	return nil, args.Error(1)
 }
 
+func (r *MockArticlesRepository) GetCorrelationUUIDsByAuthor(ctx context.Context, authorUUID string, offset uint, limit uint) ([]string, error) {
+	args := r.Mock.Called(ctx, authorUUID, offset, limit)
+
+	if a, ok := args.Get(0).([]string); ok {
+		return a, args.Error(1)
+	}
+
+	return nil, args.Error(1)
+}
+
+func (r *MockArticlesRepository) CountByCorrelationAndAuthor(ctx context.Context, authorUUID string) (uint, error) {
+	args := r.Mock.Called(ctx, authorUUID)
+
+	return args.Get(0).(uint), args.Error(1)
+}
+
 func (r *MockArticlesRepository) GetAllPublished(ctx context.Context, language string, offset uint, limit uint) ([]article.Article, error) {
 	args := r.Mock.Called(ctx, language, offset, limit)
 
@@ -38,6 +54,16 @@ func (r *MockArticlesRepository) GetByCorrelationUUIDAndLanguage(ctx context.Con
 	args := r.Mock.Called(ctx, correlationUUID, languageCode)
 
 	return args.Get(0).(article.Article), args.Error(1)
+}
+
+func (r *MockArticlesRepository) GetByCorrelationUUIDAndLanguageAndAuthor(ctx context.Context, correlationUUID string, languageCode string, authorUUID string) (article.Article, error) {
+	args := r.Mock.Called(ctx, correlationUUID, languageCode, authorUUID)
+
+	return args.Get(0).(article.Article), args.Error(1)
+}
+
+func (r *MockArticlesRepository) DeleteByCorrelationUUIDAndLanguageAndAuthor(ctx context.Context, correlationUUID string, languageCode string, authorUUID string) error {
+	return r.Mock.Called(ctx, correlationUUID, languageCode, authorUUID).Error(0)
 }
 
 func (r *MockArticlesRepository) GetOnePublished(ctx context.Context, correlationUUID string, languageCode string) (article.Article, error) {
