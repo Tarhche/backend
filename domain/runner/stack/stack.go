@@ -7,6 +7,8 @@ package stack
 import (
 	"context"
 	"time"
+
+	"github.com/khanzadimahdi/testproject/domain/runner/task"
 )
 
 // Stack is a set of containers run and managed as one thing.
@@ -15,9 +17,16 @@ import (
 // stack is what those tasks belong to. It is immutable, like the containers in
 // it — there is no update, only run and remove.
 type Stack struct {
-	UUID      string
-	Name      string
-	Slug      string
+	UUID string
+	Name string
+	Slug string
+
+	// ExpectedState is what the stack was asked to be. It is kept here rather
+	// than read off the services because a stack is asked for as a whole: while
+	// a command is still reaching them, what they say between them is neither
+	// one thing nor the other.
+	ExpectedState task.State
+
 	NodeName  string
 	OwnerUUID string
 	CreatedAt time.Time
@@ -26,6 +35,10 @@ type Stack struct {
 // Repository stores stacks.
 type Repository interface {
 	GetAll(ctx context.Context, offset uint, limit uint) ([]Stack, error)
+
+	// GetAllByOwner is the same listing, of what one person asked for.
+	GetAllByOwner(ctx context.Context, ownerUUID string, offset uint, limit uint) ([]Stack, error)
+	CountByOwner(ctx context.Context, ownerUUID string) (uint, error)
 	GetOne(ctx context.Context, UUID string) (Stack, error)
 	GetOneBySlug(ctx context.Context, slug string) (Stack, error)
 	Save(ctx context.Context, s *Stack) (uuid string, err error)

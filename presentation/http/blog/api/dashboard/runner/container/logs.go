@@ -2,11 +2,14 @@ package container
 
 import (
 	"encoding/json"
+	"errors"
+	"github.com/khanzadimahdi/testproject/application/auth"
 	"net/http"
 	"strconv"
 	"time"
 
 	getContainerLogs "github.com/khanzadimahdi/testproject/application/dashboard/runner/container/getContainerLogs"
+	"github.com/khanzadimahdi/testproject/domain"
 	infraTrace "github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -31,7 +34,10 @@ func NewLogsHandler(useCase *getContainerLogs.UseCase) *logsHandler {
 // @Failure		500		{object}	map[string]interface{}
 // @Router			/dashboard/runner/containers/{uuid}/logs [get]
 func (h *logsHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
-	request := &getContainerLogs.Request{UUID: r.PathValue("uuid")}
+	request := &getContainerLogs.Request{
+		UUID:      r.PathValue("uuid"),
+		ActorUUID: auth.UUIDFromContext(r.Context()),
+	}
 
 	if after, err := time.Parse(time.RFC3339Nano, r.URL.Query().Get("after")); err == nil {
 		request.After = after
@@ -43,6 +49,10 @@ func (h *logsHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 	response, err := h.useCase.Execute(r.Context(), request)
 	switch {
+	case errors.Is(err, domain.ErrForbidden):
+		rw.WriteHeader(http.StatusForbidden)
+	case errors.Is(err, domain.ErrNotExists):
+		rw.WriteHeader(http.StatusNotFound)
 	case err != nil:
 		infraTrace.RecordError(trace.SpanFromContext(r.Context()), err)
 		rw.WriteHeader(http.StatusInternalServerError)

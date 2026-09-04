@@ -39,6 +39,14 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		return nil, err
 	}
 
+	// what the stack is asked to be from now on, written down before anything
+	// is asked of its services: while a command is still reaching them, what
+	// they say between them is neither one thing nor the other.
+	s.ExpectedState = task.Stopped
+	if _, err := uc.stackRepository.Save(ctx, &s); err != nil {
+		return nil, err
+	}
+
 	services, err := uc.taskRepository.GetAllByStack(ctx, s.UUID)
 	if err != nil {
 		return nil, err

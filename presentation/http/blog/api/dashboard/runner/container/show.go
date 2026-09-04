@@ -3,6 +3,7 @@ package container
 import (
 	"encoding/json"
 	"errors"
+	"github.com/khanzadimahdi/testproject/application/auth"
 	"net/http"
 
 	getContainer "github.com/khanzadimahdi/testproject/application/dashboard/runner/container/getContainer"
@@ -30,8 +31,13 @@ func NewShowHandler(useCase *getContainer.UseCase) *showHandler {
 // @Failure		500		{object}	map[string]interface{}
 // @Router			/dashboard/runner/containers/{uuid} [get]
 func (h *showHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
-	response, err := h.useCase.Execute(r.Context(), r.PathValue("uuid"))
+	response, err := h.useCase.Execute(r.Context(), &getContainer.Request{
+		UUID:      r.PathValue("uuid"),
+		ActorUUID: auth.UUIDFromContext(r.Context()),
+	})
 	switch {
+	case errors.Is(err, domain.ErrForbidden):
+		rw.WriteHeader(http.StatusForbidden)
 	case errors.Is(err, domain.ErrNotExists):
 		rw.WriteHeader(http.StatusNotFound)
 	case err != nil:

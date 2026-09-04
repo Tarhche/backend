@@ -2,6 +2,7 @@ package container
 
 import (
 	"errors"
+	"github.com/khanzadimahdi/testproject/application/auth"
 	"net/http"
 
 	deleteContainer "github.com/khanzadimahdi/testproject/application/dashboard/runner/container/deleteContainer"
@@ -26,6 +27,8 @@ func (h *commandHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	err := h.command(r)
 
 	switch {
+	case errors.Is(err, domain.ErrForbidden):
+		rw.WriteHeader(http.StatusForbidden)
 	case errors.Is(err, domain.ErrNotExists):
 		rw.WriteHeader(http.StatusNotFound)
 	case err != nil:
@@ -47,7 +50,10 @@ func NewStopHandler(useCase *stopContainer.UseCase) http.Handler {
 	return &commandHandler{
 		success: http.StatusAccepted,
 		command: func(r *http.Request) error {
-			return useCase.Execute(r.Context(), &stopContainer.Request{UUID: r.PathValue("uuid")})
+			return useCase.Execute(r.Context(), &stopContainer.Request{
+				UUID:      r.PathValue("uuid"),
+				ActorUUID: auth.UUIDFromContext(r.Context()),
+			})
 		},
 	}
 }
@@ -63,7 +69,10 @@ func NewKillHandler(useCase *killContainer.UseCase) http.Handler {
 	return &commandHandler{
 		success: http.StatusAccepted,
 		command: func(r *http.Request) error {
-			return useCase.Execute(r.Context(), &killContainer.Request{UUID: r.PathValue("uuid")})
+			return useCase.Execute(r.Context(), &killContainer.Request{
+				UUID:      r.PathValue("uuid"),
+				ActorUUID: auth.UUIDFromContext(r.Context()),
+			})
 		},
 	}
 }
@@ -79,7 +88,10 @@ func NewRestartHandler(useCase *restartContainer.UseCase) http.Handler {
 	return &commandHandler{
 		success: http.StatusAccepted,
 		command: func(r *http.Request) error {
-			return useCase.Execute(r.Context(), &restartContainer.Request{UUID: r.PathValue("uuid")})
+			return useCase.Execute(r.Context(), &restartContainer.Request{
+				UUID:      r.PathValue("uuid"),
+				ActorUUID: auth.UUIDFromContext(r.Context()),
+			})
 		},
 	}
 }
@@ -95,7 +107,10 @@ func NewDeleteHandler(useCase *deleteContainer.UseCase) http.Handler {
 	return &commandHandler{
 		success: http.StatusNoContent,
 		command: func(r *http.Request) error {
-			return useCase.Execute(r.Context(), &deleteContainer.Request{UUID: r.PathValue("uuid")})
+			return useCase.Execute(r.Context(), &deleteContainer.Request{
+				UUID:      r.PathValue("uuid"),
+				ActorUUID: auth.UUIDFromContext(r.Context()),
+			})
 		},
 	}
 }

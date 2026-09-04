@@ -12,9 +12,12 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/khanzadimahdi/testproject/application/access"
 	"github.com/khanzadimahdi/testproject/application/auth"
+	runnerAccess "github.com/khanzadimahdi/testproject/application/dashboard/runner/access"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/permission"
+	"github.com/khanzadimahdi/testproject/domain/runner/task"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/ecdsa"
 	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
@@ -94,6 +97,29 @@ func refusal(t *testing.T, replies []domain.Reply) domain.ValidationErrors {
 	return body.Errors
 }
 
+// mayTouchAnything is a guard that lets whoever is asking act on whatever they
+// named: which of the two permissions they hold, and whose container it is, is
+// covered where the guard is.
+func mayTouchAnything(runner *runnerMock.MockClient) *runnerAccess.Guard {
+	// the guard reads the container before it answers; whose it is does not
+	// matter to somebody who may touch them all.
+	runner.On("Container", mock.Anything, mock.Anything).Return(task.Task{UUID: containerUUID}, nil).Maybe()
+
+	authorizer := &domain.MockAuthorizer{}
+	authorizer.On("Authorize", mock.Anything, mock.Anything, mock.Anything).Return(true, nil).Maybe()
+
+	return runnerAccess.NewGuard(runner, access.NewGuard(authorizer))
+}
+
+// mayTouchNothing is a guard that refuses whoever is asking, whatever they
+// named.
+func mayTouchNothing(runner *runnerMock.MockClient) *runnerAccess.Guard {
+	authorizer := &domain.MockAuthorizer{}
+	authorizer.On("Authorize", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Maybe()
+
+	return runnerAccess.NewGuard(runner, access.NewGuard(authorizer))
+}
+
 func TestUseCase_Handle(t *testing.T) {
 	t.Parallel()
 
@@ -114,7 +140,7 @@ func TestUseCase_Handle(t *testing.T) {
 		runner.On("AttachContainer", mock.Anything, containerUUID, []string(nil)).Return(attachment, nil).Once()
 		defer runner.AssertExpectations(t)
 
-		useCase := NewUseCase(&runner, authenticator, &authorizer, accepts(), &replyer, gateway.NewStreams(), discardLogger())
+		useCase := NewUseCase(&runner, authenticator, &authorizer, mayTouchAnything(&runner), accepts(), &replyer, gateway.NewStreams(), discardLogger())
 
 		require.NoError(t, useCase.Handle(context.Background(), request(t, token)))
 
@@ -148,7 +174,7 @@ func TestUseCase_Handle(t *testing.T) {
 		authorizer.On("Authorize", mock.Anything, userUUID, permission.RunnerContainersAttach).Return(true, nil)
 		runner.On("AttachContainer", mock.Anything, containerUUID, []string(nil)).Return(attachment, nil).Once()
 
-		useCase := NewUseCase(&runner, authenticator, &authorizer, accepts(), &replyer, gateway.NewStreams(), discardLogger())
+		useCase := NewUseCase(&runner, authenticator, &authorizer, mayTouchAnything(&runner), accepts(), &replyer, gateway.NewStreams(), discardLogger())
 
 		require.NoError(t, useCase.Handle(context.Background(), request(t, token)))
 
@@ -176,7 +202,7 @@ func TestUseCase_Handle(t *testing.T) {
 		authorizer.On("Authorize", mock.Anything, userUUID, permission.RunnerContainersAttach).Return(true, nil)
 		runner.On("AttachContainer", mock.Anything, containerUUID, []string(nil)).Return(attachment, nil).Once()
 
-		useCase := NewUseCase(&runner, authenticator, &authorizer, accepts(), &replyer, gateway.NewStreams(), discardLogger())
+		useCase := NewUseCase(&runner, authenticator, &authorizer, mayTouchAnything(&runner), accepts(), &replyer, gateway.NewStreams(), discardLogger())
 		require.NoError(t, useCase.Handle(context.Background(), request(t, token)))
 
 		keys, err := json.Marshal(Input{ID: requestID, Data: []byte("ls -la\n")})
@@ -202,7 +228,7 @@ func TestUseCase_Handle(t *testing.T) {
 			replyer    messagingMock.RecordingReplyer
 		)
 
-		useCase := NewUseCase(&runner, authenticator, &authorizer, accepts(), &replyer, gateway.NewStreams(), discardLogger())
+		useCase := NewUseCase(&runner, authenticator, &authorizer, mayTouchAnything(&runner), accepts(), &replyer, gateway.NewStreams(), discardLogger())
 
 		keys, err := json.Marshal(Input{ID: "a-terminal-elsewhere", Data: []byte("ls\n")})
 		require.NoError(t, err)
@@ -227,7 +253,7 @@ func TestUseCase_Handle(t *testing.T) {
 		authorizer.On("Authorize", mock.Anything, userUUID, permission.RunnerContainersAttach).Return(true, nil)
 		runner.On("AttachContainer", mock.Anything, containerUUID, []string(nil)).Return(attachment, nil).Once()
 
-		useCase := NewUseCase(&runner, authenticator, &authorizer, accepts(), &replyer, streams, discardLogger())
+		useCase := NewUseCase(&runner, authenticator, &authorizer, mayTouchAnything(&runner), accepts(), &replyer, streams, discardLogger())
 		require.NoError(t, useCase.Handle(context.Background(), request(t, token)))
 
 		require.Eventually(t, func() bool { return streams.Len() == 1 }, 2*time.Second, 10*time.Millisecond)
@@ -252,7 +278,7 @@ func TestUseCase_Handle(t *testing.T) {
 			replyer    messagingMock.RecordingReplyer
 		)
 
-		useCase := NewUseCase(&runner, authenticator, &authorizer, accepts(), &replyer, gateway.NewStreams(), discardLogger())
+		useCase := NewUseCase(&runner, authenticator, &authorizer, mayTouchAnything(&runner), accepts(), &replyer, gateway.NewStreams(), discardLogger())
 
 		require.NoError(t, useCase.Handle(context.Background(), request(t, "not-a-token")))
 
@@ -274,8 +300,9 @@ func TestUseCase_Handle(t *testing.T) {
 		// a shell inside somebody's container is the strongest thing on offer,
 		// so it is never implied by any other permission.
 		authorizer.On("Authorize", mock.Anything, userUUID, permission.RunnerContainersAttach).Return(false, nil)
+		runner.On("Container", mock.Anything, containerUUID).Return(task.Task{UUID: containerUUID, OwnerUUID: "somebody-else"}, nil).Maybe()
 
-		useCase := NewUseCase(&runner, authenticator, &authorizer, accepts(), &replyer, gateway.NewStreams(), discardLogger())
+		useCase := NewUseCase(&runner, authenticator, &authorizer, mayTouchNothing(&runner), accepts(), &replyer, gateway.NewStreams(), discardLogger())
 
 		require.NoError(t, useCase.Handle(context.Background(), request(t, token)))
 
@@ -298,7 +325,7 @@ func TestUseCase_Handle(t *testing.T) {
 		runner.On("AttachContainer", mock.Anything, containerUUID, []string(nil)).
 			Return(nil, domain.ErrNotExists).Once()
 
-		useCase := NewUseCase(&runner, authenticator, &authorizer, accepts(), &replyer, gateway.NewStreams(), discardLogger())
+		useCase := NewUseCase(&runner, authenticator, &authorizer, mayTouchAnything(&runner), accepts(), &replyer, gateway.NewStreams(), discardLogger())
 
 		require.NoError(t, useCase.Handle(context.Background(), request(t, token)))
 
@@ -316,7 +343,7 @@ func TestUseCase_Handle(t *testing.T) {
 			replyer    messagingMock.RecordingReplyer
 		)
 
-		useCase := NewUseCase(&runner, authenticator, &authorizer, accepts(), &replyer, gateway.NewStreams(), discardLogger())
+		useCase := NewUseCase(&runner, authenticator, &authorizer, mayTouchAnything(&runner), accepts(), &replyer, gateway.NewStreams(), discardLogger())
 
 		assert.NoError(t, useCase.Handle(context.Background(), []byte("{")))
 		assert.Empty(t, replyer.Replies())

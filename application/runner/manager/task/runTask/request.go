@@ -1,6 +1,8 @@
 package runTask
 
 import (
+	"time"
+
 	"github.com/khanzadimahdi/testproject/application/runner/spec"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/runner/network"
@@ -21,24 +23,34 @@ type Request struct {
 	ServiceName   string `json:"service_name,omitempty"`
 	NominatedNode string `json:"nominated_node,omitempty"`
 
-	Image          string                 `json:"image"`
-	AutoRemove     bool                   `json:"auto_remove"`
-	PortBindings   map[uint][]PortBinding `json:"port_bindings"`
-	ExposedPorts   []port.Port            `json:"exposed_ports"`
-	NetworkPolicy  network.Policy         `json:"network_policy"`
-	RestartPolicy  string                 `json:"restart_policy"`
-	RestartCount   uint                   `json:"restart_count"`
-	HealthCheck    string                 `json:"health_check"`
-	AttachStdin    bool                   `json:"attach_stdin"`
-	AttachStdout   bool                   `json:"attach_stdout"`
-	AttachStderr   bool                   `json:"attach_stderr"`
-	Environment    []string               `json:"environment"`
-	Command        []string               `json:"command"`
-	Entrypoint     []string               `json:"entrypoint"`
-	WorkingDir     string                 `json:"working_dir"`
-	Mounts         []Mount                `json:"mounts"`
-	ResourceLimits ResourceLimits         `json:"resource_limits"`
-	OwnerUUID      string                 `json:"-"`
+	Image         string                 `json:"image"`
+	AutoRemove    bool                   `json:"auto_remove"`
+	PortBindings  map[uint][]PortBinding `json:"port_bindings"`
+	ExposedPorts  []port.Port            `json:"exposed_ports"`
+	NetworkPolicy network.Policy         `json:"network_policy"`
+	RestartPolicy string                 `json:"restart_policy"`
+	RestartCount  uint                   `json:"restart_count"`
+	HealthCheck   string                 `json:"health_check"`
+	AttachStdin   bool                   `json:"attach_stdin"`
+	AttachStdout  bool                   `json:"attach_stdout"`
+	AttachStderr  bool                   `json:"attach_stderr"`
+	Environment   []string               `json:"environment"`
+	Command       []string               `json:"command"`
+	Entrypoint    []string               `json:"entrypoint"`
+	WorkingDir    string                 `json:"working_dir"`
+	ReadOnly      bool                   `json:"read_only"`
+
+	// MaxRetries is how many times this container is asked for again after it
+	// fails, before the runner gives up on it. Nothing at all is whatever its
+	// kind is usually worth, zero is not at all, and -1 never gives up.
+	MaxRetries *int `json:"max_retries,omitempty"`
+
+	// TTL is how long a job may run for. Zero is no limit, and a service —
+	// which is meant to keep running — may not ask for one.
+	TTL            time.Duration  `json:"ttl"`
+	Mounts         []Mount        `json:"mounts"`
+	ResourceLimits ResourceLimits `json:"resource_limits"`
+	OwnerUUID      string         `json:"-"`
 }
 
 // PortBinding represents a host-to-container port binding
@@ -74,6 +86,8 @@ func FromSpec(name string, service *spec.Service, defaults task.ResourceLimits) 
 		Command:       service.Command,
 		Entrypoint:    service.Entrypoint,
 		WorkingDir:    service.WorkingDir,
+		ReadOnly:      service.ReadOnly,
+		MaxRetries:    service.Deploy.RestartPolicy.MaxAttempts,
 		Environment:   service.Environment,
 		ExposedPorts:  service.ExposedPorts(),
 		NetworkPolicy: service.NetworkPolicy(),
@@ -120,6 +134,20 @@ func (r *Request) Validate() domain.ValidationErrors {
 		validationErrors["kind"] = "invalid_value"
 	}
 
+	if r.MaxRetries != nil && *r.MaxRetries < task.RetryForever {
+		validationErrors["max_retries"] = "invalid_value"
+	}
+
+	switch {
+	case r.TTL < 0:
+		validationErrors["ttl"] = "invalid_value"
+
+	// a service runs until it is stopped, so there is no run for a limit to
+	// bound: asking for one is asking for something else.
+	case r.TTL > 0 && r.TaskKind() != task.KindJob:
+		validationErrors["ttl"] = "ttl_requires_a_job"
+	}
+
 	if !r.Policy().IsValid() {
 		validationErrors["network_policy"] = "invalid_network_policy"
 	}
@@ -138,6 +166,16 @@ func (r *Request) Validate() domain.ValidationErrors {
 	}
 
 	return validationErrors
+}
+
+// Retries is how many times this container is worth asking for again, or what
+// its kind is usually worth when it did not say.
+func (r *Request) Retries() int {
+	if r.MaxRetries == nil {
+		return task.DefaultMaxRetries(r.TaskKind())
+	}
+
+	return *r.MaxRetries
 }
 
 // TaskKind is the kind this request asked for, or the default when it named

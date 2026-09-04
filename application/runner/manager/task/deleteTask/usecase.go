@@ -38,7 +38,7 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		return nil, err
 	}
 
-	if !request.Force && !task.IsTerminalState(t.State) {
+	if !request.Force && !task.IsTerminalState(t.CurrentState) {
 		return &Response{
 			ValidationErrors: domain.ValidationErrors{
 				"task_id": uc.translator.Translate("task_is_not_terminal_state"),
@@ -50,12 +50,15 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		return nil, err
 	}
 
-	// a container's log lives exactly as long as the container does.
-	if err := uc.logRepository.DeleteByTask(ctx, request.UUID); err != nil {
+	// the task goes first, because it is what the dashboard shows: a log that
+	// could not be swept is worth reporting, but it is not a reason to keep
+	// showing a container that is meant to be gone.
+	if err := uc.taskRepository.Delete(ctx, request.UUID); err != nil {
 		return nil, err
 	}
 
-	return nil, uc.taskRepository.Delete(ctx, request.UUID)
+	// a container's log lives exactly as long as the container does.
+	return nil, uc.logRepository.DeleteByTask(ctx, request.UUID)
 }
 
 func (uc *UseCase) publishTaskDeleted(ctx context.Context, uuid string) error {

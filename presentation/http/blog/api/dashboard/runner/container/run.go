@@ -2,10 +2,12 @@ package container
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	runContainer "github.com/khanzadimahdi/testproject/application/dashboard/runner/container/runContainer"
+	"github.com/khanzadimahdi/testproject/domain"
 	infraTrace "github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -38,10 +40,14 @@ func (h *runHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	request.OwnerUUID = auth.FromContext(r.Context()).UUID
+	request.OwnerUUID = auth.UUIDFromContext(r.Context())
 
 	response, err := h.useCase.Execute(r.Context(), &request)
 	switch {
+	case errors.Is(err, domain.ErrForbidden):
+		rw.WriteHeader(http.StatusForbidden)
+	case errors.Is(err, domain.ErrNotExists):
+		rw.WriteHeader(http.StatusNotFound)
 	case err != nil:
 		infraTrace.RecordError(trace.SpanFromContext(r.Context()), err)
 		rw.WriteHeader(http.StatusInternalServerError)

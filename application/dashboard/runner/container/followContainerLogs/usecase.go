@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
+	runnerAccess "github.com/khanzadimahdi/testproject/application/dashboard/runner/access"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/permission"
 	runnerManager "github.com/khanzadimahdi/testproject/domain/runner/manager"
@@ -60,6 +61,7 @@ type UseCase struct {
 	runner        runnerManager.Client
 	authenticator *auth.Authenticator
 	authorizer    domain.Authorizer
+	guard         *runnerAccess.Guard
 	validator     domain.Validator
 	replyer       domain.Replyer
 	streams       *gateway.Streams
@@ -72,6 +74,7 @@ func NewUseCase(
 	runner runnerManager.Client,
 	authenticator *auth.Authenticator,
 	authorizer domain.Authorizer,
+	guard *runnerAccess.Guard,
 	validator domain.Validator,
 	replyer domain.Replyer,
 	streams *gateway.Streams,
@@ -81,6 +84,7 @@ func NewUseCase(
 		runner:        runner,
 		authenticator: authenticator,
 		authorizer:    authorizer,
+		guard:         guard,
 		validator:     validator,
 		replyer:       replyer,
 		streams:       streams,
@@ -103,13 +107,16 @@ func (uc *UseCase) Handle(ctx context.Context, data []byte) error {
 		return uc.fail(ctx, request.ID, domain.ValidationErrors{"access_token": "unauthenticated"})
 	}
 
-	allowed, err := uc.authorizer.Authorize(ctx, user.UUID, permission.RunnerContainersLogs)
-	if err != nil {
-		return err
-	}
+	if err := uc.guard.OverContainer(ctx, user.UUID, permission.RunnerContainersLogs, permission.SelfRunnerContainersLogs, request.ContainerUUID); err != nil {
+		if errors.Is(err, domain.ErrForbidden) {
+			return uc.fail(ctx, request.ID, domain.ValidationErrors{"container_uuid": "forbidden"})
+		}
 
-	if !allowed {
-		return uc.fail(ctx, request.ID, domain.ValidationErrors{"container_uuid": "forbidden"})
+		if errors.Is(err, domain.ErrNotExists) {
+			return uc.fail(ctx, request.ID, domain.ValidationErrors{"container_uuid": "not_exists"})
+		}
+
+		return err
 	}
 
 	stream, err := uc.runner.FollowContainerLogs(ctx, request.ContainerUUID, request.After)

@@ -12,22 +12,39 @@ import (
 
 // Container is one container, as the dashboard shows it.
 type Container struct {
-	UUID        string     `json:"uuid"`
-	Name        string     `json:"name"`
-	Slug        string     `json:"slug"`
-	State       string     `json:"state"`
-	Image       string     `json:"image"`
-	StackUUID   string     `json:"stack_uuid,omitempty"`
-	ServiceName string     `json:"service_name,omitempty"`
-	Endpoints   []Endpoint `json:"endpoints"`
-	Environment []string   `json:"environment,omitempty"`
-	Command     []string   `json:"command,omitempty"`
-	Entrypoint  []string   `json:"entrypoint,omitempty"`
-	WorkingDir  string     `json:"working_dir,omitempty"`
-	Limits      Limits     `json:"resource_limits"`
-	CreatedAt   time.Time  `json:"created_at"`
-	StartedAt   time.Time  `json:"started_at"`
-	FinishedAt  time.Time  `json:"finished_at"`
+	UUID string `json:"uuid"`
+	Name string `json:"name"`
+	Slug string `json:"slug"`
+	// State is what the container is doing; ExpectedState is what it was asked
+	// to be doing. They differ while the runner is closing the gap.
+	State         string     `json:"state"`
+	ExpectedState string     `json:"expected_state,omitempty"`
+	Image         string     `json:"image"`
+	StackUUID     string     `json:"stack_uuid,omitempty"`
+	ServiceName   string     `json:"service_name,omitempty"`
+	Endpoints     []Endpoint `json:"endpoints"`
+	Environment   []string   `json:"environment,omitempty"`
+	Command       []string   `json:"command,omitempty"`
+	Entrypoint    []string   `json:"entrypoint,omitempty"`
+	WorkingDir    string     `json:"working_dir,omitempty"`
+	ReadOnly      bool       `json:"read_only"`
+
+	// MaxRetries is how many times a container that fails is asked for again
+	// before the runner gives up on it. -1 never gives up. Retries is how many
+	// of those have happened, so a container that keeps failing can say what is
+	// being done about it.
+	MaxRetries int `json:"max_retries"`
+	Retries    int `json:"retries"`
+
+	// Reason is why a container failed, when the runner can say so.
+	Reason string `json:"reason,omitempty"`
+
+	// Owner is who asked for this container.
+	Owner      Owner     `json:"owner"`
+	Limits     Limits    `json:"resource_limits"`
+	CreatedAt  time.Time `json:"created_at"`
+	StartedAt  time.Time `json:"started_at"`
+	FinishedAt time.Time `json:"finished_at"`
 }
 
 // Endpoint is one of a container's exposed ports, together with the hostname it
@@ -47,20 +64,26 @@ type Limits struct {
 
 // NewContainer presents one container. The ingress domain is what its hostnames
 // are built from, so the dashboard can link straight to a running container.
-func NewContainer(t task.Task, ingressDomain string) Container {
+func NewContainer(t task.Task, ingressDomain string, owners Owners) Container {
 	return Container{
-		UUID:        t.UUID,
-		Name:        t.Name,
-		Slug:        t.Slug,
-		State:       t.State.String(),
-		Image:       t.Image,
-		StackUUID:   t.StackUUID,
-		ServiceName: t.ServiceName,
-		Endpoints:   NewEndpoints(t, ingressDomain),
-		Environment: t.Environment,
-		Command:     t.Command,
-		Entrypoint:  t.Entrypoint,
-		WorkingDir:  t.WorkingDir,
+		UUID:          t.UUID,
+		Name:          t.Name,
+		Slug:          t.Slug,
+		State:         t.CurrentState.String(),
+		ExpectedState: t.ExpectedState.String(),
+		Image:         t.Image,
+		StackUUID:     t.StackUUID,
+		ServiceName:   t.ServiceName,
+		Endpoints:     NewEndpoints(t, ingressDomain),
+		Environment:   t.Environment,
+		Command:       t.Command,
+		Entrypoint:    t.Entrypoint,
+		WorkingDir:    t.WorkingDir,
+		ReadOnly:      t.ReadOnly,
+		MaxRetries:    t.MaxRetries,
+		Retries:       t.Retries,
+		Reason:        t.Reason,
+		Owner:         owners.Of(t.OwnerUUID),
 		Limits: Limits{
 			Cpu:    t.ResourceLimits.Cpu,
 			Memory: t.ResourceLimits.Memory,
@@ -73,10 +96,10 @@ func NewContainer(t task.Task, ingressDomain string) Container {
 }
 
 // NewContainers presents a list of containers.
-func NewContainers(tasks []task.Task, ingressDomain string) []Container {
+func NewContainers(tasks []task.Task, ingressDomain string, owners Owners) []Container {
 	items := make([]Container, len(tasks))
 	for i := range tasks {
-		items[i] = NewContainer(tasks[i], ingressDomain)
+		items[i] = NewContainer(tasks[i], ingressDomain, owners)
 	}
 
 	return items

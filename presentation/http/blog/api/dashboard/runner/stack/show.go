@@ -3,6 +3,7 @@ package stack
 import (
 	"encoding/json"
 	"errors"
+	"github.com/khanzadimahdi/testproject/application/auth"
 	"net/http"
 
 	getStack "github.com/khanzadimahdi/testproject/application/dashboard/runner/stack/getStack"
@@ -30,8 +31,13 @@ func NewShowHandler(useCase *getStack.UseCase) *showHandler {
 // @Failure		500		{object}	map[string]interface{}
 // @Router			/dashboard/runner/stacks/{uuid} [get]
 func (h *showHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
-	response, err := h.useCase.Execute(r.Context(), r.PathValue("uuid"))
+	response, err := h.useCase.Execute(r.Context(), &getStack.Request{
+		UUID:      r.PathValue("uuid"),
+		ActorUUID: auth.UUIDFromContext(r.Context()),
+	})
 	switch {
+	case errors.Is(err, domain.ErrForbidden):
+		rw.WriteHeader(http.StatusForbidden)
 	case errors.Is(err, domain.ErrNotExists):
 		rw.WriteHeader(http.StatusNotFound)
 	case err != nil:

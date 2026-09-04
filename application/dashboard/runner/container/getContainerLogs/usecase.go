@@ -4,6 +4,8 @@ import (
 	"context"
 	"time"
 
+	runnerAccess "github.com/khanzadimahdi/testproject/application/dashboard/runner/access"
+	"github.com/khanzadimahdi/testproject/domain/permission"
 	runnerManager "github.com/khanzadimahdi/testproject/domain/runner/manager"
 )
 
@@ -12,7 +14,12 @@ import (
 const defaultLimit uint = 500
 
 type Request struct {
-	UUID  string    `json:"-"`
+	UUID string `json:"-"`
+
+	// ActorUUID is who is asking, which decides whether this container's log
+	// is theirs to read.
+	ActorUUID string `json:"-"`
+
 	After time.Time `json:"after"`
 	Limit uint      `json:"limit"`
 }
@@ -32,13 +39,18 @@ type LogResponse struct {
 // container still has its whole history.
 type UseCase struct {
 	runner runnerManager.Client
+	guard  *runnerAccess.Guard
 }
 
-func NewUseCase(runner runnerManager.Client) *UseCase {
-	return &UseCase{runner: runner}
+func NewUseCase(runner runnerManager.Client, guard *runnerAccess.Guard) *UseCase {
+	return &UseCase{runner: runner, guard: guard}
 }
 
 func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
+	if err := uc.guard.OverContainer(ctx, request.ActorUUID, permission.RunnerContainersLogs, permission.SelfRunnerContainersLogs, request.UUID); err != nil {
+		return nil, err
+	}
+
 	limit := request.Limit
 	if limit == 0 {
 		limit = defaultLimit

@@ -26,6 +26,13 @@ import (
 // so the wire mapping can build one without importing its own package.
 type managerStack = runnerManager.Stack
 
+// managerContainerChange and managerStackChange are the client's own names for
+// one change to a container and to a stack, for the same reason.
+type (
+	managerContainerChange = runnerManager.ContainerChange
+	managerStackChange     = runnerManager.StackChange
+)
+
 // requestTimeout bounds a call to the manager. It does not apply to the
 // streams, which are meant to stay open.
 const requestTimeout = 15 * time.Second
@@ -55,9 +62,9 @@ func New(baseURL string) (*Client, error) {
 	}, nil
 }
 
-func (c *Client) Containers(ctx context.Context, page uint) (runnerManager.Page[task.Task], error) {
+func (c *Client) Containers(ctx context.Context, ownerUUID string, page uint) (runnerManager.Page[task.Task], error) {
 	var payload tasksPayload
-	if err := c.call(ctx, http.MethodGet, c.path("/api/tasks", url.Values{"page": {strconv.FormatUint(uint64(page), 10)}}), nil, &payload); err != nil {
+	if err := c.call(ctx, http.MethodGet, c.path("/api/tasks", listing(ownerUUID, page)), nil, &payload); err != nil {
 		return runnerManager.Page[task.Task]{}, err
 	}
 
@@ -133,9 +140,9 @@ func (c *Client) ContainerLogs(ctx context.Context, uuid string, after time.Time
 	return logs, nil
 }
 
-func (c *Client) Stacks(ctx context.Context, page uint) (runnerManager.Page[runnerManager.Stack], error) {
+func (c *Client) Stacks(ctx context.Context, ownerUUID string, page uint) (runnerManager.Page[runnerManager.Stack], error) {
 	var payload stacksPayload
-	if err := c.call(ctx, http.MethodGet, c.path("/api/stacks", url.Values{"page": {strconv.FormatUint(uint64(page), 10)}}), nil, &payload); err != nil {
+	if err := c.call(ctx, http.MethodGet, c.path("/api/stacks", listing(ownerUUID, page)), nil, &payload); err != nil {
 		return runnerManager.Page[runnerManager.Stack]{}, err
 	}
 
@@ -195,6 +202,17 @@ type ValidationError struct {
 
 func (e *ValidationError) Error() string {
 	return fmt.Sprintf("the runner refused the request: %v", e.ValidationErrors)
+}
+
+// listing is what a page of somebody's containers or stacks is asked for by.
+func listing(ownerUUID string, page uint) url.Values {
+	query := url.Values{"page": {strconv.FormatUint(uint64(page), 10)}}
+
+	if len(ownerUUID) > 0 {
+		query.Set("owner", ownerUUID)
+	}
+
+	return query
 }
 
 func (c *Client) path(path string, query url.Values) string {

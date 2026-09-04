@@ -69,6 +69,52 @@ func (r *TasksRepository) GetAll(ctx context.Context, offset uint, limit uint) (
 
 // GetAllByStack returns the services of one stack, so a stack can be stopped,
 // restarted or deleted as the single thing it is.
+// GetAllByOwner is GetAll of what one person asked for.
+func (r *TasksRepository) GetAllByOwner(ctx context.Context, ownerUUID string, offset uint, limit uint) ([]task.Task, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
+	cur, err := r.collection.Find(
+		ctx,
+		bson.D{{Key: "owner_uuid", Value: ownerUUID}},
+		options.Find().SetSkip(int64(offset)).SetLimit(int64(limit)).SetSort(bson.D{{Key: "_id", Value: -1}}),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer cur.Close(ctx)
+
+	items := make([]task.Task, 0, limit)
+	for cur.Next(ctx) {
+		var t TaskBson
+
+		if err := cur.Decode(&t); err != nil {
+			return nil, err
+		}
+
+		items = append(items, toTask(&t))
+	}
+
+	if err := cur.Err(); err != nil {
+		return nil, err
+	}
+
+	return items, nil
+}
+
+// CountByOwner is how many containers one person has.
+func (r *TasksRepository) CountByOwner(ctx context.Context, ownerUUID string) (uint, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
+	count, err := r.collection.CountDocuments(ctx, bson.D{{Key: "owner_uuid", Value: ownerUUID}})
+	if err != nil {
+		return 0, err
+	}
+
+	return uint(count), nil
+}
+
 func (r *TasksRepository) GetAllByStack(ctx context.Context, stackUUID string) ([]task.Task, error) {
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()

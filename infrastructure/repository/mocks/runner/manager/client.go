@@ -21,8 +21,8 @@ type MockClient struct {
 
 var _ runnerManager.Client = &MockClient{}
 
-func (m *MockClient) Containers(ctx context.Context, page uint) (runnerManager.Page[task.Task], error) {
-	args := m.Called(ctx, page)
+func (m *MockClient) Containers(ctx context.Context, ownerUUID string, page uint) (runnerManager.Page[task.Task], error) {
+	args := m.Called(ctx, ownerUUID, page)
 
 	return args.Get(0).(runnerManager.Page[task.Task]), args.Error(1)
 }
@@ -61,6 +61,14 @@ func (m *MockClient) ContainerLogs(ctx context.Context, uuid string, after time.
 	return args.Get(0).([]container.Log), args.Error(1)
 }
 
+func (m *MockClient) WatchContainers(ctx context.Context) (runnerManager.ContainerStream, error) {
+	args := m.Called(ctx)
+
+	stream, _ := args.Get(0).(runnerManager.ContainerStream)
+
+	return stream, args.Error(1)
+}
+
 func (m *MockClient) FollowContainerLogs(ctx context.Context, uuid string, after time.Time) (runnerManager.LogStream, error) {
 	args := m.Called(ctx, uuid, after)
 
@@ -77,10 +85,18 @@ func (m *MockClient) AttachContainer(ctx context.Context, uuid string, command [
 	return attachment, args.Error(1)
 }
 
-func (m *MockClient) Stacks(ctx context.Context, page uint) (runnerManager.Page[runnerManager.Stack], error) {
-	args := m.Called(ctx, page)
+func (m *MockClient) Stacks(ctx context.Context, ownerUUID string, page uint) (runnerManager.Page[runnerManager.Stack], error) {
+	args := m.Called(ctx, ownerUUID, page)
 
 	return args.Get(0).(runnerManager.Page[runnerManager.Stack]), args.Error(1)
+}
+
+func (m *MockClient) WatchStacks(ctx context.Context) (runnerManager.StackStream, error) {
+	args := m.Called(ctx)
+
+	stream, _ := args.Get(0).(runnerManager.StackStream)
+
+	return stream, args.Error(1)
 }
 
 func (m *MockClient) Stack(ctx context.Context, uuid string) (runnerManager.Stack, error) {
@@ -208,6 +224,108 @@ func (a *FakeAttachment) IsClosed() bool {
 	defer a.lock.Unlock()
 
 	return a.closed
+}
+
+// FakeContainerStream is what happens to the containers, without a runner.
+type FakeContainerStream struct {
+	changes chan runnerManager.ContainerChange
+
+	lock   sync.Mutex
+	closed bool
+}
+
+var _ runnerManager.ContainerStream = &FakeContainerStream{}
+
+func NewFakeContainerStream() *FakeContainerStream {
+	return &FakeContainerStream{changes: make(chan runnerManager.ContainerChange, 16)}
+}
+
+// Emit gives the reader a change, as a container becoming something else would.
+func (s *FakeContainerStream) Emit(change runnerManager.ContainerChange) {
+	s.changes <- change
+}
+
+func (s *FakeContainerStream) Next(ctx context.Context) (runnerManager.ContainerChange, error) {
+	select {
+	case change, ok := <-s.changes:
+		if !ok {
+			return runnerManager.ContainerChange{}, io.EOF
+		}
+
+		return change, nil
+	case <-ctx.Done():
+		return runnerManager.ContainerChange{}, io.EOF
+	}
+}
+
+func (s *FakeContainerStream) Close() error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	if !s.closed {
+		s.closed = true
+		close(s.changes)
+	}
+
+	return nil
+}
+
+func (s *FakeContainerStream) IsClosed() bool {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	return s.closed
+}
+
+// FakeStackStream is what happens to the stacks, without a runner.
+type FakeStackStream struct {
+	changes chan runnerManager.StackChange
+
+	lock   sync.Mutex
+	closed bool
+}
+
+var _ runnerManager.StackStream = &FakeStackStream{}
+
+func NewFakeStackStream() *FakeStackStream {
+	return &FakeStackStream{changes: make(chan runnerManager.StackChange, 16)}
+}
+
+// Emit gives the reader a change, as a stack becoming something else would.
+func (s *FakeStackStream) Emit(change runnerManager.StackChange) {
+	s.changes <- change
+}
+
+func (s *FakeStackStream) Next(ctx context.Context) (runnerManager.StackChange, error) {
+	select {
+	case change, ok := <-s.changes:
+		if !ok {
+			return runnerManager.StackChange{}, io.EOF
+		}
+
+		return change, nil
+	case <-ctx.Done():
+		return runnerManager.StackChange{}, io.EOF
+	}
+}
+
+func (s *FakeStackStream) Close() error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	if !s.closed {
+		s.closed = true
+		close(s.changes)
+	}
+
+	return nil
+}
+
+func (s *FakeStackStream) IsClosed() bool {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	return s.closed
 }
 
 // FakeLogStream is a container's output, without a container.

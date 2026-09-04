@@ -388,14 +388,34 @@ definitions:
         items:
           type: string
         type: array
+      expected_state:
+        type: string
       finished_at:
         type: string
       image:
         type: string
+      max_retries:
+        description: |-
+          MaxRetries is how many times a container that fails is asked for again
+          before the runner gives up on it. -1 never gives up. Retries is how many
+          of those have happened, so a container that keeps failing can say what is
+          being done about it.
+        type: integer
       name:
+        type: string
+      owner:
+        allOf:
+        - $ref: '#/definitions/presenter.Owner'
+        description: Owner is who asked for this container.
+      read_only:
+        type: boolean
+      reason:
+        description: Reason is why a container failed, when the runner can say so.
         type: string
       resource_limits:
         $ref: '#/definitions/presenter.Limits'
+      retries:
+        type: integer
       service_name:
         type: string
       slug:
@@ -405,6 +425,9 @@ definitions:
       started_at:
         type: string
       state:
+        description: |-
+          State is what the container is doing; ExpectedState is what it was asked
+          to be doing. They differ while the runner is closing the gap.
         type: string
       uuid:
         type: string
@@ -1156,8 +1179,17 @@ definitions:
     properties:
       created_at:
         type: string
+      expected_state:
+        description: |-
+          ExpectedState is what the stack was asked to be, which is what it is on
+          its way to while a command is still reaching its services.
+        type: string
       name:
         type: string
+      owner:
+        allOf:
+        - $ref: '#/definitions/presenter.Owner'
+        description: Owner is who asked for this stack.
       services:
         items:
           $ref: '#/definitions/presenter.Container'
@@ -1193,8 +1225,17 @@ definitions:
         type: string
       errors:
         $ref: '#/definitions/domain.ValidationErrors'
+      expected_state:
+        description: |-
+          ExpectedState is what the stack was asked to be, which is what it is on
+          its way to while a command is still reaching its services.
+        type: string
       name:
         type: string
+      owner:
+        allOf:
+        - $ref: '#/definitions/presenter.Owner'
+        description: Owner is who asked for this stack.
       services:
         items:
           $ref: '#/definitions/presenter.Container'
@@ -1327,14 +1368,34 @@ definitions:
         items:
           type: string
         type: array
+      expected_state:
+        type: string
       finished_at:
         type: string
       image:
         type: string
+      max_retries:
+        description: |-
+          MaxRetries is how many times a container that fails is asked for again
+          before the runner gives up on it. -1 never gives up. Retries is how many
+          of those have happened, so a container that keeps failing can say what is
+          being done about it.
+        type: integer
       name:
+        type: string
+      owner:
+        allOf:
+        - $ref: '#/definitions/presenter.Owner'
+        description: Owner is who asked for this container.
+      read_only:
+        type: boolean
+      reason:
+        description: Reason is why a container failed, when the runner can say so.
         type: string
       resource_limits:
         $ref: '#/definitions/presenter.Limits'
+      retries:
+        type: integer
       service_name:
         type: string
       slug:
@@ -1344,6 +1405,9 @@ definitions:
       started_at:
         type: string
       state:
+        description: |-
+          State is what the container is doing; ExpectedState is what it was asked
+          to be doing. They differ while the runner is closing the gap.
         type: string
       uuid:
         type: string
@@ -1368,6 +1432,17 @@ definitions:
       memory:
         type: integer
     type: object
+  presenter.Owner:
+    properties:
+      avatar:
+        type: string
+      name:
+        type: string
+      username:
+        type: string
+      uuid:
+        type: string
+    type: object
   presenter.Pagination:
     properties:
       current_page:
@@ -1379,8 +1454,17 @@ definitions:
     properties:
       created_at:
         type: string
+      expected_state:
+        description: |-
+          ExpectedState is what the stack was asked to be, which is what it is on
+          its way to while a command is still reaching its services.
+        type: string
       name:
         type: string
+      owner:
+        allOf:
+        - $ref: '#/definitions/presenter.Owner'
+        description: Owner is who asked for this stack.
       services:
         items:
           $ref: '#/definitions/presenter.Container'
@@ -1449,6 +1533,11 @@ definitions:
         items:
           $ref: '#/definitions/spec.Port'
         type: array
+      read_only:
+        description: |-
+          ReadOnly makes the container's filesystem immutable, so nothing it runs
+          can change the image it was started from. It is compose's read_only.
+        type: boolean
       restart:
         type: string
       working_dir:
@@ -1476,14 +1565,34 @@ definitions:
         type: array
       errors:
         $ref: '#/definitions/domain.ValidationErrors'
+      expected_state:
+        type: string
       finished_at:
         type: string
       image:
         type: string
+      max_retries:
+        description: |-
+          MaxRetries is how many times a container that fails is asked for again
+          before the runner gives up on it. -1 never gives up. Retries is how many
+          of those have happened, so a container that keeps failing can say what is
+          being done about it.
+        type: integer
       name:
+        type: string
+      owner:
+        allOf:
+        - $ref: '#/definitions/presenter.Owner'
+        description: Owner is who asked for this container.
+      read_only:
+        type: boolean
+      reason:
+        description: Reason is why a container failed, when the runner can say so.
         type: string
       resource_limits:
         $ref: '#/definitions/presenter.Limits'
+      retries:
+        type: integer
       service_name:
         type: string
       slug:
@@ -1493,6 +1602,9 @@ definitions:
       started_at:
         type: string
       state:
+        description: |-
+          State is what the container is doing; ExpectedState is what it was asked
+          to be doing. They differ while the runner is closing the gap.
         type: string
       uuid:
         type: string
@@ -1503,6 +1615,8 @@ definitions:
     properties:
       resources:
         $ref: '#/definitions/spec.Resources'
+      restart_policy:
+        $ref: '#/definitions/spec.RestartPolicy'
     type: object
   spec.Limits:
     properties:
@@ -1522,6 +1636,15 @@ definitions:
     properties:
       limits:
         $ref: '#/definitions/spec.Limits'
+    type: object
+  spec.RestartPolicy:
+    properties:
+      max_attempts:
+        description: |-
+          MaxAttempts is how many times a container that failed is asked for
+          again. Nothing at all leaves it to the runner, zero is not at all, and
+          -1 never gives up.
+        type: integer
     type: object
   spec.Service:
     properties:
@@ -1552,6 +1675,11 @@ definitions:
         items:
           $ref: '#/definitions/spec.Port'
         type: array
+      read_only:
+        description: |-
+          ReadOnly makes the container's filesystem immutable, so nothing it runs
+          can change the image it was started from. It is compose's read_only.
+        type: boolean
       restart:
         type: string
       working_dir:
@@ -3305,6 +3433,58 @@ paths:
       summary: Delete own file
       tags:
       - dashboard files
+  /dashboard/my/runner/containers:
+    get:
+      consumes:
+      - application/json
+      description: paginated list of the containers the current user owns
+      parameters:
+      - default: 1
+        description: Page
+        in: query
+        name: page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getContainers.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List my containers
+      tags:
+      - dashboard runner
+  /dashboard/my/runner/stacks:
+    get:
+      consumes:
+      - application/json
+      description: paginated list of the stacks the current user owns
+      parameters:
+      - default: 1
+        description: Page
+        in: query
+        name: page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_runner_stack_getStacks.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List my stacks
+      tags:
+      - dashboard runner
   /dashboard/permissions:
     get:
       consumes:

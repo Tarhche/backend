@@ -10,13 +10,16 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/khanzadimahdi/testproject/application/dashboard/runner/owners"
 	"github.com/khanzadimahdi/testproject/application/runner/spec"
 	"github.com/khanzadimahdi/testproject/domain"
 	runnerManager "github.com/khanzadimahdi/testproject/domain/runner/manager"
 	"github.com/khanzadimahdi/testproject/domain/runner/network"
 	"github.com/khanzadimahdi/testproject/domain/runner/port"
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
+	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/runner/manager"
+	usersMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
 	"github.com/khanzadimahdi/testproject/infrastructure/runner/manager/client"
 	"github.com/khanzadimahdi/testproject/infrastructure/validator"
 )
@@ -41,6 +44,15 @@ func composeRequest(t *testing.T, body string) *Request {
 	return &request
 }
 
+// directory answers about whoever a container belongs to, which for these is
+// nobody in particular: what is presented is covered where presenting is.
+func directory() *owners.Directory {
+	users := &usersMock.MockUsersRepository{}
+	users.On("GetByUUIDs", mock.Anything, mock.Anything).Return([]user.User{}, nil).Maybe()
+
+	return owners.NewDirectory(users)
+}
+
 func TestUseCase_Execute(t *testing.T) {
 	t.Parallel()
 
@@ -53,15 +65,15 @@ func TestUseCase_Execute(t *testing.T) {
 		runner.On("RunContainer", mock.Anything, mock.Anything, "owner-uuid").
 			Run(func(args mock.Arguments) { handed = args.Get(1).(runnerManager.ContainerSpec) }).
 			Return(task.Task{
-				UUID:      "task-uuid",
-				Name:      "nginx",
-				Slug:      "nginx-xkfqz",
-				State:     task.Created,
-				Endpoints: []task.Endpoint{{ContainerPort: 80}},
+				UUID:         "task-uuid",
+				Name:         "nginx",
+				Slug:         "nginx-xkfqz",
+				CurrentState: task.Created,
+				Endpoints:    []task.Endpoint{{ContainerPort: 80}},
 			}, nil).Once()
 		defer runner.AssertExpectations(t)
 
-		response, err := NewUseCase(&runner, accepts(), ingressDomain).Execute(
+		response, err := NewUseCase(&runner, accepts(), directory(), ingressDomain).Execute(
 			context.Background(),
 			composeRequest(t, `{
 				"name": "nginx",
@@ -103,7 +115,7 @@ func TestUseCase_Execute(t *testing.T) {
 		runner.On("RunContainer", mock.Anything, mock.Anything, "owner-uuid").
 			Return(task.Task{}, &client.ValidationError{ValidationErrors: refusal}).Once()
 
-		response, err := NewUseCase(&runner, accepts(), ingressDomain).Execute(
+		response, err := NewUseCase(&runner, accepts(), directory(), ingressDomain).Execute(
 			context.Background(),
 			composeRequest(t, `{"name": "nginx", "image": "nginx:alpine"}`),
 		)
@@ -122,7 +134,7 @@ func TestUseCase_Execute(t *testing.T) {
 		runner.On("RunContainer", mock.Anything, mock.Anything, "owner-uuid").
 			Return(task.Task{}, unreachable).Once()
 
-		_, err := NewUseCase(&runner, accepts(), ingressDomain).Execute(
+		_, err := NewUseCase(&runner, accepts(), directory(), ingressDomain).Execute(
 			context.Background(),
 			composeRequest(t, `{"name": "nginx", "image": "nginx:alpine"}`),
 		)
@@ -140,7 +152,7 @@ func TestUseCase_Execute(t *testing.T) {
 		v := &validator.MockValidator{}
 		v.On("Validate", mock.Anything).Return(refusal)
 
-		response, err := NewUseCase(&runner, v, ingressDomain).Execute(
+		response, err := NewUseCase(&runner, v, directory(), ingressDomain).Execute(
 			context.Background(),
 			composeRequest(t, `{"name": "nginx"}`),
 		)
