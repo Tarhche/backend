@@ -33,9 +33,16 @@ const (
 	// LiveCodeTimeout is what a snippet gets when there is something to do
 	// with it while it runs: a port to open, or a shell to type in. Both are
 	// worth more than the half minute it takes to print something, and both
-	// end when the container does.
-	LiveCodeTimeout = 5 * time.Minute
-	LiveTTL         = 2 * LiveCodeTimeout
+	// end when the container does. It is what the page counts down to, and it
+	// is short on purpose: a page anybody can open is a page anybody can leave
+	// a container running on.
+	LiveCodeTimeout = 2 * time.Minute
+
+	// LiveTTL is the same: what a snippet is given is what its container is
+	// allowed, so the countdown a reader watches is the whole of its time. The
+	// image's own limit is what usually ends it; the runner takes the
+	// container away if it does not.
+	LiveTTL = LiveCodeTimeout
 )
 
 // codeRetries is how many times a piece of code that could not be run is tried

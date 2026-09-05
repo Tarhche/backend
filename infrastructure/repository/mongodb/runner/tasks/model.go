@@ -44,9 +44,13 @@ type TaskBson struct {
 	// MaxRetries is a pointer because nothing at all means something: a
 	// container written down before there were retry budgets is worth whatever
 	// its kind is usually worth, while one written with none is worth none.
-	MaxRetries     *int           `bson:"max_retries"`
-	Retries        int            `bson:"retries,omitempty"`
-	TTL            time.Duration  `bson:"ttl,omitempty"`
+	MaxRetries *int          `bson:"max_retries"`
+	Retries    int           `bson:"retries,omitempty"`
+	TTL        time.Duration `bson:"ttl,omitempty"`
+
+	// Deadline is when the container running this task will be stopped for
+	// having run long enough, as the node that made it set it.
+	Deadline       time.Time      `bson:"deadline,omitempty"`
 	Reason         string         `bson:"reason,omitempty"`
 	Mounts         []Mount        `bson:"mounts,omitempty"`
 	ResourceLimits ResourceLimits `bson:"resource_limits,omitempty"`
@@ -125,6 +129,7 @@ func toTask(t *TaskBson) task.Task {
 		OwnerUUID:     t.OwnerUUID,
 		CreatedAt:     t.CreatedAt,
 		StartedAt:     t.StartedAt,
+		Deadline:      t.Deadline,
 		FinishedAt:    t.FinishedAt,
 	}
 }
@@ -186,6 +191,7 @@ func toBson(t *task.Task) TaskBson {
 		OwnerUUID:     t.OwnerUUID,
 		CreatedAt:     t.CreatedAt,
 		StartedAt:     t.StartedAt,
+		Deadline:      t.Deadline,
 		FinishedAt:    t.FinishedAt,
 	}
 }

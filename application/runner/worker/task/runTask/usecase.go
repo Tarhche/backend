@@ -2,9 +2,9 @@ package runTask
 
 import (
 	"context"
-	"strconv"
-
 	"errors"
+	"strconv"
+	"time"
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/runner/container"
@@ -46,6 +46,14 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		return nil, err
 	}
 
+	// the image is made sure of first, so that what a container is allowed to
+	// run for is counted from when it runs rather than from when it was asked
+	// for: pulling an image it has never seen can take longer than the whole
+	// of that.
+	if err := uc.containerManager.EnsureImage(ctx, request.Image); err != nil {
+		return nil, err
+	}
+
 	c := &container.Container{
 		Name:             request.ContainerName(),
 		Image:            request.Image,
@@ -84,6 +92,12 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 			Memory: request.ResourceLimits.Memory,
 			Disk:   request.ResourceLimits.Disk,
 		},
+	}
+
+	// what it may run for, counted from now: the image is there and the
+	// container is about to be started.
+	if deadline := request.Deadline(); !deadline.IsZero() {
+		c.Labels[container.TaskDeadlineLabelKey] = deadline.Format(time.RFC3339Nano)
 	}
 
 	if err := uc.clearEarlierAttempts(ctx, request); err != nil {

@@ -334,5 +334,51 @@ func TestHandler(t *testing.T) {
 		NewHandler(resolver, testDomain).ServeHTTP(rw, request)
 
 		assert.Equal(t, http.StatusBadGateway, rw.Code)
+		assert.Equal(t, "2", rw.Header().Get("Retry-After"))
+		assert.NotContains(t, rw.Body.String(), "<html", "a client that did not ask for a page is not given one")
+	})
+
+	t.Run("a browser waiting for a container gets a page that comes back on its own", func(t *testing.T) {
+		t.Parallel()
+
+		dead := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+		starting := runningContainer("nginx-xkfqz", map[port.Port]*httptest.Server{80: dead})
+		dead.Close()
+
+		resolver := &fakeResolver{tasks: map[string]task.Task{"nginx-xkfqz": starting}}
+
+		rw := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, "/", nil)
+		request.Host = "nginx-xkfqz." + testDomain
+		request.Header.Set("Accept", "text/html,application/xhtml+xml,*/*;q=0.8")
+
+		NewHandler(resolver, testDomain).ServeHTTP(rw, request)
+
+		assert.Equal(t, http.StatusBadGateway, rw.Code)
+		assert.Equal(t, "2", rw.Header().Get("Retry-After"))
+		assert.Contains(t, rw.Header().Get("Content-Type"), "text/html")
+		assert.Contains(t, rw.Body.String(), `http-equiv="refresh"`)
+		assert.Contains(t, rw.Body.String(), "starting")
+	})
+
+	t.Run("the waiting page speaks the language the browser asked for", func(t *testing.T) {
+		t.Parallel()
+
+		dead := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+		starting := runningContainer("nginx-xkfqz", map[port.Port]*httptest.Server{80: dead})
+		dead.Close()
+
+		resolver := &fakeResolver{tasks: map[string]task.Task{"nginx-xkfqz": starting}}
+
+		rw := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, "/", nil)
+		request.Host = "nginx-xkfqz." + testDomain
+		request.Header.Set("Accept", "text/html")
+		request.Header.Set("Accept-Language", "fa-IR,fa;q=0.9,en;q=0.8")
+
+		NewHandler(resolver, testDomain).ServeHTTP(rw, request)
+
+		assert.Contains(t, rw.Body.String(), `lang="fa" dir="rtl"`)
+		assert.Contains(t, rw.Body.String(), "آماده‌سازی")
 	})
 }

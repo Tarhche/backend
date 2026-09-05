@@ -71,6 +71,12 @@ type Task struct {
 	// see what is being done about it.
 	Retries int
 
+	// Deadline is when the container running this task will be stopped for
+	// having run long enough. The node that made the container sets it, so it
+	// is counted from when the container came up rather than from when the
+	// task was asked for.
+	Deadline time.Time
+
 	// TTL is how long a job may run for. A job that outlives it is stopped, and
 	// then taken away like any other job that has ended. Zero is no limit, and
 	// it means nothing for a service, which is meant to keep running.

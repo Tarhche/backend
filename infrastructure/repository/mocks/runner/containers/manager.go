@@ -31,6 +31,10 @@ func (m *MockContainerManager) GetByLabel(ctx context.Context, labelName string,
 	return args.Get(0).([]container.Container), args.Error(1)
 }
 
+func (m *MockContainerManager) EnsureImage(ctx context.Context, image string) error {
+	return m.Called(ctx, image).Error(0)
+}
+
 func (m *MockContainerManager) Create(ctx context.Context, c *container.Container) (string, error) {
 	args := m.Called(ctx, c)
 
