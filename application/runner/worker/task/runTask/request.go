@@ -37,6 +37,7 @@ type Request struct {
 	Entrypoint     []string               `json:"entrypoint"`
 	WorkingDir     string                 `json:"working_dir"`
 	ReadOnly       bool                   `json:"read_only"`
+	Interactive    bool                   `json:"interactive,omitempty"`
 	Mounts         []Mount                `json:"mounts"`
 	ResourceLimits ResourceLimits         `json:"resource_limits"`
 

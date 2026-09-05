@@ -68,6 +68,10 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 			// long as it means anything: whoever reports on this container
 			// reports the failures behind it along with it.
 			container.TaskAttemptLabelKey: strconv.Itoa(request.Attempt),
+
+			// whether anybody is watching it run, which is what says a report
+			// about it is worth passing on as it happens.
+			container.TaskInteractiveLabelKey: strconv.FormatBool(request.Interactive),
 		},
 		Environment:   request.Environment,
 		Entrypoint:    request.Entrypoint,
