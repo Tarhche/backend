@@ -54,6 +54,12 @@ func (c *Container) Attempt() int {
 	return attempt
 }
 
+// Interactive reports whether somebody is watching this container run, as it
+// was labelled when it was created.
+func (c *Container) Interactive() bool {
+	return c.Labels[TaskInteractiveLabelKey] == "true"
+}
+
 // ResourceLimits represents the resource limits of the container
 type ResourceLimits struct {
 	Cpu    float64
@@ -112,6 +118,11 @@ const (
 	TaskSlugLabelKey = "task.slug" // The unique, publicly addressable name of the task
 	TaskKindLabelKey = "task.kind" // Whether the task is a one-shot job or a long-running service
 	NodeNameLabelKey = "node.name" // the name of the node that manages the container.
+
+	// TaskInteractiveLabelKey marks a container somebody is watching while it
+	// runs. It is kept on the container so that whoever reports on it can say
+	// so without looking anything up.
+	TaskInteractiveLabelKey = "task.interactive"
 
 	// TaskAttemptLabelKey is which attempt this container is, counting from
 	// zero. It is kept on the container rather than written down anywhere,

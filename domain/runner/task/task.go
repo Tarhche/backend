@@ -51,6 +51,11 @@ type Task struct {
 	Entrypoint    []string
 	WorkingDir    string
 
+	// Interactive says this container is meant to be watched and reached while
+	// it runs — a snippet on a page that serves something, or that somebody is
+	// given a way into — rather than waited on for what it prints.
+	Interactive bool
+
 	// ReadOnly makes the container's own filesystem immutable: it may write
 	// only to what is mounted into it. It is compose's read_only.
 	ReadOnly bool

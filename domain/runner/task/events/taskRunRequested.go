@@ -32,6 +32,7 @@ type TaskRunRequested struct {
 	Entrypoint    []string               `json:"entrypoint"`
 	WorkingDir    string                 `json:"working_dir"`
 	ReadOnly      bool                   `json:"read_only"`
+	Interactive   bool                   `json:"interactive,omitempty"`
 
 	// TTL is how long a job may run for, in nanoseconds. Zero is no limit.
 	TTL time.Duration `json:"ttl"`

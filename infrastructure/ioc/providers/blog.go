@@ -25,6 +25,7 @@ import (
 	"github.com/khanzadimahdi/testproject/application/bookmark/updateBookmark"
 	"github.com/khanzadimahdi/testproject/application/code/heartbeat"
 	"github.com/khanzadimahdi/testproject/application/code/runCode"
+	codeTerminal "github.com/khanzadimahdi/testproject/application/code/terminal"
 	"github.com/khanzadimahdi/testproject/application/comment/createComment"
 	"github.com/khanzadimahdi/testproject/application/comment/getComments"
 	"github.com/khanzadimahdi/testproject/application/contact/createMessage"
@@ -126,6 +127,7 @@ import (
 	getLanguages "github.com/khanzadimahdi/testproject/application/language/getLanguages"
 	languageresolver "github.com/khanzadimahdi/testproject/application/language/resolver"
 	"github.com/khanzadimahdi/testproject/application/localize"
+	runnerTerminal "github.com/khanzadimahdi/testproject/application/runner/terminal"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/file"
 	"github.com/khanzadimahdi/testproject/domain/password"
@@ -258,7 +260,9 @@ func (p *blogProvider) Boot(ctx context.Context, c provider.Container) error {
 		return err
 	}
 
-	cachedGateway := gateway.NewCacheDecorator(messageGateway, runCodeCache, logger, runCode.RunCodeRequest)
+	cachedGateway := gateway.
+		NewCacheDecorator(messageGateway, runCodeCache, logger, runCode.RunCodeRequest).
+		Keeping(runCode.RunCodeRequest, runCode.Keepable)
 
 	websocketTransport, err := infraWebsocket.NewHandler(messageGateway, logger)
 	if err != nil {
@@ -455,7 +459,11 @@ func blog(
 		return nil, err
 	}
 
-	dashboardAttachContainerUseCase := dashboardAttachContainer.NewUseCase(runner, authenticator, authorizer, runnerContainers, validator, cachedGateway, streams, logger)
+	// the terminals this replica is holding, whoever opened them.
+	terminalSessions := runnerTerminal.NewSessions(cachedGateway, streams, logger)
+
+	dashboardAttachContainerUseCase := dashboardAttachContainer.NewUseCase(runner, authenticator, authorizer, runnerContainers, validator, terminalSessions, logger)
+	codeTerminalUseCase := codeTerminal.NewUseCase(runner, validator, terminalSessions, logger)
 	dashboardFollowContainerLogsUseCase := dashboardFollowContainerLogs.NewUseCase(runner, authenticator, authorizer, runnerContainers, validator, cachedGateway, streams, logger)
 	dashboardWatchContainersUseCase := dashboardWatchContainers.NewUseCase(runner, authenticator, authorizer, validator, cachedGateway, streams, ownerDirectory, ingressDomain, logger)
 	dashboardWatchStacksUseCase := dashboardWatchStacks.NewUseCase(runner, authenticator, authorizer, validator, cachedGateway, streams, ownerDirectory, ingressDomain, logger)
@@ -463,6 +471,8 @@ func blog(
 	for subject, handler := range map[string]domain.MessageHandler{
 		dashboardAttachContainer.AttachName:     dashboardAttachContainerUseCase,
 		dashboardAttachContainer.InputName:      dashboardAttachContainerUseCase.InputHandler(),
+		codeTerminal.AttachName:                 codeTerminalUseCase,
+		codeTerminal.InputName:                  codeTerminalUseCase.InputHandler(),
 		dashboardFollowContainerLogs.FollowName: dashboardFollowContainerLogsUseCase,
 		dashboardWatchContainers.WatchName:      dashboardWatchContainersUseCase,
 		dashboardWatchStacks.WatchName:          dashboardWatchStacksUseCase,
@@ -814,7 +824,7 @@ func blog(
 	subscribers := map[string]domain.MessageHandler{
 		forgetpassword.SendForgetPasswordEmailName: forgetpassword.NewSendForgetPasswordEmailHandler(userRepository, authTokenGenerator, mailer, mailFromAddress, webURL, renderer, translator),
 		register.SendRegisterationEmailName:        register.NewSendRegisterationEmailHandler(authTokenGenerator, mailer, mailFromAddress, webURL, renderer, translator),
-		taskEvents.HeartbeatName:                   heartbeat.NewHeartbeatHandler(cachedGateway, logger),
+		taskEvents.HeartbeatName:                   heartbeat.NewHeartbeatHandler(cachedGateway, ingressDomain, logger),
 		taskEvents.TaskFailedName:                  heartbeat.NewTaskFailedHandler(cachedGateway, logger),
 	}
 

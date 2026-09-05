@@ -40,6 +40,7 @@ type TaskBson struct {
 	Entrypoint    []string       `bson:"entrypoint,omitempty"`
 	WorkingDir    string         `bson:"working_dir,omitempty"`
 	ReadOnly      bool           `bson:"read_only,omitempty"`
+	Interactive   bool           `bson:"interactive,omitempty"`
 	// MaxRetries is a pointer because nothing at all means something: a
 	// container written down before there were retry budgets is worth whatever
 	// its kind is usually worth, while one written with none is worth none.
@@ -107,6 +108,7 @@ func toTask(t *TaskBson) task.Task {
 		Entrypoint:      t.Entrypoint,
 		WorkingDir:      t.WorkingDir,
 		ReadOnly:        t.ReadOnly,
+		Interactive:     t.Interactive,
 		MaxRetries:      maxRetriesOf(t),
 		Retries:         t.Retries,
 		TTL:             t.TTL,
@@ -167,6 +169,7 @@ func toBson(t *task.Task) TaskBson {
 		Entrypoint:      t.Entrypoint,
 		WorkingDir:      t.WorkingDir,
 		ReadOnly:        t.ReadOnly,
+		Interactive:     t.Interactive,
 		MaxRetries:      &t.MaxRetries,
 		Retries:         t.Retries,
 		TTL:             t.TTL,

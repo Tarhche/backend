@@ -32,6 +32,7 @@ type TaskScheduled struct {
 	Entrypoint     []string       `json:"entrypoint"`
 	WorkingDir     string         `json:"working_dir"`
 	ReadOnly       bool           `json:"read_only"`
+	Interactive    bool           `json:"interactive,omitempty"`
 	Mounts         []Mount        `json:"mounts"`
 	ResourceLimits ResourceLimits `json:"resource_limits"`
 	NominatedNode  string         `json:"nominated_node"`
@@ -101,6 +102,7 @@ func NewTaskScheduled(t *task.Task, stackSlug string, nominatedNode string, atte
 		Entrypoint:    t.Entrypoint,
 		WorkingDir:    t.WorkingDir,
 		ReadOnly:      t.ReadOnly,
+		Interactive:   t.Interactive,
 		Mounts:        mountsOf(t),
 		ResourceLimits: ResourceLimits{
 			Cpu:    t.ResourceLimits.Cpu,

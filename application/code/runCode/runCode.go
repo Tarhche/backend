@@ -29,6 +29,13 @@ const (
 	// backstop for a container that ignores the timeout above — the runner
 	// takes it away regardless — so it is the longer of the two.
 	TTL = 2 * CodeTimeout
+
+	// LiveCodeTimeout is what a snippet gets when there is something to do
+	// with it while it runs: a port to open, or a shell to type in. Both are
+	// worth more than the half minute it takes to print something, and both
+	// end when the container does.
+	LiveCodeTimeout = 5 * time.Minute
+	LiveTTL         = 2 * LiveCodeTimeout
 )
 
 // codeRetries is how many times a piece of code that could not be run is tried
@@ -100,20 +107,33 @@ func (h *runCode) Handle(ctx context.Context, data []byte) error {
 		})
 	}
 
+	timeout, ttl := CodeTimeout, TTL
+	if request.Live() {
+		timeout, ttl = LiveCodeTimeout, LiveTTL
+	}
+
 	// a job: it runs once, and what is left of it goes when it ends.
 	event := &events.TaskRunRequested{
 		Name:       request.ID,
 		Kind:       string(task.KindJob),
 		Image:      request.Image(),
-		TTL:        TTL,
+		TTL:        ttl,
 		MaxRetries: &codeRetries,
-		Command:    []string{"--timeout", strconv.Itoa(int(CodeTimeout.Seconds())), request.Code},
+		Command:    []string{"--timeout", strconv.Itoa(int(timeout.Seconds())), request.Code},
 		ResourceLimits: events.ResourceLimits{
 			Cpu:    DefaultMaxCpu,
 			Memory: DefaultMaxMemorySize,
 			Disk:   DefaultMaxDiskSize,
 		},
 		OwnerUUID: CodeRunnerOwnerUUID,
+
+		// a snippet that serves something is reached by name: the runner
+		// publishes these on the node and answers for them at the ingress.
+		ExposedPorts: request.Ports,
+
+		// and one somebody is watching is reported as it runs rather than
+		// answered once at the end.
+		Interactive: request.Live(),
 	}
 
 	h.logger.Info("event produced", "event", event)
