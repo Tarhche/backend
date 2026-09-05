@@ -3,11 +3,14 @@ package runTask
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"log/slog"
 	"time"
 
+	"github.com/khanzadimahdi/testproject/application/runner/manager/task/schedule"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/runner/node"
-	"github.com/khanzadimahdi/testproject/domain/runner/port"
+	"github.com/khanzadimahdi/testproject/domain/runner/stack"
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
 	"github.com/khanzadimahdi/testproject/domain/runner/task/events"
 )
@@ -19,21 +22,27 @@ const (
 type TaskCreated struct {
 	taskRepository  task.Repository
 	nodeRepository  node.Repository
-	scheduler       task.Scheduler
-	asyncCommandBus domain.ProduceConsumer
+	stackRepository stack.Repository
+	placement       task.Scheduler
+	scheduler       *schedule.Scheduler
+	logger          *slog.Logger
 }
 
 func NewTaskCreated(
 	taskRepository task.Repository,
 	nodeRepository node.Repository,
-	scheduler task.Scheduler,
-	asyncCommandBus domain.ProduceConsumer,
+	stackRepository stack.Repository,
+	placement task.Scheduler,
+	scheduler *schedule.Scheduler,
+	logger *slog.Logger,
 ) *TaskCreated {
 	return &TaskCreated{
 		taskRepository:  taskRepository,
 		nodeRepository:  nodeRepository,
+		stackRepository: stackRepository,
+		placement:       placement,
 		scheduler:       scheduler,
-		asyncCommandBus: asyncCommandBus,
+		logger:          logger,
 	}
 }
 
@@ -51,26 +60,90 @@ func (uc *TaskCreated) Handle(ctx context.Context, data []byte) error {
 	}
 
 	destinationState := task.Scheduled
-	if t.State == destinationState {
+	if t.CurrentState == destinationState {
 		return nil
 	}
 
-	nodes, err := uc.getHealthyNodes(ctx)
+	selectedNode, err := uc.pickNode(ctx, &t)
 	if err != nil {
 		return err
 	}
 
-	if len(nodes) == 0 {
-		return node.ErrNoNodesAvailable
-	}
-	selectedNode := uc.scheduler.Pick(&t, nodes)
-
-	t.State = destinationState
+	t.CurrentState = destinationState
+	t.NodeName = selectedNode.Name
 	if _, err = uc.taskRepository.Save(ctx, &t); err != nil {
 		return err
 	}
 
-	return uc.publishTaskScheduled(ctx, &t, &selectedNode)
+	// the first attempt at it: nothing has failed yet.
+	return uc.scheduler.On(ctx, &t, selectedNode.Name, 0)
+}
+
+// pickNode chooses where a container runs.
+//
+// A service of a stack has that choice made for it: everything in a stack
+// shares one private network, and a bridge is local to the node that created
+// it, so a stack runs on one node or it does not run. Anything else goes where
+// it was nominated, or wherever there is room.
+func (uc *TaskCreated) pickNode(ctx context.Context, t *task.Task) (node.Node, error) {
+	if len(t.StackUUID) > 0 {
+		return uc.stackNode(ctx, t)
+	}
+
+	if len(t.NodeName) > 0 {
+		return node.Node{Name: t.NodeName}, nil
+	}
+
+	return uc.anyNode(ctx, t)
+}
+
+// stackNode is the one node a stack's services all run on.
+//
+// It is read from the stack rather than from the service, so that services
+// asked for at different moments, by different paths, all end up in the same
+// place — and written back to the stack when it does not have one yet, so that
+// the first service to be placed decides for the rest.
+func (uc *TaskCreated) stackNode(ctx context.Context, t *task.Task) (node.Node, error) {
+	s, err := uc.stackRepository.GetOne(ctx, t.StackUUID)
+	if errors.Is(err, domain.ErrNotExists) {
+		// there is no stack to keep it with any more.
+		return uc.anyNode(ctx, t)
+	} else if err != nil {
+		return node.Node{}, err
+	}
+
+	if len(s.NodeName) > 0 {
+		return node.Node{Name: s.NodeName}, nil
+	}
+
+	selected, err := uc.anyNode(ctx, t)
+	if err != nil {
+		return node.Node{}, err
+	}
+
+	s.NodeName = selected.Name
+	if _, err := uc.stackRepository.Save(ctx, &s); err != nil {
+		return node.Node{}, err
+	}
+
+	uc.logger.InfoContext(ctx, "a stack was placed", "stack", s.UUID, "node", selected.Name)
+
+	return selected, nil
+}
+
+// anyNode is wherever there is room for a container that is not held to a
+// place by anything else.
+func (uc *TaskCreated) anyNode(ctx context.Context, t *task.Task) (node.Node, error) {
+	nodes, err := uc.getHealthyNodes(ctx)
+	if err != nil {
+		return node.Node{}, err
+	}
+
+	if len(nodes) == 0 {
+		return node.Node{}, node.ErrNoNodesAvailable
+	}
+
+	return uc.placement.Pick(t, nodes), nil
 }
 
 func (uc *TaskCreated) getHealthyNodes(ctx context.Context) ([]node.Node, error) {
@@ -89,70 +162,4 @@ func (uc *TaskCreated) getHealthyNodes(ctx context.Context) ([]node.Node, error)
 	nodes = nodes[:j:j]
 
 	return nodes, nil
-}
-
-func (uc *TaskCreated) publishTaskScheduled(ctx context.Context, t *task.Task, selectedNode *node.Node) error {
-	event := events.TaskScheduled{
-		UUID:          t.UUID,
-		Name:          t.Name,
-		Image:         t.Image,
-		AutoRemove:    t.AutoRemove,
-		PortBindings:  convertPortBindings(t.PortBindings),
-		RestartPolicy: t.RestartPolicy,
-		RestartCount:  t.RestartCount,
-		HealthCheck:   t.HealthCheck,
-		AttachStdin:   t.AttachStdin,
-		AttachStdout:  t.AttachStdout,
-		AttachStderr:  t.AttachStderr,
-		Environment:   t.Environment,
-		Command:       t.Command,
-		Entrypoint:    t.Entrypoint,
-		Mounts:        convertMounts(t.Mounts),
-		ResourceLimits: events.ResourceLimits{
-			Cpu:    t.ResourceLimits.Cpu,
-			Memory: t.ResourceLimits.Memory,
-			Disk:   t.ResourceLimits.Disk,
-		},
-		NominatedNode: selectedNode.Name,
-	}
-
-	payload, err := json.Marshal(event)
-	if err != nil {
-		return err
-	}
-
-	return uc.asyncCommandBus.Produce(ctx, events.TaskScheduledName, payload)
-}
-
-func convertPortBindings(domainPorts []port.PortMap) []events.PortMap {
-	result := make([]events.PortMap, len(domainPorts))
-	for i, p := range domainPorts {
-		portMap := make(events.PortMap)
-		for portNum, bindings := range p {
-			portBindings := make([]events.PortBinding, len(bindings))
-			for j, b := range bindings {
-				portBindings[j] = events.PortBinding{
-					HostIP:   b.HostIP,
-					HostPort: b.HostPort,
-				}
-			}
-			portMap[portNum] = portBindings
-		}
-		result[i] = portMap
-	}
-	return result
-}
-
-func convertMounts(domainMounts []task.Mount) []events.Mount {
-	result := make([]events.Mount, len(domainMounts))
-	for i, m := range domainMounts {
-		result[i] = events.Mount{
-			Source:   m.Source,
-			Target:   m.Target,
-			Type:     m.Type,
-			ReadOnly: m.ReadOnly,
-		}
-	}
-
-	return result
 }

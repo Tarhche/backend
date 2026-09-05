@@ -41,8 +41,19 @@ type CacheDecorator struct {
 
 	cache    domain.Cache
 	subjects map[string]struct{}
-	logger   *slog.Logger
+
+	// keepable says which requests on a subject have an answer worth keeping.
+	// A subject that says nothing has all of them kept; one that does is asked
+	// about each request before anything is looked up or stored.
+	keepable map[string]Keepable
+
+	logger *slog.Logger
 }
+
+// Keepable reports whether the answer to this request is the same answer every
+// time. One that is not — a snippet that serves a port, or that somebody is
+// given a way into — is asked for again rather than remembered.
+type Keepable func(payload []byte) bool
 
 // Ensure CacheDecorator implements the Messaging interface
 var _ Messaging = &CacheDecorator{}
@@ -57,8 +68,18 @@ func NewCacheDecorator(messaging Messaging, cache domain.Cache, logger *slog.Log
 		Messaging: messaging,
 		cache:     cache,
 		subjects:  s,
+		keepable:  make(map[string]Keepable, 1),
 		logger:    logger,
 	}
+}
+
+// Keeping narrows a cached subject to the requests whose answers are worth
+// keeping. What that means belongs to whoever knows the subject, so it is said
+// here rather than guessed at.
+func (d *CacheDecorator) Keeping(subject string, keepable Keepable) *CacheDecorator {
+	d.keepable[subject] = keepable
+
+	return d
 }
 
 func (d *CacheDecorator) Consume(ctx context.Context, subject string, handler domain.MessageHandler) error {
@@ -70,6 +91,10 @@ func (d *CacheDecorator) Consume(ctx context.Context, subject string, handler do
 		ctx,
 		subject,
 		domain.MessageHandlerFunc(func(ctx context.Context, payload []byte) error {
+			if keepable, ok := d.keepable[subject]; ok && !keepable(payload) {
+				return handler.Handle(ctx, payload)
+			}
+
 			checksum, requestID, err := payloadChecksum(payload)
 			if err != nil {
 				return handler.Handle(ctx, payload)

@@ -1,24 +1,13 @@
 package gettasks
 
 import (
-	"time"
-
+	gettask "github.com/khanzadimahdi/testproject/application/runner/manager/task/getTask"
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
 )
 
 type Response struct {
-	Items      []TaskResponse `json:"items"`
-	Pagination Pagination     `json:"pagination"`
-}
-
-type TaskResponse struct {
-	UUID       string    `json:"uuid"`
-	Name       string    `json:"name"`
-	State      string    `json:"state"`
-	Image      string    `json:"image"`
-	CreatedAt  time.Time `json:"created_at"`
-	StartedAt  time.Time `json:"started_at"`
-	FinishedAt time.Time `json:"finished_at"`
+	Items      []gettask.Response `json:"items"`
+	Pagination Pagination         `json:"pagination"`
 }
 
 type Pagination struct {
@@ -27,18 +16,10 @@ type Pagination struct {
 }
 
 func NewResponse(tasks []task.Task, totalPages, currentPage uint) *Response {
-	items := make([]TaskResponse, len(tasks))
+	items := make([]gettask.Response, len(tasks))
 
 	for i, t := range tasks {
-		items[i] = TaskResponse{
-			UUID:       t.UUID,
-			Name:       t.Name,
-			State:      t.State.String(),
-			Image:      t.Image,
-			CreatedAt:  t.CreatedAt,
-			StartedAt:  t.StartedAt,
-			FinishedAt: t.FinishedAt,
-		}
+		items[i] = *gettask.NewResponse(t)
 	}
 
 	return &Response{

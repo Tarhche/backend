@@ -7,7 +7,12 @@ import (
 )
 
 type Response struct {
-	Name            string    `json:"name"`
+	Name string `json:"name"`
+
+	// APIAddress is where this node's own HTTP API can be reached from inside
+	// the cluster. The manager proxies terminals and live logs there.
+	APIAddress string `json:"api_address"`
+
 	Stats           Stats     `json:"stats"`
 	LastHeartbeatAt time.Time `json:"last_heartbeat_at"`
 	CreatedAt       time.Time `json:"created_at"`
@@ -27,7 +32,8 @@ type Stats struct {
 
 func NewResponse(node *node.Node) *Response {
 	return &Response{
-		Name: node.Name,
+		Name:       node.Name,
+		APIAddress: node.APIAddress,
 		Stats: Stats{
 			PIDs:          node.Stats.PIDs,
 			CPUPercent:    node.Stats.CPUPercent,

@@ -4,14 +4,21 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"testing"
 	"time"
 
 	"github.com/danceable/console"
+	workerHeartbeat "github.com/khanzadimahdi/testproject/application/runner/worker/beatHeart"
+	taskHeartbeat "github.com/khanzadimahdi/testproject/application/runner/worker/task/beatHeart"
+	shipLogs "github.com/khanzadimahdi/testproject/application/runner/worker/task/shipLogs"
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/runner/container"
+	"github.com/khanzadimahdi/testproject/domain/runner/node"
 	messaging "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
+	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/runner/containers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -192,7 +199,15 @@ func TestServe(t *testing.T) {
 
 		var consumer messaging.MockProduceConsumer
 		consumer.On("Consume", ctx, mock.Anything, mock.Anything).Times(len(subscribers)).Return(nil)
+		consumer.On("Produce", mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 		defer consumer.AssertExpectations(t)
+
+		var nodeManager containers.MockNodeManager
+		nodeManager.On("Stats", mock.Anything, mock.Anything).Return(node.Stats{}, nil).Maybe()
+
+		var containerManager containers.MockContainerManager
+		containerManager.On("GetByLabel", mock.Anything, mock.Anything, mock.Anything).
+			Return([]container.Container{}, nil).Maybe()
 
 		command := NewServeCommand()
 		command.configs.Name = consumerName
@@ -200,6 +215,14 @@ func TestServe(t *testing.T) {
 		command.handler = handler
 		command.consumer = &consumer
 		command.consumers = subscribers
+		command.logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+
+		// the background work a running worker does. It is set here because
+		// Run starts it, and a command assembled by hand has to be assembled
+		// completely.
+		command.logShipper = shipLogs.NewUseCase(&containerManager, &consumer, consumerName, command.logger)
+		command.taskHeartBeat = taskHeartbeat.NewUseCase(&containerManager, &consumer, consumerName, "docker", command.logger)
+		command.workerHeartBeat = workerHeartbeat.NewUseCase(&consumer, &nodeManager, consumerName, "worker:80")
 
 		serverStartedListening := make(chan struct{})
 

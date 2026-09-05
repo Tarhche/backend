@@ -56,8 +56,9 @@ func (r *NodesRepository) GetAll(ctx context.Context, offset uint, limit uint) (
 			return nil, err
 		}
 		items = append(items, node.Node{
-			Name: t.Name,
-			Role: node.Role(t.Role),
+			Name:       t.Name,
+			Role:       node.Role(t.Role),
+			APIAddress: t.APIAddress,
 			Stats: node.Stats{
 				PIDs:          t.Stats.PIDs,
 				CPUPercent:    t.Stats.CPUPercent,
@@ -95,8 +96,9 @@ func (r *NodesRepository) GetOne(ctx context.Context, UUID string) (node.Node, e
 	}
 
 	return node.Node{
-		Name: t.Name,
-		Role: node.Role(t.Role),
+		Name:       t.Name,
+		Role:       node.Role(t.Role),
+		APIAddress: t.APIAddress,
 		Stats: node.Stats{
 			PIDs:          t.Stats.PIDs,
 			CPUPercent:    t.Stats.CPUPercent,
@@ -117,8 +119,9 @@ func (r *NodesRepository) Save(ctx context.Context, n *node.Node) (string, error
 	defer cancel()
 
 	update := NodeBson{
-		Name: n.Name,
-		Role: string(n.Role),
+		Name:       n.Name,
+		Role:       string(n.Role),
+		APIAddress: n.APIAddress,
 		Stats: Stats{
 			PIDs:          n.Stats.PIDs,
 			CPUPercent:    n.Stats.CPUPercent,

@@ -1,0 +1,212 @@
+// Package watchContainers keeps the dashboard's list of containers as it is,
+// without asking for it again.
+//
+// One request opens the stream and the reply to it is that stream: a message
+// for each container whose state changed, and one for each that is gone, until
+// the client says it has seen enough.
+package watchContainers
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"io"
+	"log/slog"
+
+	"github.com/khanzadimahdi/testproject/application/auth"
+	"github.com/khanzadimahdi/testproject/application/dashboard/runner/owners"
+	"github.com/khanzadimahdi/testproject/application/dashboard/runner/presenter"
+	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/permission"
+	runnerManager "github.com/khanzadimahdi/testproject/domain/runner/manager"
+	"github.com/khanzadimahdi/testproject/infrastructure/websocket/gateway"
+)
+
+// WatchName is the subject a client opens a containers watch on.
+const WatchName = "runnerContainersWatch"
+
+// the kinds of change a client is told about.
+const (
+	kindChanged = "changed"
+	kindDeleted = "deleted"
+)
+
+// UseCase watches the containers on behalf of the clients showing them.
+type UseCase struct {
+	runner        runnerManager.Client
+	authenticator *auth.Authenticator
+	authorizer    domain.Authorizer
+	validator     domain.Validator
+	replyer       domain.Replyer
+	streams       *gateway.Streams
+	owners        *owners.Directory
+	ingressDomain string
+	logger        *slog.Logger
+}
+
+var _ domain.MessageHandler = &UseCase{}
+
+func NewUseCase(
+	runner runnerManager.Client,
+	authenticator *auth.Authenticator,
+	authorizer domain.Authorizer,
+	validator domain.Validator,
+	replyer domain.Replyer,
+	streams *gateway.Streams,
+	ownerDirectory *owners.Directory,
+	ingressDomain string,
+	logger *slog.Logger,
+) *UseCase {
+	return &UseCase{
+		runner:        runner,
+		authenticator: authenticator,
+		authorizer:    authorizer,
+		validator:     validator,
+		replyer:       replyer,
+		streams:       streams,
+		owners:        ownerDirectory,
+		ingressDomain: ingressDomain,
+		logger:        logger,
+	}
+}
+
+func (uc *UseCase) Handle(ctx context.Context, data []byte) error {
+	var request Request
+	if err := json.Unmarshal(data, &request); err != nil {
+		return nil
+	}
+
+	if validationErrors := uc.validator.Validate(&request); len(validationErrors) > 0 {
+		return uc.fail(ctx, request.ID, validationErrors)
+	}
+
+	user, err := uc.authenticator.Authenticate(ctx, request.AccessToken)
+	if err != nil {
+		return uc.fail(ctx, request.ID, domain.ValidationErrors{"access_token": "unauthenticated"})
+	}
+
+	// a watch shows what a listing shows, so it is the listing's permission —
+	// and somebody who may only list their own is only told about their own.
+	all, err := uc.authorizer.Authorize(ctx, user.UUID, permission.RunnerContainersIndex)
+	if err != nil {
+		return err
+	}
+
+	// what they are told about: everybody's, or their own alone.
+	var watching string
+
+	if !all {
+		own, err := uc.authorizer.Authorize(ctx, user.UUID, permission.SelfRunnerContainersIndex)
+		if err != nil {
+			return err
+		}
+
+		if !own {
+			return uc.fail(ctx, request.ID, domain.ValidationErrors{"access_token": "forbidden"})
+		}
+
+		watching = user.UUID
+	}
+
+	stream, err := uc.runner.WatchContainers(ctx)
+	if err != nil {
+		return err
+	}
+
+	uc.serve(ctx, request.ID, watching, stream)
+
+	return nil
+}
+
+// serve carries the containers' changes to the client watching them.
+func (uc *UseCase) serve(ctx context.Context, requestID string, watching string, stream runnerManager.ContainerStream) {
+	// detached from the message that asked for it: the watch lives as long as
+	// the person watching, not as long as the request.
+	ctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+
+	uc.streams.Add(requestID, cancel)
+
+	go func() {
+		defer func() {
+			uc.streams.Remove(requestID)
+			_ = stream.Close()
+			cancel()
+
+			uc.end(ctx, requestID)
+		}()
+
+		for {
+			change, err := stream.Next(ctx)
+			if err != nil {
+				if !errors.Is(err, io.EOF) {
+					uc.logger.WarnContext(ctx, "a container watch ended", "error", err)
+				}
+
+				return
+			}
+
+			// a change to somebody else's container is not this client's news.
+			if len(watching) > 0 && !change.Deleted && change.Container.OwnerUUID != watching {
+				continue
+			}
+
+			response, err := uc.response(ctx, change)
+			if err != nil {
+				uc.logger.ErrorContext(ctx, "error on reading who a change belongs to", "error", err)
+
+				return
+			}
+
+			payload, err := json.Marshal(response)
+			if err != nil {
+				uc.logger.ErrorContext(ctx, "error on marshalling a container change", "error", err)
+
+				return
+			}
+
+			if err := uc.replyer.Reply(ctx, &domain.Reply{
+				RequestID: requestID,
+				Kind:      domain.ReplyChunk,
+				Payload:   payload,
+			}); err != nil {
+				uc.logger.ErrorContext(ctx, "error on writing a container change", "error", err)
+
+				return
+			}
+		}
+	}()
+}
+
+func (uc *UseCase) response(ctx context.Context, change runnerManager.ContainerChange) (ChangeResponse, error) {
+	if change.Deleted {
+		return ChangeResponse{Kind: kindDeleted, UUID: change.UUID}, nil
+	}
+
+	people, err := uc.owners.Of(ctx, change.Container.OwnerUUID)
+	if err != nil {
+		return ChangeResponse{}, err
+	}
+
+	container := presenter.NewContainer(change.Container, uc.ingressDomain, people)
+
+	return ChangeResponse{Kind: kindChanged, UUID: change.UUID, Container: &container}, nil
+}
+
+func (uc *UseCase) end(ctx context.Context, requestID string) {
+	if err := uc.replyer.Reply(ctx, &domain.Reply{RequestID: requestID, Kind: domain.ReplyEOF}); err != nil {
+		uc.logger.ErrorContext(ctx, "error on ending a container watch", "error", err)
+	}
+}
+
+func (uc *UseCase) fail(ctx context.Context, requestID string, validationErrors domain.ValidationErrors) error {
+	payload, err := json.Marshal(map[string]any{"errors": validationErrors})
+	if err != nil {
+		return err
+	}
+
+	return uc.replyer.Reply(ctx, &domain.Reply{
+		RequestID: requestID,
+		Kind:      domain.ReplyEOF,
+		Payload:   payload,
+	})
+}

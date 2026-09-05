@@ -56,34 +56,8 @@ func (r *TasksRepository) GetAll(ctx context.Context, offset uint, limit uint) (
 		if err := cur.Decode(&t); err != nil {
 			return nil, err
 		}
-		items = append(items, task.Task{
-			UUID:          t.UUID,
-			Name:          t.Name,
-			State:         task.State(t.State),
-			Image:         t.Image,
-			AutoRemove:    t.AutoRemove,
-			PortBindings:  t.PortBindings,
-			RestartPolicy: t.RestartPolicy,
-			RestartCount:  t.RestartCount,
-			HealthCheck:   t.HealthCheck,
-			AttachStdin:   t.AttachStdin,
-			AttachStdout:  t.AttachStdout,
-			AttachStderr:  t.AttachStderr,
-			Environment:   t.Environment,
-			Command:       t.Command,
-			Entrypoint:    t.Entrypoint,
-			Mounts:        convertMounts(t.Mounts),
-			ResourceLimits: task.ResourceLimits{
-				Cpu:    t.ResourceLimits.Cpu,
-				Memory: t.ResourceLimits.Memory,
-				Disk:   t.ResourceLimits.Disk,
-			},
-			ContainerID: t.ContainerID,
-			OwnerUUID:   t.OwnerUUID,
-			CreatedAt:   t.CreatedAt,
-			StartedAt:   t.StartedAt,
-			FinishedAt:  t.FinishedAt,
-		})
+
+		items = append(items, toTask(&t))
 	}
 
 	if err := cur.Err(); err != nil {
@@ -93,49 +67,110 @@ func (r *TasksRepository) GetAll(ctx context.Context, offset uint, limit uint) (
 	return items, nil
 }
 
-func (r *TasksRepository) GetOne(ctx context.Context, UUID string) (task.Task, error) {
+// GetAllByStack returns the services of one stack, so a stack can be stopped,
+// restarted or deleted as the single thing it is.
+// GetAllByOwner is GetAll of what one person asked for.
+func (r *TasksRepository) GetAllByOwner(ctx context.Context, ownerUUID string, offset uint, limit uint) ([]task.Task, error) {
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
-	filter := bson.D{{Key: "_id", Value: UUID}}
+	cur, err := r.collection.Find(
+		ctx,
+		bson.D{{Key: "owner_uuid", Value: ownerUUID}},
+		options.Find().SetSkip(int64(offset)).SetLimit(int64(limit)).SetSort(bson.D{{Key: "_id", Value: -1}}),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer cur.Close(ctx)
+
+	items := make([]task.Task, 0, limit)
+	for cur.Next(ctx) {
+		var t TaskBson
+
+		if err := cur.Decode(&t); err != nil {
+			return nil, err
+		}
+
+		items = append(items, toTask(&t))
+	}
+
+	if err := cur.Err(); err != nil {
+		return nil, err
+	}
+
+	return items, nil
+}
+
+// CountByOwner is how many containers one person has.
+func (r *TasksRepository) CountByOwner(ctx context.Context, ownerUUID string) (uint, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
+	count, err := r.collection.CountDocuments(ctx, bson.D{{Key: "owner_uuid", Value: ownerUUID}})
+	if err != nil {
+		return 0, err
+	}
+
+	return uint(count), nil
+}
+
+func (r *TasksRepository) GetAllByStack(ctx context.Context, stackUUID string) ([]task.Task, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
+	cur, err := r.collection.Find(
+		ctx,
+		bson.D{{Key: "stack_uuid", Value: stackUUID}},
+		options.Find().SetSort(bson.D{{Key: "service_name", Value: 1}}),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer cur.Close(ctx)
+
+	items := make([]task.Task, 0, 8)
+	for cur.Next(ctx) {
+		var t TaskBson
+
+		if err := cur.Decode(&t); err != nil {
+			return nil, err
+		}
+
+		items = append(items, toTask(&t))
+	}
+
+	return items, cur.Err()
+}
+
+func (r *TasksRepository) GetOne(ctx context.Context, UUID string) (task.Task, error) {
+	return r.findOne(ctx, bson.D{{Key: "_id", Value: UUID}})
+}
+
+func (r *TasksRepository) GetOneByOwner(ctx context.Context, ownerUUID string, UUID string) (task.Task, error) {
+	return r.findOne(ctx, bson.D{{Key: "_id", Value: UUID}, {Key: "owner_uuid", Value: ownerUUID}})
+}
+
+// GetOneBySlug finds a task by the unique name its ports are served on, which
+// is how the ingress turns a hostname into a container.
+func (r *TasksRepository) GetOneBySlug(ctx context.Context, slug string) (task.Task, error) {
+	return r.findOne(ctx, bson.D{{Key: "slug", Value: slug}})
+}
+
+func (r *TasksRepository) findOne(ctx context.Context, filter bson.D) (task.Task, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
 
 	var t TaskBson
 	if err := r.collection.FindOne(ctx, filter).Decode(&t); err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			err = domain.ErrNotExists
 		}
+
 		return task.Task{}, err
 	}
 
-	return task.Task{
-		UUID:          t.UUID,
-		Name:          t.Name,
-		State:         task.State(t.State),
-		Image:         t.Image,
-		AutoRemove:    t.AutoRemove,
-		PortBindings:  t.PortBindings,
-		RestartPolicy: t.RestartPolicy,
-		RestartCount:  t.RestartCount,
-		HealthCheck:   t.HealthCheck,
-		AttachStdin:   t.AttachStdin,
-		AttachStdout:  t.AttachStdout,
-		AttachStderr:  t.AttachStderr,
-		Environment:   t.Environment,
-		Command:       t.Command,
-		Entrypoint:    t.Entrypoint,
-		Mounts:        convertMounts(t.Mounts),
-		ResourceLimits: task.ResourceLimits{
-			Cpu:    t.ResourceLimits.Cpu,
-			Memory: t.ResourceLimits.Memory,
-			Disk:   t.ResourceLimits.Disk,
-		},
-		ContainerID:   t.ContainerID,
-		ContainerLogs: t.ContainerLogs,
-		OwnerUUID:     t.OwnerUUID,
-		CreatedAt:     t.CreatedAt,
-		StartedAt:     t.StartedAt,
-		FinishedAt:    t.FinishedAt,
-	}, nil
+	return toTask(&t), nil
 }
 
 func (r *TasksRepository) Save(ctx context.Context, t *task.Task) (string, error) {
@@ -150,45 +185,13 @@ func (r *TasksRepository) Save(ctx context.Context, t *task.Task) (string, error
 		t.UUID = UUID.String()
 	}
 
-	mounts := make([]Mount, len(t.Mounts))
-	for i, m := range t.Mounts {
-		mounts[i] = Mount{
-			Source:   m.Source,
-			Target:   m.Target,
-			Type:     m.Type,
-			ReadOnly: m.ReadOnly,
-		}
+	// a task is saved on every state change, so its creation time is whatever
+	// it already had rather than the time of the latest write.
+	if t.CreatedAt.IsZero() {
+		t.CreatedAt = time.Now()
 	}
 
-	update := TaskBson{
-		UUID:          t.UUID,
-		Name:          t.Name,
-		State:         uint(t.State),
-		Image:         t.Image,
-		AutoRemove:    t.AutoRemove,
-		PortBindings:  t.PortBindings,
-		RestartPolicy: t.RestartPolicy,
-		RestartCount:  t.RestartCount,
-		HealthCheck:   t.HealthCheck,
-		AttachStdin:   t.AttachStdin,
-		AttachStdout:  t.AttachStdout,
-		AttachStderr:  t.AttachStderr,
-		Environment:   t.Environment,
-		Command:       t.Command,
-		Entrypoint:    t.Entrypoint,
-		Mounts:        mounts,
-		ResourceLimits: ResourceLimits{
-			Cpu:    t.ResourceLimits.Cpu,
-			Memory: t.ResourceLimits.Memory,
-			Disk:   t.ResourceLimits.Disk,
-		},
-		ContainerID:   t.ContainerID,
-		ContainerLogs: t.ContainerLogs,
-		OwnerUUID:     t.OwnerUUID,
-		CreatedAt:     time.Now(),
-		StartedAt:     t.StartedAt,
-		FinishedAt:    t.FinishedAt,
-	}
+	update := toBson(t)
 
 	if _, err := r.collection.UpdateOne(
 		ctx,
@@ -221,19 +224,4 @@ func (r *TasksRepository) Count(ctx context.Context) (uint, error) {
 	}
 
 	return uint(c), nil
-}
-
-// Convert from repository Mount to domain Mount
-func convertMounts(mounts []Mount) []task.Mount {
-	result := make([]task.Mount, len(mounts))
-	for i, m := range mounts {
-		result[i] = task.Mount{
-			Source:   m.Source,
-			Target:   m.Target,
-			Type:     m.Type,
-			ReadOnly: m.ReadOnly,
-		}
-	}
-
-	return result
 }

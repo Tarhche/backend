@@ -20,9 +20,9 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	oteltrace "go.opentelemetry.io/otel/trace"
 
+	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/runner/container"
 	"github.com/khanzadimahdi/testproject/domain/runner/port"
-	"github.com/khanzadimahdi/testproject/domain/runner/task"
 	"github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
 )
 
@@ -39,6 +39,10 @@ var statusMap = map[string]container.Status{
 const (
 	readOperation  = "read"
 	writeOperation = "write"
+
+	// stopTimeout is how long a container is given to shut down on its own
+	// before docker kills it.
+	stopTimeout = 10
 )
 
 type DockerManager struct {
@@ -121,32 +125,44 @@ func (m *DockerManager) GetByLabel(ctx context.Context, labelName string, labelV
 	return result, nil
 }
 
+// EnsureImage makes sure an image is on this node, pulling it if it is not.
+func (m *DockerManager) EnsureImage(ctx context.Context, reference string) error {
+	ctx, span := m.tracer.Start(ctx, "docker.image.ensure",
+		oteltrace.WithAttributes(attribute.String("image", reference)),
+	)
+	defer span.End()
+
+	images, err := m.client.ImageList(ctx, image.ListOptions{
+		All:     false,
+		Filters: filters.NewArgs(filters.Arg("reference", reference)),
+	})
+	if err != nil {
+		return trace.RecordError(span, err)
+	}
+
+	if len(images) > 0 {
+		return nil
+	}
+
+	m.logger.Info("image does not exist, start pulling", "image", reference)
+
+	if err := m.pullImage(ctx, reference); err != nil {
+		return trace.RecordError(span, err)
+	}
+
+	m.logger.Info("image pulled", "image", reference)
+
+	return nil
+}
+
 func (m *DockerManager) Create(ctx context.Context, c *container.Container) (string, error) {
 	ctx, span := m.tracer.Start(ctx, "docker.container.create",
 		oteltrace.WithAttributes(attribute.String("image", c.Image), attribute.String("name", c.Name)),
 	)
 	defer span.End()
 
-	// check if image exists
-	m.logger.Info("checking if image exists", "image", c.Image)
-	images, err := m.client.ImageList(ctx, image.ListOptions{
-		All:     false,
-		Filters: filters.NewArgs(filters.Arg("reference", c.Image)),
-	})
-	if err != nil {
+	if err := m.EnsureImage(ctx, c.Image); err != nil {
 		return "", trace.RecordError(span, err)
-	}
-
-	m.logger.Info("image existence checked", "exists", len(images) > 0)
-
-	if len(images) == 0 {
-		m.logger.Info("image does not exist, start pulling", "image", c.Image)
-
-		if err := m.pullImage(ctx, c.Image); err != nil {
-			return "", trace.RecordError(span, err)
-		}
-
-		m.logger.Info("image pulled", "image", c.Image)
 	}
 
 	config := &containerTypes.Config{
@@ -169,13 +185,24 @@ func (m *DockerManager) Create(ctx context.Context, c *container.Container) (str
 		},
 		PortBindings: convertPortMap(c.PortBindings),
 		AutoRemove:   c.AutoRemove,
+
+		// an immutable container writes only to what is mounted into it.
+		ReadonlyRootfs: c.ReadOnly,
+		NetworkMode:    networkMode(c.Networks),
 	}
 
-	m.logger.Info("creating container", "name", c.Name)
-	resp, err := m.client.ContainerCreate(ctx, config, hostConfig, nil, nil, c.Name)
+	m.logger.Info("creating container", "name", c.Name, "networks", c.Networks)
+	resp, err := m.client.ContainerCreate(ctx, config, hostConfig, endpointsConfig(c.Networks), nil, c.Name)
 	if err != nil {
 		return "", trace.RecordError(span, err)
 	}
+
+	// a container that reaches both its own stack and the internet sits on two
+	// networks, and docker only takes one of them at create time.
+	if err := m.connectRemainingNetworks(ctx, resp.ID, c.Networks); err != nil {
+		return "", trace.RecordError(span, err)
+	}
+
 	m.logger.Info("container created", "image", c.Image, "containerID", resp.ID)
 
 	return resp.ID, nil
@@ -210,18 +237,57 @@ func (m *DockerManager) Start(ctx context.Context, containerUUID string) error {
 	return trace.RecordError(span, err)
 }
 
+// gone turns docker's own "no such container" into the domain's way of saying
+// it, so that a command for a container that is not there any more reads as
+// already done rather than as a failure worth trying again.
+func gone(err error) error {
+	if client.IsErrNotFound(err) {
+		return domain.ErrNotExists
+	}
+
+	return err
+}
+
 func (m *DockerManager) Stop(ctx context.Context, containerUUID string) error {
 	ctx, span := m.tracer.Start(ctx, "docker.container.stop",
 		oteltrace.WithAttributes(attribute.String("container.id", containerUUID)),
 	)
 	defer span.End()
 
-	timeout := 10
+	timeout := stopTimeout
 	err := m.client.ContainerStop(ctx, containerUUID, containerTypes.StopOptions{
 		Timeout: &timeout,
 	})
 
-	return trace.RecordError(span, err)
+	return trace.RecordError(span, gone(err))
+}
+
+// Restart stops the container and starts it again. The container keeps its
+// identity, so its logs, its published ports and its name all survive.
+func (m *DockerManager) Restart(ctx context.Context, containerUUID string) error {
+	ctx, span := m.tracer.Start(ctx, "docker.container.restart",
+		oteltrace.WithAttributes(attribute.String("container.id", containerUUID)),
+	)
+	defer span.End()
+
+	timeout := stopTimeout
+	err := m.client.ContainerRestart(ctx, containerUUID, containerTypes.StopOptions{
+		Timeout: &timeout,
+	})
+
+	return trace.RecordError(span, gone(err))
+}
+
+// Kill stops the container at once, without the grace period Stop gives it.
+func (m *DockerManager) Kill(ctx context.Context, containerUUID string) error {
+	ctx, span := m.tracer.Start(ctx, "docker.container.kill",
+		oteltrace.WithAttributes(attribute.String("container.id", containerUUID)),
+	)
+	defer span.End()
+
+	err := m.client.ContainerKill(ctx, containerUUID, "SIGKILL")
+
+	return trace.RecordError(span, gone(err))
 }
 
 func (m *DockerManager) Delete(ctx context.Context, containerUUID string) error {
@@ -234,7 +300,7 @@ func (m *DockerManager) Delete(ctx context.Context, containerUUID string) error 
 		Force: true,
 	})
 
-	return trace.RecordError(span, err)
+	return trace.RecordError(span, gone(err))
 }
 
 func (m *DockerManager) Inspect(ctx context.Context, containerUUID string) (container.Container, error) {
@@ -263,6 +329,7 @@ func (m *DockerManager) Inspect(ctx context.Context, containerUUID string) (cont
 		Command:          info.Config.Cmd,
 		Entrypoint:       info.Config.Entrypoint,
 		WorkingDirectory: info.Config.WorkingDir,
+		ReadOnly:         info.HostConfig.ReadonlyRootfs,
 		RestartPolicy:    string(info.HostConfig.RestartPolicy.Name),
 		RestartCount:     uint(info.RestartCount),
 		CreatedAt:        created,
@@ -273,6 +340,7 @@ func (m *DockerManager) Inspect(ctx context.Context, containerUUID string) (cont
 			Cpu:    float64(info.HostConfig.Resources.NanoCPUs) / 1e9,
 		},
 		AutoRemove: info.HostConfig.AutoRemove,
+		Networks:   inspectedNetworks(info.NetworkSettings),
 	}, nil
 }
 
@@ -369,25 +437,6 @@ func (m *DockerManager) Logs(ctx context.Context, containerUUID string, writer i
 	return trace.RecordError(span, err)
 }
 
-func (m *DockerManager) EvaluateTaskState(status container.Status) task.State {
-	switch status {
-	case container.StatusCreated:
-		return task.Scheduled
-	case container.StatusRunning:
-		return task.Running
-	case container.StatusRestarting:
-		return task.Stopping
-	case container.StatusPaused:
-		return task.Stopped
-	case container.StatusDead:
-		return task.Failed
-	case container.StatusExited, container.StatusRemoving:
-		return task.Completed
-	default:
-		return task.Failed
-	}
-}
-
 func convertPortSet(ports port.PortSet) nat.PortSet {
 	result := make(nat.PortSet)
 	for p := range ports {
@@ -396,15 +445,24 @@ func convertPortSet(ports port.PortSet) nat.PortSet {
 	return result
 }
 
+// convertPortMap turns the bindings a container asks for into docker's own
+// shape. A binding with no host port asks docker to pick a free one, which is
+// how the runner publishes a container's ports without having to keep track of
+// what is already taken on the node.
 func convertPortMap(bindings port.PortMap) nat.PortMap {
 	result := make(nat.PortMap)
 	for p, bindings := range bindings {
 		portStr := fmt.Sprintf("%d/tcp", p)
 		result[nat.Port(portStr)] = make([]nat.PortBinding, len(bindings))
 		for i, b := range bindings {
+			hostPort := ""
+			if b.HostPort > 0 {
+				hostPort = fmt.Sprintf("%d", b.HostPort)
+			}
+
 			result[nat.Port(portStr)][i] = nat.PortBinding{
 				HostIP:   b.HostIP,
-				HostPort: fmt.Sprintf("%d", b.HostPort),
+				HostPort: hostPort,
 			}
 		}
 	}

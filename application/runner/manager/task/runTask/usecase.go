@@ -7,6 +7,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
 	"github.com/khanzadimahdi/testproject/domain/runner/task/events"
+	"github.com/khanzadimahdi/testproject/infrastructure/runner/slug"
 )
 
 type UseCase struct {
@@ -34,12 +35,27 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		}, nil
 	}
 
+	// the slug is the name this container is addressed by from outside: it is
+	// unique, it survives restarts, and it is the left-most label of the
+	// hostname its ports are served on.
+	containerSlug, err := slug.Generate(request.Name)
+	if err != nil {
+		return nil, err
+	}
+
 	t := task.Task{
 		Name:          request.Name,
-		State:         task.Created,
+		Slug:          containerSlug,
+		Kind:          request.TaskKind(),
+		StackUUID:     request.StackUUID,
+		ServiceName:   request.ServiceName,
+		CurrentState:  task.Created,
+		ExpectedState: task.Running,
 		Image:         request.Image,
 		AutoRemove:    request.AutoRemove,
 		PortBindings:  request.ConvertPortBindings(),
+		ExposedPorts:  request.ExposedPorts,
+		NetworkPolicy: request.Policy(),
 		RestartPolicy: request.RestartPolicy,
 		RestartCount:  request.RestartCount,
 		HealthCheck:   request.HealthCheck,
@@ -49,12 +65,18 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		Environment:   request.Environment,
 		Command:       request.Command,
 		Entrypoint:    request.Entrypoint,
+		WorkingDir:    request.WorkingDir,
+		ReadOnly:      request.ReadOnly,
+		Interactive:   request.Interactive,
+		MaxRetries:    request.Retries(),
+		TTL:           request.TTL,
 		Mounts:        request.ConvertMounts(),
 		ResourceLimits: task.ResourceLimits{
 			Cpu:    request.ResourceLimits.Cpu,
 			Memory: request.ResourceLimits.Memory,
 			Disk:   request.ResourceLimits.Disk,
 		},
+		NodeName:  request.NominatedNode,
 		OwnerUUID: request.OwnerUUID,
 	}
 
@@ -67,7 +89,7 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		return nil, err
 	}
 
-	return &Response{UUID: uuid}, nil
+	return &Response{UUID: uuid, Slug: containerSlug}, nil
 }
 
 func (uc *UseCase) publishTaskCreated(ctx context.Context, uuid string) error {

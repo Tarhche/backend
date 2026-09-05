@@ -65,6 +65,28 @@ const (
 	LanguagesShow   = "languages.show"
 	LanguagesUpdate = "languages.update"
 	LanguagesDelete = "languages.delete"
+
+	RunnerContainersIndex  = "runner.containers.index"
+	RunnerContainersCreate = "runner.containers.create"
+	RunnerContainersShow   = "runner.containers.show"
+	RunnerContainersDelete = "runner.containers.delete"
+	RunnerContainersLogs   = "runner.containers.logs"
+
+	// RunnerContainersManage covers stopping, killing and restarting. They are
+	// one permission because they are one decision: whether somebody may
+	// change what a container is doing.
+	RunnerContainersManage = "runner.containers.manage"
+
+	// RunnerContainersAttach is a shell inside somebody's container, which is
+	// the strongest thing the dashboard offers, so it is never implied by any
+	// of the others.
+	RunnerContainersAttach = "runner.containers.attach"
+
+	RunnerStacksIndex  = "runner.stacks.index"
+	RunnerStacksCreate = "runner.stacks.create"
+	RunnerStacksShow   = "runner.stacks.show"
+	RunnerStacksDelete = "runner.stacks.delete"
+	RunnerStacksManage = "runner.stacks.manage"
 )
 
 // user's self related accesses
@@ -84,4 +106,16 @@ const (
 
 	SelfFilesIndex  = "self.files.index"
 	SelfFilesDelete = "self.files.delete"
+
+	SelfRunnerContainersIndex  = "self.runner.containers.index"
+	SelfRunnerContainersShow   = "self.runner.containers.show"
+	SelfRunnerContainersLogs   = "self.runner.containers.logs"
+	SelfRunnerContainersManage = "self.runner.containers.manage"
+	SelfRunnerContainersAttach = "self.runner.containers.attach"
+	SelfRunnerContainersDelete = "self.runner.containers.delete"
+
+	SelfRunnerStacksIndex  = "self.runner.stacks.index"
+	SelfRunnerStacksShow   = "self.runner.stacks.show"
+	SelfRunnerStacksManage = "self.runner.stacks.manage"
+	SelfRunnerStacksDelete = "self.runner.stacks.delete"
 )

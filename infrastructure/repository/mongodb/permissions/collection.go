@@ -84,4 +84,34 @@ var collection []permission.Permission = []permission.Permission{
 	// self files
 	{Name: "list of self files", Value: permission.SelfFilesIndex},
 	{Name: "delete a self file", Value: permission.SelfFilesDelete},
+
+	// self containers
+	{Name: "list of self containers", Value: permission.SelfRunnerContainersIndex},
+	{Name: "show a self container", Value: permission.SelfRunnerContainersShow},
+	{Name: "read a self container's logs", Value: permission.SelfRunnerContainersLogs},
+	{Name: "stop, kill or restart a self container", Value: permission.SelfRunnerContainersManage},
+	{Name: "open a terminal in a self container", Value: permission.SelfRunnerContainersAttach},
+	{Name: "delete a self container", Value: permission.SelfRunnerContainersDelete},
+
+	// self stacks
+	{Name: "list of self stacks", Value: permission.SelfRunnerStacksIndex},
+	{Name: "show a self stack", Value: permission.SelfRunnerStacksShow},
+	{Name: "stop, kill or restart a self stack", Value: permission.SelfRunnerStacksManage},
+	{Name: "delete a self stack", Value: permission.SelfRunnerStacksDelete},
+
+	// runner containers
+	{Name: "list of containers", Value: permission.RunnerContainersIndex},
+	{Name: "run a container", Value: permission.RunnerContainersCreate},
+	{Name: "show a container", Value: permission.RunnerContainersShow},
+	{Name: "delete a container", Value: permission.RunnerContainersDelete},
+	{Name: "read a container's logs", Value: permission.RunnerContainersLogs},
+	{Name: "stop, kill or restart a container", Value: permission.RunnerContainersManage},
+	{Name: "open a terminal in a container", Value: permission.RunnerContainersAttach},
+
+	// runner stacks
+	{Name: "list of stacks", Value: permission.RunnerStacksIndex},
+	{Name: "run a stack", Value: permission.RunnerStacksCreate},
+	{Name: "show a stack", Value: permission.RunnerStacksShow},
+	{Name: "delete a stack", Value: permission.RunnerStacksDelete},
+	{Name: "stop, kill or restart a stack", Value: permission.RunnerStacksManage},
 }
