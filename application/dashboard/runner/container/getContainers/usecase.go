@@ -8,15 +8,6 @@ import (
 	runnerManager "github.com/khanzadimahdi/testproject/domain/runner/manager"
 )
 
-type Request struct {
-	Page uint `json:"page"`
-}
-
-type Response struct {
-	Items      []presenter.Container `json:"items"`
-	Pagination presenter.Pagination  `json:"pagination"`
-}
-
 // UseCase lists the containers the runner is holding.
 type UseCase struct {
 	runner        runnerManager.Client

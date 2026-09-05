@@ -8,15 +8,6 @@ import (
 	runnerManager "github.com/khanzadimahdi/testproject/domain/runner/manager"
 )
 
-type Response struct {
-	presenter.Stack
-}
-
-// Request is one stack to show.
-type Request struct {
-	UUID string `json:"-"`
-}
-
 // UseCase reads one stack and the services in it.
 type UseCase struct {
 	runner        runnerManager.Client
