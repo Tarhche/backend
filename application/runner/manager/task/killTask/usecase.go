@@ -37,8 +37,19 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		return nil, err
 	}
 
+	// what it is asked to be from now on. It is written down before anything
+	// is asked of the node, and whatever happens to that request, so that a
+	// container which ends up somewhere else is brought back here by the
+	// runner's own heartbeat.
+	t.ExpectedState = task.Stopped
+
 	destinationState := task.Stopping
-	if !task.ValidStateTransition(t.State, destinationState) {
+	if !task.ValidStateTransition(t.CurrentState, destinationState) {
+		// it cannot go there from where it is — but what was wanted is kept.
+		if _, err := uc.taskRepository.Save(ctx, &t); err != nil {
+			return nil, err
+		}
+
 		return &Response{
 			ValidationErrors: domain.ValidationErrors{
 				"task_id": uc.translator.Translate("invalid_state_transition"),
@@ -46,7 +57,8 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		}, nil
 	}
 
-	t.State = destinationState
+	t.CurrentState = destinationState
+
 	if _, err = uc.taskRepository.Save(ctx, &t); err != nil {
 		return nil, err
 	}

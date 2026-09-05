@@ -20,6 +20,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	oteltrace "go.opentelemetry.io/otel/trace"
 
+	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/runner/container"
 	"github.com/khanzadimahdi/testproject/domain/runner/port"
 	"github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
@@ -172,7 +173,10 @@ func (m *DockerManager) Create(ctx context.Context, c *container.Container) (str
 		},
 		PortBindings: convertPortMap(c.PortBindings),
 		AutoRemove:   c.AutoRemove,
-		NetworkMode:  networkMode(c.Networks),
+
+		// an immutable container writes only to what is mounted into it.
+		ReadonlyRootfs: c.ReadOnly,
+		NetworkMode:    networkMode(c.Networks),
 	}
 
 	m.logger.Info("creating container", "name", c.Name, "networks", c.Networks)
@@ -221,6 +225,17 @@ func (m *DockerManager) Start(ctx context.Context, containerUUID string) error {
 	return trace.RecordError(span, err)
 }
 
+// gone turns docker's own "no such container" into the domain's way of saying
+// it, so that a command for a container that is not there any more reads as
+// already done rather than as a failure worth trying again.
+func gone(err error) error {
+	if client.IsErrNotFound(err) {
+		return domain.ErrNotExists
+	}
+
+	return err
+}
+
 func (m *DockerManager) Stop(ctx context.Context, containerUUID string) error {
 	ctx, span := m.tracer.Start(ctx, "docker.container.stop",
 		oteltrace.WithAttributes(attribute.String("container.id", containerUUID)),
@@ -232,7 +247,7 @@ func (m *DockerManager) Stop(ctx context.Context, containerUUID string) error {
 		Timeout: &timeout,
 	})
 
-	return trace.RecordError(span, err)
+	return trace.RecordError(span, gone(err))
 }
 
 // Restart stops the container and starts it again. The container keeps its
@@ -248,7 +263,7 @@ func (m *DockerManager) Restart(ctx context.Context, containerUUID string) error
 		Timeout: &timeout,
 	})
 
-	return trace.RecordError(span, err)
+	return trace.RecordError(span, gone(err))
 }
 
 // Kill stops the container at once, without the grace period Stop gives it.
@@ -260,7 +275,7 @@ func (m *DockerManager) Kill(ctx context.Context, containerUUID string) error {
 
 	err := m.client.ContainerKill(ctx, containerUUID, "SIGKILL")
 
-	return trace.RecordError(span, err)
+	return trace.RecordError(span, gone(err))
 }
 
 func (m *DockerManager) Delete(ctx context.Context, containerUUID string) error {
@@ -273,7 +288,7 @@ func (m *DockerManager) Delete(ctx context.Context, containerUUID string) error 
 		Force: true,
 	})
 
-	return trace.RecordError(span, err)
+	return trace.RecordError(span, gone(err))
 }
 
 func (m *DockerManager) Inspect(ctx context.Context, containerUUID string) (container.Container, error) {
@@ -302,6 +317,7 @@ func (m *DockerManager) Inspect(ctx context.Context, containerUUID string) (cont
 		Command:          info.Config.Cmd,
 		Entrypoint:       info.Config.Entrypoint,
 		WorkingDirectory: info.Config.WorkingDir,
+		ReadOnly:         info.HostConfig.ReadonlyRootfs,
 		RestartPolicy:    string(info.HostConfig.RestartPolicy.Name),
 		RestartCount:     uint(info.RestartCount),
 		CreatedAt:        created,

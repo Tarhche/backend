@@ -24,6 +24,10 @@ type Service struct {
 	Ports       Ports         `json:"ports,omitempty"`
 	Restart     string        `json:"restart,omitempty"`
 
+	// ReadOnly makes the container's filesystem immutable, so nothing it runs
+	// can change the image it was started from. It is compose's read_only.
+	ReadOnly bool `json:"read_only,omitempty"`
+
 	// NetworkMode is how much of the network the container reaches: "none",
 	// "isolated" or "public". It is not docker's own network_mode — the runner
 	// decides which networks a container joins — but it sits in the same place
@@ -33,9 +37,20 @@ type Service struct {
 	Deploy Deploy `json:"deploy,omitempty"`
 }
 
-// Deploy carries the resource limits, where a compose file puts them.
+// Deploy carries the resource limits and the restart policy, where a compose
+// file puts them.
 type Deploy struct {
-	Resources Resources `json:"resources,omitempty"`
+	Resources     Resources     `json:"resources,omitempty"`
+	RestartPolicy RestartPolicy `json:"restart_policy,omitempty"`
+}
+
+// RestartPolicy is how hard the runner tries to make a container what it was
+// asked to be.
+type RestartPolicy struct {
+	// MaxAttempts is how many times a container that failed is asked for
+	// again. Nothing at all leaves it to the runner, zero is not at all, and
+	// -1 never gives up.
+	MaxAttempts *int `json:"max_attempts,omitempty"`
 }
 
 type Resources struct {
@@ -102,6 +117,10 @@ func (s *Service) Validate(prefix string) domain.ValidationErrors {
 
 	if s.Deploy.Resources.Limits.CPUs < 0 || s.Deploy.Resources.Limits.Memory < 0 || s.Deploy.Resources.Limits.Disk < 0 {
 		validationErrors[field("deploy.resources.limits")] = "invalid_value"
+	}
+
+	if attempts := s.Deploy.RestartPolicy.MaxAttempts; attempts != nil && *attempts < task.RetryForever {
+		validationErrors[field("deploy.restart_policy.max_attempts")] = "invalid_value"
 	}
 
 	return validationErrors

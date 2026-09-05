@@ -15,7 +15,14 @@ FROM base AS develop
 WORKDIR /opt/app
 ENV PATH=$GOPATH/bin/linux_$GOARCH:$PATH
 RUN apk add tmux
-ENTRYPOINT ["go", "tool", "air", "-build.poll=true", "--"]
+ENTRYPOINT ["go", "tool", "air", \
+    "-build.poll=true", \
+    "-build.poll_interval=2000", \
+    "-build.include_ext=go,tmpl", \
+    "-build.exclude_dir=tmp,vendor,testdata,.git,.github,resources/docs,storage", \
+    "-build.exclude_regex=_test\\.go$", \
+    "-build.stop_on_error=false", \
+    "--"]
 
 FROM alpine:latest AS production
 RUN addgroup -g 10001 app \

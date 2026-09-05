@@ -26,7 +26,8 @@ func NewIndexHandler(useCase *gettasks.UseCase) *indexHandler {
 // @Tags			runner tasks
 // @Accept			json
 // @Produce		json
-// @Param			page	query		int	false	"Page number"	default(1)
+// @Param			page	query		int		false	"Page number"	default(1)
+// @Param			owner	query		string	false	"Only the containers this person owns"
 // @Success		200		{object}	gettasks.Response
 // @Failure		500		{object}	map[string]interface{}
 // @Router			/tasks [get]
@@ -40,7 +41,8 @@ func (h *indexHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	}
 
 	request := &gettasks.Request{
-		Page: page,
+		Page:      page,
+		OwnerUUID: r.URL.Query().Get("owner"),
 	}
 
 	response, err := h.useCase.Execute(r.Context(), request)

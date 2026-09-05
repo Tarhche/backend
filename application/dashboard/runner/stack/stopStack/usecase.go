@@ -10,7 +10,7 @@ type Request struct {
 	UUID string `json:"-"`
 }
 
-// UseCase stops every service of a stack. The runner owns its lifecycle, so this passes the
+// UseCase stops a stack. The runner owns its lifecycle, so this passes the
 // command on rather than deciding anything about it.
 type UseCase struct {
 	runner runnerManager.Client

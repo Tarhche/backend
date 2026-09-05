@@ -51,6 +51,42 @@ type Attachment interface {
 	Resize(ctx context.Context, rows uint, cols uint) error
 }
 
+// ContainerChange is what became of one container: the container as it is now,
+// or, when it is gone, the uuid of the one that was removed.
+type ContainerChange struct {
+	UUID      string
+	Deleted   bool
+	Container task.Task
+}
+
+// ContainerStream is what happens to the containers the runner holds, as it
+// happens.
+type ContainerStream interface {
+	// Next blocks until the next change arrives. It reports io.EOF when the
+	// stream ends.
+	Next(ctx context.Context) (ContainerChange, error)
+
+	io.Closer
+}
+
+// StackChange is what became of one stack: the stack as it is now, together
+// with the services its state is read off, or, when it is gone, the uuid of the
+// one that was removed.
+type StackChange struct {
+	UUID    string
+	Deleted bool
+	Stack   Stack
+}
+
+// StackStream is what happens to the stacks the runner holds, as it happens.
+type StackStream interface {
+	// Next blocks until the next change arrives. It reports io.EOF when the
+	// stream ends.
+	Next(ctx context.Context) (StackChange, error)
+
+	io.Closer
+}
+
 // LogStream is a container's output as it is written.
 type LogStream interface {
 	// Next blocks until the next line arrives. It reports io.EOF when the
@@ -62,20 +98,42 @@ type LogStream interface {
 
 // Client is the runner.
 type Client interface {
-	Containers(ctx context.Context, page uint) (Page[task.Task], error)
+	// Containers is a page of the containers the runner holds. An owner
+	// narrows it to that person's own; empty is everybody's, including the
+	// ones nobody owns.
+	Containers(ctx context.Context, ownerUUID string, page uint) (Page[task.Task], error)
 	Container(ctx context.Context, uuid string) (task.Task, error)
+
+	// ContainerOf is one of somebody's own containers. One that is not theirs
+	// is not there as far as they are concerned, and is reported missing.
+	ContainerOf(ctx context.Context, ownerUUID string, uuid string) (task.Task, error)
 	RunContainer(ctx context.Context, spec ContainerSpec, ownerUUID string) (task.Task, error)
 	StopContainer(ctx context.Context, uuid string) error
 	KillContainer(ctx context.Context, uuid string) error
 	RestartContainer(ctx context.Context, uuid string) error
 	DeleteContainer(ctx context.Context, uuid string) error
 
+	// WatchContainers follows what happens to every container the runner
+	// holds, so a listing of them can be kept as it is rather than asked for
+	// again.
+	WatchContainers(ctx context.Context) (ContainerStream, error)
+
 	ContainerLogs(ctx context.Context, uuid string, after time.Time, limit uint) ([]container.Log, error)
 	FollowContainerLogs(ctx context.Context, uuid string, after time.Time) (LogStream, error)
 	AttachContainer(ctx context.Context, uuid string, command []string) (Attachment, error)
 
-	Stacks(ctx context.Context, page uint) (Page[Stack], error)
+	// Stacks is a page of the stacks the runner holds, narrowed the same way.
+	Stacks(ctx context.Context, ownerUUID string, page uint) (Page[Stack], error)
+
+	// WatchStacks follows what happens to every stack the runner holds. A
+	// stack's state is read off its services, so it changes whenever one of
+	// them does.
+	WatchStacks(ctx context.Context) (StackStream, error)
 	Stack(ctx context.Context, uuid string) (Stack, error)
+
+	// StackOf is one of somebody's own stacks, reported missing when it is not
+	// theirs.
+	StackOf(ctx context.Context, ownerUUID string, uuid string) (Stack, error)
 	RunStack(ctx context.Context, spec StackSpec, ownerUUID string) (Stack, error)
 	StopStack(ctx context.Context, uuid string) error
 	KillStack(ctx context.Context, uuid string) error
@@ -89,6 +147,10 @@ type Client interface {
 type Stack struct {
 	stack.Stack
 
-	State    task.State
+	// State is what the stack is, read off its services; ExpectedState is what
+	// it was asked to be. They differ while a command is still reaching them.
+	State         task.State
+	ExpectedState task.State
+
 	Services []task.Task
 }

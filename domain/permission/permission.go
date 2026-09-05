@@ -101,4 +101,16 @@ const (
 
 	SelfFilesIndex  = "self.files.index"
 	SelfFilesDelete = "self.files.delete"
+
+	SelfRunnerContainersIndex  = "self.runner.containers.index"
+	SelfRunnerContainersShow   = "self.runner.containers.show"
+	SelfRunnerContainersLogs   = "self.runner.containers.logs"
+	SelfRunnerContainersManage = "self.runner.containers.manage"
+	SelfRunnerContainersAttach = "self.runner.containers.attach"
+	SelfRunnerContainersDelete = "self.runner.containers.delete"
+
+	SelfRunnerStacksIndex  = "self.runner.stacks.index"
+	SelfRunnerStacksShow   = "self.runner.stacks.show"
+	SelfRunnerStacksManage = "self.runner.stacks.manage"
+	SelfRunnerStacksDelete = "self.runner.stacks.delete"
 )

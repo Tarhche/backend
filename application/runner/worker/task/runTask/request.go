@@ -36,8 +36,16 @@ type Request struct {
 	Command        []string               `json:"command"`
 	Entrypoint     []string               `json:"entrypoint"`
 	WorkingDir     string                 `json:"working_dir"`
+	ReadOnly       bool                   `json:"read_only"`
 	Mounts         []Mount                `json:"mounts"`
 	ResourceLimits ResourceLimits         `json:"resource_limits"`
+
+	// Attempt is which try this is, counting from zero, and MaxRetries how
+	// many the container is worth. The node does not decide either — it hands
+	// them back with whatever becomes of this attempt — but a retry is a fresh
+	// container rather than the failed one started again.
+	Attempt    int `json:"attempt"`
+	MaxRetries int `json:"max_retries"`
 }
 
 // PortBinding represents a host-to-container port binding

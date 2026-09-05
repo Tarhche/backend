@@ -3,6 +3,7 @@ package killTask
 import (
 	"context"
 	"encoding/json"
+	"errors"
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/runner/task/events"
@@ -26,7 +27,7 @@ func (h *KillTaskHandler) Handle(ctx context.Context, data []byte) error {
 	}
 
 	_, err := h.useCase.Execute(ctx, &Request{UUID: killRequested.UUID})
-	if err == domain.ErrNotExists {
+	if errors.Is(err, domain.ErrNotExists) {
 		// the container is not on this node, or is already gone.
 		return nil
 	}

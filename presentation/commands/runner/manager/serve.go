@@ -10,6 +10,7 @@ import (
 	"github.com/danceable/console"
 	"github.com/danceable/provider"
 
+	"github.com/khanzadimahdi/testproject/application/runner/manager/task/reconcile"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers"
@@ -18,6 +19,12 @@ import (
 
 const (
 	serveName string = "serve-runner-manager"
+
+	// heartbeatInterval is how often the manager looks at what the containers
+	// are doing against what was asked of them. Often enough that a container
+	// somebody stopped by hand comes back while they are still looking at it;
+	// rarely enough that it is not a poll of the whole runner.
+	heartbeatInterval = 10 * time.Second
 )
 
 type ServeCommand struct {
@@ -31,7 +38,13 @@ type ServeCommand struct {
 	ingress http.Handler
 
 	consumers map[string]domain.MessageHandler
-	logger    *slog.Logger
+
+	// reconcile is the manager's own heartbeat: one pass over the containers,
+	// asking the nodes for whatever would make each of them what it is meant
+	// to be.
+	reconcile *reconcile.UseCase
+
+	logger *slog.Logger
 }
 
 var (
@@ -109,6 +122,10 @@ func (c *ServeCommand) Boot(ctx context.Context, container provider.Container) e
 		return err
 	}
 
+	if err := container.Resolve(&c.reconcile); err != nil {
+		return err
+	}
+
 	return container.Resolve(&c.consumers, provider.ResolveName(runner.ManagerSubscribers))
 }
 
@@ -167,12 +184,33 @@ func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 		}
 	}()
 
+	go c.heartbeat(ctx)
+
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		c.logger.ErrorContext(ctx, "server failed", "error", err)
 		return console.ExitFailure
 	}
 
 	return console.ExitSuccess
+}
+
+// heartbeat keeps the containers as they were asked to be, for as long as the
+// manager is up.
+func (c *ServeCommand) heartbeat(ctx context.Context) {
+	ticker := time.NewTicker(heartbeatInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			if err := c.reconcile.Execute(ctx); err != nil {
+				c.logger.ErrorContext(ctx, "the runner's heartbeat failed", "error", err)
+			}
+
+		case <-ctx.Done():
+			return
+		}
+	}
 }
 
 func (c *ServeCommand) consumeTopics(ctx context.Context) error {

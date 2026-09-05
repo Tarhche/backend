@@ -76,10 +76,11 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 	}
 
 	s := stack.Stack{
-		Name:      request.Name,
-		Slug:      stackSlug,
-		NodeName:  selectedNode.Name,
-		OwnerUUID: request.OwnerUUID,
+		Name:          request.Name,
+		Slug:          stackSlug,
+		ExpectedState: task.Running,
+		NodeName:      selectedNode.Name,
+		OwnerUUID:     request.OwnerUUID,
 	}
 
 	uuid, err := uc.stackRepository.Save(ctx, &s)

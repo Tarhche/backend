@@ -30,7 +30,9 @@ func NewShowHandler(useCase *getContainer.UseCase) *showHandler {
 // @Failure		500		{object}	map[string]interface{}
 // @Router			/dashboard/runner/containers/{uuid} [get]
 func (h *showHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
-	response, err := h.useCase.Execute(r.Context(), r.PathValue("uuid"))
+	response, err := h.useCase.Execute(r.Context(), &getContainer.Request{
+		UUID: r.PathValue("uuid"),
+	})
 	switch {
 	case errors.Is(err, domain.ErrNotExists):
 		rw.WriteHeader(http.StatusNotFound)
