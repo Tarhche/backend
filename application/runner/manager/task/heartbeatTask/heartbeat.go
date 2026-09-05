@@ -196,6 +196,7 @@ func (uc *Heartbeat) publishTaskRan(ctx context.Context, heartbeat *events.Heart
 		ContainerUUID: heartbeat.ContainerUUID,
 		Endpoints:     heartbeat.Endpoints,
 		StartedAt:     heartbeat.At,
+		Deadline:      heartbeat.Deadline,
 	}
 
 	payload, err := json.Marshal(event)

@@ -49,6 +49,7 @@ func TestTaskScheduled_Handle(t *testing.T) {
 		)
 
 		networkManager.On("EnsureIsolatedNetwork", mock.Anything).Return(nil)
+		containerManager.On("EnsureImage", mock.Anything, mock.Anything).Return(nil)
 		containerManager.On("Create", mock.Anything, mock.Anything).
 			Return("", errors.New("no such image: ghcr.io/example/runner:latest")).Once()
 

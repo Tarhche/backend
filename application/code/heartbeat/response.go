@@ -1,5 +1,7 @@
 package heartbeat
 
+import "time"
+
 type Response struct {
 	Name string `json:"name"`
 	Logs []byte `json:"logs"`
@@ -9,6 +11,11 @@ type Response struct {
 	// nothing has none, and one that has stopped has none any more.
 	State     string     `json:"state,omitempty"`
 	Endpoints []Endpoint `json:"endpoints,omitempty"`
+
+	// Deadline is when a snippet somebody is watching will be stopped, which
+	// is what the countdown beside it counts down to. A snippet nobody is
+	// watching is answered once and has none.
+	Deadline *time.Time `json:"deadline,omitempty"`
 
 	// ContainerUUID is the container itself, which is what a terminal is
 	// opened on. It is known only to whoever ran the code.

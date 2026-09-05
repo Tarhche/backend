@@ -3,6 +3,7 @@ package presenter
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -134,4 +135,50 @@ func TestNewContainer(t *testing.T) {
 
 	require.Len(t, presented.Endpoints, 1)
 	assert.Equal(t, "http://nginx-xkfqz.runner.localhost:8021", presented.Endpoints[0].URL)
+}
+
+func TestNewContainer_deadline(t *testing.T) {
+	t.Parallel()
+
+	started := time.Now().Add(-time.Minute)
+	ends := started.Add(10 * time.Minute)
+
+	t.Run("a container that may only run for so long says when it runs out", func(t *testing.T) {
+		t.Parallel()
+
+		presented := NewContainer(task.Task{
+			UUID:         "task-uuid",
+			CurrentState: task.Running,
+			StartedAt:    started,
+			Deadline:     ends,
+		}, ingressDomain, NewOwners(nil))
+
+		require.NotNil(t, presented.Deadline)
+		assert.Equal(t, ends, *presented.Deadline)
+	})
+
+	t.Run("a container that may run forever never expires", func(t *testing.T) {
+		t.Parallel()
+
+		presented := NewContainer(task.Task{
+			UUID:         "task-uuid",
+			CurrentState: task.Running,
+			StartedAt:    started,
+		}, ingressDomain, NewOwners(nil))
+
+		assert.Nil(t, presented.Deadline)
+	})
+
+	t.Run("a container that is not running has nothing left to count down", func(t *testing.T) {
+		t.Parallel()
+
+		presented := NewContainer(task.Task{
+			UUID:         "task-uuid",
+			CurrentState: task.Stopped,
+			StartedAt:    started,
+			Deadline:     ends,
+		}, ingressDomain, NewOwners(nil))
+
+		assert.Nil(t, presented.Deadline)
+	})
 }

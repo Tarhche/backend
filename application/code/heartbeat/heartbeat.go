@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
@@ -46,6 +47,19 @@ func kindOf(h *events.Heartbeat) task.Kind {
 	return task.DefaultKind
 }
 
+// deadline is when a snippet being watched will be stopped. The runner sets it
+// as the container is made and reports it with every beat; a snippet that is
+// not running any more has none left to report.
+func deadline(h *events.Heartbeat, state task.State) *time.Time {
+	if !h.Interactive || state != task.Running || h.Deadline.IsZero() {
+		return nil
+	}
+
+	at := h.Deadline
+
+	return &at
+}
+
 func (h *heartbeat) Handle(ctx context.Context, data []byte) error {
 	var heartbeat events.Heartbeat
 	if err := json.Unmarshal(data, &heartbeat); err != nil {
@@ -70,6 +84,7 @@ func (h *heartbeat) Handle(ctx context.Context, data []byte) error {
 		State:         taskState.String(),
 		ContainerUUID: heartbeat.UUID,
 		Endpoints:     h.endpoints(&heartbeat, taskState),
+		Deadline:      deadline(&heartbeat, taskState),
 	}
 
 	payload, err := json.Marshal(response)

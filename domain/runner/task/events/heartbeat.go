@@ -31,6 +31,11 @@ type Heartbeat struct {
 	// runs, rather than waiting on for what it prints.
 	Interactive bool
 
+	// Deadline is when the container will be stopped for having run long
+	// enough, as it was labelled when it was made. A container that may run
+	// for as long as it likes has none.
+	Deadline time.Time
+
 	Endpoints []Endpoint
 	Logs      []byte
 	At        time.Time

@@ -125,32 +125,44 @@ func (m *DockerManager) GetByLabel(ctx context.Context, labelName string, labelV
 	return result, nil
 }
 
+// EnsureImage makes sure an image is on this node, pulling it if it is not.
+func (m *DockerManager) EnsureImage(ctx context.Context, reference string) error {
+	ctx, span := m.tracer.Start(ctx, "docker.image.ensure",
+		oteltrace.WithAttributes(attribute.String("image", reference)),
+	)
+	defer span.End()
+
+	images, err := m.client.ImageList(ctx, image.ListOptions{
+		All:     false,
+		Filters: filters.NewArgs(filters.Arg("reference", reference)),
+	})
+	if err != nil {
+		return trace.RecordError(span, err)
+	}
+
+	if len(images) > 0 {
+		return nil
+	}
+
+	m.logger.Info("image does not exist, start pulling", "image", reference)
+
+	if err := m.pullImage(ctx, reference); err != nil {
+		return trace.RecordError(span, err)
+	}
+
+	m.logger.Info("image pulled", "image", reference)
+
+	return nil
+}
+
 func (m *DockerManager) Create(ctx context.Context, c *container.Container) (string, error) {
 	ctx, span := m.tracer.Start(ctx, "docker.container.create",
 		oteltrace.WithAttributes(attribute.String("image", c.Image), attribute.String("name", c.Name)),
 	)
 	defer span.End()
 
-	// check if image exists
-	m.logger.Info("checking if image exists", "image", c.Image)
-	images, err := m.client.ImageList(ctx, image.ListOptions{
-		All:     false,
-		Filters: filters.NewArgs(filters.Arg("reference", c.Image)),
-	})
-	if err != nil {
+	if err := m.EnsureImage(ctx, c.Image); err != nil {
 		return "", trace.RecordError(span, err)
-	}
-
-	m.logger.Info("image existence checked", "exists", len(images) > 0)
-
-	if len(images) == 0 {
-		m.logger.Info("image does not exist, start pulling", "image", c.Image)
-
-		if err := m.pullImage(ctx, c.Image); err != nil {
-			return "", trace.RecordError(span, err)
-		}
-
-		m.logger.Info("image pulled", "image", c.Image)
 	}
 
 	config := &containerTypes.Config{

@@ -302,3 +302,72 @@ func TestContainerHandler(t *testing.T) {
 		assert.Contains(t, rw.Body.String(), "not connected")
 	})
 }
+
+// A container that is not answering yet is usually one that has only just
+// started, so whoever is looking at it is given something that comes back on
+// its own rather than an error to refresh by hand.
+func TestWaitingPage(t *testing.T) {
+	// a node that takes the request and cannot reach the container
+	unreachable := func(t *testing.T) *node {
+		return newNode(t, http.HandlerFunc(func(rw http.ResponseWriter, _ *http.Request) {
+			// the node accepts and then goes away mid-answer, which is what a
+			// container that is still coming up looks like from here
+			conn, _, err := rw.(http.Hijacker).Hijack()
+			if err != nil {
+				return
+			}
+
+			conn.Close()
+		}))
+	}
+
+	resolver := &fakeResolver{tasks: map[string]task.Task{
+		"nginx-xkfqz": held("nginx-xkfqz", "runner-worker-01"),
+	}}
+
+	t.Run("a browser gets a page that comes back on its own", func(t *testing.T) {
+		n := unreachable(t)
+
+		rw := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, "/", nil)
+		request.Host = "nginx-xkfqz." + testDomain
+		request.Header.Set("Accept", "text/html,application/xhtml+xml,*/*;q=0.8")
+
+		ingressFor(t, resolver, map[string]*node{"runner-worker-01": n}).ServeHTTP(rw, request)
+
+		assert.Equal(t, http.StatusBadGateway, rw.Code)
+		assert.Equal(t, "2", rw.Header().Get("Retry-After"))
+		assert.Contains(t, rw.Header().Get("Content-Type"), "text/html")
+		assert.Contains(t, rw.Body.String(), `http-equiv="refresh"`)
+		assert.Contains(t, rw.Body.String(), "starting")
+	})
+
+	t.Run("the page speaks the language the browser asked for", func(t *testing.T) {
+		n := unreachable(t)
+
+		rw := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, "/", nil)
+		request.Host = "nginx-xkfqz." + testDomain
+		request.Header.Set("Accept", "text/html")
+		request.Header.Set("Accept-Language", "fa-IR,fa;q=0.9,en;q=0.8")
+
+		ingressFor(t, resolver, map[string]*node{"runner-worker-01": n}).ServeHTTP(rw, request)
+
+		assert.Contains(t, rw.Body.String(), `lang="fa" dir="rtl"`)
+		assert.Contains(t, rw.Body.String(), "آماده‌سازی")
+	})
+
+	t.Run("anything that did not ask for a page is told plainly", func(t *testing.T) {
+		n := unreachable(t)
+
+		rw := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, "/api/health", nil)
+		request.Host = "nginx-xkfqz." + testDomain
+
+		ingressFor(t, resolver, map[string]*node{"runner-worker-01": n}).ServeHTTP(rw, request)
+
+		assert.Equal(t, http.StatusBadGateway, rw.Code)
+		assert.Equal(t, "2", rw.Header().Get("Retry-After"))
+		assert.NotContains(t, rw.Body.String(), "<html", "a client that did not ask for a page is not given one")
+	})
+}
