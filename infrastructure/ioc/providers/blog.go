@@ -30,9 +30,13 @@ import (
 	"github.com/khanzadimahdi/testproject/application/contact/createMessage"
 	dashboardCreateArticle "github.com/khanzadimahdi/testproject/application/dashboard/article/createArticle"
 	dashboardDeleteArticle "github.com/khanzadimahdi/testproject/application/dashboard/article/deleteArticle"
+	dashboardDeleteUserArticle "github.com/khanzadimahdi/testproject/application/dashboard/article/deleteUserArticle"
 	dashboardGetArticle "github.com/khanzadimahdi/testproject/application/dashboard/article/getArticle"
 	dashboardGetArticles "github.com/khanzadimahdi/testproject/application/dashboard/article/getArticles"
+	dashboardGetUserArticle "github.com/khanzadimahdi/testproject/application/dashboard/article/getUserArticle"
+	dashboardGetUserArticles "github.com/khanzadimahdi/testproject/application/dashboard/article/getUserArticles"
 	dashboardUpdateArticle "github.com/khanzadimahdi/testproject/application/dashboard/article/updateArticle"
+	dashboardUpdateUserArticle "github.com/khanzadimahdi/testproject/application/dashboard/article/updateUserArticle"
 	dashboardDeleteUserBookmark "github.com/khanzadimahdi/testproject/application/dashboard/bookmark/deleteUserBookmark"
 	dashboardGetUserBookmarks "github.com/khanzadimahdi/testproject/application/dashboard/bookmark/getUserBookmarks"
 	dashboardCreateComment "github.com/khanzadimahdi/testproject/application/dashboard/comment/createComment"
@@ -359,6 +363,9 @@ func blog(
 	dashboardDeleteArticleUsecase := dashboardDeleteArticle.NewUseCase(articlesRepository)
 	dashboardGetArticleUsecase := dashboardGetArticle.NewUseCase(articlesRepository, userRepository)
 	dashboardGetArticlesUsecase := dashboardGetArticles.NewUseCase(articlesRepository, userRepository, languageRepository)
+	dashboardGetUserArticlesUsecase := dashboardGetUserArticles.NewUseCase(articlesRepository, userRepository, languageRepository)
+	dashboardGetUserArticleUsecase := dashboardGetUserArticle.NewUseCase(articlesRepository, userRepository)
+	dashboardDeleteUserArticleUsecase := dashboardDeleteUserArticle.NewUseCase(articlesRepository)
 
 	dashboardDeleteCommentUsecase := dashboardDeleteComment.NewUseCase(commentsRepository)
 	dashboardGetCommentUsecase := dashboardGetComment.NewUseCase(commentsRepository, userRepository)
@@ -546,6 +553,14 @@ func blog(
 	mux.Handle("PUT /api/dashboard/articles", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
 		return dashboardArticleAPI.NewUpdateHandler(dashboardUpdateArticle.NewUseCase(articlesRepository, languageRepository, va(c), tr(c)))
 	}), authorizer, permission.ArticlesUpdate), jwt, userRepository))
+
+	// one's own articles
+	mux.Handle("GET /api/dashboard/my/articles", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardArticleAPI.NewIndexUserHandler(dashboardGetUserArticlesUsecase), authorizer, permission.SelfArticlesIndex), jwt, userRepository))
+	mux.Handle("GET /api/dashboard/my/articles/{correlationUUID}/{language_code}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardArticleAPI.NewShowUserHandler(dashboardGetUserArticleUsecase), authorizer, permission.SelfArticlesShow), jwt, userRepository))
+	mux.Handle("DELETE /api/dashboard/my/articles/{correlationUUID}/{language_code}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardArticleAPI.NewDeleteUserHandler(dashboardDeleteUserArticleUsecase), authorizer, permission.SelfArticlesDelete), jwt, userRepository))
+	mux.Handle("PUT /api/dashboard/my/articles", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardArticleAPI.NewUpdateUserHandler(dashboardUpdateUserArticle.NewUseCase(articlesRepository, languageRepository, va(c), tr(c)))
+	}), authorizer, permission.SelfArticlesUpdate), jwt, userRepository))
 
 	// comments
 	mux.Handle("POST /api/dashboard/comments", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {

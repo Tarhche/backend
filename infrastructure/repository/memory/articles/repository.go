@@ -62,6 +62,52 @@ func (r *ArticlesRepository) GetCorrelationUUIDs(ctx context.Context, offset uin
 	return correlationUUIDs[offset:end], nil
 }
 
+// GetCorrelationUUIDsByAuthor is GetCorrelationUUIDs of what one author wrote.
+func (r *ArticlesRepository) GetCorrelationUUIDsByAuthor(ctx context.Context, authorUUID string, offset uint, limit uint) ([]string, error) {
+	maxUUID := make(map[string]string)
+	r.datastore.Range(func(_, value any) bool {
+		v := value.(article.Article)
+		if len(v.CorrelationUUID) == 0 || v.AuthorUUID != authorUUID {
+			return true
+		}
+		if cur, ok := maxUUID[v.CorrelationUUID]; !ok || strings.Compare(v.UUID, cur) > 0 {
+			maxUUID[v.CorrelationUUID] = v.UUID
+		}
+		return true
+	})
+
+	correlationUUIDs := make([]string, 0, len(maxUUID))
+	for correlationUUID := range maxUUID {
+		correlationUUIDs = append(correlationUUIDs, correlationUUID)
+	}
+
+	slices.SortFunc(correlationUUIDs, func(a, b string) int {
+		return strings.Compare(maxUUID[b], maxUUID[a])
+	})
+
+	if offset >= uint(len(correlationUUIDs)) {
+		return []string{}, nil
+	}
+
+	end := min(offset+limit, uint(len(correlationUUIDs)))
+
+	return correlationUUIDs[offset:end], nil
+}
+
+// CountByCorrelationAndAuthor is how many articles one author has.
+func (r *ArticlesRepository) CountByCorrelationAndAuthor(ctx context.Context, authorUUID string) (uint, error) {
+	correlations := make(map[string]struct{})
+	r.datastore.Range(func(_, value any) bool {
+		v := value.(article.Article)
+		if len(v.CorrelationUUID) > 0 && v.AuthorUUID == authorUUID {
+			correlations[v.CorrelationUUID] = struct{}{}
+		}
+		return true
+	})
+
+	return uint(len(correlations)), nil
+}
+
 func (r *ArticlesRepository) GetAllPublished(ctx context.Context, languageCode string, offset uint, limit uint) ([]article.Article, error) {
 	var (
 		a []article.Article
@@ -208,6 +254,34 @@ func (r *ArticlesRepository) GetByCorrelationUUIDAndLanguage(ctx context.Context
 	return found, nil
 }
 
+func (r *ArticlesRepository) GetByCorrelationUUIDAndLanguageAndAuthor(ctx context.Context, correlationUUID string, languageCode string, authorUUID string) (article.Article, error) {
+	var (
+		found article.Article
+		ok    bool
+	)
+
+	r.datastore.Range(func(_, value any) bool {
+		item := value.(article.Article)
+		if item.CorrelationUUID != correlationUUID || item.AuthorUUID != authorUUID {
+			return true
+		}
+		if len(languageCode) > 0 && item.LanguageCode != languageCode {
+			return true
+		}
+
+		found = item
+		ok = true
+
+		return false
+	})
+
+	if !ok {
+		return article.Article{}, domain.ErrNotExists
+	}
+
+	return found, nil
+}
+
 func (r *ArticlesRepository) GetOnePublished(ctx context.Context, correlationUUID string, languageCode string) (article.Article, error) {
 	var (
 		found article.Article
@@ -292,6 +366,24 @@ func (r *ArticlesRepository) DeleteByCorrelationUUIDAndLanguage(ctx context.Cont
 	r.datastore.Range(func(key, value any) bool {
 		item := value.(article.Article)
 		if item.CorrelationUUID != correlationUUID {
+			return true
+		}
+		if len(languageCode) > 0 && item.LanguageCode != languageCode {
+			return true
+		}
+
+		r.datastore.Delete(key)
+
+		return true
+	})
+
+	return nil
+}
+
+func (r *ArticlesRepository) DeleteByCorrelationUUIDAndLanguageAndAuthor(ctx context.Context, correlationUUID string, languageCode string, authorUUID string) error {
+	r.datastore.Range(func(key, value any) bool {
+		item := value.(article.Article)
+		if item.CorrelationUUID != correlationUUID || item.AuthorUUID != authorUUID {
 			return true
 		}
 		if len(languageCode) > 0 && item.LanguageCode != languageCode {
