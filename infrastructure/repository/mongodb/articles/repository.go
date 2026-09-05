@@ -389,6 +389,26 @@ func (r *ArticlesRepository) GetByCorrelationUUIDAndLanguage(ctx context.Context
 	return toDomain(a), nil
 }
 
+func (r *ArticlesRepository) GetByCorrelationUUIDAndLanguageAndAuthor(ctx context.Context, correlationUUID string, languageCode string, authorUUID string) (article.Article, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
+	filter := bson.M{"correlation_uuid": correlationUUID, "author_uuid": authorUUID}
+	if len(languageCode) > 0 {
+		filter["language_code"] = languageCode
+	}
+
+	var a ArticleBson
+	if err := r.collection.FindOne(ctx, filter).Decode(&a); err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			err = domain.ErrNotExists
+		}
+		return article.Article{}, err
+	}
+
+	return toDomain(a), nil
+}
+
 func (r *ArticlesRepository) GetOnePublished(ctx context.Context, correlationUUID string, languageCode string) (article.Article, error) {
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
@@ -410,6 +430,90 @@ func (r *ArticlesRepository) GetOnePublished(ctx context.Context, correlationUUI
 	}
 
 	return toDomain(a), nil
+}
+
+// GetCorrelationUUIDsByAuthor is the same listing as GetCorrelationUUIDs, of
+// what one author wrote.
+func (r *ArticlesRepository) GetCorrelationUUIDsByAuthor(ctx context.Context, authorUUID string, offset uint, limit uint) ([]string, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
+	pipeline := mongo.Pipeline{
+		bson.D{{Key: "$match", Value: bson.M{
+			"correlation_uuid": bson.M{"$gt": ""},
+			"author_uuid":      authorUUID,
+		}}},
+		bson.D{{Key: "$sort", Value: bson.D{{Key: "_id", Value: -1}}}},
+		bson.D{{Key: "$group", Value: bson.M{
+			"_id":    "$correlation_uuid",
+			"max_id": bson.M{"$first": "$_id"},
+		}}},
+		bson.D{{Key: "$sort", Value: bson.D{{Key: "max_id", Value: -1}}}},
+		bson.D{{Key: "$skip", Value: int64(offset)}},
+		bson.D{{Key: "$limit", Value: int64(limit)}},
+	}
+
+	cur, err := r.collection.Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, err
+	}
+	defer cur.Close(ctx)
+
+	correlationUUIDs := make([]string, 0, limit)
+	for cur.Next(ctx) {
+		var doc struct {
+			CorrelationUUID string `bson:"_id"`
+		}
+
+		if err := cur.Decode(&doc); err != nil {
+			return nil, err
+		}
+
+		correlationUUIDs = append(correlationUUIDs, doc.CorrelationUUID)
+	}
+
+	if err := cur.Err(); err != nil {
+		return nil, err
+	}
+
+	return correlationUUIDs, nil
+}
+
+// CountByCorrelationAndAuthor is how many articles one author has, counted the
+// way the listing groups them.
+func (r *ArticlesRepository) CountByCorrelationAndAuthor(ctx context.Context, authorUUID string) (uint, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
+	pipeline := mongo.Pipeline{
+		bson.D{{Key: "$match", Value: bson.M{
+			"correlation_uuid": bson.M{"$gt": ""},
+			"author_uuid":      authorUUID,
+		}}},
+		bson.D{{Key: "$group", Value: bson.M{"_id": "$correlation_uuid"}}},
+		bson.D{{Key: "$count", Value: "count"}},
+	}
+
+	cur, err := r.collection.Aggregate(ctx, pipeline)
+	if err != nil {
+		return 0, err
+	}
+	defer cur.Close(ctx)
+
+	var result struct {
+		Count uint `bson:"count"`
+	}
+	if cur.Next(ctx) {
+		if err := cur.Decode(&result); err != nil {
+			return 0, err
+		}
+	}
+
+	if err := cur.Err(); err != nil {
+		return 0, err
+	}
+
+	return result.Count, nil
 }
 
 func (r *ArticlesRepository) CountByCorrelation(ctx context.Context) (uint, error) {
@@ -509,6 +613,20 @@ func (r *ArticlesRepository) DeleteByCorrelationUUIDAndLanguage(ctx context.Cont
 	defer cancel()
 
 	filter := bson.M{"correlation_uuid": correlationUUID}
+	if len(languageCode) > 0 {
+		filter["language_code"] = languageCode
+	}
+
+	_, err := r.collection.DeleteOne(ctx, filter)
+
+	return err
+}
+
+func (r *ArticlesRepository) DeleteByCorrelationUUIDAndLanguageAndAuthor(ctx context.Context, correlationUUID string, languageCode string, authorUUID string) error {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
+	filter := bson.M{"correlation_uuid": correlationUUID, "author_uuid": authorUUID}
 	if len(languageCode) > 0 {
 		filter["language_code"] = languageCode
 	}
