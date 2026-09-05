@@ -60,6 +60,19 @@ func (c *Container) Interactive() bool {
 	return c.Labels[TaskInteractiveLabelKey] == "true"
 }
 
+// Deadline is when this container will be stopped for having run long enough,
+// as it was labelled when it was made. A container that may run for as long as
+// it likes has no deadline, and neither has one from before deadlines were
+// written down.
+func (c *Container) Deadline() time.Time {
+	deadline, err := time.Parse(time.RFC3339Nano, c.Labels[TaskDeadlineLabelKey])
+	if err != nil {
+		return time.Time{}
+	}
+
+	return deadline
+}
+
 // ResourceLimits represents the resource limits of the container
 type ResourceLimits struct {
 	Cpu    float64
@@ -99,6 +112,11 @@ type ExecSession interface {
 type Manager interface {
 	GetAll(ctx context.Context) ([]Container, error)
 	GetByLabel(ctx context.Context, labelName string, labelValue string) ([]Container, error)
+
+	// EnsureImage makes sure an image is on this node, pulling it if it is
+	// not. Creating a container does this too; it is worth doing on its own
+	// when something is being timed from the moment the container is made.
+	EnsureImage(ctx context.Context, image string) error
 	Create(ctx context.Context, container *Container) (containerUUID string, err error)
 	Start(ctx context.Context, containerUUID string) error
 	Stop(ctx context.Context, containerUUID string) error
@@ -123,6 +141,13 @@ const (
 	// runs. It is kept on the container so that whoever reports on it can say
 	// so without looking anything up.
 	TaskInteractiveLabelKey = "task.interactive"
+
+	// TaskDeadlineLabelKey is when a container that may only run for so long
+	// will be stopped. It is written as the container is made, which is after
+	// its image is there and a moment before it runs, so the time it is
+	// allowed runs from when it came up rather than from when it was asked
+	// for.
+	TaskDeadlineLabelKey = "task.deadline"
 
 	// TaskAttemptLabelKey is which attempt this container is, counting from
 	// zero. It is kept on the container rather than written down anywhere,
