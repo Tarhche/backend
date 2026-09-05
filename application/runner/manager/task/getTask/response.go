@@ -31,6 +31,7 @@ type Response struct {
 	Entrypoint    []string           `json:"entrypoint"`
 	WorkingDir    string             `json:"working_dir"`
 	ReadOnly      bool               `json:"read_only"`
+	Interactive   bool               `json:"interactive,omitempty"`
 	MaxRetries    int                `json:"max_retries"`
 	Retries       int                `json:"retries"`
 	TTL           time.Duration      `json:"ttl,omitempty"`
@@ -93,6 +94,7 @@ func NewResponse(t task.Task) *Response {
 		Entrypoint:    entrypoint,
 		WorkingDir:    t.WorkingDir,
 		ReadOnly:      t.ReadOnly,
+		Interactive:   t.Interactive,
 		MaxRetries:    t.MaxRetries,
 		Retries:       t.Retries,
 		TTL:           t.TTL,
