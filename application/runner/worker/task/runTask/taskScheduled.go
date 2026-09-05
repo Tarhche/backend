@@ -96,6 +96,7 @@ func (uc *TaskScheduled) Handle(ctx context.Context, data []byte) error {
 		WorkingDir:    taskScheduled.WorkingDir,
 		ReadOnly:      taskScheduled.ReadOnly,
 		Interactive:   taskScheduled.Interactive,
+		TTL:           taskScheduled.TTL,
 		Mounts:        mounts,
 		ResourceLimits: ResourceLimits{
 			Cpu:    taskScheduled.ResourceLimits.Cpu,

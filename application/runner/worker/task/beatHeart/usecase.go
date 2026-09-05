@@ -65,6 +65,7 @@ func (uc *UseCase) Execute(ctx context.Context) error {
 			NodeName:      uc.nodeName,
 			Attempt:       c.Attempt(),
 			Interactive:   c.Interactive(),
+			Deadline:      c.Deadline(),
 			Endpoints:     uc.endpoints(&c),
 			Logs:          uc.logs(ctx, &c),
 			At:            time.Now(),

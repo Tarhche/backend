@@ -43,11 +43,16 @@ func (uc *TaskRan) Handle(ctx context.Context, data []byte) error {
 	// and the state, the first time it comes up.
 	changed := t.NodeName != taskRan.NodeName ||
 		t.ContainerID != taskRan.ContainerUUID ||
+		!t.Deadline.Equal(taskRan.Deadline) ||
 		!slices.Equal(t.Endpoints, endpoints)
 
 	t.NodeName = taskRan.NodeName
 	t.ContainerID = taskRan.ContainerUUID
 	t.Endpoints = endpoints
+
+	// what the container is running against, which only the node that made it
+	// knows: a container that came back is running against a new one.
+	t.Deadline = taskRan.Deadline
 
 	if t.CurrentState != task.Running {
 		t.CurrentState = task.Running

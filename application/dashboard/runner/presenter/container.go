@@ -45,6 +45,10 @@ type Container struct {
 	CreatedAt  time.Time `json:"created_at"`
 	StartedAt  time.Time `json:"started_at"`
 	FinishedAt time.Time `json:"finished_at"`
+
+	// Deadline is when a container that is only allowed to run for so long
+	// will be stopped. A container with no limit of its own has none.
+	Deadline *time.Time `json:"deadline,omitempty"`
 }
 
 // Endpoint is one of a container's exposed ports, together with the hostname it
@@ -92,7 +96,21 @@ func NewContainer(t task.Task, ingressDomain string, owners Owners) Container {
 		CreatedAt:  t.CreatedAt,
 		StartedAt:  t.StartedAt,
 		FinishedAt: t.FinishedAt,
+		Deadline:   deadline(t),
 	}
+}
+
+// deadline is when a container that may only run for so long will be stopped.
+// The node that made it sets it as it comes up, so a container that is not
+// running, or that may run forever, has nothing to count down to.
+func deadline(t task.Task) *time.Time {
+	if t.Deadline.IsZero() || t.CurrentState != task.Running {
+		return nil
+	}
+
+	at := t.Deadline
+
+	return &at
 }
 
 // NewContainers presents a list of containers.

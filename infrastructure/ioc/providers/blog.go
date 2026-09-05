@@ -25,6 +25,7 @@ import (
 	"github.com/khanzadimahdi/testproject/application/bookmark/updateBookmark"
 	"github.com/khanzadimahdi/testproject/application/code/heartbeat"
 	"github.com/khanzadimahdi/testproject/application/code/runCode"
+	codeStop "github.com/khanzadimahdi/testproject/application/code/stop"
 	codeTerminal "github.com/khanzadimahdi/testproject/application/code/terminal"
 	"github.com/khanzadimahdi/testproject/application/comment/createComment"
 	"github.com/khanzadimahdi/testproject/application/comment/getComments"
@@ -464,6 +465,7 @@ func blog(
 
 	dashboardAttachContainerUseCase := dashboardAttachContainer.NewUseCase(runner, authenticator, authorizer, runnerContainers, validator, terminalSessions, logger)
 	codeTerminalUseCase := codeTerminal.NewUseCase(runner, validator, terminalSessions, logger)
+	codeStopUseCase := codeStop.NewUseCase(runner, validator, cachedGateway, logger)
 	dashboardFollowContainerLogsUseCase := dashboardFollowContainerLogs.NewUseCase(runner, authenticator, authorizer, runnerContainers, validator, cachedGateway, streams, logger)
 	dashboardWatchContainersUseCase := dashboardWatchContainers.NewUseCase(runner, authenticator, authorizer, validator, cachedGateway, streams, ownerDirectory, ingressDomain, logger)
 	dashboardWatchStacksUseCase := dashboardWatchStacks.NewUseCase(runner, authenticator, authorizer, validator, cachedGateway, streams, ownerDirectory, ingressDomain, logger)
@@ -473,6 +475,7 @@ func blog(
 		dashboardAttachContainer.InputName:      dashboardAttachContainerUseCase.InputHandler(),
 		codeTerminal.AttachName:                 codeTerminalUseCase,
 		codeTerminal.InputName:                  codeTerminalUseCase.InputHandler(),
+		codeStop.StopName:                       codeStopUseCase,
 		dashboardFollowContainerLogs.FollowName: dashboardFollowContainerLogsUseCase,
 		dashboardWatchContainers.WatchName:      dashboardWatchContainersUseCase,
 		dashboardWatchStacks.WatchName:          dashboardWatchStacksUseCase,
