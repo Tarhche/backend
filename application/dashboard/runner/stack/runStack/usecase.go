@@ -11,12 +11,6 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/runner/manager/client"
 )
 
-type Response struct {
-	ValidationErrors domain.ValidationErrors `json:"errors,omitempty"`
-
-	*presenter.Stack
-}
-
 // UseCase hands a stack to the runner.
 type UseCase struct {
 	runner        runnerManager.Client

@@ -8,15 +8,6 @@ import (
 	runnerManager "github.com/khanzadimahdi/testproject/domain/runner/manager"
 )
 
-type Response struct {
-	presenter.Container
-}
-
-// Request is one container to show.
-type Request struct {
-	UUID string `json:"-"`
-}
-
 // UseCase reads one container.
 
 type UseCase struct {

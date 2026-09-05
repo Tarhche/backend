@@ -6,10 +6,6 @@ import (
 	runnerManager "github.com/khanzadimahdi/testproject/domain/runner/manager"
 )
 
-type Request struct {
-	UUID string `json:"-"`
-}
-
 // UseCase takes away a container. The runner owns its lifecycle, so this passes the
 // command on rather than deciding anything about it.
 type UseCase struct {

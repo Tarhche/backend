@@ -11,12 +11,6 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/runner/manager/client"
 )
 
-type Response struct {
-	ValidationErrors domain.ValidationErrors `json:"errors,omitempty"`
-
-	*presenter.Container
-}
-
 // UseCase hands a container to the runner. The runner is what owns a
 // container's lifecycle; this decides only whether the request is well formed
 // before passing it on.
