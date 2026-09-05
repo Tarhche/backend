@@ -2243,6 +2243,196 @@
                 }
             }
         },
+        "/dashboard/my/articles": {
+            "get": {
+                "description": "page through the articles the authenticated user wrote, grouped by correlation uuid",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard articles"
+                ],
+                "summary": "List own articles",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page",
+                        "name": "page",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/getuserarticles.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "change an article the authenticated user wrote",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard articles"
+                ],
+                "summary": "Update own article",
+                "parameters": [
+                    {
+                        "description": "Article update payload",
+                        "name": "article",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/updateuserarticle.Request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/my/articles/{correlationUUID}/{language_code}": {
+            "get": {
+                "description": "an article the authenticated user wrote, by correlation uuid and language",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard articles"
+                ],
+                "summary": "Show own article",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Article correlation UUID",
+                        "name": "correlationUUID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Language code",
+                        "name": "language_code",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/getuserarticle.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "remove an article the authenticated user wrote, by correlation uuid and language",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard articles"
+                ],
+                "summary": "Delete own article",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Article correlation UUID",
+                        "name": "correlationUUID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Language code",
+                        "name": "language_code",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/dashboard/my/bookmarks": {
             "get": {
                 "description": "paginated list of bookmarks for authenticated user",
@@ -5643,6 +5833,154 @@
                 }
             }
         },
+        "getuserarticle.Response": {
+            "type": "object",
+            "properties": {
+                "author": {
+                    "$ref": "#/definitions/getuserarticle.author"
+                },
+                "body": {
+                    "type": "string"
+                },
+                "correlation_uuid": {
+                    "type": "string"
+                },
+                "cover": {
+                    "type": "string"
+                },
+                "excerpt": {
+                    "type": "string"
+                },
+                "language_code": {
+                    "type": "string"
+                },
+                "published_at": {
+                    "type": "string"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "title": {
+                    "type": "string"
+                },
+                "video": {
+                    "type": "string"
+                },
+                "view_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "getuserarticle.author": {
+            "type": "object",
+            "properties": {
+                "avatar": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                }
+            }
+        },
+        "getuserarticles.Response": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/getuserarticles.articleResponse"
+                    }
+                },
+                "pagination": {
+                    "$ref": "#/definitions/getuserarticles.pagination"
+                }
+            }
+        },
+        "getuserarticles.articleResponse": {
+            "type": "object",
+            "properties": {
+                "correlation_uuid": {
+                    "type": "string"
+                },
+                "corrolated_items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/getuserarticles.corrolatedArticleResponse"
+                    }
+                }
+            }
+        },
+        "getuserarticles.author": {
+            "type": "object",
+            "properties": {
+                "avatar": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                }
+            }
+        },
+        "getuserarticles.corrolatedArticleResponse": {
+            "type": "object",
+            "properties": {
+                "author": {
+                    "$ref": "#/definitions/getuserarticles.author"
+                },
+                "cover": {
+                    "type": "string"
+                },
+                "language": {
+                    "$ref": "#/definitions/getuserarticles.languageResponse"
+                },
+                "published_at": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "video": {
+                    "type": "string"
+                }
+            }
+        },
+        "getuserarticles.languageResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "getuserarticles.pagination": {
+            "type": "object",
+            "properties": {
+                "current_page": {
+                    "type": "integer"
+                },
+                "total_pages": {
+                    "type": "integer"
+                }
+            }
+        },
         "getusercontainer.Response": {
             "type": "object",
             "properties": {
@@ -7252,6 +7590,41 @@
                     "type": "string"
                 },
                 "uuid": {
+                    "type": "string"
+                }
+            }
+        },
+        "updateuserarticle.Request": {
+            "type": "object",
+            "properties": {
+                "body": {
+                    "type": "string"
+                },
+                "correlation_uuid": {
+                    "type": "string"
+                },
+                "cover": {
+                    "type": "string"
+                },
+                "excerpt": {
+                    "type": "string"
+                },
+                "language_code": {
+                    "type": "string"
+                },
+                "published_at": {
+                    "type": "string"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "title": {
+                    "type": "string"
+                },
+                "video": {
                     "type": "string"
                 }
             }

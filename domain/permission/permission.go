@@ -99,6 +99,11 @@ const (
 	SelfCommentsUpdate = "self.comments.update"
 	SelfCommentsDelete = "self.comments.delete"
 
+	SelfArticlesIndex  = "self.articles.index"
+	SelfArticlesShow   = "self.articles.show"
+	SelfArticlesUpdate = "self.articles.update"
+	SelfArticlesDelete = "self.articles.delete"
+
 	SelfFilesIndex  = "self.files.index"
 	SelfFilesDelete = "self.files.delete"
 

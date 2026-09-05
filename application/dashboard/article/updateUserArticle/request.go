@@ -1,0 +1,51 @@
+package updateuserarticle
+
+import (
+	"time"
+
+	"github.com/khanzadimahdi/testproject/domain"
+)
+
+type Request struct {
+	CorrelationUUID string    `json:"correlation_uuid"`
+	Cover           string    `json:"cover"`
+	Video           string    `json:"video"`
+	Title           string    `json:"title"`
+	Excerpt         string    `json:"excerpt"`
+	Body            string    `json:"body"`
+	PublishedAt     time.Time `json:"published_at"`
+	Tags            []string  `json:"tags"`
+	LanguageCode    string    `json:"language_code"`
+
+	// AuthorUUID is whose article this has to be. It is not asked for: it is
+	// who is asking, filled in by the handler.
+	AuthorUUID string `json:"-"`
+}
+
+var _ domain.Validatable = &Request{}
+
+func (r *Request) Validate() domain.ValidationErrors {
+	validationErrors := make(domain.ValidationErrors)
+
+	if len(r.CorrelationUUID) == 0 {
+		validationErrors["correlation_uuid"] = "required_field"
+	}
+
+	if len(r.Title) == 0 {
+		validationErrors["title"] = "required_field"
+	}
+
+	if len(r.Excerpt) == 0 {
+		validationErrors["excerpt"] = "required_field"
+	}
+
+	if len(r.Body) == 0 {
+		validationErrors["body"] = "required_field"
+	}
+
+	if len(r.LanguageCode) == 0 {
+		validationErrors["language_code"] = "required_field"
+	}
+
+	return validationErrors
+}
