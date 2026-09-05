@@ -6,14 +6,6 @@ import (
 	runnerManager "github.com/khanzadimahdi/testproject/domain/runner/manager"
 )
 
-type Request struct {
-	UUID string `json:"-"`
-
-	// OwnerUUID is whose stack this has to be. It is not asked for: it is who
-	// is asking, filled in by the handler.
-	OwnerUUID string `json:"-"`
-}
-
 // UseCase stops one of somebody's own stacks.
 //
 // The stack is read as theirs first, so one that is somebody else's is not
