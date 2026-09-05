@@ -12,7 +12,6 @@ import (
 	"errors"
 	"io"
 	"log/slog"
-	"time"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	runnerAccess "github.com/khanzadimahdi/testproject/application/dashboard/runner/access"
@@ -24,37 +23,6 @@ import (
 
 // FollowName is the subject a client opens a container's log on.
 const FollowName = "runnerContainerLogs"
-
-// Request opens a container's log stream.
-type Request struct {
-	ID            string    `json:"id"`
-	ContainerUUID string    `json:"container_uuid"`
-	AccessToken   string    `json:"access_token"`
-	After         time.Time `json:"after"`
-}
-
-var _ domain.Validatable = &Request{}
-
-func (r *Request) Validate() domain.ValidationErrors {
-	validationErrors := make(domain.ValidationErrors)
-
-	if len(r.ContainerUUID) == 0 {
-		validationErrors["container_uuid"] = "required_field"
-	}
-
-	if len(r.AccessToken) == 0 {
-		validationErrors["access_token"] = "required_field"
-	}
-
-	return validationErrors
-}
-
-// LineResponse is one line, as the dashboard shows it.
-type LineResponse struct {
-	Stream  string    `json:"stream"`
-	Content string    `json:"content"`
-	At      time.Time `json:"at"`
-}
 
 // UseCase follows containers' logs on behalf of the clients watching them.
 type UseCase struct {

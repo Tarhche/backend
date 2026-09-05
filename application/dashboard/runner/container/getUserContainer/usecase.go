@@ -8,19 +8,6 @@ import (
 	runnerManager "github.com/khanzadimahdi/testproject/domain/runner/manager"
 )
 
-type Response struct {
-	presenter.Container
-}
-
-// Request is one of somebody's own containers to show.
-type Request struct {
-	UUID string `json:"-"`
-
-	// OwnerUUID is whose container this has to be. It is not asked for: it is
-	// who is asking, filled in by the handler.
-	OwnerUUID string `json:"-"`
-}
-
 // UseCase reads one of somebody's own containers. One that is somebody else's
 // is not found rather than refused.
 type UseCase struct {

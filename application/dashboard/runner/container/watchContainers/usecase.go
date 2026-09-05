@@ -31,37 +31,6 @@ const (
 	kindDeleted = "deleted"
 )
 
-// Request opens a watch on the containers.
-//
-// The access token travels in the payload because a websocket handshake from a
-// browser carries no Authorization header, and one connection is shared by
-// every request on it: the person is established per request, not per socket.
-type Request struct {
-	ID          string `json:"id"`
-	AccessToken string `json:"access_token"`
-}
-
-var _ domain.Validatable = &Request{}
-
-func (r *Request) Validate() domain.ValidationErrors {
-	validationErrors := make(domain.ValidationErrors)
-
-	if len(r.AccessToken) == 0 {
-		validationErrors["access_token"] = "required_field"
-	}
-
-	return validationErrors
-}
-
-// ChangeResponse is what became of one container, as the dashboard shows it. A
-// container that is gone is reported by uuid alone, because there is nothing
-// left to describe.
-type ChangeResponse struct {
-	Kind      string               `json:"kind"`
-	UUID      string               `json:"uuid"`
-	Container *presenter.Container `json:"container,omitempty"`
-}
-
 // UseCase watches the containers on behalf of the clients showing them.
 type UseCase struct {
 	runner        runnerManager.Client

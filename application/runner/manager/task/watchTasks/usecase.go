@@ -15,11 +15,6 @@ import (
 // somebody could be looking at.
 const Limit uint = 200
 
-// Response is every container the watch covers, as it is now.
-type Response struct {
-	Items []gettask.Response `json:"items"`
-}
-
 type UseCase struct {
 	taskRepository task.Repository
 }

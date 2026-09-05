@@ -2,7 +2,6 @@ package getusercontainerlogs
 
 import (
 	"context"
-	"time"
 
 	runnerManager "github.com/khanzadimahdi/testproject/domain/runner/manager"
 )
@@ -10,27 +9,6 @@ import (
 // defaultLimit is how many lines one read returns when the caller names no
 // limit of its own.
 const defaultLimit uint = 500
-
-type Request struct {
-	UUID string `json:"-"`
-
-	// OwnerUUID is whose container this has to be. It is not asked for: it is
-	// who is asking, filled in by the handler.
-	OwnerUUID string `json:"-"`
-
-	After time.Time `json:"after"`
-	Limit uint      `json:"limit"`
-}
-
-type Response struct {
-	Items []LogResponse `json:"items"`
-}
-
-type LogResponse struct {
-	Stream  string    `json:"stream"`
-	Content string    `json:"content"`
-	At      time.Time `json:"at"`
-}
 
 // UseCase reads what one of somebody's own containers has written, from its
 // first line onward. The lines are kept against the container until it is

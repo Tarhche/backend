@@ -18,11 +18,6 @@ import (
 // somebody could be looking at.
 const Limit uint = 200
 
-// Response is every stack the watch covers, as it is now.
-type Response struct {
-	Items []getstack.Response `json:"items"`
-}
-
 type UseCase struct {
 	stackRepository stack.Repository
 	taskRepository  task.Repository
