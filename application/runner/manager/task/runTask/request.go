@@ -39,6 +39,7 @@ type Request struct {
 	Entrypoint    []string               `json:"entrypoint"`
 	WorkingDir    string                 `json:"working_dir"`
 	ReadOnly      bool                   `json:"read_only"`
+	Interactive   bool                   `json:"interactive,omitempty"`
 
 	// MaxRetries is how many times this container is asked for again after it
 	// fails, before the runner gives up on it. Nothing at all is whatever its

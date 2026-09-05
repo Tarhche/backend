@@ -14,6 +14,7 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	runnerAccess "github.com/khanzadimahdi/testproject/application/dashboard/runner/access"
+	"github.com/khanzadimahdi/testproject/application/runner/terminal"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/permission"
 	runnerManager "github.com/khanzadimahdi/testproject/domain/runner/manager"
@@ -150,7 +151,7 @@ func TestUseCase_Handle(t *testing.T) {
 		runner.On("AttachContainer", mock.Anything, attaching(token)).Return(attachment, nil).Once()
 		defer runner.AssertExpectations(t)
 
-		useCase := NewUseCase(&runner, authenticator, &authorizer, mayTouchAnything(&runner), accepts(), &replyer, gateway.NewStreams(), discardLogger())
+		useCase := NewUseCase(&runner, authenticator, &authorizer, mayTouchAnything(&runner), accepts(), terminal.NewSessions(&replyer, gateway.NewStreams(), discardLogger()), discardLogger())
 
 		require.NoError(t, useCase.Handle(context.Background(), request(t, token)))
 
@@ -184,7 +185,7 @@ func TestUseCase_Handle(t *testing.T) {
 		authorizer.On("Authorize", mock.Anything, userUUID, permission.RunnerContainersAttach).Return(true, nil)
 		runner.On("AttachContainer", mock.Anything, attaching(token)).Return(attachment, nil).Once()
 
-		useCase := NewUseCase(&runner, authenticator, &authorizer, mayTouchAnything(&runner), accepts(), &replyer, gateway.NewStreams(), discardLogger())
+		useCase := NewUseCase(&runner, authenticator, &authorizer, mayTouchAnything(&runner), accepts(), terminal.NewSessions(&replyer, gateway.NewStreams(), discardLogger()), discardLogger())
 
 		require.NoError(t, useCase.Handle(context.Background(), request(t, token)))
 
@@ -212,16 +213,16 @@ func TestUseCase_Handle(t *testing.T) {
 		authorizer.On("Authorize", mock.Anything, userUUID, permission.RunnerContainersAttach).Return(true, nil)
 		runner.On("AttachContainer", mock.Anything, attaching(token)).Return(attachment, nil).Once()
 
-		useCase := NewUseCase(&runner, authenticator, &authorizer, mayTouchAnything(&runner), accepts(), &replyer, gateway.NewStreams(), discardLogger())
+		useCase := NewUseCase(&runner, authenticator, &authorizer, mayTouchAnything(&runner), accepts(), terminal.NewSessions(&replyer, gateway.NewStreams(), discardLogger()), discardLogger())
 		require.NoError(t, useCase.Handle(context.Background(), request(t, token)))
 
 		keys, err := json.Marshal(Input{ID: requestID, Data: []byte("ls -la\n")})
 		require.NoError(t, err)
-		require.NoError(t, useCase.HandleInput(context.Background(), keys))
+		require.NoError(t, useCase.InputHandler().Handle(context.Background(), keys))
 
 		resize, err := json.Marshal(Input{ID: requestID, Type: "resize", Rows: 24, Cols: 100})
 		require.NoError(t, err)
-		require.NoError(t, useCase.HandleInput(context.Background(), resize))
+		require.NoError(t, useCase.InputHandler().Handle(context.Background(), resize))
 
 		assert.Equal(t, "ls -la\n", attachment.Typed())
 		assert.Equal(t, [][2]uint{{24, 100}}, attachment.Resizes())
@@ -238,12 +239,12 @@ func TestUseCase_Handle(t *testing.T) {
 			replyer    messagingMock.RecordingReplyer
 		)
 
-		useCase := NewUseCase(&runner, authenticator, &authorizer, mayTouchAnything(&runner), accepts(), &replyer, gateway.NewStreams(), discardLogger())
+		useCase := NewUseCase(&runner, authenticator, &authorizer, mayTouchAnything(&runner), accepts(), terminal.NewSessions(&replyer, gateway.NewStreams(), discardLogger()), discardLogger())
 
 		keys, err := json.Marshal(Input{ID: "a-terminal-elsewhere", Data: []byte("ls\n")})
 		require.NoError(t, err)
 
-		assert.NoError(t, useCase.HandleInput(context.Background(), keys))
+		assert.NoError(t, useCase.InputHandler().Handle(context.Background(), keys))
 	})
 
 	t.Run("a client that walks away has its terminal closed", func(t *testing.T) {
@@ -263,7 +264,7 @@ func TestUseCase_Handle(t *testing.T) {
 		authorizer.On("Authorize", mock.Anything, userUUID, permission.RunnerContainersAttach).Return(true, nil)
 		runner.On("AttachContainer", mock.Anything, attaching(token)).Return(attachment, nil).Once()
 
-		useCase := NewUseCase(&runner, authenticator, &authorizer, mayTouchAnything(&runner), accepts(), &replyer, streams, discardLogger())
+		useCase := NewUseCase(&runner, authenticator, &authorizer, mayTouchAnything(&runner), accepts(), terminal.NewSessions(&replyer, streams, discardLogger()), discardLogger())
 		require.NoError(t, useCase.Handle(context.Background(), request(t, token)))
 
 		require.Eventually(t, func() bool { return streams.Len() == 1 }, 2*time.Second, 10*time.Millisecond)
@@ -288,7 +289,7 @@ func TestUseCase_Handle(t *testing.T) {
 			replyer    messagingMock.RecordingReplyer
 		)
 
-		useCase := NewUseCase(&runner, authenticator, &authorizer, mayTouchAnything(&runner), accepts(), &replyer, gateway.NewStreams(), discardLogger())
+		useCase := NewUseCase(&runner, authenticator, &authorizer, mayTouchAnything(&runner), accepts(), terminal.NewSessions(&replyer, gateway.NewStreams(), discardLogger()), discardLogger())
 
 		require.NoError(t, useCase.Handle(context.Background(), request(t, "not-a-token")))
 
@@ -312,7 +313,7 @@ func TestUseCase_Handle(t *testing.T) {
 		authorizer.On("Authorize", mock.Anything, userUUID, permission.RunnerContainersAttach).Return(false, nil)
 		runner.On("Container", mock.Anything, containerUUID).Return(task.Task{UUID: containerUUID, OwnerUUID: "somebody-else"}, nil).Maybe()
 
-		useCase := NewUseCase(&runner, authenticator, &authorizer, mayTouchNothing(&runner), accepts(), &replyer, gateway.NewStreams(), discardLogger())
+		useCase := NewUseCase(&runner, authenticator, &authorizer, mayTouchNothing(&runner), accepts(), terminal.NewSessions(&replyer, gateway.NewStreams(), discardLogger()), discardLogger())
 
 		require.NoError(t, useCase.Handle(context.Background(), request(t, token)))
 
@@ -335,7 +336,7 @@ func TestUseCase_Handle(t *testing.T) {
 		runner.On("AttachContainer", mock.Anything, attaching(token)).
 			Return(nil, domain.ErrNotExists).Once()
 
-		useCase := NewUseCase(&runner, authenticator, &authorizer, mayTouchAnything(&runner), accepts(), &replyer, gateway.NewStreams(), discardLogger())
+		useCase := NewUseCase(&runner, authenticator, &authorizer, mayTouchAnything(&runner), accepts(), terminal.NewSessions(&replyer, gateway.NewStreams(), discardLogger()), discardLogger())
 
 		require.NoError(t, useCase.Handle(context.Background(), request(t, token)))
 
@@ -353,7 +354,7 @@ func TestUseCase_Handle(t *testing.T) {
 			replyer    messagingMock.RecordingReplyer
 		)
 
-		useCase := NewUseCase(&runner, authenticator, &authorizer, mayTouchAnything(&runner), accepts(), &replyer, gateway.NewStreams(), discardLogger())
+		useCase := NewUseCase(&runner, authenticator, &authorizer, mayTouchAnything(&runner), accepts(), terminal.NewSessions(&replyer, gateway.NewStreams(), discardLogger()), discardLogger())
 
 		assert.NoError(t, useCase.Handle(context.Background(), []byte("{")))
 		assert.Empty(t, replyer.Replies())

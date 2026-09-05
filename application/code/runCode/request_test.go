@@ -1,10 +1,14 @@
 package runCode
 
 import (
-	"github.com/stretchr/testify/assert"
+	"encoding/json"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/runner/port"
 )
 
 func TestRequest_Validate(t *testing.T) {
@@ -174,4 +178,35 @@ func TestRequest_Image(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+func TestKeepable(t *testing.T) {
+	t.Parallel()
+
+	keepable := func(t *testing.T, r Request) bool {
+		t.Helper()
+
+		payload, err := json.Marshal(r)
+		require.NoError(t, err)
+
+		return Keepable(payload)
+	}
+
+	t.Run("a snippet that prints something prints the same thing", func(t *testing.T) {
+		t.Parallel()
+
+		assert.True(t, keepable(t, Request{ID: "request-id", Code: "print", Runner: "go-1.24"}))
+	})
+
+	t.Run("one that serves a port is a container to be reached", func(t *testing.T) {
+		t.Parallel()
+
+		assert.False(t, keepable(t, Request{ID: "request-id", Code: "serve", Runner: "go-1.24", Ports: []port.Port{8080}}))
+	})
+
+	t.Run("and so is one somebody is given a way into", func(t *testing.T) {
+		t.Parallel()
+
+		assert.False(t, keepable(t, Request{ID: "request-id", Code: "sleep", Runner: "go-1.24", Terminal: true}))
+	})
 }
