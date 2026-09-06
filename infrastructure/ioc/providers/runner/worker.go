@@ -281,15 +281,6 @@ func workerConsoleCommand(
 		return nil, err
 	}
 
-	forwarder, err := ingress.NewForwarder(view, workerConfigs.PublicPortRange, logger)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := iocContainer.Bind(func() *ingress.Forwarder { return forwarder }, provider.Singleton()); err != nil {
-		return nil, err
-	}
-
 	// worker subscribers
 	if err := iocContainer.Bind(func() map[string]domain.MessageHandler {
 		return subscribers

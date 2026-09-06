@@ -52,11 +52,11 @@ CMD ["serve-runner-manager", "--port=80"]
 
 # runner worker service
 FROM develop AS develop-runner-worker
-ENV RUNNER_WORKER_NAME=runner-worker-01
 EXPOSE 80 8090
 CMD ["serve-runner-worker", "--port=80"]
 
+# a node takes the machine's own name unless it is told one, so that as many
+# of them as somebody starts are each themselves.
 FROM production AS production-runner-worker
-ENV RUNNER_WORKER_NAME=runner-worker-01
 EXPOSE 80 8090
 CMD ["serve-runner-worker", "--port=80"]

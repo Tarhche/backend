@@ -232,13 +232,9 @@ func TestServe(t *testing.T) {
 		subscriber.On("Subscribe", mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 
 		view := cluster.NewView(consumerName)
-		forwarder, forwarderErr := ingress.NewForwarder(view, "", command.logger)
-		assert.NoError(t, forwarderErr)
-
 		command.configs.IngressPort = findAvailablePort()
 		command.view = view
 		command.subscriber = &subscriber
-		command.forwarder = forwarder
 		command.ingress = ingress.NewHandler(view, "runner.localhost")
 
 		serverStartedListening := make(chan struct{})

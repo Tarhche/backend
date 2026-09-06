@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -50,14 +51,17 @@ func NewUseCase(
 // the node's other containers hold is read off them: a node's containers are
 // the only record of what it has given out, which is what makes it survive its
 // own restart.
-func (uc *UseCase) givePublicPorts(ctx context.Context, request *Request) (string, error) {
+func (uc *UseCase) givePublicPorts(ctx context.Context, request *Request) (map[port.Port]port.Port, error) {
 	if uc.publicPorts.Empty() || len(request.ExposedPorts) == 0 {
-		return "", nil
+		return nil, nil
 	}
 
-	held, err := uc.containerManager.GetByLabel(ctx, container.NodeNameLabelKey, uc.nodeName)
+	// every container on this daemon, not only this node's: nodes alike enough
+	// to be scaled are alike enough to hand out the same port, and what each
+	// has given out is written on the containers they made.
+	held, err := uc.containerManager.GetAll(ctx)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	taken := make(map[port.Port]struct{})
@@ -73,21 +77,36 @@ func (uc *UseCase) givePublicPorts(ctx context.Context, request *Request) (strin
 		}
 	}
 
-	pairs := make([]string, 0, len(request.ExposedPorts))
+	given := make(map[port.Port]port.Port, len(request.ExposedPorts))
 
 	for _, exposed := range request.ExposedPorts {
 		public, found := uc.publicPorts.Free(taken)
 		if !found {
 			// nothing left to give: the container is served over http, and
-			// nothing else.
+			// docker puts its port wherever it likes.
 			break
 		}
 
 		taken[public] = struct{}{}
+		given[exposed] = public
+	}
+
+	return given, nil
+}
+
+// writtenPorts is what a container carries about the ports it was given, so
+// that a node reading its containers back — its own, or another node's — finds
+// what has already been handed out.
+func writtenPorts(given map[port.Port]port.Port) string {
+	pairs := make([]string, 0, len(given))
+
+	for exposed, public := range given {
 		pairs = append(pairs, fmt.Sprintf("%d:%d", exposed, public))
 	}
 
-	return strings.Join(pairs, ","), nil
+	slices.Sort(pairs)
+
+	return strings.Join(pairs, ",")
 }
 
 // Execute executes the use case
@@ -107,6 +126,13 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 	// for: pulling an image it has never seen can take longer than the whole
 	// of that.
 	if err := uc.containerManager.EnsureImage(ctx, request.Image); err != nil {
+		return nil, err
+	}
+
+	// where its ports are published, which is where somebody will be told to
+	// find them.
+	publicPorts, err := uc.givePublicPorts(ctx, request)
+	if err != nil {
 		return nil, err
 	}
 
@@ -141,7 +167,7 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		Entrypoint:    request.Entrypoint,
 		RestartPolicy: request.RestartPolicy,
 		ExposedPorts:  request.ExposedPortSet(),
-		PortBindings:  request.PublishedPorts(),
+		PortBindings:  request.PublishedPorts(publicPorts),
 		Networks:      network.Attachments(request.Policy(), request.StackSlug, request.ServiceName),
 		ResourceLimits: container.ResourceLimits{
 			Cpu:    request.ResourceLimits.Cpu,
@@ -156,15 +182,8 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		c.Labels[container.TaskTTLLabelKey] = strconv.Itoa(int(request.TTL.Seconds()))
 	}
 
-	// and where it is reached at whole, which this node gives out and this
-	// node listens on.
-	publicPorts, err := uc.givePublicPorts(ctx, request)
-	if err != nil {
-		return nil, err
-	}
-
-	if publicPorts != "" {
-		c.Labels[container.TaskPublicPortsLabelKey] = publicPorts
+	if written := writtenPorts(publicPorts); written != "" {
+		c.Labels[container.TaskPublicPortsLabelKey] = written
 	}
 
 	if err := uc.clearEarlierAttempts(ctx, request); err != nil {

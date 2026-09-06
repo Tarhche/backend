@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/danceable/console"
@@ -19,7 +20,6 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers/runner"
-	"github.com/khanzadimahdi/testproject/infrastructure/runner/ingress"
 )
 
 const (
@@ -32,11 +32,8 @@ const (
 	// this long, and one that has gone is let go.
 	logShippingInterval = 1 * time.Second
 
-	// forwardInterval is how often the node looks at what it is holding, which
-	// is what tells it which ports to be listening on; forgetInterval how
-	// often it drops what no node has spoken for.
-	forwardInterval = time.Second
-	forgetInterval  = 5 * time.Second
+	// forgetInterval is how often a node drops what no node has spoken for.
+	forgetInterval = 5 * time.Second
 )
 
 type ServeCommand struct {
@@ -47,7 +44,6 @@ type ServeCommand struct {
 	// belongs to another node: a container answers on a name of its own, and
 	// every node hears where every container is.
 	ingress         http.Handler
-	forwarder       *ingress.Forwarder
 	view            *cluster.View
 	subscriber      domain.Subscriber
 	consumer        domain.Consumer
@@ -98,6 +94,12 @@ func (c *ServeCommand) Configure(flagSet *console.FlagSet) {
 // The worker name (configured by flag or environment) is bound into the
 // container so the worker providers can resolve it.
 func (c *ServeCommand) Providers() []provider.Provider {
+	// the flags have been read by now, so what the node was not told about
+	// itself is filled in before anything is wired with it.
+	if err := c.nameItself(); err != nil {
+		panic(err)
+	}
+
 	return []provider.Provider{
 		providers.NewConfigsProvider(c.configs),
 		runner.NewWorkerNameProvider(),
@@ -148,10 +150,6 @@ func (c *ServeCommand) Boot(ctx context.Context, container provider.Container) e
 		return err
 	}
 
-	if err := container.Resolve(&c.forwarder); err != nil {
-		return err
-	}
-
 	if err := container.Resolve(&c.view); err != nil {
 		return err
 	}
@@ -181,9 +179,6 @@ func (c *ServeCommand) Terminate(ctx context.Context) error {
 // @basePath		/api
 // @schemes		http
 func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
-	if !c.validateParams() {
-		return console.ExitFailure
-	}
 
 	server := http.Server{
 		Addr:        fmt.Sprintf("0.0.0.0:%d", c.configs.Port),
@@ -239,7 +234,6 @@ func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 		}
 	}()
 
-	go c.forwarder.Serve(ctx, forwardInterval)
 	go c.forgetGoneContainers(ctx)
 
 	go c.tasksHeartbeat(ctx)
@@ -270,13 +264,24 @@ func (c *ServeCommand) forgetGoneContainers(ctx context.Context) {
 	}
 }
 
-func (c *ServeCommand) validateParams() bool {
-	if len(c.configs.Name) == 0 {
-		c.logger.Error("name is required")
-		return false
+// nameItself gives a node that was not told what it is called the name of the
+// machine it is running on. Nodes are otherwise alike, so this is what lets
+// there be as many of them as somebody starts without configuring each.
+func (c *ServeCommand) nameItself() error {
+	if c.configs.Name == "" {
+		hostname, err := os.Hostname()
+		if err != nil {
+			return err
+		}
+
+		c.configs.Name = hostname
 	}
 
-	return true
+	if c.configs.APIAddress == "" {
+		c.configs.APIAddress = fmt.Sprintf("%s:%d", c.configs.Name, c.configs.Port)
+	}
+
+	return nil
 }
 
 func (c *ServeCommand) consumeTopics(ctx context.Context) error {
