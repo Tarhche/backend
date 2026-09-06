@@ -76,6 +76,10 @@ type Endpoint struct {
 	ContainerPort port.Port `json:"container_port"`
 	Host          string    `json:"host"`
 	HostPort      port.Port `json:"host_port"`
+
+	// HostPortUDP is where the same container port was published for udp,
+	// which docker gives a port of its own. Zero when there is none.
+	HostPortUDP port.Port `json:"host_port_udp,omitempty"`
 }
 
 // NewTaskScheduled is a task, as the node that is to run it needs to see it.

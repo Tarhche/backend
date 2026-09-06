@@ -44,6 +44,7 @@ type taskPayload struct {
 
 type endpointPayload struct {
 	ContainerPort uint `json:"container_port"`
+	PublicPort    uint `json:"public_port,omitempty"`
 }
 
 type limitsPayload struct {
@@ -124,7 +125,10 @@ var streams = map[string]container.Stream{
 func (p *taskPayload) toTask() task.Task {
 	endpoints := make([]task.Endpoint, len(p.Endpoints))
 	for i, e := range p.Endpoints {
-		endpoints[i] = task.Endpoint{ContainerPort: port.Port(e.ContainerPort)}
+		endpoints[i] = task.Endpoint{
+			ContainerPort: port.Port(e.ContainerPort),
+			PublicPort:    port.Port(e.PublicPort),
+		}
 	}
 
 	return task.Task{

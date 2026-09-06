@@ -157,6 +157,33 @@ func (r *TasksRepository) GetOneBySlug(ctx context.Context, slug string) (task.T
 	return r.findOne(ctx, bson.D{{Key: "slug", Value: slug}})
 }
 
+// GetRunningWithPublicPorts finds every container being served whole, which is
+// what the ingress opens its own ports for.
+func (r *TasksRepository) GetRunningWithPublicPorts(ctx context.Context) ([]task.Task, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
+	cursor, err := r.collection.Find(ctx, bson.D{
+		{Key: "current_state", Value: task.Running},
+		{Key: "endpoints.public_port", Value: bson.D{{Key: "$gt", Value: 0}}},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var items []TaskBson
+	if err := cursor.All(ctx, &items); err != nil {
+		return nil, err
+	}
+
+	tasks := make([]task.Task, len(items))
+	for i := range items {
+		tasks[i] = toTask(&items[i])
+	}
+
+	return tasks, nil
+}
+
 func (r *TasksRepository) findOne(ctx context.Context, filter bson.D) (task.Task, error) {
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()

@@ -182,3 +182,34 @@ func TestNewContainer_deadline(t *testing.T) {
 		assert.Nil(t, presented.Deadline)
 	})
 }
+
+func TestNewEndpoints_address(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a port the ingress forwards whole is given as an address", func(t *testing.T) {
+		t.Parallel()
+
+		endpoints := NewEndpoints(task.Task{
+			Slug: "nginx-xkfqz",
+			Endpoints: []task.Endpoint{
+				{ContainerPort: 80, Host: "docker", HostPort: 32768, PublicPort: 30001},
+			},
+		}, ingressDomain)
+
+		require.Len(t, endpoints, 1)
+		assert.Equal(t, "http://nginx-xkfqz.runner.localhost:8021", endpoints[0].URL)
+		assert.Equal(t, "runner.localhost:30001", endpoints[0].Address, "the port http is served on is not the one a raw connection is made to")
+	})
+
+	t.Run("a port nothing forwards has no address to connect to", func(t *testing.T) {
+		t.Parallel()
+
+		endpoints := NewEndpoints(task.Task{
+			Slug:      "nginx-xkfqz",
+			Endpoints: []task.Endpoint{{ContainerPort: 80, Host: "docker", HostPort: 32768}},
+		}, ingressDomain)
+
+		require.Len(t, endpoints, 1)
+		assert.Empty(t, endpoints[0].Address)
+	})
+}

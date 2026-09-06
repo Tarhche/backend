@@ -67,10 +67,9 @@ services:
       target: develop-runner-manager
     ports:
       - "8020:80"
-      - "8021:8090" # the containers' own exposed ports, routed by hostname
     environment:
-      RUNNER_INGRESS_PORT: 8090
       RUNNER_INGRESS_DOMAIN: ${RUNNER_INGRESS_DOMAIN}
+      RUNNER_INGRESS_PORT_RANGE: ${RUNNER_INGRESS_PORT_RANGE:-30000-30063}
       MONGO_SCHEME: ${MONGO_SCHEME}
       MONGO_USERNAME: ${MONGO_USERNAME}
       MONGO_PASSWORD: ${MONGO_PASSWORD}
@@ -85,6 +84,34 @@ services:
       OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT: ${OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT:-}
       OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
       PROFILING_ENABLED: ${PROFILING_ENABLED:-true}
+  runner-ingress:
+    <<: *app
+    build:
+      target: develop-runner-ingress
+    ports:
+      # the containers' own exposed ports: http routed by hostname, and a span
+      # of ports carrying whole connections to whatever else they serve.
+      - "8021:8090"
+      - "30000-30063:30000-30063"
+      - "30000-30063:30000-30063/udp"
+    environment:
+      RUNNER_INGRESS_PORT: 8090
+      RUNNER_INGRESS_DOMAIN: ${RUNNER_INGRESS_DOMAIN}
+      RUNNER_INGRESS_PORT_RANGE: ${RUNNER_INGRESS_PORT_RANGE:-30000-30063}
+      MONGO_SCHEME: ${MONGO_SCHEME}
+      MONGO_USERNAME: ${MONGO_USERNAME}
+      MONGO_PASSWORD: ${MONGO_PASSWORD}
+      MONGO_HOST: ${MONGO_HOST}
+      MONGO_PORT: ${MONGO_PORT}
+      MONGO_DATABASE_NAME: ${MONGO_DATABASE_NAME}
+      OTEL_EXPORTER_OTLP_INSECURE: ${OTEL_EXPORTER_OTLP_INSECURE}
+      OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL}
+      OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
+      OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT: ${OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT:-}
+      OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
+      PROFILING_ENABLED: ${PROFILING_ENABLED:-true}
+
   runner-worker-01:
     <<: *app
     build:

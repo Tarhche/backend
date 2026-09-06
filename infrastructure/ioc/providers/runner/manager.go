@@ -47,7 +47,6 @@ import (
 	noderepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/runner/nodes"
 	stackrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/runner/stacks"
 	taskrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/runner/tasks"
-	"github.com/khanzadimahdi/testproject/infrastructure/runner/ingress"
 	"github.com/khanzadimahdi/testproject/infrastructure/runner/scheduler/roundrobin"
 	"github.com/khanzadimahdi/testproject/infrastructure/telemetry/profiler"
 	healthAPI "github.com/khanzadimahdi/testproject/presentation/http/health"
@@ -60,10 +59,6 @@ import (
 
 const (
 	ManagerSubscribers = "runner:manager:subscribers"
-
-	// ManagerIngress is the handler that serves the containers' own exposed
-	// ports, which listens on a port of its own rather than alongside the API.
-	ManagerIngress = "runner:manager:ingress"
 )
 
 // managerProvider builds the runner manager's messaging singleton, HTTP handler
@@ -148,6 +143,14 @@ func managerConsoleCommand(
 	}
 
 	taskScheduler := roundrobin.New()
+
+	// what the ingress will accept raw connections on. A range it cannot read
+	// is a mistake in how the runner was started, and the manager says so
+	// rather than quietly handing out nothing.
+	ingressPorts, err := task.ParsePortRange(managerConfigs.IngressPortRange)
+	if err != nil {
+		return nil, err
+	}
 
 	taskRepository := taskrepository.NewRepository(database)
 	nodeRepository := noderepository.NewRepository(database)
@@ -266,20 +269,12 @@ func managerConsoleCommand(
 		taskEvents.HeartbeatName:        managerHeartbeatTask.NewHeartbeatHandler(taskRepository, jetStreamProduceConsumer, managerDeleteTaskUseCase, managerKillTaskUseCase),
 		taskEvents.TaskRunRequestedName: managerRunTask.NewTaskRunRequested(managerRunTaskUseCase, logger),
 		taskEvents.TaskCreatedName:      managerRunTask.NewTaskCreated(taskRepository, nodeRepository, stackRepository, taskScheduler, taskSchedule, logger),
-		taskEvents.TaskRanName:          managerRunTask.NewTaskRan(taskRepository),
+		taskEvents.TaskRanName:          managerRunTask.NewTaskRan(taskRepository, ingressPorts),
 		taskEvents.TaskRestartedName:    managerRunTask.NewTaskRestarted(taskRepository),
 		taskEvents.TaskCompletedName:    managerRunTask.NewTaskCompleted(taskRepository),
 		taskEvents.TaskFailedName:       managerRunTask.NewTaskFailed(taskRepository, logRepository, taskSchedule, managerDeleteTaskUseCase, logger),
 		taskEvents.TaskStoppedName:      managerStopTask.NewTaskStopped(taskRepository),
 		taskEvents.TaskLoggedName:       managerLogTask.NewTaskLogged(taskRepository, logRepository, managerConfigs.MaxLogBytes, logger),
-	}
-
-	// the ingress serves the containers' own ports, on a port of its own: a
-	// request there is routed to a container by the hostname it was made to.
-	if err := iocContainer.Bind(func() http.Handler {
-		return ingress.NewHandler(taskRepository, managerConfigs.IngressDomain)
-	}, provider.Singleton(), provider.WithName(ManagerIngress)); err != nil {
-		return nil, err
 	}
 
 	// manager subscribers

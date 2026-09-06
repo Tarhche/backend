@@ -10,6 +10,7 @@ import (
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/runner/container"
+	"github.com/khanzadimahdi/testproject/domain/runner/port"
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
 	"github.com/khanzadimahdi/testproject/domain/runner/task/events"
 )
@@ -195,19 +196,35 @@ func (uc *UseCase) endpoints(c *container.Container) []events.Endpoint {
 	endpoints := make([]events.Endpoint, 0, len(c.PortBindings))
 
 	for containerPort, bindings := range c.PortBindings {
+		endpoint := events.Endpoint{
+			ContainerPort: containerPort,
+			Host:          uc.advertiseHost,
+		}
+
+		// a port is published for both protocols, on a host port each.
 		for _, binding := range bindings {
 			if binding.HostPort == 0 {
 				continue
 			}
 
-			endpoints = append(endpoints, events.Endpoint{
-				ContainerPort: containerPort,
-				Host:          uc.advertiseHost,
-				HostPort:      binding.HostPort,
-			})
+			if binding.Is(port.UDP) {
+				if endpoint.HostPortUDP == 0 {
+					endpoint.HostPortUDP = binding.HostPort
+				}
 
-			break
+				continue
+			}
+
+			if endpoint.HostPort == 0 {
+				endpoint.HostPort = binding.HostPort
+			}
 		}
+
+		if endpoint.HostPort == 0 && endpoint.HostPortUDP == 0 {
+			continue
+		}
+
+		endpoints = append(endpoints, endpoint)
 	}
 
 	// docker hands back the bindings in no particular order, and the lowest

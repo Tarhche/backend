@@ -5,6 +5,7 @@ package presenter
 
 import (
 	"fmt"
+	"net"
 	"time"
 
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
@@ -58,6 +59,11 @@ type Endpoint struct {
 	ContainerPort uint   `json:"container_port"`
 	Host          string `json:"host"`
 	URL           string `json:"url"`
+
+	// Address is where the port is reached whole — what ssh, a database
+	// client, or anything else that is not http connects to. Empty when the
+	// runner forwards nothing.
+	Address string `json:"address,omitempty"`
 }
 
 type Limits struct {
@@ -123,6 +129,16 @@ func NewContainers(tasks []task.Task, ingressDomain string, owners Owners) []Con
 	return items
 }
 
+// hostOf is the ingress's own name, without the port its http is served on: a
+// raw connection is made to a port of its own.
+func hostOf(ingressDomain string) string {
+	if host, _, err := net.SplitHostPort(ingressDomain); err == nil {
+		return host
+	}
+
+	return ingressDomain
+}
+
 // NewEndpoints builds the addresses a container's ports are served on.
 //
 // The first exposed port answers on the container's bare name, and every port
@@ -144,11 +160,19 @@ func NewEndpoints(t task.Task, ingressDomain string) []Endpoint {
 			host = fmt.Sprintf("%s.%s", t.Slug, ingressDomain)
 		}
 
-		endpoints = append(endpoints, Endpoint{
+		endpoint := Endpoint{
 			ContainerPort: uint(e.ContainerPort),
 			Host:          host,
 			URL:           "http://" + host,
-		})
+		}
+
+		// the ingress answers http by name and everything else by port, so a
+		// port it forwards whole is given as an address to connect to.
+		if e.PublicPort > 0 {
+			endpoint.Address = fmt.Sprintf("%s:%d", hostOf(ingressDomain), e.PublicPort)
+		}
+
+		endpoints = append(endpoints, endpoint)
 	}
 
 	return endpoints
