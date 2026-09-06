@@ -40,6 +40,10 @@ type Container struct {
 	Command     []string
 	Labels      map[string]string
 	CreatedAt   time.Time
+
+	// StartedAt is when the container last started running, as docker reports
+	// it. It is what anything a container is given time for is counted from.
+	StartedAt time.Time
 }
 
 // Attempt is which attempt at its task this container is, counting from zero,
@@ -60,17 +64,29 @@ func (c *Container) Interactive() bool {
 	return c.Labels[TaskInteractiveLabelKey] == "true"
 }
 
-// Deadline is when this container will be stopped for having run long enough,
-// as it was labelled when it was made. A container that may run for as long as
-// it likes has no deadline, and neither has one from before deadlines were
-// written down.
+// TTL is how long this container may run for once it is up, as it was
+// labelled when it was made. A container that may run for as long as it likes
+// has none, and neither has one from before this was written down.
+func (c *Container) TTL() time.Duration {
+	seconds, err := strconv.Atoi(c.Labels[TaskTTLLabelKey])
+	if err != nil || seconds <= 0 {
+		return 0
+	}
+
+	return time.Duration(seconds) * time.Second
+}
+
+// Deadline is when this container will have run long enough, counted from the
+// moment it started. One that may run as long as it likes, or that has not
+// started, has none.
 func (c *Container) Deadline() time.Time {
-	deadline, err := time.Parse(time.RFC3339Nano, c.Labels[TaskDeadlineLabelKey])
-	if err != nil {
+	ttl := c.TTL()
+
+	if ttl <= 0 || c.StartedAt.IsZero() {
 		return time.Time{}
 	}
 
-	return deadline
+	return c.StartedAt.Add(ttl)
 }
 
 // ResourceLimits represents the resource limits of the container
@@ -142,12 +158,10 @@ const (
 	// so without looking anything up.
 	TaskInteractiveLabelKey = "task.interactive"
 
-	// TaskDeadlineLabelKey is when a container that may only run for so long
-	// will be stopped. It is written as the container is made, which is after
-	// its image is there and a moment before it runs, so the time it is
-	// allowed runs from when it came up rather than from when it was asked
-	// for.
-	TaskDeadlineLabelKey = "task.deadline"
+	// TaskTTLLabelKey is how long a container may run for once it is up, in
+	// seconds. What it is counted from is when the container started, which
+	// the node reads off the container itself.
+	TaskTTLLabelKey = "task.ttl"
 
 	// TaskAttemptLabelKey is which attempt this container is, counting from
 	// zero. It is kept on the container rather than written down anywhere,

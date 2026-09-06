@@ -168,13 +168,3 @@ func (r *Request) ExposedPortSet() port.PortSet {
 
 	return set
 }
-
-// Deadline is when a container made now would have run long enough. A task
-// with no limit has none.
-func (r *Request) Deadline() time.Time {
-	if r.TTL <= 0 {
-		return time.Time{}
-	}
-
-	return time.Now().Add(r.TTL)
-}
