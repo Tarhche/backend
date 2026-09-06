@@ -55,6 +55,11 @@ type RunnerWorker struct {
 	IngressPort   int    `usage:"Port the containers' own exposed ports are served on. A request there is routed to a container by its hostname, whichever node is holding it." env:"RUNNER_INGRESS_PORT" long:"ingress-port"`
 	IngressDomain string `usage:"Domain a container's exposed ports are served on, without a leading dot." env:"RUNNER_INGRESS_DOMAIN" long:"ingress-domain"`
 
+	// PublicIngressDomain is that domain as somebody outside writes it, which
+	// carries a port when the nodes are not reached on 80. Empty is the domain
+	// above, which is what it is wherever there is nothing in the way.
+	PublicIngressDomain string `usage:"Domain a container's exposed ports are reached at from outside, with a port if it is not 80. Empty is the domain the node answers under." env:"RUNNER_WORKER_PUBLIC_INGRESS_DOMAIN" long:"public-ingress-domain"`
+
 	PublicPortRange string `usage:"Range of ports a container's own ports are published on, as \"first-last\", so that what does not speak http has an address. Empty lets docker pick, which is an address nobody can predict." env:"RUNNER_WORKER_PUBLIC_PORT_RANGE" long:"public-port-range"`
 	PublicHost      string `usage:"Host somebody outside reaches this node's forwarded ports at. Empty uses the advertised host." env:"RUNNER_WORKER_PUBLIC_HOST" long:"public-host"`
 }

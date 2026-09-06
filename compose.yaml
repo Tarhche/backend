@@ -93,6 +93,9 @@ services:
     environment:
       RUNNER_INGRESS_PORT: 8090
       RUNNER_INGRESS_DOMAIN: ${RUNNER_INGRESS_DOMAIN}
+      # what a browser writes: here the nodes sit behind one proxy on a port of
+      # its own, where in production they answer on their own names.
+      RUNNER_WORKER_PUBLIC_INGRESS_DOMAIN: ${RUNNER_PUBLIC_INGRESS_DOMAIN}
       RUNNER_WORKER_PUBLIC_PORT_RANGE: ${RUNNER_WORKER_PUBLIC_PORT_RANGE:-30000-30063}
       RUNNER_WORKER_PUBLIC_HOST: ${RUNNER_WORKER_PUBLIC_HOST:-localhost}
       RUNNER_WORKER_ADVERTISE_HOST: ${RUNNER_WORKER_ADVERTISE_HOST}

@@ -64,6 +64,17 @@ func publicHost(configs *configs.RunnerWorker) string {
 	return configs.AdvertiseHost
 }
 
+// publicIngressDomain is how somebody outside writes the name a container on
+// this node answers to. It differs from the name the node matches only where
+// something in front answers on another port.
+func publicIngressDomain(configs *configs.RunnerWorker) string {
+	if configs.PublicIngressDomain != "" {
+		return configs.PublicIngressDomain
+	}
+
+	return configs.IngressDomain
+}
+
 // workerNameProvider binds the worker name, which the command loads from its
 // --name flag or from the RUNNER_WORKER_NAME environment variable, under the
 // name the worker providers resolve it by.
@@ -297,7 +308,7 @@ func workerConsoleCommand(
 
 	// task heartbeat
 	if err := iocContainer.Bind(func() *workerTaskHeartbeat.UseCase {
-		return workerTaskHeartbeat.NewUseCase(containerManager, asyncProduceConsumer, nodeName, workerConfigs.AdvertiseHost, publicHost(workerConfigs), workerConfigs.IngressDomain, logger)
+		return workerTaskHeartbeat.NewUseCase(containerManager, asyncProduceConsumer, nodeName, workerConfigs.AdvertiseHost, publicHost(workerConfigs), publicIngressDomain(workerConfigs), logger)
 	}, provider.Singleton()); err != nil {
 		return nil, err
 	}
