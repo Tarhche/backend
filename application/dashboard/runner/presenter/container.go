@@ -5,7 +5,6 @@ package presenter
 
 import (
 	"fmt"
-	"net"
 	"time"
 
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
@@ -129,16 +128,6 @@ func NewContainers(tasks []task.Task, ingressDomain string, owners Owners) []Con
 	return items
 }
 
-// hostOf is the ingress's own name, without the port its http is served on: a
-// raw connection is made to a port of its own.
-func hostOf(ingressDomain string) string {
-	if host, _, err := net.SplitHostPort(ingressDomain); err == nil {
-		return host
-	}
-
-	return ingressDomain
-}
-
 // NewEndpoints builds the addresses a container's ports are served on.
 //
 // The first exposed port answers on the container's bare name, and every port
@@ -166,10 +155,10 @@ func NewEndpoints(t task.Task, ingressDomain string) []Endpoint {
 			URL:           "http://" + host,
 		}
 
-		// the ingress answers http by name and everything else by port, so a
-		// port it forwards whole is given as an address to connect to.
-		if e.PublicPort > 0 {
-			endpoint.Address = fmt.Sprintf("%s:%d", hostOf(ingressDomain), e.PublicPort)
+		// http is answered by name, wherever the container is held; everything
+		// else is answered by the node holding it, on a port of its own.
+		if e.PublicPort > 0 && e.PublicHost != "" {
+			endpoint.Address = fmt.Sprintf("%s:%d", e.PublicHost, e.PublicPort)
 		}
 
 		endpoints = append(endpoints, endpoint)

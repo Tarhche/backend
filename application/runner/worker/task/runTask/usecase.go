@@ -3,11 +3,15 @@ package runTask
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/runner/container"
 	"github.com/khanzadimahdi/testproject/domain/runner/network"
+	"github.com/khanzadimahdi/testproject/domain/runner/port"
+	"github.com/khanzadimahdi/testproject/domain/runner/task"
 )
 
 // UseCase runs a container on this node.
@@ -16,6 +20,12 @@ type UseCase struct {
 	networkManager   network.Manager
 	validator        domain.Validator
 	nodeName         string
+
+	// publicPorts is the span this node accepts whole connections on. Each
+	// container it makes is given one of them per port it exposes, so what
+	// does not speak http has an address; the ports are written on the
+	// container, which is what remembers them.
+	publicPorts task.PortRange
 }
 
 // NewUseCase creates a new UseCase
@@ -24,13 +34,60 @@ func NewUseCase(
 	networkManager network.Manager,
 	validator domain.Validator,
 	nodeName string,
+	publicPorts task.PortRange,
 ) *UseCase {
 	return &UseCase{
 		containerManager: containerManager,
 		networkManager:   networkManager,
 		validator:        validator,
 		nodeName:         nodeName,
+		publicPorts:      publicPorts,
 	}
+}
+
+// givePublicPorts hands each of a container's ports one of this node's own, so
+// that ssh and everything else that is not http has somewhere to connect. What
+// the node's other containers hold is read off them: a node's containers are
+// the only record of what it has given out, which is what makes it survive its
+// own restart.
+func (uc *UseCase) givePublicPorts(ctx context.Context, request *Request) (string, error) {
+	if uc.publicPorts.Empty() || len(request.ExposedPorts) == 0 {
+		return "", nil
+	}
+
+	held, err := uc.containerManager.GetByLabel(ctx, container.NodeNameLabelKey, uc.nodeName)
+	if err != nil {
+		return "", err
+	}
+
+	taken := make(map[port.Port]struct{})
+	for i := range held {
+		// a container of this task's own is about to be replaced by this one,
+		// so what it holds is free.
+		if held[i].Labels[container.TaskUUIDLabelKey] == request.UUID {
+			continue
+		}
+
+		for _, public := range held[i].PublicPorts() {
+			taken[public] = struct{}{}
+		}
+	}
+
+	pairs := make([]string, 0, len(request.ExposedPorts))
+
+	for _, exposed := range request.ExposedPorts {
+		public, found := uc.publicPorts.Free(taken)
+		if !found {
+			// nothing left to give: the container is served over http, and
+			// nothing else.
+			break
+		}
+
+		taken[public] = struct{}{}
+		pairs = append(pairs, fmt.Sprintf("%d:%d", exposed, public))
+	}
+
+	return strings.Join(pairs, ","), nil
 }
 
 // Execute executes the use case
@@ -97,6 +154,17 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 	// this node's to decide here: the container itself says when it started.
 	if request.TTL > 0 {
 		c.Labels[container.TaskTTLLabelKey] = strconv.Itoa(int(request.TTL.Seconds()))
+	}
+
+	// and where it is reached at whole, which this node gives out and this
+	// node listens on.
+	publicPorts, err := uc.givePublicPorts(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+
+	if publicPorts != "" {
+		c.Labels[container.TaskPublicPortsLabelKey] = publicPorts
 	}
 
 	if err := uc.clearEarlierAttempts(ctx, request); err != nil {

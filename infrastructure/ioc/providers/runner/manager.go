@@ -144,14 +144,6 @@ func managerConsoleCommand(
 
 	taskScheduler := roundrobin.New()
 
-	// what the ingress will accept raw connections on. A range it cannot read
-	// is a mistake in how the runner was started, and the manager says so
-	// rather than quietly handing out nothing.
-	ingressPorts, err := task.ParsePortRange(managerConfigs.IngressPortRange)
-	if err != nil {
-		return nil, err
-	}
-
 	taskRepository := taskrepository.NewRepository(database)
 	nodeRepository := noderepository.NewRepository(database)
 	stackRepository := stackrepository.NewRepository(database)
@@ -269,7 +261,7 @@ func managerConsoleCommand(
 		taskEvents.HeartbeatName:        managerHeartbeatTask.NewHeartbeatHandler(taskRepository, jetStreamProduceConsumer, managerDeleteTaskUseCase, managerKillTaskUseCase),
 		taskEvents.TaskRunRequestedName: managerRunTask.NewTaskRunRequested(managerRunTaskUseCase, logger),
 		taskEvents.TaskCreatedName:      managerRunTask.NewTaskCreated(taskRepository, nodeRepository, stackRepository, taskScheduler, taskSchedule, logger),
-		taskEvents.TaskRanName:          managerRunTask.NewTaskRan(taskRepository, ingressPorts),
+		taskEvents.TaskRanName:          managerRunTask.NewTaskRan(taskRepository),
 		taskEvents.TaskRestartedName:    managerRunTask.NewTaskRestarted(taskRepository),
 		taskEvents.TaskCompletedName:    managerRunTask.NewTaskCompleted(taskRepository),
 		taskEvents.TaskFailedName:       managerRunTask.NewTaskFailed(taskRepository, logRepository, taskSchedule, managerDeleteTaskUseCase, logger),

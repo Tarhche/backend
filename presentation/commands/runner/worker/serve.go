@@ -11,12 +11,15 @@ import (
 	"github.com/danceable/provider"
 
 	workerHeartbeat "github.com/khanzadimahdi/testproject/application/runner/worker/beatHeart"
+	"github.com/khanzadimahdi/testproject/application/runner/worker/cluster"
 	taskHeartbeat "github.com/khanzadimahdi/testproject/application/runner/worker/task/beatHeart"
 	shipLogs "github.com/khanzadimahdi/testproject/application/runner/worker/task/shipLogs"
 	"github.com/khanzadimahdi/testproject/domain"
+	taskEvents "github.com/khanzadimahdi/testproject/domain/runner/task/events"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers/runner"
+	"github.com/khanzadimahdi/testproject/infrastructure/runner/ingress"
 )
 
 const (
@@ -28,11 +31,25 @@ const (
 	// what is running. A container that has just started is followed within
 	// this long, and one that has gone is let go.
 	logShippingInterval = 1 * time.Second
+
+	// forwardInterval is how often the node looks at what it is holding, which
+	// is what tells it which ports to be listening on; forgetInterval how
+	// often it drops what no node has spoken for.
+	forwardInterval = time.Second
+	forgetInterval  = 5 * time.Second
 )
 
 type ServeCommand struct {
-	configs         *configs.RunnerWorker
-	handler         http.Handler
+	configs *configs.RunnerWorker
+	handler http.Handler
+
+	// ingress serves what this node's containers serve, and passes on what
+	// belongs to another node: a container answers on a name of its own, and
+	// every node hears where every container is.
+	ingress         http.Handler
+	forwarder       *ingress.Forwarder
+	view            *cluster.View
+	subscriber      domain.Subscriber
 	consumer        domain.Consumer
 	consumers       map[string]domain.MessageHandler
 	taskHeartBeat   *taskHeartbeat.UseCase
@@ -127,6 +144,22 @@ func (c *ServeCommand) Boot(ctx context.Context, container provider.Container) e
 		return err
 	}
 
+	if err := container.Resolve(&c.ingress, provider.ResolveName(runner.WorkerIngress)); err != nil {
+		return err
+	}
+
+	if err := container.Resolve(&c.forwarder); err != nil {
+		return err
+	}
+
+	if err := container.Resolve(&c.view); err != nil {
+		return err
+	}
+
+	if err := container.Resolve(&c.subscriber); err != nil {
+		return err
+	}
+
 	return container.Resolve(&c.consumers, provider.ResolveName(runner.WorkerSubscribers))
 }
 
@@ -174,6 +207,41 @@ func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 		return console.ExitFailure
 	}
 
+	// what every node is holding, heard from every node. It is a plain
+	// subscription rather than a queue: each node keeps its own view, so each
+	// node needs its own copy of what is said.
+	if err := c.subscriber.Subscribe(ctx, taskEvents.HeartbeatName, c.view); err != nil {
+		c.logger.ErrorContext(ctx, "failed to listen for what the other nodes are holding", "error", err)
+
+		return console.ExitFailure
+	}
+
+	// no read timeout: what it carries is a container's own traffic, which may
+	// be a long upload or a websocket rather than a request that finishes.
+	containers := http.Server{
+		Addr:        fmt.Sprintf("0.0.0.0:%d", c.configs.IngressPort),
+		Handler:     c.ingress,
+		IdleTimeout: 120 * time.Second,
+	}
+
+	go func() {
+		<-ctx.Done()
+
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		_ = containers.Shutdown(shutdownCtx)
+	}()
+
+	go func() {
+		if err := containers.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			c.logger.ErrorContext(ctx, "serving the containers failed", "error", err)
+		}
+	}()
+
+	go c.forwarder.Serve(ctx, forwardInterval)
+	go c.forgetGoneContainers(ctx)
+
 	go c.tasksHeartbeat(ctx)
 	go c.workerHeartbeat(ctx)
 	go c.shipLogs(ctx)
@@ -184,6 +252,22 @@ func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 	}
 
 	return console.ExitSuccess
+}
+
+// forgetGoneContainers drops what no node has spoken for lately, so a node
+// that goes away takes its containers out of this one's view with it.
+func (c *ServeCommand) forgetGoneContainers(ctx context.Context) {
+	ticker := time.NewTicker(forgetInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			c.view.Forget()
+		case <-ctx.Done():
+			return
+		}
+	}
 }
 
 func (c *ServeCommand) validateParams() bool {

@@ -68,12 +68,6 @@ func (r *MockTasksRepository) GetOneBySlug(ctx context.Context, slug string) (ta
 	return args.Get(0).(task.Task), args.Error(1)
 }
 
-func (r *MockTasksRepository) GetRunningWithPublicPorts(ctx context.Context) ([]task.Task, error) {
-	args := r.Mock.Called(ctx)
-
-	return args.Get(0).([]task.Task), args.Error(1)
-}
-
 func (r *MockTasksRepository) Save(ctx context.Context, t *task.Task) (string, error) {
 	args := r.Mock.Called(ctx, t)
 

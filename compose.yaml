@@ -69,7 +69,6 @@ services:
       - "8020:80"
     environment:
       RUNNER_INGRESS_DOMAIN: ${RUNNER_INGRESS_DOMAIN}
-      RUNNER_INGRESS_PORT_RANGE: ${RUNNER_INGRESS_PORT_RANGE:-30000-30063}
       MONGO_SCHEME: ${MONGO_SCHEME}
       MONGO_USERNAME: ${MONGO_USERNAME}
       MONGO_PASSWORD: ${MONGO_PASSWORD}
@@ -84,42 +83,21 @@ services:
       OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT: ${OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT:-}
       OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
       PROFILING_ENABLED: ${PROFILING_ENABLED:-true}
-  runner-ingress:
-    <<: *app
-    build:
-      target: develop-runner-ingress
-    ports:
-      # the containers' own exposed ports: http routed by hostname, and a span
-      # of ports carrying whole connections to whatever else they serve.
-      - "8021:8090"
-      - "30000-30063:30000-30063"
-      - "30000-30063:30000-30063/udp"
-    environment:
-      RUNNER_INGRESS_PORT: 8090
-      RUNNER_INGRESS_DOMAIN: ${RUNNER_INGRESS_DOMAIN}
-      RUNNER_INGRESS_PORT_RANGE: ${RUNNER_INGRESS_PORT_RANGE:-30000-30063}
-      MONGO_SCHEME: ${MONGO_SCHEME}
-      MONGO_USERNAME: ${MONGO_USERNAME}
-      MONGO_PASSWORD: ${MONGO_PASSWORD}
-      MONGO_HOST: ${MONGO_HOST}
-      MONGO_PORT: ${MONGO_PORT}
-      MONGO_DATABASE_NAME: ${MONGO_DATABASE_NAME}
-      OTEL_EXPORTER_OTLP_INSECURE: ${OTEL_EXPORTER_OTLP_INSECURE}
-      OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL}
-      OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES}
-      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
-      OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT: ${OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT:-}
-      OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
-      PROFILING_ENABLED: ${PROFILING_ENABLED:-true}
-
   runner-worker-01:
     <<: *app
     build:
       target: develop-runner-worker
     ports:
+      - "8021:8090" # the containers themselves: http by hostname, wherever they are held
+      - "30000-30003:30000-30003"
+      - "30000-30003:30000-30003/udp"
       - "8040:80"
     environment:
       RUNNER_WORKER_NAME: runner-worker-01
+      RUNNER_INGRESS_PORT: 8090
+      RUNNER_INGRESS_DOMAIN: ${RUNNER_INGRESS_DOMAIN}
+      RUNNER_WORKER_PUBLIC_PORT_RANGE: 30000-30003
+      RUNNER_WORKER_PUBLIC_HOST: ${RUNNER_WORKER_PUBLIC_HOST:-localhost}
       # the containers' ports are published on the docker daemon's own host,
       # which is the dind service rather than this one.
       RUNNER_WORKER_ADVERTISE_HOST: ${RUNNER_WORKER_ADVERTISE_HOST}
@@ -138,9 +116,15 @@ services:
     build:
       target: develop-runner-worker
     ports:
+      - "30010-30013:30010-30013"
+      - "30010-30013:30010-30013/udp"
       - "8041:80"
     environment:
       RUNNER_WORKER_NAME: runner-worker-02
+      RUNNER_INGRESS_PORT: 8090
+      RUNNER_INGRESS_DOMAIN: ${RUNNER_INGRESS_DOMAIN}
+      RUNNER_WORKER_PUBLIC_PORT_RANGE: 30010-30013
+      RUNNER_WORKER_PUBLIC_HOST: ${RUNNER_WORKER_PUBLIC_HOST:-localhost}
       # the containers' ports are published on the docker daemon's own host,
       # which is the dind service rather than this one.
       RUNNER_WORKER_ADVERTISE_HOST: ${RUNNER_WORKER_ADVERTISE_HOST}
@@ -159,9 +143,15 @@ services:
     build:
       target: develop-runner-worker
     ports:
+      - "30020-30023:30020-30023"
+      - "30020-30023:30020-30023/udp"
       - "8042:80"
     environment:
       RUNNER_WORKER_NAME: runner-worker-03
+      RUNNER_INGRESS_PORT: 8090
+      RUNNER_INGRESS_DOMAIN: ${RUNNER_INGRESS_DOMAIN}
+      RUNNER_WORKER_PUBLIC_PORT_RANGE: 30020-30023
+      RUNNER_WORKER_PUBLIC_HOST: ${RUNNER_WORKER_PUBLIC_HOST:-localhost}
       # the containers' ports are published on the docker daemon's own host,
       # which is the dind service rather than this one.
       RUNNER_WORKER_ADVERTISE_HOST: ${RUNNER_WORKER_ADVERTISE_HOST}

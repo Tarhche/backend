@@ -192,13 +192,13 @@ func TestNewEndpoints_address(t *testing.T) {
 		endpoints := NewEndpoints(task.Task{
 			Slug: "nginx-xkfqz",
 			Endpoints: []task.Endpoint{
-				{ContainerPort: 80, Host: "docker", HostPort: 32768, PublicPort: 30001},
+				{ContainerPort: 80, Host: "docker", HostPort: 32768, PublicPort: 30001, PublicHost: "runner-01.tarhche.com"},
 			},
 		}, ingressDomain)
 
 		require.Len(t, endpoints, 1)
 		assert.Equal(t, "http://nginx-xkfqz.runner.localhost:8021", endpoints[0].URL)
-		assert.Equal(t, "runner.localhost:30001", endpoints[0].Address, "the port http is served on is not the one a raw connection is made to")
+		assert.Equal(t, "runner-01.tarhche.com:30001", endpoints[0].Address, "a raw connection is made to the node holding the container, not to whatever served the http")
 	})
 
 	t.Run("a port nothing forwards has no address to connect to", func(t *testing.T) {

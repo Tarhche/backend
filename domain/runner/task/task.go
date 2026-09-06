@@ -110,11 +110,13 @@ type Endpoint struct {
 	// Zero when the node published none.
 	HostPortUDP port.Port
 
-	// PublicPort is the port the ingress accepts raw connections for this one
-	// on — what ssh, a database client, or anything else that is not http
-	// connects to. Zero until a container is running and one has been given to
-	// it, and zero for good if the runner forwards nothing.
+	// PublicPort is the port the node holding this container accepts raw
+	// connections for it on — what ssh, a database client, or anything else
+	// that is not http connects to — and PublicHost is where somebody outside
+	// reaches that node. Zero and empty until a container is running, and for
+	// good if the node forwards nothing.
 	PublicPort port.Port
+	PublicHost string
 }
 
 // Mount represents a mount point of volume
@@ -149,11 +151,6 @@ type Repository interface {
 	// theirs is not there as far as they are concerned.
 	GetOneByOwner(ctx context.Context, ownerUUID string, UUID string) (Task, error)
 	GetOneBySlug(ctx context.Context, slug string) (Task, error)
-
-	// GetRunningWithPublicPorts is every container being served whole, which
-	// is what the ingress listens on behalf of.
-	GetRunningWithPublicPorts(ctx context.Context) ([]Task, error)
-
 	Save(ctx context.Context, t *Task) (uuid string, err error)
 	Delete(ctx context.Context, UUID string) error
 	Count(ctx context.Context) (uint, error)

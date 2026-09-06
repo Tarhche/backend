@@ -23,9 +23,14 @@ type UseCase struct {
 	nodeName         string
 
 	// advertiseHost is the host whose ports the containers on this node are
-	// published on. It is what the ingress proxies to, so it has to be an
-	// address the manager can reach rather than one this node calls itself.
+	// published on. It is what another node proxies to, so it has to be an
+	// address the runner can reach rather than one this node calls itself.
 	advertiseHost string
+
+	// publicHost is where somebody outside reaches this node's forwarded
+	// ports, which is not the same address: one is inside the runner and the
+	// other is not.
+	publicHost string
 
 	// startedAt is when each container this node holds began running, which is
 	// what a container's allowed time is counted from. Docker only tells it on
@@ -40,6 +45,7 @@ func NewUseCase(
 	messageProducer domain.Producer,
 	nodeName string,
 	advertiseHost string,
+	publicHost string,
 	logger *slog.Logger,
 ) *UseCase {
 	return &UseCase{
@@ -47,6 +53,7 @@ func NewUseCase(
 		messageProducer:  messageProducer,
 		nodeName:         nodeName,
 		advertiseHost:    advertiseHost,
+		publicHost:       publicHost,
 		startedAt:        make(map[string]time.Time),
 		logger:           logger,
 	}
@@ -195,10 +202,14 @@ func (uc *UseCase) logs(ctx context.Context, c *container.Container) []byte {
 func (uc *UseCase) endpoints(c *container.Container) []events.Endpoint {
 	endpoints := make([]events.Endpoint, 0, len(c.PortBindings))
 
+	public := c.PublicPorts()
+
 	for containerPort, bindings := range c.PortBindings {
 		endpoint := events.Endpoint{
 			ContainerPort: containerPort,
 			Host:          uc.advertiseHost,
+			PublicPort:    public[containerPort],
+			PublicHost:    uc.publicHost,
 		}
 
 		// a port is published for both protocols, on a host port each.

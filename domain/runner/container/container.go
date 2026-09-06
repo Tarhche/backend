@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/khanzadimahdi/testproject/domain/runner/network"
@@ -74,6 +75,39 @@ func (c *Container) TTL() time.Duration {
 	}
 
 	return time.Duration(seconds) * time.Second
+}
+
+// PublicPorts is what this container's ports are reached at whole, by the port
+// it opened. A container from before there were such ports has none.
+func (c *Container) PublicPorts() map[port.Port]port.Port {
+	written := c.Labels[TaskPublicPortsLabelKey]
+
+	if written == "" {
+		return nil
+	}
+
+	ports := make(map[port.Port]port.Port)
+
+	for _, pair := range strings.Split(written, ",") {
+		container, public, found := strings.Cut(pair, ":")
+		if !found {
+			continue
+		}
+
+		from, err := strconv.Atoi(strings.TrimSpace(container))
+		if err != nil {
+			continue
+		}
+
+		to, err := strconv.Atoi(strings.TrimSpace(public))
+		if err != nil {
+			continue
+		}
+
+		ports[port.Port(from)] = port.Port(to)
+	}
+
+	return ports
 }
 
 // Deadline is when this container will have run long enough, counted from the
@@ -157,6 +191,13 @@ const (
 	// runs. It is kept on the container so that whoever reports on it can say
 	// so without looking anything up.
 	TaskInteractiveLabelKey = "task.interactive"
+
+	// TaskPublicPortsLabelKey is what the node accepts whole connections for
+	// this container's ports on, written as "containerPort:publicPort" pairs
+	// separated by commas. The node that made the container gave them out of
+	// its own range, and reads them back off the container rather than
+	// remembering them.
+	TaskPublicPortsLabelKey = "task.public_ports"
 
 	// TaskTTLLabelKey is how long a container may run for once it is up, in
 	// seconds. What it is counted from is when the container started, which

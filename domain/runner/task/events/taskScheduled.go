@@ -80,6 +80,13 @@ type Endpoint struct {
 	// HostPortUDP is where the same container port was published for udp,
 	// which docker gives a port of its own. Zero when there is none.
 	HostPortUDP port.Port `json:"host_port_udp,omitempty"`
+
+	// PublicPort is what the node accepts whole connections for this port on:
+	// what ssh, a database client, or anything else that is not http connects
+	// to. The node holding the container gives it out of its own range, and
+	// PublicHost is where somebody outside reaches that node.
+	PublicPort port.Port `json:"public_port,omitempty"`
+	PublicHost string    `json:"public_host,omitempty"`
 }
 
 // NewTaskScheduled is a task, as the node that is to run it needs to see it.

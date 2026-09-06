@@ -71,8 +71,10 @@ type Endpoint struct {
 	// HostPortUDP is where the same container port was published for udp.
 	HostPortUDP port.Port `bson:"host_port_udp,omitempty"`
 
-	// PublicPort is what the ingress accepts raw connections for this port on.
+	// PublicPort is what the node holding this container accepts raw
+	// connections for this port on, and PublicHost where that node is reached.
 	PublicPort port.Port `bson:"public_port,omitempty"`
+	PublicHost string    `bson:"public_host,omitempty"`
 }
 
 type Mount struct {
@@ -231,6 +233,7 @@ func toEndpoints(endpoints []Endpoint) []task.Endpoint {
 			HostPort:      e.HostPort,
 			HostPortUDP:   e.HostPortUDP,
 			PublicPort:    e.PublicPort,
+			PublicHost:    e.PublicHost,
 		}
 	}
 
@@ -246,6 +249,7 @@ func fromEndpoints(endpoints []task.Endpoint) []Endpoint {
 			HostPort:      e.HostPort,
 			HostPortUDP:   e.HostPortUDP,
 			PublicPort:    e.PublicPort,
+			PublicHost:    e.PublicHost,
 		}
 	}
 
