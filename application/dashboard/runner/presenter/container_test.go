@@ -213,3 +213,20 @@ func TestNewEndpoints_address(t *testing.T) {
 		assert.Empty(t, endpoints[0].Address)
 	})
 }
+
+func TestNewEndpoints_node(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a container is reached on the node holding it", func(t *testing.T) {
+		t.Parallel()
+
+		endpoints := NewEndpoints(task.Task{
+			Slug:          "nginx-xkfqz",
+			IngressDomain: "node-02.runner.tarhche.com",
+			Endpoints:     []task.Endpoint{{ContainerPort: 80, Host: "docker", HostPort: 30001}},
+		}, ingressDomain)
+
+		require.Len(t, endpoints, 1)
+		assert.Equal(t, "http://nginx-xkfqz.node-02.runner.tarhche.com", endpoints[0].URL)
+	})
+}

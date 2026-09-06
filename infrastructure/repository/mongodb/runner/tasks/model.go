@@ -51,6 +51,7 @@ type TaskBson struct {
 	// Deadline is when the container running this task will be stopped for
 	// having run long enough, as the node that made it set it.
 	Deadline       time.Time      `bson:"deadline,omitempty"`
+	IngressDomain  string         `bson:"ingress_domain,omitempty"`
 	Reason         string         `bson:"reason,omitempty"`
 	Mounts         []Mount        `bson:"mounts,omitempty"`
 	ResourceLimits ResourceLimits `bson:"resource_limits,omitempty"`
@@ -138,6 +139,7 @@ func toTask(t *TaskBson) task.Task {
 		CreatedAt:     t.CreatedAt,
 		StartedAt:     t.StartedAt,
 		Deadline:      t.Deadline,
+		IngressDomain: t.IngressDomain,
 		FinishedAt:    t.FinishedAt,
 	}
 }
@@ -200,6 +202,7 @@ func toBson(t *task.Task) TaskBson {
 		CreatedAt:     t.CreatedAt,
 		StartedAt:     t.StartedAt,
 		Deadline:      t.Deadline,
+		IngressDomain: t.IngressDomain,
 		FinishedAt:    t.FinishedAt,
 	}
 }

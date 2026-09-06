@@ -27,10 +27,12 @@ type UseCase struct {
 	// address the runner can reach rather than one this node calls itself.
 	advertiseHost string
 
-	// publicHost is where somebody outside reaches this node's forwarded
-	// ports, which is not the same address: one is inside the runner and the
-	// other is not.
-	publicHost string
+	// publicHost is where somebody outside reaches this node's published
+	// ports, and ingressDomain what it answers container hostnames under.
+	// Neither is the address the runner reaches it at: one is inside and the
+	// others are not.
+	publicHost    string
+	ingressDomain string
 
 	// startedAt is when each container this node holds began running, which is
 	// what a container's allowed time is counted from. Docker only tells it on
@@ -46,6 +48,7 @@ func NewUseCase(
 	nodeName string,
 	advertiseHost string,
 	publicHost string,
+	ingressDomain string,
 	logger *slog.Logger,
 ) *UseCase {
 	return &UseCase{
@@ -54,6 +57,7 @@ func NewUseCase(
 		nodeName:         nodeName,
 		advertiseHost:    advertiseHost,
 		publicHost:       publicHost,
+		ingressDomain:    ingressDomain,
 		startedAt:        make(map[string]time.Time),
 		logger:           logger,
 	}
@@ -74,6 +78,7 @@ func (uc *UseCase) Execute(ctx context.Context) error {
 			UUID:          c.Labels[container.TaskUUIDLabelKey],
 			Name:          c.Labels[container.TaskNameLabelKey],
 			Slug:          c.Labels[container.TaskSlugLabelKey],
+			IngressDomain: uc.ingressDomain,
 			Kind:          string(kind),
 			Image:         c.Image,
 			ContainerUUID: c.ID,

@@ -79,7 +79,7 @@ func TestUseCase_Execute_deadline(t *testing.T) {
 			Return(container.Container{ID: held.ID, StartedAt: started}, nil)
 		producer.On("Produce", mock.Anything, events.HeartbeatName, mock.Anything).Return(nil)
 
-		useCase := NewUseCase(&manager, &producer, nodeName, "docker", "localhost", discardLogger())
+		useCase := NewUseCase(&manager, &producer, nodeName, "docker", "localhost", "node-1.runner.localhost", discardLogger())
 
 		require.NoError(t, useCase.Execute(context.Background()))
 		assert.Equal(t, started.Add(2*time.Minute), beaten(t, &producer))
@@ -101,7 +101,7 @@ func TestUseCase_Execute_deadline(t *testing.T) {
 			Return([]container.Container{heldContainer(nil)}, nil)
 		producer.On("Produce", mock.Anything, events.HeartbeatName, mock.Anything).Return(nil)
 
-		useCase := NewUseCase(&manager, &producer, nodeName, "docker", "localhost", discardLogger())
+		useCase := NewUseCase(&manager, &producer, nodeName, "docker", "localhost", "node-1.runner.localhost", discardLogger())
 
 		require.NoError(t, useCase.Execute(context.Background()))
 		assert.True(t, beaten(t, &producer).IsZero())
@@ -124,7 +124,7 @@ func TestUseCase_Execute_deadline(t *testing.T) {
 			Return(container.Container{ID: held.ID}, nil)
 		producer.On("Produce", mock.Anything, events.HeartbeatName, mock.Anything).Return(nil)
 
-		useCase := NewUseCase(&manager, &producer, nodeName, "docker", "localhost", discardLogger())
+		useCase := NewUseCase(&manager, &producer, nodeName, "docker", "localhost", "node-1.runner.localhost", discardLogger())
 
 		require.NoError(t, useCase.Execute(context.Background()))
 		assert.True(t, beaten(t, &producer).IsZero())

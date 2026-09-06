@@ -223,7 +223,7 @@ func TestServe(t *testing.T) {
 		// Run starts it, and a command assembled by hand has to be assembled
 		// completely.
 		command.logShipper = shipLogs.NewUseCase(&containerManager, &consumer, consumerName, command.logger)
-		command.taskHeartBeat = taskHeartbeat.NewUseCase(&containerManager, &consumer, consumerName, "docker", "localhost", command.logger)
+		command.taskHeartBeat = taskHeartbeat.NewUseCase(&containerManager, &consumer, consumerName, "docker", "localhost", "runner.localhost", command.logger)
 		command.workerHeartBeat = workerHeartbeat.NewUseCase(&consumer, &nodeManager, consumerName, "worker:80")
 
 		// and what it serves of the containers themselves: what it is holding,

@@ -297,7 +297,7 @@ func workerConsoleCommand(
 
 	// task heartbeat
 	if err := iocContainer.Bind(func() *workerTaskHeartbeat.UseCase {
-		return workerTaskHeartbeat.NewUseCase(containerManager, asyncProduceConsumer, nodeName, workerConfigs.AdvertiseHost, publicHost(workerConfigs), logger)
+		return workerTaskHeartbeat.NewUseCase(containerManager, asyncProduceConsumer, nodeName, workerConfigs.AdvertiseHost, publicHost(workerConfigs), workerConfigs.IngressDomain, logger)
 	}, provider.Singleton()); err != nil {
 		return nil, err
 	}

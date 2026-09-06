@@ -42,11 +42,13 @@ func (uc *TaskRan) Handle(ctx context.Context, data []byte) error {
 	// endpoints, because a restarted container comes back on new host ports,
 	// and the state, the first time it comes up.
 	changed := t.NodeName != taskRan.NodeName ||
+		t.IngressDomain != taskRan.IngressDomain ||
 		t.ContainerID != taskRan.ContainerUUID ||
 		!t.Deadline.Equal(taskRan.Deadline) ||
 		!slices.Equal(t.Endpoints, endpoints)
 
 	t.NodeName = taskRan.NodeName
+	t.IngressDomain = taskRan.IngressDomain
 	t.ContainerID = taskRan.ContainerUUID
 	t.Endpoints = endpoints
 

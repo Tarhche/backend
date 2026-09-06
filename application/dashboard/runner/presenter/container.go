@@ -134,6 +134,12 @@ func NewContainers(tasks []task.Task, ingressDomain string, owners Owners) []Con
 // also answers on that name with the port appended, which keeps each hostname
 // to a single label so one wildcard certificate covers them all.
 func NewEndpoints(t task.Task, ingressDomain string) []Endpoint {
+	// the node holding a container is where its hostname is answered: nodes
+	// share nothing, so an address is an address on one of them.
+	if t.IngressDomain != "" {
+		ingressDomain = t.IngressDomain
+	}
+
 	endpoints := make([]Endpoint, 0, len(t.Endpoints))
 
 	for i, e := range t.Endpoints {

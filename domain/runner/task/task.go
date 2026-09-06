@@ -71,6 +71,11 @@ type Task struct {
 	// see what is being done about it.
 	Retries int
 
+	// IngressDomain is what the node holding this container answers its
+	// hostname under. It is the node's own, since a node holds its containers
+	// alone.
+	IngressDomain string
+
 	// Deadline is when the container running this task will be stopped for
 	// having run long enough. The node that made the container sets it, so it
 	// is counted from when the container came up rather than from when the
