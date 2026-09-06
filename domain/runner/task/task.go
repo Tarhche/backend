@@ -76,6 +76,11 @@ type Task struct {
 	// alone.
 	IngressDomain string
 
+	// NodeAPI is host:port of that node's own API, where a terminal is opened
+	// and a live log followed. It is not stored with the task: the node says
+	// it, and whoever reads the task is told it.
+	NodeAPI string
+
 	// Deadline is when the container running this task will be stopped for
 	// having run long enough. The node that made the container sets it, so it
 	// is counted from when the container came up rather than from when the

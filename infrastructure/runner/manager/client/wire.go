@@ -35,6 +35,7 @@ type taskPayload struct {
 	Reason        string            `json:"reason"`
 	Limits        limitsPayload     `json:"resource_limits"`
 	NodeName      string            `json:"node_name"`
+	NodeAPI       string            `json:"node_api,omitempty"`
 	OwnerUUID     string            `json:"owner_uuid"`
 	CreatedAt     time.Time         `json:"created_at"`
 	StartedAt     time.Time         `json:"started_at"`
@@ -156,6 +157,7 @@ func (p *taskPayload) toTask() task.Task {
 			Disk:   p.Limits.Disk,
 		},
 		NodeName:   p.NodeName,
+		NodeAPI:    p.NodeAPI,
 		OwnerUUID:  p.OwnerUUID,
 		CreatedAt:  p.CreatedAt,
 		StartedAt:  p.StartedAt,
