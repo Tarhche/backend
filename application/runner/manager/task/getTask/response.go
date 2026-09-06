@@ -35,15 +35,20 @@ type Response struct {
 	MaxRetries    int                `json:"max_retries"`
 	Retries       int                `json:"retries"`
 	TTL           time.Duration      `json:"ttl,omitempty"`
-	Reason        string             `json:"reason,omitempty"`
-	Limits        LimitsResponse     `json:"resource_limits"`
-	NodeName      string             `json:"node_name"`
-	OwnerUUID     string             `json:"owner_uuid"`
-	CreatedAt     time.Time          `json:"created_at"`
-	StartedAt     time.Time          `json:"started_at"`
-	FinishedAt    time.Time          `json:"finished_at"`
-	ContainerID   string             `json:"container_id"`
-	ContainerLogs []byte             `json:"container_logs"`
+
+	// Deadline is when a container that may only run for so long will be
+	// stopped, as the node that made it set it.
+	Deadline time.Time `json:"deadline,omitempty"`
+
+	Reason        string         `json:"reason,omitempty"`
+	Limits        LimitsResponse `json:"resource_limits"`
+	NodeName      string         `json:"node_name"`
+	OwnerUUID     string         `json:"owner_uuid"`
+	CreatedAt     time.Time      `json:"created_at"`
+	StartedAt     time.Time      `json:"started_at"`
+	FinishedAt    time.Time      `json:"finished_at"`
+	ContainerID   string         `json:"container_id"`
+	ContainerLogs []byte         `json:"container_logs"`
 }
 
 // EndpointResponse is one of a container's exposed ports. The node and host
@@ -108,6 +113,7 @@ func NewResponse(t task.Task) *Response {
 		OwnerUUID:     t.OwnerUUID,
 		CreatedAt:     t.CreatedAt,
 		StartedAt:     t.StartedAt,
+		Deadline:      t.Deadline,
 		FinishedAt:    t.FinishedAt,
 		ContainerID:   t.ContainerID,
 		ContainerLogs: t.ContainerLogs,

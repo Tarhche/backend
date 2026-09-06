@@ -38,6 +38,10 @@ type Service struct {
 	Endpoints []Endpoint `json:"endpoints"`
 	CreatedAt time.Time  `json:"created_at"`
 	StartedAt time.Time  `json:"started_at"`
+
+	// Deadline is when a service that may only run for so long will be
+	// stopped.
+	Deadline time.Time `json:"deadline,omitempty"`
 }
 
 type Endpoint struct {
@@ -59,6 +63,7 @@ func NewStack(s stack.Stack, services []task.Task) Stack {
 			Endpoints:     endpoints(service),
 			CreatedAt:     service.CreatedAt,
 			StartedAt:     service.StartedAt,
+			Deadline:      service.Deadline,
 		}
 	}
 
