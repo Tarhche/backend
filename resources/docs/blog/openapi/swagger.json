@@ -5119,6 +5119,10 @@
                 "created_at": {
                     "type": "string"
                 },
+                "deadline": {
+                    "description": "Deadline is when a container that is only allowed to run for so long\nwill be stopped. A container with no limit of its own has none.",
+                    "type": "string"
+                },
                 "endpoints": {
                     "type": "array",
                     "items": {
@@ -5991,6 +5995,10 @@
                     }
                 },
                 "created_at": {
+                    "type": "string"
+                },
+                "deadline": {
+                    "description": "Deadline is when a container that is only allowed to run for so long\nwill be stopped. A container with no limit of its own has none.",
                     "type": "string"
                 },
                 "endpoints": {
@@ -6943,6 +6951,10 @@
                 "created_at": {
                     "type": "string"
                 },
+                "deadline": {
+                    "description": "Deadline is when a container that is only allowed to run for so long\nwill be stopped. A container with no limit of its own has none.",
+                    "type": "string"
+                },
                 "endpoints": {
                     "type": "array",
                     "items": {
@@ -7219,6 +7231,10 @@
                     }
                 },
                 "created_at": {
+                    "type": "string"
+                },
+                "deadline": {
+                    "description": "Deadline is when a container that is only allowed to run for so long\nwill be stopped. A container with no limit of its own has none.",
                     "type": "string"
                 },
                 "endpoints": {
