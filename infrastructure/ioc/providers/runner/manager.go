@@ -164,7 +164,7 @@ func managerConsoleCommand(
 	managerStopTaskUseCase := managerStopTask.NewUseCase(taskRepository, jetStreamProduceConsumer, translator)
 	managerKillTaskUseCase := managerKillTask.NewUseCase(taskRepository, jetStreamProduceConsumer, translator)
 	managerRestartTaskUseCase := managerRestartTask.NewUseCase(taskRepository, taskSchedule, jetStreamProduceConsumer, translator)
-	managerGetTaskUseCase := managerGetTask.NewUseCase(taskRepository)
+	managerGetTaskUseCase := managerGetTask.NewUseCase(taskRepository, nodeRepository)
 	managerGetTasksUseCase := managerGetTasks.NewUseCase(taskRepository)
 	managerWatchTasksUseCase := managerWatchTasks.NewUseCase(taskRepository)
 	managerWatchStacksUseCase := managerWatchStacks.NewUseCase(stackRepository, taskRepository)
@@ -209,7 +209,6 @@ func managerConsoleCommand(
 	mux.Handle("POST /api/tasks/{uuid}/restart", managerTaskAPI.NewRestartHandler(managerRestartTaskUseCase))
 	mux.Handle("GET /api/tasks/{uuid}/logs", managerTaskAPI.NewLogsHandler(managerGetTaskLogsUseCase))
 	mux.Handle("GET /api/tasks/{uuid}/logs/stream", managerTaskAPI.NewLogsStreamHandler(managerGetTaskLogsUseCase, logger))
-	mux.Handle("GET /api/tasks/{uuid}/attach", managerTaskAPI.NewAttachHandler(managerGetTaskUseCase, managerGetNodeUseCase, logger))
 
 	// a long-running container is run from a compose service rather than from
 	// the flat shape a one-shot task takes.
