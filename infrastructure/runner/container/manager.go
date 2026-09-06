@@ -319,6 +319,10 @@ func (m *DockerManager) Inspect(ctx context.Context, containerUUID string) (cont
 		return container.Container{}, trace.RecordError(span, err)
 	}
 
+	// a container that has never run has no start to report, which docker says
+	// with a zero time rather than an error.
+	started, _ := time.Parse(time.RFC3339Nano, info.State.StartedAt)
+
 	return container.Container{
 		ID:               info.ID,
 		Name:             info.Name,
@@ -333,6 +337,7 @@ func (m *DockerManager) Inspect(ctx context.Context, containerUUID string) (cont
 		RestartPolicy:    string(info.HostConfig.RestartPolicy.Name),
 		RestartCount:     uint(info.RestartCount),
 		CreatedAt:        created,
+		StartedAt:        started,
 		ExposedPorts:     convertDockerPortSetFromMap(info.NetworkSettings.Ports),
 		PortBindings:     convertDockerPortMapFromMap(info.NetworkSettings.Ports),
 		ResourceLimits: container.ResourceLimits{

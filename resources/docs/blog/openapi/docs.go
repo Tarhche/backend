@@ -5122,6 +5122,10 @@ const docTemplate = `{
                 "created_at": {
                     "type": "string"
                 },
+                "deadline": {
+                    "description": "Deadline is when a container that is only allowed to run for so long\nwill be stopped. A container with no limit of its own has none.",
+                    "type": "string"
+                },
                 "endpoints": {
                     "type": "array",
                     "items": {
@@ -5994,6 +5998,10 @@ const docTemplate = `{
                     }
                 },
                 "created_at": {
+                    "type": "string"
+                },
+                "deadline": {
+                    "description": "Deadline is when a container that is only allowed to run for so long\nwill be stopped. A container with no limit of its own has none.",
                     "type": "string"
                 },
                 "endpoints": {
@@ -6946,6 +6954,10 @@ const docTemplate = `{
                 "created_at": {
                     "type": "string"
                 },
+                "deadline": {
+                    "description": "Deadline is when a container that is only allowed to run for so long\nwill be stopped. A container with no limit of its own has none.",
+                    "type": "string"
+                },
                 "endpoints": {
                     "type": "array",
                     "items": {
@@ -7222,6 +7234,10 @@ const docTemplate = `{
                     }
                 },
                 "created_at": {
+                    "type": "string"
+                },
+                "deadline": {
+                    "description": "Deadline is when a container that is only allowed to run for so long\nwill be stopped. A container with no limit of its own has none.",
                     "type": "string"
                 },
                 "endpoints": {

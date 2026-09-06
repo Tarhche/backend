@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"strconv"
-	"time"
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/runner/container"
@@ -94,10 +93,10 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		},
 	}
 
-	// what it may run for, counted from now: the image is there and the
-	// container is about to be started.
-	if deadline := request.Deadline(); !deadline.IsZero() {
-		c.Labels[container.TaskDeadlineLabelKey] = deadline.Format(time.RFC3339Nano)
+	// how long it may run for once it is up. When that is counted from is not
+	// this node's to decide here: the container itself says when it started.
+	if request.TTL > 0 {
+		c.Labels[container.TaskTTLLabelKey] = strconv.Itoa(int(request.TTL.Seconds()))
 	}
 
 	if err := uc.clearEarlierAttempts(ctx, request); err != nil {
