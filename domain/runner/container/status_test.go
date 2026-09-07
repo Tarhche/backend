@@ -12,16 +12,46 @@ func TestEvaluateTaskState(t *testing.T) {
 	t.Parallel()
 
 	testcases := []struct {
-		name   string
-		status Status
-		kind   task.Kind
-		want   task.State
+		name     string
+		status   Status
+		kind     task.Kind
+		exitCode int
+		want     task.State
 	}{
 		{
 			name:   "a job that exits has finished",
 			status: StatusExited,
 			kind:   task.KindJob,
 			want:   task.Completed,
+		},
+		{
+			// what it returned is the difference between a job that ran to the
+			// end and one that fell over, and a reader watching a snippet is
+			// owed the second answer rather than the first.
+			name:     "a job that returns a failure has not completed",
+			status:   StatusExited,
+			kind:     task.KindJob,
+			exitCode: 3,
+			want:     task.Failed,
+		},
+		{
+			// a container stopped, killed, or taken away when its time was up
+			// is ended from outside: docker reports that as 128 plus the
+			// signal, and none of it is the code's doing.
+			name:     "a job ended by a signal did not fail",
+			status:   StatusExited,
+			kind:     task.KindJob,
+			exitCode: 137,
+			want:     task.Completed,
+		},
+		{
+			// whether a service that ended was supposed to is not something a
+			// container can say, so what it returned changes nothing here.
+			name:     "a service that returns a failure has still stopped",
+			status:   StatusExited,
+			kind:     task.KindService,
+			exitCode: 3,
+			want:     task.Stopped,
 		},
 		{
 			// the difference that matters: a service is meant to keep going, so
@@ -81,7 +111,7 @@ func TestEvaluateTaskState(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			assert.Equal(t, tt.want, EvaluateTaskState(tt.status, tt.kind))
+			assert.Equal(t, tt.want, EvaluateTaskState(tt.status, tt.kind, tt.exitCode))
 		})
 	}
 }

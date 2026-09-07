@@ -338,6 +338,7 @@ func (m *DockerManager) Inspect(ctx context.Context, containerUUID string) (cont
 		RestartCount:     uint(info.RestartCount),
 		CreatedAt:        created,
 		StartedAt:        started,
+		ExitCode:         info.State.ExitCode,
 		ExposedPorts:     convertDockerPortSetFromMap(info.NetworkSettings.Ports),
 		PortBindings:     convertDockerPortMapFromMap(info.NetworkSettings.Ports),
 		ResourceLimits: container.ResourceLimits{

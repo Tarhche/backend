@@ -42,7 +42,7 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 
 	c := containers[len(containers)-1]
 
-	if container.EvaluateTaskState(c.Status, task.Kind(c.Labels[container.TaskKindLabelKey])) != task.Running {
+	if container.EvaluateTaskState(c.Status, task.Kind(c.Labels[container.TaskKindLabelKey]), c.ExitCode) != task.Running {
 		return nil, ErrNotRunning
 	}
 
