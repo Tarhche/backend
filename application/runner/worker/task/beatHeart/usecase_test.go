@@ -83,7 +83,11 @@ func TestUseCase_Execute_deadline(t *testing.T) {
 		useCase := NewUseCase(&manager, &producer, nodeName, "docker", "localhost", "node-1.runner.localhost", discardLogger())
 
 		require.NoError(t, useCase.Execute(context.Background()))
-		assert.Equal(t, started.Add(2*time.Minute), beaten(t, &producer))
+
+		// a deadline travels as text and comes back naming whichever zone it
+		// was written in, so what is compared is the moment rather than how it
+		// happens to be spelled.
+		assert.WithinDuration(t, started.Add(2*time.Minute), beaten(t, &producer), 0)
 
 		// a second beat asks docker nothing: when it started does not change.
 		require.NoError(t, useCase.Execute(context.Background()))
