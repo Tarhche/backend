@@ -53,11 +53,17 @@ func (r *Renderer) Render(writer io.Writer, templateName string, data any) error
 
 	if _, ok := r.cache[templateName]; !ok {
 		l := len(r.files) - 1
-		last := r.files[l]
 
-		r.files[l] = r.files[index]
-		t, err := template.New(path.Base(r.files[index])).ParseFS(r.fileSystem, r.files...)
-		r.files[l] = last
+		// the one that was asked for is parsed last, so that what it defines
+		// wins over what the others define under the same name. The one it
+		// changes places with takes its place rather than falling out of the
+		// set: a template nothing else is parsed with is a template nothing
+		// else can use.
+		r.files[index], r.files[l] = r.files[l], r.files[index]
+
+		t, err := template.New(path.Base(r.files[l])).ParseFS(r.fileSystem, r.files...)
+
+		r.files[index], r.files[l] = r.files[l], r.files[index]
 
 		if err != nil {
 			return err

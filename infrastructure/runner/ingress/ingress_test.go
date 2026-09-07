@@ -17,9 +17,17 @@ import (
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/runner/port"
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
+	"github.com/khanzadimahdi/testproject/infrastructure/template"
+	"github.com/khanzadimahdi/testproject/resources/view"
 )
 
 const testDomain = "runner.localhost"
+
+// views draws the pages this serves from the same place everything else draws
+// them, so what a test reads back is the page somebody is really shown.
+func views() domain.Renderer {
+	return template.NewRenderer(view.Files, "tmpl")
+}
 
 // fakeResolver stands in for the task repository.
 type fakeResolver struct {
@@ -64,7 +72,7 @@ func runningContainer(slug string, upstreams map[port.Port]*httptest.Server) tas
 func TestParseHost(t *testing.T) {
 	t.Parallel()
 
-	h := NewHandler(&fakeResolver{}, testDomain)
+	h := NewHandler(&fakeResolver{}, testDomain, views())
 
 	testcases := []struct {
 		name string
@@ -129,7 +137,7 @@ func TestHandler(t *testing.T) {
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
 		request.Host = "nginx-xkfqz." + testDomain
 
-		NewHandler(resolver, testDomain).ServeHTTP(rw, request)
+		NewHandler(resolver, testDomain, views()).ServeHTTP(rw, request)
 
 		assert.Equal(t, http.StatusOK, rw.Code)
 		assert.Equal(t, "port 80", rw.Body.String())
@@ -156,7 +164,7 @@ func TestHandler(t *testing.T) {
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
 		request.Host = "nginx-xkfqz-8080." + testDomain
 
-		NewHandler(resolver, testDomain).ServeHTTP(rw, request)
+		NewHandler(resolver, testDomain, views()).ServeHTTP(rw, request)
 
 		assert.Equal(t, http.StatusOK, rw.Code)
 		assert.Equal(t, "port 8080", rw.Body.String())
@@ -184,7 +192,7 @@ func TestHandler(t *testing.T) {
 		request := httptest.NewRequest(http.MethodGet, "/some/path?a=1", nil)
 		request.Host = "nginx-xkfqz." + testDomain
 
-		NewHandler(resolver, testDomain).ServeHTTP(rw, request)
+		NewHandler(resolver, testDomain, views()).ServeHTTP(rw, request)
 
 		assert.Equal(t, "/some/path", gotPath)
 		assert.Equal(t, "a=1", gotQuery)
@@ -215,7 +223,7 @@ func TestHandler(t *testing.T) {
 			"app-xkfqz": runningContainer("app-xkfqz", map[port.Port]*httptest.Server{80: upstream}),
 		}}
 
-		ingress := httptest.NewServer(NewHandler(resolver, testDomain))
+		ingress := httptest.NewServer(NewHandler(resolver, testDomain, views()))
 		defer ingress.Close()
 
 		endpoint := "ws://" + strings.TrimPrefix(ingress.URL, "http://") + "/ws"
@@ -239,7 +247,7 @@ func TestHandler(t *testing.T) {
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
 		request.Host = "nobody-xkfqz." + testDomain
 
-		NewHandler(&fakeResolver{}, testDomain).ServeHTTP(rw, request)
+		NewHandler(&fakeResolver{}, testDomain, views()).ServeHTTP(rw, request)
 
 		assert.Equal(t, http.StatusNotFound, rw.Code)
 	})
@@ -258,7 +266,7 @@ func TestHandler(t *testing.T) {
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
 		request.Host = "nginx-xkfqz.example.com"
 
-		NewHandler(resolver, testDomain).ServeHTTP(rw, request)
+		NewHandler(resolver, testDomain, views()).ServeHTTP(rw, request)
 
 		assert.Equal(t, http.StatusNotFound, rw.Code)
 	})
@@ -277,7 +285,7 @@ func TestHandler(t *testing.T) {
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
 		request.Host = "nginx-xkfqz-9999." + testDomain
 
-		NewHandler(resolver, testDomain).ServeHTTP(rw, request)
+		NewHandler(resolver, testDomain, views()).ServeHTTP(rw, request)
 
 		assert.Equal(t, http.StatusNotFound, rw.Code)
 	})
@@ -293,7 +301,7 @@ func TestHandler(t *testing.T) {
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
 		request.Host = "nginx-xkfqz." + testDomain
 
-		NewHandler(resolver, testDomain).ServeHTTP(rw, request)
+		NewHandler(resolver, testDomain, views()).ServeHTTP(rw, request)
 
 		assert.Equal(t, http.StatusNotFound, rw.Code)
 	})
@@ -313,7 +321,7 @@ func TestHandler(t *testing.T) {
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
 		request.Host = "nginx-xkfqz." + testDomain
 
-		NewHandler(resolver, testDomain).ServeHTTP(rw, request)
+		NewHandler(resolver, testDomain, views()).ServeHTTP(rw, request)
 
 		assert.Equal(t, http.StatusServiceUnavailable, rw.Code)
 	})
@@ -331,7 +339,7 @@ func TestHandler(t *testing.T) {
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
 		request.Host = "nginx-xkfqz." + testDomain
 
-		NewHandler(resolver, testDomain).ServeHTTP(rw, request)
+		NewHandler(resolver, testDomain, views()).ServeHTTP(rw, request)
 
 		assert.Equal(t, http.StatusBadGateway, rw.Code)
 		assert.Equal(t, "2", rw.Header().Get("Retry-After"))
@@ -345,7 +353,7 @@ func TestHandler(t *testing.T) {
 		request := httptest.NewRequest(http.MethodGet, "/health", nil)
 		request.Host = "runner-ingress:8090"
 
-		NewHandler(&fakeResolver{}, testDomain).ServeHTTP(rw, request)
+		NewHandler(&fakeResolver{}, testDomain, views()).ServeHTTP(rw, request)
 
 		assert.Equal(t, http.StatusOK, rw.Code)
 	})
@@ -364,7 +372,7 @@ func TestHandler(t *testing.T) {
 		request.Host = "nginx-xkfqz." + testDomain
 		request.Header.Set("Accept", "text/html,application/xhtml+xml,*/*;q=0.8")
 
-		NewHandler(resolver, testDomain).ServeHTTP(rw, request)
+		NewHandler(resolver, testDomain, views()).ServeHTTP(rw, request)
 
 		assert.Equal(t, http.StatusBadGateway, rw.Code)
 		assert.Equal(t, "2", rw.Header().Get("Retry-After"))
@@ -388,7 +396,7 @@ func TestHandler(t *testing.T) {
 		request.Header.Set("Accept", "text/html")
 		request.Header.Set("Accept-Language", "fa-IR,fa;q=0.9,en;q=0.8")
 
-		NewHandler(resolver, testDomain).ServeHTTP(rw, request)
+		NewHandler(resolver, testDomain, views()).ServeHTTP(rw, request)
 
 		assert.Contains(t, rw.Body.String(), `lang="fa" dir="rtl"`)
 		assert.Contains(t, rw.Body.String(), "آماده‌سازی")

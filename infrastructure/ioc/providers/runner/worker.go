@@ -286,8 +286,15 @@ func workerConsoleCommand(
 		return nil, err
 	}
 
+	// what somebody is shown while a container is still coming up is a view
+	// like any other, drawn by whoever draws the rest of them.
+	var renderer domain.Renderer
+	if err := iocContainer.Resolve(&renderer); err != nil {
+		return nil, err
+	}
+
 	if err := iocContainer.Bind(func() http.Handler {
-		return ingress.NewHandler(view, workerConfigs.IngressDomain)
+		return ingress.NewHandler(view, workerConfigs.IngressDomain, renderer)
 	}, provider.Singleton(), provider.WithName(WorkerIngress)); err != nil {
 		return nil, err
 	}

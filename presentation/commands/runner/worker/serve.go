@@ -108,6 +108,7 @@ func (c *ServeCommand) Providers() []provider.Provider {
 		providers.NewNatsProvider(),
 		providers.NewDockerProvider(),
 		providers.NewTranslationProvider(),
+		providers.NewTemplateProvider(),
 		providers.NewValidationProvider(),
 		providers.NewContainerProvider(),
 		runner.NewWorkerProvider(),
