@@ -54,7 +54,7 @@ func (uc *UseCase) Execute(ctx context.Context, uuid string) (*Response, error) 
 		ContainerID:   c.ID,
 		ContainerLogs: logs,
 		CreatedAt:     c.CreatedAt,
-		CurrentState:  container.EvaluateTaskState(c.Status, task.Kind(c.Labels[container.TaskKindLabelKey])),
+		CurrentState:  container.EvaluateTaskState(c.Status, task.Kind(c.Labels[container.TaskKindLabelKey]), c.ExitCode),
 	}
 
 	return NewResponse(&t), nil
