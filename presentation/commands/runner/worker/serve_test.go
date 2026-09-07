@@ -21,6 +21,8 @@ import (
 	messaging "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/runner/containers"
 	"github.com/khanzadimahdi/testproject/infrastructure/runner/ingress"
+	"github.com/khanzadimahdi/testproject/infrastructure/template"
+	resourceView "github.com/khanzadimahdi/testproject/resources/view"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -235,7 +237,7 @@ func TestServe(t *testing.T) {
 		command.configs.IngressPort = findAvailablePort()
 		command.view = view
 		command.subscriber = &subscriber
-		command.ingress = ingress.NewHandler(view, "runner.localhost")
+		command.ingress = ingress.NewHandler(view, "runner.localhost", template.NewRenderer(resourceView.Files, "tmpl"))
 
 		serverStartedListening := make(chan struct{})
 
