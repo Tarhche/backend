@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/khanzadimahdi/testproject/domain/runner/container"
+	"github.com/khanzadimahdi/testproject/domain/runner/task"
 	"github.com/khanzadimahdi/testproject/domain/runner/task/events"
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
 	containersMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/runner/containers"
@@ -128,5 +129,101 @@ func TestUseCase_Execute_deadline(t *testing.T) {
 
 		require.NoError(t, useCase.Execute(context.Background()))
 		assert.True(t, beaten(t, &producer).IsZero())
+	})
+}
+
+// reportedState is the state the node reported for the only container it holds.
+func reportedState(t *testing.T, producer *messagingMock.MockProduceConsumer) task.State {
+	t.Helper()
+
+	require.NotEmpty(t, producer.Calls)
+
+	var heartbeat events.Heartbeat
+	require.NoError(t, json.Unmarshal(producer.Calls[0].Arguments[2].([]byte), &heartbeat))
+
+	return task.State(heartbeat.State)
+}
+
+func TestUseCase_Execute_exitCode(t *testing.T) {
+	t.Parallel()
+
+	ended := func(exitCode int) container.Container {
+		c := heldContainer(map[string]string{container.TaskKindLabelKey: string(task.KindJob)})
+		c.Status = container.StatusExited
+		c.ExitCode = exitCode
+
+		return c
+	}
+
+	t.Run("a job that returned a failure did not complete", func(t *testing.T) {
+		t.Parallel()
+
+		var (
+			manager  containersMock.MockContainerManager
+			producer messagingMock.MockProduceConsumer
+		)
+
+		held := ended(0)
+
+		manager.On("GetByLabel", mock.Anything, container.NodeNameLabelKey, nodeName).
+			Return([]container.Container{held}, nil)
+		manager.On("Inspect", mock.Anything, held.ID).Once().
+			Return(ended(3), nil)
+		manager.On("Logs", mock.Anything, held.ID, mock.Anything).Return(nil)
+		producer.On("Produce", mock.Anything, events.HeartbeatName, mock.Anything).Return(nil)
+
+		useCase := NewUseCase(&manager, &producer, nodeName, "docker", "localhost", "node-1.runner.localhost", discardLogger())
+
+		require.NoError(t, useCase.Execute(context.Background()))
+		assert.Equal(t, task.Failed, reportedState(t, &producer))
+
+		// a second beat asks docker nothing: what it returned does not change.
+		require.NoError(t, useCase.Execute(context.Background()))
+		manager.AssertNumberOfCalls(t, "Inspect", 1)
+	})
+
+	t.Run("a job ended by a signal completed", func(t *testing.T) {
+		t.Parallel()
+
+		var (
+			manager  containersMock.MockContainerManager
+			producer messagingMock.MockProduceConsumer
+		)
+
+		held := ended(0)
+
+		manager.On("GetByLabel", mock.Anything, container.NodeNameLabelKey, nodeName).
+			Return([]container.Container{held}, nil)
+		manager.On("Inspect", mock.Anything, held.ID).
+			Return(ended(137), nil)
+		manager.On("Logs", mock.Anything, held.ID, mock.Anything).Return(nil)
+		producer.On("Produce", mock.Anything, events.HeartbeatName, mock.Anything).Return(nil)
+
+		useCase := NewUseCase(&manager, &producer, nodeName, "docker", "localhost", "node-1.runner.localhost", discardLogger())
+
+		require.NoError(t, useCase.Execute(context.Background()))
+		assert.Equal(t, task.Completed, reportedState(t, &producer))
+	})
+
+	t.Run("a container that is still running is not asked what it returned", func(t *testing.T) {
+		t.Parallel()
+
+		var (
+			manager  containersMock.MockContainerManager
+			producer messagingMock.MockProduceConsumer
+		)
+
+		held := heldContainer(map[string]string{container.TaskKindLabelKey: string(task.KindJob)})
+
+		manager.On("GetByLabel", mock.Anything, container.NodeNameLabelKey, nodeName).
+			Return([]container.Container{held}, nil)
+		manager.On("Logs", mock.Anything, held.ID, mock.Anything).Return(nil)
+		producer.On("Produce", mock.Anything, events.HeartbeatName, mock.Anything).Return(nil)
+
+		useCase := NewUseCase(&manager, &producer, nodeName, "docker", "localhost", "node-1.runner.localhost", discardLogger())
+
+		require.NoError(t, useCase.Execute(context.Background()))
+		assert.Equal(t, task.Running, reportedState(t, &producer))
+		manager.AssertNotCalled(t, "Inspect", mock.Anything, mock.Anything)
 	})
 }

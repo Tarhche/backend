@@ -39,6 +39,11 @@ type UseCase struct {
 	// inspection, so it is asked for once per container and remembered.
 	startedAt map[string]time.Time
 
+	// exitCodes is what the program in each ended container returned, which is
+	// what tells a job that finished from one that fell over. It is asked for
+	// the same way, and forgotten as soon as the container runs again.
+	exitCodes map[string]int
+
 	logger *slog.Logger
 }
 
@@ -59,6 +64,7 @@ func NewUseCase(
 		publicHost:       publicHost,
 		ingressDomain:    ingressDomain,
 		startedAt:        make(map[string]time.Time),
+		exitCodes:        make(map[string]int),
 		logger:           logger,
 	}
 }
@@ -82,7 +88,7 @@ func (uc *UseCase) Execute(ctx context.Context) error {
 			Kind:          string(kind),
 			Image:         c.Image,
 			ContainerUUID: c.ID,
-			State:         int(container.EvaluateTaskState(c.Status, kind)),
+			State:         int(container.EvaluateTaskState(c.Status, kind, uc.exitCode(ctx, &c))),
 			NodeName:      uc.nodeName,
 			Attempt:       c.Attempt(),
 			Interactive:   c.Interactive(),
@@ -143,10 +149,40 @@ func (uc *UseCase) deadline(ctx context.Context, c *container.Container) time.Ti
 	return inspected.StartedAt.Add(ttl)
 }
 
+// exitCode is what the program in a container returned, for one that has
+// ended. Docker only tells it on inspection, so it is asked for once and kept
+// until the container runs again or goes away.
+func (uc *UseCase) exitCode(ctx context.Context, c *container.Container) int {
+	if !c.Status.Ended() {
+		// it may yet end, and what it returns then is not what it returned
+		// the last time it ran.
+		delete(uc.exitCodes, c.ID)
+
+		return 0
+	}
+
+	if code, ok := uc.exitCodes[c.ID]; ok {
+		return code
+	}
+
+	inspected, err := uc.containerManager.Inspect(ctx, c.ID)
+	if err != nil {
+		// it will be asked again on the next beat; until then what it returned
+		// is unknown, which is not the same as a failure.
+		uc.logger.WarnContext(ctx, "failed to inspect a container for what it returned", "error", err)
+
+		return 0
+	}
+
+	uc.exitCodes[c.ID] = inspected.ExitCode
+
+	return inspected.ExitCode
+}
+
 // forgetGone lets go of what was remembered about containers this node no
 // longer holds.
 func (uc *UseCase) forgetGone(held []container.Container) {
-	if len(uc.startedAt) == 0 {
+	if len(uc.startedAt) == 0 && len(uc.exitCodes) == 0 {
 		return
 	}
 
@@ -158,6 +194,12 @@ func (uc *UseCase) forgetGone(held []container.Container) {
 	for id := range uc.startedAt {
 		if _, ok := ids[id]; !ok {
 			delete(uc.startedAt, id)
+		}
+	}
+
+	for id := range uc.exitCodes {
+		if _, ok := ids[id]; !ok {
+			delete(uc.exitCodes, id)
 		}
 	}
 }

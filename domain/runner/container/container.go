@@ -45,6 +45,11 @@ type Container struct {
 	// StartedAt is when the container last started running, as docker reports
 	// it. It is what anything a container is given time for is counted from.
 	StartedAt time.Time
+
+	// ExitCode is what the process in the container returned once it ended.
+	// Docker reports it on inspection alone, so a container that was only
+	// listed has none, and neither has one that is still running.
+	ExitCode int
 }
 
 // Attempt is which attempt at its task this container is, counting from zero,
