@@ -1,0 +1,41 @@
+{{/*
+    How the waiting page looks, which is the same however it is written. It is
+    defined once and used by each of the pages beside it: nothing overrides it,
+    so which page is being drawn cannot change it.
+*/}}
+{{define "starting-style"}}<style>
+    :root { color-scheme: light dark; }
+
+    body {
+        margin: 0;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+        perspective: 200px;
+        background: #fff;
+        color: #868e96;
+        font: 13px/1.5 ui-sans-serif, system-ui, sans-serif;
+    }
+
+    .cube { position: relative; width: 18px; height: 18px; transform-style: preserve-3d; animation: turn 3s infinite linear; }
+    .cube span { position: absolute; inset: 0; border: 1.5px solid #228be6; opacity: .85; }
+    .cube span:nth-child(1) { transform: translateZ(9px); }
+    .cube span:nth-child(2) { transform: rotateY(180deg) translateZ(9px); }
+    .cube span:nth-child(3) { transform: rotateY(90deg) translateZ(9px); }
+    .cube span:nth-child(4) { transform: rotateY(-90deg) translateZ(9px); }
+    .cube span:nth-child(5) { transform: rotateX(90deg) translateZ(9px); }
+    .cube span:nth-child(6) { transform: rotateX(-90deg) translateZ(9px); }
+
+    @keyframes turn {
+        from { transform: rotateX(-24deg) rotateY(0); }
+        to { transform: rotateX(-24deg) rotateY(360deg); }
+    }
+
+    @media (prefers-reduced-motion: reduce) { .cube { animation-duration: 0s; } }
+    @media (prefers-color-scheme: dark) { body { background: #1a1b1e; color: #909296; } }
+</style>{{end}}
+
+{{define "starting-cube"}}<div class="cube"><span></span><span></span><span></span><span></span><span></span><span></span></div>{{end}}

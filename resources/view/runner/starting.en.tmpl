@@ -1,6 +1,19 @@
-{{template "starting.layout.tmpl" .}}
+{{/* What somebody is shown while a container is on its way up. */}}
+<!doctype html>
+<html lang="en" dir="ltr">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width,initial-scale=1">
+        <meta http-equiv="refresh" content="{{.Seconds}}">
 
-{{define "lang"}}en{{end}}
-{{define "dir"}}ltr{{end}}
-{{define "title"}}starting…{{end}}
-{{define "text"}}starting…{{end}}
+        <title>starting…</title>
+
+        {{template "starting-style" .}}
+    </head>
+
+    <body>
+        {{template "starting-cube" .}}
+
+        <p>starting…</p>
+    </body>
+</html>

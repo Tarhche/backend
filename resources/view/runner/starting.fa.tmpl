@@ -1,6 +1,19 @@
-{{template "starting.layout.tmpl" .}}
+{{/* What somebody is shown while a container is on its way up. */}}
+<!doctype html>
+<html lang="fa" dir="rtl">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width,initial-scale=1">
+        <meta http-equiv="refresh" content="{{.Seconds}}">
 
-{{define "lang"}}fa{{end}}
-{{define "dir"}}rtl{{end}}
-{{define "title"}}در حال آماده‌سازی…{{end}}
-{{define "text"}}در حال آماده‌سازی…{{end}}
+        <title>در حال آماده‌سازی…</title>
+
+        {{template "starting-style" .}}
+    </head>
+
+    <body>
+        {{template "starting-cube" .}}
+
+        <p>در حال آماده‌سازی…</p>
+    </body>
+</html>
