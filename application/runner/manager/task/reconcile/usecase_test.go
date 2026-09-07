@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"strconv"
 	"testing"
 	"time"
 
@@ -47,7 +48,8 @@ func TestUseCase_Execute(t *testing.T) {
 			LastHeartbeatAt: time.Now().Add(-time.Minute),
 		}
 
-		tasks.On("GetAll", mock.Anything, uint(0), limit).Return([]task.Task{stopped}, nil).Once()
+		tasks.On("Count", mock.Anything).Return(uint(1), nil).Once()
+		tasks.On("GetAll", mock.Anything, uint(0), batch).Return([]task.Task{stopped}, nil).Once()
 		producer.On("Produce", mock.Anything, events.TaskScheduledName, mock.Anything).Return(nil).Once()
 		defer producer.AssertExpectations(t)
 
@@ -81,7 +83,8 @@ func TestUseCase_Execute(t *testing.T) {
 			LastHeartbeatAt: time.Now(),
 		}
 
-		tasks.On("GetAll", mock.Anything, uint(0), limit).Return([]task.Task{crashed}, nil).Once()
+		tasks.On("Count", mock.Anything).Return(uint(1), nil).Once()
+		tasks.On("GetAll", mock.Anything, uint(0), batch).Return([]task.Task{crashed}, nil).Once()
 
 		require.NoError(t, NewUseCase(&tasks, schedule.New(&stacks, &producer), &producer, discardLogger()).Execute(context.Background()))
 
@@ -109,7 +112,8 @@ func TestUseCase_Execute(t *testing.T) {
 			LastHeartbeatAt: time.Now().Add(-time.Minute),
 		}
 
-		tasks.On("GetAll", mock.Anything, uint(0), limit).Return([]task.Task{vanished}, nil).Once()
+		tasks.On("Count", mock.Anything).Return(uint(1), nil).Once()
+		tasks.On("GetAll", mock.Anything, uint(0), batch).Return([]task.Task{vanished}, nil).Once()
 		stacks.On("GetOne", mock.Anything, "stack-uuid").Return(stack.Stack{UUID: "stack-uuid", Slug: "myapp-abcde"}, nil).Once()
 		producer.On("Produce", mock.Anything, events.TaskScheduledName, mock.Anything).Return(nil).Once()
 		defer producer.AssertExpectations(t)
@@ -138,7 +142,8 @@ func TestUseCase_Execute(t *testing.T) {
 			LastHeartbeatAt: time.Now(),
 		}
 
-		tasks.On("GetAll", mock.Anything, uint(0), limit).Return([]task.Task{revived}, nil).Once()
+		tasks.On("Count", mock.Anything).Return(uint(1), nil).Once()
+		tasks.On("GetAll", mock.Anything, uint(0), batch).Return([]task.Task{revived}, nil).Once()
 		producer.On("Produce", mock.Anything, events.TaskStoppageRequestedName, mock.Anything).Return(nil).Once()
 		defer producer.AssertExpectations(t)
 
@@ -156,7 +161,8 @@ func TestUseCase_Execute(t *testing.T) {
 
 		now := time.Now()
 
-		tasks.On("GetAll", mock.Anything, uint(0), limit).Return([]task.Task{
+		tasks.On("Count", mock.Anything).Return(uint(1), nil).Once()
+		tasks.On("GetAll", mock.Anything, uint(0), batch).Return([]task.Task{
 			{UUID: "running", ExpectedState: task.Running, CurrentState: task.Running, LastHeartbeatAt: now},
 			{UUID: "stopping", ExpectedState: task.Stopped, CurrentState: task.Stopping, LastHeartbeatAt: now},
 			{UUID: "a finished job", Kind: task.KindJob, ExpectedState: task.Completed, CurrentState: task.Completed, LastHeartbeatAt: now},
@@ -189,7 +195,8 @@ func TestUseCase_Execute_settling(t *testing.T) {
 			LastHeartbeatAt: time.Now().Add(-time.Minute),
 		}
 
-		tasks.On("GetAll", mock.Anything, uint(0), limit).Return([]task.Task{vanished}, nil).Once()
+		tasks.On("Count", mock.Anything).Return(uint(1), nil).Once()
+		tasks.On("GetAll", mock.Anything, uint(0), batch).Return([]task.Task{vanished}, nil).Once()
 		tasks.On("Save", mock.Anything, mock.MatchedBy(func(t *task.Task) bool {
 			return t.CurrentState == task.Stopped
 		})).Return("task-uuid", nil).Once()
@@ -219,7 +226,8 @@ func TestUseCase_Execute_settling(t *testing.T) {
 			LastHeartbeatAt: time.Now(),
 		}
 
-		tasks.On("GetAll", mock.Anything, uint(0), limit).Return([]task.Task{finished}, nil).Once()
+		tasks.On("Count", mock.Anything).Return(uint(1), nil).Once()
+		tasks.On("GetAll", mock.Anything, uint(0), batch).Return([]task.Task{finished}, nil).Once()
 
 		require.NoError(t, NewUseCase(&tasks, schedule.New(&stacks, &producer), &producer, discardLogger()).Execute(context.Background()))
 
@@ -250,12 +258,84 @@ func TestUseCase_Execute_placing(t *testing.T) {
 			CreatedAt:     time.Now().Add(-time.Minute),
 		}
 
-		tasks.On("GetAll", mock.Anything, uint(0), limit).Return([]task.Task{unplaced}, nil).Once()
+		tasks.On("Count", mock.Anything).Return(uint(1), nil).Once()
+		tasks.On("GetAll", mock.Anything, uint(0), batch).Return([]task.Task{unplaced}, nil).Once()
 		producer.On("Produce", mock.Anything, events.TaskCreatedName, mock.Anything).Return(nil).Once()
 		defer producer.AssertExpectations(t)
 
 		require.NoError(t, NewUseCase(&tasks, schedule.New(&stacks, &producer), &producer, discardLogger()).Execute(context.Background()))
 
 		producer.AssertNotCalled(t, "Produce", mock.Anything, events.TaskScheduledName, mock.Anything)
+	})
+}
+
+func TestUseCase_Execute_readsEveryContainer(t *testing.T) {
+	t.Parallel()
+
+	// what a pass covers is every container the runner is holding, however
+	// many that is: one read of the newest few would leave the rest to drift
+	// with nothing coming back for them.
+	t.Run("works through them a batch at a time", func(t *testing.T) {
+		t.Parallel()
+
+		var (
+			tasks    tasksMock.MockTasksRepository
+			stacks   stacksMock.MockStacksRepository
+			producer messagingMock.MockProduceConsumer
+		)
+
+		const held uint = 45
+
+		stopped := func(uuid string) task.Task {
+			return task.Task{
+				UUID:            uuid,
+				Name:            uuid,
+				Image:           "nginx:1.27-alpine",
+				NodeName:        "runner-worker-01",
+				ExpectedState:   task.Running,
+				CurrentState:    task.Stopped,
+				LastHeartbeatAt: time.Now().Add(-time.Minute),
+			}
+		}
+
+		batchOf := func(offset uint) []task.Task {
+			var of []task.Task
+			for i := offset; i < offset+batch && i < held; i++ {
+				of = append(of, stopped(strconv.FormatUint(uint64(i), 10)))
+			}
+
+			return of
+		}
+
+		tasks.On("Count", mock.Anything).Return(held, nil).Once()
+		for offset := uint(0); offset < held; offset += batch {
+			tasks.On("GetAll", mock.Anything, offset, batch).Return(batchOf(offset), nil).Once()
+		}
+
+		producer.On("Produce", mock.Anything, events.TaskScheduledName, mock.Anything).Return(nil)
+
+		require.NoError(t, NewUseCase(&tasks, schedule.New(&stacks, &producer), &producer, discardLogger()).Execute(context.Background()))
+
+		tasks.AssertExpectations(t)
+		assert.Len(t, producer.Calls, int(held), "every one of them is asked for")
+	})
+
+	t.Run("stops when there are fewer than were counted", func(t *testing.T) {
+		t.Parallel()
+
+		var (
+			tasks    tasksMock.MockTasksRepository
+			stacks   stacksMock.MockStacksRepository
+			producer messagingMock.MockProduceConsumer
+		)
+
+		// counted before they were read, and taken away in between.
+		tasks.On("Count", mock.Anything).Return(uint(100), nil).Once()
+		tasks.On("GetAll", mock.Anything, uint(0), batch).Return([]task.Task{}, nil).Once()
+
+		require.NoError(t, NewUseCase(&tasks, schedule.New(&stacks, &producer), &producer, discardLogger()).Execute(context.Background()))
+
+		tasks.AssertExpectations(t)
+		tasks.AssertNumberOfCalls(t, "GetAll", 1)
 	})
 }

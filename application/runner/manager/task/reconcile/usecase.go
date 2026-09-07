@@ -23,8 +23,11 @@ import (
 )
 
 const (
-	// limit is how many containers one pass looks at.
-	limit uint = 200
+	// batch is how many containers are read from the store at a time. A pass
+	// works through every one of them, a batch at a time, rather than taking
+	// the newest few: a container nobody looks at is a container nobody brings
+	// back.
+	batch uint = 20
 
 	// silentAfter is how long a container may go unspoken for before what it
 	// was last seen doing stops being believed. The nodes speak for theirs
@@ -55,39 +58,64 @@ func NewUseCase(
 }
 
 // Execute looks at every container and asks for what is missing.
+//
+// It reads them a batch at a time rather than all at once, so that how many
+// the runner is holding decides how long a pass takes rather than whether it
+// covers them. What is being counted moves while it is being read — a
+// container asked for during a pass shifts the rest along — so one may be
+// looked at twice, which asks for what it needs twice and is the same answer,
+// or missed, which the next pass ten seconds later picks up.
 func (uc *UseCase) Execute(ctx context.Context) error {
-	tasks, err := uc.taskRepository.GetAll(ctx, 0, limit)
+	count, err := uc.taskRepository.Count(ctx)
 	if err != nil {
 		return err
 	}
 
+	// what they are judged against is when the pass began, so that a container
+	// is not called silent for the time a long pass took to reach it.
 	now := time.Now()
 
-	for i := range tasks {
-		t := &tasks[i]
-
-		if !t.Drifted(now, silentAfter) {
-			continue
+	for offset := uint(0); offset < count; offset += batch {
+		tasks, err := uc.taskRepository.GetAll(ctx, offset, batch)
+		if err != nil {
+			return err
 		}
 
-		// a container that has ended while its node is still speaking for it
-		// belongs to the failure chain: that is what counts the attempts at it
-		// and decides whether there is another one. One that ended and then
-		// went quiet is nobody's any more, and asking for it again is what
-		// brings it back.
-		if task.IsTerminalState(t.CurrentState) && !t.Silent(now, silentAfter) {
-			continue
+		// fewer are there than were counted: something was taken away while
+		// this pass was reading them.
+		if len(tasks) == 0 {
+			return nil
 		}
 
-		if err := uc.close(ctx, t); err != nil {
-			// one container that cannot be dealt with is not a reason to leave
-			// the rest as they are; the next pass tries it again.
-			uc.logger.ErrorContext(ctx, "could not bring a container back to what was asked of it",
-				"error", err, "uuid", t.UUID, "expected", t.ExpectedState.String(), "current", t.CurrentState.String())
+		for i := range tasks {
+			uc.look(ctx, &tasks[i], now)
 		}
 	}
 
 	return nil
+}
+
+// look asks for what one container is missing, if it is missing anything.
+func (uc *UseCase) look(ctx context.Context, t *task.Task, now time.Time) {
+	if !t.Drifted(now, silentAfter) {
+		return
+	}
+
+	// a container that has ended while its node is still speaking for it
+	// belongs to the failure chain: that is what counts the attempts at it
+	// and decides whether there is another one. One that ended and then
+	// went quiet is nobody's any more, and asking for it again is what
+	// brings it back.
+	if task.IsTerminalState(t.CurrentState) && !t.Silent(now, silentAfter) {
+		return
+	}
+
+	if err := uc.close(ctx, t); err != nil {
+		// one container that cannot be dealt with is not a reason to leave
+		// the rest as they are; the next pass tries it again.
+		uc.logger.ErrorContext(ctx, "could not bring a container back to what was asked of it",
+			"error", err, "uuid", t.UUID, "expected", t.ExpectedState.String(), "current", t.CurrentState.String())
+	}
 }
 
 // close asks for the one thing that would put this container where it belongs.
