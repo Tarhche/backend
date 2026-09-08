@@ -50,13 +50,12 @@ FROM production AS production-runner-manager
 EXPOSE 80
 CMD ["serve-runner-manager", "--port=80"]
 
-# runner worker service
+# runner worker service; port 80 for API, 8090 for container ingress
 FROM develop AS develop-runner-worker
 EXPOSE 80 8090
 CMD ["serve-runner-worker", "--port=80"]
 
-# a node takes the machine's own name unless it is told one, so that as many
-# of them as somebody starts are each themselves.
+# runner worker service; port 80 for API, 8090 for container ingress
 FROM production AS production-runner-worker
 EXPOSE 80 8090
 CMD ["serve-runner-worker", "--port=80"]
