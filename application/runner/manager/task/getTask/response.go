@@ -51,11 +51,13 @@ type Response struct {
 	ContainerLogs []byte         `json:"container_logs"`
 }
 
-// EndpointResponse is one of a container's exposed ports. The node and host
-// port behind it are the runner's own business, so only the container port
-// leaves it: a caller reaches a port through the ingress, by name.
+// EndpointResponse is one of a container's exposed ports. The node and the
+// host port behind it are the runner's own business; what leaves is the port
+// the container opened, and the one the ingress accepts whole connections for
+// it on, which is what anything that is not http connects to.
 type EndpointResponse struct {
 	ContainerPort uint `json:"container_port"`
+	PublicPort    uint `json:"public_port,omitempty"`
 }
 
 type LimitsResponse struct {
@@ -128,7 +130,10 @@ func NewEndpoints(t task.Task) []EndpointResponse {
 			continue
 		}
 
-		endpoints = append(endpoints, EndpointResponse{ContainerPort: uint(e.ContainerPort)})
+		endpoints = append(endpoints, EndpointResponse{
+			ContainerPort: uint(e.ContainerPort),
+			PublicPort:    uint(e.PublicPort),
+		})
 	}
 
 	return endpoints

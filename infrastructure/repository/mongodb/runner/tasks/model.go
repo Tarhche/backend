@@ -51,6 +51,7 @@ type TaskBson struct {
 	// Deadline is when the container running this task will be stopped for
 	// having run long enough, as the node that made it set it.
 	Deadline       time.Time      `bson:"deadline,omitempty"`
+	IngressDomain  string         `bson:"ingress_domain,omitempty"`
 	Reason         string         `bson:"reason,omitempty"`
 	Mounts         []Mount        `bson:"mounts,omitempty"`
 	ResourceLimits ResourceLimits `bson:"resource_limits,omitempty"`
@@ -67,6 +68,14 @@ type Endpoint struct {
 	ContainerPort port.Port `bson:"container_port"`
 	Host          string    `bson:"host"`
 	HostPort      port.Port `bson:"host_port"`
+
+	// HostPortUDP is where the same container port was published for udp.
+	HostPortUDP port.Port `bson:"host_port_udp,omitempty"`
+
+	// PublicPort is what the node holding this container accepts raw
+	// connections for this port on, and PublicHost where that node is reached.
+	PublicPort port.Port `bson:"public_port,omitempty"`
+	PublicHost string    `bson:"public_host,omitempty"`
 }
 
 type Mount struct {
@@ -130,6 +139,7 @@ func toTask(t *TaskBson) task.Task {
 		CreatedAt:     t.CreatedAt,
 		StartedAt:     t.StartedAt,
 		Deadline:      t.Deadline,
+		IngressDomain: t.IngressDomain,
 		FinishedAt:    t.FinishedAt,
 	}
 }
@@ -192,6 +202,7 @@ func toBson(t *task.Task) TaskBson {
 		CreatedAt:     t.CreatedAt,
 		StartedAt:     t.StartedAt,
 		Deadline:      t.Deadline,
+		IngressDomain: t.IngressDomain,
 		FinishedAt:    t.FinishedAt,
 	}
 }
@@ -223,6 +234,9 @@ func toEndpoints(endpoints []Endpoint) []task.Endpoint {
 			ContainerPort: e.ContainerPort,
 			Host:          e.Host,
 			HostPort:      e.HostPort,
+			HostPortUDP:   e.HostPortUDP,
+			PublicPort:    e.PublicPort,
+			PublicHost:    e.PublicHost,
 		}
 	}
 
@@ -236,6 +250,9 @@ func fromEndpoints(endpoints []task.Endpoint) []Endpoint {
 			ContainerPort: e.ContainerPort,
 			Host:          e.Host,
 			HostPort:      e.HostPort,
+			HostPortUDP:   e.HostPortUDP,
+			PublicPort:    e.PublicPort,
+			PublicHost:    e.PublicHost,
 		}
 	}
 

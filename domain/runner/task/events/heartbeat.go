@@ -14,6 +14,11 @@ type Heartbeat struct {
 	// turns an exposed port into an address somebody can open.
 	Slug string
 
+	// IngressDomain is what this node answers container hostnames under. Nodes
+	// hold nothing in common in production — a machine each, a docker each —
+	// so an address for a container is an address on the node holding it.
+	IngressDomain string
+
 	// Kind is what the container is running, so that whoever is listening can
 	// tell a job it asked for from a service somebody else's dashboard did.
 	Kind string

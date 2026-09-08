@@ -182,3 +182,51 @@ func TestNewContainer_deadline(t *testing.T) {
 		assert.Nil(t, presented.Deadline)
 	})
 }
+
+func TestNewEndpoints_address(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a port the ingress forwards whole is given as an address", func(t *testing.T) {
+		t.Parallel()
+
+		endpoints := NewEndpoints(task.Task{
+			Slug: "nginx-xkfqz",
+			Endpoints: []task.Endpoint{
+				{ContainerPort: 80, Host: "docker", HostPort: 32768, PublicPort: 30001, PublicHost: "runner-01.tarhche.com"},
+			},
+		}, ingressDomain)
+
+		require.Len(t, endpoints, 1)
+		assert.Equal(t, "http://nginx-xkfqz.runner.localhost:8021", endpoints[0].URL)
+		assert.Equal(t, "runner-01.tarhche.com:30001", endpoints[0].Address, "a raw connection is made to the node holding the container, not to whatever served the http")
+	})
+
+	t.Run("a port nothing forwards has no address to connect to", func(t *testing.T) {
+		t.Parallel()
+
+		endpoints := NewEndpoints(task.Task{
+			Slug:      "nginx-xkfqz",
+			Endpoints: []task.Endpoint{{ContainerPort: 80, Host: "docker", HostPort: 32768}},
+		}, ingressDomain)
+
+		require.Len(t, endpoints, 1)
+		assert.Empty(t, endpoints[0].Address)
+	})
+}
+
+func TestNewEndpoints_node(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a container is reached on the node holding it", func(t *testing.T) {
+		t.Parallel()
+
+		endpoints := NewEndpoints(task.Task{
+			Slug:          "nginx-xkfqz",
+			IngressDomain: "node-02.runner.tarhche.com",
+			Endpoints:     []task.Endpoint{{ContainerPort: 80, Host: "docker", HostPort: 30001}},
+		}, ingressDomain)
+
+		require.Len(t, endpoints, 1)
+		assert.Equal(t, "http://nginx-xkfqz.node-02.runner.tarhche.com", endpoints[0].URL)
+	})
+}

@@ -11,6 +11,9 @@ type TaskRan struct {
 	Endpoints     []Endpoint `json:"endpoints"`
 	StartedAt     time.Time  `json:"started_at"`
 
+	// IngressDomain is what the node holding it answers its hostname under.
+	IngressDomain string `json:"ingress_domain,omitempty"`
+
 	// Deadline is when the container will be stopped for having run long
 	// enough. It is set as the container is made, so what it may run for is
 	// counted from when it came up.

@@ -12,6 +12,7 @@ import (
 
 	"github.com/danceable/console"
 	workerHeartbeat "github.com/khanzadimahdi/testproject/application/runner/worker/beatHeart"
+	"github.com/khanzadimahdi/testproject/application/runner/worker/cluster"
 	taskHeartbeat "github.com/khanzadimahdi/testproject/application/runner/worker/task/beatHeart"
 	shipLogs "github.com/khanzadimahdi/testproject/application/runner/worker/task/shipLogs"
 	"github.com/khanzadimahdi/testproject/domain"
@@ -19,6 +20,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/runner/node"
 	messaging "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/runner/containers"
+	"github.com/khanzadimahdi/testproject/infrastructure/runner/ingress"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -221,8 +223,19 @@ func TestServe(t *testing.T) {
 		// Run starts it, and a command assembled by hand has to be assembled
 		// completely.
 		command.logShipper = shipLogs.NewUseCase(&containerManager, &consumer, consumerName, command.logger)
-		command.taskHeartBeat = taskHeartbeat.NewUseCase(&containerManager, &consumer, consumerName, "docker", command.logger)
+		command.taskHeartBeat = taskHeartbeat.NewUseCase(&containerManager, &consumer, consumerName, "docker", "localhost", "runner.localhost", command.logger)
 		command.workerHeartBeat = workerHeartbeat.NewUseCase(&consumer, &nodeManager, consumerName, "worker:80")
+
+		// and what it serves of the containers themselves: what it is holding,
+		// heard from every node, and the ports it answers for them on.
+		var subscriber messaging.MockPublishSubscriber
+		subscriber.On("Subscribe", mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+
+		view := cluster.NewView(consumerName)
+		command.configs.IngressPort = findAvailablePort()
+		command.view = view
+		command.subscriber = &subscriber
+		command.ingress = ingress.NewHandler(view, "runner.localhost")
 
 		serverStartedListening := make(chan struct{})
 

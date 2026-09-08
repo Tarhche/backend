@@ -61,7 +61,7 @@ func TestUseCase_Execute(t *testing.T) {
 		containerManager.On("Start", mock.Anything, "container-id").Return(nil).Once()
 		defer containerManager.AssertExpectations(t)
 
-		response, err := NewUseCase(&containerManager, &networkManager, accepts(), nodeName).
+		response, err := NewUseCase(&containerManager, &networkManager, accepts(), nodeName, task.PortRange{}).
 			Execute(context.Background(), validRequest(func(r *Request) {
 				r.ExposedPorts = []port.Port{80, 443}
 			}))
@@ -101,7 +101,7 @@ func TestUseCase_Execute(t *testing.T) {
 			Return("container-id", nil).Once()
 		containerManager.On("Start", mock.Anything, "container-id").Return(nil).Once()
 
-		_, err := NewUseCase(&containerManager, &networkManager, accepts(), nodeName).
+		_, err := NewUseCase(&containerManager, &networkManager, accepts(), nodeName, task.PortRange{}).
 			Execute(context.Background(), validRequest(nil))
 
 		require.NoError(t, err)
@@ -135,7 +135,7 @@ func TestUseCase_Execute(t *testing.T) {
 			Return("container-id", nil).Once()
 		containerManager.On("Start", mock.Anything, "container-id").Return(nil).Once()
 
-		_, err := NewUseCase(&containerManager, &networkManager, accepts(), nodeName).
+		_, err := NewUseCase(&containerManager, &networkManager, accepts(), nodeName, task.PortRange{}).
 			Execute(context.Background(), validRequest(func(r *Request) {
 				r.StackUUID = "stack-uuid"
 				r.StackSlug = "myapp-abcde"
@@ -167,7 +167,7 @@ func TestUseCase_Execute(t *testing.T) {
 			Return("container-id", nil).Once()
 		containerManager.On("Start", mock.Anything, "container-id").Return(nil).Once()
 
-		_, err := NewUseCase(&containerManager, &networkManager, accepts(), nodeName).
+		_, err := NewUseCase(&containerManager, &networkManager, accepts(), nodeName, task.PortRange{}).
 			Execute(context.Background(), validRequest(func(r *Request) {
 				r.NetworkPolicy = network.PolicyPublic
 			}))
@@ -196,7 +196,7 @@ func TestUseCase_Execute(t *testing.T) {
 			Return("container-id", nil).Once()
 		containerManager.On("Start", mock.Anything, "container-id").Return(nil).Once()
 
-		_, err := NewUseCase(&containerManager, &networkManager, accepts(), nodeName).
+		_, err := NewUseCase(&containerManager, &networkManager, accepts(), nodeName, task.PortRange{}).
 			Execute(context.Background(), validRequest(func(r *Request) {
 				r.NetworkPolicy = network.PolicyNone
 				r.ExposedPorts = nil
@@ -218,7 +218,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		refusal := domain.ValidationErrors{"exposed_ports": "ports_require_network"}
 
-		response, err := NewUseCase(&containerManager, &networkManager, refuses(refusal), nodeName).
+		response, err := NewUseCase(&containerManager, &networkManager, refuses(refusal), nodeName, task.PortRange{}).
 			Execute(context.Background(), validRequest(nil))
 
 		require.NoError(t, err)
@@ -246,7 +246,7 @@ func TestUseCase_Execute(t *testing.T) {
 		containerManager.On("GetByLabel", mock.Anything, container.TaskUUIDLabelKey, mock.Anything).
 			Return([]container.Container{}, nil).Once()
 
-		_, err := NewUseCase(&containerManager, &networkManager, accepts(), nodeName).
+		_, err := NewUseCase(&containerManager, &networkManager, accepts(), nodeName, task.PortRange{}).
 			Execute(context.Background(), validRequest(nil))
 
 		assert.ErrorIs(t, err, expected)
@@ -275,7 +275,7 @@ func TestUseCase_Execute(t *testing.T) {
 		containerManager.On("Start", mock.Anything, "container-id").Return(nil).Once()
 		defer containerManager.AssertExpectations(t)
 
-		response, err := NewUseCase(&containerManager, &networkManager, accepts(), nodeName).
+		response, err := NewUseCase(&containerManager, &networkManager, accepts(), nodeName, task.PortRange{}).
 			Execute(context.Background(), validRequest(nil))
 
 		require.NoError(t, err)
@@ -293,7 +293,7 @@ func TestUseCase_Execute(t *testing.T) {
 		expected := errors.New("the network cannot be created")
 		networkManager.On("EnsureIsolatedNetwork", mock.Anything).Return(expected).Once()
 
-		_, err := NewUseCase(&containerManager, &networkManager, accepts(), nodeName).
+		_, err := NewUseCase(&containerManager, &networkManager, accepts(), nodeName, task.PortRange{}).
 			Execute(context.Background(), validRequest(nil))
 
 		assert.ErrorIs(t, err, expected)
@@ -379,7 +379,7 @@ func TestUseCase_Execute_retrying(t *testing.T) {
 		containerManager.On("Start", mock.Anything, "container-id").Return(nil).Once()
 		defer containerManager.AssertExpectations(t)
 
-		useCase := NewUseCase(&containerManager, &networkManager, accepts(), nodeName)
+		useCase := NewUseCase(&containerManager, &networkManager, accepts(), nodeName, task.PortRange{})
 
 		response, err := useCase.Execute(context.Background(), &Request{
 			UUID:       "task-uuid",
@@ -419,7 +419,7 @@ func TestUseCase_Execute_retrying(t *testing.T) {
 		containerManager.On("Start", mock.Anything, "existing-container-id").Return(nil).Once()
 		defer containerManager.AssertExpectations(t)
 
-		useCase := NewUseCase(&containerManager, &networkManager, accepts(), nodeName)
+		useCase := NewUseCase(&containerManager, &networkManager, accepts(), nodeName, task.PortRange{})
 
 		response, err := useCase.Execute(context.Background(), &Request{
 			UUID:  "task-uuid",
@@ -459,7 +459,7 @@ func TestUseCase_Execute_adopting(t *testing.T) {
 		containerManager.On("Start", mock.Anything, "running-container-id").Return(nil).Once()
 		defer containerManager.AssertExpectations(t)
 
-		_, err := NewUseCase(&containerManager, &networkManager, accepts(), nodeName).
+		_, err := NewUseCase(&containerManager, &networkManager, accepts(), nodeName, task.PortRange{}).
 			Execute(context.Background(), &Request{
 				UUID:  "task-uuid",
 				Name:  "api",

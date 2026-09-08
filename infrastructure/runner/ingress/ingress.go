@@ -149,6 +149,10 @@ func writeStarting(rw http.ResponseWriter, r *http.Request) {
 	_, _ = fmt.Fprintf(rw, startingPage, lang, dir, text)
 }
 
+// healthPath is what the ingress answers about itself, for whatever is
+// watching whether it is up.
+const healthPath = "/health"
+
 // targetKey carries the resolved upstream from ServeHTTP to the rewrite, which
 // is the only hook a ReverseProxy gives for a per-request target.
 type targetKey struct{}
@@ -156,6 +160,14 @@ type targetKey struct{}
 func (h *Handler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	slug, containerPort, ok := h.parseHost(r.Host)
 	if !ok {
+		// nothing here is addressed by name except a container, so a request
+		// that names none is either lost or asking after the ingress itself.
+		if r.URL.Path == healthPath {
+			rw.WriteHeader(http.StatusOK)
+
+			return
+		}
+
 		http.Error(rw, "unknown container", http.StatusNotFound)
 
 		return

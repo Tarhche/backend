@@ -58,6 +58,11 @@ type Endpoint struct {
 	ContainerPort uint   `json:"container_port"`
 	Host          string `json:"host"`
 	URL           string `json:"url"`
+
+	// Address is where the port is reached whole — what ssh, a database
+	// client, or anything else that is not http connects to. Empty when the
+	// runner forwards nothing.
+	Address string `json:"address,omitempty"`
 }
 
 type Limits struct {
@@ -129,6 +134,12 @@ func NewContainers(tasks []task.Task, ingressDomain string, owners Owners) []Con
 // also answers on that name with the port appended, which keeps each hostname
 // to a single label so one wildcard certificate covers them all.
 func NewEndpoints(t task.Task, ingressDomain string) []Endpoint {
+	// the node holding a container is where its hostname is answered: nodes
+	// share nothing, so an address is an address on one of them.
+	if t.IngressDomain != "" {
+		ingressDomain = t.IngressDomain
+	}
+
 	endpoints := make([]Endpoint, 0, len(t.Endpoints))
 
 	for i, e := range t.Endpoints {
@@ -144,11 +155,19 @@ func NewEndpoints(t task.Task, ingressDomain string) []Endpoint {
 			host = fmt.Sprintf("%s.%s", t.Slug, ingressDomain)
 		}
 
-		endpoints = append(endpoints, Endpoint{
+		endpoint := Endpoint{
 			ContainerPort: uint(e.ContainerPort),
 			Host:          host,
 			URL:           "http://" + host,
-		})
+		}
+
+		// http is answered by name, wherever the container is held; everything
+		// else is answered by the node holding it, on a port of its own.
+		if e.PublicPort > 0 && e.PublicHost != "" {
+			endpoint.Address = fmt.Sprintf("%s:%d", e.PublicHost, e.PublicPort)
+		}
+
+		endpoints = append(endpoints, endpoint)
 	}
 
 	return endpoints
