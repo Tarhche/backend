@@ -17,7 +17,20 @@ import (
 	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
-const defaultAckWait = 30 * time.Second
+const (
+	defaultAckWait = 30 * time.Second
+
+	// maxDeliveries bounds how many times one message is handed to a handler
+	// before it is given up on. Without a bound, a handler that cannot succeed
+	// — a container whose image will never pull, say — is redelivered forever,
+	// as fast as the broker can manage it.
+	maxDeliveries = 5
+
+	// redeliveryDelay is how long a message that could not be handled waits
+	// before it is tried again, so that something failing its way towards that
+	// limit does not spend the time in a hot loop.
+	redeliveryDelay = 5 * time.Second
+)
 
 type produceConsumer struct {
 	connection *nats.Conn
@@ -103,10 +116,11 @@ func (m *produceConsumer) consumeInBackground(ctx context.Context, stream jetstr
 	m.wg.Add(1)
 
 	consumer, err := stream.CreateOrUpdateConsumer(ctx, jetstream.ConsumerConfig{
-		Name:      m.consumerID,
-		Durable:   m.consumerID,
-		AckPolicy: jetstream.AckExplicitPolicy,
-		AckWait:   m.ackWait,
+		Name:       m.consumerID,
+		Durable:    m.consumerID,
+		AckPolicy:  jetstream.AckExplicitPolicy,
+		AckWait:    m.ackWait,
+		MaxDeliver: maxDeliveries,
 	})
 	if err != nil {
 		m.wg.Done()
@@ -144,14 +158,30 @@ func (m *produceConsumer) consumeFunc(handler domain.MessageHandler) func(msg je
 		)
 		defer span.End()
 
-		if err := msg.InProgress(); err != nil {
-			m.logger.Error("in progress error", "error", err)
+		attempt := deliveryAttempt(msg)
+
+		if attempt > 1 {
+			m.logger.Warn("handling a message again", "subject", msg.Subject(), "attempt", attempt, "attempts", maxDeliveries)
 		}
 
-		if err := trace.RecordError(span, handler.Handle(msgCtx, msg.Data())); err != nil {
-			m.logger.Error("consume error", "error", err, "subject", string(msg.Subject()))
+		// a handler that takes its time — an image being pulled, say — is
+		// still working on it: saying so for as long as it runs is what keeps
+		// the message from being handed out again underneath it.
+		working := m.keepWorkingOn(msg)
 
-			if err := msg.Nak(); err != nil {
+		err := handler.Handle(msgCtx, msg.Data())
+		working()
+
+		if err := trace.RecordError(span, err); err != nil {
+			m.logger.Error("consume error", "error", err, "subject", string(msg.Subject()), "attempt", attempt)
+
+			// the broker stops handing over a message that has been tried this
+			// often, so this is the last anybody hears of it.
+			if attempt >= maxDeliveries {
+				m.logger.Error("giving up on a message", "subject", msg.Subject(), "attempts", attempt)
+			}
+
+			if err := msg.NakWithDelay(redeliveryDelay); err != nil {
 				m.logger.Error("nak error", "error", err)
 			}
 			return
@@ -164,6 +194,46 @@ func (m *produceConsumer) consumeFunc(handler domain.MessageHandler) func(msg je
 			m.logger.Error("double ack error", "error", err)
 		}
 	}
+}
+
+// keepWorkingOn tells the broker the message is still being worked on, until
+// the returned function says it is not. A handler may take longer than the ack
+// wait, and the ack wait is there for a handler that has stopped, not for one
+// that is slow.
+func (m *produceConsumer) keepWorkingOn(msg jetstream.Msg) func() {
+	done := make(chan struct{})
+
+	go func() {
+		ticker := time.NewTicker(m.ackWait / 2)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-done:
+				return
+
+			case <-ticker.C:
+				if err := msg.InProgress(); err != nil {
+					m.logger.Warn("could not report a message as still being handled", "error", err, "subject", msg.Subject())
+
+					return
+				}
+			}
+		}
+	}()
+
+	return sync.OnceFunc(func() { close(done) })
+}
+
+// deliveryAttempt is which try this is, or the first when the broker will not
+// say — a message whose metadata cannot be read is still a message to handle.
+func deliveryAttempt(msg jetstream.Msg) uint64 {
+	metadata, err := msg.Metadata()
+	if err != nil {
+		return 1
+	}
+
+	return metadata.NumDelivered
 }
 
 func (m *produceConsumer) makeSureStreamExists(ctx context.Context, subject string) (jetstream.Stream, error) {

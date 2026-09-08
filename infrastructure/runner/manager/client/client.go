@@ -26,6 +26,13 @@ import (
 // so the wire mapping can build one without importing its own package.
 type managerStack = runnerManager.Stack
 
+// managerContainerChange and managerStackChange are the client's own names for
+// one change to a container and to a stack, for the same reason.
+type (
+	managerContainerChange = runnerManager.ContainerChange
+	managerStackChange     = runnerManager.StackChange
+)
+
 // requestTimeout bounds a call to the manager. It does not apply to the
 // streams, which are meant to stay open.
 const requestTimeout = 15 * time.Second
