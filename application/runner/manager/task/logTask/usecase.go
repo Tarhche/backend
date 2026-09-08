@@ -3,10 +3,12 @@ package logTask
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/runner/container"
+	"github.com/khanzadimahdi/testproject/domain/runner/task"
 	"github.com/khanzadimahdi/testproject/domain/runner/task/events"
 )
 
@@ -16,6 +18,11 @@ import (
 // has already shipped, so the same lines arrive twice; the repository
 // recognises them by their own content and stores each one once.
 type TaskLogged struct {
+	// taskRepository is consulted once per batch, not once per line: a worker
+	// has lines in hand when its container's task is deleted, and storing them
+	// would leave rows nothing owns and nothing will ever clear.
+	taskRepository task.Repository
+
 	logRepository container.LogRepository
 
 	// maxBytes caps what one container may keep, so a chatty container cannot
@@ -27,11 +34,17 @@ type TaskLogged struct {
 
 var _ domain.MessageHandler = &TaskLogged{}
 
-func NewTaskLogged(logRepository container.LogRepository, maxBytes int64, logger *slog.Logger) *TaskLogged {
+func NewTaskLogged(
+	taskRepository task.Repository,
+	logRepository container.LogRepository,
+	maxBytes int64,
+	logger *slog.Logger,
+) *TaskLogged {
 	return &TaskLogged{
-		logRepository: logRepository,
-		maxBytes:      maxBytes,
-		logger:        logger,
+		taskRepository: taskRepository,
+		logRepository:  logRepository,
+		maxBytes:       maxBytes,
+		logger:         logger,
 	}
 }
 
@@ -46,6 +59,14 @@ func (uc *TaskLogged) Handle(ctx context.Context, data []byte) error {
 
 	if len(logged.Lines) == 0 || len(logged.UUID) == 0 {
 		return nil
+	}
+
+	// a container's log lives exactly as long as the container, so a batch that
+	// arrives after the task went is nothing to keep.
+	if _, err := uc.taskRepository.GetOne(ctx, logged.UUID); errors.Is(err, domain.ErrNotExists) {
+		return nil
+	} else if err != nil {
+		return err
 	}
 
 	if uc.overCap(ctx, logged.UUID) {

@@ -40,10 +40,12 @@ func (h *StackDeletedHandler) Handle(ctx context.Context, data []byte) error {
 		return nil
 	}
 
+	// the removal waits for the stack's containers to detach, so reaching here
+	// with an error means the network is genuinely stuck. Reported rather than
+	// redelivered: nothing about trying the same thing again would free it, and
+	// a stuck network is a leak to look at rather than a message to replay.
 	if err := h.networkManager.RemoveStackNetwork(ctx, deleted.Slug); err != nil {
-		// the containers are already gone; a network that will not go yet is
-		// worth reporting but not worth redelivering forever.
-		h.logger.WarnContext(ctx, "could not remove a stack's network", "error", err, "stack", deleted.Slug)
+		h.logger.ErrorContext(ctx, "a stack's network outlived it", "error", err, "stack", deleted.Slug)
 	}
 
 	return nil

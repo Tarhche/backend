@@ -9,12 +9,32 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/runner/container"
+	"github.com/khanzadimahdi/testproject/domain/runner/task"
 	"github.com/khanzadimahdi/testproject/domain/runner/task/events"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/runner/logs"
+	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/runner/tasks"
 )
+
+// stillThere is a task repository that recognises every task asked of it.
+func stillThere() *tasks.MockTasksRepository {
+	r := &tasks.MockTasksRepository{}
+	r.On("GetOne", mock.Anything, mock.Anything).Return(task.Task{}, nil)
+
+	return r
+}
+
+// gone is a task repository for which nothing exists any more.
+func gone() *tasks.MockTasksRepository {
+	r := &tasks.MockTasksRepository{}
+	r.On("GetOne", mock.Anything, mock.Anything).Return(task.Task{}, domain.ErrNotExists)
+
+	return r
+}
 
 func discardLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -45,7 +65,7 @@ func TestTaskLogged_Handle(t *testing.T) {
 
 		repository := logs.NewInMemoryRepository()
 
-		require.NoError(t, NewTaskLogged(repository, 0, discardLogger()).Handle(context.Background(), batch(
+		require.NoError(t, NewTaskLogged(stillThere(), repository, 0, discardLogger()).Handle(context.Background(), batch(
 			"task-uuid",
 			events.LogLine{Stream: uint8(container.StreamStdout), Content: "listening on :80", At: first},
 			events.LogLine{Stream: uint8(container.StreamStderr), Content: "a warning", At: second},
@@ -65,7 +85,7 @@ func TestTaskLogged_Handle(t *testing.T) {
 		t.Parallel()
 
 		repository := logs.NewInMemoryRepository()
-		handler := NewTaskLogged(repository, 0, discardLogger())
+		handler := NewTaskLogged(stillThere(), repository, 0, discardLogger())
 
 		line := events.LogLine{Stream: uint8(container.StreamStdout), Content: "listening on :80", At: first}
 
@@ -84,7 +104,7 @@ func TestTaskLogged_Handle(t *testing.T) {
 
 		// a cap of ten bytes is reached by the first line, so the second is
 		// dropped rather than stored.
-		handler := NewTaskLogged(repository, 10, discardLogger())
+		handler := NewTaskLogged(stillThere(), repository, 10, discardLogger())
 
 		require.NoError(t, handler.Handle(context.Background(), batch("task-uuid",
 			events.LogLine{Stream: uint8(container.StreamStdout), Content: "0123456789abc", At: first},
@@ -100,7 +120,7 @@ func TestTaskLogged_Handle(t *testing.T) {
 		t.Parallel()
 
 		repository := logs.NewInMemoryRepository()
-		handler := NewTaskLogged(repository, 10, discardLogger())
+		handler := NewTaskLogged(stillThere(), repository, 10, discardLogger())
 
 		require.NoError(t, handler.Handle(context.Background(), batch("chatty",
 			events.LogLine{Stream: uint8(container.StreamStdout), Content: "0123456789abc", At: first},
@@ -117,7 +137,7 @@ func TestTaskLogged_Handle(t *testing.T) {
 
 		repository := logs.NewInMemoryRepository()
 
-		require.NoError(t, NewTaskLogged(repository, 0, discardLogger()).Handle(context.Background(), batch("task-uuid")))
+		require.NoError(t, NewTaskLogged(stillThere(), repository, 0, discardLogger()).Handle(context.Background(), batch("task-uuid")))
 
 		assert.Equal(t, 0, repository.Count("task-uuid"))
 	})
@@ -127,7 +147,7 @@ func TestTaskLogged_Handle(t *testing.T) {
 
 		repository := logs.NewInMemoryRepository()
 
-		require.NoError(t, NewTaskLogged(repository, 0, discardLogger()).Handle(context.Background(), batch(
+		require.NoError(t, NewTaskLogged(stillThere(), repository, 0, discardLogger()).Handle(context.Background(), batch(
 			"",
 			events.LogLine{Stream: uint8(container.StreamStdout), Content: "orphaned", At: first},
 		)))
@@ -135,11 +155,26 @@ func TestTaskLogged_Handle(t *testing.T) {
 		assert.Equal(t, 0, repository.Count(""))
 	})
 
+	t.Run("a batch that arrives after its task went is not kept", func(t *testing.T) {
+		t.Parallel()
+
+		repository := logs.NewInMemoryRepository()
+
+		// a worker has lines in hand when a container is deleted, and rows
+		// nothing owns would never be cleared by anything.
+		require.NoError(t, NewTaskLogged(gone(), repository, 0, discardLogger()).Handle(context.Background(), batch(
+			"task-uuid",
+			events.LogLine{Stream: uint8(container.StreamStdout), Content: "one last line", At: first},
+		)))
+
+		assert.Equal(t, 0, repository.Count("task-uuid"))
+	})
+
 	t.Run("a malformed batch is dropped rather than redelivered", func(t *testing.T) {
 		t.Parallel()
 
 		repository := logs.NewInMemoryRepository()
 
-		assert.NoError(t, NewTaskLogged(repository, 0, discardLogger()).Handle(context.Background(), []byte("{")))
+		assert.NoError(t, NewTaskLogged(stillThere(), repository, 0, discardLogger()).Handle(context.Background(), []byte("{")))
 	})
 }
