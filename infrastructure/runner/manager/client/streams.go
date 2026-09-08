@@ -52,6 +52,26 @@ func (c *Client) FollowContainerLogs(ctx context.Context, uuid string, after tim
 	return &logStream{conn: conn, taskUUID: uuid}, nil
 }
 
+// WatchContainers follows what happens to the containers the runner holds.
+func (c *Client) WatchContainers(ctx context.Context) (runnerManager.ContainerStream, error) {
+	conn, err := c.dial(ctx, "/api/tasks/watch", nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return &containerStream{conn: conn}, nil
+}
+
+// WatchStacks follows what happens to the stacks the runner holds.
+func (c *Client) WatchStacks(ctx context.Context) (runnerManager.StackStream, error) {
+	conn, err := c.dial(ctx, "/api/stacks/watch", nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return &stackStream{conn: conn}, nil
+}
+
 // dial opens a websocket to the manager. A handshake refused with 404 is a
 // container that is not there, which the layers above already know how to
 // report.
@@ -169,6 +189,70 @@ func (a *attachment) Close() error {
 	})
 
 	return a.shutErr
+}
+
+// containerStream reads the containers' changes as the manager sends them.
+type containerStream struct {
+	conn *websocket.Conn
+
+	shut    sync.Once
+	shutErr error
+}
+
+var _ runnerManager.ContainerStream = &containerStream{}
+
+func (s *containerStream) Next(ctx context.Context) (runnerManager.ContainerChange, error) {
+	// closing the connection is what releases a reader parked here, so a
+	// cancelled context has to reach it that way.
+	stop := context.AfterFunc(ctx, func() { _ = s.Close() })
+	defer stop()
+
+	var payload changePayload
+	if err := s.conn.ReadJSON(&payload); err != nil {
+		return runnerManager.ContainerChange{}, io.EOF
+	}
+
+	return payload.toChange(), nil
+}
+
+func (s *containerStream) Close() error {
+	s.shut.Do(func() {
+		s.shutErr = s.conn.Close()
+	})
+
+	return s.shutErr
+}
+
+// stackStream reads the stacks' changes as the manager sends them.
+type stackStream struct {
+	conn *websocket.Conn
+
+	shut    sync.Once
+	shutErr error
+}
+
+var _ runnerManager.StackStream = &stackStream{}
+
+func (s *stackStream) Next(ctx context.Context) (runnerManager.StackChange, error) {
+	// closing the connection is what releases a reader parked here, so a
+	// cancelled context has to reach it that way.
+	stop := context.AfterFunc(ctx, func() { _ = s.Close() })
+	defer stop()
+
+	var payload stackChangePayload
+	if err := s.conn.ReadJSON(&payload); err != nil {
+		return runnerManager.StackChange{}, io.EOF
+	}
+
+	return payload.toChange(), nil
+}
+
+func (s *stackStream) Close() error {
+	s.shut.Do(func() {
+		s.shutErr = s.conn.Close()
+	})
+
+	return s.shutErr
 }
 
 // logStream reads a container's lines as the manager sends them.
