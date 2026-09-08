@@ -40,15 +40,20 @@ type Response struct {
 	// stopped, as the node that made it set it.
 	Deadline time.Time `json:"deadline,omitempty"`
 
-	Reason        string         `json:"reason,omitempty"`
-	Limits        LimitsResponse `json:"resource_limits"`
-	NodeName      string         `json:"node_name"`
-	OwnerUUID     string         `json:"owner_uuid"`
-	CreatedAt     time.Time      `json:"created_at"`
-	StartedAt     time.Time      `json:"started_at"`
-	FinishedAt    time.Time      `json:"finished_at"`
-	ContainerID   string         `json:"container_id"`
-	ContainerLogs []byte         `json:"container_logs"`
+	Reason   string         `json:"reason,omitempty"`
+	Limits   LimitsResponse `json:"resource_limits"`
+	NodeName string         `json:"node_name"`
+
+	// NodeAPI is host:port of that node's own API. A terminal and a live log
+	// exist only on the node holding the container, so whoever wants one is
+	// told where to ask rather than asking through the manager.
+	NodeAPI       string    `json:"node_api,omitempty"`
+	OwnerUUID     string    `json:"owner_uuid"`
+	CreatedAt     time.Time `json:"created_at"`
+	StartedAt     time.Time `json:"started_at"`
+	FinishedAt    time.Time `json:"finished_at"`
+	ContainerID   string    `json:"container_id"`
+	ContainerLogs []byte    `json:"container_logs"`
 }
 
 // EndpointResponse is one of a container's exposed ports. The node and the
@@ -67,6 +72,8 @@ type LimitsResponse struct {
 }
 
 // NewResponse creates a new response from a task
+// NewResponse presents a task. The node's own address is filled in by whoever
+// knows it, since a task carries the node's name and not where it answers.
 func NewResponse(t task.Task) *Response {
 	environment := make([]string, len(t.Environment))
 	copy(environment, t.Environment)
