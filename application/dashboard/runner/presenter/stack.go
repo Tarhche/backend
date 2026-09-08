@@ -14,23 +14,27 @@ type Stack struct {
 	State     string      `json:"state"`
 	Services  []Container `json:"services"`
 	CreatedAt time.Time   `json:"created_at"`
+
+	// Owner is who asked for this stack.
+	Owner Owner `json:"owner"`
 }
 
-func NewStack(s runnerManager.Stack, ingressDomain string) Stack {
+func NewStack(s runnerManager.Stack, ingressDomain string, owners Owners) Stack {
 	return Stack{
 		UUID:      s.UUID,
 		Name:      s.Name,
 		Slug:      s.Slug,
 		State:     s.State.String(),
-		Services:  NewContainers(s.Services, ingressDomain),
+		Services:  NewContainers(s.Services, ingressDomain, owners),
 		CreatedAt: s.CreatedAt,
+		Owner:     owners.Of(s.OwnerUUID),
 	}
 }
 
-func NewStacks(stacks []runnerManager.Stack, ingressDomain string) []Stack {
+func NewStacks(stacks []runnerManager.Stack, ingressDomain string, owners Owners) []Stack {
 	items := make([]Stack, len(stacks))
 	for i := range stacks {
-		items[i] = NewStack(stacks[i], ingressDomain)
+		items[i] = NewStack(stacks[i], ingressDomain, owners)
 	}
 
 	return items

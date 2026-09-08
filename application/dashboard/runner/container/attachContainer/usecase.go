@@ -15,6 +15,7 @@ import (
 	"log/slog"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
+	runnerAccess "github.com/khanzadimahdi/testproject/application/dashboard/runner/access"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/permission"
 	runnerManager "github.com/khanzadimahdi/testproject/domain/runner/manager"
@@ -29,6 +30,7 @@ type UseCase struct {
 	runner        runnerManager.Client
 	authenticator *auth.Authenticator
 	authorizer    domain.Authorizer
+	containers    *runnerAccess.Containers
 	validator     domain.Validator
 	replyer       domain.Replyer
 
@@ -46,6 +48,7 @@ func NewUseCase(
 	runner runnerManager.Client,
 	authenticator *auth.Authenticator,
 	authorizer domain.Authorizer,
+	containers *runnerAccess.Containers,
 	validator domain.Validator,
 	replyer domain.Replyer,
 	streams *gateway.Streams,
@@ -55,6 +58,7 @@ func NewUseCase(
 		runner:        runner,
 		authenticator: authenticator,
 		authorizer:    authorizer,
+		containers:    containers,
 		validator:     validator,
 		replyer:       replyer,
 		streams:       streams,
@@ -80,22 +84,19 @@ func (uc *UseCase) Handle(ctx context.Context, data []byte) error {
 	}
 
 	// a terminal is the strongest thing the dashboard offers — it is a shell
-	// inside somebody's container — so it has a permission of its own.
-	allowed, err := uc.authorizer.Authorize(ctx, user.UUID, permission.RunnerContainersAttach)
+	// inside somebody's container — so it has a permission of its own, and a
+	// container that is not this person's is not one they may open.
+	// looked up as far as this person may reach: a container that is not
+	// theirs is not there for them.
+	// looked up as far as this person may reach, which also says which node is
+	// holding it -- a terminal only exists there, and the ingress will not work
+	// that out, because it proxies and decides nothing.
+	container, err := uc.containers.Of(ctx, user.UUID, request.ContainerUUID, permission.RunnerContainersAttach, permission.SelfRunnerContainersAttach)
 	if err != nil {
-		return err
-	}
+		if errors.Is(err, domain.ErrNotExists) {
+			return uc.fail(ctx, request.ID, domain.ValidationErrors{"container_uuid": "not_exists"})
+		}
 
-	if !allowed {
-		return uc.fail(ctx, request.ID, domain.ValidationErrors{"container_uuid": "forbidden"})
-	}
-
-	// which node is holding it, because a terminal only exists there and the
-	// ingress will not work it out -- it proxies and decides nothing.
-	container, err := uc.runner.Container(ctx, request.ContainerUUID)
-	if errors.Is(err, domain.ErrNotExists) {
-		return uc.fail(ctx, request.ID, domain.ValidationErrors{"container_uuid": "not_exists"})
-	} else if err != nil {
 		return err
 	}
 

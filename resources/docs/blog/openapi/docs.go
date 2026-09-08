@@ -2565,6 +2565,502 @@ const docTemplate = `{
                 }
             }
         },
+        "/dashboard/my/runner/containers": {
+            "get": {
+                "description": "paginated list of the containers the current user owns",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard runner"
+                ],
+                "summary": "List my containers",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page",
+                        "name": "page",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/getusercontainers.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/my/runner/containers/{uuid}": {
+            "get": {
+                "description": "one of the containers the current user owns",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard runner"
+                ],
+                "summary": "Show own container",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Container UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/getusercontainer.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "stop and remove one of your own containers",
+                "tags": [
+                    "dashboard runner"
+                ],
+                "summary": "Delete own container",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Container UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/my/runner/containers/{uuid}/kill": {
+            "post": {
+                "description": "stop one of your own containers at once",
+                "tags": [
+                    "dashboard runner"
+                ],
+                "summary": "Kill own container",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Container UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/my/runner/containers/{uuid}/logs": {
+            "get": {
+                "description": "what one of your own containers has written",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard runner"
+                ],
+                "summary": "Own container logs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Container UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Only lines written after this time (RFC3339)",
+                        "name": "after",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "How many lines",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/getusercontainerlogs.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/my/runner/containers/{uuid}/restart": {
+            "post": {
+                "description": "restart one of your own containers",
+                "tags": [
+                    "dashboard runner"
+                ],
+                "summary": "Restart own container",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Container UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/my/runner/containers/{uuid}/stop": {
+            "post": {
+                "description": "stop one of your own containers",
+                "tags": [
+                    "dashboard runner"
+                ],
+                "summary": "Stop own container",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Container UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/my/runner/stacks": {
+            "get": {
+                "description": "paginated list of the stacks the current user owns",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard runner"
+                ],
+                "summary": "List my stacks",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page",
+                        "name": "page",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/getuserstacks.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/my/runner/stacks/{uuid}": {
+            "get": {
+                "description": "one of the stacks the current user owns",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard runner"
+                ],
+                "summary": "Show own stack",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Stack UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/getuserstack.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "stop and remove one of your own stacks",
+                "tags": [
+                    "dashboard runner"
+                ],
+                "summary": "Delete own stack",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Stack UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/my/runner/stacks/{uuid}/kill": {
+            "post": {
+                "description": "stop every service of one of your own stacks at once",
+                "tags": [
+                    "dashboard runner"
+                ],
+                "summary": "Kill own stack",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Stack UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/my/runner/stacks/{uuid}/restart": {
+            "post": {
+                "description": "restart every service of one of your own stacks",
+                "tags": [
+                    "dashboard runner"
+                ],
+                "summary": "Restart own stack",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Stack UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/my/runner/stacks/{uuid}/stop": {
+            "post": {
+                "description": "stop every service of one of your own stacks",
+                "tags": [
+                    "dashboard runner"
+                ],
+                "summary": "Stop own stack",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Stack UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/dashboard/permissions": {
             "get": {
                 "description": "retrieve all permissions",
@@ -4653,6 +5149,14 @@ const docTemplate = `{
                 "name": {
                     "type": "string"
                 },
+                "owner": {
+                    "description": "Owner is who asked for this container.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/presenter.Owner"
+                        }
+                    ]
+                },
                 "resource_limits": {
                     "$ref": "#/definitions/presenter.Limits"
                 },
@@ -5462,6 +5966,118 @@ const docTemplate = `{
                 }
             }
         },
+        "getusercontainer.Response": {
+            "type": "object",
+            "properties": {
+                "command": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "endpoints": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/presenter.Endpoint"
+                    }
+                },
+                "entrypoint": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "environment": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "finished_at": {
+                    "type": "string"
+                },
+                "image": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "owner": {
+                    "description": "Owner is who asked for this container.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/presenter.Owner"
+                        }
+                    ]
+                },
+                "resource_limits": {
+                    "$ref": "#/definitions/presenter.Limits"
+                },
+                "service_name": {
+                    "type": "string"
+                },
+                "slug": {
+                    "type": "string"
+                },
+                "stack_uuid": {
+                    "type": "string"
+                },
+                "started_at": {
+                    "type": "string"
+                },
+                "state": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                },
+                "working_dir": {
+                    "type": "string"
+                }
+            }
+        },
+        "getusercontainerlogs.LogResponse": {
+            "type": "object",
+            "properties": {
+                "at": {
+                    "type": "string"
+                },
+                "content": {
+                    "type": "string"
+                },
+                "stream": {
+                    "type": "string"
+                }
+            }
+        },
+        "getusercontainerlogs.Response": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/getusercontainerlogs.LogResponse"
+                    }
+                }
+            }
+        },
+        "getusercontainers.Response": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/presenter.Container"
+                    }
+                },
+                "pagination": {
+                    "$ref": "#/definitions/presenter.Pagination"
+                }
+            }
+        },
         "getuserfiles.Response": {
             "type": "object",
             "properties": {
@@ -5549,6 +6165,54 @@ const docTemplate = `{
                 },
                 "uuid": {
                     "type": "string"
+                }
+            }
+        },
+        "getuserstack.Response": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "owner": {
+                    "description": "Owner is who asked for this stack.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/presenter.Owner"
+                        }
+                    ]
+                },
+                "services": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/presenter.Container"
+                    }
+                },
+                "slug": {
+                    "type": "string"
+                },
+                "state": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                }
+            }
+        },
+        "getuserstacks.Response": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/presenter.Stack"
+                    }
+                },
+                "pagination": {
+                    "$ref": "#/definitions/presenter.Pagination"
                 }
             }
         },
@@ -5979,6 +6643,14 @@ const docTemplate = `{
                 "name": {
                     "type": "string"
                 },
+                "owner": {
+                    "description": "Owner is who asked for this stack.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/presenter.Owner"
+                        }
+                    ]
+                },
                 "services": {
                     "type": "array",
                     "items": {
@@ -6035,6 +6707,14 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
+                },
+                "owner": {
+                    "description": "Owner is who asked for this stack.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/presenter.Owner"
+                        }
+                    ]
                 },
                 "services": {
                     "type": "array",
@@ -6245,6 +6925,14 @@ const docTemplate = `{
                 "name": {
                     "type": "string"
                 },
+                "owner": {
+                    "description": "Owner is who asked for this container.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/presenter.Owner"
+                        }
+                    ]
+                },
                 "resource_limits": {
                     "$ref": "#/definitions/presenter.Limits"
                 },
@@ -6299,6 +6987,23 @@ const docTemplate = `{
                 }
             }
         },
+        "presenter.Owner": {
+            "type": "object",
+            "properties": {
+                "avatar": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                }
+            }
+        },
         "presenter.Pagination": {
             "type": "object",
             "properties": {
@@ -6318,6 +7023,14 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
+                },
+                "owner": {
+                    "description": "Owner is who asked for this stack.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/presenter.Owner"
+                        }
+                    ]
                 },
                 "services": {
                     "type": "array",
@@ -6466,6 +7179,14 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
+                },
+                "owner": {
+                    "description": "Owner is who asked for this container.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/presenter.Owner"
+                        }
+                    ]
                 },
                 "resource_limits": {
                     "$ref": "#/definitions/presenter.Limits"

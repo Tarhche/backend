@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
+	runnerAccess "github.com/khanzadimahdi/testproject/application/dashboard/runner/access"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/permission"
 	runnerManager "github.com/khanzadimahdi/testproject/domain/runner/manager"
@@ -60,6 +61,7 @@ type UseCase struct {
 	runner        runnerManager.Client
 	authenticator *auth.Authenticator
 	authorizer    domain.Authorizer
+	containers    *runnerAccess.Containers
 	validator     domain.Validator
 	replyer       domain.Replyer
 	streams       *gateway.Streams
@@ -72,6 +74,7 @@ func NewUseCase(
 	runner runnerManager.Client,
 	authenticator *auth.Authenticator,
 	authorizer domain.Authorizer,
+	containers *runnerAccess.Containers,
 	validator domain.Validator,
 	replyer domain.Replyer,
 	streams *gateway.Streams,
@@ -81,6 +84,7 @@ func NewUseCase(
 		runner:        runner,
 		authenticator: authenticator,
 		authorizer:    authorizer,
+		containers:    containers,
 		validator:     validator,
 		replyer:       replyer,
 		streams:       streams,
@@ -103,13 +107,14 @@ func (uc *UseCase) Handle(ctx context.Context, data []byte) error {
 		return uc.fail(ctx, request.ID, domain.ValidationErrors{"access_token": "unauthenticated"})
 	}
 
-	allowed, err := uc.authorizer.Authorize(ctx, user.UUID, permission.RunnerContainersLogs)
-	if err != nil {
-		return err
-	}
+	// looked up as far as this person may reach: a container that is not
+	// theirs is not there for them.
+	if _, err := uc.containers.Of(ctx, user.UUID, request.ContainerUUID, permission.RunnerContainersLogs, permission.SelfRunnerContainersLogs); err != nil {
+		if errors.Is(err, domain.ErrNotExists) {
+			return uc.fail(ctx, request.ID, domain.ValidationErrors{"container_uuid": "not_exists"})
+		}
 
-	if !allowed {
-		return uc.fail(ctx, request.ID, domain.ValidationErrors{"container_uuid": "forbidden"})
+		return err
 	}
 
 	stream, err := uc.runner.FollowContainerLogs(ctx, request.ContainerUUID, request.After)

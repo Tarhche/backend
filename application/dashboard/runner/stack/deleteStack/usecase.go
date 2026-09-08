@@ -10,7 +10,7 @@ type Request struct {
 	UUID string `json:"-"`
 }
 
-// UseCase removes a stack: its services, their logs and the private network they shared. The runner owns its lifecycle, so this passes the
+// UseCase takes away a stack. The runner owns its lifecycle, so this passes the
 // command on rather than deciding anything about it.
 type UseCase struct {
 	runner runnerManager.Client

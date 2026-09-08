@@ -2,10 +2,12 @@ package container
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 
 	getContainers "github.com/khanzadimahdi/testproject/application/dashboard/runner/container/getContainers"
+	"github.com/khanzadimahdi/testproject/domain"
 	infraTrace "github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -35,6 +37,8 @@ func (h *indexHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 	response, err := h.useCase.Execute(r.Context(), &getContainers.Request{Page: page})
 	switch {
+	case errors.Is(err, domain.ErrNotExists):
+		rw.WriteHeader(http.StatusNotFound)
 	case err != nil:
 		infraTrace.RecordError(trace.SpanFromContext(r.Context()), err)
 		rw.WriteHeader(http.StatusInternalServerError)
