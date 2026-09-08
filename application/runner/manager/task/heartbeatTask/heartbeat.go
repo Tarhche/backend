@@ -41,9 +41,13 @@ func (h *Heartbeat) Handle(ctx context.Context, data []byte) error {
 		return err
 	}
 
-	t.ContainerLogs = heartbeat.Logs
-	_, err = h.taskRepository.Save(ctx, &t)
-	if err != nil {
+	// a job's whole log rides its heartbeat; a service's is streamed line by
+	// line and kept in the log repository instead.
+	if t.Kind != task.KindService {
+		t.ContainerLogs = heartbeat.Logs
+	}
+
+	if _, err = h.taskRepository.Save(ctx, &t); err != nil {
 		return err
 	}
 
@@ -76,6 +80,7 @@ func (uc *Heartbeat) publishTaskRan(ctx context.Context, heartbeat *events.Heart
 		UUID:          heartbeat.UUID,
 		NodeName:      heartbeat.NodeName,
 		ContainerUUID: heartbeat.ContainerUUID,
+		Endpoints:     heartbeat.Endpoints,
 		StartedAt:     heartbeat.At,
 	}
 

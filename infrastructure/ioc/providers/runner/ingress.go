@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/danceable/provider"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	checkhealth "github.com/khanzadimahdi/testproject/application/app/checkHealth"
 	ingressGetRunner "github.com/khanzadimahdi/testproject/application/runner/ingress/getRunner"
@@ -15,6 +16,8 @@ import (
 	ingressContract "github.com/khanzadimahdi/testproject/domain/runner/ingress"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/certificate"
+	infraHealth "github.com/khanzadimahdi/testproject/infrastructure/health"
+	taskrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/runner/tasks"
 	"github.com/khanzadimahdi/testproject/infrastructure/runner/tunnel"
 	"github.com/khanzadimahdi/testproject/infrastructure/telemetry/profiler"
 	healthAPI "github.com/khanzadimahdi/testproject/presentation/http/health"
@@ -150,11 +153,17 @@ func (p *ingressProvider) Terminate(ctx context.Context) error {
 }
 
 func ingressConsoleCommand(
+	database *mongo.Database,
 	registry ingressContract.Registry,
 	iocContainer provider.Container,
 ) (http.Handler, error) {
 	var logger *slog.Logger
 	if err := iocContainer.Resolve(&logger, provider.WithParams(ingressLoggerName)); err != nil {
+		return nil, err
+	}
+
+	var ingressConfigs *configs.RunnerIngress
+	if err := iocContainer.Resolve(&ingressConfigs); err != nil {
 		return nil, err
 	}
 
@@ -165,9 +174,13 @@ func ingressConsoleCommand(
 
 	getRunnerUseCase := ingressGetRunner.NewUseCase(registry)
 
-	// the ingress talks to nothing it has to reach: it holds the connections
-	// the workers opened, and there is nothing to be reachable but itself.
-	checkHealthUseCase := checkhealth.NewUseCase()
+	// which node is holding a container is the manager's record of it, and the
+	// only thing here that outlives a connection.
+	taskRepository := taskrepository.NewRepository(database)
+
+	checkHealthUseCase := checkhealth.NewUseCase(
+		checkhealth.Dependency{Name: "database", Pinger: infraHealth.NewMongodbPinger(database)},
+	)
 
 	// a transport that dials nothing. The address it is given names a runner,
 	// and what comes back is a stream on one of the connections that runner
@@ -188,9 +201,9 @@ func ingressConsoleCommand(
 	mux := http.NewServeMux()
 
 	// CORS goes on the ingress's own answers and no further: what it proxies is
-	// the runner's to answer for, a preflight included. A header set here would
-	// otherwise arrive alongside the one the runner sent, and two
-	// Access-Control-Allow-Origin headers are worse than none.
+	// the runner's or the container's to answer for, a preflight included. A
+	// header set here would otherwise arrive alongside the one upstream sent,
+	// and two Access-Control-Allow-Origin headers are worse than none.
 
 	// the container healthcheck probes this
 	mux.Handle("GET /health", middleware.NewCORSMiddleware(healthAPI.NewHealthHandler(checkHealthUseCase)))
@@ -203,9 +216,18 @@ func ingressConsoleCommand(
 		return nil, err
 	}
 
+	// a request to a hostname under the containers' domain is a container's own
+	// traffic and goes to the node holding it; everything else is one of the
+	// ingress's own routes.
+	router := ingressAPI.NewRouter(
+		ingressAPI.NewContainerHandler(taskRepository, registry, transport, ingressConfigs.Domain, logger),
+		mux,
+		ingressConfigs.Domain,
+	)
+
 	// no rate limit: what comes through here is a container's own traffic —
-	// an attached terminal, a log being followed — which a cap per minute
-	// would cut off rather than pace.
+	// an attached terminal, a log being followed, whatever the container itself
+	// serves — which a cap per minute would cut off rather than pace.
 	handler := middleware.NewRecoveryMiddleware(
 		middleware.NewRequestIDMiddleware(
 			middleware.NewTelemetryMiddleware(
@@ -213,7 +235,7 @@ func ingressConsoleCommand(
 				// inside Telemetry so profile samples link to the request span
 				middleware.NewProfilingMiddleware(
 					middleware.NewLogMiddleware(
-						mux,
+						router,
 						logger,
 					),
 					tracedProfiler,

@@ -14,14 +14,22 @@ import (
 
 	checkhealth "github.com/khanzadimahdi/testproject/application/app/checkHealth"
 	workerHeartbeat "github.com/khanzadimahdi/testproject/application/runner/worker/beatHeart"
+	workerGetEndpoint "github.com/khanzadimahdi/testproject/application/runner/worker/container/getEndpoint"
+	workerDeleteStack "github.com/khanzadimahdi/testproject/application/runner/worker/stack/deleteStack"
+	workerAttachTask "github.com/khanzadimahdi/testproject/application/runner/worker/task/attachTask"
 	workerTaskHeartbeat "github.com/khanzadimahdi/testproject/application/runner/worker/task/beatHeart"
 	workerDeleteTask "github.com/khanzadimahdi/testproject/application/runner/worker/task/deleteTask"
 	workergettasks "github.com/khanzadimahdi/testproject/application/runner/worker/task/getTasks"
+	workerkilltask "github.com/khanzadimahdi/testproject/application/runner/worker/task/killTask"
+	workerrestarttask "github.com/khanzadimahdi/testproject/application/runner/worker/task/restartTask"
 	workerruntask "github.com/khanzadimahdi/testproject/application/runner/worker/task/runTask"
+	workerShipLogs "github.com/khanzadimahdi/testproject/application/runner/worker/task/shipLogs"
 	workerstoptask "github.com/khanzadimahdi/testproject/application/runner/worker/task/stopTask"
 	"github.com/khanzadimahdi/testproject/domain"
 	containerContract "github.com/khanzadimahdi/testproject/domain/runner/container"
+	networkContract "github.com/khanzadimahdi/testproject/domain/runner/network"
 	nodeContract "github.com/khanzadimahdi/testproject/domain/runner/node"
+	stackEvents "github.com/khanzadimahdi/testproject/domain/runner/stack/events"
 	taskEvents "github.com/khanzadimahdi/testproject/domain/runner/task/events"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/certificate"
@@ -31,6 +39,7 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/telemetry/profiler"
 	healthAPI "github.com/khanzadimahdi/testproject/presentation/http/health"
 	"github.com/khanzadimahdi/testproject/presentation/http/middleware"
+	workerContainerAPI "github.com/khanzadimahdi/testproject/presentation/http/runner/worker/api/container"
 	workerTaskAPI "github.com/khanzadimahdi/testproject/presentation/http/runner/worker/api/task"
 )
 
@@ -198,6 +207,7 @@ func (p *workerProvider) Terminate(ctx context.Context) error {
 func workerConsoleCommand(
 	natsConnection *nats.Conn,
 	containerManager containerContract.Manager,
+	networkManager networkContract.Manager,
 	nodeManager nodeContract.Manager,
 	asyncProduceConsumer domain.ProduceConsumer,
 	validator domain.Validator,
@@ -213,30 +223,62 @@ func workerConsoleCommand(
 		return nil, err
 	}
 
+	var workerConfigs *configs.RunnerWorker
+	if err := iocContainer.Resolve(&workerConfigs); err != nil {
+		return nil, err
+	}
+
+	// the network standalone isolated containers share is this node's to make,
+	// and it has to be there before the first container tries to join it.
+	if err := networkManager.EnsureIsolatedNetwork(context.Background()); err != nil {
+		return nil, err
+	}
+
 	// tasks
 	getTasksUseCase := workergettasks.NewUseCase(containerManager, nodeName)
-	runTaskUseCase := workerruntask.NewUseCase(containerManager, validator, nodeName)
+	runTaskUseCase := workerruntask.NewUseCase(containerManager, networkManager, validator, nodeName)
 	stopTaskUseCase := workerstoptask.NewUseCase(containerManager, validator)
+	killTaskUseCase := workerkilltask.NewUseCase(containerManager, validator)
+	restartTaskUseCase := workerrestarttask.NewUseCase(containerManager, validator)
 	deleteTaskUseCase := workerDeleteTask.NewUseCase(containerManager, validator)
+	attachTaskUseCase := workerAttachTask.NewUseCase(containerManager, validator)
 
 	// the worker talks to no database, so messaging is its only dependency
 	checkHealthUseCase := checkhealth.NewUseCase(
 		checkhealth.Dependency{Name: "messaging", Pinger: infraHealth.NewNatsPinger(natsConnection)},
 	)
 
-	mux := http.NewServeMux()
+	api := http.NewServeMux()
 
 	// the container healthcheck probes this
-	mux.Handle("GET /health", healthAPI.NewHealthHandler(checkHealthUseCase))
+	api.Handle("GET /health", healthAPI.NewHealthHandler(checkHealthUseCase))
 
-	mux.Handle("GET /api/tasks", workerTaskAPI.NewIndexHandler(getTasksUseCase))
-	mux.Handle("POST /api/tasks/run", workerTaskAPI.NewRunHandler(runTaskUseCase))
-	mux.Handle("POST /api/tasks/{uuid}/stop", workerTaskAPI.NewStopHandler(stopTaskUseCase))
+	api.Handle("GET /api/tasks", workerTaskAPI.NewIndexHandler(getTasksUseCase))
+	api.Handle("POST /api/tasks/run", workerTaskAPI.NewRunHandler(runTaskUseCase))
+	api.Handle("POST /api/tasks/{uuid}/stop", workerTaskAPI.NewStopHandler(stopTaskUseCase))
+	api.Handle("POST /api/tasks/{uuid}/kill", workerTaskAPI.NewKillHandler(killTaskUseCase))
+	api.Handle("POST /api/tasks/{uuid}/restart", workerTaskAPI.NewRestartHandler(restartTaskUseCase))
 
-	rateLimited, err := middleware.NewRateLimitMiddleware(mux, 600, 1*time.Minute)
+	// a terminal inside a container. Only the manager reaches this, and it is
+	// what decides who may open one.
+	api.Handle("GET /api/tasks/{uuid}/attach", workerTaskAPI.NewAttachHandler(attachTaskUseCase, logger))
+
+	rateLimited, err := middleware.NewRateLimitMiddleware(api, 600, 1*time.Minute)
 	if err != nil {
 		return nil, err
 	}
+
+	mux := http.NewServeMux()
+
+	// the node's own answers, which are capped and carry its own headers
+	mux.Handle("/", middleware.NewCORSMiddleware(rateLimited))
+
+	// a container this node is holding, which only this node can reach: the
+	// ingress works out whose it is and sends the request here. Neither the cap
+	// nor the headers belong on it — what comes through is the container's own
+	// traffic, and answering for it is the container's, a preflight included.
+	getEndpointUseCase := workerGetEndpoint.NewUseCase(containerManager, workerConfigs.AdvertiseHost)
+	mux.Handle("/containers/{slug}/{port}/{path...}", workerContainerAPI.NewProxyHandler(getEndpointUseCase, logger))
 
 	var tracedProfiler *profiler.TracedProfiler
 	if err := iocContainer.Resolve(&tracedProfiler); err != nil {
@@ -250,9 +292,7 @@ func workerConsoleCommand(
 				// inside Telemetry so profile samples link to the request span
 				middleware.NewProfilingMiddleware(
 					middleware.NewLogMiddleware(
-						middleware.NewCORSMiddleware(
-							rateLimited,
-						),
+						mux,
 						logger,
 					),
 					tracedProfiler,
@@ -265,7 +305,10 @@ func workerConsoleCommand(
 	subscribers := map[string]domain.MessageHandler{
 		taskEvents.TaskScheduledName:         workerruntask.NewTaskScheduled(runTaskUseCase, nodeName),
 		taskEvents.TaskStoppageRequestedName: workerstoptask.NewStoppageTaskHandler(stopTaskUseCase),
+		taskEvents.TaskKillRequestedName:     workerkilltask.NewKillTaskHandler(killTaskUseCase),
+		taskEvents.TaskRestartRequestedName:  workerrestarttask.NewRestartTaskHandler(restartTaskUseCase),
 		taskEvents.TaskDeletedName:           workerDeleteTask.NewDeleteTaskHandler(deleteTaskUseCase),
+		stackEvents.StackDeletedName:         workerDeleteStack.NewStackDeletedHandler(networkManager, nodeName, logger),
 	}
 
 	// worker subscribers
@@ -285,6 +328,14 @@ func workerConsoleCommand(
 	// task heartbeat
 	if err := iocContainer.Bind(func() *workerTaskHeartbeat.UseCase {
 		return workerTaskHeartbeat.NewUseCase(containerManager, asyncProduceConsumer, nodeName, logger)
+	}, provider.Singleton()); err != nil {
+		return nil, err
+	}
+
+	// log shipping, which is what makes a long-running container's output
+	// outlive the container.
+	if err := iocContainer.Bind(func() *workerShipLogs.UseCase {
+		return workerShipLogs.NewUseCase(containerManager, asyncProduceConsumer, nodeName, logger)
 	}, provider.Singleton()); err != nil {
 		return nil, err
 	}

@@ -5,18 +5,23 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"slices"
 	"time"
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/runner/container"
+	"github.com/khanzadimahdi/testproject/domain/runner/task"
 	"github.com/khanzadimahdi/testproject/domain/runner/task/events"
 )
 
+// UseCase reports what this node is running, so the manager can follow every
+// container's state and learn which of its ports came up.
 type UseCase struct {
 	containerManager container.Manager
 	messageProducer  domain.Producer
 	nodeName         string
-	logger           *slog.Logger
+
+	logger *slog.Logger
 }
 
 func NewUseCase(
@@ -39,38 +44,21 @@ func (uc *UseCase) Execute(ctx context.Context) error {
 		return err
 	}
 
-	var eventBuffer bytes.Buffer
-	var logsBuffer bytes.Buffer
-
 	for _, c := range allContainers {
-		if err := uc.containerManager.Logs(ctx, c.ID, &logsBuffer); err != nil {
-			uc.logger.WarnContext(ctx, "failed to fetch container logs", "error", err) // there are some cases that the container is not started yet and we can't get the logs
-		}
-
-		var logs []byte
-		if logsBuffer.Len() > 0 {
-			logs = make([]byte, logsBuffer.Len())
-			if _, err := logsBuffer.Read(logs); err != nil {
-				return err
-			}
-		}
-
 		event := events.Heartbeat{
 			UUID:          c.Labels[container.TaskUUIDLabelKey],
 			Name:          c.Labels[container.TaskNameLabelKey],
 			Image:         c.Image,
 			ContainerUUID: c.ID,
-			State:         int(uc.containerManager.EvaluateTaskState(c.Status)),
-			Logs:          logs,
+			State:         int(container.EvaluateTaskState(c.Status, kindOf(&c))),
+			NodeName:      uc.nodeName,
+			Endpoints:     uc.endpoints(&c),
+			Logs:          uc.logs(ctx, &c),
 			At:            time.Now(),
 		}
 
-		if err := json.NewEncoder(&eventBuffer).Encode(event); err != nil {
-			return err
-		}
-
-		payload := make([]byte, eventBuffer.Len())
-		if _, err := eventBuffer.Read(payload); err != nil {
+		payload, err := json.Marshal(event)
+		if err != nil {
 			return err
 		}
 
@@ -80,4 +68,73 @@ func (uc *UseCase) Execute(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// kindOf reads what a container is running from the label it was created with.
+// A container from before there were kinds is a job, which is what every one of
+// them was.
+func kindOf(c *container.Container) task.Kind {
+	if kind := task.Kind(c.Labels[container.TaskKindLabelKey]); kind.IsValid() {
+		return kind
+	}
+
+	return task.DefaultKind
+}
+
+// logs collects a container's whole output for the heartbeat to carry.
+//
+// Only a one-shot job's log travels this way: it is what the caller waiting on
+// that job receives when it finishes. A long-running service would make every
+// heartbeat carry its entire history, so its output is streamed line by line
+// and kept by the manager instead.
+func (uc *UseCase) logs(ctx context.Context, c *container.Container) []byte {
+	if kindOf(c) == task.KindService {
+		return nil
+	}
+
+	var buffer bytes.Buffer
+
+	if err := uc.containerManager.Logs(ctx, c.ID, &buffer); err != nil {
+		// a container that has not started yet has no logs to read, which is
+		// ordinary rather than a failure.
+		uc.logger.WarnContext(ctx, "failed to fetch container logs", "error", err)
+
+		return nil
+	}
+
+	if buffer.Len() == 0 {
+		return nil
+	}
+
+	return buffer.Bytes()
+}
+
+// endpoints reports which of a container's exposed ports docker actually
+// published. They are read from docker every heartbeat because a restarted
+// container comes back on different host ports.
+func (uc *UseCase) endpoints(c *container.Container) []events.Endpoint {
+	endpoints := make([]events.Endpoint, 0, len(c.PortBindings))
+
+	for containerPort, bindings := range c.PortBindings {
+		for _, binding := range bindings {
+			if binding.HostPort == 0 {
+				continue
+			}
+
+			endpoints = append(endpoints, events.Endpoint{
+				ContainerPort: containerPort,
+				HostPort:      binding.HostPort,
+			})
+
+			break
+		}
+	}
+
+	// docker hands back the bindings in no particular order, and the lowest
+	// exposed port is the one a bare hostname reaches.
+	slices.SortFunc(endpoints, func(a events.Endpoint, b events.Endpoint) int {
+		return int(a.ContainerPort) - int(b.ContainerPort)
+	})
+
+	return endpoints
 }
