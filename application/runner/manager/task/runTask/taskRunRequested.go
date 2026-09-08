@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 
+	"github.com/khanzadimahdi/testproject/domain/runner/task"
 	"github.com/khanzadimahdi/testproject/domain/runner/task/events"
 )
 
@@ -63,6 +64,10 @@ func (uc *TaskRunRequested) Handle(ctx context.Context, data []byte) error {
 	request := &Request{
 		Name:           event.Name,
 		Image:          event.Image,
+		StackUUID:      event.StackUUID,
+		StackSlug:      event.StackSlug,
+		ServiceName:    event.ServiceName,
+		NominatedNode:  event.NominatedNode,
 		AutoRemove:     event.AutoRemove,
 		PortBindings:   portBindings,
 		RestartPolicy:  event.RestartPolicy,
@@ -74,6 +79,11 @@ func (uc *TaskRunRequested) Handle(ctx context.Context, data []byte) error {
 		Environment:    event.Environment,
 		Command:        event.Command,
 		Entrypoint:     event.Entrypoint,
+		Kind:           task.Kind(event.Kind),
+		WorkingDir:     event.WorkingDir,
+		ReadOnly:       event.ReadOnly,
+		MaxRetries:     event.MaxRetries,
+		TTL:            event.TTL,
 		Mounts:         mounts,
 		ResourceLimits: resourceLimits,
 		OwnerUUID:      event.OwnerUUID,

@@ -1,24 +1,14 @@
 package getStacks
 
 import (
-	"time"
-
+	"github.com/khanzadimahdi/testproject/application/runner/manager/stack/internal/report"
 	"github.com/khanzadimahdi/testproject/domain/runner/stack"
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
 )
 
 type Response struct {
-	Items      []StackResponse `json:"items"`
-	Pagination Pagination      `json:"pagination"`
-}
-
-type StackResponse struct {
-	UUID      string    `json:"uuid"`
-	Name      string    `json:"name"`
-	Slug      string    `json:"slug"`
-	State     string    `json:"state"`
-	Services  uint      `json:"services"`
-	CreatedAt time.Time `json:"created_at"`
+	Items      []report.Stack `json:"items"`
+	Pagination Pagination     `json:"pagination"`
 }
 
 type Pagination struct {
@@ -27,16 +17,9 @@ type Pagination struct {
 }
 
 func NewResponse(stacks []stack.Stack, services map[string][]task.Task, totalPages uint, currentPage uint) *Response {
-	items := make([]StackResponse, len(stacks))
+	items := make([]report.Stack, len(stacks))
 	for i, s := range stacks {
-		items[i] = StackResponse{
-			UUID:      s.UUID,
-			Name:      s.Name,
-			Slug:      s.Slug,
-			State:     stack.State(services[s.UUID]).String(),
-			Services:  uint(len(services[s.UUID])),
-			CreatedAt: s.CreatedAt,
-		}
+		items[i] = report.NewStack(s, services[s.UUID])
 	}
 
 	return &Response{

@@ -7,6 +7,40 @@ import (
 // State reads a stack's condition off its services. A stack keeps no state of
 // its own: it is exactly as running as the containers in it, so there is one
 // state machine in the runner rather than two that can disagree.
+// ExpectedState is what a stack was asked to be, read off what its services
+// were asked to be.
+//
+// A stack is asked for as a whole, so its services agree; while a command is
+// still reaching all of them they may not, and one service still wanted running
+// is a stack still wanted running.
+func ExpectedState(services []task.Task) task.State {
+	var running, stopped, failed int
+
+	for _, service := range services {
+		switch service.ExpectedState {
+		case task.Running:
+			running++
+		case task.Stopped:
+			stopped++
+		case task.Failed:
+			failed++
+		}
+	}
+
+	switch {
+	case running > 0:
+		return task.Running
+	case stopped > 0:
+		return task.Stopped
+	case failed > 0:
+		return task.Failed
+	default:
+		// a stack from before there were expectations was not asked for
+		// anything in particular.
+		return 0
+	}
+}
+
 func State(services []task.Task) task.State {
 	if len(services) == 0 {
 		return task.Failed
@@ -21,12 +55,12 @@ func State(services []task.Task) task.State {
 
 	for _, service := range services {
 		switch {
-		case service.State == task.Failed:
+		case service.CurrentState == task.Failed:
 			failed++
 			terminal++
-		case service.State == task.Running:
+		case service.CurrentState == task.Running:
 			running++
-		case task.IsTerminalState(service.State):
+		case task.IsTerminalState(service.CurrentState):
 			terminal++
 		default:
 			inProgress++

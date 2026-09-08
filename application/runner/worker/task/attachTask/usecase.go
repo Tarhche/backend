@@ -8,7 +8,8 @@ import (
 )
 
 // UseCase opens a command inside a task's container and hands back the stream
-// it runs on. Closing that stream is what ends the command.
+// it runs on. Closing that stream releases it; ending the session is what stops
+// the command.
 type UseCase struct {
 	containerManager container.Manager
 	validator        domain.Validator

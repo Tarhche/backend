@@ -96,7 +96,7 @@ func ingressFor(t *testing.T, resolver Resolver, nodes map[string]*node) *contai
 }
 
 func held(slug string, nodeName string) task.Task {
-	return task.Task{Slug: slug, State: task.Running, NodeName: nodeName}
+	return task.Task{Slug: slug, CurrentState: task.Running, NodeName: nodeName}
 }
 
 func TestParseHost(t *testing.T) {
@@ -258,7 +258,7 @@ func TestContainerHandler(t *testing.T) {
 
 	t.Run("a container that is not running is unavailable", func(t *testing.T) {
 		resolver := &fakeResolver{tasks: map[string]task.Task{
-			"nginx-xkfqz": {Slug: "nginx-xkfqz", State: task.Stopped, NodeName: "runner-worker-01"},
+			"nginx-xkfqz": {Slug: "nginx-xkfqz", CurrentState: task.Stopped, NodeName: "runner-worker-01"},
 		}}
 
 		rw := httptest.NewRecorder()
@@ -273,7 +273,7 @@ func TestContainerHandler(t *testing.T) {
 
 	t.Run("a container that has not been scheduled is unavailable", func(t *testing.T) {
 		resolver := &fakeResolver{tasks: map[string]task.Task{
-			"nginx-xkfqz": {Slug: "nginx-xkfqz", State: task.Running},
+			"nginx-xkfqz": {Slug: "nginx-xkfqz", CurrentState: task.Running},
 		}}
 
 		rw := httptest.NewRecorder()

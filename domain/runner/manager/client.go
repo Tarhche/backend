@@ -147,6 +147,10 @@ type Client interface {
 type Stack struct {
 	stack.Stack
 
-	State    task.State
+	// State is what the stack is, read off its services; ExpectedState is what
+	// it was asked to be. They differ while a command is still reaching them.
+	State         task.State
+	ExpectedState task.State
+
 	Services []task.Task
 }

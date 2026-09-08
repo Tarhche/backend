@@ -23,7 +23,7 @@ func NewResponse(t *task.Task) *Response {
 	return &Response{
 		UUID:          t.UUID,
 		Name:          t.Name,
-		State:         t.State.String(),
+		State:         t.CurrentState.String(),
 		Image:         t.Image,
 		ContainerID:   t.ContainerID,
 		ContainerLogs: t.ContainerLogs,

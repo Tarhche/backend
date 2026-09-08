@@ -3,6 +3,7 @@ package container
 import (
 	"context"
 	"io"
+	"strconv"
 	"time"
 
 	"github.com/khanzadimahdi/testproject/domain/runner/network"
@@ -19,8 +20,13 @@ type Container struct {
 	RestartPolicy    string
 	RestartCount     uint
 	WorkingDirectory string
-	ExposedPorts     port.PortSet
-	PortBindings     port.PortMap
+
+	// ReadOnly makes the container's root filesystem immutable, so nothing it
+	// runs can change the image it was started from.
+	ReadOnly bool
+
+	ExposedPorts port.PortSet
+	PortBindings port.PortMap
 
 	// Networks are the networks the container joins, in order. The first is
 	// the one it is created on; the rest it is connected to afterwards, which
@@ -34,6 +40,18 @@ type Container struct {
 	Command     []string
 	Labels      map[string]string
 	CreatedAt   time.Time
+}
+
+// Attempt is which attempt at its task this container is, counting from zero,
+// as it was labelled when it was created. One from before attempts were
+// counted is the first of them.
+func (c *Container) Attempt() int {
+	attempt, err := strconv.Atoi(c.Labels[TaskAttemptLabelKey])
+	if err != nil || attempt < 0 {
+		return 0
+	}
+
+	return attempt
 }
 
 // ResourceLimits represents the resource limits of the container
@@ -59,6 +77,16 @@ type ExecSession interface {
 
 	// Resize tells the command's terminal how big it now is.
 	Resize(ctx context.Context, rows uint, cols uint) error
+
+	// End stops the command, and everything it started, once nobody is
+	// attached to it any more.
+	//
+	// Closing a session only releases the stream it ran on: what was running
+	// inside the container carries on, with nothing to show it to and no way
+	// back to it. Ending gives it a moment to finish on its own, asks it to
+	// stop, and stops it for good if it will not. A command that has already
+	// finished is left alone.
+	End(ctx context.Context) error
 }
 
 // Manager represents a manager of containers
@@ -84,4 +112,10 @@ const (
 	TaskSlugLabelKey = "task.slug" // The unique, publicly addressable name of the task
 	TaskKindLabelKey = "task.kind" // Whether the task is a one-shot job or a long-running service
 	NodeNameLabelKey = "node.name" // the name of the node that manages the container.
+
+	// TaskAttemptLabelKey is which attempt this container is, counting from
+	// zero. It is kept on the container rather than written down anywhere,
+	// because that is exactly how long it means anything: a container that is
+	// taken away takes the failures behind it with it.
+	TaskAttemptLabelKey = "task.attempt"
 )

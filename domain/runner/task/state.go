@@ -86,3 +86,18 @@ func ValidStateTransition(src State, dst State) bool {
 func IsTerminalState(state State) bool {
 	return slices.Contains(terminalStates, state)
 }
+
+// inFlightStates are the states a container is passing through rather than
+// resting in: something has been asked of it and has yet to happen.
+var inFlightStates = []State{
+	Created,
+	Scheduled,
+	Stopping,
+	Restarting,
+}
+
+// IsInFlightState reports whether a container is on its way somewhere, which is
+// not the same as being somewhere it should not be.
+func IsInFlightState(state State) bool {
+	return slices.Contains(inFlightStates, state)
+}
