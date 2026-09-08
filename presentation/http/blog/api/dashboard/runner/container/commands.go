@@ -47,7 +47,9 @@ func NewStopHandler(useCase *stopContainer.UseCase) http.Handler {
 	return &commandHandler{
 		success: http.StatusAccepted,
 		command: func(r *http.Request) error {
-			return useCase.Execute(r.Context(), &stopContainer.Request{UUID: r.PathValue("uuid")})
+			return useCase.Execute(r.Context(), &stopContainer.Request{
+				UUID: r.PathValue("uuid"),
+			})
 		},
 	}
 }
@@ -63,7 +65,9 @@ func NewKillHandler(useCase *killContainer.UseCase) http.Handler {
 	return &commandHandler{
 		success: http.StatusAccepted,
 		command: func(r *http.Request) error {
-			return useCase.Execute(r.Context(), &killContainer.Request{UUID: r.PathValue("uuid")})
+			return useCase.Execute(r.Context(), &killContainer.Request{
+				UUID: r.PathValue("uuid"),
+			})
 		},
 	}
 }
@@ -79,7 +83,9 @@ func NewRestartHandler(useCase *restartContainer.UseCase) http.Handler {
 	return &commandHandler{
 		success: http.StatusAccepted,
 		command: func(r *http.Request) error {
-			return useCase.Execute(r.Context(), &restartContainer.Request{UUID: r.PathValue("uuid")})
+			return useCase.Execute(r.Context(), &restartContainer.Request{
+				UUID: r.PathValue("uuid"),
+			})
 		},
 	}
 }
@@ -95,7 +101,9 @@ func NewDeleteHandler(useCase *deleteContainer.UseCase) http.Handler {
 	return &commandHandler{
 		success: http.StatusNoContent,
 		command: func(r *http.Request) error {
-			return useCase.Execute(r.Context(), &deleteContainer.Request{UUID: r.PathValue("uuid")})
+			return useCase.Execute(r.Context(), &deleteContainer.Request{
+				UUID: r.PathValue("uuid"),
+			})
 		},
 	}
 }

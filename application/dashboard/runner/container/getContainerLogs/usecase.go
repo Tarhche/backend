@@ -12,7 +12,8 @@ import (
 const defaultLimit uint = 500
 
 type Request struct {
-	UUID  string    `json:"-"`
+	UUID string `json:"-"`
+
 	After time.Time `json:"after"`
 	Limit uint      `json:"limit"`
 }
@@ -39,6 +40,7 @@ func NewUseCase(runner runnerManager.Client) *UseCase {
 }
 
 func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
+
 	limit := request.Limit
 	if limit == 0 {
 		limit = defaultLimit
