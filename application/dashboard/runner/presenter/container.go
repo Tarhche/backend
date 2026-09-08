@@ -24,10 +24,12 @@ type Container struct {
 	Command     []string   `json:"command,omitempty"`
 	Entrypoint  []string   `json:"entrypoint,omitempty"`
 	WorkingDir  string     `json:"working_dir,omitempty"`
-	Limits      Limits     `json:"resource_limits"`
-	CreatedAt   time.Time  `json:"created_at"`
-	StartedAt   time.Time  `json:"started_at"`
-	FinishedAt  time.Time  `json:"finished_at"`
+	// Owner is who asked for this container.
+	Owner      Owner     `json:"owner"`
+	Limits     Limits    `json:"resource_limits"`
+	CreatedAt  time.Time `json:"created_at"`
+	StartedAt  time.Time `json:"started_at"`
+	FinishedAt time.Time `json:"finished_at"`
 }
 
 // Endpoint is one of a container's exposed ports, together with the hostname it
@@ -47,7 +49,7 @@ type Limits struct {
 
 // NewContainer presents one container. The ingress domain is what its hostnames
 // are built from, so the dashboard can link straight to a running container.
-func NewContainer(t task.Task, ingressDomain string) Container {
+func NewContainer(t task.Task, ingressDomain string, owners Owners) Container {
 	return Container{
 		UUID:        t.UUID,
 		Name:        t.Name,
@@ -61,6 +63,7 @@ func NewContainer(t task.Task, ingressDomain string) Container {
 		Command:     t.Command,
 		Entrypoint:  t.Entrypoint,
 		WorkingDir:  t.WorkingDir,
+		Owner:       owners.Of(t.OwnerUUID),
 		Limits: Limits{
 			Cpu:    t.ResourceLimits.Cpu,
 			Memory: t.ResourceLimits.Memory,
@@ -73,10 +76,10 @@ func NewContainer(t task.Task, ingressDomain string) Container {
 }
 
 // NewContainers presents a list of containers.
-func NewContainers(tasks []task.Task, ingressDomain string) []Container {
+func NewContainers(tasks []task.Task, ingressDomain string, owners Owners) []Container {
 	items := make([]Container, len(tasks))
 	for i := range tasks {
-		items[i] = NewContainer(tasks[i], ingressDomain)
+		items[i] = NewContainer(tasks[i], ingressDomain, owners)
 	}
 
 	return items

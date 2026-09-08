@@ -32,6 +32,20 @@ func FromContext(ctx context.Context) *user.User {
 	return u
 }
 
+// UUIDFromContext is who is asking, or nobody at all.
+//
+// A request that reached a handler has been through authentication, so this is
+// somebody; asking this way is for the paths where it might not be, where
+// nobody owns anything and so may do nothing to what is owned.
+func UUIDFromContext(ctx context.Context) string {
+	u := FromContext(ctx)
+	if u == nil {
+		return ""
+	}
+
+	return u.UUID
+}
+
 func ToContext(ctx context.Context, user *user.User) context.Context {
 	return context.WithValue(ctx, AuthKey, user)
 }

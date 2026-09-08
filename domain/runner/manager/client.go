@@ -62,8 +62,15 @@ type LogStream interface {
 
 // Client is the runner.
 type Client interface {
-	Containers(ctx context.Context, page uint) (Page[task.Task], error)
+	// Containers is a page of the containers the runner holds. An owner
+	// narrows it to that person's own; empty is everybody's, including the
+	// ones nobody owns.
+	Containers(ctx context.Context, ownerUUID string, page uint) (Page[task.Task], error)
 	Container(ctx context.Context, uuid string) (task.Task, error)
+
+	// ContainerOf is one of somebody's own containers. One that is not theirs
+	// is not there as far as they are concerned, and is reported missing.
+	ContainerOf(ctx context.Context, ownerUUID string, uuid string) (task.Task, error)
 	RunContainer(ctx context.Context, spec ContainerSpec, ownerUUID string) (task.Task, error)
 	StopContainer(ctx context.Context, uuid string) error
 	KillContainer(ctx context.Context, uuid string) error
@@ -74,8 +81,13 @@ type Client interface {
 	FollowContainerLogs(ctx context.Context, uuid string, after time.Time) (LogStream, error)
 	AttachContainer(ctx context.Context, uuid string, command []string) (Attachment, error)
 
-	Stacks(ctx context.Context, page uint) (Page[Stack], error)
+	// Stacks is a page of the stacks the runner holds, narrowed the same way.
+	Stacks(ctx context.Context, ownerUUID string, page uint) (Page[Stack], error)
 	Stack(ctx context.Context, uuid string) (Stack, error)
+
+	// StackOf is one of somebody's own stacks, reported missing when it is not
+	// theirs.
+	StackOf(ctx context.Context, ownerUUID string, uuid string) (Stack, error)
 	RunStack(ctx context.Context, spec StackSpec, ownerUUID string) (Stack, error)
 	StopStack(ctx context.Context, uuid string) error
 	KillStack(ctx context.Context, uuid string) error

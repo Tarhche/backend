@@ -9,6 +9,7 @@ import (
 
 	"github.com/khanzadimahdi/testproject/domain/runner/port"
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
+	"github.com/khanzadimahdi/testproject/domain/user"
 )
 
 const ingressDomain = "runner.localhost:8021"
@@ -98,6 +99,7 @@ func TestNewContainer(t *testing.T) {
 		Kind:         task.KindService,
 		StackUUID:    "stack-uuid",
 		ServiceName:  "web",
+		OwnerUUID:    "owner-uuid",
 		State:        task.Running,
 		Image:        "nginx:1.27-alpine",
 		ExposedPorts: []port.Port{80},
@@ -110,7 +112,7 @@ func TestNewContainer(t *testing.T) {
 			Memory: 256 << 20,
 			Disk:   1 << 30,
 		},
-	}, ingressDomain)
+	}, ingressDomain, NewOwners([]user.User{{UUID: "owner-uuid", Name: "Mahdi", Username: "mahdi", Avatar: "avatar-uuid"}}))
 
 	assert.Equal(t, "task-uuid", presented.UUID)
 	assert.Equal(t, "nginx", presented.Name)
@@ -120,6 +122,10 @@ func TestNewContainer(t *testing.T) {
 	assert.Equal(t, "web", presented.ServiceName)
 	assert.Equal(t, 0.5, presented.Limits.Cpu)
 	assert.Equal(t, uint64(256<<20), presented.Limits.Memory)
+
+	assert.Equal(t, "owner-uuid", presented.Owner.UUID)
+	assert.Equal(t, "Mahdi", presented.Owner.Name, "a container says who it belongs to")
+	assert.Equal(t, "mahdi", presented.Owner.Username)
 
 	require.Len(t, presented.Endpoints, 1)
 	assert.Equal(t, "http://nginx-xkfqz.runner.localhost:8021", presented.Endpoints[0].URL)

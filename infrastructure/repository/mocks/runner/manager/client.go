@@ -21,14 +21,20 @@ type MockClient struct {
 
 var _ runnerManager.Client = &MockClient{}
 
-func (m *MockClient) Containers(ctx context.Context, page uint) (runnerManager.Page[task.Task], error) {
-	args := m.Called(ctx, page)
+func (m *MockClient) Containers(ctx context.Context, ownerUUID string, page uint) (runnerManager.Page[task.Task], error) {
+	args := m.Called(ctx, ownerUUID, page)
 
 	return args.Get(0).(runnerManager.Page[task.Task]), args.Error(1)
 }
 
 func (m *MockClient) Container(ctx context.Context, uuid string) (task.Task, error) {
 	args := m.Called(ctx, uuid)
+
+	return args.Get(0).(task.Task), args.Error(1)
+}
+
+func (m *MockClient) ContainerOf(ctx context.Context, ownerUUID string, uuid string) (task.Task, error) {
+	args := m.Mock.Called(ctx, ownerUUID, uuid)
 
 	return args.Get(0).(task.Task), args.Error(1)
 }
@@ -77,14 +83,20 @@ func (m *MockClient) AttachContainer(ctx context.Context, uuid string, command [
 	return attachment, args.Error(1)
 }
 
-func (m *MockClient) Stacks(ctx context.Context, page uint) (runnerManager.Page[runnerManager.Stack], error) {
-	args := m.Called(ctx, page)
+func (m *MockClient) Stacks(ctx context.Context, ownerUUID string, page uint) (runnerManager.Page[runnerManager.Stack], error) {
+	args := m.Called(ctx, ownerUUID, page)
 
 	return args.Get(0).(runnerManager.Page[runnerManager.Stack]), args.Error(1)
 }
 
 func (m *MockClient) Stack(ctx context.Context, uuid string) (runnerManager.Stack, error) {
 	args := m.Called(ctx, uuid)
+
+	return args.Get(0).(runnerManager.Stack), args.Error(1)
+}
+
+func (m *MockClient) StackOf(ctx context.Context, ownerUUID string, uuid string) (runnerManager.Stack, error) {
+	args := m.Mock.Called(ctx, ownerUUID, uuid)
 
 	return args.Get(0).(runnerManager.Stack), args.Error(1)
 }
