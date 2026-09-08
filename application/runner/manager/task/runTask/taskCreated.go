@@ -3,11 +3,13 @@ package runTask
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"time"
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/runner/node"
 	"github.com/khanzadimahdi/testproject/domain/runner/port"
+	"github.com/khanzadimahdi/testproject/domain/runner/stack"
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
 	"github.com/khanzadimahdi/testproject/domain/runner/task/events"
 )
@@ -19,6 +21,7 @@ const (
 type TaskCreated struct {
 	taskRepository  task.Repository
 	nodeRepository  node.Repository
+	stackRepository stack.Repository
 	scheduler       task.Scheduler
 	asyncCommandBus domain.ProduceConsumer
 }
@@ -26,12 +29,14 @@ type TaskCreated struct {
 func NewTaskCreated(
 	taskRepository task.Repository,
 	nodeRepository node.Repository,
+	stackRepository stack.Repository,
 	scheduler task.Scheduler,
 	asyncCommandBus domain.ProduceConsumer,
 ) *TaskCreated {
 	return &TaskCreated{
 		taskRepository:  taskRepository,
 		nodeRepository:  nodeRepository,
+		stackRepository: stackRepository,
 		scheduler:       scheduler,
 		asyncCommandBus: asyncCommandBus,
 	}
@@ -55,22 +60,38 @@ func (uc *TaskCreated) Handle(ctx context.Context, data []byte) error {
 		return nil
 	}
 
-	nodes, err := uc.getHealthyNodes(ctx)
+	selectedNode, err := uc.pickNode(ctx, &t)
 	if err != nil {
 		return err
 	}
 
-	if len(nodes) == 0 {
-		return node.ErrNoNodesAvailable
-	}
-	selectedNode := uc.scheduler.Pick(&t, nodes)
-
 	t.State = destinationState
+	t.NodeName = selectedNode.Name
 	if _, err = uc.taskRepository.Save(ctx, &t); err != nil {
 		return err
 	}
 
 	return uc.publishTaskScheduled(ctx, &t, &selectedNode)
+}
+
+// pickNode chooses where a task runs. A service of a stack has that choice made
+// for it: everything in a stack shares one private network, and a bridge is
+// local to the node it was created on, so the whole stack runs on one node.
+func (uc *TaskCreated) pickNode(ctx context.Context, t *task.Task) (node.Node, error) {
+	if len(t.NodeName) > 0 {
+		return node.Node{Name: t.NodeName}, nil
+	}
+
+	nodes, err := uc.getHealthyNodes(ctx)
+	if err != nil {
+		return node.Node{}, err
+	}
+
+	if len(nodes) == 0 {
+		return node.Node{}, node.ErrNoNodesAvailable
+	}
+
+	return uc.scheduler.Pick(t, nodes), nil
 }
 
 func (uc *TaskCreated) getHealthyNodes(ctx context.Context) ([]node.Node, error) {
@@ -92,12 +113,31 @@ func (uc *TaskCreated) getHealthyNodes(ctx context.Context) ([]node.Node, error)
 }
 
 func (uc *TaskCreated) publishTaskScheduled(ctx context.Context, t *task.Task, selectedNode *node.Node) error {
+	// the worker needs the stack's slug, not its uuid: the slug is what names
+	// the docker network its services share.
+	var stackSlug string
+	if len(t.StackUUID) > 0 {
+		s, err := uc.stackRepository.GetOne(ctx, t.StackUUID)
+		if err != nil && !errors.Is(err, domain.ErrNotExists) {
+			return err
+		}
+
+		stackSlug = s.Slug
+	}
+
 	event := events.TaskScheduled{
 		UUID:          t.UUID,
 		Name:          t.Name,
+		Slug:          t.Slug,
+		Kind:          string(t.Kind),
+		StackUUID:     t.StackUUID,
+		StackSlug:     stackSlug,
+		ServiceName:   t.ServiceName,
 		Image:         t.Image,
 		AutoRemove:    t.AutoRemove,
 		PortBindings:  convertPortBindings(t.PortBindings),
+		ExposedPorts:  t.ExposedPorts,
+		NetworkPolicy: t.NetworkPolicy,
 		RestartPolicy: t.RestartPolicy,
 		RestartCount:  t.RestartCount,
 		HealthCheck:   t.HealthCheck,
@@ -107,6 +147,7 @@ func (uc *TaskCreated) publishTaskScheduled(ctx context.Context, t *task.Task, s
 		Environment:   t.Environment,
 		Command:       t.Command,
 		Entrypoint:    t.Entrypoint,
+		WorkingDir:    t.WorkingDir,
 		Mounts:        convertMounts(t.Mounts),
 		ResourceLimits: events.ResourceLimits{
 			Cpu:    t.ResourceLimits.Cpu,

@@ -7,12 +7,15 @@ import (
 	"time"
 
 	"github.com/danceable/provider"
+	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	checkhealth "github.com/khanzadimahdi/testproject/application/app/checkHealth"
 	ingressCheckWorkerExists "github.com/khanzadimahdi/testproject/application/runner/ingress/checkWorkerExists"
 	ingressContract "github.com/khanzadimahdi/testproject/domain/runner/ingress"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/certificate"
+	infraHealth "github.com/khanzadimahdi/testproject/infrastructure/health"
+	taskrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/runner/tasks"
 	infraIngress "github.com/khanzadimahdi/testproject/infrastructure/runner/ingress"
 	"github.com/khanzadimahdi/testproject/infrastructure/telemetry/profiler"
 	"github.com/khanzadimahdi/testproject/infrastructure/tunnel"
@@ -128,12 +131,18 @@ func (p *ingressProvider) Terminate(ctx context.Context) error {
 }
 
 func ingressConsoleCommand(
+	database *mongo.Database,
 	tracedProfiler *profiler.TracedProfiler,
 	registry ingressContract.Registry,
 	iocContainer provider.Container,
 ) (http.Handler, error) {
 	var logger *slog.Logger
 	if err := iocContainer.Resolve(&logger, provider.WithParams(ingressLoggerName)); err != nil {
+		return nil, err
+	}
+
+	var ingressConfigs *configs.RunnerIngress
+	if err := iocContainer.Resolve(&ingressConfigs); err != nil {
 		return nil, err
 	}
 
@@ -144,9 +153,13 @@ func ingressConsoleCommand(
 
 	checkWorkerExistsUseCase := ingressCheckWorkerExists.NewUseCase(registry)
 
-	// the ingress talks to nothing it has to reach: it holds the connections
-	// the workers opened, and there is nothing to be reachable but itself.
-	checkHealthUseCase := checkhealth.NewUseCase()
+	// which node is holding a container is the manager's record of it, and the
+	// only thing here that outlives a connection.
+	taskRepository := taskrepository.NewRepository(database)
+
+	checkHealthUseCase := checkhealth.NewUseCase(
+		checkhealth.Dependency{Name: "database", Pinger: infraHealth.NewMongodbPinger(database)},
+	)
 
 	// a transport that dials nothing: the address it is handed names a runner,
 	// and what comes back is a stream on a connection that runner already
@@ -155,19 +168,34 @@ func ingressConsoleCommand(
 
 	mux := http.NewServeMux()
 
+	// CORS goes on the ingress's own answers and no further: what it proxies is
+	// the worker's or the container's to answer for, a preflight included. A
+	// header set here would otherwise arrive alongside the one upstream sent,
+	// and two Access-Control-Allow-Origin headers are worse than none.
+
+	// the container healthcheck probes this
 	mux.Handle("GET /health", middleware.NewCORSMiddleware(healthAPI.NewHealthHandler(checkHealthUseCase)))
 	mux.Handle("/workers/{name}/{path...}", ingressAPI.NewProxyHandler(checkWorkerExistsUseCase, transport, logger))
 
+	// a request to a hostname under the containers' domain is a container's own
+	// traffic and goes to the node holding it; everything else is one of the
+	// ingress's own routes.
+	router := ingressAPI.NewRouter(
+		ingressAPI.NewContainerHandler(taskRepository, registry, transport, ingressConfigs.Domain, logger),
+		mux,
+		ingressConfigs.Domain,
+	)
+
 	// no rate limit: what comes through here is a container's own traffic —
-	// an attached terminal, a log being followed — which a cap per minute
-	// would cut off rather than pace.
+	// an attached terminal, a log being followed, whatever the container itself
+	// serves — which a cap per minute would cut off rather than pace.
 	handler := middleware.NewRecoveryMiddleware(
 		middleware.NewRequestIDMiddleware(
 			middleware.NewTelemetryMiddleware(
 				"/runner/ingress",
 				middleware.NewProfilingMiddleware(
 					middleware.NewLogMiddleware(
-						mux,
+						router,
 						logger,
 					),
 					tracedProfiler,

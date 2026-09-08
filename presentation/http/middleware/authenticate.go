@@ -30,7 +30,7 @@ func NewAuthenticateMiddleware(next http.Handler, j *jwt.JWT, userRepository use
 }
 
 func (a *Authenticate) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
-	token := a.bearerToken(r)
+	token := bearerToken(r)
 	claims, err := a.j.Verify(r.Context(), token)
 	if err != nil {
 		rw.WriteHeader(http.StatusUnauthorized)
@@ -62,7 +62,9 @@ func (a *Authenticate) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	a.next.ServeHTTP(rw, r.WithContext(auth.ToContext(r.Context(), &user)))
 }
 
-func (a *Authenticate) bearerToken(r *http.Request) string {
+// bearerToken takes the token out of an Authorization header, and is shared by
+// everything here that reads one.
+func bearerToken(r *http.Request) string {
 	offset := len(authenticationHeaderPrefix)
 	h := r.Header.Get(authenticationHeaderName)
 	if len(h) <= offset {

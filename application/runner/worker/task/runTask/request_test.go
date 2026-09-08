@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/runner/network"
+	"github.com/khanzadimahdi/testproject/domain/runner/port"
 )
 
 func TestRequest_Validate(t *testing.T) {
@@ -134,6 +136,57 @@ func TestRequest_Validate(t *testing.T) {
 			want: domain.ValidationErrors{
 				"resource_limits.disk": "required_field",
 			},
+		},
+		{
+			name: "a container with no network cannot expose a port",
+			request: Request{
+				UUID:          "task-uuid-123",
+				Name:          "test-task",
+				Image:         "test-image:latest",
+				NetworkPolicy: network.PolicyNone,
+				ExposedPorts:  []port.Port{80},
+				ResourceLimits: ResourceLimits{
+					Cpu:    1.0,
+					Memory: 1024,
+					Disk:   2048,
+				},
+			},
+			want: domain.ValidationErrors{
+				"exposed_ports": "ports_require_network",
+			},
+		},
+		{
+			name: "an unknown network policy is rejected",
+			request: Request{
+				UUID:          "task-uuid-123",
+				Name:          "test-task",
+				Image:         "test-image:latest",
+				NetworkPolicy: network.Policy("host"),
+				ResourceLimits: ResourceLimits{
+					Cpu:    1.0,
+					Memory: 1024,
+					Disk:   2048,
+				},
+			},
+			want: domain.ValidationErrors{
+				"network_policy": "invalid_network_policy",
+			},
+		},
+		{
+			name: "an isolated container may expose ports",
+			request: Request{
+				UUID:          "task-uuid-123",
+				Name:          "test-task",
+				Image:         "test-image:latest",
+				NetworkPolicy: network.PolicyIsolated,
+				ExposedPorts:  []port.Port{80, 443},
+				ResourceLimits: ResourceLimits{
+					Cpu:    1.0,
+					Memory: 1024,
+					Disk:   2048,
+				},
+			},
+			want: domain.ValidationErrors{},
 		},
 		{
 			name: "invalid request with multiple errors",

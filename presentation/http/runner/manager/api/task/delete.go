@@ -27,6 +27,7 @@ func NewDeleteHandler(useCase *deletetask.UseCase) *deleteHandler {
 // @Accept			json
 // @Produce		json
 // @Param			uuid	path		string	true	"Task UUID"
+// @Param			force	query		bool	false	"Remove the container even if it is still running"
 // @Success		204		{object}	map[string]interface{}
 // @Failure		404		{object}	map[string]interface{}
 // @Failure		500		{object}	map[string]interface{}
@@ -35,6 +36,10 @@ func (h *deleteHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	UUID := r.PathValue("uuid")
 	request := &deletetask.Request{
 		UUID: UUID,
+
+		// a caller asking for a container to be gone means it, rather than
+		// wanting to be told it is still busy.
+		Force: r.URL.Query().Get("force") == "true",
 	}
 
 	response, err := h.useCase.Execute(r.Context(), request)
