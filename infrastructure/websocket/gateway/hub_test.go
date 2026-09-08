@@ -16,11 +16,13 @@ func TestHub(t *testing.T) {
 	// newTestSession builds only as much of a session as the hub touches.
 	newTestSession := func(buffer int) *session {
 		return &session{
-			conn:    newIdleConn(),
-			replies: make(chan *domain.Reply, buffer),
-			done:    make(chan struct{}),
-			gone:    make(chan struct{}),
-			logger:  discardLogger(),
+			conn:         newIdleConn(),
+			registry:     NewInMemoryRequestRegistry(0),
+			cancelStream: func(context.Context, string) {},
+			replies:      make(chan *domain.Reply, buffer),
+			done:         make(chan struct{}),
+			gone:         make(chan struct{}),
+			logger:       discardLogger(),
 		}
 	}
 
