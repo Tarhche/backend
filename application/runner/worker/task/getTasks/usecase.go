@@ -33,7 +33,7 @@ func (uc *UseCase) Execute(ctx context.Context) (*Response, error) {
 			Image:        c.Image,
 			ContainerID:  c.ID,
 			CreatedAt:    c.CreatedAt,
-			CurrentState: container.EvaluateTaskState(c.Status, task.Kind(c.Labels[container.TaskKindLabelKey])),
+			CurrentState: container.EvaluateTaskState(c.Status, task.Kind(c.Labels[container.TaskKindLabelKey]), c.ExitCode),
 		}
 	}
 
