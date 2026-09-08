@@ -24,12 +24,14 @@ func TestViews_areDrawnInTheLanguageTheyAreWrittenIn(t *testing.T) {
 		"mail/auth/register.fa":       `<html lang="fa" dir="rtl">`,
 		"mail/auth/reset-password.en": `<html lang="en" dir="ltr">`,
 		"mail/auth/reset-password.fa": `<html lang="fa" dir="rtl">`,
+		"runner/starting.en":          `<html lang="en" dir="ltr">`,
+		"runner/starting.fa":          `<html lang="fa" dir="rtl">`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
 			var drawn bytes.Buffer
-			require.NoError(t, template.NewRenderer(view.Files, "tmpl").Render(&drawn, name, nil))
+			require.NoError(t, template.NewRenderer(view.Files, "tmpl").Render(&drawn, name, map[string]any{"Seconds": 2}))
 
 			assert.True(t, strings.Contains(drawn.String(), expected),
 				"%s should be drawn as %s", name, expected)
