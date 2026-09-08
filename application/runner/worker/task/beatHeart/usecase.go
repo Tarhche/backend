@@ -10,6 +10,7 @@ import (
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/runner/container"
+	"github.com/khanzadimahdi/testproject/domain/runner/port"
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
 	"github.com/khanzadimahdi/testproject/domain/runner/task/events"
 )
@@ -22,9 +23,16 @@ type UseCase struct {
 	nodeName         string
 
 	// advertiseHost is the host whose ports the containers on this node are
-	// published on. It is what the ingress proxies to, so it has to be an
-	// address the manager can reach rather than one this node calls itself.
+	// published on. It is what another node proxies to, so it has to be an
+	// address the runner can reach rather than one this node calls itself.
 	advertiseHost string
+
+	// publicHost is where somebody outside reaches this node's published
+	// ports, and ingressDomain what it answers container hostnames under.
+	// Neither is the address the runner reaches it at: one is inside and the
+	// others are not.
+	publicHost    string
+	ingressDomain string
 
 	// startedAt is when each container this node holds began running, which is
 	// what a container's allowed time is counted from. Docker only tells it on
@@ -39,6 +47,8 @@ func NewUseCase(
 	messageProducer domain.Producer,
 	nodeName string,
 	advertiseHost string,
+	publicHost string,
+	ingressDomain string,
 	logger *slog.Logger,
 ) *UseCase {
 	return &UseCase{
@@ -46,6 +56,8 @@ func NewUseCase(
 		messageProducer:  messageProducer,
 		nodeName:         nodeName,
 		advertiseHost:    advertiseHost,
+		publicHost:       publicHost,
+		ingressDomain:    ingressDomain,
 		startedAt:        make(map[string]time.Time),
 		logger:           logger,
 	}
@@ -66,6 +78,7 @@ func (uc *UseCase) Execute(ctx context.Context) error {
 			UUID:          c.Labels[container.TaskUUIDLabelKey],
 			Name:          c.Labels[container.TaskNameLabelKey],
 			Slug:          c.Labels[container.TaskSlugLabelKey],
+			IngressDomain: uc.ingressDomain,
 			Kind:          string(kind),
 			Image:         c.Image,
 			ContainerUUID: c.ID,
@@ -194,20 +207,40 @@ func (uc *UseCase) logs(ctx context.Context, c *container.Container) []byte {
 func (uc *UseCase) endpoints(c *container.Container) []events.Endpoint {
 	endpoints := make([]events.Endpoint, 0, len(c.PortBindings))
 
+	public := c.PublicPorts()
+
 	for containerPort, bindings := range c.PortBindings {
+		endpoint := events.Endpoint{
+			ContainerPort: containerPort,
+			Host:          uc.advertiseHost,
+			PublicPort:    public[containerPort],
+			PublicHost:    uc.publicHost,
+		}
+
+		// a port is published for both protocols, on a host port each.
 		for _, binding := range bindings {
 			if binding.HostPort == 0 {
 				continue
 			}
 
-			endpoints = append(endpoints, events.Endpoint{
-				ContainerPort: containerPort,
-				Host:          uc.advertiseHost,
-				HostPort:      binding.HostPort,
-			})
+			if binding.Is(port.UDP) {
+				if endpoint.HostPortUDP == 0 {
+					endpoint.HostPortUDP = binding.HostPort
+				}
 
-			break
+				continue
+			}
+
+			if endpoint.HostPort == 0 {
+				endpoint.HostPort = binding.HostPort
+			}
 		}
+
+		if endpoint.HostPort == 0 && endpoint.HostPortUDP == 0 {
+			continue
+		}
+
+		endpoints = append(endpoints, endpoint)
 	}
 
 	// docker hands back the bindings in no particular order, and the lowest

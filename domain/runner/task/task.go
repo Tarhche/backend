@@ -71,6 +71,11 @@ type Task struct {
 	// see what is being done about it.
 	Retries int
 
+	// IngressDomain is what the node holding this container answers its
+	// hostname under. It is the node's own, since a node holds its containers
+	// alone.
+	IngressDomain string
+
 	// Deadline is when the container running this task will be stopped for
 	// having run long enough. The node that made the container sets it, so it
 	// is counted from when the container came up rather than from when the
@@ -105,6 +110,18 @@ type Endpoint struct {
 	ContainerPort port.Port
 	Host          string
 	HostPort      port.Port
+
+	// HostPortUDP is where the same container port was published for udp.
+	// Zero when the node published none.
+	HostPortUDP port.Port
+
+	// PublicPort is the port the node holding this container accepts raw
+	// connections for it on — what ssh, a database client, or anything else
+	// that is not http connects to — and PublicHost is where somebody outside
+	// reaches that node. Zero and empty until a container is running, and for
+	// good if the node forwards nothing.
+	PublicPort port.Port
+	PublicHost string
 }
 
 // Mount represents a mount point of volume

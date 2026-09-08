@@ -20,8 +20,9 @@ import (
 type heartbeat struct {
 	replyer domain.Replyer
 
-	// ingressDomain is what the runner answers a container's ports under, so
-	// that an exposed port becomes an address a reader can open.
+	// ingressDomain is what a container's ports are answered under when the
+	// node holding it does not say — nodes hold nothing in common, so the
+	// address is the node's own whenever it names one.
 	ingressDomain string
 
 	logger *slog.Logger
@@ -127,13 +128,18 @@ func (h *heartbeat) endpoints(beat *events.Heartbeat, state task.State) []Endpoi
 		return nil
 	}
 
+	domain := beat.IngressDomain
+	if domain == "" {
+		domain = h.ingressDomain
+	}
+
 	endpoints := make([]Endpoint, 0, len(beat.Endpoints))
 	for i, e := range beat.Endpoints {
 		// the first port answers on the container's bare name, and the rest
 		// carry their port in it: one name, one address.
-		host := fmt.Sprintf("%s-%d.%s", beat.Slug, e.ContainerPort, h.ingressDomain)
+		host := fmt.Sprintf("%s-%d.%s", beat.Slug, e.ContainerPort, domain)
 		if i == 0 {
-			host = fmt.Sprintf("%s.%s", beat.Slug, h.ingressDomain)
+			host = fmt.Sprintf("%s.%s", beat.Slug, domain)
 		}
 
 		endpoints = append(endpoints, Endpoint{

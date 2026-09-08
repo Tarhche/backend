@@ -442,10 +442,15 @@ func (m *DockerManager) Logs(ctx context.Context, containerUUID string, writer i
 	return trace.RecordError(span, err)
 }
 
+// convertPortSet declares a container's ports open for both protocols: what a
+// container speaks on a port it opened is its own business, and the runner
+// carries whichever it turns out to be.
 func convertPortSet(ports port.PortSet) nat.PortSet {
 	result := make(nat.PortSet)
 	for p := range ports {
-		result[nat.Port(fmt.Sprintf("%d/tcp", p))] = struct{}{}
+		for _, protocol := range port.Protocols {
+			result[nat.Port(fmt.Sprintf("%d/%s", p, protocol))] = struct{}{}
+		}
 	}
 	return result
 }
@@ -457,17 +462,20 @@ func convertPortSet(ports port.PortSet) nat.PortSet {
 func convertPortMap(bindings port.PortMap) nat.PortMap {
 	result := make(nat.PortMap)
 	for p, bindings := range bindings {
-		portStr := fmt.Sprintf("%d/tcp", p)
-		result[nat.Port(portStr)] = make([]nat.PortBinding, len(bindings))
-		for i, b := range bindings {
-			hostPort := ""
-			if b.HostPort > 0 {
-				hostPort = fmt.Sprintf("%d", b.HostPort)
-			}
+		for _, protocol := range port.Protocols {
+			portStr := fmt.Sprintf("%d/%s", p, protocol)
+			result[nat.Port(portStr)] = make([]nat.PortBinding, len(bindings))
 
-			result[nat.Port(portStr)][i] = nat.PortBinding{
-				HostIP:   b.HostIP,
-				HostPort: hostPort,
+			for i, b := range bindings {
+				hostPort := ""
+				if b.HostPort > 0 {
+					hostPort = fmt.Sprintf("%d", b.HostPort)
+				}
+
+				result[nat.Port(portStr)][i] = nat.PortBinding{
+					HostIP:   b.HostIP,
+					HostPort: hostPort,
+				}
 			}
 		}
 	}
@@ -482,17 +490,26 @@ func convertDockerPortSet(ports []types.Port) port.PortSet {
 	return result
 }
 
+// convertDockerPortMap reads back what a container's ports were published on.
+// One port has a binding per protocol, so they are collected rather than the
+// last one winning.
 func convertDockerPortMap(ports []types.Port) port.PortMap {
 	result := make(port.PortMap)
 	for _, p := range ports {
-		if p.PublicPort != 0 {
-			result[port.Port(p.PrivatePort)] = []port.PortBinding{
-				{
-					HostIP:   "0.0.0.0",
-					HostPort: port.Port(p.PublicPort),
-				},
-			}
+		if p.PublicPort == 0 {
+			continue
 		}
+
+		protocol := port.Protocol(p.Type)
+		if protocol == "" {
+			protocol = port.TCP
+		}
+
+		result[port.Port(p.PrivatePort)] = append(result[port.Port(p.PrivatePort)], port.PortBinding{
+			HostIP:   "0.0.0.0",
+			HostPort: port.Port(p.PublicPort),
+			Protocol: protocol,
+		})
 	}
 	return result
 }
@@ -510,16 +527,22 @@ func convertDockerPortSetFromMap(ports nat.PortMap) port.PortSet {
 func convertDockerPortMapFromMap(ports nat.PortMap) port.PortMap {
 	result := make(port.PortMap)
 	for p, bindings := range ports {
-		var portNum port.Port
-		fmt.Sscanf(string(p), "%d/tcp", &portNum)
-		result[portNum] = make([]port.PortBinding, len(bindings))
-		for i, b := range bindings {
+		portNum := port.Port(p.Int())
+
+		protocol := port.Protocol(p.Proto())
+		if protocol == "" {
+			protocol = port.TCP
+		}
+
+		for _, b := range bindings {
 			var hostPort port.Port
 			fmt.Sscanf(b.HostPort, "%d", &hostPort)
-			result[portNum][i] = port.PortBinding{
+
+			result[portNum] = append(result[portNum], port.PortBinding{
 				HostIP:   b.HostIP,
 				HostPort: hostPort,
-			}
+				Protocol: protocol,
+			})
 		}
 	}
 	return result

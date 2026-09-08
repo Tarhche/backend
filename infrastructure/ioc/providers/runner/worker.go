@@ -12,6 +12,7 @@ import (
 
 	checkhealth "github.com/khanzadimahdi/testproject/application/app/checkHealth"
 	workerHeartbeat "github.com/khanzadimahdi/testproject/application/runner/worker/beatHeart"
+	"github.com/khanzadimahdi/testproject/application/runner/worker/cluster"
 	workerDeleteStack "github.com/khanzadimahdi/testproject/application/runner/worker/stack/deleteStack"
 	workerAttachTask "github.com/khanzadimahdi/testproject/application/runner/worker/task/attachTask"
 	workerTaskHeartbeat "github.com/khanzadimahdi/testproject/application/runner/worker/task/beatHeart"
@@ -27,10 +28,13 @@ import (
 	networkContract "github.com/khanzadimahdi/testproject/domain/runner/network"
 	nodeContract "github.com/khanzadimahdi/testproject/domain/runner/node"
 	stackEvents "github.com/khanzadimahdi/testproject/domain/runner/stack/events"
+	"github.com/khanzadimahdi/testproject/domain/runner/task"
 	taskEvents "github.com/khanzadimahdi/testproject/domain/runner/task/events"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	infraHealth "github.com/khanzadimahdi/testproject/infrastructure/health"
+	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/core/pubsub"
 	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/jetstream/produceConsumer"
+	"github.com/khanzadimahdi/testproject/infrastructure/runner/ingress"
 	"github.com/khanzadimahdi/testproject/infrastructure/telemetry/profiler"
 	healthAPI "github.com/khanzadimahdi/testproject/presentation/http/health"
 	"github.com/khanzadimahdi/testproject/presentation/http/middleware"
@@ -41,8 +45,35 @@ const (
 	WorkerSubscribers = "runner:worker:subscribers"
 	WorkerName        = "runner:worker:name"
 
+	// WorkerIngress is what serves the containers themselves: a request is
+	// routed to a container by the hostname it was made to, whichever node is
+	// holding it.
+	WorkerIngress = "runner:worker:ingress"
+
 	consumerNamePrefix string = "runner-worker-%s"
 )
+
+// publicHost is where somebody outside reaches this node's forwarded ports. A
+// node that does not say has only the address the runner reaches it at, which
+// is better than nothing to report.
+func publicHost(configs *configs.RunnerWorker) string {
+	if configs.PublicHost != "" {
+		return configs.PublicHost
+	}
+
+	return configs.AdvertiseHost
+}
+
+// publicIngressDomain is how somebody outside writes the name a container on
+// this node answers to. It differs from the name the node matches only where
+// something in front answers on another port.
+func publicIngressDomain(configs *configs.RunnerWorker) string {
+	if configs.PublicIngressDomain != "" {
+		return configs.PublicIngressDomain
+	}
+
+	return configs.IngressDomain
+}
 
 // workerNameProvider binds the worker name, which the command loads from its
 // --name flag or from the RUNNER_WORKER_NAME environment variable, under the
@@ -165,7 +196,15 @@ func workerConsoleCommand(
 
 	// tasks
 	getTasksUseCase := workergettasks.NewUseCase(containerManager, nodeName)
-	runTaskUseCase := workerruntask.NewUseCase(containerManager, networkManager, validator, nodeName)
+	// what this node accepts whole connections on. A range it cannot read is a
+	// mistake in how the node was started, and it says so rather than quietly
+	// forwarding nothing.
+	publicPorts, err := task.ParsePortRange(workerConfigs.PublicPortRange)
+	if err != nil {
+		return nil, err
+	}
+
+	runTaskUseCase := workerruntask.NewUseCase(containerManager, networkManager, validator, nodeName, publicPorts)
 	stopTaskUseCase := workerstoptask.NewUseCase(containerManager, validator)
 	killTaskUseCase := workerkilltask.NewUseCase(containerManager, validator)
 	restartTaskUseCase := workerrestarttask.NewUseCase(containerManager, validator)
@@ -230,6 +269,29 @@ func workerConsoleCommand(
 		stackEvents.StackDeletedName:         workerDeleteStack.NewStackDeletedHandler(networkManager, nodeName, logger),
 	}
 
+	// What every node is holding, which every node hears: a beat carries a
+	// container's name and where its ports came up, so this node can answer
+	// for a container another node is holding by passing the request on.
+	view := cluster.NewView(nodeName)
+
+	if err := iocContainer.Bind(func() *cluster.View { return view }, provider.Singleton()); err != nil {
+		return nil, err
+	}
+
+	// the node only listens to what the others say, so that is what it is
+	// given: the same connection, under the half of the contract it uses.
+	subscriber := pubsub.NewPublishSubscriber(natsConnection, logger)
+
+	if err := iocContainer.Bind(func() domain.Subscriber { return subscriber }, provider.Singleton()); err != nil {
+		return nil, err
+	}
+
+	if err := iocContainer.Bind(func() http.Handler {
+		return ingress.NewHandler(view, workerConfigs.IngressDomain)
+	}, provider.Singleton(), provider.WithName(WorkerIngress)); err != nil {
+		return nil, err
+	}
+
 	// worker subscribers
 	if err := iocContainer.Bind(func() map[string]domain.MessageHandler {
 		return subscribers
@@ -246,7 +308,7 @@ func workerConsoleCommand(
 
 	// task heartbeat
 	if err := iocContainer.Bind(func() *workerTaskHeartbeat.UseCase {
-		return workerTaskHeartbeat.NewUseCase(containerManager, asyncProduceConsumer, nodeName, workerConfigs.AdvertiseHost, logger)
+		return workerTaskHeartbeat.NewUseCase(containerManager, asyncProduceConsumer, nodeName, workerConfigs.AdvertiseHost, publicHost(workerConfigs), publicIngressDomain(workerConfigs), logger)
 	}, provider.Singleton()); err != nil {
 		return nil, err
 	}

@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/khanzadimahdi/testproject/domain/runner/container"
+	"github.com/khanzadimahdi/testproject/domain/runner/task"
 	"github.com/khanzadimahdi/testproject/domain/runner/task/events"
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/runner/containers"
@@ -60,7 +61,7 @@ func TestTaskScheduled_Handle(t *testing.T) {
 		producer.On("Produce", mock.Anything, events.TaskFailedName, mock.Anything).Return(nil).Once()
 		defer producer.AssertExpectations(t)
 
-		useCase := NewUseCase(&containerManager, &networkManager, accepts(), nodeName)
+		useCase := NewUseCase(&containerManager, &networkManager, accepts(), nodeName, task.PortRange{})
 
 		// no error: the failure is announced rather than handed back, which is
 		// what would have the message delivered again.
@@ -85,7 +86,7 @@ func TestTaskScheduled_Handle(t *testing.T) {
 			producer         messagingMock.MockProduceConsumer
 		)
 
-		useCase := NewUseCase(&containerManager, &networkManager, accepts(), nodeName)
+		useCase := NewUseCase(&containerManager, &networkManager, accepts(), nodeName, task.PortRange{})
 
 		require.NoError(t, NewTaskScheduled(useCase, &producer, "runner-worker-99", discardLogger()).
 			Handle(context.Background(), scheduled(t)))

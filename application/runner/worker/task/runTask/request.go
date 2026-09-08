@@ -150,10 +150,16 @@ func (r *Request) ContainerName() string {
 // PublishedPorts are the bindings the container is created with. Every exposed
 // port is published on a host port docker picks, so the runner never has to
 // keep track of what is already taken on the node.
-func (r *Request) PublishedPorts() port.PortMap {
+// PublishedPorts is where a container's ports are published on the node.
+//
+// A port it was given an address for is published there, so that the address
+// somebody was told is the address docker is listening on — one port, one
+// container, forwarded by docker itself. A port it was given none for is left
+// to docker to place wherever it likes.
+func (r *Request) PublishedPorts(public map[port.Port]port.Port) port.PortMap {
 	bindings := make(port.PortMap, len(r.ExposedPorts))
 	for _, p := range r.ExposedPorts {
-		bindings[p] = []port.PortBinding{{HostIP: "0.0.0.0"}}
+		bindings[p] = []port.PortBinding{{HostIP: "0.0.0.0", HostPort: public[p]}}
 	}
 
 	return bindings

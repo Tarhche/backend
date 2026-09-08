@@ -338,6 +338,18 @@ func TestHandler(t *testing.T) {
 		assert.NotContains(t, rw.Body.String(), "<html", "a client that did not ask for a page is not given one")
 	})
 
+	t.Run("says whether it is up, to whatever asks after it rather than a container", func(t *testing.T) {
+		t.Parallel()
+
+		rw := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, "/health", nil)
+		request.Host = "runner-ingress:8090"
+
+		NewHandler(&fakeResolver{}, testDomain).ServeHTTP(rw, request)
+
+		assert.Equal(t, http.StatusOK, rw.Code)
+	})
+
 	t.Run("a browser waiting for a container gets a page that comes back on its own", func(t *testing.T) {
 		t.Parallel()
 

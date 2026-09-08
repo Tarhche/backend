@@ -67,9 +67,7 @@ services:
       target: develop-runner-manager
     ports:
       - "8020:80"
-      - "8021:8090" # the containers' own exposed ports, routed by hostname
     environment:
-      RUNNER_INGRESS_PORT: 8090
       RUNNER_INGRESS_DOMAIN: ${RUNNER_INGRESS_DOMAIN}
       MONGO_SCHEME: ${MONGO_SCHEME}
       MONGO_USERNAME: ${MONGO_USERNAME}
@@ -85,18 +83,22 @@ services:
       OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT: ${OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT:-}
       OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
       PROFILING_ENABLED: ${PROFILING_ENABLED:-true}
-  runner-worker-01:
+  # The nodes. They are alike, so there is one of them here and as many as
+  # somebody asks for: `docker compose up --scale runner-worker=5`. A node
+  # takes the machine's own name, and what it holds it says to the others.
+  runner-worker:
     <<: *app
     build:
       target: develop-runner-worker
-    ports:
-      - "8040:80"
     environment:
-      RUNNER_WORKER_NAME: runner-worker-01
-      # the containers' ports are published on the docker daemon's own host,
-      # which is the dind service rather than this one.
+      RUNNER_INGRESS_PORT: 8090
+      RUNNER_INGRESS_DOMAIN: ${RUNNER_INGRESS_DOMAIN}
+      # what a browser writes: here the nodes sit behind one proxy on a port of
+      # its own, where in production they answer on their own names.
+      RUNNER_WORKER_PUBLIC_INGRESS_DOMAIN: ${RUNNER_PUBLIC_INGRESS_DOMAIN}
+      RUNNER_WORKER_PUBLIC_PORT_RANGE: ${RUNNER_WORKER_PUBLIC_PORT_RANGE:-30000-30063}
+      RUNNER_WORKER_PUBLIC_HOST: ${RUNNER_WORKER_PUBLIC_HOST:-localhost}
       RUNNER_WORKER_ADVERTISE_HOST: ${RUNNER_WORKER_ADVERTISE_HOST}
-      RUNNER_WORKER_API_ADDRESS: runner-worker-01:80
       NATS_URL: ${NATS_URL}
       DOCKER_HOST: ${BACKEND_DOCKER_HOST}
       OTEL_EXPORTER_OTLP_INSECURE: ${OTEL_EXPORTER_OTLP_INSECURE}
@@ -106,48 +108,22 @@ services:
       OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT: ${OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT:-}
       OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
       PROFILING_ENABLED: ${PROFILING_ENABLED:-true}
-  runner-worker-02:
-    <<: *app
-    build:
-      target: develop-runner-worker
+    deploy:
+      mode: replicated
+      replicas: 3
+
+  # what stands in front of the nodes, so a container is reached by its own
+  # name whichever node happens to be holding it. In production this is the
+  # proxy; here it is one nginx with the nodes behind it.
+  runner-proxy:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    depends_on:
+      - runner-worker
     ports:
-      - "8041:80"
-    environment:
-      RUNNER_WORKER_NAME: runner-worker-02
-      # the containers' ports are published on the docker daemon's own host,
-      # which is the dind service rather than this one.
-      RUNNER_WORKER_ADVERTISE_HOST: ${RUNNER_WORKER_ADVERTISE_HOST}
-      RUNNER_WORKER_API_ADDRESS: runner-worker-02:80
-      NATS_URL: ${NATS_URL}
-      DOCKER_HOST: ${BACKEND_DOCKER_HOST}
-      OTEL_EXPORTER_OTLP_INSECURE: ${OTEL_EXPORTER_OTLP_INSECURE}
-      OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL}
-      OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES}
-      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
-      OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT: ${OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT:-}
-      OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
-      PROFILING_ENABLED: ${PROFILING_ENABLED:-true}
-  runner-worker-03:
-    <<: *app
-    build:
-      target: develop-runner-worker
-    ports:
-      - "8042:80"
-    environment:
-      RUNNER_WORKER_NAME: runner-worker-03
-      # the containers' ports are published on the docker daemon's own host,
-      # which is the dind service rather than this one.
-      RUNNER_WORKER_ADVERTISE_HOST: ${RUNNER_WORKER_ADVERTISE_HOST}
-      RUNNER_WORKER_API_ADDRESS: runner-worker-03:80
-      NATS_URL: ${NATS_URL}
-      DOCKER_HOST: ${BACKEND_DOCKER_HOST}
-      OTEL_EXPORTER_OTLP_INSECURE: ${OTEL_EXPORTER_OTLP_INSECURE}
-      OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL}
-      OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES}
-      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
-      OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT: ${OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT:-}
-      OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
-      PROFILING_ENABLED: ${PROFILING_ENABLED:-true}
+      - "8021:80"
+    volumes:
+      - ./resources/runner-proxy.conf:/etc/nginx/conf.d/default.conf:ro
 
   mongodb:
     image: mongo
@@ -228,9 +204,10 @@ services:
     privileged: true
     ports:
       - "2375:2375"
-      # the range docker publishes a container's ports on. The runner proxies
-      # them by hostname, so this is only for reaching one directly.
-      - "32768-32868:32768-32868"
+      # the range a container's ports are published on, which is what makes
+      # them reachable from here by the address the runner hands out.
+      - "${RUNNER_WORKER_PUBLIC_PORT_RANGE_FIRST:-30000}-${RUNNER_WORKER_PUBLIC_PORT_RANGE_LAST:-30063}:${RUNNER_WORKER_PUBLIC_PORT_RANGE_FIRST:-30000}-${RUNNER_WORKER_PUBLIC_PORT_RANGE_LAST:-30063}"
+      - "${RUNNER_WORKER_PUBLIC_PORT_RANGE_FIRST:-30000}-${RUNNER_WORKER_PUBLIC_PORT_RANGE_LAST:-30063}:${RUNNER_WORKER_PUBLIC_PORT_RANGE_FIRST:-30000}-${RUNNER_WORKER_PUBLIC_PORT_RANGE_LAST:-30063}/udp"
     environment:
       DOCKER_TLS_CERTDIR: "" # disable certs
     # dockerd's own Prometheus metrics endpoint on 0.0.0.0:9323

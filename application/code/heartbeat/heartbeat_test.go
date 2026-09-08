@@ -49,3 +49,40 @@ func TestDeadline(t *testing.T) {
 		assert.Nil(t, deadline(&events.Heartbeat{Interactive: true}, task.Running))
 	})
 }
+
+func TestEndpoints_node(t *testing.T) {
+	t.Parallel()
+
+	beat := events.Heartbeat{
+		Slug:        "abc-xkfqz",
+		Interactive: true,
+		Endpoints: []events.Endpoint{
+			{ContainerPort: 8080},
+			{ContainerPort: 3000},
+		},
+	}
+
+	t.Run("a snippet is reached on the node holding it", func(t *testing.T) {
+		t.Parallel()
+
+		beat := beat
+		beat.IngressDomain = "node-02.runner.tarhche.com"
+
+		handler := NewHeartbeatHandler(nil, "runner.tarhche.com", discardLogger())
+		endpoints := handler.endpoints(&beat, task.Running)
+
+		require.Len(t, endpoints, 2)
+		assert.Equal(t, "http://abc-xkfqz.node-02.runner.tarhche.com", endpoints[0].URL, "the first port answers on the container's bare name")
+		assert.Equal(t, "http://abc-xkfqz-3000.node-02.runner.tarhche.com", endpoints[1].URL, "and the rest carry their port in it")
+	})
+
+	t.Run("a node that names no domain of its own is answered under the runner's", func(t *testing.T) {
+		t.Parallel()
+
+		handler := NewHeartbeatHandler(nil, "runner.tarhche.com", discardLogger())
+		endpoints := handler.endpoints(&beat, task.Running)
+
+		require.Len(t, endpoints, 2)
+		assert.Equal(t, "http://abc-xkfqz.runner.tarhche.com", endpoints[0].URL)
+	})
+}

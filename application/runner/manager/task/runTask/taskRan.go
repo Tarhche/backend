@@ -42,11 +42,13 @@ func (uc *TaskRan) Handle(ctx context.Context, data []byte) error {
 	// endpoints, because a restarted container comes back on new host ports,
 	// and the state, the first time it comes up.
 	changed := t.NodeName != taskRan.NodeName ||
+		t.IngressDomain != taskRan.IngressDomain ||
 		t.ContainerID != taskRan.ContainerUUID ||
 		!t.Deadline.Equal(taskRan.Deadline) ||
 		!slices.Equal(t.Endpoints, endpoints)
 
 	t.NodeName = taskRan.NodeName
+	t.IngressDomain = taskRan.IngressDomain
 	t.ContainerID = taskRan.ContainerUUID
 	t.Endpoints = endpoints
 
@@ -77,6 +79,12 @@ func toEndpoints(endpoints []events.Endpoint) []task.Endpoint {
 			ContainerPort: e.ContainerPort,
 			Host:          e.Host,
 			HostPort:      e.HostPort,
+			HostPortUDP:   e.HostPortUDP,
+
+			// where it is reached at whole is the node's to say: it is the
+			// node that listens on it.
+			PublicPort: e.PublicPort,
+			PublicHost: e.PublicHost,
 		}
 	}
 

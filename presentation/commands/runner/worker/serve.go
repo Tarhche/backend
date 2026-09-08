@@ -5,15 +5,18 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/danceable/console"
 	"github.com/danceable/provider"
 
 	workerHeartbeat "github.com/khanzadimahdi/testproject/application/runner/worker/beatHeart"
+	"github.com/khanzadimahdi/testproject/application/runner/worker/cluster"
 	taskHeartbeat "github.com/khanzadimahdi/testproject/application/runner/worker/task/beatHeart"
 	shipLogs "github.com/khanzadimahdi/testproject/application/runner/worker/task/shipLogs"
 	"github.com/khanzadimahdi/testproject/domain"
+	taskEvents "github.com/khanzadimahdi/testproject/domain/runner/task/events"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers/runner"
@@ -28,11 +31,21 @@ const (
 	// what is running. A container that has just started is followed within
 	// this long, and one that has gone is let go.
 	logShippingInterval = 1 * time.Second
+
+	// forgetInterval is how often a node drops what no node has spoken for.
+	forgetInterval = 5 * time.Second
 )
 
 type ServeCommand struct {
-	configs         *configs.RunnerWorker
-	handler         http.Handler
+	configs *configs.RunnerWorker
+	handler http.Handler
+
+	// ingress serves what this node's containers serve, and passes on what
+	// belongs to another node: a container answers on a name of its own, and
+	// every node hears where every container is.
+	ingress         http.Handler
+	view            *cluster.View
+	subscriber      domain.Subscriber
 	consumer        domain.Consumer
 	consumers       map[string]domain.MessageHandler
 	taskHeartBeat   *taskHeartbeat.UseCase
@@ -81,6 +94,12 @@ func (c *ServeCommand) Configure(flagSet *console.FlagSet) {
 // The worker name (configured by flag or environment) is bound into the
 // container so the worker providers can resolve it.
 func (c *ServeCommand) Providers() []provider.Provider {
+	// the flags have been read by now, so what the node was not told about
+	// itself is filled in before anything is wired with it.
+	if err := c.nameItself(); err != nil {
+		panic(err)
+	}
+
 	return []provider.Provider{
 		providers.NewConfigsProvider(c.configs),
 		runner.NewWorkerNameProvider(),
@@ -127,6 +146,18 @@ func (c *ServeCommand) Boot(ctx context.Context, container provider.Container) e
 		return err
 	}
 
+	if err := container.Resolve(&c.ingress, provider.ResolveName(runner.WorkerIngress)); err != nil {
+		return err
+	}
+
+	if err := container.Resolve(&c.view); err != nil {
+		return err
+	}
+
+	if err := container.Resolve(&c.subscriber); err != nil {
+		return err
+	}
+
 	return container.Resolve(&c.consumers, provider.ResolveName(runner.WorkerSubscribers))
 }
 
@@ -148,9 +179,6 @@ func (c *ServeCommand) Terminate(ctx context.Context) error {
 // @basePath		/api
 // @schemes		http
 func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
-	if !c.validateParams() {
-		return console.ExitFailure
-	}
 
 	server := http.Server{
 		Addr:        fmt.Sprintf("0.0.0.0:%d", c.configs.Port),
@@ -174,6 +202,40 @@ func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 		return console.ExitFailure
 	}
 
+	// what every node is holding, heard from every node. It is a plain
+	// subscription rather than a queue: each node keeps its own view, so each
+	// node needs its own copy of what is said.
+	if err := c.subscriber.Subscribe(ctx, taskEvents.HeartbeatName, c.view); err != nil {
+		c.logger.ErrorContext(ctx, "failed to listen for what the other nodes are holding", "error", err)
+
+		return console.ExitFailure
+	}
+
+	// no read timeout: what it carries is a container's own traffic, which may
+	// be a long upload or a websocket rather than a request that finishes.
+	containers := http.Server{
+		Addr:        fmt.Sprintf("0.0.0.0:%d", c.configs.IngressPort),
+		Handler:     c.ingress,
+		IdleTimeout: 120 * time.Second,
+	}
+
+	go func() {
+		<-ctx.Done()
+
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		_ = containers.Shutdown(shutdownCtx)
+	}()
+
+	go func() {
+		if err := containers.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			c.logger.ErrorContext(ctx, "serving the containers failed", "error", err)
+		}
+	}()
+
+	go c.forgetGoneContainers(ctx)
+
 	go c.tasksHeartbeat(ctx)
 	go c.workerHeartbeat(ctx)
 	go c.shipLogs(ctx)
@@ -186,13 +248,40 @@ func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 	return console.ExitSuccess
 }
 
-func (c *ServeCommand) validateParams() bool {
-	if len(c.configs.Name) == 0 {
-		c.logger.Error("name is required")
-		return false
+// forgetGoneContainers drops what no node has spoken for lately, so a node
+// that goes away takes its containers out of this one's view with it.
+func (c *ServeCommand) forgetGoneContainers(ctx context.Context) {
+	ticker := time.NewTicker(forgetInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			c.view.Forget()
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+// nameItself gives a node that was not told what it is called the name of the
+// machine it is running on. Nodes are otherwise alike, so this is what lets
+// there be as many of them as somebody starts without configuring each.
+func (c *ServeCommand) nameItself() error {
+	if c.configs.Name == "" {
+		hostname, err := os.Hostname()
+		if err != nil {
+			return err
+		}
+
+		c.configs.Name = hostname
 	}
 
-	return true
+	if c.configs.APIAddress == "" {
+		c.configs.APIAddress = fmt.Sprintf("%s:%d", c.configs.Name, c.configs.Port)
+	}
+
+	return nil
 }
 
 func (c *ServeCommand) consumeTopics(ctx context.Context) error {
