@@ -6,6 +6,7 @@ services:
     networks:
       - nats
       - docker
+      - runner_manager
       - monitoring
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:80/health"]
@@ -45,6 +46,10 @@ services:
         max-file: "3"
     environment:
       RUNNER_WORKER_NAME: runner-worker-03
+      # the host the containers' published ports land on, and where this
+      # worker's own API is reachable from the manager.
+      RUNNER_WORKER_ADVERTISE_HOST: ${BACKEND_RUNNER_WORKER_ADVERTISE_HOST}
+      RUNNER_WORKER_API_ADDRESS: runner-worker-03:80
       NATS_URL: ${BACKEND_NATS_URL}
       DOCKER_HOST: ${BACKEND_DOCKER_HOST}
       OTEL_EXPORTER_OTLP_INSECURE: ${OTEL_EXPORTER_OTLP_INSECURE}
@@ -58,6 +63,9 @@ services:
 networks:
   nats:
     name: nats
+    external: true
+  runner_manager:
+    name: runner_manager
     external: true
   docker:
     name: docker

@@ -16,7 +16,12 @@ import (
 	"github.com/khanzadimahdi/testproject/presentation/commands/runner/worker"
 )
 
-//go:generate go tool swag init --generalInfo ./presentation/commands/blog/serve.go --dir ./ --output ./resources/docs/blog/openapi
+// the blog's specification documents the blog. The runner services carry
+// annotations of their own and are served elsewhere, so scanning them here
+// only puts routes in this spec that this service does not answer — and makes
+// the manager and the worker collide over the paths they share.
+//
+//go:generate go tool swag init --generalInfo ./presentation/commands/blog/serve.go --dir ./ --exclude ./presentation/http/runner --output ./resources/docs/blog/openapi
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancel()

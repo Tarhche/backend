@@ -32,6 +32,7 @@ func (h *Heartbeat) Handle(ctx context.Context, data []byte) error {
 
 	n.Name = heartbeat.Name
 	n.Role = heartbeat.Role
+	n.APIAddress = heartbeat.APIAddress
 	n.Stats = heartbeat.Stats
 	n.LastHeartbeatAt = heartbeat.At
 

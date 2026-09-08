@@ -58,6 +58,8 @@ services:
       OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT: ${OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT:-}
       OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
       PROFILING_ENABLED: ${PROFILING_ENABLED:-true}
+      RUNNER_MANAGER_URL: ${RUNNER_MANAGER_URL}
+      RUNNER_INGRESS_DOMAIN: ${RUNNER_PUBLIC_INGRESS_DOMAIN}
 
   runner-manager:
     <<: *app
@@ -65,7 +67,10 @@ services:
       target: develop-runner-manager
     ports:
       - "8020:80"
+      - "8021:8090" # the containers' own exposed ports, routed by hostname
     environment:
+      RUNNER_INGRESS_PORT: 8090
+      RUNNER_INGRESS_DOMAIN: ${RUNNER_INGRESS_DOMAIN}
       MONGO_SCHEME: ${MONGO_SCHEME}
       MONGO_USERNAME: ${MONGO_USERNAME}
       MONGO_PASSWORD: ${MONGO_PASSWORD}
@@ -88,6 +93,10 @@ services:
       - "8040:80"
     environment:
       RUNNER_WORKER_NAME: runner-worker-01
+      # the containers' ports are published on the docker daemon's own host,
+      # which is the dind service rather than this one.
+      RUNNER_WORKER_ADVERTISE_HOST: ${RUNNER_WORKER_ADVERTISE_HOST}
+      RUNNER_WORKER_API_ADDRESS: runner-worker-01:80
       NATS_URL: ${NATS_URL}
       DOCKER_HOST: ${BACKEND_DOCKER_HOST}
       OTEL_EXPORTER_OTLP_INSECURE: ${OTEL_EXPORTER_OTLP_INSECURE}
@@ -105,6 +114,10 @@ services:
       - "8041:80"
     environment:
       RUNNER_WORKER_NAME: runner-worker-02
+      # the containers' ports are published on the docker daemon's own host,
+      # which is the dind service rather than this one.
+      RUNNER_WORKER_ADVERTISE_HOST: ${RUNNER_WORKER_ADVERTISE_HOST}
+      RUNNER_WORKER_API_ADDRESS: runner-worker-02:80
       NATS_URL: ${NATS_URL}
       DOCKER_HOST: ${BACKEND_DOCKER_HOST}
       OTEL_EXPORTER_OTLP_INSECURE: ${OTEL_EXPORTER_OTLP_INSECURE}
@@ -122,6 +135,10 @@ services:
       - "8042:80"
     environment:
       RUNNER_WORKER_NAME: runner-worker-03
+      # the containers' ports are published on the docker daemon's own host,
+      # which is the dind service rather than this one.
+      RUNNER_WORKER_ADVERTISE_HOST: ${RUNNER_WORKER_ADVERTISE_HOST}
+      RUNNER_WORKER_API_ADDRESS: runner-worker-03:80
       NATS_URL: ${NATS_URL}
       DOCKER_HOST: ${BACKEND_DOCKER_HOST}
       OTEL_EXPORTER_OTLP_INSECURE: ${OTEL_EXPORTER_OTLP_INSECURE}
@@ -211,6 +228,9 @@ services:
     privileged: true
     ports:
       - "2375:2375"
+      # the range docker publishes a container's ports on. The runner proxies
+      # them by hostname, so this is only for reaching one directly.
+      - "32768-32868:32768-32868"
     environment:
       DOCKER_TLS_CERTDIR: "" # disable certs
     # dockerd's own Prometheus metrics endpoint on 0.0.0.0:9323

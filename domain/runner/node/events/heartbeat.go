@@ -9,8 +9,9 @@ import (
 const HeartbeatName = "runnerNodeHeartbeat"
 
 type Heartbeat struct {
-	Name  string
-	Role  node.Role
-	Stats node.Stats
-	At    time.Time
+	Name       string
+	Role       node.Role
+	APIAddress string
+	Stats      node.Stats
+	At         time.Time
 }

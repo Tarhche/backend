@@ -21,9 +21,15 @@ const (
 )
 
 type ServeCommand struct {
-	configs   *configs.RunnerManager
-	handler   http.Handler
-	consumer  domain.Consumer
+	configs  *configs.RunnerManager
+	handler  http.Handler
+	consumer domain.Consumer
+
+	// ingress serves the containers' own exposed ports, on a port of its own:
+	// a request there is routed to a container by the hostname it was made to,
+	// which is not something the API's own routes should have to step around.
+	ingress http.Handler
+
 	consumers map[string]domain.MessageHandler
 	logger    *slog.Logger
 }
@@ -99,6 +105,10 @@ func (c *ServeCommand) Boot(ctx context.Context, container provider.Container) e
 		return err
 	}
 
+	if err := container.Resolve(&c.ingress, provider.ResolveName(runner.ManagerIngress)); err != nil {
+		return err
+	}
+
 	return container.Resolve(&c.consumers, provider.ResolveName(runner.ManagerSubscribers))
 }
 
@@ -127,6 +137,14 @@ func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 		IdleTimeout: 10 * time.Second,
 	}
 
+	// no read timeout: what it carries is a container's own traffic, which may
+	// be a long upload or a websocket rather than a request that finishes.
+	ingress := http.Server{
+		Addr:        fmt.Sprintf("0.0.0.0:%d", c.configs.IngressPort),
+		Handler:     c.ingress,
+		IdleTimeout: 120 * time.Second,
+	}
+
 	go func() {
 		<-ctx.Done()
 
@@ -135,12 +153,19 @@ func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 		defer cancel()
 
 		_ = server.Shutdown(shutdownCtx)
+		_ = ingress.Shutdown(shutdownCtx)
 	}()
 
 	if err := c.consumeTopics(ctx); err != nil {
 		c.logger.ErrorContext(ctx, "failed to consume topics", "error", err)
 		return console.ExitFailure
 	}
+
+	go func() {
+		if err := ingress.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			c.logger.ErrorContext(ctx, "the ingress failed", "error", err)
+		}
+	}()
 
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		c.logger.ErrorContext(ctx, "server failed", "error", err)

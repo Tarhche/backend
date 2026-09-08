@@ -5,9 +5,13 @@ import (
 )
 
 type NodeBson struct {
-	Name            string    `bson:"name"`
-	Role            string    `bson:"role"`
-	API             string    `bson:"api"`
+	Name string `bson:"name"`
+	Role string `bson:"role"`
+
+	// APIAddress is where this node's own HTTP API is reachable from inside
+	// the cluster, which is where the manager proxies a terminal to.
+	APIAddress string `bson:"api,omitempty"`
+
 	Stats           Stats     `bson:"stats"`
 	LastHeartbeatAt time.Time `bson:"last_heartbeat_at,omitempty"`
 	CreatedAt       time.Time `bson:"created_at,omitempty"`
