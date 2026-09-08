@@ -1,6 +1,17 @@
 package configs
 
-const defaultBlogPort = 80
+const (
+	defaultBlogPort = 80
+
+	// defaultRunnerManagerURL is where the runner manager sits on the local
+	// stack, which is also what it is called in production.
+	defaultRunnerManagerURL = "http://runner-manager:80"
+
+	// defaultRunnerIngressDomain is the local one. Every *.localhost name
+	// resolves to the loopback address, so a container is reachable in a
+	// browser without touching any DNS.
+	defaultRunnerIngressDomain = "runner.localhost:8021"
+)
 
 // Blog holds the configuration of the serve-blog command.
 type Blog struct {
@@ -20,6 +31,9 @@ type Blog struct {
 	MailPort     string `usage:"SMTP port." env:"MAIL_SMTP_PORT" long:"mail-smtp-port"`
 	MailUsername string `usage:"SMTP user, when the relay authenticates." env:"MAIL_SMTP_USERNAME" long:"mail-smtp-username"`
 	MailPassword string `usage:"SMTP password, when the relay authenticates." env:"MAIL_SMTP_PASSWORD" long:"mail-smtp-password"`
+
+	RunnerManagerURL    string `usage:"Base URL of the runner manager's API, which the dashboard passes container and stack commands to." env:"RUNNER_MANAGER_URL" long:"runner-manager-url"`
+	RunnerIngressDomain string `usage:"Domain a runner container's exposed ports are served on, used to build the addresses the dashboard shows." env:"RUNNER_INGRESS_DOMAIN" long:"runner-ingress-domain"`
 }
 
 // NewBlog returns the configuration of the serve-blog command, holding the
@@ -27,6 +41,8 @@ type Blog struct {
 // struct it is given, so nothing it parses reaches another command.
 func NewBlog() *Blog {
 	return &Blog{
-		Port: defaultBlogPort,
+		Port:                defaultBlogPort,
+		RunnerManagerURL:    defaultRunnerManagerURL,
+		RunnerIngressDomain: defaultRunnerIngressDomain,
 	}
 }

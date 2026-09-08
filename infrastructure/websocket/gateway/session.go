@@ -24,9 +24,14 @@ type failureResponse struct {
 // hands them to the dispatcher, and writes back the replies for what it
 // dispatched.
 type session struct {
-	conn         Conn
-	dispatcher   *dispatcher
-	registry     RequestRegistry
+	conn       Conn
+	dispatcher *dispatcher
+	registry   RequestRegistry
+
+	// cancelStream tells whoever is producing a stream that this client has
+	// stopped listening to it.
+	cancelStream func(ctx context.Context, requestID string)
+
 	hub          *hub
 	bus          *replyBus
 	replyBackoff Backoff
@@ -96,6 +101,11 @@ func (s *session) run(ctx context.Context) {
 		s.finish()
 		leave()
 		<-written
+
+		// whatever was still being produced for this client has nobody left to
+		// receive it. Detached from ctx, which is already done by the time a
+		// disconnect unwinds the session.
+		s.cancelOutstandingStreams(context.WithoutCancel(ctx))
 	}()
 
 	s.readRequests(ctx)
@@ -139,6 +149,14 @@ func (s *session) readRequests(ctx context.Context) {
 
 		if s.bus.isClosed() {
 			s.writeFailure(request.ID, nil, ErrClosed)
+
+			continue
+		}
+
+		// a stream named with no subject to carry it to is the client asking
+		// for that stream to end.
+		if len(request.StreamID) > 0 && len(request.Subject) == 0 {
+			s.closeStream(ctx, &request)
 
 			continue
 		}
@@ -195,8 +213,12 @@ func (s *session) deliver(reply *domain.Reply) {
 		default:
 			// the reply is shared with every session, so answer with a copy
 			// rather than rewriting the id on it.
-			if s.conn.Send(&domain.Reply{RequestID: clientSideID, Payload: reply.Payload}) {
-				s.forget(reply.RequestID)
+			if s.conn.Send(&domain.Reply{RequestID: clientSideID, Kind: reply.Kind, Payload: reply.Payload}) {
+				// a chunk is one piece of an answer still being written, so the
+				// request stays registered until something ends it.
+				if reply.Kind.EndsRequest() {
+					s.forget(reply.RequestID)
+				}
 
 				return
 			}
@@ -259,5 +281,48 @@ func (s *session) writeFailure(requestID string, validationErrors domain.Validat
 
 	if !s.conn.Send(&domain.Reply{RequestID: requestID, Payload: payload}) {
 		s.logger.Warn("could not deliver a failure response to the client", "requestID", requestID)
+	}
+}
+
+// closeStream ends a stream at the client's request: whoever is producing it is
+// told to stop, the client is sent the end of the stream it asked to end, and
+// the request is released.
+func (s *session) closeStream(ctx context.Context, request *domain.Request) {
+	validationErrors, err := s.dispatcher.validator.validate(request)
+	if err != nil {
+		s.writeFailure(request.StreamID, nil, err)
+
+		return
+	}
+
+	if len(validationErrors) > 0 {
+		s.writeFailure(request.StreamID, validationErrors, nil)
+
+		return
+	}
+
+	serverSideID, err := s.registry.GetServerSideID(request.StreamID)
+	if err != nil {
+		// the stream ended between validating the request and acting on it,
+		// which is the outcome the client asked for anyway.
+		return
+	}
+
+	s.cancelStream(ctx, serverSideID)
+
+	if !s.conn.Send(&domain.Reply{RequestID: request.StreamID, Kind: domain.ReplyEOF}) {
+		s.logger.Warn("could not tell the client its stream ended", "streamID", request.StreamID)
+	}
+
+	s.forget(serverSideID)
+}
+
+// cancelOutstandingStreams tells the producers of everything this client still
+// had open that it is gone. A request that was already answered is no longer
+// registered, so nothing is cancelled for it; one that never streamed at all
+// simply has no producer listening.
+func (s *session) cancelOutstandingStreams(ctx context.Context) {
+	for _, serverSideID := range s.registry.ServerSideIDs() {
+		s.cancelStream(ctx, serverSideID)
 	}
 }

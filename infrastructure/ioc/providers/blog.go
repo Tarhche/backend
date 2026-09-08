@@ -30,13 +30,9 @@ import (
 	"github.com/khanzadimahdi/testproject/application/contact/createMessage"
 	dashboardCreateArticle "github.com/khanzadimahdi/testproject/application/dashboard/article/createArticle"
 	dashboardDeleteArticle "github.com/khanzadimahdi/testproject/application/dashboard/article/deleteArticle"
-	dashboardDeleteUserArticle "github.com/khanzadimahdi/testproject/application/dashboard/article/deleteUserArticle"
 	dashboardGetArticle "github.com/khanzadimahdi/testproject/application/dashboard/article/getArticle"
 	dashboardGetArticles "github.com/khanzadimahdi/testproject/application/dashboard/article/getArticles"
-	dashboardGetUserArticle "github.com/khanzadimahdi/testproject/application/dashboard/article/getUserArticle"
-	dashboardGetUserArticles "github.com/khanzadimahdi/testproject/application/dashboard/article/getUserArticles"
 	dashboardUpdateArticle "github.com/khanzadimahdi/testproject/application/dashboard/article/updateArticle"
-	dashboardUpdateUserArticle "github.com/khanzadimahdi/testproject/application/dashboard/article/updateUserArticle"
 	dashboardDeleteUserBookmark "github.com/khanzadimahdi/testproject/application/dashboard/bookmark/deleteUserBookmark"
 	dashboardGetUserBookmarks "github.com/khanzadimahdi/testproject/application/dashboard/bookmark/getUserBookmarks"
 	dashboardCreateComment "github.com/khanzadimahdi/testproject/application/dashboard/comment/createComment"
@@ -80,6 +76,23 @@ import (
 	dashboardGetRole "github.com/khanzadimahdi/testproject/application/dashboard/role/getRole"
 	dashboardGetRoles "github.com/khanzadimahdi/testproject/application/dashboard/role/getRoles"
 	dashboardUpdateRole "github.com/khanzadimahdi/testproject/application/dashboard/role/updateRole"
+	dashboardAttachContainer "github.com/khanzadimahdi/testproject/application/dashboard/runner/container/attachContainer"
+	dashboardDeleteContainer "github.com/khanzadimahdi/testproject/application/dashboard/runner/container/deleteContainer"
+	dashboardFollowContainerLogs "github.com/khanzadimahdi/testproject/application/dashboard/runner/container/followContainerLogs"
+	dashboardGetContainer "github.com/khanzadimahdi/testproject/application/dashboard/runner/container/getContainer"
+	dashboardGetContainerLogs "github.com/khanzadimahdi/testproject/application/dashboard/runner/container/getContainerLogs"
+	dashboardGetContainers "github.com/khanzadimahdi/testproject/application/dashboard/runner/container/getContainers"
+	dashboardKillContainer "github.com/khanzadimahdi/testproject/application/dashboard/runner/container/killContainer"
+	dashboardRestartContainer "github.com/khanzadimahdi/testproject/application/dashboard/runner/container/restartContainer"
+	dashboardRunContainer "github.com/khanzadimahdi/testproject/application/dashboard/runner/container/runContainer"
+	dashboardStopContainer "github.com/khanzadimahdi/testproject/application/dashboard/runner/container/stopContainer"
+	dashboardDeleteStack "github.com/khanzadimahdi/testproject/application/dashboard/runner/stack/deleteStack"
+	dashboardGetStack "github.com/khanzadimahdi/testproject/application/dashboard/runner/stack/getStack"
+	dashboardGetStacks "github.com/khanzadimahdi/testproject/application/dashboard/runner/stack/getStacks"
+	dashboardKillStack "github.com/khanzadimahdi/testproject/application/dashboard/runner/stack/killStack"
+	dashboardRestartStack "github.com/khanzadimahdi/testproject/application/dashboard/runner/stack/restartStack"
+	dashboardRunStack "github.com/khanzadimahdi/testproject/application/dashboard/runner/stack/runStack"
+	dashboardStopStack "github.com/khanzadimahdi/testproject/application/dashboard/runner/stack/stopStack"
 	createuser "github.com/khanzadimahdi/testproject/application/dashboard/user/createUser"
 	deleteuser "github.com/khanzadimahdi/testproject/application/dashboard/user/deleteUser"
 	getuser "github.com/khanzadimahdi/testproject/application/dashboard/user/getUser"
@@ -116,6 +129,7 @@ import (
 	permissionsrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/permissions"
 	rolesrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/roles"
 	userrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/users"
+	runnerClient "github.com/khanzadimahdi/testproject/infrastructure/runner/manager/client"
 	"github.com/khanzadimahdi/testproject/infrastructure/telemetry/profiler"
 	infraWebsocket "github.com/khanzadimahdi/testproject/infrastructure/websocket"
 	"github.com/khanzadimahdi/testproject/infrastructure/websocket/gateway"
@@ -136,6 +150,8 @@ import (
 	dashboardPermissionAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/permission"
 	"github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/profile"
 	dashboardRoleAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/role"
+	dashboardRunnerContainerAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/runner/container"
+	dashboardRunnerStackAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/runner/stack"
 	dashboardUserAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/user"
 	fileAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/file"
 	hashtagAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/hashtag"
@@ -356,6 +372,62 @@ func blog(
 		return nil, err
 	}
 
+	// ---- dashboard: the runner ----
+	//
+	// the dashboard does not schedule containers itself. It establishes who is
+	// asking and whether they may, then passes the request to the runner, so
+	// one service owns a container's lifecycle.
+	runner, err := runnerClient.New(blogConfigs.RunnerManagerURL)
+	if err != nil {
+		return nil, err
+	}
+
+	authenticator := auth.NewAuthenticator(jwt, userRepository)
+	ingressDomain := blogConfigs.RunnerIngressDomain
+
+	dashboardGetContainersUseCase := dashboardGetContainers.NewUseCase(runner, ingressDomain)
+	dashboardGetContainerUseCase := dashboardGetContainer.NewUseCase(runner, ingressDomain)
+	dashboardRunContainerUseCase := dashboardRunContainer.NewUseCase(runner, validator, ingressDomain)
+	dashboardStopContainerUseCase := dashboardStopContainer.NewUseCase(runner)
+	dashboardKillContainerUseCase := dashboardKillContainer.NewUseCase(runner)
+	dashboardRestartContainerUseCase := dashboardRestartContainer.NewUseCase(runner)
+	dashboardDeleteContainerUseCase := dashboardDeleteContainer.NewUseCase(runner)
+	dashboardGetContainerLogsUseCase := dashboardGetContainerLogs.NewUseCase(runner)
+
+	dashboardGetStacksUseCase := dashboardGetStacks.NewUseCase(runner, ingressDomain)
+	dashboardGetStackUseCase := dashboardGetStack.NewUseCase(runner, ingressDomain)
+	dashboardRunStackUseCase := dashboardRunStack.NewUseCase(runner, validator, ingressDomain)
+	dashboardStopStackUseCase := dashboardStopStack.NewUseCase(runner)
+	dashboardKillStackUseCase := dashboardKillStack.NewUseCase(runner)
+	dashboardRestartStackUseCase := dashboardRestartStack.NewUseCase(runner)
+	dashboardDeleteStackUseCase := dashboardDeleteStack.NewUseCase(runner)
+
+	// a terminal and a live log are streams rather than answers, so they travel
+	// over the websocket the gateway already serves: one request opens the
+	// stream and its reply arrives chunk by chunk until it ends.
+	var messageGateway *gateway.Gateway
+	if err := iocContainer.Resolve(&messageGateway); err != nil {
+		return nil, err
+	}
+
+	streams := gateway.NewStreams()
+	if err := messageGateway.WatchStreamCancellations(context.Background(), streams); err != nil {
+		return nil, err
+	}
+
+	dashboardAttachContainerUseCase := dashboardAttachContainer.NewUseCase(runner, authenticator, authorizer, validator, cachedGateway, streams, logger)
+	dashboardFollowContainerLogsUseCase := dashboardFollowContainerLogs.NewUseCase(runner, authenticator, authorizer, validator, cachedGateway, streams, logger)
+
+	for subject, handler := range map[string]domain.MessageHandler{
+		dashboardAttachContainer.AttachName:     dashboardAttachContainerUseCase,
+		dashboardAttachContainer.InputName:      dashboardAttachContainerUseCase.InputHandler(),
+		dashboardFollowContainerLogs.FollowName: dashboardFollowContainerLogsUseCase,
+	} {
+		if err := cachedGateway.Consume(context.Background(), subject, handler); err != nil {
+			return nil, err
+		}
+	}
+
 	// ---- dashboard ----
 	getProfileUseCase := getprofile.NewUseCase(userRepository)
 	dashboardProfileGetRolesUseCase := getRoles.NewUseCase(rolesRepository)
@@ -363,9 +435,6 @@ func blog(
 	dashboardDeleteArticleUsecase := dashboardDeleteArticle.NewUseCase(articlesRepository)
 	dashboardGetArticleUsecase := dashboardGetArticle.NewUseCase(articlesRepository, userRepository)
 	dashboardGetArticlesUsecase := dashboardGetArticles.NewUseCase(articlesRepository, userRepository, languageRepository)
-	dashboardGetUserArticlesUsecase := dashboardGetUserArticles.NewUseCase(articlesRepository, userRepository, languageRepository)
-	dashboardGetUserArticleUsecase := dashboardGetUserArticle.NewUseCase(articlesRepository, userRepository)
-	dashboardDeleteUserArticleUsecase := dashboardDeleteUserArticle.NewUseCase(articlesRepository)
 
 	dashboardDeleteCommentUsecase := dashboardDeleteComment.NewUseCase(commentsRepository)
 	dashboardGetCommentUsecase := dashboardGetComment.NewUseCase(commentsRepository, userRepository)
@@ -554,14 +623,6 @@ func blog(
 		return dashboardArticleAPI.NewUpdateHandler(dashboardUpdateArticle.NewUseCase(articlesRepository, languageRepository, va(c), tr(c)))
 	}), authorizer, permission.ArticlesUpdate), jwt, userRepository))
 
-	// one's own articles
-	mux.Handle("GET /api/dashboard/my/articles", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardArticleAPI.NewIndexUserHandler(dashboardGetUserArticlesUsecase), authorizer, permission.SelfArticlesIndex), jwt, userRepository))
-	mux.Handle("GET /api/dashboard/my/articles/{correlationUUID}/{language_code}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardArticleAPI.NewShowUserHandler(dashboardGetUserArticleUsecase), authorizer, permission.SelfArticlesShow), jwt, userRepository))
-	mux.Handle("DELETE /api/dashboard/my/articles/{correlationUUID}/{language_code}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardArticleAPI.NewDeleteUserHandler(dashboardDeleteUserArticleUsecase), authorizer, permission.SelfArticlesDelete), jwt, userRepository))
-	mux.Handle("PUT /api/dashboard/my/articles", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
-		return dashboardArticleAPI.NewUpdateUserHandler(dashboardUpdateUserArticle.NewUseCase(articlesRepository, languageRepository, va(c), tr(c)))
-	}), authorizer, permission.SelfArticlesUpdate), jwt, userRepository))
-
 	// comments
 	mux.Handle("POST /api/dashboard/comments", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
 		return dashboardCommentAPI.NewCreateHandler(dashboardCreateComment.NewUseCase(commentsRepository, va(c)))
@@ -617,6 +678,25 @@ func blog(
 	mux.Handle("GET /api/dashboard/contact-us", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardContactAPI.NewIndexHandler(dashboardGetContactMessagesUsecase), authorizer, permission.ContactUsIndex), jwt, userRepository))
 	mux.Handle("GET /api/dashboard/contact-us/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardContactAPI.NewShowHandler(dashboardGetContactMessageUsecase), authorizer, permission.ContactUsShow), jwt, userRepository))
 	mux.Handle("PUT /api/dashboard/contact-us/{uuid}/read", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardContactAPI.NewMarkAsReadHandler(dashboardMarkContactMessageAsReadUsecase), authorizer, permission.ContactUsMarkAsRead), jwt, userRepository))
+
+	// runner containers
+	mux.Handle("GET /api/dashboard/runner/containers", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardRunnerContainerAPI.NewIndexHandler(dashboardGetContainersUseCase), authorizer, permission.RunnerContainersIndex), jwt, userRepository))
+	mux.Handle("POST /api/dashboard/runner/containers", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardRunnerContainerAPI.NewRunHandler(dashboardRunContainerUseCase), authorizer, permission.RunnerContainersCreate), jwt, userRepository))
+	mux.Handle("GET /api/dashboard/runner/containers/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardRunnerContainerAPI.NewShowHandler(dashboardGetContainerUseCase), authorizer, permission.RunnerContainersShow), jwt, userRepository))
+	mux.Handle("DELETE /api/dashboard/runner/containers/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardRunnerContainerAPI.NewDeleteHandler(dashboardDeleteContainerUseCase), authorizer, permission.RunnerContainersDelete), jwt, userRepository))
+	mux.Handle("POST /api/dashboard/runner/containers/{uuid}/stop", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardRunnerContainerAPI.NewStopHandler(dashboardStopContainerUseCase), authorizer, permission.RunnerContainersManage), jwt, userRepository))
+	mux.Handle("POST /api/dashboard/runner/containers/{uuid}/kill", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardRunnerContainerAPI.NewKillHandler(dashboardKillContainerUseCase), authorizer, permission.RunnerContainersManage), jwt, userRepository))
+	mux.Handle("POST /api/dashboard/runner/containers/{uuid}/restart", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardRunnerContainerAPI.NewRestartHandler(dashboardRestartContainerUseCase), authorizer, permission.RunnerContainersManage), jwt, userRepository))
+	mux.Handle("GET /api/dashboard/runner/containers/{uuid}/logs", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardRunnerContainerAPI.NewLogsHandler(dashboardGetContainerLogsUseCase), authorizer, permission.RunnerContainersLogs), jwt, userRepository))
+
+	// runner stacks
+	mux.Handle("GET /api/dashboard/runner/stacks", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardRunnerStackAPI.NewIndexHandler(dashboardGetStacksUseCase), authorizer, permission.RunnerStacksIndex), jwt, userRepository))
+	mux.Handle("POST /api/dashboard/runner/stacks", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardRunnerStackAPI.NewRunHandler(dashboardRunStackUseCase), authorizer, permission.RunnerStacksCreate), jwt, userRepository))
+	mux.Handle("GET /api/dashboard/runner/stacks/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardRunnerStackAPI.NewShowHandler(dashboardGetStackUseCase), authorizer, permission.RunnerStacksShow), jwt, userRepository))
+	mux.Handle("DELETE /api/dashboard/runner/stacks/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardRunnerStackAPI.NewDeleteHandler(dashboardDeleteStackUseCase), authorizer, permission.RunnerStacksDelete), jwt, userRepository))
+	mux.Handle("POST /api/dashboard/runner/stacks/{uuid}/stop", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardRunnerStackAPI.NewStopHandler(dashboardStopStackUseCase), authorizer, permission.RunnerStacksManage), jwt, userRepository))
+	mux.Handle("POST /api/dashboard/runner/stacks/{uuid}/kill", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardRunnerStackAPI.NewKillHandler(dashboardKillStackUseCase), authorizer, permission.RunnerStacksManage), jwt, userRepository))
+	mux.Handle("POST /api/dashboard/runner/stacks/{uuid}/restart", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardRunnerStackAPI.NewRestartHandler(dashboardRestartStackUseCase), authorizer, permission.RunnerStacksManage), jwt, userRepository))
 
 	// config
 	mux.Handle("GET /api/dashboard/config", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardConfigAPI.NewShowHandler(dashboardGetConfigUsecase), authorizer, permission.ConfigShow), jwt, userRepository))
