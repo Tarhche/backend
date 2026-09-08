@@ -158,11 +158,10 @@ func workerConsoleCommand(
 		return nil, err
 	}
 
-	// the network standalone isolated containers share is this node's to make,
-	// and it has to be there before the first container tries to join it.
-	if err := networkManager.EnsureIsolatedNetwork(context.Background()); err != nil {
-		return nil, err
-	}
+	// the network standalone isolated containers share is made when the first
+	// container joins it rather than here. A node whose docker daemon is away
+	// for a moment — it restarts, or it comes up after the node does — would
+	// otherwise fail to start at all, and stay down until somebody noticed.
 
 	// tasks
 	getTasksUseCase := workergettasks.NewUseCase(containerManager, nodeName)
@@ -170,7 +169,7 @@ func workerConsoleCommand(
 	stopTaskUseCase := workerstoptask.NewUseCase(containerManager, validator)
 	killTaskUseCase := workerkilltask.NewUseCase(containerManager, validator)
 	restartTaskUseCase := workerrestarttask.NewUseCase(containerManager, validator)
-	deleteTaskUseCase := workerDeleteTask.NewUseCase(containerManager, validator)
+	deleteTaskUseCase := workerDeleteTask.NewUseCase(containerManager, validator, logger)
 	attachTaskUseCase := workerAttachTask.NewUseCase(containerManager, validator)
 
 	// the worker talks to no database, so messaging is its only dependency
@@ -223,7 +222,7 @@ func workerConsoleCommand(
 	)
 
 	subscribers := map[string]domain.MessageHandler{
-		taskEvents.TaskScheduledName:         workerruntask.NewTaskScheduled(runTaskUseCase, nodeName),
+		taskEvents.TaskScheduledName:         workerruntask.NewTaskScheduled(runTaskUseCase, asyncProduceConsumer, nodeName, logger),
 		taskEvents.TaskStoppageRequestedName: workerstoptask.NewStoppageTaskHandler(stopTaskUseCase),
 		taskEvents.TaskKillRequestedName:     workerkilltask.NewKillTaskHandler(killTaskUseCase),
 		taskEvents.TaskRestartRequestedName:  workerrestarttask.NewRestartTaskHandler(restartTaskUseCase),

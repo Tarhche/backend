@@ -23,7 +23,8 @@ func NewIndexHandler(useCase *getstacks.UseCase) *indexHandler {
 // @Tags			runner stacks
 // @Accept			json
 // @Produce		json
-// @Param			page	query		int	false	"Page number"	default(1)
+// @Param			page	query		int		false	"Page number"	default(1)
+// @Param			owner	query		string	false	"Only the stacks this person owns"
 // @Success		200		{object}	getstacks.Response
 // @Failure		500		{object}	map[string]interface{}
 // @Router			/stacks [get]
@@ -33,7 +34,10 @@ func (h *indexHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		page = uint(parsed)
 	}
 
-	response, err := h.useCase.Execute(r.Context(), &getstacks.Request{Page: page})
+	response, err := h.useCase.Execute(r.Context(), &getstacks.Request{
+		Page:      page,
+		OwnerUUID: r.URL.Query().Get("owner"),
+	})
 	switch {
 	case err != nil:
 		infraTrace.RecordError(trace.SpanFromContext(r.Context()), err)

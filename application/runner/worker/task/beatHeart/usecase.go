@@ -52,13 +52,17 @@ func (uc *UseCase) Execute(ctx context.Context) error {
 	}
 
 	for _, c := range allContainers {
+		kind := kindOf(&c)
+
 		event := events.Heartbeat{
 			UUID:          c.Labels[container.TaskUUIDLabelKey],
 			Name:          c.Labels[container.TaskNameLabelKey],
+			Kind:          string(kind),
 			Image:         c.Image,
 			ContainerUUID: c.ID,
-			State:         int(container.EvaluateTaskState(c.Status, kindOf(&c))),
+			State:         int(container.EvaluateTaskState(c.Status, kind)),
 			NodeName:      uc.nodeName,
+			Attempt:       c.Attempt(),
 			Endpoints:     uc.endpoints(&c),
 			Logs:          uc.logs(ctx, &c),
 			At:            time.Now(),

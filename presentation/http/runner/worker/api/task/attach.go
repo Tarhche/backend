@@ -23,6 +23,10 @@ const (
 
 	// readChunk is how much of a command's output is carried in one frame.
 	readChunk = 4 << 10
+
+	// endWait bounds ending a command the client walked away from, which is
+	// two signals with a grace period after each.
+	endWait = 30 * time.Second
 )
 
 // attachHandler carries a command running inside a container over a websocket.
@@ -94,12 +98,32 @@ func (h *attachHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	conn, err := h.upgrader.Upgrade(rw, r, nil)
 	if err != nil {
 		_ = session.Close()
+
+		// nobody ever attached to it, so nothing is going to end it either.
+		go h.end(session)
+
 		h.logger.ErrorContext(r.Context(), "failed to upgrade an attach connection", "error", err)
 
 		return
 	}
 
 	h.pump(conn, session)
+
+	// the client is gone. What it left running has nothing to show its output
+	// to and no way back to it, so it is ended rather than left in the
+	// container for as long as the container lives.
+	go h.end(session)
+}
+
+// end stops what the client left running. Detached from the request, which is
+// over: the command is given its grace period after the person has gone.
+func (h *attachHandler) end(session container.ExecSession) {
+	ctx, cancel := context.WithTimeout(context.Background(), endWait)
+	defer cancel()
+
+	if err := session.End(ctx); err != nil {
+		h.logger.Warn("could not end a command left running in a container", "error", err)
+	}
 }
 
 // pump carries bytes between the client and the command until either end stops.

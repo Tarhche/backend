@@ -90,7 +90,7 @@ func (h *Handler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if t.State != task.Running {
+	if t.CurrentState != task.Running {
 		http.Error(rw, "the container is not running", http.StatusServiceUnavailable)
 
 		return

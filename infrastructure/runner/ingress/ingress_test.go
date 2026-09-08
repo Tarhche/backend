@@ -58,7 +58,7 @@ func runningContainer(slug string, upstreams map[port.Port]*httptest.Server) tas
 		})
 	}
 
-	return task.Task{Slug: slug, State: task.Running, Endpoints: endpoints}
+	return task.Task{Slug: slug, CurrentState: task.Running, Endpoints: endpoints}
 }
 
 func TestParseHost(t *testing.T) {
@@ -286,7 +286,7 @@ func TestHandler(t *testing.T) {
 		t.Parallel()
 
 		resolver := &fakeResolver{tasks: map[string]task.Task{
-			"nginx-xkfqz": {Slug: "nginx-xkfqz", State: task.Running},
+			"nginx-xkfqz": {Slug: "nginx-xkfqz", CurrentState: task.Running},
 		}}
 
 		rw := httptest.NewRecorder()
@@ -305,7 +305,7 @@ func TestHandler(t *testing.T) {
 		defer upstream.Close()
 
 		stopped := runningContainer("nginx-xkfqz", map[port.Port]*httptest.Server{80: upstream})
-		stopped.State = task.Stopped
+		stopped.CurrentState = task.Stopped
 
 		resolver := &fakeResolver{tasks: map[string]task.Task{"nginx-xkfqz": stopped}}
 
