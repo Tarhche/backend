@@ -75,13 +75,23 @@ var collection []permission.Permission = []permission.Permission{
 	{Name: "update a self comment", Value: permission.SelfCommentsUpdate},
 	{Name: "delete a self comment", Value: permission.SelfCommentsDelete},
 
-	// self articles
-	{Name: "list of self articles", Value: permission.SelfArticlesIndex},
-	{Name: "show a self article", Value: permission.SelfArticlesShow},
-	{Name: "update a self article", Value: permission.SelfArticlesUpdate},
-	{Name: "delete a self article", Value: permission.SelfArticlesDelete},
-
 	// self files
 	{Name: "list of self files", Value: permission.SelfFilesIndex},
 	{Name: "delete a self file", Value: permission.SelfFilesDelete},
+
+	// runner containers
+	{Name: "list of containers", Value: permission.RunnerContainersIndex},
+	{Name: "run a container", Value: permission.RunnerContainersCreate},
+	{Name: "show a container", Value: permission.RunnerContainersShow},
+	{Name: "delete a container", Value: permission.RunnerContainersDelete},
+	{Name: "read a container's logs", Value: permission.RunnerContainersLogs},
+	{Name: "stop, kill or restart a container", Value: permission.RunnerContainersManage},
+	{Name: "open a terminal in a container", Value: permission.RunnerContainersAttach},
+
+	// runner stacks
+	{Name: "list of stacks", Value: permission.RunnerStacksIndex},
+	{Name: "run a stack", Value: permission.RunnerStacksCreate},
+	{Name: "show a stack", Value: permission.RunnerStacksShow},
+	{Name: "delete a stack", Value: permission.RunnerStacksDelete},
+	{Name: "stop, kill or restart a stack", Value: permission.RunnerStacksManage},
 }

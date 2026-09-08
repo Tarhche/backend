@@ -8,6 +8,8 @@ services:
       # hostnames to it, and the workers dial in. The manager is not here --
       # it schedules over NATS and asks the ingress for nothing.
       - runner_ingress
+      # the blog opens a terminal through it, on the blog's own network
+      - app
       # which node is holding a container is the one thing it looks up
       - mongodb
       - monitoring
@@ -84,6 +86,10 @@ networks:
   mongodb:
     name: mongodb
     external: true
+  app:
+    name: app
+    external: true
+
   monitoring:
     name: monitoring
     external: true

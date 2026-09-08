@@ -14,7 +14,7 @@ import (
 func echoTranslator() *translator.TranslatorMock {
 	translatorMock := &translator.TranslatorMock{}
 
-	for _, key := range []string{requiredFieldMessage, invalidValueMessage, requestAlreadyExistsMessage, tooManyRequestsMessage} {
+	for _, key := range []string{requiredFieldMessage, invalidValueMessage, requestAlreadyExistsMessage, tooManyRequestsMessage, streamNotOpenMessage} {
 		translatorMock.On("Translate", key, mock.AnythingOfType("[]func(*translator.Params)")).Return(key).Maybe()
 	}
 

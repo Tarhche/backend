@@ -15,6 +15,10 @@ type RequestRegistry interface {
 	GetServerSideID(clientSideID string) (string, error)
 	DeleteByServerSideID(serverSideID string) error
 
+	// ServerSideIDs lists the requests still waiting for a reply, so a session
+	// that is ending can tell their producers nobody is listening any more.
+	ServerSideIDs() []string
+
 	// Len reports how many requests are still waiting for a reply.
 	Len() int
 }
@@ -96,6 +100,19 @@ func (r *InMemoryRequestRegistry) DeleteByServerSideID(serverSideID string) erro
 	delete(r.clientToServer, clientSideID)
 
 	return nil
+}
+
+// ServerSideIDs returns the requests that are still waiting for a reply.
+func (r *InMemoryRequestRegistry) ServerSideIDs() []string {
+	r.lock.RLock()
+	defer r.lock.RUnlock()
+
+	ids := make([]string, 0, len(r.serverToClient))
+	for serverSideID := range r.serverToClient {
+		ids = append(ids, serverSideID)
+	}
+
+	return ids
 }
 
 // Len returns how many requests are waiting for a reply.
