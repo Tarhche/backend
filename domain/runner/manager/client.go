@@ -51,6 +51,42 @@ type Attachment interface {
 	Resize(ctx context.Context, rows uint, cols uint) error
 }
 
+// ContainerChange is what became of one container: the container as it is now,
+// or, when it is gone, the uuid of the one that was removed.
+type ContainerChange struct {
+	UUID      string
+	Deleted   bool
+	Container task.Task
+}
+
+// ContainerStream is what happens to the containers the runner holds, as it
+// happens.
+type ContainerStream interface {
+	// Next blocks until the next change arrives. It reports io.EOF when the
+	// stream ends.
+	Next(ctx context.Context) (ContainerChange, error)
+
+	io.Closer
+}
+
+// StackChange is what became of one stack: the stack as it is now, together
+// with the services its state is read off, or, when it is gone, the uuid of the
+// one that was removed.
+type StackChange struct {
+	UUID    string
+	Deleted bool
+	Stack   Stack
+}
+
+// StackStream is what happens to the stacks the runner holds, as it happens.
+type StackStream interface {
+	// Next blocks until the next change arrives. It reports io.EOF when the
+	// stream ends.
+	Next(ctx context.Context) (StackChange, error)
+
+	io.Closer
+}
+
 // LogStream is a container's output as it is written.
 type LogStream interface {
 	// Next blocks until the next line arrives. It reports io.EOF when the
@@ -77,12 +113,22 @@ type Client interface {
 	RestartContainer(ctx context.Context, uuid string) error
 	DeleteContainer(ctx context.Context, uuid string) error
 
+	// WatchContainers follows what happens to every container the runner
+	// holds, so a listing of them can be kept as it is rather than asked for
+	// again.
+	WatchContainers(ctx context.Context) (ContainerStream, error)
+
 	ContainerLogs(ctx context.Context, uuid string, after time.Time, limit uint) ([]container.Log, error)
 	FollowContainerLogs(ctx context.Context, uuid string, after time.Time) (LogStream, error)
 	AttachContainer(ctx context.Context, uuid string, command []string) (Attachment, error)
 
 	// Stacks is a page of the stacks the runner holds, narrowed the same way.
 	Stacks(ctx context.Context, ownerUUID string, page uint) (Page[Stack], error)
+
+	// WatchStacks follows what happens to every stack the runner holds. A
+	// stack's state is read off its services, so it changes whenever one of
+	// them does.
+	WatchStacks(ctx context.Context) (StackStream, error)
 	Stack(ctx context.Context, uuid string) (Stack, error)
 
 	// StackOf is one of somebody's own stacks, reported missing when it is not
