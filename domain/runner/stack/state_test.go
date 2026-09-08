@@ -11,7 +11,7 @@ import (
 func services(states ...task.State) []task.Task {
 	items := make([]task.Task, len(states))
 	for i, state := range states {
-		items[i] = task.Task{State: state}
+		items[i] = task.Task{CurrentState: state}
 	}
 
 	return items
@@ -79,4 +79,38 @@ func TestState(t *testing.T) {
 			assert.Equal(t, tt.want, State(tt.services))
 		})
 	}
+}
+
+func TestExpectedState(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a stack asked to stop is a stack asked to stop", func(t *testing.T) {
+		t.Parallel()
+
+		// its services are still stopping, which reads as a stack on its way
+		// somewhere: where it is going is what this says.
+		services := []task.Task{
+			{CurrentState: task.Stopping, ExpectedState: task.Stopped},
+			{CurrentState: task.Stopped, ExpectedState: task.Stopped},
+		}
+
+		assert.Equal(t, task.Stopped, ExpectedState(services))
+	})
+
+	t.Run("one service still wanted running keeps the stack wanted running", func(t *testing.T) {
+		t.Parallel()
+
+		services := []task.Task{
+			{ExpectedState: task.Stopped},
+			{ExpectedState: task.Running},
+		}
+
+		assert.Equal(t, task.Running, ExpectedState(services))
+	})
+
+	t.Run("a stack from before there were expectations was asked for nothing", func(t *testing.T) {
+		t.Parallel()
+
+		assert.Equal(t, task.State(0), ExpectedState([]task.Task{{}}))
+	})
 }

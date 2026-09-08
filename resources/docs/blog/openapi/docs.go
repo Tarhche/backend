@@ -5140,11 +5140,18 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
+                "expected_state": {
+                    "type": "string"
+                },
                 "finished_at": {
                     "type": "string"
                 },
                 "image": {
                     "type": "string"
+                },
+                "max_retries": {
+                    "description": "MaxRetries is how many times a container that fails is asked for again\nbefore the runner gives up on it. -1 never gives up. Retries is how many\nof those have happened, so a container that keeps failing can say what is\nbeing done about it.",
+                    "type": "integer"
                 },
                 "name": {
                     "type": "string"
@@ -5157,8 +5164,18 @@ const docTemplate = `{
                         }
                     ]
                 },
+                "read_only": {
+                    "type": "boolean"
+                },
+                "reason": {
+                    "description": "Reason is why a container failed, when the runner can say so.",
+                    "type": "string"
+                },
                 "resource_limits": {
                     "$ref": "#/definitions/presenter.Limits"
+                },
+                "retries": {
+                    "type": "integer"
                 },
                 "service_name": {
                     "type": "string"
@@ -5173,6 +5190,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "state": {
+                    "description": "State is what the container is doing; ExpectedState is what it was asked\nto be doing. They differ while the runner is closing the gap.",
                     "type": "string"
                 },
                 "uuid": {
@@ -5996,11 +6014,18 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
+                "expected_state": {
+                    "type": "string"
+                },
                 "finished_at": {
                     "type": "string"
                 },
                 "image": {
                     "type": "string"
+                },
+                "max_retries": {
+                    "description": "MaxRetries is how many times a container that fails is asked for again\nbefore the runner gives up on it. -1 never gives up. Retries is how many\nof those have happened, so a container that keeps failing can say what is\nbeing done about it.",
+                    "type": "integer"
                 },
                 "name": {
                     "type": "string"
@@ -6013,8 +6038,18 @@ const docTemplate = `{
                         }
                     ]
                 },
+                "read_only": {
+                    "type": "boolean"
+                },
+                "reason": {
+                    "description": "Reason is why a container failed, when the runner can say so.",
+                    "type": "string"
+                },
                 "resource_limits": {
                     "$ref": "#/definitions/presenter.Limits"
+                },
+                "retries": {
+                    "type": "integer"
                 },
                 "service_name": {
                     "type": "string"
@@ -6029,6 +6064,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "state": {
+                    "description": "State is what the container is doing; ExpectedState is what it was asked\nto be doing. They differ while the runner is closing the gap.",
                     "type": "string"
                 },
                 "uuid": {
@@ -6172,6 +6208,10 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "created_at": {
+                    "type": "string"
+                },
+                "expected_state": {
+                    "description": "ExpectedState is what the stack was asked to be, which is what it is on\nits way to while a command is still reaching its services.",
                     "type": "string"
                 },
                 "name": {
@@ -6640,6 +6680,10 @@ const docTemplate = `{
                 "created_at": {
                     "type": "string"
                 },
+                "expected_state": {
+                    "description": "ExpectedState is what the stack was asked to be, which is what it is on\nits way to while a command is still reaching its services.",
+                    "type": "string"
+                },
                 "name": {
                     "type": "string"
                 },
@@ -6704,6 +6748,10 @@ const docTemplate = `{
                 },
                 "errors": {
                     "$ref": "#/definitions/domain.ValidationErrors"
+                },
+                "expected_state": {
+                    "description": "ExpectedState is what the stack was asked to be, which is what it is on\nits way to while a command is still reaching its services.",
+                    "type": "string"
                 },
                 "name": {
                     "type": "string"
@@ -6916,11 +6964,18 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
+                "expected_state": {
+                    "type": "string"
+                },
                 "finished_at": {
                     "type": "string"
                 },
                 "image": {
                     "type": "string"
+                },
+                "max_retries": {
+                    "description": "MaxRetries is how many times a container that fails is asked for again\nbefore the runner gives up on it. -1 never gives up. Retries is how many\nof those have happened, so a container that keeps failing can say what is\nbeing done about it.",
+                    "type": "integer"
                 },
                 "name": {
                     "type": "string"
@@ -6933,8 +6988,18 @@ const docTemplate = `{
                         }
                     ]
                 },
+                "read_only": {
+                    "type": "boolean"
+                },
+                "reason": {
+                    "description": "Reason is why a container failed, when the runner can say so.",
+                    "type": "string"
+                },
                 "resource_limits": {
                     "$ref": "#/definitions/presenter.Limits"
+                },
+                "retries": {
+                    "type": "integer"
                 },
                 "service_name": {
                     "type": "string"
@@ -6949,6 +7014,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "state": {
+                    "description": "State is what the container is doing; ExpectedState is what it was asked\nto be doing. They differ while the runner is closing the gap.",
                     "type": "string"
                 },
                 "uuid": {
@@ -7019,6 +7085,10 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "created_at": {
+                    "type": "string"
+                },
+                "expected_state": {
+                    "description": "ExpectedState is what the stack was asked to be, which is what it is on\nits way to while a command is still reaching its services.",
                     "type": "string"
                 },
                 "name": {
@@ -7130,6 +7200,10 @@ const docTemplate = `{
                         "$ref": "#/definitions/spec.Port"
                     }
                 },
+                "read_only": {
+                    "description": "ReadOnly makes the container's filesystem immutable, so nothing it runs\ncan change the image it was started from. It is compose's read_only.",
+                    "type": "boolean"
+                },
                 "restart": {
                     "type": "string"
                 },
@@ -7171,11 +7245,18 @@ const docTemplate = `{
                 "errors": {
                     "$ref": "#/definitions/domain.ValidationErrors"
                 },
+                "expected_state": {
+                    "type": "string"
+                },
                 "finished_at": {
                     "type": "string"
                 },
                 "image": {
                     "type": "string"
+                },
+                "max_retries": {
+                    "description": "MaxRetries is how many times a container that fails is asked for again\nbefore the runner gives up on it. -1 never gives up. Retries is how many\nof those have happened, so a container that keeps failing can say what is\nbeing done about it.",
+                    "type": "integer"
                 },
                 "name": {
                     "type": "string"
@@ -7188,8 +7269,18 @@ const docTemplate = `{
                         }
                     ]
                 },
+                "read_only": {
+                    "type": "boolean"
+                },
+                "reason": {
+                    "description": "Reason is why a container failed, when the runner can say so.",
+                    "type": "string"
+                },
                 "resource_limits": {
                     "$ref": "#/definitions/presenter.Limits"
+                },
+                "retries": {
+                    "type": "integer"
                 },
                 "service_name": {
                     "type": "string"
@@ -7204,6 +7295,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "state": {
+                    "description": "State is what the container is doing; ExpectedState is what it was asked\nto be doing. They differ while the runner is closing the gap.",
                     "type": "string"
                 },
                 "uuid": {
@@ -7219,6 +7311,9 @@ const docTemplate = `{
             "properties": {
                 "resources": {
                     "$ref": "#/definitions/spec.Resources"
+                },
+                "restart_policy": {
+                    "$ref": "#/definitions/spec.RestartPolicy"
                 }
             }
         },
@@ -7249,6 +7344,15 @@ const docTemplate = `{
             "properties": {
                 "limits": {
                     "$ref": "#/definitions/spec.Limits"
+                }
+            }
+        },
+        "spec.RestartPolicy": {
+            "type": "object",
+            "properties": {
+                "max_attempts": {
+                    "description": "MaxAttempts is how many times a container that failed is asked for\nagain. Nothing at all leaves it to the runner, zero is not at all, and\n-1 never gives up.",
+                    "type": "integer"
                 }
             }
         },
@@ -7288,6 +7392,10 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/spec.Port"
                     }
+                },
+                "read_only": {
+                    "description": "ReadOnly makes the container's filesystem immutable, so nothing it runs\ncan change the image it was started from. It is compose's read_only.",
+                    "type": "boolean"
                 },
                 "restart": {
                     "type": "string"

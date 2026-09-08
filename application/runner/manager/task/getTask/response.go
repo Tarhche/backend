@@ -12,7 +12,8 @@ type Response struct {
 	Name          string             `json:"name"`
 	Slug          string             `json:"slug"`
 	Kind          string             `json:"kind"`
-	State         string             `json:"state"`
+	CurrentState  string             `json:"current_state"`
+	ExpectedState string             `json:"expected_state,omitempty"`
 	Image         string             `json:"image"`
 	StackUUID     string             `json:"stack_uuid,omitempty"`
 	ServiceName   string             `json:"service_name,omitempty"`
@@ -29,6 +30,11 @@ type Response struct {
 	Command       []string           `json:"command"`
 	Entrypoint    []string           `json:"entrypoint"`
 	WorkingDir    string             `json:"working_dir"`
+	ReadOnly      bool               `json:"read_only"`
+	MaxRetries    int                `json:"max_retries"`
+	Retries       int                `json:"retries"`
+	TTL           time.Duration      `json:"ttl,omitempty"`
+	Reason        string             `json:"reason,omitempty"`
 	Limits        LimitsResponse     `json:"resource_limits"`
 	NodeName      string             `json:"node_name"`
 	OwnerUUID     string             `json:"owner_uuid"`
@@ -68,7 +74,8 @@ func NewResponse(t task.Task) *Response {
 		Name:          t.Name,
 		Slug:          t.Slug,
 		Kind:          string(t.Kind),
-		State:         t.State.String(),
+		CurrentState:  t.CurrentState.String(),
+		ExpectedState: t.ExpectedState.String(),
 		Image:         t.Image,
 		StackUUID:     t.StackUUID,
 		ServiceName:   t.ServiceName,
@@ -85,6 +92,11 @@ func NewResponse(t task.Task) *Response {
 		Command:       command,
 		Entrypoint:    entrypoint,
 		WorkingDir:    t.WorkingDir,
+		ReadOnly:      t.ReadOnly,
+		MaxRetries:    t.MaxRetries,
+		Retries:       t.Retries,
+		TTL:           t.TTL,
+		Reason:        t.Reason,
 		Limits: LimitsResponse{
 			Cpu:    t.ResourceLimits.Cpu,
 			Memory: t.ResourceLimits.Memory,

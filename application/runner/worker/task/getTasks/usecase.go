@@ -28,12 +28,12 @@ func (uc *UseCase) Execute(ctx context.Context) (*Response, error) {
 	tasks := make([]task.Task, len(allContainers))
 	for i, c := range allContainers {
 		tasks[i] = task.Task{
-			UUID:        c.Labels[container.TaskUUIDLabelKey],
-			Name:        c.Labels[container.TaskNameLabelKey],
-			Image:       c.Image,
-			ContainerID: c.ID,
-			CreatedAt:   c.CreatedAt,
-			State:       container.EvaluateTaskState(c.Status, task.Kind(c.Labels[container.TaskKindLabelKey])),
+			UUID:         c.Labels[container.TaskUUIDLabelKey],
+			Name:         c.Labels[container.TaskNameLabelKey],
+			Image:        c.Image,
+			ContainerID:  c.ID,
+			CreatedAt:    c.CreatedAt,
+			CurrentState: container.EvaluateTaskState(c.Status, task.Kind(c.Labels[container.TaskKindLabelKey])),
 		}
 	}
 

@@ -4,8 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"strconv"
+	"time"
 
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/runner/task"
 	"github.com/khanzadimahdi/testproject/domain/runner/task/events"
 )
 
@@ -16,7 +19,23 @@ const (
 	DefaultMaxDiskSize   = 100 << 20 // 100 MB
 	DefaultMaxMemorySize = 200 << 20 // 200 MB
 	DefaultMaxCpu        = 2
+
+	// CodeTimeout is how long the code itself is given. The runner image
+	// enforces it and says so in the output, which is what somebody running
+	// code wants to be told.
+	CodeTimeout = 30 * time.Second
+
+	// TTL is how long the container is allowed to exist at all. It is the
+	// backstop for a container that ignores the timeout above — the runner
+	// takes it away regardless — so it is the longer of the two.
+	TTL = 2 * CodeTimeout
 )
+
+// codeRetries is how many times a piece of code that could not be run is tried
+// again: none. Whatever stopped it — an image that will not pull, a node that
+// will not take it — is not something a second attempt fixes, and somebody is
+// waiting on the page to be told what happened.
+var codeRetries = 0
 
 type runCode struct {
 	validator domain.Validator
@@ -81,11 +100,14 @@ func (h *runCode) Handle(ctx context.Context, data []byte) error {
 		})
 	}
 
+	// a job: it runs once, and what is left of it goes when it ends.
 	event := &events.TaskRunRequested{
 		Name:       request.ID,
+		Kind:       string(task.KindJob),
 		Image:      request.Image(),
-		AutoRemove: true,
-		Command:    []string{"--timeout", "30", request.Code},
+		TTL:        TTL,
+		MaxRetries: &codeRetries,
+		Command:    []string{"--timeout", strconv.Itoa(int(CodeTimeout.Seconds())), request.Code},
 		ResourceLimits: events.ResourceLimits{
 			Cpu:    DefaultMaxCpu,
 			Memory: DefaultMaxMemorySize,

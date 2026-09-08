@@ -35,7 +35,7 @@ func (uc *TaskRestarted) Handle(ctx context.Context, data []byte) error {
 		return err
 	}
 
-	t.State = task.Running
+	t.CurrentState = task.Running
 	t.NodeName = taskRestarted.NodeName
 	t.ContainerID = taskRestarted.ContainerUUID
 	t.StartedAt = taskRestarted.At

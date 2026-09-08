@@ -117,12 +117,12 @@ func TestUseCase_Handle(t *testing.T) {
 				Stack: stack.Stack{UUID: "one", Name: "myapp", Slug: "myapp-abcde"},
 				State: task.Running,
 				Services: []task.Task{{
-					UUID:      "web-uuid",
-					Name:      "myapp-web",
-					Slug:      "web-abcde",
-					State:     task.Running,
-					Image:     "nginx:1.27-alpine",
-					Endpoints: []task.Endpoint{{ContainerPort: port.Port(80)}},
+					UUID:         "web-uuid",
+					Name:         "myapp-web",
+					Slug:         "web-abcde",
+					CurrentState: task.Running,
+					Image:        "nginx:1.27-alpine",
+					Endpoints:    []task.Endpoint{{ContainerPort: port.Port(80)}},
 				}},
 			},
 		})

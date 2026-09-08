@@ -27,7 +27,7 @@ func NewResponse(tasks []task.Task) *Response {
 		items[i] = TaskResponse{
 			UUID:       t.UUID,
 			Name:       t.Name,
-			State:      t.State.String(),
+			State:      t.CurrentState.String(),
 			Image:      t.Image,
 			CreatedAt:  t.CreatedAt,
 			StartedAt:  t.StartedAt,

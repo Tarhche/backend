@@ -113,12 +113,12 @@ func TestUseCase_Handle(t *testing.T) {
 		stream.Emit(runnerManager.ContainerChange{
 			UUID: "one",
 			Container: task.Task{
-				UUID:      "one",
-				Name:      "web",
-				Slug:      "web-abcde",
-				State:     task.Running,
-				Image:     "nginx:1.27-alpine",
-				Endpoints: []task.Endpoint{{ContainerPort: port.Port(80)}},
+				UUID:         "one",
+				Name:         "web",
+				Slug:         "web-abcde",
+				CurrentState: task.Running,
+				Image:        "nginx:1.27-alpine",
+				Endpoints:    []task.Endpoint{{ContainerPort: port.Port(80)}},
 			},
 		})
 		stream.Emit(runnerManager.ContainerChange{UUID: "two", Deleted: true})

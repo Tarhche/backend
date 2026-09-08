@@ -65,11 +65,11 @@ func TestUseCase_Execute(t *testing.T) {
 		runner.On("RunContainer", mock.Anything, mock.Anything, "owner-uuid").
 			Run(func(args mock.Arguments) { handed = args.Get(1).(runnerManager.ContainerSpec) }).
 			Return(task.Task{
-				UUID:      "task-uuid",
-				Name:      "nginx",
-				Slug:      "nginx-xkfqz",
-				State:     task.Created,
-				Endpoints: []task.Endpoint{{ContainerPort: 80}},
+				UUID:         "task-uuid",
+				Name:         "nginx",
+				Slug:         "nginx-xkfqz",
+				CurrentState: task.Created,
+				Endpoints:    []task.Endpoint{{ContainerPort: 80}},
 			}, nil).Once()
 		defer runner.AssertExpectations(t)
 

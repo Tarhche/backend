@@ -29,6 +29,7 @@ func TestServiceUnmarshalling(t *testing.T) {
 			"ports": ["8080:80", 443, "127.0.0.1:9090:9000/tcp"],
 			"restart": "unless-stopped",
 			"network_mode": "public",
+			"read_only": true,
 			"deploy": {"resources": {"limits": {"cpus": "0.5", "memory": "256M"}}}
 		}`), &service))
 
@@ -45,6 +46,7 @@ func TestServiceUnmarshalling(t *testing.T) {
 		assert.Equal(t, []port.Port{80, 443, 9000}, service.ExposedPorts())
 
 		assert.Equal(t, network.PolicyPublic, service.NetworkPolicy())
+		assert.True(t, service.ReadOnly)
 		assert.Equal(t, Decimal(0.5), service.Deploy.Resources.Limits.CPUs)
 		assert.Equal(t, ByteSize(256<<20), service.Deploy.Resources.Limits.Memory)
 	})
@@ -278,6 +280,7 @@ func TestServiceRoundTrip(t *testing.T) {
 		"ports": ["8080:80", 443],
 		"network_mode": "public",
 		"restart": "always",
+		"read_only": true,
 		"deploy": {"resources": {"limits": {"cpus": "0.5", "memory": "256M"}}}
 	}`), &read))
 
@@ -288,6 +291,7 @@ func TestServiceRoundTrip(t *testing.T) {
 	require.NoError(t, json.Unmarshal(written, &back))
 
 	assert.Equal(t, read, back)
+	assert.True(t, back.ReadOnly)
 	assert.Equal(t, []port.Port{80, 443}, back.ExposedPorts())
 	assert.Equal(t, network.PolicyPublic, back.NetworkPolicy())
 	assert.Equal(t, task.ResourceLimits{Cpu: 0.5, Memory: 256 << 20, Disk: 7},
