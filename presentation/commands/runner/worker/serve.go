@@ -16,6 +16,7 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers/runner"
+	"github.com/khanzadimahdi/testproject/infrastructure/runner/tunnel"
 )
 
 const (
@@ -31,7 +32,13 @@ type ServeCommand struct {
 	consumers       map[string]domain.MessageHandler
 	taskHeartBeat   *taskHeartbeat.UseCase
 	workerHeartBeat *workerHeartbeat.UseCase
-	logger          *slog.Logger
+
+	// tunnel holds this worker's connections to the ingresses. They are how a
+	// request reaches it: nothing dials a worker, so its own port answers only
+	// the healthcheck, whoever is on the machine, and the tunnel itself.
+	tunnel *tunnel.Worker
+
+	logger *slog.Logger
 }
 
 var (
@@ -112,6 +119,10 @@ func (c *ServeCommand) Boot(ctx context.Context, container provider.Container) e
 		return err
 	}
 
+	if err := container.Resolve(&c.tunnel); err != nil {
+		return err
+	}
+
 	if err := container.Resolve(&c.logger, provider.WithParams("runner-worker-"+c.configs.Name)); err != nil {
 		return err
 	}
@@ -165,6 +176,7 @@ func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 
 	go c.tasksHeartbeat(ctx)
 	go c.workerHeartbeat(ctx)
+	go c.serveTunnel(ctx)
 
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		c.logger.ErrorContext(ctx, "server failed", "error", err)
@@ -172,6 +184,16 @@ func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 	}
 
 	return console.ExitSuccess
+}
+
+// serveTunnel keeps this worker's connections to the ingresses open.
+//
+// What arrives on them is carried to whichever of this worker's services was
+// asked for, which for its own api is the port it is already listening on. So
+// there is one server rather than two, and a stream reaching it is
+// indistinguishable from a request made on the machine itself.
+func (c *ServeCommand) serveTunnel(ctx context.Context) {
+	c.tunnel.Run(ctx)
 }
 
 func (c *ServeCommand) validateParams() bool {

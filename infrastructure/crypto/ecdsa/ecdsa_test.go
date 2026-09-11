@@ -42,3 +42,66 @@ func TestECDSA(t *testing.T) {
 		t.Errorf("private and it's public key doesn't match")
 	}
 }
+
+func TestEncode(t *testing.T) {
+	t.Run("a generated key survives being written and read back", func(t *testing.T) {
+		key, err := Generate()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		privateKeyPEM, err := EncodePrivateKey(key)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		publicKeyPEM, err := EncodePublicKey(&key.PublicKey)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		parsedPrivate, err := ParsePrivateKey(privateKeyPEM)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		parsedPublic, err := ParsePublicKey(publicKeyPEM)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if !key.Equal(parsedPrivate) {
+			t.Error("the private key did not survive the round trip")
+		}
+
+		if !parsedPrivate.PublicKey.Equal(parsedPublic) {
+			t.Error("the public key does not belong to the private one")
+		}
+	})
+
+	t.Run("what openssl wrote is what this reads", func(t *testing.T) {
+		privateKeyData, err := os.ReadFile("testdata/key.pem")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		key, err := ParsePrivateKey(privateKeyData)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		publicKeyPEM, err := EncodePublicKey(&key.PublicKey)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		expected, err := os.ReadFile("testdata/key.pem.pub")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if string(publicKeyPEM) != string(expected) {
+			t.Error("the public key derived here is not the one openssl derived")
+		}
+	})
+}

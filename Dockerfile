@@ -43,6 +43,15 @@ FROM production AS production-runner-manager
 EXPOSE 80
 CMD ["serve-runner-manager", "--port=80"]
 
+# runner ingress service
+FROM develop AS develop-runner-ingress
+EXPOSE 80
+CMD ["serve-runner-ingress", "--port=80"]
+
+FROM production AS production-runner-ingress
+EXPOSE 80
+CMD ["serve-runner-ingress", "--port=80"]
+
 # runner worker service
 FROM develop AS develop-runner-worker
 ENV RUNNER_WORKER_NAME=runner-worker-01

@@ -19,18 +19,18 @@ go test ./application/article/getArticle -run TestUseCase -v   # single package/
 make generate      # runs `go generate` inside the app container
 ```
 
-Go 1.26. Local dev containers run under `go tool air` (hot reload with build polling), so code changes are picked up without restarting. The blog API is on http://localhost:8000, runner-manager on :8020, workers on :8040–8042. `.env` holds local config (compose interpolates it).
+Go 1.26. Local dev containers run under `go tool air` (hot reload with build polling), so code changes are picked up without restarting. The blog API is on http://localhost:8000, runner-manager on :8020, runner-ingress on :8030, workers on :8040–8042. `.env` holds local config (compose interpolates it).
 
 ## Architecture
 
-One Go module producing a single binary (`main.go`) that registers three console commands — `serve-blog`, `serve-runner-manager`, `serve-runner-worker` — each built into its own Docker image via Dockerfile targets (`production-blog`, `production-runner-manager`, `production-runner-worker`). CI (`.github/workflows/backend.yaml`) tests, builds all three images, and deploys via the `compose.*.yaml` files.
+One Go module producing a single binary (`main.go`) that registers four serve commands — `serve-blog`, `serve-runner-manager`, `serve-runner-ingress`, `serve-runner-worker` — each built into its own Docker image via Dockerfile targets (`production-blog`, `production-runner-manager`, `production-runner-ingress`, `production-runner-worker`), plus a `certificate` command group (`authority`/`ingress`/`worker` `generate`) for the certificates the runner's tunnel authenticates with. CI (`.github/workflows/backend.yaml`) tests, builds all four images, and deploys via the `compose.*.yaml` files.
 
 Layers (clean architecture, dependencies point inward):
 
 - **`domain/`** — entities and interfaces only, no implementations. Repository interfaces live next to their entity (e.g. `domain/article/article.go`). Cross-cutting contracts (`Validator`, `Consumer`/`Publisher`, `Mailer`, `Cache`, errors like `domain.ErrNotExists`) are in `domain/*.go`.
 - **`application/`** — one package per use case (e.g. `application/article/getArticle`) containing `request.go`, `response.go`, `usecase.go`, `usecase_test.go`. Use cases validate the request first and return validation errors inside the response (not as an error). `application/dashboard/` mirrors the public use cases for the authenticated admin API.
-- **`infrastructure/`** — implementations: `repository/mongodb` (real), `repository/memory` and `repository/mocks` (tests), `messaging/nats` (JetStream produce/consume + core pub/sub) with `messaging/mock`, `storage` (MinIO/S3), `jwt`, `email`, `telemetry` (OTel traces/metrics/logs + OTLP profiler), `runner` (Docker-based code execution), `matcher` (glob matching for element venues).
-- **`presentation/`** — `commands/` (the three serve commands) and `http/` (handlers). Handlers are thin: decode request → call use case → encode response.
+- **`infrastructure/`** — implementations: `repository/mongodb` (real), `repository/memory` and `repository/mocks` (tests), `messaging/nats` (JetStream produce/consume + core pub/sub) with `messaging/mock`, `storage` (MinIO/S3), `jwt`, `email`, `telemetry` (OTel traces/metrics/logs + OTLP profiler), `runner` (Docker-based code execution, plus `runner/tunnel`, the connections the workers open to the ingress), `matcher` (glob matching for element venues).
+- **`presentation/`** — `commands/` (the serve commands, plus `certificate/` for issuing certificates) and `http/` (handlers). Handlers are thin: decode request → call use case → encode response.
 
 ### Console
 
@@ -84,3 +84,14 @@ Two wiring conventions to respect:
 ### Runner subsystem
 
 The runner manager schedules code-execution tasks (from `application/code/runCode`) across worker nodes over NATS; workers run them in Docker containers (docker-in-docker locally). Domain model in `domain/runner/` (task, node, container, port); Docker integration in `infrastructure/runner/`.
+
+The **runner ingress** (`serve-runner-ingress`) is how anything reaches a worker, and **nothing ever dials a worker**. A worker opens persistent TCP connections *to* the ingress and the ingress multiplexes onto them with [smux](https://github.com/xtaci/smux), one stream per client connection (`infrastructure/runner/tunnel` — read its README first, it carries the whole design). It is an L4 tunnel: the data plane is a byte pipe and assumes nothing about HTTP. A worker needs no address, no open port and no way in, and being connected and being reachable are the same fact. `GET /runners/{id}/...` is carried to that worker as a stream to its `api` service.
+
+- **Forwarded ports** (`--forward`, `RUNNER_INGRESS_FORWARDS`) are the same tunnel used for arbitrary TCP: `8022=worker-a:22` listens on 8022 and carries everything arriving there to port 22 on that worker, `9000=:api` lets the router pick the worker. Which worker a connection goes to is *the port it arrived on*, because a raw connection carries nothing that could name one. An address target has to be in the worker's own `RUNNER_TUNNEL_ALLOWED_TARGETS`, which is empty by default; a service target needs no entry, since a service is a name the worker already offers.
+
+Three things to hold on to: the **ingress is smux's client** even though the worker dialled, because the ingress is what opens streams; **a session is the unit of failure**, so a worker keeps several and a dead one takes only its own streams; and the **stream counts are a memory budget**, since what is in flight is `streams × (MaxStreamBuffer + copy buffer)`.
+
+- **Mutual TLS 1.3 under a private CA**, established *before* smux: TCP → TLS → smux → streams. Both ends verify the other's chain, dates and extended key usage against `RUNNER_TUNNEL_CA_CERT`; the worker also checks the ingress answers for `RUNNER_TUNNEL_SERVER_NAME`. **A worker's identity is the SAN of the certificate TLS verified**, not what it said — a worker holding one certificate cannot register as another. `RUNNER_TUNNEL_ALLOWED_WORKERS` is authorization, deliberately separate. There is no shared token: the certificate already says who this is. Never `InsecureSkipVerify`, never the system trust store, and **`ca.key` is needed only to issue and belongs on neither an ingress nor a worker**. `make certs` builds a development set; `app certificate {authority,ingress,worker} generate` builds any other.
+- **The pool is the worker's**, configured like a database pool: `RUNNER_TUNNEL_MIN_CONNECTIONS` kept ready, `RUNNER_TUNNEL_MAX_CONNECTIONS` open at once, `RUNNER_TUNNEL_MAX_STREAMS_PER_SESSION` on each, `RUNNER_TUNNEL_MAX_IDLE_TIME` before an unused one is let go. It grows at 75% of capacity rather than at capacity, because the ingress cannot make room — only wait for the worker to make it.
+- **Several ingresses**: `RUNNER_TUNNEL_ADDRESSES` is a comma-separated list and a worker keeps a pool at each, so it is reachable through every one of them rather than through whichever it happened to find. They need an address each — one name in front of several replicas hands each connection to a different one, which is why each `compose.runner-ingress*.yaml` is `replicas: 1`.
+- `runnerNodeHeartbeat` still exists and is still the manager's: it schedules on `LastHeartbeatAt` and scores on `node.Stats`. The ingress does not consume it, and nothing carries a node's address any more.
