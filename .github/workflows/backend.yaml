@@ -26,6 +26,8 @@ jobs:
             target: production-blog
           - name: runner-manager
             target: production-runner-manager
+          - name: runner-ingress
+            target: production-runner-ingress
           - name: runner-worker
             target: production-runner-worker
 
@@ -72,6 +74,8 @@ jobs:
             target: production-blog
           - name: runner-manager
             target: production-runner-manager
+          - name: runner-ingress
+            target: production-runner-ingress
           - name: runner-worker
             target: production-runner-worker
 
@@ -163,8 +167,18 @@ jobs:
 
             export BACKEND_DOCKER_HOST='${{ secrets.BACKEND_DOCKER_HOST }}'
 
+            export BACKEND_RUNNER_INGRESS_TUNNEL_PRIVATE_KEY='${{ secrets.BACKEND_RUNNER_INGRESS_TUNNEL_PRIVATE_KEY }}'
+            export BACKEND_RUNNER_INGRESS_TUNNEL_PUBLIC_KEYS='${{ secrets.BACKEND_RUNNER_INGRESS_TUNNEL_PUBLIC_KEYS }}'
+            export BACKEND_RUNNER_TUNNEL_ADDRESSES='${{ secrets.BACKEND_RUNNER_TUNNEL_ADDRESSES }}'
+            export BACKEND_RUNNER_TUNNEL_TOKEN='${{ secrets.BACKEND_RUNNER_TUNNEL_TOKEN }}'
+            export BACKEND_RUNNER_WORKER_TUNNEL_PUBLIC_KEYS='${{ secrets.BACKEND_RUNNER_WORKER_TUNNEL_PUBLIC_KEYS }}'
+            export BACKEND_RUNNER_WORKER_01_TUNNEL_PRIVATE_KEY='${{ secrets.BACKEND_RUNNER_WORKER_01_TUNNEL_PRIVATE_KEY }}'
+            export BACKEND_RUNNER_WORKER_02_TUNNEL_PRIVATE_KEY='${{ secrets.BACKEND_RUNNER_WORKER_02_TUNNEL_PRIVATE_KEY }}'
+            export BACKEND_RUNNER_WORKER_03_TUNNEL_PRIVATE_KEY='${{ secrets.BACKEND_RUNNER_WORKER_03_TUNNEL_PRIVATE_KEY }}'
+
             export APP_IMAGE='${{ secrets.APP_IMAGE }}'
             export RUNNER_MANAGER_IMAGE='${{ secrets.RUNNER_MANAGER_IMAGE }}'
+            export RUNNER_INGRESS_IMAGE='${{ secrets.RUNNER_INGRESS_IMAGE }}'
             export RUNNER_WORKER_IMAGE='${{ secrets.RUNNER_WORKER_IMAGE }}'
 
             export OTEL_EXPORTER_OTLP_INSECURE='${{ secrets.OTEL_EXPORTER_OTLP_INSECURE }}'
@@ -181,6 +195,7 @@ jobs:
             # fails the job instead of being reported as deployed
             docker compose -f compose.app.yaml --project-name app up --pull always --detach --wait --wait-timeout 180 > /dev/null 2>&1
             docker compose -f compose.runner-manager.yaml --project-name runner-manager up --pull always --detach --wait --wait-timeout 180 > /dev/null 2>&1
+            docker compose -f compose.runner-ingress.yaml --project-name runner-ingress up --pull always --detach --wait --wait-timeout 180 > /dev/null 2>&1
             docker compose -f compose.runner-worker-01.yaml --project-name runner-worker-01 up --pull always --detach --wait --wait-timeout 180 > /dev/null 2>&1
             docker compose -f compose.runner-worker-02.yaml --project-name runner-worker-02 up --pull always --detach --wait --wait-timeout 180 > /dev/null 2>&1
             docker compose -f compose.runner-worker-03.yaml --project-name runner-worker-03 up --pull always --detach --wait --wait-timeout 180 > /dev/null 2>&1

@@ -1,11 +1,9 @@
 services:
-  runner-worker-02:
-    image: ${RUNNER_WORKER_IMAGE}
+  runner-ingress:
+    image: ${RUNNER_INGRESS_IMAGE}
     security_opt:
       - no-new-privileges:true
     networks:
-      - nats
-      - docker
       - runner_manager
       - monitoring
     healthcheck:
@@ -17,6 +15,11 @@ services:
     stop_grace_period: 30s
     deploy:
       mode: replicated
+      # one replica per address: a worker's connections land on whichever
+      # replica it dialled, and one name in front of several replicas hands
+      # each connection to a different one. Several ingresses are had by
+      # running several of these with an address each and naming them all in
+      # RUNNER_TUNNEL_ADDRESSES, which is what a worker keeps a pool per.
       replicas: 1
       endpoint_mode: vip
       update_config:
@@ -37,22 +40,17 @@ services:
         max_attempts: 3
       resources:
         limits:
-          cpus: '0.10'
-          memory: 50M
+          cpus: '0.20'
+          memory: 100M
     logging:
       driver: json-file
       options:
         max-size: "50m"
         max-file: "3"
     environment:
-      RUNNER_WORKER_NAME: runner-worker-02
-      # every ingress this worker opens connections to, separated by commas
-      RUNNER_TUNNEL_ADDRESSES: ${BACKEND_RUNNER_TUNNEL_ADDRESSES:-runner-ingress:81}
-      RUNNER_TUNNEL_PRIVATE_KEY: ${BACKEND_RUNNER_WORKER_02_TUNNEL_PRIVATE_KEY}
+      RUNNER_TUNNEL_PRIVATE_KEY: ${BACKEND_RUNNER_INGRESS_TUNNEL_PRIVATE_KEY}
       RUNNER_TUNNEL_TOKEN: ${BACKEND_RUNNER_TUNNEL_TOKEN}
-      RUNNER_TUNNEL_INGRESS_PUBLIC_KEYS: ${BACKEND_RUNNER_INGRESS_TUNNEL_PUBLIC_KEYS}
-      NATS_URL: ${BACKEND_NATS_URL}
-      DOCKER_HOST: ${BACKEND_DOCKER_HOST}
+      RUNNER_TUNNEL_AUTHORIZED_KEYS: ${BACKEND_RUNNER_WORKER_TUNNEL_PUBLIC_KEYS}
       OTEL_EXPORTER_OTLP_INSECURE: ${OTEL_EXPORTER_OTLP_INSECURE}
       OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL}
       OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES}
@@ -62,14 +60,8 @@ services:
       PROFILING_ENABLED: ${PROFILING_ENABLED:-true}
 
 networks:
-  nats:
-    name: nats
-    external: true
   runner_manager:
     name: runner_manager
-    external: true
-  docker:
-    name: docker
     external: true
   monitoring:
     name: monitoring

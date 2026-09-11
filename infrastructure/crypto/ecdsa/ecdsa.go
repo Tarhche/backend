@@ -20,6 +20,28 @@ func Generate() (*ecdsa.PrivateKey, error) {
 	return ecdsa.GenerateKey(elliptic.P521(), rand.Reader)
 }
 
+// EncodePrivateKey writes a private key in the PEM form ParsePrivateKey reads,
+// which is the one `openssl ecparam -genkey` produces.
+func EncodePrivateKey(key *ecdsa.PrivateKey) ([]byte, error) {
+	der, err := x509.MarshalECPrivateKey(key)
+	if err != nil {
+		return nil, err
+	}
+
+	return pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: der}), nil
+}
+
+// EncodePublicKey writes a public key in the PEM form ParsePublicKey reads,
+// which is the one `openssl ec -pubout` produces.
+func EncodePublicKey(key *ecdsa.PublicKey) ([]byte, error) {
+	der, err := x509.MarshalPKIXPublicKey(key)
+	if err != nil {
+		return nil, err
+	}
+
+	return pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: der}), nil
+}
+
 func ParsePrivateKey(key []byte) (*ecdsa.PrivateKey, error) {
 	block, _ := pem.Decode(key)
 	if block == nil {

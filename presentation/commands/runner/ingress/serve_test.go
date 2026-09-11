@@ -1,8 +1,6 @@
-package worker
+package ingress
 
 import (
-	"context"
-	"crypto/tls"
 	"fmt"
 	"io"
 	"log/slog"
@@ -12,18 +10,17 @@ import (
 	"time"
 
 	"github.com/danceable/console"
-	"github.com/khanzadimahdi/testproject/domain"
-	messaging "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
-	"github.com/khanzadimahdi/testproject/infrastructure/runner/tunnel"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
+
+	"github.com/khanzadimahdi/testproject/infrastructure/crypto/ecdsa"
+	"github.com/khanzadimahdi/testproject/infrastructure/runner/tunnel"
 )
 
 func TestServe(t *testing.T) {
 	t.Run("name", func(t *testing.T) {
 		command := NewServeCommand()
 
-		want := "serve-runner-worker"
+		want := "serve-runner-ingress"
 		got := command.Name()
 
 		if want != got {
@@ -45,7 +42,7 @@ func TestServe(t *testing.T) {
 	t.Run("usage", func(t *testing.T) {
 		command := NewServeCommand()
 
-		want := "serve-runner-worker [arguments]"
+		want := "serve-runner-ingress [arguments]"
 		got := command.Usage()
 
 		if want != got {
@@ -86,22 +83,6 @@ func TestServe(t *testing.T) {
 		}
 
 		if command.configs.Port != 100 {
-			t.Error("unexpected port flag default value")
-		}
-	})
-
-	t.Run("configure with the short flag", func(t *testing.T) {
-		command := NewServeCommand()
-
-		flagSet := console.NewFlagSet(command.Name(), io.Discard)
-
-		command.Configure(flagSet)
-
-		if err := flagSet.Parse([]string{"-p", "100"}); err != nil {
-			t.Errorf("unexpected parsing error: %q", err)
-		}
-
-		if command.configs.Port != 100 {
 			t.Error("unexpected port flag value")
 		}
 	})
@@ -124,100 +105,27 @@ func TestServe(t *testing.T) {
 		}
 	})
 
-	t.Run("configure the worker name", func(t *testing.T) {
-		testCases := []struct {
-			name      string
-			arguments []string
-			env       string
-			want      string
-		}{
-			{
-				name:      "long flag",
-				arguments: []string{"--name", "runner-worker-01"},
-				want:      "runner-worker-01",
-			},
-			{
-				name:      "short flag",
-				arguments: []string{"-n", "runner-worker-01"},
-				want:      "runner-worker-01",
-			},
-			{
-				name: "environment variable",
-				env:  "runner-worker-01",
-				want: "runner-worker-01",
-			},
-			{
-				name:      "the flag wins over the environment variable",
-				arguments: []string{"--name", "runner-worker-02"},
-				env:       "runner-worker-01",
-				want:      "runner-worker-02",
-			},
-		}
-
-		for _, testCase := range testCases {
-			t.Run(testCase.name, func(t *testing.T) {
-				if testCase.env != "" {
-					t.Setenv("RUNNER_WORKER_NAME", testCase.env)
-				}
-
-				command := NewServeCommand()
-
-				flagSet := console.NewFlagSet(command.Name(), io.Discard)
-
-				command.Configure(flagSet)
-
-				if err := flagSet.Parse(testCase.arguments); err != nil {
-					t.Errorf("unexpected parsing error: %q", err)
-				}
-
-				if command.configs.Name != testCase.want {
-					t.Errorf("unexpected name flag value, want %q got %q", testCase.want, command.configs.Name)
-				}
-			})
-		}
-	})
-
 	t.Run("run", func(t *testing.T) {
 		ctx := t.Context()
-
-		consumerName := "01"
 
 		handler := http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 			rw.WriteHeader(http.StatusOK)
 			fmt.Fprint(rw, "test response")
 		})
 
-		subscribers := map[string]domain.MessageHandler{
-			"test1": domain.MessageHandlerFunc(func(ctx context.Context, message []byte) error { return nil }),
-			"test2": domain.MessageHandlerFunc(func(ctx context.Context, message []byte) error { return nil }),
-			"test3": domain.MessageHandlerFunc(func(ctx context.Context, message []byte) error { return nil }),
-		}
-
-		var consumer messaging.MockProduceConsumer
-		consumer.On("Consume", ctx, mock.Anything, mock.Anything).Times(len(subscribers)).Return(nil)
-		defer consumer.AssertExpectations(t)
+		ingressPrivateKey, workerPublicKey := testKeys(t)
 
 		command := NewServeCommand()
-		command.configs.Name = consumerName
 		command.configs.Port = findAvailablePort()
+		command.configs.TunnelPort = findAvailablePort()
+		command.configs.TunnelPrivateKey = ingressPrivateKey
+		command.configs.TunnelAuthorizedKeys = workerPublicKey
 		command.handler = handler
-		command.consumer = &consumer
-		command.consumers = subscribers
 		command.logger = slog.New(slog.DiscardHandler)
 
-		// nothing is listening for it, so the pool spends the test trying to
-		// connect and the worker serves its own port regardless — which is the
-		// point: the tunnel being down is not the worker being down.
-		tunnelWorker, err := tunnel.NewWorker(
-			consumerName,
-			[]string{"127.0.0.1:1"},
-			tunnel.DefaultConfig(),
-			tunnel.TLSDialer(&tls.Config{}, time.Second),
-			tunnel.NewServiceTargets(nil),
-			command.logger,
-		)
+		tunnelIngress, err := tunnel.NewIngress(tunnel.DefaultConfig(), tunnel.NewTokenAuthenticator("secret"), command.logger)
 		assert.NoError(t, err)
-		command.tunnel = tunnelWorker
+		command.tunnel = tunnelIngress
 
 		serverStartedListening := make(chan struct{})
 
@@ -244,6 +152,15 @@ func TestServe(t *testing.T) {
 
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 	})
+
+	t.Run("keys it cannot use stop it before it listens", func(t *testing.T) {
+		command := NewServeCommand()
+		command.configs.Port = findAvailablePort()
+		command.configs.TunnelPort = findAvailablePort()
+		command.logger = slog.New(slog.DiscardHandler)
+
+		assert.Equal(t, console.ExitFailure, command.Run(t.Context()))
+	})
 }
 
 // findAvailablePort finds an available port to use for testing
@@ -256,4 +173,24 @@ func findAvailablePort() int {
 
 	addr := listener.Addr().(*net.TCPAddr)
 	return addr.Port
+}
+
+// testKeys makes the two keys the tunnel needs: the ingress's own, and the
+// public half of a worker it would take.
+func testKeys(t *testing.T) (ingressPrivateKey string, workerPublicKey string) {
+	t.Helper()
+
+	ingress, err := ecdsa.Generate()
+	assert.NoError(t, err)
+
+	worker, err := ecdsa.Generate()
+	assert.NoError(t, err)
+
+	private, err := ecdsa.EncodePrivateKey(ingress)
+	assert.NoError(t, err)
+
+	public, err := ecdsa.EncodePublicKey(&worker.PublicKey)
+	assert.NoError(t, err)
+
+	return string(private), string(public)
 }

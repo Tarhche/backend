@@ -12,6 +12,8 @@ import (
 
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	"github.com/khanzadimahdi/testproject/presentation/commands/blog"
+	"github.com/khanzadimahdi/testproject/presentation/commands/key"
+	"github.com/khanzadimahdi/testproject/presentation/commands/runner/ingress"
 	"github.com/khanzadimahdi/testproject/presentation/commands/runner/manager"
 	"github.com/khanzadimahdi/testproject/presentation/commands/runner/worker"
 )
@@ -40,6 +42,11 @@ func main() {
 	c.Register(blog.NewServeCommand())
 	c.Register(manager.NewServeCommand())
 	c.Register(worker.NewServeCommand())
+	c.Register(ingress.NewServeCommand())
+
+	// the keys the runner's tunnel is built on
+	c.Register(key.NewGeneratePrivateKeyCommand())
+	c.Register(key.NewGeneratePublicKeyCommand())
 
 	code := c.Run(ctx, os.Args)
 

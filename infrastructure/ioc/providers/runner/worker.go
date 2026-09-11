@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/danceable/provider"
@@ -24,6 +26,7 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	infraHealth "github.com/khanzadimahdi/testproject/infrastructure/health"
 	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/jetstream/produceConsumer"
+	"github.com/khanzadimahdi/testproject/infrastructure/runner/tunnel"
 	"github.com/khanzadimahdi/testproject/infrastructure/telemetry/profiler"
 	healthAPI "github.com/khanzadimahdi/testproject/presentation/http/health"
 	"github.com/khanzadimahdi/testproject/presentation/http/middleware"
@@ -116,7 +119,60 @@ func (p *workerProvider) Boot(ctx context.Context, c provider.Container) error {
 		defer pc.Wait()
 	}
 
+	if err := p.bindTunnel(c, nodeName, logger); err != nil {
+		return err
+	}
+
 	return c.Bind(workerConsoleCommand, provider.Singleton())
+}
+
+// bindTunnel builds this worker's connections to the ingresses.
+//
+// Nothing dials a worker, so these are the only way a request reaches one. What
+// arrives on them is carried to whichever of the worker's own services was
+// asked for — its http api today, a container's port once there is one — so the
+// ingress never learns where any of them are.
+func (p *workerProvider) bindTunnel(c provider.Container, nodeName string, logger *slog.Logger) error {
+	var workerConfigs *configs.RunnerWorker
+	if err := c.Resolve(&workerConfigs); err != nil {
+		return err
+	}
+
+	tlsConfig, err := tunnel.ClientTLS(workerConfigs.TunnelPrivateKey, workerConfigs.TunnelIngressPublicKeys)
+	if err != nil {
+		return err
+	}
+
+	tunnelConfig := tunnel.DefaultConfig()
+	tunnelConfig.MinSessions = workerConfigs.TunnelMinConnections
+	tunnelConfig.MaxSessions = workerConfigs.TunnelMaxConnections
+	tunnelConfig.MaxStreamsPerSession = workerConfigs.TunnelMaxStreamsPerSession
+	tunnelConfig.IdleSessionTimeout = workerConfigs.TunnelMaxIdleTime
+
+	// the api this worker already serves on its own port, offered under a name
+	// so that the ingress asks for the service rather than for a port.
+	targets := tunnel.NewServiceTargets(map[string]string{
+		runnerAPIService: net.JoinHostPort("127.0.0.1", strconv.Itoa(workerConfigs.Port)),
+	})
+
+	worker, err := tunnel.NewWorker(
+		nodeName,
+		workerConfigs.IngressAddresses(),
+		tunnelConfig,
+		tunnel.TLSDialer(tlsConfig, tunnelConfig.DialTimeout),
+		targets,
+		logger,
+		tunnel.WithToken(workerConfigs.TunnelToken),
+	)
+	if err != nil {
+		return err
+	}
+
+	if err := c.Bind(func() tunnel.Targets { return targets }, provider.Singleton()); err != nil {
+		return err
+	}
+
+	return c.Bind(func() *tunnel.Worker { return worker }, provider.Singleton())
 }
 
 func (p *workerProvider) Terminate(ctx context.Context) error {
