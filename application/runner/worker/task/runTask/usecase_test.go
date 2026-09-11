@@ -54,6 +54,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		var created *container.Container
 		containerManager.On("GetByLabel", mock.Anything, container.TaskUUIDLabelKey, mock.Anything).Return([]container.Container{}, nil).Maybe()
+		containerManager.On("EnsureImage", mock.Anything, mock.Anything).Once().Return(nil)
 		containerManager.On("Create", mock.Anything, mock.Anything).
 			Run(func(args mock.Arguments) { created = args.Get(1).(*container.Container) }).
 			Return("container-id", nil).Once()
@@ -94,6 +95,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		var created *container.Container
 		containerManager.On("GetByLabel", mock.Anything, container.TaskUUIDLabelKey, mock.Anything).Return([]container.Container{}, nil).Maybe()
+		containerManager.On("EnsureImage", mock.Anything, mock.Anything).Once().Return(nil)
 		containerManager.On("Create", mock.Anything, mock.Anything).
 			Run(func(args mock.Arguments) { created = args.Get(1).(*container.Container) }).
 			Return("container-id", nil).Once()
@@ -127,6 +129,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		var created *container.Container
 		containerManager.On("GetByLabel", mock.Anything, container.TaskUUIDLabelKey, mock.Anything).Return([]container.Container{}, nil).Maybe()
+		containerManager.On("EnsureImage", mock.Anything, mock.Anything).Once().Return(nil)
 		containerManager.On("Create", mock.Anything, mock.Anything).
 			Run(func(args mock.Arguments) { created = args.Get(1).(*container.Container) }).
 			Return("container-id", nil).Once()
@@ -158,6 +161,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		var created *container.Container
 		containerManager.On("GetByLabel", mock.Anything, container.TaskUUIDLabelKey, mock.Anything).Return([]container.Container{}, nil).Maybe()
+		containerManager.On("EnsureImage", mock.Anything, mock.Anything).Once().Return(nil)
 		containerManager.On("Create", mock.Anything, mock.Anything).
 			Run(func(args mock.Arguments) { created = args.Get(1).(*container.Container) }).
 			Return("container-id", nil).Once()
@@ -186,6 +190,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		var created *container.Container
 		containerManager.On("GetByLabel", mock.Anything, container.TaskUUIDLabelKey, mock.Anything).Return([]container.Container{}, nil).Maybe()
+		containerManager.On("EnsureImage", mock.Anything, mock.Anything).Once().Return(nil)
 		containerManager.On("Create", mock.Anything, mock.Anything).
 			Run(func(args mock.Arguments) { created = args.Get(1).(*container.Container) }).
 			Return("container-id", nil).Once()
@@ -234,6 +239,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		networkManager.On("EnsureIsolatedNetwork", mock.Anything).Return(nil).Once()
 		containerManager.On("GetByLabel", mock.Anything, container.TaskUUIDLabelKey, mock.Anything).Return([]container.Container{}, nil).Maybe()
+		containerManager.On("EnsureImage", mock.Anything, mock.Anything).Once().Return(nil)
 		containerManager.On("Create", mock.Anything, mock.Anything).Return("", expected).Once()
 
 		// nothing was created, so there is nothing to take instead.
@@ -264,6 +270,7 @@ func TestUseCase_Execute(t *testing.T) {
 		// it turns out to be unnecessary.
 		containerManager.On("GetByLabel", mock.Anything, container.TaskUUIDLabelKey, mock.Anything).
 			Return([]container.Container{{ID: "container-id"}}, nil).Twice()
+		containerManager.On("EnsureImage", mock.Anything, mock.Anything).Once().Return(nil)
 		containerManager.On("Create", mock.Anything, mock.Anything).Return("", conflict).Once()
 		containerManager.On("Start", mock.Anything, "container-id").Return(nil).Once()
 		defer containerManager.AssertExpectations(t)
@@ -365,6 +372,7 @@ func TestUseCase_Execute_retrying(t *testing.T) {
 
 		var created *container.Container
 		containerManager.On("GetByLabel", mock.Anything, container.TaskUUIDLabelKey, mock.Anything).Return([]container.Container{}, nil).Maybe()
+		containerManager.On("EnsureImage", mock.Anything, mock.Anything).Once().Return(nil)
 		containerManager.On("Create", mock.Anything, mock.Anything).
 			Run(func(args mock.Arguments) { created = args.Get(1).(*container.Container) }).
 			Return("container-id", nil).Once()
@@ -406,6 +414,7 @@ func TestUseCase_Execute_retrying(t *testing.T) {
 		// the attempt that was asked for, so it is started rather than replaced.
 		containerManager.On("GetByLabel", mock.Anything, container.TaskUUIDLabelKey, "task-uuid").
 			Return([]container.Container{{ID: "existing-container-id"}}, nil).Twice()
+		containerManager.On("EnsureImage", mock.Anything, mock.Anything).Once().Return(nil)
 		containerManager.On("Create", mock.Anything, mock.Anything).Return("", errors.New("name is already in use")).Once()
 		containerManager.On("Start", mock.Anything, "existing-container-id").Return(nil).Once()
 		defer containerManager.AssertExpectations(t)
@@ -445,6 +454,7 @@ func TestUseCase_Execute_adopting(t *testing.T) {
 		// from the beginning, and they are still running.
 		containerManager.On("GetByLabel", mock.Anything, container.TaskUUIDLabelKey, "task-uuid").
 			Return([]container.Container{{ID: "running-container-id", Status: container.StatusRunning}}, nil).Twice()
+		containerManager.On("EnsureImage", mock.Anything, mock.Anything).Once().Return(nil)
 		containerManager.On("Create", mock.Anything, mock.Anything).Return("", errors.New("name is already in use")).Once()
 		containerManager.On("Start", mock.Anything, "running-container-id").Return(nil).Once()
 		defer containerManager.AssertExpectations(t)

@@ -3,6 +3,7 @@ package ingress
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
@@ -86,11 +87,13 @@ func NewContainerHandler(
 
 			r.SetXForwarded()
 		},
-		ErrorHandler: func(rw http.ResponseWriter, _ *http.Request, err error) {
-			// the node took the request and nothing came back: its own problem
-			// to report, not something the ingress can fix.
+		ErrorHandler: func(rw http.ResponseWriter, r *http.Request, err error) {
+			// the node took the request and nothing came back, which for a
+			// container that has only just started usually means it is still
+			// coming up. Whoever is looking at it is served a page that comes
+			// back on its own; anything else is told plainly.
 			h.logger.Error("could not reach the node holding a container", "error", err)
-			rw.WriteHeader(http.StatusBadGateway)
+			writeStarting(rw, r)
 		},
 	}
 
@@ -184,4 +187,86 @@ func (h *containerHandler) parseHost(host string) (string, port.Port, bool) {
 	}
 
 	return label[:index], port.Port(requested), true
+}
+
+// startingSeconds is how long a page that is waiting for a container waits
+// before asking again.
+const startingSeconds = 2
+
+// startingPage is what a browser is shown while a container is not answering
+// yet: it says so, and comes back on its own until it is. What it says is
+// filled in from the language the browser asked for.
+const startingPage = `<!doctype html>
+<html lang="%s" dir="%s">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="refresh" content="2">
+<title>starting…</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    margin: 0;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    perspective: 200px;
+    background: #fff;
+    color: #868e96;
+    font: 13px/1.5 ui-sans-serif, system-ui, sans-serif;
+  }
+  .cube { position: relative; width: 18px; height: 18px; transform-style: preserve-3d; animation: turn 3s infinite linear; }
+  .cube span { position: absolute; inset: 0; border: 1.5px solid #228be6; opacity: .85; }
+  .cube span:nth-child(1) { transform: translateZ(9px); }
+  .cube span:nth-child(2) { transform: rotateY(180deg) translateZ(9px); }
+  .cube span:nth-child(3) { transform: rotateY(90deg) translateZ(9px); }
+  .cube span:nth-child(4) { transform: rotateY(-90deg) translateZ(9px); }
+  .cube span:nth-child(5) { transform: rotateX(90deg) translateZ(9px); }
+  .cube span:nth-child(6) { transform: rotateX(-90deg) translateZ(9px); }
+  @keyframes turn { from { transform: rotateX(-24deg) rotateY(0); } to { transform: rotateX(-24deg) rotateY(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .cube { animation-duration: 0s; } }
+  @media (prefers-color-scheme: dark) { body { background: #1a1b1e; color: #909296; } }
+</style>
+</head>
+<body>
+  <div class="cube"><span></span><span></span><span></span><span></span><span></span><span></span></div>
+  <p>%s</p>
+</body>
+</html>
+`
+
+// writeStarting answers a request for a container that is not answering yet.
+// A browser is given the waiting page, which asks again on its own; anything
+// else — a fetch, a health check, a command line — is given the bare status it
+// can act on.
+// starting is what the waiting page says, in the language the browser asked
+// for. It knows the two the site is written in and falls back to English,
+// which is what the runner itself speaks.
+func starting(acceptLanguage string) (lang string, dir string, text string) {
+	if strings.HasPrefix(strings.TrimSpace(strings.ToLower(acceptLanguage)), "fa") {
+		return "fa", "rtl", "در حال آماده‌سازی…"
+	}
+
+	return "en", "ltr", "starting…"
+}
+
+func writeStarting(rw http.ResponseWriter, r *http.Request) {
+	rw.Header().Set("Retry-After", strconv.Itoa(startingSeconds))
+	rw.Header().Set("Cache-Control", "no-store")
+
+	if !strings.Contains(r.Header.Get("Accept"), "text/html") {
+		http.Error(rw, "the container is not answering", http.StatusBadGateway)
+
+		return
+	}
+
+	lang, dir, text := starting(r.Header.Get("Accept-Language"))
+
+	rw.Header().Set("Content-Type", "text/html; charset=utf-8")
+	rw.Header().Set("Vary", "Accept-Language")
+	rw.WriteHeader(http.StatusBadGateway)
+	_, _ = fmt.Fprintf(rw, startingPage, lang, dir, text)
 }

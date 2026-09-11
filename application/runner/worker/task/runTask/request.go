@@ -5,6 +5,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/runner/network"
 	"github.com/khanzadimahdi/testproject/domain/runner/port"
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
+	"time"
 )
 
 // Request represents a request to run a task
@@ -40,6 +41,10 @@ type Request struct {
 	Interactive    bool                   `json:"interactive,omitempty"`
 	Mounts         []Mount                `json:"mounts"`
 	ResourceLimits ResourceLimits         `json:"resource_limits"`
+
+	// TTL is how long the container may run for once it is up, in
+	// nanoseconds. Zero is no limit.
+	TTL time.Duration `json:"ttl,omitempty"`
 
 	// Attempt is which try this is, counting from zero, and MaxRetries how
 	// many the container is worth. The node does not decide either — it hands

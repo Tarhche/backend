@@ -2,9 +2,8 @@ package runTask
 
 import (
 	"context"
-	"strconv"
-
 	"errors"
+	"strconv"
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/runner/container"
@@ -46,6 +45,14 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		return nil, err
 	}
 
+	// the image is made sure of first, so that what a container is allowed to
+	// run for is counted from when it runs rather than from when it was asked
+	// for: pulling an image it has never seen can take longer than the whole
+	// of that.
+	if err := uc.containerManager.EnsureImage(ctx, request.Image); err != nil {
+		return nil, err
+	}
+
 	c := &container.Container{
 		Name:             request.ContainerName(),
 		Image:            request.Image,
@@ -84,6 +91,12 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 			Memory: request.ResourceLimits.Memory,
 			Disk:   request.ResourceLimits.Disk,
 		},
+	}
+
+	// how long it may run for once it is up. When that is counted from is not
+	// this node's to decide here: the container itself says when it started.
+	if request.TTL > 0 {
+		c.Labels[container.TaskTTLLabelKey] = strconv.Itoa(int(request.TTL.Seconds()))
 	}
 
 	if err := uc.clearEarlierAttempts(ctx, request); err != nil {

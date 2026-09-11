@@ -376,6 +376,11 @@ definitions:
         type: array
       created_at:
         type: string
+      deadline:
+        description: |-
+          Deadline is when a container that is only allowed to run for so long
+          will be stopped. A container with no limit of its own has none.
+        type: string
       endpoints:
         items:
           $ref: '#/definitions/presenter.Endpoint'
@@ -948,6 +953,11 @@ definitions:
           type: string
         type: array
       created_at:
+        type: string
+      deadline:
+        description: |-
+          Deadline is when a container that is only allowed to run for so long
+          will be stopped. A container with no limit of its own has none.
         type: string
       endpoints:
         items:
@@ -1578,6 +1588,11 @@ definitions:
         type: array
       created_at:
         type: string
+      deadline:
+        description: |-
+          Deadline is when a container that is only allowed to run for so long
+          will be stopped. A container with no limit of its own has none.
+        type: string
       endpoints:
         items:
           $ref: '#/definitions/presenter.Endpoint'
@@ -1772,6 +1787,11 @@ definitions:
           type: string
         type: array
       created_at:
+        type: string
+      deadline:
+        description: |-
+          Deadline is when a container that is only allowed to run for so long
+          will be stopped. A container with no limit of its own has none.
         type: string
       endpoints:
         items:

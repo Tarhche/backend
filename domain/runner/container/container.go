@@ -40,6 +40,10 @@ type Container struct {
 	Command     []string
 	Labels      map[string]string
 	CreatedAt   time.Time
+
+	// StartedAt is when the container last started running, as docker reports
+	// it. It is what anything a container is given time for is counted from.
+	StartedAt time.Time
 }
 
 // Attempt is which attempt at its task this container is, counting from zero,
@@ -58,6 +62,31 @@ func (c *Container) Attempt() int {
 // was labelled when it was created.
 func (c *Container) Interactive() bool {
 	return c.Labels[TaskInteractiveLabelKey] == "true"
+}
+
+// TTL is how long this container may run for once it is up, as it was
+// labelled when it was made. A container that may run for as long as it likes
+// has none, and neither has one from before this was written down.
+func (c *Container) TTL() time.Duration {
+	seconds, err := strconv.Atoi(c.Labels[TaskTTLLabelKey])
+	if err != nil || seconds <= 0 {
+		return 0
+	}
+
+	return time.Duration(seconds) * time.Second
+}
+
+// Deadline is when this container will have run long enough, counted from the
+// moment it started. One that may run as long as it likes, or that has not
+// started, has none.
+func (c *Container) Deadline() time.Time {
+	ttl := c.TTL()
+
+	if ttl <= 0 || c.StartedAt.IsZero() {
+		return time.Time{}
+	}
+
+	return c.StartedAt.Add(ttl)
 }
 
 // ResourceLimits represents the resource limits of the container
@@ -99,6 +128,11 @@ type ExecSession interface {
 type Manager interface {
 	GetAll(ctx context.Context) ([]Container, error)
 	GetByLabel(ctx context.Context, labelName string, labelValue string) ([]Container, error)
+
+	// EnsureImage makes sure an image is on this node, pulling it if it is
+	// not. Creating a container does this too; it is worth doing on its own
+	// when something is being timed from the moment the container is made.
+	EnsureImage(ctx context.Context, image string) error
 	Create(ctx context.Context, container *Container) (containerUUID string, err error)
 	Start(ctx context.Context, containerUUID string) error
 	Stop(ctx context.Context, containerUUID string) error
@@ -123,6 +157,11 @@ const (
 	// runs. It is kept on the container so that whoever reports on it can say
 	// so without looking anything up.
 	TaskInteractiveLabelKey = "task.interactive"
+
+	// TaskTTLLabelKey is how long a container may run for once it is up, in
+	// seconds. What it is counted from is when the container started, which
+	// the node reads off the container itself.
+	TaskTTLLabelKey = "task.ttl"
 
 	// TaskAttemptLabelKey is which attempt this container is, counting from
 	// zero. It is kept on the container rather than written down anywhere,
