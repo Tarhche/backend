@@ -258,7 +258,7 @@ func managerConsoleCommand(
 		taskEvents.TaskCompletedName:    managerRunTask.NewTaskCompleted(taskRepository),
 		taskEvents.TaskFailedName:       managerRunTask.NewTaskFailed(taskRepository),
 		taskEvents.TaskStoppedName:      managerStopTask.NewTaskStopped(taskRepository),
-		taskEvents.TaskLoggedName:       managerLogTask.NewTaskLogged(logRepository, managerConfigs.MaxLogBytes, logger),
+		taskEvents.TaskLoggedName:       managerLogTask.NewTaskLogged(taskRepository, logRepository, managerConfigs.MaxLogBytes, logger),
 	}
 
 	// manager subscribers
