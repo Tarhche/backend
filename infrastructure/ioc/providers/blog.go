@@ -815,6 +815,7 @@ func blog(
 		forgetpassword.SendForgetPasswordEmailName: forgetpassword.NewSendForgetPasswordEmailHandler(userRepository, authTokenGenerator, mailer, mailFromAddress, webURL, renderer, translator),
 		register.SendRegisterationEmailName:        register.NewSendRegisterationEmailHandler(authTokenGenerator, mailer, mailFromAddress, webURL, renderer, translator),
 		taskEvents.HeartbeatName:                   heartbeat.NewHeartbeatHandler(cachedGateway, logger),
+		taskEvents.TaskFailedName:                  heartbeat.NewTaskFailedHandler(cachedGateway, logger),
 	}
 
 	if err := iocContainer.Bind(func() map[string]domain.MessageHandler {

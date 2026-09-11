@@ -49,8 +49,8 @@ func (uc *TaskRan) Handle(ctx context.Context, data []byte) error {
 	t.ContainerID = taskRan.ContainerUUID
 	t.Endpoints = endpoints
 
-	if t.State != task.Running {
-		t.State = task.Running
+	if t.CurrentState != task.Running {
+		t.CurrentState = task.Running
 		t.StartedAt = taskRan.StartedAt
 		changed = true
 	}
