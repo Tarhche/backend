@@ -34,6 +34,7 @@ never to the bytes.
 | `Targets` | what a worker will connect a stream to, and what it will not |
 | `Authenticator` | what the ingress will take a connection from |
 | `StreamProxy` | the byte pipe, both directions, with half-close |
+| `Forwarder` | the ports arbitrary TCP arrives on, each carried onto a worker's connections |
 
 ## Which end is the smux client
 
@@ -235,6 +236,50 @@ opened, so two callers cannot each take the last one.
 The choice is made once and holds for the connection's life. A live TCP
 connection cannot be moved to another worker, because neither end could be told.
 
+## Forwarded ports
+
+`Forwarder` is the edge for traffic that is not the ingress's own: a port it
+listens on, and the worker and target everything arriving there is carried to.
+
+```
+ssh client ──TCP──> :8022 ─┐
+                           ├─> Forwarder ──> Ingress.Dial ──> stream ──> worker ──> 127.0.0.1:22
+psql client ──TCP──> :5432 ┘
+```
+
+Which worker a connection goes to is **the port it arrived on**, because a raw
+connection carries nothing that could name one — there is no host header to read
+and no path to route on. That is why the mapping is configuration rather than
+something read off the wire, and it is the one place where an L4 tunnel is
+necessarily less flexible than an L7 proxy.
+
+A rule is `listen=worker:target`:
+
+| rule | what it does |
+|---|---|
+| `8022=worker-a:22` | port 22 on that worker's own loopback |
+| `8080=worker-a:api` | a service that worker resolves for itself |
+| `5432=worker-a:10.0.0.5:5432` | an address that worker has to allow |
+| `9000=:api` | whichever worker the router picks |
+| `127.0.0.1:8022=worker-a:22` | one interface rather than all of them |
+
+A service is the safer of the two forms: a worker offering only names cannot be
+talked into connecting anywhere else at all. An address is checked against
+`RUNNER_TUNNEL_ALLOWED_TARGETS` on the worker, which is empty by default and
+therefore allows nothing.
+
+Every port opens before any is served, so a port already taken is a refusal to
+start rather than something found once traffic is arriving on the others.
+
+A port whose worker is not connected still listens, and closes what it accepts.
+At layer four there is nothing to say and nowhere to say it: no status line, no
+error frame. The client sees what it would see if the service were down, which
+is what it is.
+
+Closing ends what is being carried rather than draining it. What this carries
+has no length — an ssh session lasts as long as someone is typing — so draining
+is a process that never exits.
+
 ## smux configuration
 
 | setting | default | why |
@@ -355,6 +400,20 @@ BenchmarkIdleSessions            58005 ns/op                              (1 bus
 BenchmarkRegistry                  207 ns/op      19 B/op     1 alloc/op   (parallel)
 ```
 
+A forwarded port costs almost nothing once a connection is established — the
+same measurement through `Forwarder` rather than `Dial` directly:
+
+```
+BenchmarkRoundTrip               92070 ns/op     376 B/op     6 allocs/op
+BenchmarkForwardedRoundTrip      92297 ns/op     810 B/op     6 allocs/op   (+0.2%)
+BenchmarkOpenStream             198805 ns/op  151897 B/op   160 allocs/op
+BenchmarkForwardedAccept        345587 ns/op  219546 B/op   205 allocs/op   (+ the client's own handshake)
+```
+
+Steady state is one extra `io.CopyBuffer` hop and nothing else. Accepting costs
+more because it is a whole TCP handshake the client makes and the ingress
+answers, before any of the tunnel's work begins.
+
 ## Running it
 
 ```sh
@@ -375,7 +434,8 @@ app certificate worker generate \
 RUNNER_TUNNEL_CA_CERT=./certs/ca/ca.crt \
 RUNNER_TUNNEL_CERT=./certs/ingress/tls.crt \
 RUNNER_TUNNEL_KEY=./certs/ingress/tls.key \
-  app serve-runner-ingress --port=80 --tunnel-port=81
+  app serve-runner-ingress --port=80 --tunnel-port=81 \
+      --forward='8022=worker-001:22,5432=worker-001:5432,9000=:api'
 
 # 5. a worker, which needs no inbound port of any kind
 RUNNER_TUNNEL_CA_CERT=./certs/ca/ca.crt \
@@ -383,11 +443,21 @@ RUNNER_TUNNEL_CERT=./certs/worker-001/tls.crt \
 RUNNER_TUNNEL_KEY=./certs/worker-001/tls.key \
 RUNNER_TUNNEL_SERVER_NAME=ingress.example.internal \
 RUNNER_TUNNEL_ADDRESSES='ingress-a:81,ingress-b:81' \
+RUNNER_TUNNEL_ALLOWED_TARGETS='127.0.0.1:22,127.0.0.1:5432' \
   app serve-runner-worker --name=worker-001 --port=80
 
-# 6. and a client connection, which reaches the worker's target through the tunnel
+# 6. a client connection, which reaches the worker's target through the tunnel
 curl http://ingress:80/runners/worker-001/health
+
+# 7. and arbitrary TCP, which knows none of the above is happening
+ssh -p 8022 user@ingress
+psql -h ingress -p 5432
 ```
+
+The worker allows `127.0.0.1:22` and `127.0.0.1:5432` and nothing else, so the
+two forwarded ports resolve and anything else the ingress might ask for does
+not. `9000=:api` needs no such entry: a service is a name the worker already
+offers.
 
 Several ingresses are named with commas; the worker keeps a pool at each and is
 reachable through all of them.
@@ -421,6 +491,15 @@ go ingress.Serve(ctx, listener)
 // a client connection, bound to one worker for its whole life
 stream, _ := ingress.Dial(ctx, "runner-worker-01", tunnel.Target{Service: "ssh"})
 tunnel.StreamProxy{}.Copy(client, stream)
+
+// or let a listening port do both, for every connection that arrives on it
+forwarder, _ := tunnel.NewForwarder(ingress, logger, tunnel.Forward{
+    Address: "0.0.0.0:8022",
+    Worker:  "runner-worker-01",
+    Target:  tunnel.Target{Service: "ssh"},
+})
+_ = forwarder.Listen()
+go forwarder.Serve(ctx)
 ```
 
 and the far end:

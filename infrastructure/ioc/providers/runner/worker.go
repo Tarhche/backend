@@ -155,11 +155,18 @@ func (p *workerProvider) bindTunnel(c provider.Container, nodeName string, logge
 	tunnelConfig.MaxStreamsPerSession = workerConfigs.TunnelMaxStreamsPerSession
 	tunnelConfig.IdleSessionTimeout = workerConfigs.TunnelMaxIdleTime
 
-	// the api this worker already serves on its own port, offered under a name
-	// so that the ingress asks for the service rather than for a port.
+	// what a stream may be connected to: the api this worker already serves,
+	// offered under a name so that the ingress asks for the service rather than
+	// for a port, and whatever addresses this worker was told to allow. Nothing
+	// else, however the ingress asks.
+	allowed, err := workerConfigs.AllowedTargets()
+	if err != nil {
+		return err
+	}
+
 	targets := tunnel.NewServiceTargets(map[string]string{
 		runnerAPIService: net.JoinHostPort("127.0.0.1", strconv.Itoa(workerConfigs.Port)),
-	})
+	}, allowed...)
 
 	worker, err := tunnel.NewWorker(
 		nodeName,

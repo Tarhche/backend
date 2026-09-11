@@ -27,6 +27,10 @@ const (
 	// take the workers' connections.
 	IngressTunnel = "runner:ingress:tunnel"
 
+	// IngressForwarder is the ports arbitrary TCP arrives on, which the serve
+	// command needs in order to listen on them.
+	IngressForwarder = "runner:ingress:forwarder"
+
 	// runnerAPIService is the name a worker offers its own http api under. The
 	// ingress asks for a service rather than an address, so where the worker
 	// serves it is the worker's own business.
@@ -92,6 +96,23 @@ func (p *ingressProvider) Boot(ctx context.Context, c provider.Container) error 
 	}
 
 	if err := c.Bind(func() *tunnel.Ingress { return tunnelIngress }, provider.Singleton(), provider.WithName(IngressTunnel)); err != nil {
+		return err
+	}
+
+	// the ports arbitrary TCP arrives on. They carry onto the connections the
+	// workers already opened, so forwarding a port adds a way in for clients
+	// and no way in to a worker.
+	forwards, err := ingressConfigs.Forwards()
+	if err != nil {
+		return err
+	}
+
+	forwarder, err := tunnel.NewForwarder(tunnelIngress, logger, forwards...)
+	if err != nil {
+		return err
+	}
+
+	if err := c.Bind(func() *tunnel.Forwarder { return forwarder }, provider.Singleton(), provider.WithName(IngressForwarder)); err != nil {
 		return err
 	}
 

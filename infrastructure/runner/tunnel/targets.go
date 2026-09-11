@@ -7,6 +7,7 @@ import (
 	"maps"
 	"net"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -80,6 +81,81 @@ func (r AddressRule) allows(host string, port uint16) bool {
 	}
 
 	return r.From > 0 && port >= r.From && port <= r.To
+}
+
+// ParseAddressRules reads a comma-separated list of addresses a worker will
+// connect a stream to, each a single port or a span of them:
+//
+//	127.0.0.1:5432              one port
+//	127.0.0.1:30000-31000       a span, which is how published container ports
+//	                            are allowed without naming each one
+//
+// Nothing is allowed by default. What is not listed here a worker will not
+// dial, whatever the ingress asks for.
+func ParseAddressRules(rules string) ([]AddressRule, error) {
+	allowed := make([]AddressRule, 0, 1)
+
+	for _, rule := range strings.Split(rules, ",") {
+		if rule = strings.TrimSpace(rule); len(rule) == 0 {
+			continue
+		}
+
+		parsed, err := ParseAddressRule(rule)
+		if err != nil {
+			return nil, err
+		}
+
+		allowed = append(allowed, parsed)
+	}
+
+	return allowed, nil
+}
+
+// ParseAddressRule reads one allowed address, as host:port or host:from-to.
+func ParseAddressRule(rule string) (AddressRule, error) {
+	host, ports, err := net.SplitHostPort(strings.TrimSpace(rule))
+	if err != nil {
+		return AddressRule{}, fmt.Errorf("%w: %q is not an address: %s", ErrTargetNotAllowed, rule, err)
+	}
+
+	if len(host) == 0 {
+		return AddressRule{}, fmt.Errorf("%w: %q names no host", ErrTargetNotAllowed, rule)
+	}
+
+	from, to, spanned := strings.Cut(ports, "-")
+	if !spanned {
+		port, err := portNumber(from)
+		if err != nil {
+			return AddressRule{}, err
+		}
+
+		return AddressRule{Host: host, Ports: []uint16{port}}, nil
+	}
+
+	first, err := portNumber(from)
+	if err != nil {
+		return AddressRule{}, err
+	}
+
+	last, err := portNumber(to)
+	if err != nil {
+		return AddressRule{}, err
+	}
+
+	if last < first {
+		return AddressRule{}, fmt.Errorf("%w: %q ends before it starts", ErrTargetNotAllowed, rule)
+	}
+
+	return AddressRule{Host: host, From: first, To: last}, nil
+}
+
+func portNumber(port string) (uint16, error) {
+	number, err := strconv.ParseUint(strings.TrimSpace(port), 10, 16)
+	if err != nil || number == 0 {
+		return 0, fmt.Errorf("%w: %q is not a port", ErrTargetNotAllowed, port)
+	}
+
+	return uint16(number), nil
 }
 
 // NewServiceTargets builds the set of things a worker offers, keyed by the name

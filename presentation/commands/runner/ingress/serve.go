@@ -30,6 +30,11 @@ type ServeCommand struct {
 	// that says a worker is there at all.
 	tunnel *tunnel.Ingress
 
+	// forwarder is the ports arbitrary TCP arrives on, each carried onto those
+	// same connections. It is layer four: what comes in is a byte pipe, so ssh
+	// travels it as readily as anything else.
+	forwarder *tunnel.Forwarder
+
 	logger *slog.Logger
 }
 
@@ -98,7 +103,11 @@ func (c *ServeCommand) Boot(ctx context.Context, container provider.Container) e
 		return err
 	}
 
-	return container.Resolve(&c.tunnel, provider.ResolveName(runner.IngressTunnel))
+	if err := container.Resolve(&c.tunnel, provider.ResolveName(runner.IngressTunnel)); err != nil {
+		return err
+	}
+
+	return container.Resolve(&c.forwarder, provider.ResolveName(runner.IngressForwarder))
 }
 
 // Terminate terminates the command's own resources, of which it has none. The
@@ -143,6 +152,19 @@ func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 		}
 	}()
 
+	// the forwarded ports open before the http server does, so a port already
+	// taken is a refusal to start rather than something found once traffic is
+	// arriving on the others.
+	if err := c.forwarder.Listen(); err != nil {
+		c.logger.ErrorContext(ctx, "a forwarded port could not be opened", "error", err)
+		return console.ExitFailure
+	}
+
+	forwarding := make(chan error, 1)
+	go func() {
+		forwarding <- c.forwarder.Serve(ctx)
+	}()
+
 	// no read timeout: what this carries is a runner's own traffic, which may
 	// be an attached terminal or a log being followed rather than a request
 	// that finishes.
@@ -160,10 +182,16 @@ func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 		defer cancel()
 
 		_ = server.Shutdown(shutdownCtx)
+		_ = c.forwarder.Close()
 	}()
 
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		c.logger.ErrorContext(ctx, "server failed", "error", err)
+		return console.ExitFailure
+	}
+
+	if err := <-forwarding; err != nil {
+		c.logger.ErrorContext(ctx, "a forwarded port failed", "error", err)
 		return console.ExitFailure
 	}
 

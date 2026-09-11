@@ -58,6 +58,9 @@ services:
       OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT: ${OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT:-}
       OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
       PROFILING_ENABLED: ${PROFILING_ENABLED:-true}
+      # ports arbitrary TCP arrives on, as listen=worker:target. Nothing is
+      # forwarded unless it is named here.
+      RUNNER_INGRESS_FORWARDS: ${BACKEND_RUNNER_INGRESS_FORWARDS:-}
 
 networks:
   runner_manager:

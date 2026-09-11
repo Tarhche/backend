@@ -481,3 +481,88 @@ func BenchmarkRegistry(b *testing.B) {
 		}
 	})
 }
+
+// benchForwarder puts a forwarded port in front of the tunnel, which is what a
+// client that knows nothing of any of this actually connects to.
+func benchForwarder(b *testing.B, config Config) string {
+	b.Helper()
+
+	ingress, _ := benchTunnel(b, config)
+
+	forwarder, err := NewForwarder(ingress, discardLogger(), Forward{
+		Address: "127.0.0.1:0",
+		Worker:  "worker-a",
+		Target:  Target{Service: "echo"},
+	})
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	if err := forwarder.Listen(); err != nil {
+		b.Fatal(err)
+	}
+
+	go func() { _ = forwarder.Serve(context.Background()) }()
+
+	b.Cleanup(func() { forwarder.Close() })
+
+	return forwarder.Listening()[0].String()
+}
+
+// BenchmarkForwardedRoundTrip is the whole path a client pays for: its own TCP
+// connection, the stream it was joined to, and the target behind the worker.
+func BenchmarkForwardedRoundTrip(b *testing.B) {
+	address := benchForwarder(b, benchConfig())
+
+	client, err := net.Dial("tcp", address)
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer client.Close()
+
+	message := make([]byte, 64)
+	answer := make([]byte, 64)
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for b.Loop() {
+		if _, err := client.Write(message); err != nil {
+			b.Fatal(err)
+		}
+
+		if _, err := io.ReadFull(client, answer); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// BenchmarkForwardedAccept is what accepting a client costs end to end: a TCP
+// accept, a stream opened on the worker's connection, and the worker dialling
+// the target.
+func BenchmarkForwardedAccept(b *testing.B) {
+	config := benchConfig()
+	config.MaxStreamsPerSession = 4096
+
+	address := benchForwarder(b, config)
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for b.Loop() {
+		client, err := net.Dial("tcp", address)
+		if err != nil {
+			b.Fatal(err)
+		}
+
+		if _, err := client.Write([]byte("x")); err != nil {
+			b.Fatal(err)
+		}
+
+		if _, err := io.ReadFull(client, make([]byte, 1)); err != nil {
+			b.Fatal(err)
+		}
+
+		client.Close()
+	}
+}

@@ -129,6 +129,13 @@ func TestServe(t *testing.T) {
 		assert.NoError(t, err)
 		command.tunnel = tunnelIngress
 
+		forwards, err := command.configs.Forwards()
+		assert.NoError(t, err)
+
+		forwarder, err := tunnel.NewForwarder(tunnelIngress, command.logger, forwards...)
+		assert.NoError(t, err)
+		command.forwarder = forwarder
+
 		serverStartedListening := make(chan struct{})
 
 		go func() {

@@ -60,6 +60,9 @@ services:
       OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT: ${OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT:-}
       OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
       PROFILING_ENABLED: ${PROFILING_ENABLED:-true}
+      # addresses a stream may be connected to beyond the services this worker
+      # offers by name. Empty allows none.
+      RUNNER_TUNNEL_ALLOWED_TARGETS: ${BACKEND_RUNNER_TUNNEL_ALLOWED_TARGETS:-}
 
 networks:
   nats:

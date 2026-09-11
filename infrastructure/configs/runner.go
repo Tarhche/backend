@@ -3,6 +3,8 @@ package configs
 import (
 	"strings"
 	"time"
+
+	"github.com/khanzadimahdi/testproject/infrastructure/runner/tunnel"
 )
 
 const (
@@ -48,6 +50,8 @@ type RunnerIngress struct {
 
 	TunnelMaxStreamsPerSession int `usage:"How many client connections one of a worker's connections will carry before the next is used. It is a blast radius before it is a capacity: they all end when it does." env:"RUNNER_TUNNEL_MAX_STREAMS_PER_SESSION" long:"tunnel-max-streams-per-session"`
 	TunnelMaxSessionsPerWorker int `usage:"How many connections one worker may hold here." env:"RUNNER_TUNNEL_MAX_SESSIONS_PER_WORKER" long:"tunnel-max-sessions-per-worker"`
+
+	ForwardedPorts string `usage:"Ports to carry arbitrary TCP into the tunnel on, as listen=worker:target, separated by commas — 8022=worker-a:22 reaches port 22 on that worker, 9000=:api reaches the api service on whichever worker the router picks. Nothing is forwarded by default." env:"RUNNER_INGRESS_FORWARDS" long:"forward"`
 }
 
 // NewRunnerIngress returns the configuration of the serve-runner-ingress
@@ -75,6 +79,8 @@ type RunnerWorker struct {
 	TunnelKey         string `usage:"Path of the private key for that certificate." env:"RUNNER_TUNNEL_KEY" long:"tunnel-key"`
 
 	TunnelServerName string `usage:"Name the ingress's certificate has to answer for. Without it a worker would hand its credentials to anything the authority ever signed." env:"RUNNER_TUNNEL_SERVER_NAME" long:"tunnel-server-name"`
+
+	TunnelAllowedTargets string `usage:"Addresses this worker will connect a stream to beyond the services it offers, as host:port or host:from-to, separated by commas. Empty offers only named services, which is the only shape an ingress cannot talk a worker out of." env:"RUNNER_TUNNEL_ALLOWED_TARGETS" long:"tunnel-allowed-targets"`
 
 	TunnelMaxStreamsPerSession int `usage:"How many client connections one connection to an ingress will carry before the next is used." env:"RUNNER_TUNNEL_MAX_STREAMS_PER_SESSION" long:"tunnel-max-streams-per-session"`
 
@@ -109,6 +115,17 @@ func (c *RunnerWorker) IngressAddresses() []string {
 	}
 
 	return addresses
+}
+
+// AllowedTargets is what this worker will connect a stream to beyond the
+// services it offers by name.
+func (c *RunnerWorker) AllowedTargets() ([]tunnel.AddressRule, error) {
+	return tunnel.ParseAddressRules(c.TunnelAllowedTargets)
+}
+
+// Forwards is the ports this ingress carries arbitrary TCP into the tunnel on.
+func (c *RunnerIngress) Forwards() ([]tunnel.Forward, error) {
+	return tunnel.ParseForwards(c.ForwardedPorts)
 }
 
 // AllowedWorkers is the workers this ingress will take, or none named at all,
