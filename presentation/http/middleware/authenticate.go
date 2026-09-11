@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
@@ -14,48 +15,30 @@ const (
 )
 
 type Authenticate struct {
-	next           http.Handler
-	j              *jwt.JWT
-	userRepository user.Repository
+	next          http.Handler
+	authenticator *auth.Authenticator
 }
 
 var _ http.Handler = &Authenticate{}
 
 func NewAuthenticateMiddleware(next http.Handler, j *jwt.JWT, userRepository user.Repository) *Authenticate {
 	return &Authenticate{
-		j:              j,
-		userRepository: userRepository,
-		next:           next,
+		next:          next,
+		authenticator: auth.NewAuthenticator(j, userRepository),
 	}
 }
 
 func (a *Authenticate) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
-	token := a.bearerToken(r)
-	claims, err := a.j.Verify(r.Context(), token)
-	if err != nil {
-		rw.WriteHeader(http.StatusUnauthorized)
-		return
-	}
+	user, err := a.authenticator.Authenticate(r.Context(), a.bearerToken(r))
 
-	if audiences, err := claims.GetAudience(); err != nil || len(audiences) == 0 || audiences[0] != auth.AccessToken {
-		rw.WriteHeader(http.StatusUnauthorized)
-		return
-	}
-
-	userUUID, err := claims.GetSubject()
-	if err != nil {
-		rw.WriteHeader(http.StatusUnauthorized)
-		return
-	}
-
-	user, err := a.userRepository.GetOne(r.Context(), userUUID)
-	if err != nil {
-		rw.WriteHeader(http.StatusUnauthorized)
-		return
-	}
-
-	if user.IsBanned() {
+	switch {
+	case errors.Is(err, auth.ErrBanned):
 		rw.WriteHeader(http.StatusForbidden)
+
+		return
+	case err != nil:
+		rw.WriteHeader(http.StatusUnauthorized)
+
 		return
 	}
 
