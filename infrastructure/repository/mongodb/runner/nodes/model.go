@@ -7,7 +7,6 @@ import (
 type NodeBson struct {
 	Name            string    `bson:"name"`
 	Role            string    `bson:"role"`
-	API             string    `bson:"api"`
 	Stats           Stats     `bson:"stats"`
 	LastHeartbeatAt time.Time `bson:"last_heartbeat_at,omitempty"`
 	CreatedAt       time.Time `bson:"created_at,omitempty"`

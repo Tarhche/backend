@@ -46,11 +46,18 @@ services:
         max-file: "3"
     environment:
       RUNNER_WORKER_NAME: runner-worker-02
+      # the host the containers' published ports land on, which is the docker
+      # daemon's own rather than this service's. Where this worker's API
+      # answers needs no saying: it is this service's name and port.
+      RUNNER_WORKER_ADVERTISE_HOST: ${BACKEND_RUNNER_WORKER_ADVERTISE_HOST}
       # every ingress this worker opens connections to, separated by commas
       RUNNER_TUNNEL_ADDRESSES: ${BACKEND_RUNNER_TUNNEL_ADDRESSES:-runner-ingress:81}
-      RUNNER_TUNNEL_PRIVATE_KEY: ${BACKEND_RUNNER_WORKER_02_TUNNEL_PRIVATE_KEY}
-      RUNNER_TUNNEL_TOKEN: ${BACKEND_RUNNER_TUNNEL_TOKEN}
-      RUNNER_TUNNEL_INGRESS_PUBLIC_KEYS: ${BACKEND_RUNNER_INGRESS_TUNNEL_PUBLIC_KEYS}
+      # this worker's own certificate, and the authority to check the ingress
+      # against. Its private key stays on this machine.
+      RUNNER_TUNNEL_CA_CERT: ${BACKEND_RUNNER_TUNNEL_CA_CERT:-/certs/ca/ca.crt}
+      RUNNER_TUNNEL_CERT: ${BACKEND_RUNNER_TUNNEL_CERT:-/certs/tls.crt}
+      RUNNER_TUNNEL_KEY: ${BACKEND_RUNNER_TUNNEL_KEY:-/certs/tls.key}
+      RUNNER_TUNNEL_SERVER_NAME: ${BACKEND_RUNNER_TUNNEL_SERVER_NAME:-runner-ingress}
       NATS_URL: ${BACKEND_NATS_URL}
       DOCKER_HOST: ${BACKEND_DOCKER_HOST}
       OTEL_EXPORTER_OTLP_INSECURE: ${OTEL_EXPORTER_OTLP_INSECURE}

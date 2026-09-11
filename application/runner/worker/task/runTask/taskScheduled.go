@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/runner/task"
 	"github.com/khanzadimahdi/testproject/domain/runner/task/events"
 )
 
@@ -65,9 +66,16 @@ func (uc *TaskScheduled) Handle(ctx context.Context, data []byte) error {
 	request := &Request{
 		UUID:          taskScheduled.UUID,
 		Name:          taskScheduled.Name,
+		Slug:          taskScheduled.Slug,
+		Kind:          task.Kind(taskScheduled.Kind),
+		StackUUID:     taskScheduled.StackUUID,
+		StackSlug:     taskScheduled.StackSlug,
+		ServiceName:   taskScheduled.ServiceName,
 		Image:         taskScheduled.Image,
 		AutoRemove:    taskScheduled.AutoRemove,
 		PortBindings:  portBindings,
+		ExposedPorts:  taskScheduled.ExposedPorts,
+		NetworkPolicy: taskScheduled.NetworkPolicy,
 		RestartPolicy: taskScheduled.RestartPolicy,
 		HealthCheck:   taskScheduled.HealthCheck,
 		RestartCount:  taskScheduled.RestartCount,
@@ -77,6 +85,7 @@ func (uc *TaskScheduled) Handle(ctx context.Context, data []byte) error {
 		Environment:   taskScheduled.Environment,
 		Command:       taskScheduled.Command,
 		Entrypoint:    taskScheduled.Entrypoint,
+		WorkingDir:    taskScheduled.WorkingDir,
 		Mounts:        mounts,
 		ResourceLimits: ResourceLimits{
 			Cpu:    taskScheduled.ResourceLimits.Cpu,

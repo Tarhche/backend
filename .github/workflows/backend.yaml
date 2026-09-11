@@ -167,14 +167,21 @@ jobs:
 
             export BACKEND_DOCKER_HOST='${{ secrets.BACKEND_DOCKER_HOST }}'
 
-            export BACKEND_RUNNER_INGRESS_TUNNEL_PRIVATE_KEY='${{ secrets.BACKEND_RUNNER_INGRESS_TUNNEL_PRIVATE_KEY }}'
-            export BACKEND_RUNNER_INGRESS_TUNNEL_PUBLIC_KEYS='${{ secrets.BACKEND_RUNNER_INGRESS_TUNNEL_PUBLIC_KEYS }}'
+            export BACKEND_RUNNER_MANAGER_URL='${{ secrets.BACKEND_RUNNER_MANAGER_URL }}'
+            export BACKEND_RUNNER_INGRESS_DOMAIN='${{ secrets.BACKEND_RUNNER_INGRESS_DOMAIN }}'
+            export BACKEND_RUNNER_WORKER_ADVERTISE_HOST='${{ secrets.BACKEND_RUNNER_WORKER_ADVERTISE_HOST }}'
             export BACKEND_RUNNER_TUNNEL_ADDRESSES='${{ secrets.BACKEND_RUNNER_TUNNEL_ADDRESSES }}'
-            export BACKEND_RUNNER_TUNNEL_TOKEN='${{ secrets.BACKEND_RUNNER_TUNNEL_TOKEN }}'
-            export BACKEND_RUNNER_WORKER_TUNNEL_PUBLIC_KEYS='${{ secrets.BACKEND_RUNNER_WORKER_TUNNEL_PUBLIC_KEYS }}'
-            export BACKEND_RUNNER_WORKER_01_TUNNEL_PRIVATE_KEY='${{ secrets.BACKEND_RUNNER_WORKER_01_TUNNEL_PRIVATE_KEY }}'
-            export BACKEND_RUNNER_WORKER_02_TUNNEL_PRIVATE_KEY='${{ secrets.BACKEND_RUNNER_WORKER_02_TUNNEL_PRIVATE_KEY }}'
-            export BACKEND_RUNNER_WORKER_03_TUNNEL_PRIVATE_KEY='${{ secrets.BACKEND_RUNNER_WORKER_03_TUNNEL_PRIVATE_KEY }}'
+
+            # where each service finds its own certificate and the authority to
+            # check the other end against. ca.key is deliberately not here:
+            # nothing that runs needs it.
+            export BACKEND_RUNNER_TUNNEL_CA_CERT='${{ secrets.BACKEND_RUNNER_TUNNEL_CA_CERT }}'
+            export BACKEND_RUNNER_TUNNEL_CERT='${{ secrets.BACKEND_RUNNER_TUNNEL_CERT }}'
+            export BACKEND_RUNNER_TUNNEL_KEY='${{ secrets.BACKEND_RUNNER_TUNNEL_KEY }}'
+            export BACKEND_RUNNER_TUNNEL_SERVER_NAME='${{ secrets.BACKEND_RUNNER_TUNNEL_SERVER_NAME }}'
+
+            # the ports arbitrary TCP arrives on, and what a worker will connect
+            # a stream to beyond the services it offers by name.
             export BACKEND_RUNNER_INGRESS_FORWARDS='${{ secrets.BACKEND_RUNNER_INGRESS_FORWARDS }}'
             export BACKEND_RUNNER_TUNNEL_ALLOWED_TARGETS='${{ secrets.BACKEND_RUNNER_TUNNEL_ALLOWED_TARGETS }}'
 

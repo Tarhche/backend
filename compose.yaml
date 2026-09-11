@@ -58,6 +58,8 @@ services:
       OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT: ${OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT:-}
       OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
       PROFILING_ENABLED: ${PROFILING_ENABLED:-true}
+      RUNNER_MANAGER_URL: ${RUNNER_MANAGER_URL}
+      RUNNER_INGRESS_DOMAIN: ${RUNNER_PUBLIC_INGRESS_DOMAIN}
 
   runner-manager:
     <<: *app
@@ -66,6 +68,7 @@ services:
     ports:
       - "8020:80"
     environment:
+      RUNNER_INGRESS_URL: ${RUNNER_INGRESS_URL}
       MONGO_SCHEME: ${MONGO_SCHEME}
       MONGO_USERNAME: ${MONGO_USERNAME}
       MONGO_PASSWORD: ${MONGO_PASSWORD}
@@ -86,10 +89,18 @@ services:
     build:
       target: develop-runner-ingress
     ports:
+      # the ingress's own routes and, by hostname, the containers' exposed ports
       - "8030:80"
       # a forwarded port, carrying arbitrary TCP to a worker through the tunnel
       - "8031:8031"
     environment:
+      RUNNER_INGRESS_DOMAIN: ${RUNNER_INGRESS_DOMAIN}
+      MONGO_SCHEME: ${MONGO_SCHEME}
+      MONGO_USERNAME: ${MONGO_USERNAME}
+      MONGO_PASSWORD: ${MONGO_PASSWORD}
+      MONGO_HOST: ${MONGO_HOST}
+      MONGO_PORT: ${MONGO_PORT}
+      MONGO_DATABASE_NAME: ${MONGO_DATABASE_NAME}
       RUNNER_TUNNEL_CA_CERT: ${RUNNER_TUNNEL_CA_CERT}
       RUNNER_TUNNEL_CERT: ${RUNNER_INGRESS_TUNNEL_CERT}
       RUNNER_TUNNEL_KEY: ${RUNNER_INGRESS_TUNNEL_KEY}
@@ -110,6 +121,9 @@ services:
       - "8040:80"
     environment:
       RUNNER_WORKER_NAME: runner-worker-01
+      # the containers' ports are published on the docker daemon's own host,
+      # which is the dind service rather than this one.
+      RUNNER_WORKER_ADVERTISE_HOST: ${RUNNER_WORKER_ADVERTISE_HOST}
       RUNNER_TUNNEL_ADDRESSES: ${RUNNER_TUNNEL_ADDRESSES}
       RUNNER_TUNNEL_CA_CERT: ${RUNNER_TUNNEL_CA_CERT}
       RUNNER_TUNNEL_CERT: /opt/app/tmp/certs/runner-worker-01/tls.crt
@@ -133,6 +147,9 @@ services:
       - "8041:80"
     environment:
       RUNNER_WORKER_NAME: runner-worker-02
+      # the containers' ports are published on the docker daemon's own host,
+      # which is the dind service rather than this one.
+      RUNNER_WORKER_ADVERTISE_HOST: ${RUNNER_WORKER_ADVERTISE_HOST}
       RUNNER_TUNNEL_ADDRESSES: ${RUNNER_TUNNEL_ADDRESSES}
       RUNNER_TUNNEL_CA_CERT: ${RUNNER_TUNNEL_CA_CERT}
       RUNNER_TUNNEL_CERT: /opt/app/tmp/certs/runner-worker-02/tls.crt
@@ -156,6 +173,9 @@ services:
       - "8042:80"
     environment:
       RUNNER_WORKER_NAME: runner-worker-03
+      # the containers' ports are published on the docker daemon's own host,
+      # which is the dind service rather than this one.
+      RUNNER_WORKER_ADVERTISE_HOST: ${RUNNER_WORKER_ADVERTISE_HOST}
       RUNNER_TUNNEL_ADDRESSES: ${RUNNER_TUNNEL_ADDRESSES}
       RUNNER_TUNNEL_CA_CERT: ${RUNNER_TUNNEL_CA_CERT}
       RUNNER_TUNNEL_CERT: /opt/app/tmp/certs/runner-worker-03/tls.crt
@@ -251,6 +271,9 @@ services:
     privileged: true
     ports:
       - "2375:2375"
+      # the range docker publishes a container's ports on. The runner proxies
+      # them by hostname, so this is only for reaching one directly.
+      - "32768-32868:32768-32868"
     environment:
       DOCKER_TLS_CERTDIR: "" # disable certs
     # dockerd's own Prometheus metrics endpoint on 0.0.0.0:9323

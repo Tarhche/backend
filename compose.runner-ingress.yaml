@@ -5,6 +5,7 @@ services:
       - no-new-privileges:true
     networks:
       - runner_manager
+      - mongodb
       - monitoring
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:80/health"]
@@ -48,9 +49,18 @@ services:
         max-size: "50m"
         max-file: "3"
     environment:
-      RUNNER_TUNNEL_PRIVATE_KEY: ${BACKEND_RUNNER_INGRESS_TUNNEL_PRIVATE_KEY}
-      RUNNER_TUNNEL_TOKEN: ${BACKEND_RUNNER_TUNNEL_TOKEN}
-      RUNNER_TUNNEL_AUTHORIZED_KEYS: ${BACKEND_RUNNER_WORKER_TUNNEL_PUBLIC_KEYS}
+      RUNNER_INGRESS_DOMAIN: ${BACKEND_RUNNER_INGRESS_DOMAIN}
+      MONGO_SCHEME: ${BACKEND_MONGO_SCHEME}
+      MONGO_USERNAME: ${BACKEND_MONGO_USERNAME}
+      MONGO_PASSWORD: ${BACKEND_MONGO_PASSWORD}
+      MONGO_HOST: ${BACKEND_MONGO_HOST}
+      MONGO_PORT: ${BACKEND_MONGO_PORT}
+      MONGO_DATABASE_NAME: ${BACKEND_MONGO_DATABASE_NAME}
+      # the authority and this ingress's own certificate. The authority's
+      # private key is deliberately not here: nothing that runs needs it.
+      RUNNER_TUNNEL_CA_CERT: ${BACKEND_RUNNER_TUNNEL_CA_CERT:-/certs/ca/ca.crt}
+      RUNNER_TUNNEL_CERT: ${BACKEND_RUNNER_TUNNEL_CERT:-/certs/tls.crt}
+      RUNNER_TUNNEL_KEY: ${BACKEND_RUNNER_TUNNEL_KEY:-/certs/tls.key}
       OTEL_EXPORTER_OTLP_INSECURE: ${OTEL_EXPORTER_OTLP_INSECURE}
       OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL}
       OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES}
@@ -65,6 +75,9 @@ services:
 networks:
   runner_manager:
     name: runner_manager
+    external: true
+  mongodb:
+    name: mongodb
     external: true
   monitoring:
     name: monitoring

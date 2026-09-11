@@ -8,9 +8,15 @@ import (
 )
 
 const (
-	defaultRunnerManagerPort = 80
-	defaultRunnerWorkerPort  = 80
-	defaultRunnerIngressPort = 80
+	defaultRunnerManagerPort   = 80
+	defaultRunnerWorkerPort    = 80
+	defaultRunnerIngressPort   = 80
+	defaultRunnerIngressDomain = "runner.localhost"
+	defaultRunnerIngressURL    = "http://runner-ingress:80"
+	defaultRunnerMaxLogBytes   = 32 << 20 // 32 MB per container
+	defaultRunnerWorkerCpu     = 0.5
+	defaultRunnerWorkerMemory  = 256 << 20 // 256 MB
+	defaultRunnerWorkerDisk    = 1 << 30   // 1 GB
 
 	defaultRunnerTunnelPort = 81
 
@@ -25,19 +31,34 @@ const (
 // RunnerManager holds the configuration of the serve-runner-manager command.
 type RunnerManager struct {
 	Port int `usage:"specifies which port server should listen to." env:"SERVER_PORT" long:"port" short:"p"`
+
+	IngressURL string `usage:"Where the runner ingress answers. A terminal is proxied through it to the node holding the container." env:"RUNNER_INGRESS_URL" long:"ingress-url"`
+
+	MaxLogBytes int64 `usage:"How much log one container may keep. Past it, further lines are dropped rather than stored." env:"RUNNER_MAX_LOG_BYTES" long:"max-log-bytes"`
+
+	DefaultCpu    float64 `usage:"CPUs a container is limited to when its specification names no limit." env:"RUNNER_DEFAULT_CPU" long:"default-cpu"`
+	DefaultMemory uint64  `usage:"Memory, in bytes, a container is limited to when its specification names no limit." env:"RUNNER_DEFAULT_MEMORY" long:"default-memory"`
+	DefaultDisk   uint64  `usage:"Disk, in bytes, a container is limited to when its specification names no limit." env:"RUNNER_DEFAULT_DISK" long:"default-disk"`
 }
 
 // NewRunnerManager returns the configuration of the serve-runner-manager
 // command, holding the defaults it runs with until the console overrides them.
 func NewRunnerManager() *RunnerManager {
 	return &RunnerManager{
-		Port: defaultRunnerManagerPort,
+		Port:          defaultRunnerManagerPort,
+		IngressURL:    defaultRunnerIngressURL,
+		MaxLogBytes:   defaultRunnerMaxLogBytes,
+		DefaultCpu:    defaultRunnerWorkerCpu,
+		DefaultMemory: defaultRunnerWorkerMemory,
+		DefaultDisk:   defaultRunnerWorkerDisk,
 	}
 }
 
 // RunnerIngress holds the configuration of the serve-runner-ingress command.
 type RunnerIngress struct {
 	Port int `usage:"specifies which port server should listen to." env:"SERVER_PORT" long:"port" short:"p"`
+
+	Domain string `usage:"Domain a container's exposed ports are served on, without a leading dot. A request to a hostname under it is routed to the container the hostname names." env:"RUNNER_INGRESS_DOMAIN" long:"domain"`
 
 	TunnelPort int `usage:"Port the workers open their connections to. It carries nothing but them, so it is not the port requests arrive on." env:"RUNNER_TUNNEL_PORT" long:"tunnel-port"`
 
@@ -59,10 +80,17 @@ type RunnerIngress struct {
 func NewRunnerIngress() *RunnerIngress {
 	return &RunnerIngress{
 		Port:                       defaultRunnerIngressPort,
+		Domain:                     defaultRunnerIngressDomain,
 		TunnelPort:                 defaultRunnerTunnelPort,
 		TunnelMaxStreamsPerSession: defaultTunnelMaxStreamsPerSession,
 		TunnelMaxSessionsPerWorker: defaultTunnelMaxSessionsPerWorker,
 	}
+}
+
+// AllowedWorkers is the workers this ingress will take, or none named at all,
+// which allows every worker the authority signed for.
+func (c *RunnerIngress) AllowedWorkers() []string {
+	return commaSeparated(c.TunnelAllowedWorkers)
 }
 
 // RunnerWorker holds the configuration of the serve-runner-worker command.
@@ -71,6 +99,11 @@ type RunnerWorker struct {
 	Name string `usage:"specifies the unique name of the worker." env:"RUNNER_WORKER_NAME" long:"name" short:"n"`
 
 	DockerHost string `usage:"Docker daemon the tasks are run on. Empty uses the Docker client's own default." env:"DOCKER_HOST" long:"docker-host"`
+
+	// AdvertiseHost is where this worker reaches the ports its own containers
+	// publish. It is the docker daemon's host rather than this service's, which
+	// are not the same machine when the daemon is a service of its own.
+	AdvertiseHost string `usage:"Host this worker reaches its containers' published ports at, which is the docker daemon's own rather than this one." env:"RUNNER_WORKER_ADVERTISE_HOST" long:"advertise-host"`
 
 	TunnelAddresses string `usage:"host:port of every ingress this worker opens connections to, separated by commas. It keeps a pool at each, so it is reachable through all of them." env:"RUNNER_TUNNEL_ADDRESSES" long:"tunnel-addresses"`
 
@@ -82,11 +115,11 @@ type RunnerWorker struct {
 
 	TunnelAllowedTargets string `usage:"Addresses this worker will connect a stream to beyond the services it offers, as host:port or host:from-to, separated by commas. Empty offers only named services, which is the only shape an ingress cannot talk a worker out of." env:"RUNNER_TUNNEL_ALLOWED_TARGETS" long:"tunnel-allowed-targets"`
 
-	TunnelMaxStreamsPerSession int `usage:"How many client connections one connection to an ingress will carry before the next is used." env:"RUNNER_TUNNEL_MAX_STREAMS_PER_SESSION" long:"tunnel-max-streams-per-session"`
-
 	TunnelMinConnections int           `usage:"How many connections to each ingress are kept open and ready." env:"RUNNER_TUNNEL_MIN_CONNECTIONS" long:"tunnel-min-connections"`
 	TunnelMaxConnections int           `usage:"How many connections to each ingress may be open at once. More is how throughput grows: each is its own congestion window." env:"RUNNER_TUNNEL_MAX_CONNECTIONS" long:"tunnel-max-connections"`
 	TunnelMaxIdleTime    time.Duration `usage:"How long a connection beyond the fewest may carry nothing before it is let go." env:"RUNNER_TUNNEL_MAX_IDLE_TIME" long:"tunnel-max-idle-time"`
+
+	TunnelMaxStreamsPerSession int `usage:"How many client connections one connection to an ingress will carry before the next is used." env:"RUNNER_TUNNEL_MAX_STREAMS_PER_SESSION" long:"tunnel-max-streams-per-session"`
 }
 
 // NewRunnerWorker returns the configuration of the serve-runner-worker
@@ -106,15 +139,19 @@ func NewRunnerWorker() *RunnerWorker {
 // The console binds scalars, so the list travels as one comma-separated value
 // and is taken apart here — the same way the profiler's headers do.
 func (c *RunnerWorker) IngressAddresses() []string {
-	addresses := make([]string, 0, 1)
+	return commaSeparated(c.TunnelAddresses)
+}
 
-	for _, address := range strings.Split(c.TunnelAddresses, ",") {
-		if address = strings.TrimSpace(address); len(address) > 0 {
-			addresses = append(addresses, address)
+func commaSeparated(value string) []string {
+	items := make([]string, 0, 1)
+
+	for _, item := range strings.Split(value, ",") {
+		if item = strings.TrimSpace(item); len(item) > 0 {
+			items = append(items, item)
 		}
 	}
 
-	return addresses
+	return items
 }
 
 // AllowedTargets is what this worker will connect a stream to beyond the
@@ -126,18 +163,4 @@ func (c *RunnerWorker) AllowedTargets() ([]tunnel.AddressRule, error) {
 // Forwards is the ports this ingress carries arbitrary TCP into the tunnel on.
 func (c *RunnerIngress) Forwards() ([]tunnel.Forward, error) {
 	return tunnel.ParseForwards(c.ForwardedPorts)
-}
-
-// AllowedWorkers is the workers this ingress will take, or none named at all,
-// which allows every worker the authority signed for.
-func (c *RunnerIngress) AllowedWorkers() []string {
-	workers := make([]string, 0, 1)
-
-	for _, worker := range strings.Split(c.TunnelAllowedWorkers, ",") {
-		if worker = strings.TrimSpace(worker); len(worker) > 0 {
-			workers = append(workers, worker)
-		}
-	}
-
-	return workers
 }

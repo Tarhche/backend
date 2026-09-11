@@ -75,13 +75,14 @@ func (c *ServeCommand) Configure(flagSet *console.FlagSet) {
 }
 
 // Providers returns the service providers required to serve the runner ingress.
-// It reaches nothing: the workers come to it, so it needs neither a database
-// nor messaging.
+// The workers come to it, so it reaches none of them; the database is only for
+// looking up which node is holding a container.
 func (c *ServeCommand) Providers() []provider.Provider {
 	return []provider.Provider{
 		providers.NewConfigsProvider(c.configs),
 		providers.NewOpenTelemetryProvider("runner-ingress", "runner-ingress"),
 		providers.NewProfilerProvider("runner-ingress"),
+		providers.NewMongodbProvider(),
 		providers.NewContainerProvider(),
 		runner.NewIngressProvider(),
 		c,
