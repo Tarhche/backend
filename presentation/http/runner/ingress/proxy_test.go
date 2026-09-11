@@ -196,14 +196,5 @@ func (r connectedRunners) Get(_ context.Context, id string) (ingress.Runner, err
 		return ingress.Runner{}, domain.ErrNotExists
 	}
 
-	return ingress.Runner{ID: id, Connections: 1}, nil
-}
-
-func (r connectedRunners) All(_ context.Context) ([]ingress.Runner, error) {
-	runners := make([]ingress.Runner, 0, len(r))
-	for id := range r {
-		runners = append(runners, ingress.Runner{ID: id, Connections: 1})
-	}
-
-	return runners, nil
+	return ingress.Runner{ID: id}, nil
 }

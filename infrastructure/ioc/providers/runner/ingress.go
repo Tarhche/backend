@@ -11,7 +11,6 @@ import (
 
 	checkhealth "github.com/khanzadimahdi/testproject/application/app/checkHealth"
 	ingressGetRunner "github.com/khanzadimahdi/testproject/application/runner/ingress/getRunner"
-	ingressGetRunners "github.com/khanzadimahdi/testproject/application/runner/ingress/getRunners"
 	"github.com/khanzadimahdi/testproject/domain"
 	ingressContract "github.com/khanzadimahdi/testproject/domain/runner/ingress"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
@@ -121,23 +120,8 @@ func (r runnerRegistry) Get(_ context.Context, id string) (ingressContract.Runne
 	return ingressContract.Runner{}, domain.ErrNotExists
 }
 
-func (r runnerRegistry) All(_ context.Context) ([]ingressContract.Runner, error) {
-	workers := r.ingress.Workers()
-
-	runners := make([]ingressContract.Runner, 0, len(workers))
-	for _, worker := range workers {
-		runners = append(runners, asRunner(worker))
-	}
-
-	return runners, nil
-}
-
 func asRunner(worker tunnel.WorkerState) ingressContract.Runner {
-	return ingressContract.Runner{
-		ID:          worker.Worker,
-		Connections: uint(worker.Sessions),
-		ConnectedAt: worker.ConnectedAt,
-	}
+	return ingressContract.Runner{ID: worker.Worker}
 }
 
 func (p *ingressProvider) Terminate(ctx context.Context) error {
@@ -159,7 +143,6 @@ func ingressConsoleCommand(
 	}
 
 	getRunnerUseCase := ingressGetRunner.NewUseCase(registry)
-	getRunnersUseCase := ingressGetRunners.NewUseCase(registry)
 
 	// the ingress talks to nothing it has to reach: it holds the connections
 	// the workers opened, and there is nothing to be reachable but itself.
@@ -190,8 +173,6 @@ func ingressConsoleCommand(
 
 	// the container healthcheck probes this
 	mux.Handle("GET /health", middleware.NewCORSMiddleware(healthAPI.NewHealthHandler(checkHealthUseCase)))
-
-	mux.Handle("GET /api/runners", middleware.NewCORSMiddleware(ingressAPI.NewIndexHandler(getRunnersUseCase)))
 
 	// everything below here belongs to a runner rather than to the ingress
 	mux.Handle("/runners/{id}/{path...}", ingressAPI.NewProxyHandler(getRunnerUseCase, transport, logger))

@@ -341,12 +341,11 @@ func TestSessionCapacity(t *testing.T) {
 
 		assert.Equal(t, 2, session.Streams())
 		assert.Zero(t, session.Free())
-		assert.False(t, session.Usable())
 
 		session.release()
 
 		assert.Equal(t, 1, session.Streams())
-		assert.True(t, session.Usable())
+		assert.Equal(t, 1, session.Free())
 	})
 
 	t.Run("concurrent reservations never overshoot", func(t *testing.T) {

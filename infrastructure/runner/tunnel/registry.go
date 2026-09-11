@@ -5,7 +5,6 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"time"
 )
 
 // ErrNoSuchWorker is a worker with nothing connected.
@@ -18,10 +17,6 @@ type WorkerState struct {
 	Sessions int
 	Streams  int
 	Capacity int
-
-	// ConnectedAt is when the oldest connection still held was made, which is
-	// as close to "when this worker came up" as the ingress can see.
-	ConnectedAt time.Time
 }
 
 // Free is how many more streams the worker will take.
@@ -152,10 +147,6 @@ func (r *memoryRegistry) Workers() []WorkerState {
 			state.Sessions++
 			state.Streams += session.Streams()
 			state.Capacity += session.Capacity()
-
-			if state.ConnectedAt.IsZero() || session.CreatedAt().Before(state.ConnectedAt) {
-				state.ConnectedAt = session.CreatedAt()
-			}
 		}
 
 		if state.Sessions == 0 {

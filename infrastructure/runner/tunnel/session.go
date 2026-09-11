@@ -29,7 +29,6 @@ type Session struct {
 	worker string
 
 	session *smux.Session
-	created time.Time
 
 	// maxStreams is what this session will carry. Reserving against it is what
 	// keeps two callers from each taking the last place.
@@ -47,7 +46,6 @@ func newSession(id string, worker string, session *smux.Session, maxStreams int)
 		id:         id,
 		worker:     worker,
 		session:    session,
-		created:    time.Now(),
 		maxStreams: maxStreams,
 	}
 }
@@ -58,9 +56,6 @@ func (s *Session) ID() string { return s.id }
 
 // Worker is whose session this is.
 func (s *Session) Worker() string { return s.worker }
-
-// CreatedAt is when the connection was made.
-func (s *Session) CreatedAt() time.Time { return s.created }
 
 // Streams is how many are on it now. It is the reserved count rather than
 // smux's own, because a stream is reserved before it exists and released after
@@ -87,9 +82,6 @@ func (s *Session) Traffic() (sent int64, received int64) {
 
 // Closed reports a session whose connection has gone.
 func (s *Session) Closed() bool { return s.session.IsClosed() }
-
-// Usable reports a session that can still be given a stream.
-func (s *Session) Usable() bool { return !s.Closed() && s.Free() > 0 }
 
 // Done is closed when the session is, so a watcher does not have to poll.
 func (s *Session) Done() <-chan struct{} { return s.session.CloseChan() }
@@ -163,10 +155,4 @@ func (s *Session) open(ctx context.Context, target Target, timeout time.Duration
 	}
 
 	return withPrefix(stream, leftover), nil
-}
-
-// smuxServerOn starts a session over a connection with no handshake, which is
-// what the tests that are about counting rather than carrying need.
-func smuxServerOn(conn net.Conn) (*smux.Session, error) {
-	return smux.Server(conn, DefaultConfig().smux())
 }

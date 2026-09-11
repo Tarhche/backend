@@ -331,21 +331,6 @@ func (i *Ingress) Route(ctx context.Context, target Target) (net.Conn, error) {
 	return i.Dial(ctx, worker, target)
 }
 
-// Proxy takes a client connection and joins it to a worker for its whole life.
-// It returns when the connection is over.
-func (i *Ingress) Proxy(ctx context.Context, client net.Conn, worker string, target Target) error {
-	stream, err := i.Dial(ctx, worker, target)
-	if err != nil {
-		client.Close()
-
-		return err
-	}
-
-	_, _, err = StreamProxy{}.Copy(client, stream)
-
-	return err
-}
-
 // capacityPollInterval is how often Dial looks again while a worker is full.
 const capacityPollInterval = 50 * time.Millisecond
 

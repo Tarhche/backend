@@ -22,13 +22,3 @@ func (r *MockRegistry) Get(ctx context.Context, id string) (ingress.Runner, erro
 
 	return args.Get(0).(ingress.Runner), args.Error(1)
 }
-
-func (r *MockRegistry) All(ctx context.Context) ([]ingress.Runner, error) {
-	args := r.Mock.Called(ctx)
-
-	if a, ok := args.Get(0).([]ingress.Runner); ok {
-		return a, args.Error(1)
-	}
-
-	return nil, args.Error(1)
-}

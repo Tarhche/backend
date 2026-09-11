@@ -8,24 +8,13 @@
 // side has to remember.
 package ingress
 
-import (
-	"context"
-	"time"
-)
+import "context"
 
-// Runner is a worker the ingress can reach: the id it is addressed by, which is
-// the worker's own name, and how much of it is currently connected.
+// Runner is a worker the ingress can reach, which is its name and nothing else:
+// how it is reached is the tunnel's business, and how much of it is connected
+// is a question nothing asks.
 type Runner struct {
 	ID string
-
-	// Connections is how many of this runner's connections the ingress is
-	// holding. One is enough to be reachable; the worker decides how many more
-	// to keep ready.
-	Connections uint
-
-	// ConnectedAt is when the first of them arrived, which is as close to "when
-	// this worker came up" as the ingress can see.
-	ConnectedAt time.Time
 }
 
 // Registry is the set of runners currently connected.
@@ -36,7 +25,4 @@ type Registry interface {
 	// Get returns the runner an id names. It reports domain.ErrNotExists for an
 	// id that has never connected, and for one whose connections have all gone.
 	Get(ctx context.Context, id string) (Runner, error)
-
-	// All returns every connected runner, ordered by id.
-	All(ctx context.Context) ([]Runner, error)
 }

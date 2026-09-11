@@ -10,7 +10,14 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"github.com/xtaci/smux"
 )
+
+// smuxServerOn starts a session over a connection with no handshake, which is
+// what the tests that are about counting rather than carrying need.
+func smuxServerOn(conn net.Conn) (*smux.Session, error) {
+	return smux.Server(conn, DefaultConfig().smux())
+}
 
 // testConfig is the defaults made small and quick, so that a test exercises the
 // same code paths without waiting for production timings.
