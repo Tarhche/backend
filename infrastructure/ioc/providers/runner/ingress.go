@@ -15,6 +15,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain"
 	ingressContract "github.com/khanzadimahdi/testproject/domain/runner/ingress"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
+	"github.com/khanzadimahdi/testproject/infrastructure/crypto/certificate"
 	"github.com/khanzadimahdi/testproject/infrastructure/runner/tunnel"
 	"github.com/khanzadimahdi/testproject/infrastructure/telemetry/profiler"
 	healthAPI "github.com/khanzadimahdi/testproject/presentation/http/health"
@@ -70,9 +71,18 @@ func (p *ingressProvider) Boot(ctx context.Context, c provider.Container) error 
 	tunnelConfig.MaxStreamsPerSession = ingressConfigs.TunnelMaxStreamsPerSession
 	tunnelConfig.MaxSessions = ingressConfigs.TunnelMaxSessionsPerWorker
 
-	// the token is a second lock: the connection's own key has already settled
-	// who this is by the time the name is read.
-	auth := tunnel.NewTokenAuthenticator(ingressConfigs.TunnelToken)
+	// who a worker is comes from the certificate TLS already verified, not from
+	// what it said. Whether that worker may stay is a separate question, asked
+	// of the authorizer.
+	authorizer := tunnel.AllowSignedWorkers()
+	if allowed := ingressConfigs.AllowedWorkers(); len(allowed) > 0 {
+		authorizer = tunnel.AllowWorkers(allowed...)
+	}
+
+	auth := tunnel.NewCertificateAuthenticator(
+		certificate.SubjectAlternativeName(ingressConfigs.TunnelIdentitySuffix),
+		authorizer,
+	)
 	auth.MaxSessions = ingressConfigs.TunnelMaxSessionsPerWorker
 
 	// the tunnel is the registry: a runner is reachable for exactly as long as

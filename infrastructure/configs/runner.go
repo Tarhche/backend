@@ -39,9 +39,12 @@ type RunnerIngress struct {
 
 	TunnelPort int `usage:"Port the workers open their connections to. It carries nothing but them, so it is not the port requests arrive on." env:"RUNNER_TUNNEL_PORT" long:"tunnel-port"`
 
-	TunnelPrivateKey     string `usage:"Private key, in PEM form, the ingress proves itself to the workers with. Generate one with generate-private-key." env:"RUNNER_TUNNEL_PRIVATE_KEY" long:"tunnel-private-key"`
-	TunnelAuthorizedKeys string `usage:"Public keys, in PEM form, of the workers that may connect, one after another. A worker offering anything else is dropped." env:"RUNNER_TUNNEL_AUTHORIZED_KEYS" long:"tunnel-authorized-keys"`
-	TunnelToken          string `usage:"Shared secret a worker proves its name with, inside the connection its key already opened." env:"RUNNER_TUNNEL_TOKEN" long:"tunnel-token"`
+	TunnelAuthority   string `usage:"Path of the certificate authority a worker's own certificate has to be signed by. The authority's private key is never needed here." env:"RUNNER_TUNNEL_CA_CERT" long:"tunnel-ca-cert"`
+	TunnelCertificate string `usage:"Path of the certificate the ingress answers with." env:"RUNNER_TUNNEL_CERT" long:"tunnel-cert"`
+	TunnelKey         string `usage:"Path of the private key for that certificate." env:"RUNNER_TUNNEL_KEY" long:"tunnel-key"`
+
+	TunnelIdentitySuffix string `usage:"Domain a worker's certificate carries its name under, dropped to leave the name. Empty takes the first subject alternative name whole." env:"RUNNER_TUNNEL_IDENTITY_SUFFIX" long:"tunnel-identity-suffix"`
+	TunnelAllowedWorkers string `usage:"Workers allowed to connect, separated by commas. Empty allows every worker the authority signed for." env:"RUNNER_TUNNEL_ALLOWED_WORKERS" long:"tunnel-allowed-workers"`
 
 	TunnelMaxStreamsPerSession int `usage:"How many client connections one of a worker's connections will carry before the next is used. It is a blast radius before it is a capacity: they all end when it does." env:"RUNNER_TUNNEL_MAX_STREAMS_PER_SESSION" long:"tunnel-max-streams-per-session"`
 	TunnelMaxSessionsPerWorker int `usage:"How many connections one worker may hold here." env:"RUNNER_TUNNEL_MAX_SESSIONS_PER_WORKER" long:"tunnel-max-sessions-per-worker"`
@@ -67,9 +70,11 @@ type RunnerWorker struct {
 
 	TunnelAddresses string `usage:"host:port of every ingress this worker opens connections to, separated by commas. It keeps a pool at each, so it is reachable through all of them." env:"RUNNER_TUNNEL_ADDRESSES" long:"tunnel-addresses"`
 
-	TunnelPrivateKey        string `usage:"Private key, in PEM form, this worker proves itself to the ingresses with. Generate one with generate-private-key." env:"RUNNER_TUNNEL_PRIVATE_KEY" long:"tunnel-private-key"`
-	TunnelIngressPublicKeys string `usage:"Public keys, in PEM form, of the ingresses this worker will talk to, one after another. An ingress offering anything else is not talked to." env:"RUNNER_TUNNEL_INGRESS_PUBLIC_KEYS" long:"tunnel-ingress-public-keys"`
-	TunnelToken             string `usage:"Shared secret this worker proves its name with, inside the connection its key already opened." env:"RUNNER_TUNNEL_TOKEN" long:"tunnel-token"`
+	TunnelAuthority   string `usage:"Path of the certificate authority the ingress's certificate has to be signed by. The authority's private key is never needed here." env:"RUNNER_TUNNEL_CA_CERT" long:"tunnel-ca-cert"`
+	TunnelCertificate string `usage:"Path of the certificate this worker proves itself with." env:"RUNNER_TUNNEL_CERT" long:"tunnel-cert"`
+	TunnelKey         string `usage:"Path of the private key for that certificate." env:"RUNNER_TUNNEL_KEY" long:"tunnel-key"`
+
+	TunnelServerName string `usage:"Name the ingress's certificate has to answer for. Without it a worker would hand its credentials to anything the authority ever signed." env:"RUNNER_TUNNEL_SERVER_NAME" long:"tunnel-server-name"`
 
 	TunnelMaxStreamsPerSession int `usage:"How many client connections one connection to an ingress will carry before the next is used." env:"RUNNER_TUNNEL_MAX_STREAMS_PER_SESSION" long:"tunnel-max-streams-per-session"`
 
@@ -104,4 +109,18 @@ func (c *RunnerWorker) IngressAddresses() []string {
 	}
 
 	return addresses
+}
+
+// AllowedWorkers is the workers this ingress will take, or none named at all,
+// which allows every worker the authority signed for.
+func (c *RunnerIngress) AllowedWorkers() []string {
+	workers := make([]string, 0, 1)
+
+	for _, worker := range strings.Split(c.TunnelAllowedWorkers, ",") {
+		if worker = strings.TrimSpace(worker); len(worker) > 0 {
+			workers = append(workers, worker)
+		}
+	}
+
+	return workers
 }

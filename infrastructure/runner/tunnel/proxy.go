@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"time"
 )
 
 // StreamProxy joins two connections and copies between them until both are
@@ -37,6 +38,22 @@ type StreamProxy struct {
 	// BufferSize is what one direction copies through. Zero uses the package
 	// default.
 	BufferSize int
+
+	// HalfCloseLinger is how long the second direction to finish waits before
+	// saying so, when the first one ended because the far end had already said
+	// it. Zero uses the package default.
+	//
+	// It works around a data loss in smux v1.5.57: completing a half-close —
+	// both ends having closed their write half — tears the stream down through
+	// streamClosed, and recycleTokens throws away whatever had arrived and not
+	// yet been read. The request-and-answer shape that half-close exists for is
+	// exactly the shape that loses its answer, because the answer and the FIN
+	// behind it arrive together.
+	//
+	// So the side closing second gives the side that already finished a moment
+	// to read what it was just sent. It costs nothing on any connection that
+	// did not half-close, because there is no teardown to race.
+	HalfCloseLinger time.Duration
 }
 
 // Copy runs both directions and returns when both have finished, reporting how
@@ -53,12 +70,22 @@ func (p StreamProxy) Copy(left net.Conn, right net.Conn) (sent int64, received i
 		size = copyBufferSize
 	}
 
+	linger := p.HalfCloseLinger
+	if linger <= 0 {
+		linger = defaultHalfCloseLinger
+	}
+
 	var (
 		wait      sync.WaitGroup
 		leftErr   error
 		rightErr  error
 		forward   int64
 		backwards int64
+
+		// finished is closed by whichever direction ends first, so the other
+		// one knows the far end is already waiting on it.
+		finished  sync.Once
+		firstDone = make(chan struct{})
 	)
 
 	wait.Add(2)
@@ -66,13 +93,17 @@ func (p StreamProxy) Copy(left net.Conn, right net.Conn) (sent int64, received i
 	go func() {
 		defer wait.Done()
 
-		forward, leftErr = copyOneWay(right, left, size)
+		forward, leftErr = copyOneWay(right, left, size, firstDone, linger)
+
+		finished.Do(func() { close(firstDone) })
 	}()
 
 	go func() {
 		defer wait.Done()
 
-		backwards, rightErr = copyOneWay(left, right, size)
+		backwards, rightErr = copyOneWay(left, right, size, firstDone, linger)
+
+		finished.Do(func() { close(firstDone) })
 	}()
 
 	wait.Wait()
@@ -87,10 +118,21 @@ func (p StreamProxy) Copy(left net.Conn, right net.Conn) (sent int64, received i
 
 // copyOneWay moves bytes from src to dst and then tells dst that there will be
 // no more.
-func copyOneWay(dst net.Conn, src net.Conn, size int) (int64, error) {
+func copyOneWay(dst net.Conn, src net.Conn, size int, first <-chan struct{}, linger time.Duration) (int64, error) {
 	buffer := make([]byte, size)
 
 	n, err := io.CopyBuffer(writerOnly{dst}, readerOnly{src}, buffer)
+
+	// the other direction is already over, so saying this one is too completes
+	// the half-close — and completing it is what can throw away what was just
+	// written. Give the far end the moment it needs to read it.
+	select {
+	case <-first:
+		if n > 0 {
+			time.Sleep(linger)
+		}
+	default:
+	}
 
 	// whatever happened, the direction is over: closing the writing half is
 	// what turns "I have stopped" into something the far end can see.

@@ -91,53 +91,6 @@ func TestTarget(t *testing.T) {
 	})
 }
 
-func TestTokenAuthenticator(t *testing.T) {
-	auth := NewTokenAuthenticator(testToken)
-
-	t.Run("the right token gets in", func(t *testing.T) {
-		identity, err := auth.Authenticate(t.Context(), nil, "worker-a", testToken)
-
-		assert.NoError(t, err)
-		assert.Equal(t, "worker-a", identity.Worker)
-	})
-
-	t.Run("the wrong one does not", func(t *testing.T) {
-		_, err := auth.Authenticate(t.Context(), nil, "worker-a", "wrong")
-
-		assert.ErrorIs(t, err, ErrUnauthenticated)
-	})
-
-	t.Run("no name is nobody", func(t *testing.T) {
-		_, err := auth.Authenticate(t.Context(), nil, "", testToken)
-
-		assert.ErrorIs(t, err, ErrUnauthenticated)
-	})
-
-	t.Run("an ingress with no token of its own takes nothing", func(t *testing.T) {
-		_, err := NewTokenAuthenticator("").Authenticate(t.Context(), nil, "worker-a", "")
-
-		assert.ErrorIs(t, err, ErrUnauthenticated)
-	})
-
-	t.Run("what a worker may hold rides on the identity", func(t *testing.T) {
-		limited := NewTokenAuthenticator(testToken)
-		limited.MaxSessions = 2
-		limited.MaxStreams = 16
-
-		identity, err := limited.Authenticate(t.Context(), nil, "worker-a", testToken)
-
-		require.NoError(t, err)
-		assert.Equal(t, 2, identity.MaxSessions)
-		assert.Equal(t, 16, identity.MaxStreams)
-	})
-
-	t.Run("allowing all still needs a name", func(t *testing.T) {
-		_, err := AllowAll().Authenticate(t.Context(), nil, "", "")
-
-		assert.ErrorIs(t, err, ErrUnauthenticated)
-	})
-}
-
 func TestServiceTargets(t *testing.T) {
 	targets := NewServiceTargets(
 		map[string]string{"api": "127.0.0.1:8080"},
@@ -337,22 +290,32 @@ func TestRegistry(t *testing.T) {
 		assert.Equal(t, 4, states[0].Capacity)
 	})
 
-	t.Run("many goroutines adding and removing do not race", func(t *testing.T) {
+	t.Run("adding while the last one is removed does not lose the new one", func(t *testing.T) {
 		registry := NewRegistry()
 
+		// the sessions are made up front: building one is not what is being
+		// tested, and a test helper is not safe to call from a goroutine.
+		sessions := make([]*Session, 50)
+		for i := range sessions {
+			sessions[i] = fakeSession(t, "worker-a", 4)
+		}
+
 		var wait sync.WaitGroup
-		for i := range 50 {
+		for i, session := range sessions {
 			wait.Add(1)
 
 			go func() {
 				defer wait.Done()
 
-				session := fakeSession(t, "worker-a", 4)
+				if err := registry.Add(session); err != nil {
+					return
+				}
 
-				require.NoError(t, registry.Add(session))
 				_, _ = registry.Sessions("worker-a")
 				registry.Workers()
 
+				// half of them leave again, so the worker is repeatedly taken
+				// down to nothing while others are still arriving
 				if i%2 == 0 {
 					registry.Remove(session)
 				}
@@ -361,9 +324,9 @@ func TestRegistry(t *testing.T) {
 
 		wait.Wait()
 
-		sessions, err := registry.Sessions("worker-a")
-		require.NoError(t, err)
-		assert.Len(t, sessions, 25)
+		held, err := registry.Sessions("worker-a")
+		require.NoError(t, err, "the worker should still be there")
+		assert.Len(t, held, 25, "a session added while the last one left was dropped")
 	})
 }
 

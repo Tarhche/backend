@@ -24,6 +24,7 @@ import (
 	nodeContract "github.com/khanzadimahdi/testproject/domain/runner/node"
 	taskEvents "github.com/khanzadimahdi/testproject/domain/runner/task/events"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
+	"github.com/khanzadimahdi/testproject/infrastructure/crypto/certificate"
 	infraHealth "github.com/khanzadimahdi/testproject/infrastructure/health"
 	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/jetstream/produceConsumer"
 	"github.com/khanzadimahdi/testproject/infrastructure/runner/tunnel"
@@ -138,7 +139,12 @@ func (p *workerProvider) bindTunnel(c provider.Container, nodeName string, logge
 		return err
 	}
 
-	tlsConfig, err := tunnel.ClientTLS(workerConfigs.TunnelPrivateKey, workerConfigs.TunnelIngressPublicKeys)
+	tlsConfig, err := tunnel.ClientTLS(certificate.TLSFiles{
+		Authority:   workerConfigs.TunnelAuthority,
+		Certificate: workerConfigs.TunnelCertificate,
+		PrivateKey:  workerConfigs.TunnelKey,
+		ServerName:  workerConfigs.TunnelServerName,
+	})
 	if err != nil {
 		return err
 	}
@@ -162,7 +168,6 @@ func (p *workerProvider) bindTunnel(c provider.Container, nodeName string, logge
 		tunnel.TLSDialer(tlsConfig, tunnelConfig.DialTimeout),
 		targets,
 		logger,
-		tunnel.WithToken(workerConfigs.TunnelToken),
 	)
 	if err != nil {
 		return err

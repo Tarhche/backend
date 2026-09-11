@@ -34,8 +34,11 @@ type Ingress struct {
 	closed    chan struct{}
 
 	// sessions are the ones this ingress is serving, so that closing it closes
-	// them rather than leaving workers talking to nothing.
+	// them rather than leaving workers talking to nothing. closing is set
+	// before anything waits, because a WaitGroup counted up from zero while
+	// something is already waiting on it is a race rather than a queue.
 	lock     sync.Mutex
+	closing  bool
 	sessions map[*Session]struct{}
 
 	wait sync.WaitGroup
@@ -123,7 +126,11 @@ func (i *Ingress) Serve(ctx context.Context, listener net.Listener) error {
 			return err
 		}
 
-		i.wait.Add(1)
+		if !i.starting() {
+			conn.Close()
+
+			return nil
+		}
 
 		go func() {
 			defer i.wait.Done()
@@ -377,6 +384,22 @@ func (i *Ingress) reserve(worker string) (*Session, error) {
 	return nil, ErrAtCapacity
 }
 
+// starting counts one more thing this ingress has running, unless it is on its
+// way out. Counting up and waiting are ordered by the same lock, which is what
+// a WaitGroup requires of anything that does both.
+func (i *Ingress) starting() bool {
+	i.lock.Lock()
+	defer i.lock.Unlock()
+
+	if i.closing {
+		return false
+	}
+
+	i.wait.Add(1)
+
+	return true
+}
+
 func (i *Ingress) track(session *Session) {
 	i.lock.Lock()
 	defer i.lock.Unlock()
@@ -407,6 +430,7 @@ func (i *Ingress) Close() error {
 		close(i.closed)
 
 		i.lock.Lock()
+		i.closing = true
 		sessions := make([]*Session, 0, len(i.sessions))
 		for session := range i.sessions {
 			sessions = append(sessions, session)

@@ -12,8 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const testToken = "a-shared-secret"
-
 // testConfig is the defaults made small and quick, so that a test exercises the
 // same code paths without waiting for production timings.
 func testConfig() Config {
@@ -75,8 +73,9 @@ func startIngress(t *testing.T, config Config, auth Authenticator, options ...In
 	return &testIngress{Ingress: ingress, address: listener.Addr().String(), listener: listener, metrics: metrics, done: done}
 }
 
-// plainDialer reaches an ingress over unencrypted tcp, which is what the tests
-// that are not about TLS use.
+// plainDialer reaches an ingress over unencrypted tcp. It is for the tests
+// about multiplexing rather than about who is allowed to multiplex; the ones
+// about mTLS stand a real authority up instead.
 func plainDialer() Dialer {
 	return DialerFunc(func(ctx context.Context, address string) (net.Conn, error) {
 		dialer := net.Dialer{}
@@ -97,7 +96,7 @@ func startWorker(t *testing.T, id string, addresses []string, config Config, tar
 	t.Helper()
 
 	metrics := &Counters{}
-	options = append([]WorkerOption{WithToken(testToken), WithWorkerMetrics(metrics)}, options...)
+	options = append([]WorkerOption{WithWorkerMetrics(metrics)}, options...)
 
 	worker, err := NewWorker(id, addresses, config, plainDialer(), targets, discardLogger(), options...)
 	require.NoError(t, err)

@@ -6,13 +6,14 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/danceable/console"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/khanzadimahdi/testproject/infrastructure/crypto/ecdsa"
+	"github.com/khanzadimahdi/testproject/infrastructure/crypto/certificate"
 	"github.com/khanzadimahdi/testproject/infrastructure/runner/tunnel"
 )
 
@@ -113,17 +114,18 @@ func TestServe(t *testing.T) {
 			fmt.Fprint(rw, "test response")
 		})
 
-		ingressPrivateKey, workerPublicKey := testKeys(t)
+		files := testCertificates(t)
 
 		command := NewServeCommand()
 		command.configs.Port = findAvailablePort()
 		command.configs.TunnelPort = findAvailablePort()
-		command.configs.TunnelPrivateKey = ingressPrivateKey
-		command.configs.TunnelAuthorizedKeys = workerPublicKey
+		command.configs.TunnelAuthority = files.Authority
+		command.configs.TunnelCertificate = files.Certificate
+		command.configs.TunnelKey = files.PrivateKey
 		command.handler = handler
 		command.logger = slog.New(slog.DiscardHandler)
 
-		tunnelIngress, err := tunnel.NewIngress(tunnel.DefaultConfig(), tunnel.NewTokenAuthenticator("secret"), command.logger)
+		tunnelIngress, err := tunnel.NewIngress(tunnel.DefaultConfig(), tunnel.NewCertificateAuthenticator(nil, nil), command.logger)
 		assert.NoError(t, err)
 		command.tunnel = tunnelIngress
 
@@ -175,22 +177,28 @@ func findAvailablePort() int {
 	return addr.Port
 }
 
-// testKeys makes the two keys the tunnel needs: the ingress's own, and the
-// public half of a worker it would take.
-func testKeys(t *testing.T) (ingressPrivateKey string, workerPublicKey string) {
+// testCertificates writes an authority and an ingress certificate under it, so
+// the tunnel can listen without anything having to exist beforehand.
+func testCertificates(t *testing.T) certificate.TLSFiles {
 	t.Helper()
 
-	ingress, err := ecdsa.Generate()
+	directory := t.TempDir()
+
+	authority, err := certificate.GenerateCA("test authority", 0)
 	assert.NoError(t, err)
 
-	worker, err := ecdsa.Generate()
+	authorityFiles := certificate.AuthorityFiles(filepath.Join(directory, "ca"))
+	assert.NoError(t, certificate.Write(authorityFiles, authority.Certificate, authority.PrivateKey, false))
+
+	issued, key, err := authority.GenerateServerCertificate(certificate.Request{Name: "runner-ingress"})
 	assert.NoError(t, err)
 
-	private, err := ecdsa.EncodePrivateKey(ingress)
-	assert.NoError(t, err)
+	issuedFiles := certificate.IdentityFiles(filepath.Join(directory, "ingress"))
+	assert.NoError(t, certificate.Write(issuedFiles, issued, key, false))
 
-	public, err := ecdsa.EncodePublicKey(&worker.PublicKey)
-	assert.NoError(t, err)
-
-	return string(private), string(public)
+	return certificate.TLSFiles{
+		Authority:   authorityFiles.Certificate,
+		Certificate: issuedFiles.Certificate,
+		PrivateKey:  issuedFiles.PrivateKey,
+	}
 }

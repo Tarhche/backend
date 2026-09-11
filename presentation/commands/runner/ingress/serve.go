@@ -11,6 +11,7 @@ import (
 	"github.com/danceable/provider"
 
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
+	"github.com/khanzadimahdi/testproject/infrastructure/crypto/certificate"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers/runner"
 	"github.com/khanzadimahdi/testproject/infrastructure/runner/tunnel"
@@ -118,9 +119,13 @@ func (c *ServeCommand) Terminate(ctx context.Context) error {
 // @basePath		/
 // @schemes		http
 func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
-	tunnelConfig, err := tunnel.ServerTLS(c.configs.TunnelPrivateKey, c.configs.TunnelAuthorizedKeys)
+	tunnelConfig, err := tunnel.ServerTLS(certificate.TLSFiles{
+		Authority:   c.configs.TunnelAuthority,
+		Certificate: c.configs.TunnelCertificate,
+		PrivateKey:  c.configs.TunnelKey,
+	})
 	if err != nil {
-		c.logger.ErrorContext(ctx, "the tunnel's keys are unusable", "error", err)
+		c.logger.ErrorContext(ctx, "the tunnel's certificates are unusable", "error", err)
 		return console.ExitFailure
 	}
 

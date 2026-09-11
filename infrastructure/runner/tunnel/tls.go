@@ -1,166 +1,141 @@
 package tunnel
 
 import (
-	stdecdsa "crypto/ecdsa"
-	"crypto/rand"
+	"context"
 	"crypto/tls"
-	"crypto/x509"
-	"crypto/x509/pkix"
-	"encoding/pem"
 	"errors"
-	"math/big"
+	"fmt"
 	"net"
-	"time"
+	"slices"
 
-	"github.com/khanzadimahdi/testproject/infrastructure/crypto/ecdsa"
+	"github.com/khanzadimahdi/testproject/infrastructure/crypto/certificate"
 )
 
-var (
-	// ErrNoAuthorizedKeys is nothing to check the other side against. An empty
-	// list is not "trust everyone", it is a mistake.
-	ErrNoAuthorizedKeys = errors.New("tunnel: no authorized public keys")
-
-	// ErrUnauthorizedKey is a side whose key is not one of the ones given. It
-	// is reported during the handshake, so a connection never gets as far as
-	// saying what it claims to be.
-	ErrUnauthorizedKey = errors.New("tunnel: the key offered is not one of ours")
-)
-
-// ServerTLS is how the ingress answers: it proves it holds its own private key,
-// and takes a connection only from a worker that proves it holds one of the
-// authorized ones.
+// ServerTLS is what an ingress listens with: TLS 1.3, a certificate of its own,
+// and a client certificate required and verified against the authority.
 //
-// This is mutual TLS with the keys pinned rather than an authority trusted,
-// which is stricter: an authority would vouch for anything it had signed. It
-// also means the transport has already settled who the peer is by the time the
-// registration is read — so the token inside it is a second lock rather than
-// the only one, and swapping the token for the certificate's own subject later
-// changes nothing outside this file.
-func ServerTLS(privateKeyPEM string, authorizedKeysPEM string) (*tls.Config, error) {
-	certificate, err := selfSigned(privateKeyPEM)
-	if err != nil {
-		return nil, err
-	}
-
-	authorized, err := publicKeys(authorizedKeysPEM)
-	if err != nil {
-		return nil, err
-	}
-
-	return &tls.Config{
-		Certificates:          []tls.Certificate{*certificate},
-		ClientAuth:            tls.RequireAnyClientCert,
-		VerifyPeerCertificate: verifyPeerKey(authorized),
-		MinVersion:            tls.VersionTLS13,
-	}, nil
+// Everything about who the peer is is settled here, before a byte of the
+// protocol above is read. Nothing further down re-checks it, and nothing
+// further down could overlook it.
+func ServerTLS(files certificate.TLSFiles) (*tls.Config, error) {
+	return certificate.LoadIngressTLSConfig(files)
 }
 
-// ClientTLS is how a worker dials: it proves it holds its own private key, and
-// refuses to talk to an ingress that does not hold one it was told to expect.
-func ClientTLS(privateKeyPEM string, ingressPublicKeysPEM string) (*tls.Config, error) {
-	certificate, err := selfSigned(privateKeyPEM)
-	if err != nil {
-		return nil, err
-	}
-
-	authorized, err := publicKeys(ingressPublicKeysPEM)
-	if err != nil {
-		return nil, err
-	}
-
-	return &tls.Config{
-		Certificates: []tls.Certificate{*certificate},
-
-		// the certificate is an envelope for the key and nothing more, so the
-		// usual checks — an authority, a name, a lifetime — have nothing to
-		// work with. The key inside it is checked instead.
-		InsecureSkipVerify:    true,
-		VerifyPeerCertificate: verifyPeerKey(authorized),
-		MinVersion:            tls.VersionTLS13,
-	}, nil
+// ClientTLS is what a worker dials with: TLS 1.3, its own certificate, the
+// authority to check the ingress against, and the name that ingress has to
+// answer for.
+func ClientTLS(files certificate.TLSFiles) (*tls.Config, error) {
+	return certificate.LoadWorkerTLSConfig(files)
 }
 
-// Listen returns a listener an ingress serves on.
+// Listen returns a listener an ingress serves on. The handshake happens as the
+// connection is accepted; smux is given a connection that is already mutually
+// authenticated.
 func Listen(address string, config *tls.Config) (net.Listener, error) {
 	return tls.Listen("tcp", address, config)
 }
 
-// selfSigned wraps a private key in the certificate TLS insists on carrying it
-// in. Nothing is ever read out of it but the key.
-func selfSigned(privateKeyPEM string) (*tls.Certificate, error) {
-	key, err := ecdsa.ParsePrivateKey([]byte(privateKeyPEM))
-	if err != nil {
-		return nil, err
-	}
-
-	template := &x509.Certificate{
-		SerialNumber: big.NewInt(1),
-		Subject:      pkix.Name{CommonName: "runner tunnel"},
-		NotBefore:    time.Now().Add(-time.Hour),
-		NotAfter:     time.Now().Add(100 * 365 * 24 * time.Hour),
-		KeyUsage:     x509.KeyUsageDigitalSignature,
-		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
-	}
-
-	der, err := x509.CreateCertificate(rand.Reader, template, template, key.Public(), key)
-	if err != nil {
-		return nil, err
-	}
-
-	return &tls.Certificate{Certificate: [][]byte{der}, PrivateKey: key}, nil
+// WorkerAuthorizer decides whether a worker that has proved who it is may do
+// what it is asking to do.
+//
+// It is separate from authentication on purpose: TLS settles identity, and
+// identity is not permission. An authority that signed a certificate two years
+// ago has not thereby agreed to whatever that worker wants today.
+type WorkerAuthorizer interface {
+	Authorize(ctx context.Context, identity Identity) error
 }
 
-// publicKeys reads every public key in a PEM string.
-func publicKeys(keysPEM string) ([]*stdecdsa.PublicKey, error) {
-	var keys []*stdecdsa.PublicKey
+// WorkerAuthorizerFunc adapts a function to a WorkerAuthorizer.
+type WorkerAuthorizerFunc func(ctx context.Context, identity Identity) error
 
-	rest := []byte(keysPEM)
-	for {
-		var block *pem.Block
-		if block, rest = pem.Decode(rest); block == nil {
-			break
-		}
-
-		key, err := ecdsa.ParsePublicKey(pem.EncodeToMemory(block))
-		if err != nil {
-			return nil, err
-		}
-
-		keys = append(keys, key)
-	}
-
-	if len(keys) == 0 {
-		return nil, ErrNoAuthorizedKeys
-	}
-
-	return keys, nil
+func (f WorkerAuthorizerFunc) Authorize(ctx context.Context, identity Identity) error {
+	return f(ctx, identity)
 }
 
-// verifyPeerKey checks that the other side holds one of the keys it was
-// supposed to. TLS has already proved it holds the private half of whatever it
-// offered, so recognising the public half is the whole of the question.
-func verifyPeerKey(authorized []*stdecdsa.PublicKey) func([][]byte, [][]*x509.Certificate) error {
-	return func(rawCertificates [][]byte, _ [][]*x509.Certificate) error {
-		if len(rawCertificates) == 0 {
-			return ErrUnauthorizedKey
+// AllowSignedWorkers lets in every worker the authority vouched for.
+//
+// It is the right default because the authority is private: something holding a
+// certificate it signed is something that was deliberately given one. It is
+// also the thing to replace first when that stops being true.
+func AllowSignedWorkers() WorkerAuthorizer {
+	return WorkerAuthorizerFunc(func(context.Context, Identity) error { return nil })
+}
+
+// AllowWorkers lets in only the workers named.
+func AllowWorkers(names ...string) WorkerAuthorizer {
+	allowed := slices.Clone(names)
+
+	return WorkerAuthorizerFunc(func(_ context.Context, identity Identity) error {
+		if slices.Contains(allowed, identity.Worker) {
+			return nil
 		}
 
-		certificate, err := x509.ParseCertificate(rawCertificates[0])
-		if err != nil {
-			return err
-		}
+		return fmt.Errorf("%w: %s is not one of the workers allowed here", ErrUnauthorized, identity.Worker)
+	})
+}
 
-		offered, ok := certificate.PublicKey.(*stdecdsa.PublicKey)
-		if !ok {
-			return ErrUnauthorizedKey
-		}
+// CertificateAuthenticator takes a worker's identity from the certificate it
+// already proved it holds, and asks an authorizer whether that worker may stay.
+//
+// Nothing is taken from what the worker *said*: the name in the registration is
+// checked against the certificate rather than trusted, so a worker holding a
+// valid certificate still cannot claim to be a different one.
+type CertificateAuthenticator struct {
+	identifier certificate.Identifier
+	authorizer WorkerAuthorizer
 
-		for _, key := range authorized {
-			if offered.Equal(key) {
-				return nil
-			}
-		}
+	// MaxSessions and MaxStreams are what a worker let in this way may hold.
+	MaxSessions int
+	MaxStreams  int
+}
 
-		return ErrUnauthorizedKey
+var _ Authenticator = &CertificateAuthenticator{}
+
+func NewCertificateAuthenticator(identifier certificate.Identifier, authorizer WorkerAuthorizer) *CertificateAuthenticator {
+	if identifier == nil {
+		identifier = certificate.SubjectAlternativeName("")
 	}
+
+	if authorizer == nil {
+		authorizer = AllowSignedWorkers()
+	}
+
+	return &CertificateAuthenticator{identifier: identifier, authorizer: authorizer}
+}
+
+func (a *CertificateAuthenticator) Authenticate(ctx context.Context, conn net.Conn, worker string, _ string) (Identity, error) {
+	secure, ok := conn.(*tls.Conn)
+	if !ok {
+		return Identity{}, errors.Join(ErrUnauthenticated, errors.New("the connection is not encrypted"))
+	}
+
+	state := secure.ConnectionState()
+	if !state.HandshakeComplete {
+		return Identity{}, errors.Join(ErrUnauthenticated, errors.New("the handshake is not finished"))
+	}
+
+	// the chains are what TLS *verified*, not what the peer offered. Reading
+	// the offered certificate instead would be reading an unchecked claim.
+	if len(state.VerifiedChains) == 0 || len(state.VerifiedChains[0]) == 0 {
+		return Identity{}, errors.Join(ErrUnauthenticated, errors.New("no verified client certificate"))
+	}
+
+	name, err := a.identifier.Identify(state.VerifiedChains[0][0])
+	if err != nil {
+		return Identity{}, errors.Join(ErrUnauthenticated, err)
+	}
+
+	// what it says it is has to be what its certificate says it is. A worker
+	// with a valid certificate is still only that worker.
+	if len(worker) > 0 && worker != name {
+		return Identity{}, fmt.Errorf("%w: it registered as %s and its certificate says %s", ErrUnauthenticated, worker, name)
+	}
+
+	identity := Identity{Worker: name, MaxSessions: a.MaxSessions, MaxStreams: a.MaxStreams}
+
+	if err := a.authorizer.Authorize(ctx, identity); err != nil {
+		return Identity{}, err
+	}
+
+	return identity, nil
 }

@@ -19,7 +19,7 @@ import (
 // knowing what it is.
 //
 //	registration, once per TCP connection, before smux starts
-//	    worker  -> ingress   {"version":1,"worker":"…","token":"…"}
+//	    worker  -> ingress   {"version":1,"worker":"…"}
 //	    ingress -> worker    {"ok":true,"session":"…"}
 //	    … from here the connection belongs to smux
 //
@@ -52,8 +52,12 @@ var (
 	ErrRejected = errors.New("tunnel: rejected")
 )
 
-// registration is what a worker says on a new connection: which worker it is,
-// and what entitles it to say so.
+// registration is what a worker says on a new connection: which worker it is.
+//
+// What entitles it to say so was settled by the transport before this was read,
+// so there is no credential here. A token is carried for an Authenticator that
+// wants one; the one production uses does not, because a certificate has
+// already said who this is.
 type registration struct {
 	Version int    `json:"version"`
 	Worker  string `json:"worker"`

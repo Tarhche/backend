@@ -109,6 +109,12 @@ const (
 	// copyBufferSize is what one direction of one stream copies through. It
 	// matches the frame size so a full buffer is one frame.
 	copyBufferSize = 32 * 1024
+
+	// defaultHalfCloseLinger is how long the second direction of a copy waits
+	// before ending, when the first already had. See StreamProxy for what it
+	// works around; it is short because it is only covering the gap between the
+	// far end being handed bytes and reading them.
+	defaultHalfCloseLinger = 50 * time.Millisecond
 )
 
 var (

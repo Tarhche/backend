@@ -20,7 +20,7 @@ import (
 func TestRegistration(t *testing.T) {
 	t.Run("a worker that connects becomes reachable, and says how much of it there is", func(t *testing.T) {
 		config := testConfig()
-		ingress := startIngress(t, config, NewTokenAuthenticator(testToken))
+		ingress := startIngress(t, config, AllowAll())
 		startWorker(t, "worker-a", []string{ingress.address}, config, NewServiceTargets(map[string]string{"echo": echoServer(t, "")}))
 
 		waitFor(t, "the worker to bring its pool up", func() bool {
@@ -37,73 +37,17 @@ func TestRegistration(t *testing.T) {
 	})
 
 	t.Run("a worker that never connected is not there", func(t *testing.T) {
-		ingress := startIngress(t, testConfig(), NewTokenAuthenticator(testToken))
+		ingress := startIngress(t, testConfig(), AllowAll())
 
 		_, err := ingress.Dial(t.Context(), "worker-a", Target{Service: "echo"})
 		assert.ErrorIs(t, err, ErrNoSuchWorker)
 	})
 }
 
-// 2 & 20. Worker authentication, and failures
-func TestAuthentication(t *testing.T) {
-	t.Run("a worker without the token never registers", func(t *testing.T) {
-		config := testConfig()
-		ingress := startIngress(t, config, NewTokenAuthenticator(testToken))
-
-		startWorker(t, "worker-a", []string{ingress.address}, config,
-			NewServiceTargets(map[string]string{"echo": echoServer(t, "")}),
-			WithToken("the wrong secret"),
-		)
-
-		// it keeps trying and keeps being turned away
-		waitFor(t, "the ingress to refuse it", func() bool {
-			return ingress.metrics.AuthFailures.Load() > 0
-		})
-
-		assert.Empty(t, ingress.Workers())
-	})
-
-	t.Run("an empty token is refused rather than treated as none required", func(t *testing.T) {
-		config := testConfig()
-		ingress := startIngress(t, config, NewTokenAuthenticator(testToken))
-
-		startWorker(t, "worker-a", []string{ingress.address}, config,
-			NewServiceTargets(map[string]string{"echo": echoServer(t, "")}),
-			WithToken(""),
-		)
-
-		waitFor(t, "the ingress to refuse it", func() bool {
-			return ingress.metrics.AuthFailures.Load() > 0
-		})
-
-		assert.Empty(t, ingress.Workers())
-	})
-
-	t.Run("what the ingress may do with a worker is settled when it is let in", func(t *testing.T) {
-		config := testConfig()
-
-		auth := NewTokenAuthenticator(testToken)
-		auth.MaxSessions = 1
-
-		ingress := startIngress(t, config, auth)
-		startWorker(t, "worker-a", []string{ingress.address}, config, NewServiceTargets(map[string]string{"echo": echoServer(t, "")}))
-
-		waitFor(t, "the worker to get its one session in", func() bool {
-			workers := ingress.Workers()
-
-			return len(workers) == 1
-		})
-
-		// the worker wants two; it is allowed one
-		time.Sleep(200 * time.Millisecond)
-		assert.Equal(t, 1, ingress.Workers()[0].Sessions)
-	})
-}
-
 // 3. Multiple workers, and 6/7. bidirectional traffic reaching the right target
 func TestMultipleWorkers(t *testing.T) {
 	config := testConfig()
-	ingress := startIngress(t, config, NewTokenAuthenticator(testToken))
+	ingress := startIngress(t, config, AllowAll())
 
 	// each worker offers the same service name, pointing at a target of its own
 	for _, name := range []string{"worker-a", "worker-b", "worker-c"} {
@@ -136,7 +80,7 @@ func TestSessionsAndStreams(t *testing.T) {
 	config.MinSessions = 3
 	config.MaxStreamsPerSession = 4
 
-	ingress := startIngress(t, config, NewTokenAuthenticator(testToken))
+	ingress := startIngress(t, config, AllowAll())
 	startWorker(t, "worker-a", []string{ingress.address}, config, NewServiceTargets(map[string]string{"echo": echoServer(t, "")}))
 
 	waitFor(t, "three sessions", func() bool {
@@ -178,7 +122,7 @@ func TestSessionsAndStreams(t *testing.T) {
 // 6. ssh-like long-lived connections, exchanging in both directions over time
 func TestLongLivedConnection(t *testing.T) {
 	config := testConfig()
-	ingress := startIngress(t, config, NewTokenAuthenticator(testToken))
+	ingress := startIngress(t, config, AllowAll())
 
 	// a target that talks first and then answers each line, the way a shell does
 	address := targetServer(t, func(conn net.Conn) {
@@ -240,7 +184,7 @@ func TestHighConcurrency(t *testing.T) {
 	config.MaxSessions = 8
 	config.MaxStreamsPerSession = 32
 
-	ingress := startIngress(t, config, NewTokenAuthenticator(testToken))
+	ingress := startIngress(t, config, AllowAll())
 	startWorker(t, "worker-a", []string{ingress.address}, config, NewServiceTargets(map[string]string{"echo": echoServer(t, "")}))
 
 	waitFor(t, "the worker", func() bool { return len(ingress.Workers()) == 1 })
@@ -293,7 +237,7 @@ func TestHighConcurrency(t *testing.T) {
 // 9 & 14. Worker disconnect, and becoming available again
 func TestWorkerDisconnect(t *testing.T) {
 	config := testConfig()
-	ingress := startIngress(t, config, NewTokenAuthenticator(testToken))
+	ingress := startIngress(t, config, AllowAll())
 
 	address := echoServer(t, "")
 	worker := startWorker(t, "worker-a", []string{ingress.address}, config, NewServiceTargets(map[string]string{"echo": address}))
@@ -327,7 +271,7 @@ func TestSessionIsolation(t *testing.T) {
 	config.MaxSessions = 2
 	config.MaxStreamsPerSession = 4
 
-	ingress := startIngress(t, config, NewTokenAuthenticator(testToken))
+	ingress := startIngress(t, config, AllowAll())
 	startWorker(t, "worker-a", []string{ingress.address}, config, NewServiceTargets(map[string]string{"echo": echoServer(t, "")}))
 
 	waitFor(t, "two sessions", func() bool {
@@ -397,7 +341,7 @@ func TestIngressRestart(t *testing.T) {
 	require.NoError(t, err)
 	address := listener.Addr().String()
 
-	first, err := NewIngress(config, NewTokenAuthenticator(testToken), discardLogger())
+	first, err := NewIngress(config, AllowAll(), discardLogger())
 	require.NoError(t, err)
 
 	firstDone := make(chan struct{})
@@ -420,7 +364,7 @@ func TestIngressRestart(t *testing.T) {
 	again, err := net.Listen("tcp", address)
 	require.NoError(t, err)
 
-	second := startIngressOn(t, again, config, NewTokenAuthenticator(testToken))
+	second := startIngressOn(t, again, config, AllowAll())
 
 	// the worker finds its way back on its own, without being told
 	waitFor(t, "the worker to reconnect", func() bool {
@@ -444,7 +388,7 @@ func TestAtCapacity(t *testing.T) {
 	config.MaxStreamsPerSession = 2
 	config.CapacityWait = 200 * time.Millisecond
 
-	ingress := startIngress(t, config, NewTokenAuthenticator(testToken))
+	ingress := startIngress(t, config, AllowAll())
 	startWorker(t, "worker-a", []string{ingress.address}, config, NewServiceTargets(map[string]string{"echo": echoServer(t, "")}))
 
 	waitFor(t, "the worker", func() bool { return len(ingress.Workers()) == 1 })
@@ -484,7 +428,7 @@ func TestPoolGrows(t *testing.T) {
 	config.MaxStreamsPerSession = 4
 	config.GrowThreshold = 0.5
 
-	ingress := startIngress(t, config, NewTokenAuthenticator(testToken))
+	ingress := startIngress(t, config, AllowAll())
 	startWorker(t, "worker-a", []string{ingress.address}, config, NewServiceTargets(map[string]string{"echo": echoServer(t, "")}))
 
 	waitFor(t, "the first session", func() bool { return len(ingress.Workers()) == 1 })
@@ -518,7 +462,7 @@ func TestBackpressure(t *testing.T) {
 		config.MaxStreamBuffer = 64 * 1024
 		config.MaxReceiveBuffer = 256 * 1024
 
-		ingress := startIngress(t, config, NewTokenAuthenticator(testToken))
+		ingress := startIngress(t, config, AllowAll())
 
 		// a target that accepts and then reads nothing at all
 		blocked := make(chan struct{})
@@ -565,7 +509,7 @@ func TestBackpressure(t *testing.T) {
 		config.MaxStreamBuffer = 64 * 1024
 		config.MaxReceiveBuffer = 256 * 1024
 
-		ingress := startIngress(t, config, NewTokenAuthenticator(testToken))
+		ingress := startIngress(t, config, AllowAll())
 
 		// a target that writes as fast as it is allowed to
 		var produced atomic.Int64
@@ -588,21 +532,33 @@ func TestBackpressure(t *testing.T) {
 
 		conn, err := ingress.Dial(t.Context(), "worker-a", Target{Service: "fast"})
 		require.NoError(t, err)
+		defer conn.Close()
 
-		// read nothing for a while, then see how much the path let through
-		time.Sleep(500 * time.Millisecond)
+		// what matters is that the target *stops*, not how much it managed
+		// before it did: how much fits along the way is the machine's socket
+		// buffers, which vary, while coming to a halt is the property.
+		waitFor(t, "the target to be stopped by a client that is not reading", func() bool {
+			before := produced.Load()
+			time.Sleep(200 * time.Millisecond)
 
-		assert.Less(t, produced.Load(), int64(4*1024*1024),
-			"a client that is not reading should have stopped the target well before this")
+			return produced.Load() == before
+		})
 
-		conn.Close()
+		stopped := produced.Load()
+
+		// and it stays stopped, rather than trickling on
+		time.Sleep(300 * time.Millisecond)
+		assert.Equal(t, stopped, produced.Load(), "the target should still be blocked")
+
+		// an unthrottled writer on loopback would be far past this by now
+		assert.Less(t, stopped, int64(64*1024*1024))
 	})
 }
 
 // 18. Half-closed connections, which smux carries as a FIN of its own
 func TestHalfClose(t *testing.T) {
 	config := testConfig()
-	ingress := startIngress(t, config, NewTokenAuthenticator(testToken))
+	ingress := startIngress(t, config, AllowAll())
 
 	// a target that reads to EOF and only then answers, which is exactly what
 	// needs the half-close to have travelled
@@ -643,7 +599,7 @@ func TestHalfClose(t *testing.T) {
 // 19. Graceful shutdown: both ends stop without leaving anything running
 func TestGracefulShutdown(t *testing.T) {
 	config := testConfig()
-	ingress := startIngress(t, config, NewTokenAuthenticator(testToken))
+	ingress := startIngress(t, config, AllowAll())
 
 	worker := startWorker(t, "worker-a", []string{ingress.address}, config, NewServiceTargets(map[string]string{"echo": echoServer(t, "")}))
 	waitFor(t, "the worker", func() bool { return len(ingress.Workers()) == 1 })
@@ -674,8 +630,8 @@ func TestManyIngresses(t *testing.T) {
 	config := testConfig()
 	config.MinSessions = 1
 
-	first := startIngress(t, config, NewTokenAuthenticator(testToken))
-	second := startIngress(t, config, NewTokenAuthenticator(testToken))
+	first := startIngress(t, config, AllowAll())
+	second := startIngress(t, config, AllowAll())
 
 	startWorker(t, "worker-a", []string{first.address, second.address}, config,
 		NewServiceTargets(map[string]string{"echo": echoServer(t, "")}),
@@ -697,7 +653,7 @@ func TestOneIngressDown(t *testing.T) {
 	config := testConfig()
 	config.MinSessions = 1
 
-	ingress := startIngress(t, config, NewTokenAuthenticator(testToken))
+	ingress := startIngress(t, config, AllowAll())
 
 	startWorker(t, "worker-a", []string{ingress.address, "127.0.0.1:1"}, config,
 		NewServiceTargets(map[string]string{"echo": echoServer(t, "")}),
@@ -719,7 +675,7 @@ func TestRouting(t *testing.T) {
 	config.MaxSessions = 1
 	config.MaxStreamsPerSession = 4
 
-	ingress := startIngress(t, config, NewTokenAuthenticator(testToken))
+	ingress := startIngress(t, config, AllowAll())
 
 	for _, name := range []string{"worker-a", "worker-b"} {
 		startWorker(t, name, []string{ingress.address}, config,
@@ -760,7 +716,7 @@ func TestRouting(t *testing.T) {
 // that connected and closed.
 func TestTargetFailures(t *testing.T) {
 	config := testConfig()
-	ingress := startIngress(t, config, NewTokenAuthenticator(testToken))
+	ingress := startIngress(t, config, AllowAll())
 
 	startWorker(t, "worker-a", []string{ingress.address}, config,
 		NewServiceTargets(map[string]string{"nothing": "127.0.0.1:1"}),
@@ -807,7 +763,7 @@ func TestTargetFailures(t *testing.T) {
 // Explicit addresses are allowed when the worker says they are.
 func TestAllowedAddresses(t *testing.T) {
 	config := testConfig()
-	ingress := startIngress(t, config, NewTokenAuthenticator(testToken))
+	ingress := startIngress(t, config, AllowAll())
 
 	address := echoServer(t, "")
 	host, port, err := net.SplitHostPort(address)
@@ -883,7 +839,7 @@ func TestNoGoroutineLeaks(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
 
-		ingress, err := NewIngress(config, NewTokenAuthenticator(testToken), discardLogger())
+		ingress, err := NewIngress(config, AllowAll(), discardLogger())
 		require.NoError(t, err)
 
 		listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -899,7 +855,7 @@ func TestNoGoroutineLeaks(t *testing.T) {
 		target := echoServer(t, "")
 
 		worker, err := NewWorker("worker-a", []string{listener.Addr().String()}, config, plainDialer(),
-			NewServiceTargets(map[string]string{"echo": target}), discardLogger(), WithToken(testToken))
+			NewServiceTargets(map[string]string{"echo": target}), discardLogger(), WithWorkerMetrics(&Counters{}))
 		require.NoError(t, err)
 
 		stopped := make(chan struct{})

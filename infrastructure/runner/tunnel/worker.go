@@ -28,9 +28,9 @@ func (f DialerFunc) DialContext(ctx context.Context, address string) (net.Conn, 
 	return f(ctx, address)
 }
 
-// TLSDialer reaches an ingress over TLS, which is what the token is safe to
-// cross inside. Giving the configuration a client certificate is all that
-// mutual TLS needs from this end.
+// TLSDialer reaches an ingress over TLS. The configuration carries this
+// worker's own certificate and the authority to check the ingress against,
+// which is the whole of how either end knows the other.
 func TLSDialer(config *tls.Config, timeout time.Duration) Dialer {
 	return DialerFunc(func(ctx context.Context, address string) (net.Conn, error) {
 		dialer := tls.Dialer{NetDialer: &net.Dialer{Timeout: timeout}, Config: config}
@@ -46,7 +46,6 @@ func TLSDialer(config *tls.Config, timeout time.Duration) Dialer {
 // it needs no address, no open port and no way in.
 type Worker struct {
 	id      string
-	token   string
 	config  Config
 	dialer  Dialer
 	targets Targets
@@ -57,16 +56,17 @@ type Worker struct {
 
 	closeOnce sync.Once
 	closed    chan struct{}
-	wait      sync.WaitGroup
+
+	// closing is set before anything waits, because a WaitGroup counted up
+	// from zero while something is already waiting on it is a race rather than
+	// a queue.
+	lock    sync.Mutex
+	closing bool
+	wait    sync.WaitGroup
 }
 
 // WorkerOption configures a Worker.
 type WorkerOption func(*Worker)
-
-// WithToken is what the worker proves itself with.
-func WithToken(token string) WorkerOption {
-	return func(w *Worker) { w.token = token }
-}
 
 // WithWorkerMetrics replaces where the worker reports to.
 func WithWorkerMetrics(metrics Metrics) WorkerOption {
@@ -168,12 +168,32 @@ func (w *Worker) Close() error {
 	w.closeOnce.Do(func() {
 		close(w.closed)
 
+		w.lock.Lock()
+		w.closing = true
+		w.lock.Unlock()
+
 		for _, pool := range w.pools {
 			pool.closeAll()
 		}
 	})
 
 	return nil
+}
+
+// starting counts one more thing this worker has running, unless it is on its
+// way out. Counting up and waiting are ordered by the same lock, which is what
+// a WaitGroup requires of anything that does both.
+func (w *Worker) starting() bool {
+	w.lock.Lock()
+	defer w.lock.Unlock()
+
+	if w.closing {
+		return false
+	}
+
+	w.wait.Add(1)
+
+	return true
 }
 
 func (w *Worker) isClosed() bool {
@@ -193,7 +213,11 @@ func (w *Worker) serve(ctx context.Context, session *smux.Session, id string) {
 			return
 		}
 
-		w.wait.Add(1)
+		if !w.starting() {
+			stream.Close()
+
+			return
+		}
 
 		go func() {
 			defer w.wait.Done()
@@ -476,7 +500,11 @@ func (p *sessionPool) connect(ctx context.Context) error {
 	p.worker.metrics.SessionOpened(p.worker.id, id)
 	p.worker.logger.InfoContext(ctx, "connected to an ingress", "address", p.address, "session", id)
 
-	p.worker.wait.Add(1)
+	if !p.worker.starting() {
+		session.Close()
+
+		return nil
+	}
 
 	go func() {
 		defer p.worker.wait.Done()
@@ -495,7 +523,7 @@ func (p *sessionPool) connect(ctx context.Context) error {
 func (p *sessionPool) registerOn(conn net.Conn) (string, error) {
 	deadline := time.Now().Add(p.worker.config.HandshakeTimeout)
 
-	hello := registration{Version: ProtocolVersion, Worker: p.worker.id, Token: p.worker.token}
+	hello := registration{Version: ProtocolVersion, Worker: p.worker.id}
 	if err := writeFrame(conn, hello, deadline); err != nil {
 		return "", err
 	}
