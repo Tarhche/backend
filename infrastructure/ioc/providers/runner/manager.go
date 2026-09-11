@@ -21,6 +21,7 @@ import (
 	managerRestartStack "github.com/khanzadimahdi/testproject/application/runner/manager/stack/restartStack"
 	managerRunStack "github.com/khanzadimahdi/testproject/application/runner/manager/stack/runStack"
 	managerStopStack "github.com/khanzadimahdi/testproject/application/runner/manager/stack/stopStack"
+	managerWatchStacks "github.com/khanzadimahdi/testproject/application/runner/manager/stack/watchStacks"
 	managerDeleteTask "github.com/khanzadimahdi/testproject/application/runner/manager/task/deleteTask"
 	managerGetTask "github.com/khanzadimahdi/testproject/application/runner/manager/task/getTask"
 	managerGetTaskLogs "github.com/khanzadimahdi/testproject/application/runner/manager/task/getTaskLogs"
@@ -31,6 +32,7 @@ import (
 	managerRestartTask "github.com/khanzadimahdi/testproject/application/runner/manager/task/restartTask"
 	managerRunTask "github.com/khanzadimahdi/testproject/application/runner/manager/task/runTask"
 	managerStopTask "github.com/khanzadimahdi/testproject/application/runner/manager/task/stopTask"
+	managerWatchTasks "github.com/khanzadimahdi/testproject/application/runner/manager/task/watchTasks"
 	"github.com/khanzadimahdi/testproject/domain"
 	nodeEvents "github.com/khanzadimahdi/testproject/domain/runner/node/events"
 	stackEvents "github.com/khanzadimahdi/testproject/domain/runner/stack/events"
@@ -164,6 +166,8 @@ func managerConsoleCommand(
 	managerRestartTaskUseCase := managerRestartTask.NewUseCase(taskRepository, jetStreamProduceConsumer, translator)
 	managerGetTaskUseCase := managerGetTask.NewUseCase(taskRepository)
 	managerGetTasksUseCase := managerGetTasks.NewUseCase(taskRepository)
+	managerWatchTasksUseCase := managerWatchTasks.NewUseCase(taskRepository)
+	managerWatchStacksUseCase := managerWatchStacks.NewUseCase(stackRepository, taskRepository)
 	managerGetTaskLogsUseCase := managerGetTaskLogs.NewUseCase(logRepository, validator)
 
 	managerRunStackUseCase := managerRunStack.NewUseCase(stackRepository, nodeRepository, managerRunTaskUseCase, taskScheduler, defaultLimits, validator, logger)
@@ -188,6 +192,8 @@ func managerConsoleCommand(
 	mux.Handle("GET /health", healthAPI.NewHealthHandler(checkHealthUseCase))
 
 	mux.Handle("GET /api/tasks", managerTaskAPI.NewIndexHandler(managerGetTasksUseCase))
+	mux.Handle("GET /api/tasks/watch", managerTaskAPI.NewWatchHandler(managerWatchTasksUseCase, logger))
+	mux.Handle("GET /api/stacks/watch", managerStackAPI.NewWatchHandler(managerWatchStacksUseCase, logger))
 	mux.Handle("GET /api/tasks/{uuid}", managerTaskAPI.NewShowHandler(managerGetTaskUseCase))
 	mux.Handle("DELETE /api/tasks/{uuid}", managerTaskAPI.NewDeleteHandler(managerDeleteTaskUseCase))
 	mux.Handle("POST /api/tasks/run", managerTaskAPI.NewRunHandler(managerRunTaskUseCase))

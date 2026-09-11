@@ -98,6 +98,7 @@ import (
 	dashboardRunContainer "github.com/khanzadimahdi/testproject/application/dashboard/runner/container/runContainer"
 	dashboardStopContainer "github.com/khanzadimahdi/testproject/application/dashboard/runner/container/stopContainer"
 	dashboardUserStopContainer "github.com/khanzadimahdi/testproject/application/dashboard/runner/container/stopUserContainer"
+	dashboardWatchContainers "github.com/khanzadimahdi/testproject/application/dashboard/runner/container/watchContainers"
 	runnerOwners "github.com/khanzadimahdi/testproject/application/dashboard/runner/owners"
 	dashboardDeleteStack "github.com/khanzadimahdi/testproject/application/dashboard/runner/stack/deleteStack"
 	dashboardUserDeleteStack "github.com/khanzadimahdi/testproject/application/dashboard/runner/stack/deleteUserStack"
@@ -112,6 +113,7 @@ import (
 	dashboardRunStack "github.com/khanzadimahdi/testproject/application/dashboard/runner/stack/runStack"
 	dashboardStopStack "github.com/khanzadimahdi/testproject/application/dashboard/runner/stack/stopStack"
 	dashboardUserStopStack "github.com/khanzadimahdi/testproject/application/dashboard/runner/stack/stopUserStack"
+	dashboardWatchStacks "github.com/khanzadimahdi/testproject/application/dashboard/runner/stack/watchStacks"
 	createuser "github.com/khanzadimahdi/testproject/application/dashboard/user/createUser"
 	deleteuser "github.com/khanzadimahdi/testproject/application/dashboard/user/deleteUser"
 	getuser "github.com/khanzadimahdi/testproject/application/dashboard/user/getUser"
@@ -455,11 +457,15 @@ func blog(
 
 	dashboardAttachContainerUseCase := dashboardAttachContainer.NewUseCase(runner, authenticator, authorizer, runnerContainers, validator, cachedGateway, streams, logger)
 	dashboardFollowContainerLogsUseCase := dashboardFollowContainerLogs.NewUseCase(runner, authenticator, authorizer, runnerContainers, validator, cachedGateway, streams, logger)
+	dashboardWatchContainersUseCase := dashboardWatchContainers.NewUseCase(runner, authenticator, authorizer, validator, cachedGateway, streams, ownerDirectory, ingressDomain, logger)
+	dashboardWatchStacksUseCase := dashboardWatchStacks.NewUseCase(runner, authenticator, authorizer, validator, cachedGateway, streams, ownerDirectory, ingressDomain, logger)
 
 	for subject, handler := range map[string]domain.MessageHandler{
 		dashboardAttachContainer.AttachName:     dashboardAttachContainerUseCase,
 		dashboardAttachContainer.InputName:      dashboardAttachContainerUseCase.InputHandler(),
 		dashboardFollowContainerLogs.FollowName: dashboardFollowContainerLogsUseCase,
+		dashboardWatchContainers.WatchName:      dashboardWatchContainersUseCase,
+		dashboardWatchStacks.WatchName:          dashboardWatchStacksUseCase,
 	} {
 		if err := cachedGateway.Consume(context.Background(), subject, handler); err != nil {
 			return nil, err

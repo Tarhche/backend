@@ -72,6 +72,21 @@ type stacksPayload struct {
 	Pagination paginationPayload `json:"pagination"`
 }
 
+// changePayload is one message of a container watch: "changed" carries the
+// container as it is now, "deleted" only the uuid of one that is gone.
+type changePayload struct {
+	Kind string       `json:"kind"`
+	UUID string       `json:"uuid"`
+	Task *taskPayload `json:"task,omitempty"`
+}
+
+// stackChangePayload is one message of a stack watch.
+type stackChangePayload struct {
+	Kind  string        `json:"kind"`
+	UUID  string        `json:"uuid"`
+	Stack *stackPayload `json:"stack,omitempty"`
+}
+
 type logsPayload struct {
 	Items []logPayload `json:"items"`
 }
@@ -161,4 +176,30 @@ func (p *logPayload) toLog(taskUUID string) container.Log {
 			At:      p.At,
 		},
 	}
+}
+
+func (p *changePayload) toChange() managerContainerChange {
+	change := managerContainerChange{
+		UUID:    p.UUID,
+		Deleted: p.Kind == "deleted",
+	}
+
+	if p.Task != nil {
+		change.Container = p.Task.toTask()
+	}
+
+	return change
+}
+
+func (p *stackChangePayload) toChange() managerStackChange {
+	change := managerStackChange{
+		UUID:    p.UUID,
+		Deleted: p.Kind == "deleted",
+	}
+
+	if p.Stack != nil {
+		change.Stack = p.Stack.toStack()
+	}
+
+	return change
 }
