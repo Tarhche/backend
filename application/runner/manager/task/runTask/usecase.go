@@ -67,6 +67,7 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		Entrypoint:    request.Entrypoint,
 		WorkingDir:    request.WorkingDir,
 		ReadOnly:      request.ReadOnly,
+		Interactive:   request.Interactive,
 		MaxRetries:    request.Retries(),
 		TTL:           request.TTL,
 		Mounts:        request.ConvertMounts(),
