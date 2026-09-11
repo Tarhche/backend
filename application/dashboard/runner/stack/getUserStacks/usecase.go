@@ -8,19 +8,6 @@ import (
 	runnerManager "github.com/khanzadimahdi/testproject/domain/runner/manager"
 )
 
-type Request struct {
-	Page uint `json:"page"`
-
-	// OwnerUUID is whose stacks these are. It is not asked for: it is who is
-	// asking, filled in by the handler.
-	OwnerUUID string `json:"-"`
-}
-
-type Response struct {
-	Items      []presenter.Stack    `json:"items"`
-	Pagination presenter.Pagination `json:"pagination"`
-}
-
 // UseCase lists the stacks one person asked the runner for.
 type UseCase struct {
 	runner        runnerManager.Client
