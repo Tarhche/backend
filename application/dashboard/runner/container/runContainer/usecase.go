@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/khanzadimahdi/testproject/application/dashboard/runner/owners"
 	"github.com/khanzadimahdi/testproject/application/dashboard/runner/presenter"
 	"github.com/khanzadimahdi/testproject/domain"
 	runnerManager "github.com/khanzadimahdi/testproject/domain/runner/manager"
@@ -22,13 +23,15 @@ type Response struct {
 type UseCase struct {
 	runner        runnerManager.Client
 	validator     domain.Validator
+	owners        *owners.Directory
 	ingressDomain string
 }
 
-func NewUseCase(runner runnerManager.Client, validator domain.Validator, ingressDomain string) *UseCase {
+func NewUseCase(runner runnerManager.Client, validator domain.Validator, ownerDirectory *owners.Directory, ingressDomain string) *UseCase {
 	return &UseCase{
 		runner:        runner,
 		validator:     validator,
+		owners:        ownerDirectory,
 		ingressDomain: ingressDomain,
 	}
 }
@@ -54,7 +57,12 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		return nil, err
 	}
 
-	container := presenter.NewContainer(created, uc.ingressDomain)
+	people, err := uc.owners.Of(ctx, created.OwnerUUID)
+	if err != nil {
+		return nil, err
+	}
+
+	container := presenter.NewContainer(created, uc.ingressDomain, people)
 
 	return &Response{Container: &container}, nil
 }
