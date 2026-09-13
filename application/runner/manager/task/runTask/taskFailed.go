@@ -11,25 +11,24 @@ import (
 	deletetask "github.com/khanzadimahdi/testproject/application/runner/manager/task/deleteTask"
 	"github.com/khanzadimahdi/testproject/application/runner/manager/task/schedule"
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/runner/container"
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
 	"github.com/khanzadimahdi/testproject/domain/runner/task/events"
 )
 
-// TaskFailed is what becomes of a container that has failed.
+// TaskFailed is what becomes of a task that has failed.
 //
 // Every failure is written down — which attempt it was, and what went wrong —
-// and then answered. A container still worth trying is asked for again, one
+// and then answered. A task still worth trying is asked for again, one
 // attempt further along; one that has run out of attempts is left where it is,
 // and what was expected of it is set to that, so nothing keeps asking for
 // something that is not going to happen.
 type TaskFailed struct {
 	taskRepository task.Repository
-	logRepository  container.LogRepository
+	logRepository  task.LogRepository
 	scheduler      *schedule.Scheduler
 
 	// deleteTask takes away a job that has failed for good. A job that never
-	// got a container never reports a heartbeat either, so this is the only
+	// got a task never reports a heartbeat either, so this is the only
 	// place that hears it is over.
 	deleteTask *deletetask.UseCase
 
@@ -40,7 +39,7 @@ var _ domain.MessageHandler = &TaskFailed{}
 
 func NewTaskFailed(
 	taskRepository task.Repository,
-	logRepository container.LogRepository,
+	logRepository task.LogRepository,
 	scheduler *schedule.Scheduler,
 	deleteTask *deletetask.UseCase,
 	logger *slog.Logger,
@@ -68,7 +67,7 @@ func (uc *TaskFailed) Handle(ctx context.Context, data []byte) error {
 	}
 
 	// which attempt this failure belongs to is the node's count, unless the
-	// container had been standing long enough that what came before it no
+	// task had been standing long enough that what came before it no
 	// longer has anything to do with it.
 	attempt := t.Attempt(taskFailed.Attempt, taskFailed.At)
 
@@ -80,7 +79,7 @@ func (uc *TaskFailed) Handle(ctx context.Context, data []byte) error {
 		return err
 	}
 
-	// only a container that is still wanted running is worth another attempt:
+	// only a task that is still wanted running is worth another attempt:
 	// one that failed on its way to being stopped has arrived.
 	if retrying {
 		// and only when it has been left alone long enough. The node holding
@@ -97,10 +96,10 @@ func (uc *TaskFailed) Handle(ctx context.Context, data []byte) error {
 }
 
 // record writes down that an attempt failed: on the task, where the dashboard
-// reads it, and against the container's log, where somebody looking into a
-// container that keeps dying will find every attempt rather than the last.
+// reads it, and against the task's log, where somebody looking into a
+// task that keeps dying will find every attempt rather than the last.
 func (uc *TaskFailed) record(ctx context.Context, t *task.Task, failure *events.TaskFailed, attempt int, retrying bool) error {
-	uc.logger.WarnContext(ctx, "a container failed",
+	uc.logger.WarnContext(ctx, "a task failed",
 		"uuid", t.UUID, "name", t.Name, "node", failure.NodeName,
 		"attempt", attempt, "max_retries", t.MaxRetries, "reason", failure.Reason)
 
@@ -119,7 +118,7 @@ func (uc *TaskFailed) record(ctx context.Context, t *task.Task, failure *events.
 	t.CurrentState = task.Failed
 	t.Reason = reason
 
-	// the attempt that is coming, so that a container which has failed says
+	// the attempt that is coming, so that a task which has failed says
 	// what is being done about it rather than what has been done so far.
 	if retrying {
 		t.Retries = attempt + 1
@@ -137,11 +136,11 @@ func (uc *TaskFailed) record(ctx context.Context, t *task.Task, failure *events.
 		return nil
 	}
 
-	return uc.logRepository.Append(ctx, []container.Log{{
+	return uc.logRepository.Append(ctx, []task.Log{{
 		TaskUUID:    t.UUID,
-		ContainerID: failure.ContainerUUID,
-		LogLine: container.LogLine{
-			Stream:  container.StreamStderr,
+		ExecutionID: failure.ExecutionID,
+		LogLine: task.LogLine{
+			Stream:  task.StreamStderr,
 			Content: t.Reason,
 			At:      at,
 		},
@@ -149,11 +148,11 @@ func (uc *TaskFailed) record(ctx context.Context, t *task.Task, failure *events.
 }
 
 // reason says what happened in the words the dashboard shows: what went wrong,
-// and where that leaves the container.
+// and where that leaves the task.
 func (uc *TaskFailed) reason(t *task.Task, failure *events.TaskFailed, attempt int) string {
 	cause := failure.Reason
 	if len(cause) == 0 {
-		cause = "the container failed"
+		cause = "the task failed"
 	}
 
 	switch {
@@ -168,12 +167,12 @@ func (uc *TaskFailed) reason(t *task.Task, failure *events.TaskFailed, attempt i
 	}
 }
 
-// again asks for the container one more time.
+// again asks for the task one more time.
 func (uc *TaskFailed) again(ctx context.Context, t *task.Task, attempt int) error {
-	uc.logger.InfoContext(ctx, "asking for a failed container again",
+	uc.logger.InfoContext(ctx, "asking for a failed task again",
 		"uuid", t.UUID, "name", t.Name, "attempt", attempt, "max_retries", t.MaxRetries)
 
-	// written down before it is asked for, so that a container on its way back
+	// written down before it is asked for, so that a task on its way back
 	// is not also taken for one that has drifted.
 	t.CurrentState = task.Scheduled
 	if _, err := uc.taskRepository.Save(ctx, t); err != nil {
@@ -183,14 +182,14 @@ func (uc *TaskFailed) again(ctx context.Context, t *task.Task, attempt int) erro
 	return uc.scheduler.On(ctx, t, t.NodeName, attempt)
 }
 
-// giveUp stops asking. What the container is, is now also what is expected of
+// giveUp stops asking. What the task is, is now also what is expected of
 // it, so the runner's own heartbeat leaves it alone until somebody asks for
 // something else.
 func (uc *TaskFailed) giveUp(ctx context.Context, t *task.Task) error {
-	uc.logger.ErrorContext(ctx, "giving up on a container",
+	uc.logger.ErrorContext(ctx, "giving up on a task",
 		"uuid", t.UUID, "name", t.Name, "max_retries", t.MaxRetries, "reason", t.Reason)
 
-	// only what was still wanted running is given up on: a container that
+	// only what was still wanted running is given up on: a task that
 	// failed on its way to being stopped has arrived where it was going.
 	if t.ExpectedState == task.Running {
 		t.ExpectedState = task.Failed

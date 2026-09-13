@@ -20,12 +20,12 @@ type subjectKey struct{}
 // It verifies the signature and the audience and then takes the subject at its
 // word. There is no user looked up, no ban checked, and no permission read,
 // because a worker has no database to read any of them from -- what it has is
-// the containers themselves, and what it decides it decides from those.
+// the tasks themselves, and what it decides it decides from those.
 //
 // So this says "the estate signed this, recently, for this person". Whether
 // that person may do the thing they are asking for is the handler's to work
-// out, and on a worker the answer is written on the container: a terminal is
-// opened for whoever the container belongs to. A token is therefore worth
+// out, and on a worker the answer is written on the task: a terminal is
+// opened for whoever the task belongs to. A token is therefore worth
 // exactly what its holder already owns, and only until it expires.
 type Token struct {
 	next http.Handler
@@ -49,9 +49,9 @@ func NewTokenMiddleware(next http.Handler, j *jwt.JWT) *Token {
 // NewOptionalTokenMiddleware says who a request is from when it says, and lets
 // it through as nobody when it does not.
 //
-// It is for what an anonymous caller may reach: a container with no owner is a
+// It is for what an anonymous caller may reach: a task with no owner is a
 // snippet, which belongs to nobody and is therefore open to everybody. The
-// handler decides that, because the handler is what knows whose the container
+// handler decides that, because the handler is what knows whose the task
 // is; this only establishes whether anyone is asking.
 func NewOptionalTokenMiddleware(next http.Handler, j *jwt.JWT) *Token {
 	return &Token{next: next, j: j, optional: true}

@@ -79,7 +79,7 @@ func (uc *TaskCreated) Handle(ctx context.Context, data []byte) error {
 	return uc.scheduler.On(ctx, &t, selectedNode.Name, 0)
 }
 
-// pickNode chooses where a container runs.
+// pickNode chooses where a task runs.
 //
 // A service of a stack has that choice made for it: everything in a stack
 // shares one private network, and a bridge is local to the node that created
@@ -131,7 +131,7 @@ func (uc *TaskCreated) stackNode(ctx context.Context, t *task.Task) (node.Node, 
 	return selected, nil
 }
 
-// anyNode is wherever there is room for a container that is not held to a
+// anyNode is wherever there is room for a task that is not held to a
 // place by anything else.
 func (uc *TaskCreated) anyNode(ctx context.Context, t *task.Task) (node.Node, error) {
 	nodes, err := uc.getHealthyNodes(ctx)

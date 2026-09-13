@@ -11,7 +11,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/translator"
 )
 
-// UseCase stops a container and starts it again in place. The container keeps
+// UseCase stops a task and starts it again in place. The task keeps
 // its identity, so its slug, its log and its place in a stack all survive; only
 // the host ports it is published on may change.
 type UseCase struct {
@@ -43,11 +43,11 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 
 	// what it is asked to be from now on. It is written down before anything
 	// is asked of the node, and whatever happens to that request, so that a
-	// container which ends up somewhere else is brought back here by the
+	// task which ends up somewhere else is brought back here by the
 	// runner's own heartbeat.
 	t.ExpectedState = task.Running
 
-	// a container that has ended is not restarted where it stands: there may be
+	// a task that has ended is not restarted where it stands: there may be
 	// nothing left to restart, and somebody asking for it by hand is asking for
 	// a fresh start rather than one more of the attempts behind it.
 	if task.IsTerminalState(t.CurrentState) {

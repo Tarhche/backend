@@ -108,7 +108,7 @@ func (uc *TaskScheduled) Handle(ctx context.Context, data []byte) error {
 	}
 
 	if _, err := uc.useCase.Execute(ctx, request); err != nil {
-		// there is no container, so nothing will ever report what became of
+		// there is no task, so nothing will ever report what became of
 		// this one: saying so here is what keeps it from sitting in the state
 		// it was scheduled in for good, with the node trying again and again
 		// behind everybody's back.
@@ -131,6 +131,7 @@ func (uc *TaskScheduled) reportFailure(ctx context.Context, scheduled *events.Ta
 	event := events.TaskFailed{
 		UUID:       scheduled.UUID,
 		Name:       scheduled.Name,
+		OwnerUUID:  scheduled.OwnerUUID,
 		NodeName:   uc.nodeName,
 		At:         time.Now(),
 		Attempt:    scheduled.Attempt,

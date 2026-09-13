@@ -28,7 +28,7 @@ func NewMongodbPinger(database *mongo.Database) *MongodbPinger {
 func (p *MongodbPinger) Ping(ctx context.Context) error {
 	// without a deadline of its own the driver spends its full server selection
 	// timeout (30s by default) looking for a reachable server, long after the
-	// container healthcheck has given up waiting for an answer
+	// task healthcheck has given up waiting for an answer
 	ctx, cancel := context.WithTimeout(ctx, pingTimeout)
 	defer cancel()
 

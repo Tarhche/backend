@@ -1,7 +1,3 @@
-// Package stack groups the containers that make up one application. The
-// services of a stack share a private network and are scheduled together onto
-// one node, so they reach each other by service name the way a compose file
-// expects.
 package stack
 
 import (
@@ -11,10 +7,10 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
 )
 
-// Stack is a set of containers run and managed as one thing.
+// Stack is a set of tasks run and managed as one thing.
 //
 // A stack holds no spec of its own: each of its services is a task, and the
-// stack is what those tasks belong to. It is immutable, like the containers in
+// stack is what those tasks belong to. It is immutable, like the tasks in
 // it — there is no update, only run and remove.
 type Stack struct {
 	UUID string

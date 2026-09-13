@@ -4,14 +4,14 @@ import "time"
 
 const TaskLoggedName = "runnerTaskLogged"
 
-// TaskLogged carries a batch of lines a container wrote. The worker ships them
+// TaskLogged carries a batch of lines a task wrote. The worker ships them
 // as they are produced and the manager is what stores them, so a line survives
-// its container.
+// its task.
 type TaskLogged struct {
-	UUID          string    `json:"uuid"`
-	ContainerUUID string    `json:"container_uuid"`
-	NodeName      string    `json:"node_name"`
-	Lines         []LogLine `json:"lines"`
+	UUID        string    `json:"uuid"`
+	ExecutionID string    `json:"execution_id"`
+	NodeName    string    `json:"node_name"`
+	Lines       []LogLine `json:"lines"`
 }
 
 type LogLine struct {

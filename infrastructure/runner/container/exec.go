@@ -13,16 +13,16 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	oteltrace "go.opentelemetry.io/otel/trace"
 
-	"github.com/khanzadimahdi/testproject/domain/runner/container"
+	"github.com/khanzadimahdi/testproject/domain/runner/task"
 	"github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
 )
 
 // Exec starts a command inside a running container and hands back the stream it
 // runs on. Closing the session releases that stream; ending it is what stops
 // the command.
-func (m *DockerManager) Exec(ctx context.Context, containerUUID string, options container.ExecOptions) (container.ExecSession, error) {
-	ctx, span := m.tracer.Start(ctx, "docker.container.exec",
-		oteltrace.WithAttributes(attribute.String("container.id", containerUUID)),
+func (m *DockerManager) Exec(ctx context.Context, containerUUID string, options task.ExecOptions) (task.ExecSession, error) {
+	ctx, span := m.tracer.Start(ctx, "docker.task.exec",
+		oteltrace.WithAttributes(attribute.String("task.id", containerUUID)),
 	)
 	defer span.End()
 
@@ -88,7 +88,7 @@ type execSession struct {
 	err  error
 }
 
-var _ container.ExecSession = &execSession{}
+var _ task.ExecSession = &execSession{}
 
 func (s *execSession) Read(p []byte) (int, error) {
 	return s.reader.Read(p)

@@ -34,6 +34,7 @@ func (h *showHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	// an owner narrows it to that person's own, the way it narrows a listing:
 	// a stack that is not theirs is not found.
 	response, err := h.show(r, r.PathValue("uuid"))
+
 	switch {
 	case errors.Is(err, domain.ErrNotExists):
 		rw.WriteHeader(http.StatusNotFound)

@@ -1,5 +1,5 @@
-// Package slug turns a container's name into the unique label it is addressed
-// by. A container called "nginx" becomes something like "nginx-xkfqz", which is
+// Package slug turns a task's name into the unique label it is addressed
+// by. A task called "nginx" becomes something like "nginx-xkfqz", which is
 // both a valid docker container name and a single DNS label, so it can be the
 // left-most part of the hostname its ports are served on.
 package slug
@@ -12,7 +12,7 @@ import (
 const (
 	// suffixLength is how many random characters are appended. Five letters is
 	// nearly twelve million combinations, which is plenty to keep two
-	// containers of the same name apart.
+	// tasks of the same name apart.
 	suffixLength = 5
 
 	// maxNameLength leaves room for the separator and the suffix inside the 63
@@ -20,13 +20,13 @@ const (
 	maxNameLength = 63 - suffixLength - 1
 
 	// suffixAlphabet is letters only, deliberately. A hostname's trailing
-	// "-<digits>" group selects which of a container's ports to reach, so a
+	// "-<digits>" group selects which of a task's ports to reach, so a
 	// suffix that could come out all digits would make "abc-12345" ambiguous.
 	suffixAlphabet = "abcdefghijklmnopqrstuvwxyz"
 )
 
 // Generate returns a unique slug for name. An empty or entirely unusable name
-// still produces a usable slug, because a container has to be addressable
+// still produces a usable slug, because a task has to be addressable
 // whatever it was called.
 func Generate(name string) (string, error) {
 	suffix, err := randomSuffix()

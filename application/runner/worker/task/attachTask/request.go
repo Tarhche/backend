@@ -8,7 +8,7 @@ import (
 // command. A busybox image has sh but not bash, so sh is the one to reach for.
 var defaultShell = []string{"/bin/sh"}
 
-// Request represents a request to run a command inside a task's container.
+// Request represents a request to run a command inside a task's task.
 type Request struct {
 	UUID    string   `json:"uuid"`
 	Command []string `json:"command"`
@@ -20,7 +20,7 @@ type Request struct {
 	// OwnerUUID is who is asking, taken from the token they presented, and
 	// empty when they presented none.
 	//
-	// A container with an owner is opened for that person alone. One without is
+	// A task with an owner is opened for that person alone. One without is
 	// opened for anybody, so nobody has to say who they are to reach it.
 	OwnerUUID string `json:"-"`
 }

@@ -5,7 +5,7 @@ import (
 )
 
 // State reads a stack's condition off its services. A stack keeps no state of
-// its own: it is exactly as running as the containers in it, so there is one
+// its own: it is exactly as running as the tasks in it, so there is one
 // state machine in the runner rather than two that can disagree.
 // ExpectedState is what a stack was asked to be, read off what its services
 // were asked to be.

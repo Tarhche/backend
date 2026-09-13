@@ -39,7 +39,7 @@ func failure(t *testing.T, e events.TaskFailed) []byte {
 func TestTaskFailed_Handle(t *testing.T) {
 	t.Parallel()
 
-	t.Run("a container that is still worth trying is asked for again", func(t *testing.T) {
+	t.Run("a task that is still worth trying is asked for again", func(t *testing.T) {
 		t.Parallel()
 
 		var (
@@ -106,7 +106,7 @@ func TestTaskFailed_Handle(t *testing.T) {
 		assert.Equal(t, 1, logs.Count(failed.UUID))
 	})
 
-	t.Run("a container is left alone between attempts", func(t *testing.T) {
+	t.Run("a task is left alone between attempts", func(t *testing.T) {
 		t.Parallel()
 
 		var (
@@ -154,7 +154,7 @@ func TestTaskFailed_Handle(t *testing.T) {
 		assert.Equal(t, 1, logs.Count(failed.UUID))
 	})
 
-	t.Run("a container that has run out of attempts is left failed", func(t *testing.T) {
+	t.Run("a task that has run out of attempts is left failed", func(t *testing.T) {
 		t.Parallel()
 
 		var (
@@ -254,7 +254,7 @@ func TestTaskFailed_Handle(t *testing.T) {
 		producer.AssertNotCalled(t, "Produce", mock.Anything, events.TaskScheduledName, mock.Anything)
 	})
 
-	t.Run("a container that failed on its way out is not brought back", func(t *testing.T) {
+	t.Run("a task that failed on its way out is not brought back", func(t *testing.T) {
 		t.Parallel()
 
 		var (

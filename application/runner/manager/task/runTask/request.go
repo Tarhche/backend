@@ -15,7 +15,7 @@ type Request struct {
 	Name string    `json:"name"`
 	Kind task.Kind `json:"kind"`
 
-	// StackUUID, StackSlug and ServiceName are set when this container is one
+	// StackUUID, StackSlug and ServiceName are set when this task is one
 	// service of a stack. NominatedNode is the node the rest of that stack was
 	// scheduled onto, because services that share a network share a node.
 	StackUUID     string `json:"stack_uuid,omitempty"`
@@ -41,7 +41,7 @@ type Request struct {
 	ReadOnly      bool                   `json:"read_only"`
 	Interactive   bool                   `json:"interactive,omitempty"`
 
-	// MaxRetries is how many times this container is asked for again after it
+	// MaxRetries is how many times this task is asked for again after it
 	// fails, before the runner gives up on it. Nothing at all is whatever its
 	// kind is usually worth, zero is not at all, and -1 never gives up.
 	MaxRetries *int `json:"max_retries,omitempty"`
@@ -54,7 +54,7 @@ type Request struct {
 	OwnerUUID      string         `json:"-"`
 }
 
-// PortBinding represents a host-to-container port binding
+// PortBinding represents a host-to-task port binding
 type PortBinding struct {
 	HostIP   string `json:"host_ip"`
 	HostPort uint   `json:"host_port"`
@@ -68,7 +68,7 @@ type Mount struct {
 	ReadOnly bool   `json:"read_only"`
 }
 
-// ResourceLimits represents the resource limits of the container
+// ResourceLimits represents the resource limits of the task
 type ResourceLimits struct {
 	Cpu    float64 `json:"cpu"`
 	Memory uint64  `json:"memory"`
@@ -161,7 +161,7 @@ func (r *Request) Validate() domain.ValidationErrors {
 		}
 	}
 
-	// a container with no network has nothing to publish a port on.
+	// a task with no network has nothing to publish a port on.
 	if len(r.ExposedPorts) > 0 && r.Policy().IsValid() && !r.Policy().AllowsPorts() {
 		validationErrors["exposed_ports"] = "ports_require_network"
 	}
@@ -169,7 +169,7 @@ func (r *Request) Validate() domain.ValidationErrors {
 	return validationErrors
 }
 
-// Retries is how many times this container is worth asking for again, or what
+// Retries is how many times this task is worth asking for again, or what
 // its kind is usually worth when it did not say.
 func (r *Request) Retries() int {
 	if r.MaxRetries == nil {
@@ -217,9 +217,9 @@ func (r *Request) ConvertMounts() []task.Mount {
 // ConvertPortBindings converts the port bindings to port.PortMap
 func (r *Request) ConvertPortBindings() []port.PortMap {
 	result := make([]port.PortMap, 0, len(r.PortBindings))
-	for containerPort, hostBindings := range r.PortBindings {
+	for taskPort, hostBindings := range r.PortBindings {
 		portMap := make(port.PortMap)
-		portMap[port.Port(containerPort)] = r.convertPortBinding(hostBindings)
+		portMap[port.Port(taskPort)] = r.convertPortBinding(hostBindings)
 		result = append(result, portMap)
 	}
 

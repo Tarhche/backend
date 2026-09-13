@@ -8,32 +8,32 @@ import (
 
 // router puts the two things the ingress serves behind one port.
 //
-// A request made to a hostname under the containers' domain belongs to a
-// container, and is carried there whole — whatever path it asks for is the
-// container's to answer. Everything else is the ingress's own: the runners it
+// A request made to a hostname under the tasks' domain belongs to a
+// task, and is carried there whole — whatever path it asks for is the
+// task's to answer. Everything else is the ingress's own: the runners it
 // proxies to, and what it reports about them.
 type router struct {
-	containers http.Handler
-	own        http.Handler
+	tasks http.Handler
+	own   http.Handler
 
-	// domain is the suffix every container hostname carries, without a leading
+	// domain is the suffix every task hostname carries, without a leading
 	// dot: "runner.tarhche.com", or "runner.localhost" while developing.
 	domain string
 }
 
 var _ http.Handler = &router{}
 
-func NewRouter(containers http.Handler, own http.Handler, domain string) *router {
+func NewRouter(tasks http.Handler, own http.Handler, domain string) *router {
 	return &router{
-		containers: containers,
-		own:        own,
-		domain:     strings.ToLower(strings.Trim(domain, ".")),
+		tasks:  tasks,
+		own:    own,
+		domain: strings.ToLower(strings.Trim(domain, ".")),
 	}
 }
 
 func (r *router) ServeHTTP(rw http.ResponseWriter, request *http.Request) {
-	if r.isContainer(request.Host) {
-		r.containers.ServeHTTP(rw, request)
+	if r.isTask(request.Host) {
+		r.tasks.ServeHTTP(rw, request)
 
 		return
 	}
@@ -41,7 +41,7 @@ func (r *router) ServeHTTP(rw http.ResponseWriter, request *http.Request) {
 	r.own.ServeHTTP(rw, request)
 }
 
-func (r *router) isContainer(host string) bool {
+func (r *router) isTask(host string) bool {
 	name := strings.ToLower(host)
 
 	if hostname, _, err := net.SplitHostPort(host); err == nil {

@@ -4,23 +4,23 @@ import (
 	"context"
 
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/runner/container"
+	"github.com/khanzadimahdi/testproject/domain/runner/task"
 )
 
 // StopTask stops a task
 type UseCase struct {
-	containerManager container.Manager
-	validator        domain.Validator
+	taskManager task.Runtime
+	validator   domain.Validator
 }
 
 // NewUseCase creates a new UseCase
 func NewUseCase(
-	containerManager container.Manager,
+	taskManager task.Runtime,
 	validator domain.Validator,
 ) *UseCase {
 	return &UseCase{
-		containerManager: containerManager,
-		validator:        validator,
+		taskManager: taskManager,
+		validator:   validator,
 	}
 }
 
@@ -32,17 +32,17 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		}, nil
 	}
 
-	containers, err := uc.containerManager.GetByLabel(ctx, container.TaskUUIDLabelKey, request.UUID)
+	tasks, err := uc.taskManager.Of(ctx, request.UUID)
 	if err != nil {
 		return nil, err
 	}
 
-	if len(containers) == 0 {
+	if len(tasks) == 0 {
 		return nil, domain.ErrNotExists
 	}
 
-	for _, c := range containers {
-		err := uc.containerManager.Stop(ctx, c.ID)
+	for _, c := range tasks {
+		err := uc.taskManager.Stop(ctx, c.ID)
 		if err != nil {
 			return nil, err
 		}

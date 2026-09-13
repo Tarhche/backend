@@ -7,25 +7,24 @@ import (
 	"log/slog"
 
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/runner/container"
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
 	"github.com/khanzadimahdi/testproject/domain/runner/task/events"
 )
 
-// TaskLogged stores the lines a worker ships as its containers write them.
+// TaskLogged stores the lines a worker ships as its tasks write them.
 //
-// A worker that reconnects to a container's stream resumes from a timestamp it
+// A worker that reconnects to a task's stream resumes from a timestamp it
 // has already shipped, so the same lines arrive twice; the repository
 // recognises them by their own content and stores each one once.
 type TaskLogged struct {
 	// taskRepository is consulted once per batch, not once per line: a worker
-	// has lines in hand when its container's task is deleted, and storing them
+	// has lines in hand when its task's task is deleted, and storing them
 	// would leave rows nothing owns and nothing will ever clear.
 	taskRepository task.Repository
 
-	logRepository container.LogRepository
+	logRepository task.LogRepository
 
-	// maxBytes caps what one container may keep, so a chatty container cannot
+	// maxBytes caps what one task may keep, so a chatty task cannot
 	// fill the disk. Past it, its lines are dropped rather than stored.
 	maxBytes int64
 
@@ -36,7 +35,7 @@ var _ domain.MessageHandler = &TaskLogged{}
 
 func NewTaskLogged(
 	taskRepository task.Repository,
-	logRepository container.LogRepository,
+	logRepository task.LogRepository,
 	maxBytes int64,
 	logger *slog.Logger,
 ) *TaskLogged {
@@ -61,7 +60,7 @@ func (uc *TaskLogged) Handle(ctx context.Context, data []byte) error {
 		return nil
 	}
 
-	// a container's log lives exactly as long as the container, so a batch that
+	// a task's log lives exactly as long as the task, so a batch that
 	// arrives after the task went is nothing to keep.
 	if _, err := uc.taskRepository.GetOne(ctx, logged.UUID); errors.Is(err, domain.ErrNotExists) {
 		return nil
@@ -73,13 +72,13 @@ func (uc *TaskLogged) Handle(ctx context.Context, data []byte) error {
 		return nil
 	}
 
-	logs := make([]container.Log, len(logged.Lines))
+	logs := make([]task.Log, len(logged.Lines))
 	for i, line := range logged.Lines {
-		logs[i] = container.Log{
+		logs[i] = task.Log{
 			TaskUUID:    logged.UUID,
-			ContainerID: logged.ContainerUUID,
-			LogLine: container.LogLine{
-				Stream:  container.Stream(line.Stream),
+			ExecutionID: logged.ExecutionID,
+			LogLine: task.LogLine{
+				Stream:  task.Stream(line.Stream),
 				Content: line.Content,
 				At:      line.At,
 			},
@@ -107,7 +106,7 @@ func (uc *TaskLogged) overCap(ctx context.Context, taskUUID string) bool {
 
 	size, err := sizer.Size(ctx, taskUUID)
 	if err != nil {
-		uc.logger.WarnContext(ctx, "could not measure a container's log", "error", err, "taskUUID", taskUUID)
+		uc.logger.WarnContext(ctx, "could not measure a task's log", "error", err, "taskUUID", taskUUID)
 
 		return false
 	}
@@ -116,7 +115,7 @@ func (uc *TaskLogged) overCap(ctx context.Context, taskUUID string) bool {
 		return false
 	}
 
-	uc.logger.WarnContext(ctx, "a container has reached its log limit, dropping further lines", "taskUUID", taskUUID, "bytes", size)
+	uc.logger.WarnContext(ctx, "a task has reached its log limit, dropping further lines", "taskUUID", taskUUID, "bytes", size)
 
 	return true
 }

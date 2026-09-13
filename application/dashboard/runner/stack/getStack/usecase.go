@@ -3,7 +3,6 @@ package getStack
 import (
 	"context"
 
-	"github.com/khanzadimahdi/testproject/application/dashboard/runner/owners"
 	"github.com/khanzadimahdi/testproject/application/dashboard/runner/presenter"
 	runnerManager "github.com/khanzadimahdi/testproject/domain/runner/manager"
 )
@@ -11,11 +10,11 @@ import (
 // UseCase reads one stack and the services in it.
 type UseCase struct {
 	runner        runnerManager.Client
-	owners        *owners.Directory
+	owners        *presenter.Directory
 	ingressDomain string
 }
 
-func NewUseCase(runner runnerManager.Client, ownerDirectory *owners.Directory, ingressDomain string) *UseCase {
+func NewUseCase(runner runnerManager.Client, ownerDirectory *presenter.Directory, ingressDomain string) *UseCase {
 	return &UseCase{runner: runner, owners: ownerDirectory, ingressDomain: ingressDomain}
 }
 

@@ -43,7 +43,7 @@ func TestDeadline(t *testing.T) {
 		}, task.Completed))
 	})
 
-	t.Run("a container that may run for as long as it likes has no deadline", func(t *testing.T) {
+	t.Run("a task that may run for as long as it likes has no deadline", func(t *testing.T) {
 		t.Parallel()
 
 		assert.Nil(t, deadline(&events.Heartbeat{Interactive: true}, task.Running))

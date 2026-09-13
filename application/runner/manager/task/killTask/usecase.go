@@ -10,9 +10,9 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/translator"
 )
 
-// UseCase stops a container at once, without the grace period a stop gives it.
+// UseCase stops a task at once, without the grace period a stop gives it.
 // It travels the same states as a stop, because that is what it is: the
-// difference is only how patient the worker is with the container.
+// difference is only how patient the worker is with the task.
 type UseCase struct {
 	taskRepository  task.Repository
 	asyncCommandBus domain.Producer
@@ -39,7 +39,7 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 
 	// what it is asked to be from now on. It is written down before anything
 	// is asked of the node, and whatever happens to that request, so that a
-	// container which ends up somewhere else is brought back here by the
+	// task which ends up somewhere else is brought back here by the
 	// runner's own heartbeat.
 	t.ExpectedState = task.Stopped
 

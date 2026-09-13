@@ -12,10 +12,10 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/khanzadimahdi/testproject/domain/runner/container"
+	"github.com/khanzadimahdi/testproject/domain/runner/task"
 	"github.com/khanzadimahdi/testproject/domain/runner/task/events"
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
-	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/runner/containers"
+	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/runner/runtime"
 )
 
 func scheduled(t *testing.T) []byte {
@@ -39,28 +39,28 @@ func discardLogger() *slog.Logger {
 func TestTaskScheduled_Handle(t *testing.T) {
 	t.Parallel()
 
-	t.Run("a container that cannot be started is reported as failed, with the reason", func(t *testing.T) {
+	t.Run("a task that cannot be started is reported as failed, with the reason", func(t *testing.T) {
 		t.Parallel()
 
 		var (
-			containerManager containers.MockContainerManager
-			networkManager   containers.MockNetworkManager
-			producer         messagingMock.MockProduceConsumer
+			taskManager    runtime.MockRuntime
+			networkManager runtime.MockNetworkManager
+			producer       messagingMock.MockProduceConsumer
 		)
 
 		networkManager.On("EnsureIsolatedNetwork", mock.Anything).Return(nil)
-		containerManager.On("EnsureImage", mock.Anything, mock.Anything).Return(nil)
-		containerManager.On("Create", mock.Anything, mock.Anything).
+		taskManager.On("EnsureImage", mock.Anything, mock.Anything).Return(nil)
+		taskManager.On("Create", mock.Anything, mock.Anything).
 			Return("", errors.New("no such image: ghcr.io/example/runner:latest")).Once()
 
 		// nothing is there before it runs, and nothing was created, so there is
-		// no container to take instead either.
-		containerManager.On("GetByLabel", mock.Anything, container.TaskUUIDLabelKey, mock.Anything).
-			Return([]container.Container{}, nil).Twice()
+		// no task to take instead either.
+		taskManager.On("Of", mock.Anything, mock.Anything).
+			Return([]task.Execution{}, nil).Twice()
 		producer.On("Produce", mock.Anything, events.TaskFailedName, mock.Anything).Return(nil).Once()
 		defer producer.AssertExpectations(t)
 
-		useCase := NewUseCase(&containerManager, &networkManager, accepts(), nodeName)
+		useCase := NewUseCase(&taskManager, &networkManager, accepts(), nodeName)
 
 		// no error: the failure is announced rather than handed back, which is
 		// what would have the message delivered again.
@@ -80,17 +80,17 @@ func TestTaskScheduled_Handle(t *testing.T) {
 		t.Parallel()
 
 		var (
-			containerManager containers.MockContainerManager
-			networkManager   containers.MockNetworkManager
-			producer         messagingMock.MockProduceConsumer
+			taskManager    runtime.MockRuntime
+			networkManager runtime.MockNetworkManager
+			producer       messagingMock.MockProduceConsumer
 		)
 
-		useCase := NewUseCase(&containerManager, &networkManager, accepts(), nodeName)
+		useCase := NewUseCase(&taskManager, &networkManager, accepts(), nodeName)
 
 		require.NoError(t, NewTaskScheduled(useCase, &producer, "runner-worker-99", discardLogger()).
 			Handle(context.Background(), scheduled(t)))
 
-		containerManager.AssertNotCalled(t, "Create", mock.Anything, mock.Anything)
+		taskManager.AssertNotCalled(t, "Create", mock.Anything, mock.Anything)
 		producer.AssertNotCalled(t, "Produce", mock.Anything, mock.Anything, mock.Anything)
 	})
 }

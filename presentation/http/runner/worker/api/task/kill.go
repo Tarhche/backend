@@ -20,7 +20,7 @@ func NewKillHandler(useCase *killtask.UseCase) *killHandler {
 }
 
 // @Summary		Kill worker task
-// @Description	stop a task's container at once, without a grace period
+// @Description	stop a task's task at once, without a grace period
 // @Tags			runner tasks
 // @Accept			json
 // @Produce		json

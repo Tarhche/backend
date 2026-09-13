@@ -29,7 +29,7 @@ func discardLogger() *slog.Logger {
 func TestUseCase_Execute(t *testing.T) {
 	t.Parallel()
 
-	t.Run("a container that is no longer where it was left is asked for again", func(t *testing.T) {
+	t.Run("a task that is no longer where it was left is asked for again", func(t *testing.T) {
 		t.Parallel()
 
 		var (
@@ -63,7 +63,7 @@ func TestUseCase_Execute(t *testing.T) {
 		assert.Equal(t, "runner-worker-01", scheduled.NominatedNode, "on the node that was holding it")
 	})
 
-	t.Run("a container that ended while its node still holds it is left to the failure chain", func(t *testing.T) {
+	t.Run("a task that ended while its node still holds it is left to the failure chain", func(t *testing.T) {
 		t.Parallel()
 
 		var (
@@ -92,7 +92,7 @@ func TestUseCase_Execute(t *testing.T) {
 		tasks.AssertNotCalled(t, "Save", mock.Anything, mock.Anything)
 	})
 
-	t.Run("a container nobody has spoken for is asked for again too", func(t *testing.T) {
+	t.Run("a task nobody has spoken for is asked for again too", func(t *testing.T) {
 		t.Parallel()
 
 		var (
@@ -102,7 +102,7 @@ func TestUseCase_Execute(t *testing.T) {
 		)
 
 		// last seen running, but its node has said nothing since: somebody
-		// removed the container.
+		// removed the task.
 		vanished := task.Task{
 			UUID:            "task-uuid",
 			StackUUID:       "stack-uuid",
@@ -126,7 +126,7 @@ func TestUseCase_Execute(t *testing.T) {
 		assert.Equal(t, "myapp-abcde", scheduled.StackSlug, "a service comes back onto its stack's own network")
 	})
 
-	t.Run("a container that came back up after it was stopped is stopped again", func(t *testing.T) {
+	t.Run("a task that came back up after it was stopped is stopped again", func(t *testing.T) {
 		t.Parallel()
 
 		var (
@@ -150,7 +150,7 @@ func TestUseCase_Execute(t *testing.T) {
 		require.NoError(t, NewUseCase(&tasks, schedule.New(&stacks, &producer), &producer, discardLogger()).Execute(context.Background()))
 	})
 
-	t.Run("containers that are what they were asked to be are left alone", func(t *testing.T) {
+	t.Run("tasks that are what they were asked to be are left alone", func(t *testing.T) {
 		t.Parallel()
 
 		var (
@@ -177,7 +177,7 @@ func TestUseCase_Execute(t *testing.T) {
 func TestUseCase_Execute_settling(t *testing.T) {
 	t.Parallel()
 
-	t.Run("a container asked to stop, that nobody holds any more, has stopped", func(t *testing.T) {
+	t.Run("a task asked to stop, that nobody holds any more, has stopped", func(t *testing.T) {
 		t.Parallel()
 
 		var (
@@ -239,7 +239,7 @@ func TestUseCase_Execute_settling(t *testing.T) {
 func TestUseCase_Execute_placing(t *testing.T) {
 	t.Parallel()
 
-	t.Run("a container that was never placed anywhere is asked for from the beginning", func(t *testing.T) {
+	t.Run("a task that was never placed anywhere is asked for from the beginning", func(t *testing.T) {
 		t.Parallel()
 
 		var (
@@ -269,10 +269,10 @@ func TestUseCase_Execute_placing(t *testing.T) {
 	})
 }
 
-func TestUseCase_Execute_readsEveryContainer(t *testing.T) {
+func TestUseCase_Execute_readsEveryTask(t *testing.T) {
 	t.Parallel()
 
-	// what a pass covers is every container the runner is holding, however
+	// what a pass covers is every task the runner is holding, however
 	// many that is: one read of the newest few would leave the rest to drift
 	// with nothing coming back for them.
 	t.Run("works through them a batch at a time", func(t *testing.T) {

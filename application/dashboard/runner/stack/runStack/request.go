@@ -5,12 +5,10 @@ import (
 	"github.com/khanzadimahdi/testproject/domain"
 )
 
-// Request is a set of services to run together, in the shape a compose file
-// has.
 type Request struct {
-	spec.Stack
-
 	OwnerUUID string `json:"-"`
+
+	spec.Stack
 }
 
 var _ domain.Validatable = &Request{}

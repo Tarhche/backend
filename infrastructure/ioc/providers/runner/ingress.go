@@ -44,7 +44,7 @@ const (
 	// after a request, ready for the next one. It is deliberately shorter than
 	// the worker's own idle time, so the side that opened a connection is never
 	// the one surprised by it closing.
-	idleConnectionTimeout = 60 * time.Second
+	idleConnectionTimeout = 3 * time.Minute
 )
 
 // ingressProvider builds the tunnel the workers connect to, the registry of
@@ -153,7 +153,7 @@ func ingressConsoleCommand(
 
 	checkWorkerExistsUseCase := ingressCheckWorkerExists.NewUseCase(registry)
 
-	// which node is holding a container is the manager's record of it, and the
+	// which node is holding a task is the manager's record of it, and the
 	// only thing here that outlives a connection.
 	taskRepository := taskrepository.NewRepository(database)
 
@@ -169,31 +169,31 @@ func ingressConsoleCommand(
 	mux := http.NewServeMux()
 
 	// CORS goes on the ingress's own answers and no further: what it proxies is
-	// the worker's or the container's to answer for, a preflight included. A
+	// the worker's or the task's to answer for, a preflight included. A
 	// header set here would otherwise arrive alongside the one upstream sent,
 	// and two Access-Control-Allow-Origin headers are worse than none.
 
-	// the container healthcheck probes this
+	// the task healthcheck probes this
 	mux.Handle("GET /health", middleware.NewCORSMiddleware(healthAPI.NewHealthHandler(checkHealthUseCase)))
 	mux.Handle("/workers/{name}/{path...}", ingressAPI.NewProxyHandler(checkWorkerExistsUseCase, transport, logger))
 
 	// a terminal, which the browser opens here rather than anywhere else: the
-	// ingress works out which node is holding the container and carries the
+	// ingress works out which node is holding the task and carries the
 	// connection there. Who may open one is the node's to decide, from the
-	// owner on the container and the token on this request.
-	mux.Handle("GET /containers/{uuid}/attach", ingressAPI.NewTerminalHandler(taskRepository, registry, transport, logger))
+	// owner on the task and the token on this request.
+	mux.Handle("GET /tasks/{uuid}/attach", ingressAPI.NewTerminalHandler(taskRepository, registry, transport, logger))
 
-	// a request to a hostname under the containers' domain is a container's own
+	// a request to a hostname under the tasks' domain is a task's own
 	// traffic and goes to the node holding it; everything else is one of the
 	// ingress's own routes.
 	router := ingressAPI.NewRouter(
-		ingressAPI.NewContainerHandler(taskRepository, registry, transport, ingressConfigs.Domain, logger),
+		ingressAPI.NewTaskHandler(taskRepository, registry, transport, ingressConfigs.Domain, logger),
 		mux,
 		ingressConfigs.Domain,
 	)
 
-	// no rate limit: what comes through here is a container's own traffic —
-	// an attached terminal, a log being followed, whatever the container itself
+	// no rate limit: what comes through here is a task's own traffic —
+	// an attached terminal, a log being followed, whatever the task itself
 	// serves — which a cap per minute would cut off rather than pace.
 	handler := middleware.NewRecoveryMiddleware(
 		middleware.NewRequestIDMiddleware(

@@ -12,41 +12,41 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// containerRequest is one container to run, in the shape a compose service has.
-type containerRequest struct {
+// taskRequest is one task to run, in the shape a compose service has.
+type taskRequest struct {
 	Name      string `json:"name"`
 	OwnerUUID string `json:"owner_uuid"`
 
 	Service spec.Service `json:"service"`
 }
 
-type runContainerHandler struct {
+type runTaskHandler struct {
 	runTask  *runTask.UseCase
 	getTask  *gettask.UseCase
 	defaults task.ResourceLimits
 }
 
-// NewRunContainerHandler runs a long-running container from a compose service.
-func NewRunContainerHandler(runTaskUseCase *runTask.UseCase, getTaskUseCase *gettask.UseCase, defaults task.ResourceLimits) *runContainerHandler {
-	return &runContainerHandler{
+// NewRunTaskHandler runs a long-running task from a compose service.
+func NewRunTaskHandler(runTaskUseCase *runTask.UseCase, getTaskUseCase *gettask.UseCase, defaults task.ResourceLimits) *runTaskHandler {
+	return &runTaskHandler{
 		runTask:  runTaskUseCase,
 		getTask:  getTaskUseCase,
 		defaults: defaults,
 	}
 }
 
-// @Summary		Run a container
-// @Description	run one long-running container from a docker compose service specification
-// @Tags			runner containers
+// @Summary		Run a task
+// @Description	run one long-running task from a docker compose service specification
+// @Tags			runner tasks
 // @Accept			json
 // @Produce		json
-// @Param			body	body		containerRequest	true	"Container specification"
+// @Param			body	body		taskRequest	true	"Task specification"
 // @Success		201		{object}	gettask.Response
 // @Failure		400		{object}	map[string]interface{}
 // @Failure		500		{object}	map[string]interface{}
-// @Router			/containers/run [post]
-func (h *runContainerHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
-	var request containerRequest
+// @Router			/tasks/run [post]
+func (h *runTaskHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
+	var request taskRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		rw.WriteHeader(http.StatusBadRequest)
 
@@ -71,7 +71,7 @@ func (h *runContainerHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// answered with the container itself, so the caller has its slug and can
+	// answered with the task itself, so the caller has its slug and can
 	// build the addresses its ports will be served on.
 	created, err := h.getTask.Execute(r.Context(), response.UUID)
 	if err != nil {

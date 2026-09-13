@@ -15,12 +15,12 @@ type Request struct {
 	Slug string    `json:"slug"`
 	Kind task.Kind `json:"kind"`
 
-	// OwnerUUID is whose container this is. It is written onto the container so
+	// OwnerUUID is whose task this is. It is written onto the task so
 	// that the node holding it can answer for itself who may be let in, without
 	// asking anything that keeps records.
 	OwnerUUID string `json:"owner_uuid,omitempty"`
 
-	// StackSlug and ServiceName place this container in a stack: the slug
+	// StackSlug and ServiceName place this task in a stack: the slug
 	// names the private network its services share, and the service name is
 	// what its neighbours reach it by on that network.
 	StackUUID   string `json:"stack_uuid,omitempty"`
@@ -47,19 +47,19 @@ type Request struct {
 	Mounts         []Mount                `json:"mounts"`
 	ResourceLimits ResourceLimits         `json:"resource_limits"`
 
-	// TTL is how long the container may run for once it is up, in
+	// TTL is how long the task may run for once it is up, in
 	// nanoseconds. Zero is no limit.
 	TTL time.Duration `json:"ttl,omitempty"`
 
 	// Attempt is which try this is, counting from zero, and MaxRetries how
-	// many the container is worth. The node does not decide either — it hands
+	// many the task is worth. The node does not decide either — it hands
 	// them back with whatever becomes of this attempt — but a retry is a fresh
-	// container rather than the failed one started again.
+	// task rather than the failed one started again.
 	Attempt    int `json:"attempt"`
 	MaxRetries int `json:"max_retries"`
 }
 
-// PortBinding represents a host-to-container port binding
+// PortBinding represents a host-to-task port binding
 type PortBinding struct {
 	HostIP   string `json:"host_ip"`
 	HostPort uint   `json:"host_port"`
@@ -73,7 +73,7 @@ type Mount struct {
 	ReadOnly bool   `json:"read_only"`
 }
 
-// ResourceLimits represents the resource limits of the container
+// ResourceLimits represents the resource limits of the task
 type ResourceLimits struct {
 	Cpu    float64 `json:"cpu"`
 	Memory uint64  `json:"memory"`
@@ -141,10 +141,10 @@ func (r *Request) Policy() network.Policy {
 	return r.NetworkPolicy
 }
 
-// ContainerName is what the container is called on the node. It is the slug,
-// which is unique and is also the name the container's ports are served on, so
-// a container is called the same thing wherever it is looked at.
-func (r *Request) ContainerName() string {
+// TaskName is what the task is called on the node. It is the slug,
+// which is unique and is also the name the task's ports are served on, so
+// a task is called the same thing wherever it is looked at.
+func (r *Request) TaskName() string {
 	if len(r.Slug) > 0 {
 		return r.Slug
 	}
@@ -152,7 +152,7 @@ func (r *Request) ContainerName() string {
 	return r.Name
 }
 
-// PublishedPorts are the bindings the container is created with. Every exposed
+// PublishedPorts are the bindings the task is created with. Every exposed
 // port is published on a host port docker picks, so the runner never has to
 // keep track of what is already taken on the node.
 func (r *Request) PublishedPorts() port.PortMap {

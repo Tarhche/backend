@@ -25,23 +25,23 @@ const (
 	// code wants to be told.
 	CodeTimeout = 30 * time.Second
 
-	// TTL is how long the container is allowed to exist at all. It is the
-	// backstop for a container that ignores the timeout above — the runner
+	// TTL is how long the task is allowed to exist at all. It is the
+	// backstop for a task that ignores the timeout above — the runner
 	// takes it away regardless — so it is the longer of the two.
 	TTL = 2 * CodeTimeout
 
 	// LiveCodeTimeout is what a snippet gets when there is something to do
 	// with it while it runs: a port to open, or a shell to type in. Both are
 	// worth more than the half minute it takes to print something, and both
-	// end when the container does. It is what the page counts down to, and it
+	// end when the task does. It is what the page counts down to, and it
 	// is short on purpose: a page anybody can open is a page anybody can leave
-	// a container running on.
+	// a task running on.
 	LiveCodeTimeout = 2 * time.Minute
 
-	// LiveTTL is the same: what a snippet is given is what its container is
+	// LiveTTL is the same: what a snippet is given is what its task is
 	// allowed, so the countdown a reader watches is the whole of its time. The
 	// image's own limit is what usually ends it; the runner takes the
-	// container away if it does not.
+	// task away if it does not.
 	LiveTTL = LiveCodeTimeout
 )
 

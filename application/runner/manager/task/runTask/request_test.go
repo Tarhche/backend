@@ -171,7 +171,7 @@ func TestRequest_ConvertMounts(t *testing.T) {
 		Mounts: []Mount{
 			{
 				Source:   "/host/path",
-				Target:   "/container/path",
+				Target:   "/task/path",
 				Type:     "bind",
 				ReadOnly: true,
 			},

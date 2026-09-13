@@ -37,12 +37,11 @@ type TaskRunRequested struct {
 	// TTL is how long a job may run for, in nanoseconds. Zero is no limit.
 	TTL time.Duration `json:"ttl"`
 
-	// MaxRetries is how many times this container is asked for again after it
+	// MaxRetries is how many times this task is asked for again after it
 	// fails. Nothing at all means whatever its kind is usually worth.
 	MaxRetries *int `json:"max_retries,omitempty"`
 
-	Mounts         []Mount           `json:"mounts"`
-	ResourceLimits ResourceLimits    `json:"resource_limits"`
-	OwnerUUID      string            `json:"owner_uuid"`
-	Labels         map[string]string `json:"labels"`
+	Mounts         []Mount        `json:"mounts"`
+	ResourceLimits ResourceLimits `json:"resource_limits"`
+	OwnerUUID      string         `json:"owner_uuid"`
 }

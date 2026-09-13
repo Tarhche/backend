@@ -3,7 +3,6 @@ package client
 import (
 	"time"
 
-	"github.com/khanzadimahdi/testproject/domain/runner/container"
 	"github.com/khanzadimahdi/testproject/domain/runner/port"
 	"github.com/khanzadimahdi/testproject/domain/runner/stack"
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
@@ -43,7 +42,7 @@ type taskPayload struct {
 }
 
 type endpointPayload struct {
-	ContainerPort uint `json:"container_port"`
+	TaskPort uint `json:"task_port"`
 }
 
 type limitsPayload struct {
@@ -79,21 +78,6 @@ type stacksPayload struct {
 	Pagination paginationPayload `json:"pagination"`
 }
 
-// changePayload is one message of a container watch: "changed" carries the
-// container as it is now, "deleted" only the uuid of one that is gone.
-type changePayload struct {
-	Kind string       `json:"kind"`
-	UUID string       `json:"uuid"`
-	Task *taskPayload `json:"task,omitempty"`
-}
-
-// stackChangePayload is one message of a stack watch.
-type stackChangePayload struct {
-	Kind  string        `json:"kind"`
-	UUID  string        `json:"uuid"`
-	Stack *stackPayload `json:"stack,omitempty"`
-}
-
 type logsPayload struct {
 	Items []logPayload `json:"items"`
 }
@@ -116,15 +100,15 @@ var states = map[string]task.State{
 	"restarting": task.Restarting,
 }
 
-var streams = map[string]container.Stream{
-	"stdout": container.StreamStdout,
-	"stderr": container.StreamStderr,
+var streams = map[string]task.Stream{
+	"stdout": task.StreamStdout,
+	"stderr": task.StreamStderr,
 }
 
 func (p *taskPayload) toTask() task.Task {
 	endpoints := make([]task.Endpoint, len(p.Endpoints))
 	for i, e := range p.Endpoints {
-		endpoints[i] = task.Endpoint{ContainerPort: port.Port(e.ContainerPort)}
+		endpoints[i] = task.Endpoint{TaskPort: port.Port(e.TaskPort)}
 	}
 
 	return task.Task{
@@ -181,36 +165,10 @@ func (p *stackPayload) toStack() managerStack {
 	}
 }
 
-func (p *changePayload) toChange() managerContainerChange {
-	change := managerContainerChange{
-		UUID:    p.UUID,
-		Deleted: p.Kind == "deleted",
-	}
-
-	if p.Task != nil {
-		change.Container = p.Task.toTask()
-	}
-
-	return change
-}
-
-func (p *stackChangePayload) toChange() managerStackChange {
-	change := managerStackChange{
-		UUID:    p.UUID,
-		Deleted: p.Kind == "deleted",
-	}
-
-	if p.Stack != nil {
-		change.Stack = p.Stack.toStack()
-	}
-
-	return change
-}
-
-func (p *logPayload) toLog(taskUUID string) container.Log {
-	return container.Log{
+func (p *logPayload) toLog(taskUUID string) task.Log {
+	return task.Log{
 		TaskUUID: taskUUID,
-		LogLine: container.LogLine{
+		LogLine: task.LogLine{
 			Stream:  streams[p.Stream],
 			Content: p.Content,
 			At:      p.At,

@@ -12,11 +12,10 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/khanzadimahdi/testproject/domain/runner/container"
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
 	"github.com/khanzadimahdi/testproject/domain/runner/task/events"
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
-	containersMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/runner/containers"
+	runtimeMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/runner/runtime"
 )
 
 const nodeName = "node-1"
@@ -25,29 +24,37 @@ func discardLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
-// heldContainer is one running container on this node, as docker lists it.
-func heldContainer(labels map[string]string) container.Container {
-	all := map[string]string{
-		container.TaskUUIDLabelKey: "task-uuid",
-		container.TaskNameLabelKey: "task-name",
-		container.TaskKindLabelKey: "service",
-		container.NodeNameLabelKey: nodeName,
+// heldTask is one running task on this node, as the runtime reports it.
+func heldTask(adjust ...func(*task.Execution)) task.Execution {
+	held := task.Execution{
+		ID:       "task-id",
+		Name:     "/task-name",
+		Status:   task.StatusRunning,
+		Image:    "nginx:1.27-alpine",
+		TaskUUID: "task-uuid",
+		TaskName: "task-name",
+		Kind:     task.KindService,
+		NodeName: nodeName,
 	}
 
-	for key, value := range labels {
-		all[key] = value
+	for _, change := range adjust {
+		change(&held)
 	}
 
-	return container.Container{
-		ID:     "container-id",
-		Name:   "/task-name",
-		Status: container.StatusRunning,
-		Image:  "nginx:1.27-alpine",
-		Labels: all,
-	}
+	return held
 }
 
-// beaten is the deadline the node reported for the only container it holds.
+// allowed is how long the task may run for once it is up.
+func allowed(ttl time.Duration) func(*task.Execution) {
+	return func(held *task.Execution) { held.TTL = ttl }
+}
+
+// asJob makes it one that is expected to exit.
+func asJob() func(*task.Execution) {
+	return func(held *task.Execution) { held.Kind = task.KindJob }
+}
+
+// beaten is the deadline the node reported for the only task it holds.
 func beaten(t *testing.T, producer *messagingMock.MockProduceConsumer) time.Time {
 	t.Helper()
 
@@ -64,20 +71,20 @@ func TestUseCase_Execute_deadline(t *testing.T) {
 
 	started := time.Now().Add(-30 * time.Second).Truncate(time.Millisecond)
 
-	t.Run("counts a container's time from when it started running", func(t *testing.T) {
+	t.Run("counts a task's time from when it started running", func(t *testing.T) {
 		t.Parallel()
 
 		var (
-			manager  containersMock.MockContainerManager
+			manager  runtimeMock.MockRuntime
 			producer messagingMock.MockProduceConsumer
 		)
 
-		held := heldContainer(map[string]string{container.TaskTTLLabelKey: "120"})
+		held := heldTask(allowed(2 * time.Minute))
 
-		manager.On("GetByLabel", mock.Anything, container.NodeNameLabelKey, nodeName).
-			Return([]container.Container{held}, nil)
+		manager.On("OnNode", mock.Anything, nodeName).
+			Return([]task.Execution{held}, nil)
 		manager.On("Inspect", mock.Anything, held.ID).Once().
-			Return(container.Container{ID: held.ID, StartedAt: started}, nil)
+			Return(task.Execution{ID: held.ID, StartedAt: started}, nil)
 		producer.On("Produce", mock.Anything, events.HeartbeatName, mock.Anything).Return(nil)
 
 		useCase := NewUseCase(&manager, &producer, nodeName, discardLogger())
@@ -95,16 +102,16 @@ func TestUseCase_Execute_deadline(t *testing.T) {
 		manager.AssertNumberOfCalls(t, "Inspect", 1)
 	})
 
-	t.Run("a container that may run as long as it likes has no deadline", func(t *testing.T) {
+	t.Run("a task that may run as long as it likes has no deadline", func(t *testing.T) {
 		t.Parallel()
 
 		var (
-			manager  containersMock.MockContainerManager
+			manager  runtimeMock.MockRuntime
 			producer messagingMock.MockProduceConsumer
 		)
 
-		manager.On("GetByLabel", mock.Anything, container.NodeNameLabelKey, nodeName).
-			Return([]container.Container{heldContainer(nil)}, nil)
+		manager.On("OnNode", mock.Anything, nodeName).
+			Return([]task.Execution{heldTask()}, nil)
 		producer.On("Produce", mock.Anything, events.HeartbeatName, mock.Anything).Return(nil)
 
 		useCase := NewUseCase(&manager, &producer, nodeName, discardLogger())
@@ -114,20 +121,20 @@ func TestUseCase_Execute_deadline(t *testing.T) {
 		manager.AssertNotCalled(t, "Inspect", mock.Anything, mock.Anything)
 	})
 
-	t.Run("a container that has not started yet counts down to nothing", func(t *testing.T) {
+	t.Run("a task that has not started yet counts down to nothing", func(t *testing.T) {
 		t.Parallel()
 
 		var (
-			manager  containersMock.MockContainerManager
+			manager  runtimeMock.MockRuntime
 			producer messagingMock.MockProduceConsumer
 		)
 
-		held := heldContainer(map[string]string{container.TaskTTLLabelKey: "120"})
+		held := heldTask(allowed(2 * time.Minute))
 
-		manager.On("GetByLabel", mock.Anything, container.NodeNameLabelKey, nodeName).
-			Return([]container.Container{held}, nil)
+		manager.On("OnNode", mock.Anything, nodeName).
+			Return([]task.Execution{held}, nil)
 		manager.On("Inspect", mock.Anything, held.ID).
-			Return(container.Container{ID: held.ID}, nil)
+			Return(task.Execution{ID: held.ID}, nil)
 		producer.On("Produce", mock.Anything, events.HeartbeatName, mock.Anything).Return(nil)
 
 		useCase := NewUseCase(&manager, &producer, nodeName, discardLogger())
@@ -137,7 +144,7 @@ func TestUseCase_Execute_deadline(t *testing.T) {
 	})
 }
 
-// reportedState is the state the node reported for the only container it holds.
+// reportedState is the state the node reported for the only task it holds.
 func reportedState(t *testing.T, producer *messagingMock.MockProduceConsumer) task.State {
 	t.Helper()
 
@@ -152,9 +159,9 @@ func reportedState(t *testing.T, producer *messagingMock.MockProduceConsumer) ta
 func TestUseCase_Execute_exitCode(t *testing.T) {
 	t.Parallel()
 
-	ended := func(exitCode int) container.Container {
-		c := heldContainer(map[string]string{container.TaskKindLabelKey: string(task.KindJob)})
-		c.Status = container.StatusExited
+	ended := func(exitCode int) task.Execution {
+		c := heldTask(asJob())
+		c.Status = task.StatusExited
 		c.ExitCode = exitCode
 
 		return c
@@ -164,14 +171,14 @@ func TestUseCase_Execute_exitCode(t *testing.T) {
 		t.Parallel()
 
 		var (
-			manager  containersMock.MockContainerManager
+			manager  runtimeMock.MockRuntime
 			producer messagingMock.MockProduceConsumer
 		)
 
 		held := ended(0)
 
-		manager.On("GetByLabel", mock.Anything, container.NodeNameLabelKey, nodeName).
-			Return([]container.Container{held}, nil)
+		manager.On("OnNode", mock.Anything, nodeName).
+			Return([]task.Execution{held}, nil)
 		manager.On("Inspect", mock.Anything, held.ID).Once().
 			Return(ended(3), nil)
 		manager.On("Logs", mock.Anything, held.ID, mock.Anything).Return(nil)
@@ -191,14 +198,14 @@ func TestUseCase_Execute_exitCode(t *testing.T) {
 		t.Parallel()
 
 		var (
-			manager  containersMock.MockContainerManager
+			manager  runtimeMock.MockRuntime
 			producer messagingMock.MockProduceConsumer
 		)
 
 		held := ended(0)
 
-		manager.On("GetByLabel", mock.Anything, container.NodeNameLabelKey, nodeName).
-			Return([]container.Container{held}, nil)
+		manager.On("OnNode", mock.Anything, nodeName).
+			Return([]task.Execution{held}, nil)
 		manager.On("Inspect", mock.Anything, held.ID).
 			Return(ended(137), nil)
 		manager.On("Logs", mock.Anything, held.ID, mock.Anything).Return(nil)
@@ -210,18 +217,18 @@ func TestUseCase_Execute_exitCode(t *testing.T) {
 		assert.Equal(t, task.Completed, reportedState(t, &producer))
 	})
 
-	t.Run("a container that is still running is not asked what it returned", func(t *testing.T) {
+	t.Run("a task that is still running is not asked what it returned", func(t *testing.T) {
 		t.Parallel()
 
 		var (
-			manager  containersMock.MockContainerManager
+			manager  runtimeMock.MockRuntime
 			producer messagingMock.MockProduceConsumer
 		)
 
-		held := heldContainer(map[string]string{container.TaskKindLabelKey: string(task.KindJob)})
+		held := heldTask(asJob())
 
-		manager.On("GetByLabel", mock.Anything, container.NodeNameLabelKey, nodeName).
-			Return([]container.Container{held}, nil)
+		manager.On("OnNode", mock.Anything, nodeName).
+			Return([]task.Execution{held}, nil)
 		manager.On("Logs", mock.Anything, held.ID, mock.Anything).Return(nil)
 		producer.On("Produce", mock.Anything, events.HeartbeatName, mock.Anything).Return(nil)
 

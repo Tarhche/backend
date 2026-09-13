@@ -102,7 +102,7 @@ func (r *TasksRepository) GetAllByOwner(ctx context.Context, ownerUUID string, o
 	return items, nil
 }
 
-// CountByOwner is how many containers one person has.
+// CountByOwner is how many tasks one person has.
 func (r *TasksRepository) CountByOwner(ctx context.Context, ownerUUID string) (uint, error) {
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
@@ -152,7 +152,7 @@ func (r *TasksRepository) GetOneByOwner(ctx context.Context, ownerUUID string, U
 }
 
 // GetOneBySlug finds a task by the unique name its ports are served on, which
-// is how the ingress turns a hostname into a container.
+// is how the ingress turns a hostname into a task.
 func (r *TasksRepository) GetOneBySlug(ctx context.Context, slug string) (task.Task, error) {
 	return r.findOne(ctx, bson.D{{Key: "slug", Value: slug}})
 }

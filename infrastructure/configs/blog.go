@@ -7,10 +7,10 @@ const (
 	// stack, which is also what it is called in production.
 	defaultRunnerManagerURL = "http://runner-manager:80"
 
-	// defaultRunnerPublicIngressDomain is where a browser reaches a container,
+	// defaultRunnerPublicIngressDomain is where a browser reaches a task,
 	// which is the ingress's own domain with the port it is published on — the
 	// ingress matches the hostname alone, so its copy carries no port. Every
-	// *.localhost name resolves to the loopback address, so a container is
+	// *.localhost name resolves to the loopback address, so a task is
 	// reachable without touching any DNS.
 	defaultRunnerPublicIngressDomain = "runner.localhost:8030"
 )
@@ -34,8 +34,8 @@ type Blog struct {
 	MailUsername string `usage:"SMTP user, when the relay authenticates." env:"MAIL_SMTP_USERNAME" long:"mail-smtp-username"`
 	MailPassword string `usage:"SMTP password, when the relay authenticates." env:"MAIL_SMTP_PASSWORD" long:"mail-smtp-password"`
 
-	RunnerManagerURL    string `usage:"Base URL of the runner manager's API, which the dashboard passes container and stack commands to." env:"RUNNER_MANAGER_URL" long:"runner-manager-url"`
-	RunnerIngressDomain string `usage:"Domain a runner container's exposed ports are served on, used to build the addresses the dashboard shows." env:"RUNNER_INGRESS_DOMAIN" long:"runner-ingress-domain"`
+	RunnerManagerURL    string `usage:"Base URL of the runner manager's API, which the dashboard passes task and stack commands to." env:"RUNNER_MANAGER_URL" long:"runner-manager-url"`
+	RunnerIngressDomain string `usage:"Domain a runner task's exposed ports are served on, used to build the addresses the dashboard shows." env:"RUNNER_INGRESS_DOMAIN" long:"runner-ingress-domain"`
 }
 
 // NewBlog returns the configuration of the serve-blog command, holding the

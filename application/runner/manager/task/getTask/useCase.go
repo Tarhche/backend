@@ -28,7 +28,7 @@ func (uc *UseCase) Execute(ctx context.Context, UUID string) (*Response, error) 
 	return NewResponse(t), nil
 }
 
-// ExecuteOwn is the same, of one person's own container. One that is not
+// ExecuteOwn is the same, of one person's own task. One that is not
 // theirs is not there for them, which is what the caller passes on.
 func (uc *UseCase) ExecuteOwn(ctx context.Context, ownerUUID string, UUID string) (*Response, error) {
 	t, err := uc.taskRepository.GetOneByOwner(ctx, ownerUUID, UUID)

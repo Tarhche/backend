@@ -85,13 +85,13 @@ var collection []permission.Permission = []permission.Permission{
 	{Name: "list of self files", Value: permission.SelfFilesIndex},
 	{Name: "delete a self file", Value: permission.SelfFilesDelete},
 
-	// self containers
-	{Name: "list of self containers", Value: permission.SelfRunnerContainersIndex},
-	{Name: "show a self container", Value: permission.SelfRunnerContainersShow},
-	{Name: "read a self container's logs", Value: permission.SelfRunnerContainersLogs},
-	{Name: "stop, kill or restart a self container", Value: permission.SelfRunnerContainersManage},
-	{Name: "open a terminal in a self container", Value: permission.SelfRunnerContainersAttach},
-	{Name: "delete a self container", Value: permission.SelfRunnerContainersDelete},
+	// self tasks
+	{Name: "list of self tasks", Value: permission.SelfRunnerTasksIndex},
+	{Name: "show a self task", Value: permission.SelfRunnerTasksShow},
+	{Name: "read a self task's logs", Value: permission.SelfRunnerTasksLogs},
+	{Name: "stop, kill or restart a self task", Value: permission.SelfRunnerTasksManage},
+	{Name: "open a terminal in a self task", Value: permission.SelfRunnerTasksAttach},
+	{Name: "delete a self task", Value: permission.SelfRunnerTasksDelete},
 
 	// self stacks
 	{Name: "list of self stacks", Value: permission.SelfRunnerStacksIndex},
@@ -99,14 +99,14 @@ var collection []permission.Permission = []permission.Permission{
 	{Name: "stop, kill or restart a self stack", Value: permission.SelfRunnerStacksManage},
 	{Name: "delete a self stack", Value: permission.SelfRunnerStacksDelete},
 
-	// runner containers
-	{Name: "list of containers", Value: permission.RunnerContainersIndex},
-	{Name: "run a container", Value: permission.RunnerContainersCreate},
-	{Name: "show a container", Value: permission.RunnerContainersShow},
-	{Name: "delete a container", Value: permission.RunnerContainersDelete},
-	{Name: "read a container's logs", Value: permission.RunnerContainersLogs},
-	{Name: "stop, kill or restart a container", Value: permission.RunnerContainersManage},
-	{Name: "open a terminal in a container", Value: permission.RunnerContainersAttach},
+	// runner tasks
+	{Name: "list of tasks", Value: permission.RunnerTasksIndex},
+	{Name: "run a task", Value: permission.RunnerTasksCreate},
+	{Name: "show a task", Value: permission.RunnerTasksShow},
+	{Name: "delete a task", Value: permission.RunnerTasksDelete},
+	{Name: "read a task's logs", Value: permission.RunnerTasksLogs},
+	{Name: "stop, kill or restart a task", Value: permission.RunnerTasksManage},
+	{Name: "open a terminal in a task", Value: permission.RunnerTasksAttach},
 
 	// runner stacks
 	{Name: "list of stacks", Value: permission.RunnerStacksIndex},

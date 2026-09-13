@@ -36,6 +36,7 @@ type Streams struct {
 	open map[string]context.CancelFunc
 }
 
+// Ensure Streams implements MessageHandler interface.
 var _ domain.MessageHandler = &Streams{}
 
 func NewStreams() *Streams {

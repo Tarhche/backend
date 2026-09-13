@@ -17,7 +17,7 @@ type Heartbeat struct {
 	producer       domain.Producer
 
 	// deleteTask takes away a task that has finished and was only ever meant
-	// to run once, which is the whole of it: the container, its log, and the
+	// to run once, which is the whole of it: the task, its log, and the
 	// task itself. killTask stops a job that has run for too long.
 	deleteTask *deletetask.UseCase
 	killTask   *killtask.UseCase
@@ -57,10 +57,10 @@ func (h *Heartbeat) Handle(ctx context.Context, data []byte) error {
 	// a job's whole log rides its heartbeat; a service's is streamed line by
 	// line and kept in the log repository instead.
 	if t.Kind != task.KindService {
-		t.ContainerLogs = heartbeat.Logs
+		t.ExecutionLogs = heartbeat.Logs
 	}
 
-	// what the node says it is doing, and what that means for a container that
+	// what the node says it is doing, and what that means for a task that
 	// was supposed to be doing something else.
 	reportedState := task.State(heartbeat.State)
 	taskState := reportedState
@@ -79,11 +79,11 @@ func (h *Heartbeat) Handle(ctx context.Context, data []byte) error {
 	}
 
 	// what the node holding it says it is doing, and that it said anything at
-	// all: a container nobody speaks for is one that is no longer there.
+	// all: a task nobody speaks for is one that is no longer there.
 	t.CurrentState = taskState
 	t.LastHeartbeatAt = heartbeat.At
 
-	// a container that is running was not given up on after all: it came back,
+	// a task that is running was not given up on after all: it came back,
 	// so keeping it up is what is wanted of it again.
 	if taskState == task.Running && t.ExpectedState == task.Failed {
 		t.ExpectedState = task.Running
@@ -101,12 +101,12 @@ func (h *Heartbeat) Handle(ctx context.Context, data []byte) error {
 
 	switch {
 	case taskState == task.Running:
-		// a running container is reported over and over, and each report
+		// a running task is reported over and over, and each report
 		// carries the addresses its ports came up on, which change under it.
 		err = h.publishTaskRan(ctx, &heartbeat)
 
 	case taskState == task.Failed:
-		// a container that has failed says so in every report it makes until
+		// a task that has failed says so in every report it makes until
 		// somebody takes it away. The moment it failed is announced once, and
 		// after that the repeats are what ask for the next attempt, when the
 		// wait between attempts is over.
@@ -144,14 +144,14 @@ func (h *Heartbeat) Handle(ctx context.Context, data []byte) error {
 }
 
 // failureReason says what went wrong in the words the dashboard shows: what
-// the node reported is what tells a container that fell over apart from one
+// the node reported is what tells a task that fell over apart from one
 // that ended when nobody asked it to.
 func failureReason(reported task.State) string {
 	if reported == task.Failed {
-		return "the container failed"
+		return "the task failed"
 	}
 
-	return "the container stopped without being asked to"
+	return "the task stopped without being asked to"
 }
 
 // kill stops a job that has outlived its ttl.
@@ -169,12 +169,12 @@ func (h *Heartbeat) kill(ctx context.Context, uuid string) error {
 	return err
 }
 
-// remove takes away a task that was only ever meant to run once. A container
+// remove takes away a task that was only ever meant to run once. A task
 // the code runner started has said everything it is going to say by the time it
-// finishes, so what is left of it — the container, its log and the task itself
+// finishes, so what is left of it — the task, its log and the task itself
 // — goes with it rather than staying in every listing forever.
 //
-// Forced, because the container has just reported that it finished: waiting for
+// Forced, because the task has just reported that it finished: waiting for
 // the stored state to catch up with what this heartbeat already says would
 // leave the task behind on the first report and take it away on some later one.
 func (h *Heartbeat) remove(ctx context.Context, uuid string) error {
@@ -191,12 +191,12 @@ func (h *Heartbeat) remove(ctx context.Context, uuid string) error {
 
 func (uc *Heartbeat) publishTaskRan(ctx context.Context, heartbeat *events.Heartbeat) error {
 	event := events.TaskRan{
-		UUID:          heartbeat.UUID,
-		NodeName:      heartbeat.NodeName,
-		ContainerUUID: heartbeat.ContainerUUID,
-		Endpoints:     heartbeat.Endpoints,
-		StartedAt:     heartbeat.At,
-		Deadline:      heartbeat.Deadline,
+		UUID:        heartbeat.UUID,
+		NodeName:    heartbeat.NodeName,
+		ExecutionID: heartbeat.ExecutionID,
+		Endpoints:   heartbeat.Endpoints,
+		StartedAt:   heartbeat.At,
+		Deadline:    heartbeat.Deadline,
 	}
 
 	payload, err := json.Marshal(event)
@@ -239,13 +239,14 @@ func (uc *Heartbeat) publishTaskCompleted(ctx context.Context, heartbeat *events
 
 func (uc *Heartbeat) publishTaskFailed(ctx context.Context, heartbeat *events.Heartbeat, t *task.Task, reason string) error {
 	event := events.TaskFailed{
-		UUID:          heartbeat.UUID,
-		ContainerUUID: heartbeat.ContainerUUID,
-		NodeName:      heartbeat.NodeName,
-		At:            heartbeat.At,
-		Attempt:       heartbeat.Attempt,
-		MaxRetries:    t.MaxRetries,
-		Reason:        reason,
+		UUID:        heartbeat.UUID,
+		OwnerUUID:   t.OwnerUUID,
+		ExecutionID: heartbeat.ExecutionID,
+		NodeName:    heartbeat.NodeName,
+		At:          heartbeat.At,
+		Attempt:     heartbeat.Attempt,
+		MaxRetries:  t.MaxRetries,
+		Reason:      reason,
 	}
 
 	payload, err := json.Marshal(event)

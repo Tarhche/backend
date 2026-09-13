@@ -16,10 +16,10 @@ import (
 	taskHeartbeat "github.com/khanzadimahdi/testproject/application/runner/worker/task/beatHeart"
 	shipLogs "github.com/khanzadimahdi/testproject/application/runner/worker/task/shipLogs"
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/runner/container"
 	"github.com/khanzadimahdi/testproject/domain/runner/node"
+	"github.com/khanzadimahdi/testproject/domain/runner/task"
 	messaging "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
-	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/runner/containers"
+	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/runner/runtime"
 	"github.com/khanzadimahdi/testproject/infrastructure/tunnel"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -204,12 +204,12 @@ func TestServe(t *testing.T) {
 		consumer.On("Produce", mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 		defer consumer.AssertExpectations(t)
 
-		var nodeManager containers.MockNodeManager
+		var nodeManager runtime.MockNodeManager
 		nodeManager.On("Stats", mock.Anything, mock.Anything).Return(node.Stats{}, nil).Maybe()
 
-		var containerManager containers.MockContainerManager
-		containerManager.On("GetByLabel", mock.Anything, mock.Anything, mock.Anything).
-			Return([]container.Container{}, nil).Maybe()
+		var taskManager runtime.MockRuntime
+		taskManager.On("Of", mock.Anything, mock.Anything).
+			Return([]task.Execution{}, nil).Maybe()
 
 		command := NewServeCommand()
 		command.configs.Name = consumerName
@@ -222,8 +222,8 @@ func TestServe(t *testing.T) {
 		// the background work a running worker does. It is set here because
 		// Run starts it, and a command assembled by hand has to be assembled
 		// completely.
-		command.logShipper = shipLogs.NewUseCase(&containerManager, &consumer, consumerName, command.logger)
-		command.taskHeartBeat = taskHeartbeat.NewUseCase(&containerManager, &consumer, consumerName, command.logger)
+		command.logShipper = shipLogs.NewUseCase(&taskManager, &consumer, consumerName, command.logger)
+		command.taskHeartBeat = taskHeartbeat.NewUseCase(&taskManager, &consumer, consumerName, command.logger)
 		command.workerHeartBeat = workerHeartbeat.NewUseCase(&consumer, &nodeManager, consumerName)
 
 		// nothing is listening for it, so the pool spends the test trying to

@@ -11,7 +11,7 @@ import (
 )
 
 // UseCase kills every service of a stack. A stack has no state of its own,
-// the command reaches the containers in it, one by one.
+// the command reaches the tasks in it, one by one.
 type UseCase struct {
 	stackRepository stack.Repository
 	taskRepository  task.Repository

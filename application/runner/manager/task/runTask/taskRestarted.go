@@ -10,7 +10,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/runner/task/events"
 )
 
-// TaskRestarted marks a container running again after a restart, and records
+// TaskRestarted marks a task running again after a restart, and records
 // the host ports it came back on, which a restart may change.
 type TaskRestarted struct {
 	taskRepository task.Repository
@@ -37,7 +37,7 @@ func (uc *TaskRestarted) Handle(ctx context.Context, data []byte) error {
 
 	t.CurrentState = task.Running
 	t.NodeName = taskRestarted.NodeName
-	t.ContainerID = taskRestarted.ContainerUUID
+	t.ExecutionID = taskRestarted.ExecutionID
 	t.StartedAt = taskRestarted.At
 	t.FinishedAt = time.Time{}
 

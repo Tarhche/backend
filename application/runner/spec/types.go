@@ -64,7 +64,7 @@ func (e *Environment) UnmarshalJSON(data []byte) error {
 		entries = append(entries, key+"="+value)
 	}
 
-	// a map has no order of its own, and a container's environment reads
+	// a map has no order of its own, and a task's environment reads
 	// better, and diffs better, sorted.
 	sort.Strings(entries)
 
@@ -73,11 +73,11 @@ func (e *Environment) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// Port is one entry of a compose ports list. Only the container side matters to
+// Port is one entry of a compose ports list. Only the task side matters to
 // the runner, which picks the host side itself, but the whole compose syntax is
 // accepted so a compose file can be pasted in unchanged.
 type Port struct {
-	Container port.Port
+	Task port.Port
 }
 
 // Ports is a compose ports list.
@@ -92,42 +92,42 @@ var (
 // was read in one place and passed on to another survives the journey. Without
 // it a port would go out as the struct it is held in and come back as nothing.
 func (p Port) MarshalJSON() ([]byte, error) {
-	return json.Marshal(uint16(p.Container))
+	return json.Marshal(uint16(p.Task))
 }
 
 func (p *Port) UnmarshalJSON(data []byte) error {
 	var number uint16
 	if err := json.Unmarshal(data, &number); err == nil {
-		p.Container = port.Port(number)
+		p.Task = port.Port(number)
 
 		return nil
 	}
 
 	var text string
 	if err := json.Unmarshal(data, &text); err != nil {
-		return fmt.Errorf("expected a port number or a \"host:container\" string, got %s", data)
+		return fmt.Errorf("expected a port number or a \"host:task\" string, got %s", data)
 	}
 
-	container, err := containerPort(text)
+	task, err := taskPort(text)
 	if err != nil {
 		return err
 	}
 
-	p.Container = container
+	p.Task = task
 
 	return nil
 }
 
-// containerPort takes the container side out of compose's port syntax:
+// taskPort takes the task side out of compose's port syntax:
 // "80", "8080:80", "127.0.0.1:8080:80", and any of those with a "/tcp" suffix.
-func containerPort(text string) (port.Port, error) {
+func taskPort(text string) (port.Port, error) {
 	text = strings.TrimSpace(text)
 
 	if protocol := strings.Index(text, "/"); protocol >= 0 {
 		text = text[:protocol]
 	}
 
-	// the container side is the last colon-separated part, whether the entry
+	// the task side is the last colon-separated part, whether the entry
 	// names a host port, a host address, or neither.
 	if colon := strings.LastIndex(text, ":"); colon >= 0 {
 		text = text[colon+1:]

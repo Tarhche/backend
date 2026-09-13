@@ -4,18 +4,18 @@ import (
 	"context"
 
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/runner/container"
+	"github.com/khanzadimahdi/testproject/domain/runner/task"
 )
 
-// UseCase reads what a container has written. The lines are kept against the
-// task, so they go back to the container's first line and stay readable after
+// UseCase reads what a task has written. The lines are kept against the
+// task, so they go back to the task's first line and stay readable after
 // it has stopped — until the task itself is deleted.
 type UseCase struct {
-	logRepository container.LogRepository
+	logRepository task.LogRepository
 	validator     domain.Validator
 }
 
-func NewUseCase(logRepository container.LogRepository, validator domain.Validator) *UseCase {
+func NewUseCase(logRepository task.LogRepository, validator domain.Validator) *UseCase {
 	return &UseCase{
 		logRepository: logRepository,
 		validator:     validator,

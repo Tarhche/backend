@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 
-	"github.com/khanzadimahdi/testproject/application/dashboard/runner/owners"
 	"github.com/khanzadimahdi/testproject/application/dashboard/runner/presenter"
 	"github.com/khanzadimahdi/testproject/domain"
 	runnerManager "github.com/khanzadimahdi/testproject/domain/runner/manager"
@@ -15,11 +14,11 @@ import (
 type UseCase struct {
 	runner        runnerManager.Client
 	validator     domain.Validator
-	owners        *owners.Directory
+	owners        *presenter.Directory
 	ingressDomain string
 }
 
-func NewUseCase(runner runnerManager.Client, validator domain.Validator, ownerDirectory *owners.Directory, ingressDomain string) *UseCase {
+func NewUseCase(runner runnerManager.Client, validator domain.Validator, ownerDirectory *presenter.Directory, ingressDomain string) *UseCase {
 	return &UseCase{
 		runner:        runner,
 		validator:     validator,

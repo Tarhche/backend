@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/runner/container"
+	"github.com/khanzadimahdi/testproject/domain/runner/task"
 )
 
 type Response struct {
@@ -19,7 +19,7 @@ type LogResponse struct {
 	At      time.Time `json:"at"`
 }
 
-func NewResponse(logs []container.Log) *Response {
+func NewResponse(logs []task.Log) *Response {
 	items := make([]LogResponse, len(logs))
 	for i, l := range logs {
 		items[i] = LogResponse{

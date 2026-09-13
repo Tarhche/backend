@@ -15,7 +15,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
 )
 
-// UseCase removes a stack and everything it owns: its containers, their logs,
+// UseCase removes a stack and everything it owns: its tasks, their logs,
 // and the private network its services shared.
 //
 // A service still running goes down with it. Deleting a stack is a request to

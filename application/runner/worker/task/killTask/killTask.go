@@ -28,7 +28,7 @@ func (h *KillTaskHandler) Handle(ctx context.Context, data []byte) error {
 
 	_, err := h.useCase.Execute(ctx, &Request{UUID: killRequested.UUID})
 	if errors.Is(err, domain.ErrNotExists) {
-		// the container is not on this node, or is already gone.
+		// the task is not on this node, or is already gone.
 		return nil
 	}
 

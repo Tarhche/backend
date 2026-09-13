@@ -14,11 +14,11 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// terminalHandler carries a terminal to the node holding the container.
+// terminalHandler carries a terminal to the node holding the task.
 //
 // It works out which node that is and proxies the connection there, and that is
 // all it does. Who may open a terminal is the node's to answer: it reads the
-// owner off the container and compares it with the token carried in this
+// owner off the task and compares it with the token carried in this
 // request, neither of which the ingress looks at. So this is a pipe that knows
 // an address, and nothing here has to be trusted for the answer to be right.
 type terminalHandler struct {
@@ -62,21 +62,21 @@ func NewTerminalHandler(
 	return h
 }
 
-// @Summary		Open a terminal in a container
-// @Description	carries a websocket to the node holding the container, which decides who may open one
+// @Summary		Open a terminal in a task
+// @Description	carries a websocket to the node holding the task, which decides who may open one
 // @Tags			runner ingress
-// @Param			uuid	path	string	true	"Container UUID"
+// @Param			uuid	path	string	true	"Task UUID"
 // @Success		101		{string}	string	"switching protocols"
 // @Failure		404		{object}	map[string]interface{}
 // @Failure		503		{object}	map[string]interface{}
-// @Router			/containers/{uuid}/attach [get]
+// @Router			/tasks/{uuid}/attach [get]
 func (h *terminalHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	uuid := r.PathValue("uuid")
 
 	t, err := h.resolver.GetOne(r.Context(), uuid)
 	switch {
 	case errors.Is(err, domain.ErrNotExists):
-		http.Error(rw, "no such container", http.StatusNotFound)
+		http.Error(rw, "no such task", http.StatusNotFound)
 
 		return
 	case err != nil:
@@ -87,7 +87,7 @@ func (h *terminalHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(t.NodeName) == 0 {
-		http.Error(rw, "the container has not been scheduled yet", http.StatusServiceUnavailable)
+		http.Error(rw, "the task has not been scheduled yet", http.StatusServiceUnavailable)
 
 		return
 	}
@@ -103,7 +103,7 @@ func (h *terminalHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	}
 
 	if !connected {
-		http.Error(rw, "the node holding this container is not connected", http.StatusServiceUnavailable)
+		http.Error(rw, "the node holding this task is not connected", http.StatusServiceUnavailable)
 
 		return
 	}

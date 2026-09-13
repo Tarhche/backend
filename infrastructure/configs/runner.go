@@ -12,10 +12,10 @@ const (
 	defaultRunnerWorkerPort    = 80
 	defaultRunnerIngressPort   = 80
 	defaultRunnerIngressDomain = "runner.localhost"
-	defaultRunnerMaxLogBytes   = 32 << 20 // 32 MB per container
+	defaultRunnerMaxLogBytes   = 32 << 20 // 32 MB per task
 	defaultRunnerWorkerCpu     = 0.5
 	defaultRunnerWorkerMemory  = 256 << 20 // 256 MB
-	defaultRunnerWorkerDisk    = 1 << 30   // 1 GB
+	defaultRunnerWorkerDisk    = 256 << 20 // 256 MB
 
 	defaultRunnerTunnelPort = 81
 
@@ -31,11 +31,11 @@ const (
 type RunnerManager struct {
 	Port int `usage:"specifies which port server should listen to." env:"SERVER_PORT" long:"port" short:"p"`
 
-	MaxLogBytes int64 `usage:"How much log one container may keep. Past it, further lines are dropped rather than stored." env:"RUNNER_MAX_LOG_BYTES" long:"max-log-bytes"`
+	MaxLogBytes int64 `usage:"How much log one task may keep. Past it, further lines are dropped rather than stored." env:"RUNNER_MAX_LOG_BYTES" long:"max-log-bytes"`
 
-	DefaultCpu    float64 `usage:"CPUs a container is limited to when its specification names no limit." env:"RUNNER_DEFAULT_CPU" long:"default-cpu"`
-	DefaultMemory uint64  `usage:"Memory, in bytes, a container is limited to when its specification names no limit." env:"RUNNER_DEFAULT_MEMORY" long:"default-memory"`
-	DefaultDisk   uint64  `usage:"Disk, in bytes, a container is limited to when its specification names no limit." env:"RUNNER_DEFAULT_DISK" long:"default-disk"`
+	DefaultCpu    float64 `usage:"CPUs a task is limited to when its specification names no limit." env:"RUNNER_DEFAULT_CPU" long:"default-cpu"`
+	DefaultMemory uint64  `usage:"Memory, in bytes, a task is limited to when its specification names no limit." env:"RUNNER_DEFAULT_MEMORY" long:"default-memory"`
+	DefaultDisk   uint64  `usage:"Disk, in bytes, a task is limited to when its specification names no limit." env:"RUNNER_DEFAULT_DISK" long:"default-disk"`
 }
 
 // NewRunnerManager returns the configuration of the serve-runner-manager
@@ -54,7 +54,7 @@ func NewRunnerManager() *RunnerManager {
 type RunnerIngress struct {
 	Port int `usage:"specifies which port server should listen to." env:"SERVER_PORT" long:"port" short:"p"`
 
-	Domain string `usage:"Domain a container's exposed ports are served on, without a leading dot. A request to a hostname under it is routed to the container the hostname names." env:"RUNNER_INGRESS_DOMAIN" long:"domain"`
+	Domain string `usage:"Domain a task's exposed ports are served on, without a leading dot. A request to a hostname under it is routed to the task the hostname names." env:"RUNNER_INGRESS_DOMAIN" long:"domain"`
 
 	TunnelPort int `usage:"Port the workers open their connections to. It carries nothing but them, so it is not the port requests arrive on." env:"RUNNER_TUNNEL_PORT" long:"tunnel-port"`
 
@@ -100,10 +100,10 @@ type RunnerWorker struct {
 	// so it is given the public half and nothing else.
 	PublicKey string `usage:"ECDSA public key, in PEM form, the access tokens are verified against. It is the public half of the key the blog signs them with." env:"PUBLIC_KEY" long:"public-key"`
 
-	// AdvertiseHost is where this worker reaches the ports its own containers
+	// AdvertiseHost is where this worker reaches the ports its own tasks
 	// publish. It is the docker daemon's host rather than this service's, which
 	// are not the same machine when the daemon is a service of its own.
-	AdvertiseHost string `usage:"Host this worker reaches its containers' published ports at, which is the docker daemon's own rather than this one." env:"RUNNER_WORKER_ADVERTISE_HOST" long:"advertise-host"`
+	AdvertiseHost string `usage:"Host this worker reaches its tasks' published ports at, which is the docker daemon's own rather than this one." env:"RUNNER_WORKER_ADVERTISE_HOST" long:"advertise-host"`
 
 	TunnelAddresses string `usage:"host:port of every ingress this worker opens connections to, separated by commas. It keeps a pool at each, so it is reachable through all of them." env:"RUNNER_TUNNEL_ADDRESSES" long:"tunnel-addresses"`
 

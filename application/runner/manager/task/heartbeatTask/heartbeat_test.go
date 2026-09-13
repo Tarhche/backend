@@ -12,7 +12,6 @@ import (
 	deletetask "github.com/khanzadimahdi/testproject/application/runner/manager/task/deleteTask"
 	killtask "github.com/khanzadimahdi/testproject/application/runner/manager/task/killTask"
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/runner/container"
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
 	"github.com/khanzadimahdi/testproject/domain/runner/task/events"
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
@@ -46,7 +45,7 @@ func beatAt(t *testing.T, state task.State, at time.Time) []byte {
 }
 
 // handler builds the heartbeat handler with the pieces it leans on.
-func handler(tasks task.Repository, producer domain.Producer, logs container.LogRepository) *Heartbeat {
+func handler(tasks task.Repository, producer domain.Producer, logs task.LogRepository) *Heartbeat {
 	words := &translator.TranslatorMock{}
 
 	return NewHeartbeatHandler(
@@ -60,7 +59,7 @@ func handler(tasks task.Repository, producer domain.Producer, logs container.Log
 func TestHeartbeat_Handle(t *testing.T) {
 	t.Parallel()
 
-	t.Run("a container that was only meant to run once is taken away when it finishes", func(t *testing.T) {
+	t.Run("a task that was only meant to run once is taken away when it finishes", func(t *testing.T) {
 		t.Parallel()
 
 		var (
@@ -83,7 +82,7 @@ func TestHeartbeat_Handle(t *testing.T) {
 		producer.AssertCalled(t, "Produce", mock.Anything, events.TaskDeletedName, mock.Anything)
 	})
 
-	t.Run("a container meant to keep running is left alone when it stops", func(t *testing.T) {
+	t.Run("a task meant to keep running is left alone when it stops", func(t *testing.T) {
 		t.Parallel()
 
 		var (
@@ -100,7 +99,7 @@ func TestHeartbeat_Handle(t *testing.T) {
 
 		require.NoError(t, handler(&tasks, &producer, logs).Handle(context.Background(), beat(t, task.Stopped)))
 
-		// a stopped service is still a container somebody can start again.
+		// a stopped service is still a task somebody can start again.
 		tasks.AssertNotCalled(t, "Delete", mock.Anything, mock.Anything)
 		producer.AssertNotCalled(t, "Produce", mock.Anything, events.TaskDeletedName, mock.Anything)
 		producer.AssertCalled(t, "Produce", mock.Anything, events.TaskStoppedName, mock.Anything)
@@ -268,7 +267,7 @@ func TestHeartbeat_Handle_failing(t *testing.T) {
 		producer.AssertNotCalled(t, "Produce", mock.Anything, events.TaskFailedName, mock.Anything)
 	})
 
-	t.Run("a container that has already failed is not answered again", func(t *testing.T) {
+	t.Run("a task that has already failed is not answered again", func(t *testing.T) {
 		t.Parallel()
 
 		var (
@@ -313,7 +312,7 @@ func TestHeartbeat_Handle_askingAgain(t *testing.T) {
 		return payload
 	}
 
-	// a container that has failed goes on saying so, and the node holding it
+	// a task that has failed goes on saying so, and the node holding it
 	// goes on reporting it: that is what asks for the next attempt once the
 	// wait between attempts is over.
 	failed := func(finishedAt time.Time) task.Task {
@@ -327,7 +326,7 @@ func TestHeartbeat_Handle_askingAgain(t *testing.T) {
 		}
 	}
 
-	t.Run("a container left long enough is asked about again", func(t *testing.T) {
+	t.Run("a task left long enough is asked about again", func(t *testing.T) {
 		t.Parallel()
 
 		var (
@@ -344,7 +343,7 @@ func TestHeartbeat_Handle_askingAgain(t *testing.T) {
 			Handle(context.Background(), beatOfFailure(t, 2)))
 	})
 
-	t.Run("a container that has just failed is not", func(t *testing.T) {
+	t.Run("a task that has just failed is not", func(t *testing.T) {
 		t.Parallel()
 
 		var (
@@ -365,7 +364,7 @@ func TestHeartbeat_Handle_askingAgain(t *testing.T) {
 func TestHeartbeat_Handle_comingBack(t *testing.T) {
 	t.Parallel()
 
-	t.Run("a container the runner gave up on is wanted again once it is running", func(t *testing.T) {
+	t.Run("a task the runner gave up on is wanted again once it is running", func(t *testing.T) {
 		t.Parallel()
 
 		var (

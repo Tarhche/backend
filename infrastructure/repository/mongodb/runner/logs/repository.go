@@ -8,7 +8,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
-	"github.com/khanzadimahdi/testproject/domain/runner/container"
+	"github.com/khanzadimahdi/testproject/domain/runner/task"
 )
 
 const (
@@ -20,13 +20,13 @@ const (
 	defaultLimit = 500
 )
 
-// LogsRepository keeps the lines containers write, for as long as the task that
+// LogsRepository keeps the lines tasks write, for as long as the task that
 // produced them exists.
 type LogsRepository struct {
 	collection *mongo.Collection
 }
 
-var _ container.LogRepository = &LogsRepository{}
+var _ task.LogRepository = &LogsRepository{}
 
 func NewRepository(database *mongo.Database) *LogsRepository {
 	if database == nil {
@@ -38,7 +38,7 @@ func NewRepository(database *mongo.Database) *LogsRepository {
 	}
 }
 
-// EnsureIndexes creates the index a container's log is read by. Reading always
+// EnsureIndexes creates the index a task's log is read by. Reading always
 // asks for one task's lines in the order they were written, so that is the one
 // index the collection needs.
 func (r *LogsRepository) EnsureIndexes(ctx context.Context) error {
@@ -55,7 +55,7 @@ func (r *LogsRepository) EnsureIndexes(ctx context.Context) error {
 // Append stores lines, skipping the ones already held. A line is identified by
 // its own content, so a worker replaying part of a stream it has already
 // shipped costs a no-op write rather than a duplicate.
-func (r *LogsRepository) Append(ctx context.Context, logs []container.Log) error {
+func (r *LogsRepository) Append(ctx context.Context, logs []task.Log) error {
 	if len(logs) == 0 {
 		return nil
 	}
@@ -81,8 +81,8 @@ func (r *LogsRepository) Append(ctx context.Context, logs []container.Log) error
 }
 
 // Get returns a task's lines written after the given moment, oldest first, so a
-// reader can page forward through a container's whole history.
-func (r *LogsRepository) Get(ctx context.Context, taskUUID string, after time.Time, limit uint) ([]container.Log, error) {
+// reader can page forward through a task's whole history.
+func (r *LogsRepository) Get(ctx context.Context, taskUUID string, after time.Time, limit uint) ([]task.Log, error) {
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
@@ -105,7 +105,7 @@ func (r *LogsRepository) Get(ctx context.Context, taskUUID string, after time.Ti
 	}
 	defer cur.Close(ctx)
 
-	items := make([]container.Log, 0, limit)
+	items := make([]task.Log, 0, limit)
 	for cur.Next(ctx) {
 		var l LogBson
 
@@ -119,7 +119,7 @@ func (r *LogsRepository) Get(ctx context.Context, taskUUID string, after time.Ti
 	return items, cur.Err()
 }
 
-// DeleteByTask drops everything a task ever wrote. Deleting the container is
+// DeleteByTask drops everything a task ever wrote. Deleting the task is
 // what ends its log, so this is called when the task itself goes.
 func (r *LogsRepository) DeleteByTask(ctx context.Context, taskUUID string) error {
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
@@ -131,7 +131,7 @@ func (r *LogsRepository) DeleteByTask(ctx context.Context, taskUUID string) erro
 }
 
 // Size reports how many bytes of content a task has stored, which is what the
-// manager caps a chatty container against.
+// manager caps a chatty task against.
 func (r *LogsRepository) Size(ctx context.Context, taskUUID string) (int64, error) {
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()

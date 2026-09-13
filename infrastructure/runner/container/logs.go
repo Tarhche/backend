@@ -13,7 +13,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	oteltrace "go.opentelemetry.io/otel/trace"
 
-	"github.com/khanzadimahdi/testproject/domain/runner/container"
+	"github.com/khanzadimahdi/testproject/domain/runner/task"
 	"github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
 )
 
@@ -29,9 +29,9 @@ const logLineLimit = 64 * 1024
 // Docker is asked to timestamp every line, so a caller can resume from where it
 // left off and the lines it reads twice can be recognised as ones it already
 // has.
-func (m *DockerManager) StreamLogs(ctx context.Context, containerUUID string, since time.Time, emit func(container.LogLine) error) error {
-	ctx, span := m.tracer.Start(ctx, "docker.container.logs.stream",
-		oteltrace.WithAttributes(attribute.String("container.id", containerUUID)),
+func (m *DockerManager) StreamLogs(ctx context.Context, containerUUID string, since time.Time, emit func(task.LogLine) error) error {
+	ctx, span := m.tracer.Start(ctx, "docker.task.logs.stream",
+		oteltrace.WithAttributes(attribute.String("task.id", containerUUID)),
 	)
 	defer span.End()
 
@@ -56,8 +56,8 @@ func (m *DockerManager) StreamLogs(ctx context.Context, containerUUID string, si
 	// them apart, writing to these one at a time. Emitting from inside Write is
 	// what keeps a container's output in the order it was produced, with no
 	// merging to do afterwards.
-	stdout := &lineWriter{stream: container.StreamStdout, emit: emit}
-	stderr := &lineWriter{stream: container.StreamStderr, emit: emit}
+	stdout := &lineWriter{stream: task.StreamStdout, emit: emit}
+	stderr := &lineWriter{stream: task.StreamStderr, emit: emit}
 
 	_, copyErr := stdcopy.StdCopy(stdout, stderr, readCloser)
 
@@ -83,8 +83,8 @@ func (m *DockerManager) StreamLogs(ctx context.Context, containerUUID string, si
 
 // lineWriter turns the bytes stdcopy hands it into whole lines and emits them.
 type lineWriter struct {
-	stream container.Stream
-	emit   func(container.LogLine) error
+	stream task.Stream
+	emit   func(task.LogLine) error
 	buffer bytes.Buffer
 	err    error
 }
@@ -142,7 +142,7 @@ func (w *lineWriter) write(line string) error {
 
 	at, content := splitTimestamp(line)
 
-	w.err = w.emit(container.LogLine{Stream: w.stream, Content: content, At: at})
+	w.err = w.emit(task.LogLine{Stream: w.stream, Content: content, At: at})
 
 	return w.err
 }

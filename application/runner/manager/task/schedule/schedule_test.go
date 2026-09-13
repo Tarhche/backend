@@ -53,7 +53,7 @@ func TestScheduler_On(t *testing.T) {
 		assert.Equal(t, "shop-abcde", event.StackSlug)
 	})
 
-	t.Run("a container of its own goes where it is asked to", func(t *testing.T) {
+	t.Run("a task of its own goes where it is asked to", func(t *testing.T) {
 		t.Parallel()
 
 		var (

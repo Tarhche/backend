@@ -17,7 +17,7 @@ import (
 var ErrMalformedForward = errors.New("tunnel: malformed forward")
 
 // defaultForwardHost is where a rule that names only a port looks for it. A
-// agent publishes its containers' ports on its own loopback, so that is what a
+// agent publishes its tasks' ports on its own loopback, so that is what a
 // bare port means.
 const defaultForwardHost = "127.0.0.1"
 

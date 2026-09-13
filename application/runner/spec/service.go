@@ -1,4 +1,4 @@
-// Package spec reads a container's specification in the shape a docker compose
+// Package spec reads a task's specification in the shape a docker compose
 // service has, so a block of a compose file can be handed to the runner as it
 // stands.
 //
@@ -14,7 +14,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
 )
 
-// Service is one container, in a compose service's shape.
+// Service is one task, in a compose service's shape.
 type Service struct {
 	Image       string        `json:"image"`
 	Command     StringOrSlice `json:"command,omitempty"`
@@ -24,13 +24,13 @@ type Service struct {
 	Ports       Ports         `json:"ports,omitempty"`
 	Restart     string        `json:"restart,omitempty"`
 
-	// ReadOnly makes the container's filesystem immutable, so nothing it runs
+	// ReadOnly makes the task's filesystem immutable, so nothing it runs
 	// can change the image it was started from. It is compose's read_only.
 	ReadOnly bool `json:"read_only,omitempty"`
 
-	// NetworkMode is how much of the network the container reaches: "none",
+	// NetworkMode is how much of the network the task reaches: "none",
 	// "isolated" or "public". It is not docker's own network_mode — the runner
-	// decides which networks a container joins — but it sits in the same place
+	// decides which networks a task joins — but it sits in the same place
 	// a compose file puts that decision.
 	NetworkMode string `json:"network_mode,omitempty"`
 
@@ -44,10 +44,10 @@ type Deploy struct {
 	RestartPolicy RestartPolicy `json:"restart_policy,omitempty"`
 }
 
-// RestartPolicy is how hard the runner tries to make a container what it was
+// RestartPolicy is how hard the runner tries to make a task what it was
 // asked to be.
 type RestartPolicy struct {
-	// MaxAttempts is how many times a container that failed is asked for
+	// MaxAttempts is how many times a task that failed is asked for
 	// again. Nothing at all leaves it to the runner, zero is not at all, and
 	// -1 never gives up.
 	MaxAttempts *int `json:"max_attempts,omitempty"`
@@ -76,7 +76,7 @@ var restartPolicies = map[string]struct{}{
 
 // Validate reports what is wrong with a service, under the field names the
 // client sent. The prefix names the service inside a stack, and is empty for a
-// container that stands on its own.
+// task that stands on its own.
 func (s *Service) Validate(prefix string) domain.ValidationErrors {
 	validationErrors := make(domain.ValidationErrors)
 
@@ -102,14 +102,14 @@ func (s *Service) Validate(prefix string) domain.ValidationErrors {
 	}
 
 	for _, p := range s.Ports {
-		if p.Container == 0 {
+		if p.Task == 0 {
 			validationErrors[field("ports")] = "invalid_value"
 
 			break
 		}
 	}
 
-	// a container with no network has nothing to publish a port on, so asking
+	// a task with no network has nothing to publish a port on, so asking
 	// for both is a contradiction rather than something to silently drop.
 	if len(s.Ports) > 0 && policy.IsValid() && !policy.AllowsPorts() {
 		validationErrors[field("ports")] = "ports_require_network"
@@ -136,20 +136,20 @@ func (s *Service) NetworkPolicy() network.Policy {
 	return network.Policy(s.NetworkMode)
 }
 
-// ExposedPorts are the container ports the runner publishes. Only the container
+// ExposedPorts are the task ports the runner publishes. Only the task
 // side of a compose port is honoured: the runner picks the host port itself,
-// and serves it on the container's own hostname.
+// and serves it on the task's own hostname.
 func (s *Service) ExposedPorts() []port.Port {
 	seen := make(map[port.Port]struct{}, len(s.Ports))
 	ports := make([]port.Port, 0, len(s.Ports))
 
 	for _, p := range s.Ports {
-		if _, duplicate := seen[p.Container]; duplicate {
+		if _, duplicate := seen[p.Task]; duplicate {
 			continue
 		}
 
-		seen[p.Container] = struct{}{}
-		ports = append(ports, p.Container)
+		seen[p.Task] = struct{}{}
+		ports = append(ports, p.Task)
 	}
 
 	return ports

@@ -10,7 +10,7 @@ import (
 )
 
 // dnsLabel is what a slug has to be, because it becomes the left-most part of
-// the hostname a container's ports are served on.
+// the hostname a task's ports are served on.
 var dnsLabel = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 
 func TestSanitize(t *testing.T) {
@@ -97,7 +97,7 @@ func TestGenerate(t *testing.T) {
 		assert.Regexp(t, dnsLabel, got)
 	})
 
-	t.Run("two containers of the same name get different slugs", func(t *testing.T) {
+	t.Run("two tasks of the same name get different slugs", func(t *testing.T) {
 		t.Parallel()
 
 		seen := make(map[string]struct{}, 500)

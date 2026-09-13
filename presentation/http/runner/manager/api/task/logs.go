@@ -22,7 +22,7 @@ func NewLogsHandler(useCase *gettasklogs.UseCase) *logsHandler {
 }
 
 // @Summary		Task logs
-// @Description	read what a container has written, from its first line onward
+// @Description	read what a task has written, from its first line onward
 // @Tags			runner tasks
 // @Accept			json
 // @Produce		json

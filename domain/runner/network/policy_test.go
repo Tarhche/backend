@@ -45,17 +45,17 @@ func TestAttachments(t *testing.T) {
 		want        []Attachment
 	}{
 		{
-			name:   "a standalone isolated container joins the shared internal network",
+			name:   "a standalone isolated task joins the shared internal network",
 			policy: PolicyIsolated,
 			want:   []Attachment{{Name: IsolatedNetworkName}},
 		},
 		{
-			name:   "a standalone public container also joins the bridge, which is what routes out",
+			name:   "a standalone public task also joins the bridge, which is what routes out",
 			policy: PolicyPublic,
 			want:   []Attachment{{Name: IsolatedNetworkName}, {Name: PublicNetworkName, Gateway: true}},
 		},
 		{
-			name:   "a container with no network joins nothing",
+			name:   "a task with no network joins nothing",
 			policy: PolicyNone,
 			want:   []Attachment{{Name: NoNetworkName}},
 		},
@@ -118,7 +118,7 @@ func TestAttachmentsGateway(t *testing.T) {
 		assert.Equal(t, []string{PublicNetworkName}, gateways)
 	}
 
-	// a container that cannot reach the internet needs no default route at all.
+	// a task that cannot reach the internet needs no default route at all.
 	for _, attachment := range Attachments(PolicyIsolated, "myapp-xkfqz", "web") {
 		assert.False(t, attachment.Gateway)
 	}

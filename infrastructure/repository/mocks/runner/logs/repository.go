@@ -5,31 +5,31 @@ import (
 	"sync"
 	"time"
 
-	"github.com/khanzadimahdi/testproject/domain/runner/container"
+	"github.com/khanzadimahdi/testproject/domain/runner/task"
 )
 
-// InMemoryLogRepository keeps a container's lines in memory, identifying each
+// InMemoryLogRepository keeps a task's lines in memory, identifying each
 // one the way the real repository does — by its own content — so that storing
 // the same line twice is a no-op here as well.
 type InMemoryLogRepository struct {
 	lock  sync.Mutex
-	lines map[string][]container.Log
+	lines map[string][]task.Log
 	seen  map[string]struct{}
 
 	// Fail, when set, is what every call reports instead of doing anything.
 	Fail error
 }
 
-var _ container.LogRepository = &InMemoryLogRepository{}
+var _ task.LogRepository = &InMemoryLogRepository{}
 
 func NewInMemoryRepository() *InMemoryLogRepository {
 	return &InMemoryLogRepository{
-		lines: make(map[string][]container.Log),
+		lines: make(map[string][]task.Log),
 		seen:  make(map[string]struct{}),
 	}
 }
 
-func (r *InMemoryLogRepository) Append(_ context.Context, logs []container.Log) error {
+func (r *InMemoryLogRepository) Append(_ context.Context, logs []task.Log) error {
 	if r.Fail != nil {
 		return r.Fail
 	}
@@ -50,7 +50,7 @@ func (r *InMemoryLogRepository) Append(_ context.Context, logs []container.Log) 
 	return nil
 }
 
-func (r *InMemoryLogRepository) Get(_ context.Context, taskUUID string, after time.Time, limit uint) ([]container.Log, error) {
+func (r *InMemoryLogRepository) Get(_ context.Context, taskUUID string, after time.Time, limit uint) ([]task.Log, error) {
 	if r.Fail != nil {
 		return nil, r.Fail
 	}
@@ -58,7 +58,7 @@ func (r *InMemoryLogRepository) Get(_ context.Context, taskUUID string, after ti
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
-	found := make([]container.Log, 0, len(r.lines[taskUUID]))
+	found := make([]task.Log, 0, len(r.lines[taskUUID]))
 	for _, l := range r.lines[taskUUID] {
 		if !after.IsZero() && !l.At.After(after) {
 			continue
@@ -88,7 +88,7 @@ func (r *InMemoryLogRepository) DeleteByTask(_ context.Context, taskUUID string)
 }
 
 // Size reports how many bytes a task has stored, which is what the manager caps
-// a chatty container against.
+// a chatty task against.
 func (r *InMemoryLogRepository) Size(_ context.Context, taskUUID string) (int64, error) {
 	if r.Fail != nil {
 		return 0, r.Fail

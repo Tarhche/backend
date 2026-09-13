@@ -36,7 +36,7 @@ type Response struct {
 	Retries       int                `json:"retries"`
 	TTL           time.Duration      `json:"ttl,omitempty"`
 
-	// Deadline is when a container that may only run for so long will be
+	// Deadline is when a task that may only run for so long will be
 	// stopped, as the node that made it set it.
 	Deadline time.Time `json:"deadline,omitempty"`
 
@@ -47,15 +47,15 @@ type Response struct {
 	CreatedAt     time.Time      `json:"created_at"`
 	StartedAt     time.Time      `json:"started_at"`
 	FinishedAt    time.Time      `json:"finished_at"`
-	ContainerID   string         `json:"container_id"`
-	ContainerLogs []byte         `json:"container_logs"`
+	ExecutionID   string         `json:"execution_id"`
+	ExecutionLogs []byte         `json:"execution_logs"`
 }
 
-// EndpointResponse is one of a container's exposed ports. The node and host
-// port behind it are the runner's own business, so only the container port
+// EndpointResponse is one of a task's exposed ports. The node and host
+// port behind it are the runner's own business, so only the task port
 // leaves it: a caller reaches a port through the ingress, by name.
 type EndpointResponse struct {
-	ContainerPort uint `json:"container_port"`
+	TaskPort uint `json:"task_port"`
 }
 
 type LimitsResponse struct {
@@ -115,12 +115,12 @@ func NewResponse(t task.Task) *Response {
 		StartedAt:     t.StartedAt,
 		Deadline:      t.Deadline,
 		FinishedAt:    t.FinishedAt,
-		ContainerID:   t.ContainerID,
-		ContainerLogs: t.ContainerLogs,
+		ExecutionID:   t.ExecutionID,
+		ExecutionLogs: t.ExecutionLogs,
 	}
 }
 
-// NewEndpoints reports which of a container's ports are actually reachable.
+// NewEndpoints reports which of a task's ports are actually reachable.
 func NewEndpoints(t task.Task) []EndpointResponse {
 	endpoints := make([]EndpointResponse, 0, len(t.Endpoints))
 	for _, e := range t.Endpoints {
@@ -128,7 +128,7 @@ func NewEndpoints(t task.Task) []EndpointResponse {
 			continue
 		}
 
-		endpoints = append(endpoints, EndpointResponse{ContainerPort: uint(e.ContainerPort)})
+		endpoints = append(endpoints, EndpointResponse{TaskPort: uint(e.TaskPort)})
 	}
 
 	return endpoints

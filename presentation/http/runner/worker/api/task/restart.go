@@ -20,7 +20,7 @@ func NewRestartHandler(useCase *restarttask.UseCase) *restartHandler {
 }
 
 // @Summary		Restart worker task
-// @Description	stop a task container and start it again in place
+// @Description	stop a task task and start it again in place
 // @Tags			runner tasks
 // @Accept			json
 // @Produce		json

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/runner/container"
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
 	"github.com/khanzadimahdi/testproject/domain/runner/task/events"
 	"github.com/khanzadimahdi/testproject/domain/translator"
@@ -13,14 +12,14 @@ import (
 
 type UseCase struct {
 	taskRepository  task.Repository
-	logRepository   container.LogRepository
+	logRepository   task.LogRepository
 	asyncCommandBus domain.Producer
 	translator      translator.Translator
 }
 
 func NewUseCase(
 	taskRepository task.Repository,
-	logRepository container.LogRepository,
+	logRepository task.LogRepository,
 	asyncCommandBus domain.Producer,
 	translator translator.Translator,
 ) *UseCase {
@@ -52,12 +51,12 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 
 	// the task goes first, because it is what the dashboard shows: a log that
 	// could not be swept is worth reporting, but it is not a reason to keep
-	// showing a container that is meant to be gone.
+	// showing a task that is meant to be gone.
 	if err := uc.taskRepository.Delete(ctx, request.UUID); err != nil {
 		return nil, err
 	}
 
-	// a container's log lives exactly as long as the container does.
+	// a task's log lives exactly as long as the task does.
 	return nil, uc.logRepository.DeleteByTask(ctx, request.UUID)
 }
 

@@ -25,7 +25,7 @@ func NewHealthHandler(useCase *checkhealth.UseCase) *healthHandler {
 // ServeHTTP reports whether the service can serve traffic, which means every
 // dependency it needs answers. it is shared by all services and carries no
 // openapi annotation on purpose: it lives outside the /api base path and exists
-// for the container healthcheck (and therefore the rolling deploy), not for API
+// for the task healthcheck (and therefore the rolling deploy), not for API
 // consumers.
 func (h *healthHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	rw.Header().Add("Content-Type", "text/plain; charset=utf-8")

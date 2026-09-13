@@ -15,6 +15,7 @@ type TaskScheduled struct {
 	Name          string         `json:"name"`
 	Slug          string         `json:"slug"`
 	Kind          string         `json:"kind"`
+	OwnerUUID     string         `json:"owner_uuid,omitempty"`
 	StackUUID     string         `json:"stack_uuid,omitempty"`
 	StackSlug     string         `json:"stack_slug,omitempty"`
 	ServiceName   string         `json:"service_name,omitempty"`
@@ -36,7 +37,7 @@ type TaskScheduled struct {
 	ReadOnly      bool           `json:"read_only"`
 	Interactive   bool           `json:"interactive,omitempty"`
 
-	// TTL is how long the container may run for once it is up, in
+	// TTL is how long the task may run for once it is up, in
 	// nanoseconds. Zero is no limit.
 	TTL            time.Duration  `json:"ttl,omitempty"`
 	Mounts         []Mount        `json:"mounts"`
@@ -44,7 +45,7 @@ type TaskScheduled struct {
 	NominatedNode  string         `json:"nominated_node"`
 
 	// Attempt is which try this is, counting from zero, and MaxRetries how
-	// many the container is worth. They travel with the request because that
+	// many the task is worth. They travel with the request because that
 	// is where the count is kept: the node hands them back with whatever
 	// becomes of this attempt, and nothing has to remember them meanwhile.
 	Attempt    int `json:"attempt"`
@@ -71,16 +72,16 @@ type ResourceLimits struct {
 	Disk   uint64  `json:"disk"`
 }
 
-// Endpoint is an exposed container port as the worker actually published it.
+// Endpoint is an exposed task port as the worker actually published it.
 type Endpoint struct {
-	ContainerPort port.Port `json:"container_port"`
-	HostPort      port.Port `json:"host_port"`
+	TaskPort port.Port `json:"task_port"`
+	HostPort port.Port `json:"host_port"`
 }
 
 // NewTaskScheduled is a task, as the node that is to run it needs to see it.
 //
 // It is built in one place because it is asked for in two: when a task is first
-// scheduled, and again whenever the runner finds a container that is not what it
+// scheduled, and again whenever the runner finds a task that is not what it
 // was asked to be.
 func NewTaskScheduled(t *task.Task, stackSlug string, nominatedNode string, attempt int) TaskScheduled {
 	return TaskScheduled{
@@ -88,6 +89,7 @@ func NewTaskScheduled(t *task.Task, stackSlug string, nominatedNode string, atte
 		Name:          t.Name,
 		Slug:          t.Slug,
 		Kind:          string(t.Kind),
+		OwnerUUID:     t.OwnerUUID,
 		StackUUID:     t.StackUUID,
 		StackSlug:     stackSlug,
 		ServiceName:   t.ServiceName,

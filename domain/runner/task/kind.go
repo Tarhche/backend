@@ -1,7 +1,7 @@
 package task
 
 // Kind tells a one-shot task apart from a long-running one. It decides how the
-// runner treats the container's lifetime: a job is expected to exit and have
+// runner treats the task's lifetime: a job is expected to exit and have
 // its whole log shipped back in the heartbeat, while a service is expected to
 // keep running, expose ports and stream its log as it is produced.
 type Kind string

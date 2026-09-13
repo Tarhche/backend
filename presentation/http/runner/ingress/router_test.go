@@ -15,18 +15,18 @@ func TestRouter(t *testing.T) {
 		})
 	}
 
-	router := NewRouter(answer("containers"), answer("ingress"), "runner.localhost")
+	router := NewRouter(answer("tasks"), answer("ingress"), "runner.localhost")
 
 	tests := []struct {
 		name string
 		host string
 		want string
 	}{
-		{name: "a container's hostname", host: "nginx-xkfqz.runner.localhost", want: "containers"},
-		{name: "a container's hostname with a port", host: "nginx-xkfqz.runner.localhost:8021", want: "containers"},
-		{name: "a container's hostname in capitals", host: "Nginx-XKFQZ.Runner.Localhost", want: "containers"},
+		{name: "a task's hostname", host: "nginx-xkfqz.runner.localhost", want: "tasks"},
+		{name: "a task's hostname with a port", host: "nginx-xkfqz.runner.localhost:8021", want: "tasks"},
+		{name: "a task's hostname in capitals", host: "Nginx-XKFQZ.Runner.Localhost", want: "tasks"},
 		{name: "the ingress's own name", host: "runner-ingress", want: "ingress"},
-		{name: "the domain itself names no container", host: "runner.localhost", want: "ingress"},
+		{name: "the domain itself names no task", host: "runner.localhost", want: "ingress"},
 		{name: "a hostname that only ends in something similar", host: "notrunner.localhost", want: "ingress"},
 		{name: "an address rather than a name", host: "127.0.0.1:8030", want: "ingress"},
 	}
@@ -44,7 +44,7 @@ func TestRouter(t *testing.T) {
 	}
 
 	t.Run("no domain at all routes everything to the ingress", func(t *testing.T) {
-		router := NewRouter(answer("containers"), answer("ingress"), "")
+		router := NewRouter(answer("tasks"), answer("ingress"), "")
 
 		request := httptest.NewRequest(http.MethodGet, "/api/tasks", nil)
 		request.Host = "nginx-xkfqz.runner.localhost"

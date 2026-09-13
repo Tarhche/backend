@@ -35,17 +35,17 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		}, nil
 	}
 
-	// the slug is the name this container is addressed by from outside: it is
+	// the slug is the name this task is addressed by from outside: it is
 	// unique, it survives restarts, and it is the left-most label of the
 	// hostname its ports are served on.
-	containerSlug, err := slug.Generate(request.Name)
+	taskSlug, err := slug.Generate(request.Name)
 	if err != nil {
 		return nil, err
 	}
 
 	t := task.Task{
 		Name:          request.Name,
-		Slug:          containerSlug,
+		Slug:          taskSlug,
 		Kind:          request.TaskKind(),
 		StackUUID:     request.StackUUID,
 		ServiceName:   request.ServiceName,
@@ -89,7 +89,7 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		return nil, err
 	}
 
-	return &Response{UUID: uuid, Slug: containerSlug}, nil
+	return &Response{UUID: uuid, Slug: taskSlug}, nil
 }
 
 func (uc *UseCase) publishTaskCreated(ctx context.Context, uuid string) error {

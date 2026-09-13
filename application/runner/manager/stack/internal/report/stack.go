@@ -45,7 +45,7 @@ type Service struct {
 }
 
 type Endpoint struct {
-	ContainerPort uint `json:"container_port"`
+	TaskPort uint `json:"task_port"`
 }
 
 // NewStack presents a stack together with its services, whose states are what
@@ -91,9 +91,9 @@ func expectedStateOf(s stack.Stack, services []task.Task) task.State {
 	return stack.ExpectedState(services)
 }
 
-// endpoints reports which container ports are reachable. The host and host port
-// a container sits on are the runner's own business, so they stay inside it —
-// a caller reaches a port by the container's hostname, not by its node.
+// endpoints reports which task ports are reachable. The host and host port
+// a task sits on are the runner's own business, so they stay inside it —
+// a caller reaches a port by the task's hostname, not by its node.
 func endpoints(t task.Task) []Endpoint {
 	items := make([]Endpoint, 0, len(t.Endpoints))
 	for _, e := range t.Endpoints {
@@ -101,7 +101,7 @@ func endpoints(t task.Task) []Endpoint {
 			continue
 		}
 
-		items = append(items, Endpoint{ContainerPort: uint(e.ContainerPort)})
+		items = append(items, Endpoint{TaskPort: uint(e.TaskPort)})
 	}
 
 	return items

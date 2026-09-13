@@ -66,21 +66,15 @@ const (
 	LanguagesUpdate = "languages.update"
 	LanguagesDelete = "languages.delete"
 
-	RunnerContainersIndex  = "runner.containers.index"
-	RunnerContainersCreate = "runner.containers.create"
-	RunnerContainersShow   = "runner.containers.show"
-	RunnerContainersDelete = "runner.containers.delete"
-	RunnerContainersLogs   = "runner.containers.logs"
+	RunnerTasksIndex  = "runner.tasks.index"
+	RunnerTasksCreate = "runner.tasks.create"
+	RunnerTasksShow   = "runner.tasks.show"
+	RunnerTasksDelete = "runner.tasks.delete"
+	RunnerTasksLogs   = "runner.tasks.logs"
+	RunnerTasksAttach = "runner.tasks.attach"
 
-	// RunnerContainersManage covers stopping, killing and restarting. They are
-	// one permission because they are one decision: whether somebody may
-	// change what a container is doing.
-	RunnerContainersManage = "runner.containers.manage"
-
-	// RunnerContainersAttach is a shell inside somebody's container, which is
-	// the strongest thing the dashboard offers, so it is never implied by any
-	// of the others.
-	RunnerContainersAttach = "runner.containers.attach"
+	// RunnerTasksManage covers stopping, killing and restarting.
+	RunnerTasksManage = "runner.tasks.manage"
 
 	RunnerStacksIndex  = "runner.stacks.index"
 	RunnerStacksCreate = "runner.stacks.create"
@@ -107,12 +101,12 @@ const (
 	SelfFilesIndex  = "self.files.index"
 	SelfFilesDelete = "self.files.delete"
 
-	SelfRunnerContainersIndex  = "self.runner.containers.index"
-	SelfRunnerContainersShow   = "self.runner.containers.show"
-	SelfRunnerContainersLogs   = "self.runner.containers.logs"
-	SelfRunnerContainersManage = "self.runner.containers.manage"
-	SelfRunnerContainersAttach = "self.runner.containers.attach"
-	SelfRunnerContainersDelete = "self.runner.containers.delete"
+	SelfRunnerTasksIndex  = "self.runner.tasks.index"
+	SelfRunnerTasksShow   = "self.runner.tasks.show"
+	SelfRunnerTasksLogs   = "self.runner.tasks.logs"
+	SelfRunnerTasksManage = "self.runner.tasks.manage"
+	SelfRunnerTasksAttach = "self.runner.tasks.attach"
+	SelfRunnerTasksDelete = "self.runner.tasks.delete"
 
 	SelfRunnerStacksIndex  = "self.runner.stacks.index"
 	SelfRunnerStacksShow   = "self.runner.stacks.show"

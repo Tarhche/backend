@@ -117,7 +117,7 @@ func TestTaskCreated_Handle(t *testing.T) {
 		require.NoError(t, handler.Handle(context.Background(), created(t, service.UUID)))
 	})
 
-	t.Run("a container of its own goes where it was nominated", func(t *testing.T) {
+	t.Run("a task of its own goes where it was nominated", func(t *testing.T) {
 		t.Parallel()
 
 		var (

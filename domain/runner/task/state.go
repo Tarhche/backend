@@ -52,8 +52,8 @@ const (
 	// Failed is the state of a task that is failed
 	Failed State = 7
 
-	// Restarting is the state of a task whose container is being restarted in
-	// place. The container keeps its identity, so this is not a trip back
+	// Restarting is the state of a task whose task is being restarted in
+	// place. The task keeps its identity, so this is not a trip back
 	// through scheduling.
 	Restarting State = 8
 )
@@ -87,7 +87,7 @@ func IsTerminalState(state State) bool {
 	return slices.Contains(terminalStates, state)
 }
 
-// inFlightStates are the states a container is passing through rather than
+// inFlightStates are the states a task is passing through rather than
 // resting in: something has been asked of it and has yet to happen.
 var inFlightStates = []State{
 	Created,
@@ -96,7 +96,7 @@ var inFlightStates = []State{
 	Restarting,
 }
 
-// IsInFlightState reports whether a container is on its way somewhere, which is
+// IsInFlightState reports whether a task is on its way somewhere, which is
 // not the same as being somewhere it should not be.
 func IsInFlightState(state State) bool {
 	return slices.Contains(inFlightStates, state)

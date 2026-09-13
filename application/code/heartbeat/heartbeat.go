@@ -1,8 +1,3 @@
-// Package heartbeat tells whoever ran a piece of code what became of it.
-//
-// A job the code runner started is named after the request that asked for it,
-// so what the runner says about that job is the answer to that request: the
-// output it wrote when it ran, or why it never got to run at all.
 package heartbeat
 
 import (
@@ -20,7 +15,7 @@ import (
 type heartbeat struct {
 	replyer domain.Replyer
 
-	// ingressDomain is what the runner answers a container's ports under, so
+	// ingressDomain is what the runner answers a task's ports under, so
 	// that an exposed port becomes an address a reader can open.
 	ingressDomain string
 
@@ -38,7 +33,7 @@ func NewHeartbeatHandler(replyer domain.Replyer, ingressDomain string, logger *s
 }
 
 // kindOf reads what a heartbeat is reporting on. One from before there were
-// kinds is a job, which is what every container here was.
+// kinds is a job, which is what every task here was.
 func kindOf(h *events.Heartbeat) task.Kind {
 	if kind := task.Kind(h.Kind); kind.IsValid() {
 		return kind
@@ -48,7 +43,7 @@ func kindOf(h *events.Heartbeat) task.Kind {
 }
 
 // deadline is when a snippet being watched will be stopped. The runner sets it
-// as the container is made and reports it with every beat; a snippet that is
+// as the task is made and reports it with every beat; a snippet that is
 // not running any more has none left to report.
 func deadline(h *events.Heartbeat, state task.State) *time.Time {
 	if !h.Interactive || state != task.Running || h.Deadline.IsZero() {
@@ -67,7 +62,7 @@ func (h *heartbeat) Handle(ctx context.Context, data []byte) error {
 	}
 
 	// a job is a piece of code somebody ran here, and its name is the request
-	// that asked for it. A service is a container from the dashboard, whose
+	// that asked for it. A service is a task from the dashboard, whose
 	// name is a name: answering it would be answering a request nobody made.
 	if kindOf(&heartbeat) != task.KindJob {
 		return nil
@@ -79,12 +74,12 @@ func (h *heartbeat) Handle(ctx context.Context, data []byte) error {
 	h.logger.Info("heartbeat received", "heartbeat", heartbeat)
 
 	response := &Response{
-		Name:          heartbeat.Name,
-		Logs:          heartbeat.Logs,
-		State:         taskState.String(),
-		ContainerUUID: heartbeat.UUID,
-		Endpoints:     h.endpoints(&heartbeat, taskState),
-		Deadline:      deadline(&heartbeat, taskState),
+		Name:      heartbeat.Name,
+		Logs:      heartbeat.Logs,
+		State:     taskState.String(),
+		TaskUUID:  heartbeat.UUID,
+		Endpoints: h.endpoints(&heartbeat, taskState),
+		Deadline:  deadline(&heartbeat, taskState),
 	}
 
 	payload, err := json.Marshal(response)
@@ -119,26 +114,18 @@ func (h *heartbeat) Handle(ctx context.Context, data []byte) error {
 	})
 }
 
-// endpoints are the addresses a running snippet answers on. A container that
-// has ended answers on none, so they go with it rather than being left on the
-// page pointing at nothing.
 func (h *heartbeat) endpoints(beat *events.Heartbeat, state task.State) []Endpoint {
 	if state != task.Running || len(beat.Slug) == 0 {
 		return nil
 	}
 
 	endpoints := make([]Endpoint, 0, len(beat.Endpoints))
-	for i, e := range beat.Endpoints {
-		// the first port answers on the container's bare name, and the rest
-		// carry their port in it: one name, one address.
-		host := fmt.Sprintf("%s-%d.%s", beat.Slug, e.ContainerPort, h.ingressDomain)
-		if i == 0 {
-			host = fmt.Sprintf("%s.%s", beat.Slug, h.ingressDomain)
-		}
+	for _, e := range beat.Endpoints {
+		host := fmt.Sprintf("%s-%d.%s", beat.Slug, e.TaskPort, h.ingressDomain)
 
 		endpoints = append(endpoints, Endpoint{
-			ContainerPort: uint(e.ContainerPort),
-			URL:           "http://" + host,
+			TaskPort: uint(e.TaskPort),
+			URL:      "http://" + host,
 		})
 	}
 

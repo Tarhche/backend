@@ -18,7 +18,7 @@ type workerNameProvider struct{}
 
 var _ provider.Provider = &workerNameProvider{}
 
-// NewWorkerNameProvider binds the worker name into the container so the worker
+// NewWorkerNameProvider binds the worker name into the task so the worker
 // providers can resolve it. It must be registered after the configs provider.
 func NewWorkerNameProvider() *workerNameProvider {
 	return &workerNameProvider{}

@@ -20,7 +20,6 @@ import (
 	managerRestartStack "github.com/khanzadimahdi/testproject/application/runner/manager/stack/restartStack"
 	managerRunStack "github.com/khanzadimahdi/testproject/application/runner/manager/stack/runStack"
 	managerStopStack "github.com/khanzadimahdi/testproject/application/runner/manager/stack/stopStack"
-	managerWatchStacks "github.com/khanzadimahdi/testproject/application/runner/manager/stack/watchStacks"
 	managerDeleteTask "github.com/khanzadimahdi/testproject/application/runner/manager/task/deleteTask"
 	managerGetTask "github.com/khanzadimahdi/testproject/application/runner/manager/task/getTask"
 	managerGetTaskLogs "github.com/khanzadimahdi/testproject/application/runner/manager/task/getTaskLogs"
@@ -33,7 +32,6 @@ import (
 	managerRunTask "github.com/khanzadimahdi/testproject/application/runner/manager/task/runTask"
 	"github.com/khanzadimahdi/testproject/application/runner/manager/task/schedule"
 	managerStopTask "github.com/khanzadimahdi/testproject/application/runner/manager/task/stopTask"
-	managerWatchTasks "github.com/khanzadimahdi/testproject/application/runner/manager/task/watchTasks"
 	"github.com/khanzadimahdi/testproject/domain"
 	nodeEvents "github.com/khanzadimahdi/testproject/domain/runner/node/events"
 	stackEvents "github.com/khanzadimahdi/testproject/domain/runner/stack/events"
@@ -149,13 +147,13 @@ func managerConsoleCommand(
 	stackRepository := stackrepository.NewRepository(database)
 	logRepository := logrepository.NewRepository(database)
 
-	// a container's log is only ever read one container at a time, in the
+	// a task's log is only ever read one task at a time, in the
 	// order it was written, so that is the index it needs.
 	if err := logRepository.EnsureIndexes(ctx); err != nil {
 		return nil, err
 	}
 
-	// the one place a container is handed to a node, whether it is being asked
+	// the one place a task is handed to a node, whether it is being asked
 	// for the first time, again, or after a failure.
 	taskSchedule := schedule.New(stackRepository, jetStreamProduceConsumer)
 
@@ -166,8 +164,6 @@ func managerConsoleCommand(
 	managerRestartTaskUseCase := managerRestartTask.NewUseCase(taskRepository, taskSchedule, jetStreamProduceConsumer, translator)
 	managerGetTaskUseCase := managerGetTask.NewUseCase(taskRepository)
 	managerGetTasksUseCase := managerGetTasks.NewUseCase(taskRepository)
-	managerWatchTasksUseCase := managerWatchTasks.NewUseCase(taskRepository)
-	managerWatchStacksUseCase := managerWatchStacks.NewUseCase(stackRepository, taskRepository)
 
 	// the manager's own heartbeat, which the serve command runs on a ticker.
 	if err := iocContainer.Bind(func() *managerReconcile.UseCase {
@@ -196,11 +192,10 @@ func managerConsoleCommand(
 
 	mux := http.NewServeMux()
 
-	// the container healthcheck probes this
+	// the task healthcheck probes this
 	mux.Handle("GET /health", healthAPI.NewHealthHandler(checkHealthUseCase))
 
 	mux.Handle("GET /api/tasks", managerTaskAPI.NewIndexHandler(managerGetTasksUseCase))
-	mux.Handle("GET /api/tasks/watch", managerTaskAPI.NewWatchHandler(managerWatchTasksUseCase, logger))
 	mux.Handle("GET /api/tasks/{uuid}", managerTaskAPI.NewShowHandler(managerGetTaskUseCase))
 	mux.Handle("DELETE /api/tasks/{uuid}", managerTaskAPI.NewDeleteHandler(managerDeleteTaskUseCase))
 	mux.Handle("POST /api/tasks/run", managerTaskAPI.NewRunHandler(managerRunTaskUseCase))
@@ -208,14 +203,12 @@ func managerConsoleCommand(
 	mux.Handle("POST /api/tasks/{uuid}/kill", managerTaskAPI.NewKillHandler(managerKillTaskUseCase))
 	mux.Handle("POST /api/tasks/{uuid}/restart", managerTaskAPI.NewRestartHandler(managerRestartTaskUseCase))
 	mux.Handle("GET /api/tasks/{uuid}/logs", managerTaskAPI.NewLogsHandler(managerGetTaskLogsUseCase))
-	mux.Handle("GET /api/tasks/{uuid}/logs/stream", managerTaskAPI.NewLogsStreamHandler(managerGetTaskLogsUseCase, logger))
 
-	// a long-running container is run from a compose service rather than from
+	// a long-running task is run from a compose service rather than from
 	// the flat shape a one-shot task takes.
-	mux.Handle("POST /api/containers/run", managerTaskAPI.NewRunContainerHandler(managerRunTaskUseCase, managerGetTaskUseCase, defaultLimits))
+	mux.Handle("POST /api/tasks/run", managerTaskAPI.NewRunTaskHandler(managerRunTaskUseCase, managerGetTaskUseCase, defaultLimits))
 
 	mux.Handle("GET /api/stacks", managerStackAPI.NewIndexHandler(managerGetStacksUseCase))
-	mux.Handle("GET /api/stacks/watch", managerStackAPI.NewWatchHandler(managerWatchStacksUseCase, logger))
 	mux.Handle("GET /api/stacks/{uuid}", managerStackAPI.NewShowHandler(managerGetStackUseCase))
 	mux.Handle("POST /api/stacks/run", managerStackAPI.NewRunHandler(managerRunStackUseCase, managerGetStackUseCase))
 	mux.Handle("POST /api/stacks/{uuid}/stop", managerStackAPI.NewStopHandler(managerStopStackUseCase))

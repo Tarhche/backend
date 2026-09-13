@@ -27,7 +27,7 @@ func TestOwners_Of(t *testing.T) {
 	t.Run("an id that names nobody is nobody", func(t *testing.T) {
 		t.Parallel()
 
-		// what the code runner puts on the containers it starts for whoever is
+		// what the code runner puts on the tasks it starts for whoever is
 		// reading a page, and what is left of an owner who has since gone.
 		assert.Equal(t, Owner{}, owners.Of("guest"))
 		assert.Equal(t, Owner{}, owners.Of(""))

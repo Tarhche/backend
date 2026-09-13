@@ -138,7 +138,7 @@ func TestRequest_Validate(t *testing.T) {
 			},
 		},
 		{
-			name: "a container with no network cannot expose a port",
+			name: "a task with no network cannot expose a port",
 			request: Request{
 				UUID:          "task-uuid-123",
 				Name:          "test-task",
@@ -173,7 +173,7 @@ func TestRequest_Validate(t *testing.T) {
 			},
 		},
 		{
-			name: "an isolated container may expose ports",
+			name: "an isolated task may expose ports",
 			request: Request{
 				UUID:          "task-uuid-123",
 				Name:          "test-task",

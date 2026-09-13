@@ -56,12 +56,12 @@ func TestTaskFailed_Handle(t *testing.T) {
 		assert.Empty(t, answer.Logs, "there is no output from something that never ran")
 	})
 
-	t.Run("a container that ran and failed speaks through its own output", func(t *testing.T) {
+	t.Run("a task that ran and failed speaks through its own output", func(t *testing.T) {
 		t.Parallel()
 
 		var replyer messagingMock.RecordingReplyer
 
-		// a failure with no reason is a container that ran: its heartbeat
+		// a failure with no reason is a task that ran: its heartbeat
 		// carries the log, and answering here would answer twice.
 		require.NoError(t, NewTaskFailedHandler(&replyer, discardLogger()).Handle(context.Background(), failure(t, events.TaskFailed{
 			UUID: "task-uuid",

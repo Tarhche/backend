@@ -1,6 +1,9 @@
-// Package client reaches the runner manager over HTTP, and over websockets for
-// the two things that are streams rather than answers: a container's log as it
-// is written, and a command running inside one.
+// Package client reaches the runner manager over HTTP.
+//
+// Everything it asks for is an answer: what is streamed rather than answered —
+// a task's output as it is written, what becomes of one, a command running
+// inside one — arrives another way, as the runner's own messages or through the
+// ingress.
 package client
 
 import (
@@ -17,7 +20,6 @@ import (
 	"time"
 
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/runner/container"
 	runnerManager "github.com/khanzadimahdi/testproject/domain/runner/manager"
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
 )
@@ -26,15 +28,7 @@ import (
 // so the wire mapping can build one without importing its own package.
 type managerStack = runnerManager.Stack
 
-// managerContainerChange and managerStackChange are the client's own names for
-// one change to a container and to a stack, for the same reason.
-type (
-	managerContainerChange = runnerManager.ContainerChange
-	managerStackChange     = runnerManager.StackChange
-)
-
-// requestTimeout bounds a call to the manager. It does not apply to the
-// streams, which are meant to stay open.
+// requestTimeout bounds a call to the manager.
 const requestTimeout = 15 * time.Second
 
 // Client is the runner manager, reached over its HTTP API.
@@ -46,7 +40,7 @@ type Client struct {
 var _ runnerManager.Client = &Client{}
 
 // New builds a client for the manager at baseURL, e.g. "http://runner-manager:80".
-// New builds a client for the manager. It answers about containers; reaching
+// New builds a client for the manager. It answers about tasks; reaching
 // one is the ingress's business and no longer passes through here.
 func New(baseURL string) (*Client, error) {
 	parsed, err := usable(baseURL, "runner manager")
@@ -73,7 +67,7 @@ func usable(raw string, what string) (*url.URL, error) {
 	return parsed, nil
 }
 
-func (c *Client) Containers(ctx context.Context, ownerUUID string, page uint) (runnerManager.Page[task.Task], error) {
+func (c *Client) Tasks(ctx context.Context, ownerUUID string, page uint) (runnerManager.Page[task.Task], error) {
 	var payload tasksPayload
 	if err := c.call(ctx, http.MethodGet, c.path("/api/tasks", listing(ownerUUID, page)), nil, &payload); err != nil {
 		return runnerManager.Page[task.Task]{}, err
@@ -91,7 +85,7 @@ func (c *Client) Containers(ctx context.Context, ownerUUID string, page uint) (r
 	}, nil
 }
 
-func (c *Client) Container(ctx context.Context, uuid string) (task.Task, error) {
+func (c *Client) Task(ctx context.Context, uuid string) (task.Task, error) {
 	var payload taskPayload
 	if err := c.call(ctx, http.MethodGet, c.path("/api/tasks/"+url.PathEscape(uuid), nil), nil, &payload); err != nil {
 		return task.Task{}, err
@@ -100,7 +94,7 @@ func (c *Client) Container(ctx context.Context, uuid string) (task.Task, error) 
 	return payload.toTask(), nil
 }
 
-func (c *Client) ContainerOf(ctx context.Context, ownerUUID string, uuid string) (task.Task, error) {
+func (c *Client) TaskOf(ctx context.Context, ownerUUID string, uuid string) (task.Task, error) {
 	query := url.Values{}
 	query.Set("owner", ownerUUID)
 
@@ -112,36 +106,36 @@ func (c *Client) ContainerOf(ctx context.Context, ownerUUID string, uuid string)
 	return payload.toTask(), nil
 }
 
-func (c *Client) RunContainer(ctx context.Context, spec runnerManager.ContainerSpec, ownerUUID string) (task.Task, error) {
+func (c *Client) RunTask(ctx context.Context, spec runnerManager.TaskSpec, ownerUUID string) (task.Task, error) {
 	body := map[string]any{"name": spec.Name, "owner_uuid": ownerUUID, "service": spec.Service}
 
 	var payload taskPayload
-	if err := c.call(ctx, http.MethodPost, c.path("/api/containers/run", nil), body, &payload); err != nil {
+	if err := c.call(ctx, http.MethodPost, c.path("/api/tasks/run", nil), body, &payload); err != nil {
 		return task.Task{}, err
 	}
 
 	return payload.toTask(), nil
 }
 
-func (c *Client) StopContainer(ctx context.Context, uuid string) error {
+func (c *Client) StopTask(ctx context.Context, uuid string) error {
 	return c.call(ctx, http.MethodPost, c.path("/api/tasks/"+url.PathEscape(uuid)+"/stop", nil), nil, nil)
 }
 
-func (c *Client) KillContainer(ctx context.Context, uuid string) error {
+func (c *Client) KillTask(ctx context.Context, uuid string) error {
 	return c.call(ctx, http.MethodPost, c.path("/api/tasks/"+url.PathEscape(uuid)+"/kill", nil), nil, nil)
 }
 
-func (c *Client) RestartContainer(ctx context.Context, uuid string) error {
+func (c *Client) RestartTask(ctx context.Context, uuid string) error {
 	return c.call(ctx, http.MethodPost, c.path("/api/tasks/"+url.PathEscape(uuid)+"/restart", nil), nil, nil)
 }
 
-// DeleteContainer removes a container whether or not it is still running: the
+// DeleteTask removes a task whether or not it is still running: the
 // dashboard's delete is a request to have it gone.
-func (c *Client) DeleteContainer(ctx context.Context, uuid string) error {
+func (c *Client) DeleteTask(ctx context.Context, uuid string) error {
 	return c.call(ctx, http.MethodDelete, c.path("/api/tasks/"+url.PathEscape(uuid), url.Values{"force": {"true"}}), nil, nil)
 }
 
-func (c *Client) ContainerLogs(ctx context.Context, uuid string, after time.Time, limit uint) ([]container.Log, error) {
+func (c *Client) TaskLogs(ctx context.Context, uuid string, after time.Time, limit uint) ([]task.Log, error) {
 	query := url.Values{}
 	if !after.IsZero() {
 		query.Set("after", after.UTC().Format(time.RFC3339Nano))
@@ -155,7 +149,7 @@ func (c *Client) ContainerLogs(ctx context.Context, uuid string, after time.Time
 		return nil, err
 	}
 
-	logs := make([]container.Log, len(payload.Items))
+	logs := make([]task.Log, len(payload.Items))
 	for i := range payload.Items {
 		logs[i] = payload.Items[i].toLog(uuid)
 	}
@@ -239,7 +233,7 @@ func (e *ValidationError) Error() string {
 	return fmt.Sprintf("the runner refused the request: %v", e.ValidationErrors)
 }
 
-// listing is what a page of somebody's containers or stacks is asked for by.
+// listing is what a page of somebody's tasks or stacks is asked for by.
 func listing(ownerUUID string, page uint) url.Values {
 	query := url.Values{"page": {strconv.FormatUint(uint64(page), 10)}}
 

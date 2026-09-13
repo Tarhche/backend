@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/runner/container"
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
 	"github.com/khanzadimahdi/testproject/domain/runner/task/events"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/runner/logs"
@@ -42,10 +41,10 @@ func discardLogger() *slog.Logger {
 
 func batch(taskUUID string, lines ...events.LogLine) []byte {
 	payload, err := json.Marshal(events.TaskLogged{
-		UUID:          taskUUID,
-		ContainerUUID: "container-id",
-		NodeName:      "runner-worker-01",
-		Lines:         lines,
+		UUID:        taskUUID,
+		ExecutionID: "task-id",
+		NodeName:    "runner-worker-01",
+		Lines:       lines,
 	})
 	if err != nil {
 		panic(err)
@@ -60,15 +59,15 @@ func TestTaskLogged_Handle(t *testing.T) {
 	first := time.Date(2026, 9, 2, 10, 0, 0, 0, time.UTC)
 	second := first.Add(time.Second)
 
-	t.Run("stores what a container wrote", func(t *testing.T) {
+	t.Run("stores what a task wrote", func(t *testing.T) {
 		t.Parallel()
 
 		repository := logs.NewInMemoryRepository()
 
 		require.NoError(t, NewTaskLogged(stillThere(), repository, 0, discardLogger()).Handle(context.Background(), batch(
 			"task-uuid",
-			events.LogLine{Stream: uint8(container.StreamStdout), Content: "listening on :80", At: first},
-			events.LogLine{Stream: uint8(container.StreamStderr), Content: "a warning", At: second},
+			events.LogLine{Stream: uint8(task.StreamStdout), Content: "listening on :80", At: first},
+			events.LogLine{Stream: uint8(task.StreamStderr), Content: "a warning", At: second},
 		)))
 
 		stored, err := repository.Get(context.Background(), "task-uuid", time.Time{}, 0)
@@ -76,9 +75,9 @@ func TestTaskLogged_Handle(t *testing.T) {
 		require.Len(t, stored, 2)
 
 		assert.Equal(t, "listening on :80", stored[0].Content)
-		assert.Equal(t, container.StreamStdout, stored[0].Stream)
-		assert.Equal(t, "container-id", stored[0].ContainerID)
-		assert.Equal(t, container.StreamStderr, stored[1].Stream)
+		assert.Equal(t, task.StreamStdout, stored[0].Stream)
+		assert.Equal(t, "task-id", stored[0].ExecutionID)
+		assert.Equal(t, task.StreamStderr, stored[1].Stream)
 	})
 
 	t.Run("a line shipped twice is stored once", func(t *testing.T) {
@@ -87,7 +86,7 @@ func TestTaskLogged_Handle(t *testing.T) {
 		repository := logs.NewInMemoryRepository()
 		handler := NewTaskLogged(stillThere(), repository, 0, discardLogger())
 
-		line := events.LogLine{Stream: uint8(container.StreamStdout), Content: "listening on :80", At: first}
+		line := events.LogLine{Stream: uint8(task.StreamStdout), Content: "listening on :80", At: first}
 
 		// a worker that has to pick a stream up again resumes from a timestamp
 		// it has already shipped, so the lines around that point arrive twice.
@@ -97,7 +96,7 @@ func TestTaskLogged_Handle(t *testing.T) {
 		assert.Equal(t, 1, repository.Count("task-uuid"))
 	})
 
-	t.Run("stops storing once a container has written its fill", func(t *testing.T) {
+	t.Run("stops storing once a task has written its fill", func(t *testing.T) {
 		t.Parallel()
 
 		repository := logs.NewInMemoryRepository()
@@ -107,26 +106,26 @@ func TestTaskLogged_Handle(t *testing.T) {
 		handler := NewTaskLogged(stillThere(), repository, 10, discardLogger())
 
 		require.NoError(t, handler.Handle(context.Background(), batch("task-uuid",
-			events.LogLine{Stream: uint8(container.StreamStdout), Content: "0123456789abc", At: first},
+			events.LogLine{Stream: uint8(task.StreamStdout), Content: "0123456789abc", At: first},
 		)))
 		require.NoError(t, handler.Handle(context.Background(), batch("task-uuid",
-			events.LogLine{Stream: uint8(container.StreamStdout), Content: "more", At: second},
+			events.LogLine{Stream: uint8(task.StreamStdout), Content: "more", At: second},
 		)))
 
 		assert.Equal(t, 1, repository.Count("task-uuid"))
 	})
 
-	t.Run("one container's fill does not silence another", func(t *testing.T) {
+	t.Run("one task's fill does not silence another", func(t *testing.T) {
 		t.Parallel()
 
 		repository := logs.NewInMemoryRepository()
 		handler := NewTaskLogged(stillThere(), repository, 10, discardLogger())
 
 		require.NoError(t, handler.Handle(context.Background(), batch("chatty",
-			events.LogLine{Stream: uint8(container.StreamStdout), Content: "0123456789abc", At: first},
+			events.LogLine{Stream: uint8(task.StreamStdout), Content: "0123456789abc", At: first},
 		)))
 		require.NoError(t, handler.Handle(context.Background(), batch("quiet",
-			events.LogLine{Stream: uint8(container.StreamStdout), Content: "hello", At: first},
+			events.LogLine{Stream: uint8(task.StreamStdout), Content: "hello", At: first},
 		)))
 
 		assert.Equal(t, 1, repository.Count("quiet"))
@@ -149,7 +148,7 @@ func TestTaskLogged_Handle(t *testing.T) {
 
 		require.NoError(t, NewTaskLogged(stillThere(), repository, 0, discardLogger()).Handle(context.Background(), batch(
 			"",
-			events.LogLine{Stream: uint8(container.StreamStdout), Content: "orphaned", At: first},
+			events.LogLine{Stream: uint8(task.StreamStdout), Content: "orphaned", At: first},
 		)))
 
 		assert.Equal(t, 0, repository.Count(""))
@@ -160,11 +159,11 @@ func TestTaskLogged_Handle(t *testing.T) {
 
 		repository := logs.NewInMemoryRepository()
 
-		// a worker has lines in hand when a container is deleted, and rows
+		// a worker has lines in hand when a task is deleted, and rows
 		// nothing owns would never be cleared by anything.
 		require.NoError(t, NewTaskLogged(gone(), repository, 0, discardLogger()).Handle(context.Background(), batch(
 			"task-uuid",
-			events.LogLine{Stream: uint8(container.StreamStdout), Content: "one last line", At: first},
+			events.LogLine{Stream: uint8(task.StreamStdout), Content: "one last line", At: first},
 		)))
 
 		assert.Equal(t, 0, repository.Count("task-uuid"))

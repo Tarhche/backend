@@ -48,7 +48,7 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 	return NewResponse(tasks, totalPages, currentPage), nil
 }
 
-// count is how many containers the listing covers: everybody's, or one
+// count is how many tasks the listing covers: everybody's, or one
 // person's.
 func (uc *UseCase) count(ctx context.Context, request *Request) (uint, error) {
 	if len(request.OwnerUUID) == 0 {
@@ -58,7 +58,7 @@ func (uc *UseCase) count(ctx context.Context, request *Request) (uint, error) {
 	return uc.taskRepository.CountByOwner(ctx, request.OwnerUUID)
 }
 
-// page is the containers themselves, of the same ones count counted.
+// page is the tasks themselves, of the same ones count counted.
 func (uc *UseCase) page(ctx context.Context, request *Request, offset uint) ([]task.Task, error) {
 	if len(request.OwnerUUID) == 0 {
 		return uc.taskRepository.GetAll(ctx, offset, limit)

@@ -30,13 +30,13 @@ func NewShowHandler(useCase *gettask.UseCase) *showHandler {
 // @Success		200		{object}	gettask.Response
 // @Failure		404		{object}	map[string]interface{}
 // @Failure		500		{object}	map[string]interface{}
-// @Param			owner	query	string	false	"Only this owner's container"
+// @Param			owner	query	string	false	"Only this owner's task"
 // @Router			/tasks/{uuid} [get]
 func (h *showHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	UUID := r.PathValue("uuid")
 
 	// an owner narrows it to that person's own, the way it narrows a listing:
-	// a container that is not theirs is not found.
+	// a task that is not theirs is not found.
 	response, err := h.show(r, UUID)
 
 	switch {
@@ -52,7 +52,7 @@ func (h *showHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// show reads the container, as anybody's or as one person's own.
+// show reads the task, as anybody's or as one person's own.
 func (h *showHandler) show(r *http.Request, UUID string) (*gettask.Response, error) {
 	if ownerUUID := r.URL.Query().Get("owner"); len(ownerUUID) > 0 {
 		return h.useCase.ExecuteOwn(r.Context(), ownerUUID, UUID)

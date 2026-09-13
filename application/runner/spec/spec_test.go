@@ -41,7 +41,7 @@ func TestServiceUnmarshalling(t *testing.T) {
 		// a map has no order, so the entries come out sorted.
 		assert.Equal(t, Environment{"APP_ENV=production", "TZ=UTC"}, service.Environment)
 
-		// only the container side of a port is honoured; the runner picks the
+		// only the task side of a port is honoured; the runner picks the
 		// host side itself.
 		assert.Equal(t, []port.Port{80, 443, 9000}, service.ExposedPorts())
 
@@ -68,7 +68,7 @@ func TestServiceUnmarshalling(t *testing.T) {
 		assert.Equal(t, ByteSize(1<<30), service.Deploy.Resources.Limits.Memory)
 	})
 
-	t.Run("a host-side range still names one container port", func(t *testing.T) {
+	t.Run("a host-side range still names one task port", func(t *testing.T) {
 		t.Parallel()
 
 		// the runner picks the host port itself, so whatever a compose file
@@ -79,7 +79,7 @@ func TestServiceUnmarshalling(t *testing.T) {
 		assert.Equal(t, []port.Port{80}, service.ExposedPorts())
 	})
 
-	t.Run("a duplicated container port is exposed once", func(t *testing.T) {
+	t.Run("a duplicated task port is exposed once", func(t *testing.T) {
 		t.Parallel()
 
 		var service Service
@@ -92,8 +92,8 @@ func TestServiceUnmarshalling(t *testing.T) {
 		t.Parallel()
 
 		testcases := map[string]string{
-			"a container port range":      `{"image": "a:1", "ports": ["8000-8010"]}`,
-			"a mapped container range":    `{"image": "a:1", "ports": ["8000-8010:80-90"]}`,
+			"a task port range":           `{"image": "a:1", "ports": ["8000-8010"]}`,
+			"a mapped task range":         `{"image": "a:1", "ports": ["8000-8010:80-90"]}`,
 			"a port that is text":         `{"image": "a:1", "ports": ["http"]}`,
 			"a command as an object":      `{"image": "a:1", "command": {"run": true}}`,
 			"an environment as a number":  `{"image": "a:1", "environment": 3}`,
@@ -167,13 +167,13 @@ func TestServiceValidate(t *testing.T) {
 			want:    domain.ValidationErrors{"network_mode": "invalid_network_policy"},
 		},
 		{
-			name:    "a port on a container with no network is a contradiction",
-			service: Service{Image: "a:1", NetworkMode: "none", Ports: Ports{{Container: 80}}},
+			name:    "a port on a task with no network is a contradiction",
+			service: Service{Image: "a:1", NetworkMode: "none", Ports: Ports{{Task: 80}}},
 			want:    domain.ValidationErrors{"ports": "ports_require_network"},
 		},
 		{
 			name:    "port zero is not a port",
-			service: Service{Image: "a:1", Ports: Ports{{Container: 0}}},
+			service: Service{Image: "a:1", Ports: Ports{{Task: 0}}},
 			want:    domain.ValidationErrors{"ports": "invalid_value"},
 		},
 	}

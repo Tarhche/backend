@@ -11,8 +11,9 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	oteltrace "go.opentelemetry.io/otel/trace"
 
-	"github.com/khanzadimahdi/testproject/domain/runner/container"
 	"github.com/khanzadimahdi/testproject/domain/runner/node"
+	"github.com/khanzadimahdi/testproject/domain/runner/task"
+	infraContainer "github.com/khanzadimahdi/testproject/infrastructure/runner/container"
 	"github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
 )
 
@@ -20,12 +21,12 @@ type DockerManager struct {
 	client *client.Client
 	tracer oteltrace.Tracer
 
-	containerManager container.Manager
+	containerManager task.Runtime
 }
 
 var _ node.Manager = &DockerManager{}
 
-func NewDockerManager(dockerHost string, containerManager container.Manager) (*DockerManager, error) {
+func NewDockerManager(dockerHost string, containerManager task.Runtime) (*DockerManager, error) {
 	cli, err := client.NewClientWithOpts(
 		client.WithHost(dockerHost),
 		client.WithAPIVersionNegotiation(),
@@ -44,7 +45,7 @@ func (m *DockerManager) Stats(ctx context.Context, nodeName string) (node.Stats,
 	defer span.End()
 
 	filter := filters.NewArgs()
-	filter.Add("label", container.NodeNameLabelKey+"="+nodeName)
+	filter.Add("label", infraContainer.NodeNameLabel+"="+nodeName)
 	filter.Add("status", "running")
 
 	containers, err := m.client.ContainerList(ctx, containerTypes.ListOptions{Filters: filter})
@@ -52,7 +53,7 @@ func (m *DockerManager) Stats(ctx context.Context, nodeName string) (node.Stats,
 		return node.Stats{}, trace.RecordError(span, err)
 	}
 
-	span.SetAttributes(attribute.Int("container.count", len(containers)))
+	span.SetAttributes(attribute.Int("task.count", len(containers)))
 
 	var aggregate node.Stats
 	for _, c := range containers {

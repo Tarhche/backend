@@ -4,13 +4,10 @@ package manager
 
 import (
 	"context"
-	"io"
-	"sync"
 	"time"
 
 	"github.com/stretchr/testify/mock"
 
-	"github.com/khanzadimahdi/testproject/domain/runner/container"
 	runnerManager "github.com/khanzadimahdi/testproject/domain/runner/manager"
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
 )
@@ -21,80 +18,56 @@ type MockClient struct {
 
 var _ runnerManager.Client = &MockClient{}
 
-func (m *MockClient) Containers(ctx context.Context, ownerUUID string, page uint) (runnerManager.Page[task.Task], error) {
+func (m *MockClient) Tasks(ctx context.Context, ownerUUID string, page uint) (runnerManager.Page[task.Task], error) {
 	args := m.Called(ctx, ownerUUID, page)
 
 	return args.Get(0).(runnerManager.Page[task.Task]), args.Error(1)
 }
 
-func (m *MockClient) Container(ctx context.Context, uuid string) (task.Task, error) {
+func (m *MockClient) Task(ctx context.Context, uuid string) (task.Task, error) {
 	args := m.Called(ctx, uuid)
 
 	return args.Get(0).(task.Task), args.Error(1)
 }
 
-func (m *MockClient) ContainerOf(ctx context.Context, ownerUUID string, uuid string) (task.Task, error) {
+func (m *MockClient) TaskOf(ctx context.Context, ownerUUID string, uuid string) (task.Task, error) {
 	args := m.Mock.Called(ctx, ownerUUID, uuid)
 
 	return args.Get(0).(task.Task), args.Error(1)
 }
 
-func (m *MockClient) RunContainer(ctx context.Context, spec runnerManager.ContainerSpec, ownerUUID string) (task.Task, error) {
+func (m *MockClient) RunTask(ctx context.Context, spec runnerManager.TaskSpec, ownerUUID string) (task.Task, error) {
 	args := m.Called(ctx, spec, ownerUUID)
 
 	return args.Get(0).(task.Task), args.Error(1)
 }
 
-func (m *MockClient) StopContainer(ctx context.Context, uuid string) error {
+func (m *MockClient) StopTask(ctx context.Context, uuid string) error {
 	return m.Called(ctx, uuid).Error(0)
 }
 
-func (m *MockClient) KillContainer(ctx context.Context, uuid string) error {
+func (m *MockClient) KillTask(ctx context.Context, uuid string) error {
 	return m.Called(ctx, uuid).Error(0)
 }
 
-func (m *MockClient) RestartContainer(ctx context.Context, uuid string) error {
+func (m *MockClient) RestartTask(ctx context.Context, uuid string) error {
 	return m.Called(ctx, uuid).Error(0)
 }
 
-func (m *MockClient) DeleteContainer(ctx context.Context, uuid string) error {
+func (m *MockClient) DeleteTask(ctx context.Context, uuid string) error {
 	return m.Called(ctx, uuid).Error(0)
 }
 
-func (m *MockClient) ContainerLogs(ctx context.Context, uuid string, after time.Time, limit uint) ([]container.Log, error) {
+func (m *MockClient) TaskLogs(ctx context.Context, uuid string, after time.Time, limit uint) ([]task.Log, error) {
 	args := m.Called(ctx, uuid, after, limit)
 
-	return args.Get(0).([]container.Log), args.Error(1)
-}
-
-func (m *MockClient) WatchContainers(ctx context.Context) (runnerManager.ContainerStream, error) {
-	args := m.Called(ctx)
-
-	stream, _ := args.Get(0).(runnerManager.ContainerStream)
-
-	return stream, args.Error(1)
-}
-
-func (m *MockClient) FollowContainerLogs(ctx context.Context, uuid string, after time.Time) (runnerManager.LogStream, error) {
-	args := m.Called(ctx, uuid, after)
-
-	stream, _ := args.Get(0).(runnerManager.LogStream)
-
-	return stream, args.Error(1)
+	return args.Get(0).([]task.Log), args.Error(1)
 }
 
 func (m *MockClient) Stacks(ctx context.Context, ownerUUID string, page uint) (runnerManager.Page[runnerManager.Stack], error) {
 	args := m.Called(ctx, ownerUUID, page)
 
 	return args.Get(0).(runnerManager.Page[runnerManager.Stack]), args.Error(1)
-}
-
-func (m *MockClient) WatchStacks(ctx context.Context) (runnerManager.StackStream, error) {
-	args := m.Called(ctx)
-
-	stream, _ := args.Get(0).(runnerManager.StackStream)
-
-	return stream, args.Error(1)
 }
 
 func (m *MockClient) Stack(ctx context.Context, uuid string) (runnerManager.Stack, error) {
@@ -129,157 +102,4 @@ func (m *MockClient) RestartStack(ctx context.Context, uuid string) error {
 
 func (m *MockClient) DeleteStack(ctx context.Context, uuid string) error {
 	return m.Called(ctx, uuid).Error(0)
-}
-
-// FakeContainerStream is what happens to the containers, without a runner.
-type FakeContainerStream struct {
-	changes chan runnerManager.ContainerChange
-
-	lock   sync.Mutex
-	closed bool
-}
-
-var _ runnerManager.ContainerStream = &FakeContainerStream{}
-
-func NewFakeContainerStream() *FakeContainerStream {
-	return &FakeContainerStream{changes: make(chan runnerManager.ContainerChange, 16)}
-}
-
-// Emit gives the reader a change, as a container becoming something else would.
-func (s *FakeContainerStream) Emit(change runnerManager.ContainerChange) {
-	s.changes <- change
-}
-
-func (s *FakeContainerStream) Next(ctx context.Context) (runnerManager.ContainerChange, error) {
-	select {
-	case change, ok := <-s.changes:
-		if !ok {
-			return runnerManager.ContainerChange{}, io.EOF
-		}
-
-		return change, nil
-	case <-ctx.Done():
-		return runnerManager.ContainerChange{}, io.EOF
-	}
-}
-
-func (s *FakeContainerStream) Close() error {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-
-	if !s.closed {
-		s.closed = true
-		close(s.changes)
-	}
-
-	return nil
-}
-
-func (s *FakeContainerStream) IsClosed() bool {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-
-	return s.closed
-}
-
-// FakeStackStream is what happens to the stacks, without a runner.
-type FakeStackStream struct {
-	changes chan runnerManager.StackChange
-
-	lock   sync.Mutex
-	closed bool
-}
-
-var _ runnerManager.StackStream = &FakeStackStream{}
-
-func NewFakeStackStream() *FakeStackStream {
-	return &FakeStackStream{changes: make(chan runnerManager.StackChange, 16)}
-}
-
-// Emit gives the reader a change, as a stack becoming something else would.
-func (s *FakeStackStream) Emit(change runnerManager.StackChange) {
-	s.changes <- change
-}
-
-func (s *FakeStackStream) Next(ctx context.Context) (runnerManager.StackChange, error) {
-	select {
-	case change, ok := <-s.changes:
-		if !ok {
-			return runnerManager.StackChange{}, io.EOF
-		}
-
-		return change, nil
-	case <-ctx.Done():
-		return runnerManager.StackChange{}, io.EOF
-	}
-}
-
-func (s *FakeStackStream) Close() error {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-
-	if !s.closed {
-		s.closed = true
-		close(s.changes)
-	}
-
-	return nil
-}
-
-func (s *FakeStackStream) IsClosed() bool {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-
-	return s.closed
-}
-
-// FakeLogStream is a container's output, without a container.
-type FakeLogStream struct {
-	lines chan container.Log
-
-	lock   sync.Mutex
-	closed bool
-}
-
-var _ runnerManager.LogStream = &FakeLogStream{}
-
-func NewFakeLogStream() *FakeLogStream {
-	return &FakeLogStream{lines: make(chan container.Log, 16)}
-}
-
-// Emit gives the reader a line, as a container writing one would.
-func (s *FakeLogStream) Emit(log container.Log) {
-	s.lines <- log
-}
-
-func (s *FakeLogStream) Next(ctx context.Context) (container.Log, error) {
-	select {
-	case line, ok := <-s.lines:
-		if !ok {
-			return container.Log{}, io.EOF
-		}
-
-		return line, nil
-	case <-ctx.Done():
-		return container.Log{}, io.EOF
-	}
-}
-
-func (s *FakeLogStream) Close() error {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-
-	if !s.closed {
-		s.closed = true
-		close(s.lines)
-	}
-
-	return nil
-}
-
-func (s *FakeLogStream) IsClosed() bool {
-	s.lock.Lock()
-	defer s.lock.Unlock()
-
-	return s.closed
 }

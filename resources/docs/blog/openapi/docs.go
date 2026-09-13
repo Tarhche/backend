@@ -2565,283 +2565,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/dashboard/my/runner/containers": {
-            "get": {
-                "description": "paginated list of the containers the current user owns",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "dashboard runner"
-                ],
-                "summary": "List my containers",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "default": 1,
-                        "description": "Page",
-                        "name": "page",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/getusercontainers.Response"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/dashboard/my/runner/containers/{uuid}": {
-            "get": {
-                "description": "one of the containers the current user owns",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "dashboard runner"
-                ],
-                "summary": "Show own container",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Container UUID",
-                        "name": "uuid",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/getusercontainer.Response"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "description": "stop and remove one of your own containers",
-                "tags": [
-                    "dashboard runner"
-                ],
-                "summary": "Delete own container",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Container UUID",
-                        "name": "uuid",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "204": {
-                        "description": "No Content",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/dashboard/my/runner/containers/{uuid}/kill": {
-            "post": {
-                "description": "stop one of your own containers at once",
-                "tags": [
-                    "dashboard runner"
-                ],
-                "summary": "Kill own container",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Container UUID",
-                        "name": "uuid",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "202": {
-                        "description": "Accepted",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/dashboard/my/runner/containers/{uuid}/logs": {
-            "get": {
-                "description": "what one of your own containers has written",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "dashboard runner"
-                ],
-                "summary": "Own container logs",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Container UUID",
-                        "name": "uuid",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Only lines written after this time (RFC3339)",
-                        "name": "after",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "How many lines",
-                        "name": "limit",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/getusercontainerlogs.Response"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/dashboard/my/runner/containers/{uuid}/restart": {
-            "post": {
-                "description": "restart one of your own containers",
-                "tags": [
-                    "dashboard runner"
-                ],
-                "summary": "Restart own container",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Container UUID",
-                        "name": "uuid",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "202": {
-                        "description": "Accepted",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/dashboard/my/runner/containers/{uuid}/stop": {
-            "post": {
-                "description": "stop one of your own containers",
-                "tags": [
-                    "dashboard runner"
-                ],
-                "summary": "Stop own container",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Container UUID",
-                        "name": "uuid",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "202": {
-                        "description": "Accepted",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
         "/dashboard/my/runner/stacks": {
             "get": {
                 "description": "paginated list of the stacks the current user owns",
@@ -3038,6 +2761,283 @@ const docTemplate = `{
                     {
                         "type": "string",
                         "description": "Stack UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/my/runner/tasks": {
+            "get": {
+                "description": "paginated list of the tasks the current user owns",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard runner"
+                ],
+                "summary": "List my tasks",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page",
+                        "name": "page",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/getusertasks.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/my/runner/tasks/{uuid}": {
+            "get": {
+                "description": "one of the tasks the current user owns",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard runner"
+                ],
+                "summary": "Show own task",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Task UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/getusertask.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "stop and remove one of your own tasks",
+                "tags": [
+                    "dashboard runner"
+                ],
+                "summary": "Delete own task",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Task UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/my/runner/tasks/{uuid}/kill": {
+            "post": {
+                "description": "stop one of your own tasks at once",
+                "tags": [
+                    "dashboard runner"
+                ],
+                "summary": "Kill own task",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Task UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/my/runner/tasks/{uuid}/logs": {
+            "get": {
+                "description": "what one of your own tasks has written",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard runner"
+                ],
+                "summary": "Own task logs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Task UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Only lines written after this time (RFC3339)",
+                        "name": "after",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "How many lines",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/getusertasklogs.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/my/runner/tasks/{uuid}/restart": {
+            "post": {
+                "description": "restart one of your own tasks",
+                "tags": [
+                    "dashboard runner"
+                ],
+                "summary": "Restart own task",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Task UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/my/runner/tasks/{uuid}/stop": {
+            "post": {
+                "description": "stop one of your own tasks",
+                "tags": [
+                    "dashboard runner"
+                ],
+                "summary": "Stop own task",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Task UUID",
                         "name": "uuid",
                         "in": "path",
                         "required": true
@@ -3489,322 +3489,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/dashboard/runner/containers": {
-            "get": {
-                "description": "paginated list of the containers the runner is holding",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "dashboard runner"
-                ],
-                "summary": "List containers",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "default": 1,
-                        "description": "Page",
-                        "name": "page",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/getContainers.Response"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            },
-            "post": {
-                "description": "run one long-running container from a docker compose service specification",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "dashboard runner"
-                ],
-                "summary": "Run a container",
-                "parameters": [
-                    {
-                        "description": "Container specification",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/runContainer.Request"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Created",
-                        "schema": {
-                            "$ref": "#/definitions/runContainer.Response"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/dashboard/runner/containers/{uuid}": {
-            "get": {
-                "description": "retrieve one container, with the addresses its ports are served on",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "dashboard runner"
-                ],
-                "summary": "Get container",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Container UUID",
-                        "name": "uuid",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/getContainer.Response"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "description": "remove a container and everything it holds: its ports, its log and the container itself",
-                "tags": [
-                    "dashboard runner"
-                ],
-                "summary": "Delete container",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Container UUID",
-                        "name": "uuid",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "204": {
-                        "description": "No Content",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/dashboard/runner/containers/{uuid}/kill": {
-            "post": {
-                "description": "stop a container at once, without a grace period",
-                "tags": [
-                    "dashboard runner"
-                ],
-                "summary": "Kill container",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Container UUID",
-                        "name": "uuid",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "202": {
-                        "description": "Accepted",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/dashboard/runner/containers/{uuid}/logs": {
-            "get": {
-                "description": "read what a container has written, from its first line onward",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "dashboard runner"
-                ],
-                "summary": "Container logs",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Container UUID",
-                        "name": "uuid",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Only lines written after this moment (RFC3339)",
-                        "name": "after",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "How many lines to return",
-                        "name": "limit",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/getContainerLogs.Response"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/dashboard/runner/containers/{uuid}/restart": {
-            "post": {
-                "description": "stop a container and start it again in place",
-                "tags": [
-                    "dashboard runner"
-                ],
-                "summary": "Restart container",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Container UUID",
-                        "name": "uuid",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "202": {
-                        "description": "Accepted",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/dashboard/runner/containers/{uuid}/stop": {
-            "post": {
-                "description": "stop a container, giving it a moment to shut down on its own",
-                "tags": [
-                    "dashboard runner"
-                ],
-                "summary": "Stop container",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Container UUID",
-                        "name": "uuid",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "202": {
-                        "description": "Accepted",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
         "/dashboard/runner/stacks": {
             "get": {
                 "description": "paginated list of the stacks the runner is holding",
@@ -3936,7 +3620,7 @@ const docTemplate = `{
                 }
             },
             "delete": {
-                "description": "remove a stack and everything it holds: its ports, its log and the container itself",
+                "description": "remove a stack and everything it holds: its ports, its log and the task itself",
                 "tags": [
                     "dashboard runner"
                 ],
@@ -4047,6 +3731,322 @@ const docTemplate = `{
                     {
                         "type": "string",
                         "description": "Stack UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/runner/tasks": {
+            "get": {
+                "description": "paginated list of the tasks the runner is holding",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard runner"
+                ],
+                "summary": "List tasks",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page",
+                        "name": "page",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/getTasks.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "run one long-running task from a docker compose service specification",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard runner"
+                ],
+                "summary": "Run a task",
+                "parameters": [
+                    {
+                        "description": "Task specification",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_runner_task_runTask.Request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_runner_task_runTask.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/runner/tasks/{uuid}": {
+            "get": {
+                "description": "retrieve one task, with the addresses its ports are served on",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard runner"
+                ],
+                "summary": "Get task",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Task UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/getTask.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "remove a task and everything it holds: its ports, its log and the task itself",
+                "tags": [
+                    "dashboard runner"
+                ],
+                "summary": "Delete task",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Task UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/runner/tasks/{uuid}/kill": {
+            "post": {
+                "description": "stop a task at once, without a grace period",
+                "tags": [
+                    "dashboard runner"
+                ],
+                "summary": "Kill task",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Task UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/runner/tasks/{uuid}/logs": {
+            "get": {
+                "description": "read what a task has written, from its first line onward",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard runner"
+                ],
+                "summary": "Task logs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Task UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Only lines written after this moment (RFC3339)",
+                        "name": "after",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "How many lines to return",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_runner_task_getTaskLogs.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/runner/tasks/{uuid}/restart": {
+            "post": {
+                "description": "stop a task and start it again in place",
+                "tags": [
+                    "dashboard runner"
+                ],
+                "summary": "Restart task",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Task UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/runner/tasks/{uuid}/stop": {
+            "post": {
+                "description": "stop a task, giving it a moment to shut down on its own",
+                "tags": [
+                    "dashboard runner"
+                ],
+                "summary": "Stop task",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Task UUID",
                         "name": "uuid",
                         "in": "path",
                         "required": true
@@ -5110,140 +5110,6 @@ const docTemplate = `{
                 }
             }
         },
-        "getContainer.Response": {
-            "type": "object",
-            "properties": {
-                "command": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "created_at": {
-                    "type": "string"
-                },
-                "deadline": {
-                    "description": "Deadline is when a container that is only allowed to run for so long\nwill be stopped. A container with no limit of its own has none.",
-                    "type": "string"
-                },
-                "endpoints": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/presenter.Endpoint"
-                    }
-                },
-                "entrypoint": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "environment": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "expected_state": {
-                    "type": "string"
-                },
-                "finished_at": {
-                    "type": "string"
-                },
-                "image": {
-                    "type": "string"
-                },
-                "max_retries": {
-                    "description": "MaxRetries is how many times a container that fails is asked for again\nbefore the runner gives up on it. -1 never gives up. Retries is how many\nof those have happened, so a container that keeps failing can say what is\nbeing done about it.",
-                    "type": "integer"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "owner": {
-                    "description": "Owner is who asked for this container.",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/presenter.Owner"
-                        }
-                    ]
-                },
-                "read_only": {
-                    "type": "boolean"
-                },
-                "reason": {
-                    "description": "Reason is why a container failed, when the runner can say so.",
-                    "type": "string"
-                },
-                "resource_limits": {
-                    "$ref": "#/definitions/presenter.Limits"
-                },
-                "retries": {
-                    "type": "integer"
-                },
-                "service_name": {
-                    "type": "string"
-                },
-                "slug": {
-                    "type": "string"
-                },
-                "stack_uuid": {
-                    "type": "string"
-                },
-                "started_at": {
-                    "type": "string"
-                },
-                "state": {
-                    "description": "State is what the container is doing; ExpectedState is what it was asked\nto be doing. They differ while the runner is closing the gap.",
-                    "type": "string"
-                },
-                "uuid": {
-                    "type": "string"
-                },
-                "working_dir": {
-                    "type": "string"
-                }
-            }
-        },
-        "getContainerLogs.LogResponse": {
-            "type": "object",
-            "properties": {
-                "at": {
-                    "type": "string"
-                },
-                "content": {
-                    "type": "string"
-                },
-                "stream": {
-                    "type": "string"
-                }
-            }
-        },
-        "getContainerLogs.Response": {
-            "type": "object",
-            "properties": {
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/getContainerLogs.LogResponse"
-                    }
-                }
-            }
-        },
-        "getContainers.Response": {
-            "type": "object",
-            "properties": {
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/presenter.Container"
-                    }
-                },
-                "pagination": {
-                    "$ref": "#/definitions/presenter.Pagination"
-                }
-            }
-        },
         "getMessage.Response": {
             "type": "object",
             "properties": {
@@ -5318,6 +5184,129 @@ const docTemplate = `{
                 },
                 "total_pages": {
                     "type": "integer"
+                }
+            }
+        },
+        "getTask.Response": {
+            "type": "object",
+            "properties": {
+                "command": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "deadline": {
+                    "description": "Deadline is when a task that is only allowed to run for so long\nwill be stopped. A task with no limit of its own has none.",
+                    "type": "string"
+                },
+                "endpoints": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/presenter.Endpoint"
+                    }
+                },
+                "entrypoint": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "environment": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "expected_state": {
+                    "type": "string"
+                },
+                "finished_at": {
+                    "type": "string"
+                },
+                "image": {
+                    "type": "string"
+                },
+                "max_retries": {
+                    "description": "MaxRetries is how many times a task that fails is asked for again\nbefore the runner gives up on it. -1 never gives up. Retries is how many\nof those have happened, so a task that keeps failing can say what is\nbeing done about it.",
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "owner": {
+                    "description": "Owner is who asked for this task.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/presenter.Owner"
+                        }
+                    ]
+                },
+                "read_only": {
+                    "type": "boolean"
+                },
+                "reason": {
+                    "description": "Reason is why a task failed, when the runner can say so.",
+                    "type": "string"
+                },
+                "resource_limits": {
+                    "$ref": "#/definitions/presenter.Limits"
+                },
+                "retries": {
+                    "type": "integer"
+                },
+                "service_name": {
+                    "type": "string"
+                },
+                "slug": {
+                    "type": "string"
+                },
+                "stack_uuid": {
+                    "type": "string"
+                },
+                "started_at": {
+                    "type": "string"
+                },
+                "state": {
+                    "description": "State is what the task is doing; ExpectedState is what it was asked\nto be doing. They differ while the runner is closing the gap.",
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                },
+                "working_dir": {
+                    "type": "string"
+                }
+            }
+        },
+        "getTaskLogs.log": {
+            "type": "object",
+            "properties": {
+                "at": {
+                    "type": "string"
+                },
+                "content": {
+                    "type": "string"
+                },
+                "stream": {
+                    "type": "string"
+                }
+            }
+        },
+        "getTasks.Response": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/presenter.Task"
+                    }
+                },
+                "pagination": {
+                    "$ref": "#/definitions/presenter.Pagination"
                 }
             }
         },
@@ -5988,140 +5977,6 @@ const docTemplate = `{
                 }
             }
         },
-        "getusercontainer.Response": {
-            "type": "object",
-            "properties": {
-                "command": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "created_at": {
-                    "type": "string"
-                },
-                "deadline": {
-                    "description": "Deadline is when a container that is only allowed to run for so long\nwill be stopped. A container with no limit of its own has none.",
-                    "type": "string"
-                },
-                "endpoints": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/presenter.Endpoint"
-                    }
-                },
-                "entrypoint": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "environment": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "expected_state": {
-                    "type": "string"
-                },
-                "finished_at": {
-                    "type": "string"
-                },
-                "image": {
-                    "type": "string"
-                },
-                "max_retries": {
-                    "description": "MaxRetries is how many times a container that fails is asked for again\nbefore the runner gives up on it. -1 never gives up. Retries is how many\nof those have happened, so a container that keeps failing can say what is\nbeing done about it.",
-                    "type": "integer"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "owner": {
-                    "description": "Owner is who asked for this container.",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/presenter.Owner"
-                        }
-                    ]
-                },
-                "read_only": {
-                    "type": "boolean"
-                },
-                "reason": {
-                    "description": "Reason is why a container failed, when the runner can say so.",
-                    "type": "string"
-                },
-                "resource_limits": {
-                    "$ref": "#/definitions/presenter.Limits"
-                },
-                "retries": {
-                    "type": "integer"
-                },
-                "service_name": {
-                    "type": "string"
-                },
-                "slug": {
-                    "type": "string"
-                },
-                "stack_uuid": {
-                    "type": "string"
-                },
-                "started_at": {
-                    "type": "string"
-                },
-                "state": {
-                    "description": "State is what the container is doing; ExpectedState is what it was asked\nto be doing. They differ while the runner is closing the gap.",
-                    "type": "string"
-                },
-                "uuid": {
-                    "type": "string"
-                },
-                "working_dir": {
-                    "type": "string"
-                }
-            }
-        },
-        "getusercontainerlogs.LogResponse": {
-            "type": "object",
-            "properties": {
-                "at": {
-                    "type": "string"
-                },
-                "content": {
-                    "type": "string"
-                },
-                "stream": {
-                    "type": "string"
-                }
-            }
-        },
-        "getusercontainerlogs.Response": {
-            "type": "object",
-            "properties": {
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/getusercontainerlogs.LogResponse"
-                    }
-                }
-            }
-        },
-        "getusercontainers.Response": {
-            "type": "object",
-            "properties": {
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/presenter.Container"
-                    }
-                },
-                "pagination": {
-                    "$ref": "#/definitions/presenter.Pagination"
-                }
-            }
-        },
         "getuserfiles.Response": {
             "type": "object",
             "properties": {
@@ -6236,7 +6091,7 @@ const docTemplate = `{
                 "services": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/presenter.Container"
+                        "$ref": "#/definitions/presenter.Task"
                     }
                 },
                 "slug": {
@@ -6257,6 +6112,140 @@ const docTemplate = `{
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/presenter.Stack"
+                    }
+                },
+                "pagination": {
+                    "$ref": "#/definitions/presenter.Pagination"
+                }
+            }
+        },
+        "getusertask.Response": {
+            "type": "object",
+            "properties": {
+                "command": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "deadline": {
+                    "description": "Deadline is when a task that is only allowed to run for so long\nwill be stopped. A task with no limit of its own has none.",
+                    "type": "string"
+                },
+                "endpoints": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/presenter.Endpoint"
+                    }
+                },
+                "entrypoint": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "environment": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "expected_state": {
+                    "type": "string"
+                },
+                "finished_at": {
+                    "type": "string"
+                },
+                "image": {
+                    "type": "string"
+                },
+                "max_retries": {
+                    "description": "MaxRetries is how many times a task that fails is asked for again\nbefore the runner gives up on it. -1 never gives up. Retries is how many\nof those have happened, so a task that keeps failing can say what is\nbeing done about it.",
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "owner": {
+                    "description": "Owner is who asked for this task.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/presenter.Owner"
+                        }
+                    ]
+                },
+                "read_only": {
+                    "type": "boolean"
+                },
+                "reason": {
+                    "description": "Reason is why a task failed, when the runner can say so.",
+                    "type": "string"
+                },
+                "resource_limits": {
+                    "$ref": "#/definitions/presenter.Limits"
+                },
+                "retries": {
+                    "type": "integer"
+                },
+                "service_name": {
+                    "type": "string"
+                },
+                "slug": {
+                    "type": "string"
+                },
+                "stack_uuid": {
+                    "type": "string"
+                },
+                "started_at": {
+                    "type": "string"
+                },
+                "state": {
+                    "description": "State is what the task is doing; ExpectedState is what it was asked\nto be doing. They differ while the runner is closing the gap.",
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                },
+                "working_dir": {
+                    "type": "string"
+                }
+            }
+        },
+        "getusertasklogs.Response": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/getusertasklogs.log"
+                    }
+                }
+            }
+        },
+        "getusertasklogs.log": {
+            "type": "object",
+            "properties": {
+                "at": {
+                    "type": "string"
+                },
+                "content": {
+                    "type": "string"
+                },
+                "stream": {
+                    "type": "string"
+                }
+            }
+        },
+        "getusertasks.Response": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/presenter.Task"
                     }
                 },
                 "pagination": {
@@ -6706,7 +6695,7 @@ const docTemplate = `{
                 "services": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/presenter.Container"
+                        "$ref": "#/definitions/presenter.Task"
                     }
                 },
                 "slug": {
@@ -6775,7 +6764,7 @@ const docTemplate = `{
                 "services": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/presenter.Container"
+                        "$ref": "#/definitions/presenter.Task"
                     }
                 },
                 "slug": {
@@ -6785,6 +6774,167 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "uuid": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_khanzadimahdi_testproject_application_dashboard_runner_task_getTaskLogs.Response": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/getTaskLogs.log"
+                    }
+                }
+            }
+        },
+        "github_com_khanzadimahdi_testproject_application_dashboard_runner_task_runTask.Request": {
+            "type": "object",
+            "properties": {
+                "command": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "deploy": {
+                    "$ref": "#/definitions/spec.Deploy"
+                },
+                "entrypoint": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "environment": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "image": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "network_mode": {
+                    "description": "NetworkMode is how much of the network the task reaches: \"none\",\n\"isolated\" or \"public\". It is not docker's own network_mode — the runner\ndecides which networks a task joins — but it sits in the same place\na compose file puts that decision.",
+                    "type": "string"
+                },
+                "ports": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/spec.Port"
+                    }
+                },
+                "read_only": {
+                    "description": "ReadOnly makes the task's filesystem immutable, so nothing it runs\ncan change the image it was started from. It is compose's read_only.",
+                    "type": "boolean"
+                },
+                "restart": {
+                    "type": "string"
+                },
+                "working_dir": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_khanzadimahdi_testproject_application_dashboard_runner_task_runTask.Response": {
+            "type": "object",
+            "properties": {
+                "command": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "deadline": {
+                    "description": "Deadline is when a task that is only allowed to run for so long\nwill be stopped. A task with no limit of its own has none.",
+                    "type": "string"
+                },
+                "endpoints": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/presenter.Endpoint"
+                    }
+                },
+                "entrypoint": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "environment": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "errors": {
+                    "$ref": "#/definitions/domain.ValidationErrors"
+                },
+                "expected_state": {
+                    "type": "string"
+                },
+                "finished_at": {
+                    "type": "string"
+                },
+                "image": {
+                    "type": "string"
+                },
+                "max_retries": {
+                    "description": "MaxRetries is how many times a task that fails is asked for again\nbefore the runner gives up on it. -1 never gives up. Retries is how many\nof those have happened, so a task that keeps failing can say what is\nbeing done about it.",
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "owner": {
+                    "description": "Owner is who asked for this task.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/presenter.Owner"
+                        }
+                    ]
+                },
+                "read_only": {
+                    "type": "boolean"
+                },
+                "reason": {
+                    "description": "Reason is why a task failed, when the runner can say so.",
+                    "type": "string"
+                },
+                "resource_limits": {
+                    "$ref": "#/definitions/presenter.Limits"
+                },
+                "retries": {
+                    "type": "integer"
+                },
+                "service_name": {
+                    "type": "string"
+                },
+                "slug": {
+                    "type": "string"
+                },
+                "stack_uuid": {
+                    "type": "string"
+                },
+                "started_at": {
+                    "type": "string"
+                },
+                "state": {
+                    "description": "State is what the task is doing; ExpectedState is what it was asked\nto be doing. They differ while the runner is closing the gap.",
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                },
+                "working_dir": {
                     "type": "string"
                 }
             }
@@ -6942,109 +7092,14 @@ const docTemplate = `{
                 }
             }
         },
-        "presenter.Container": {
-            "type": "object",
-            "properties": {
-                "command": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "created_at": {
-                    "type": "string"
-                },
-                "deadline": {
-                    "description": "Deadline is when a container that is only allowed to run for so long\nwill be stopped. A container with no limit of its own has none.",
-                    "type": "string"
-                },
-                "endpoints": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/presenter.Endpoint"
-                    }
-                },
-                "entrypoint": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "environment": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "expected_state": {
-                    "type": "string"
-                },
-                "finished_at": {
-                    "type": "string"
-                },
-                "image": {
-                    "type": "string"
-                },
-                "max_retries": {
-                    "description": "MaxRetries is how many times a container that fails is asked for again\nbefore the runner gives up on it. -1 never gives up. Retries is how many\nof those have happened, so a container that keeps failing can say what is\nbeing done about it.",
-                    "type": "integer"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "owner": {
-                    "description": "Owner is who asked for this container.",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/presenter.Owner"
-                        }
-                    ]
-                },
-                "read_only": {
-                    "type": "boolean"
-                },
-                "reason": {
-                    "description": "Reason is why a container failed, when the runner can say so.",
-                    "type": "string"
-                },
-                "resource_limits": {
-                    "$ref": "#/definitions/presenter.Limits"
-                },
-                "retries": {
-                    "type": "integer"
-                },
-                "service_name": {
-                    "type": "string"
-                },
-                "slug": {
-                    "type": "string"
-                },
-                "stack_uuid": {
-                    "type": "string"
-                },
-                "started_at": {
-                    "type": "string"
-                },
-                "state": {
-                    "description": "State is what the container is doing; ExpectedState is what it was asked\nto be doing. They differ while the runner is closing the gap.",
-                    "type": "string"
-                },
-                "uuid": {
-                    "type": "string"
-                },
-                "working_dir": {
-                    "type": "string"
-                }
-            }
-        },
         "presenter.Endpoint": {
             "type": "object",
             "properties": {
-                "container_port": {
-                    "type": "integer"
-                },
                 "host": {
                     "type": "string"
+                },
+                "task_port": {
+                    "type": "integer"
                 },
                 "url": {
                     "type": "string"
@@ -7117,7 +7172,7 @@ const docTemplate = `{
                 "services": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/presenter.Container"
+                        "$ref": "#/definitions/presenter.Task"
                     }
                 },
                 "slug": {
@@ -7127,6 +7182,101 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "uuid": {
+                    "type": "string"
+                }
+            }
+        },
+        "presenter.Task": {
+            "type": "object",
+            "properties": {
+                "command": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "deadline": {
+                    "description": "Deadline is when a task that is only allowed to run for so long\nwill be stopped. A task with no limit of its own has none.",
+                    "type": "string"
+                },
+                "endpoints": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/presenter.Endpoint"
+                    }
+                },
+                "entrypoint": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "environment": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "expected_state": {
+                    "type": "string"
+                },
+                "finished_at": {
+                    "type": "string"
+                },
+                "image": {
+                    "type": "string"
+                },
+                "max_retries": {
+                    "description": "MaxRetries is how many times a task that fails is asked for again\nbefore the runner gives up on it. -1 never gives up. Retries is how many\nof those have happened, so a task that keeps failing can say what is\nbeing done about it.",
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "owner": {
+                    "description": "Owner is who asked for this task.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/presenter.Owner"
+                        }
+                    ]
+                },
+                "read_only": {
+                    "type": "boolean"
+                },
+                "reason": {
+                    "description": "Reason is why a task failed, when the runner can say so.",
+                    "type": "string"
+                },
+                "resource_limits": {
+                    "$ref": "#/definitions/presenter.Limits"
+                },
+                "retries": {
+                    "type": "integer"
+                },
+                "service_name": {
+                    "type": "string"
+                },
+                "slug": {
+                    "type": "string"
+                },
+                "stack_uuid": {
+                    "type": "string"
+                },
+                "started_at": {
+                    "type": "string"
+                },
+                "state": {
+                    "description": "State is what the task is doing; ExpectedState is what it was asked\nto be doing. They differ while the runner is closing the gap.",
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                },
+                "working_dir": {
                     "type": "string"
                 }
             }
@@ -7172,156 +7322,6 @@ const docTemplate = `{
                 }
             }
         },
-        "runContainer.Request": {
-            "type": "object",
-            "properties": {
-                "command": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "deploy": {
-                    "$ref": "#/definitions/spec.Deploy"
-                },
-                "entrypoint": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "environment": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "image": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "network_mode": {
-                    "description": "NetworkMode is how much of the network the container reaches: \"none\",\n\"isolated\" or \"public\". It is not docker's own network_mode — the runner\ndecides which networks a container joins — but it sits in the same place\na compose file puts that decision.",
-                    "type": "string"
-                },
-                "ports": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/spec.Port"
-                    }
-                },
-                "read_only": {
-                    "description": "ReadOnly makes the container's filesystem immutable, so nothing it runs\ncan change the image it was started from. It is compose's read_only.",
-                    "type": "boolean"
-                },
-                "restart": {
-                    "type": "string"
-                },
-                "working_dir": {
-                    "type": "string"
-                }
-            }
-        },
-        "runContainer.Response": {
-            "type": "object",
-            "properties": {
-                "command": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "created_at": {
-                    "type": "string"
-                },
-                "deadline": {
-                    "description": "Deadline is when a container that is only allowed to run for so long\nwill be stopped. A container with no limit of its own has none.",
-                    "type": "string"
-                },
-                "endpoints": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/presenter.Endpoint"
-                    }
-                },
-                "entrypoint": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "environment": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "errors": {
-                    "$ref": "#/definitions/domain.ValidationErrors"
-                },
-                "expected_state": {
-                    "type": "string"
-                },
-                "finished_at": {
-                    "type": "string"
-                },
-                "image": {
-                    "type": "string"
-                },
-                "max_retries": {
-                    "description": "MaxRetries is how many times a container that fails is asked for again\nbefore the runner gives up on it. -1 never gives up. Retries is how many\nof those have happened, so a container that keeps failing can say what is\nbeing done about it.",
-                    "type": "integer"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "owner": {
-                    "description": "Owner is who asked for this container.",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/presenter.Owner"
-                        }
-                    ]
-                },
-                "read_only": {
-                    "type": "boolean"
-                },
-                "reason": {
-                    "description": "Reason is why a container failed, when the runner can say so.",
-                    "type": "string"
-                },
-                "resource_limits": {
-                    "$ref": "#/definitions/presenter.Limits"
-                },
-                "retries": {
-                    "type": "integer"
-                },
-                "service_name": {
-                    "type": "string"
-                },
-                "slug": {
-                    "type": "string"
-                },
-                "stack_uuid": {
-                    "type": "string"
-                },
-                "started_at": {
-                    "type": "string"
-                },
-                "state": {
-                    "description": "State is what the container is doing; ExpectedState is what it was asked\nto be doing. They differ while the runner is closing the gap.",
-                    "type": "string"
-                },
-                "uuid": {
-                    "type": "string"
-                },
-                "working_dir": {
-                    "type": "string"
-                }
-            }
-        },
         "spec.Deploy": {
             "type": "object",
             "properties": {
@@ -7350,7 +7350,7 @@ const docTemplate = `{
         "spec.Port": {
             "type": "object",
             "properties": {
-                "container": {
+                "task": {
                     "type": "integer"
                 }
             }
@@ -7367,7 +7367,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "max_attempts": {
-                    "description": "MaxAttempts is how many times a container that failed is asked for\nagain. Nothing at all leaves it to the runner, zero is not at all, and\n-1 never gives up.",
+                    "description": "MaxAttempts is how many times a task that failed is asked for\nagain. Nothing at all leaves it to the runner, zero is not at all, and\n-1 never gives up.",
                     "type": "integer"
                 }
             }
@@ -7400,7 +7400,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "network_mode": {
-                    "description": "NetworkMode is how much of the network the container reaches: \"none\",\n\"isolated\" or \"public\". It is not docker's own network_mode — the runner\ndecides which networks a container joins — but it sits in the same place\na compose file puts that decision.",
+                    "description": "NetworkMode is how much of the network the task reaches: \"none\",\n\"isolated\" or \"public\". It is not docker's own network_mode — the runner\ndecides which networks a task joins — but it sits in the same place\na compose file puts that decision.",
                     "type": "string"
                 },
                 "ports": {
@@ -7410,7 +7410,7 @@ const docTemplate = `{
                     }
                 },
                 "read_only": {
-                    "description": "ReadOnly makes the container's filesystem immutable, so nothing it runs\ncan change the image it was started from. It is compose's read_only.",
+                    "description": "ReadOnly makes the task's filesystem immutable, so nothing it runs\ncan change the image it was started from. It is compose's read_only.",
                     "type": "boolean"
                 },
                 "restart": {

@@ -1,9 +1,3 @@
-// Package stop takes away the container a snippet is running in.
-//
-// Stopping a snippet is removing it: there is nothing in one worth keeping,
-// and running it again is a new container running the code as it is written
-// now. Like the terminal a snippet offers, this reaches a job the code runner
-// started and nothing else, whatever uuid is named.
 package stop
 
 import (
@@ -18,6 +12,10 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
 )
 
+// StopName is what a reader asks on to have the task their snippet is
+// running in taken away. Running the snippet again starts a new one.
+const StopName = "codeStop"
+
 type UseCase struct {
 	runner    runnerManager.Client
 	validator domain.Validator
@@ -26,6 +24,7 @@ type UseCase struct {
 	logger *slog.Logger
 }
 
+// Eunsure UseCase implements the MessageHandler interface.
 var _ domain.MessageHandler = &UseCase{}
 
 func NewUseCase(
@@ -52,26 +51,22 @@ func (uc *UseCase) Handle(ctx context.Context, data []byte) error {
 		return uc.reply(ctx, request.ID, &Response{ValidationErrors: validationErrors})
 	}
 
-	c, err := uc.runner.Container(ctx, request.ContainerUUID)
+	c, err := uc.runner.Task(ctx, request.TaskUUID)
 	if errors.Is(err, domain.ErrNotExists) {
-		// a container that is already gone is what was asked for.
 		return uc.reply(ctx, request.ID, &Response{})
 	} else if err != nil {
 		return err
 	}
 
-	// a snippet's container, and nothing else: a job the code runner started,
-	// which belongs to nobody. A container from the dashboard belongs to
-	// somebody, and this is not the way to it.
 	if c.Kind != task.KindJob || c.OwnerUUID != runCode.CodeRunnerOwnerUUID {
-		uc.logger.WarnContext(ctx, "a stop was asked for on a container the code runner does not own", "container", request.ContainerUUID)
+		uc.logger.WarnContext(ctx, "a stop was asked for on a task the code runner does not own", "task", request.TaskUUID)
 
 		return uc.reply(ctx, request.ID, &Response{
-			ValidationErrors: domain.ValidationErrors{"container_uuid": "not_exists"},
+			ValidationErrors: domain.ValidationErrors{"task_uuid": "not_exists"},
 		})
 	}
 
-	if err := uc.runner.DeleteContainer(ctx, request.ContainerUUID); err != nil && !errors.Is(err, domain.ErrNotExists) {
+	if err := uc.runner.DeleteTask(ctx, request.TaskUUID); err != nil && !errors.Is(err, domain.ErrNotExists) {
 		return err
 	}
 

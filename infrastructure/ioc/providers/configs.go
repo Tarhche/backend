@@ -10,7 +10,7 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 )
 
-// configsProvider binds the application configuration into the container.
+// configsProvider binds the application configuration into the task.
 //
 // The console has already filled the configuration structs from the flags and
 // the environment by the time a provider runs, so this provider only has to
@@ -55,7 +55,7 @@ func (p *configsProvider) Terminate(ctx context.Context) error {
 
 // bindConfigs binds one configuration struct as a singleton under its own type.
 //
-// The container only accepts function resolvers, so the pointer is wrapped in a
+// The task only accepts function resolvers, so the pointer is wrapped in a
 // generated func() T returning it. That keeps the binding typed: a consumer
 // resolves *configs.Blog and gets exactly the struct the flags were parsed
 // into, pointer and all, so a value read after startup is the configured one.

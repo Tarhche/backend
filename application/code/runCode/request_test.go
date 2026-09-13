@@ -198,7 +198,7 @@ func TestKeepable(t *testing.T) {
 		assert.True(t, keepable(t, Request{ID: "request-id", Code: "print", Runner: "go-1.24"}))
 	})
 
-	t.Run("one that serves a port is a container to be reached", func(t *testing.T) {
+	t.Run("one that serves a port is a task to be reached", func(t *testing.T) {
 		t.Parallel()
 
 		assert.False(t, keepable(t, Request{ID: "request-id", Code: "serve", Runner: "go-1.24", Ports: []port.Port{8080}}))

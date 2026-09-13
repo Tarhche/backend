@@ -9,73 +9,72 @@ import (
 	"time"
 
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/runner/container"
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
 	"github.com/khanzadimahdi/testproject/domain/runner/task/events"
 )
 
 // UseCase reports what this node is running, so the manager can follow every
-// container's state and learn which of its ports came up.
+// task's state and learn which of its ports came up.
 type UseCase struct {
-	containerManager container.Manager
-	messageProducer  domain.Producer
-	nodeName         string
+	taskManager     task.Runtime
+	messageProducer domain.Producer
+	nodeName        string
 
-	// startedAt is when each container this node holds began running, which is
-	// what a container's allowed time is counted from. Docker only tells it on
-	// inspection, so it is asked for once per container and remembered.
+	// startedAt is when each task this node holds began running, which is
+	// what a task's allowed time is counted from. Docker only tells it on
+	// inspection, so it is asked for once per task and remembered.
 	startedAt map[string]time.Time
 
-	// exitCodes is what the program in each ended container returned, which is
+	// exitCodes is what the program in each ended task returned, which is
 	// what tells a job that finished from one that fell over. It is asked for
-	// the same way, and forgotten as soon as the container runs again.
+	// the same way, and forgotten as soon as the task runs again.
 	exitCodes map[string]int
 
 	logger *slog.Logger
 }
 
 func NewUseCase(
-	containerManager container.Manager,
+	taskManager task.Runtime,
 	messageProducer domain.Producer,
 	nodeName string,
 	logger *slog.Logger,
 ) *UseCase {
 	return &UseCase{
-		containerManager: containerManager,
-		messageProducer:  messageProducer,
-		nodeName:         nodeName,
-		startedAt:        make(map[string]time.Time),
-		exitCodes:        make(map[string]int),
-		logger:           logger,
+		taskManager:     taskManager,
+		messageProducer: messageProducer,
+		nodeName:        nodeName,
+		startedAt:       make(map[string]time.Time),
+		exitCodes:       make(map[string]int),
+		logger:          logger,
 	}
 }
 
 func (uc *UseCase) Execute(ctx context.Context) error {
-	allContainers, err := uc.containerManager.GetByLabel(ctx, container.NodeNameLabelKey, uc.nodeName)
+	allTasks, err := uc.taskManager.OnNode(ctx, uc.nodeName)
 	if err != nil {
 		return err
 	}
 
-	uc.forgetGone(allContainers)
+	uc.forgetGone(allTasks)
 
-	for _, c := range allContainers {
-		kind := kindOf(&c)
-
+	for _, c := range allTasks {
 		event := events.Heartbeat{
-			UUID:          c.Labels[container.TaskUUIDLabelKey],
-			Name:          c.Labels[container.TaskNameLabelKey],
-			Slug:          c.Labels[container.TaskSlugLabelKey],
-			Kind:          string(kind),
-			Image:         c.Image,
-			ContainerUUID: c.ID,
-			State:         int(container.EvaluateTaskState(c.Status, kind, uc.exitCode(ctx, &c))),
-			NodeName:      uc.nodeName,
-			Attempt:       c.Attempt(),
-			Interactive:   c.Interactive(),
-			Deadline:      uc.deadline(ctx, &c),
-			Endpoints:     uc.endpoints(&c),
-			Logs:          uc.logs(ctx, &c),
-			At:            time.Now(),
+			UUID:        c.TaskUUID,
+			Name:        c.TaskName,
+			Slug:        c.Slug,
+			Kind:        string(c.Kind),
+			OwnerUUID:   c.OwnerUUID,
+			StackUUID:   c.StackUUID,
+			Image:       c.Image,
+			ExecutionID: c.ID,
+			State:       int(task.EvaluateState(c.Status, c.Kind, uc.exitCode(ctx, &c))),
+			NodeName:    uc.nodeName,
+			Attempt:     c.Attempt,
+			Interactive: c.Interactive,
+			Deadline:    uc.deadline(ctx, &c),
+			Endpoints:   uc.endpoints(&c),
+			Logs:        uc.logs(ctx, &c),
+			At:          time.Now(),
 		}
 
 		payload, err := json.Marshal(event)
@@ -91,12 +90,12 @@ func (uc *UseCase) Execute(ctx context.Context) error {
 	return nil
 }
 
-// deadline is when a container that may only run for so long will have run
-// long enough. It is counted from when the container actually started, which
-// docker reports on inspection alone, so a container is inspected once and
+// deadline is when a task that may only run for so long will have run
+// long enough. It is counted from when the task actually started, which
+// docker reports on inspection alone, so a task is inspected once and
 // what it says is kept for as long as this node holds it.
-func (uc *UseCase) deadline(ctx context.Context, c *container.Container) time.Time {
-	ttl := c.TTL()
+func (uc *UseCase) deadline(ctx context.Context, c *task.Execution) time.Time {
+	ttl := c.TTL
 
 	if ttl <= 0 {
 		return time.Time{}
@@ -110,11 +109,11 @@ func (uc *UseCase) deadline(ctx context.Context, c *container.Container) time.Ti
 		return started.Add(ttl)
 	}
 
-	inspected, err := uc.containerManager.Inspect(ctx, c.ID)
+	inspected, err := uc.taskManager.Inspect(ctx, c.ID)
 	if err != nil {
 		// it will be asked again on the next beat; until then it has no
 		// deadline to report rather than a made-up one.
-		uc.logger.WarnContext(ctx, "failed to inspect a container for when it started", "error", err)
+		uc.logger.WarnContext(ctx, "failed to inspect a task for when it started", "error", err)
 
 		return time.Time{}
 	}
@@ -129,10 +128,10 @@ func (uc *UseCase) deadline(ctx context.Context, c *container.Container) time.Ti
 	return inspected.StartedAt.Add(ttl)
 }
 
-// exitCode is what the program in a container returned, for one that has
+// exitCode is what the program in a task returned, for one that has
 // ended. Docker only tells it on inspection, so it is asked for once and kept
-// until the container runs again or goes away.
-func (uc *UseCase) exitCode(ctx context.Context, c *container.Container) int {
+// until the task runs again or goes away.
+func (uc *UseCase) exitCode(ctx context.Context, c *task.Execution) int {
 	if !c.Status.Ended() {
 		// it may yet end, and what it returns then is not what it returned
 		// the last time it ran.
@@ -145,11 +144,11 @@ func (uc *UseCase) exitCode(ctx context.Context, c *container.Container) int {
 		return code
 	}
 
-	inspected, err := uc.containerManager.Inspect(ctx, c.ID)
+	inspected, err := uc.taskManager.Inspect(ctx, c.ID)
 	if err != nil {
 		// it will be asked again on the next beat; until then what it returned
 		// is unknown, which is not the same as a failure.
-		uc.logger.WarnContext(ctx, "failed to inspect a container for what it returned", "error", err)
+		uc.logger.WarnContext(ctx, "failed to inspect a task for what it returned", "error", err)
 
 		return 0
 	}
@@ -159,9 +158,9 @@ func (uc *UseCase) exitCode(ctx context.Context, c *container.Container) int {
 	return inspected.ExitCode
 }
 
-// forgetGone lets go of what was remembered about containers this node no
+// forgetGone lets go of what was remembered about tasks this node no
 // longer holds.
-func (uc *UseCase) forgetGone(held []container.Container) {
+func (uc *UseCase) forgetGone(held []task.Execution) {
 	if len(uc.startedAt) == 0 && len(uc.exitCodes) == 0 {
 		return
 	}
@@ -184,34 +183,23 @@ func (uc *UseCase) forgetGone(held []container.Container) {
 	}
 }
 
-// kindOf reads what a container is running from the label it was created with.
-// A container from before there were kinds is a job, which is what every one of
-// them was.
-func kindOf(c *container.Container) task.Kind {
-	if kind := task.Kind(c.Labels[container.TaskKindLabelKey]); kind.IsValid() {
-		return kind
-	}
-
-	return task.DefaultKind
-}
-
-// logs collects a container's whole output for the heartbeat to carry.
+// logs collects a task's whole output for the heartbeat to carry.
 //
 // Only a one-shot job's log travels this way: it is what the caller waiting on
 // that job receives when it finishes. A long-running service would make every
 // heartbeat carry its entire history, so its output is streamed line by line
 // and kept by the manager instead.
-func (uc *UseCase) logs(ctx context.Context, c *container.Container) []byte {
-	if kindOf(c) == task.KindService {
+func (uc *UseCase) logs(ctx context.Context, c *task.Execution) []byte {
+	if c.Kind == task.KindService {
 		return nil
 	}
 
 	var buffer bytes.Buffer
 
-	if err := uc.containerManager.Logs(ctx, c.ID, &buffer); err != nil {
-		// a container that has not started yet has no logs to read, which is
+	if err := uc.taskManager.Logs(ctx, c.ID, &buffer); err != nil {
+		// a task that has not started yet has no logs to read, which is
 		// ordinary rather than a failure.
-		uc.logger.WarnContext(ctx, "failed to fetch container logs", "error", err)
+		uc.logger.WarnContext(ctx, "failed to fetch task logs", "error", err)
 
 		return nil
 	}
@@ -223,21 +211,21 @@ func (uc *UseCase) logs(ctx context.Context, c *container.Container) []byte {
 	return buffer.Bytes()
 }
 
-// endpoints reports which of a container's exposed ports docker actually
+// endpoints reports which of a task's exposed ports docker actually
 // published. They are read from docker every heartbeat because a restarted
-// container comes back on different host ports.
-func (uc *UseCase) endpoints(c *container.Container) []events.Endpoint {
+// task comes back on different host ports.
+func (uc *UseCase) endpoints(c *task.Execution) []events.Endpoint {
 	endpoints := make([]events.Endpoint, 0, len(c.PortBindings))
 
-	for containerPort, bindings := range c.PortBindings {
+	for taskPort, bindings := range c.PortBindings {
 		for _, binding := range bindings {
 			if binding.HostPort == 0 {
 				continue
 			}
 
 			endpoints = append(endpoints, events.Endpoint{
-				ContainerPort: containerPort,
-				HostPort:      binding.HostPort,
+				TaskPort: taskPort,
+				HostPort: binding.HostPort,
 			})
 
 			break
@@ -247,7 +235,7 @@ func (uc *UseCase) endpoints(c *container.Container) []events.Endpoint {
 	// docker hands back the bindings in no particular order, and the lowest
 	// exposed port is the one a bare hostname reaches.
 	slices.SortFunc(endpoints, func(a events.Endpoint, b events.Endpoint) int {
-		return int(a.ContainerPort) - int(b.ContainerPort)
+		return int(a.TaskPort) - int(b.TaskPort)
 	})
 
 	return endpoints

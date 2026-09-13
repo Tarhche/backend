@@ -11,7 +11,7 @@ import (
 )
 
 // UseCase stops every service of a stack. A stack has no state of its own, so
-// stopping it is exactly stopping the containers in it.
+// stopping it is exactly stopping the tasks in it.
 type UseCase struct {
 	stackRepository stack.Repository
 	taskRepository  task.Repository

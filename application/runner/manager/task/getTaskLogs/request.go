@@ -6,14 +6,14 @@ import (
 	"github.com/khanzadimahdi/testproject/domain"
 )
 
-// maxLimit caps one read, so a container with a long history is paged through
+// maxLimit caps one read, so a task with a long history is paged through
 // rather than loaded whole.
 const maxLimit uint = 1000
 
 type Request struct {
 	UUID string `json:"-"`
 
-	// After pages forward through a container's history: the next read asks
+	// After pages forward through a task's history: the next read asks
 	// for what was written after the last line it already has.
 	After time.Time `json:"after"`
 	Limit uint      `json:"limit"`

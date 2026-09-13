@@ -26,7 +26,7 @@ const (
 
 // UseCase runs a set of services as one stack.
 //
-// Every service is a container of its own, so the runner has one kind of thing
+// Every service is a task of its own, so the runner has one kind of thing
 // to schedule and one lifecycle to reason about. What makes them a stack is the
 // private network they share — and because a bridge is local to the node that
 // created it, they are all placed on one node.

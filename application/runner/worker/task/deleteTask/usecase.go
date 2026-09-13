@@ -6,30 +6,30 @@ import (
 	"log/slog"
 
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/runner/container"
+	"github.com/khanzadimahdi/testproject/domain/runner/task"
 )
 
-// UseCase takes a container away.
+// UseCase takes a task away.
 //
-// What is still running is stopped first and only then removed, so a container
+// What is still running is stopped first and only then removed, so a task
 // ends the way it would if it had been stopped: its process is asked to finish
 // rather than pulled out from under itself.
 type UseCase struct {
-	containerManager container.Manager
-	validator        domain.Validator
-	logger           *slog.Logger
+	taskManager task.Runtime
+	validator   domain.Validator
+	logger      *slog.Logger
 }
 
 // NewUseCase creates a new UseCase
 func NewUseCase(
-	containerManager container.Manager,
+	taskManager task.Runtime,
 	validator domain.Validator,
 	logger *slog.Logger,
 ) *UseCase {
 	return &UseCase{
-		containerManager: containerManager,
-		validator:        validator,
-		logger:           logger,
+		taskManager: taskManager,
+		validator:   validator,
+		logger:      logger,
 	}
 }
 
@@ -41,25 +41,25 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		}, nil
 	}
 
-	containers, err := uc.containerManager.GetByLabel(ctx, container.TaskUUIDLabelKey, request.UUID)
+	tasks, err := uc.taskManager.Of(ctx, request.UUID)
 	if err != nil {
 		return nil, err
 	}
 
-	if len(containers) == 0 {
+	if len(tasks) == 0 {
 		return nil, domain.ErrNotExists
 	}
 
-	for _, c := range containers {
-		if c.Status == container.StatusRunning {
-			// a container that will not stop is still one to take away, so its
+	for _, c := range tasks {
+		if c.Status == task.StatusRunning {
+			// a task that will not stop is still one to take away, so its
 			// refusal is noted rather than obeyed: the removal below is forced.
-			if err := uc.containerManager.Stop(ctx, c.ID); err != nil && !errors.Is(err, domain.ErrNotExists) {
-				uc.logger.WarnContext(ctx, "a container would not stop before being removed", "error", err, "container", c.ID)
+			if err := uc.taskManager.Stop(ctx, c.ID); err != nil && !errors.Is(err, domain.ErrNotExists) {
+				uc.logger.WarnContext(ctx, "a task would not stop before being removed", "error", err, "task", c.ID)
 			}
 		}
 
-		if err := uc.containerManager.Delete(ctx, c.ID); err != nil && !errors.Is(err, domain.ErrNotExists) {
+		if err := uc.taskManager.Delete(ctx, c.ID); err != nil && !errors.Is(err, domain.ErrNotExists) {
 			return nil, err
 		}
 	}

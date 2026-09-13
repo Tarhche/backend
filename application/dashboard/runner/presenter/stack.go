@@ -15,9 +15,9 @@ type Stack struct {
 
 	// ExpectedState is what the stack was asked to be, which is what it is on
 	// its way to while a command is still reaching its services.
-	ExpectedState string      `json:"expected_state,omitempty"`
-	Services      []Container `json:"services"`
-	CreatedAt     time.Time   `json:"created_at"`
+	ExpectedState string    `json:"expected_state,omitempty"`
+	Services      []Task    `json:"services"`
+	CreatedAt     time.Time `json:"created_at"`
 
 	// Owner is who asked for this stack.
 	Owner Owner `json:"owner"`
@@ -30,7 +30,7 @@ func NewStack(s runnerManager.Stack, ingressDomain string, owners Owners) Stack 
 		Slug:          s.Slug,
 		State:         s.State.String(),
 		ExpectedState: s.ExpectedState.String(),
-		Services:      NewContainers(s.Services, ingressDomain, owners),
+		Services:      NewTasks(s.Services, ingressDomain, owners),
 		CreatedAt:     s.CreatedAt,
 		Owner:         owners.Of(s.OwnerUUID),
 	}

@@ -18,8 +18,8 @@ type TaskBson struct {
 	CurrentState  uint   `bson:"current_state"`
 	ExpectedState uint   `bson:"expected_state,omitempty"`
 
-	// LastHeartbeatAt is when the node holding this container last spoke for
-	// it, which is how a container that is no longer there is told from one
+	// LastHeartbeatAt is when the node holding this task last spoke for
+	// it, which is how a task that is no longer there is told from one
 	// that simply has not changed.
 	LastHeartbeatAt time.Time `bson:"last_heartbeat_at,omitempty"`
 
@@ -42,21 +42,21 @@ type TaskBson struct {
 	ReadOnly      bool           `bson:"read_only,omitempty"`
 	Interactive   bool           `bson:"interactive,omitempty"`
 	// MaxRetries is a pointer because nothing at all means something: a
-	// container written down before there were retry budgets is worth whatever
+	// task written down before there were retry budgets is worth whatever
 	// its kind is usually worth, while one written with none is worth none.
 	MaxRetries *int          `bson:"max_retries"`
 	Retries    int           `bson:"retries,omitempty"`
 	TTL        time.Duration `bson:"ttl,omitempty"`
 
-	// Deadline is when the container running this task will be stopped for
+	// Deadline is when the task running this task will be stopped for
 	// having run long enough, as the node that made it set it.
 	Deadline       time.Time      `bson:"deadline,omitempty"`
 	Reason         string         `bson:"reason,omitempty"`
 	Mounts         []Mount        `bson:"mounts,omitempty"`
 	ResourceLimits ResourceLimits `bson:"resource_limits,omitempty"`
 	NodeName       string         `bson:"node_name,omitempty"`
-	ContainerLogs  []byte         `bson:"container_logs,omitempty"`
-	ContainerID    string         `bson:"container_id,omitempty"`
+	ExecutionLogs  []byte         `bson:"container_logs,omitempty"`
+	ExecutionID    string         `bson:"container_id,omitempty"`
 	OwnerUUID      string         `bson:"owner_uuid"`
 	CreatedAt      time.Time      `bson:"created_at,omitempty"`
 	StartedAt      time.Time      `bson:"started_at,omitempty"`
@@ -64,8 +64,8 @@ type TaskBson struct {
 }
 
 type Endpoint struct {
-	ContainerPort port.Port `bson:"container_port"`
-	HostPort      port.Port `bson:"host_port"`
+	TaskPort port.Port `bson:"container_port"`
+	HostPort port.Port `bson:"host_port"`
 }
 
 type Mount struct {
@@ -123,8 +123,8 @@ func toTask(t *TaskBson) task.Task {
 			Disk:   t.ResourceLimits.Disk,
 		},
 		NodeName:      t.NodeName,
-		ContainerID:   t.ContainerID,
-		ContainerLogs: t.ContainerLogs,
+		ExecutionID:   t.ExecutionID,
+		ExecutionLogs: t.ExecutionLogs,
 		OwnerUUID:     t.OwnerUUID,
 		CreatedAt:     t.CreatedAt,
 		StartedAt:     t.StartedAt,
@@ -133,7 +133,7 @@ func toTask(t *TaskBson) task.Task {
 	}
 }
 
-// maxRetriesOf is how many times a stored container is worth asking for again.
+// maxRetriesOf is how many times a stored task is worth asking for again.
 // One stored before there were retry budgets says nothing about it, and is
 // worth what anything of its kind is worth.
 func maxRetriesOf(t *TaskBson) int {
@@ -185,8 +185,8 @@ func toBson(t *task.Task) TaskBson {
 			Disk:   t.ResourceLimits.Disk,
 		},
 		NodeName:      t.NodeName,
-		ContainerID:   t.ContainerID,
-		ContainerLogs: t.ContainerLogs,
+		ExecutionID:   t.ExecutionID,
+		ExecutionLogs: t.ExecutionLogs,
 		OwnerUUID:     t.OwnerUUID,
 		CreatedAt:     t.CreatedAt,
 		StartedAt:     t.StartedAt,
@@ -219,8 +219,8 @@ func toEndpoints(endpoints []Endpoint) []task.Endpoint {
 	result := make([]task.Endpoint, len(endpoints))
 	for i, e := range endpoints {
 		result[i] = task.Endpoint{
-			ContainerPort: e.ContainerPort,
-			HostPort:      e.HostPort,
+			TaskPort: e.TaskPort,
+			HostPort: e.HostPort,
 		}
 	}
 
@@ -231,8 +231,8 @@ func fromEndpoints(endpoints []task.Endpoint) []Endpoint {
 	result := make([]Endpoint, len(endpoints))
 	for i, e := range endpoints {
 		result[i] = Endpoint{
-			ContainerPort: e.ContainerPort,
-			HostPort:      e.HostPort,
+			TaskPort: e.TaskPort,
+			HostPort: e.HostPort,
 		}
 	}
 

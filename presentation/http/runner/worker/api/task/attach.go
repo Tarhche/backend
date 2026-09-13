@@ -13,7 +13,7 @@ import (
 
 	attachtask "github.com/khanzadimahdi/testproject/application/runner/worker/task/attachTask"
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/runner/container"
+	"github.com/khanzadimahdi/testproject/domain/runner/task"
 	"github.com/khanzadimahdi/testproject/presentation/http/middleware"
 )
 
@@ -30,13 +30,13 @@ const (
 	endWait = 30 * time.Second
 )
 
-// attachHandler carries a command running inside a container over a websocket.
+// attachHandler carries a command running inside a task over a websocket.
 //
 // Binary frames are the command's own bytes, in both directions. A text frame
 // is a control message, which today means a terminal that has been resized.
 //
 // Who is asking comes from the token the middleware verified, and whose
-// container it is comes off the container itself. Nothing in between is trusted
+// task it is comes off the task itself. Nothing in between is trusted
 // to have checked: the connection arrives through the ingress, which proxies
 // and decides nothing.
 type attachHandler struct {
@@ -73,7 +73,7 @@ type control struct {
 }
 
 // @Summary		Attach to a worker task
-// @Description	upgrades to a websocket carrying a command running inside the container
+// @Description	upgrades to a websocket carrying a command running inside the task
 // @Tags			runner tasks
 // @Param			uuid	path	string	true	"Task UUID"
 // @Param			command	query	[]string	false	"The command to run; an interactive shell by default"
@@ -91,11 +91,11 @@ func (h *attachHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	session, validationErrors, err := h.useCase.Execute(r.Context(), request)
 	switch {
 	case errors.Is(err, domain.ErrNotExists):
-		http.Error(rw, "no such container", http.StatusNotFound)
+		http.Error(rw, "no such task", http.StatusNotFound)
 
 		return
 	case err != nil:
-		h.logger.ErrorContext(r.Context(), "could not attach to a container", "error", err)
+		h.logger.ErrorContext(r.Context(), "could not attach to a task", "error", err)
 		http.Error(rw, "could not attach", http.StatusInternalServerError)
 
 		return
@@ -123,23 +123,23 @@ func (h *attachHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 	// the client is gone. What it left running has nothing to show its output
 	// to and no way back to it, so it is ended rather than left in the
-	// container for as long as the container lives.
+	// task for as long as the task lives.
 	go h.end(session)
 }
 
 // end stops what the client left running. Detached from the request, which is
 // over: the command is given its grace period after the person has gone.
-func (h *attachHandler) end(session container.ExecSession) {
+func (h *attachHandler) end(session task.ExecSession) {
 	ctx, cancel := context.WithTimeout(context.Background(), endWait)
 	defer cancel()
 
 	if err := session.End(ctx); err != nil {
-		h.logger.Warn("could not end a command left running in a container", "error", err)
+		h.logger.Warn("could not end a command left running in a task", "error", err)
 	}
 }
 
 // pump carries bytes between the client and the command until either end stops.
-func (h *attachHandler) pump(conn *websocket.Conn, session container.ExecSession) {
+func (h *attachHandler) pump(conn *websocket.Conn, session task.ExecSession) {
 	defer conn.Close()
 	defer session.Close()
 
@@ -164,7 +164,7 @@ func (h *attachHandler) pump(conn *websocket.Conn, session container.ExecSession
 
 			if err != nil {
 				if !errors.Is(err, io.EOF) {
-					h.logger.Warn("a container's command ended", "error", err)
+					h.logger.Warn("a task's command ended", "error", err)
 				}
 
 				return

@@ -11,7 +11,7 @@ import (
 var serviceName = regexp.MustCompile(`^[a-z0-9]([a-z0-9_-]{0,61}[a-z0-9])?$`)
 
 // maxServices caps one stack, so a single request cannot ask a node for an
-// unbounded number of containers.
+// unbounded number of tasks.
 const maxServices = 20
 
 // Stack is a set of services run together, in the shape a compose file has.

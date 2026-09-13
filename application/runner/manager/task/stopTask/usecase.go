@@ -36,7 +36,7 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 
 	// what it is asked to be from now on. It is written down before anything
 	// is asked of the node, and whatever happens to that request, so that a
-	// container which ends up somewhere else is brought back here by the
+	// task which ends up somewhere else is brought back here by the
 	// runner's own heartbeat.
 	t.ExpectedState = task.Stopped
 

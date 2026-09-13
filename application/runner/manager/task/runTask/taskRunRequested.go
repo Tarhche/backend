@@ -35,12 +35,12 @@ func (uc *TaskRunRequested) Handle(ctx context.Context, data []byte) error {
 	}
 
 	portBindings := make(map[uint][]PortBinding, len(event.PortBindings))
-	for hostPort, containerPorts := range event.PortBindings {
-		portBindings[hostPort] = make([]PortBinding, len(containerPorts))
-		for i, containerPort := range containerPorts {
+	for hostPort, taskPorts := range event.PortBindings {
+		portBindings[hostPort] = make([]PortBinding, len(taskPorts))
+		for i, taskPort := range taskPorts {
 			portBindings[hostPort][i] = PortBinding{
-				HostIP:   containerPort.HostIP,
-				HostPort: uint(containerPort.HostPort),
+				HostIP:   taskPort.HostIP,
+				HostPort: uint(taskPort.HostPort),
 			}
 		}
 	}
