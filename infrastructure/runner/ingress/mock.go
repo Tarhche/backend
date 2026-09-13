@@ -1,6 +1,3 @@
-// Package ingress holds the doubles for the registry of connected runners. The
-// registry itself is the tunnel: a runner is in it for exactly as long as its
-// connections are.
 package ingress
 
 import (

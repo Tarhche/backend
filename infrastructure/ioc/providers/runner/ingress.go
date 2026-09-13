@@ -3,7 +3,6 @@ package runner
 import (
 	"context"
 	"log/slog"
-	"net"
 	"net/http"
 	"time"
 
@@ -14,6 +13,7 @@ import (
 	ingressContract "github.com/khanzadimahdi/testproject/domain/runner/ingress"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/certificate"
+	infraIngress "github.com/khanzadimahdi/testproject/infrastructure/runner/ingress"
 	"github.com/khanzadimahdi/testproject/infrastructure/runner/tunnel"
 	"github.com/khanzadimahdi/testproject/infrastructure/telemetry/profiler"
 	healthAPI "github.com/khanzadimahdi/testproject/presentation/http/health"
@@ -115,31 +115,11 @@ func (p *ingressProvider) Boot(ctx context.Context, c provider.Container) error 
 		return err
 	}
 
-	if err := c.Bind(func() ingressContract.Registry { return runnerRegistry{tunnelIngress} }, provider.Singleton()); err != nil {
+	if err := c.Bind(func() ingressContract.Registry { return infraIngress.NewRegistry(tunnelIngress) }, provider.Singleton()); err != nil {
 		return err
 	}
 
 	return c.Bind(ingressConsoleCommand, provider.Singleton())
-}
-
-// runnerRegistry is the tunnel's view of what is connected, told in the terms
-// the rest of the application already has.
-type runnerRegistry struct {
-	ingress *tunnel.Ingress
-}
-
-var _ ingressContract.Registry = runnerRegistry{}
-
-func (r runnerRegistry) Exists(_ context.Context, name string) (bool, error) {
-	for _, worker := range r.ingress.Workers() {
-		if worker.Worker == name {
-			return true, nil
-		}
-	}
-
-	// it is not there, which this can say for certain: what it holds is the
-	// connections themselves rather than a record of them.
-	return false, nil
 }
 
 func (p *ingressProvider) Terminate(ctx context.Context) error {
@@ -166,21 +146,10 @@ func ingressConsoleCommand(
 	// the workers opened, and there is nothing to be reachable but itself.
 	checkHealthUseCase := checkhealth.NewUseCase()
 
-	// a transport that dials nothing. The address it is given names a runner,
-	// and what comes back is a stream on one of the connections that runner
-	// opened — carried to the worker's own api, which is one of the services it
-	// offers. Nothing below this knows the tunnel is not a network.
-	transport := &http.Transport{
-		DialContext: func(ctx context.Context, _ string, address string) (net.Conn, error) {
-			worker, _, err := net.SplitHostPort(address)
-			if err != nil {
-				worker = address
-			}
-
-			return tunnelIngress.Dial(ctx, worker, tunnel.Target{Service: runnerAPIService})
-		},
-		IdleConnTimeout: idleConnectionTimeout,
-	}
+	// a transport that dials nothing: the address it is handed names a runner,
+	// and what comes back is a stream on a connection that runner already
+	// opened.
+	transport := infraIngress.NewTransport(tunnelIngress, runnerAPIService, idleConnectionTimeout)
 
 	mux := http.NewServeMux()
 
