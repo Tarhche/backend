@@ -14,7 +14,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	getRunner "github.com/khanzadimahdi/testproject/application/runner/ingress/getRunner"
+	checkRunnerExists "github.com/khanzadimahdi/testproject/application/runner/ingress/checkRunnerExists"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/runner/ingress"
 )
@@ -32,9 +32,9 @@ func serve(t *testing.T, connected map[string]string) *httptest.Server {
 
 	transport := &http.Transport{
 		DialContext: func(ctx context.Context, network string, address string) (net.Conn, error) {
-			id, _, _ := net.SplitHostPort(address)
+			name, _, _ := net.SplitHostPort(address)
 
-			upstream, ok := connected[id]
+			upstream, ok := connected[name]
 			if !ok {
 				return nil, domain.ErrNotExists
 			}
@@ -44,7 +44,7 @@ func serve(t *testing.T, connected map[string]string) *httptest.Server {
 	}
 
 	mux := http.NewServeMux()
-	mux.Handle("/runners/{id}/{path...}", NewProxyHandler(getRunner.NewUseCase(registry), transport, slog.New(slog.DiscardHandler)))
+	mux.Handle("/runners/{name}/{path...}", NewProxyHandler(checkRunnerExists.NewUseCase(registry), transport, slog.New(slog.DiscardHandler)))
 
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
@@ -53,7 +53,7 @@ func serve(t *testing.T, connected map[string]string) *httptest.Server {
 }
 
 func TestProxyHandler(t *testing.T) {
-	t.Run("the request reaches the runner the id names", func(t *testing.T) {
+	t.Run("the request reaches the runner the name belongs to", func(t *testing.T) {
 		var gotPath, gotQuery, gotHeader string
 
 		runner := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
@@ -164,7 +164,7 @@ func TestProxyHandler(t *testing.T) {
 }
 
 func TestProxyHandler_upstream(t *testing.T) {
-	t.Run("the runner is addressed by its id rather than by a machine", func(t *testing.T) {
+	t.Run("the runner is addressed by its name rather than by a machine", func(t *testing.T) {
 		var gotHost string
 
 		runner := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
@@ -191,10 +191,8 @@ type connectedRunners map[string]string
 
 var _ ingress.Registry = connectedRunners{}
 
-func (r connectedRunners) Get(_ context.Context, id string) (ingress.Runner, error) {
-	if _, ok := r[id]; !ok {
-		return ingress.Runner{}, domain.ErrNotExists
-	}
+func (r connectedRunners) Exists(_ context.Context, name string) (bool, error) {
+	_, ok := r[name]
 
-	return ingress.Runner{ID: id}, nil
+	return ok, nil
 }

@@ -10,19 +10,18 @@ package ingress
 
 import "context"
 
-// Runner is a worker the ingress can reach, which is its name and nothing else:
-// how it is reached is the tunnel's business, and how much of it is connected
-// is a question nothing asks.
-type Runner struct {
-	ID string
-}
-
 // Registry is the set of runners currently connected.
 //
 // Connections arrive and go while requests are being routed, so an
 // implementation has to be safe for concurrent use.
 type Registry interface {
-	// Get returns the runner an id names. It reports domain.ErrNotExists for an
-	// id that has never connected, and for one whose connections have all gone.
-	Get(ctx context.Context, id string) (Runner, error)
+	// Exists reports whether a worker of that name is connected. A name is all
+	// a worker is: it is unique across the cluster, it is what the certificate
+	// says, and there is nothing else to look up -- so this answers the only
+	// question there is to ask, rather than handing back the name it was given.
+	//
+	// false and a nil error is a worker that is not there. An error is this
+	// being unable to say, which a registry kept anywhere but in memory can be
+	// and which is not the same answer at all.
+	Exists(ctx context.Context, name string) (bool, error)
 }

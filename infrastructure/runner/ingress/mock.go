@@ -17,8 +17,8 @@ type MockRegistry struct {
 
 var _ ingress.Registry = &MockRegistry{}
 
-func (r *MockRegistry) Get(ctx context.Context, id string) (ingress.Runner, error) {
-	args := r.Mock.Called(ctx, id)
+func (r *MockRegistry) Exists(ctx context.Context, name string) (bool, error) {
+	args := r.Mock.Called(ctx, name)
 
-	return args.Get(0).(ingress.Runner), args.Error(1)
+	return args.Bool(0), args.Error(1)
 }

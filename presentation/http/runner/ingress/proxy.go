@@ -5,14 +5,12 @@ package ingress
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 
-	getRunner "github.com/khanzadimahdi/testproject/application/runner/ingress/getRunner"
-	"github.com/khanzadimahdi/testproject/domain"
+	checkRunnerExists "github.com/khanzadimahdi/testproject/application/runner/ingress/checkRunnerExists"
 	infraTrace "github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -22,17 +20,17 @@ import (
 // Everything a worker serves is reached this way: an attached terminal, a log
 // being followed, a plain call to its API. Nothing is dialled — the request goes
 // back down a connection the worker itself opened, which is what the transport
-// resolves the runner's id to. A worker therefore needs no address, and callers
-// name one by its id and are spared the question.
+// resolves the runner's name to. A worker therefore needs no address, and
+// callers name one and are spared the question.
 type proxyHandler struct {
-	useCase *getRunner.UseCase
+	useCase *checkRunnerExists.UseCase
 	proxy   *httputil.ReverseProxy
 	logger  *slog.Logger
 }
 
 var _ http.Handler = &proxyHandler{}
 
-func NewProxyHandler(useCase *getRunner.UseCase, transport http.RoundTripper, logger *slog.Logger) *proxyHandler {
+func NewProxyHandler(useCase *checkRunnerExists.UseCase, transport http.RoundTripper, logger *slog.Logger) *proxyHandler {
 	h := &proxyHandler{useCase: useCase, logger: logger}
 
 	h.proxy = &httputil.ReverseProxy{
@@ -45,8 +43,8 @@ func NewProxyHandler(useCase *getRunner.UseCase, transport http.RoundTripper, lo
 			// set after SetURL, which joins the target's path onto the inbound
 			// one: the runner is asked for its own path, not for the ingress's.
 			// SetURL also clears the outbound Host, which leaves the runner
-			// addressed by its id — it serves its own API here, not a site that
-			// has to know what it is called.
+			// addressed by its name — it serves its own API here, not a site
+			// that has to know what it is called.
 			r.Out.URL.Path = upstream.Path
 			r.Out.URL.RawQuery = r.In.URL.RawQuery
 
@@ -68,29 +66,31 @@ func NewProxyHandler(useCase *getRunner.UseCase, transport http.RoundTripper, lo
 type upstreamKey struct{}
 
 // @Summary		Proxy to a runner
-// @Description	carries the request to the runner the id names, path and all, including a websocket upgrade
+// @Description	carries the request to the named runner, path and all, including a websocket upgrade
 // @Tags			runner ingress
-// @Param			id		path		string	true	"Runner id"
+// @Param			name	path		string	true	"Runner name"
 // @Param			path	path		string	true	"Path on the runner"
 // @Success		200		{string}	string	"whatever the runner answered"
 // @Failure		404		{object}	map[string]interface{}
 // @Failure		502		{object}	map[string]interface{}
-// @Router			/runners/{id}/{path} [get]
+// @Router			/runners/{name}/{path} [get]
 func (h *proxyHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
-	request := getRunner.Request{
-		ID: r.PathValue("id"),
+	request := checkRunnerExists.Request{
+		Name: r.PathValue("name"),
 	}
 
-	response, err := h.useCase.Execute(r.Context(), &request)
-
-	switch {
-	case errors.Is(err, domain.ErrNotExists):
-		http.Error(rw, "unknown runner", http.StatusNotFound)
-
-		return
-	case err != nil:
+	exists, err := h.useCase.Execute(r.Context(), &request)
+	if err != nil {
 		infraTrace.RecordError(trace.SpanFromContext(r.Context()), err)
 		rw.WriteHeader(http.StatusInternalServerError)
+
+		return
+	}
+
+	// nothing is connected from it, so there is nothing to carry this to. It is
+	// the same to a caller as a runner that was never heard of.
+	if !exists {
+		http.Error(rw, "unknown runner", http.StatusNotFound)
 
 		return
 	}
@@ -99,7 +99,7 @@ func (h *proxyHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	// to one of the connections that runner has open here.
 	upstream := &url.URL{
 		Scheme: "http",
-		Host:   response.ID,
+		Host:   request.Name,
 		Path:   "/" + r.PathValue("path"),
 	}
 

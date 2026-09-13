@@ -10,8 +10,7 @@ import (
 	"github.com/danceable/provider"
 
 	checkhealth "github.com/khanzadimahdi/testproject/application/app/checkHealth"
-	ingressGetRunner "github.com/khanzadimahdi/testproject/application/runner/ingress/getRunner"
-	"github.com/khanzadimahdi/testproject/domain"
+	ingressCheckRunnerExists "github.com/khanzadimahdi/testproject/application/runner/ingress/checkRunnerExists"
 	ingressContract "github.com/khanzadimahdi/testproject/domain/runner/ingress"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/certificate"
@@ -131,18 +130,16 @@ type runnerRegistry struct {
 
 var _ ingressContract.Registry = runnerRegistry{}
 
-func (r runnerRegistry) Get(_ context.Context, id string) (ingressContract.Runner, error) {
+func (r runnerRegistry) Exists(_ context.Context, name string) (bool, error) {
 	for _, worker := range r.ingress.Workers() {
-		if worker.Worker == id {
-			return asRunner(worker), nil
+		if worker.Worker == name {
+			return true, nil
 		}
 	}
 
-	return ingressContract.Runner{}, domain.ErrNotExists
-}
-
-func asRunner(worker tunnel.WorkerState) ingressContract.Runner {
-	return ingressContract.Runner{ID: worker.Worker}
+	// it is not there, which this can say for certain: what it holds is the
+	// connections themselves rather than a record of them.
+	return false, nil
 }
 
 func (p *ingressProvider) Terminate(ctx context.Context) error {
@@ -163,7 +160,7 @@ func ingressConsoleCommand(
 		return nil, err
 	}
 
-	getRunnerUseCase := ingressGetRunner.NewUseCase(registry)
+	checkRunnerExistsUseCase := ingressCheckRunnerExists.NewUseCase(registry)
 
 	// the ingress talks to nothing it has to reach: it holds the connections
 	// the workers opened, and there is nothing to be reachable but itself.
@@ -196,7 +193,7 @@ func ingressConsoleCommand(
 	mux.Handle("GET /health", middleware.NewCORSMiddleware(healthAPI.NewHealthHandler(checkHealthUseCase)))
 
 	// everything below here belongs to a runner rather than to the ingress
-	mux.Handle("/runners/{id}/{path...}", ingressAPI.NewProxyHandler(getRunnerUseCase, transport, logger))
+	mux.Handle("/runners/{name}/{path...}", ingressAPI.NewProxyHandler(checkRunnerExistsUseCase, transport, logger))
 
 	var tracedProfiler *profiler.TracedProfiler
 	if err := iocContainer.Resolve(&tracedProfiler); err != nil {
