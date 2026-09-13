@@ -1,4 +1,4 @@
-package checkRunnerExists
+package checkWorkerExists
 
 import (
 	"errors"
@@ -11,7 +11,7 @@ import (
 )
 
 func TestUseCase_Execute(t *testing.T) {
-	t.Run("a connected runner is there", func(t *testing.T) {
+	t.Run("a connected worker is there", func(t *testing.T) {
 		var registry infraIngress.MockRegistry
 		registry.On("Exists", mock.Anything, "runner-worker-01").Once().Return(true, nil)
 		defer registry.AssertExpectations(t)
@@ -22,7 +22,7 @@ func TestUseCase_Execute(t *testing.T) {
 		assert.True(t, exists)
 	})
 
-	t.Run("a runner that is not connected is not there", func(t *testing.T) {
+	t.Run("a worker that is not connected is not there", func(t *testing.T) {
 		var registry infraIngress.MockRegistry
 		registry.On("Exists", mock.Anything, "runner-worker-01").Once().Return(false, nil)
 		defer registry.AssertExpectations(t)
@@ -33,7 +33,7 @@ func TestUseCase_Execute(t *testing.T) {
 		assert.False(t, exists)
 	})
 
-	t.Run("a registry that cannot answer is not a runner that is missing", func(t *testing.T) {
+	t.Run("a registry that cannot answer is not a worker that is missing", func(t *testing.T) {
 		expected := errors.New("the registry is unreachable")
 
 		var registry infraIngress.MockRegistry

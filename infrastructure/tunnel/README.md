@@ -460,7 +460,7 @@ RUNNER_TUNNEL_ALLOWED_TARGETS='127.0.0.1:22,127.0.0.1:5432' \
   app serve-runner-worker --name=worker-001 --port=80
 
 # 6. a client connection, which reaches the agent's target through the tunnel
-curl http://ingress:80/runners/worker-001/health
+curl http://ingress:80/workers/worker-001/health
 
 # 7. and arbitrary TCP, which knows none of the above is happening
 ssh -p 8022 user@ingress

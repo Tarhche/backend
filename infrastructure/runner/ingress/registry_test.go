@@ -16,7 +16,7 @@ type connected []tunnel.AgentState
 func (c connected) Agents() []tunnel.AgentState { return c }
 
 func TestRegistry_Exists(t *testing.T) {
-	t.Run("a runner holding connections is there", func(t *testing.T) {
+	t.Run("a worker holding connections is there", func(t *testing.T) {
 		registry := NewRegistry(connected{
 			{Name: "runner-worker-01", Sessions: 2},
 			{Name: "runner-worker-02", Sessions: 3},
@@ -28,12 +28,12 @@ func TestRegistry_Exists(t *testing.T) {
 		assert.True(t, exists)
 	})
 
-	t.Run("a runner that never connected is not there", func(t *testing.T) {
+	t.Run("a worker that never connected is not there", func(t *testing.T) {
 		registry := NewRegistry(connected{{Name: "runner-worker-01", Sessions: 2}})
 
 		exists, err := registry.Exists(t.Context(), "runner-worker-09")
 
-		require.NoError(t, err, "a runner that is not there is an answer, not a failure")
+		require.NoError(t, err, "a worker that is not there is an answer, not a failure")
 		assert.False(t, exists)
 	})
 

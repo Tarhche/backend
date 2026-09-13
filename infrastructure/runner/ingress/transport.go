@@ -18,7 +18,7 @@ type Streams interface {
 
 // NewTransport builds an http.Transport that dials nothing.
 //
-// The address it is handed names a runner rather than a machine, and what comes
+// The address it is handed names a worker rather than a machine, and what comes
 // back is a stream on one of the connections that runner already opened,
 // carried to the service named here. Nothing below this knows the tunnel is not
 // a network, which is what lets an ordinary reverse proxy sit on top of it.

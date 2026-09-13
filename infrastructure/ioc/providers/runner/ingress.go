@@ -9,7 +9,7 @@ import (
 	"github.com/danceable/provider"
 
 	checkhealth "github.com/khanzadimahdi/testproject/application/app/checkHealth"
-	ingressCheckRunnerExists "github.com/khanzadimahdi/testproject/application/runner/ingress/checkRunnerExists"
+	ingressCheckWorkerExists "github.com/khanzadimahdi/testproject/application/runner/ingress/checkWorkerExists"
 	ingressContract "github.com/khanzadimahdi/testproject/domain/runner/ingress"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/certificate"
@@ -142,7 +142,7 @@ func ingressConsoleCommand(
 		return nil, err
 	}
 
-	checkRunnerExistsUseCase := ingressCheckRunnerExists.NewUseCase(registry)
+	checkWorkerExistsUseCase := ingressCheckWorkerExists.NewUseCase(registry)
 
 	// the ingress talks to nothing it has to reach: it holds the connections
 	// the workers opened, and there is nothing to be reachable but itself.
@@ -156,7 +156,7 @@ func ingressConsoleCommand(
 	mux := http.NewServeMux()
 
 	mux.Handle("GET /health", middleware.NewCORSMiddleware(healthAPI.NewHealthHandler(checkHealthUseCase)))
-	mux.Handle("/runners/{name}/{path...}", ingressAPI.NewProxyHandler(checkRunnerExistsUseCase, transport, logger))
+	mux.Handle("/workers/{name}/{path...}", ingressAPI.NewProxyHandler(checkWorkerExistsUseCase, transport, logger))
 
 	// no rate limit: what comes through here is a container's own traffic —
 	// an attached terminal, a log being followed — which a cap per minute

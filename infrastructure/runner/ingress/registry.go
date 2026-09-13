@@ -1,8 +1,8 @@
 // Package ingress is the tunnel told in the terms the rest of the application
-// already has: which runners are connected, and therefore which ones can be
+// already has: which workers are connected, and therefore which ones can be
 // reached.
 //
-// Nothing is recorded here. A runner is in the registry for exactly as long as
+// Nothing is recorded here. A worker is in the registry for exactly as long as
 // its connections are open, so what this reads is the connections themselves
 // rather than anything either side had to remember to say.
 package ingress
@@ -22,7 +22,7 @@ type Connections interface {
 	Agents() []tunnel.AgentState
 }
 
-// Registry answers whether a runner can be reached.
+// Registry answers whether a worker can be reached.
 type Registry struct {
 	connections Connections
 }

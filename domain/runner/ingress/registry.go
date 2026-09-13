@@ -10,7 +10,7 @@ package ingress
 
 import "context"
 
-// Registry is the set of runners currently connected.
+// Registry is the set of workers currently connected.
 //
 // Connections arrive and go while requests are being routed, so an
 // implementation has to be safe for concurrent use.

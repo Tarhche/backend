@@ -1,5 +1,5 @@
 // Package ingress serves the runner cluster's front door: a request naming a
-// runner is carried to that runner, and one naming a runner that is not there
+// worker is carried to that worker, and one naming a worker that is not there
 // is answered as such.
 package ingress
 
@@ -10,7 +10,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 
-	checkRunnerExists "github.com/khanzadimahdi/testproject/application/runner/ingress/checkRunnerExists"
+	"github.com/khanzadimahdi/testproject/application/runner/ingress/checkWorkerExists"
 	infraTrace "github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -23,14 +23,21 @@ import (
 // resolves the runner's name to. A worker therefore needs no address, and
 // callers name one and are spared the question.
 type proxyHandler struct {
-	useCase *checkRunnerExists.UseCase
+	useCase *checkWorkerExists.UseCase
 	proxy   *httputil.ReverseProxy
 	logger  *slog.Logger
 }
 
 var _ http.Handler = &proxyHandler{}
 
-func NewProxyHandler(useCase *checkRunnerExists.UseCase, transport http.RoundTripper, logger *slog.Logger) *proxyHandler {
+// upstreamKey carries the resolved runner from ServeHTTP to the rewrite, which
+// is the only hook a ReverseProxy gives for a per-request target.
+type upstreamKey struct{}
+
+func NewProxyHandler(
+	useCase *checkWorkerExists.UseCase,
+	transport http.RoundTripper, logger *slog.Logger,
+) *proxyHandler {
 	h := &proxyHandler{useCase: useCase, logger: logger}
 
 	h.proxy = &httputil.ReverseProxy{
@@ -41,8 +48,8 @@ func NewProxyHandler(useCase *checkRunnerExists.UseCase, transport http.RoundTri
 			r.SetURL(&url.URL{Scheme: upstream.Scheme, Host: upstream.Host})
 
 			// set after SetURL, which joins the target's path onto the inbound
-			// one: the runner is asked for its own path, not for the ingress's.
-			// SetURL also clears the outbound Host, which leaves the runner
+			// one: the worker is asked for its own path, not for the ingress's.
+			// SetURL also clears the outbound Host, which leaves the worker
 			// addressed by its name — it serves its own API here, not a site
 			// that has to know what it is called.
 			r.Out.URL.Path = upstream.Path
@@ -51,9 +58,9 @@ func NewProxyHandler(useCase *checkRunnerExists.UseCase, transport http.RoundTri
 			r.SetXForwarded()
 		},
 		ErrorHandler: func(rw http.ResponseWriter, _ *http.Request, err error) {
-			// the runner is connected but nothing came back down it: its own
+			// the worker is connected but nothing came back down it: its own
 			// problem to report, not something the ingress can fix.
-			h.logger.Error("could not reach a runner", "error", err)
+			h.logger.Error("could not reach a worker", "error", err)
 			rw.WriteHeader(http.StatusBadGateway)
 		},
 	}
@@ -61,47 +68,40 @@ func NewProxyHandler(useCase *checkRunnerExists.UseCase, transport http.RoundTri
 	return h
 }
 
-// upstreamKey carries the resolved runner from ServeHTTP to the rewrite, which
-// is the only hook a ReverseProxy gives for a per-request target.
-type upstreamKey struct{}
-
-// @Summary		Proxy to a runner
-// @Description	carries the request to the named runner, path and all, including a websocket upgrade
-// @Tags			runner ingress
-// @Param			name	path		string	true	"Runner name"
-// @Param			path	path		string	true	"Path on the runner"
-// @Success		200		{string}	string	"whatever the runner answered"
+// @Summary		Proxy to a worker
+// @Description	carries the request to the named worker, path and all, including a websocket upgrade
+// @Tags			worker ingress
+// @Param			name	path		string	true	"Worker name"
+// @Param			path	path		string	true	"Path on the worker"
+// @Success		200		{string}	string	"whatever the worker answered"
 // @Failure		404		{object}	map[string]interface{}
 // @Failure		502		{object}	map[string]interface{}
-// @Router			/runners/{name}/{path} [get]
+// @Router			/workers/{name}/{path} [get]
 func (h *proxyHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
-	request := checkRunnerExists.Request{
+	request := checkWorkerExists.Request{
 		Name: r.PathValue("name"),
 	}
 
 	exists, err := h.useCase.Execute(r.Context(), &request)
-	if err != nil {
+
+	switch {
+	case err != nil:
 		infraTrace.RecordError(trace.SpanFromContext(r.Context()), err)
 		rw.WriteHeader(http.StatusInternalServerError)
 
 		return
-	}
-
-	// nothing is connected from it, so there is nothing to carry this to. It is
-	// the same to a caller as a runner that was never heard of.
-	if !exists {
-		http.Error(rw, "unknown runner", http.StatusNotFound)
+	case !exists:
+		rw.WriteHeader(http.StatusNotFound)
 
 		return
+	default:
+		// the host is the workers rather than a machine: the transport resolves it
+		// to one of the connections that worker has open here.
+		upstream := &url.URL{
+			Scheme: "http",
+			Host:   request.Name,
+			Path:   "/" + r.PathValue("path"),
+		}
+		h.proxy.ServeHTTP(rw, r.WithContext(context.WithValue(r.Context(), upstreamKey{}, upstream)))
 	}
-
-	// the host is the runner rather than a machine: the transport resolves it
-	// to one of the connections that runner has open here.
-	upstream := &url.URL{
-		Scheme: "http",
-		Host:   request.Name,
-		Path:   "/" + r.PathValue("path"),
-	}
-
-	h.proxy.ServeHTTP(rw, r.WithContext(context.WithValue(r.Context(), upstreamKey{}, upstream)))
 }

@@ -1,4 +1,4 @@
-package checkRunnerExists
+package checkWorkerExists
 
 import (
 	"context"
