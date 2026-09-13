@@ -1,0 +1,77 @@
+services:
+  runner-ingress:
+    image: ${RUNNER_INGRESS_IMAGE}
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      # where a request comes from: the proxy routes container hostnames here,
+      # and nothing routes to the manager any more.
+      - runner_manager
+      # and where the workers dial in. Nothing else is on this one, so a worker
+      # has no path to the manager and the proxy none to a worker.
+      - runner_ingress
+      - monitoring
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:80/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    stop_grace_period: 30s
+    deploy:
+      mode: replicated
+      # one replica per address: a worker's connections land on whichever
+      # replica it dialled, and one name in front of several replicas hands
+      # each connection to a different one. Several ingresses are had by
+      # running several of these with an address each and naming them all in
+      # RUNNER_TUNNEL_ADDRESSES, which is what a worker keeps a pool per.
+      replicas: 1
+      endpoint_mode: vip
+      update_config:
+        parallelism: 1
+        order: start-first
+        monitor: 90s
+        delay: 5s
+        failure_action: rollback
+      rollback_config:
+        parallelism: 1
+        order: start-first
+        monitor: 90s
+        delay: 5s
+        failure_action: pause
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      resources:
+        limits:
+          cpus: '0.20'
+          memory: 100M
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+    environment:
+      RUNNER_TUNNEL_PRIVATE_KEY: ${BACKEND_RUNNER_INGRESS_TUNNEL_PRIVATE_KEY}
+      RUNNER_TUNNEL_TOKEN: ${BACKEND_RUNNER_TUNNEL_TOKEN}
+      RUNNER_TUNNEL_AUTHORIZED_KEYS: ${BACKEND_RUNNER_WORKER_TUNNEL_PUBLIC_KEYS}
+      OTEL_EXPORTER_OTLP_INSECURE: ${OTEL_EXPORTER_OTLP_INSECURE}
+      OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL}
+      OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
+      OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT: ${OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT:-}
+      OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
+      PROFILING_ENABLED: ${PROFILING_ENABLED:-true}
+      # ports arbitrary TCP arrives on, as listen=worker:target. Nothing is
+      # forwarded unless it is named here.
+      RUNNER_INGRESS_FORWARDS: ${BACKEND_RUNNER_INGRESS_FORWARDS:-}
+
+networks:
+  runner_ingress:
+    name: runner_ingress
+    external: true
+
+  monitoring:
+    name: monitoring
+    external: true

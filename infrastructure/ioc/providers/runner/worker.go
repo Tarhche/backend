@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/danceable/provider"
@@ -22,9 +24,11 @@ import (
 	nodeContract "github.com/khanzadimahdi/testproject/domain/runner/node"
 	taskEvents "github.com/khanzadimahdi/testproject/domain/runner/task/events"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
+	"github.com/khanzadimahdi/testproject/infrastructure/crypto/certificate"
 	infraHealth "github.com/khanzadimahdi/testproject/infrastructure/health"
 	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/jetstream/produceConsumer"
 	"github.com/khanzadimahdi/testproject/infrastructure/telemetry/profiler"
+	"github.com/khanzadimahdi/testproject/infrastructure/tunnel"
 	healthAPI "github.com/khanzadimahdi/testproject/presentation/http/health"
 	"github.com/khanzadimahdi/testproject/presentation/http/middleware"
 	workerTaskAPI "github.com/khanzadimahdi/testproject/presentation/http/runner/worker/api/task"
@@ -32,42 +36,9 @@ import (
 
 const (
 	WorkerSubscribers = "runner:worker:subscribers"
-	WorkerName        = "runner:worker:name"
 
 	consumerNamePrefix string = "runner-worker-%s"
 )
-
-// workerNameProvider binds the worker name, which the command loads from its
-// --name flag or from the RUNNER_WORKER_NAME environment variable, under the
-// name the worker providers resolve it by.
-type workerNameProvider struct{}
-
-var _ provider.Provider = &workerNameProvider{}
-
-// NewWorkerNameProvider binds the worker name into the container so the worker
-// providers can resolve it. It must be registered after the configs provider.
-func NewWorkerNameProvider() *workerNameProvider {
-	return &workerNameProvider{}
-}
-
-func (p *workerNameProvider) Register(ctx context.Context, c provider.Container) error {
-	var workerConfigs *configs.RunnerWorker
-	if err := c.Resolve(&workerConfigs); err != nil {
-		return err
-	}
-
-	name := workerConfigs.Name
-
-	return c.Bind(func() string { return name }, provider.Singleton(), provider.WithName(WorkerName))
-}
-
-func (p *workerNameProvider) Boot(ctx context.Context, c provider.Container) error {
-	return nil
-}
-
-func (p *workerNameProvider) Terminate(ctx context.Context) error {
-	return nil
-}
 
 // workerProvider builds the runner worker's messaging singleton, HTTP handler,
 // message subscribers and heartbeat use cases.
@@ -116,7 +87,71 @@ func (p *workerProvider) Boot(ctx context.Context, c provider.Container) error {
 		defer pc.Wait()
 	}
 
+	if err := p.bindTunnel(c, nodeName, logger); err != nil {
+		return err
+	}
+
 	return c.Bind(workerConsoleCommand, provider.Singleton())
+}
+
+// bindTunnel builds this worker's connections to the ingresses.
+//
+// Nothing dials a worker, so these are the only way a request reaches one. What
+// arrives on them is carried to whichever of the worker's own services was
+// asked for — its http api today, a container's port once there is one — so the
+// ingress never learns where any of them are.
+func (p *workerProvider) bindTunnel(c provider.Container, nodeName string, logger *slog.Logger) error {
+	var workerConfigs *configs.RunnerWorker
+	if err := c.Resolve(&workerConfigs); err != nil {
+		return err
+	}
+
+	tlsConfig, err := tunnel.ClientTLS(certificate.TLSFiles{
+		Authority:   workerConfigs.TunnelAuthority,
+		Certificate: workerConfigs.TunnelCertificate,
+		PrivateKey:  workerConfigs.TunnelKey,
+		ServerName:  workerConfigs.TunnelServerName,
+	})
+	if err != nil {
+		return err
+	}
+
+	tunnelConfig := tunnel.DefaultConfig()
+	tunnelConfig.MinSessions = workerConfigs.TunnelMinConnections
+	tunnelConfig.MaxSessions = workerConfigs.TunnelMaxConnections
+	tunnelConfig.MaxStreamsPerSession = workerConfigs.TunnelMaxStreamsPerSession
+	tunnelConfig.IdleSessionTimeout = workerConfigs.TunnelMaxIdleTime
+
+	// what a stream may be connected to: the api this worker already serves,
+	// offered under a name so that the ingress asks for the service rather than
+	// for a port, and whatever addresses this worker was told to allow. Nothing
+	// else, however the ingress asks.
+	allowed, err := workerConfigs.AllowedTargets()
+	if err != nil {
+		return err
+	}
+
+	targets := tunnel.NewServiceTargets(map[string]string{
+		runnerAPIService: net.JoinHostPort("127.0.0.1", strconv.Itoa(workerConfigs.Port)),
+	}, allowed...)
+
+	worker, err := tunnel.NewAgent(
+		nodeName,
+		workerConfigs.IngressAddresses(),
+		tunnelConfig,
+		tunnel.TLSDialer(tlsConfig, tunnelConfig.DialTimeout),
+		targets,
+		logger,
+	)
+	if err != nil {
+		return err
+	}
+
+	if err := c.Bind(func() tunnel.Targets { return targets }, provider.Singleton()); err != nil {
+		return err
+	}
+
+	return c.Bind(func() *tunnel.Agent { return worker }, provider.Singleton())
 }
 
 func (p *workerProvider) Terminate(ctx context.Context) error {

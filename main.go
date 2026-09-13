@@ -12,6 +12,8 @@ import (
 
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	"github.com/khanzadimahdi/testproject/presentation/commands/blog"
+	"github.com/khanzadimahdi/testproject/presentation/commands/certificate"
+	"github.com/khanzadimahdi/testproject/presentation/commands/runner/ingress"
 	"github.com/khanzadimahdi/testproject/presentation/commands/runner/manager"
 	"github.com/khanzadimahdi/testproject/presentation/commands/runner/worker"
 )
@@ -40,6 +42,10 @@ func main() {
 	c.Register(blog.NewServeCommand())
 	c.Register(manager.NewServeCommand())
 	c.Register(worker.NewServeCommand())
+	c.Register(ingress.NewServeCommand())
+
+	// the certificates the runner's tunnel authenticates with
+	c.RegisterGroup(certificate.Group())
 
 	code := c.Run(ctx, os.Args)
 

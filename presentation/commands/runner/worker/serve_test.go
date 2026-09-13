@@ -2,8 +2,10 @@ package worker
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"testing"
@@ -12,6 +14,7 @@ import (
 	"github.com/danceable/console"
 	"github.com/khanzadimahdi/testproject/domain"
 	messaging "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
+	"github.com/khanzadimahdi/testproject/infrastructure/tunnel"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -200,6 +203,21 @@ func TestServe(t *testing.T) {
 		command.handler = handler
 		command.consumer = &consumer
 		command.consumers = subscribers
+		command.logger = slog.New(slog.DiscardHandler)
+
+		// nothing is listening for it, so the pool spends the test trying to
+		// connect and the worker serves its own port regardless — which is the
+		// point: the tunnel being down is not the worker being down.
+		tunnelWorker, err := tunnel.NewAgent(
+			consumerName,
+			[]string{"127.0.0.1:1"},
+			tunnel.DefaultConfig(),
+			tunnel.TLSDialer(&tls.Config{}, time.Second),
+			tunnel.NewServiceTargets(nil),
+			command.logger,
+		)
+		assert.NoError(t, err)
+		command.tunnel = tunnelWorker
 
 		serverStartedListening := make(chan struct{})
 
