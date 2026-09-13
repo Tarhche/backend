@@ -26,7 +26,6 @@ import (
 	"github.com/khanzadimahdi/testproject/application/code/heartbeat"
 	"github.com/khanzadimahdi/testproject/application/code/runCode"
 	codeStop "github.com/khanzadimahdi/testproject/application/code/stop"
-	codeTerminal "github.com/khanzadimahdi/testproject/application/code/terminal"
 	"github.com/khanzadimahdi/testproject/application/comment/createComment"
 	"github.com/khanzadimahdi/testproject/application/comment/getComments"
 	"github.com/khanzadimahdi/testproject/application/contact/createMessage"
@@ -83,7 +82,6 @@ import (
 	dashboardGetRoles "github.com/khanzadimahdi/testproject/application/dashboard/role/getRoles"
 	dashboardUpdateRole "github.com/khanzadimahdi/testproject/application/dashboard/role/updateRole"
 	runnerAccess "github.com/khanzadimahdi/testproject/application/dashboard/runner/access"
-	dashboardAttachContainer "github.com/khanzadimahdi/testproject/application/dashboard/runner/container/attachContainer"
 	dashboardDeleteContainer "github.com/khanzadimahdi/testproject/application/dashboard/runner/container/deleteContainer"
 	dashboardUserDeleteContainer "github.com/khanzadimahdi/testproject/application/dashboard/runner/container/deleteUserContainer"
 	dashboardFollowContainerLogs "github.com/khanzadimahdi/testproject/application/dashboard/runner/container/followContainerLogs"
@@ -128,7 +126,6 @@ import (
 	getLanguages "github.com/khanzadimahdi/testproject/application/language/getLanguages"
 	languageresolver "github.com/khanzadimahdi/testproject/application/language/resolver"
 	"github.com/khanzadimahdi/testproject/application/localize"
-	runnerTerminal "github.com/khanzadimahdi/testproject/application/runner/terminal"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/file"
 	"github.com/khanzadimahdi/testproject/domain/password"
@@ -403,7 +400,7 @@ func blog(
 	// the dashboard does not schedule containers itself. It establishes who is
 	// asking and whether they may, then passes the request to the runner, so
 	// one service owns a container's lifecycle.
-	runner, err := runnerClient.New(blogConfigs.RunnerManagerURL, blogConfigs.RunnerIngressURL)
+	runner, err := runnerClient.New(blogConfigs.RunnerManagerURL)
 	if err != nil {
 		return nil, err
 	}
@@ -461,20 +458,13 @@ func blog(
 	}
 
 	// the terminals this replica is holding, whoever opened them.
-	terminalSessions := runnerTerminal.NewSessions(cachedGateway, streams, logger)
 
-	dashboardAttachContainerUseCase := dashboardAttachContainer.NewUseCase(runner, authenticator, authorizer, runnerContainers, validator, terminalSessions, logger)
-	codeTerminalUseCase := codeTerminal.NewUseCase(runner, validator, terminalSessions, logger)
 	codeStopUseCase := codeStop.NewUseCase(runner, validator, cachedGateway, logger)
 	dashboardFollowContainerLogsUseCase := dashboardFollowContainerLogs.NewUseCase(runner, authenticator, authorizer, runnerContainers, validator, cachedGateway, streams, logger)
 	dashboardWatchContainersUseCase := dashboardWatchContainers.NewUseCase(runner, authenticator, authorizer, validator, cachedGateway, streams, ownerDirectory, ingressDomain, logger)
 	dashboardWatchStacksUseCase := dashboardWatchStacks.NewUseCase(runner, authenticator, authorizer, validator, cachedGateway, streams, ownerDirectory, ingressDomain, logger)
 
 	for subject, handler := range map[string]domain.MessageHandler{
-		dashboardAttachContainer.AttachName:     dashboardAttachContainerUseCase,
-		dashboardAttachContainer.InputName:      dashboardAttachContainerUseCase.InputHandler(),
-		codeTerminal.AttachName:                 codeTerminalUseCase,
-		codeTerminal.InputName:                  codeTerminalUseCase.InputHandler(),
 		codeStop.StopName:                       codeStopUseCase,
 		dashboardFollowContainerLogs.FollowName: dashboardFollowContainerLogsUseCase,
 		dashboardWatchContainers.WatchName:      dashboardWatchContainersUseCase,

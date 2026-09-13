@@ -39,35 +39,23 @@ const requestTimeout = 15 * time.Second
 
 // Client is the runner manager, reached over its HTTP API.
 type Client struct {
-	baseURL *url.URL
-
-	// ingress is the only way to a node, and a terminal is the one thing that
-	// has to reach one.
-	ingress *url.URL
-
+	baseURL    *url.URL
 	httpClient *http.Client
 }
 
 var _ runnerManager.Client = &Client{}
 
 // New builds a client for the manager at baseURL, e.g. "http://runner-manager:80".
-// New builds a client for the manager, and for the ingress that a terminal
-// reaches a node through. They are two addresses because they are two things:
-// the manager answers about containers, and the ingress is the only way to one.
-func New(baseURL string, ingressURL string) (*Client, error) {
+// New builds a client for the manager. It answers about containers; reaching
+// one is the ingress's business and no longer passes through here.
+func New(baseURL string) (*Client, error) {
 	parsed, err := usable(baseURL, "runner manager")
-	if err != nil {
-		return nil, err
-	}
-
-	ingress, err := usable(ingressURL, "runner ingress")
 	if err != nil {
 		return nil, err
 	}
 
 	return &Client{
 		baseURL:    parsed,
-		ingress:    ingress,
 		httpClient: &http.Client{Timeout: requestTimeout},
 	}, nil
 }

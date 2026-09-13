@@ -52,8 +52,16 @@ func NewAttachHandler(useCase *attachtask.UseCase, logger *slog.Logger) *attachH
 		useCase: useCase,
 		// the origin is not what says who this is -- the token is -- and the
 		// peer may be a browser or anything else.
-		upgrader: websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }},
-		logger:   logger,
+		//
+		// Subprotocols is what accepts a browser's token: it offers "bearer"
+		// and the token itself, and a websocket is only opened if the server
+		// echoes one of them back. Echoing the marker rather than the token
+		// keeps the token out of the response.
+		upgrader: websocket.Upgrader{
+			CheckOrigin:  func(*http.Request) bool { return true },
+			Subprotocols: []string{middleware.WebSocketBearerProtocol},
+		},
+		logger: logger,
 	}
 }
 

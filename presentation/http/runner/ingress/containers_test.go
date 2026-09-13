@@ -35,6 +35,16 @@ func (r *fakeResolver) GetOneBySlug(_ context.Context, slug string) (task.Task, 
 	return t, nil
 }
 
+func (r *fakeResolver) GetOne(_ context.Context, uuid string) (task.Task, error) {
+	for _, t := range r.tasks {
+		if t.UUID == uuid {
+			return t, nil
+		}
+	}
+
+	return task.Task{}, domain.ErrNotExists
+}
+
 // node is a worker standing in for the far end of a tunnel: it answers the
 // route the ingress sends a container's traffic down, and records what it was
 // asked for.

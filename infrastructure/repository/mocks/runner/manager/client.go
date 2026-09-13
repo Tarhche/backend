@@ -83,14 +83,6 @@ func (m *MockClient) FollowContainerLogs(ctx context.Context, uuid string, after
 	return stream, args.Error(1)
 }
 
-func (m *MockClient) AttachContainer(ctx context.Context, attach runnerManager.Attach) (runnerManager.Attachment, error) {
-	args := m.Called(ctx, attach)
-
-	attachment, _ := args.Get(0).(runnerManager.Attachment)
-
-	return attachment, args.Error(1)
-}
-
 func (m *MockClient) Stacks(ctx context.Context, ownerUUID string, page uint) (runnerManager.Page[runnerManager.Stack], error) {
 	args := m.Called(ctx, ownerUUID, page)
 
@@ -137,105 +129,6 @@ func (m *MockClient) RestartStack(ctx context.Context, uuid string) error {
 
 func (m *MockClient) DeleteStack(ctx context.Context, uuid string) error {
 	return m.Called(ctx, uuid).Error(0)
-}
-
-// FakeAttachment is a command running inside a container, without a container.
-// Writing to it records what was typed; the output it hands back is whatever it
-// was given, and closing it ends the read the way a real session does.
-type FakeAttachment struct {
-	output chan []byte
-
-	lock    sync.Mutex
-	typed   []byte
-	resizes [][2]uint
-	closed  bool
-
-	pending []byte
-}
-
-var _ runnerManager.Attachment = &FakeAttachment{}
-
-func NewFakeAttachment() *FakeAttachment {
-	return &FakeAttachment{output: make(chan []byte, 16)}
-}
-
-// Emit gives the reader something to read, as a command writing would.
-func (a *FakeAttachment) Emit(data string) {
-	a.output <- []byte(data)
-}
-
-func (a *FakeAttachment) Read(p []byte) (int, error) {
-	if len(a.pending) == 0 {
-		data, ok := <-a.output
-		if !ok {
-			return 0, io.EOF
-		}
-
-		a.pending = data
-	}
-
-	n := copy(p, a.pending)
-	a.pending = a.pending[n:]
-
-	return n, nil
-}
-
-func (a *FakeAttachment) Write(p []byte) (int, error) {
-	a.lock.Lock()
-	defer a.lock.Unlock()
-
-	if a.closed {
-		return 0, io.ErrClosedPipe
-	}
-
-	a.typed = append(a.typed, p...)
-
-	return len(p), nil
-}
-
-func (a *FakeAttachment) Resize(_ context.Context, rows uint, cols uint) error {
-	a.lock.Lock()
-	defer a.lock.Unlock()
-
-	a.resizes = append(a.resizes, [2]uint{rows, cols})
-
-	return nil
-}
-
-func (a *FakeAttachment) Close() error {
-	a.lock.Lock()
-	defer a.lock.Unlock()
-
-	if !a.closed {
-		a.closed = true
-		close(a.output)
-	}
-
-	return nil
-}
-
-// Typed is everything written to the command.
-func (a *FakeAttachment) Typed() string {
-	a.lock.Lock()
-	defer a.lock.Unlock()
-
-	return string(a.typed)
-}
-
-// Resizes is every window size the command was told about.
-func (a *FakeAttachment) Resizes() [][2]uint {
-	a.lock.Lock()
-	defer a.lock.Unlock()
-
-	return append([][2]uint(nil), a.resizes...)
-}
-
-// IsClosed reports whether the session has been ended.
-func (a *FakeAttachment) IsClosed() bool {
-	a.lock.Lock()
-	defer a.lock.Unlock()
-
-	return a.closed
 }
 
 // FakeContainerStream is what happens to the containers, without a runner.

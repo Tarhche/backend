@@ -6,7 +6,6 @@ const (
 	// defaultRunnerManagerURL is where the runner manager sits on the local
 	// stack, which is also what it is called in production.
 	defaultRunnerManagerURL = "http://runner-manager:80"
-	defaultRunnerIngressURL = "http://runner-ingress:80"
 
 	// defaultRunnerPublicIngressDomain is where a browser reaches a container,
 	// which is the ingress's own domain with the port it is published on — the
@@ -36,7 +35,6 @@ type Blog struct {
 	MailPassword string `usage:"SMTP password, when the relay authenticates." env:"MAIL_SMTP_PASSWORD" long:"mail-smtp-password"`
 
 	RunnerManagerURL    string `usage:"Base URL of the runner manager's API, which the dashboard passes container and stack commands to." env:"RUNNER_MANAGER_URL" long:"runner-manager-url"`
-	RunnerIngressURL    string `usage:"Base URL of the runner ingress, which is the only way to the node holding a container. A terminal is opened through it." env:"RUNNER_INGRESS_URL" long:"runner-ingress-url"`
 	RunnerIngressDomain string `usage:"Domain a runner container's exposed ports are served on, used to build the addresses the dashboard shows." env:"RUNNER_INGRESS_DOMAIN" long:"runner-ingress-domain"`
 }
 
@@ -47,7 +45,6 @@ func NewBlog() *Blog {
 	return &Blog{
 		Port:                defaultBlogPort,
 		RunnerManagerURL:    defaultRunnerManagerURL,
-		RunnerIngressURL:    defaultRunnerIngressURL,
 		RunnerIngressDomain: defaultRunnerPublicIngressDomain,
 	}
 }

@@ -25,11 +25,13 @@ import (
 // agreement, so they are written down once, here.
 const ContainerPath = "/containers/%s/%d/%s"
 
-// Resolver finds which node is holding the container a hostname names. It is the
-// task repository in production; the ingress asks for no more than this so it
-// can be driven by a double in tests.
+// Resolver finds which node is holding a container, by the slug a hostname
+// carries or by the uuid a terminal asks for. It is the task repository in
+// production; the ingress asks for no more than this so it can be driven by a
+// double in tests.
 type Resolver interface {
 	GetOneBySlug(ctx context.Context, slug string) (task.Task, error)
+	GetOne(ctx context.Context, uuid string) (task.Task, error)
 }
 
 // containerHandler serves the ports containers expose. A container's slug is

@@ -177,6 +177,12 @@ func ingressConsoleCommand(
 	mux.Handle("GET /health", middleware.NewCORSMiddleware(healthAPI.NewHealthHandler(checkHealthUseCase)))
 	mux.Handle("/workers/{name}/{path...}", ingressAPI.NewProxyHandler(checkWorkerExistsUseCase, transport, logger))
 
+	// a terminal, which the browser opens here rather than anywhere else: the
+	// ingress works out which node is holding the container and carries the
+	// connection there. Who may open one is the node's to decide, from the
+	// owner on the container and the token on this request.
+	mux.Handle("GET /containers/{uuid}/attach", ingressAPI.NewTerminalHandler(taskRepository, registry, transport, logger))
+
 	// a request to a hostname under the containers' domain is a container's own
 	// traffic and goes to the node holding it; everything else is one of the
 	// ingress's own routes.

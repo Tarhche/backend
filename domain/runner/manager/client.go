@@ -43,14 +43,6 @@ type StackSpec struct {
 	Services any
 }
 
-// Attachment is a command running inside a container: reading takes its output,
-// writing feeds its input, and closing ends it.
-type Attachment interface {
-	io.ReadWriteCloser
-
-	Resize(ctx context.Context, rows uint, cols uint) error
-}
-
 // ContainerChange is what became of one container: the container as it is now,
 // or, when it is gone, the uuid of the one that was removed.
 type ContainerChange struct {
@@ -120,7 +112,6 @@ type Client interface {
 
 	ContainerLogs(ctx context.Context, uuid string, after time.Time, limit uint) ([]container.Log, error)
 	FollowContainerLogs(ctx context.Context, uuid string, after time.Time) (LogStream, error)
-	AttachContainer(ctx context.Context, attach Attach) (Attachment, error)
 
 	// Stacks is a page of the stacks the runner holds, narrowed the same way.
 	Stacks(ctx context.Context, ownerUUID string, page uint) (Page[Stack], error)
@@ -153,16 +144,4 @@ type Stack struct {
 	ExpectedState task.State
 
 	Services []task.Task
-}
-
-// Attach is what opening a terminal takes.
-//
-// The node is where the container is, and the token is who is asking. Both
-// travel to the node: it is the only thing that can see the container, so it is
-// the only thing that can say whether this person owns it.
-type Attach struct {
-	ContainerUUID string
-	NodeName      string
-	AccessToken   string
-	Command       []string
 }

@@ -2,7 +2,6 @@ package client
 
 import (
 	"context"
-	"encoding/json"
 	"io"
 	"net/http"
 	"net/url"
@@ -20,36 +19,6 @@ import (
 // writeWait bounds one write to the manager, so a stalled peer cannot hold a
 // stream's writer forever.
 const writeWait = 10 * time.Second
-
-// AttachContainer opens a command inside a container and hands back the stream
-// it runs on.
-// AttachContainer opens a command inside a container and hands back the stream
-// it runs on.
-//
-// It goes to the node holding the container, through the ingress, which proxies
-// and decides nothing. The node is the only thing that can see the container,
-// and it is what decides who may be let in: it reads whose the container is off
-// the container itself and compares that with the token carried here. So the
-// token travels the whole way rather than being checked once and trusted after.
-func (c *Client) AttachContainer(ctx context.Context, attach runnerManager.Attach) (runnerManager.Attachment, error) {
-	query := url.Values{}
-	for _, argument := range attach.Command {
-		query.Add("command", argument)
-	}
-
-	endpoint := c.ingress.JoinPath("workers", attach.NodeName, "api", "tasks", attach.ContainerUUID, "attach")
-	endpoint.RawQuery = query.Encode()
-
-	header := http.Header{}
-	header.Set("Authorization", "Bearer "+attach.AccessToken)
-
-	conn, err := c.dialTo(ctx, websocketURL(endpoint.String()), header)
-	if err != nil {
-		return nil, err
-	}
-
-	return &attachment{conn: conn}, nil
-}
 
 // websocketURL is the same endpoint spelled as a websocket one.
 func websocketURL(endpoint string) string {
@@ -102,17 +71,9 @@ func (c *Client) WatchStacks(ctx context.Context) (runnerManager.StackStream, er
 // container that is not there, which the layers above already know how to
 // report.
 func (c *Client) dial(ctx context.Context, path string, query url.Values) (*websocket.Conn, error) {
-	return c.dialTo(ctx, c.path(path, query), nil)
-}
+	endpoint := websocketURL(c.path(path, query))
 
-// dialTo opens a websocket to an endpoint already built, carrying headers the
-// far end needs. It is what lets a stream reach through the ingress to a node,
-// which asks who is calling.
-func (c *Client) dialTo(ctx context.Context, endpoint string, header http.Header) (*websocket.Conn, error) {
-
-	endpoint = websocketURL(endpoint)
-
-	conn, response, err := websocket.DefaultDialer.DialContext(ctx, endpoint, header)
+	conn, response, err := websocket.DefaultDialer.DialContext(ctx, endpoint, nil)
 	if err != nil {
 		if response != nil {
 			defer response.Body.Close()
@@ -126,96 +87,6 @@ func (c *Client) dialTo(ctx context.Context, endpoint string, header http.Header
 	}
 
 	return conn, nil
-}
-
-// attachment carries a command's bytes over a websocket: binary frames are the
-// command's own input and output, and a text frame is a control message, which
-// today means a terminal that has been resized.
-type attachment struct {
-	conn *websocket.Conn
-
-	// reader is whatever is left of the frame currently being read.
-	reader io.Reader
-
-	writeLock sync.Mutex
-	shut      sync.Once
-	shutErr   error
-}
-
-var _ runnerManager.Attachment = &attachment{}
-
-func (a *attachment) Read(p []byte) (int, error) {
-	for {
-		if a.reader != nil {
-			n, err := a.reader.Read(p)
-			if err == io.EOF {
-				a.reader = nil
-
-				// an empty frame says nothing; wait for one that does rather
-				// than reporting the end of the stream.
-				if n == 0 {
-					continue
-				}
-
-				return n, nil
-			}
-
-			return n, err
-		}
-
-		messageType, reader, err := a.conn.NextReader()
-		if err != nil {
-			return 0, io.EOF
-		}
-
-		if messageType != websocket.BinaryMessage && messageType != websocket.TextMessage {
-			continue
-		}
-
-		a.reader = reader
-	}
-}
-
-func (a *attachment) Write(p []byte) (int, error) {
-	a.writeLock.Lock()
-	defer a.writeLock.Unlock()
-
-	_ = a.conn.SetWriteDeadline(time.Now().Add(writeWait))
-
-	if err := a.conn.WriteMessage(websocket.BinaryMessage, p); err != nil {
-		return 0, err
-	}
-
-	return len(p), nil
-}
-
-// resize is the control message a terminal sends when its window changes.
-type resize struct {
-	Type string `json:"type"`
-	Rows uint   `json:"rows"`
-	Cols uint   `json:"cols"`
-}
-
-func (a *attachment) Resize(_ context.Context, rows uint, cols uint) error {
-	payload, err := json.Marshal(resize{Type: "resize", Rows: rows, Cols: cols})
-	if err != nil {
-		return err
-	}
-
-	a.writeLock.Lock()
-	defer a.writeLock.Unlock()
-
-	_ = a.conn.SetWriteDeadline(time.Now().Add(writeWait))
-
-	return a.conn.WriteMessage(websocket.TextMessage, payload)
-}
-
-func (a *attachment) Close() error {
-	a.shut.Do(func() {
-		a.shutErr = a.conn.Close()
-	})
-
-	return a.shutErr
 }
 
 // containerStream reads the containers' changes as the manager sends them.
