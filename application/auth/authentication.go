@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"reflect"
 	"time"
 
 	"github.com/khanzadimahdi/testproject/domain/role"
@@ -32,14 +33,9 @@ func FromContext(ctx context.Context) *user.User {
 	return u
 }
 
-// UUIDFromContext is who is asking, or nobody at all.
-//
-// A request that reached a handler has been through authentication, so this is
-// somebody; asking this way is for the paths where it might not be, where
-// nobody owns anything and so may do nothing to what is owned.
 func UUIDFromContext(ctx context.Context) string {
 	u := FromContext(ctx)
-	if u == nil {
+	if u == nil || reflect.ValueOf(u).IsNil() || len(u.UUID) == 0 {
 		return ""
 	}
 

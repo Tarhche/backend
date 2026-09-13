@@ -28,6 +28,46 @@ func TestContext(t *testing.T) {
 	assert.Equal(t, &expectedUser, FromContext(ToContext(ctx, &expectedUser)))
 }
 
+func TestUUIDFromContext(t *testing.T) {
+	t.Parallel()
+
+	t.Run("somebody is who the context says", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := ToContext(context.Background(), &user.User{UUID: "test-uuid"})
+
+		assert.Equal(t, "test-uuid", UUIDFromContext(ctx))
+	})
+
+	t.Run("nobody is nobody", func(t *testing.T) {
+		t.Parallel()
+
+		assert.Empty(t, UUIDFromContext(context.Background()))
+	})
+
+	t.Run("a user put in as nothing is nobody", func(t *testing.T) {
+		t.Parallel()
+
+		var nobody *user.User
+
+		assert.Empty(t, UUIDFromContext(ToContext(context.Background(), nobody)))
+	})
+
+	t.Run("a user with no uuid is nobody", func(t *testing.T) {
+		t.Parallel()
+
+		assert.Empty(t, UUIDFromContext(ToContext(context.Background(), &user.User{})))
+	})
+
+	t.Run("something else under the key is nobody", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.WithValue(context.Background(), AuthKey, "test-uuid")
+
+		assert.Empty(t, UUIDFromContext(ctx), "only a user is a user")
+	})
+}
+
 func TestGenerateAccessToken(t *testing.T) {
 	t.Parallel()
 
