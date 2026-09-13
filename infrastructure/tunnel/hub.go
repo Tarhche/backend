@@ -15,14 +15,14 @@ import (
 	"github.com/xtaci/smux"
 )
 
-// Ingress takes the workers' connections and opens streams back down them.
+// Hub takes the agents' connections and opens streams back down them.
 //
 // It is deliberately three things kept apart: taking a connection and
-// registering it, deciding which worker a client belongs to, and copying bytes.
+// registering it, deciding which agent a client belongs to, and copying bytes.
 // Only the first two touch shared state, and only the registry is shared at
-// all — which is what leaves room for a second ingress to be given a registry
+// all — which is what leaves room for a second hub to be given a registry
 // that both can see, without the rest of this changing.
-type Ingress struct {
+type Hub struct {
 	config   Config
 	registry Registry
 	auth     Authenticator
@@ -33,8 +33,8 @@ type Ingress struct {
 	closeOnce sync.Once
 	closed    chan struct{}
 
-	// sessions are the ones this ingress is serving, so that closing it closes
-	// them rather than leaving workers talking to nothing. closing is set
+	// sessions are the ones this hub is serving, so that closing it closes
+	// them rather than leaving agents talking to nothing. closing is set
 	// before anything waits, because a WaitGroup counted up from zero while
 	// something is already waiting on it is a race rather than a queue.
 	lock     sync.Mutex
@@ -44,36 +44,36 @@ type Ingress struct {
 	wait sync.WaitGroup
 }
 
-// IngressOption configures an Ingress.
-type IngressOption func(*Ingress)
+// HubOption configures an Hub.
+type HubOption func(*Hub)
 
 // WithRouter replaces the routing policy.
-func WithRouter(router Router) IngressOption {
-	return func(i *Ingress) { i.router = router }
+func WithRouter(router Router) HubOption {
+	return func(i *Hub) { i.router = router }
 }
 
-// WithIngressMetrics replaces where the ingress reports to.
-func WithIngressMetrics(metrics Metrics) IngressOption {
-	return func(i *Ingress) { i.metrics = metrics }
+// WithHubMetrics replaces where the hub reports to.
+func WithHubMetrics(metrics Metrics) HubOption {
+	return func(i *Hub) { i.metrics = metrics }
 }
 
-// WithRegistry replaces where connected workers are kept.
-func WithRegistry(registry Registry) IngressOption {
-	return func(i *Ingress) { i.registry = registry }
+// WithRegistry replaces where connected agents are kept.
+func WithRegistry(registry Registry) HubOption {
+	return func(i *Hub) { i.registry = registry }
 }
 
-// NewIngress builds an ingress. The authenticator is required: a tunnel that
-// takes anything is a way into every worker behind it.
-func NewIngress(config Config, auth Authenticator, logger *slog.Logger, options ...IngressOption) (*Ingress, error) {
+// NewHub builds a hub. The authenticator is required: a tunnel that
+// takes anything is a way into every agent behind it.
+func NewHub(config Config, auth Authenticator, logger *slog.Logger, options ...HubOption) (*Hub, error) {
 	if err := config.Validate(); err != nil {
 		return nil, err
 	}
 
 	if auth == nil {
-		return nil, errors.New("tunnel: an ingress needs an authenticator")
+		return nil, errors.New("tunnel: a hub needs an authenticator")
 	}
 
-	i := &Ingress{
+	i := &Hub{
 		config:   config,
 		registry: NewRegistry(),
 		auth:     auth,
@@ -91,18 +91,18 @@ func NewIngress(config Config, auth Authenticator, logger *slog.Logger, options 
 	return i, nil
 }
 
-// Registry is what the ingress knows about the workers, for reporting on and
+// Registry is what the hub knows about the agents, for reporting on and
 // for routing.
-func (i *Ingress) Registry() Registry { return i.registry }
+func (i *Hub) Registry() Registry { return i.registry }
 
-// Workers reports every connected worker.
-func (i *Ingress) Workers() []WorkerState { return i.registry.Workers() }
+// Agents reports every connected agent.
+func (i *Hub) Agents() []AgentState { return i.registry.Agents() }
 
 // Serve takes connections from listener until ctx is done or Close is called.
 //
-// Each connection is registered on a goroutine of its own, so one worker taking
+// Each connection is registered on a goroutine of its own, so one agent taking
 // its time over the handshake does not hold up the others.
-func (i *Ingress) Serve(ctx context.Context, listener net.Listener) error {
+func (i *Hub) Serve(ctx context.Context, listener net.Listener) error {
 	stop := make(chan struct{})
 	defer close(stop)
 
@@ -140,9 +140,9 @@ func (i *Ingress) Serve(ctx context.Context, listener net.Listener) error {
 	}
 }
 
-// register takes a worker's hello, decides whether to keep the connection, and
+// register takes an agent's hello, decides whether to keep the connection, and
 // turns it into a session.
-func (i *Ingress) register(ctx context.Context, conn net.Conn) {
+func (i *Hub) register(ctx context.Context, conn net.Conn) {
 	deadline := time.Now().Add(i.config.HandshakeTimeout)
 	reader := bufio.NewReaderSize(conn, maxFrameBytes)
 
@@ -157,8 +157,8 @@ func (i *Ingress) register(ctx context.Context, conn net.Conn) {
 
 	identity, err := i.accept(ctx, conn, reader, &hello)
 	if err != nil {
-		i.metrics.AuthenticationFailed(hello.Worker, err.Error())
-		i.logger.WarnContext(ctx, "a connection was refused", "worker", hello.Worker, "error", err)
+		i.metrics.AuthenticationFailed(hello.Agent, err.Error())
+		i.logger.WarnContext(ctx, "a connection was refused", "agent", hello.Agent, "error", err)
 
 		_ = writeFrame(conn, registered{Error: err.Error()}, deadline)
 		conn.Close()
@@ -174,35 +174,35 @@ func (i *Ingress) register(ctx context.Context, conn net.Conn) {
 		return
 	}
 
-	// the ingress opens streams, so it is smux's client even though the worker
+	// the hub opens streams, so it is smux's client even though the agent
 	// is the one that dialled. Getting this the other way round makes both ends
 	// mint stream ids the other does not expect.
 	muxSession, err := smux.Client(conn, i.config.smux())
 	if err != nil {
-		i.logger.WarnContext(ctx, "a session could not be started", "worker", identity.Worker, "error", err)
+		i.logger.WarnContext(ctx, "a session could not be started", "agent", identity.Name, "error", err)
 		conn.Close()
 
 		return
 	}
 
-	session := newSession(id, identity.Worker, muxSession, i.streamsPerSession(identity))
+	session := newSession(id, identity.Name, muxSession, i.streamsPerSession(identity))
 
 	if err := i.registry.Add(session); err != nil {
-		i.logger.WarnContext(ctx, "a session could not be registered", "worker", identity.Worker, "error", err)
+		i.logger.WarnContext(ctx, "a session could not be registered", "agent", identity.Name, "error", err)
 		muxSession.Close()
 
 		return
 	}
 
 	i.track(session)
-	i.metrics.SessionOpened(identity.Worker, id)
-	i.logger.InfoContext(ctx, "a worker connected", "worker", identity.Worker, "session", id)
+	i.metrics.SessionOpened(identity.Name, id)
+	i.logger.InfoContext(ctx, "an agent connected", "agent", identity.Name, "session", id)
 
 	i.watch(ctx, session)
 }
 
 // accept settles whether a connection may stay, and as what.
-func (i *Ingress) accept(ctx context.Context, conn net.Conn, reader *bufio.Reader, hello *registration) (Identity, error) {
+func (i *Hub) accept(ctx context.Context, conn net.Conn, reader *bufio.Reader, hello *registration) (Identity, error) {
 	if hello.Version != ProtocolVersion {
 		return Identity{}, ErrUnsupportedVersion
 	}
@@ -213,26 +213,26 @@ func (i *Ingress) accept(ctx context.Context, conn net.Conn, reader *bufio.Reade
 		return Identity{}, errors.Join(ErrProtocol, errors.New("spoke before it was registered"))
 	}
 
-	identity, err := i.auth.Authenticate(ctx, conn, hello.Worker, hello.Token)
+	identity, err := i.auth.Authenticate(ctx, conn, hello.Agent, hello.Token)
 	if err != nil {
 		return Identity{}, err
 	}
 
-	if len(identity.Worker) == 0 {
+	if len(identity.Name) == 0 {
 		return Identity{}, errors.Join(ErrUnauthenticated, errors.New("authenticated as nobody"))
 	}
 
 	if limit := identity.MaxSessions; limit > 0 {
-		if sessions, err := i.registry.Sessions(identity.Worker); err == nil && len(sessions) >= limit {
-			return Identity{}, errors.Join(ErrUnauthorized, errors.New("this worker holds as many connections as it may"))
+		if sessions, err := i.registry.Sessions(identity.Name); err == nil && len(sessions) >= limit {
+			return Identity{}, errors.Join(ErrUnauthorized, errors.New("this agent holds as many connections as it may"))
 		}
 	}
 
 	return identity, nil
 }
 
-// streamsPerSession is what one of this worker's sessions may carry.
-func (i *Ingress) streamsPerSession(identity Identity) int {
+// streamsPerSession is what one of this agent's sessions may carry.
+func (i *Hub) streamsPerSession(identity Identity) int {
 	if identity.MaxStreams > 0 && identity.MaxStreams < i.config.MaxStreamsPerSession {
 		return identity.MaxStreams
 	}
@@ -241,9 +241,9 @@ func (i *Ingress) streamsPerSession(identity Identity) int {
 }
 
 // watch holds a session until it ends, and takes it out when it does. It is
-// what makes a worker's existence follow its connections rather than anything
+// what makes an agent's existence follow its connections rather than anything
 // it has to say.
-func (i *Ingress) watch(ctx context.Context, session *Session) {
+func (i *Hub) watch(ctx context.Context, session *Session) {
 	select {
 	case <-session.Done():
 	case <-i.closed:
@@ -256,21 +256,21 @@ func (i *Ingress) watch(ctx context.Context, session *Session) {
 	i.untrack(session)
 
 	sent, received := session.Traffic()
-	i.metrics.SessionClosed(session.Worker(), session.ID(), "closed")
-	i.logger.InfoContext(ctx, "a worker's connection ended",
-		"worker", session.Worker(),
+	i.metrics.SessionClosed(session.Agent(), session.ID(), "closed")
+	i.logger.InfoContext(ctx, "an agent's connection ended",
+		"agent", session.Agent(),
 		"session", session.ID(),
 		"sent", sent,
 		"received", received,
 	)
 }
 
-// Dial opens a stream to a named worker and connects it to target.
+// Dial opens a stream to a named agent and connects it to target.
 //
 // What comes back behaves as a TCP connection to that target: reading takes
 // what it sends, writing reaches it, and closing the writing half tells it that
 // nothing more is coming.
-func (i *Ingress) Dial(ctx context.Context, worker string, target Target) (net.Conn, error) {
+func (i *Hub) Dial(ctx context.Context, agent string, target Target) (net.Conn, error) {
 	if !target.Valid() {
 		return nil, errors.Join(ErrProtocol, errors.New("a stream has to name a target"))
 	}
@@ -278,26 +278,26 @@ func (i *Ingress) Dial(ctx context.Context, worker string, target Target) (net.C
 	deadline := time.Now().Add(i.config.CapacityWait)
 
 	for {
-		session, err := i.reserve(worker)
+		session, err := i.reserve(agent)
 		switch {
 		case err == nil:
 			stream, err := session.open(ctx, target, i.config.HandshakeTimeout)
 			if err != nil {
 				session.release()
-				i.metrics.StreamFailed(worker, target.String(), "open")
+				i.metrics.StreamFailed(agent, target.String(), "open")
 
 				return nil, err
 			}
 
-			i.metrics.StreamOpened(worker, session.ID(), target.String())
+			i.metrics.StreamOpened(agent, session.ID(), target.String())
 
 			return &accountedConn{Conn: stream, session: session, metrics: i.metrics, target: target}, nil
 
 		case errors.Is(err, ErrAtCapacity):
-			// the worker grows its own pool; the ingress cannot make room, only
+			// the agent grows its own pool; the hub cannot make room, only
 			// wait for it to be made.
 			if !time.Now().Before(deadline) {
-				i.metrics.StreamFailed(worker, target.String(), "capacity")
+				i.metrics.StreamFailed(agent, target.String(), "capacity")
 
 				return nil, err
 			}
@@ -311,36 +311,36 @@ func (i *Ingress) Dial(ctx context.Context, worker string, target Target) (net.C
 			}
 
 		default:
-			i.metrics.StreamFailed(worker, target.String(), "unavailable")
+			i.metrics.StreamFailed(agent, target.String(), "unavailable")
 
 			return nil, err
 		}
 	}
 }
 
-// Route picks a worker and opens a stream to it. The connection it returns
-// stays bound to that worker for as long as it lives.
-func (i *Ingress) Route(ctx context.Context, target Target) (net.Conn, error) {
-	worker, err := i.router.Pick(i.registry.Workers())
+// Route picks an agent and opens a stream to it. The connection it returns
+// stays bound to that agent for as long as it lives.
+func (i *Hub) Route(ctx context.Context, target Target) (net.Conn, error) {
+	agent, err := i.router.Pick(i.registry.Agents())
 	if err != nil {
-		i.metrics.StreamFailed("", target.String(), "no worker")
+		i.metrics.StreamFailed("", target.String(), "no agent")
 
 		return nil, err
 	}
 
-	return i.Dial(ctx, worker, target)
+	return i.Dial(ctx, agent, target)
 }
 
-// capacityPollInterval is how often Dial looks again while a worker is full.
+// capacityPollInterval is how often Dial looks again while an agent is full.
 const capacityPollInterval = 50 * time.Millisecond
 
-// reserve picks one of a worker's sessions and takes a place on it.
+// reserve picks one of an agent's sessions and takes a place on it.
 //
 // The session with the most room is chosen, which spreads streams evenly and
 // keeps the failure of any one connection from taking a disproportionate share
 // of them with it.
-func (i *Ingress) reserve(worker string) (*Session, error) {
-	sessions, err := i.registry.Sessions(worker)
+func (i *Hub) reserve(agent string) (*Session, error) {
+	sessions, err := i.registry.Sessions(agent)
 	if err != nil {
 		return nil, err
 	}
@@ -353,7 +353,7 @@ func (i *Ingress) reserve(worker string) (*Session, error) {
 	}
 
 	if len(usable) == 0 {
-		return nil, ErrNoSuchWorker
+		return nil, ErrNoSuchAgent
 	}
 
 	slices.SortFunc(usable, func(a *Session, b *Session) int {
@@ -369,10 +369,10 @@ func (i *Ingress) reserve(worker string) (*Session, error) {
 	return nil, ErrAtCapacity
 }
 
-// starting counts one more thing this ingress has running, unless it is on its
+// starting counts one more thing this hub has running, unless it is on its
 // way out. Counting up and waiting are ordered by the same lock, which is what
 // a WaitGroup requires of anything that does both.
-func (i *Ingress) starting() bool {
+func (i *Hub) starting() bool {
 	i.lock.Lock()
 	defer i.lock.Unlock()
 
@@ -385,21 +385,21 @@ func (i *Ingress) starting() bool {
 	return true
 }
 
-func (i *Ingress) track(session *Session) {
+func (i *Hub) track(session *Session) {
 	i.lock.Lock()
 	defer i.lock.Unlock()
 
 	i.sessions[session] = struct{}{}
 }
 
-func (i *Ingress) untrack(session *Session) {
+func (i *Hub) untrack(session *Session) {
 	i.lock.Lock()
 	defer i.lock.Unlock()
 
 	delete(i.sessions, session)
 }
 
-func (i *Ingress) isClosed() bool {
+func (i *Hub) isClosed() bool {
 	select {
 	case <-i.closed:
 		return true
@@ -409,8 +409,8 @@ func (i *Ingress) isClosed() bool {
 }
 
 // Close ends every session and waits for the goroutines holding them to finish,
-// so that a closed ingress leaves nothing running.
-func (i *Ingress) Close() error {
+// so that a closed hub leaves nothing running.
+func (i *Hub) Close() error {
 	i.closeOnce.Do(func() {
 		close(i.closed)
 
@@ -460,7 +460,7 @@ func (c *accountedConn) CloseWrite() error {
 func (c *accountedConn) Close() error {
 	c.closeOnce.Do(func() {
 		c.session.release()
-		c.metrics.StreamClosed(c.session.Worker(), c.session.ID(), c.target.String(), 0, 0)
+		c.metrics.StreamClosed(c.session.Agent(), c.session.ID(), c.target.String(), 0, 0)
 	})
 
 	return c.Conn.Close()

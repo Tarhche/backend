@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/khanzadimahdi/testproject/infrastructure/runner/tunnel"
+	"github.com/khanzadimahdi/testproject/infrastructure/tunnel"
 )
 
 // Streams is the part of the tunnel a transport needs: a stream to one named

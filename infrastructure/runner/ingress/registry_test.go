@@ -6,20 +6,20 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/khanzadimahdi/testproject/infrastructure/runner/tunnel"
+	"github.com/khanzadimahdi/testproject/infrastructure/tunnel"
 )
 
 // connected stands in for the tunnel, which is the only thing the registry
 // reads and the only thing it needs.
-type connected []tunnel.WorkerState
+type connected []tunnel.AgentState
 
-func (c connected) Workers() []tunnel.WorkerState { return c }
+func (c connected) Agents() []tunnel.AgentState { return c }
 
 func TestRegistry_Exists(t *testing.T) {
 	t.Run("a runner holding connections is there", func(t *testing.T) {
 		registry := NewRegistry(connected{
-			{Worker: "runner-worker-01", Sessions: 2},
-			{Worker: "runner-worker-02", Sessions: 3},
+			{Name: "runner-worker-01", Sessions: 2},
+			{Name: "runner-worker-02", Sessions: 3},
 		})
 
 		exists, err := registry.Exists(t.Context(), "runner-worker-02")
@@ -29,7 +29,7 @@ func TestRegistry_Exists(t *testing.T) {
 	})
 
 	t.Run("a runner that never connected is not there", func(t *testing.T) {
-		registry := NewRegistry(connected{{Worker: "runner-worker-01", Sessions: 2}})
+		registry := NewRegistry(connected{{Name: "runner-worker-01", Sessions: 2}})
 
 		exists, err := registry.Exists(t.Context(), "runner-worker-09")
 
@@ -47,7 +47,7 @@ func TestRegistry_Exists(t *testing.T) {
 	})
 
 	t.Run("a name is matched whole, not by resemblance", func(t *testing.T) {
-		registry := NewRegistry(connected{{Worker: "runner-worker-01", Sessions: 2}})
+		registry := NewRegistry(connected{{Name: "runner-worker-01", Sessions: 2}})
 
 		for _, name := range []string{"runner-worker-0", "runner-worker-011", "RUNNER-WORKER-01", ""} {
 			exists, err := registry.Exists(t.Context(), name)

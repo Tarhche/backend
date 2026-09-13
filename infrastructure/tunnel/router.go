@@ -5,24 +5,24 @@ import (
 	"math"
 )
 
-// ErrNoWorkerAvailable is every worker being gone, or full.
-var ErrNoWorkerAvailable = errors.New("tunnel: no worker available")
+// ErrNoAgentAvailable is every agent being gone, or full.
+var ErrNoAgentAvailable = errors.New("tunnel: no agent available")
 
-// Router picks the worker a client that named none will be bound to.
+// Router picks the agent a client that named none will be bound to.
 //
 // The choice is made once, when the connection arrives, and holds for its whole
-// life: a TCP connection cannot be moved to another worker afterwards, because
+// life: a TCP connection cannot be moved to another agent afterwards, because
 // neither end could be told that it had been.
 type Router interface {
-	Pick(workers []WorkerState) (string, error)
+	Pick(agents []AgentState) (string, error)
 }
 
 // RouterFunc adapts a function to a Router.
-type RouterFunc func(workers []WorkerState) (string, error)
+type RouterFunc func(agents []AgentState) (string, error)
 
-func (f RouterFunc) Pick(workers []WorkerState) (string, error) { return f(workers) }
+func (f RouterFunc) Pick(agents []AgentState) (string, error) { return f(agents) }
 
-// LeastLoaded picks the worker carrying the smallest share of what it can
+// LeastLoaded picks the agent carrying the smallest share of what it can
 // carry, ignoring any that is full or has nothing connected.
 //
 // Load is measured in streams because that is what a session's capacity is
@@ -31,22 +31,22 @@ func (f RouterFunc) Pick(workers []WorkerState) (string, error) { return f(worke
 // this is behind an interface and why sessions also count bytes: a policy that
 // weighs those can replace this one without anything else changing.
 func LeastLoaded() Router {
-	return RouterFunc(func(workers []WorkerState) (string, error) {
+	return RouterFunc(func(agents []AgentState) (string, error) {
 		best := ""
 		lowest := math.Inf(1)
 
-		for _, worker := range workers {
-			if worker.Sessions == 0 || worker.Free() == 0 {
+		for _, agent := range agents {
+			if agent.Sessions == 0 || agent.Free() == 0 {
 				continue
 			}
 
-			if load := worker.Load(); load < lowest {
-				best, lowest = worker.Worker, load
+			if load := agent.Load(); load < lowest {
+				best, lowest = agent.Name, load
 			}
 		}
 
 		if len(best) == 0 {
-			return "", ErrNoWorkerAvailable
+			return "", ErrNoAgentAvailable
 		}
 
 		return best, nil

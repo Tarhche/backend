@@ -143,7 +143,7 @@ func TestServiceTargets(t *testing.T) {
 		assert.ErrorIs(t, err, ErrTargetNotAllowed)
 	})
 
-	t.Run("a worker that offers only names will dial nothing else", func(t *testing.T) {
+	t.Run("an agent that offers only names will dial nothing else", func(t *testing.T) {
 		only := NewServiceTargets(map[string]string{"api": "127.0.0.1:8080"})
 
 		_, err := only.Resolve(t.Context(), Target{Host: "127.0.0.1", Port: 8080})
@@ -174,94 +174,94 @@ func TestLeastLoadedRouter(t *testing.T) {
 	router := LeastLoaded()
 
 	t.Run("the emptiest is picked", func(t *testing.T) {
-		worker, err := router.Pick([]WorkerState{
-			{Worker: "busy", Sessions: 1, Streams: 8, Capacity: 10},
-			{Worker: "quiet", Sessions: 1, Streams: 1, Capacity: 10},
+		agent, err := router.Pick([]AgentState{
+			{Name: "busy", Sessions: 1, Streams: 8, Capacity: 10},
+			{Name: "quiet", Sessions: 1, Streams: 1, Capacity: 10},
 		})
 
 		assert.NoError(t, err)
-		assert.Equal(t, "quiet", worker)
+		assert.Equal(t, "quiet", agent)
 	})
 
-	t.Run("load is a share rather than a count, so unequal workers compare", func(t *testing.T) {
-		worker, err := router.Pick([]WorkerState{
-			{Worker: "small", Sessions: 1, Streams: 5, Capacity: 10},
-			{Worker: "large", Sessions: 4, Streams: 20, Capacity: 100},
+	t.Run("load is a share rather than a count, so unequal agents compare", func(t *testing.T) {
+		agent, err := router.Pick([]AgentState{
+			{Name: "small", Sessions: 1, Streams: 5, Capacity: 10},
+			{Name: "large", Sessions: 4, Streams: 20, Capacity: 100},
 		})
 
 		assert.NoError(t, err)
-		assert.Equal(t, "large", worker)
+		assert.Equal(t, "large", agent)
 	})
 
-	t.Run("a full worker is not picked", func(t *testing.T) {
-		worker, err := router.Pick([]WorkerState{
-			{Worker: "full", Sessions: 1, Streams: 10, Capacity: 10},
-			{Worker: "room", Sessions: 1, Streams: 9, Capacity: 10},
+	t.Run("a full agent is not picked", func(t *testing.T) {
+		agent, err := router.Pick([]AgentState{
+			{Name: "full", Sessions: 1, Streams: 10, Capacity: 10},
+			{Name: "room", Sessions: 1, Streams: 9, Capacity: 10},
 		})
 
 		assert.NoError(t, err)
-		assert.Equal(t, "room", worker)
+		assert.Equal(t, "room", agent)
 	})
 
-	t.Run("a worker with nothing connected is not picked", func(t *testing.T) {
-		_, err := router.Pick([]WorkerState{{Worker: "gone", Sessions: 0, Capacity: 10}})
+	t.Run("an agent with nothing connected is not picked", func(t *testing.T) {
+		_, err := router.Pick([]AgentState{{Name: "gone", Sessions: 0, Capacity: 10}})
 
-		assert.ErrorIs(t, err, ErrNoWorkerAvailable)
+		assert.ErrorIs(t, err, ErrNoAgentAvailable)
 	})
 
 	t.Run("nobody at all", func(t *testing.T) {
 		_, err := router.Pick(nil)
 
-		assert.ErrorIs(t, err, ErrNoWorkerAvailable)
+		assert.ErrorIs(t, err, ErrNoAgentAvailable)
 	})
 
 	t.Run("everybody full", func(t *testing.T) {
-		_, err := router.Pick([]WorkerState{{Worker: "full", Sessions: 1, Streams: 10, Capacity: 10}})
+		_, err := router.Pick([]AgentState{{Name: "full", Sessions: 1, Streams: 10, Capacity: 10}})
 
-		assert.ErrorIs(t, err, ErrNoWorkerAvailable)
+		assert.ErrorIs(t, err, ErrNoAgentAvailable)
 	})
 }
 
-func TestWorkerState(t *testing.T) {
-	t.Run("a worker with no capacity is fully loaded rather than empty", func(t *testing.T) {
-		state := WorkerState{Worker: "gone"}
+func TestAgentState(t *testing.T) {
+	t.Run("an agent with no capacity is fully loaded rather than empty", func(t *testing.T) {
+		state := AgentState{Name: "gone"}
 
 		assert.Equal(t, float64(1), state.Load())
 		assert.Zero(t, state.Free())
 	})
 
 	t.Run("free never goes below nothing", func(t *testing.T) {
-		state := WorkerState{Streams: 12, Capacity: 10}
+		state := AgentState{Streams: 12, Capacity: 10}
 
 		assert.Zero(t, state.Free())
 	})
 }
 
 func TestRegistry(t *testing.T) {
-	t.Run("a session makes its worker exist, and the last one leaving unmakes it", func(t *testing.T) {
+	t.Run("a session makes its agent exist, and the last one leaving unmakes it", func(t *testing.T) {
 		registry := NewRegistry()
 
-		first := fakeSession(t, "worker-a", 4)
-		second := fakeSession(t, "worker-a", 4)
+		first := fakeSession(t, "agent-a", 4)
+		second := fakeSession(t, "agent-a", 4)
 
 		require.NoError(t, registry.Add(first))
 		require.NoError(t, registry.Add(second))
 
-		sessions, err := registry.Sessions("worker-a")
+		sessions, err := registry.Sessions("agent-a")
 		require.NoError(t, err)
 		assert.Len(t, sessions, 2)
 
 		registry.Remove(first)
 
-		sessions, err = registry.Sessions("worker-a")
+		sessions, err = registry.Sessions("agent-a")
 		require.NoError(t, err)
 		assert.Len(t, sessions, 1)
 
 		registry.Remove(second)
 
-		_, err = registry.Sessions("worker-a")
-		assert.ErrorIs(t, err, ErrNoSuchWorker)
-		assert.Empty(t, registry.Workers())
+		_, err = registry.Sessions("agent-a")
+		assert.ErrorIs(t, err, ErrNoSuchAgent)
+		assert.Empty(t, registry.Agents())
 	})
 
 	t.Run("a session belonging to nobody is refused", func(t *testing.T) {
@@ -271,22 +271,22 @@ func TestRegistry(t *testing.T) {
 	t.Run("removing what was never there is not an error", func(t *testing.T) {
 		registry := NewRegistry()
 
-		registry.Remove(fakeSession(t, "worker-a", 4))
+		registry.Remove(fakeSession(t, "agent-a", 4))
 	})
 
-	t.Run("workers come back ordered, with what they are carrying", func(t *testing.T) {
+	t.Run("agents come back ordered, with what they are carrying", func(t *testing.T) {
 		registry := NewRegistry()
 
-		for _, name := range []string{"worker-c", "worker-a", "worker-b"} {
+		for _, name := range []string{"agent-c", "agent-a", "agent-b"} {
 			require.NoError(t, registry.Add(fakeSession(t, name, 4)))
 		}
 
-		states := registry.Workers()
+		states := registry.Agents()
 		require.Len(t, states, 3)
 
-		assert.Equal(t, "worker-a", states[0].Worker)
-		assert.Equal(t, "worker-b", states[1].Worker)
-		assert.Equal(t, "worker-c", states[2].Worker)
+		assert.Equal(t, "agent-a", states[0].Name)
+		assert.Equal(t, "agent-b", states[1].Name)
+		assert.Equal(t, "agent-c", states[2].Name)
 		assert.Equal(t, 4, states[0].Capacity)
 	})
 
@@ -297,42 +297,40 @@ func TestRegistry(t *testing.T) {
 		// tested, and a test helper is not safe to call from a goroutine.
 		sessions := make([]*Session, 50)
 		for i := range sessions {
-			sessions[i] = fakeSession(t, "worker-a", 4)
+			sessions[i] = fakeSession(t, "agent-a", 4)
 		}
 
 		var wait sync.WaitGroup
 		for i, session := range sessions {
-			wait.Add(1)
 
-			go func() {
-				defer wait.Done()
+			wait.Go(func() {
 
 				if err := registry.Add(session); err != nil {
 					return
 				}
 
-				_, _ = registry.Sessions("worker-a")
-				registry.Workers()
+				_, _ = registry.Sessions("agent-a")
+				registry.Agents()
 
-				// half of them leave again, so the worker is repeatedly taken
+				// half of them leave again, so the agent is repeatedly taken
 				// down to nothing while others are still arriving
 				if i%2 == 0 {
 					registry.Remove(session)
 				}
-			}()
+			})
 		}
 
 		wait.Wait()
 
-		held, err := registry.Sessions("worker-a")
-		require.NoError(t, err, "the worker should still be there")
+		held, err := registry.Sessions("agent-a")
+		require.NoError(t, err, "the agent should still be there")
 		assert.Len(t, held, 25, "a session added while the last one left was dropped")
 	})
 }
 
 func TestSessionCapacity(t *testing.T) {
 	t.Run("places are handed out until there are none", func(t *testing.T) {
-		session := fakeSession(t, "worker-a", 2)
+		session := fakeSession(t, "agent-a", 2)
 
 		assert.Equal(t, 2, session.Free())
 		assert.True(t, session.reserve())
@@ -349,7 +347,7 @@ func TestSessionCapacity(t *testing.T) {
 	})
 
 	t.Run("concurrent reservations never overshoot", func(t *testing.T) {
-		session := fakeSession(t, "worker-a", 10)
+		session := fakeSession(t, "agent-a", 10)
 
 		var (
 			wait   sync.WaitGroup
@@ -358,17 +356,15 @@ func TestSessionCapacity(t *testing.T) {
 		)
 
 		for range 100 {
-			wait.Add(1)
 
-			go func() {
-				defer wait.Done()
+			wait.Go(func() {
 
 				if session.reserve() {
 					taken <- struct{}{}
 				} else {
 					failed <- struct{}{}
 				}
-			}()
+			})
 		}
 
 		wait.Wait()
@@ -459,8 +455,8 @@ func TestPrefixedConn(t *testing.T) {
 }
 
 func TestBackoff(t *testing.T) {
-	worker := &Worker{config: testConfig(), closed: make(chan struct{})}
-	pool := newSessionPool(worker, "127.0.0.1:1")
+	agent := &Agent{config: testConfig(), closed: make(chan struct{})}
+	pool := newSessionPool(agent, "127.0.0.1:1")
 
 	t.Run("it grows, and never past the ceiling", func(t *testing.T) {
 		seen := make([]time.Duration, 0, 20)
@@ -471,7 +467,7 @@ func TestBackoff(t *testing.T) {
 			delay := pool.backoff()
 
 			assert.Positive(t, delay)
-			assert.LessOrEqual(t, delay, worker.config.ReconnectMaxDelay)
+			assert.LessOrEqual(t, delay, agent.config.ReconnectMaxDelay)
 
 			seen = append(seen, delay)
 		}
@@ -479,7 +475,7 @@ func TestBackoff(t *testing.T) {
 		assert.NotEmpty(t, seen)
 	})
 
-	t.Run("two waits are not the same, so workers do not come back in step", func(t *testing.T) {
+	t.Run("two waits are not the same, so agents do not come back in step", func(t *testing.T) {
 		pool.attempt = 8
 
 		distinct := make(map[time.Duration]struct{})
@@ -494,13 +490,13 @@ func TestBackoff(t *testing.T) {
 func TestCounters(t *testing.T) {
 	counters := &Counters{}
 
-	counters.SessionOpened("worker-a", "s1")
-	counters.StreamOpened("worker-a", "s1", "api")
-	counters.StreamClosed("worker-a", "s1", "api", 100, 200)
-	counters.StreamFailed("worker-a", "api", "target")
-	counters.AuthenticationFailed("worker-a", "token")
-	counters.Reconnected("worker-a", "ingress:81", 2)
-	counters.SessionClosed("worker-a", "s1", "closed")
+	counters.SessionOpened("agent-a", "s1")
+	counters.StreamOpened("agent-a", "s1", "api")
+	counters.StreamClosed("agent-a", "s1", "api", 100, 200)
+	counters.StreamFailed("agent-a", "api", "target")
+	counters.AuthenticationFailed("agent-a", "token")
+	counters.Reconnected("agent-a", "hub:81", 2)
+	counters.SessionClosed("agent-a", "s1", "closed")
 
 	assert.EqualValues(t, 1, counters.SessionsOpened.Load())
 	assert.EqualValues(t, 1, counters.SessionsClosed.Load())
@@ -513,13 +509,13 @@ func TestCounters(t *testing.T) {
 	assert.EqualValues(t, 200, counters.BytesReceived.Load())
 }
 
-func TestIngressRequiresAuthenticator(t *testing.T) {
-	_, err := NewIngress(DefaultConfig(), nil, discardLogger())
+func TestHubRequiresAuthenticator(t *testing.T) {
+	_, err := NewHub(DefaultConfig(), nil, discardLogger())
 
-	assert.Error(t, err, "a tunnel that takes anything is a way into every worker behind it")
+	assert.Error(t, err, "a tunnel that takes anything is a way into every agent behind it")
 }
 
-func TestWorkerRequires(t *testing.T) {
+func TestAgentRequires(t *testing.T) {
 	config := testConfig()
 	targets := NewServiceTargets(nil)
 
@@ -531,14 +527,14 @@ func TestWorkerRequires(t *testing.T) {
 		targets   Targets
 	}{
 		{name: "a name", addresses: []string{"x:1"}, dialer: plainDialer(), targets: targets},
-		{name: "an ingress", id: "worker-a", dialer: plainDialer(), targets: targets},
-		{name: "a dialer", id: "worker-a", addresses: []string{"x:1"}, targets: targets},
-		{name: "somewhere it may connect", id: "worker-a", addresses: []string{"x:1"}, dialer: plainDialer()},
+		{name: "a hub", id: "agent-a", dialer: plainDialer(), targets: targets},
+		{name: "a dialer", id: "agent-a", addresses: []string{"x:1"}, targets: targets},
+		{name: "somewhere it may connect", id: "agent-a", addresses: []string{"x:1"}, dialer: plainDialer()},
 	}
 
 	for _, tt := range tests {
 		t.Run("it needs "+tt.name, func(t *testing.T) {
-			_, err := NewWorker(tt.id, tt.addresses, config, tt.dialer, tt.targets, discardLogger())
+			_, err := NewAgent(tt.id, tt.addresses, config, tt.dialer, tt.targets, discardLogger())
 
 			assert.Error(t, err)
 		})
@@ -547,7 +543,7 @@ func TestWorkerRequires(t *testing.T) {
 
 // fakeSession is a session with no connection under it, for the parts that are
 // about counting rather than about carrying anything.
-func fakeSession(t *testing.T, worker string, capacity int) *Session {
+func fakeSession(t *testing.T, agent string, capacity int) *Session {
 	t.Helper()
 
 	left, right := net.Pipe()
@@ -561,7 +557,7 @@ func fakeSession(t *testing.T, worker string, capacity int) *Session {
 
 	t.Cleanup(func() { muxSession.Close() })
 
-	return newSession(newID(), worker, muxSession, capacity)
+	return newSession(newID(), agent, muxSession, capacity)
 }
 
 func TestIDsAreDistinct(t *testing.T) {

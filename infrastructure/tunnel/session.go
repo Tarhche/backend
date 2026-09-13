@@ -14,19 +14,19 @@ var (
 	// ErrSessionClosed is a session that has gone since it was picked.
 	ErrSessionClosed = errors.New("tunnel: session is closed")
 
-	// ErrAtCapacity is a session, or a whole worker, carrying as many streams
+	// ErrAtCapacity is a session, or a whole agent, carrying as many streams
 	// as it is allowed to.
 	ErrAtCapacity = errors.New("tunnel: at capacity")
 )
 
-// Session is one of a worker's TCP connections, and the smux session over it.
+// Session is one of an agent's TCP connections, and the smux session over it.
 //
 // It is the unit of failure: everything on it dies with it, and nothing else
 // does. It is also the unit of capacity — how many streams it will carry is
 // settled here rather than anywhere that would have to be asked.
 type Session struct {
-	id     string
-	worker string
+	id    string
+	agent string
 
 	session *smux.Session
 
@@ -41,21 +41,21 @@ type Session struct {
 	received atomic.Int64
 }
 
-func newSession(id string, worker string, session *smux.Session, maxStreams int) *Session {
+func newSession(id string, agent string, session *smux.Session, maxStreams int) *Session {
 	return &Session{
 		id:         id,
-		worker:     worker,
+		agent:      agent,
 		session:    session,
 		maxStreams: maxStreams,
 	}
 }
 
-// ID names this session within its worker, so a stream can be traced back to
+// ID names this session within its agent, so a stream can be traced back to
 // the connection that carried it.
 func (s *Session) ID() string { return s.id }
 
-// Worker is whose session this is.
-func (s *Session) Worker() string { return s.worker }
+// Agent is whose session this is.
+func (s *Session) Agent() string { return s.agent }
 
 // Streams is how many are on it now. It is the reserved count rather than
 // smux's own, because a stream is reserved before it exists and released after
@@ -112,10 +112,10 @@ func (s *Session) account(sent int64, received int64) {
 	s.received.Add(received)
 }
 
-// open starts a stream on this session and asks the worker to connect it to the
+// open starts a stream on this session and asks the agent to connect it to the
 // target. The place on the session has to have been reserved already.
 //
-// The stream comes back only once the worker has said it reached the target, so
+// The stream comes back only once the agent has said it reached the target, so
 // what the caller is given is a pipe that is known to lead somewhere.
 func (s *Session) open(ctx context.Context, target Target, timeout time.Duration) (net.Conn, error) {
 	stream, err := s.session.OpenStream()

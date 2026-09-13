@@ -16,7 +16,7 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers/runner"
-	"github.com/khanzadimahdi/testproject/infrastructure/runner/tunnel"
+	"github.com/khanzadimahdi/testproject/infrastructure/tunnel"
 )
 
 const (
@@ -36,7 +36,7 @@ type ServeCommand struct {
 	// tunnel holds this worker's connections to the ingresses. They are how a
 	// request reaches it: nothing dials a worker, so its own port answers only
 	// the healthcheck, whoever is on the machine, and the tunnel itself.
-	tunnel *tunnel.Worker
+	tunnel *tunnel.Agent
 
 	logger *slog.Logger
 }

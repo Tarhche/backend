@@ -4,7 +4,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/khanzadimahdi/testproject/infrastructure/runner/tunnel"
+	"github.com/khanzadimahdi/testproject/infrastructure/tunnel"
 )
 
 const (
@@ -108,7 +108,7 @@ func NewRunnerWorker() *RunnerWorker {
 func (c *RunnerWorker) IngressAddresses() []string {
 	addresses := make([]string, 0, 1)
 
-	for _, address := range strings.Split(c.TunnelAddresses, ",") {
+	for address := range strings.SplitSeq(c.TunnelAddresses, ",") {
 		if address = strings.TrimSpace(address); len(address) > 0 {
 			addresses = append(addresses, address)
 		}
@@ -133,7 +133,7 @@ func (c *RunnerIngress) Forwards() ([]tunnel.Forward, error) {
 func (c *RunnerIngress) AllowedWorkers() []string {
 	workers := make([]string, 0, 1)
 
-	for _, worker := range strings.Split(c.TunnelAllowedWorkers, ",") {
+	for worker := range strings.SplitSeq(c.TunnelAllowedWorkers, ",") {
 		if worker = strings.TrimSpace(worker); len(worker) > 0 {
 			workers = append(workers, worker)
 		}

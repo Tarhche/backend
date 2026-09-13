@@ -16,50 +16,50 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// 1. Worker registration
+// 1. Agent registration
 func TestRegistration(t *testing.T) {
-	t.Run("a worker that connects becomes reachable, and says how much of it there is", func(t *testing.T) {
+	t.Run("an agent that connects becomes reachable, and says how much of it there is", func(t *testing.T) {
 		config := testConfig()
-		ingress := startIngress(t, config, AllowAll())
-		startWorker(t, "worker-a", []string{ingress.address}, config, NewServiceTargets(map[string]string{"echo": echoServer(t, "")}))
+		hub := startHub(t, config, AllowAll())
+		startAgent(t, "agent-a", []string{hub.address}, config, NewServiceTargets(map[string]string{"echo": echoServer(t, "")}))
 
-		waitFor(t, "the worker to bring its pool up", func() bool {
-			workers := ingress.Workers()
+		waitFor(t, "the agent to bring its pool up", func() bool {
+			agents := hub.Agents()
 
-			return len(workers) == 1 && workers[0].Sessions == config.MinSessions
+			return len(agents) == 1 && agents[0].Sessions == config.MinSessions
 		})
 
-		state := ingress.Workers()[0]
-		assert.Equal(t, "worker-a", state.Worker)
+		state := hub.Agents()[0]
+		assert.Equal(t, "agent-a", state.Name)
 		assert.Equal(t, config.MinSessions, state.Sessions)
 		assert.Equal(t, config.MinSessions*config.MaxStreamsPerSession, state.Capacity)
 		assert.Zero(t, state.Streams)
 	})
 
-	t.Run("a worker that never connected is not there", func(t *testing.T) {
-		ingress := startIngress(t, testConfig(), AllowAll())
+	t.Run("an agent that never connected is not there", func(t *testing.T) {
+		hub := startHub(t, testConfig(), AllowAll())
 
-		_, err := ingress.Dial(t.Context(), "worker-a", Target{Service: "echo"})
-		assert.ErrorIs(t, err, ErrNoSuchWorker)
+		_, err := hub.Dial(t.Context(), "agent-a", Target{Service: "echo"})
+		assert.ErrorIs(t, err, ErrNoSuchAgent)
 	})
 }
 
-// 3. Multiple workers, and 6/7. bidirectional traffic reaching the right target
-func TestMultipleWorkers(t *testing.T) {
+// 3. Multiple agents, and 6/7. bidirectional traffic reaching the right target
+func TestMultipleAgents(t *testing.T) {
 	config := testConfig()
-	ingress := startIngress(t, config, AllowAll())
+	hub := startHub(t, config, AllowAll())
 
-	// each worker offers the same service name, pointing at a target of its own
-	for _, name := range []string{"worker-a", "worker-b", "worker-c"} {
-		startWorker(t, name, []string{ingress.address}, config,
+	// each agent offers the same service name, pointing at a target of its own
+	for _, name := range []string{"agent-a", "agent-b", "agent-c"} {
+		startAgent(t, name, []string{hub.address}, config,
 			NewServiceTargets(map[string]string{"echo": echoServer(t, name+":")}),
 		)
 	}
 
-	waitFor(t, "all three workers", func() bool { return len(ingress.Workers()) == 3 })
+	waitFor(t, "all three agents", func() bool { return len(hub.Agents()) == 3 })
 
-	for _, name := range []string{"worker-a", "worker-b", "worker-c"} {
-		conn, err := ingress.Dial(t.Context(), name, Target{Service: "echo"})
+	for _, name := range []string{"agent-a", "agent-b", "agent-c"} {
+		conn, err := hub.Dial(t.Context(), name, Target{Service: "echo"})
 		require.NoError(t, err)
 
 		greeting := make([]byte, len(name)+1)
@@ -67,32 +67,32 @@ func TestMultipleWorkers(t *testing.T) {
 		_, err = io.ReadFull(conn, greeting)
 		require.NoError(t, err)
 
-		assert.Equal(t, name+":", string(greeting), "the stream reached the wrong worker's target")
+		assert.Equal(t, name+":", string(greeting), "the stream reached the wrong agent's target")
 		assert.Equal(t, "hello", roundTrip(t, conn, "hello"))
 
 		conn.Close()
 	}
 }
 
-// 4 & 5. Multiple sessions per worker, multiple streams per session
+// 4 & 5. Multiple sessions per agent, multiple streams per session
 func TestSessionsAndStreams(t *testing.T) {
 	config := testConfig()
 	config.MinSessions = 3
 	config.MaxStreamsPerSession = 4
 
-	ingress := startIngress(t, config, AllowAll())
-	startWorker(t, "worker-a", []string{ingress.address}, config, NewServiceTargets(map[string]string{"echo": echoServer(t, "")}))
+	hub := startHub(t, config, AllowAll())
+	startAgent(t, "agent-a", []string{hub.address}, config, NewServiceTargets(map[string]string{"echo": echoServer(t, "")}))
 
 	waitFor(t, "three sessions", func() bool {
-		workers := ingress.Workers()
+		agents := hub.Agents()
 
-		return len(workers) == 1 && workers[0].Sessions == 3
+		return len(agents) == 1 && agents[0].Sessions == 3
 	})
 
 	// fill every session and check the streams were spread rather than piled on
 	var conns []net.Conn
 	for range 9 {
-		conn, err := ingress.Dial(t.Context(), "worker-a", Target{Service: "echo"})
+		conn, err := hub.Dial(t.Context(), "agent-a", Target{Service: "echo"})
 		require.NoError(t, err)
 
 		conns = append(conns, conn)
@@ -104,7 +104,7 @@ func TestSessionsAndStreams(t *testing.T) {
 		}
 	}()
 
-	sessions, err := ingress.Registry().Sessions("worker-a")
+	sessions, err := hub.Registry().Sessions("agent-a")
 	require.NoError(t, err)
 
 	for _, session := range sessions {
@@ -122,7 +122,7 @@ func TestSessionsAndStreams(t *testing.T) {
 // 6. ssh-like long-lived connections, exchanging in both directions over time
 func TestLongLivedConnection(t *testing.T) {
 	config := testConfig()
-	ingress := startIngress(t, config, AllowAll())
+	hub := startHub(t, config, AllowAll())
 
 	// a target that talks first and then answers each line, the way a shell does
 	address := targetServer(t, func(conn net.Conn) {
@@ -145,10 +145,10 @@ func TestLongLivedConnection(t *testing.T) {
 		}
 	})
 
-	startWorker(t, "worker-a", []string{ingress.address}, config, NewServiceTargets(map[string]string{"ssh": address}))
-	waitFor(t, "the worker", func() bool { return len(ingress.Workers()) == 1 })
+	startAgent(t, "agent-a", []string{hub.address}, config, NewServiceTargets(map[string]string{"ssh": address}))
+	waitFor(t, "the agent", func() bool { return len(hub.Agents()) == 1 })
 
-	conn, err := ingress.Dial(t.Context(), "worker-a", Target{Service: "ssh"})
+	conn, err := hub.Dial(t.Context(), "agent-a", Target{Service: "ssh"})
 	require.NoError(t, err)
 	defer conn.Close()
 
@@ -184,10 +184,10 @@ func TestHighConcurrency(t *testing.T) {
 	config.MaxSessions = 8
 	config.MaxStreamsPerSession = 32
 
-	ingress := startIngress(t, config, AllowAll())
-	startWorker(t, "worker-a", []string{ingress.address}, config, NewServiceTargets(map[string]string{"echo": echoServer(t, "")}))
+	hub := startHub(t, config, AllowAll())
+	startAgent(t, "agent-a", []string{hub.address}, config, NewServiceTargets(map[string]string{"echo": echoServer(t, "")}))
 
-	waitFor(t, "the worker", func() bool { return len(ingress.Workers()) == 1 })
+	waitFor(t, "the agent", func() bool { return len(hub.Agents()) == 1 })
 
 	const clients = 100
 
@@ -197,12 +197,10 @@ func TestHighConcurrency(t *testing.T) {
 	)
 
 	for i := range clients {
-		wait.Add(1)
 
-		go func() {
-			defer wait.Done()
+		wait.Go(func() {
 
-			conn, err := ingress.Dial(t.Context(), "worker-a", Target{Service: "echo"})
+			conn, err := hub.Dial(t.Context(), "agent-a", Target{Service: "echo"})
 			if err != nil {
 				return
 			}
@@ -226,7 +224,7 @@ func TestHighConcurrency(t *testing.T) {
 			if string(answer) == message {
 				succeeded.Add(1)
 			}
-		}()
+		})
 	}
 
 	wait.Wait()
@@ -234,30 +232,30 @@ func TestHighConcurrency(t *testing.T) {
 	assert.EqualValues(t, clients, succeeded.Load(), "every client should have reached the target and been answered")
 }
 
-// 9 & 14. Worker disconnect, and becoming available again
-func TestWorkerDisconnect(t *testing.T) {
+// 9 & 14. Agent disconnect, and becoming available again
+func TestAgentDisconnect(t *testing.T) {
 	config := testConfig()
-	ingress := startIngress(t, config, AllowAll())
+	hub := startHub(t, config, AllowAll())
 
 	address := echoServer(t, "")
-	worker := startWorker(t, "worker-a", []string{ingress.address}, config, NewServiceTargets(map[string]string{"echo": address}))
+	agent := startAgent(t, "agent-a", []string{hub.address}, config, NewServiceTargets(map[string]string{"echo": address}))
 
-	waitFor(t, "the worker", func() bool { return len(ingress.Workers()) == 1 })
+	waitFor(t, "the agent", func() bool { return len(hub.Agents()) == 1 })
 
-	worker.stop()
+	agent.stop()
 
-	// nothing announced this: the ingress found out because the connections it
+	// nothing announced this: the hub found out because the connections it
 	// was holding went.
-	waitFor(t, "the worker to stop being reachable", func() bool { return len(ingress.Workers()) == 0 })
+	waitFor(t, "the agent to stop being reachable", func() bool { return len(hub.Agents()) == 0 })
 
-	_, err := ingress.Dial(t.Context(), "worker-a", Target{Service: "echo"})
-	assert.ErrorIs(t, err, ErrNoSuchWorker)
+	_, err := hub.Dial(t.Context(), "agent-a", Target{Service: "echo"})
+	assert.ErrorIs(t, err, ErrNoSuchAgent)
 
 	// and a new one under the same name is reachable again
-	startWorker(t, "worker-a", []string{ingress.address}, config, NewServiceTargets(map[string]string{"echo": address}))
-	waitFor(t, "the worker to come back", func() bool { return len(ingress.Workers()) == 1 })
+	startAgent(t, "agent-a", []string{hub.address}, config, NewServiceTargets(map[string]string{"echo": address}))
+	waitFor(t, "the agent to come back", func() bool { return len(hub.Agents()) == 1 })
 
-	conn, err := ingress.Dial(t.Context(), "worker-a", Target{Service: "echo"})
+	conn, err := hub.Dial(t.Context(), "agent-a", Target{Service: "echo"})
 	require.NoError(t, err)
 	defer conn.Close()
 
@@ -271,23 +269,23 @@ func TestSessionIsolation(t *testing.T) {
 	config.MaxSessions = 2
 	config.MaxStreamsPerSession = 4
 
-	ingress := startIngress(t, config, AllowAll())
-	startWorker(t, "worker-a", []string{ingress.address}, config, NewServiceTargets(map[string]string{"echo": echoServer(t, "")}))
+	hub := startHub(t, config, AllowAll())
+	startAgent(t, "agent-a", []string{hub.address}, config, NewServiceTargets(map[string]string{"echo": echoServer(t, "")}))
 
 	waitFor(t, "two sessions", func() bool {
-		workers := ingress.Workers()
+		agents := hub.Agents()
 
-		return len(workers) == 1 && workers[0].Sessions == 2
+		return len(agents) == 1 && agents[0].Sessions == 2
 	})
 
 	// one connection on each session
-	sessions, err := ingress.Registry().Sessions("worker-a")
+	sessions, err := hub.Registry().Sessions("agent-a")
 	require.NoError(t, err)
 	require.Len(t, sessions, 2)
 
 	conns := make(map[string]net.Conn, 2)
 	for range 2 {
-		conn, err := ingress.Dial(t.Context(), "worker-a", Target{Service: "echo"})
+		conn, err := hub.Dial(t.Context(), "agent-a", Target{Service: "echo"})
 		require.NoError(t, err)
 
 		for _, session := range sessions {
@@ -320,28 +318,28 @@ func TestSessionIsolation(t *testing.T) {
 
 	// and new streams go to what is left
 	waitFor(t, "the dead session to be taken out", func() bool {
-		workers := ingress.Workers()
+		agents := hub.Agents()
 
-		return len(workers) == 1 && workers[0].Sessions >= 1
+		return len(agents) == 1 && agents[0].Sessions >= 1
 	})
 
-	fresh, err := ingress.Dial(t.Context(), "worker-a", Target{Service: "echo"})
+	fresh, err := hub.Dial(t.Context(), "agent-a", Target{Service: "echo"})
 	require.NoError(t, err)
 	defer fresh.Close()
 
 	assert.Equal(t, "new", roundTrip(t, fresh, "new"))
 }
 
-// 11 & 12. Ingress restart, and the worker reconnecting to it
-func TestIngressRestart(t *testing.T) {
+// 11 & 12. Hub restart, and the agent reconnecting to it
+func TestHubRestart(t *testing.T) {
 	config := testConfig()
 
-	// the ingress is restarted on the same address, which is what a deploy does
+	// the hub is restarted on the same address, which is what a deploy does
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	address := listener.Addr().String()
 
-	first, err := NewIngress(config, AllowAll(), discardLogger())
+	first, err := NewHub(config, AllowAll(), discardLogger())
 	require.NoError(t, err)
 
 	firstDone := make(chan struct{})
@@ -351,11 +349,11 @@ func TestIngressRestart(t *testing.T) {
 		_ = first.Serve(t.Context(), listener)
 	}()
 
-	startWorker(t, "worker-a", []string{address}, config, NewServiceTargets(map[string]string{"echo": echoServer(t, "")}))
+	startAgent(t, "agent-a", []string{address}, config, NewServiceTargets(map[string]string{"echo": echoServer(t, "")}))
 
-	waitFor(t, "the worker", func() bool { return len(first.Workers()) == 1 })
+	waitFor(t, "the agent", func() bool { return len(first.Agents()) == 1 })
 
-	// the ingress goes
+	// the hub goes
 	listener.Close()
 	first.Close()
 	<-firstDone
@@ -364,23 +362,23 @@ func TestIngressRestart(t *testing.T) {
 	again, err := net.Listen("tcp", address)
 	require.NoError(t, err)
 
-	second := startIngressOn(t, again, config, AllowAll())
+	second := startHubOn(t, again, config, AllowAll())
 
-	// the worker finds its way back on its own, without being told
-	waitFor(t, "the worker to reconnect", func() bool {
-		workers := second.Workers()
+	// the agent finds its way back on its own, without being told
+	waitFor(t, "the agent to reconnect", func() bool {
+		agents := second.Agents()
 
-		return len(workers) == 1 && workers[0].Sessions == config.MinSessions
+		return len(agents) == 1 && agents[0].Sessions == config.MinSessions
 	})
 
-	conn, err := second.Dial(t.Context(), "worker-a", Target{Service: "echo"})
+	conn, err := second.Dial(t.Context(), "agent-a", Target{Service: "echo"})
 	require.NoError(t, err)
 	defer conn.Close()
 
 	assert.Equal(t, "after the restart", roundTrip(t, conn, "after the restart"))
 }
 
-// 12b. The backoff is forgotten the moment a connection is made, so a worker
+// 12b. The backoff is forgotten the moment a connection is made, so an agent
 // that spent an outage backing off does not go on waiting as if it still were.
 func TestReconnectResetsBackoff(t *testing.T) {
 	config := testConfig()
@@ -389,7 +387,7 @@ func TestReconnectResetsBackoff(t *testing.T) {
 	require.NoError(t, err)
 	address := listener.Addr().String()
 
-	first, err := NewIngress(config, AllowAll(), discardLogger())
+	first, err := NewHub(config, AllowAll(), discardLogger())
 	require.NoError(t, err)
 
 	firstDone := make(chan struct{})
@@ -399,49 +397,49 @@ func TestReconnectResetsBackoff(t *testing.T) {
 		_ = first.Serve(t.Context(), listener)
 	}()
 
-	worker := startWorker(t, "worker-a", []string{address}, config, NewServiceTargets(map[string]string{"echo": echoServer(t, "")}))
+	agent := startAgent(t, "agent-a", []string{address}, config, NewServiceTargets(map[string]string{"echo": echoServer(t, "")}))
 
-	waitFor(t, "the worker", func() bool { return len(first.Workers()) == 1 })
-	require.Zero(t, attemptsOf(worker), "a worker that connected first time has nothing to back off from")
+	waitFor(t, "the agent", func() bool { return len(first.Agents()) == 1 })
+	require.Zero(t, attemptsOf(agent), "an agent that connected first time has nothing to back off from")
 
-	// the ingress goes, and stays gone long enough to be given up on more than
+	// the hub goes, and stays gone long enough to be given up on more than
 	// once — which is what puts the pool into a grown backoff at all
 	listener.Close()
 	first.Close()
 	<-firstDone
 
-	waitFor(t, "the worker to have failed more than once", func() bool {
-		return attemptsOf(worker) > 1
+	waitFor(t, "the agent to have failed more than once", func() bool {
+		return attemptsOf(agent) > 1
 	})
 
-	backedOff := attemptsOf(worker)
+	backedOff := attemptsOf(agent)
 	require.Greater(t, backedOff, 1)
 
 	// and comes back on the same address
 	again, err := net.Listen("tcp", address)
 	require.NoError(t, err)
 
-	second := startIngressOn(t, again, config, AllowAll())
+	second := startHubOn(t, again, config, AllowAll())
 
-	waitFor(t, "the worker to reconnect", func() bool {
-		workers := second.Workers()
+	waitFor(t, "the agent to reconnect", func() bool {
+		agents := second.Agents()
 
-		return len(workers) == 1 && workers[0].Sessions == config.MinSessions
+		return len(agents) == 1 && agents[0].Sessions == config.MinSessions
 	})
 
-	waitFor(t, "the backoff to be forgotten", func() bool { return attemptsOf(worker) == 0 })
+	waitFor(t, "the backoff to be forgotten", func() bool { return attemptsOf(agent) == 0 })
 
-	assert.Zero(t, attemptsOf(worker),
+	assert.Zero(t, attemptsOf(agent),
 		"it backed off %d times and reconnected; the next failure should wait from the start again", backedOff)
 
 	// and the wait it would take now is one drawn from the first step, not from
 	// wherever the outage had pushed it
-	assert.LessOrEqual(t, worker.pools[0].backoff(), config.ReconnectMinDelay)
+	assert.LessOrEqual(t, agent.pools[0].backoff(), config.ReconnectMinDelay)
 }
 
-// attemptsOf is how many times in a row a worker has failed to reach its first
-// ingress, which is what the backoff is computed from.
-func attemptsOf(w *testWorker) int {
+// attemptsOf is how many times in a row an agent has failed to reach its first
+// hub, which is what the backoff is computed from.
+func attemptsOf(w *testAgent) int {
 	pool := w.pools[0]
 
 	pool.lock.Lock()
@@ -458,28 +456,28 @@ func TestAtCapacity(t *testing.T) {
 	config.MaxStreamsPerSession = 2
 	config.CapacityWait = 200 * time.Millisecond
 
-	ingress := startIngress(t, config, AllowAll())
-	startWorker(t, "worker-a", []string{ingress.address}, config, NewServiceTargets(map[string]string{"echo": echoServer(t, "")}))
+	hub := startHub(t, config, AllowAll())
+	startAgent(t, "agent-a", []string{hub.address}, config, NewServiceTargets(map[string]string{"echo": echoServer(t, "")}))
 
-	waitFor(t, "the worker", func() bool { return len(ingress.Workers()) == 1 })
+	waitFor(t, "the agent", func() bool { return len(hub.Agents()) == 1 })
 
 	var held []net.Conn
 	for range 2 {
-		conn, err := ingress.Dial(t.Context(), "worker-a", Target{Service: "echo"})
+		conn, err := hub.Dial(t.Context(), "agent-a", Target{Service: "echo"})
 		require.NoError(t, err)
 
 		held = append(held, conn)
 	}
 
-	// the worker cannot grow past one session, so there is nowhere to put this
-	_, err := ingress.Dial(t.Context(), "worker-a", Target{Service: "echo"})
+	// the agent cannot grow past one session, so there is nowhere to put this
+	_, err := hub.Dial(t.Context(), "agent-a", Target{Service: "echo"})
 	assert.ErrorIs(t, err, ErrAtCapacity)
 
 	// when a place is given back, the next one gets it
 	held[0].Close()
 
 	waitFor(t, "the place to be given back", func() bool {
-		conn, err := ingress.Dial(t.Context(), "worker-a", Target{Service: "echo"})
+		conn, err := hub.Dial(t.Context(), "agent-a", Target{Service: "echo"})
 		if err != nil {
 			return false
 		}
@@ -490,7 +488,7 @@ func TestAtCapacity(t *testing.T) {
 	})
 }
 
-// The worker grows its pool before it is full, since the ingress cannot make room
+// The agent grows its pool before it is full, since the hub cannot make room
 func TestPoolGrows(t *testing.T) {
 	config := testConfig()
 	config.MinSessions = 1
@@ -498,10 +496,10 @@ func TestPoolGrows(t *testing.T) {
 	config.MaxStreamsPerSession = 4
 	config.GrowThreshold = 0.5
 
-	ingress := startIngress(t, config, AllowAll())
-	startWorker(t, "worker-a", []string{ingress.address}, config, NewServiceTargets(map[string]string{"echo": echoServer(t, "")}))
+	hub := startHub(t, config, AllowAll())
+	startAgent(t, "agent-a", []string{hub.address}, config, NewServiceTargets(map[string]string{"echo": echoServer(t, "")}))
 
-	waitFor(t, "the first session", func() bool { return len(ingress.Workers()) == 1 })
+	waitFor(t, "the first session", func() bool { return len(hub.Agents()) == 1 })
 
 	var held []net.Conn
 	defer func() {
@@ -512,16 +510,16 @@ func TestPoolGrows(t *testing.T) {
 
 	// take enough to cross the threshold on what is open
 	for range 3 {
-		conn, err := ingress.Dial(t.Context(), "worker-a", Target{Service: "echo"})
+		conn, err := hub.Dial(t.Context(), "agent-a", Target{Service: "echo"})
 		require.NoError(t, err)
 
 		held = append(held, conn)
 	}
 
-	waitFor(t, "the worker to open another session", func() bool {
-		workers := ingress.Workers()
+	waitFor(t, "the agent to open another session", func() bool {
+		agents := hub.Agents()
 
-		return len(workers) == 1 && workers[0].Sessions > 1
+		return len(agents) == 1 && agents[0].Sessions > 1
 	})
 }
 
@@ -532,7 +530,7 @@ func TestBackpressure(t *testing.T) {
 		config.MaxStreamBuffer = 64 * 1024
 		config.MaxReceiveBuffer = 256 * 1024
 
-		ingress := startIngress(t, config, AllowAll())
+		hub := startHub(t, config, AllowAll())
 
 		// a target that accepts and then reads nothing at all
 		blocked := make(chan struct{})
@@ -542,10 +540,10 @@ func TestBackpressure(t *testing.T) {
 			<-blocked
 		})
 
-		startWorker(t, "worker-a", []string{ingress.address}, config, NewServiceTargets(map[string]string{"slow": address}))
-		waitFor(t, "the worker", func() bool { return len(ingress.Workers()) == 1 })
+		startAgent(t, "agent-a", []string{hub.address}, config, NewServiceTargets(map[string]string{"slow": address}))
+		waitFor(t, "the agent", func() bool { return len(hub.Agents()) == 1 })
 
-		conn, err := ingress.Dial(t.Context(), "worker-a", Target{Service: "slow"})
+		conn, err := hub.Dial(t.Context(), "agent-a", Target{Service: "slow"})
 		require.NoError(t, err)
 		defer conn.Close()
 		defer close(blocked)
@@ -579,7 +577,7 @@ func TestBackpressure(t *testing.T) {
 		config.MaxStreamBuffer = 64 * 1024
 		config.MaxReceiveBuffer = 256 * 1024
 
-		ingress := startIngress(t, config, AllowAll())
+		hub := startHub(t, config, AllowAll())
 
 		// a target that writes as fast as it is allowed to
 		var produced atomic.Int64
@@ -597,10 +595,10 @@ func TestBackpressure(t *testing.T) {
 			}
 		})
 
-		startWorker(t, "worker-a", []string{ingress.address}, config, NewServiceTargets(map[string]string{"fast": address}))
-		waitFor(t, "the worker", func() bool { return len(ingress.Workers()) == 1 })
+		startAgent(t, "agent-a", []string{hub.address}, config, NewServiceTargets(map[string]string{"fast": address}))
+		waitFor(t, "the agent", func() bool { return len(hub.Agents()) == 1 })
 
-		conn, err := ingress.Dial(t.Context(), "worker-a", Target{Service: "fast"})
+		conn, err := hub.Dial(t.Context(), "agent-a", Target{Service: "fast"})
 		require.NoError(t, err)
 		defer conn.Close()
 
@@ -628,7 +626,7 @@ func TestBackpressure(t *testing.T) {
 // 18. Half-closed connections, which smux carries as a FIN of its own
 func TestHalfClose(t *testing.T) {
 	config := testConfig()
-	ingress := startIngress(t, config, AllowAll())
+	hub := startHub(t, config, AllowAll())
 
 	// a target that reads to EOF and only then answers, which is exactly what
 	// needs the half-close to have travelled
@@ -643,10 +641,10 @@ func TestHalfClose(t *testing.T) {
 		_, _ = fmt.Fprintf(conn, "read %d bytes", len(asked))
 	})
 
-	startWorker(t, "worker-a", []string{ingress.address}, config, NewServiceTargets(map[string]string{"drain": address}))
-	waitFor(t, "the worker", func() bool { return len(ingress.Workers()) == 1 })
+	startAgent(t, "agent-a", []string{hub.address}, config, NewServiceTargets(map[string]string{"drain": address}))
+	waitFor(t, "the agent", func() bool { return len(hub.Agents()) == 1 })
 
-	conn, err := ingress.Dial(t.Context(), "worker-a", Target{Service: "drain"})
+	conn, err := hub.Dial(t.Context(), "agent-a", Target{Service: "drain"})
 	require.NoError(t, err)
 	defer conn.Close()
 
@@ -669,18 +667,18 @@ func TestHalfClose(t *testing.T) {
 // 19. Graceful shutdown: both ends stop without leaving anything running
 func TestGracefulShutdown(t *testing.T) {
 	config := testConfig()
-	ingress := startIngress(t, config, AllowAll())
+	hub := startHub(t, config, AllowAll())
 
-	worker := startWorker(t, "worker-a", []string{ingress.address}, config, NewServiceTargets(map[string]string{"echo": echoServer(t, "")}))
-	waitFor(t, "the worker", func() bool { return len(ingress.Workers()) == 1 })
+	agent := startAgent(t, "agent-a", []string{hub.address}, config, NewServiceTargets(map[string]string{"echo": echoServer(t, "")}))
+	waitFor(t, "the agent", func() bool { return len(hub.Agents()) == 1 })
 
-	conn, err := ingress.Dial(t.Context(), "worker-a", Target{Service: "echo"})
+	conn, err := hub.Dial(t.Context(), "agent-a", Target{Service: "echo"})
 	require.NoError(t, err)
 	assert.Equal(t, "before", roundTrip(t, conn, "before"))
 
-	worker.stop() // returns only when everything it started has stopped
+	agent.stop() // returns only when everything it started has stopped
 
-	waitFor(t, "the ingress to let the worker go", func() bool { return len(ingress.Workers()) == 0 })
+	waitFor(t, "the hub to let the agent go", func() bool { return len(hub.Agents()) == 0 })
 
 	// the stream that was open ends, rather than hanging
 	require.NoError(t, conn.SetDeadline(time.Now().Add(2*time.Second)))
@@ -691,26 +689,26 @@ func TestGracefulShutdown(t *testing.T) {
 	assert.Error(t, err)
 
 	conn.Close()
-	assert.NoError(t, ingress.Close())
+	assert.NoError(t, hub.Close())
 }
 
-// A worker connected to several ingresses is reachable through all of them,
+// An agent connected to several hubs is reachable through all of them,
 // which is what lets there be more than one.
-func TestManyIngresses(t *testing.T) {
+func TestManyHubes(t *testing.T) {
 	config := testConfig()
 	config.MinSessions = 1
 
-	first := startIngress(t, config, AllowAll())
-	second := startIngress(t, config, AllowAll())
+	first := startHub(t, config, AllowAll())
+	second := startHub(t, config, AllowAll())
 
-	startWorker(t, "worker-a", []string{first.address, second.address}, config,
+	startAgent(t, "agent-a", []string{first.address, second.address}, config,
 		NewServiceTargets(map[string]string{"echo": echoServer(t, "")}),
 	)
 
-	for _, ingress := range []*testIngress{first, second} {
-		waitFor(t, "the worker to reach both ingresses", func() bool { return len(ingress.Workers()) == 1 })
+	for _, hub := range []*testHub{first, second} {
+		waitFor(t, "the agent to reach both hubs", func() bool { return len(hub.Agents()) == 1 })
 
-		conn, err := ingress.Dial(t.Context(), "worker-a", Target{Service: "echo"})
+		conn, err := hub.Dial(t.Context(), "agent-a", Target{Service: "echo"})
 		require.NoError(t, err)
 
 		assert.Equal(t, "both", roundTrip(t, conn, "both"))
@@ -718,20 +716,20 @@ func TestManyIngresses(t *testing.T) {
 	}
 }
 
-// An ingress that is down does not stop the ones that are up.
-func TestOneIngressDown(t *testing.T) {
+// A hub that is down does not stop the ones that are up.
+func TestOneHubDown(t *testing.T) {
 	config := testConfig()
 	config.MinSessions = 1
 
-	ingress := startIngress(t, config, AllowAll())
+	hub := startHub(t, config, AllowAll())
 
-	startWorker(t, "worker-a", []string{ingress.address, "127.0.0.1:1"}, config,
+	startAgent(t, "agent-a", []string{hub.address, "127.0.0.1:1"}, config,
 		NewServiceTargets(map[string]string{"echo": echoServer(t, "")}),
 	)
 
-	waitFor(t, "the ingress that is up", func() bool { return len(ingress.Workers()) == 1 })
+	waitFor(t, "the hub that is up", func() bool { return len(hub.Agents()) == 1 })
 
-	conn, err := ingress.Dial(t.Context(), "worker-a", Target{Service: "echo"})
+	conn, err := hub.Dial(t.Context(), "agent-a", Target{Service: "echo"})
 	require.NoError(t, err)
 	defer conn.Close()
 
@@ -745,27 +743,27 @@ func TestRouting(t *testing.T) {
 	config.MaxSessions = 1
 	config.MaxStreamsPerSession = 4
 
-	ingress := startIngress(t, config, AllowAll())
+	hub := startHub(t, config, AllowAll())
 
-	for _, name := range []string{"worker-a", "worker-b"} {
-		startWorker(t, name, []string{ingress.address}, config,
+	for _, name := range []string{"agent-a", "agent-b"} {
+		startAgent(t, name, []string{hub.address}, config,
 			NewServiceTargets(map[string]string{"echo": echoServer(t, name+":")}),
 		)
 	}
 
-	waitFor(t, "both workers", func() bool { return len(ingress.Workers()) == 2 })
+	waitFor(t, "both agents", func() bool { return len(hub.Agents()) == 2 })
 
 	// the least loaded is picked, so two routed connections land one each
 	reached := make(map[string]int)
 	var conns []net.Conn
 
 	for range 2 {
-		conn, err := ingress.Route(t.Context(), Target{Service: "echo"})
+		conn, err := hub.Route(t.Context(), Target{Service: "echo"})
 		require.NoError(t, err)
 
 		conns = append(conns, conn)
 
-		greeting := make([]byte, len("worker-a:"))
+		greeting := make([]byte, len("agent-a:"))
 		require.NoError(t, conn.SetDeadline(time.Now().Add(5*time.Second)))
 		_, err = io.ReadFull(conn, greeting)
 		require.NoError(t, err)
@@ -779,49 +777,49 @@ func TestRouting(t *testing.T) {
 		}
 	}()
 
-	assert.Len(t, reached, 2, "the second connection should have gone to the emptier worker")
+	assert.Len(t, reached, 2, "the second connection should have gone to the emptier agent")
 }
 
 // A stream whose target cannot be reached says so, rather than looking like one
 // that connected and closed.
 func TestTargetFailures(t *testing.T) {
 	config := testConfig()
-	ingress := startIngress(t, config, AllowAll())
+	hub := startHub(t, config, AllowAll())
 
-	startWorker(t, "worker-a", []string{ingress.address}, config,
+	startAgent(t, "agent-a", []string{hub.address}, config,
 		NewServiceTargets(map[string]string{"nothing": "127.0.0.1:1"}),
 	)
 
-	waitFor(t, "the worker", func() bool { return len(ingress.Workers()) == 1 })
+	waitFor(t, "the agent", func() bool { return len(hub.Agents()) == 1 })
 
-	t.Run("a service the worker does not offer", func(t *testing.T) {
-		_, err := ingress.Dial(t.Context(), "worker-a", Target{Service: "missing"})
+	t.Run("a service the agent does not offer", func(t *testing.T) {
+		_, err := hub.Dial(t.Context(), "agent-a", Target{Service: "missing"})
 
 		assert.ErrorIs(t, err, ErrRejected)
 		assert.Contains(t, err.Error(), ErrUnknownService.Error())
 	})
 
-	t.Run("an address the worker will not dial", func(t *testing.T) {
-		_, err := ingress.Dial(t.Context(), "worker-a", Target{Host: "10.0.0.1", Port: 22})
+	t.Run("an address the agent will not dial", func(t *testing.T) {
+		_, err := hub.Dial(t.Context(), "agent-a", Target{Host: "10.0.0.1", Port: 22})
 
 		assert.ErrorIs(t, err, ErrRejected)
 		assert.Contains(t, err.Error(), ErrTargetNotAllowed.Error())
 	})
 
 	t.Run("a target that is not listening", func(t *testing.T) {
-		_, err := ingress.Dial(t.Context(), "worker-a", Target{Service: "nothing"})
+		_, err := hub.Dial(t.Context(), "agent-a", Target{Service: "nothing"})
 
 		assert.ErrorIs(t, err, ErrRejected)
 	})
 
 	t.Run("a stream that names nothing at all", func(t *testing.T) {
-		_, err := ingress.Dial(t.Context(), "worker-a", Target{})
+		_, err := hub.Dial(t.Context(), "agent-a", Target{})
 
 		assert.ErrorIs(t, err, ErrProtocol)
 	})
 
 	t.Run("a place taken for a stream that failed is given back", func(t *testing.T) {
-		sessions, err := ingress.Registry().Sessions("worker-a")
+		sessions, err := hub.Registry().Sessions("agent-a")
 		require.NoError(t, err)
 
 		for _, session := range sessions {
@@ -830,10 +828,10 @@ func TestTargetFailures(t *testing.T) {
 	})
 }
 
-// Explicit addresses are allowed when the worker says they are.
+// Explicit addresses are allowed when the agent says they are.
 func TestAllowedAddresses(t *testing.T) {
 	config := testConfig()
-	ingress := startIngress(t, config, AllowAll())
+	hub := startHub(t, config, AllowAll())
 
 	address := echoServer(t, "")
 	host, port, err := net.SplitHostPort(address)
@@ -843,30 +841,30 @@ func TestAllowedAddresses(t *testing.T) {
 	_, err = fmt.Sscan(port, &portNumber)
 	require.NoError(t, err)
 
-	startWorker(t, "worker-a", []string{ingress.address}, config,
+	startAgent(t, "agent-a", []string{hub.address}, config,
 		NewServiceTargets(nil, AddressRule{Host: host, Ports: []uint16{portNumber}}),
 	)
 
-	waitFor(t, "the worker", func() bool { return len(ingress.Workers()) == 1 })
+	waitFor(t, "the agent", func() bool { return len(hub.Agents()) == 1 })
 
-	conn, err := ingress.Dial(t.Context(), "worker-a", Target{Host: host, Port: portNumber})
+	conn, err := hub.Dial(t.Context(), "agent-a", Target{Host: host, Port: portNumber})
 	require.NoError(t, err)
 	defer conn.Close()
 
 	assert.Equal(t, "by address", roundTrip(t, conn, "by address"))
 
-	_, err = ingress.Dial(t.Context(), "worker-a", Target{Host: host, Port: portNumber + 1})
+	_, err = hub.Dial(t.Context(), "agent-a", Target{Host: host, Port: portNumber + 1})
 	assert.ErrorIs(t, err, ErrRejected)
 }
 
-// startIngressOn serves an ingress on a listener the test already made, which
+// startHubOn serves a hub on a listener the test already made, which
 // is what the restart test needs.
-func startIngressOn(t *testing.T, listener net.Listener, config Config, auth Authenticator) *testIngress {
+func startHubOn(t *testing.T, listener net.Listener, config Config, auth Authenticator) *testHub {
 	t.Helper()
 
 	metrics := &Counters{}
 
-	ingress, err := NewIngress(config, auth, discardLogger(), WithIngressMetrics(metrics))
+	hub, err := NewHub(config, auth, discardLogger(), WithHubMetrics(metrics))
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(t.Context())
@@ -875,16 +873,16 @@ func startIngressOn(t *testing.T, listener net.Listener, config Config, auth Aut
 	go func() {
 		defer close(done)
 
-		_ = ingress.Serve(ctx, listener)
+		_ = hub.Serve(ctx, listener)
 	}()
 
 	t.Cleanup(func() {
 		cancel()
-		ingress.Close()
+		hub.Close()
 		<-done
 	})
 
-	return &testIngress{Ingress: ingress, address: listener.Addr().String(), listener: listener, metrics: metrics, done: done}
+	return &testHub{Hub: hub, address: listener.Addr().String(), listener: listener, metrics: metrics, done: done}
 }
 
 // Every goroutine here belongs to something with an end: a session, a stream,
@@ -909,7 +907,7 @@ func TestNoGoroutineLeaks(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		defer cancel()
 
-		ingress, err := NewIngress(config, AllowAll(), discardLogger())
+		hub, err := NewHub(config, AllowAll(), discardLogger())
 		require.NoError(t, err)
 
 		listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -919,27 +917,27 @@ func TestNoGoroutineLeaks(t *testing.T) {
 		go func() {
 			defer close(served)
 
-			_ = ingress.Serve(ctx, listener)
+			_ = hub.Serve(ctx, listener)
 		}()
 
 		target := echoServer(t, "")
 
-		worker, err := NewWorker("worker-a", []string{listener.Addr().String()}, config, plainDialer(),
-			NewServiceTargets(map[string]string{"echo": target}), discardLogger(), WithWorkerMetrics(&Counters{}))
+		agent, err := NewAgent("agent-a", []string{listener.Addr().String()}, config, plainDialer(),
+			NewServiceTargets(map[string]string{"echo": target}), discardLogger(), WithAgentMetrics(&Counters{}))
 		require.NoError(t, err)
 
 		stopped := make(chan struct{})
 		go func() {
 			defer close(stopped)
 
-			worker.Run(ctx)
+			agent.Run(ctx)
 		}()
 
-		waitFor(t, "the worker", func() bool { return len(ingress.Workers()) == 1 })
+		waitFor(t, "the agent", func() bool { return len(hub.Agents()) == 1 })
 
 		// run a good number of streams through, then let everything go
 		for range 20 {
-			conn, err := ingress.Dial(ctx, "worker-a", Target{Service: "echo"})
+			conn, err := hub.Dial(ctx, "agent-a", Target{Service: "echo"})
 			require.NoError(t, err)
 
 			assert.Equal(t, "leak check", roundTrip(t, conn, "leak check"))
@@ -947,9 +945,9 @@ func TestNoGoroutineLeaks(t *testing.T) {
 		}
 
 		cancel()
-		worker.Close()
+		agent.Close()
 		listener.Close()
-		ingress.Close()
+		hub.Close()
 
 		<-stopped
 		<-served

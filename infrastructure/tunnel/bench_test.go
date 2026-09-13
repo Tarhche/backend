@@ -21,11 +21,11 @@ func benchConfig() Config {
 	return c
 }
 
-// benchTunnel stands an ingress and one worker up, with an echo target.
-func benchTunnel(b *testing.B, config Config) (*Ingress, func(context.Context) (net.Conn, error)) {
+// benchTunnel stands a hub and one agent up, with an echo target.
+func benchTunnel(b *testing.B, config Config) (*Hub, func(context.Context) (net.Conn, error)) {
 	b.Helper()
 
-	ingress, err := NewIngress(config, AllowAll(), discardLogger())
+	hub, err := NewHub(config, AllowAll(), discardLogger())
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -37,11 +37,11 @@ func benchTunnel(b *testing.B, config Config) (*Ingress, func(context.Context) (
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	go func() { _ = ingress.Serve(ctx, listener) }()
+	go func() { _ = hub.Serve(ctx, listener) }()
 
 	target := benchEcho(b)
 
-	worker, err := NewWorker("worker-a", []string{listener.Addr().String()}, config, plainDialer(),
+	agent, err := NewAgent("agent-a", []string{listener.Addr().String()}, config, plainDialer(),
 		NewServiceTargets(map[string]string{"echo": target}), discardLogger())
 	if err != nil {
 		b.Fatal(err)
@@ -51,33 +51,33 @@ func benchTunnel(b *testing.B, config Config) (*Ingress, func(context.Context) (
 	go func() {
 		defer close(stopped)
 
-		worker.Run(ctx)
+		agent.Run(ctx)
 	}()
 
 	b.Cleanup(func() {
 		cancel()
-		worker.Close()
-		ingress.Close()
+		agent.Close()
+		hub.Close()
 		<-stopped
 	})
 
 	// wait for the pool, so the measurement is not of connecting
 	deadline := time.Now().Add(10 * time.Second)
 	for {
-		workers := ingress.Workers()
-		if len(workers) == 1 && workers[0].Sessions >= config.MinSessions {
+		agents := hub.Agents()
+		if len(agents) == 1 && agents[0].Sessions >= config.MinSessions {
 			break
 		}
 
 		if time.Now().After(deadline) {
-			b.Fatal("the worker never came up")
+			b.Fatal("the agent never came up")
 		}
 
 		time.Sleep(5 * time.Millisecond)
 	}
 
-	return ingress, func(ctx context.Context) (net.Conn, error) {
-		return ingress.Dial(ctx, "worker-a", Target{Service: "echo"})
+	return hub, func(ctx context.Context) (net.Conn, error) {
+		return hub.Dial(ctx, "agent-a", Target{Service: "echo"})
 	}
 }
 
@@ -328,16 +328,16 @@ func BenchmarkStreamsPerSession(b *testing.B) {
 	}
 }
 
-// BenchmarkManyWorkers is the ingress's side of scale: many workers connected
+// BenchmarkManyAgents is the hub's side of scale: many agents connected
 // at once, each carrying a little.
-func BenchmarkManyWorkers(b *testing.B) {
-	for _, workers := range []int{1, 10, 50} {
-		b.Run(fmt.Sprintf("workers-%d", workers), func(b *testing.B) {
+func BenchmarkManyAgents(b *testing.B) {
+	for _, agents := range []int{1, 10, 50} {
+		b.Run(fmt.Sprintf("agents-%d", agents), func(b *testing.B) {
 			config := benchConfig()
 			config.MinSessions = 1
 			config.MaxSessions = 2
 
-			ingress, err := NewIngress(config, AllowAll(), discardLogger())
+			hub, err := NewHub(config, AllowAll(), discardLogger())
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -348,42 +348,39 @@ func BenchmarkManyWorkers(b *testing.B) {
 			}
 
 			ctx, cancel := context.WithCancel(context.Background())
-			go func() { _ = ingress.Serve(ctx, listener) }()
+			go func() { _ = hub.Serve(ctx, listener) }()
 
 			target := benchEcho(b)
 
 			var stopped sync.WaitGroup
-			names := make([]string, 0, workers)
+			names := make([]string, 0, agents)
 
-			for i := range workers {
-				name := fmt.Sprintf("worker-%03d", i)
+			for i := range agents {
+				name := fmt.Sprintf("agent-%03d", i)
 				names = append(names, name)
 
-				worker, err := NewWorker(name, []string{listener.Addr().String()}, config, plainDialer(),
+				agent, err := NewAgent(name, []string{listener.Addr().String()}, config, plainDialer(),
 					NewServiceTargets(map[string]string{"echo": target}), discardLogger())
 				if err != nil {
 					b.Fatal(err)
 				}
 
-				stopped.Add(1)
+				stopped.Go(func() {
 
-				go func() {
-					defer stopped.Done()
-
-					worker.Run(ctx)
-				}()
+					agent.Run(ctx)
+				})
 			}
 
 			b.Cleanup(func() {
 				cancel()
-				ingress.Close()
+				hub.Close()
 				stopped.Wait()
 			})
 
 			deadline := time.Now().Add(30 * time.Second)
-			for len(ingress.Workers()) < workers {
+			for len(hub.Agents()) < agents {
 				if time.Now().After(deadline) {
-					b.Fatalf("only %d of %d workers came up", len(ingress.Workers()), workers)
+					b.Fatalf("only %d of %d agents came up", len(hub.Agents()), agents)
 				}
 
 				time.Sleep(10 * time.Millisecond)
@@ -394,7 +391,7 @@ func BenchmarkManyWorkers(b *testing.B) {
 
 			for b.Loop() {
 				for _, name := range names {
-					conn, err := ingress.Dial(context.Background(), name, Target{Service: "echo"})
+					conn, err := hub.Dial(context.Background(), name, Target{Service: "echo"})
 					if err != nil {
 						b.Fatal(err)
 					}
@@ -465,7 +462,7 @@ func BenchmarkRegistry(b *testing.B) {
 	defer muxSession.Close()
 
 	for i := range 100 {
-		if err := registry.Add(newSession(newID(), fmt.Sprintf("worker-%03d", i), muxSession, 256)); err != nil {
+		if err := registry.Add(newSession(newID(), fmt.Sprintf("agent-%03d", i), muxSession, 256)); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -475,7 +472,7 @@ func BenchmarkRegistry(b *testing.B) {
 
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			if _, err := registry.Sessions("worker-050"); err != nil {
+			if _, err := registry.Sessions("agent-050"); err != nil {
 				b.Fatal(err)
 			}
 		}
@@ -487,11 +484,11 @@ func BenchmarkRegistry(b *testing.B) {
 func benchForwarder(b *testing.B, config Config) string {
 	b.Helper()
 
-	ingress, _ := benchTunnel(b, config)
+	hub, _ := benchTunnel(b, config)
 
-	forwarder, err := NewForwarder(ingress, discardLogger(), Forward{
+	forwarder, err := NewForwarder(hub, discardLogger(), Forward{
 		Address: "127.0.0.1:0",
-		Worker:  "worker-a",
+		Agent:   "agent-a",
 		Target:  Target{Service: "echo"},
 	})
 	if err != nil {
@@ -510,7 +507,7 @@ func benchForwarder(b *testing.B, config Config) string {
 }
 
 // BenchmarkForwardedRoundTrip is the whole path a client pays for: its own TCP
-// connection, the stream it was joined to, and the target behind the worker.
+// connection, the stream it was joined to, and the target behind the agent.
 func BenchmarkForwardedRoundTrip(b *testing.B) {
 	address := benchForwarder(b, benchConfig())
 
@@ -538,7 +535,7 @@ func BenchmarkForwardedRoundTrip(b *testing.B) {
 }
 
 // BenchmarkForwardedAccept is what accepting a client costs end to end: a TCP
-// accept, a stream opened on the worker's connection, and the worker dialling
+// accept, a stream opened on the agent's connection, and the agent dialling
 // the target.
 func BenchmarkForwardedAccept(b *testing.B) {
 	config := benchConfig()

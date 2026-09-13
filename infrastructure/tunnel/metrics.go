@@ -8,25 +8,25 @@ import "sync/atomic"
 // and must not block. Nothing here carries a stream's contents — only who it
 // belonged to and how much of it there was.
 type Metrics interface {
-	// SessionOpened and SessionClosed bracket one of a worker's connections.
-	SessionOpened(worker string, session string)
-	SessionClosed(worker string, session string, reason string)
+	// SessionOpened and SessionClosed bracket one of an agent's connections.
+	SessionOpened(agent string, session string)
+	SessionClosed(agent string, session string, reason string)
 
 	// StreamOpened and StreamClosed bracket one client connection. Bytes are
 	// reported once, at the end, rather than as they go: counting every read
 	// would put an atomic in the middle of the copy.
-	StreamOpened(worker string, session string, target string)
-	StreamClosed(worker string, session string, target string, sent int64, received int64)
+	StreamOpened(agent string, session string, target string)
+	StreamClosed(agent string, session string, target string, sent int64, received int64)
 
-	// StreamFailed is a stream that never carried anything, because no worker
+	// StreamFailed is a stream that never carried anything, because no agent
 	// could take it or the target could not be reached.
-	StreamFailed(worker string, target string, reason string)
+	StreamFailed(agent string, target string, reason string)
 
 	// AuthenticationFailed is a connection that did not get in.
-	AuthenticationFailed(worker string, reason string)
+	AuthenticationFailed(agent string, reason string)
 
-	// Reconnected is a worker's own count of having had to dial again.
-	Reconnected(worker string, address string, attempt int)
+	// Reconnected is an agent's own count of having had to dial again.
+	Reconnected(agent string, address string, attempt int)
 }
 
 // Counters is a Metrics that keeps totals in memory, which is enough to assert

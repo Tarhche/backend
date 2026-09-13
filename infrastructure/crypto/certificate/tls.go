@@ -29,19 +29,19 @@ type TLSFiles struct {
 	Certificate string
 	PrivateKey  string
 
-	// ServerName is the name a worker expects the ingress's certificate to
-	// answer for. It is unused by an ingress.
+	// ServerName is the name the dialling side expects the certificate it is
+	// answered with to carry. It is unused by the side being dialled.
 	ServerName string
 }
 
-// LoadIngressTLSConfig builds what an ingress listens with.
+// LoadServerTLSConfig builds what the side being dialled listens with.
 //
 // It requires a client certificate and verifies it: RequireAndVerifyClientCert
 // checks the chain against the authority, the validity dates, and that the
 // certificate is good for clientAuth. A connection that fails any of those does
 // not complete the handshake, so it never reaches anything that could be
 // persuaded to overlook it.
-func LoadIngressTLSConfig(files TLSFiles) (*tls.Config, error) {
+func LoadServerTLSConfig(files TLSFiles) (*tls.Config, error) {
 	certificate, err := loadKeyPair(files)
 	if err != nil {
 		return nil, err
@@ -67,14 +67,14 @@ func LoadIngressTLSConfig(files TLSFiles) (*tls.Config, error) {
 	}, nil
 }
 
-// LoadWorkerTLSConfig builds what a worker dials with.
+// LoadClientTLSConfig builds what the side that dials dials with.
 //
-// ServerName is what the ingress's certificate has to answer for, and it is
-// checked: without it a worker would hand its credentials to anything holding
-// any certificate the authority signed — including another worker's.
-func LoadWorkerTLSConfig(files TLSFiles) (*tls.Config, error) {
+// ServerName is what the far certificate has to answer for, and it is checked:
+// without it a client would hand its credentials to anything holding any
+// certificate the authority signed — including another client's.
+func LoadClientTLSConfig(files TLSFiles) (*tls.Config, error) {
 	if len(files.ServerName) == 0 {
-		return nil, errors.New("certificate: a worker has to be told which ingress to expect")
+		return nil, errors.New("certificate: a client has to be told which server to expect")
 	}
 
 	certificate, err := loadKeyPair(files)
@@ -102,7 +102,8 @@ func LoadWorkerTLSConfig(files TLSFiles) (*tls.Config, error) {
 // LoadPool reads the authority everything is verified against.
 //
 // Only what is given: the system's trust store has no business vouching for a
-// worker, and including it would mean any public authority could issue one.
+// private peer, and including it would mean any public authority could issue
+// one.
 func LoadPool(path string) (*x509.CertPool, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -157,8 +158,8 @@ func (f IdentifierFunc) Identify(certificate *x509.Certificate) (string, error) 
 // SubjectAlternativeName takes the identity from the first DNS name in the
 // certificate, dropping the given suffix when it carries one.
 //
-// So a certificate for worker-001.example.internal is worker-001 where the
-// suffix is example.internal, and worker-001.example.internal where it is not.
+// So a certificate for peer-001.example.internal is peer-001 where the suffix
+// is example.internal, and peer-001.example.internal where it is not.
 func SubjectAlternativeName(suffix string) Identifier {
 	suffix = strings.TrimPrefix(strings.ToLower(suffix), ".")
 

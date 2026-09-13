@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/certificate"
-	"github.com/khanzadimahdi/testproject/infrastructure/runner/tunnel"
+	"github.com/khanzadimahdi/testproject/infrastructure/tunnel"
 )
 
 func TestServe(t *testing.T) {
@@ -125,7 +125,7 @@ func TestServe(t *testing.T) {
 		command.handler = handler
 		command.logger = slog.New(slog.DiscardHandler)
 
-		tunnelIngress, err := tunnel.NewIngress(tunnel.DefaultConfig(), tunnel.NewCertificateAuthenticator(nil, nil), command.logger)
+		tunnelIngress, err := tunnel.NewHub(tunnel.DefaultConfig(), tunnel.NewCertificateAuthenticator(nil, nil), command.logger)
 		assert.NoError(t, err)
 		command.tunnel = tunnelIngress
 

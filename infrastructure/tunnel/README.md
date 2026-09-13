@@ -1,9 +1,13 @@
-# The runner tunnel
+# Tunnel
 
-An L4 reverse tunnel. Workers sit behind NAT with no inbound port and no address
-anyone could dial; they open a few persistent TCP connections outwards to an
-ingress, and the ingress multiplexes every client connection it receives onto
-them as independent streams.
+An L4 reverse tunnel, and nothing above it. Agents sit behind NAT with no
+inbound port and no address anyone could dial; they open a few persistent TCP
+connections outwards to a hub, and the hub multiplexes every client connection
+it receives onto them as independent streams.
+
+The package knows nothing about what is at either end of it. The runner uses it
+to reach its workers, and calls an agent a worker; anything else can use it to
+reach anything else.
 
 Nothing in the data plane knows what it is carrying. SSH, a database protocol, a
 file — all the same bytes.
@@ -12,9 +16,9 @@ file — all the same bytes.
 
 ```
 client TCP ─┐
-client TCP ─┼──> ingress ──> smux stream ──> worker ──> target TCP
+client TCP ─┼──> hub ──> smux stream ──> agent ──> target TCP
 client TCP ─┘                    │
-                                 └─ over one of the worker's own
+                                 └─ over one of the agent's own
                                     persistent TCP connections
 ```
 
@@ -26,20 +30,20 @@ never to the bytes.
 
 | | |
 |---|---|
-| `Ingress` | takes the workers' connections, registers them, opens streams on them |
-| `Registry` | which workers are connected and with what. The only shared state, behind an interface |
-| `Session` | one smux session over one of a worker's TCP connections, with its own capacity |
-| `Router` | picks a worker for a client that did not name one |
-| `Worker` | the far end: a pool of connections per ingress, and the thing that accepts streams |
-| `Targets` | what a worker will connect a stream to, and what it will not |
-| `Authenticator` | what the ingress will take a connection from |
+| `Hub` | takes the agents' connections, registers them, opens streams on them |
+| `Registry` | which agents are connected and with what. The only shared state, behind an interface |
+| `Session` | one smux session over one of an agent's TCP connections, with its own capacity |
+| `Router` | picks an agent for a client that did not name one |
+| `Agent` | the far end: a pool of connections per hub, and the thing that accepts streams |
+| `Targets` | what an agent will connect a stream to, and what it will not |
+| `Authenticator` | what the hub will take a connection from |
 | `StreamProxy` | the byte pipe, both directions, with half-close |
-| `Forwarder` | the ports arbitrary TCP arrives on, each carried onto a worker's connections |
+| `Forwarder` | the ports arbitrary TCP arrives on, each carried onto an agent's connections |
 
 ## Which end is the smux client
 
-The worker dials, but the **ingress** opens streams — so the ingress is
-`smux.Client` and the worker is `smux.Server`, on a connection the worker made.
+The agent dials, but the **hub** opens streams — so the hub is
+`smux.Client` and the agent is `smux.Server`, on a connection the agent made.
 smux gives the client odd stream ids and the server even ones; putting them the
 other way round makes both ends mint ids the other does not expect.
 
@@ -50,13 +54,13 @@ the connection or the stream is a plain byte pipe.
 
 ```
 registration, once per TCP connection, after TLS and before smux
-    worker  -> ingress   {"version":1,"worker":"…"}
-    ingress -> worker    {"ok":true,"session":"…"}
+    agent  -> hub   {"version":1,"agent":"…"}
+    hub -> agent    {"ok":true,"session":"…"}
     … the connection is smux's from here
 
 opening, once per stream, before any payload
-    ingress -> worker    {"service":"…"}  or  {"host":"…","port":22}
-    worker  -> ingress   {"ok":true}
+    hub -> agent    {"service":"…"}  or  {"host":"…","port":22}
+    agent  -> hub   {"ok":true}
     … the stream is the client's bytes and the target's from here
 ```
 
@@ -70,11 +74,11 @@ smux or to the client, and dropping a byte of it would be silent corruption.
 ## The stack, and where TLS sits in it
 
 ```
-worker                                    ingress
+agent                                    hub
 ──────                                    ───────
 TCP dial            ──────────────────>   TCP accept
 TLS 1.3 handshake   <────── mTLS ──────>  TLS 1.3 handshake
-  ├ verifies the ingress against the CA     ├ verifies the worker against the CA
+  ├ verifies the hub against the CA     ├ verifies the agent against the CA
   ├ checks serverAuth                       ├ checks clientAuth
   └ checks the server name                  └ takes the identity from the SAN
 registration        ──────────────────>   authenticate + authorize
@@ -91,20 +95,20 @@ handshake never reaches the protocol above it at all.
 
 ## Registration flow
 
-1. The worker dials and completes **mutual TLS**. Both certificates are verified
+1. The agent dials and completes **mutual TLS**. Both certificates are verified
    against the private authority — chain, dates, and the right extended key
-   usage. The worker also checks the ingress answers for the name it expects.
-2. The worker sends its name. There is no credential in it: the transport has already settled who this is.
-3. The ingress takes the identity from the **verified** certificate chain — the
+   usage. The agent also checks the hub answers for the name it expects.
+2. The agent sends its name. There is no credential in it: the transport has already settled who this is.
+3. The hub takes the identity from the **verified** certificate chain — the
    first subject alternative name, with a configurable domain suffix dropped —
-   and rejects the connection if the name the worker *said* is not the name its
-   certificate says. A valid certificate makes a worker itself, not any worker.
-4. A `WorkerAuthorizer` decides whether that worker may stay. Authentication and
+   and rejects the connection if the name the agent *said* is not the name its
+   certificate says. A valid certificate makes an agent itself, not any agent.
+4. A `AgentAuthorizer` decides whether that agent may stay. Authentication and
    authorization are separate: an authority that signed a certificate two years
-   ago has not thereby agreed to whatever that worker wants today.
-5. The ingress answers with a session id, starts `smux.Client`, and adds the
+   ago has not thereby agreed to whatever that agent wants today.
+5. The hub answers with a session id, starts `smux.Client`, and adds the
    session to the registry.
-6. A goroutine holds the session until it ends and removes it. **A worker exists
+6. A goroutine holds the session until it ends and removes it. **An agent exists
    for exactly as long as it has a session**; nothing polls and nothing is
    announced.
 
@@ -115,7 +119,7 @@ handshake never reaches the protocol above it at all.
                             │
          ┌──────────────────┼──────────────────┐
          │                  │                  │
-    ingress            worker-001         worker-002
+    hub            worker-001         agent-002
    serverAuth          clientAuth         clientAuth
 ```
 
@@ -124,14 +128,14 @@ and signatures are a fraction of RSA's at the same strength, and Go's
 implementation is constant time. RSA would only be worth the size for a peer too
 old to speak anything else, and both ends here are this program.
 
-| | ingress | worker |
+| | hub | agent |
 |---|---|---|
 | `ca.crt` | yes | yes |
 | `tls.crt` / `tls.key` | its own | its own |
 | **`ca.key`** | **never** | **never** |
 
 `ca.key` signs certificates and does nothing else. Nothing that runs needs it; it
-should not be on an ingress, on a worker, or in a repository. `ca.crt` is safe to
+should not be on a hub, on an agent, or in a repository. `ca.crt` is safe to
 hand to anyone. Each private key stays on the machine it was made for.
 
 ### Making them
@@ -145,7 +149,7 @@ app certificate ingress generate \
     --ca-cert ./certs/ca/ca.crt --ca-key ./certs/ca/ca.key \
     --output-dir ./certs/ingress \
     --name ingress.example.internal \
-    --dns ingress --ip 10.0.0.10
+    --dns hub --ip 10.0.0.10
 
 app certificate worker generate \
     --ca-cert ./certs/ca/ca.crt --ca-key ./certs/ca/ca.key \
@@ -160,9 +164,9 @@ certs/
 ├── ca/
 │   ├── ca.crt          distribute freely
 │   └── ca.key          0600 — signs, and goes back in the safe
-├── ingress/
+├── hub/
 │   ├── tls.crt
-│   └── tls.key         0600 — stays on the ingress
+│   └── tls.key         0600 — stays on the hub
 └── worker-001/
     ├── tls.crt
     └── tls.key         0600 — stays on worker-001
@@ -189,16 +193,16 @@ deployment that encodes identity differently — a URI SAN, an organizational un
 ### Authorization
 
 `RUNNER_TUNNEL_ALLOWED_WORKERS` restricts which identities may connect. Empty
-allows every worker the authority signed for, which is the right default because
+allows every agent the authority signed for, which is the right default because
 the authority is private: something holding a certificate it signed is something
-that was deliberately given one. `WorkerAuthorizer` is the interface to replace
+that was deliberately given one. `AgentAuthorizer` is the interface to replace
 when that stops being true.
 
 ### Rotation
 
 Neither end holds its certificate in `tls.Config.Certificates`. Both read it
-through a callback — `GetCertificate` on the ingress, `GetClientCertificate` on
-the worker — so **replacing a certificate is swapping what that callback closes
+through a callback — `GetCertificate` on the hub, `GetClientCertificate` on
+the agent — so **replacing a certificate is swapping what that callback closes
 over**, with no listener rebuilt and nothing above told. A reload today is a
 restart; making it live means putting an `atomic.Pointer[tls.Certificate]` behind
 the callback and refreshing it from a file watcher or a timer, which touches one
@@ -210,7 +214,7 @@ Rotating in order, without downtime:
    and new are trusted, reissue everything, then drop the old. A pool accepts
    several, so the overlap costs nothing.
 2. **Leaf certificates**, routinely. Issue, write beside the old, reload. A
-   worker whose certificate expires simply fails the handshake and reconnects
+   agent whose certificate expires simply fails the handshake and reconnects
    with backoff — it does not take its sessions' streams with it until it does.
 3. **Revocation** is by reissuing the authority or by naming the survivors in
    `RUNNER_TUNNEL_ALLOWED_WORKERS`. There is no CRL or OCSP, deliberately: both
@@ -220,58 +224,58 @@ Rotating in order, without downtime:
 ## Routing
 
 ```
-worker named?  ─ yes ─> Ingress.Dial(worker, target)
-               ─ no  ─> Router.Pick(registry.Workers()) ─> Ingress.Dial(…)
+agent named?  ─ yes ─> Hub.Dial(agent, target)
+               ─ no  ─> Router.Pick(registry.Agents()) ─> Hub.Dial(…)
 ```
 
-`LeastLoaded` skips workers with no sessions and workers that are full, then
+`LeastLoaded` skips agents with no sessions and agents that are full, then
 picks the smallest `streams/capacity`. A share rather than a count, so a small
-worker and a large one compare properly.
+agent and a large one compare properly.
 
-Within a worker, the session with the **most free room** is chosen, which
+Within an agent, the session with the **most free room** is chosen, which
 spreads streams evenly so no single connection's death takes an outsized share
 with it. A place is reserved with a compare-and-swap before the stream is
 opened, so two callers cannot each take the last one.
 
 The choice is made once and holds for the connection's life. A live TCP
-connection cannot be moved to another worker, because neither end could be told.
+connection cannot be moved to another agent, because neither end could be told.
 
 ## Forwarded ports
 
-`Forwarder` is the edge for traffic that is not the ingress's own: a port it
-listens on, and the worker and target everything arriving there is carried to.
+`Forwarder` is the edge for traffic that is not the hub's own: a port it
+listens on, and the agent and target everything arriving there is carried to.
 
 ```
 ssh client ──TCP──> :8022 ─┐
-                           ├─> Forwarder ──> Ingress.Dial ──> stream ──> worker ──> 127.0.0.1:22
+                           ├─> Forwarder ──> Hub.Dial ──> stream ──> agent ──> 127.0.0.1:22
 psql client ──TCP──> :5432 ┘
 ```
 
-Which worker a connection goes to is **the port it arrived on**, because a raw
+Which agent a connection goes to is **the port it arrived on**, because a raw
 connection carries nothing that could name one — there is no host header to read
 and no path to route on. That is why the mapping is configuration rather than
 something read off the wire, and it is the one place where an L4 tunnel is
 necessarily less flexible than an L7 proxy.
 
-A rule is `listen=worker:target`:
+A rule is `listen=agent:target`:
 
 | rule | what it does |
 |---|---|
-| `8022=worker-a:22` | port 22 on that worker's own loopback |
-| `8080=worker-a:api` | a service that worker resolves for itself |
-| `5432=worker-a:10.0.0.5:5432` | an address that worker has to allow |
-| `9000=:api` | whichever worker the router picks |
-| `127.0.0.1:8022=worker-a:22` | one interface rather than all of them |
+| `8022=agent-a:22` | port 22 on that agent's own loopback |
+| `8080=agent-a:api` | a service that agent resolves for itself |
+| `5432=agent-a:10.0.0.5:5432` | an address that agent has to allow |
+| `9000=:api` | whichever agent the router picks |
+| `127.0.0.1:8022=agent-a:22` | one interface rather than all of them |
 
-A service is the safer of the two forms: a worker offering only names cannot be
+A service is the safer of the two forms: an agent offering only names cannot be
 talked into connecting anywhere else at all. An address is checked against
-`RUNNER_TUNNEL_ALLOWED_TARGETS` on the worker, which is empty by default and
+`RUNNER_TUNNEL_ALLOWED_TARGETS` on the agent, which is empty by default and
 therefore allows nothing.
 
 Every port opens before any is served, so a port already taken is a refusal to
 start rather than something found once traffic is arriving on the others.
 
-A port whose worker is not connected still listens, and closes what it accepts.
+A port whose agent is not connected still listens, and closes what it accepts.
 At layer four there is nothing to say and nowhere to say it: no status line, no
 error frame. The client sees what it would see if the service were down, which
 is what it is.
@@ -286,7 +290,7 @@ is a process that never exits.
 |---|---|---|
 | `Version` | 2 | v2 gives each stream its own receive window; v1 shares the session's. That per-stream window is why a slow target does not stall its neighbours. |
 | `KeepAliveInterval` | 10s | Must be well under the idle timeout of anything in between — NAT tables and load balancers are commonly 30–60s. Three tries inside a 30s window. |
-| `KeepAliveTimeout` | 30s | Three intervals, so two lost keepalives do not kill a healthy session. Also the worst case for noticing a worker that was unplugged rather than closed. |
+| `KeepAliveTimeout` | 30s | Three intervals, so two lost keepalives do not kill a healthy session. Also the worst case for noticing an agent that was unplugged rather than closed. |
 | `MaxFrameSize` | 32 KB | Under a typical 64 KB socket buffer so a frame is not split across reads, well above the ~1460 byte MSS so framing overhead is negligible. Larger frames raise the head-of-line delay one big write inflicts on the streams sharing the session. |
 | `MaxReceiveBuffer` | 4 MB | The whole session's window: the ceiling on what every stream on it can hold unread between them. |
 | `MaxStreamBuffer` | 256 KB | One stream's bandwidth-delay product. At 10 ms RTT that is about 50 Mbit/s on a single stream. |
@@ -302,12 +306,12 @@ There is no queue anywhere. A copy is a read followed by the write of exactly
 what was read.
 
 ```
-client ── TCP ──> ingress ── smux ──> worker ── TCP ──> target
+client ── TCP ──> hub ── smux ──> agent ── TCP ──> target
 ```
 
-A slow target stops reading its socket; its buffer fills; the worker's write
-blocks; the worker stops reading the stream; its receive window closes; smux
-refuses the ingress's writes; the ingress stops reading the client; the client's
+A slow target stops reading its socket; its buffer fills; the agent's write
+blocks; the agent stops reading the stream; its receive window closes; smux
+refuses the hub's writes; the hub stops reading the client; the client's
 socket buffer fills; the client's writes block. Every step is a bounded buffer
 that was already there. The reverse direction is the same in reverse.
 
@@ -317,23 +321,23 @@ different one and break the bound.
 
 ## Connection lifecycle
 
-- **Growth.** The worker opens another session when the pool crosses
+- **Growth.** The agent opens another session when the pool crosses
   `GrowThreshold` (0.75) of its stream capacity — *before* it is full, because
-  the ingress cannot make room, only wait for room to be made.
+  the hub cannot make room, only wait for room to be made.
 - **Shrink.** Sessions above `MinSessions` carrying nothing for
   `IdleSessionTimeout` are let go.
 - **Reconnect.** Backoff doubles from 500 ms to 30 s, and every wait is drawn
-  from anywhere in that range. **The jitter is the point**: a thousand workers
-  that lost the same ingress would otherwise come back in step and knock it over
-  again. There is no attempt ceiling — only a delay ceiling — so a worker
+  from anywhere in that range. **The jitter is the point**: a thousand agents
+  that lost the same hub would otherwise come back in step and knock it over
+  again. There is no attempt ceiling — only a delay ceiling — so an agent
   outlasts an outage of any length. **A connection resets it to zero**, so one
   that spent an hour backing off is not still waiting thirty seconds between
-  attempts afterwards. It is counted per ingress: one being unreachable backs
-  off against that one alone, and the worker stays reachable through the others
+  attempts afterwards. It is counted per hub: one being unreachable backs
+  off against that one alone, and the agent stays reachable through the others
   at full speed.
-- **Shutdown.** `Worker.Close` and `Ingress.Close` end every session and wait
+- **Shutdown.** `Agent.Close` and `Hub.Close` end every session and wait
   for the goroutines holding them. A connection completing its dial after close
-  is closed rather than kept, so a worker on its way out does not look like one
+  is closed rather than kept, so an agent on its way out does not look like one
   arriving.
 
 ## Failure scenarios
@@ -341,30 +345,30 @@ different one and break the bound.
 | what happens | what follows |
 |---|---|
 | one session's TCP connection dies | its streams fail the way a TCP connection fails. Sessions beside it carry on. Nothing is migrated — replaying bytes is not possible, so a dead stream stays dead and only new ones are routed elsewhere. |
-| every session of a worker dies | the worker stops existing in the registry. `Dial` reports `ErrNoSuchWorker`. |
-| the worker process stops | same, within a sweep — the ingress finds out because the connections went, not because anything said so. |
-| the ingress restarts | every session dies; workers reconnect with jittered backoff. Clients in flight fail. |
-| the worker is unplugged (no FIN) | the keepalive notices within `KeepAliveTimeout` (30 s). This is the one case that takes time. |
-| every session at capacity | `Dial` waits `CapacityWait` (5 s) for the worker to grow, then reports `ErrAtCapacity`. |
-| the target refuses the connection | the worker says so in the open acknowledgement; `Dial` returns `ErrRejected` wrapping the reason, and the reserved place is given back. |
+| every session of an agent dies | the agent stops existing in the registry. `Dial` reports `ErrNoSuchAgent`. |
+| the agent process stops | same, within a sweep — the hub finds out because the connections went, not because anything said so. |
+| the hub restarts | every session dies; agents reconnect with jittered backoff. Clients in flight fail. |
+| the agent is unplugged (no FIN) | the keepalive notices within `KeepAliveTimeout` (30 s). This is the one case that takes time. |
+| every session at capacity | `Dial` waits `CapacityWait` (5 s) for the agent to grow, then reports `ErrAtCapacity`. |
+| the target refuses the connection | the agent says so in the open acknowledgement; `Dial` returns `ErrRejected` wrapping the reason, and the reserved place is given back. |
 | a certificate the authority did not sign | the TLS handshake fails; the peer never speaks the protocol above it. |
 | an expired or not-yet-valid certificate | same, from either end. |
-| a worker certificate without `clientAuth` | same — the usage is checked, not just the chain. |
-| an ingress answering for another name | the worker refuses to hand over its credentials. |
-| a worker claiming a name its certificate does not carry | registration refused, counted as an authentication failure. |
-| a worker not in the allowed list | authenticated, then refused by the authorizer. |
+| an agent certificate without `clientAuth` | same — the usage is checked, not just the chain. |
+| a hub answering for another name | the agent refuses to hand over its credentials. |
+| an agent claiming a name its certificate does not carry | registration refused, counted as an authentication failure. |
+| an agent not in the allowed list | authenticated, then refused by the authorizer. |
 
 ## Scaling
 
 - **More streams per session** costs nothing but memory, and shares one TCP
   connection — so one packet loss stalls all of them, and one connection's death
   takes all of them. It is a blast radius before it is a capacity.
-- **More sessions per worker** is how throughput actually grows: each is its own
+- **More sessions per agent** is how throughput actually grows: each is its own
   congestion window, and the only way past head-of-line blocking.
-- **More workers** is linear on the ingress; the registry is sharded per worker
+- **More agents** is linear on the hub; the registry is sharded per agent
   and the lock is never held while a byte is copied.
-- **More ingresses** works today by giving every worker every ingress address —
-  each keeps a pool per ingress. That needs no shared state and keeps the data
+- **More hubs** works today by giving every agent every hub address —
+  each keeps a pool per hub. That needs no shared state and keeps the data
   path broker-free, at N×M connections. A shared `Registry` implementation is
   the alternative, and nothing above the interface would change.
 
@@ -416,33 +420,37 @@ BenchmarkForwardedAccept        345587 ns/op  219546 B/op   205 allocs/op   (+ t
 ```
 
 Steady state is one extra `io.CopyBuffer` hop and nothing else. Accepting costs
-more because it is a whole TCP handshake the client makes and the ingress
+more because it is a whole TCP handshake the client makes and the hub
 answers, before any of the tunnel's work begins.
 
-## Running it
+## Running it, as the runner does
+
+Every command below is the runner's. Its hub is the `runner-ingress` service and
+its agents are its workers, which is why the flags and variables say so — the
+package itself has no idea.
 
 ```sh
 # 1. the authority, once
 app certificate authority generate --output-dir ./certs/ca --name "My Tunnel CA"
 
-# 2. the ingress
+# 2. the hub, which the runner calls its ingress
 app certificate ingress generate \
     --ca-cert ./certs/ca/ca.crt --ca-key ./certs/ca/ca.key \
     --output-dir ./certs/ingress --name ingress.example.internal
 
-# 3. a worker
+# 3. an agent, which the runner calls a worker
 app certificate worker generate \
     --ca-cert ./certs/ca/ca.crt --ca-key ./certs/ca/ca.key \
     --output-dir ./certs/worker-001 --name worker-001
 
-# 4. the ingress — ca.key is not among what it is given
+# 4. the hub — ca.key is not among what it is given
 RUNNER_TUNNEL_CA_CERT=./certs/ca/ca.crt \
 RUNNER_TUNNEL_CERT=./certs/ingress/tls.crt \
 RUNNER_TUNNEL_KEY=./certs/ingress/tls.key \
   app serve-runner-ingress --port=80 --tunnel-port=81 \
       --forward='8022=worker-001:22,5432=worker-001:5432,9000=:api'
 
-# 5. a worker, which needs no inbound port of any kind
+# 5. the agent itself, which needs no inbound port of any kind
 RUNNER_TUNNEL_CA_CERT=./certs/ca/ca.crt \
 RUNNER_TUNNEL_CERT=./certs/worker-001/tls.crt \
 RUNNER_TUNNEL_KEY=./certs/worker-001/tls.key \
@@ -451,7 +459,7 @@ RUNNER_TUNNEL_ADDRESSES='ingress-a:81,ingress-b:81' \
 RUNNER_TUNNEL_ALLOWED_TARGETS='127.0.0.1:22,127.0.0.1:5432' \
   app serve-runner-worker --name=worker-001 --port=80
 
-# 6. a client connection, which reaches the worker's target through the tunnel
+# 6. a client connection, which reaches the agent's target through the tunnel
 curl http://ingress:80/runners/worker-001/health
 
 # 7. and arbitrary TCP, which knows none of the above is happening
@@ -459,19 +467,19 @@ ssh -p 8022 user@ingress
 psql -h ingress -p 5432
 ```
 
-The worker allows `127.0.0.1:22` and `127.0.0.1:5432` and nothing else, so the
-two forwarded ports resolve and anything else the ingress might ask for does
-not. `9000=:api` needs no such entry: a service is a name the worker already
+The agent allows `127.0.0.1:22` and `127.0.0.1:5432` and nothing else, so the
+two forwarded ports resolve and anything else the hub might ask for does
+not. `9000=:api` needs no such entry: a service is a name the agent already
 offers.
 
-Several ingresses are named with commas; the worker keeps a pool at each and is
+Several hubs are named with commas; the agent keeps a pool at each and is
 reachable through all of them.
 
 ### Security
 
 Not done, anywhere: `InsecureSkipVerify`, a custom verification callback, the
 system trust store, a certificate accepted for existing rather than verifying, a
-private key logged or sent, or a plaintext worker connection. The tests assert
+private key logged or sent, or a plaintext agent connection. The tests assert
 several of these directly, because they are the kind of thing that gets
 reintroduced by accident.
 
@@ -480,27 +488,27 @@ Directly, as a library:
 ```go
 auth := tunnel.NewCertificateAuthenticator(
     certificate.SubjectAlternativeName("example.internal"),
-    tunnel.AllowSignedWorkers(),
+    tunnel.AllowSignedAgents(),
 )
 
 serverTLS, _ := tunnel.ServerTLS(certificate.TLSFiles{
     Authority:   "./certs/ca/ca.crt",
-    Certificate: "./certs/ingress/tls.crt",
-    PrivateKey:  "./certs/ingress/tls.key",
+    Certificate: "./certs/hub/tls.crt",
+    PrivateKey:  "./certs/hub/tls.key",
 })
 
-ingress, _ := tunnel.NewIngress(tunnel.DefaultConfig(), auth, logger)
+hub, _ := tunnel.NewHub(tunnel.DefaultConfig(), auth, logger)
 listener, _ := tunnel.Listen("0.0.0.0:81", serverTLS)
-go ingress.Serve(ctx, listener)
+go hub.Serve(ctx, listener)
 
-// a client connection, bound to one worker for its whole life
-stream, _ := ingress.Dial(ctx, "runner-worker-01", tunnel.Target{Service: "ssh"})
+// a client connection, bound to one agent for its whole life
+stream, _ := hub.Dial(ctx, "agent-001", tunnel.Target{Service: "ssh"})
 tunnel.StreamProxy{}.Copy(client, stream)
 
 // or let a listening port do both, for every connection that arrives on it
-forwarder, _ := tunnel.NewForwarder(ingress, logger, tunnel.Forward{
+forwarder, _ := tunnel.NewForwarder(hub, logger, tunnel.Forward{
     Address: "0.0.0.0:8022",
-    Worker:  "runner-worker-01",
+    Agent:   "agent-001",
     Target:  tunnel.Target{Service: "ssh"},
 })
 _ = forwarder.Listen()
@@ -510,9 +518,9 @@ go forwarder.Serve(ctx)
 and the far end:
 
 ```go
-worker, _ := tunnel.NewWorker(
-    "runner-worker-01",
-    []string{"ingress-a:81", "ingress-b:81"},
+agent, _ := tunnel.NewAgent(
+    "agent-001",
+    []string{"hub-a:81", "hub-b:81"},
     tunnel.DefaultConfig(),
     tunnel.TLSDialer(clientTLS, 10*time.Second), // from tunnel.ClientTLS(files)
     tunnel.NewServiceTargets(
@@ -521,5 +529,5 @@ worker, _ := tunnel.NewWorker(
     ),
     logger,
 )
-worker.Run(ctx)
+agent.Run(ctx)
 ```

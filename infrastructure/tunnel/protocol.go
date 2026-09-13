@@ -19,13 +19,13 @@ import (
 // knowing what it is.
 //
 //	registration, once per TCP connection, before smux starts
-//	    worker  -> ingress   {"version":1,"worker":"…"}
-//	    ingress -> worker    {"ok":true,"session":"…"}
+//	    agent  -> hub   {"version":1,"agent":"…"}
+//	    hub -> agent    {"ok":true,"session":"…"}
 //	    … from here the connection belongs to smux
 //
 //	opening, once per stream, before any payload
-//	    ingress -> worker    {"service":"…"}  or  {"host":"…","port":22}
-//	    worker  -> ingress   {"ok":true}
+//	    hub -> agent    {"service":"…"}  or  {"host":"…","port":22}
+//	    agent  -> hub   {"ok":true}
 //	    … from here the stream is the client's bytes and the target's
 //
 // The opening is acknowledged so that a target which could not be reached is
@@ -52,7 +52,7 @@ var (
 	ErrRejected = errors.New("tunnel: rejected")
 )
 
-// registration is what a worker says on a new connection: which worker it is.
+// registration is what an agent says on a new connection: which agent it is.
 //
 // What entitles it to say so was settled by the transport before this was read,
 // so there is no credential here. A token is carried for an Authenticator that
@@ -60,11 +60,11 @@ var (
 // already said who this is.
 type registration struct {
 	Version int    `json:"version"`
-	Worker  string `json:"worker"`
+	Agent   string `json:"agent"`
 	Token   string `json:"token,omitempty"`
 }
 
-// registered is the ingress's answer. A worker that is not welcome is told why
+// registered is the hub's answer. An agent that is not welcome is told why
 // before the connection closes, so a misconfigured one says so in its log
 // rather than looping in silence.
 type registered struct {
@@ -75,10 +75,10 @@ type registered struct {
 
 // Target is what a stream is to be connected to.
 //
-// A service is a name the worker resolves for itself, which is how one worker
-// comes to offer several things without the ingress knowing what any of them
+// A service is a name the agent resolves for itself, which is how one agent
+// comes to offer several things without the hub knowing what any of them
 // are. A host and port is the same request made explicitly, and is checked
-// against what the worker will allow.
+// against what the agent will allow.
 type Target struct {
 	Service string `json:"service,omitempty"`
 	Host    string `json:"host,omitempty"`
@@ -104,7 +104,7 @@ func (t Target) Valid() bool {
 	return t.Named() || (len(t.Host) > 0 && t.Port > 0)
 }
 
-// opened is the worker's answer to a stream: whether it reached the target.
+// opened is the agent's answer to a stream: whether it reached the target.
 type opened struct {
 	OK    bool   `json:"ok"`
 	Error string `json:"error,omitempty"`

@@ -14,8 +14,8 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/certificate"
 	infraIngress "github.com/khanzadimahdi/testproject/infrastructure/runner/ingress"
-	"github.com/khanzadimahdi/testproject/infrastructure/runner/tunnel"
 	"github.com/khanzadimahdi/testproject/infrastructure/telemetry/profiler"
+	"github.com/khanzadimahdi/testproject/infrastructure/tunnel"
 	healthAPI "github.com/khanzadimahdi/testproject/presentation/http/health"
 	"github.com/khanzadimahdi/testproject/presentation/http/middleware"
 	ingressAPI "github.com/khanzadimahdi/testproject/presentation/http/runner/ingress"
@@ -48,6 +48,7 @@ const (
 // what is connected, and the HTTP handler that routes to them.
 type ingressProvider struct{}
 
+// Ensure ingressProvider implements provider interface.
 var _ provider.Provider = &ingressProvider{}
 
 func NewIngressProvider() *ingressProvider {
@@ -76,9 +77,9 @@ func (p *ingressProvider) Boot(ctx context.Context, c provider.Container) error 
 	// who a worker is comes from the certificate TLS already verified, not from
 	// what it said. Whether that worker may stay is a separate question, asked
 	// of the authorizer.
-	authorizer := tunnel.AllowSignedWorkers()
+	authorizer := tunnel.AllowSignedAgents()
 	if allowed := ingressConfigs.AllowedWorkers(); len(allowed) > 0 {
-		authorizer = tunnel.AllowWorkers(allowed...)
+		authorizer = tunnel.AllowAgents(allowed...)
 	}
 
 	auth := tunnel.NewCertificateAuthenticator(
@@ -89,12 +90,12 @@ func (p *ingressProvider) Boot(ctx context.Context, c provider.Container) error 
 
 	// the tunnel is the registry: a runner is reachable for exactly as long as
 	// its connections are open, so there is one thing holding both facts.
-	tunnelIngress, err := tunnel.NewIngress(tunnelConfig, auth, logger)
+	tunnelIngress, err := tunnel.NewHub(tunnelConfig, auth, logger)
 	if err != nil {
 		return err
 	}
 
-	if err := c.Bind(func() *tunnel.Ingress { return tunnelIngress }, provider.Singleton(), provider.WithName(IngressTunnel)); err != nil {
+	if err := c.Bind(func() *tunnel.Hub { return tunnelIngress }, provider.Singleton(), provider.WithName(IngressTunnel)); err != nil {
 		return err
 	}
 
@@ -127,6 +128,7 @@ func (p *ingressProvider) Terminate(ctx context.Context) error {
 }
 
 func ingressConsoleCommand(
+	tracedProfiler *profiler.TracedProfiler,
 	registry ingressContract.Registry,
 	iocContainer provider.Container,
 ) (http.Handler, error) {
@@ -135,7 +137,7 @@ func ingressConsoleCommand(
 		return nil, err
 	}
 
-	var tunnelIngress *tunnel.Ingress
+	var tunnelIngress *tunnel.Hub
 	if err := iocContainer.Resolve(&tunnelIngress, provider.ResolveName(IngressTunnel)); err != nil {
 		return nil, err
 	}
@@ -153,21 +155,8 @@ func ingressConsoleCommand(
 
 	mux := http.NewServeMux()
 
-	// CORS goes on the ingress's own answers and no further: what it proxies is
-	// the runner's to answer for, a preflight included. A header set here would
-	// otherwise arrive alongside the one the runner sent, and two
-	// Access-Control-Allow-Origin headers are worse than none.
-
-	// the container healthcheck probes this
 	mux.Handle("GET /health", middleware.NewCORSMiddleware(healthAPI.NewHealthHandler(checkHealthUseCase)))
-
-	// everything below here belongs to a runner rather than to the ingress
 	mux.Handle("/runners/{name}/{path...}", ingressAPI.NewProxyHandler(checkRunnerExistsUseCase, transport, logger))
-
-	var tracedProfiler *profiler.TracedProfiler
-	if err := iocContainer.Resolve(&tracedProfiler); err != nil {
-		return nil, err
-	}
 
 	// no rate limit: what comes through here is a container's own traffic —
 	// an attached terminal, a log being followed — which a cap per minute
@@ -176,7 +165,6 @@ func ingressConsoleCommand(
 		middleware.NewRequestIDMiddleware(
 			middleware.NewTelemetryMiddleware(
 				"/runner/ingress",
-				// inside Telemetry so profile samples link to the request span
 				middleware.NewProfilingMiddleware(
 					middleware.NewLogMiddleware(
 						mux,

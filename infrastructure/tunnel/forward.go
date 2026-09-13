@@ -17,36 +17,36 @@ import (
 var ErrMalformedForward = errors.New("tunnel: malformed forward")
 
 // defaultForwardHost is where a rule that names only a port looks for it. A
-// worker publishes its containers' ports on its own loopback, so that is what a
+// agent publishes its containers' ports on its own loopback, so that is what a
 // bare port means.
 const defaultForwardHost = "127.0.0.1"
 
-// Forward is a port the ingress listens on and where what arrives there goes.
+// Forward is a port the hub listens on and where what arrives there goes.
 //
 // Nothing is dialled to deliver it. The accepted connection becomes a stream on
-// one of the connections the worker itself opened, which is the only way into a
-// worker there is: a worker has no address, no open port, and nothing to dial.
+// one of the connections the agent itself opened, which is the only way into a
+// agent there is: an agent has no address, no open port, and nothing to dial.
 type Forward struct {
 	// Address is what to listen on, as host:port. An empty host listens on
 	// every interface.
 	Address string
 
-	// Worker is the worker every connection on this port is carried to. Empty
-	// leaves the choice to the router, which is how a service several workers
+	// Agent is the agent every connection on this port is carried to. Empty
+	// leaves the choice to the router, which is how a service several agents
 	// offer is spread across them.
-	Worker string
+	Agent string
 
-	// Target is what the worker connects the stream to once it arrives.
+	// Target is what the agent connects the stream to once it arrives.
 	Target Target
 }
 
 func (f Forward) String() string {
-	worker := f.Worker
-	if len(worker) == 0 {
-		worker = "any worker"
+	agent := f.Agent
+	if len(agent) == 0 {
+		agent = "any agent"
 	}
 
-	return fmt.Sprintf("%s -> %s %s", f.Address, worker, f.Target)
+	return fmt.Sprintf("%s -> %s %s", f.Address, agent, f.Target)
 }
 
 // Validate reports a rule that cannot be served.
@@ -66,7 +66,7 @@ func (f Forward) Validate() error {
 func ParseForwards(rules string) ([]Forward, error) {
 	forwards := make([]Forward, 0, 1)
 
-	for _, rule := range strings.Split(rules, ",") {
+	for rule := range strings.SplitSeq(rules, ",") {
 		if rule = strings.TrimSpace(rule); len(rule) == 0 {
 			continue
 		}
@@ -85,15 +85,15 @@ func ParseForwards(rules string) ([]Forward, error) {
 // ParseForward reads one forwarding rule, which is a port to listen on and
 // where what arrives there is carried to:
 //
-//	8022=worker-a:22              a port on that worker's own loopback
-//	8080=worker-a:api             a service that worker resolves for itself
-//	5432=worker-a:10.0.0.5:5432   an address that worker has to allow
-//	9000=:api                     whichever worker the router picks
-//	127.0.0.1:8022=worker-a:22    listening on one interface rather than all
+//	8022=agent-a:22              a port on that agent's own loopback
+//	8080=agent-a:api             a service that agent resolves for itself
+//	5432=agent-a:10.0.0.5:5432   an address that agent has to allow
+//	9000=:api                     whichever agent the router picks
+//	127.0.0.1:8022=agent-a:22    listening on one interface rather than all
 //
-// A service is the safer of the two: a worker that offers only names cannot be
+// A service is the safer of the two: an agent that offers only names cannot be
 // talked into connecting anywhere else, while an address is checked against
-// what that worker allows.
+// what that agent allows.
 func ParseForward(rule string) (Forward, error) {
 	left, right, found := strings.Cut(rule, "=")
 	if !found {
@@ -105,9 +105,9 @@ func ParseForward(rule string) (Forward, error) {
 		return Forward{}, err
 	}
 
-	worker, destination, found := strings.Cut(strings.TrimSpace(right), ":")
+	agent, destination, found := strings.Cut(strings.TrimSpace(right), ":")
 	if !found {
-		return Forward{}, fmt.Errorf("%w: %q says no worker", ErrMalformedForward, rule)
+		return Forward{}, fmt.Errorf("%w: %q says no agent", ErrMalformedForward, rule)
 	}
 
 	target, err := forwardTarget(strings.TrimSpace(destination))
@@ -115,7 +115,7 @@ func ParseForward(rule string) (Forward, error) {
 		return Forward{}, err
 	}
 
-	forward := Forward{Address: address, Worker: strings.TrimSpace(worker), Target: target}
+	forward := Forward{Address: address, Agent: strings.TrimSpace(agent), Target: target}
 
 	return forward, forward.Validate()
 }
@@ -142,7 +142,7 @@ func listenOn(listen string) (string, error) {
 	return listen, nil
 }
 
-// forwardTarget turns the right of a rule into what the worker is asked for: a
+// forwardTarget turns the right of a rule into what the agent is asked for: a
 // bare port on its loopback, an address it has to allow, or a service it
 // resolves for itself.
 func forwardTarget(destination string) (Target, error) {
@@ -170,20 +170,20 @@ func forwardTarget(destination string) (Target, error) {
 	return Target{Service: destination}, nil
 }
 
-// Forwarder is the ingress's edge for traffic that is not the ingress's own.
+// Forwarder is the hub's edge for traffic that is not the hub's own.
 //
 // It is layer four and nothing more: it accepts a connection and joins it to a
-// stream, having read none of it. Which worker it goes to is the port it
+// stream, having read none of it. Which agent it goes to is the port it
 // arrived on, because a raw connection carries nothing that could name one —
 // there is no host header to read and no path to route on, which is the whole
 // reason the mapping is configuration rather than something read off the wire.
 //
-// A port whose worker is not connected refuses by closing, since at layer four
+// A port whose agent is not connected refuses by closing, since at layer four
 // there is nothing to say and nowhere to say it.
 type Forwarder struct {
-	ingress *Ingress
-	proxy   StreamProxy
-	logger  *slog.Logger
+	hub    *Hub
+	proxy  StreamProxy
+	logger *slog.Logger
 
 	forwards []Forward
 
@@ -198,11 +198,11 @@ type Forwarder struct {
 	wait      sync.WaitGroup
 }
 
-// NewForwarder builds the edge. It carries onto an ingress rather than dialling
+// NewForwarder builds the edge. It carries onto a hub rather than dialling
 // anything itself, so a forwarder without one has nowhere to put a connection.
-func NewForwarder(ingress *Ingress, logger *slog.Logger, forwards ...Forward) (*Forwarder, error) {
-	if ingress == nil {
-		return nil, errors.New("tunnel: a forwarder needs an ingress to carry onto")
+func NewForwarder(hub *Hub, logger *slog.Logger, forwards ...Forward) (*Forwarder, error) {
+	if hub == nil {
+		return nil, errors.New("tunnel: a forwarder needs a hub to carry onto")
 	}
 
 	for _, forward := range forwards {
@@ -212,7 +212,7 @@ func NewForwarder(ingress *Ingress, logger *slog.Logger, forwards ...Forward) (*
 	}
 
 	return &Forwarder{
-		ingress:  ingress,
+		hub:      hub,
 		logger:   logger,
 		forwards: slices.Clone(forwards),
 		carrying: make(map[net.Conn]struct{}),
@@ -366,14 +366,14 @@ func (f *Forwarder) serve(ctx context.Context, forward Forward, listener net.Lis
 	}
 }
 
-// carry joins one accepted connection to a stream on the worker's own
+// carry joins one accepted connection to a stream on the agent's own
 // connection, and stays with it until it is over.
 func (f *Forwarder) carry(ctx context.Context, forward Forward, client net.Conn) {
 	stream, err := f.open1(ctx, forward)
 	if err != nil {
 		// there is no way to refuse at layer four but to close: whatever is on
 		// the other side is speaking a protocol this knows nothing about.
-		f.logger.WarnContext(ctx, "a forwarded connection reached no worker",
+		f.logger.WarnContext(ctx, "a forwarded connection reached no agent",
 			"forward", forward.String(),
 			"client", client.RemoteAddr().String(),
 			"error", err,
@@ -394,14 +394,14 @@ func (f *Forwarder) carry(ctx context.Context, forward Forward, client net.Conn)
 	}
 }
 
-// open1 asks the tunnel for a stream, either to the worker the port names or to
+// open1 asks the tunnel for a stream, either to the agent the port names or to
 // whichever one the router picks.
 func (f *Forwarder) open1(ctx context.Context, forward Forward) (net.Conn, error) {
-	if len(forward.Worker) == 0 {
-		return f.ingress.Route(ctx, forward.Target)
+	if len(forward.Agent) == 0 {
+		return f.hub.Route(ctx, forward.Target)
 	}
 
-	return f.ingress.Dial(ctx, forward.Worker, forward.Target)
+	return f.hub.Dial(ctx, forward.Agent, forward.Target)
 }
 
 func (f *Forwarder) starting(client net.Conn) bool {

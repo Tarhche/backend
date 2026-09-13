@@ -203,7 +203,7 @@ func (c *certificateCommand) Run(ctx context.Context) console.ExitStatus {
 func parseList(value string) []string {
 	items := make([]string, 0, 1)
 
-	for _, item := range strings.Split(value, ",") {
+	for item := range strings.SplitSeq(value, ",") {
 		if item = strings.TrimSpace(item); len(item) > 0 {
 			items = append(items, item)
 		}

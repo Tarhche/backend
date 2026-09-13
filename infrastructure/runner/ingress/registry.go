@@ -11,14 +11,15 @@ import (
 	"context"
 
 	"github.com/khanzadimahdi/testproject/domain/runner/ingress"
-	"github.com/khanzadimahdi/testproject/infrastructure/runner/tunnel"
+	"github.com/khanzadimahdi/testproject/infrastructure/tunnel"
 )
 
-// Connections is the part of the tunnel the registry needs: which workers are
+// Connections is the part of the tunnel the registry needs: which agents are
 // holding connections open. Asking for no more than this is what lets the
-// registry be driven by a double in tests.
+// registry be driven by a double in tests, and keeps the tunnel from having to
+// know that an agent is what this application calls a worker.
 type Connections interface {
-	Workers() []tunnel.WorkerState
+	Agents() []tunnel.AgentState
 }
 
 // Registry answers whether a runner can be reached.
@@ -26,6 +27,7 @@ type Registry struct {
 	connections Connections
 }
 
+// Ensure Registry implements ingress.Registry.
 var _ ingress.Registry = &Registry{}
 
 func NewRegistry(connections Connections) *Registry {
@@ -33,8 +35,8 @@ func NewRegistry(connections Connections) *Registry {
 }
 
 func (r *Registry) Exists(_ context.Context, name string) (bool, error) {
-	for _, worker := range r.connections.Workers() {
-		if worker.Worker == name {
+	for _, worker := range r.connections.Agents() {
+		if worker.Name == name {
 			return true, nil
 		}
 	}

@@ -40,9 +40,9 @@ func testConfig() Config {
 
 func discardLogger() *slog.Logger { return slog.New(slog.DiscardHandler) }
 
-// testIngress is an ingress listening on the loopback, torn down with the test.
-type testIngress struct {
-	*Ingress
+// testHub is a hub listening on the loopback, torn down with the test.
+type testHub struct {
+	*Hub
 
 	address  string
 	listener net.Listener
@@ -50,13 +50,13 @@ type testIngress struct {
 	done     chan struct{}
 }
 
-func startIngress(t *testing.T, config Config, auth Authenticator, options ...IngressOption) *testIngress {
+func startHub(t *testing.T, config Config, auth Authenticator, options ...HubOption) *testHub {
 	t.Helper()
 
 	metrics := &Counters{}
-	options = append([]IngressOption{WithIngressMetrics(metrics)}, options...)
+	options = append([]HubOption{WithHubMetrics(metrics)}, options...)
 
-	ingress, err := NewIngress(config, auth, discardLogger(), options...)
+	hub, err := NewHub(config, auth, discardLogger(), options...)
 	require.NoError(t, err)
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -68,19 +68,19 @@ func startIngress(t *testing.T, config Config, auth Authenticator, options ...In
 	go func() {
 		defer close(done)
 
-		_ = ingress.Serve(ctx, listener)
+		_ = hub.Serve(ctx, listener)
 	}()
 
 	t.Cleanup(func() {
 		cancel()
-		ingress.Close()
+		hub.Close()
 		<-done
 	})
 
-	return &testIngress{Ingress: ingress, address: listener.Addr().String(), listener: listener, metrics: metrics, done: done}
+	return &testHub{Hub: hub, address: listener.Addr().String(), listener: listener, metrics: metrics, done: done}
 }
 
-// plainDialer reaches an ingress over unencrypted tcp. It is for the tests
+// plainDialer reaches a hub over unencrypted tcp. It is for the tests
 // about multiplexing rather than about who is allowed to multiplex; the ones
 // about mTLS stand a real authority up instead.
 func plainDialer() Dialer {
@@ -91,21 +91,21 @@ func plainDialer() Dialer {
 	})
 }
 
-type testWorker struct {
-	*Worker
+type testAgent struct {
+	*Agent
 
 	metrics *Counters
 	stopped chan struct{}
 	cancel  context.CancelFunc
 }
 
-func startWorker(t *testing.T, id string, addresses []string, config Config, targets Targets, options ...WorkerOption) *testWorker {
+func startAgent(t *testing.T, id string, addresses []string, config Config, targets Targets, options ...AgentOption) *testAgent {
 	t.Helper()
 
 	metrics := &Counters{}
-	options = append([]WorkerOption{WithWorkerMetrics(metrics)}, options...)
+	options = append([]AgentOption{WithAgentMetrics(metrics)}, options...)
 
-	worker, err := NewWorker(id, addresses, config, plainDialer(), targets, discardLogger(), options...)
+	agent, err := NewAgent(id, addresses, config, plainDialer(), targets, discardLogger(), options...)
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(t.Context())
@@ -114,20 +114,20 @@ func startWorker(t *testing.T, id string, addresses []string, config Config, tar
 	go func() {
 		defer close(stopped)
 
-		worker.Run(ctx)
+		agent.Run(ctx)
 	}()
 
 	t.Cleanup(func() {
 		cancel()
-		worker.Close()
+		agent.Close()
 		<-stopped
 	})
 
-	return &testWorker{Worker: worker, metrics: metrics, stopped: stopped, cancel: cancel}
+	return &testAgent{Agent: agent, metrics: metrics, stopped: stopped, cancel: cancel}
 }
 
-// stop ends a worker the way a shutdown does, and waits for it to be over.
-func (w *testWorker) stop() {
+// stop ends an agent the way a shutdown does, and waits for it to be over.
+func (w *testAgent) stop() {
 	w.cancel()
 	w.Close()
 	<-w.stopped
@@ -167,13 +167,10 @@ func targetServer(t *testing.T, handle func(net.Conn)) string {
 				return
 			}
 
-			running.Add(1)
-
-			go func() {
-				defer running.Done()
+			running.Go(func() {
 
 				handle(conn)
-			}()
+			})
 		}
 	}()
 

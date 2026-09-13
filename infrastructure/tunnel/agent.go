@@ -14,7 +14,7 @@ import (
 	"github.com/xtaci/smux"
 )
 
-// Dialer opens the transport a worker reaches an ingress over. It is an
+// Dialer opens the transport an agent reaches a hub over. It is an
 // argument rather than a fact so that a test can join the two ends in memory,
 // and so that TLS is a choice made outside this file.
 type Dialer interface {
@@ -28,8 +28,8 @@ func (f DialerFunc) DialContext(ctx context.Context, address string) (net.Conn, 
 	return f(ctx, address)
 }
 
-// TLSDialer reaches an ingress over TLS. The configuration carries this
-// worker's own certificate and the authority to check the ingress against,
+// TLSDialer reaches a hub over TLS. The configuration carries this
+// agent's own certificate and the authority to check the hub against,
 // which is the whole of how either end knows the other.
 func TLSDialer(config *tls.Config, timeout time.Duration) Dialer {
 	return DialerFunc(func(ctx context.Context, address string) (net.Conn, error) {
@@ -39,12 +39,12 @@ func TLSDialer(config *tls.Config, timeout time.Duration) Dialer {
 	})
 }
 
-// Worker is the far end of the tunnel: a pool of connections to each ingress,
+// Agent is the far end of the tunnel: a pool of connections to each hub,
 // and the thing that connects the streams arriving on them to their targets.
 //
-// Nothing dials a worker. It holds connections outwards and answers on them, so
+// Nothing dials an agent. It holds connections outwards and answers on them, so
 // it needs no address, no open port and no way in.
-type Worker struct {
+type Agent struct {
 	id      string
 	config  Config
 	dialer  Dialer
@@ -65,44 +65,44 @@ type Worker struct {
 	wait    sync.WaitGroup
 }
 
-// WorkerOption configures a Worker.
-type WorkerOption func(*Worker)
+// AgentOption configures an Agent.
+type AgentOption func(*Agent)
 
-// WithWorkerMetrics replaces where the worker reports to.
-func WithWorkerMetrics(metrics Metrics) WorkerOption {
-	return func(w *Worker) { w.metrics = metrics }
+// WithAgentMetrics replaces where the agent reports to.
+func WithAgentMetrics(metrics Metrics) AgentOption {
+	return func(w *Agent) { w.metrics = metrics }
 }
 
-// NewWorker builds a worker that keeps a pool at each of the given addresses.
+// NewAgent builds an agent that keeps a pool at each of the given addresses.
 //
-// A worker connected to several ingresses is reachable through all of them,
+// An agent connected to several hubs is reachable through all of them,
 // which is what lets there be more than one: they hold no shared state, so each
 // has to have been connected to.
-func NewWorker(
+func NewAgent(
 	id string,
 	addresses []string,
 	config Config,
 	dialer Dialer,
 	targets Targets,
 	logger *slog.Logger,
-	options ...WorkerOption,
-) (*Worker, error) {
+	options ...AgentOption,
+) (*Agent, error) {
 	if err := config.Validate(); err != nil {
 		return nil, err
 	}
 
 	switch {
 	case len(id) == 0:
-		return nil, errors.New("tunnel: a worker needs a name")
+		return nil, errors.New("tunnel: an agent needs a name")
 	case len(addresses) == 0:
-		return nil, errors.New("tunnel: a worker needs an ingress to connect to")
+		return nil, errors.New("tunnel: an agent needs a hub to connect to")
 	case dialer == nil:
-		return nil, errors.New("tunnel: a worker needs a dialer")
+		return nil, errors.New("tunnel: an agent needs a dialer")
 	case targets == nil:
-		return nil, errors.New("tunnel: a worker needs to know what it may connect to")
+		return nil, errors.New("tunnel: an agent needs to know what it may connect to")
 	}
 
-	w := &Worker{
+	w := &Agent{
 		id:      id,
 		config:  config,
 		dialer:  dialer,
@@ -125,7 +125,7 @@ func NewWorker(
 
 // Run keeps every pool at size until ctx is done, and returns once everything
 // it started has stopped.
-func (w *Worker) Run(ctx context.Context) {
+func (w *Agent) Run(ctx context.Context) {
 	defer w.Close()
 
 	var running sync.WaitGroup
@@ -143,8 +143,8 @@ func (w *Worker) Run(ctx context.Context) {
 	w.wait.Wait()
 }
 
-// Sessions is how many connections the worker is holding, across every ingress.
-func (w *Worker) Sessions() int {
+// Sessions is how many connections the agent is holding, across every hub.
+func (w *Agent) Sessions() int {
 	total := 0
 	for _, pool := range w.pools {
 		total += pool.size()
@@ -153,8 +153,8 @@ func (w *Worker) Sessions() int {
 	return total
 }
 
-// Streams is how many streams the worker is carrying.
-func (w *Worker) Streams() int {
+// Streams is how many streams the agent is carrying.
+func (w *Agent) Streams() int {
 	total := 0
 	for _, pool := range w.pools {
 		total += pool.streams()
@@ -164,7 +164,7 @@ func (w *Worker) Streams() int {
 }
 
 // Close ends every session. Streams on them end the way a TCP connection ends.
-func (w *Worker) Close() error {
+func (w *Agent) Close() error {
 	w.closeOnce.Do(func() {
 		close(w.closed)
 
@@ -180,10 +180,10 @@ func (w *Worker) Close() error {
 	return nil
 }
 
-// starting counts one more thing this worker has running, unless it is on its
+// starting counts one more thing this agent has running, unless it is on its
 // way out. Counting up and waiting are ordered by the same lock, which is what
 // a WaitGroup requires of anything that does both.
-func (w *Worker) starting() bool {
+func (w *Agent) starting() bool {
 	w.lock.Lock()
 	defer w.lock.Unlock()
 
@@ -196,7 +196,7 @@ func (w *Worker) starting() bool {
 	return true
 }
 
-func (w *Worker) isClosed() bool {
+func (w *Agent) isClosed() bool {
 	select {
 	case <-w.closed:
 		return true
@@ -206,7 +206,7 @@ func (w *Worker) isClosed() bool {
 }
 
 // serve answers the streams arriving on one session until it ends.
-func (w *Worker) serve(ctx context.Context, session *smux.Session, id string) {
+func (w *Agent) serve(ctx context.Context, session *smux.Session, id string) {
 	for {
 		stream, err := session.AcceptStream()
 		if err != nil {
@@ -228,7 +228,7 @@ func (w *Worker) serve(ctx context.Context, session *smux.Session, id string) {
 }
 
 // handle connects one stream to what it asked for.
-func (w *Worker) handle(ctx context.Context, stream *smux.Stream, session string) {
+func (w *Agent) handle(ctx context.Context, stream *smux.Stream, session string) {
 	deadline := time.Now().Add(w.config.HandshakeTimeout)
 
 	var target Target
@@ -291,10 +291,10 @@ func (w *Worker) handle(ctx context.Context, stream *smux.Stream, session string
 	}
 }
 
-// refuse tells the ingress why a stream is going no further, so that a target
+// refuse tells the hub why a stream is going no further, so that a target
 // which could not be reached is reported rather than looking like one that
 // accepted and said nothing.
-func (w *Worker) refuse(ctx context.Context, stream *smux.Stream, session string, target Target, reason error, deadline time.Time) {
+func (w *Agent) refuse(ctx context.Context, stream *smux.Stream, session string, target Target, reason error, deadline time.Time) {
 	w.logger.WarnContext(ctx, "a stream could not be connected",
 		"session", session,
 		"target", target.String(),
@@ -305,13 +305,13 @@ func (w *Worker) refuse(ctx context.Context, stream *smux.Stream, session string
 	stream.Close()
 }
 
-// sessionPool is a worker's connections to one ingress.
+// sessionPool is an agent's connections to one hub.
 //
-// It grows before it is full rather than when it is: the ingress cannot make
+// It grows before it is full rather than when it is: the hub cannot make
 // room, only wait for room to be made, so waiting until capacity is reached
 // means clients wait too.
 type sessionPool struct {
-	worker  *Worker
+	agent   *Agent
 	address string
 
 	wake chan struct{}
@@ -328,8 +328,8 @@ type pooledSession struct {
 	idle    time.Time
 }
 
-func newSessionPool(worker *Worker, address string) *sessionPool {
-	return &sessionPool{worker: worker, address: address, wake: make(chan struct{}, 1)}
+func newSessionPool(agent *Agent, address string) *sessionPool {
+	return &sessionPool{agent: agent, address: address, wake: make(chan struct{}, 1)}
 }
 
 func (p *sessionPool) run(ctx context.Context) {
@@ -337,8 +337,8 @@ func (p *sessionPool) run(ctx context.Context) {
 	defer ticker.Stop()
 
 	for {
-		if err := p.reconcile(ctx); err != nil && ctx.Err() == nil && !p.worker.isClosed() {
-			p.worker.logger.WarnContext(ctx, "could not reach an ingress",
+		if err := p.reconcile(ctx); err != nil && ctx.Err() == nil && !p.agent.isClosed() {
+			p.agent.logger.WarnContext(ctx, "could not reach a hub",
 				"address", p.address,
 				"attempt", p.attempt,
 				"error", err,
@@ -346,7 +346,7 @@ func (p *sessionPool) run(ctx context.Context) {
 
 			select {
 			case <-time.After(p.backoff()):
-			case <-p.worker.closed:
+			case <-p.agent.closed:
 				return
 			case <-ctx.Done():
 				return
@@ -358,7 +358,7 @@ func (p *sessionPool) run(ctx context.Context) {
 		select {
 		case <-ticker.C:
 		case <-p.wake:
-		case <-p.worker.closed:
+		case <-p.agent.closed:
 			return
 		case <-ctx.Done():
 			return
@@ -374,16 +374,16 @@ func (p *sessionPool) reconcile(ctx context.Context) error {
 	p.prune()
 
 	for {
-		if p.worker.isClosed() || ctx.Err() != nil {
+		if p.agent.isClosed() || ctx.Err() != nil {
 			return nil
 		}
 
 		size, streams := p.state()
 
-		enough := size >= p.worker.config.MinSessions
-		room := float64(streams) < float64(size*p.worker.config.MaxStreamsPerSession)*p.worker.config.GrowThreshold
+		enough := size >= p.agent.config.MinSessions
+		room := float64(streams) < float64(size*p.agent.config.MaxStreamsPerSession)*p.agent.config.GrowThreshold
 
-		if size >= p.worker.config.MaxSessions || (enough && room) {
+		if size >= p.agent.config.MaxSessions || (enough && room) {
 			break
 		}
 
@@ -419,7 +419,7 @@ func (p *sessionPool) prune() {
 // reap closes the sessions above the minimum that have been carrying nothing
 // for longer than they are allowed to.
 func (p *sessionPool) reap() {
-	if p.worker.config.IdleSessionTimeout <= 0 {
+	if p.agent.config.IdleSessionTimeout <= 0 {
 		return
 	}
 
@@ -434,11 +434,11 @@ func (p *sessionPool) reap() {
 			continue
 		}
 
-		if len(p.sessions)-len(stale) <= p.worker.config.MinSessions {
+		if len(p.sessions)-len(stale) <= p.agent.config.MinSessions {
 			break
 		}
 
-		if now.Sub(session.idle) > p.worker.config.IdleSessionTimeout {
+		if now.Sub(session.idle) > p.agent.config.IdleSessionTimeout {
 			stale = append(stale, session)
 		}
 	}
@@ -451,10 +451,10 @@ func (p *sessionPool) reap() {
 
 // connect opens one connection, registers on it, and starts serving it.
 func (p *sessionPool) connect(ctx context.Context) error {
-	dialCtx, cancel := context.WithTimeout(ctx, p.worker.config.DialTimeout)
+	dialCtx, cancel := context.WithTimeout(ctx, p.agent.config.DialTimeout)
 	defer cancel()
 
-	conn, err := p.worker.dialer.DialContext(dialCtx, p.address)
+	conn, err := p.agent.dialer.DialContext(dialCtx, p.address)
 	if err != nil {
 		p.failed()
 
@@ -469,9 +469,9 @@ func (p *sessionPool) connect(ctx context.Context) error {
 		return err
 	}
 
-	// the ingress opens the streams, so it is smux's client and this is the
+	// the hub opens the streams, so it is smux's client and this is the
 	// server, on a connection this end dialled.
-	session, err := smux.Server(conn, p.worker.config.smux())
+	session, err := smux.Server(conn, p.agent.config.smux())
 	if err != nil {
 		conn.Close()
 		p.failed()
@@ -482,7 +482,7 @@ func (p *sessionPool) connect(ctx context.Context) error {
 	held := &pooledSession{id: id, session: session, opened: time.Now(), idle: time.Now()}
 
 	p.lock.Lock()
-	closed := p.worker.isClosed()
+	closed := p.agent.isClosed()
 	if !closed {
 		p.sessions = append(p.sessions, held)
 		p.attempt = 0
@@ -491,39 +491,39 @@ func (p *sessionPool) connect(ctx context.Context) error {
 
 	if closed {
 		// closed while this one was being opened. Letting it go is what tells
-		// the ingress the worker is leaving rather than arriving.
+		// the hub the agent is leaving rather than arriving.
 		session.Close()
 
 		return nil
 	}
 
-	p.worker.metrics.SessionOpened(p.worker.id, id)
-	p.worker.logger.InfoContext(ctx, "connected to an ingress", "address", p.address, "session", id)
+	p.agent.metrics.SessionOpened(p.agent.id, id)
+	p.agent.logger.InfoContext(ctx, "connected to a hub", "address", p.address, "session", id)
 
-	if !p.worker.starting() {
+	if !p.agent.starting() {
 		session.Close()
 
 		return nil
 	}
 
 	go func() {
-		defer p.worker.wait.Done()
+		defer p.agent.wait.Done()
 		defer p.nudge()
 
-		p.worker.serve(ctx, session, id)
+		p.agent.serve(ctx, session, id)
 
-		p.worker.metrics.SessionClosed(p.worker.id, id, "closed")
-		p.worker.logger.InfoContext(ctx, "a connection to an ingress ended", "address", p.address, "session", id)
+		p.agent.metrics.SessionClosed(p.agent.id, id, "closed")
+		p.agent.logger.InfoContext(ctx, "a connection to a hub ended", "address", p.address, "session", id)
 	}()
 
 	return nil
 }
 
-// registerOn says which worker this is and waits to be told it may stay.
+// registerOn says which agent this is and waits to be told it may stay.
 func (p *sessionPool) registerOn(conn net.Conn) (string, error) {
-	deadline := time.Now().Add(p.worker.config.HandshakeTimeout)
+	deadline := time.Now().Add(p.agent.config.HandshakeTimeout)
 
-	hello := registration{Version: ProtocolVersion, Worker: p.worker.id}
+	hello := registration{Version: ProtocolVersion, Agent: p.agent.id}
 	if err := writeFrame(conn, hello, deadline); err != nil {
 		return "", err
 	}
@@ -542,7 +542,7 @@ func (p *sessionPool) registerOn(conn net.Conn) (string, error) {
 	// smux takes the connection from here, so anything read past the newline
 	// would be lost.
 	if reader.Buffered() > 0 {
-		return "", errors.Join(ErrProtocol, errors.New("the ingress spoke before it was asked to"))
+		return "", errors.Join(ErrProtocol, errors.New("the hub spoke before it was asked to"))
 	}
 
 	return answer.Session, nil
@@ -554,24 +554,24 @@ func (p *sessionPool) failed() {
 	attempt := p.attempt
 	p.lock.Unlock()
 
-	p.worker.metrics.Reconnected(p.worker.id, p.address, attempt)
+	p.agent.metrics.Reconnected(p.agent.id, p.address, attempt)
 }
 
 // backoff is how long to wait before dialling again: doubling to a ceiling, and
 // then a wait drawn from anywhere in that range rather than the range's end.
 //
-// The jitter is the point. A thousand workers that lost the same ingress would
+// The jitter is the point. A thousand agents that lost the same hub would
 // otherwise come back in step, and knock it over again the moment it stood up.
 func (p *sessionPool) backoff() time.Duration {
 	p.lock.Lock()
 	attempt := p.attempt
 	p.lock.Unlock()
 
-	delay := p.worker.config.ReconnectMinDelay
+	delay := p.agent.config.ReconnectMinDelay
 	for range max(attempt-1, 0) {
 		delay *= 2
-		if delay >= p.worker.config.ReconnectMaxDelay {
-			delay = p.worker.config.ReconnectMaxDelay
+		if delay >= p.agent.config.ReconnectMaxDelay {
+			delay = p.agent.config.ReconnectMaxDelay
 
 			break
 		}

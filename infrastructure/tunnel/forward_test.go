@@ -18,28 +18,28 @@ func TestParseForward(t *testing.T) {
 			want Forward
 		}{
 			{
-				rule: "8022=worker-a:22",
-				want: Forward{Address: ":8022", Worker: "worker-a", Target: Target{Host: "127.0.0.1", Port: 22}},
+				rule: "8022=agent-a:22",
+				want: Forward{Address: ":8022", Agent: "agent-a", Target: Target{Host: "127.0.0.1", Port: 22}},
 			},
 			{
-				rule: "8080=worker-a:api",
-				want: Forward{Address: ":8080", Worker: "worker-a", Target: Target{Service: "api"}},
+				rule: "8080=agent-a:api",
+				want: Forward{Address: ":8080", Agent: "agent-a", Target: Target{Service: "api"}},
 			},
 			{
-				rule: "5432=worker-b:10.0.0.5:5432",
-				want: Forward{Address: ":5432", Worker: "worker-b", Target: Target{Host: "10.0.0.5", Port: 5432}},
+				rule: "5432=agent-b:10.0.0.5:5432",
+				want: Forward{Address: ":5432", Agent: "agent-b", Target: Target{Host: "10.0.0.5", Port: 5432}},
 			},
 			{
 				rule: "9000=:api",
 				want: Forward{Address: ":9000", Target: Target{Service: "api"}},
 			},
 			{
-				rule: "127.0.0.1:8022=worker-a:22",
-				want: Forward{Address: "127.0.0.1:8022", Worker: "worker-a", Target: Target{Host: "127.0.0.1", Port: 22}},
+				rule: "127.0.0.1:8022=agent-a:22",
+				want: Forward{Address: "127.0.0.1:8022", Agent: "agent-a", Target: Target{Host: "127.0.0.1", Port: 22}},
 			},
 			{
-				rule: "  8022 = worker-a : 22  ",
-				want: Forward{Address: ":8022", Worker: "worker-a", Target: Target{Host: "127.0.0.1", Port: 22}},
+				rule: "  8022 = agent-a : 22  ",
+				want: Forward{Address: ":8022", Agent: "agent-a", Target: Target{Host: "127.0.0.1", Port: 22}},
 			},
 		}
 
@@ -54,14 +54,14 @@ func TestParseForward(t *testing.T) {
 
 	t.Run("what a rule cannot say", func(t *testing.T) {
 		tests := []string{
-			"8022",              // no destination
-			"8022=worker-a",     // no target
-			"=worker-a:22",      // nothing to listen on
-			"ssh=worker-a:22",   // not a port
-			"70000=worker-a:22", // not a port either
-			"8022=worker-a:",    // no target
-			"8022=worker-a:0",   // port zero reaches nothing
-			"8022=:",            // neither worker nor target
+			"8022",             // no destination
+			"8022=agent-a",     // no target
+			"=agent-a:22",      // nothing to listen on
+			"ssh=agent-a:22",   // not a port
+			"70000=agent-a:22", // not a port either
+			"8022=agent-a:",    // no target
+			"8022=agent-a:0",   // port zero reaches nothing
+			"8022=:",           // neither agent nor target
 		}
 
 		for _, rule := range tests {
@@ -73,17 +73,17 @@ func TestParseForward(t *testing.T) {
 	})
 
 	t.Run("a list is read whole, and an empty one forwards nothing", func(t *testing.T) {
-		forwards, err := ParseForwards("8022=worker-a:22, 9000=:api")
+		forwards, err := ParseForwards("8022=agent-a:22, 9000=:api")
 		require.NoError(t, err)
 		require.Len(t, forwards, 2)
-		assert.Equal(t, "worker-a", forwards[0].Worker)
-		assert.Empty(t, forwards[1].Worker)
+		assert.Equal(t, "agent-a", forwards[0].Agent)
+		assert.Empty(t, forwards[1].Agent)
 
 		forwards, err = ParseForwards("")
 		require.NoError(t, err)
 		assert.Empty(t, forwards)
 
-		_, err = ParseForwards("8022=worker-a:22,nonsense")
+		_, err = ParseForwards("8022=agent-a:22,nonsense")
 		assert.ErrorIs(t, err, ErrMalformedForward)
 	})
 }
@@ -121,10 +121,10 @@ func TestParseAddressRules(t *testing.T) {
 
 // startForwarder serves the given forwards until the test ends, and reports
 // where each one actually landed.
-func startForwarder(t *testing.T, ingress *Ingress, forwards ...Forward) []string {
+func startForwarder(t *testing.T, hub *Hub, forwards ...Forward) []string {
 	t.Helper()
 
-	forwarder, err := NewForwarder(ingress, discardLogger(), forwards...)
+	forwarder, err := NewForwarder(hub, discardLogger(), forwards...)
 	require.NoError(t, err)
 	require.NoError(t, forwarder.Listen())
 
@@ -148,16 +148,16 @@ func anyPort() string { return "127.0.0.1:0" }
 
 func TestForwardedPortCarriesArbitraryTCP(t *testing.T) {
 	config := testConfig()
-	ingress := startIngress(t, config, AllowAll())
+	hub := startHub(t, config, AllowAll())
 
-	startWorker(t, "worker-a", []string{ingress.address}, config,
-		NewServiceTargets(map[string]string{"echo": echoServer(t, "worker-a:")}),
+	startAgent(t, "agent-a", []string{hub.address}, config,
+		NewServiceTargets(map[string]string{"echo": echoServer(t, "agent-a:")}),
 	)
-	waitFor(t, "the worker", func() bool { return len(ingress.Workers()) == 1 })
+	waitFor(t, "the agent", func() bool { return len(hub.Agents()) == 1 })
 
-	ports := startForwarder(t, ingress.Ingress, Forward{
+	ports := startForwarder(t, hub.Hub, Forward{
 		Address: anyPort(),
-		Worker:  "worker-a",
+		Agent:   "agent-a",
 		Target:  Target{Service: "echo"},
 	})
 
@@ -166,18 +166,18 @@ func TestForwardedPortCarriesArbitraryTCP(t *testing.T) {
 	require.NoError(t, err)
 	defer client.Close()
 
-	greeting := make([]byte, len("worker-a:"))
+	greeting := make([]byte, len("agent-a:"))
 	require.NoError(t, client.SetDeadline(time.Now().Add(5*time.Second)))
 	_, err = io.ReadFull(client, greeting)
 	require.NoError(t, err)
-	assert.Equal(t, "worker-a:", string(greeting))
+	assert.Equal(t, "agent-a:", string(greeting))
 
 	assert.Equal(t, "hello", roundTrip(t, client, "hello"))
 }
 
 func TestForwardedPortReachesAnAllowedAddress(t *testing.T) {
 	config := testConfig()
-	ingress := startIngress(t, config, AllowAll())
+	hub := startHub(t, config, AllowAll())
 
 	target := echoServer(t, "")
 	_, port, err := net.SplitHostPort(target)
@@ -185,15 +185,15 @@ func TestForwardedPortReachesAnAllowedAddress(t *testing.T) {
 	number, err := strconv.ParseUint(port, 10, 16)
 	require.NoError(t, err)
 
-	// the worker offers no services at all, only this one address
-	startWorker(t, "worker-a", []string{ingress.address}, config,
+	// the agent offers no services at all, only this one address
+	startAgent(t, "agent-a", []string{hub.address}, config,
 		NewServiceTargets(nil, AddressRule{Host: "127.0.0.1", Ports: []uint16{uint16(number)}}),
 	)
-	waitFor(t, "the worker", func() bool { return len(ingress.Workers()) == 1 })
+	waitFor(t, "the agent", func() bool { return len(hub.Agents()) == 1 })
 
-	ports := startForwarder(t, ingress.Ingress,
-		Forward{Address: anyPort(), Worker: "worker-a", Target: Target{Host: "127.0.0.1", Port: uint16(number)}},
-		Forward{Address: anyPort(), Worker: "worker-a", Target: Target{Host: "127.0.0.1", Port: uint16(number) + 1}},
+	ports := startForwarder(t, hub.Hub,
+		Forward{Address: anyPort(), Agent: "agent-a", Target: Target{Host: "127.0.0.1", Port: uint16(number)}},
+		Forward{Address: anyPort(), Agent: "agent-a", Target: Target{Host: "127.0.0.1", Port: uint16(number) + 1}},
 	)
 
 	client, err := net.Dial("tcp", ports[0])
@@ -202,7 +202,7 @@ func TestForwardedPortReachesAnAllowedAddress(t *testing.T) {
 
 	assert.Equal(t, "hello", roundTrip(t, client, "hello"))
 
-	// the port next door was never allowed, so the worker refuses and there is
+	// the port next door was never allowed, so the agent refuses and there is
 	// nothing to say at layer four but to close
 	refused, err := net.Dial("tcp", ports[1])
 	require.NoError(t, err)
@@ -213,18 +213,18 @@ func TestForwardedPortReachesAnAllowedAddress(t *testing.T) {
 	assert.ErrorIs(t, err, io.EOF)
 }
 
-func TestForwardedPortRoutesWhenItNamesNoWorker(t *testing.T) {
+func TestForwardedPortRoutesWhenItNamesNoAgent(t *testing.T) {
 	config := testConfig()
-	ingress := startIngress(t, config, AllowAll())
+	hub := startHub(t, config, AllowAll())
 
-	for _, name := range []string{"worker-a", "worker-b"} {
-		startWorker(t, name, []string{ingress.address}, config,
+	for _, name := range []string{"agent-a", "agent-b"} {
+		startAgent(t, name, []string{hub.address}, config,
 			NewServiceTargets(map[string]string{"echo": echoServer(t, name+":")}),
 		)
 	}
-	waitFor(t, "both workers", func() bool { return len(ingress.Workers()) == 2 })
+	waitFor(t, "both agents", func() bool { return len(hub.Agents()) == 2 })
 
-	ports := startForwarder(t, ingress.Ingress, Forward{
+	ports := startForwarder(t, hub.Hub, Forward{
 		Address: anyPort(),
 		Target:  Target{Service: "echo"},
 	})
@@ -235,7 +235,7 @@ func TestForwardedPortRoutesWhenItNamesNoWorker(t *testing.T) {
 		client, err := net.Dial("tcp", ports[0])
 		require.NoError(t, err)
 
-		greeting := make([]byte, len("worker-a:"))
+		greeting := make([]byte, len("agent-a:"))
 		require.NoError(t, client.SetDeadline(time.Now().Add(5*time.Second)))
 		_, err = io.ReadFull(client, greeting)
 		require.NoError(t, err)
@@ -244,25 +244,25 @@ func TestForwardedPortRoutesWhenItNamesNoWorker(t *testing.T) {
 		client.Close()
 	}
 
-	assert.Len(t, reached, 2, "the least loaded worker should not always be the same one")
+	assert.Len(t, reached, 2, "the least loaded agent should not always be the same one")
 }
 
-func TestForwardedPortWithNoWorkerConnected(t *testing.T) {
-	ingress := startIngress(t, testConfig(), AllowAll())
+func TestForwardedPortWithNoAgentConnected(t *testing.T) {
+	hub := startHub(t, testConfig(), AllowAll())
 
-	ports := startForwarder(t, ingress.Ingress,
-		Forward{Address: anyPort(), Worker: "worker-a", Target: Target{Service: "echo"}},
+	ports := startForwarder(t, hub.Hub,
+		Forward{Address: anyPort(), Agent: "agent-a", Target: Target{Service: "echo"}},
 		Forward{Address: anyPort(), Target: Target{Service: "echo"}},
 	)
 
-	// the port stays open — it is the worker that is missing, not the listener
+	// the port stays open — it is the agent that is missing, not the listener
 	for _, port := range ports {
 		client, err := net.Dial("tcp", port)
 		require.NoError(t, err)
 
 		require.NoError(t, client.SetDeadline(time.Now().Add(5*time.Second)))
 		_, err = client.Read(make([]byte, 1))
-		assert.ErrorIs(t, err, io.EOF, "a port with no worker behind it should close what it accepts")
+		assert.ErrorIs(t, err, io.EOF, "a port with no agent behind it should close what it accepts")
 
 		client.Close()
 	}
@@ -270,7 +270,7 @@ func TestForwardedPortWithNoWorkerConnected(t *testing.T) {
 
 func TestForwardedPortCarriesAHalfClose(t *testing.T) {
 	config := testConfig()
-	ingress := startIngress(t, config, AllowAll())
+	hub := startHub(t, config, AllowAll())
 
 	// the shape ssh and every request-then-answer protocol has: read until the
 	// far end says it is finished asking, and only then answer.
@@ -285,14 +285,14 @@ func TestForwardedPortCarriesAHalfClose(t *testing.T) {
 		_, _ = conn.Write(append([]byte("answering "), asked...))
 	})
 
-	startWorker(t, "worker-a", []string{ingress.address}, config,
+	startAgent(t, "agent-a", []string{hub.address}, config,
 		NewServiceTargets(map[string]string{"target": target}),
 	)
-	waitFor(t, "the worker", func() bool { return len(ingress.Workers()) == 1 })
+	waitFor(t, "the agent", func() bool { return len(hub.Agents()) == 1 })
 
-	ports := startForwarder(t, ingress.Ingress, Forward{
+	ports := startForwarder(t, hub.Hub, Forward{
 		Address: anyPort(),
-		Worker:  "worker-a",
+		Agent:   "agent-a",
 		Target:  Target{Service: "target"},
 	})
 
@@ -312,15 +312,15 @@ func TestForwardedPortCarriesAHalfClose(t *testing.T) {
 }
 
 func TestForwarderRefusesAPortItCannotHave(t *testing.T) {
-	ingress := startIngress(t, testConfig(), AllowAll())
+	hub := startHub(t, testConfig(), AllowAll())
 
 	taken, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	defer taken.Close()
 
-	forwarder, err := NewForwarder(ingress.Ingress, discardLogger(),
-		Forward{Address: anyPort(), Worker: "worker-a", Target: Target{Service: "echo"}},
-		Forward{Address: taken.Addr().String(), Worker: "worker-a", Target: Target{Service: "echo"}},
+	forwarder, err := NewForwarder(hub.Hub, discardLogger(),
+		Forward{Address: anyPort(), Agent: "agent-a", Target: Target{Service: "echo"}},
+		Forward{Address: taken.Addr().String(), Agent: "agent-a", Target: Target{Service: "echo"}},
 	)
 	require.NoError(t, err)
 
@@ -332,27 +332,27 @@ func TestForwarderRefusesAPortItCannotHave(t *testing.T) {
 }
 
 func TestForwarderRefusesWhatItCannotServe(t *testing.T) {
-	ingress := startIngress(t, testConfig(), AllowAll())
+	hub := startHub(t, testConfig(), AllowAll())
 
 	_, err := NewForwarder(nil, discardLogger())
-	assert.Error(t, err, "a forwarder has nowhere to put a connection without an ingress")
+	assert.Error(t, err, "a forwarder has nowhere to put a connection without a hub")
 
-	_, err = NewForwarder(ingress.Ingress, discardLogger(), Forward{Address: anyPort()})
+	_, err = NewForwarder(hub.Hub, discardLogger(), Forward{Address: anyPort()})
 	assert.ErrorIs(t, err, ErrMalformedForward, "a forward that names no target cannot be served")
 }
 
 func TestForwarderShutdownLeavesNothingRunning(t *testing.T) {
 	config := testConfig()
-	ingress := startIngress(t, config, AllowAll())
+	hub := startHub(t, config, AllowAll())
 
-	startWorker(t, "worker-a", []string{ingress.address}, config,
+	startAgent(t, "agent-a", []string{hub.address}, config,
 		NewServiceTargets(map[string]string{"echo": echoServer(t, "")}),
 	)
-	waitFor(t, "the worker", func() bool { return len(ingress.Workers()) == 1 })
+	waitFor(t, "the agent", func() bool { return len(hub.Agents()) == 1 })
 
-	forwarder, err := NewForwarder(ingress.Ingress, discardLogger(), Forward{
+	forwarder, err := NewForwarder(hub.Hub, discardLogger(), Forward{
 		Address: anyPort(),
-		Worker:  "worker-a",
+		Agent:   "agent-a",
 		Target:  Target{Service: "echo"},
 	})
 	require.NoError(t, err)

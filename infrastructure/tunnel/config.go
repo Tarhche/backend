@@ -14,7 +14,7 @@ import (
 //
 //	streams × (MaxStreamBuffer + copyBufferSize)   bounded by MaxReceiveBuffer
 //
-// so the ceiling for a worker holding maxSessions at full stream capacity is
+// so the ceiling for an agent holding maxSessions at full stream capacity is
 // maxSessions × MaxReceiveBuffer, plus the copy buffers. With the values here
 // that is 4 × 4 MB = 16 MB of window per direction, and 256 × 4 × 32 KB = 32 MB
 // of copy buffer if every stream is busy at once. Raising stream counts without
@@ -35,9 +35,9 @@ const (
 	// defaultKeepAliveTimeout is when a session with nothing arriving is
 	// declared dead. It must be a multiple of the interval, or a single lost
 	// NOP kills a healthy session; three intervals tolerates two losses. This
-	// is also the worst case for noticing a worker that was unplugged rather
+	// is also the worst case for noticing an agent that was unplugged rather
 	// than closed, which is why the registry does not wait for it to decide a
-	// worker is gone — a closed session is removed at once.
+	// agent is gone — a closed session is removed at once.
 	defaultKeepAliveTimeout = 30 * time.Second
 
 	// defaultMaxFrameSize is what one smux frame carries. It is kept under a
@@ -58,13 +58,13 @@ const (
 	// machine holding many streams wants less.
 	defaultMaxStreamBuffer = 256 * 1024
 
-	// defaultMinSessions is how many connections a worker keeps to each
-	// ingress even when nothing is using them. Two rather than one so that
-	// losing a connection does not leave the worker briefly unreachable while
+	// defaultMinSessions is how many connections an agent keeps to each
+	// hub even when nothing is using them. Two rather than one so that
+	// losing a connection does not leave the agent briefly unreachable while
 	// it dials again.
 	defaultMinSessions = 2
 
-	// defaultMaxSessions bounds what one worker may open to one ingress. More
+	// defaultMaxSessions bounds what one agent may open to one hub. More
 	// sessions is how throughput grows — each is its own TCP connection with
 	// its own congestion window, and the only way past the head-of-line
 	// blocking that a single connection imposes on every stream it carries.
@@ -78,31 +78,31 @@ const (
 	// maxSessions higher. Benchmarks in this package compare the two.
 	defaultMaxStreamsPerSession = 256
 
-	// defaultGrowThreshold is how full the pool gets before the worker opens
-	// another session. Growing at capacity is too late: the ingress can only
+	// defaultGrowThreshold is how full the pool gets before the agent opens
+	// another session. Growing at capacity is too late: the hub can only
 	// wait, and cannot make capacity itself.
 	defaultGrowThreshold = 0.75
 
 	// defaultIdleSessionTimeout is how long a session above the minimum stays
-	// open with nothing on it before the worker lets it go.
+	// open with nothing on it before the agent lets it go.
 	defaultIdleSessionTimeout = 2 * time.Minute
 
 	// defaultHandshakeTimeout bounds registering a connection and opening a
 	// stream. Both are a round trip on a connection that already exists.
 	defaultHandshakeTimeout = 10 * time.Second
 
-	// defaultDialTimeout bounds dialling an ingress, and a worker dialling a
+	// defaultDialTimeout bounds dialling a hub, and an agent dialling a
 	// target.
 	defaultDialTimeout = 10 * time.Second
 
 	// defaultCapacityWait is how long a client waits when every session of the
-	// worker it wants is full. The worker grows its pool on its own, so this is
-	// waiting for that rather than for anything the ingress can do.
+	// agent it wants is full. The agent grows its pool on its own, so this is
+	// waiting for that rather than for anything the hub can do.
 	defaultCapacityWait = 5 * time.Second
 
 	// reconnect backoff. The delay doubles to the maximum and every wait is
-	// jittered across its whole range, so a thousand workers that lost the same
-	// ingress do not come back in step and knock it over again.
+	// jittered across its whole range, so a thousand agents that lost the same
+	// hub do not come back in step and knock it over again.
 	defaultReconnectMinDelay = 500 * time.Millisecond
 	defaultReconnectMaxDelay = 30 * time.Second
 
@@ -134,7 +134,7 @@ type Config struct {
 	MaxReceiveBuffer  int
 	MaxStreamBuffer   int
 
-	// MinSessions and MaxSessions bound a worker's pool to one ingress.
+	// MinSessions and MaxSessions bound an agent's pool to one hub.
 	MinSessions int
 	MaxSessions int
 
@@ -143,7 +143,7 @@ type Config struct {
 	MaxStreamsPerSession int
 
 	// GrowThreshold is the fraction of the pool's stream capacity in use at
-	// which a worker opens another session, between 0 and 1.
+	// which an agent opens another session, between 0 and 1.
 	GrowThreshold float64
 
 	// IdleSessionTimeout is how long a session beyond MinSessions stays open
@@ -153,14 +153,14 @@ type Config struct {
 	// HandshakeTimeout bounds registration and stream opening.
 	HandshakeTimeout time.Duration
 
-	// DialTimeout bounds dialling an ingress and dialling a target.
+	// DialTimeout bounds dialling a hub and dialling a target.
 	DialTimeout time.Duration
 
-	// CapacityWait is how long Dial waits for a worker to make room.
+	// CapacityWait is how long Dial waits for an agent to make room.
 	CapacityWait time.Duration
 
 	// ReconnectMinDelay and ReconnectMaxDelay bound the jittered backoff a
-	// worker reconnects with.
+	// agent reconnects with.
 	ReconnectMinDelay time.Duration
 	ReconnectMaxDelay time.Duration
 }
@@ -220,7 +220,7 @@ func (c Config) smux() *smux.Config {
 	}
 }
 
-// Capacity is how many streams a worker's pool can carry when it is at its
+// Capacity is how many streams an agent's pool can carry when it is at its
 // largest.
 func (c Config) Capacity() int {
 	return c.MaxSessions * c.MaxStreamsPerSession

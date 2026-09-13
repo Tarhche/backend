@@ -22,11 +22,11 @@ import (
 // what was read, so a direction moves only as fast as its slower end, and a
 // stalled write stalls the read behind it:
 //
-//	client ── TCP ──> ingress ── smux ──> worker ── TCP ──> target
+//	client ── TCP ──> hub ── smux ──> agent ── TCP ──> target
 //
 // A slow target stops reading its TCP connection, its socket buffer fills, the
-// worker's write blocks, so the worker stops reading the stream, so its receive
-// window closes. smux then refuses the ingress's writes, the ingress stops
+// agent's write blocks, so the agent stops reading the stream, so its receive
+// window closes. smux then refuses the hub's writes, the hub stops
 // reading the client, the client's socket buffer fills, and the client's own
 // writes block. Every step is a bounded buffer that was already there. The same
 // happens in reverse for a slow client.

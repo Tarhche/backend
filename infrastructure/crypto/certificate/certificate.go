@@ -1,22 +1,21 @@
-// Package certificate makes and loads the X.509 certificates the runner's
-// tunnel authenticates with.
+// Package certificate makes and loads X.509 certificates for mutual TLS under a
+// private authority.
 //
-// A private authority signs one certificate for the ingress and one for each
-// worker. Both ends verify the other against that authority and nothing else:
-// not the system's trust store, which has no business vouching for a worker,
-// and not a key pinned by hand, which cannot be added to without redeploying
-// everything that would have to trust it.
+// The authority signs one certificate for the side being dialled and one for
+// each side that dials. Both verify the other against that authority and
+// nothing else: not the system's trust store, which has no business vouching
+// for a private peer, and not a key pinned by hand, which cannot be added to
+// without redeploying everything that would have to trust it.
 //
-//	               authority (ca.crt / ca.key)
-//	                         │
-//	      ┌──────────────────┼──────────────────┐
-//	      │                  │                  │
-//	 ingress            worker-001         worker-002
+//	              authority (ca.crt / ca.key)
+//	                        │
+//	     ┌──────────────────┼──────────────────┐
+//	     │                  │                  │
+//	  server             peer-001           peer-002
 //	serverAuth          clientAuth         clientAuth
 //
-// The authority's private key signs certificates and does nothing else. Neither
-// a running ingress nor a running worker ever needs it, and neither is ever
-// given it.
+// The authority's private key signs certificates and does nothing else. Nothing
+// that runs ever needs it, and nothing that runs is ever given it.
 package certificate
 
 import (
@@ -67,8 +66,8 @@ type Authority struct {
 
 // Request is what a certificate is to say.
 type Request struct {
-	// Name is who this is: the ingress's own name, or a worker's identity. It
-	// becomes the common name and the first subject alternative name.
+	// Name is who this is. It becomes the common name and the first subject
+	// alternative name.
 	Name string
 
 	// DNSNames and IPAddresses are the other names the certificate answers for.
@@ -129,15 +128,17 @@ func GenerateCA(name string, validity time.Duration) (*Authority, error) {
 	return &Authority{Certificate: certificate, PrivateKey: key}, nil
 }
 
-// GenerateServerCertificate issues the certificate an ingress answers with.
+// GenerateServerCertificate issues the certificate the side being dialled
+// answers with.
 //
-// It carries serverAuth and not clientAuth: a certificate that is good for both
-// is one an ingress could be impersonated with by anything holding it.
+// It carries serverAuth and not clientAuth: a certificate good for both is one
+// the server could be impersonated with by anything holding it.
 func (a *Authority) GenerateServerCertificate(request Request) (*x509.Certificate, *ecdsa.PrivateKey, error) {
 	return a.issue(request, x509.ExtKeyUsageServerAuth)
 }
 
-// GenerateClientCertificate issues the certificate a worker proves itself with.
+// GenerateClientCertificate issues the certificate a dialling peer proves
+// itself with.
 func (a *Authority) GenerateClientCertificate(request Request) (*x509.Certificate, *ecdsa.PrivateKey, error) {
 	return a.issue(request, x509.ExtKeyUsageClientAuth)
 }

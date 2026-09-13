@@ -13,20 +13,20 @@ import (
 )
 
 var (
-	// ErrUnknownService is a name the worker does not offer.
+	// ErrUnknownService is a name the agent does not offer.
 	ErrUnknownService = errors.New("tunnel: no such service")
 
-	// ErrTargetNotAllowed is an address the worker will not connect to. A
+	// ErrTargetNotAllowed is an address the agent will not connect to. A
 	// tunnel whose far end will dial anything is a way into everything that
 	// end can reach.
 	ErrTargetNotAllowed = errors.New("tunnel: target is not allowed")
 )
 
-// Targets is what a worker will connect a stream to.
+// Targets is what an agent will connect a stream to.
 //
-// It is the whole of the worker's authorisation: the ingress asks, and this
-// decides. Naming a service rather than an address is what lets a worker offer
-// several things — an api, a database, a container's port — without the ingress
+// It is the whole of the agent's authorisation: the hub asks, and this
+// decides. Naming a service rather than an address is what lets an agent offer
+// several things — an api, a database, a container's port — without the hub
 // knowing what any of them are or where they live, and lets them move without
 // anything else being told.
 type Targets interface {
@@ -45,7 +45,7 @@ func (f TargetsFunc) Resolve(ctx context.Context, target Target) (string, error)
 // ServiceTargets offers a fixed set of named services, and optionally a set of
 // addresses that may be asked for directly.
 //
-// A worker that offers only names cannot be talked into connecting anywhere
+// An agent that offers only names cannot be talked into connecting anywhere
 // else at all, which is the safe default; allowing addresses is for the cases
 // where the caller genuinely has to choose the port, and is bounded by what is
 // allowed rather than left open.
@@ -83,19 +83,19 @@ func (r AddressRule) allows(host string, port uint16) bool {
 	return r.From > 0 && port >= r.From && port <= r.To
 }
 
-// ParseAddressRules reads a comma-separated list of addresses a worker will
+// ParseAddressRules reads a comma-separated list of addresses an agent will
 // connect a stream to, each a single port or a span of them:
 //
 //	127.0.0.1:5432              one port
 //	127.0.0.1:30000-31000       a span, which is how published container ports
 //	                            are allowed without naming each one
 //
-// Nothing is allowed by default. What is not listed here a worker will not
-// dial, whatever the ingress asks for.
+// Nothing is allowed by default. What is not listed here an agent will not
+// dial, whatever the hub asks for.
 func ParseAddressRules(rules string) ([]AddressRule, error) {
 	allowed := make([]AddressRule, 0, 1)
 
-	for _, rule := range strings.Split(rules, ",") {
+	for rule := range strings.SplitSeq(rules, ",") {
 		if rule = strings.TrimSpace(rule); len(rule) == 0 {
 			continue
 		}
@@ -158,13 +158,13 @@ func portNumber(port string) (uint16, error) {
 	return uint16(number), nil
 }
 
-// NewServiceTargets builds the set of things a worker offers, keyed by the name
-// the ingress will ask for.
+// NewServiceTargets builds the set of things an agent offers, keyed by the name
+// the hub will ask for.
 func NewServiceTargets(services map[string]string, allowed ...AddressRule) *ServiceTargets {
 	return &ServiceTargets{services: maps.Clone(services), allowed: allowed}
 }
 
-// Set adds or replaces a service while the worker is running, which is how one
+// Set adds or replaces a service while the agent is running, which is how one
 // that comes to hold something new starts offering it.
 func (t *ServiceTargets) Set(name string, address string) {
 	t.lock.Lock()

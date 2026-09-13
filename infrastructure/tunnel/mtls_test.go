@@ -68,30 +68,30 @@ func (p *pki) issue(t *testing.T, name string, server bool, request certificate.
 	}
 }
 
-// ingressFiles and workerFiles are the ordinary cases.
-func (p *pki) ingressFiles(t *testing.T) certificate.TLSFiles {
-	return p.issue(t, "ingress.example.internal", true, certificate.Request{})
+// hubFiles and agentFiles are the ordinary cases.
+func (p *pki) hubFiles(t *testing.T) certificate.TLSFiles {
+	return p.issue(t, "hub.example.internal", true, certificate.Request{})
 }
 
-func (p *pki) workerFiles(t *testing.T, name string) certificate.TLSFiles {
+func (p *pki) agentFiles(t *testing.T, name string) certificate.TLSFiles {
 	files := p.issue(t, name, false, certificate.Request{})
-	files.ServerName = "ingress.example.internal"
+	files.ServerName = "hub.example.internal"
 
 	return files
 }
 
-// mtlsTunnel stands an ingress up on real mTLS and returns how to reach it.
-func mtlsTunnel(t *testing.T, p *pki, ingress certificate.TLSFiles, options ...IngressOption) (*Ingress, string) {
+// mtlsTunnel stands a hub up on real mTLS and returns how to reach it.
+func mtlsTunnel(t *testing.T, p *pki, hub certificate.TLSFiles, options ...HubOption) (*Hub, string) {
 	t.Helper()
 
 	config := testConfig()
 
-	auth := NewCertificateAuthenticator(certificate.SubjectAlternativeName(""), AllowSignedWorkers())
+	auth := NewCertificateAuthenticator(certificate.SubjectAlternativeName(""), AllowSignedAgents())
 
-	server, err := NewIngress(config, auth, discardLogger(), options...)
+	server, err := NewHub(config, auth, discardLogger(), options...)
 	require.NoError(t, err)
 
-	tlsConfig, err := ServerTLS(ingress)
+	tlsConfig, err := ServerTLS(hub)
 	require.NoError(t, err)
 
 	listener, err := Listen("127.0.0.1:0", tlsConfig)
@@ -115,7 +115,7 @@ func mtlsTunnel(t *testing.T, p *pki, ingress certificate.TLSFiles, options ...I
 	return server, listener.Addr().String()
 }
 
-// connect dials an ingress the way a worker does, and reports what happened.
+// connect dials a hub the way an agent does, and reports what happened.
 func connect(t *testing.T, address string, files certificate.TLSFiles) (net.Conn, error) {
 	t.Helper()
 
@@ -131,22 +131,22 @@ func connect(t *testing.T, address string, files certificate.TLSFiles) (net.Conn
 
 // 4. A successful mTLS handshake, and 20/21. smux and many streams over it
 func TestMutualTLS(t *testing.T) {
-	t.Run("a worker the authority signed for gets in, and its streams work", func(t *testing.T) {
+	t.Run("an agent the authority signed for gets in, and its streams work", func(t *testing.T) {
 		p := newPKI(t)
-		ingress, address := mtlsTunnel(t, p, p.ingressFiles(t))
+		hub, address := mtlsTunnel(t, p, p.hubFiles(t))
 
 		config := testConfig()
-		worker, err := NewWorker("worker-001", []string{address}, config,
-			TLSDialer(mustClientTLS(t, p.workerFiles(t, "worker-001")), config.DialTimeout),
+		agent, err := NewAgent("agent-001", []string{address}, config,
+			TLSDialer(mustClientTLS(t, p.agentFiles(t, "agent-001")), config.DialTimeout),
 			NewServiceTargets(map[string]string{"echo": echoServer(t, "")}), discardLogger())
 		require.NoError(t, err)
 
 		ctx, cancel := context.WithCancel(t.Context())
-		t.Cleanup(func() { cancel(); worker.Close() })
+		t.Cleanup(func() { cancel(); agent.Close() })
 
-		go worker.Run(ctx)
+		go agent.Run(ctx)
 
-		waitFor(t, "the worker to get in", func() bool { return len(ingress.Workers()) == 1 })
+		waitFor(t, "the agent to get in", func() bool { return len(hub.Agents()) == 1 })
 
 		// 21. many streams over the one mutually authenticated connection
 		var conns []net.Conn
@@ -157,7 +157,7 @@ func TestMutualTLS(t *testing.T) {
 		}()
 
 		for i := range 8 {
-			conn, err := ingress.Dial(t.Context(), "worker-001", Target{Service: "echo"})
+			conn, err := hub.Dial(t.Context(), "agent-001", Target{Service: "echo"})
 			require.NoError(t, err)
 
 			conns = append(conns, conn)
@@ -169,7 +169,7 @@ func TestMutualTLS(t *testing.T) {
 
 	t.Run("the handshake happens before smux, so an unauthenticated peer never speaks it", func(t *testing.T) {
 		p := newPKI(t)
-		ingress, address := mtlsTunnel(t, p, p.ingressFiles(t))
+		hub, address := mtlsTunnel(t, p, p.hubFiles(t))
 
 		// a plain tcp connection, offering no certificate at all
 		conn, err := net.DialTimeout("tcp", address, 5*time.Second)
@@ -179,7 +179,7 @@ func TestMutualTLS(t *testing.T) {
 		require.NoError(t, conn.SetDeadline(time.Now().Add(5*time.Second)))
 
 		// it speaks the protocol above TLS, which is not the one being spoken
-		_, err = conn.Write([]byte(`{"version":1,"worker":"worker-001"}` + "\n"))
+		_, err = conn.Write([]byte(`{"version":1,"agent":"agent-001"}` + "\n"))
 		require.NoError(t, err, "the bytes reach the socket; what answers them is the question")
 
 		// what comes back is a TLS alert and then the connection, rather than
@@ -188,20 +188,20 @@ func TestMutualTLS(t *testing.T) {
 		assert.NotContains(t, string(answer), `"ok"`, "it was answered as if it had registered")
 
 		time.Sleep(200 * time.Millisecond)
-		assert.Empty(t, ingress.Workers(), "a peer that did not complete the handshake registered anyway")
+		assert.Empty(t, hub.Agents(), "a peer that did not complete the handshake registered anyway")
 	})
 }
 
 // 5 & 16. An unknown authority, from either side
 func TestUnknownAuthority(t *testing.T) {
-	t.Run("a worker signed by another authority is refused", func(t *testing.T) {
+	t.Run("an agent signed by another authority is refused", func(t *testing.T) {
 		ours := newPKI(t)
 		theirs := newPKI(t)
 
-		_, address := mtlsTunnel(t, ours, ours.ingressFiles(t))
+		_, address := mtlsTunnel(t, ours, ours.hubFiles(t))
 
-		// the stranger's certificate, but our authority to check the ingress
-		stranger := theirs.workerFiles(t, "worker-001")
+		// the stranger's certificate, but our authority to check the hub
+		stranger := theirs.agentFiles(t, "agent-001")
 		stranger.Authority = ours.files.Authority
 
 		conn, err := connect(t, address, stranger)
@@ -214,31 +214,31 @@ func TestUnknownAuthority(t *testing.T) {
 		assert.Error(t, err, "a certificate the authority did not sign should not get in")
 	})
 
-	t.Run("an ingress signed by another authority is not talked to", func(t *testing.T) {
+	t.Run("a hub signed by another authority is not talked to", func(t *testing.T) {
 		ours := newPKI(t)
 		theirs := newPKI(t)
 
-		// an ingress holding a certificate from an authority the worker does
+		// a hub holding a certificate from an authority the agent does
 		// not trust
-		_, address := mtlsTunnel(t, theirs, theirs.issue(t, "ingress.example.internal", true, certificate.Request{}))
+		_, address := mtlsTunnel(t, theirs, theirs.issue(t, "hub.example.internal", true, certificate.Request{}))
 
-		files := ours.workerFiles(t, "worker-001")
+		files := ours.agentFiles(t, "agent-001")
 
 		_, err := connect(t, address, files)
-		assert.Error(t, err, "a worker should not hand its credentials to an ingress it cannot verify")
+		assert.Error(t, err, "an agent should not hand its credentials to a hub it cannot verify")
 		assert.Contains(t, err.Error(), "certificate")
 	})
 }
 
 // 6 & 7. Expired certificates, either end
 func TestExpiredCertificates(t *testing.T) {
-	t.Run("an expired worker certificate is refused", func(t *testing.T) {
+	t.Run("an expired agent certificate is refused", func(t *testing.T) {
 		p := newPKI(t)
-		_, address := mtlsTunnel(t, p, p.ingressFiles(t))
+		_, address := mtlsTunnel(t, p, p.hubFiles(t))
 
 		// a validity so short it has already passed by the time it is used
-		expired := p.issue(t, "worker-expired", false, certificate.Request{Validity: time.Nanosecond})
-		expired.ServerName = "ingress.example.internal"
+		expired := p.issue(t, "agent-expired", false, certificate.Request{Validity: time.Nanosecond})
+		expired.ServerName = "hub.example.internal"
 
 		conn, err := connect(t, address, expired)
 		if err == nil {
@@ -250,13 +250,13 @@ func TestExpiredCertificates(t *testing.T) {
 		assert.Error(t, err)
 	})
 
-	t.Run("an expired ingress certificate is not talked to", func(t *testing.T) {
+	t.Run("an expired hub certificate is not talked to", func(t *testing.T) {
 		p := newPKI(t)
 
-		expired := p.issue(t, "ingress.example.internal", true, certificate.Request{Validity: time.Nanosecond})
+		expired := p.issue(t, "hub.example.internal", true, certificate.Request{Validity: time.Nanosecond})
 		_, address := mtlsTunnel(t, p, expired)
 
-		_, err := connect(t, address, p.workerFiles(t, "worker-001"))
+		_, err := connect(t, address, p.agentFiles(t, "agent-001"))
 
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "expired")
@@ -265,13 +265,13 @@ func TestExpiredCertificates(t *testing.T) {
 
 // 8 & 9. The wrong extended key usage, either end
 func TestExtendedKeyUsage(t *testing.T) {
-	t.Run("a worker offering a server certificate is refused", func(t *testing.T) {
+	t.Run("an agent offering a server certificate is refused", func(t *testing.T) {
 		p := newPKI(t)
-		_, address := mtlsTunnel(t, p, p.ingressFiles(t))
+		_, address := mtlsTunnel(t, p, p.hubFiles(t))
 
 		// signed by the right authority, but for serving rather than connecting
-		wrong := p.issue(t, "worker-server", true, certificate.Request{})
-		wrong.ServerName = "ingress.example.internal"
+		wrong := p.issue(t, "agent-server", true, certificate.Request{})
+		wrong.ServerName = "hub.example.internal"
 
 		conn, err := connect(t, address, wrong)
 		if err == nil {
@@ -283,13 +283,13 @@ func TestExtendedKeyUsage(t *testing.T) {
 		assert.Error(t, err, "clientAuth is what a client certificate is for")
 	})
 
-	t.Run("an ingress offering a client certificate is not talked to", func(t *testing.T) {
+	t.Run("a hub offering a client certificate is not talked to", func(t *testing.T) {
 		p := newPKI(t)
 
-		wrong := p.issue(t, "ingress.example.internal", false, certificate.Request{})
+		wrong := p.issue(t, "hub.example.internal", false, certificate.Request{})
 		_, address := mtlsTunnel(t, p, wrong)
 
-		_, err := connect(t, address, p.workerFiles(t, "worker-001"))
+		_, err := connect(t, address, p.agentFiles(t, "agent-001"))
 
 		assert.Error(t, err, "serverAuth is what a server certificate is for")
 	})
@@ -297,39 +297,39 @@ func TestExtendedKeyUsage(t *testing.T) {
 
 // 10 & 11. The wrong name
 func TestServerName(t *testing.T) {
-	t.Run("an ingress answering for another name is not talked to", func(t *testing.T) {
+	t.Run("a hub answering for another name is not talked to", func(t *testing.T) {
 		p := newPKI(t)
 		_, address := mtlsTunnel(t, p, p.issue(t, "somebody-else.example.internal", true, certificate.Request{}))
 
-		files := p.workerFiles(t, "worker-001") // expects ingress.example.internal
+		files := p.agentFiles(t, "agent-001") // expects hub.example.internal
 
 		_, err := connect(t, address, files)
 		assert.Error(t, err)
 	})
 
-	t.Run("a worker that was told no name will not connect at all", func(t *testing.T) {
+	t.Run("an agent that was told no name will not connect at all", func(t *testing.T) {
 		p := newPKI(t)
 
-		files := p.workerFiles(t, "worker-001")
+		files := p.agentFiles(t, "agent-001")
 		files.ServerName = ""
 
 		_, err := ClientTLS(files)
-		assert.Error(t, err, "without a name a worker would trust anything the authority signed, including another worker")
+		assert.Error(t, err, "without a name an agent would trust anything the authority signed, including another agent")
 	})
 
 	t.Run("an address in the certificate is answered for", func(t *testing.T) {
 		p := newPKI(t)
 
-		files := p.issue(t, "ingress.example.internal", true, certificate.Request{
+		files := p.issue(t, "hub.example.internal", true, certificate.Request{
 			IPAddresses: []net.IP{net.ParseIP("127.0.0.1")},
 		})
 
 		_, address := mtlsTunnel(t, p, files)
 
-		worker := p.workerFiles(t, "worker-001")
-		worker.ServerName = "127.0.0.1"
+		agent := p.agentFiles(t, "agent-001")
+		agent.ServerName = "127.0.0.1"
 
-		conn, err := connect(t, address, worker)
+		conn, err := connect(t, address, agent)
 		require.NoError(t, err)
 		conn.Close()
 	})
@@ -338,7 +338,7 @@ func TestServerName(t *testing.T) {
 // 12, 13 & 14. Missing and mismatched files
 func TestBadFiles(t *testing.T) {
 	p := newPKI(t)
-	files := p.workerFiles(t, "worker-001")
+	files := p.agentFiles(t, "agent-001")
 
 	t.Run("a certificate that is not there", func(t *testing.T) {
 		broken := files
@@ -367,7 +367,7 @@ func TestBadFiles(t *testing.T) {
 	})
 
 	t.Run("a key that belongs to another certificate", func(t *testing.T) {
-		other := p.workerFiles(t, "worker-002")
+		other := p.agentFiles(t, "agent-002")
 
 		broken := files
 		broken.PrivateKey = other.PrivateKey
@@ -377,31 +377,31 @@ func TestBadFiles(t *testing.T) {
 	})
 }
 
-// 17 & 18. Several workers, told apart by their certificates
-func TestManyWorkersByCertificate(t *testing.T) {
+// 17 & 18. Several agents, told apart by their certificates
+func TestManyAgentsByCertificate(t *testing.T) {
 	p := newPKI(t)
-	ingress, address := mtlsTunnel(t, p, p.ingressFiles(t))
+	hub, address := mtlsTunnel(t, p, p.hubFiles(t))
 
 	config := testConfig()
 	config.MinSessions = 1
 
-	for _, name := range []string{"worker-001", "worker-002", "worker-003"} {
-		worker, err := NewWorker(name, []string{address}, config,
-			TLSDialer(mustClientTLS(t, p.workerFiles(t, name)), config.DialTimeout),
+	for _, name := range []string{"agent-001", "agent-002", "agent-003"} {
+		agent, err := NewAgent(name, []string{address}, config,
+			TLSDialer(mustClientTLS(t, p.agentFiles(t, name)), config.DialTimeout),
 			NewServiceTargets(map[string]string{"echo": echoServer(t, name+":")}), discardLogger())
 		require.NoError(t, err)
 
 		ctx, cancel := context.WithCancel(t.Context())
-		t.Cleanup(func() { cancel(); worker.Close() })
+		t.Cleanup(func() { cancel(); agent.Close() })
 
-		go worker.Run(ctx)
+		go agent.Run(ctx)
 	}
 
-	waitFor(t, "all three workers", func() bool { return len(ingress.Workers()) == 3 })
+	waitFor(t, "all three agents", func() bool { return len(hub.Agents()) == 3 })
 
 	// each is known by the name in its own certificate, and reaches its own target
-	for _, name := range []string{"worker-001", "worker-002", "worker-003"} {
-		conn, err := ingress.Dial(t.Context(), name, Target{Service: "echo"})
+	for _, name := range []string{"agent-001", "agent-002", "agent-003"} {
+		conn, err := hub.Dial(t.Context(), name, Target{Service: "echo"})
 		require.NoError(t, err)
 
 		greeting := make([]byte, len(name)+1)
@@ -414,33 +414,33 @@ func TestManyWorkersByCertificate(t *testing.T) {
 	}
 }
 
-// A worker cannot claim to be a different worker, however valid its certificate
+// An agent cannot claim to be a different agent, however valid its certificate
 func TestIdentityIsTheCertificate(t *testing.T) {
 	p := newPKI(t)
-	ingress, address := mtlsTunnel(t, p, p.ingressFiles(t))
+	hub, address := mtlsTunnel(t, p, p.hubFiles(t))
 
 	config := testConfig()
 	config.MinSessions = 1
 
-	// it holds worker-001's certificate and registers as worker-002
-	worker, err := NewWorker("worker-002", []string{address}, config,
-		TLSDialer(mustClientTLS(t, p.workerFiles(t, "worker-001")), config.DialTimeout),
+	// it holds agent-001's certificate and registers as agent-002
+	agent, err := NewAgent("agent-002", []string{address}, config,
+		TLSDialer(mustClientTLS(t, p.agentFiles(t, "agent-001")), config.DialTimeout),
 		NewServiceTargets(map[string]string{"echo": echoServer(t, "")}), discardLogger())
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(t.Context())
-	t.Cleanup(func() { cancel(); worker.Close() })
+	t.Cleanup(func() { cancel(); agent.Close() })
 
-	go worker.Run(ctx)
+	go agent.Run(ctx)
 
 	time.Sleep(500 * time.Millisecond)
 
-	assert.Empty(t, ingress.Workers(), "a worker holding one certificate should not be able to register as another")
+	assert.Empty(t, hub.Agents(), "an agent holding one certificate should not be able to register as another")
 }
 
 // 15 & 19. Authorization, which is a separate question from authentication
-func TestWorkerAuthorization(t *testing.T) {
-	t.Run("only the workers named are let in", func(t *testing.T) {
+func TestAgentAuthorization(t *testing.T) {
+	t.Run("only the agents named are let in", func(t *testing.T) {
 		p := newPKI(t)
 
 		config := testConfig()
@@ -448,13 +448,13 @@ func TestWorkerAuthorization(t *testing.T) {
 
 		auth := NewCertificateAuthenticator(
 			certificate.SubjectAlternativeName(""),
-			AllowWorkers("worker-001"),
+			AllowAgents("agent-001"),
 		)
 
-		ingress, err := NewIngress(config, auth, discardLogger())
+		hub, err := NewHub(config, auth, discardLogger())
 		require.NoError(t, err)
 
-		tlsConfig, err := ServerTLS(p.ingressFiles(t))
+		tlsConfig, err := ServerTLS(p.hubFiles(t))
 		require.NoError(t, err)
 
 		listener, err := Listen("127.0.0.1:0", tlsConfig)
@@ -466,53 +466,53 @@ func TestWorkerAuthorization(t *testing.T) {
 		go func() {
 			defer close(done)
 
-			_ = ingress.Serve(ctx, listener)
+			_ = hub.Serve(ctx, listener)
 		}()
 
-		t.Cleanup(func() { cancel(); ingress.Close(); <-done })
+		t.Cleanup(func() { cancel(); hub.Close(); <-done })
 
-		for _, name := range []string{"worker-001", "worker-002"} {
-			worker, err := NewWorker(name, []string{listener.Addr().String()}, config,
-				TLSDialer(mustClientTLS(t, p.workerFiles(t, name)), config.DialTimeout),
+		for _, name := range []string{"agent-001", "agent-002"} {
+			agent, err := NewAgent(name, []string{listener.Addr().String()}, config,
+				TLSDialer(mustClientTLS(t, p.agentFiles(t, name)), config.DialTimeout),
 				NewServiceTargets(map[string]string{"echo": echoServer(t, "")}), discardLogger())
 			require.NoError(t, err)
 
-			workerCtx, workerCancel := context.WithCancel(t.Context())
-			t.Cleanup(func() { workerCancel(); worker.Close() })
+			agentCtx, agentCancel := context.WithCancel(t.Context())
+			t.Cleanup(func() { agentCancel(); agent.Close() })
 
-			go worker.Run(workerCtx)
+			go agent.Run(agentCtx)
 		}
 
-		waitFor(t, "the allowed worker", func() bool { return len(ingress.Workers()) == 1 })
+		waitFor(t, "the allowed agent", func() bool { return len(hub.Agents()) == 1 })
 
 		time.Sleep(300 * time.Millisecond)
 
-		workers := ingress.Workers()
-		require.Len(t, workers, 1, "a worker the authority signed for is still not automatically allowed")
-		assert.Equal(t, "worker-001", workers[0].Worker)
+		agents := hub.Agents()
+		require.Len(t, agents, 1, "an agent the authority signed for is still not automatically allowed")
+		assert.Equal(t, "agent-001", agents[0].Name)
 	})
 
 	t.Run("an authorizer that refuses says so", func(t *testing.T) {
-		err := AllowWorkers("worker-001").Authorize(t.Context(), Identity{Worker: "worker-002"})
+		err := AllowAgents("agent-001").Authorize(t.Context(), Identity{Name: "agent-002"})
 
 		assert.ErrorIs(t, err, ErrUnauthorized)
-		assert.Contains(t, err.Error(), "worker-002")
+		assert.Contains(t, err.Error(), "agent-002")
 	})
 
-	t.Run("every worker the authority signed for, when none are named", func(t *testing.T) {
-		assert.NoError(t, AllowSignedWorkers().Authorize(t.Context(), Identity{Worker: "anybody"}))
+	t.Run("every agent the authority signed for, when none are named", func(t *testing.T) {
+		assert.NoError(t, AllowSignedAgents().Authorize(t.Context(), Identity{Name: "anybody"}))
 	})
 }
 
-// 22. A worker reconnecting after the ingress went, with the same certificate
+// 22. An agent reconnecting after the hub went, with the same certificate
 func TestReconnectOverMutualTLS(t *testing.T) {
 	p := newPKI(t)
-	ingressFiles := p.ingressFiles(t)
+	hubFiles := p.hubFiles(t)
 
 	config := testConfig()
 	config.MinSessions = 1
 
-	tlsConfig, err := ServerTLS(ingressFiles)
+	tlsConfig, err := ServerTLS(hubFiles)
 	require.NoError(t, err)
 
 	listener, err := Listen("127.0.0.1:0", tlsConfig)
@@ -520,7 +520,7 @@ func TestReconnectOverMutualTLS(t *testing.T) {
 
 	address := listener.Addr().String()
 
-	first, err := NewIngress(config, NewCertificateAuthenticator(nil, nil), discardLogger())
+	first, err := NewHub(config, NewCertificateAuthenticator(nil, nil), discardLogger())
 	require.NoError(t, err)
 
 	firstDone := make(chan struct{})
@@ -530,27 +530,27 @@ func TestReconnectOverMutualTLS(t *testing.T) {
 		_ = first.Serve(t.Context(), listener)
 	}()
 
-	worker, err := NewWorker("worker-001", []string{address}, config,
-		TLSDialer(mustClientTLS(t, p.workerFiles(t, "worker-001")), config.DialTimeout),
+	agent, err := NewAgent("agent-001", []string{address}, config,
+		TLSDialer(mustClientTLS(t, p.agentFiles(t, "agent-001")), config.DialTimeout),
 		NewServiceTargets(map[string]string{"echo": echoServer(t, "")}), discardLogger())
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(t.Context())
-	t.Cleanup(func() { cancel(); worker.Close() })
+	t.Cleanup(func() { cancel(); agent.Close() })
 
-	go worker.Run(ctx)
+	go agent.Run(ctx)
 
-	waitFor(t, "the worker", func() bool { return len(first.Workers()) == 1 })
+	waitFor(t, "the agent", func() bool { return len(first.Agents()) == 1 })
 
 	listener.Close()
 	first.Close()
 	<-firstDone
 
-	// the ingress comes back with the same certificate, and the worker finds it
+	// the hub comes back with the same certificate, and the agent finds it
 	again, err := Listen(address, tlsConfig)
 	require.NoError(t, err)
 
-	second, err := NewIngress(config, NewCertificateAuthenticator(nil, nil), discardLogger())
+	second, err := NewHub(config, NewCertificateAuthenticator(nil, nil), discardLogger())
 	require.NoError(t, err)
 
 	secondDone := make(chan struct{})
@@ -562,9 +562,9 @@ func TestReconnectOverMutualTLS(t *testing.T) {
 
 	t.Cleanup(func() { second.Close(); <-secondDone })
 
-	waitFor(t, "the worker to reconnect", func() bool { return len(second.Workers()) == 1 })
+	waitFor(t, "the agent to reconnect", func() bool { return len(second.Agents()) == 1 })
 
-	conn, err := second.Dial(t.Context(), "worker-001", Target{Service: "echo"})
+	conn, err := second.Dial(t.Context(), "agent-001", Target{Service: "echo"})
 	require.NoError(t, err)
 	defer conn.Close()
 
@@ -576,8 +576,8 @@ func TestReconnectOverMutualTLS(t *testing.T) {
 func TestRotationDesign(t *testing.T) {
 	p := newPKI(t)
 
-	t.Run("an ingress asks for its certificate each time rather than holding one", func(t *testing.T) {
-		config, err := ServerTLS(p.ingressFiles(t))
+	t.Run("a hub asks for its certificate each time rather than holding one", func(t *testing.T) {
+		config, err := ServerTLS(p.hubFiles(t))
 		require.NoError(t, err)
 
 		require.NotNil(t, config.GetCertificate, "a certificate read from a field cannot be replaced while running")
@@ -592,8 +592,8 @@ func TestRotationDesign(t *testing.T) {
 		assert.Equal(t, first, second)
 	})
 
-	t.Run("a worker asks for its certificate each time too", func(t *testing.T) {
-		config, err := ClientTLS(p.workerFiles(t, "worker-001"))
+	t.Run("an agent asks for its certificate each time too", func(t *testing.T) {
+		config, err := ClientTLS(p.agentFiles(t, "agent-001"))
 		require.NoError(t, err)
 
 		require.NotNil(t, config.GetClientCertificate)
@@ -605,10 +605,10 @@ func TestRotationDesign(t *testing.T) {
 	})
 
 	t.Run("both ends insist on TLS 1.3", func(t *testing.T) {
-		server, err := ServerTLS(p.ingressFiles(t))
+		server, err := ServerTLS(p.hubFiles(t))
 		require.NoError(t, err)
 
-		client, err := ClientTLS(p.workerFiles(t, "worker-001"))
+		client, err := ClientTLS(p.agentFiles(t, "agent-001"))
 		require.NoError(t, err)
 
 		assert.EqualValues(t, tls.VersionTLS13, server.MinVersion)
@@ -616,10 +616,10 @@ func TestRotationDesign(t *testing.T) {
 	})
 
 	t.Run("verification is never skipped, and a client certificate is always required", func(t *testing.T) {
-		server, err := ServerTLS(p.ingressFiles(t))
+		server, err := ServerTLS(p.hubFiles(t))
 		require.NoError(t, err)
 
-		client, err := ClientTLS(p.workerFiles(t, "worker-001"))
+		client, err := ClientTLS(p.agentFiles(t, "agent-001"))
 		require.NoError(t, err)
 
 		assert.Equal(t, tls.RequireAndVerifyClientCert, server.ClientAuth)
@@ -636,7 +636,7 @@ func TestCertificateAuthenticator(t *testing.T) {
 		_, conn := net.Pipe()
 		defer conn.Close()
 
-		_, err := NewCertificateAuthenticator(nil, nil).Authenticate(t.Context(), conn, "worker-001", "")
+		_, err := NewCertificateAuthenticator(nil, nil).Authenticate(t.Context(), conn, "agent-001", "")
 
 		assert.ErrorIs(t, err, ErrUnauthenticated)
 	})
@@ -651,7 +651,7 @@ func TestCertificateAuthenticator(t *testing.T) {
 		_, conn := net.Pipe()
 		defer conn.Close()
 
-		_, err := auth.Authenticate(t.Context(), conn, "worker-001", "")
+		_, err := auth.Authenticate(t.Context(), conn, "agent-001", "")
 		assert.ErrorIs(t, err, ErrUnauthenticated)
 	})
 }

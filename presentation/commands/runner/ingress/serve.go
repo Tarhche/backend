@@ -14,7 +14,7 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/certificate"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers/runner"
-	"github.com/khanzadimahdi/testproject/infrastructure/runner/tunnel"
+	"github.com/khanzadimahdi/testproject/infrastructure/tunnel"
 )
 
 const (
@@ -28,7 +28,7 @@ type ServeCommand struct {
 	// tunnel is where the workers connect. Requests go back down those
 	// connections, so this is the only way into a worker and the only thing
 	// that says a worker is there at all.
-	tunnel *tunnel.Ingress
+	tunnel *tunnel.Hub
 
 	// forwarder is the ports arbitrary TCP arrives on, each carried onto those
 	// same connections. It is layer four: what comes in is a byte pipe, so ssh

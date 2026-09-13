@@ -14,7 +14,7 @@ import (
 	"github.com/danceable/console"
 	"github.com/khanzadimahdi/testproject/domain"
 	messaging "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
-	"github.com/khanzadimahdi/testproject/infrastructure/runner/tunnel"
+	"github.com/khanzadimahdi/testproject/infrastructure/tunnel"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -208,7 +208,7 @@ func TestServe(t *testing.T) {
 		// nothing is listening for it, so the pool spends the test trying to
 		// connect and the worker serves its own port regardless — which is the
 		// point: the tunnel being down is not the worker being down.
-		tunnelWorker, err := tunnel.NewWorker(
+		tunnelWorker, err := tunnel.NewAgent(
 			consumerName,
 			[]string{"127.0.0.1:1"},
 			tunnel.DefaultConfig(),

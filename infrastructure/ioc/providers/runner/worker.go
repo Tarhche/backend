@@ -27,8 +27,8 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/certificate"
 	infraHealth "github.com/khanzadimahdi/testproject/infrastructure/health"
 	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/jetstream/produceConsumer"
-	"github.com/khanzadimahdi/testproject/infrastructure/runner/tunnel"
 	"github.com/khanzadimahdi/testproject/infrastructure/telemetry/profiler"
+	"github.com/khanzadimahdi/testproject/infrastructure/tunnel"
 	healthAPI "github.com/khanzadimahdi/testproject/presentation/http/health"
 	"github.com/khanzadimahdi/testproject/presentation/http/middleware"
 	workerTaskAPI "github.com/khanzadimahdi/testproject/presentation/http/runner/worker/api/task"
@@ -36,42 +36,9 @@ import (
 
 const (
 	WorkerSubscribers = "runner:worker:subscribers"
-	WorkerName        = "runner:worker:name"
 
 	consumerNamePrefix string = "runner-worker-%s"
 )
-
-// workerNameProvider binds the worker name, which the command loads from its
-// --name flag or from the RUNNER_WORKER_NAME environment variable, under the
-// name the worker providers resolve it by.
-type workerNameProvider struct{}
-
-var _ provider.Provider = &workerNameProvider{}
-
-// NewWorkerNameProvider binds the worker name into the container so the worker
-// providers can resolve it. It must be registered after the configs provider.
-func NewWorkerNameProvider() *workerNameProvider {
-	return &workerNameProvider{}
-}
-
-func (p *workerNameProvider) Register(ctx context.Context, c provider.Container) error {
-	var workerConfigs *configs.RunnerWorker
-	if err := c.Resolve(&workerConfigs); err != nil {
-		return err
-	}
-
-	name := workerConfigs.Name
-
-	return c.Bind(func() string { return name }, provider.Singleton(), provider.WithName(WorkerName))
-}
-
-func (p *workerNameProvider) Boot(ctx context.Context, c provider.Container) error {
-	return nil
-}
-
-func (p *workerNameProvider) Terminate(ctx context.Context) error {
-	return nil
-}
 
 // workerProvider builds the runner worker's messaging singleton, HTTP handler,
 // message subscribers and heartbeat use cases.
@@ -168,7 +135,7 @@ func (p *workerProvider) bindTunnel(c provider.Container, nodeName string, logge
 		runnerAPIService: net.JoinHostPort("127.0.0.1", strconv.Itoa(workerConfigs.Port)),
 	}, allowed...)
 
-	worker, err := tunnel.NewWorker(
+	worker, err := tunnel.NewAgent(
 		nodeName,
 		workerConfigs.IngressAddresses(),
 		tunnelConfig,
@@ -184,7 +151,7 @@ func (p *workerProvider) bindTunnel(c provider.Container, nodeName string, logge
 		return err
 	}
 
-	return c.Bind(func() *tunnel.Worker { return worker }, provider.Singleton())
+	return c.Bind(func() *tunnel.Agent { return worker }, provider.Singleton())
 }
 
 func (p *workerProvider) Terminate(ctx context.Context) error {
