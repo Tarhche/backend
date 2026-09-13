@@ -20,11 +20,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// ContainerPath is where a node serves one of the containers it is holding. The
-// ingress builds it and the node routes it; they are the two ends of the same
-// agreement, so they are written down once, here.
-const ContainerPath = "/containers/%s/%d/%s"
-
 // Resolver finds which node is holding a container, by the slug a hostname
 // carries or by the uuid a terminal asks for. It is the task repository in
 // production; the ingress asks for no more than this so it can be driven by a

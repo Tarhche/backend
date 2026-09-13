@@ -14,11 +14,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// TerminalPath is where a node serves a terminal into one of the containers it
-// is holding. The ingress builds it and the node routes it, so it is written
-// down once, here.
-const TerminalPath = "/api/tasks/%s/attach"
-
 // terminalHandler carries a terminal to the node holding the container.
 //
 // It works out which node that is and proxies the connection there, and that is
