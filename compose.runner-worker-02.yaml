@@ -6,7 +6,9 @@ services:
     networks:
       - nats
       - docker
-      - runner_manager
+      # for dialling the ingress, which is the whole of what this is for. A
+      # worker has no business reaching the manager or another worker.
+      - runner_ingress
       - monitoring
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:80/health"]
@@ -68,8 +70,8 @@ networks:
   nats:
     name: nats
     external: true
-  runner_manager:
-    name: runner_manager
+  runner_ingress:
+    name: runner_ingress
     external: true
   docker:
     name: docker

@@ -4,7 +4,12 @@ services:
     security_opt:
       - no-new-privileges:true
     networks:
+      # where a request comes from: the proxy routes container hostnames here,
+      # and nothing routes to the manager any more.
       - runner_manager
+      # and where the workers dial in. Nothing else is on this one, so a worker
+      # has no path to the manager and the proxy none to a worker.
+      - runner_ingress
       - monitoring
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:80/health"]
@@ -63,9 +68,10 @@ services:
       RUNNER_INGRESS_FORWARDS: ${BACKEND_RUNNER_INGRESS_FORWARDS:-}
 
 networks:
-  runner_manager:
-    name: runner_manager
+  runner_ingress:
+    name: runner_ingress
     external: true
+
   monitoring:
     name: monitoring
     external: true
