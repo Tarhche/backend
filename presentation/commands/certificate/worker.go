@@ -12,17 +12,21 @@ import (
 //
 // It issues for clientAuth, which is the whole of what makes it a worker
 // certificate rather than an ingress one.
-type WorkerCommand struct{ certificateCommand }
+type WorkerCommand struct {
+	certificateCommand
+}
 
 var _ console.Command = &WorkerCommand{}
 
 func NewWorkerCommand() *WorkerCommand {
-	return &WorkerCommand{certificateCommand{
-		configs: configs.NewGenerateCertificate(),
-		out:     os.Stdout,
-		err:     os.Stderr,
-		server:  false,
-	}}
+	return &WorkerCommand{
+		certificateCommand{
+			configs: configs.NewGenerateCertificate(),
+			out:     os.Stdout,
+			err:     os.Stderr,
+			server:  false,
+		},
+	}
 }
 
 func (c *WorkerCommand) Description() string {

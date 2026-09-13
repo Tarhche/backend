@@ -27,7 +27,11 @@ type AuthorityCommand struct {
 var _ console.Command = &AuthorityCommand{}
 
 func NewAuthorityCommand() *AuthorityCommand {
-	return &AuthorityCommand{configs: configs.NewGenerateAuthority(), out: os.Stdout, err: os.Stderr}
+	return &AuthorityCommand{
+		configs: configs.NewGenerateAuthority(),
+		out:     os.Stdout,
+		err:     os.Stderr,
+	}
 }
 
 func (c *AuthorityCommand) Name() string { return generateName }

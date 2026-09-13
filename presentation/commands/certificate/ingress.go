@@ -12,17 +12,21 @@ import (
 //
 // It issues for serverAuth, which is the whole of what makes it an ingress
 // certificate rather than a worker one.
-type IngressCommand struct{ certificateCommand }
+type IngressCommand struct {
+	certificateCommand
+}
 
 var _ console.Command = &IngressCommand{}
 
 func NewIngressCommand() *IngressCommand {
-	return &IngressCommand{certificateCommand{
-		configs: configs.NewGenerateCertificate(),
-		out:     os.Stdout,
-		err:     os.Stderr,
-		server:  true,
-	}}
+	return &IngressCommand{
+		certificateCommand{
+			configs: configs.NewGenerateCertificate(),
+			out:     os.Stdout,
+			err:     os.Stderr,
+			server:  true,
+		},
+	}
 }
 
 func (c *IngressCommand) Description() string {

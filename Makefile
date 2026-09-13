@@ -28,9 +28,7 @@ logs-%:
 generate:
 	docker compose exec -it app go generate
 
-# the certificates the runner's tunnel authenticates with. They live under tmp/,
-# which is not in the repository: a private key that is committed is a private
-# key that has been published.
+# the certificates the runner's tunnel authenticates with. (mTLS)
 certs:
 	go run . certificate authority generate --output-dir ./tmp/certs/ca --name "runner tunnel development authority"
 	go run . certificate ingress generate --ca-cert ./tmp/certs/ca/ca.crt --ca-key ./tmp/certs/ca/ca.key \
