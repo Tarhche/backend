@@ -380,6 +380,76 @@ func TestIngressRestart(t *testing.T) {
 	assert.Equal(t, "after the restart", roundTrip(t, conn, "after the restart"))
 }
 
+// 12b. The backoff is forgotten the moment a connection is made, so a worker
+// that spent an outage backing off does not go on waiting as if it still were.
+func TestReconnectResetsBackoff(t *testing.T) {
+	config := testConfig()
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	address := listener.Addr().String()
+
+	first, err := NewIngress(config, AllowAll(), discardLogger())
+	require.NoError(t, err)
+
+	firstDone := make(chan struct{})
+	go func() {
+		defer close(firstDone)
+
+		_ = first.Serve(t.Context(), listener)
+	}()
+
+	worker := startWorker(t, "worker-a", []string{address}, config, NewServiceTargets(map[string]string{"echo": echoServer(t, "")}))
+
+	waitFor(t, "the worker", func() bool { return len(first.Workers()) == 1 })
+	require.Zero(t, attemptsOf(worker), "a worker that connected first time has nothing to back off from")
+
+	// the ingress goes, and stays gone long enough to be given up on more than
+	// once — which is what puts the pool into a grown backoff at all
+	listener.Close()
+	first.Close()
+	<-firstDone
+
+	waitFor(t, "the worker to have failed more than once", func() bool {
+		return attemptsOf(worker) > 1
+	})
+
+	backedOff := attemptsOf(worker)
+	require.Greater(t, backedOff, 1)
+
+	// and comes back on the same address
+	again, err := net.Listen("tcp", address)
+	require.NoError(t, err)
+
+	second := startIngressOn(t, again, config, AllowAll())
+
+	waitFor(t, "the worker to reconnect", func() bool {
+		workers := second.Workers()
+
+		return len(workers) == 1 && workers[0].Sessions == config.MinSessions
+	})
+
+	waitFor(t, "the backoff to be forgotten", func() bool { return attemptsOf(worker) == 0 })
+
+	assert.Zero(t, attemptsOf(worker),
+		"it backed off %d times and reconnected; the next failure should wait from the start again", backedOff)
+
+	// and the wait it would take now is one drawn from the first step, not from
+	// wherever the outage had pushed it
+	assert.LessOrEqual(t, worker.pools[0].backoff(), config.ReconnectMinDelay)
+}
+
+// attemptsOf is how many times in a row a worker has failed to reach its first
+// ingress, which is what the backoff is computed from.
+func attemptsOf(w *testWorker) int {
+	pool := w.pools[0]
+
+	pool.lock.Lock()
+	defer pool.lock.Unlock()
+
+	return pool.attempt
+}
+
 // 13. Every session at capacity
 func TestAtCapacity(t *testing.T) {
 	config := testConfig()

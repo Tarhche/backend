@@ -325,7 +325,12 @@ different one and break the bound.
 - **Reconnect.** Backoff doubles from 500 ms to 30 s, and every wait is drawn
   from anywhere in that range. **The jitter is the point**: a thousand workers
   that lost the same ingress would otherwise come back in step and knock it over
-  again.
+  again. There is no attempt ceiling — only a delay ceiling — so a worker
+  outlasts an outage of any length. **A connection resets it to zero**, so one
+  that spent an hour backing off is not still waiting thirty seconds between
+  attempts afterwards. It is counted per ingress: one being unreachable backs
+  off against that one alone, and the worker stays reachable through the others
+  at full speed.
 - **Shutdown.** `Worker.Close` and `Ingress.Close` end every session and wait
   for the goroutines holding them. A connection completing its dial after close
   is closed rather than kept, so a worker on its way out does not look like one
