@@ -130,13 +130,16 @@ jobs:
           # Copy files
           scp -q -i ~/hetzner-key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -r ./compose.*.yaml $HETZNER_SSH_ENDPOINT:/tmp/deployment_backend/ 2>/dev/null
 
-          # Connect and deploy services
-          ssh -q -i ~/hetzner-key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $HETZNER_SSH_ENDPOINT << 'EOF' >/dev/null 2>&1
+          # Connect and deploy services. What the remote shell prints comes back
+          # to the job log: a deploy that fails says why here rather than only in
+          # a container nobody is looking at. The commands themselves are never
+          # echoed -- no set -x -- so the exports below stay out of it.
+          ssh -q -i ~/hetzner-key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $HETZNER_SSH_ENDPOINT << 'EOF'
             # a failure surfaces through the exit status, which set -e propagates back through ssh
             set -e
             trap 'rm -rf /tmp/deployment_backend' EXIT
 
-            echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u ${{ github.actor }} --password-stdin > /dev/null 2>&1
+            echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u ${{ github.actor }} --password-stdin > /dev/null
 
             export WEB_URL='${{ secrets.WEB_URL }}'
 
@@ -210,11 +213,25 @@ jobs:
 
             # --wait holds the deploy until every replica passes the healthcheck
             # defined in the compose file, so a version that cannot serve traffic
-            # fails the job instead of being reported as deployed
-            docker compose -f compose.app.yaml --project-name app up --pull always --detach --wait --wait-timeout 180 > /dev/null 2>&1
-            docker compose -f compose.runner-manager.yaml --project-name runner-manager up --pull always --detach --wait --wait-timeout 180 > /dev/null 2>&1
-            docker compose -f compose.runner-ingress.yaml --project-name runner-ingress up --pull always --detach --wait --wait-timeout 180 > /dev/null 2>&1
-            docker compose -f compose.runner-worker-01.yaml --project-name runner-worker-01 up --pull always --detach --wait --wait-timeout 180 > /dev/null 2>&1
-            docker compose -f compose.runner-worker-02.yaml --project-name runner-worker-02 up --pull always --detach --wait --wait-timeout 180 > /dev/null 2>&1
-            docker compose -f compose.runner-worker-03.yaml --project-name runner-worker-03 up --pull always --detach --wait --wait-timeout 180 > /dev/null 2>&1
+            # fails the job instead of being reported as deployed. A service that
+            # never gets there says so in its own words: what it printed before
+            # it gave up is the only thing that explains why.
+            deploy() {
+                if docker compose -f "$1" --project-name "$2" up --pull always --detach --wait --wait-timeout 180; then
+                    return 0
+                fi
+
+                echo "::error::$2 did not come up; what it said follows"
+                docker compose -f "$1" --project-name "$2" ps -a
+                docker compose -f "$1" --project-name "$2" logs --tail 50 --no-color
+
+                return 1
+            }
+
+            deploy compose.app.yaml app
+            deploy compose.runner-manager.yaml runner-manager
+            deploy compose.runner-ingress.yaml runner-ingress
+            deploy compose.runner-worker-01.yaml runner-worker-01
+            deploy compose.runner-worker-02.yaml runner-worker-02
+            deploy compose.runner-worker-03.yaml runner-worker-03
           EOF
