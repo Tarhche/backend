@@ -78,12 +78,12 @@ func containerToContext(ctx context.Context, c provider.Container) context.Conte
 // Localize middleware stores in the context, so the handler (and the use case
 // it builds) sees language-aware request-scoped services.
 type ScopedHandler struct {
-	build func(container provider.Container) http.Handler
+	build func(task provider.Container) http.Handler
 }
 
 var _ http.Handler = &ScopedHandler{}
 
-func NewScopedHandler(build func(container provider.Container) http.Handler) *ScopedHandler {
+func NewScopedHandler(build func(task provider.Container) http.Handler) *ScopedHandler {
 	return &ScopedHandler{build: build}
 }
 

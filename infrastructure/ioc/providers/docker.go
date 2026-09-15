@@ -6,10 +6,12 @@ import (
 
 	"github.com/danceable/provider"
 
-	containerContract "github.com/khanzadimahdi/testproject/domain/runner/container"
+	networkContract "github.com/khanzadimahdi/testproject/domain/runner/network"
 	"github.com/khanzadimahdi/testproject/domain/runner/node"
+	"github.com/khanzadimahdi/testproject/domain/runner/task"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
-	"github.com/khanzadimahdi/testproject/infrastructure/runner/container"
+	infraContainer "github.com/khanzadimahdi/testproject/infrastructure/runner/container"
+	infraNetwork "github.com/khanzadimahdi/testproject/infrastructure/runner/network"
 	infraNode "github.com/khanzadimahdi/testproject/infrastructure/runner/node"
 )
 
@@ -34,17 +36,26 @@ func (p *dockerProvider) Register(ctx context.Context, c provider.Container) err
 		return err
 	}
 
-	containerManager, err := container.NewDockerManager(dockerHost, logger)
+	taskRuntime, err := infraContainer.NewDockerManager(dockerHost, logger)
 	if err != nil {
 		return err
 	}
 
-	nodeManager, err := infraNode.NewDockerManager(dockerHost, containerManager)
+	nodeManager, err := infraNode.NewDockerManager(dockerHost, taskRuntime)
 	if err != nil {
 		return err
 	}
 
-	if err := c.Bind(func() containerContract.Manager { return containerManager }, provider.Singleton()); err != nil {
+	networkManager, err := infraNetwork.NewManager(dockerHost, logger)
+	if err != nil {
+		return err
+	}
+
+	if err := c.Bind(func() task.Runtime { return taskRuntime }, provider.Singleton()); err != nil {
+		return err
+	}
+
+	if err := c.Bind(func() networkContract.Manager { return networkManager }, provider.Singleton()); err != nil {
 		return err
 	}
 

@@ -128,6 +128,12 @@ func (panickingRegistry) GetClientSideID(string) (string, error) {
 	panic("boom")
 }
 
+// newPanickingRegistry stands a real registry behind the one panicking lookup,
+// so the panic under test is the only thing out of the ordinary.
+func newPanickingRegistry() panickingRegistry {
+	return panickingRegistry{RequestRegistry: NewInMemoryRequestRegistry(0)}
+}
+
 func TestSession(t *testing.T) {
 	t.Parallel()
 
@@ -147,6 +153,7 @@ func TestSession(t *testing.T) {
 				logger:        logger,
 			},
 			registry:     registry,
+			cancelStream: func(context.Context, string) {},
 			hub:          newHub(logger),
 			bus:          newReplyBus(&messagingMock.MockPublishSubscriber{}, "replies", logger),
 			replies:      make(chan *domain.Reply, defaultReplyBuffer),
@@ -174,6 +181,7 @@ func TestSession(t *testing.T) {
 		t.Parallel()
 
 		var registryMock MockRequestRegistry
+		registryMock.On("ServerSideIDs").Return([]string(nil)).Maybe()
 		registryMock.On("GetServerSideID", "req-1").Return("", domain.ErrNotExists)
 		registryMock.On("Len").Return(0)
 		registryMock.On("Add", "req-1").Return("server-1", nil)
@@ -201,6 +209,7 @@ func TestSession(t *testing.T) {
 		t.Parallel()
 
 		var registryMock MockRequestRegistry
+		registryMock.On("ServerSideIDs").Return([]string(nil)).Maybe()
 		registryMock.On("Len").Return(0)
 
 		var producerMock messagingMock.MockProduceConsumer
@@ -226,6 +235,7 @@ func TestSession(t *testing.T) {
 		t.Parallel()
 
 		var registryMock MockRequestRegistry
+		registryMock.On("ServerSideIDs").Return([]string(nil)).Maybe()
 		registryMock.On("GetServerSideID", "req-1").Return("", domain.ErrNotExists)
 		registryMock.On("Len").Return(defaultMaxInFlightRequests)
 
@@ -248,6 +258,7 @@ func TestSession(t *testing.T) {
 		t.Parallel()
 
 		var registryMock MockRequestRegistry
+		registryMock.On("ServerSideIDs").Return([]string(nil)).Maybe()
 		registryMock.On("GetClientSideID", "server-1").Return("client-1", nil).Once()
 		registryMock.On("DeleteByServerSideID", "server-1").Return(nil).Once()
 		defer registryMock.AssertExpectations(t)
@@ -267,6 +278,7 @@ func TestSession(t *testing.T) {
 		t.Parallel()
 
 		var registryMock MockRequestRegistry
+		registryMock.On("ServerSideIDs").Return([]string(nil)).Maybe()
 
 		s := newTestSession(
 			&panickingConn{fakeConn: newFakeConn()},
@@ -291,6 +303,7 @@ func TestSession(t *testing.T) {
 		t.Parallel()
 
 		var registryMock MockRequestRegistry
+		registryMock.On("ServerSideIDs").Return([]string(nil)).Maybe()
 		registryMock.On("GetClientSideID", "server-1").Return("", errors.New("registry is unreachable"))
 
 		s := newTestSession(newFakeConn(), &registryMock, &messagingMock.MockProduceConsumer{}, echoTranslator(), "runCode")
@@ -326,6 +339,7 @@ func TestSession(t *testing.T) {
 		unreachable := errors.New("registry is unreachable")
 
 		var registryMock MockRequestRegistry
+		registryMock.On("ServerSideIDs").Return([]string(nil)).Maybe()
 		// three attempts, then the reply is dropped: a fourth call would fail
 		// the mock, which is the assertion.
 		registryMock.On("GetClientSideID", "server-1").Return("", unreachable).Times(3)
@@ -358,6 +372,7 @@ func TestSession(t *testing.T) {
 		t.Parallel()
 
 		var registryMock MockRequestRegistry
+		registryMock.On("ServerSideIDs").Return([]string(nil)).Maybe()
 		// the entry survives every attempt: a lookup that came back empty would
 		// have ended the retries after the first one.
 		registryMock.On("GetClientSideID", "server-1").Return("client-1", nil).Times(3)
@@ -379,6 +394,7 @@ func TestSession(t *testing.T) {
 		t.Parallel()
 
 		var registryMock MockRequestRegistry
+		registryMock.On("ServerSideIDs").Return([]string(nil)).Maybe()
 		registryMock.On("GetClientSideID", mock.Anything).Return("client-1", nil)
 		registryMock.On("DeleteByServerSideID", mock.Anything).Return(nil)
 		defer registryMock.AssertExpectations(t)
@@ -404,6 +420,7 @@ func TestSession(t *testing.T) {
 		t.Parallel()
 
 		var registryMock MockRequestRegistry
+		registryMock.On("ServerSideIDs").Return([]string(nil)).Maybe()
 		registryMock.On("GetClientSideID", "server-1").Return("client-1", nil)
 		registryMock.On("DeleteByServerSideID", "server-1").Return(nil).Once()
 		defer registryMock.AssertExpectations(t)
@@ -442,6 +459,7 @@ func TestSession(t *testing.T) {
 		t.Parallel()
 
 		var registryMock MockRequestRegistry
+		registryMock.On("ServerSideIDs").Return([]string(nil)).Maybe()
 		registryMock.On("GetClientSideID", "server-1").Return("", errors.New("registry is unreachable"))
 
 		c := newFakeConn()
@@ -469,6 +487,7 @@ func TestSession(t *testing.T) {
 		t.Parallel()
 
 		var registryMock MockRequestRegistry
+		registryMock.On("ServerSideIDs").Return([]string(nil)).Maybe()
 		registryMock.On("GetClientSideID", "someone-elses-request").Return("", domain.ErrNotExists).Once()
 		defer registryMock.AssertExpectations(t)
 
@@ -558,7 +577,7 @@ func TestSession(t *testing.T) {
 
 		c := newIdleConn()
 
-		s := newTestSession(c, panickingRegistry{}, &messagingMock.MockProduceConsumer{}, echoTranslator(), "runCode")
+		s := newTestSession(c, newPanickingRegistry(), &messagingMock.MockProduceConsumer{}, echoTranslator(), "runCode")
 
 		done := make(chan struct{})
 		go func() {

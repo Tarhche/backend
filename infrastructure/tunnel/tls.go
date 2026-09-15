@@ -17,15 +17,15 @@ import (
 // Everything about who the peer is is settled here, before a byte of the
 // protocol above is read. Nothing further down re-checks it, and nothing
 // further down could overlook it.
-func ServerTLS(files certificate.TLSFiles) (*tls.Config, error) {
-	return certificate.LoadServerTLSConfig(files)
+func ServerTLS(credentials certificate.Credentials) (*tls.Config, error) {
+	return certificate.ServerTLSConfig(credentials)
 }
 
 // ClientTLS is what an agent dials with: TLS 1.3, its own certificate, the
 // authority to check the hub against, and the name that hub has to
 // answer for.
-func ClientTLS(files certificate.TLSFiles) (*tls.Config, error) {
-	return certificate.LoadClientTLSConfig(files)
+func ClientTLS(credentials certificate.Credentials) (*tls.Config, error) {
+	return certificate.ClientTLSConfig(credentials)
 }
 
 // Listen returns a listener a hub serves on. The handshake happens as the

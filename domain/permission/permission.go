@@ -65,6 +65,22 @@ const (
 	LanguagesShow   = "languages.show"
 	LanguagesUpdate = "languages.update"
 	LanguagesDelete = "languages.delete"
+
+	RunnerTasksIndex  = "runner.tasks.index"
+	RunnerTasksCreate = "runner.tasks.create"
+	RunnerTasksShow   = "runner.tasks.show"
+	RunnerTasksDelete = "runner.tasks.delete"
+	RunnerTasksLogs   = "runner.tasks.logs"
+	RunnerTasksAttach = "runner.tasks.attach"
+
+	// RunnerTasksManage covers stopping, killing and restarting.
+	RunnerTasksManage = "runner.tasks.manage"
+
+	RunnerStacksIndex  = "runner.stacks.index"
+	RunnerStacksCreate = "runner.stacks.create"
+	RunnerStacksShow   = "runner.stacks.show"
+	RunnerStacksDelete = "runner.stacks.delete"
+	RunnerStacksManage = "runner.stacks.manage"
 )
 
 // user's self related accesses
@@ -84,4 +100,16 @@ const (
 
 	SelfFilesIndex  = "self.files.index"
 	SelfFilesDelete = "self.files.delete"
+
+	SelfRunnerTasksIndex  = "self.runner.tasks.index"
+	SelfRunnerTasksShow   = "self.runner.tasks.show"
+	SelfRunnerTasksLogs   = "self.runner.tasks.logs"
+	SelfRunnerTasksManage = "self.runner.tasks.manage"
+	SelfRunnerTasksAttach = "self.runner.tasks.attach"
+	SelfRunnerTasksDelete = "self.runner.tasks.delete"
+
+	SelfRunnerStacksIndex  = "self.runner.stacks.index"
+	SelfRunnerStacksShow   = "self.runner.stacks.show"
+	SelfRunnerStacksManage = "self.runner.stacks.manage"
+	SelfRunnerStacksDelete = "self.runner.stacks.delete"
 )

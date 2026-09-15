@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -17,35 +16,28 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/certificate"
 )
 
-// pki is an authority and somewhere to keep what it signs, the way a deployment
-// has one.
+// pki is an authority and what it signs, the way a deployment has one.
 type pki struct {
-	directory string
-	authority *certificate.Authority
-	files     certificate.TLSFiles
+	authority   *certificate.Authority
+	credentials certificate.Credentials
 }
 
 func newPKI(t *testing.T) *pki {
 	t.Helper()
 
-	directory := t.TempDir()
-
 	authority, err := certificate.GenerateCA("test authority", 0)
 	require.NoError(t, err)
 
-	files := certificate.AuthorityFiles(filepath.Join(directory, "ca"))
-	require.NoError(t, certificate.Write(files, authority.Certificate, authority.PrivateKey, false))
-
 	return &pki{
-		directory: directory,
-		authority: authority,
-		files:     certificate.TLSFiles{Authority: files.Certificate},
+		authority:   authority,
+		credentials: certificate.Credentials{Authority: string(certificate.EncodeCertificate(authority.Certificate))},
 	}
 }
 
-// issue writes a certificate under the authority and returns what to load it
-// with. A validity in the past or the future is how the expiry tests are made.
-func (p *pki) issue(t *testing.T, name string, server bool, request certificate.Request) certificate.TLSFiles {
+// issue signs a certificate under the authority and returns what to configure
+// an end with. A validity in the past or the future is how the expiry tests are
+// made.
+func (p *pki) issue(t *testing.T, name string, server bool, request certificate.Request) certificate.Credentials {
 	t.Helper()
 
 	request.Name = name
@@ -58,22 +50,22 @@ func (p *pki) issue(t *testing.T, name string, server bool, request certificate.
 	issued, key, err := issue(request)
 	require.NoError(t, err)
 
-	files := certificate.IdentityFiles(filepath.Join(p.directory, name))
-	require.NoError(t, certificate.Write(files, issued, key, true))
+	keyPEM, err := certificate.EncodePrivateKey(key)
+	require.NoError(t, err)
 
-	return certificate.TLSFiles{
-		Authority:   p.files.Authority,
-		Certificate: files.Certificate,
-		PrivateKey:  files.PrivateKey,
+	return certificate.Credentials{
+		Authority:   p.credentials.Authority,
+		Certificate: string(certificate.EncodeCertificate(issued)),
+		PrivateKey:  string(keyPEM),
 	}
 }
 
 // hubFiles and agentFiles are the ordinary cases.
-func (p *pki) hubFiles(t *testing.T) certificate.TLSFiles {
+func (p *pki) hubFiles(t *testing.T) certificate.Credentials {
 	return p.issue(t, "hub.example.internal", true, certificate.Request{})
 }
 
-func (p *pki) agentFiles(t *testing.T, name string) certificate.TLSFiles {
+func (p *pki) agentFiles(t *testing.T, name string) certificate.Credentials {
 	files := p.issue(t, name, false, certificate.Request{})
 	files.ServerName = "hub.example.internal"
 
@@ -81,7 +73,7 @@ func (p *pki) agentFiles(t *testing.T, name string) certificate.TLSFiles {
 }
 
 // mtlsTunnel stands a hub up on real mTLS and returns how to reach it.
-func mtlsTunnel(t *testing.T, p *pki, hub certificate.TLSFiles, options ...HubOption) (*Hub, string) {
+func mtlsTunnel(t *testing.T, p *pki, hub certificate.Credentials, options ...HubOption) (*Hub, string) {
 	t.Helper()
 
 	config := testConfig()
@@ -116,7 +108,7 @@ func mtlsTunnel(t *testing.T, p *pki, hub certificate.TLSFiles, options ...HubOp
 }
 
 // connect dials a hub the way an agent does, and reports what happened.
-func connect(t *testing.T, address string, files certificate.TLSFiles) (net.Conn, error) {
+func connect(t *testing.T, address string, files certificate.Credentials) (net.Conn, error) {
 	t.Helper()
 
 	config, err := ClientTLS(files)
@@ -202,7 +194,7 @@ func TestUnknownAuthority(t *testing.T) {
 
 		// the stranger's certificate, but our authority to check the hub
 		stranger := theirs.agentFiles(t, "agent-001")
-		stranger.Authority = ours.files.Authority
+		stranger.Authority = ours.credentials.Authority
 
 		conn, err := connect(t, address, stranger)
 		if err == nil {
@@ -335,32 +327,32 @@ func TestServerName(t *testing.T) {
 	})
 }
 
-// 12, 13 & 14. Missing and mismatched files
+// 12, 13 & 14. Missing and mismatched credentials
 func TestBadFiles(t *testing.T) {
 	p := newPKI(t)
 	files := p.agentFiles(t, "agent-001")
 
-	t.Run("a certificate that is not there", func(t *testing.T) {
+	t.Run("a certificate that was not given", func(t *testing.T) {
 		broken := files
-		broken.Certificate = filepath.Join(t.TempDir(), "missing.crt")
+		broken.Certificate = ""
 
 		_, err := ClientTLS(broken)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "missing.crt")
+		assert.Contains(t, err.Error(), "no certificate")
 	})
 
-	t.Run("a private key that is not there", func(t *testing.T) {
+	t.Run("a private key that was not given", func(t *testing.T) {
 		broken := files
-		broken.PrivateKey = filepath.Join(t.TempDir(), "missing.key")
+		broken.PrivateKey = ""
 
 		_, err := ClientTLS(broken)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "missing.key")
+		assert.Contains(t, err.Error(), "no private key")
 	})
 
-	t.Run("an authority that is not there", func(t *testing.T) {
+	t.Run("an authority that is not a certificate", func(t *testing.T) {
 		broken := files
-		broken.Authority = filepath.Join(t.TempDir(), "missing.crt")
+		broken.Authority = "not a certificate"
 
 		_, err := ClientTLS(broken)
 		assert.Error(t, err)
@@ -656,7 +648,7 @@ func TestCertificateAuthenticator(t *testing.T) {
 	})
 }
 
-func mustClientTLS(t *testing.T, files certificate.TLSFiles) *tls.Config {
+func mustClientTLS(t *testing.T, files certificate.Credentials) *tls.Config {
 	t.Helper()
 
 	config, err := ClientTLS(files)

@@ -3,7 +3,7 @@ package port
 // Port represents a network port
 type Port uint
 
-// PortBinding represents a host-to-container port binding
+// PortBinding represents a host-to-task port binding
 type PortBinding struct {
 	HostIP   string // Host IP to bind to
 	HostPort Port   // Host port

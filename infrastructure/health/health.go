@@ -5,7 +5,7 @@ package health
 import "time"
 
 // pingTimeout bounds how long a single ping may take. every pinger applies it,
-// so a probe answers well within the container healthcheck's own timeout instead
+// so a probe answers well within the task healthcheck's own timeout instead
 // of waiting out a driver's much longer default. a context that already expires
 // sooner keeps its own deadline.
 //

@@ -3,37 +3,36 @@ package gettasks
 import (
 	"context"
 
-	"github.com/khanzadimahdi/testproject/domain/runner/container"
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
 )
 
 type UseCase struct {
-	containerManager container.Manager
-	nodeName         string
+	taskManager task.Runtime
+	nodeName    string
 }
 
-func NewUseCase(containerManager container.Manager, nodeName string) *UseCase {
+func NewUseCase(taskManager task.Runtime, nodeName string) *UseCase {
 	return &UseCase{
-		containerManager: containerManager,
-		nodeName:         nodeName,
+		taskManager: taskManager,
+		nodeName:    nodeName,
 	}
 }
 
 func (uc *UseCase) Execute(ctx context.Context) (*Response, error) {
-	allContainers, err := uc.containerManager.GetByLabel(ctx, container.NodeNameLabelKey, uc.nodeName)
+	allTasks, err := uc.taskManager.OnNode(ctx, uc.nodeName)
 	if err != nil {
 		return nil, err
 	}
 
-	tasks := make([]task.Task, len(allContainers))
-	for i, c := range allContainers {
+	tasks := make([]task.Task, len(allTasks))
+	for i, c := range allTasks {
 		tasks[i] = task.Task{
-			UUID:        c.Labels[container.TaskUUIDLabelKey],
-			Name:        c.Labels[container.TaskNameLabelKey],
-			Image:       c.Image,
-			ContainerID: c.ID,
-			CreatedAt:   c.CreatedAt,
-			State:       uc.containerManager.EvaluateTaskState(c.Status),
+			UUID:         c.TaskUUID,
+			Name:         c.TaskName,
+			Image:        c.Image,
+			ExecutionID:  c.ID,
+			CreatedAt:    c.CreatedAt,
+			CurrentState: task.EvaluateState(c.Status, c.Kind, c.ExitCode),
 		}
 	}
 

@@ -75,13 +75,14 @@ func (c *ServeCommand) Configure(flagSet *console.FlagSet) {
 }
 
 // Providers returns the service providers required to serve the runner ingress.
-// It reaches nothing: the workers come to it, so it needs neither a database
-// nor messaging.
+// The workers come to it, so it reaches none of them; the database is only for
+// looking up which node is holding a task.
 func (c *ServeCommand) Providers() []provider.Provider {
 	return []provider.Provider{
 		providers.NewConfigsProvider(c.configs),
 		providers.NewOpenTelemetryProvider("runner-ingress", "runner-ingress"),
 		providers.NewProfilerProvider("runner-ingress"),
+		providers.NewMongodbProvider(),
 		providers.NewContainerProvider(),
 		runner.NewIngressProvider(),
 		c,
@@ -89,25 +90,25 @@ func (c *ServeCommand) Providers() []provider.Provider {
 }
 
 // Register registers the command's own dependencies, of which it has none.
-func (c *ServeCommand) Register(ctx context.Context, container provider.Container) error {
+func (c *ServeCommand) Register(ctx context.Context, task provider.Container) error {
 	return nil
 }
 
-// Boot resolves the command's dependencies from the booted container.
-func (c *ServeCommand) Boot(ctx context.Context, container provider.Container) error {
-	if err := container.Resolve(&c.handler); err != nil {
+// Boot resolves the command's dependencies from the booted task.
+func (c *ServeCommand) Boot(ctx context.Context, task provider.Container) error {
+	if err := task.Resolve(&c.handler); err != nil {
 		return err
 	}
 
-	if err := container.Resolve(&c.logger, provider.WithParams("runner-ingress")); err != nil {
+	if err := task.Resolve(&c.logger, provider.WithParams("runner-ingress")); err != nil {
 		return err
 	}
 
-	if err := container.Resolve(&c.tunnel, provider.ResolveName(runner.IngressTunnel)); err != nil {
+	if err := task.Resolve(&c.tunnel, provider.ResolveName(runner.IngressTunnel)); err != nil {
 		return err
 	}
 
-	return container.Resolve(&c.forwarder, provider.ResolveName(runner.IngressForwarder))
+	return task.Resolve(&c.forwarder, provider.ResolveName(runner.IngressForwarder))
 }
 
 // Terminate terminates the command's own resources, of which it has none. The
@@ -128,7 +129,7 @@ func (c *ServeCommand) Terminate(ctx context.Context) error {
 // @basePath		/
 // @schemes		http
 func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
-	tunnelConfig, err := tunnel.ServerTLS(certificate.TLSFiles{
+	tunnelConfig, err := tunnel.ServerTLS(certificate.Credentials{
 		Authority:   c.configs.TunnelAuthority,
 		Certificate: c.configs.TunnelCertificate,
 		PrivateKey:  c.configs.TunnelKey,

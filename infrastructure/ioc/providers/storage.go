@@ -2,6 +2,7 @@ package providers
 
 import (
 	"context"
+	"log"
 
 	"github.com/danceable/provider"
 
@@ -32,6 +33,8 @@ func (p *storageProvider) Register(ctx context.Context, c provider.Container) er
 		BucketName: blogConfigs.S3BucketName,
 	})
 	if err != nil {
+		log.Println("failed to create storage client:", err)
+
 		return err
 	}
 

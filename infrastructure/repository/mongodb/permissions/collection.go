@@ -84,4 +84,34 @@ var collection []permission.Permission = []permission.Permission{
 	// self files
 	{Name: "list of self files", Value: permission.SelfFilesIndex},
 	{Name: "delete a self file", Value: permission.SelfFilesDelete},
+
+	// self tasks
+	{Name: "list of self tasks", Value: permission.SelfRunnerTasksIndex},
+	{Name: "show a self task", Value: permission.SelfRunnerTasksShow},
+	{Name: "read a self task's logs", Value: permission.SelfRunnerTasksLogs},
+	{Name: "stop, kill or restart a self task", Value: permission.SelfRunnerTasksManage},
+	{Name: "open a terminal in a self task", Value: permission.SelfRunnerTasksAttach},
+	{Name: "delete a self task", Value: permission.SelfRunnerTasksDelete},
+
+	// self stacks
+	{Name: "list of self stacks", Value: permission.SelfRunnerStacksIndex},
+	{Name: "show a self stack", Value: permission.SelfRunnerStacksShow},
+	{Name: "stop, kill or restart a self stack", Value: permission.SelfRunnerStacksManage},
+	{Name: "delete a self stack", Value: permission.SelfRunnerStacksDelete},
+
+	// runner tasks
+	{Name: "list of tasks", Value: permission.RunnerTasksIndex},
+	{Name: "run a task", Value: permission.RunnerTasksCreate},
+	{Name: "show a task", Value: permission.RunnerTasksShow},
+	{Name: "delete a task", Value: permission.RunnerTasksDelete},
+	{Name: "read a task's logs", Value: permission.RunnerTasksLogs},
+	{Name: "stop, kill or restart a task", Value: permission.RunnerTasksManage},
+	{Name: "open a terminal in a task", Value: permission.RunnerTasksAttach},
+
+	// runner stacks
+	{Name: "list of stacks", Value: permission.RunnerStacksIndex},
+	{Name: "run a stack", Value: permission.RunnerStacksCreate},
+	{Name: "show a stack", Value: permission.RunnerStacksShow},
+	{Name: "delete a stack", Value: permission.RunnerStacksDelete},
+	{Name: "stop, kill or restart a stack", Value: permission.RunnerStacksManage},
 }

@@ -14,18 +14,28 @@ import (
 
 	checkhealth "github.com/khanzadimahdi/testproject/application/app/checkHealth"
 	workerHeartbeat "github.com/khanzadimahdi/testproject/application/runner/worker/beatHeart"
+	workerDeleteStack "github.com/khanzadimahdi/testproject/application/runner/worker/stack/deleteStack"
+	workerAttachTask "github.com/khanzadimahdi/testproject/application/runner/worker/task/attachTask"
 	workerTaskHeartbeat "github.com/khanzadimahdi/testproject/application/runner/worker/task/beatHeart"
 	workerDeleteTask "github.com/khanzadimahdi/testproject/application/runner/worker/task/deleteTask"
+	workerGetEndpoint "github.com/khanzadimahdi/testproject/application/runner/worker/task/getEndpoint"
 	workergettasks "github.com/khanzadimahdi/testproject/application/runner/worker/task/getTasks"
+	workerkilltask "github.com/khanzadimahdi/testproject/application/runner/worker/task/killTask"
+	workerrestarttask "github.com/khanzadimahdi/testproject/application/runner/worker/task/restartTask"
 	workerruntask "github.com/khanzadimahdi/testproject/application/runner/worker/task/runTask"
+	workerShipLogs "github.com/khanzadimahdi/testproject/application/runner/worker/task/shipLogs"
 	workerstoptask "github.com/khanzadimahdi/testproject/application/runner/worker/task/stopTask"
 	"github.com/khanzadimahdi/testproject/domain"
-	containerContract "github.com/khanzadimahdi/testproject/domain/runner/container"
+	networkContract "github.com/khanzadimahdi/testproject/domain/runner/network"
 	nodeContract "github.com/khanzadimahdi/testproject/domain/runner/node"
+	stackEvents "github.com/khanzadimahdi/testproject/domain/runner/stack/events"
+	"github.com/khanzadimahdi/testproject/domain/runner/task"
 	taskEvents "github.com/khanzadimahdi/testproject/domain/runner/task/events"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/certificate"
+	"github.com/khanzadimahdi/testproject/infrastructure/crypto/ecdsa"
 	infraHealth "github.com/khanzadimahdi/testproject/infrastructure/health"
+	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
 	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/jetstream/produceConsumer"
 	"github.com/khanzadimahdi/testproject/infrastructure/telemetry/profiler"
 	"github.com/khanzadimahdi/testproject/infrastructure/tunnel"
@@ -98,7 +108,7 @@ func (p *workerProvider) Boot(ctx context.Context, c provider.Container) error {
 //
 // Nothing dials a worker, so these are the only way a request reaches one. What
 // arrives on them is carried to whichever of the worker's own services was
-// asked for — its http api today, a container's port once there is one — so the
+// asked for — its http api today, a task's port once there is one — so the
 // ingress never learns where any of them are.
 func (p *workerProvider) bindTunnel(c provider.Container, nodeName string, logger *slog.Logger) error {
 	var workerConfigs *configs.RunnerWorker
@@ -106,7 +116,7 @@ func (p *workerProvider) bindTunnel(c provider.Container, nodeName string, logge
 		return err
 	}
 
-	tlsConfig, err := tunnel.ClientTLS(certificate.TLSFiles{
+	tlsConfig, err := tunnel.ClientTLS(certificate.Credentials{
 		Authority:   workerConfigs.TunnelAuthority,
 		Certificate: workerConfigs.TunnelCertificate,
 		PrivateKey:  workerConfigs.TunnelKey,
@@ -164,7 +174,8 @@ func (p *workerProvider) Terminate(ctx context.Context) error {
 
 func workerConsoleCommand(
 	natsConnection *nats.Conn,
-	containerManager containerContract.Manager,
+	taskManager task.Runtime,
+	networkManager networkContract.Manager,
 	nodeManager nodeContract.Manager,
 	asyncProduceConsumer domain.ProduceConsumer,
 	validator domain.Validator,
@@ -180,30 +191,86 @@ func workerConsoleCommand(
 		return nil, err
 	}
 
+	var workerConfigs *configs.RunnerWorker
+	if err := iocContainer.Resolve(&workerConfigs); err != nil {
+		return nil, err
+	}
+
+	// the network standalone isolated tasks share is made when the first
+	// task joins it rather than here. A node whose docker daemon is away
+	// for a moment — it restarts, or it comes up after the node does — would
+	// otherwise fail to start at all, and stay down until somebody noticed.
+
 	// tasks
-	getTasksUseCase := workergettasks.NewUseCase(containerManager, nodeName)
-	runTaskUseCase := workerruntask.NewUseCase(containerManager, validator, nodeName)
-	stopTaskUseCase := workerstoptask.NewUseCase(containerManager, validator)
-	deleteTaskUseCase := workerDeleteTask.NewUseCase(containerManager, validator)
+	getTasksUseCase := workergettasks.NewUseCase(taskManager, nodeName)
+	runTaskUseCase := workerruntask.NewUseCase(taskManager, networkManager, validator, nodeName)
+	stopTaskUseCase := workerstoptask.NewUseCase(taskManager, validator)
+	killTaskUseCase := workerkilltask.NewUseCase(taskManager, validator)
+	restartTaskUseCase := workerrestarttask.NewUseCase(taskManager, validator)
+	deleteTaskUseCase := workerDeleteTask.NewUseCase(taskManager, validator, logger)
+	attachTaskUseCase := workerAttachTask.NewUseCase(taskManager, validator)
 
 	// the worker talks to no database, so messaging is its only dependency
 	checkHealthUseCase := checkhealth.NewUseCase(
 		checkhealth.Dependency{Name: "messaging", Pinger: infraHealth.NewNatsPinger(natsConnection)},
 	)
 
-	mux := http.NewServeMux()
-
-	// the container healthcheck probes this
-	mux.Handle("GET /health", healthAPI.NewHealthHandler(checkHealthUseCase))
-
-	mux.Handle("GET /api/tasks", workerTaskAPI.NewIndexHandler(getTasksUseCase))
-	mux.Handle("POST /api/tasks/run", workerTaskAPI.NewRunHandler(runTaskUseCase))
-	mux.Handle("POST /api/tasks/{uuid}/stop", workerTaskAPI.NewStopHandler(stopTaskUseCase))
-
-	rateLimited, err := middleware.NewRateLimitMiddleware(mux, 600, 1*time.Minute)
+	// what the tokens the blog signs are verified against. A worker never mints
+	// one, so it holds the public half and could not sign a token if it tried.
+	publicKey, err := ecdsa.ParsePublicKey([]byte(workerConfigs.PublicKey))
 	if err != nil {
 		return nil, err
 	}
+
+	verifier := jwt.NewJWT(nil, publicKey)
+
+	// everything under /api is reachable from outside, through the ingress, so
+	// everything under /api says who it is -- everything, that is, but the
+	// terminal, which is opened on snippets that belong to nobody as readily as
+	// on tasks that belong to somebody. Whose a task is decides that,
+	// and only the node holding it knows.
+	tasks := http.NewServeMux()
+
+	tasks.Handle("GET /api/tasks", workerTaskAPI.NewIndexHandler(getTasksUseCase))
+	tasks.Handle("POST /api/tasks/run", workerTaskAPI.NewRunHandler(runTaskUseCase))
+	tasks.Handle("POST /api/tasks/{uuid}/stop", workerTaskAPI.NewStopHandler(stopTaskUseCase))
+	tasks.Handle("POST /api/tasks/{uuid}/kill", workerTaskAPI.NewKillHandler(killTaskUseCase))
+	tasks.Handle("POST /api/tasks/{uuid}/restart", workerTaskAPI.NewRestartHandler(restartTaskUseCase))
+
+	// a terminal inside a task. Only the manager reaches this, and it is
+	// what decides who may open one.
+
+	api := http.NewServeMux()
+
+	// the task healthcheck probes this, from inside the task, and it
+	// says nothing a caller could not find out by the service being up
+	api.Handle("GET /health", healthAPI.NewHealthHandler(checkHealthUseCase))
+
+	api.Handle("/api/", middleware.NewTokenMiddleware(tasks, verifier))
+
+	// a terminal, which asks for a token and does not insist on one: a snippet
+	// has no owner, so there is nobody it could be checked against.
+	api.Handle("GET /api/tasks/{uuid}/attach", middleware.NewOptionalTokenMiddleware(
+		workerTaskAPI.NewAttachHandler(attachTaskUseCase, logger),
+		verifier,
+	))
+
+	rateLimited, err := middleware.NewRateLimitMiddleware(api, 600, 1*time.Minute)
+	if err != nil {
+		return nil, err
+	}
+
+	mux := http.NewServeMux()
+
+	// the node's own answers, which are capped and carry its own headers
+	mux.Handle("/", middleware.NewCORSMiddleware(rateLimited))
+
+	// a task this node is holding, which only this node can reach: the
+	// ingress works out whose it is and sends the request here. Neither the cap
+	// nor the headers belong on it — what comes through is the task's own
+	// traffic, and answering for it is the task's, a preflight included.
+	getEndpointUseCase := workerGetEndpoint.NewUseCase(taskManager, workerConfigs.AdvertiseHost)
+	mux.Handle("/tasks/{slug}/{port}/{path...}", workerTaskAPI.NewProxyHandler(getEndpointUseCase, logger))
 
 	var tracedProfiler *profiler.TracedProfiler
 	if err := iocContainer.Resolve(&tracedProfiler); err != nil {
@@ -217,9 +284,7 @@ func workerConsoleCommand(
 				// inside Telemetry so profile samples link to the request span
 				middleware.NewProfilingMiddleware(
 					middleware.NewLogMiddleware(
-						middleware.NewCORSMiddleware(
-							rateLimited,
-						),
+						mux,
 						logger,
 					),
 					tracedProfiler,
@@ -230,9 +295,12 @@ func workerConsoleCommand(
 	)
 
 	subscribers := map[string]domain.MessageHandler{
-		taskEvents.TaskScheduledName:         workerruntask.NewTaskScheduled(runTaskUseCase, nodeName),
+		taskEvents.TaskScheduledName:         workerruntask.NewTaskScheduled(runTaskUseCase, asyncProduceConsumer, nodeName, logger),
 		taskEvents.TaskStoppageRequestedName: workerstoptask.NewStoppageTaskHandler(stopTaskUseCase),
+		taskEvents.TaskKillRequestedName:     workerkilltask.NewKillTaskHandler(killTaskUseCase),
+		taskEvents.TaskRestartRequestedName:  workerrestarttask.NewRestartTaskHandler(restartTaskUseCase),
 		taskEvents.TaskDeletedName:           workerDeleteTask.NewDeleteTaskHandler(deleteTaskUseCase),
+		stackEvents.StackDeletedName:         workerDeleteStack.NewStackDeletedHandler(networkManager, nodeName, logger),
 	}
 
 	// worker subscribers
@@ -251,7 +319,15 @@ func workerConsoleCommand(
 
 	// task heartbeat
 	if err := iocContainer.Bind(func() *workerTaskHeartbeat.UseCase {
-		return workerTaskHeartbeat.NewUseCase(containerManager, asyncProduceConsumer, nodeName, logger)
+		return workerTaskHeartbeat.NewUseCase(taskManager, asyncProduceConsumer, nodeName, logger)
+	}, provider.Singleton()); err != nil {
+		return nil, err
+	}
+
+	// log shipping, which is what makes a long-running task's output
+	// outlive the task.
+	if err := iocContainer.Bind(func() *workerShipLogs.UseCase {
+		return workerShipLogs.NewUseCase(taskManager, asyncProduceConsumer, nodeName, logger)
 	}, provider.Singleton()); err != nil {
 		return nil, err
 	}

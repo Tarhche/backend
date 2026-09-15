@@ -5,7 +5,6 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 )
 
@@ -19,9 +18,11 @@ var (
 	ErrNoTrustAnchor = errors.New("certificate: no certificate authority to trust")
 )
 
-// TLSFiles is what one end of a tunnel is configured with. The authority's
-// private key is deliberately not among them: nothing that runs needs it.
-type TLSFiles struct {
+// Credentials is what one end of a tunnel is configured with: the PEM itself
+// rather than where to find it, so that a deployment carries its identity the
+// way it carries every other secret. The authority's private key is
+// deliberately not among them: nothing that runs needs it.
+type Credentials struct {
 	// Authority is the certificate everything is verified against.
 	Authority string
 
@@ -34,20 +35,20 @@ type TLSFiles struct {
 	ServerName string
 }
 
-// LoadServerTLSConfig builds what the side being dialled listens with.
+// ServerTLSConfig builds what the side being dialled listens with.
 //
 // It requires a client certificate and verifies it: RequireAndVerifyClientCert
 // checks the chain against the authority, the validity dates, and that the
 // certificate is good for clientAuth. A connection that fails any of those does
 // not complete the handshake, so it never reaches anything that could be
 // persuaded to overlook it.
-func LoadServerTLSConfig(files TLSFiles) (*tls.Config, error) {
-	certificate, err := loadKeyPair(files)
+func ServerTLSConfig(credentials Credentials) (*tls.Config, error) {
+	certificate, err := keyPair(credentials)
 	if err != nil {
 		return nil, err
 	}
 
-	pool, err := LoadPool(files.Authority)
+	pool, err := Pool(credentials.Authority)
 	if err != nil {
 		return nil, err
 	}
@@ -67,22 +68,22 @@ func LoadServerTLSConfig(files TLSFiles) (*tls.Config, error) {
 	}, nil
 }
 
-// LoadClientTLSConfig builds what the side that dials dials with.
+// ClientTLSConfig builds what the side that dials dials with.
 //
 // ServerName is what the far certificate has to answer for, and it is checked:
 // without it a client would hand its credentials to anything holding any
 // certificate the authority signed — including another client's.
-func LoadClientTLSConfig(files TLSFiles) (*tls.Config, error) {
-	if len(files.ServerName) == 0 {
+func ClientTLSConfig(credentials Credentials) (*tls.Config, error) {
+	if len(credentials.ServerName) == 0 {
 		return nil, errors.New("certificate: a client has to be told which server to expect")
 	}
 
-	certificate, err := loadKeyPair(files)
+	certificate, err := keyPair(credentials)
 	if err != nil {
 		return nil, err
 	}
 
-	pool, err := LoadPool(files.Authority)
+	pool, err := Pool(credentials.Authority)
 	if err != nil {
 		return nil, err
 	}
@@ -95,44 +96,42 @@ func LoadClientTLSConfig(files TLSFiles) (*tls.Config, error) {
 		},
 
 		RootCAs:    pool,
-		ServerName: files.ServerName,
+		ServerName: credentials.ServerName,
 	}, nil
 }
 
-// LoadPool reads the authority everything is verified against.
+// Pool is the authority everything is verified against.
 //
 // Only what is given: the system's trust store has no business vouching for a
 // private peer, and including it would mean any public authority could issue
 // one.
-func LoadPool(path string) (*x509.CertPool, error) {
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("certificate: could not read the authority at %s: %w", path, err)
+func Pool(authority string) (*x509.CertPool, error) {
+	if len(authority) == 0 {
+		return nil, fmt.Errorf("%w: none was given", ErrNoTrustAnchor)
 	}
 
 	pool := x509.NewCertPool()
-	if !pool.AppendCertsFromPEM(raw) {
-		return nil, fmt.Errorf("%w: %s holds no certificate", ErrNoTrustAnchor, path)
+	if !pool.AppendCertsFromPEM([]byte(authority)) {
+		return nil, fmt.Errorf("%w: what was given holds no certificate", ErrNoTrustAnchor)
 	}
 
 	return pool, nil
 }
 
-func loadKeyPair(files TLSFiles) (*tls.Certificate, error) {
-	if _, err := os.Stat(files.Certificate); err != nil {
-		return nil, fmt.Errorf("certificate: could not read the certificate at %s: %w", files.Certificate, err)
+func keyPair(credentials Credentials) (*tls.Certificate, error) {
+	if len(credentials.Certificate) == 0 {
+		return nil, errors.New("certificate: no certificate was given")
 	}
 
-	if _, err := os.Stat(files.PrivateKey); err != nil {
-		return nil, fmt.Errorf("certificate: could not read the private key at %s: %w", files.PrivateKey, err)
+	if len(credentials.PrivateKey) == 0 {
+		return nil, errors.New("certificate: no private key was given")
 	}
 
-	// tls.LoadX509KeyPair checks that the key belongs to the certificate, which
-	// is the one mistake a misconfigured deployment makes most often.
-	pair, err := tls.LoadX509KeyPair(files.Certificate, files.PrivateKey)
+	// tls.X509KeyPair checks that the key belongs to the certificate, which is
+	// the one mistake a misconfigured deployment makes most often.
+	pair, err := tls.X509KeyPair([]byte(credentials.Certificate), []byte(credentials.PrivateKey))
 	if err != nil {
-		return nil, fmt.Errorf("certificate: the certificate at %s and the key at %s do not go together: %w",
-			files.Certificate, files.PrivateKey, err)
+		return nil, fmt.Errorf("certificate: the certificate and the private key do not go together: %w", err)
 	}
 
 	return &pair, nil

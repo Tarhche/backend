@@ -26,7 +26,7 @@ var (
 //
 // It is the whole of the agent's authorisation: the hub asks, and this
 // decides. Naming a service rather than an address is what lets an agent offer
-// several things — an api, a database, a container's port — without the hub
+// several things — an api, a database, a task's port — without the hub
 // knowing what any of them are or where they live, and lets them move without
 // anything else being told.
 type Targets interface {
@@ -87,7 +87,7 @@ func (r AddressRule) allows(host string, port uint16) bool {
 // connect a stream to, each a single port or a span of them:
 //
 //	127.0.0.1:5432              one port
-//	127.0.0.1:30000-31000       a span, which is how published container ports
+//	127.0.0.1:30000-31000       a span, which is how published task ports
 //	                            are allowed without naming each one
 //
 // Nothing is allowed by default. What is not listed here an agent will not

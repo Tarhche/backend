@@ -35,11 +35,11 @@ func (uc *TaskStopped) Handle(ctx context.Context, data []byte) error {
 	}
 
 	destinationState := task.Stopped
-	if t.State == destinationState {
+	if t.CurrentState == destinationState {
 		return nil
 	}
 
-	t.State = destinationState
+	t.CurrentState = destinationState
 	_, err = uc.taskRepository.Save(ctx, &t)
 
 	return err

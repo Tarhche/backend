@@ -88,25 +88,25 @@ func (c *ServeCommand) Providers() []provider.Provider {
 }
 
 // Register registers the command's own dependencies, of which it has none.
-func (c *ServeCommand) Register(ctx context.Context, container provider.Container) error {
+func (c *ServeCommand) Register(ctx context.Context, task provider.Container) error {
 	return nil
 }
 
-// Boot resolves the command's dependencies from the booted container.
-func (c *ServeCommand) Boot(ctx context.Context, container provider.Container) error {
-	if err := container.Resolve(&c.handler); err != nil {
+// Boot resolves the command's dependencies from the booted task.
+func (c *ServeCommand) Boot(ctx context.Context, task provider.Container) error {
+	if err := task.Resolve(&c.handler); err != nil {
 		return err
 	}
 
-	if err := container.Resolve(&c.consumer); err != nil {
+	if err := task.Resolve(&c.consumer); err != nil {
 		return err
 	}
 
-	if err := container.Resolve(&c.logger, provider.WithParams("blog")); err != nil {
+	if err := task.Resolve(&c.logger, provider.WithParams("blog")); err != nil {
 		return err
 	}
 
-	return container.Resolve(&c.consumers, provider.ResolveName(providers.BlogSubscribers))
+	return task.Resolve(&c.consumers, provider.ResolveName(providers.BlogSubscribers))
 }
 
 // Terminate terminates the command's own resources, of which it has none. The

@@ -239,7 +239,10 @@ func TestIngress(t *testing.T) {
 
 		require.Equal(t, console.ExitSuccess, command.Run(t.Context()))
 
-		pool, err := certificate.LoadPool(authority.Certificate)
+		authorityCertificate, err := certificate.LoadCertificate(authority.Certificate)
+		require.NoError(t, err)
+
+		pool, err := certificate.Pool(string(certificate.EncodeCertificate(authorityCertificate)))
 		require.NoError(t, err)
 
 		issued, err := certificate.LoadCertificate(certificate.IdentityFiles(directory).Certificate)

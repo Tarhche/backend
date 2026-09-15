@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -184,28 +183,23 @@ func findAvailablePort() int {
 	return addr.Port
 }
 
-// testCertificates writes an authority and an ingress certificate under it, so
+// testCertificates signs an authority and an ingress certificate under it, so
 // the tunnel can listen without anything having to exist beforehand.
-func testCertificates(t *testing.T) certificate.TLSFiles {
+func testCertificates(t *testing.T) certificate.Credentials {
 	t.Helper()
-
-	directory := t.TempDir()
 
 	authority, err := certificate.GenerateCA("test authority", 0)
 	assert.NoError(t, err)
 
-	authorityFiles := certificate.AuthorityFiles(filepath.Join(directory, "ca"))
-	assert.NoError(t, certificate.Write(authorityFiles, authority.Certificate, authority.PrivateKey, false))
-
 	issued, key, err := authority.GenerateServerCertificate(certificate.Request{Name: "runner-ingress"})
 	assert.NoError(t, err)
 
-	issuedFiles := certificate.IdentityFiles(filepath.Join(directory, "ingress"))
-	assert.NoError(t, certificate.Write(issuedFiles, issued, key, false))
+	keyPEM, err := certificate.EncodePrivateKey(key)
+	assert.NoError(t, err)
 
-	return certificate.TLSFiles{
-		Authority:   authorityFiles.Certificate,
-		Certificate: issuedFiles.Certificate,
-		PrivateKey:  issuedFiles.PrivateKey,
+	return certificate.Credentials{
+		Authority:   string(certificate.EncodeCertificate(authority.Certificate)),
+		Certificate: string(certificate.EncodeCertificate(issued)),
+		PrivateKey:  string(keyPEM),
 	}
 }

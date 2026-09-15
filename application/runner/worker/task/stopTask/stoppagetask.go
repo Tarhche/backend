@@ -3,6 +3,7 @@ package stopTask
 import (
 	"context"
 	"encoding/json"
+	"errors"
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/runner/task/events"
@@ -34,7 +35,7 @@ func (h *StoppageTaskHandler) Handle(ctx context.Context, data []byte) error {
 	request := &Request{UUID: taskStoppageRequested.UUID}
 
 	_, err := h.useCase.Execute(ctx, request)
-	if err == domain.ErrNotExists {
+	if errors.Is(err, domain.ErrNotExists) {
 		return nil
 	}
 

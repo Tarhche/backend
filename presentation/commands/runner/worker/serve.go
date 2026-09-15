@@ -12,6 +12,7 @@ import (
 
 	workerHeartbeat "github.com/khanzadimahdi/testproject/application/runner/worker/beatHeart"
 	taskHeartbeat "github.com/khanzadimahdi/testproject/application/runner/worker/task/beatHeart"
+	shipLogs "github.com/khanzadimahdi/testproject/application/runner/worker/task/shipLogs"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers"
@@ -23,6 +24,11 @@ const (
 	serveName               string = "serve-runner-worker"
 	workerHeartbeatInterval        = 1 * time.Second
 	taskHeartbeatInterval          = 300 * time.Millisecond
+
+	// logShippingInterval is how often the followers are brought in line with
+	// what is running. A task that has just started is followed within
+	// this long, and one that has gone is let go.
+	logShippingInterval = 1 * time.Second
 )
 
 type ServeCommand struct {
@@ -32,6 +38,7 @@ type ServeCommand struct {
 	consumers       map[string]domain.MessageHandler
 	taskHeartBeat   *taskHeartbeat.UseCase
 	workerHeartBeat *workerHeartbeat.UseCase
+	logShipper      *shipLogs.UseCase
 
 	// tunnel holds this worker's connections to the ingresses. They are how a
 	// request reaches it: nothing dials a worker, so its own port answers only
@@ -79,7 +86,7 @@ func (c *ServeCommand) Configure(flagSet *console.FlagSet) {
 
 // Providers returns the service providers required to serve the runner worker.
 // The worker name (configured by flag or environment) is bound into the
-// container so the worker providers can resolve it.
+// task so the worker providers can resolve it.
 func (c *ServeCommand) Providers() []provider.Provider {
 	return []provider.Provider{
 		providers.NewConfigsProvider(c.configs),
@@ -97,37 +104,41 @@ func (c *ServeCommand) Providers() []provider.Provider {
 }
 
 // Register registers the command's own dependencies, of which it has none.
-func (c *ServeCommand) Register(ctx context.Context, container provider.Container) error {
+func (c *ServeCommand) Register(ctx context.Context, task provider.Container) error {
 	return nil
 }
 
-// Boot resolves the command's dependencies from the booted container.
-func (c *ServeCommand) Boot(ctx context.Context, container provider.Container) error {
-	if err := container.Resolve(&c.handler); err != nil {
+// Boot resolves the command's dependencies from the booted task.
+func (c *ServeCommand) Boot(ctx context.Context, task provider.Container) error {
+	if err := task.Resolve(&c.handler); err != nil {
 		return err
 	}
 
-	if err := container.Resolve(&c.consumer); err != nil {
+	if err := task.Resolve(&c.consumer); err != nil {
 		return err
 	}
 
-	if err := container.Resolve(&c.taskHeartBeat); err != nil {
+	if err := task.Resolve(&c.taskHeartBeat); err != nil {
 		return err
 	}
 
-	if err := container.Resolve(&c.workerHeartBeat); err != nil {
+	if err := task.Resolve(&c.workerHeartBeat); err != nil {
 		return err
 	}
 
-	if err := container.Resolve(&c.tunnel); err != nil {
+	if err := task.Resolve(&c.logShipper); err != nil {
 		return err
 	}
 
-	if err := container.Resolve(&c.logger, provider.WithParams("runner-worker-"+c.configs.Name)); err != nil {
+	if err := task.Resolve(&c.tunnel); err != nil {
 		return err
 	}
 
-	return container.Resolve(&c.consumers, provider.ResolveName(runner.WorkerSubscribers))
+	if err := task.Resolve(&c.logger, provider.WithParams("runner-worker-"+c.configs.Name)); err != nil {
+		return err
+	}
+
+	return task.Resolve(&c.consumers, provider.ResolveName(runner.WorkerSubscribers))
 }
 
 // Terminate terminates the command's own resources, of which it has none. The
@@ -176,6 +187,7 @@ func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 
 	go c.tasksHeartbeat(ctx)
 	go c.workerHeartbeat(ctx)
+	go c.shipLogs(ctx)
 	go c.serveTunnel(ctx)
 
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -225,6 +237,26 @@ func (c *ServeCommand) tasksHeartbeat(ctx context.Context) {
 			err := c.taskHeartBeat.Execute(ctx)
 			if err != nil {
 				c.logger.ErrorContext(ctx, "task heartbeat failed", "error", err)
+			}
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+// shipLogs keeps a follower on every long-running task this node holds, so
+// what they write reaches the manager as it is written.
+func (c *ServeCommand) shipLogs(ctx context.Context) {
+	defer c.logShipper.Close()
+
+	ticker := time.NewTicker(logShippingInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			if err := c.logShipper.Execute(ctx); err != nil {
+				c.logger.ErrorContext(ctx, "log shipping failed", "error", err)
 			}
 		case <-ctx.Done():
 			return

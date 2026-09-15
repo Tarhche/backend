@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"reflect"
 	"time"
 
 	"github.com/khanzadimahdi/testproject/domain/role"
@@ -30,6 +31,15 @@ func FromContext(ctx context.Context) *user.User {
 	u, _ := ctx.Value(AuthKey).(*user.User)
 
 	return u
+}
+
+func UUIDFromContext(ctx context.Context) string {
+	u := FromContext(ctx)
+	if u == nil || reflect.ValueOf(u).IsNil() || len(u.UUID) == 0 {
+		return ""
+	}
+
+	return u.UUID
 }
 
 func ToContext(ctx context.Context, user *user.User) context.Context {

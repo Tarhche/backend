@@ -12,8 +12,14 @@ import (
 	"time"
 
 	"github.com/danceable/console"
+	workerHeartbeat "github.com/khanzadimahdi/testproject/application/runner/worker/beatHeart"
+	taskHeartbeat "github.com/khanzadimahdi/testproject/application/runner/worker/task/beatHeart"
+	shipLogs "github.com/khanzadimahdi/testproject/application/runner/worker/task/shipLogs"
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/runner/node"
+	"github.com/khanzadimahdi/testproject/domain/runner/task"
 	messaging "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
+	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/runner/runtime"
 	"github.com/khanzadimahdi/testproject/infrastructure/tunnel"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -195,7 +201,15 @@ func TestServe(t *testing.T) {
 
 		var consumer messaging.MockProduceConsumer
 		consumer.On("Consume", ctx, mock.Anything, mock.Anything).Times(len(subscribers)).Return(nil)
+		consumer.On("Produce", mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 		defer consumer.AssertExpectations(t)
+
+		var nodeManager runtime.MockNodeManager
+		nodeManager.On("Stats", mock.Anything, mock.Anything).Return(node.Stats{}, nil).Maybe()
+
+		var taskManager runtime.MockRuntime
+		taskManager.On("Of", mock.Anything, mock.Anything).
+			Return([]task.Execution{}, nil).Maybe()
 
 		command := NewServeCommand()
 		command.configs.Name = consumerName
@@ -203,7 +217,14 @@ func TestServe(t *testing.T) {
 		command.handler = handler
 		command.consumer = &consumer
 		command.consumers = subscribers
-		command.logger = slog.New(slog.DiscardHandler)
+		command.logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+
+		// the background work a running worker does. It is set here because
+		// Run starts it, and a command assembled by hand has to be assembled
+		// completely.
+		command.logShipper = shipLogs.NewUseCase(&taskManager, &consumer, consumerName, command.logger)
+		command.taskHeartBeat = taskHeartbeat.NewUseCase(&taskManager, &consumer, consumerName, command.logger)
+		command.workerHeartBeat = workerHeartbeat.NewUseCase(&consumer, &nodeManager, consumerName)
 
 		// nothing is listening for it, so the pool spends the test trying to
 		// connect and the worker serves its own port regardless — which is the

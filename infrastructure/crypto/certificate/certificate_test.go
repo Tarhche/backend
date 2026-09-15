@@ -325,33 +325,25 @@ func TestSubjectAlternativeName(t *testing.T) {
 	})
 }
 
-func TestLoadPool(t *testing.T) {
+func TestPool(t *testing.T) {
 	t.Run("an authority is read into a pool", func(t *testing.T) {
-		directory := t.TempDir()
-
 		authority, err := GenerateCA("test authority", 0)
 		require.NoError(t, err)
 
-		files := AuthorityFiles(directory)
-		require.NoError(t, Write(files, authority.Certificate, authority.PrivateKey, false))
-
-		pool, err := LoadPool(files.Certificate)
+		pool, err := Pool(string(EncodeCertificate(authority.Certificate)))
 		assert.NoError(t, err)
 		assert.NotNil(t, pool)
 	})
 
-	t.Run("a file with nothing in it is a mistake rather than trusting everything", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "empty.crt")
-		require.NoError(t, os.WriteFile(path, nil, 0o600))
+	t.Run("nothing at all is a mistake rather than trusting everything", func(t *testing.T) {
+		_, err := Pool("")
 
-		_, err := LoadPool(path)
 		assert.ErrorIs(t, err, ErrNoTrustAnchor)
 	})
 
-	t.Run("an authority that is not there says which one", func(t *testing.T) {
-		_, err := LoadPool(filepath.Join(t.TempDir(), "missing.crt"))
+	t.Run("something that is not a certificate is a mistake too", func(t *testing.T) {
+		_, err := Pool("-----BEGIN CERTIFICATE-----\nnot a certificate\n-----END CERTIFICATE-----")
 
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "missing.crt")
+		assert.ErrorIs(t, err, ErrNoTrustAnchor)
 	})
 }

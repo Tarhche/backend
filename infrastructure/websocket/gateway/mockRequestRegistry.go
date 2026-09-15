@@ -37,6 +37,13 @@ func (m *MockRequestRegistry) DeleteByServerSideID(serverSideID string) error {
 	return args.Error(0)
 }
 
+// ServerSideIDs returns the requests that are still waiting for a reply.
+func (m *MockRequestRegistry) ServerSideIDs() []string {
+	args := m.Called()
+
+	return args.Get(0).([]string)
+}
+
 // Len returns how many requests are waiting for a reply.
 func (m *MockRequestRegistry) Len() int {
 	args := m.Called()

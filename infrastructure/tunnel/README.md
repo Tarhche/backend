@@ -180,6 +180,16 @@ prints a private key**, and none sends one anywhere.
 `make certs` does all of the above for development, under `tmp/`, which is not
 in the repository.
 
+### Configuring an end with them
+
+What a hub or an agent is configured with is the **PEM itself**, not a path to
+it: `certificate.Credentials` holds the authority, the end's own certificate and
+its private key as text, so an identity travels the way every other secret does
+— an environment variable, a secret store — and nothing has to be mounted beside
+a binary. Files are how certificates are *made* and kept, not how they are
+handed to a service. `make certs-env` prints a development set as the `.env`
+lines that carry it.
+
 ### Identity
 
 The name goes in a **subject alternative name**, not only the common name —
@@ -491,10 +501,10 @@ auth := tunnel.NewCertificateAuthenticator(
     tunnel.AllowSignedAgents(),
 )
 
-serverTLS, _ := tunnel.ServerTLS(certificate.TLSFiles{
-    Authority:   "./certs/ca/ca.crt",
-    Certificate: "./certs/hub/tls.crt",
-    PrivateKey:  "./certs/hub/tls.key",
+serverTLS, _ := tunnel.ServerTLS(certificate.Credentials{
+    Authority:   authorityPEM,
+    Certificate: hubCertificatePEM,
+    PrivateKey:  hubKeyPEM,
 })
 
 hub, _ := tunnel.NewHub(tunnel.DefaultConfig(), auth, logger)

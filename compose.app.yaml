@@ -7,6 +7,7 @@ services:
       - app
       - mongodb
       - nats
+      - runner_manager
       - monitoring
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:80/health"]
@@ -71,10 +72,15 @@ services:
       OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT: ${OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT:-}
       OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
       PROFILING_ENABLED: ${PROFILING_ENABLED:-true}
+      RUNNER_MANAGER_URL: ${BACKEND_RUNNER_MANAGER_URL}
+      RUNNER_INGRESS_DOMAIN: ${BACKEND_RUNNER_INGRESS_DOMAIN}
 
 networks:
   app:
     name: app
+    external: true
+  runner_manager:
+    name: runner_manager
     external: true
   mongodb:
     name: mongodb

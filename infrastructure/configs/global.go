@@ -3,7 +3,7 @@
 // Every setting is a field carrying the flag and the environment variable it is
 // read from, so the console populates them once at startup and nothing else in
 // the application ever reads the environment for itself. The values reach their
-// consumers through the dependency injection container, bound by the configs
+// consumers through the dependency injection task, bound by the configs
 // provider.
 package configs
 

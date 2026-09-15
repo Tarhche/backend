@@ -3,6 +3,7 @@ package runTask
 import (
 	"context"
 	"encoding/json"
+	"slices"
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
@@ -34,14 +35,49 @@ func (uc *TaskRan) Handle(ctx context.Context, data []byte) error {
 		return err
 	}
 
-	destinationState := task.Running
-	if t.State == destinationState {
+	endpoints := toEndpoints(taskRan.Endpoints)
+
+	// a running task heartbeats several times a second, and each beat
+	// reaches here. Only what has actually changed is worth a write: the
+	// endpoints, because a restarted task comes back on new host ports,
+	// and the state, the first time it comes up.
+	changed := t.NodeName != taskRan.NodeName ||
+		t.ExecutionID != taskRan.ExecutionID ||
+		!t.Deadline.Equal(taskRan.Deadline) ||
+		!slices.Equal(t.Endpoints, endpoints)
+
+	t.NodeName = taskRan.NodeName
+	t.ExecutionID = taskRan.ExecutionID
+	t.Endpoints = endpoints
+
+	// what the task is running against, which only the node that made it
+	// knows: a task that came back is running against a new one.
+	t.Deadline = taskRan.Deadline
+
+	if t.CurrentState != task.Running {
+		t.CurrentState = task.Running
+		t.StartedAt = taskRan.StartedAt
+		changed = true
+	}
+
+	if !changed {
 		return nil
 	}
 
-	t.State = destinationState
-	t.StartedAt = taskRan.StartedAt
 	_, err = uc.taskRepository.Save(ctx, &t)
 
 	return err
+}
+
+// toEndpoints reads the addresses a worker published a task on.
+func toEndpoints(endpoints []events.Endpoint) []task.Endpoint {
+	result := make([]task.Endpoint, len(endpoints))
+	for i, e := range endpoints {
+		result[i] = task.Endpoint{
+			TaskPort: e.TaskPort,
+			HostPort: e.HostPort,
+		}
+	}
+
+	return result
 }

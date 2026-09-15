@@ -74,22 +74,35 @@ func Write(files Files, certificate *x509.Certificate, key *ecdsa.PrivateKey, fo
 		}
 	}
 
-	certificatePEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certificate.Raw})
-	if err := os.WriteFile(files.Certificate, certificatePEM, CertificateMode); err != nil {
+	if err := os.WriteFile(files.Certificate, EncodeCertificate(certificate), CertificateMode); err != nil {
 		return err
 	}
 
-	der, err := x509.MarshalECPrivateKey(key)
+	keyPEM, err := EncodePrivateKey(key)
 	if err != nil {
 		return err
 	}
-
-	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: der})
 
 	// written through a file created with the mode it needs rather than one
 	// corrected afterwards: between the two there is a moment where the key is
 	// readable by anyone.
 	return os.WriteFile(files.PrivateKey, keyPEM, PrivateKeyMode)
+}
+
+// EncodeCertificate is a certificate as the PEM that is handed out, which is
+// what a deployment is configured with and what Write puts on disk.
+func EncodeCertificate(certificate *x509.Certificate) []byte {
+	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certificate.Raw})
+}
+
+// EncodePrivateKey is a private key as PEM.
+func EncodePrivateKey(key *ecdsa.PrivateKey) ([]byte, error) {
+	der, err := x509.MarshalECPrivateKey(key)
+	if err != nil {
+		return nil, err
+	}
+
+	return pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: der}), nil
 }
 
 // LoadCA reads an authority back, which is only needed to sign with.
