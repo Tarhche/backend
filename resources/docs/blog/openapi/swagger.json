@@ -4348,6 +4348,52 @@
                 }
             }
         },
+        "/dashboard/users/{uuid}/impersonate": {
+            "post": {
+                "description": "obtain a session that acts as the given user, saying who is behind it",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard users"
+                ],
+                "summary": "Sign in as a user",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "User UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/impersonateuser.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/files/{uuid}": {
             "get": {
                 "description": "serve file content by UUID",
@@ -5721,7 +5767,32 @@
                 "email": {
                     "type": "string"
                 },
+                "impersonated_by": {
+                    "description": "ImpersonatedBy is who is seeing the dashboard as this user. It is absent\nfrom an ordinary session, and is what lets the dashboard say whose eyes\nthese are without being told by whoever is holding the token.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/getprofile.impersonatorResponse"
+                        }
+                    ]
+                },
                 "language_code": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                }
+            }
+        },
+        "getprofile.impersonatorResponse": {
+            "type": "object",
+            "properties": {
+                "avatar": {
                     "type": "string"
                 },
                 "name": {
@@ -7040,6 +7111,48 @@
                     "type": "string"
                 },
                 "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "impersonateuser.Response": {
+            "type": "object",
+            "properties": {
+                "access_token": {
+                    "type": "string"
+                },
+                "errors": {
+                    "$ref": "#/definitions/domain.ValidationErrors"
+                },
+                "refresh_token": {
+                    "type": "string"
+                },
+                "user": {
+                    "description": "User is who the tokens are for. The caller has just been handed a session\nthat is not theirs, so it is told whose it is, and does not have to ask.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/impersonateuser.userResponse"
+                        }
+                    ]
+                }
+            }
+        },
+        "impersonateuser.userResponse": {
+            "type": "object",
+            "properties": {
+                "avatar": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                },
+                "uuid": {
                     "type": "string"
                 }
             }

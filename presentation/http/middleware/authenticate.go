@@ -39,7 +39,7 @@ func NewAuthenticateMiddleware(next http.Handler, j *jwt.JWT, userRepository use
 }
 
 func (a *Authenticate) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
-	user, err := a.authenticator.Authenticate(r.Context(), bearerToken(r))
+	identity, err := a.authenticator.Authenticate(r.Context(), bearerToken(r))
 
 	switch {
 	case errors.Is(err, auth.ErrBanned):
@@ -52,7 +52,7 @@ func (a *Authenticate) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	a.next.ServeHTTP(rw, r.WithContext(auth.ToContext(r.Context(), &user)))
+	a.next.ServeHTTP(rw, r.WithContext(auth.IdentityToContext(r.Context(), identity)))
 }
 
 // bearerToken takes the token out of the request, and is shared by everything

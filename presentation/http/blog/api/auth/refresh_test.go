@@ -75,6 +75,7 @@ func TestRefreshHandler(t *testing.T) {
 		var (
 			userRepository   users.MockUsersRepository
 			roleRepository   roles.MockRolesRepository
+			authorizer       domain.MockAuthorizer
 			requestValidator validator.MockValidator
 			translator       translator.TranslatorMock
 
@@ -111,7 +112,7 @@ func TestRefreshHandler(t *testing.T) {
 
 		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
 
-		handler := NewRefreshHandler(refresh.NewUseCase(&userRepository, j, authTokenGenerator, &translator, &requestValidator))
+		handler := NewRefreshHandler(refresh.NewUseCase(&userRepository, j, authTokenGenerator, &authorizer, &translator, &requestValidator))
 
 		request := httptest.NewRequest(http.MethodPost, "/", &payload)
 		response := httptest.NewRecorder()
@@ -132,6 +133,7 @@ func TestRefreshHandler(t *testing.T) {
 		var (
 			userRepository   users.MockUsersRepository
 			roleRepository   roles.MockRolesRepository
+			authorizer       domain.MockAuthorizer
 			requestValidator validator.MockValidator
 			translator       translator.TranslatorMock
 		)
@@ -143,7 +145,7 @@ func TestRefreshHandler(t *testing.T) {
 
 		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
 
-		handler := NewRefreshHandler(refresh.NewUseCase(&userRepository, j, authTokenGenerator, &translator, &requestValidator))
+		handler := NewRefreshHandler(refresh.NewUseCase(&userRepository, j, authTokenGenerator, &authorizer, &translator, &requestValidator))
 
 		request := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString("{}"))
 		response := httptest.NewRecorder()
@@ -168,6 +170,7 @@ func TestRefreshHandler(t *testing.T) {
 		var (
 			userRepository   users.MockUsersRepository
 			roleRepository   roles.MockRolesRepository
+			authorizer       domain.MockAuthorizer
 			requestValidator validator.MockValidator
 			translator       translator.TranslatorMock
 
@@ -204,7 +207,7 @@ func TestRefreshHandler(t *testing.T) {
 
 		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
 
-		handler := NewRefreshHandler(refresh.NewUseCase(&userRepository, j, authTokenGenerator, &translator, &requestValidator))
+		handler := NewRefreshHandler(refresh.NewUseCase(&userRepository, j, authTokenGenerator, &authorizer, &translator, &requestValidator))
 
 		request := httptest.NewRequest(http.MethodPost, "/", &payload)
 		response := httptest.NewRecorder()
@@ -227,6 +230,7 @@ func TestRefreshHandler(t *testing.T) {
 		var (
 			userRepository   users.MockUsersRepository
 			roleRepository   roles.MockRolesRepository
+			authorizer       domain.MockAuthorizer
 			requestValidator validator.MockValidator
 			translator       translator.TranslatorMock
 
@@ -260,7 +264,7 @@ func TestRefreshHandler(t *testing.T) {
 
 		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
 
-		handler := NewRefreshHandler(refresh.NewUseCase(&userRepository, j, authTokenGenerator, &translator, &requestValidator))
+		handler := NewRefreshHandler(refresh.NewUseCase(&userRepository, j, authTokenGenerator, &authorizer, &translator, &requestValidator))
 
 		request := httptest.NewRequest(http.MethodPost, "/", &payload)
 		response := httptest.NewRecorder()

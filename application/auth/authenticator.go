@@ -18,6 +18,17 @@ var (
 	ErrBanned = errors.New("the user is banned")
 )
 
+// Identity is who a request is from: the user whose session it is and, when
+// somebody obtained that session to be seen as them, who that somebody is.
+type Identity struct {
+	User user.User
+
+	// ImpersonatorUUID is who obtained this token to be seen as User. It is
+	// empty for an ordinary session, and is what the dashboard shows when it
+	// says whose eyes these are.
+	ImpersonatorUUID string
+}
+
 // Authenticator turns an access token into the user it stands for.
 //
 // It is the one place that decides what a token proves, so the HTTP middleware
@@ -39,34 +50,41 @@ func NewAuthenticator(j *jwt.JWT, userRepository user.Repository) *Authenticator
 // Authenticate reports who a token stands for. The audience is checked as well
 // as the signature, so a refresh or a registration token cannot be used to act
 // as its subject.
-func (a *Authenticator) Authenticate(ctx context.Context, token string) (user.User, error) {
+//
+// Who the token says is behind it is taken from the token itself and nowhere
+// else: only this estate signs one, so a caller cannot claim to be acting for
+// somebody who never asked them to.
+func (a *Authenticator) Authenticate(ctx context.Context, token string) (Identity, error) {
 	if len(token) == 0 {
-		return user.User{}, ErrUnauthenticated
+		return Identity{}, ErrUnauthenticated
 	}
 
 	claims, err := a.jwt.Verify(ctx, token)
 	if err != nil {
-		return user.User{}, ErrUnauthenticated
+		return Identity{}, ErrUnauthenticated
 	}
 
 	audiences, err := claims.GetAudience()
 	if err != nil || len(audiences) == 0 || audiences[0] != AccessToken {
-		return user.User{}, ErrUnauthenticated
+		return Identity{}, ErrUnauthenticated
 	}
 
 	userUUID, err := claims.GetSubject()
 	if err != nil {
-		return user.User{}, ErrUnauthenticated
+		return Identity{}, ErrUnauthenticated
 	}
 
 	u, err := a.userRepository.GetOne(ctx, userUUID)
 	if err != nil {
-		return user.User{}, ErrUnauthenticated
+		return Identity{}, ErrUnauthenticated
 	}
 
 	if u.IsBanned() {
-		return user.User{}, ErrBanned
+		return Identity{}, ErrBanned
 	}
 
-	return u, nil
+	return Identity{
+		User:             u,
+		ImpersonatorUUID: jwt.Impersonator(claims),
+	}, nil
 }

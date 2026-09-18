@@ -44,6 +44,10 @@ const (
 	UsersDelete         = "users.delete"
 	UsersPasswordUpdate = "users.password.update"
 
+	// UsersImpersonate is permission to be seen as somebody else: the dashboard
+	// opens a session that acts as them, saying who is behind it.
+	UsersImpersonate = "users.impersonate"
+
 	PermissionsIndex = "permissions.index"
 
 	RolesIndex  = "roles.index"

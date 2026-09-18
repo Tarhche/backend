@@ -8,6 +8,7 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/permission"
 	"github.com/khanzadimahdi/testproject/domain/role"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/ecdsa"
@@ -56,6 +57,7 @@ func TestUseCase_Execute(t *testing.T) {
 		var (
 			userRepository users.MockUsersRepository
 			roleRepository roles.MockRolesRepository
+			authorizer     domain.MockAuthorizer
 			validator      validator.MockValidator
 			translator     translator.TranslatorMock
 
@@ -76,7 +78,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
 
-		response, err := NewUseCase(&userRepository, j, authTokenGenerator, &translator, &validator).Execute(context.Background(), &r)
+		response, err := NewUseCase(&userRepository, j, authTokenGenerator, &authorizer, &translator, &validator).Execute(context.Background(), &r)
 
 		translator.AssertNotCalled(t, "Translate")
 
@@ -107,6 +109,7 @@ func TestUseCase_Execute(t *testing.T) {
 		var (
 			userRepository users.MockUsersRepository
 			roleRepository roles.MockRolesRepository
+			authorizer     domain.MockAuthorizer
 			validator      validator.MockValidator
 			translator     translator.TranslatorMock
 
@@ -137,7 +140,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
 
-		response, err := NewUseCase(&userRepository, j, authTokenGenerator, &translator, &validator).Execute(context.Background(), &r)
+		response, err := NewUseCase(&userRepository, j, authTokenGenerator, &authorizer, &translator, &validator).Execute(context.Background(), &r)
 
 		roleRepository.AssertNotCalled(t, "GetByUserUUID")
 
@@ -154,6 +157,7 @@ func TestUseCase_Execute(t *testing.T) {
 		var (
 			userRepository users.MockUsersRepository
 			roleRepository roles.MockRolesRepository
+			authorizer     domain.MockAuthorizer
 			validator      validator.MockValidator
 			translator     translator.TranslatorMock
 
@@ -170,7 +174,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
 
-		response, err := NewUseCase(&userRepository, j, authTokenGenerator, &translator, &validator).Execute(context.Background(), &r)
+		response, err := NewUseCase(&userRepository, j, authTokenGenerator, &authorizer, &translator, &validator).Execute(context.Background(), &r)
 
 		roleRepository.AssertNotCalled(t, "GetByUserUUID")
 		translator.AssertNotCalled(t, "Translate")
@@ -188,6 +192,7 @@ func TestUseCase_Execute(t *testing.T) {
 		var (
 			userRepository users.MockUsersRepository
 			roleRepository roles.MockRolesRepository
+			authorizer     domain.MockAuthorizer
 			validator      validator.MockValidator
 			translator     translator.TranslatorMock
 
@@ -207,7 +212,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
 
-		response, err := NewUseCase(&userRepository, j, authTokenGenerator, &translator, &validator).Execute(context.Background(), &r)
+		response, err := NewUseCase(&userRepository, j, authTokenGenerator, &authorizer, &translator, &validator).Execute(context.Background(), &r)
 
 		roleRepository.AssertNotCalled(t, "GetByUserUUID")
 		translator.AssertNotCalled(t, "Translate")
@@ -219,12 +224,142 @@ func TestUseCase_Execute(t *testing.T) {
 		assert.Equal(t, &expectedResponse, response)
 	})
 
+	t.Run("a shadow session refreshes as itself", func(t *testing.T) {
+		t.Parallel()
+
+		var (
+			userRepository users.MockUsersRepository
+			roleRepository roles.MockRolesRepository
+			authorizer     domain.MockAuthorizer
+			validator      validator.MockValidator
+			translator     translator.TranslatorMock
+
+			u            = user.User{UUID: "test-uuid"}
+			impersonator = user.User{UUID: "impersonator-uuid"}
+			r            = Request{
+				Token: generateRefreshToken(t, j, u, time.Now().Add(15*time.Second), auth.RefreshToken, impersonator.UUID),
+			}
+		)
+
+		validator.On("Validate", &r).Once().Return(nil)
+		defer validator.AssertExpectations(t)
+
+		userRepository.On("GetOne", mock.Anything, u.UUID).Once().Return(u, nil)
+		userRepository.On("GetOne", mock.Anything, impersonator.UUID).Once().Return(impersonator, nil)
+		defer userRepository.AssertExpectations(t)
+
+		authorizer.On("Authorize", mock.Anything, impersonator.UUID, permission.UsersImpersonate).Once().Return(true, nil)
+		defer authorizer.AssertExpectations(t)
+
+		roleRepository.On("GetByUserUUID", mock.Anything, u.UUID).Once().Return(rl, nil)
+		defer roleRepository.AssertExpectations(t)
+
+		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
+
+		response, err := NewUseCase(&userRepository, j, authTokenGenerator, &authorizer, &translator, &validator).Execute(context.Background(), &r)
+
+		assert.NoError(t, err)
+		assert.NotNil(t, response)
+		assert.Len(t, response.ValidationErrors, 0)
+
+		// both new tokens are the impersonated user's, and both still say who is
+		// behind them -- otherwise the session would quietly become their own
+		accessTokenClaims, err := j.Verify(context.Background(), response.AccessToken)
+		assert.NoError(t, err)
+		assert.Equal(t, impersonator.UUID, jwt.Impersonator(accessTokenClaims))
+
+		refreshTokenClaims, err := j.Verify(context.Background(), response.RefreshToken)
+		assert.NoError(t, err)
+		assert.Equal(t, impersonator.UUID, jwt.Impersonator(refreshTokenClaims))
+
+		subject, err := refreshTokenClaims.GetSubject()
+		assert.NoError(t, err)
+		assert.Equal(t, u.UUID, subject)
+	})
+
+	t.Run("a shadow session ends when whoever is behind it may no longer be", func(t *testing.T) {
+		t.Parallel()
+
+		tests := []struct {
+			name         string
+			impersonator user.User
+			allowed      bool
+		}{
+			{
+				name:         "the permission was taken away",
+				impersonator: user.User{UUID: "impersonator-uuid"},
+				allowed:      false,
+			},
+			{
+				name:         "they were banned",
+				impersonator: user.User{UUID: "impersonator-uuid", BannedAt: time.Now().Add(-time.Hour)},
+				allowed:      true,
+			},
+		}
+
+		for _, test := range tests {
+			t.Run(test.name, func(t *testing.T) {
+				t.Parallel()
+
+				var (
+					userRepository users.MockUsersRepository
+					roleRepository roles.MockRolesRepository
+					authorizer     domain.MockAuthorizer
+					validator      validator.MockValidator
+					translator     translator.TranslatorMock
+
+					u = user.User{UUID: "test-uuid"}
+					r = Request{
+						Token: generateRefreshToken(t, j, u, time.Now().Add(15*time.Second), auth.RefreshToken, test.impersonator.UUID),
+					}
+
+					expectedResponse = Response{
+						ValidationErrors: domain.ValidationErrors{
+							"token": "you may no longer be seen as this user",
+						},
+					}
+				)
+
+				validator.On("Validate", &r).Once().Return(nil)
+				defer validator.AssertExpectations(t)
+
+				userRepository.On("GetOne", mock.Anything, u.UUID).Once().Return(u, nil)
+				userRepository.On("GetOne", mock.Anything, test.impersonator.UUID).Once().Return(test.impersonator, nil)
+				defer userRepository.AssertExpectations(t)
+
+				if !test.impersonator.IsBanned() {
+					authorizer.On("Authorize", mock.Anything, test.impersonator.UUID, permission.UsersImpersonate).Once().Return(test.allowed, nil)
+				}
+				defer authorizer.AssertExpectations(t)
+
+				translator.On(
+					"Translate",
+					"impersonation_not_allowed",
+					mock.Anything,
+				).Once().Return(expectedResponse.ValidationErrors["token"])
+				defer translator.AssertExpectations(t)
+
+				authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
+
+				response, err := NewUseCase(&userRepository, j, authTokenGenerator, &authorizer, &translator, &validator).Execute(context.Background(), &r)
+
+				roleRepository.AssertNotCalled(t, "GetByUserUUID")
+
+				assert.NoError(t, err)
+				assert.Equal(t, &expectedResponse, response)
+				assert.Empty(t, response.AccessToken)
+				assert.Empty(t, response.RefreshToken)
+			})
+		}
+	})
+
 	t.Run("error on fetching user's data", func(t *testing.T) {
 		t.Parallel()
 
 		var (
 			userRepository users.MockUsersRepository
 			roleRepository roles.MockRolesRepository
+			authorizer     domain.MockAuthorizer
 			validator      validator.MockValidator
 			translator     translator.TranslatorMock
 
@@ -243,7 +378,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
 
-		response, err := NewUseCase(&userRepository, j, authTokenGenerator, &translator, &validator).Execute(context.Background(), &r)
+		response, err := NewUseCase(&userRepository, j, authTokenGenerator, &authorizer, &translator, &validator).Execute(context.Background(), &r)
 
 		roleRepository.AssertNotCalled(t, "GetByUserUUID")
 		translator.AssertNotCalled(t, "Translate")
@@ -253,7 +388,7 @@ func TestUseCase_Execute(t *testing.T) {
 	})
 }
 
-func generateRefreshToken(t *testing.T, j *jwt.JWT, u user.User, expiresAt time.Time, audience string) string {
+func generateRefreshToken(t *testing.T, j *jwt.JWT, u user.User, expiresAt time.Time, audience string, impersonatorUUID ...string) string {
 	t.Helper()
 
 	b := jwt.NewClaimsBuilder()
@@ -262,6 +397,10 @@ func generateRefreshToken(t *testing.T, j *jwt.JWT, u user.User, expiresAt time.
 	b.SetExpirationTime(expiresAt)
 	b.SetIssuedAt(time.Now())
 	b.SetAudience([]string{audience})
+
+	for _, uuid := range impersonatorUUID {
+		b.SetImpersonator(uuid)
+	}
 
 	token, err := j.Generate(context.Background(), b.Build())
 
