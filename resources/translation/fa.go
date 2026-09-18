@@ -27,6 +27,7 @@ var farsi = map[string]string{
 	"user_is_banned":                    "حساب کاربری شما مسدود شده است، می‌توانید از طریق فرم تماس با ما در ارتباط باشید",
 	"impersonation_does_not_nest":       "شما هم‌اکنون داشبورد را به‌جای کاربر دیگری می‌بینید",
 	"already_signed_in_as_this_user":    "شما هم‌اکنون با همین حساب کاربری وارد شده‌اید",
+	"impersonated_user_is_banned":       "این حساب کاربری مسدود است و نمی‌توان آن را باز کرد",
 	"impersonation_not_allowed":         "دیگر اجازهٔ دیده‌شدن به‌جای این کاربر را ندارید",
 	"one_or_more_permissions_not_exist": "یک یا چند مجوز وجود ندارد",
 	"invalid_state_transition":          "تغییر وضعیت غیر ممکن است",

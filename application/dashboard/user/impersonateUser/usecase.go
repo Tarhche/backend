@@ -78,11 +78,12 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 	}
 
 	// a banned user cannot act, and a session opened as them would be refused at
-	// the next request anyway.
+	// the next request anyway. It is somebody else's account being spoken of
+	// here, so it is not the message that account's owner would be given.
 	if u.IsBanned() {
 		return &Response{
 			ValidationErrors: domain.ValidationErrors{
-				"uuid": uc.translator.Translate("user_is_banned"),
+				"uuid": uc.translator.Translate("impersonated_user_is_banned"),
 			},
 		}, nil
 	}

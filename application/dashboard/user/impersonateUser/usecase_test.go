@@ -285,7 +285,7 @@ func TestUseCase_Execute(t *testing.T) {
 		userRepository.On("GetOne", mock.Anything, u.UUID).Once().Return(u, nil)
 		defer userRepository.AssertExpectations(t)
 
-		translator.On("Translate", "user_is_banned", mock.Anything).Once().
+		translator.On("Translate", "impersonated_user_is_banned", mock.Anything).Once().
 			Return(expectedResponse.ValidationErrors["uuid"])
 		defer translator.AssertExpectations(t)
 

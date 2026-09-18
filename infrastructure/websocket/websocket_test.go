@@ -199,6 +199,11 @@ func testServer(t *testing.T) (*gateway.Gateway, *httptest.Server, *url.URL, cha
 		Run(func(args mock.Arguments) { _ = replyHandler.Handle(context.Background(), args.Get(2).([]byte)) }).
 		Return(nil)
 
+	// a client that hangs up while a stream is open has its cancellation
+	// announced, which happens on the session's own clock rather than the
+	// test's: unexpected here, it panics inside the server's handler.
+	publishSubscriberMock.On("Publish", mock.Anything, "websocket_streams_cancelled", mock.Anything).Return(nil).Maybe()
+
 	produceConsumerMock.On("Consume", mock.Anything, "websocket_"+testSubject, &messageHandlerMock).Return(nil)
 	produceConsumerMock.On("Produce", mock.Anything, "websocket_"+testSubject, mock.Anything).
 		Run(func(args mock.Arguments) { produced <- args.Get(2).([]byte) }).

@@ -80,9 +80,13 @@ func TestReplyRouting(t *testing.T) {
 	t.Run("many clients may choose the same request id at the same time", func(t *testing.T) {
 		t.Parallel()
 
-		g, requests := testGateway(t)
-
 		const clients = 25
+
+		// every reply is offered to every session, and a session whose queue is
+		// full is skipped rather than waited for, so a burst this size needs
+		// room for the whole of it: what is under test here is which client an
+		// id belongs to, not what a queue does when it overflows.
+		g, requests := testGateway(t, WithReplyBuffer(clients))
 
 		conns := make([]*fakeConn, 0, clients)
 		served := make([]chan struct{}, 0, clients)

@@ -31,15 +31,21 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		LanguageCode: u.LanguageCode,
 	}
 
-	if len(request.ImpersonatorUUID) == 0 {
-		return response, nil
+	if len(request.ImpersonatorUUID) > 0 {
+		if err := uc.loadImpersonator(ctx, request.ImpersonatorUUID, response); err != nil {
+			return nil, err
+		}
 	}
 
-	// whoever is behind the session is a second person to look up, and the
-	// profile is still this user's whether or not that lookup says anything.
-	impersonator, err := uc.userRepository.GetOne(ctx, request.ImpersonatorUUID)
+	return response, nil
+}
+
+// loadImpersonator says who is seeing the dashboard as this user. It is a
+// second person to look up, so it is a second thing that can fail.
+func (uc *UseCase) loadImpersonator(ctx context.Context, impersonatorUUID string, response *Response) error {
+	impersonator, err := uc.userRepository.GetOne(ctx, impersonatorUUID)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	response.ImpersonatedBy = &impersonatorResponse{
@@ -49,5 +55,5 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		Username: impersonator.Username,
 	}
 
-	return response, nil
+	return nil
 }

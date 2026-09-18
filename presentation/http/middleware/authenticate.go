@@ -5,6 +5,9 @@ import (
 	"net/http"
 	"strings"
 
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
@@ -50,6 +53,16 @@ func (a *Authenticate) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		rw.WriteHeader(http.StatusUnauthorized)
 
 		return
+	}
+
+	// a shadow session is indistinguishable from the session of the person it
+	// stands for -- that is what it is for -- so the trace is where it says who
+	// is behind it, and what was done in their name.
+	if len(identity.ImpersonatorUUID) > 0 {
+		trace.SpanFromContext(r.Context()).SetAttributes(
+			attribute.String("auth.user", identity.User.UUID),
+			attribute.String("auth.impersonator", identity.ImpersonatorUUID),
+		)
 	}
 
 	a.next.ServeHTTP(rw, r.WithContext(auth.IdentityToContext(r.Context(), identity)))
