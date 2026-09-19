@@ -97,7 +97,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
 
-		response, err := NewUseCase(&userRepository, authTokenGenerator, &hasher, &translator, &validator).Execute(context.Background(), &request)
+		response, err := NewUseCase(&userRepository, authTokenGenerator, nil, nil, &hasher, &translator, &validator).Execute(context.Background(), &request)
 
 		translator.AssertNotCalled(t, "Translate")
 
@@ -151,7 +151,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
 
-		response, err := NewUseCase(&userRepository, authTokenGenerator, &hasher, &translator, &validator).Execute(context.Background(), &request)
+		response, err := NewUseCase(&userRepository, authTokenGenerator, nil, nil, &hasher, &translator, &validator).Execute(context.Background(), &request)
 
 		assert.NoError(t, err)
 		assert.NotNil(t, response)
@@ -190,7 +190,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
 
-		response, err := NewUseCase(&userRepository, authTokenGenerator, &hasher, &translator, &validator).Execute(context.Background(), &request)
+		response, err := NewUseCase(&userRepository, authTokenGenerator, nil, nil, &hasher, &translator, &validator).Execute(context.Background(), &request)
 
 		roleRepository.AssertNotCalled(t, "GetByUserUUID")
 		translator.AssertNotCalled(t, "Translate")
@@ -248,7 +248,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
 
-		response, err := NewUseCase(&userRepository, authTokenGenerator, &hasher, &translator, &validator).Execute(context.Background(), &request)
+		response, err := NewUseCase(&userRepository, authTokenGenerator, nil, nil, &hasher, &translator, &validator).Execute(context.Background(), &request)
 
 		roleRepository.AssertNotCalled(t, "GetByUserUUID")
 
@@ -306,7 +306,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
 
-		response, err := NewUseCase(&userRepository, authTokenGenerator, &hasher, &translator, &validator).Execute(context.Background(), &request)
+		response, err := NewUseCase(&userRepository, authTokenGenerator, nil, nil, &hasher, &translator, &validator).Execute(context.Background(), &request)
 
 		roleRepository.AssertNotCalled(t, "GetByUserUUID")
 

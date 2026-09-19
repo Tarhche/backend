@@ -107,7 +107,7 @@ const docTemplate = `{
         },
         "/auth/login": {
             "post": {
-                "description": "obtain authentication tokens",
+                "description": "obtain authentication tokens, with a password or with a provider's code",
                 "consumes": [
                     "application/json"
                 ],
@@ -134,6 +134,82 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/login.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/oauth": {
+            "get": {
+                "description": "list the accounts elsewhere that may be signed in with",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Login providers",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/providers.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/oauth/{provider}": {
+            "get": {
+                "description": "where to send the browser to sign in with somebody else's account, and the state to compare when it comes back",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Login with a provider",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Provider name",
+                        "name": "provider",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/providerredirect.Response"
                         }
                     },
                     "400": {
@@ -7163,10 +7239,17 @@ const docTemplate = `{
         "login.Request": {
             "type": "object",
             "properties": {
+                "code": {
+                    "type": "string"
+                },
                 "identity": {
                     "type": "string"
                 },
                 "password": {
+                    "type": "string"
+                },
+                "provider": {
+                    "description": "Provider names somebody else's login page -- google, github, linkedin --\nand Code is what that page handed the browser on its way back. A request\nthat carries them is answered by asking the provider who it was, and\nnothing else about the request is read.",
                     "type": "string"
                 }
             }
@@ -7390,6 +7473,41 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "working_dir": {
+                    "type": "string"
+                }
+            }
+        },
+        "providerredirect.Response": {
+            "type": "object",
+            "properties": {
+                "errors": {
+                    "$ref": "#/definitions/domain.ValidationErrors"
+                },
+                "state": {
+                    "description": "State is handed back untouched when the browser returns. Whoever sends\nthe browser keeps it and compares it then: that is how a login that comes\nback is known to be the one that went out, and not somebody else's.",
+                    "type": "string"
+                },
+                "url": {
+                    "description": "URL is where to send the browser to be asked who it is.",
+                    "type": "string"
+                }
+            }
+        },
+        "providers.Response": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/providers.providerResponse"
+                    }
+                }
+            }
+        },
+        "providers.providerResponse": {
+            "type": "object",
+            "properties": {
+                "name": {
                     "type": "string"
                 }
             }

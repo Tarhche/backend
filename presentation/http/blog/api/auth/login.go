@@ -20,7 +20,7 @@ func NewLoginHandler(useCase *login.UseCase) *loginHandler {
 }
 
 // @Summary		Login
-// @Description	obtain authentication tokens
+// @Description	obtain authentication tokens, with a password or with a provider's code
 // @Tags			auth
 // @Accept			json
 // @Produce		json

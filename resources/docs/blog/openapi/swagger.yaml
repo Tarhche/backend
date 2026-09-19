@@ -1711,9 +1711,18 @@ definitions:
     type: object
   login.Request:
     properties:
+      code:
+        type: string
       identity:
         type: string
       password:
+        type: string
+      provider:
+        description: |-
+          Provider names somebody else's login page -- google, github, linkedin --
+          and Code is what that page handed the browser on its way back. A request
+          that carries them is answered by asking the provider who it was, and
+          nothing else about the request is read.
         type: string
     type: object
   login.Response:
@@ -1871,6 +1880,32 @@ definitions:
       uuid:
         type: string
       working_dir:
+        type: string
+    type: object
+  providerredirect.Response:
+    properties:
+      errors:
+        $ref: '#/definitions/domain.ValidationErrors'
+      state:
+        description: |-
+          State is handed back untouched when the browser returns. Whoever sends
+          the browser keeps it and compares it then: that is how a login that comes
+          back is known to be the one that went out, and not somebody else's.
+        type: string
+      url:
+        description: URL is where to send the browser to be asked who it is.
+        type: string
+    type: object
+  providers.Response:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/providers.providerResponse'
+        type: array
+    type: object
+  providers.providerResponse:
+    properties:
+      name:
         type: string
     type: object
   refresh.Request:
@@ -2214,7 +2249,8 @@ paths:
     post:
       consumes:
       - application/json
-      description: obtain authentication tokens
+      description: obtain authentication tokens, with a password or with a provider's
+        code
       parameters:
       - description: Credentials
         in: body
@@ -2240,6 +2276,58 @@ paths:
             additionalProperties: true
             type: object
       summary: Login
+      tags:
+      - auth
+  /auth/oauth:
+    get:
+      consumes:
+      - application/json
+      description: list the accounts elsewhere that may be signed in with
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/providers.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Login providers
+      tags:
+      - auth
+  /auth/oauth/{provider}:
+    get:
+      consumes:
+      - application/json
+      description: where to send the browser to sign in with somebody else's account,
+        and the state to compare when it comes back
+      parameters:
+      - description: Provider name
+        in: path
+        name: provider
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/providerredirect.Response'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Login with a provider
       tags:
       - auth
   /auth/password/forget:
