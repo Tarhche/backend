@@ -94,7 +94,7 @@ func TestLoginHandler(t *testing.T) {
 
 		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
 
-		handler := NewLoginHandler(login.NewUseCase(&userRepository, authTokenGenerator, &hasher, &translator, &requestValidator))
+		handler := NewLoginHandler(login.NewUseCase(&userRepository, authTokenGenerator, nil, nil, &hasher, &translator, &requestValidator))
 
 		var payload bytes.Buffer
 		err := json.NewEncoder(&payload).Encode(r)
@@ -135,7 +135,7 @@ func TestLoginHandler(t *testing.T) {
 
 		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
 
-		handler := NewLoginHandler(login.NewUseCase(&userRepository, authTokenGenerator, &hasher, &translator, &requestValidator))
+		handler := NewLoginHandler(login.NewUseCase(&userRepository, authTokenGenerator, nil, nil, &hasher, &translator, &requestValidator))
 
 		request := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString("{}"))
 		response := httptest.NewRecorder()
@@ -182,7 +182,7 @@ func TestLoginHandler(t *testing.T) {
 
 		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
 
-		handler := NewLoginHandler(login.NewUseCase(&userRepository, authTokenGenerator, &hasher, &translator, &requestValidator))
+		handler := NewLoginHandler(login.NewUseCase(&userRepository, authTokenGenerator, nil, nil, &hasher, &translator, &requestValidator))
 
 		var payload bytes.Buffer
 		err := json.NewEncoder(&payload).Encode(r)
@@ -228,7 +228,7 @@ func TestLoginHandler(t *testing.T) {
 
 		authTokenGenerator := auth.NewTokenGenerator(j, &roleRepository)
 
-		handler := NewLoginHandler(login.NewUseCase(&userRepository, authTokenGenerator, &hasher, &translator, &requestValidator))
+		handler := NewLoginHandler(login.NewUseCase(&userRepository, authTokenGenerator, nil, nil, &hasher, &translator, &requestValidator))
 
 		var payload bytes.Buffer
 		err := json.NewEncoder(&payload).Encode(r)

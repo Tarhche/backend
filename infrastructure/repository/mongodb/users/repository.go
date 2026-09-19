@@ -37,6 +37,14 @@ func NewRepository(database *mongo.Database) *UsersRepository {
 }
 
 func toDomain(a UserBson) user.User {
+	identities := make([]user.Identity, len(a.Identities))
+	for i := range a.Identities {
+		identities[i] = user.Identity{
+			Provider: a.Identities[i].Provider,
+			ID:       a.Identities[i].ID,
+		}
+	}
+
 	return user.User{
 		UUID:         a.UUID,
 		Name:         a.Name,
@@ -48,8 +56,9 @@ func toDomain(a UserBson) user.User {
 			Value: a.PasswordHash.Value,
 			Salt:  a.PasswordHash.Salt,
 		},
-		CreatedAt: a.CreatedAt,
-		BannedAt:  a.BannedAt,
+		Identities: identities,
+		CreatedAt:  a.CreatedAt,
+		BannedAt:   a.BannedAt,
 	}
 }
 
@@ -155,6 +164,40 @@ func (r *UsersRepository) GetOneByIdentity(ctx context.Context, identity string)
 	return toDomain(a), nil
 }
 
+// GetOneByProviderIdentity finds whoever signs in as that account elsewhere.
+// The provider and the id are matched together, so the same id issued by two
+// providers stays two different people.
+func (r *UsersRepository) GetOneByProviderIdentity(ctx context.Context, provider string, id string) (user.User, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
+	filter := bson.D{
+		{
+			Key: "identities",
+			Value: bson.D{
+				{
+					Key: "$elemMatch",
+					Value: bson.D{
+						{Key: "provider", Value: provider},
+						{Key: "id", Value: id},
+					},
+				},
+			},
+		},
+	}
+
+	var a UserBson
+	if err := r.collection.FindOne(ctx, filter).Decode(&a); err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			err = domain.ErrNotExists
+		}
+
+		return user.User{}, err
+	}
+
+	return toDomain(a), nil
+}
+
 func (r *UsersRepository) Save(ctx context.Context, a *user.User) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
@@ -165,6 +208,14 @@ func (r *UsersRepository) Save(ctx context.Context, a *user.User) (string, error
 			return "", err
 		}
 		a.UUID = UUID.String()
+	}
+
+	identities := make([]IdentityBson, len(a.Identities))
+	for i := range a.Identities {
+		identities[i] = IdentityBson{
+			Provider: a.Identities[i].Provider,
+			ID:       a.Identities[i].ID,
+		}
 	}
 
 	update := UserBson{
@@ -178,8 +229,9 @@ func (r *UsersRepository) Save(ctx context.Context, a *user.User) (string, error
 			Value: a.PasswordHash.Value,
 			Salt:  a.PasswordHash.Salt,
 		},
-		CreatedAt: time.Now(),
-		BannedAt:  a.BannedAt,
+		Identities: identities,
+		CreatedAt:  time.Now(),
+		BannedAt:   a.BannedAt,
 	}
 
 	_, err := r.collection.UpdateOne(

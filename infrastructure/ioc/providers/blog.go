@@ -17,6 +17,8 @@ import (
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/application/auth/forgetpassword"
 	"github.com/khanzadimahdi/testproject/application/auth/login"
+	"github.com/khanzadimahdi/testproject/application/auth/providerredirect"
+	authProviders "github.com/khanzadimahdi/testproject/application/auth/providers"
 	"github.com/khanzadimahdi/testproject/application/auth/refresh"
 	"github.com/khanzadimahdi/testproject/application/auth/register"
 	"github.com/khanzadimahdi/testproject/application/auth/resetpassword"
@@ -133,6 +135,7 @@ import (
 	"github.com/khanzadimahdi/testproject/application/localize"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/file"
+	"github.com/khanzadimahdi/testproject/domain/oauth"
 	"github.com/khanzadimahdi/testproject/domain/password"
 	"github.com/khanzadimahdi/testproject/domain/permission"
 	stackEvents "github.com/khanzadimahdi/testproject/domain/runner/stack/events"
@@ -145,6 +148,7 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/matcher"
 	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/core/pubsub"
 	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/jetstream/produceConsumer"
+	infraOauth "github.com/khanzadimahdi/testproject/infrastructure/oauth"
 	articlesrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/articles"
 	bookmarksrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/bookmarks"
 	commentsrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/comments"
@@ -360,6 +364,12 @@ func blog(
 
 	authTokenGenerator := auth.NewTokenGenerator(jwt, rolesRepository)
 	elementRetriever := element.NewRetriever(articlesRepository, elementsRepository, userRepository, matcher.New())
+
+	// signing in with somebody else's account: which providers are offered is
+	// which ones were configured, and an arrival nobody here knows yet is
+	// enrolled rather than turned away.
+	loginProviders := configuredProviders(blogConfigs)
+	identities := auth.NewIdentities(userRepository, rolesRepository, configRepository, languageResolver)
 
 	// Every route resolves its language through the Localize middleware. localized
 	// injects the resolved language into the request context; scoped additionally
@@ -620,7 +630,11 @@ func blog(
 
 	// auth
 	mux.Handle("POST /api/auth/login", scoped(func(c provider.Container) http.Handler {
-		return authAPI.NewLoginHandler(login.NewUseCase(userRepository, authTokenGenerator, hasher, tr(c), va(c)))
+		return authAPI.NewLoginHandler(login.NewUseCase(userRepository, authTokenGenerator, identities, loginProviders, hasher, tr(c), va(c)))
+	}))
+	mux.Handle("GET /api/auth/oauth", authAPI.NewProvidersHandler(authProviders.NewUseCase(loginProviders)))
+	mux.Handle("GET /api/auth/oauth/{provider}", scoped(func(c provider.Container) http.Handler {
+		return authAPI.NewProviderRedirectHandler(providerredirect.NewUseCase(loginProviders, tr(c), va(c)))
 	}))
 	mux.Handle("POST /api/auth/token/refresh", scoped(func(c provider.Container) http.Handler {
 		return authAPI.NewRefreshHandler(refresh.NewUseCase(userRepository, jwt, authTokenGenerator, authorizer, tr(c), va(c)))
@@ -901,4 +915,40 @@ func blog(
 	}
 
 	return handler, nil
+}
+
+// configuredProviders is every way of signing in with somebody else's account
+// that this deployment was given the secrets for. One that was not configured
+// is not offered at all, rather than offered and broken.
+func configuredProviders(configs *configs.Blog) oauth.Providers {
+	providers := make(oauth.Providers, 3)
+
+	google := infraOauth.Config{
+		ClientID:     configs.GoogleClientID,
+		ClientSecret: configs.GoogleClientSecret,
+		RedirectURL:  configs.GoogleRedirectURL,
+	}
+	if !google.IsZero() {
+		providers["google"] = infraOauth.NewGoogle(google)
+	}
+
+	github := infraOauth.Config{
+		ClientID:     configs.GithubClientID,
+		ClientSecret: configs.GithubClientSecret,
+		RedirectURL:  configs.GithubRedirectURL,
+	}
+	if !github.IsZero() {
+		providers["github"] = infraOauth.NewGithub(github)
+	}
+
+	linkedin := infraOauth.Config{
+		ClientID:     configs.LinkedinClientID,
+		ClientSecret: configs.LinkedinClientSecret,
+		RedirectURL:  configs.LinkedinRedirectURL,
+	}
+	if !linkedin.IsZero() {
+		providers["linkedin"] = infraOauth.NewLinkedin(linkedin)
+	}
+
+	return providers
 }

@@ -34,6 +34,16 @@ type Blog struct {
 	MailUsername string `usage:"SMTP user, when the relay authenticates." env:"MAIL_SMTP_USERNAME" long:"mail-smtp-username"`
 	MailPassword string `usage:"SMTP password, when the relay authenticates." env:"MAIL_SMTP_PASSWORD" long:"mail-smtp-password"`
 
+	GoogleClientID       string `usage:"OAuth client id signing people in with their Google account. Empty leaves Google unoffered." env:"OAUTH_GOOGLE_CLIENT_ID" long:"oauth-google-client-id"`
+	GoogleClientSecret   string `usage:"OAuth client secret for Google." env:"OAUTH_GOOGLE_CLIENT_SECRET" long:"oauth-google-client-secret"`
+	GoogleRedirectURL    string `usage:"Address Google sends the browser back to, which must be one it was registered with." env:"OAUTH_GOOGLE_REDIRECT_URL" long:"oauth-google-redirect-url"`
+	GithubClientID       string `usage:"OAuth client id signing people in with their GitHub account. Empty leaves GitHub unoffered." env:"OAUTH_GITHUB_CLIENT_ID" long:"oauth-github-client-id"`
+	GithubClientSecret   string `usage:"OAuth client secret for GitHub." env:"OAUTH_GITHUB_CLIENT_SECRET" long:"oauth-github-client-secret"`
+	GithubRedirectURL    string `usage:"Address GitHub sends the browser back to, which must be one it was registered with." env:"OAUTH_GITHUB_REDIRECT_URL" long:"oauth-github-redirect-url"`
+	LinkedinClientID     string `usage:"OAuth client id signing people in with their LinkedIn account. Empty leaves LinkedIn unoffered." env:"OAUTH_LINKEDIN_CLIENT_ID" long:"oauth-linkedin-client-id"`
+	LinkedinClientSecret string `usage:"OAuth client secret for LinkedIn." env:"OAUTH_LINKEDIN_CLIENT_SECRET" long:"oauth-linkedin-client-secret"`
+	LinkedinRedirectURL  string `usage:"Address LinkedIn sends the browser back to, which must be one it was registered with." env:"OAUTH_LINKEDIN_REDIRECT_URL" long:"oauth-linkedin-redirect-url"`
+
 	RunnerManagerURL    string `usage:"Base URL of the runner manager's API, which the dashboard passes task and stack commands to." env:"RUNNER_MANAGER_URL" long:"runner-manager-url"`
 	RunnerIngressDomain string `usage:"Domain a runner task's exposed ports are served on, used to build the addresses the dashboard shows." env:"RUNNER_INGRESS_DOMAIN" long:"runner-ingress-domain"`
 }

@@ -46,6 +46,12 @@ func (r *MockUsersRepository) GetOneByIdentity(ctx context.Context, username str
 	return args.Get(0).(user.User), args.Error(1)
 }
 
+func (r *MockUsersRepository) GetOneByProviderIdentity(ctx context.Context, provider string, id string) (user.User, error) {
+	args := r.Called(ctx, provider, id)
+
+	return args.Get(0).(user.User), args.Error(1)
+}
+
 func (r *MockUsersRepository) Save(ctx context.Context, u *user.User) (uuid string, err error) {
 	args := r.Called(ctx, u)
 

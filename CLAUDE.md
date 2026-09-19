@@ -75,6 +75,15 @@ Two wiring conventions to respect:
 - **Elements** (page widgets) are not language-scoped; only the articles they reference are. Element venues are glob patterns (`*`/`**`/`?`) matched in-app via `infrastructure/matcher` — callers pass concrete paths like `/en/articles/<uuid>`.
 - **Author exposure**: whenever a response includes author name/avatar/username, include the author UUID too.
 
+### Signing in
+
+Two ways, one use case. `application/auth/login` reads a password when the request carries one and asks a provider when it carries `{provider, code}` instead; everything after "who is this" — the ban check, the token pair — is shared.
+
+- **`domain/oauth`** is the contract: `Provider` (name, authorization url, `Identify(code) → Identity`) and `Providers`, the ones a deployment was configured with. **`infrastructure/oauth`** implements it. Google and LinkedIn both speak OpenID Connect, so one type answers for both and differs only in its doors; GitHub has its own dialect (numeric id, emails asked for separately).
+- **Signing in and signing up are the same door**: `auth.Identities` resolves an arrival to a user — one who has signed in that way before, one whose *verified* address already has an account (the identity is linked to it), or nobody, who is enrolled with the default roles and language. An address the provider has not verified may neither find nor open an account.
+- A user keeps the provider identities that reach them (`user.Identity{Provider, ID}`), and is found by the provider's own id rather than by an address they may change.
+- A provider with no client id and secret is not registered, so `GET /api/auth/oauth` lists only what may actually be used, and asking for any other name is a validation error rather than a 500.
+
 ### Messaging and telemetry
 
 - NATS JetStream consumers are registered as `map[subject]domain.MessageHandler` and started by the serve command before the HTTP server. Consumers start a new root span *linked* (`WithLinks`) to the producer's traceparent rather than continuing it; publishes pass `context.WithoutCancel(ctx)`, never `context.Background()`.
