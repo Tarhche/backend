@@ -37,6 +37,7 @@ var collection []permission.Permission = []permission.Permission{
 	{Name: "update a user", Value: permission.UsersUpdate},
 	{Name: "delete a user", Value: permission.UsersDelete},
 	{Name: "update a user's password", Value: permission.UsersPasswordUpdate},
+	{Name: "sign in as a user", Value: permission.UsersImpersonate},
 
 	// permissions
 	{Name: "list of permissions", Value: permission.PermissionsIndex},

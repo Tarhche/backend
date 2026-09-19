@@ -122,6 +122,7 @@ import (
 	deleteuser "github.com/khanzadimahdi/testproject/application/dashboard/user/deleteUser"
 	getuser "github.com/khanzadimahdi/testproject/application/dashboard/user/getUser"
 	getusers "github.com/khanzadimahdi/testproject/application/dashboard/user/getUsers"
+	impersonateuser "github.com/khanzadimahdi/testproject/application/dashboard/user/impersonateUser"
 	updateuser "github.com/khanzadimahdi/testproject/application/dashboard/user/updateUser"
 	"github.com/khanzadimahdi/testproject/application/dashboard/user/userchangepassword"
 	"github.com/khanzadimahdi/testproject/application/element"
@@ -622,7 +623,7 @@ func blog(
 		return authAPI.NewLoginHandler(login.NewUseCase(userRepository, authTokenGenerator, hasher, tr(c), va(c)))
 	}))
 	mux.Handle("POST /api/auth/token/refresh", scoped(func(c provider.Container) http.Handler {
-		return authAPI.NewRefreshHandler(refresh.NewUseCase(userRepository, jwt, authTokenGenerator, tr(c), va(c)))
+		return authAPI.NewRefreshHandler(refresh.NewUseCase(userRepository, jwt, authTokenGenerator, authorizer, tr(c), va(c)))
 	}))
 	mux.Handle("POST /api/auth/password/forget", scoped(func(c provider.Container) http.Handler {
 		return authAPI.NewForgetPasswordHandler(forgetpassword.NewUseCase(userRepository, asyncProduceConsumer, tr(c), va(c)))
@@ -705,6 +706,9 @@ func blog(
 	mux.Handle("PUT /api/dashboard/users/password", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
 		return dashboardUserAPI.NewChangePasswordHandler(userchangepassword.NewUseCase(userRepository, hasher, va(c)))
 	}), authorizer, permission.UsersPasswordUpdate), jwt, userRepository))
+	mux.Handle("POST /api/dashboard/users/{uuid}/impersonate", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardUserAPI.NewImpersonateHandler(impersonateuser.NewUseCase(userRepository, authTokenGenerator, tr(c), va(c)))
+	}), authorizer, permission.UsersImpersonate), jwt, userRepository))
 
 	// permissions
 	mux.Handle("GET /api/dashboard/permissions", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardPermissionAPI.NewIndexHandler(dashboardGetPermissionsUseCase), authorizer, permission.PermissionsIndex), jwt, userRepository))

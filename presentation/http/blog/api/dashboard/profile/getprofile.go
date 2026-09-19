@@ -32,9 +32,12 @@ func NewGetProfileHandler(useCase *getprofile.UseCase) *getProfileHandler {
 // @Failure		500	{object}	map[string]interface{}
 // @Router			/dashboard/profile [get]
 func (h *getProfileHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
-	userUUID := auth.FromContext(r.Context()).UUID
+	request := &getprofile.Request{
+		UserUUID:         auth.FromContext(r.Context()).UUID,
+		ImpersonatorUUID: auth.ImpersonatorFromContext(r.Context()),
+	}
 
-	response, err := h.useCase.Execute(r.Context(), userUUID)
+	response, err := h.useCase.Execute(r.Context(), request)
 
 	switch {
 	case errors.Is(err, domain.ErrNotExists):

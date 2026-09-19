@@ -36,10 +36,10 @@ func (a *Authenticate) Handle(ctx context.Context, data []byte) error {
 		return nil
 	}
 
-	user, err := a.authenticator.Authenticate(ctx, r.AccessToken)
+	identity, err := a.authenticator.Authenticate(ctx, r.AccessToken)
 	if err != nil {
 		return refuse(ctx, a.replyer, r.ID, "unauthenticated")
 	}
 
-	return a.next.Handle(auth.ToContext(ctx, &user), data)
+	return a.next.Handle(auth.IdentityToContext(ctx, identity), data)
 }

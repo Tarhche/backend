@@ -775,7 +775,25 @@ definitions:
         type: string
       email:
         type: string
+      impersonated_by:
+        allOf:
+        - $ref: '#/definitions/getprofile.impersonatorResponse'
+        description: |-
+          ImpersonatedBy is who is seeing the dashboard as this user. It is absent
+          from an ordinary session, and is what lets the dashboard say whose eyes
+          these are without being told by whoever is holding the token.
       language_code:
+        type: string
+      name:
+        type: string
+      username:
+        type: string
+      uuid:
+        type: string
+    type: object
+  getprofile.impersonatorResponse:
+    properties:
+      avatar:
         type: string
       name:
         type: string
@@ -1661,6 +1679,34 @@ definitions:
       code:
         type: string
       name:
+        type: string
+    type: object
+  impersonateuser.Response:
+    properties:
+      access_token:
+        type: string
+      errors:
+        $ref: '#/definitions/domain.ValidationErrors'
+      refresh_token:
+        type: string
+      user:
+        allOf:
+        - $ref: '#/definitions/impersonateuser.userResponse'
+        description: |-
+          User is who the tokens are for. The caller has just been handed a session
+          that is not theirs, so it is told whose it is, and does not have to ask.
+    type: object
+  impersonateuser.userResponse:
+    properties:
+      avatar:
+        type: string
+      email:
+        type: string
+      name:
+        type: string
+      username:
+        type: string
+      uuid:
         type: string
     type: object
   login.Request:
@@ -5002,6 +5048,38 @@ paths:
             additionalProperties: true
             type: object
       summary: Get user
+      tags:
+      - dashboard users
+  /dashboard/users/{uuid}/impersonate:
+    post:
+      consumes:
+      - application/json
+      description: obtain a session that acts as the given user, saying who is behind
+        it
+      parameters:
+      - description: User UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/impersonateuser.Response'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Sign in as a user
       tags:
       - dashboard users
   /dashboard/users/password:

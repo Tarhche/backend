@@ -34,7 +34,27 @@ func TestAuthenticate(t *testing.T) {
 			Authenticate(t.Context(), tokenFor(t, j, authenticatedUUID, []string{AccessToken}, time.Now().Add(time.Minute)))
 
 		require.NoError(t, err)
-		assert.Equal(t, expected, got)
+		assert.Equal(t, expected, got.User)
+		assert.Empty(t, got.ImpersonatorUUID, "nobody is behind an ordinary session")
+	})
+
+	t.Run("a token somebody obtained to be seen as another says so", func(t *testing.T) {
+		t.Parallel()
+
+		j := signer(t)
+		seen := user.User{UUID: authenticatedUUID, Name: "somebody"}
+
+		var repository users.MockUsersRepository
+		repository.On("GetOne", mock.Anything, authenticatedUUID).Once().Return(seen, nil)
+		defer repository.AssertExpectations(t)
+
+		got, err := NewAuthenticator(j, &repository).
+			Authenticate(t.Context(), impersonatedTokenFor(t, j, authenticatedUUID, "impersonator-uuid"))
+
+		require.NoError(t, err)
+		// the request acts as the user it names, and says who is behind it
+		assert.Equal(t, seen, got.User)
+		assert.Equal(t, "impersonator-uuid", got.ImpersonatorUUID)
 	})
 
 	t.Run("a banned user is told apart from an unknown one", func(t *testing.T) {
@@ -70,7 +90,7 @@ func TestAuthenticate(t *testing.T) {
 			Authenticate(t.Context(), tokenFor(t, j, authenticatedUUID, []string{AccessToken}, time.Now().Add(time.Minute)))
 
 		require.NoError(t, err)
-		assert.Equal(t, later, got)
+		assert.Equal(t, later, got.User)
 	})
 
 	t.Run("what does not identify anybody", func(t *testing.T) {
@@ -199,6 +219,23 @@ func tokenFor(t *testing.T, j *jwt.JWT, subject string, audience []string, expir
 	if audience != nil {
 		claims.SetAudience(audience)
 	}
+
+	token, err := j.Generate(t.Context(), claims.Build())
+	require.NoError(t, err)
+
+	return token
+}
+
+// impersonatedTokenFor mints a token somebody obtained to be seen as the
+// subject, which is an ordinary access token plus the one claim that says so.
+func impersonatedTokenFor(t *testing.T, j *jwt.JWT, subject string, impersonatorUUID string) string {
+	t.Helper()
+
+	claims := jwt.NewClaimsBuilder()
+	claims.SetSubject(subject)
+	claims.SetExpirationTime(time.Now().Add(time.Minute))
+	claims.SetAudience([]string{AccessToken})
+	claims.SetImpersonator(impersonatorUUID)
 
 	token, err := j.Generate(t.Context(), claims.Build())
 	require.NoError(t, err)

@@ -5,6 +5,9 @@ import (
 	"net/http"
 	"strings"
 
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/infrastructure/jwt"
@@ -39,7 +42,7 @@ func NewAuthenticateMiddleware(next http.Handler, j *jwt.JWT, userRepository use
 }
 
 func (a *Authenticate) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
-	user, err := a.authenticator.Authenticate(r.Context(), bearerToken(r))
+	identity, err := a.authenticator.Authenticate(r.Context(), bearerToken(r))
 
 	switch {
 	case errors.Is(err, auth.ErrBanned):
@@ -52,7 +55,17 @@ func (a *Authenticate) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	a.next.ServeHTTP(rw, r.WithContext(auth.ToContext(r.Context(), &user)))
+	// a shadow session is indistinguishable from the session of the person it
+	// stands for -- that is what it is for -- so the trace is where it says who
+	// is behind it, and what was done in their name.
+	if len(identity.ImpersonatorUUID) > 0 {
+		trace.SpanFromContext(r.Context()).SetAttributes(
+			attribute.String("auth.user", identity.User.UUID),
+			attribute.String("auth.impersonator", identity.ImpersonatorUUID),
+		)
+	}
+
+	a.next.ServeHTTP(rw, r.WithContext(auth.IdentityToContext(r.Context(), identity)))
 }
 
 // bearerToken takes the token out of the request, and is shared by everything
