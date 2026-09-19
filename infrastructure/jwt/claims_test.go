@@ -7,6 +7,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/go-cmp/cmp"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestBuilder(t *testing.T) {
@@ -51,4 +52,26 @@ func TestBuilder(t *testing.T) {
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("console error output mismatch (-want +got):\n%s", diff)
 	}
+}
+
+func TestPermissions(t *testing.T) {
+	t.Parallel()
+
+	t.Run("what a token says its holder may do comes back", func(t *testing.T) {
+		claims := NewClaimsBuilder()
+		claims.SetPermissions([]string{"articles.index", "users.show"})
+
+		assert.Equal(t, []string{"articles.index", "users.show"}, Permissions(claims.Build()))
+	})
+
+	t.Run("it survives the journey through json", func(t *testing.T) {
+		claims := jwt.MapClaims{"permissions": []any{"articles.index", 42, "users.show"}}
+
+		assert.Equal(t, []string{"articles.index", "users.show"}, Permissions(claims))
+	})
+
+	t.Run("a token that says nothing says nothing", func(t *testing.T) {
+		assert.Nil(t, Permissions(NewClaimsBuilder().Build()))
+		assert.Nil(t, Permissions(jwt.MapClaims{"permissions": "articles.index"}))
+	})
 }

@@ -1,6 +1,7 @@
 package spec
 
 import (
+	"maps"
 	"regexp"
 
 	"github.com/khanzadimahdi/testproject/domain"
@@ -50,9 +51,7 @@ func (s *Stack) Validate() domain.ValidationErrors {
 			continue
 		}
 
-		for field, message := range service.Validate("services." + name) {
-			validationErrors[field] = message
-		}
+		maps.Copy(validationErrors, service.Validate("services."+name))
 	}
 
 	return validationErrors

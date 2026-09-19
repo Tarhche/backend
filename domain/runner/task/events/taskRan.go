@@ -10,5 +10,5 @@ type TaskRan struct {
 	ExecutionID string     `json:"execution_id"`
 	Endpoints   []Endpoint `json:"endpoints"`
 	StartedAt   time.Time  `json:"started_at"`
-	Deadline    time.Time  `json:"deadline,omitempty"`
+	Deadline    time.Time  `json:"deadline"`
 }

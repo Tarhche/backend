@@ -37,8 +37,7 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		Services: request.Services,
 	}, request.OwnerUUID)
 
-	var refused *client.ValidationError
-	if errors.As(err, &refused) {
+	if refused, ok := errors.AsType[*client.ValidationError](err); ok {
 		return &Response{ValidationErrors: refused.ValidationErrors}, nil
 	}
 

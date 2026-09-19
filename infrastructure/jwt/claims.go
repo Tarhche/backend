@@ -11,6 +11,10 @@ import (
 // from the session of the person it stands for.
 const ImpersonatorClaim = "impersonator"
 
+// PermissionsClaim carries what the subject of a token may do, as it was when
+// the token was issued.
+const PermissionsClaim = "permissions"
+
 type builder jwt.MapClaims
 
 func NewClaimsBuilder() builder {
@@ -80,4 +84,31 @@ func Impersonator(claims jwt.Claims) string {
 	impersonator, _ := mapClaims[ImpersonatorClaim].(string)
 
 	return impersonator
+}
+
+// Permissions are what a token says its subject may do. They are what the
+// roles held at the moment it was issued came to, so they are a token's own
+// answer rather than the database's, and whoever has to refuse a request asks
+// the database instead.
+func Permissions(claims jwt.Claims) []string {
+	mapClaims, ok := claims.(jwt.MapClaims)
+	if !ok {
+		return nil
+	}
+
+	switch permissions := mapClaims[PermissionsClaim].(type) {
+	case []string:
+		return permissions
+	case []any:
+		names := make([]string, 0, len(permissions))
+		for _, permission := range permissions {
+			if name, ok := permission.(string); ok {
+				names = append(names, name)
+			}
+		}
+
+		return names
+	default:
+		return nil
+	}
 }

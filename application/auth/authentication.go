@@ -60,13 +60,36 @@ func ImpersonatorFromContext(ctx context.Context) string {
 	return impersonatorUUID
 }
 
+type permissionsKey struct{}
+
+// PermissionsKey is the request context key under which what the token said
+// its holder may do is stored.
+var PermissionsKey = permissionsKey{}
+
+// PermissionsFromContext is what the request's own token says its holder may
+// do, and is empty when nothing was established.
+//
+// It is a hint, and is here to decide what to offer somebody — which tools an
+// MCP client is shown, which pages a dashboard draws. Whether a request is
+// allowed is not settled here: that is the authorizer's, which reads the roles
+// as they are now rather than as they were when a token was issued.
+func PermissionsFromContext(ctx context.Context) []string {
+	permissions, _ := ctx.Value(PermissionsKey).([]string)
+
+	return permissions
+}
+
 // IdentityToContext carries everything a token established: who the request
-// acts as, and who, if anybody, is behind it.
+// acts as, who, if anybody, is behind it, and what it says they may do.
 func IdentityToContext(ctx context.Context, identity Identity) context.Context {
 	ctx = ToContext(ctx, &identity.User)
 
 	if len(identity.ImpersonatorUUID) > 0 {
 		ctx = context.WithValue(ctx, ImpersonatorKey, identity.ImpersonatorUUID)
+	}
+
+	if len(identity.Permissions) > 0 {
+		ctx = context.WithValue(ctx, PermissionsKey, identity.Permissions)
 	}
 
 	return ctx

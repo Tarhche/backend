@@ -34,14 +34,14 @@ type Service struct {
 	// a compose file puts that decision.
 	NetworkMode string `json:"network_mode,omitempty"`
 
-	Deploy Deploy `json:"deploy,omitempty"`
+	Deploy Deploy `json:"deploy"`
 }
 
 // Deploy carries the resource limits and the restart policy, where a compose
 // file puts them.
 type Deploy struct {
-	Resources     Resources     `json:"resources,omitempty"`
-	RestartPolicy RestartPolicy `json:"restart_policy,omitempty"`
+	Resources     Resources     `json:"resources"`
+	RestartPolicy RestartPolicy `json:"restart_policy"`
 }
 
 // RestartPolicy is how hard the runner tries to make a task what it was
@@ -54,7 +54,7 @@ type RestartPolicy struct {
 }
 
 type Resources struct {
-	Limits Limits `json:"limits,omitempty"`
+	Limits Limits `json:"limits"`
 }
 
 // Limits accepts compose's own units: cpus as a decimal string or number, and

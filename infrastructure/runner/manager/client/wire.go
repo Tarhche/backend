@@ -38,7 +38,7 @@ type taskPayload struct {
 	CreatedAt     time.Time         `json:"created_at"`
 	StartedAt     time.Time         `json:"started_at"`
 	FinishedAt    time.Time         `json:"finished_at"`
-	Deadline      time.Time         `json:"deadline,omitempty"`
+	Deadline      time.Time         `json:"deadline"`
 }
 
 type endpointPayload struct {

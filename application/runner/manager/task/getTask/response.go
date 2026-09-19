@@ -38,7 +38,7 @@ type Response struct {
 
 	// Deadline is when a task that may only run for so long will be
 	// stopped, as the node that made it set it.
-	Deadline time.Time `json:"deadline,omitempty"`
+	Deadline time.Time `json:"deadline"`
 
 	Reason        string         `json:"reason,omitempty"`
 	Limits        LimitsResponse `json:"resource_limits"`

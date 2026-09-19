@@ -276,7 +276,7 @@ func assertSaysNothingSecret(t *testing.T, printed string, files certificate.Fil
 	assert.NotContains(t, printed, "PRIVATE KEY", "a private key must never be printed")
 	assert.NotContains(t, printed, string(key))
 
-	for _, line := range strings.Split(strings.TrimSpace(string(key)), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(string(key)), "\n") {
 		if len(line) > 20 {
 			assert.NotContains(t, printed, line, "no part of a private key may be printed")
 		}
