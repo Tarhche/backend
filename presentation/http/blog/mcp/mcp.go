@@ -257,7 +257,6 @@ func (s *server) route(t tool) (http.Handler, string, error) {
 // calling it is not something an agent does, not because nobody got round to
 // it.
 var unreachable = map[string]string{
-	"GET /health": "answered by the health_check tool under a name of its own",
 	"/openapi/":   "documentation of these same routes, which a tool already carries in its own schema",
 	"GET /api/ws": "a transport rather than a route: it carries the requests a browser streams, and a stream is not an answer",
 	Path:          "this server itself",

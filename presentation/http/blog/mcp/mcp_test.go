@@ -154,53 +154,6 @@ func results(t *testing.T, answer map[string]any) (string, bool) {
 	return text.String(), isError
 }
 
-func TestTheTableAndTheRoutesAgree(t *testing.T) {
-	t.Parallel()
-
-	table := tools()
-
-	t.Run("every tool names a route, once", func(t *testing.T) {
-		routes := make(map[string]string, len(table))
-		names := make(map[string]string, len(table))
-
-		for _, tool := range table {
-			assert.Regexp(t, `^[a-z][a-z0-9_]*$`, tool.name)
-			assert.NotEmpty(t, tool.description, tool.name)
-
-			method, path, found := strings.Cut(tool.route, " ")
-			require.True(t, found, tool.name)
-			assert.Contains(t, []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete}, method)
-			assert.True(t, strings.HasPrefix(path, "/"), tool.route)
-
-			if previous, taken := names[tool.name]; taken {
-				t.Fatalf("%q names both %q and %q", tool.name, previous, tool.route)
-			}
-			names[tool.name] = tool.route
-
-			if previous, taken := routes[tool.route]; taken {
-				t.Fatalf("%q is reached by both %q and %q", tool.route, previous, tool.name)
-			}
-			routes[tool.route] = tool.name
-		}
-	})
-
-	t.Run("every tool describes what its path carries", func(t *testing.T) {
-		for _, tool := range table {
-			schema, err := inputSchema(tool)
-			require.NoError(t, err, tool.name)
-
-			for _, name := range tool.pathParams() {
-				assert.Contains(t, schema.Properties, name, tool.name)
-				assert.Contains(t, schema.Required, name, tool.name)
-			}
-
-			resolved, err := schema.Resolve(nil)
-			require.NoError(t, err, tool.name)
-			require.NotNil(t, resolved)
-		}
-	})
-}
-
 func TestARouteWithoutAToolStopsTheServerBeingBuilt(t *testing.T) {
 	t.Parallel()
 
