@@ -70,7 +70,7 @@ func granted(t *testing.T, h password.Hasher) grant.Grant {
 		Scope:               oauth.Scope,
 		CodeChallenge:       challenge(),
 		CodeChallengeMethod: grant.ChallengeMethodS256,
-		ExpiresAt:           time.Now().Add(time.Minute),
+		ExpiredAt:           time.Now().Add(time.Minute),
 	}
 }
 
@@ -177,7 +177,7 @@ func TestUseCase_Execute(t *testing.T) {
 		h := hasher()
 
 		expired := granted(t, h)
-		expired.ExpiresAt = time.Now().Add(-time.Second)
+		expired.ExpiredAt = time.Now().Add(-time.Second)
 
 		var clientRepository clients.MockClientsRepository
 		clientRepository.On("GetOne", mock.Anything, "client-id").Return(public(), nil).Once()

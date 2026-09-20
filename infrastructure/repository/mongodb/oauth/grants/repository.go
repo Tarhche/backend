@@ -45,7 +45,7 @@ func (r *GrantsRepository) EnsureIndexes(ctx context.Context) error {
 	defer cancel()
 
 	_, err := r.collection.Indexes().CreateOne(ctx, mongo.IndexModel{
-		Keys:    bson.D{{Key: "expires_at", Value: 1}},
+		Keys:    bson.D{{Key: "expired_at", Value: 1}},
 		Options: options.Index().SetExpireAfterSeconds(0),
 	})
 
@@ -80,7 +80,7 @@ func (r *GrantsRepository) Save(ctx context.Context, g *grant.Grant) (string, er
 		Scope:               g.Scope,
 		CodeChallenge:       g.CodeChallenge,
 		CodeChallengeMethod: g.CodeChallengeMethod,
-		ExpiresAt:           g.ExpiresAt,
+		ExpiredAt:           g.ExpiredAt,
 		CreatedAt:           g.CreatedAt,
 	}); err != nil {
 		return "", err
@@ -116,7 +116,7 @@ func (r *GrantsRepository) Consume(ctx context.Context, id string) (grant.Grant,
 		Scope:               stored.Scope,
 		CodeChallenge:       stored.CodeChallenge,
 		CodeChallengeMethod: stored.CodeChallengeMethod,
-		ExpiresAt:           stored.ExpiresAt,
+		ExpiredAt:           stored.ExpiredAt,
 		CreatedAt:           stored.CreatedAt,
 	}, nil
 }

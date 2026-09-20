@@ -132,7 +132,7 @@ func (uc *UseCase) grant(ctx context.Context, clientID string, userUUID string, 
 		Scope:               request.Scope,
 		CodeChallenge:       request.CodeChallenge,
 		CodeChallengeMethod: request.CodeChallengeMethod,
-		ExpiresAt:           time.Now().Add(grant.Lifetime),
+		ExpiredAt:           time.Now().Add(grant.Lifetime),
 		CreatedAt:           time.Now(),
 	}
 

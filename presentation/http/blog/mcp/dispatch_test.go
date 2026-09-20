@@ -32,7 +32,8 @@ func answered(t *testing.T, result *mcpsdk.CallToolResult) (string, bool) {
 			require.NotNil(t, c.Resource)
 			text.WriteString(c.Resource.Text)
 			if len(c.Resource.Blob) > 0 {
-				text.WriteString("blob:" + base64.StdEncoding.EncodeToString(c.Resource.Blob))
+				text.WriteString("blob:")
+				text.WriteString(base64.StdEncoding.EncodeToString(c.Resource.Blob))
 			}
 		}
 	}

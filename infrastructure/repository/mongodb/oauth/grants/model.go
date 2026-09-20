@@ -15,7 +15,7 @@ type GrantBson struct {
 	CodeChallenge       string `bson:"code_challenge"`
 	CodeChallengeMethod string `bson:"code_challenge_method"`
 
-	ExpiresAt time.Time `bson:"expires_at"`
+	ExpiredAt time.Time `bson:"expired_at"`
 	CreatedAt time.Time `bson:"created_at,omitempty"`
 }
 

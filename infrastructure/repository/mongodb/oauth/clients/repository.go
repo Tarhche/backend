@@ -45,7 +45,7 @@ func (r *ClientsRepository) EnsureIndexes(ctx context.Context) error {
 	defer cancel()
 
 	_, err := r.collection.Indexes().CreateOne(ctx, mongo.IndexModel{
-		Keys:    bson.D{{Key: "expires_at", Value: 1}},
+		Keys:    bson.D{{Key: "expired_at", Value: 1}},
 		Options: options.Index().SetExpireAfterSeconds(0),
 	})
 
@@ -61,7 +61,7 @@ func (r *ClientsRepository) Keep(ctx context.Context, id string) error {
 	result, err := r.collection.UpdateOne(
 		ctx,
 		bson.D{{Key: "_id", Value: id}},
-		bson.M{"$unset": bson.M{"expires_at": ""}},
+		bson.M{"$unset": bson.M{"expired_at": ""}},
 	)
 	if err != nil {
 		return err
@@ -90,9 +90,9 @@ func (r *ClientsRepository) Save(ctx context.Context, c *client.Client) (string,
 		c.CreatedAt = time.Now()
 	}
 
-	var expiresAt *time.Time
-	if !c.ExpiresAt.IsZero() {
-		expiresAt = &c.ExpiresAt
+	var expiredAt *time.Time
+	if !c.ExpiredAt.IsZero() {
+		expiredAt = &c.ExpiredAt
 	}
 
 	stored := ClientBson{
@@ -108,7 +108,7 @@ func (r *ClientsRepository) Save(ctx context.Context, c *client.Client) (string,
 			Value: c.Secret.Value,
 			Salt:  c.Secret.Salt,
 		},
-		ExpiresAt: expiresAt,
+		ExpiredAt: expiredAt,
 		CreatedAt: c.CreatedAt,
 	}
 
@@ -154,8 +154,8 @@ func (r *ClientsRepository) GetOne(ctx context.Context, id string) (client.Clien
 		CreatedAt: stored.CreatedAt,
 	}
 
-	if stored.ExpiresAt != nil {
-		c.ExpiresAt = *stored.ExpiresAt
+	if stored.ExpiredAt != nil {
+		c.ExpiredAt = *stored.ExpiredAt
 	}
 
 	return c, nil

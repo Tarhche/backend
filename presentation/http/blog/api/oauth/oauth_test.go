@@ -293,7 +293,7 @@ func TestToken(t *testing.T) {
 		Scope:               oauth.Scope,
 		CodeChallenge:       base64.RawURLEncoding.EncodeToString(sum[:]),
 		CodeChallengeMethod: grant.ChallengeMethodS256,
-		ExpiresAt:           time.Now().Add(time.Minute),
+		ExpiredAt:           time.Now().Add(time.Minute),
 	}
 
 	privateKey, err := ecdsa.Generate()

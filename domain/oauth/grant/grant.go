@@ -42,13 +42,13 @@ type Grant struct {
 	CodeChallenge       string
 	CodeChallengeMethod string
 
-	ExpiresAt time.Time
+	ExpiredAt time.Time
 	CreatedAt time.Time
 }
 
 // IsExpired reports a grant that waited too long to be collected.
 func (g Grant) IsExpired() bool {
-	return !time.Now().Before(g.ExpiresAt)
+	return !time.Now().Before(g.ExpiredAt)
 }
 
 type Repository interface {

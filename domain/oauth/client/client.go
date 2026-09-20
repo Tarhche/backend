@@ -49,14 +49,14 @@ type Client struct {
 	// a public one.
 	Secret password.Hash
 
-	// ExpiresAt is when a registration nobody ever approved is thrown away.
+	// ExpiredAt is when a registration nobody ever approved is thrown away.
 	// Anybody may register, so a registration is worth nothing until somebody
 	// says it is: until then it is kept on sufferance, and the moment one is
 	// approved it is kept for good.
 	//
 	// It is zero for a client that has been approved, and for every client
 	// registered before this was so.
-	ExpiresAt time.Time
+	ExpiredAt time.Time
 
 	CreatedAt time.Time
 }

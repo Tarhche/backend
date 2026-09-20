@@ -15,9 +15,9 @@ type ClientBson struct {
 
 	Secret SecretBson `bson:"secret,omitempty"`
 
-	// ExpiresAt is absent once somebody has approved this client, and a
+	// ExpiredAt is absent once somebody has approved this client, and a
 	// document without it is one the database keeps.
-	ExpiresAt *time.Time `bson:"expires_at,omitempty"`
+	ExpiredAt *time.Time `bson:"expired_at,omitempty"`
 
 	CreatedAt time.Time `bson:"created_at,omitempty"`
 }

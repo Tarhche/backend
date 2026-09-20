@@ -63,8 +63,8 @@ func TestUseCase_Execute(t *testing.T) {
 		// anybody may register, so a registration is kept on sufferance until
 		// somebody approves it
 		require.NotNil(t, saved)
-		assert.False(t, saved.ExpiresAt.IsZero())
-		assert.Equal(t, client.UnapprovedLifetime, saved.ExpiresAt.Sub(saved.CreatedAt))
+		assert.False(t, saved.ExpiredAt.IsZero())
+		assert.Equal(t, client.UnapprovedLifetime, saved.ExpiredAt.Sub(saved.CreatedAt))
 	})
 
 	t.Run("an application that keeps a secret is given one, once", func(t *testing.T) {
