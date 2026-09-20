@@ -27,6 +27,11 @@ type Identity struct {
 	// empty for an ordinary session, and is what the dashboard shows when it
 	// says whose eyes these are.
 	ImpersonatorUUID string
+
+	// Permissions are what the token says its holder may do. They are a hint,
+	// good enough to decide what to offer somebody; whoever has to refuse a
+	// request asks the authorizer, which reads the roles as they are now.
+	Permissions []string
 }
 
 // Authenticator turns an access token into the user it stands for.
@@ -86,5 +91,6 @@ func (a *Authenticator) Authenticate(ctx context.Context, token string) (Identit
 	return Identity{
 		User:             u,
 		ImpersonatorUUID: jwt.Impersonator(claims),
+		Permissions:      jwt.Permissions(claims),
 	}, nil
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/danceable/provider"
@@ -131,6 +132,13 @@ import (
 	getLanguages "github.com/khanzadimahdi/testproject/application/language/getLanguages"
 	languageresolver "github.com/khanzadimahdi/testproject/application/language/resolver"
 	"github.com/khanzadimahdi/testproject/application/localize"
+	"github.com/khanzadimahdi/testproject/application/oauth"
+	approveauthorization "github.com/khanzadimahdi/testproject/application/oauth/approveAuthorization"
+	"github.com/khanzadimahdi/testproject/application/oauth/authorize"
+	describeauthorization "github.com/khanzadimahdi/testproject/application/oauth/describeAuthorization"
+	exchangecode "github.com/khanzadimahdi/testproject/application/oauth/exchangeCode"
+	refreshsession "github.com/khanzadimahdi/testproject/application/oauth/refreshSession"
+	registerclient "github.com/khanzadimahdi/testproject/application/oauth/registerClient"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/file"
 	"github.com/khanzadimahdi/testproject/domain/password"
@@ -153,6 +161,8 @@ import (
 	elementsrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/elements"
 	filesrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/files"
 	languagesrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/languages"
+	oauthclientsrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/oauth/clients"
+	oauthgrantsrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/oauth/grants"
 	permissionsrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/permissions"
 	rolesrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/roles"
 	userrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/users"
@@ -184,9 +194,12 @@ import (
 	hashtagAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/hashtag"
 	homeapi "github.com/khanzadimahdi/testproject/presentation/http/blog/api/home"
 	languageAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/language"
+	oauthAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/oauth"
+	mcpAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/mcp"
 	"github.com/khanzadimahdi/testproject/presentation/http/blog/openapi"
 	healthAPI "github.com/khanzadimahdi/testproject/presentation/http/health"
 	"github.com/khanzadimahdi/testproject/presentation/http/middleware"
+	"github.com/khanzadimahdi/testproject/presentation/http/router"
 	websocketAPI "github.com/khanzadimahdi/testproject/presentation/websocket"
 	websocketMiddleware "github.com/khanzadimahdi/testproject/presentation/websocket/middleware"
 	"github.com/nats-io/nats.go"
@@ -596,12 +609,51 @@ func blog(
 
 	dashboardGetConfigUsecase := dashboardGetConfig.NewUseCase(configRepository)
 
+	// ---- oauth ----
+	//
+	// this estate is the authorization server an MCP client is given a session
+	// by. What it hands over is an ordinary session of ours, so an application
+	// acts with the permissions of whoever approved it and with no others.
+	oauthClientsRepository := oauthclientsrepository.NewRepository(database)
+	oauthGrantsRepository := oauthgrantsrepository.NewRepository(database)
+	if err := oauthGrantsRepository.EnsureIndexes(context.Background()); err != nil {
+		return nil, err
+	}
+
+	if err := oauthClientsRepository.EnsureIndexes(context.Background()); err != nil {
+		return nil, err
+	}
+
+	oauthRequests := oauth.NewRequests(jwt)
+	oauthClients := oauth.NewClients(oauthClientsRepository, hasher)
+
+	registerClientUseCase := registerclient.NewUseCase(oauthClientsRepository, hasher)
+	authorizeUseCase := authorize.NewUseCase(oauthClientsRepository, oauthRequests)
+	describeAuthorizationUseCase := describeauthorization.NewUseCase(oauthClientsRepository, oauthRequests)
+	approveAuthorizationUseCase := approveauthorization.NewUseCase(oauthClientsRepository, oauthGrantsRepository, oauthRequests, hasher)
+	exchangeCodeUseCase := exchangecode.NewUseCase(oauthGrantsRepository, oauthClients, userRepository, hasher, authTokenGenerator)
+
 	checkHealthUseCase := checkhealth.NewUseCase(
 		checkhealth.Dependency{Name: "database", Pinger: infraHealth.NewMongodbPinger(database)},
 		checkhealth.Dependency{Name: "messaging", Pinger: infraHealth.NewNatsPinger(natsConnection)},
 	)
 
-	mux := http.NewServeMux()
+	webURL := blogConfigs.WebURL
+	if len(webURL) == 0 {
+		return nil, errors.New("the web url is not configured (--web-url, WEB_URL)")
+	}
+
+	// where this API answers, said absolutely: an application looking for a
+	// session has to be told where to go, and a relative address says nothing
+	// to somebody who is not here yet.
+	serviceURL := blogConfigs.ServiceURL
+	if len(serviceURL) == 0 {
+		return nil, errors.New("the service url is not configured (--service-url, SERVICE_URL)")
+	}
+
+	// the router keeps what it registers, so the MCP server below can be held
+	// against the routes that exist rather than against a copy of them.
+	mux := router.New()
 
 	// ---- health ----
 	// the task healthcheck probes this
@@ -852,6 +904,51 @@ func blog(
 		return dashboardConfigAPI.NewUpdateHandler(dashboardUpdateConfig.NewUseCase(configRepository, languageRepository, va(c), tr(c)))
 	}), authorizer, permission.ConfigUpdate), jwt, userRepository))
 
+	// ---- oauth ----
+	//
+	// how an application is given a session of somebody's: it registers, is
+	// put to them, and collects what they gave it. Only the answer itself is
+	// behind authentication -- the rest is how a client that has never been
+	// here finds its way.
+	mux.Handle("GET /.well-known/oauth-protected-resource", oauthAPI.NewProtectedResourceHandler(serviceURL))
+	mux.Handle("GET /.well-known/oauth-protected-resource/mcp", oauthAPI.NewProtectedResourceHandler(serviceURL))
+	mux.Handle("GET /.well-known/oauth-authorization-server", oauthAPI.NewAuthorizationServerHandler(serviceURL))
+	// anybody may register, which is what lets an MCP client introduce itself
+	// without being issued credentials first. One caller registering twenty
+	// applications in an hour is already generous; the rest is somebody
+	// filling the collection, and a registration nobody approves is thrown
+	// away a day later anyway.
+	registerClient, err := middleware.NewRateLimitMiddleware(
+		oauthAPI.NewRegisterHandler(registerClientUseCase),
+		20,
+		1*time.Hour,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	mux.Handle("POST /oauth/register", registerClient)
+	mux.Handle("GET /oauth/authorize", oauthAPI.NewAuthorizeHandler(authorizeUseCase, strings.TrimSuffix(webURL, "/")+oauthAPI.ConsentPath))
+	mux.Handle("POST /oauth/token", scoped(func(c provider.Container) http.Handler {
+		return oauthAPI.NewTokenHandler(
+			exchangeCodeUseCase,
+			refreshsession.NewUseCase(oauthClients, refresh.NewUseCase(userRepository, jwt, authTokenGenerator, authorizer, tr(c), va(c))),
+		)
+	}))
+	mux.Handle("GET /api/oauth/authorization", oauthAPI.NewDescribeAuthorizationHandler(describeAuthorizationUseCase))
+	mux.Handle("POST /api/oauth/authorization", middleware.NewAuthenticateMiddleware(oauthAPI.NewApproveAuthorizationHandler(approveAuthorizationUseCase), jwt, userRepository))
+
+	// ---- mcp ----
+	//
+	// the same API, as tools. It is built last because it is held against the
+	// routes above: it reads what each of them asks of whoever calls it, and
+	// refuses to be built at all if one of them has no tool.
+	mcpHandler, err := mcpAPI.NewHandler(mux, authenticator, oauthAPI.ProtectedResourceMetadataURL(serviceURL), logger)
+	if err != nil {
+		return nil, err
+	}
+	mux.Handle(mcpAPI.Path, mcpHandler)
+
 	rateLimited, err := middleware.NewRateLimitMiddleware(mux, 600, 1*time.Minute)
 	if err != nil {
 		return nil, err
@@ -880,11 +977,6 @@ func blog(
 		),
 		logger,
 	)
-
-	webURL := blogConfigs.WebURL
-	if len(webURL) == 0 {
-		return nil, errors.New("the web url is not configured (--web-url, WEB_URL)")
-	}
 
 	// subscribers
 	subscribers := map[string]domain.MessageHandler{

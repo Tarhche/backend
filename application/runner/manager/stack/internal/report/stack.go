@@ -41,7 +41,7 @@ type Service struct {
 
 	// Deadline is when a service that may only run for so long will be
 	// stopped.
-	Deadline time.Time `json:"deadline,omitempty"`
+	Deadline time.Time `json:"deadline"`
 }
 
 type Endpoint struct {

@@ -41,8 +41,7 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 
 	// the runner validates the spec too, and it is the one that decides what it
 	// can run, so what it refused is reported as it stands.
-	var refused *client.ValidationError
-	if errors.As(err, &refused) {
+	if refused, ok := errors.AsType[*client.ValidationError](err); ok {
 		return &Response{ValidationErrors: refused.ValidationErrors}, nil
 	}
 

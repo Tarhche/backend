@@ -30,7 +30,7 @@ Layers (clean architecture, dependencies point inward):
 - **`domain/`** — entities and interfaces only, no implementations. Repository interfaces live next to their entity (e.g. `domain/article/article.go`). Cross-cutting contracts (`Validator`, `Consumer`/`Publisher`, `Mailer`, `Cache`, errors like `domain.ErrNotExists`) are in `domain/*.go`.
 - **`application/`** — one package per use case (e.g. `application/article/getArticle`) containing `request.go`, `response.go`, `usecase.go`, `usecase_test.go`. Use cases validate the request first and return validation errors inside the response (not as an error). `application/dashboard/` mirrors the public use cases for the authenticated admin API.
 - **`infrastructure/`** — implementations: `repository/mongodb` (real), `repository/memory` and `repository/mocks` (tests), `messaging/nats` (JetStream produce/consume + core pub/sub) with `messaging/mock`, `storage` (MinIO/S3), `jwt`, `email`, `telemetry` (OTel traces/metrics/logs + OTLP profiler), `runner` (Docker-based code execution), `tunnel` (a general-purpose L4 reverse tunnel — see below), `matcher` (glob matching for element venues).
-- **`presentation/`** — `commands/` (the serve commands, plus `certificate/` for issuing certificates) and `http/` (handlers). Handlers are thin: decode request → call use case → encode response.
+- **`presentation/`** — `commands/` (the serve commands, plus `certificate/` for issuing certificates) and `http/` (handlers). Handlers are thin: decode request → call use case → encode response. `http/router` is the blog's `http.ServeMux`: it remembers the patterns it was given, so the MCP server can be held against the routes that exist.
 
 ### Console
 
@@ -74,6 +74,17 @@ Two wiring conventions to respect:
 - **Multilingual articles**: an article "identity" is its `CorrelationUUID`; each language version is a separate document keyed by `(correlationUUID, languageCode)`. Public API responses expose `correlation_uuid` only (never the article's storage UUID); bookmarks and comments also key on correlation UUID + language code. Dashboard article CRUD is keyed the same way.
 - **Elements** (page widgets) are not language-scoped; only the articles they reference are. Element venues are glob patterns (`*`/`**`/`?`) matched in-app via `infrastructure/matcher` — callers pass concrete paths like `/en/articles/<uuid>`.
 - **Author exposure**: whenever a response includes author name/avatar/username, include the author UUID too.
+
+### MCP and OAuth
+
+The blog serves its own API to agents on **`/mcp`** (`presentation/http/blog/mcp` — read its README first). It is a second transport over the routes that already exist, not a second API: a tool names a route ("METHOD /path", written exactly as the router registers it) and calling it makes that request **inside the process, through the same mux**, so authentication, authorization, localization and caching all happen exactly once, where they already did.
+
+- **Coverage is enforced, not claimed.** `router.Router` records every pattern; the MCP server is built last and refuses to build if a route has no tool and is not listed in `unreachable` (with the reason it is not one). A test parses `blog.go` and asserts the same thing in CI. Add a route → add a tool.
+- **Permissions are read off the route**, via `middleware.Requires`, never written down again. `tools/list` is filtered by the caller's `permissions` claim (a hint, like the dashboard's); every call is still authorized by the route's own `Authorize` middleware against the database.
+- **Tool schemas come from the use cases**: `body[T]()` infers from the request struct and takes what is required from `Validate()` on an empty request. Hand-written schemas exist only where the JSON is not the struct's shape (element components, compose fields).
+- Streams (follow logs, watch tasks/stacks, terminal attach, the public code runner) are not tools; they stay on the websocket.
+
+**`/mcp` is authenticated**, and a request without a valid token gets a `WWW-Authenticate` challenge pointing at the protected-resource metadata — which is what starts OAuth. This estate is also an **OAuth 2.1 authorization server** (`application/oauth`, `domain/oauth/{client,grant}`, `presentation/http/blog/api/oauth`): dynamic client registration (`POST /oauth/register`), authorization code + PKCE S256 (`GET /oauth/authorize` → the frontend's consent page → `POST /api/oauth/authorization` → `POST /oauth/token`), and the refresh grant, which delegates to the existing `application/auth/refresh` so a ban or a withdrawn permission still ends a session at its next refresh. What the token endpoint hands over is an **ordinary session of ours** — the same access/refresh tokens the dashboard carries — so an application acts with the permissions of whoever approved it. A shadow session may not approve one. Codes are single-use (`FindOneAndDelete`), live two minutes, and are stored only as a hash. `SERVICE_URL` names this estate as the issuer; don't confuse this with `domain/oauth` on `feat/social-login`, which is the other side (signing *in* with Google or GitHub).
 
 ### Messaging and telemetry
 

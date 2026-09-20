@@ -1,5 +1,23 @@
 basePath: /api
 definitions:
+  approveauthorization.Request:
+    properties:
+      approved:
+        description: |-
+          Approved is the answer. A request that is not approved is refused, and
+          the application is told so at the address it registered.
+        type: boolean
+      request:
+        description: |-
+          RequestToken is the authorization request as the authorization endpoint
+          signed it.
+        type: string
+    type: object
+  approveauthorization.Response:
+    properties:
+      redirect_to:
+        type: string
+    type: object
   bookmarkExists.Request:
     properties:
       language_code:
@@ -180,6 +198,21 @@ definitions:
       total_pages:
         type: integer
     type: object
+  describeauthorization.Response:
+    properties:
+      client_id:
+        type: string
+      client_name:
+        type: string
+      client_uri:
+        type: string
+      redirect_uri:
+        type: string
+      scopes:
+        items:
+          type: string
+        type: array
+    type: object
   domain.ValidationErrors:
     additionalProperties:
       type: string
@@ -190,6 +223,19 @@ definitions:
       type:
         type: string
       uuid:
+        type: string
+    type: object
+  exchangecode.Response:
+    properties:
+      access_token:
+        type: string
+      expires_in:
+        type: integer
+      refresh_token:
+        type: string
+      scope:
+        type: string
+      token_type:
         type: string
     type: object
   forgetpassword.Request:
@@ -1892,6 +1938,68 @@ definitions:
       identity:
         type: string
     type: object
+  registerclient.Request:
+    properties:
+      client_name:
+        type: string
+      client_uri:
+        type: string
+      grant_types:
+        items:
+          type: string
+        type: array
+      redirect_uris:
+        items:
+          type: string
+        type: array
+      response_types:
+        items:
+          type: string
+        type: array
+      scope:
+        type: string
+      token_endpoint_auth_method:
+        type: string
+    type: object
+  registerclient.Response:
+    properties:
+      client_id:
+        type: string
+      client_id_issued_at:
+        type: integer
+      client_name:
+        type: string
+      client_secret:
+        description: |-
+          ClientSecret is handed over once, here, and is never readable again. It
+          is absent for a public client, which has none.
+        type: string
+      client_secret_expires_at:
+        description: |-
+          ClientSecretExpiresAt is zero for a secret that does not expire, and
+          [RFC 7591] asks for it whenever a secret was issued, zero included.
+
+          [RFC 7591]: https://www.rfc-editor.org/rfc/rfc7591
+        type: integer
+      client_uri:
+        type: string
+      grant_types:
+        items:
+          type: string
+        type: array
+      redirect_uris:
+        items:
+          type: string
+        type: array
+      response_types:
+        items:
+          type: string
+        type: array
+      scope:
+        type: string
+      token_endpoint_auth_method:
+        type: string
+    type: object
   resetpassword.Request:
     properties:
       password:
@@ -2153,6 +2261,36 @@ info:
   title: Backend API
   version: "1.0"
 paths:
+  /.well-known/oauth-authorization-server:
+    get:
+      description: where to register, where to send somebody to approve an application,
+        and where to collect a session
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: OAuth authorization server metadata
+      tags:
+      - oauth
+  /.well-known/oauth-protected-resource:
+    get:
+      description: says which authorization server issues the tokens the MCP endpoint
+        takes
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: OAuth protected resource metadata
+      tags:
+      - oauth
   /articles:
     get:
       consumes:
@@ -5225,6 +5363,206 @@ paths:
       summary: List languages
       tags:
       - languages
+  /oauth/authorization:
+    get:
+      description: what the application asking is called and what it is asking for
+      parameters:
+      - description: The authorization request, as the authorization endpoint signed
+          it
+        in: query
+        name: request
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/describeauthorization.Response'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Describe a pending authorization
+      tags:
+      - oauth
+    post:
+      consumes:
+      - application/json
+      description: approves or refuses an application, and says where to send the
+        browser next
+      parameters:
+      - description: The request being answered
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/approveauthorization.Request'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/approveauthorization.Response'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Answer a pending authorization
+      tags:
+      - oauth
+  /oauth/authorize:
+    get:
+      description: reads what an application is asking for and sends the browser on
+        to the page that asks the person about it
+      parameters:
+      - description: The application asking
+        in: query
+        name: client_id
+        required: true
+        type: string
+      - description: Where it is answered; one it registered
+        in: query
+        name: redirect_uri
+        required: true
+        type: string
+      - description: code
+        in: query
+        name: response_type
+        required: true
+        type: string
+      - description: The proof-key challenge
+        in: query
+        name: code_challenge
+        required: true
+        type: string
+      - description: S256
+        in: query
+        name: code_challenge_method
+        required: true
+        type: string
+      - description: Handed back untouched
+        in: query
+        name: state
+        type: string
+      - description: mcp
+        in: query
+        name: scope
+        type: string
+      - description: What the application wants to reach
+        in: query
+        name: resource
+        type: string
+      produces:
+      - application/json
+      responses:
+        "302":
+          description: Found
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Authorization endpoint
+      tags:
+      - oauth
+  /oauth/register:
+    post:
+      consumes:
+      - application/json
+      description: registers an OAuth client, which is how an MCP client introduces
+        itself before anybody approves it
+      parameters:
+      - description: Client metadata
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/registerclient.Request'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/registerclient.Response'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Register an application
+      tags:
+      - oauth
+  /oauth/token:
+    post:
+      consumes:
+      - application/x-www-form-urlencoded
+      description: exchanges an authorization code for a session, or renews one
+      parameters:
+      - description: authorization_code or refresh_token
+        in: formData
+        name: grant_type
+        required: true
+        type: string
+      - description: The code the application was handed
+        in: formData
+        name: code
+        type: string
+      - description: What the challenge was built from
+        in: formData
+        name: code_verifier
+        type: string
+      - description: The address the code was given for
+        in: formData
+        name: redirect_uri
+        type: string
+      - description: The refresh token being renewed
+        in: formData
+        name: refresh_token
+        type: string
+      - description: The application asking
+        in: formData
+        name: client_id
+        type: string
+      - description: Its secret, when it has one
+        in: formData
+        name: client_secret
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/exchangecode.Response'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Token endpoint
+      tags:
+      - oauth
   /ws:
     get:
       description: upgrades the connection to a websocket. the client sends requests

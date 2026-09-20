@@ -19,7 +19,8 @@ const (
 type Blog struct {
 	Port int `usage:"specifies which port server should listen to." env:"SERVER_PORT" long:"port" short:"p"`
 
-	WebURL     string `usage:"Absolute base URL the web frontend is reachable at, used to build the links sent by email." env:"WEB_URL" long:"web-url"`
+	WebURL     string `usage:"Absolute base URL the web frontend is reachable at, used to build the links sent by email and the page an application's request for a session is put to." env:"WEB_URL" long:"web-url"`
+	ServiceURL string `usage:"Absolute base URL this service is reachable at. It names this estate as an OAuth issuer, and names the MCP endpoint as the thing a session is asked for." env:"SERVICE_URL" long:"service-url"`
 	PrivateKey string `usage:"ECDSA private key, in PEM form, the authentication tokens are signed with." env:"PRIVATE_KEY" long:"private-key"`
 
 	S3Endpoint   string `usage:"S3 compatible endpoint, as host:port." env:"S3_ENDPOINT" long:"s3-endpoint"`

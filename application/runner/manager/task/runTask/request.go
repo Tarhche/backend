@@ -1,6 +1,7 @@
 package runTask
 
 import (
+	"slices"
 	"time"
 
 	"github.com/khanzadimahdi/testproject/application/runner/spec"
@@ -153,12 +154,8 @@ func (r *Request) Validate() domain.ValidationErrors {
 		validationErrors["network_policy"] = "invalid_network_policy"
 	}
 
-	for _, p := range r.ExposedPorts {
-		if p == 0 {
-			validationErrors["exposed_ports"] = "invalid_value"
-
-			break
-		}
+	if slices.Contains(r.ExposedPorts, 0) {
+		validationErrors["exposed_ports"] = "invalid_value"
 	}
 
 	// a task with no network has nothing to publish a port on.

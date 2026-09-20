@@ -31,7 +31,8 @@ func TestCorsMiddleware(t *testing.T) {
 		assert.Equal(t, "*", response.Header().Get("Access-Control-Allow-Origin"))
 		assert.Equal(t, "true", response.Header().Get("Access-Control-Allow-Credentials"))
 		assert.Equal(t, "POST, GET, OPTIONS, PUT, DELETE", response.Header().Get("Access-Control-Allow-Methods"))
-		assert.Equal(t, "Origin, Content-Type, Accept, Authorization, X-Language-Code", response.Header().Get("Access-Control-Allow-Headers"))
+		assert.Equal(t, "Origin, Content-Type, Accept, Authorization, X-Language-Code, Mcp-Session-Id, Mcp-Protocol-Version, Mcp-Method, Mcp-Name, Last-Event-ID", response.Header().Get("Access-Control-Allow-Headers"))
+		assert.Equal(t, "Mcp-Session-Id, WWW-Authenticate", response.Header().Get("Access-Control-Expose-Headers"))
 
 		assert.Equal(t, expectedReponse, response.Body.String())
 		assert.Equal(t, http.StatusOK, response.Code)
@@ -58,7 +59,8 @@ func TestCorsMiddleware(t *testing.T) {
 		assert.Equal(t, "*", response.Header().Get("Access-Control-Allow-Origin"))
 		assert.Equal(t, "true", response.Header().Get("Access-Control-Allow-Credentials"))
 		assert.Equal(t, "POST, GET, OPTIONS, PUT, DELETE", response.Header().Get("Access-Control-Allow-Methods"))
-		assert.Equal(t, "Origin, Content-Type, Accept, Authorization, X-Language-Code", response.Header().Get("Access-Control-Allow-Headers"))
+		assert.Equal(t, "Origin, Content-Type, Accept, Authorization, X-Language-Code, Mcp-Session-Id, Mcp-Protocol-Version, Mcp-Method, Mcp-Name, Last-Event-ID", response.Header().Get("Access-Control-Allow-Headers"))
+		assert.Equal(t, "Mcp-Session-Id, WWW-Authenticate", response.Header().Get("Access-Control-Expose-Headers"))
 
 		assert.NotEqual(t, expectedReponse, response.Body.String())
 	})
