@@ -36,6 +36,44 @@ func NewRepository(database *mongo.Database) *ClientsRepository {
 	}
 }
 
+// EnsureIndexes lets the database throw away a registration nobody ever
+// approved. Anybody may register, and what is never used should not be kept
+// for ever: a client is read by its id alone, so expiry is the only index this
+// collection needs.
+func (r *ClientsRepository) EnsureIndexes(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
+	_, err := r.collection.Indexes().CreateOne(ctx, mongo.IndexModel{
+		Keys:    bson.D{{Key: "expires_at", Value: 1}},
+		Options: options.Index().SetExpireAfterSeconds(0),
+	})
+
+	return err
+}
+
+// Keep stops a client from expiring, which is what approving one means. A
+// document with no expiry is one the database has nothing to say about.
+func (r *ClientsRepository) Keep(ctx context.Context, id string) error {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
+	result, err := r.collection.UpdateOne(
+		ctx,
+		bson.D{{Key: "_id", Value: id}},
+		bson.M{"$unset": bson.M{"expires_at": ""}},
+	)
+	if err != nil {
+		return err
+	}
+
+	if result.MatchedCount == 0 {
+		return domain.ErrNotExists
+	}
+
+	return nil
+}
+
 func (r *ClientsRepository) Save(ctx context.Context, c *client.Client) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
@@ -52,6 +90,11 @@ func (r *ClientsRepository) Save(ctx context.Context, c *client.Client) (string,
 		c.CreatedAt = time.Now()
 	}
 
+	var expiresAt *time.Time
+	if !c.ExpiresAt.IsZero() {
+		expiresAt = &c.ExpiresAt
+	}
+
 	stored := ClientBson{
 		ID:                      c.ID,
 		Name:                    c.Name,
@@ -65,6 +108,7 @@ func (r *ClientsRepository) Save(ctx context.Context, c *client.Client) (string,
 			Value: c.Secret.Value,
 			Salt:  c.Secret.Salt,
 		},
+		ExpiresAt: expiresAt,
 		CreatedAt: c.CreatedAt,
 	}
 
@@ -94,7 +138,7 @@ func (r *ClientsRepository) GetOne(ctx context.Context, id string) (client.Clien
 		return client.Client{}, err
 	}
 
-	return client.Client{
+	c := client.Client{
 		ID:                      stored.ID,
 		Name:                    stored.Name,
 		URI:                     stored.URI,
@@ -108,5 +152,11 @@ func (r *ClientsRepository) GetOne(ctx context.Context, id string) (client.Clien
 			Salt:  stored.Secret.Salt,
 		},
 		CreatedAt: stored.CreatedAt,
-	}, nil
+	}
+
+	if stored.ExpiresAt != nil {
+		c.ExpiresAt = *stored.ExpiresAt
+	}
+
+	return c, nil
 }

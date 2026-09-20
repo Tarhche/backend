@@ -620,6 +620,10 @@ func blog(
 		return nil, err
 	}
 
+	if err := oauthClientsRepository.EnsureIndexes(context.Background()); err != nil {
+		return nil, err
+	}
+
 	oauthRequests := oauth.NewRequests(jwt)
 	oauthClients := oauth.NewClients(oauthClientsRepository, hasher)
 
@@ -909,7 +913,21 @@ func blog(
 	mux.Handle("GET /.well-known/oauth-protected-resource", oauthAPI.NewProtectedResourceHandler(serviceURL))
 	mux.Handle("GET /.well-known/oauth-protected-resource/mcp", oauthAPI.NewProtectedResourceHandler(serviceURL))
 	mux.Handle("GET /.well-known/oauth-authorization-server", oauthAPI.NewAuthorizationServerHandler(serviceURL))
-	mux.Handle("POST /oauth/register", oauthAPI.NewRegisterHandler(registerClientUseCase))
+	// anybody may register, which is what lets an MCP client introduce itself
+	// without being issued credentials first. One caller registering twenty
+	// applications in an hour is already generous; the rest is somebody
+	// filling the collection, and a registration nobody approves is thrown
+	// away a day later anyway.
+	registerClient, err := middleware.NewRateLimitMiddleware(
+		oauthAPI.NewRegisterHandler(registerClientUseCase),
+		20,
+		1*time.Hour,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	mux.Handle("POST /oauth/register", registerClient)
 	mux.Handle("GET /oauth/authorize", oauthAPI.NewAuthorizeHandler(authorizeUseCase, strings.TrimSuffix(webURL, "/")+oauthAPI.ConsentPath))
 	mux.Handle("POST /oauth/token", scoped(func(c provider.Container) http.Handler {
 		return oauthAPI.NewTokenHandler(

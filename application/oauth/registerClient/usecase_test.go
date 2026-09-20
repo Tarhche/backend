@@ -43,6 +43,30 @@ func TestUseCase_Execute(t *testing.T) {
 		assert.Equal(t, oauth.Scope, response.Scope)
 	})
 
+	t.Run("a registration nobody approves does not last", func(t *testing.T) {
+		t.Parallel()
+
+		var saved *client.Client
+
+		var repository clients.MockClientsRepository
+		repository.On("Save", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+			saved = args.Get(1).(*client.Client)
+		}).Return("client-id", nil).Once()
+		defer repository.AssertExpectations(t)
+
+		_, err := NewUseCase(&repository, hasher()).Execute(context.Background(), &Request{
+			ClientName:   "An agent",
+			RedirectURIs: []string{"https://agent.example/callback"},
+		})
+		require.NoError(t, err)
+
+		// anybody may register, so a registration is kept on sufferance until
+		// somebody approves it
+		require.NotNil(t, saved)
+		assert.False(t, saved.ExpiresAt.IsZero())
+		assert.Equal(t, client.UnapprovedLifetime, saved.ExpiresAt.Sub(saved.CreatedAt))
+	})
+
 	t.Run("an application that keeps a secret is given one, once", func(t *testing.T) {
 		t.Parallel()
 

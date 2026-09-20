@@ -2,6 +2,7 @@ package approveauthorization
 
 import (
 	"context"
+	"errors"
 	"net/url"
 	"strings"
 	"testing"
@@ -71,6 +72,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		var clientRepository clients.MockClientsRepository
 		clientRepository.On("GetOne", mock.Anything, "client-id").Return(registered(), nil).Once()
+		clientRepository.On("Keep", mock.Anything, "client-id").Return(nil).Once()
 		defer clientRepository.AssertExpectations(t)
 
 		var grantRepository grants.MockGrantsRepository
@@ -134,6 +136,29 @@ func TestUseCase_Execute(t *testing.T) {
 		assert.Equal(t, oauth.ErrorAccessDenied, sent.Query().Get("error"))
 		assert.Equal(t, "state-from-the-client", sent.Query().Get("state"))
 		assert.Empty(t, sent.Query().Get("code"))
+	})
+
+	t.Run("a registration that fails to be kept hands out no code", func(t *testing.T) {
+		t.Parallel()
+
+		requests, token := pending(t)
+
+		var clientRepository clients.MockClientsRepository
+		clientRepository.On("GetOne", mock.Anything, "client-id").Return(registered(), nil).Once()
+		clientRepository.On("Keep", mock.Anything, "client-id").Return(errors.New("the database said no")).Once()
+		defer clientRepository.AssertExpectations(t)
+
+		// nothing is written down, so nothing was given away
+		var grantRepository grants.MockGrantsRepository
+		defer grantRepository.AssertExpectations(t)
+
+		_, err := NewUseCase(&clientRepository, &grantRepository, requests, hasher()).Execute(context.Background(), &Request{
+			RequestToken: token,
+			Approved:     true,
+			UserUUID:     userUUID,
+		})
+
+		require.Error(t, err)
 	})
 
 	t.Run("a session somebody is standing in cannot be given away", func(t *testing.T) {

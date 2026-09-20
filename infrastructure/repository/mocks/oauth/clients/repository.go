@@ -25,3 +25,9 @@ func (r *MockClientsRepository) GetOne(ctx context.Context, id string) (client.C
 
 	return args.Get(0).(client.Client), args.Error(1)
 }
+
+func (r *MockClientsRepository) Keep(ctx context.Context, id string) error {
+	args := r.Mock.Called(ctx, id)
+
+	return args.Error(0)
+}

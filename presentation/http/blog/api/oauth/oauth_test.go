@@ -252,6 +252,7 @@ func TestAuthorization(t *testing.T) {
 	t.Run("who approves is who the request's own token is for", func(t *testing.T) {
 		var clientRepository clients.MockClientsRepository
 		clientRepository.On("GetOne", mock.Anything, "client-id").Return(registered, nil).Once()
+		clientRepository.On("Keep", mock.Anything, "client-id").Return(nil).Once()
 
 		var grantRepository grants.MockGrantsRepository
 		grantRepository.On("Save", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {

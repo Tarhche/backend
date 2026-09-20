@@ -88,6 +88,14 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		}, nil
 	}
 
+	// a registration is thrown away until somebody approves it, and this is
+	// somebody approving it. It is kept before the code is written, so nothing
+	// is handed out that leans on a client which may be gone by the time it is
+	// collected.
+	if err := uc.clientRepository.Keep(ctx, c.ID); err != nil {
+		return nil, err
+	}
+
 	code, err := uc.grant(ctx, c.ID, request.UserUUID, authorizationRequest)
 	if err != nil {
 		return nil, err

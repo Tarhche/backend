@@ -74,6 +74,7 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 	}
 
 	registered.CreatedAt = time.Now()
+	registered.ExpiresAt = registered.CreatedAt.Add(client.UnapprovedLifetime)
 
 	id, err := uc.clientRepository.Save(ctx, registered)
 	if err != nil {
