@@ -34,10 +34,11 @@ const (
 	// Path is where this server answers.
 	Path = "/mcp"
 
-	// internalHost stands in for the host a request would have arrived at. A
-	// tool's request is made inside this process and reaches the router
-	// directly, so nothing dials it and nothing resolves this name.
-	internalHost = "blog.internal"
+	// internalHost stands in for the host a request would have arrived at, and
+	// says which transport made it. A tool's request is made inside this
+	// process and reaches the router directly, so nothing dials it and nothing
+	// resolves this name.
+	internalHost = "mcp.internal"
 
 	name    = "tarhche-blog"
 	title   = "Blog"
