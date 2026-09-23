@@ -52,4 +52,15 @@ certs-env:
 		printf 'RUNNER_ORCHESTRATOR_%s_TUNNEL_KEY="%s"\n' "$$orchestrator" "$$(escape ./tmp/certs/runner-orchestrator-$$orchestrator/tls.key)"; \
 	done
 
-.PHONY: ps up down restart restart-% sh-% logs-% certs certs-env
+# boots real microVMs: it needs /dev/kvm, firecracker, sqfstar and mke2fs on
+# this machine, and fetches the kernel they boot. None of it needs root: the
+# launcher's half runs in the tests, unjailed, and the tasks are on no network.
+FIRECRACKER_KERNEL = ./tmp/firecracker/vmlinux-6.1.155
+
+test-firecracker:
+	@mkdir -p ./tmp/firecracker
+	@[ -f $(FIRECRACKER_KERNEL) ] || curl -fsSLo $(FIRECRACKER_KERNEL) \
+		https://s3.amazonaws.com/spec.ccfc.min/firecracker-ci/v1.15/$$(uname -m)/vmlinux-6.1.155
+	RUNNER_TEST_KERNEL=$(abspath $(FIRECRACKER_KERNEL)) go test -tags firecracker ./infrastructure/runner/firecracker/...
+
+.PHONY: ps up down restart restart-% sh-% logs-% certs certs-env test-firecracker

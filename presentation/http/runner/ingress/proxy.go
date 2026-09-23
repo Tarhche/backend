@@ -1,4 +1,4 @@
-// Package ingress serves the runner cluster's front door: a request naming a
+// Package ingress serves the runner cluster's front door: a request naming an
 // orchestrator is carried to that orchestrator, and one naming an orchestrator that is not there
 // is answered as such.
 package ingress

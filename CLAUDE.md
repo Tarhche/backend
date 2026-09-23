@@ -14,22 +14,25 @@ make sh-app        # shell into a service (sh-<service>)
 # Tests (same as CI)
 go test ./... -race -cover
 go test ./application/article/getArticle -run TestUseCase -v   # single package/test
+make test-firecracker   # boots real microVMs: needs /dev/kvm, firecracker, sqfstar, mke2fs (no root)
 
 # Regenerate OpenAPI docs (swag, output to resources/docs/blog/openapi)
 make generate      # runs `go generate` inside the app container
 ```
 
-Go 1.26. Local dev containers run under `go tool air` (hot reload with build polling), so code changes are picked up without restarting. The blog API is on http://localhost:8000, runner-controlplane on :8020, runner-ingress on :8030, orchestrators on :8040–8042. `.env` holds local config (compose interpolates it).
+Go 1.26. Local dev containers run under `go tool air` (hot reload with build polling), so code changes are picked up without restarting. The blog API is on http://localhost:8000, runner-controlplane on :8020, runner-ingress on :8030, orchestrators on :8040–8042, and the runner-launcher's healthcheck on the host's 127.0.0.1:8050. `.env` holds local config (compose interpolates it). The launcher needs `/dev/kvm` on the machine `make up` runs on; `RUNNER_RUNTIME=docker` with `docker compose --profile docker up` runs the tasks on the dind service instead.
 
 ## Architecture
 
-One Go module producing a single binary (`main.go`) that registers four serve commands — `serve-blog`, `serve-runner-controlplane`, `serve-runner-ingress`, `serve-runner-orchestrator` — each built into its own Docker image via Dockerfile targets (`production-blog`, `production-runner-controlplane`, `production-runner-ingress`, `production-runner-orchestrator`), plus a `certificate` command group (`authority`/`ingress`/`orchestrator` `generate`) for the certificates the runner's tunnel authenticates with. CI (`.github/workflows/backend.yaml`) tests, builds all four images, and deploys via the `compose.*.yaml` files.
+One Go module producing a single binary (`main.go`) that registers five serve commands — `serve-blog`, `serve-runner-controlplane`, `serve-runner-ingress`, `serve-runner-orchestrator`, `serve-runner-launcher` (linux only) — each built into its own Docker image via Dockerfile targets (`production-blog`, `production-runner-controlplane`, `production-runner-ingress`, `production-runner-orchestrator`, `production-runner-launcher`), plus a `certificate` command group (`authority`/`ingress`/`orchestrator` `generate`) for the certificates the runner's tunnel authenticates with. CI (`.github/workflows/backend.yaml`) tests, builds all five images, and deploys via the `compose.*.yaml` files.
+
+The one exception to the one binary is `cmd/runner-guest`, the init every microVM boots: it is unpacked into every machine's memory, so it carries its agent and nothing else. The orchestrator's images build it in; a change to it needs the image built again, in development as well.
 
 Layers (clean architecture, dependencies point inward):
 
 - **`domain/`** — entities and interfaces only, no implementations. Repository interfaces live next to their entity (e.g. `domain/article/article.go`). Cross-cutting contracts (`Validator`, `Consumer`/`Publisher`, `Mailer`, `Cache`, errors like `domain.ErrNotExists`) are in `domain/*.go`.
 - **`application/`** — one package per use case (e.g. `application/article/getArticle`) containing `request.go`, `response.go`, `usecase.go`, `usecase_test.go`. Use cases validate the request first and return validation errors inside the response (not as an error). `application/dashboard/` mirrors the public use cases for the authenticated admin API.
-- **`infrastructure/`** — implementations: `repository/mongodb` (real), `repository/memory` and `repository/mocks` (tests), `messaging/nats` (JetStream produce/consume + core pub/sub) with `messaging/mock`, `storage` (MinIO/S3), `jwt`, `email`, `telemetry` (OTel traces/metrics/logs + OTLP profiler), `runner` (Docker-based code execution), `tunnel` (a general-purpose L4 reverse tunnel — see below), `matcher` (glob matching for element venues).
+- **`infrastructure/`** — implementations: `repository/mongodb` (real), `repository/memory` and `repository/mocks` (tests), `messaging/nats` (JetStream produce/consume + core pub/sub) with `messaging/mock`, `storage` (MinIO/S3), `jwt`, `email`, `telemetry` (OTel traces/metrics/logs + OTLP profiler), `runner` (what runs the tasks — `firecracker` for microVMs, `docker` for containers — behind `task.Runtime`), `tunnel` (a general-purpose L4 reverse tunnel — see below), `matcher` (glob matching for element venues).
 - **`presentation/`** — `commands/` (the serve commands, plus `certificate/` for issuing certificates) and `http/` (handlers). Handlers are thin: decode request → call use case → encode response. `http/router` is the blog's `http.ServeMux`: it remembers the patterns it was given, so the MCP server can be held against the routes that exist.
 
 ### Console
@@ -54,7 +57,7 @@ S3UseSSL bool   `usage:"Whether the S3 endpoint is reached over TLS." env:"S3_US
 The console fills the structs while it parses the command line, and a flag falls back to its env var when it isn't provided, so both sources keep working. Defaults are the values the struct already holds when it is bound (set in the `New*` constructors), which is also what `--help` reports.
 
 - **`Global`** (`global.go`) holds what every command reads — Mongo, NATS and profiling/OTLP — as nested structs flattened into one flag set. `main.go` registers it on the console root with `console.StructFlags(&configs.GlobalConfigs)`, so its flags are given *before* the command name: `app --mongo-host=db serve-blog --port=8000`.
-- **Per-command structs** (`Blog`, `RunnerControlPlane`, `RunnerOrchestrator`) are created by `configs.New*()` in the command's constructor and bound in `Configure` with `flagSet.Struct(c.configs)`. Each command owns its own instance, so nothing it parses leaks into another command or another test.
+- **Per-command structs** (`Blog`, `RunnerControlPlane`, `RunnerOrchestrator`, `RunnerIngress`, `RunnerLauncher`) are created by `configs.New*()` in the command's constructor and bound in `Configure` with `flagSet.Struct(c.configs)`. Each command owns its own instance, so nothing it parses leaks into another command or another test.
 
 Configs reach their consumers through the container: every command lists `providers.NewConfigsProvider(c.configs)` **first**, which binds `*configs.Global` plus the command's own struct as singletons under their pointer types. A provider then resolves what it needs in `Register` (`var globalConfigs *configs.Global; c.Resolve(&globalConfigs)`) instead of reading the environment.
 
@@ -94,7 +97,9 @@ The blog serves its own API to agents on **`/mcp`** (`presentation/http/blog/mcp
 
 ### Runner subsystem
 
-The runner control plane schedules code-execution tasks (from `application/code/runCode`) across orchestrator nodes over NATS; orchestrators run them in Docker containers (docker-in-docker locally). Domain model in `domain/runner/` (task, node, container, port); Docker integration in `infrastructure/runner/`.
+The runner control plane schedules code-execution tasks (from `application/code/runCode`) across orchestrator nodes over NATS; an orchestrator runs each one through `task.Runtime`, and **nothing above `infrastructure/` knows what that is**. `RUNNER_RUNTIME=firecracker` (the default) runs each task in a microVM of its own; `RUNNER_RUNTIME=docker` runs it in a container on `DOCKER_HOST`. Both are adapters — `infrastructure/runner/firecracker` and `infrastructure/runner/docker` — bound by `providers.NewRuntimeProvider`, which is the only place that says which. A runtime reports which of a task's exposed ports it can reach (`Execution.Endpoints`) and reaches them itself (`Runtime.Dial`), so where a task is never leaves the runtime holding it. Domain model in `domain/runner/` (task, node, network, port, machine).
+
+**Firecracker** (`infrastructure/runner/firecracker` — read its README first, it carries the whole design) is split in two on purpose. Starting a microVM needs `/dev/kvm` and a tap plugged into a bridge, which only something privileged on the host can do, so the **launcher** (`serve-runner-launcher`, `application/runner/launcher`, `domain/runner/machine`) does that and nothing else: it starts each machine's firecracker through the jailer, makes bridges, taps and the firewall, and keeps no state of its own. It takes orders on a unix socket made for the machines' uid alone. The **orchestrator** holds no privilege: it makes OCI images into read-only squashfs roots, boots each machine through its firecracker's API with firecracker-go-sdk, and talks to the **agent** — `cmd/runner-guest`, the machine's init — over its vsock. The two share `/var/lib/runner` at the same path on both sides (`firecracker/layout`). Machines are the host's, not the orchestrator's: one redeployed leaves them running, and the next takes them back.
 
 The **runner ingress** (`serve-runner-ingress`) is the runner's front door, and **nothing ever dials an orchestrator**. An orchestrator opens persistent TCP connections *to* the ingress and the ingress multiplexes onto them with [smux](https://github.com/xtaci/smux), one stream per client connection (`infrastructure/tunnel` — read its README first, it carries the whole design). It is an L4 tunnel: the data plane is a byte pipe and assumes nothing about HTTP. An orchestrator needs no address, no open port and no way in, and being connected and being reachable are the same fact.
 

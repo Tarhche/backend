@@ -1,0 +1,46 @@
+# The launcher: the one part of the runner that is privileged. It starts every
+# microVM's firecracker through the jailer and plugs it into the host's network,
+# so it runs on the host's network, pids and cgroups -- which is also what
+# leaves the machines running when an orchestrator is redeployed. Nothing
+# reaches it but the orchestrators on this host, through its socket in
+# /var/lib/runner, which is made for the uid they run as.
+#
+# It is not a swarm service: it needs /dev/kvm and privileges a swarm service
+# cannot be given, and it belongs to this host rather than to the cluster.
+services:
+  runner-launcher:
+    image: ${RUNNER_LAUNCHER_IMAGE}
+    privileged: true
+    pid: host
+    cgroup: host
+    network_mode: host
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:8050/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+    volumes:
+      - /var/lib/runner:/var/lib/runner
+    environment:
+      RUNNER_STATE_DIR: /var/lib/runner
+      RUNNER_LAUNCHER_SOCKET: /var/lib/runner/launcher.sock
+      RUNNER_LAUNCHER_HEALTH_PORT: "8050"
+      # the addresses machines' networks are carved out of, a /24 each. They
+      # must be the runner's alone on this host.
+      RUNNER_NETWORK_POOL: ${BACKEND_RUNNER_NETWORK_POOL:-10.200.0.0/16}
+      # the most one machine may have.
+      RUNNER_MAX_VCPUS: ${BACKEND_RUNNER_MAX_VCPUS:-2}
+      RUNNER_MAX_MEMORY_MIB: ${BACKEND_RUNNER_MAX_MEMORY_MIB:-2048}
+      OTEL_EXPORTER_OTLP_INSECURE: ${OTEL_EXPORTER_OTLP_INSECURE}
+      OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL}
+      OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
+      OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}

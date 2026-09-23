@@ -103,7 +103,7 @@ func TestOrchestrator(t *testing.T) {
 		issued, err := certificate.LoadCertificate(files.Certificate)
 		require.NoError(t, err)
 
-		// an orchestrator dials, so it is good for clientAuth and for nothing else. A
+		// an orchestrator dials, so it is good for clientAuth and for nothing else. An
 		// orchestrator certificate that was also good for serverAuth is one an orchestrator
 		// could stand up an ingress with.
 		assert.Equal(t, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}, issued.ExtKeyUsage)

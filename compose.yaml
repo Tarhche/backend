@@ -18,7 +18,6 @@ x-app: &app
     - nats
     - minio
     - minio_configure
-    - docker
     - mailserver
     - grafana
   volumes:
@@ -119,10 +118,22 @@ services:
       target: develop-runner-orchestrator
     ports:
       - "8040:80"
+    depends_on:
+      - nats
+      - grafana
+      - runner-launcher
+    volumes:
+      - ./:/opt/app
+      # shared with the launcher at the same path, which is how what this
+      # makes for a machine is what the launcher links into it.
+      - ${RUNNER_STATE_DIR}:${RUNNER_STATE_DIR}
     environment:
       RUNNER_ORCHESTRATOR_NAME: runner-orchestrator-01
-      # the containers' ports are published on the docker daemon's own host,
-      # which is the dind service rather than this one.
+      RUNNER_RUNTIME: ${RUNNER_RUNTIME}
+      RUNNER_STATE_DIR: ${RUNNER_STATE_DIR}
+      RUNNER_LAUNCHER_SOCKET: ${RUNNER_STATE_DIR}/launcher.sock
+      # only for RUNNER_RUNTIME=docker: the containers' ports are published on
+      # the docker daemon's own host, which is the dind service.
       RUNNER_DOCKER_ADVERTISE_HOST: ${RUNNER_DOCKER_ADVERTISE_HOST}
       RUNNER_TUNNEL_ADDRESSES: ${RUNNER_TUNNEL_ADDRESSES}
       RUNNER_TUNNEL_CA_CERT: ${RUNNER_TUNNEL_CA_CERT}
@@ -146,10 +157,22 @@ services:
       target: develop-runner-orchestrator
     ports:
       - "8041:80"
+    depends_on:
+      - nats
+      - grafana
+      - runner-launcher
+    volumes:
+      - ./:/opt/app
+      # shared with the launcher at the same path, which is how what this
+      # makes for a machine is what the launcher links into it.
+      - ${RUNNER_STATE_DIR}:${RUNNER_STATE_DIR}
     environment:
       RUNNER_ORCHESTRATOR_NAME: runner-orchestrator-02
-      # the containers' ports are published on the docker daemon's own host,
-      # which is the dind service rather than this one.
+      RUNNER_RUNTIME: ${RUNNER_RUNTIME}
+      RUNNER_STATE_DIR: ${RUNNER_STATE_DIR}
+      RUNNER_LAUNCHER_SOCKET: ${RUNNER_STATE_DIR}/launcher.sock
+      # only for RUNNER_RUNTIME=docker: the containers' ports are published on
+      # the docker daemon's own host, which is the dind service.
       RUNNER_DOCKER_ADVERTISE_HOST: ${RUNNER_DOCKER_ADVERTISE_HOST}
       RUNNER_TUNNEL_ADDRESSES: ${RUNNER_TUNNEL_ADDRESSES}
       RUNNER_TUNNEL_CA_CERT: ${RUNNER_TUNNEL_CA_CERT}
@@ -173,10 +196,22 @@ services:
       target: develop-runner-orchestrator
     ports:
       - "8042:80"
+    depends_on:
+      - nats
+      - grafana
+      - runner-launcher
+    volumes:
+      - ./:/opt/app
+      # shared with the launcher at the same path, which is how what this
+      # makes for a machine is what the launcher links into it.
+      - ${RUNNER_STATE_DIR}:${RUNNER_STATE_DIR}
     environment:
       RUNNER_ORCHESTRATOR_NAME: runner-orchestrator-03
-      # the containers' ports are published on the docker daemon's own host,
-      # which is the dind service rather than this one.
+      RUNNER_RUNTIME: ${RUNNER_RUNTIME}
+      RUNNER_STATE_DIR: ${RUNNER_STATE_DIR}
+      RUNNER_LAUNCHER_SOCKET: ${RUNNER_STATE_DIR}/launcher.sock
+      # only for RUNNER_RUNTIME=docker: the containers' ports are published on
+      # the docker daemon's own host, which is the dind service.
       RUNNER_DOCKER_ADVERTISE_HOST: ${RUNNER_DOCKER_ADVERTISE_HOST}
       RUNNER_TUNNEL_ADDRESSES: ${RUNNER_TUNNEL_ADDRESSES}
       RUNNER_TUNNEL_CA_CERT: ${RUNNER_TUNNEL_CA_CERT}
@@ -268,8 +303,48 @@ services:
     ports:
       - "8082:31311"
 
+  # the launcher: the one part of the runner that is privileged. It starts
+  # every microVM's firecracker through the jailer and plugs it into the host's
+  # network, so it runs on the host's network, pids and cgroups -- which is also
+  # what leaves the machines running when an orchestrator is restarted.
+  # Nothing reaches it but the orchestrators, through its socket in the state
+  # directory. It needs /dev/kvm.
+  runner-launcher:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: develop-runner-launcher
+    restart: unless-stopped
+    privileged: true
+    pid: host
+    cgroup: host
+    network_mode: host
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:8050/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 120s
+    stop_grace_period: 10s
+    volumes:
+      - ./:/opt/app
+      - ${RUNNER_STATE_DIR}:${RUNNER_STATE_DIR}
+    environment:
+      RUNNER_STATE_DIR: ${RUNNER_STATE_DIR}
+      RUNNER_LAUNCHER_SOCKET: ${RUNNER_STATE_DIR}/launcher.sock
+      RUNNER_LAUNCHER_HEALTH_PORT: 8050
+      RUNNER_NETWORK_POOL: ${RUNNER_NETWORK_POOL}
+      # on the host's network, the collector is where grafana publishes it.
+      OTEL_EXPORTER_OTLP_INSECURE: ${OTEL_EXPORTER_OTLP_INSECURE}
+      OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL}
+      OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://127.0.0.1:4318
+
+  # docker-in-docker, for RUNNER_RUNTIME=docker only:
+  #   docker compose --profile docker up
   docker:
     image: docker:28-dind
+    profiles: ["docker"]
     restart: unless-stopped
     privileged: true
     ports:
@@ -284,6 +359,7 @@ services:
 
   portainer:
     image: portainer/portainer-ce
+    profiles: ["docker"]
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true

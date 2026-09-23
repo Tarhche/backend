@@ -30,6 +30,8 @@ jobs:
             target: production-runner-ingress
           - name: runner-orchestrator
             target: production-runner-orchestrator
+          - name: runner-launcher
+            target: production-runner-launcher
 
     steps:
       - name: Checkout code
@@ -78,6 +80,8 @@ jobs:
             target: production-runner-ingress
           - name: runner-orchestrator
             target: production-runner-orchestrator
+          - name: runner-launcher
+            target: production-runner-launcher
 
     steps:
       - name: Checkout code
@@ -171,6 +175,11 @@ jobs:
 
             export BACKEND_DOCKER_HOST='${{ secrets.BACKEND_DOCKER_HOST }}'
 
+            # what runs the tasks: firecracker, through the launcher on this
+            # host, unless docker is asked for instead.
+            export BACKEND_RUNNER_RUNTIME='${{ secrets.BACKEND_RUNNER_RUNTIME }}'
+            export BACKEND_RUNNER_NETWORK_POOL='${{ secrets.BACKEND_RUNNER_NETWORK_POOL }}'
+
             export BACKEND_RUNNER_CONTROLPLANE_URL='${{ secrets.BACKEND_RUNNER_CONTROLPLANE_URL }}'
             export BACKEND_RUNNER_INGRESS_DOMAIN='${{ secrets.BACKEND_RUNNER_INGRESS_DOMAIN }}'
             export BACKEND_RUNNER_DOCKER_ADVERTISE_HOST='${{ secrets.BACKEND_RUNNER_DOCKER_ADVERTISE_HOST }}'
@@ -202,6 +211,7 @@ jobs:
             export RUNNER_CONTROLPLANE_IMAGE='${{ secrets.RUNNER_CONTROLPLANE_IMAGE }}'
             export RUNNER_INGRESS_IMAGE='${{ secrets.RUNNER_INGRESS_IMAGE }}'
             export RUNNER_ORCHESTRATOR_IMAGE='${{ secrets.RUNNER_ORCHESTRATOR_IMAGE }}'
+            export RUNNER_LAUNCHER_IMAGE='${{ secrets.RUNNER_LAUNCHER_IMAGE }}'
 
             export OTEL_EXPORTER_OTLP_INSECURE='${{ secrets.OTEL_EXPORTER_OTLP_INSECURE }}'
             export OTEL_EXPORTER_OTLP_PROTOCOL='${{ secrets.OTEL_EXPORTER_OTLP_PROTOCOL }}'
@@ -232,6 +242,13 @@ jobs:
             deploy compose.app.yaml app
             deploy compose.runner-controlplane.yaml runner-controlplane
             deploy compose.runner-ingress.yaml runner-ingress
+
+            # the launcher comes before the orchestrators that ask it for
+            # machines, and only when microVMs are what runs the tasks.
+            if [ "${BACKEND_RUNNER_RUNTIME:-firecracker}" = "firecracker" ]; then
+                deploy compose.runner-launcher.yaml runner-launcher
+            fi
+
             deploy compose.runner-orchestrator-01.yaml runner-orchestrator-01
             deploy compose.runner-orchestrator-02.yaml runner-orchestrator-02
             deploy compose.runner-orchestrator-03.yaml runner-orchestrator-03

@@ -6,7 +6,7 @@ services:
     networks:
       - nats
       - docker
-      # for dialling the ingress, which is the whole of what this is for. A
+      # for dialling the ingress, which is the whole of what this is for. An
       # orchestrator has no business reaching the control plane or another orchestrator.
       - runner_ingress
       - monitoring
@@ -39,8 +39,14 @@ services:
         max_attempts: 3
       resources:
         limits:
-          cpus: '0.10'
-          memory: 50M
+          # making an image into the root its microVMs boot is the most work it
+          # does, and it does it here.
+          cpus: '1.00'
+          memory: 256M
+    volumes:
+      # shared with the launcher at the same path, which is how what this makes
+      # for a machine is what the launcher links into it.
+      - /var/lib/runner:/var/lib/runner
     logging:
       driver: json-file
       options:
@@ -48,9 +54,14 @@ services:
         max-file: "3"
     environment:
       RUNNER_ORCHESTRATOR_NAME: runner-orchestrator-01
-      # the host the containers' published ports land on, which is the docker
-      # daemon's own rather than this service's. Where this orchestrator's API
-      # answers needs no saying: it is this service's name and port.
+      # what runs the tasks: firecracker, through the launcher on this host,
+      # or docker, on DOCKER_HOST.
+      RUNNER_RUNTIME: ${BACKEND_RUNNER_RUNTIME:-firecracker}
+      RUNNER_STATE_DIR: /var/lib/runner
+      RUNNER_LAUNCHER_SOCKET: /var/lib/runner/launcher.sock
+      # only when docker runs the tasks: the host the containers' published
+      # ports land on, which is the docker daemon's own rather than this
+      # service's.
       RUNNER_DOCKER_ADVERTISE_HOST: ${BACKEND_RUNNER_DOCKER_ADVERTISE_HOST}
       # every ingress this orchestrator opens connections to, separated by commas
       RUNNER_TUNNEL_ADDRESSES: ${BACKEND_RUNNER_TUNNEL_ADDRESSES:-runner-ingress:81}
