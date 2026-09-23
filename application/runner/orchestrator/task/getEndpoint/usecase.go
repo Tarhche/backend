@@ -8,24 +8,19 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
 )
 
-// UseCase says where one of this node's tasks can be reached.
+// UseCase says which of this node's tasks a request reaches, and on which
+// port.
 //
-// Only the node holding a task can answer this: the port docker published
-// it on is read back off docker every time, because a task that restarted
-// came back on a different one.
+// Only the node holding a task can answer this: which of its ports can be
+// reached is read back off the runtime every time, because a task that
+// restarted is not reachable again until it is up.
 type UseCase struct {
 	taskManager task.Runtime
-
-	// advertiseHost is where this node reaches the ports its tasks were
-	// published on. That is the docker daemon's own host, which is not always
-	// this one.
-	advertiseHost string
 }
 
-func NewUseCase(taskManager task.Runtime, advertiseHost string) *UseCase {
+func NewUseCase(taskManager task.Runtime) *UseCase {
 	return &UseCase{
-		taskManager:   taskManager,
-		advertiseHost: advertiseHost,
+		taskManager: taskManager,
 	}
 }
 
@@ -45,38 +40,27 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		return nil, ErrNotRunning
 	}
 
-	published, found := selectPort(c.PortBindings, request.Port)
+	selected, found := selectPort(c.Endpoints, request.Port)
 	if !found {
 		return nil, ErrNotExposed
 	}
 
-	return &Response{Host: uc.advertiseHost, Port: published}, nil
+	return &Response{ExecutionID: c.ID, Port: selected}, nil
 }
 
-// selectPort picks the published port a hostname asked for. A hostname naming
-// no port reaches the lowest one the task exposes, so the common case of a
+// selectPort picks the port a hostname asked for. A hostname naming no port
+// reaches the lowest one the task can be reached on, so the common case of a
 // task with a single port needs no port in its name at all.
-func selectPort(bindings port.PortMap, requested port.Port) (port.Port, bool) {
-	exposed := make([]port.Port, 0, len(bindings))
-	for taskPort, published := range bindings {
-		if len(published) == 0 || published[0].HostPort == 0 {
-			continue
-		}
-
-		if requested > 0 && taskPort != requested {
-			continue
-		}
-
-		exposed = append(exposed, taskPort)
-	}
-
-	if len(exposed) == 0 {
+func selectPort(endpoints []port.Port, requested port.Port) (port.Port, bool) {
+	if len(endpoints) == 0 {
 		return 0, false
 	}
 
-	// docker hands the bindings back in no particular order, and the lowest
-	// exposed port is the one a bare hostname reaches.
-	lowest := slices.Min(exposed)
+	if requested > 0 {
+		return requested, slices.Contains(endpoints, requested)
+	}
 
-	return bindings[lowest][0].HostPort, true
+	// a runtime hands them back in no particular order, and the lowest one is
+	// the one a bare hostname reaches.
+	return slices.Min(endpoints), true
 }

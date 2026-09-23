@@ -1,19 +1,13 @@
 package getEndpoint
 
 import (
-	"net"
-	"strconv"
-
 	"github.com/khanzadimahdi/testproject/domain/runner/port"
 )
 
-// Response is where the task can actually be reached from this node.
+// Response is which run of the task a request reaches, and on which of its
+// ports. Where that run is, and how this node gets to it, is the runtime's to
+// know: a request is carried to it by dialling through the runtime.
 type Response struct {
-	Host string    `json:"host"`
-	Port port.Port `json:"port"`
-}
-
-// Address is the host:port a request to the task is sent to.
-func (r *Response) Address() string {
-	return net.JoinHostPort(r.Host, strconv.FormatUint(uint64(r.Port), 10))
+	ExecutionID string    `json:"execution_id"`
+	Port        port.Port `json:"port"`
 }

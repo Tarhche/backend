@@ -94,7 +94,7 @@ func (c *ServeCommand) Providers() []provider.Provider {
 		providers.NewOpenTelemetryProvider("runner-orchestrator", c.configs.Name),
 		providers.NewProfilerProvider("runner-orchestrator"),
 		providers.NewNatsProvider(),
-		providers.NewDockerProvider(),
+		providers.NewRuntimeProvider(),
 		providers.NewTranslationProvider(),
 		providers.NewValidationProvider(),
 		providers.NewContainerProvider(),

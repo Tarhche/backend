@@ -124,10 +124,6 @@ func NewResponse(t task.Task) *Response {
 func NewEndpoints(t task.Task) []EndpointResponse {
 	endpoints := make([]EndpointResponse, 0, len(t.Endpoints))
 	for _, e := range t.Endpoints {
-		if e.HostPort == 0 {
-			continue
-		}
-
 		endpoints = append(endpoints, EndpointResponse{TaskPort: uint(e.TaskPort)})
 	}
 

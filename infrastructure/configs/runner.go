@@ -27,6 +27,14 @@ const (
 	defaultTunnelMaxSessionsPerOrchestrator = 8
 )
 
+// The runtimes an orchestrator can run its tasks on.
+const (
+	RuntimeFirecracker = "firecracker"
+	RuntimeDocker      = "docker"
+
+	defaultRunnerRuntime = RuntimeDocker
+)
+
 // RunnerControlPlane holds the configuration of the serve-runner-controlplane command.
 type RunnerControlPlane struct {
 	Port int `usage:"specifies which port server should listen to." env:"SERVER_PORT" long:"port" short:"p"`
@@ -94,16 +102,21 @@ type RunnerOrchestrator struct {
 	Port int    `usage:"specifies which port server should listen to." env:"SERVER_PORT" long:"port" short:"p"`
 	Name string `usage:"specifies the unique name of the orchestrator." env:"RUNNER_ORCHESTRATOR_NAME" long:"name" short:"n"`
 
-	DockerHost string `usage:"Docker daemon the tasks are run on. Empty uses the Docker client's own default." env:"DOCKER_HOST" long:"docker-host"`
+	// Runtime is what runs this orchestrator's tasks. Everything above it asks
+	// the same things of either; only what each needs to be told differs.
+	Runtime string `usage:"What runs the tasks: firecracker, for a microVM each, or docker, for a container each." env:"RUNNER_RUNTIME" long:"runtime"`
+
+	DockerHost string `usage:"Docker daemon the tasks are run on, when docker runs them. Empty uses the Docker client's own default." env:"DOCKER_HOST" long:"docker-host"`
+
+	// DockerAdvertiseHost is where this orchestrator reaches the ports docker
+	// publishes its tasks on. It is the docker daemon's host rather than this
+	// service's, which are not the same machine when the daemon is a service of
+	// its own.
+	DockerAdvertiseHost string `usage:"Host this orchestrator reaches its tasks' published ports at when docker runs them, which is the docker daemon's own rather than this one." env:"RUNNER_DOCKER_ADVERTISE_HOST" long:"docker-advertise-host"`
 
 	// PublicKey verifies the tokens the blog signs. An orchestrator never mints one,
 	// so it is given the public half and nothing else.
 	PublicKey string `usage:"ECDSA public key, in PEM form, the access tokens are verified against. It is the public half of the key the blog signs them with." env:"PUBLIC_KEY" long:"public-key"`
-
-	// AdvertiseHost is where this orchestrator reaches the ports its own tasks
-	// publish. It is the docker daemon's host rather than this service's, which
-	// are not the same machine when the daemon is a service of its own.
-	AdvertiseHost string `usage:"Host this orchestrator reaches its tasks' published ports at, which is the docker daemon's own rather than this one." env:"RUNNER_ORCHESTRATOR_ADVERTISE_HOST" long:"advertise-host"`
 
 	TunnelAddresses string `usage:"host:port of every ingress this orchestrator opens connections to, separated by commas. It keeps a pool at each, so it is reachable through all of them." env:"RUNNER_TUNNEL_ADDRESSES" long:"tunnel-addresses"`
 
@@ -127,6 +140,7 @@ type RunnerOrchestrator struct {
 func NewRunnerOrchestrator() *RunnerOrchestrator {
 	return &RunnerOrchestrator{
 		Port:                       defaultRunnerOrchestratorPort,
+		Runtime:                    defaultRunnerRuntime,
 		TunnelMinConnections:       defaultRunnerTunnelMinConnections,
 		TunnelMaxConnections:       defaultRunnerTunnelMaxConnections,
 		TunnelMaxIdleTime:          defaultRunnerTunnelMaxIdleTime,

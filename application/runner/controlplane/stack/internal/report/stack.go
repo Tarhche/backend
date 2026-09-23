@@ -91,16 +91,12 @@ func expectedStateOf(s stack.Stack, services []task.Task) task.State {
 	return stack.ExpectedState(services)
 }
 
-// endpoints reports which task ports are reachable. The host and host port
-// a task sits on are the runner's own business, so they stay inside it —
-// a caller reaches a port by the task's hostname, not by its node.
+// endpoints reports which task ports are reachable. How the node holding a
+// task reaches them is the runner's own business, so it stays inside it — a
+// caller reaches a port by the task's hostname, not by its node.
 func endpoints(t task.Task) []Endpoint {
 	items := make([]Endpoint, 0, len(t.Endpoints))
 	for _, e := range t.Endpoints {
-		if e.HostPort == 0 {
-			continue
-		}
-
 		items = append(items, Endpoint{TaskPort: uint(e.TaskPort)})
 	}
 

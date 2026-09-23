@@ -1187,13 +1187,6 @@ definitions:
       type:
         type: string
     type: object
-  github_com_khanzadimahdi_testproject_application_runner_controlplane_task_runTask.PortBinding:
-    properties:
-      host_ip:
-        type: string
-      host_port:
-        type: integer
-    type: object
   github_com_khanzadimahdi_testproject_application_runner_controlplane_task_runTask.Request:
     properties:
       attach_stderr:
@@ -1226,12 +1219,6 @@ definitions:
         type: array
       name:
         type: string
-      port_bindings:
-        additionalProperties:
-          items:
-            $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_runner_controlplane_task_runTask.PortBinding'
-          type: array
-        type: object
       resource_limits:
         $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_runner_controlplane_task_runTask.ResourceLimits'
       restart_count:
@@ -1290,13 +1277,6 @@ definitions:
       type:
         type: string
     type: object
-  github_com_khanzadimahdi_testproject_application_runner_orchestrator_task_runTask.PortBinding:
-    properties:
-      host_ip:
-        type: string
-      host_port:
-        type: integer
-    type: object
   github_com_khanzadimahdi_testproject_application_runner_orchestrator_task_runTask.Request:
     properties:
       attach_stderr:
@@ -1329,12 +1309,6 @@ definitions:
         type: array
       name:
         type: string
-      port_bindings:
-        additionalProperties:
-          items:
-            $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_runner_orchestrator_task_runTask.PortBinding'
-          type: array
-        type: object
       resource_limits:
         $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_runner_orchestrator_task_runTask.ResourceLimits'
       restart_count:

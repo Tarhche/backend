@@ -19,7 +19,6 @@ func TestRequest_Validate(t *testing.T) {
 				Name:          "test-task",
 				Image:         "test-image:latest",
 				AutoRemove:    true,
-				PortBindings:  map[uint][]PortBinding{},
 				RestartPolicy: "always",
 				RestartCount:  3,
 				HealthCheck:   "http://localhost:8080/health",
@@ -183,21 +182,4 @@ func TestRequest_ConvertMounts(t *testing.T) {
 	assert.Len(t, mounts, 1)
 
 	assert.Equal(t, "/host/path", mounts[0].Source)
-}
-
-func TestRequest_ConvertPortBindings(t *testing.T) {
-	req := Request{
-		PortBindings: map[uint][]PortBinding{
-			8080: {
-				{
-					HostIP:   "0.0.0.0",
-					HostPort: 9090,
-				},
-			},
-		},
-	}
-
-	portMaps := req.ConvertPortBindings()
-
-	assert.Len(t, portMaps, 1)
 }

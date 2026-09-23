@@ -5197,17 +5197,6 @@ const docTemplateblog = `{
                 }
             }
         },
-        "github_com_khanzadimahdi_testproject_application_runner_controlplane_task_runTask.PortBinding": {
-            "type": "object",
-            "properties": {
-                "host_ip": {
-                    "type": "string"
-                },
-                "host_port": {
-                    "type": "integer"
-                }
-            }
-        },
         "github_com_khanzadimahdi_testproject_application_runner_controlplane_task_runTask.Request": {
             "type": "object",
             "properties": {
@@ -5255,15 +5244,6 @@ const docTemplateblog = `{
                 },
                 "name": {
                     "type": "string"
-                },
-                "port_bindings": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "array",
-                        "items": {
-                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_runner_controlplane_task_runTask.PortBinding"
-                        }
-                    }
                 },
                 "resource_limits": {
                     "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_runner_controlplane_task_runTask.ResourceLimits"
@@ -5355,17 +5335,6 @@ const docTemplateblog = `{
                 }
             }
         },
-        "github_com_khanzadimahdi_testproject_application_runner_orchestrator_task_runTask.PortBinding": {
-            "type": "object",
-            "properties": {
-                "host_ip": {
-                    "type": "string"
-                },
-                "host_port": {
-                    "type": "integer"
-                }
-            }
-        },
         "github_com_khanzadimahdi_testproject_application_runner_orchestrator_task_runTask.Request": {
             "type": "object",
             "properties": {
@@ -5413,15 +5382,6 @@ const docTemplateblog = `{
                 },
                 "name": {
                     "type": "string"
-                },
-                "port_bindings": {
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "array",
-                        "items": {
-                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_runner_orchestrator_task_runTask.PortBinding"
-                        }
-                    }
                 },
                 "resource_limits": {
                     "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_runner_orchestrator_task_runTask.ResourceLimits"

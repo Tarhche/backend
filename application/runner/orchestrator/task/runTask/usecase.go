@@ -93,7 +93,6 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		Entrypoint:    request.Entrypoint,
 		RestartPolicy: request.RestartPolicy,
 		ExposedPorts:  request.ExposedPortSet(),
-		PortBindings:  request.PublishedPorts(),
 		Networks:      network.Attachments(request.Policy(), request.StackSlug, request.ServiceName),
 		ResourceLimits: task.ResourceLimits{
 			Cpu:    request.ResourceLimits.Cpu,

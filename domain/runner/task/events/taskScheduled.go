@@ -21,7 +21,6 @@ type TaskScheduled struct {
 	ServiceName   string         `json:"service_name,omitempty"`
 	Image         string         `json:"image"`
 	AutoRemove    bool           `json:"auto_remove"`
-	PortBindings  []PortMap      `json:"port_bindings"`
 	ExposedPorts  []port.Port    `json:"exposed_ports"`
 	NetworkPolicy network.Policy `json:"network_policy"`
 	RestartPolicy string         `json:"restart_policy"`
@@ -52,13 +51,6 @@ type TaskScheduled struct {
 	MaxRetries int `json:"max_retries"`
 }
 
-type PortBinding struct {
-	HostIP   string    `json:"host_ip"`
-	HostPort port.Port `json:"host_port"`
-}
-
-type PortMap map[port.Port][]PortBinding
-
 type Mount struct {
 	Source   string `json:"source"`
 	Target   string `json:"target"`
@@ -72,10 +64,9 @@ type ResourceLimits struct {
 	Disk   uint64  `json:"disk"`
 }
 
-// Endpoint is an exposed task port as the orchestrator actually published it.
+// Endpoint is a task port the orchestrator holding it can reach it on.
 type Endpoint struct {
 	TaskPort port.Port `json:"task_port"`
-	HostPort port.Port `json:"host_port"`
 }
 
 // NewTaskScheduled is a task, as the node that is to run it needs to see it.
@@ -95,7 +86,6 @@ func NewTaskScheduled(t *task.Task, stackSlug string, nominatedNode string, atte
 		ServiceName:   t.ServiceName,
 		Image:         t.Image,
 		AutoRemove:    t.AutoRemove,
-		PortBindings:  portBindingsOf(t),
 		ExposedPorts:  t.ExposedPorts,
 		NetworkPolicy: t.NetworkPolicy,
 		RestartPolicy: t.RestartPolicy,
@@ -121,25 +111,6 @@ func NewTaskScheduled(t *task.Task, stackSlug string, nominatedNode string, atte
 		Attempt:       attempt,
 		MaxRetries:    t.MaxRetries,
 	}
-}
-
-func portBindingsOf(t *task.Task) []PortMap {
-	result := make([]PortMap, len(t.PortBindings))
-	for i, p := range t.PortBindings {
-		portMap := make(PortMap)
-		for portNumber, bindings := range p {
-			portBindings := make([]PortBinding, len(bindings))
-			for j, b := range bindings {
-				portBindings[j] = PortBinding{HostIP: b.HostIP, HostPort: b.HostPort}
-			}
-
-			portMap[portNumber] = portBindings
-		}
-
-		result[i] = portMap
-	}
-
-	return result
 }
 
 func mountsOf(t *task.Task) []Mount {

@@ -34,17 +34,6 @@ func (uc *TaskRunRequested) Handle(ctx context.Context, data []byte) error {
 		return nil
 	}
 
-	portBindings := make(map[uint][]PortBinding, len(event.PortBindings))
-	for hostPort, taskPorts := range event.PortBindings {
-		portBindings[hostPort] = make([]PortBinding, len(taskPorts))
-		for i, taskPort := range taskPorts {
-			portBindings[hostPort][i] = PortBinding{
-				HostIP:   taskPort.HostIP,
-				HostPort: uint(taskPort.HostPort),
-			}
-		}
-	}
-
 	mounts := make([]Mount, len(event.Mounts))
 	for i, mount := range event.Mounts {
 		mounts[i] = Mount{
@@ -69,7 +58,6 @@ func (uc *TaskRunRequested) Handle(ctx context.Context, data []byte) error {
 		ServiceName:    event.ServiceName,
 		NominatedNode:  event.NominatedNode,
 		AutoRemove:     event.AutoRemove,
-		PortBindings:   portBindings,
 		ExposedPorts:   event.ExposedPorts,
 		NetworkPolicy:  event.NetworkPolicy,
 		RestartPolicy:  event.RestartPolicy,

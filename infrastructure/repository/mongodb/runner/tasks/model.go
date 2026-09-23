@@ -23,24 +23,23 @@ type TaskBson struct {
 	// that simply has not changed.
 	LastHeartbeatAt time.Time `bson:"last_heartbeat_at,omitempty"`
 
-	Image         string         `bson:"image"`
-	AutoRemove    bool           `bson:"auto_remove,omitempty"`
-	PortBindings  []port.PortMap `bson:"port_bindings,omitempty"`
-	ExposedPorts  []port.Port    `bson:"exposed_ports,omitempty"`
-	NetworkPolicy string         `bson:"network_policy,omitempty"`
-	Endpoints     []Endpoint     `bson:"endpoints,omitempty"`
-	RestartPolicy string         `bson:"restart_policy,omitempty"`
-	RestartCount  uint           `bson:"restart_count,omitempty"`
-	HealthCheck   string         `bson:"health_check,omitempty"`
-	AttachStdin   bool           `bson:"attach_stdin,omitempty"`
-	AttachStdout  bool           `bson:"attach_stdout,omitempty"`
-	AttachStderr  bool           `bson:"attach_stderr,omitempty"`
-	Environment   []string       `bson:"environment,omitempty"`
-	Command       []string       `bson:"command,omitempty"`
-	Entrypoint    []string       `bson:"entrypoint,omitempty"`
-	WorkingDir    string         `bson:"working_dir,omitempty"`
-	ReadOnly      bool           `bson:"read_only,omitempty"`
-	Interactive   bool           `bson:"interactive,omitempty"`
+	Image         string      `bson:"image"`
+	AutoRemove    bool        `bson:"auto_remove,omitempty"`
+	ExposedPorts  []port.Port `bson:"exposed_ports,omitempty"`
+	NetworkPolicy string      `bson:"network_policy,omitempty"`
+	Endpoints     []Endpoint  `bson:"endpoints,omitempty"`
+	RestartPolicy string      `bson:"restart_policy,omitempty"`
+	RestartCount  uint        `bson:"restart_count,omitempty"`
+	HealthCheck   string      `bson:"health_check,omitempty"`
+	AttachStdin   bool        `bson:"attach_stdin,omitempty"`
+	AttachStdout  bool        `bson:"attach_stdout,omitempty"`
+	AttachStderr  bool        `bson:"attach_stderr,omitempty"`
+	Environment   []string    `bson:"environment,omitempty"`
+	Command       []string    `bson:"command,omitempty"`
+	Entrypoint    []string    `bson:"entrypoint,omitempty"`
+	WorkingDir    string      `bson:"working_dir,omitempty"`
+	ReadOnly      bool        `bson:"read_only,omitempty"`
+	Interactive   bool        `bson:"interactive,omitempty"`
 	// MaxRetries is a pointer because nothing at all means something: a
 	// task written down before there were retry budgets is worth whatever
 	// its kind is usually worth, while one written with none is worth none.
@@ -65,7 +64,6 @@ type TaskBson struct {
 
 type Endpoint struct {
 	TaskPort port.Port `bson:"container_port"`
-	HostPort port.Port `bson:"host_port"`
 }
 
 type Mount struct {
@@ -96,7 +94,6 @@ func toTask(t *TaskBson) task.Task {
 		LastHeartbeatAt: t.LastHeartbeatAt,
 		Image:           t.Image,
 		AutoRemove:      t.AutoRemove,
-		PortBindings:    t.PortBindings,
 		ExposedPorts:    t.ExposedPorts,
 		NetworkPolicy:   networkPolicy(t.NetworkPolicy),
 		Endpoints:       toEndpoints(t.Endpoints),
@@ -158,7 +155,6 @@ func toBson(t *task.Task) TaskBson {
 		LastHeartbeatAt: t.LastHeartbeatAt,
 		Image:           t.Image,
 		AutoRemove:      t.AutoRemove,
-		PortBindings:    t.PortBindings,
 		ExposedPorts:    t.ExposedPorts,
 		NetworkPolicy:   string(t.NetworkPolicy),
 		Endpoints:       fromEndpoints(t.Endpoints),
@@ -218,10 +214,7 @@ func networkPolicy(stored string) network.Policy {
 func toEndpoints(endpoints []Endpoint) []task.Endpoint {
 	result := make([]task.Endpoint, len(endpoints))
 	for i, e := range endpoints {
-		result[i] = task.Endpoint{
-			TaskPort: e.TaskPort,
-			HostPort: e.HostPort,
-		}
+		result[i] = task.Endpoint{TaskPort: e.TaskPort}
 	}
 
 	return result
@@ -230,10 +223,7 @@ func toEndpoints(endpoints []Endpoint) []task.Endpoint {
 func fromEndpoints(endpoints []task.Endpoint) []Endpoint {
 	result := make([]Endpoint, len(endpoints))
 	for i, e := range endpoints {
-		result[i] = Endpoint{
-			TaskPort: e.TaskPort,
-			HostPort: e.HostPort,
-		}
+		result[i] = Endpoint{TaskPort: e.TaskPort}
 	}
 
 	return result

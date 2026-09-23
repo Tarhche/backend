@@ -23,7 +23,7 @@ func TestNewEndpoints(t *testing.T) {
 
 		endpoints := NewEndpoints(task.Task{
 			Slug:      "nginx-xkfqz",
-			Endpoints: []task.Endpoint{{TaskPort: 80, HostPort: 32768}},
+			Endpoints: []task.Endpoint{{TaskPort: 80}},
 		}, ingressDomain)
 
 		require.Len(t, endpoints, 1)
@@ -38,9 +38,9 @@ func TestNewEndpoints(t *testing.T) {
 		endpoints := NewEndpoints(task.Task{
 			Slug: "app-xkfqz",
 			Endpoints: []task.Endpoint{
-				{TaskPort: 80, HostPort: 32768},
-				{TaskPort: 8080, HostPort: 32769},
-				{TaskPort: 443, HostPort: 32770},
+				{TaskPort: 80},
+				{TaskPort: 8080},
+				{TaskPort: 443},
 			},
 		}, ingressDomain)
 
@@ -79,7 +79,7 @@ func TestNewEndpoints(t *testing.T) {
 		t.Parallel()
 
 		assert.Empty(t, NewEndpoints(task.Task{
-			Endpoints: []task.Endpoint{{TaskPort: 80, HostPort: 32768}},
+			Endpoints: []task.Endpoint{{TaskPort: 80}},
 		}, ingressDomain))
 	})
 
@@ -106,7 +106,7 @@ func TestNewTask(t *testing.T) {
 		CurrentState: task.Running,
 		Image:        "nginx:1.27-alpine",
 		ExposedPorts: []port.Port{80},
-		Endpoints:    []task.Endpoint{{TaskPort: 80, HostPort: 32768}},
+		Endpoints:    []task.Endpoint{{TaskPort: 80}},
 		Environment:  []string{"TZ=UTC"},
 		Command:      []string{"nginx", "-g", "daemon off;"},
 		WorkingDir:   "/app",

@@ -2,24 +2,41 @@
 //
 // The ingress cannot see a task: it works out which node has one and sends
 // the request here. So this is the far end of that — the node reaching a
-// task over the port docker published it on, and saying so itself when it
-// cannot.
+// task through whatever runs it, and saying so itself when it cannot.
 package task
 
 import (
 	"context"
 	"errors"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"strconv"
+	"time"
 
 	getendpoint "github.com/khanzadimahdi/testproject/application/runner/orchestrator/task/getEndpoint"
 	"github.com/khanzadimahdi/testproject/domain/runner/port"
 	infraTrace "github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
 	"go.opentelemetry.io/otel/trace"
 )
+
+const (
+	// idleConnectionTimeout is how long a connection to a task is kept for the
+	// next request once the last one is done with it.
+	idleConnectionTimeout = 90 * time.Second
+
+	// maxIdleConnectionsPerTask caps how many of those are kept per task port.
+	maxIdleConnectionsPerTask = 8
+)
+
+// Dialer connects to a port of one of the runs this node is holding. The
+// runtime is one: how it gets there — a port docker published on its host, a
+// stream into a microVM — is its own business.
+type Dialer interface {
+	Dial(ctx context.Context, executionID string, p port.Port) (net.Conn, error)
+}
 
 type proxyHandler struct {
 	useCase *getendpoint.UseCase
@@ -29,7 +46,7 @@ type proxyHandler struct {
 
 var _ http.Handler = &proxyHandler{}
 
-func NewProxyHandler(useCase *getendpoint.UseCase, logger *slog.Logger) *proxyHandler {
+func NewProxyHandler(useCase *getendpoint.UseCase, dialer Dialer, logger *slog.Logger) *proxyHandler {
 	h := &proxyHandler{useCase: useCase, logger: logger}
 
 	h.proxy = &httputil.ReverseProxy{
@@ -44,8 +61,24 @@ func NewProxyHandler(useCase *getendpoint.UseCase, logger *slog.Logger) *proxyHa
 			r.Out.URL.RawQuery = r.In.URL.RawQuery
 
 			// the task is addressed by the name the client used, not by
-			// the port it happens to be published on.
+			// whatever the runtime calls it.
 			r.Out.Host = r.In.Host
+		},
+		// the address a request is sent to names a run and one of its ports
+		// rather than a place on the network, so connecting to it is the
+		// runtime's to do. Pooling still works as it would: connections are
+		// kept per run and port.
+		Transport: &http.Transport{
+			DialContext: func(ctx context.Context, _ string, address string) (net.Conn, error) {
+				executionID, p, err := splitAddress(address)
+				if err != nil {
+					return nil, err
+				}
+
+				return dialer.Dial(ctx, executionID, p)
+			},
+			IdleConnTimeout:     idleConnectionTimeout,
+			MaxIdleConnsPerHost: maxIdleConnectionsPerTask,
 		},
 		ErrorHandler: func(rw http.ResponseWriter, _ *http.Request, err error) {
 			// the task is there but not answering: its own problem to
@@ -63,7 +96,7 @@ func NewProxyHandler(useCase *getendpoint.UseCase, logger *slog.Logger) *proxyHa
 type targetKey struct{}
 
 // @Summary		Serve a task
-// @Description	carries the request to one of the tasks this node is holding, on the port docker published it at
+// @Description	carries the request to one of the tasks this node is holding, on one of the ports it exposes
 // @Tags			runner tasks
 // @Param			slug	path		string	true	"Task slug"
 // @Param			port	path		int		true	"Task port, or 0 for the lowest it exposes"
@@ -110,9 +143,24 @@ func (h *proxyHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 	target := &url.URL{
 		Scheme: "http",
-		Host:   response.Address(),
+		Host:   net.JoinHostPort(response.ExecutionID, strconv.FormatUint(uint64(response.Port), 10)),
 		Path:   "/" + r.PathValue("path"),
 	}
 
 	h.proxy.ServeHTTP(rw, r.WithContext(context.WithValue(r.Context(), targetKey{}, target)))
+}
+
+// splitAddress reads back the run and the port a request's address names.
+func splitAddress(address string) (string, port.Port, error) {
+	executionID, portNumber, err := net.SplitHostPort(address)
+	if err != nil {
+		return "", 0, err
+	}
+
+	p, err := strconv.ParseUint(portNumber, 10, 16)
+	if err != nil {
+		return "", 0, err
+	}
+
+	return executionID, port.Port(p), nil
 }

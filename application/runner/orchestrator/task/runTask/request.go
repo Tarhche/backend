@@ -27,25 +27,24 @@ type Request struct {
 	StackSlug   string `json:"stack_slug,omitempty"`
 	ServiceName string `json:"service_name,omitempty"`
 
-	Image          string                 `json:"image"`
-	AutoRemove     bool                   `json:"auto_remove"`
-	PortBindings   map[uint][]PortBinding `json:"port_bindings"`
-	ExposedPorts   []port.Port            `json:"exposed_ports"`
-	NetworkPolicy  network.Policy         `json:"network_policy"`
-	RestartPolicy  string                 `json:"restart_policy"`
-	RestartCount   uint                   `json:"restart_count"`
-	HealthCheck    string                 `json:"health_check"`
-	AttachStdin    bool                   `json:"attach_stdin"`
-	AttachStdout   bool                   `json:"attach_stdout"`
-	AttachStderr   bool                   `json:"attach_stderr"`
-	Environment    []string               `json:"environment"`
-	Command        []string               `json:"command"`
-	Entrypoint     []string               `json:"entrypoint"`
-	WorkingDir     string                 `json:"working_dir"`
-	ReadOnly       bool                   `json:"read_only"`
-	Interactive    bool                   `json:"interactive,omitempty"`
-	Mounts         []Mount                `json:"mounts"`
-	ResourceLimits ResourceLimits         `json:"resource_limits"`
+	Image          string         `json:"image"`
+	AutoRemove     bool           `json:"auto_remove"`
+	ExposedPorts   []port.Port    `json:"exposed_ports"`
+	NetworkPolicy  network.Policy `json:"network_policy"`
+	RestartPolicy  string         `json:"restart_policy"`
+	RestartCount   uint           `json:"restart_count"`
+	HealthCheck    string         `json:"health_check"`
+	AttachStdin    bool           `json:"attach_stdin"`
+	AttachStdout   bool           `json:"attach_stdout"`
+	AttachStderr   bool           `json:"attach_stderr"`
+	Environment    []string       `json:"environment"`
+	Command        []string       `json:"command"`
+	Entrypoint     []string       `json:"entrypoint"`
+	WorkingDir     string         `json:"working_dir"`
+	ReadOnly       bool           `json:"read_only"`
+	Interactive    bool           `json:"interactive,omitempty"`
+	Mounts         []Mount        `json:"mounts"`
+	ResourceLimits ResourceLimits `json:"resource_limits"`
 
 	// TTL is how long the task may run for once it is up, in
 	// nanoseconds. Zero is no limit.
@@ -57,12 +56,6 @@ type Request struct {
 	// task rather than the failed one started again.
 	Attempt    int `json:"attempt"`
 	MaxRetries int `json:"max_retries"`
-}
-
-// PortBinding represents a host-to-task port binding
-type PortBinding struct {
-	HostIP   string `json:"host_ip"`
-	HostPort uint   `json:"host_port"`
 }
 
 // Mount represents a mount point of volume
@@ -150,18 +143,6 @@ func (r *Request) TaskName() string {
 	}
 
 	return r.Name
-}
-
-// PublishedPorts are the bindings the task is created with. Every exposed
-// port is published on a host port docker picks, so the runner never has to
-// keep track of what is already taken on the node.
-func (r *Request) PublishedPorts() port.PortMap {
-	bindings := make(port.PortMap, len(r.ExposedPorts))
-	for _, p := range r.ExposedPorts {
-		bindings[p] = []port.PortBinding{{HostIP: "0.0.0.0"}}
-	}
-
-	return bindings
 }
 
 // ExposedPortSet is the set of ports the image declares open.

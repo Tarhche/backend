@@ -3,6 +3,7 @@ package task
 import (
 	"context"
 	"io"
+	"net"
 	"time"
 
 	"github.com/khanzadimahdi/testproject/domain/runner/network"
@@ -10,8 +11,8 @@ import (
 )
 
 // Execution is one run of a task, as whatever runs it holds one: what it was
-// asked to be, and what it has become. Docker calls this a container; nothing
-// above this line needs to know that.
+// asked to be, and what it has become. Docker calls this a container and
+// Firecracker a microVM; nothing above this line needs to know which.
 type Execution struct {
 	// ID is what the runtime calls this run, and Name what it answers to
 	// there.
@@ -19,8 +20,9 @@ type Execution struct {
 	Name string
 
 	// What this is running, as the runtime was told when the run was made. A
-	// runtime keeps it alongside the run -- docker as labels -- so that a node
-	// can say what it is holding without asking anything that keeps records.
+	// runtime keeps it alongside the run -- docker as labels, a microVM in its
+	// own record -- so that a node can say what it is holding without asking
+	// anything that keeps records.
 	TaskUUID    string
 	TaskName    string
 	Slug        string
@@ -41,16 +43,22 @@ type Execution struct {
 	RestartCount     uint
 	WorkingDirectory string
 	ExposedPorts     port.PortSet
-	PortBindings     port.PortMap
-	Networks         []network.Attachment
-	HealthCheck      string
-	AutoRemove       bool
-	Environment      []string
-	Entrypoint       []string
-	Command          []string
-	CreatedAt        time.Time
-	StartedAt        time.Time
-	ExitCode         int
+
+	// Endpoints are the exposed ports the node holding this run can reach it
+	// on right now, which is what Dial connects to. How they are reached --
+	// a port docker published on its host, a stream into a microVM -- is the
+	// runtime's business.
+	Endpoints []port.Port
+
+	Networks    []network.Attachment
+	HealthCheck string
+	AutoRemove  bool
+	Environment []string
+	Entrypoint  []string
+	Command     []string
+	CreatedAt   time.Time
+	StartedAt   time.Time
+	ExitCode    int
 
 	// ReadOnly makes the task's root filesystem immutable, so nothing it
 	// runs can change the image it was started from.
@@ -80,7 +88,7 @@ type ExecOptions struct {
 
 // ExecSession is a command running inside a task. Reading takes its
 // output, writing feeds its input, and closing tears it down. It is the only
-// thing the domain knows about attaching, so no docker type leaks past here.
+// thing the domain knows about attaching, so no runtime's type leaks past here.
 type ExecSession interface {
 	io.ReadWriteCloser
 
@@ -98,9 +106,10 @@ type ExecSession interface {
 	End(ctx context.Context) error
 }
 
-// Runtime is whatever runs the tasks. Docker does today, behind
-// infrastructure/runner/container; a microvm could tomorrow, and nothing that
-// asks for a task to be run would have to say anything different.
+// Runtime is whatever runs the tasks: Firecracker microVMs behind
+// infrastructure/runner/firecracker, or Docker containers behind
+// infrastructure/runner/docker. Which one a node uses is its own configuration,
+// and nothing that asks for a task to be run says anything different either way.
 type Runtime interface {
 	// OnNode is every run the named node is holding, whatever state it is in.
 	OnNode(ctx context.Context, nodeName string) ([]Execution, error)
@@ -128,4 +137,10 @@ type Runtime interface {
 	Logs(ctx context.Context, executionID string, writer io.Writer) error
 	StreamLogs(ctx context.Context, executionID string, since time.Time, emit func(LogLine) error) error
 	Exec(ctx context.Context, executionID string, options ExecOptions) (ExecSession, error)
+
+	// Dial connects to one of the ports a run exposes, as its neighbours on its
+	// own network would. The connection is a plain byte stream, and it is the
+	// only way anything outside a run reaches what it serves: nobody is told
+	// where a run is, because only the runtime holding it knows.
+	Dial(ctx context.Context, executionID string, p port.Port) (net.Conn, error)
 }

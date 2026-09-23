@@ -211,29 +211,18 @@ func (uc *UseCase) logs(ctx context.Context, c *task.Execution) []byte {
 	return buffer.Bytes()
 }
 
-// endpoints reports which of a task's exposed ports docker actually
-// published. They are read from docker every heartbeat because a restarted
-// task comes back on different host ports.
+// endpoints reports which of a task's exposed ports the runtime can reach it
+// on. They are read from the runtime every heartbeat because a restarted task
+// comes back without them until it is up again.
 func (uc *UseCase) endpoints(c *task.Execution) []events.Endpoint {
-	endpoints := make([]events.Endpoint, 0, len(c.PortBindings))
+	endpoints := make([]events.Endpoint, 0, len(c.Endpoints))
 
-	for taskPort, bindings := range c.PortBindings {
-		for _, binding := range bindings {
-			if binding.HostPort == 0 {
-				continue
-			}
-
-			endpoints = append(endpoints, events.Endpoint{
-				TaskPort: taskPort,
-				HostPort: binding.HostPort,
-			})
-
-			break
-		}
+	for _, taskPort := range c.Endpoints {
+		endpoints = append(endpoints, events.Endpoint{TaskPort: taskPort})
 	}
 
-	// docker hands back the bindings in no particular order, and the lowest
-	// exposed port is the one a bare hostname reaches.
+	// a runtime hands them back in no particular order, and the lowest exposed
+	// port is the one a bare hostname reaches.
 	slices.SortFunc(endpoints, func(a events.Endpoint, b events.Endpoint) int {
 		return int(a.TaskPort) - int(b.TaskPort)
 	})

@@ -173,7 +173,7 @@ jobs:
 
             export BACKEND_RUNNER_CONTROLPLANE_URL='${{ secrets.BACKEND_RUNNER_CONTROLPLANE_URL }}'
             export BACKEND_RUNNER_INGRESS_DOMAIN='${{ secrets.BACKEND_RUNNER_INGRESS_DOMAIN }}'
-            export BACKEND_RUNNER_ORCHESTRATOR_ADVERTISE_HOST='${{ secrets.BACKEND_RUNNER_ORCHESTRATOR_ADVERTISE_HOST }}'
+            export BACKEND_RUNNER_DOCKER_ADVERTISE_HOST='${{ secrets.BACKEND_RUNNER_DOCKER_ADVERTISE_HOST }}'
             export BACKEND_RUNNER_TUNNEL_ADDRESSES='${{ secrets.BACKEND_RUNNER_TUNNEL_ADDRESSES }}'
 
             # each service's own certificate and the authority to check the

@@ -45,21 +45,6 @@ func (uc *TaskScheduled) Handle(ctx context.Context, data []byte) error {
 		return nil
 	}
 
-	// Convert port bindings
-	portBindings := make(map[uint][]PortBinding, len(taskScheduled.PortBindings))
-	for _, pm := range taskScheduled.PortBindings {
-		for port, bindings := range pm {
-			pbList := make([]PortBinding, len(bindings))
-			for i, b := range bindings {
-				pbList[i] = PortBinding{
-					HostIP:   b.HostIP,
-					HostPort: uint(b.HostPort),
-				}
-			}
-			portBindings[uint(port)] = pbList
-		}
-	}
-
 	// Convert mounts
 	mounts := make([]Mount, len(taskScheduled.Mounts))
 	for i, m := range taskScheduled.Mounts {
@@ -81,7 +66,6 @@ func (uc *TaskScheduled) Handle(ctx context.Context, data []byte) error {
 		ServiceName:   taskScheduled.ServiceName,
 		Image:         taskScheduled.Image,
 		AutoRemove:    taskScheduled.AutoRemove,
-		PortBindings:  portBindings,
 		ExposedPorts:  taskScheduled.ExposedPorts,
 		NetworkPolicy: taskScheduled.NetworkPolicy,
 		RestartPolicy: taskScheduled.RestartPolicy,

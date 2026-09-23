@@ -13,7 +13,7 @@ import (
 
 	"github.com/khanzadimahdi/testproject/domain/runner/node"
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
-	infraContainer "github.com/khanzadimahdi/testproject/infrastructure/runner/container"
+	infraContainer "github.com/khanzadimahdi/testproject/infrastructure/runner/docker/container"
 	"github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
 )
 

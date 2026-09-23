@@ -36,7 +36,6 @@ type Task struct {
 
 	Image         string
 	AutoRemove    bool
-	PortBindings  []port.PortMap
 	ExposedPorts  []port.Port
 	NetworkPolicy network.Policy
 	Endpoints     []Endpoint
@@ -98,12 +97,12 @@ type Task struct {
 	FinishedAt     time.Time
 }
 
-// Endpoint is an exposed task port that docker actually published, which
-// is what makes it reachable at all. Where it was published is the node's own
-// business and never leaves it, so what travels is only which ports came up.
+// Endpoint is an exposed task port that the node holding the task can
+// actually reach, which is what makes it reachable at all. How the node reaches
+// it is the runtime's own business and never leaves the node, so what travels
+// is only which ports came up.
 type Endpoint struct {
 	TaskPort port.Port
-	HostPort port.Port
 }
 
 // Mount represents a mount point of volume

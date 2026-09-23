@@ -69,14 +69,11 @@ func (uc *TaskRan) Handle(ctx context.Context, data []byte) error {
 	return err
 }
 
-// toEndpoints reads the addresses an orchestrator published a task on.
+// toEndpoints reads the ports an orchestrator can reach a task on.
 func toEndpoints(endpoints []events.Endpoint) []task.Endpoint {
 	result := make([]task.Endpoint, len(endpoints))
 	for i, e := range endpoints {
-		result[i] = task.Endpoint{
-			TaskPort: e.TaskPort,
-			HostPort: e.HostPort,
-		}
+		result[i] = task.Endpoint{TaskPort: e.TaskPort}
 	}
 
 	return result

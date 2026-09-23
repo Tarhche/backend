@@ -123,7 +123,7 @@ services:
       RUNNER_ORCHESTRATOR_NAME: runner-orchestrator-01
       # the containers' ports are published on the docker daemon's own host,
       # which is the dind service rather than this one.
-      RUNNER_ORCHESTRATOR_ADVERTISE_HOST: ${RUNNER_ORCHESTRATOR_ADVERTISE_HOST}
+      RUNNER_DOCKER_ADVERTISE_HOST: ${RUNNER_DOCKER_ADVERTISE_HOST}
       RUNNER_TUNNEL_ADDRESSES: ${RUNNER_TUNNEL_ADDRESSES}
       RUNNER_TUNNEL_CA_CERT: ${RUNNER_TUNNEL_CA_CERT}
       RUNNER_TUNNEL_CERT: ${RUNNER_ORCHESTRATOR_01_TUNNEL_CERT}
@@ -150,7 +150,7 @@ services:
       RUNNER_ORCHESTRATOR_NAME: runner-orchestrator-02
       # the containers' ports are published on the docker daemon's own host,
       # which is the dind service rather than this one.
-      RUNNER_ORCHESTRATOR_ADVERTISE_HOST: ${RUNNER_ORCHESTRATOR_ADVERTISE_HOST}
+      RUNNER_DOCKER_ADVERTISE_HOST: ${RUNNER_DOCKER_ADVERTISE_HOST}
       RUNNER_TUNNEL_ADDRESSES: ${RUNNER_TUNNEL_ADDRESSES}
       RUNNER_TUNNEL_CA_CERT: ${RUNNER_TUNNEL_CA_CERT}
       RUNNER_TUNNEL_CERT: ${RUNNER_ORCHESTRATOR_02_TUNNEL_CERT}
@@ -177,7 +177,7 @@ services:
       RUNNER_ORCHESTRATOR_NAME: runner-orchestrator-03
       # the containers' ports are published on the docker daemon's own host,
       # which is the dind service rather than this one.
-      RUNNER_ORCHESTRATOR_ADVERTISE_HOST: ${RUNNER_ORCHESTRATOR_ADVERTISE_HOST}
+      RUNNER_DOCKER_ADVERTISE_HOST: ${RUNNER_DOCKER_ADVERTISE_HOST}
       RUNNER_TUNNEL_ADDRESSES: ${RUNNER_TUNNEL_ADDRESSES}
       RUNNER_TUNNEL_CA_CERT: ${RUNNER_TUNNEL_CA_CERT}
       RUNNER_TUNNEL_CERT: ${RUNNER_ORCHESTRATOR_03_TUNNEL_CERT}

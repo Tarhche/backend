@@ -34,7 +34,7 @@ type LogLine struct {
 // Log is a line kept against the task that produced it. It outlives the
 // task: lines are held until the task itself is deleted, which is what
 // lets the dashboard show a task's whole history rather than whatever
-// docker still happens to hold.
+// the runtime still happens to hold.
 type Log struct {
 	TaskUUID    string
 	ExecutionID string

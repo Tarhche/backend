@@ -9,19 +9,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/docker/docker/api/types"
 	containerTypes "github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
-	"github.com/docker/go-connections/nat"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	oteltrace "go.opentelemetry.io/otel/trace"
 
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/runner/port"
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
 	"github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
 )
@@ -49,11 +46,16 @@ type DockerManager struct {
 	client *client.Client
 	logger *slog.Logger
 	tracer oteltrace.Tracer
+
+	// advertiseHost is where this node reaches the ports its containers are
+	// published on. That is the docker daemon's own host, which is not always
+	// this one.
+	advertiseHost string
 }
 
 var _ task.Runtime = &DockerManager{}
 
-func NewDockerManager(dockerHost string, logger *slog.Logger) (*DockerManager, error) {
+func NewDockerManager(dockerHost string, advertiseHost string, logger *slog.Logger) (*DockerManager, error) {
 	cli, err := client.NewClientWithOpts(
 		client.WithHost(dockerHost),
 		client.WithAPIVersionNegotiation(),
@@ -62,7 +64,12 @@ func NewDockerManager(dockerHost string, logger *slog.Logger) (*DockerManager, e
 		return nil, fmt.Errorf("failed to create docker client: %w", err)
 	}
 
-	return &DockerManager{client: cli, logger: logger, tracer: otel.Tracer("docker")}, nil
+	return &DockerManager{
+		client:        cli,
+		logger:        logger,
+		tracer:        otel.Tracer("docker"),
+		advertiseHost: advertiseHost,
+	}, nil
 }
 
 // OnNode is every container this node is holding.
@@ -109,8 +116,8 @@ func (m *DockerManager) byLabel(ctx context.Context, label string, value string)
 			Status:       convertToContainerStatus(c.State),
 			Image:        c.Image,
 			CreatedAt:    time.Unix(c.Created, 0),
-			ExposedPorts: convertDockerPortSet(c.Ports),
-			PortBindings: convertDockerPortMap(c.Ports),
+			ExposedPorts: listedExposedPorts(c.Ports),
+			Endpoints:    listedEndpoints(c.Ports),
 		}
 
 		identify(&result[i], c.Labels)
@@ -164,7 +171,7 @@ func (m *DockerManager) Create(ctx context.Context, c *task.Execution) (string, 
 		Cmd:          c.Command,
 		Env:          c.Environment,
 		Labels:       labelsOf(c),
-		ExposedPorts: convertPortSet(c.ExposedPorts),
+		ExposedPorts: exposedPorts(c.ExposedPorts),
 		WorkingDir:   c.WorkingDirectory,
 		Entrypoint:   c.Entrypoint,
 	}
@@ -177,7 +184,7 @@ func (m *DockerManager) Create(ctx context.Context, c *task.Execution) (string, 
 		RestartPolicy: containerTypes.RestartPolicy{
 			Name: containerTypes.RestartPolicyMode(c.RestartPolicy),
 		},
-		PortBindings: convertPortMap(c.PortBindings),
+		PortBindings: publishAll(c.ExposedPorts),
 		AutoRemove:   c.AutoRemove,
 
 		// an immutable container writes only to what is mounted into it.
@@ -332,8 +339,8 @@ func (m *DockerManager) Inspect(ctx context.Context, containerUUID string) (task
 		CreatedAt:        created,
 		StartedAt:        started,
 		ExitCode:         info.State.ExitCode,
-		ExposedPorts:     convertDockerPortSetFromMap(info.NetworkSettings.Ports),
-		PortBindings:     convertDockerPortMapFromMap(info.NetworkSettings.Ports),
+		ExposedPorts:     inspectedExposedPorts(info.NetworkSettings.Ports),
+		Endpoints:        inspectedEndpoints(info.NetworkSettings.Ports),
 		ResourceLimits: task.ResourceLimits{
 			Memory: uint64(info.HostConfig.Resources.Memory),
 			Cpu:    float64(info.HostConfig.Resources.NanoCPUs) / 1e9,
@@ -438,89 +445,6 @@ func (m *DockerManager) Logs(ctx context.Context, containerUUID string, writer i
 	_, err = stdcopy.StdCopy(writer, writer, readCloser)
 
 	return trace.RecordError(span, err)
-}
-
-func convertPortSet(ports port.PortSet) nat.PortSet {
-	result := make(nat.PortSet)
-	for p := range ports {
-		result[nat.Port(fmt.Sprintf("%d/tcp", p))] = struct{}{}
-	}
-	return result
-}
-
-// convertPortMap turns the bindings a container asks for into docker's own
-// shape. A binding with no host port asks docker to pick a free one, which is
-// how the runner publishes a container's ports without having to keep track of
-// what is already taken on the node.
-func convertPortMap(bindings port.PortMap) nat.PortMap {
-	result := make(nat.PortMap)
-	for p, bindings := range bindings {
-		portStr := fmt.Sprintf("%d/tcp", p)
-		result[nat.Port(portStr)] = make([]nat.PortBinding, len(bindings))
-		for i, b := range bindings {
-			hostPort := ""
-			if b.HostPort > 0 {
-				hostPort = fmt.Sprintf("%d", b.HostPort)
-			}
-
-			result[nat.Port(portStr)][i] = nat.PortBinding{
-				HostIP:   b.HostIP,
-				HostPort: hostPort,
-			}
-		}
-	}
-	return result
-}
-
-func convertDockerPortSet(ports []types.Port) port.PortSet {
-	result := make(port.PortSet)
-	for _, p := range ports {
-		result[port.Port(p.PrivatePort)] = struct{}{}
-	}
-	return result
-}
-
-func convertDockerPortMap(ports []types.Port) port.PortMap {
-	result := make(port.PortMap)
-	for _, p := range ports {
-		if p.PublicPort != 0 {
-			result[port.Port(p.PrivatePort)] = []port.PortBinding{
-				{
-					HostIP:   "0.0.0.0",
-					HostPort: port.Port(p.PublicPort),
-				},
-			}
-		}
-	}
-	return result
-}
-
-func convertDockerPortSetFromMap(ports nat.PortMap) port.PortSet {
-	result := make(port.PortSet)
-	for p := range ports {
-		var portNum port.Port
-		fmt.Sscanf(string(p), "%d/tcp", &portNum)
-		result[portNum] = struct{}{}
-	}
-	return result
-}
-
-func convertDockerPortMapFromMap(ports nat.PortMap) port.PortMap {
-	result := make(port.PortMap)
-	for p, bindings := range ports {
-		var portNum port.Port
-		fmt.Sscanf(string(p), "%d/tcp", &portNum)
-		result[portNum] = make([]port.PortBinding, len(bindings))
-		for i, b := range bindings {
-			var hostPort port.Port
-			fmt.Sscanf(b.HostPort, "%d", &hostPort)
-			result[portNum][i] = port.PortBinding{
-				HostIP:   b.HostIP,
-				HostPort: hostPort,
-			}
-		}
-	}
-	return result
 }
 
 func convertToContainerStatus(status string) task.Status {

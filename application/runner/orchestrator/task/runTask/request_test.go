@@ -22,7 +22,6 @@ func TestRequest_Validate(t *testing.T) {
 				Name:          "test-task",
 				Image:         "test-image:latest",
 				AutoRemove:    true,
-				PortBindings:  map[uint][]PortBinding{},
 				RestartPolicy: "always",
 				RestartCount:  3,
 				HealthCheck:   "http://localhost:8080/health",

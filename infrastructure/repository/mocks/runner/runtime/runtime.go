@@ -3,16 +3,18 @@ package runtime
 import (
 	"context"
 	"io"
+	"net"
 	"time"
 
 	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/domain/runner/network"
 	"github.com/khanzadimahdi/testproject/domain/runner/node"
+	"github.com/khanzadimahdi/testproject/domain/runner/port"
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
 )
 
-// MockRuntime stands in for whatever runs the tasks: docker, here.
+// MockRuntime stands in for whatever runs the tasks.
 type MockRuntime struct {
 	mock.Mock
 }
@@ -93,6 +95,14 @@ func (m *MockRuntime) Exec(ctx context.Context, taskUUID string, options task.Ex
 	session, _ := args.Get(0).(task.ExecSession)
 
 	return session, args.Error(1)
+}
+
+func (m *MockRuntime) Dial(ctx context.Context, executionID string, p port.Port) (net.Conn, error) {
+	args := m.Called(ctx, executionID, p)
+
+	conn, _ := args.Get(0).(net.Conn)
+
+	return conn, args.Error(1)
 }
 
 // MockNetworkManager stands in for the networks the runner owns.

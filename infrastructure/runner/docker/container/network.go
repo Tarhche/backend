@@ -11,6 +11,29 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/runner/network"
 )
 
+// dockerNetwork is what docker calls one of the runner's networks. The one
+// that routes out is docker's own default bridge; the rest are called what the
+// runner calls them.
+func dockerNetwork(name string) string {
+	if name == network.PublicNetworkName {
+		return defaultBridge
+	}
+
+	return name
+}
+
+// runnerNetwork is what the runner calls one of docker's networks.
+func runnerNetwork(name string) string {
+	if name == defaultBridge {
+		return network.PublicNetworkName
+	}
+
+	return name
+}
+
+// defaultBridge is docker's own bridge, which routes out.
+const defaultBridge = "bridge"
+
 // networkMode is the network a container is created on. Docker takes exactly
 // one at create time; anything else is connected afterwards.
 func networkMode(attachments []network.Attachment) containerTypes.NetworkMode {
@@ -18,7 +41,7 @@ func networkMode(attachments []network.Attachment) containerTypes.NetworkMode {
 		return containerTypes.NetworkMode(network.NoNetworkName)
 	}
 
-	return containerTypes.NetworkMode(attachments[0].Name)
+	return containerTypes.NetworkMode(dockerNetwork(attachments[0].Name))
 }
 
 // endpointsConfig carries the names a container answers to on the network it is
@@ -35,7 +58,7 @@ func endpointsConfig(attachments []network.Attachment) *networkTypes.NetworkingC
 
 	return &networkTypes.NetworkingConfig{
 		EndpointsConfig: map[string]*networkTypes.EndpointSettings{
-			attachments[0].Name: settings,
+			dockerNetwork(attachments[0].Name): settings,
 		},
 	}
 }
@@ -69,7 +92,7 @@ func (m *DockerManager) connectRemainingNetworks(ctx context.Context, containerI
 			settings = &networkTypes.EndpointSettings{}
 		}
 
-		if err := m.client.NetworkConnect(ctx, attachment.Name, containerID, settings); err != nil {
+		if err := m.client.NetworkConnect(ctx, dockerNetwork(attachment.Name), containerID, settings); err != nil {
 			return err
 		}
 	}
@@ -86,7 +109,7 @@ func inspectedNetworks(settings *containerTypes.NetworkSettings) []network.Attac
 
 	attachments := make([]network.Attachment, 0, len(settings.Networks))
 	for name, endpoint := range settings.Networks {
-		attachment := network.Attachment{Name: name}
+		attachment := network.Attachment{Name: runnerNetwork(name)}
 		if endpoint != nil {
 			attachment.Aliases = endpoint.Aliases
 		}

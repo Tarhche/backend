@@ -51,7 +51,7 @@ services:
       # the host the containers' published ports land on, which is the docker
       # daemon's own rather than this service's. Where this orchestrator's API
       # answers needs no saying: it is this service's name and port.
-      RUNNER_ORCHESTRATOR_ADVERTISE_HOST: ${BACKEND_RUNNER_ORCHESTRATOR_ADVERTISE_HOST}
+      RUNNER_DOCKER_ADVERTISE_HOST: ${BACKEND_RUNNER_DOCKER_ADVERTISE_HOST}
       # every ingress this orchestrator opens connections to, separated by commas
       RUNNER_TUNNEL_ADDRESSES: ${BACKEND_RUNNER_TUNNEL_ADDRESSES:-runner-ingress:81}
       # this orchestrator's own certificate, as the PEM itself, and the authority to

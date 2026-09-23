@@ -53,7 +53,6 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		ExpectedState: task.Running,
 		Image:         request.Image,
 		AutoRemove:    request.AutoRemove,
-		PortBindings:  request.ConvertPortBindings(),
 		ExposedPorts:  request.ExposedPorts,
 		NetworkPolicy: request.Policy(),
 		RestartPolicy: request.RestartPolicy,

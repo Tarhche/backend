@@ -40,7 +40,7 @@ const nodeName = "runner-orchestrator-01"
 func TestUseCase_Execute(t *testing.T) {
 	t.Parallel()
 
-	t.Run("publishes every exposed port on a host port docker picks", func(t *testing.T) {
+	t.Run("exposes every port the task asks for", func(t *testing.T) {
 		t.Parallel()
 
 		var (
@@ -69,15 +69,6 @@ func TestUseCase_Execute(t *testing.T) {
 		assert.Equal(t, "task-id", response.UUID)
 
 		require.NotNil(t, created)
-
-		// an unset host port is docker's own "pick a free one", which is what
-		// keeps the runner out of the business of tracking what is taken.
-		require.Len(t, created.PortBindings, 2)
-		for _, taskPort := range []port.Port{80, 443} {
-			bindings := created.PortBindings[taskPort]
-			require.Len(t, bindings, 1)
-			assert.Zero(t, bindings[0].HostPort, "the host port is docker's to choose")
-		}
 
 		assert.Equal(t, port.PortSet{80: {}, 443: {}}, created.ExposedPorts)
 	})

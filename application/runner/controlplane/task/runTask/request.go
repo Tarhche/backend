@@ -24,23 +24,22 @@ type Request struct {
 	ServiceName   string `json:"service_name,omitempty"`
 	NominatedNode string `json:"nominated_node,omitempty"`
 
-	Image         string                 `json:"image"`
-	AutoRemove    bool                   `json:"auto_remove"`
-	PortBindings  map[uint][]PortBinding `json:"port_bindings"`
-	ExposedPorts  []port.Port            `json:"exposed_ports"`
-	NetworkPolicy network.Policy         `json:"network_policy"`
-	RestartPolicy string                 `json:"restart_policy"`
-	RestartCount  uint                   `json:"restart_count"`
-	HealthCheck   string                 `json:"health_check"`
-	AttachStdin   bool                   `json:"attach_stdin"`
-	AttachStdout  bool                   `json:"attach_stdout"`
-	AttachStderr  bool                   `json:"attach_stderr"`
-	Environment   []string               `json:"environment"`
-	Command       []string               `json:"command"`
-	Entrypoint    []string               `json:"entrypoint"`
-	WorkingDir    string                 `json:"working_dir"`
-	ReadOnly      bool                   `json:"read_only"`
-	Interactive   bool                   `json:"interactive,omitempty"`
+	Image         string         `json:"image"`
+	AutoRemove    bool           `json:"auto_remove"`
+	ExposedPorts  []port.Port    `json:"exposed_ports"`
+	NetworkPolicy network.Policy `json:"network_policy"`
+	RestartPolicy string         `json:"restart_policy"`
+	RestartCount  uint           `json:"restart_count"`
+	HealthCheck   string         `json:"health_check"`
+	AttachStdin   bool           `json:"attach_stdin"`
+	AttachStdout  bool           `json:"attach_stdout"`
+	AttachStderr  bool           `json:"attach_stderr"`
+	Environment   []string       `json:"environment"`
+	Command       []string       `json:"command"`
+	Entrypoint    []string       `json:"entrypoint"`
+	WorkingDir    string         `json:"working_dir"`
+	ReadOnly      bool           `json:"read_only"`
+	Interactive   bool           `json:"interactive,omitempty"`
 
 	// MaxRetries is how many times this task is asked for again after it
 	// fails, before the runner gives up on it. Nothing at all is whatever its
@@ -53,12 +52,6 @@ type Request struct {
 	Mounts         []Mount        `json:"mounts"`
 	ResourceLimits ResourceLimits `json:"resource_limits"`
 	OwnerUUID      string         `json:"-"`
-}
-
-// PortBinding represents a host-to-task port binding
-type PortBinding struct {
-	HostIP   string `json:"host_ip"`
-	HostPort uint   `json:"host_port"`
 }
 
 // Mount represents a mount point of volume
@@ -205,31 +198,6 @@ func (r *Request) ConvertMounts() []task.Mount {
 			Target:   m.Target,
 			Type:     m.Type,
 			ReadOnly: m.ReadOnly,
-		}
-	}
-
-	return result
-}
-
-// ConvertPortBindings converts the port bindings to port.PortMap
-func (r *Request) ConvertPortBindings() []port.PortMap {
-	result := make([]port.PortMap, 0, len(r.PortBindings))
-	for taskPort, hostBindings := range r.PortBindings {
-		portMap := make(port.PortMap)
-		portMap[port.Port(taskPort)] = r.convertPortBinding(hostBindings)
-		result = append(result, portMap)
-	}
-
-	return result
-}
-
-// convertPortBinding converts the port binding to port.PortBinding
-func (r *Request) convertPortBinding(bindings []PortBinding) []port.PortBinding {
-	result := make([]port.PortBinding, len(bindings))
-	for i, binding := range bindings {
-		result[i] = port.PortBinding{
-			HostIP:   binding.HostIP,
-			HostPort: port.Port(binding.HostPort),
 		}
 	}
 

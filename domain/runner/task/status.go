@@ -7,11 +7,11 @@ type Status uint
 
 const (
 	StatusCreated    Status = 1 // A task that has never been started.
-	StatusRunning    Status = 2 // A running task, started by either docker start or docker run.
-	StatusPaused     Status = 3 // A paused task. See docker pause.
+	StatusRunning    Status = 2 // A running task, started by the runtime.
+	StatusPaused     Status = 3 // A paused task. Paused by the runtime.
 	StatusRestarting Status = 4 // A task which is starting due to the designated restart policy for that task.
-	StatusExited     Status = 5 // A task which is no longer running. For example, the process inside the task completed or the task was stopped using the docker stop command.
-	StatusRemoving   Status = 6 // A task which is in the process of being removed. See docker rm.
+	StatusExited     Status = 5 // A task which is no longer running. For example, the process inside the task completed or the task was stopped.
+	StatusRemoving   Status = 6 // A task which is in the process of being removed.
 	StatusDead       Status = 7 // A "defunct" task; for example, a task that was only partially removed because resources were kept busy by an external process. dead tasks cannot be (re)started, only removed.
 )
 
@@ -22,8 +22,8 @@ func (s Status) Ended() bool {
 }
 
 // endedBySignal reports whether what was in a task was ended from
-// outside rather than by its own doing. Docker reports a process killed by
-// signal N as 128+N, which is what stopping a task, or taking one away
+// outside rather than by its own doing. A process killed by signal N is
+// reported as 128+N, as a shell and every runtime report it, which is what stopping a task, or taking one away
 // when its time is up, looks like from here: the code did not fail, it was cut
 // short.
 func endedBySignal(exitCode int) bool {
@@ -42,8 +42,8 @@ func endedBySignal(exitCode int) bool {
 // supposed to is not something a task can say, so that is left to whoever
 // knows what was asked of it.
 //
-// The exit code is what the task's process returned. Docker only tells it
-// on inspection, so a task that was merely listed reports none, and a
+// The exit code is what the task's process returned. A runtime only tells
+// it on inspection, so a task that was merely listed reports none, and a
 // task that has not ended has none to report.
 func EvaluateState(status Status, kind Kind, exitCode int) State {
 	switch status {

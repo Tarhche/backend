@@ -32,10 +32,13 @@ const (
 	// stackNetworkPrefix namespaces the private network each stack gets.
 	stackNetworkPrefix = "runner-stack-"
 
-	// PublicNetworkName is docker's default bridge, which routes out.
-	PublicNetworkName = "bridge"
+	// PublicNetworkName is the network that routes out to the internet. Each
+	// runtime maps it onto its own: docker onto its default bridge, a microVM
+	// onto a masquerading bridge of its host.
+	PublicNetworkName = "public"
 
-	// NoNetworkName is docker's own "no network at all" mode.
+	// NoNetworkName is no network at all: a task under it has no interface
+	// beyond its own loopback.
 	NoNetworkName = "none"
 )
 
