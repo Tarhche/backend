@@ -38,8 +38,10 @@ import (
 
 const (
 	// vsockName is where a machine's firecracker exposes its vsock, inside
-	// the machine's own directory.
-	vsockName = "v.sock"
+	// the machine's own directory. It is in run/, which is the one directory
+	// there that a jailed firecracker, running as nobody in particular, may
+	// make anything in.
+	vsockName = "run/v.sock"
 
 	// bootTimeout is how long a machine has to boot and answer, and
 	// stopTimeout how long its task has to end on its own when stopped.

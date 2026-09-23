@@ -119,9 +119,14 @@ services:
     ports:
       - "8040:80"
     depends_on:
-      - nats
-      - grafana
-      - runner-launcher
+      nats:
+        condition: service_started
+      grafana:
+        condition: service_started
+      # the launcher lays the state directory out, which this makes its
+      # machines' disks in.
+      runner-launcher:
+        condition: service_healthy
     volumes:
       - ./:/opt/app
       # shared with the launcher at the same path, which is how what this
@@ -158,9 +163,14 @@ services:
     ports:
       - "8041:80"
     depends_on:
-      - nats
-      - grafana
-      - runner-launcher
+      nats:
+        condition: service_started
+      grafana:
+        condition: service_started
+      # the launcher lays the state directory out, which this makes its
+      # machines' disks in.
+      runner-launcher:
+        condition: service_healthy
     volumes:
       - ./:/opt/app
       # shared with the launcher at the same path, which is how what this
@@ -197,9 +207,14 @@ services:
     ports:
       - "8042:80"
     depends_on:
-      - nats
-      - grafana
-      - runner-launcher
+      nats:
+        condition: service_started
+      grafana:
+        condition: service_started
+      # the launcher lays the state directory out, which this makes its
+      # machines' disks in.
+      runner-launcher:
+        condition: service_healthy
     volumes:
       - ./:/opt/app
       # shared with the launcher at the same path, which is how what this
