@@ -46,11 +46,11 @@ func mountRoot(root guest.Root) error {
 	}
 
 	if root.ReadOnly() {
-		if err := unix.Mount(root.Image, rootDir, "ext4", unix.MS_RDONLY, ""); err != nil {
+		if err := unix.Mount(root.Image, rootDir, "squashfs", unix.MS_RDONLY, ""); err != nil {
 			return fmt.Errorf("failed to mount the image: %w", err)
 		}
 	} else {
-		if err := unix.Mount(root.Image, imageDir, "ext4", unix.MS_RDONLY, ""); err != nil {
+		if err := unix.Mount(root.Image, imageDir, "squashfs", unix.MS_RDONLY, ""); err != nil {
 			return fmt.Errorf("failed to mount the image: %w", err)
 		}
 

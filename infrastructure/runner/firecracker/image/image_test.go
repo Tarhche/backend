@@ -29,19 +29,6 @@ func TestConfigOf(t *testing.T) {
 	})
 }
 
-func TestFilesystemSize(t *testing.T) {
-	t.Run("a filesystem has room for what it holds, and for its own tables", func(t *testing.T) {
-		size := filesystemSize(100 << 20)
-
-		assert.GreaterOrEqual(t, size, int64(125<<20+32<<20))
-		assert.Zero(t, size%sizeAlign)
-	})
-
-	t.Run("a tiny image still gets a filesystem ext4 can be made in", func(t *testing.T) {
-		assert.Equal(t, int64(minimumSize), filesystemSize(1<<10))
-	})
-}
-
 func TestDirName(t *testing.T) {
 	assert.Equal(t, "sha256-abcdef", dirName("sha256:abcdef"))
 }

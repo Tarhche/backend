@@ -31,9 +31,9 @@ func TestPull(t *testing.T) {
 	assert.Equal(t, []string{"/bin/sh"}, built.Config.Cmd)
 
 	// the image's own files are in its root, whose they were.
-	listing, err := exec.Command("debugfs", "-R", "stat /etc/passwd", built.Root).CombinedOutput()
+	listing, err := exec.Command("unsquashfs", "-lln", built.Root, "etc/passwd").CombinedOutput()
 	require.NoError(t, err, string(listing))
-	assert.Contains(t, string(listing), "User:     0")
+	assert.Contains(t, string(listing), "0/0")
 
 	again, err := store.Ensure(ctx, "alpine:3.20")
 	require.NoError(t, err)

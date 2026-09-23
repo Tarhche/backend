@@ -16,7 +16,7 @@ firecracker emulates. That is the whole reason for the change.
 host with /dev/kvm                                      tunnel-facing, unprivileged
 ┌──────────────────────────────────┐   unix socket   ┌─────────────────────────────────┐
 │ launcher (privileged)            │◄───────────────►│ orchestrator                    │
-│  jailer → firecracker, per VM    │  HTTP, JSON     │  images → ext4                  │
+│  jailer → firecracker, per VM    │  HTTP, JSON     │  images → squashfs              │
 │  bridges, taps, iptables         │                 │  firecracker API → each machine │
 │  keeps no state of its own       │                 │  vsock → each machine's agent   │
 └────────────────┬─────────────────┘                 │  records, output, restarts      │
@@ -56,7 +56,7 @@ by its name. `infrastructure/runner/firecracker/layout` is where the two agree.
 /var/lib/runner/
   boot/vmlinux                         the kernel, installed by the launcher from its image
   boot/initrd-<digest>.cpio.gz         the agent, built by an orchestrator from its own binary
-  images/<digest>/rootfs.ext4          an image's root, read only, shared by every machine running it
+  images/<digest>/rootfs.squashfs      an image's root, read only, shared by every machine running it
   nodes/<orchestrator>/networks.json   which address on which network is whose
   nodes/<orchestrator>/machines/<id>/  a machine's record, scratch disk and output
   j/firecracker/<id>/root/             a machine's own directory: its chroot
@@ -137,8 +137,8 @@ machine's memory before anything runs there, so what the agent carries is what
 every machine pays for.
 
 As init it mounts what a machine needs, and on `PUT /config` puts the task's
-root together: the image's ext4, read only, with the scratch disk laid over it
-by overlayfs (a read-only task gets the image alone). It binds `hosts`,
+root together: the image's squashfs, read only, with the scratch disk (ext4)
+laid over it by overlayfs (a read-only task gets the image alone). It binds `hosts`,
 `resolv.conf` and `hostname` over the root's own, so they can change without
 the root being writable. The task runs chrooted into that root, **inside a
 cgroup of its own that it is started in**, so nothing it starts can leave it:
@@ -167,10 +167,11 @@ into the host's network.
 ## Images
 
 `image.Store` pulls an image for the host's platform with go-containerregistry,
-lays its layers over each other (whiteouts applied), and writes the result into
-an ext4 filesystem with `mke2fs -d`, straight from the tarball — which keeps
-whose each file is without extracting anything as root. An image is kept by its
-digest and built once, with a lock file across orchestrators; a reference
+lays its layers over each other (whiteouts applied), and streams the result as a
+tarball straight into `sqfstar`, which makes a zstd-compressed squashfs of it —
+keeping whose each file is without extracting anything as root. Squashfs is read
+only by design, which is all an image is ever asked to be. An image is kept by
+its digest and built once, with a lock file across orchestrators; a reference
 already built under is taken as it is, as a container runtime does not pull an
 image it holds.
 

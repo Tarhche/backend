@@ -113,6 +113,10 @@ func New(config Config, launcher machine.Launcher, logger *slog.Logger) (*Runtim
 		return nil, nil, err
 	}
 
+	if _, err := exec.LookPath("mke2fs"); err != nil {
+		return nil, nil, fmt.Errorf("scratch disks cannot be made without mke2fs: %w", err)
+	}
+
 	machines := layout.Machines(config.StateDir, config.Owner)
 
 	records, err := openStore(machines)

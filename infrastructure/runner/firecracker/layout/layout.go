@@ -3,7 +3,7 @@
 //
 //	boot/vmlinux                       the kernel machines boot, installed by the launcher
 //	boot/initrd-<digest>.cpio.gz       the initramfs holding the agent, built by an orchestrator
-//	images/<digest>/rootfs.ext4        an image's root, shared by every machine that runs it
+//	images/<digest>/rootfs.squashfs    an image's root, shared by every machine that runs it
 //	nodes/<orchestrator>/machines/<id> a machine's record, disks and output
 //	j/…                                machines' own directories, the launcher's alone
 //	launcher.sock                      where the launcher takes orders

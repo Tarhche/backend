@@ -3,9 +3,9 @@
 // A task names an OCI image the way it would for a container: nginx:alpine.
 // The image is pulled for the host's platform, its layers are laid over each
 // other the way a container runtime would lay them, and the result is written
-// into an ext4 filesystem of its own. That filesystem is only ever read: every
-// machine running the image shares it, and what a machine changes goes to a
-// scratch disk of its own.
+// into a squashfs filesystem of its own. That filesystem is only ever read, and
+// is made to be: it is compressed, and every machine running the image shares
+// it, while what a machine changes goes to a scratch disk of its own.
 //
 // An image is kept by its digest, so a tag that moves is a new image rather
 // than a changed one, and one digest is built once however many ask for it at
@@ -18,7 +18,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -42,21 +41,13 @@ import (
 )
 
 const (
-	rootName   = "rootfs.ext4"
+	rootName   = "rootfs.squashfs"
 	configName = "config.json"
 	refsDir    = "refs"
 
-	// what an image's filesystem is sized as, beyond what it holds: ext4's
-	// own tables, and room to spare for what does not pack as tightly as it
-	// does in a tarball.
-	sizeOverhead = 32 << 20
-	sizeMargin   = 1.25
-	sizeAlign    = 4 << 20
-	minimumSize  = 64 << 20
-
-	// bytesPerInode gives an image one inode for every 4 KiB it holds, which
-	// is enough for one full of small files.
-	bytesPerInode = "4096"
+	// compressionLevel keeps making a root quick: zstd reads back as fast
+	// at any level, and its higher ones take far longer to write.
+	compressionLevel = "3"
 )
 
 // Config is what an image says about how it is run.
@@ -95,8 +86,8 @@ func NewStore(dir string, uid int, gid int, logger *slog.Logger) (*Store, error)
 		return nil, err
 	}
 
-	if _, err := exec.LookPath("mke2fs"); err != nil {
-		return nil, fmt.Errorf("images cannot be made into roots without mke2fs: %w", err)
+	if _, err := exec.LookPath("sqfstar"); err != nil {
+		return nil, fmt.Errorf("images cannot be made into roots without sqfstar: %w", err)
 	}
 
 	return &Store{dir: dir, uid: uid, gid: gid, logger: logger, tracer: otel.Tracer("firecracker")}, nil
@@ -190,20 +181,9 @@ func (s *Store) build(ctx context.Context, reference string, digest v1.Hash, pul
 		return Image{}, trace.RecordError(span, err)
 	}
 
-	tarball := filepath.Join(work, "rootfs.tar")
-
-	size, err := flatten(pulled, tarball)
-	if err != nil {
-		return Image{}, trace.RecordError(span, fmt.Errorf("failed to lay %s's layers out: %w", reference, err))
-	}
-
 	root := filepath.Join(work, rootName)
-	if err := makeFilesystem(ctx, root, tarball, filesystemSize(size)); err != nil {
+	if err := makeFilesystem(ctx, pulled, root); err != nil {
 		return Image{}, trace.RecordError(span, fmt.Errorf("failed to make %s into a root: %w", reference, err))
-	}
-
-	if err := os.Remove(tarball); err != nil {
-		return Image{}, trace.RecordError(span, err)
 	}
 
 	encoded, err := json.Marshal(config)
@@ -299,58 +279,22 @@ func (s *Store) own(path string) error {
 	return os.Chown(path, s.uid, s.gid)
 }
 
-// flatten writes an image's layers, laid over each other, as one tarball, and
-// says how large it came out.
-func flatten(img v1.Image, path string) (int64, error) {
-	file, err := os.Create(path)
-	if err != nil {
-		return 0, err
-	}
-	defer file.Close()
-
+// makeFilesystem writes an image's layers, laid over each other, into a
+// squashfs filesystem at path. The layers travel as a tarball straight into
+// sqfstar, which keeps whose each file is as the tarball says it: extracting
+// them first would lose that, unless whoever did it were root.
+func makeFilesystem(ctx context.Context, img v1.Image, path string) error {
 	layers := mutate.Extract(img)
 	defer layers.Close()
 
-	written, err := io.Copy(file, layers)
-	if err != nil {
-		return 0, err
-	}
-
-	return written, file.Close()
-}
-
-// filesystemSize is how large a filesystem holding a tarball of size bytes is
-// made.
-func filesystemSize(size int64) int64 {
-	target := int64(float64(size)*sizeMargin) + sizeOverhead
-	target = (target + sizeAlign - 1) / sizeAlign * sizeAlign
-
-	return max(target, minimumSize)
-}
-
-// makeFilesystem makes an ext4 filesystem at path holding what the tarball
-// holds, as it holds it: whose each file is survives, which extracting the
-// tarball first would not, unless whoever did it were root. Nothing writes to
-// it once it is made, so it keeps no journal.
-func makeFilesystem(ctx context.Context, path string, tarball string, size int64) error {
-	if err := os.WriteFile(path, nil, 0o644); err != nil {
-		return err
-	}
-
-	if err := os.Truncate(path, size); err != nil {
-		return err
-	}
-
-	command := exec.CommandContext(ctx, "mke2fs",
-		"-q", "-F",
-		"-t", "ext4",
-		"-O", "^has_journal",
-		"-E", "root_owner=0:0",
-		"-i", bytesPerInode,
-		"-L", "image",
-		"-d", tarball,
+	command := exec.CommandContext(ctx, "sqfstar",
+		"-quiet",
+		"-no-progress",
+		"-comp", "zstd",
+		"-Xcompression-level", compressionLevel,
 		path,
 	)
+	command.Stdin = layers
 
 	output, err := command.CombinedOutput()
 	if err != nil {
