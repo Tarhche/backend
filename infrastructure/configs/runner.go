@@ -34,7 +34,7 @@ const (
 	RuntimeFirecracker = "firecracker"
 	RuntimeDocker      = "docker"
 
-	defaultRunnerRuntime = RuntimeDocker
+	defaultRunnerRuntime = RuntimeFirecracker
 )
 
 // Where firecracker's machines are made, and what they are made with.

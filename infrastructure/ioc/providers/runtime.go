@@ -53,6 +53,8 @@ func (p *runtimeProvider) Register(ctx context.Context, c provider.Container) er
 	)
 
 	switch orchestratorConfigs.Runtime {
+	case configs.RuntimeFirecracker:
+		selected, err = firecrackerRuntime(orchestratorConfigs, logger)
 	case configs.RuntimeDocker:
 		selected, err = dockerRuntime(orchestratorConfigs, logger)
 	default:
