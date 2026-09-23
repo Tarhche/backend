@@ -1,6 +1,8 @@
 package configs
 
 import (
+	"fmt"
+	"net"
 	"strings"
 	"time"
 
@@ -33,6 +35,27 @@ const (
 	RuntimeDocker      = "docker"
 
 	defaultRunnerRuntime = RuntimeDocker
+)
+
+// Where firecracker's machines are made, and what they are made with.
+const (
+	defaultRunnerStateDir       = "/var/lib/runner"
+	defaultRunnerLauncherSocket = defaultRunnerStateDir + "/launcher.sock"
+	defaultRunnerGuestBinary    = "/usr/bin/runner-guest"
+	defaultRunnerKernel         = "/opt/runner/vmlinux"
+	defaultRunnerNameservers    = "1.1.1.1,8.8.8.8"
+	defaultRunnerNetworkPool    = "10.200.0.0/16"
+
+	// the uid and gid the app runs as in its image, so a machine's
+	// firecracker runs as the orchestrator that made it does.
+	defaultRunnerMachineUID = 10000
+	defaultRunnerMachineGID = 10001
+
+	defaultRunnerLauncherHealthPort   = 8050
+	defaultRunnerFirecrackerBinary    = "/usr/local/bin/firecracker"
+	defaultRunnerJailerBinary         = "/usr/local/bin/jailer"
+	defaultRunnerLauncherMaxVCPUs     = 2
+	defaultRunnerLauncherMaxMemoryMiB = 2048
 )
 
 // RunnerControlPlane holds the configuration of the serve-runner-controlplane command.
@@ -114,6 +137,21 @@ type RunnerOrchestrator struct {
 	// its own.
 	DockerAdvertiseHost string `usage:"Host this orchestrator reaches its tasks' published ports at when docker runs them, which is the docker daemon's own rather than this one." env:"RUNNER_DOCKER_ADVERTISE_HOST" long:"docker-advertise-host"`
 
+	// StateDir is where firecracker's machines are made, shared with the
+	// launcher at the same path on both sides: what the orchestrator makes
+	// there, the launcher links into a machine by the same name.
+	StateDir string `usage:"Directory machines are made in when firecracker runs them, shared with the launcher at the same path on both sides." env:"RUNNER_STATE_DIR" long:"state-dir"`
+
+	LauncherSocket string `usage:"Unix socket the launcher takes orders on, when firecracker runs the tasks." env:"RUNNER_LAUNCHER_SOCKET" long:"launcher-socket"`
+	Kernel         string `usage:"Kernel machines boot. Empty is the one the launcher installs in the state directory." env:"RUNNER_KERNEL" long:"kernel"`
+	GuestBinary    string `usage:"The agent every machine boots with as its init." env:"RUNNER_GUEST_BINARY" long:"guest-binary"`
+	Nameservers    string `usage:"Nameservers a machine that routes out is given, separated by commas." env:"RUNNER_NAMESERVERS" long:"nameservers"`
+
+	// MachineUID and MachineGID are who a machine's firecracker runs as.
+	// What the orchestrator makes for a machine has to be theirs.
+	MachineUID int `usage:"Who a machine's firecracker runs as, and whose what it boots from has to be." env:"RUNNER_MACHINE_UID" long:"machine-uid"`
+	MachineGID int `usage:"The group a machine's firecracker runs as." env:"RUNNER_MACHINE_GID" long:"machine-gid"`
+
 	// PublicKey verifies the tokens the blog signs. An orchestrator never mints one,
 	// so it is given the public half and nothing else.
 	PublicKey string `usage:"ECDSA public key, in PEM form, the access tokens are verified against. It is the public half of the key the blog signs them with." env:"PUBLIC_KEY" long:"public-key"`
@@ -141,6 +179,12 @@ func NewRunnerOrchestrator() *RunnerOrchestrator {
 	return &RunnerOrchestrator{
 		Port:                       defaultRunnerOrchestratorPort,
 		Runtime:                    defaultRunnerRuntime,
+		StateDir:                   defaultRunnerStateDir,
+		LauncherSocket:             defaultRunnerLauncherSocket,
+		GuestBinary:                defaultRunnerGuestBinary,
+		Nameservers:                defaultRunnerNameservers,
+		MachineUID:                 defaultRunnerMachineUID,
+		MachineGID:                 defaultRunnerMachineGID,
 		TunnelMinConnections:       defaultRunnerTunnelMinConnections,
 		TunnelMaxConnections:       defaultRunnerTunnelMaxConnections,
 		TunnelMaxIdleTime:          defaultRunnerTunnelMaxIdleTime,
@@ -177,4 +221,63 @@ func (c *RunnerOrchestrator) AllowedTargets() ([]tunnel.AddressRule, error) {
 // Forwards is the ports this ingress carries arbitrary TCP into the tunnel on.
 func (c *RunnerIngress) Forwards() ([]tunnel.Forward, error) {
 	return tunnel.ParseForwards(c.ForwardedPorts)
+}
+
+// NameserverList is the nameservers a machine that routes out is given.
+func (c *RunnerOrchestrator) NameserverList() []string {
+	return commaSeparated(c.Nameservers)
+}
+
+// RunnerLauncher holds the configuration of the serve-runner-launcher command.
+type RunnerLauncher struct {
+	// Socket is where the launcher takes orders. Whoever can open it can start
+	// machines, so it is made for MachineUID and MachineGID alone.
+	Socket string `usage:"Unix socket the launcher takes orders on. It is made for the machines' uid and gid alone." env:"RUNNER_LAUNCHER_SOCKET" long:"socket"`
+
+	HealthPort int `usage:"Port on 127.0.0.1 the launcher answers its healthcheck on." env:"RUNNER_LAUNCHER_HEALTH_PORT" long:"health-port"`
+
+	StateDir string `usage:"Directory machines are made in, shared with the orchestrators at the same path on both sides." env:"RUNNER_STATE_DIR" long:"state-dir"`
+
+	// Kernel is installed into the state directory when the launcher starts,
+	// which is where machines boot it from.
+	Kernel string `usage:"Kernel machines boot, installed into the state directory when the launcher starts." env:"RUNNER_KERNEL" long:"kernel"`
+
+	FirecrackerBinary string `usage:"The firecracker a machine runs in." env:"RUNNER_FIRECRACKER_BINARY" long:"firecracker-binary"`
+	JailerBinary      string `usage:"The jailer a machine's firecracker is started through. Empty starts it unjailed, which is for development and nothing else." env:"RUNNER_JAILER_BINARY" long:"jailer-binary"`
+
+	MachineUID int `usage:"Who a machine's firecracker runs as. The socket, the taps and the state directory are made theirs." env:"RUNNER_MACHINE_UID" long:"machine-uid"`
+	MachineGID int `usage:"The group a machine's firecracker runs as." env:"RUNNER_MACHINE_GID" long:"machine-gid"`
+
+	NetworkPool string `usage:"Addresses machines' networks are carved out of, a /24 each. They must be the runner's alone." env:"RUNNER_NETWORK_POOL" long:"network-pool"`
+
+	MaxVCPUs     int `usage:"The most CPUs one machine may have." env:"RUNNER_MAX_VCPUS" long:"max-vcpus"`
+	MaxMemoryMiB int `usage:"The most memory, in MiB, one machine may have." env:"RUNNER_MAX_MEMORY_MIB" long:"max-memory-mib"`
+}
+
+// NewRunnerLauncher returns the configuration of the serve-runner-launcher
+// command, holding the defaults it runs with until the console overrides them.
+func NewRunnerLauncher() *RunnerLauncher {
+	return &RunnerLauncher{
+		Socket:            defaultRunnerLauncherSocket,
+		HealthPort:        defaultRunnerLauncherHealthPort,
+		StateDir:          defaultRunnerStateDir,
+		Kernel:            defaultRunnerKernel,
+		FirecrackerBinary: defaultRunnerFirecrackerBinary,
+		JailerBinary:      defaultRunnerJailerBinary,
+		MachineUID:        defaultRunnerMachineUID,
+		MachineGID:        defaultRunnerMachineGID,
+		NetworkPool:       defaultRunnerNetworkPool,
+		MaxVCPUs:          defaultRunnerLauncherMaxVCPUs,
+		MaxMemoryMiB:      defaultRunnerLauncherMaxMemoryMiB,
+	}
+}
+
+// Pool is the addresses machines' networks are carved out of.
+func (c *RunnerLauncher) Pool() (*net.IPNet, error) {
+	_, pool, err := net.ParseCIDR(c.NetworkPool)
+	if err != nil {
+		return nil, fmt.Errorf("%q is not a network pool: %w", c.NetworkPool, err)
+	}
+
+	return pool, nil
 }

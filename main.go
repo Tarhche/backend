@@ -48,6 +48,7 @@ func main() {
 	c.Register(controlplane.NewServeCommand())
 	c.Register(orchestrator.NewServeCommand())
 	c.Register(ingress.NewServeCommand())
+	registerLauncher(c)
 
 	// the certificates the runner's tunnel authenticates with
 	c.RegisterGroup(certificate.Group())

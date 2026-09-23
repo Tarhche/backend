@@ -35,7 +35,7 @@ const (
 	// PublicNetworkName is the network that routes out to the internet. Each
 	// runtime maps it onto its own: docker onto its default bridge, a microVM
 	// onto a masquerading bridge of its host.
-	PublicNetworkName = "public"
+	PublicNetworkName = "runner-public"
 
 	// NoNetworkName is no network at all: a task under it has no interface
 	// beyond its own loopback.
