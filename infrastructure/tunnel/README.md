@@ -6,7 +6,7 @@ connections outwards to a hub, and the hub multiplexes every client connection
 it receives onto them as independent streams.
 
 The package knows nothing about what is at either end of it. The runner uses it
-to reach its workers, and calls an agent a worker; anything else can use it to
+to reach its orchestrators, and calls an agent an orchestrator; anything else can use it to
 reach anything else.
 
 Nothing in the data plane knows what it is carrying. SSH, a database protocol, a
@@ -119,7 +119,7 @@ handshake never reaches the protocol above it at all.
                             │
          ┌──────────────────┼──────────────────┐
          │                  │                  │
-    hub            worker-001         agent-002
+    hub            orchestrator-001         agent-002
    serverAuth          clientAuth         clientAuth
 ```
 
@@ -151,10 +151,10 @@ app certificate ingress generate \
     --name ingress.example.internal \
     --dns hub --ip 10.0.0.10
 
-app certificate worker generate \
+app certificate orchestrator generate \
     --ca-cert ./certs/ca/ca.crt --ca-key ./certs/ca/ca.key \
-    --output-dir ./certs/worker-001 \
-    --name worker-001
+    --output-dir ./certs/orchestrator-001 \
+    --name orchestrator-001
 ```
 
 giving
@@ -167,9 +167,9 @@ certs/
 ├── hub/
 │   ├── tls.crt
 │   └── tls.key         0600 — stays on the hub
-└── worker-001/
+└── orchestrator-001/
     ├── tls.crt
-    └── tls.key         0600 — stays on worker-001
+    └── tls.key         0600 — stays on orchestrator-001
 ```
 
 Keys are written `0600` and certificates `0644`, directories `0700`. Nothing is
@@ -195,14 +195,14 @@ lines that carry it.
 The name goes in a **subject alternative name**, not only the common name —
 verification stopped looking at the common name years ago, so a name only there
 is a name nothing checks. `--tunnel-identity-suffix example.internal` turns a
-certificate for `worker-001.example.internal` into the identity `worker-001`;
+certificate for `orchestrator-001.example.internal` into the identity `orchestrator-001`;
 without it the SAN is taken whole. `certificate.Identifier` is an interface, so a
 deployment that encodes identity differently — a URI SAN, an organizational unit
 — replaces one function.
 
 ### Authorization
 
-`RUNNER_TUNNEL_ALLOWED_WORKERS` restricts which identities may connect. Empty
+`RUNNER_TUNNEL_ALLOWED_ORCHESTRATORS` restricts which identities may connect. Empty
 allows every agent the authority signed for, which is the right default because
 the authority is private: something holding a certificate it signed is something
 that was deliberately given one. `AgentAuthorizer` is the interface to replace
@@ -227,7 +227,7 @@ Rotating in order, without downtime:
    agent whose certificate expires simply fails the handshake and reconnects
    with backoff — it does not take its sessions' streams with it until it does.
 3. **Revocation** is by reissuing the authority or by naming the survivors in
-   `RUNNER_TUNNEL_ALLOWED_WORKERS`. There is no CRL or OCSP, deliberately: both
+   `RUNNER_TUNNEL_ALLOWED_ORCHESTRATORS`. There is no CRL or OCSP, deliberately: both
    are a network dependency in the authentication path, and the population here
    is small enough to name.
 
@@ -436,7 +436,7 @@ answers, before any of the tunnel's work begins.
 ## Running it, as the runner does
 
 Every command below is the runner's. Its hub is the `runner-ingress` service and
-its agents are its workers, which is why the flags and variables say so — the
+its agents are its orchestrators, which is why the flags and variables say so — the
 package itself has no idea.
 
 ```sh
@@ -448,29 +448,29 @@ app certificate ingress generate \
     --ca-cert ./certs/ca/ca.crt --ca-key ./certs/ca/ca.key \
     --output-dir ./certs/ingress --name ingress.example.internal
 
-# 3. an agent, which the runner calls a worker
-app certificate worker generate \
+# 3. an agent, which the runner calls an orchestrator
+app certificate orchestrator generate \
     --ca-cert ./certs/ca/ca.crt --ca-key ./certs/ca/ca.key \
-    --output-dir ./certs/worker-001 --name worker-001
+    --output-dir ./certs/orchestrator-001 --name orchestrator-001
 
 # 4. the hub — ca.key is not among what it is given
 RUNNER_TUNNEL_CA_CERT=./certs/ca/ca.crt \
 RUNNER_TUNNEL_CERT=./certs/ingress/tls.crt \
 RUNNER_TUNNEL_KEY=./certs/ingress/tls.key \
   app serve-runner-ingress --port=80 --tunnel-port=81 \
-      --forward='8022=worker-001:22,5432=worker-001:5432,9000=:api'
+      --forward='8022=orchestrator-001:22,5432=orchestrator-001:5432,9000=:api'
 
 # 5. the agent itself, which needs no inbound port of any kind
 RUNNER_TUNNEL_CA_CERT=./certs/ca/ca.crt \
-RUNNER_TUNNEL_CERT=./certs/worker-001/tls.crt \
-RUNNER_TUNNEL_KEY=./certs/worker-001/tls.key \
+RUNNER_TUNNEL_CERT=./certs/orchestrator-001/tls.crt \
+RUNNER_TUNNEL_KEY=./certs/orchestrator-001/tls.key \
 RUNNER_TUNNEL_SERVER_NAME=ingress.example.internal \
 RUNNER_TUNNEL_ADDRESSES='ingress-a:81,ingress-b:81' \
 RUNNER_TUNNEL_ALLOWED_TARGETS='127.0.0.1:22,127.0.0.1:5432' \
-  app serve-runner-worker --name=worker-001 --port=80
+  app serve-runner-orchestrator --name=orchestrator-001 --port=80
 
 # 6. a client connection, which reaches the agent's target through the tunnel
-curl http://ingress:80/workers/worker-001/health
+curl http://ingress:80/orchestrators/orchestrator-001/health
 
 # 7. and arbitrary TCP, which knows none of the above is happening
 ssh -p 8022 user@ingress

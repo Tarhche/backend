@@ -33,7 +33,7 @@ func toLog(l *LogBson) task.Log {
 
 // toBson prepares a line to be stored, deriving its id from the line itself.
 //
-// A worker that reconnects to a task's log stream resumes from a
+// An orchestrator that reconnects to a task's log stream resumes from a
 // timestamp it has already shipped, so the lines around that point arrive
 // twice. Identifying a line by its own content is what makes storing it twice
 // a no-op rather than a duplicate.

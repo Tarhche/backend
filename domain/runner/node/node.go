@@ -24,11 +24,11 @@ type Manager interface {
 type Role string
 
 const (
-	// Worker is a node that runs tasks
-	WorkerRole Role = "worker"
+	// OrchestratorRole is a node that runs tasks
+	OrchestratorRole Role = "orchestrator"
 
-	// Manager is a node that manages the cluster
-	ManagerRole Role = "manager"
+	// ControlPlaneRole is a node that manages the cluster
+	ControlPlaneRole Role = "controlplane"
 )
 
 // Repository is the interface for the node repository

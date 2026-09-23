@@ -39,7 +39,7 @@ func TestTaskFailed_Handle(t *testing.T) {
 		require.NoError(t, NewTaskFailedHandler(&replyer, discardLogger()).Handle(context.Background(), failure(t, events.TaskFailed{
 			UUID:     "task-uuid",
 			Name:     "a-request-id",
-			NodeName: "runner-worker-01",
+			NodeName: "runner-orchestrator-01",
 			At:       time.Now(),
 			Reason:   "no such image: ghcr.io/example/runner:latest",
 		})))

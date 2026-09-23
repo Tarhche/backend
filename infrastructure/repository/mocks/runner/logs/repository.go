@@ -87,7 +87,7 @@ func (r *InMemoryLogRepository) DeleteByTask(_ context.Context, taskUUID string)
 	return nil
 }
 
-// Size reports how many bytes a task has stored, which is what the manager caps
+// Size reports how many bytes a task has stored, which is what the control plane caps
 // a chatty task against.
 func (r *InMemoryLogRepository) Size(_ context.Context, taskUUID string) (int64, error) {
 	if r.Fail != nil {

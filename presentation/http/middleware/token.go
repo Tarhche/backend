@@ -19,12 +19,12 @@ type subjectKey struct{}
 //
 // It verifies the signature and the audience and then takes the subject at its
 // word. There is no user looked up, no ban checked, and no permission read,
-// because a worker has no database to read any of them from -- what it has is
+// because an orchestrator has no database to read any of them from -- what it has is
 // the tasks themselves, and what it decides it decides from those.
 //
 // So this says "the estate signed this, recently, for this person". Whether
 // that person may do the thing they are asking for is the handler's to work
-// out, and on a worker the answer is written on the task: a terminal is
+// out, and on an orchestrator the answer is written on the task: a terminal is
 // opened for whoever the task belongs to. A token is therefore worth
 // exactly what its holder already owns, and only until it expires.
 type Token struct {

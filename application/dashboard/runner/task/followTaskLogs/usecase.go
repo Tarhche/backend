@@ -18,7 +18,7 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/dashboard/runner/logs"
 	"github.com/khanzadimahdi/testproject/domain"
-	runnerManager "github.com/khanzadimahdi/testproject/domain/runner/manager"
+	runnerControlPlane "github.com/khanzadimahdi/testproject/domain/runner/controlplane"
 	"github.com/khanzadimahdi/testproject/infrastructure/websocket/gateway"
 )
 
@@ -31,7 +31,7 @@ const backlog uint = 500
 
 // UseCase follows tasks' logs on behalf of the clients watching them.
 type UseCase struct {
-	runner    runnerManager.Client
+	runner    runnerControlPlane.Client
 	followers *logs.Followers
 	validator domain.Validator
 	replyer   domain.Replyer
@@ -42,7 +42,7 @@ type UseCase struct {
 var _ domain.MessageHandler = &UseCase{}
 
 func NewUseCase(
-	runner runnerManager.Client,
+	runner runnerControlPlane.Client,
 	followers *logs.Followers,
 	validator domain.Validator,
 	replyer domain.Replyer,

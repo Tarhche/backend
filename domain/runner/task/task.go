@@ -25,7 +25,7 @@ type Task struct {
 	// CurrentState is what the task is doing, as the node holding it last
 	// reported. ExpectedState is what it was asked to be doing. The two drift
 	// apart when a task stops, fails or is taken away behind the runner's
-	// back, and closing that gap is what the manager's own heartbeat does.
+	// back, and closing that gap is what the control plane's own heartbeat does.
 	CurrentState  State
 	ExpectedState State
 

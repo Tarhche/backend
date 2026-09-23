@@ -44,7 +44,7 @@ type Log struct {
 
 // LogRepository stores the lines tasks write.
 //
-// Append is idempotent: a worker that reconnects to a task's log stream
+// Append is idempotent: an orchestrator that reconnects to a task's log stream
 // resumes from a timestamp it has already shipped, so the same line may arrive
 // more than once and must be stored only once.
 type LogRepository interface {

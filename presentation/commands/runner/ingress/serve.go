@@ -25,9 +25,9 @@ type ServeCommand struct {
 	configs *configs.RunnerIngress
 	handler http.Handler
 
-	// tunnel is where the workers connect. Requests go back down those
-	// connections, so this is the only way into a worker and the only thing
-	// that says a worker is there at all.
+	// tunnel is where the orchestrators connect. Requests go back down those
+	// connections, so this is the only way into an orchestrator and the only thing
+	// that says an orchestrator is there at all.
 	tunnel *tunnel.Hub
 
 	// forwarder is the ports arbitrary TCP arrives on, each carried onto those
@@ -75,7 +75,7 @@ func (c *ServeCommand) Configure(flagSet *console.FlagSet) {
 }
 
 // Providers returns the service providers required to serve the runner ingress.
-// The workers come to it, so it reaches none of them; the database is only for
+// The orchestrators come to it, so it reaches none of them; the database is only for
 // looking up which node is holding a task.
 func (c *ServeCommand) Providers() []provider.Provider {
 	return []provider.Provider{
@@ -139,7 +139,7 @@ func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 		return console.ExitFailure
 	}
 
-	// the workers have to be able to arrive before the first request does, or
+	// the orchestrators have to be able to arrive before the first request does, or
 	// the ingress answers for runners it has simply not met yet.
 	listener, err := tunnel.Listen(fmt.Sprintf("0.0.0.0:%d", c.configs.TunnelPort), tunnelConfig)
 	if err != nil {

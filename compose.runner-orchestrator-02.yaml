@@ -1,0 +1,90 @@
+services:
+  runner-orchestrator-02:
+    image: ${RUNNER_ORCHESTRATOR_IMAGE}
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - nats
+      - docker
+      # for dialling the ingress, which is the whole of what this is for. A
+      # orchestrator has no business reaching the control plane or another orchestrator.
+      - runner_ingress
+      - monitoring
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:80/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    stop_grace_period: 30s
+    deploy:
+      mode: replicated
+      replicas: 1
+      endpoint_mode: vip
+      update_config:
+        parallelism: 1
+        order: start-first
+        monitor: 90s
+        delay: 5s
+        failure_action: rollback
+      rollback_config:
+        parallelism: 1
+        order: start-first
+        monitor: 90s
+        delay: 5s
+        failure_action: pause
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      resources:
+        limits:
+          cpus: '0.10'
+          memory: 50M
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+    environment:
+      RUNNER_ORCHESTRATOR_NAME: runner-orchestrator-02
+      # the host the containers' published ports land on, which is the docker
+      # daemon's own rather than this service's. Where this orchestrator's API
+      # answers needs no saying: it is this service's name and port.
+      RUNNER_ORCHESTRATOR_ADVERTISE_HOST: ${BACKEND_RUNNER_ORCHESTRATOR_ADVERTISE_HOST}
+      # every ingress this orchestrator opens connections to, separated by commas
+      RUNNER_TUNNEL_ADDRESSES: ${BACKEND_RUNNER_TUNNEL_ADDRESSES:-runner-ingress:81}
+      # this orchestrator's own certificate, as the PEM itself, and the authority to
+      # check the ingress against. Its private key belongs to it alone.
+      RUNNER_TUNNEL_CA_CERT: ${BACKEND_RUNNER_TUNNEL_CA_CERT}
+      RUNNER_TUNNEL_CERT: ${BACKEND_RUNNER_ORCHESTRATOR_02_TUNNEL_CERT}
+      RUNNER_TUNNEL_KEY: ${BACKEND_RUNNER_ORCHESTRATOR_02_TUNNEL_KEY}
+      RUNNER_TUNNEL_SERVER_NAME: ${BACKEND_RUNNER_TUNNEL_SERVER_NAME:-runner-ingress}
+      # the public half of the key the blog signs access tokens with
+      PUBLIC_KEY: ${BACKEND_PUBLIC_KEY}
+      NATS_URL: ${BACKEND_NATS_URL}
+      DOCKER_HOST: ${BACKEND_DOCKER_HOST}
+      OTEL_EXPORTER_OTLP_INSECURE: ${OTEL_EXPORTER_OTLP_INSECURE}
+      OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL}
+      OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
+      OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT: ${OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT:-}
+      OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
+      PROFILING_ENABLED: ${PROFILING_ENABLED:-true}
+      # addresses a stream may be connected to beyond the services this orchestrator
+      # offers by name. Empty allows none.
+      RUNNER_TUNNEL_ALLOWED_TARGETS: ${BACKEND_RUNNER_TUNNEL_ALLOWED_TARGETS:-}
+
+networks:
+  nats:
+    name: nats
+    external: true
+  runner_ingress:
+    name: runner_ingress
+    external: true
+  docker:
+    name: docker
+    external: true
+  monitoring:
+    name: monitoring
+    external: true

@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestRunnerWorker_IngressAddresses(t *testing.T) {
+func TestRunnerOrchestrator_IngressAddresses(t *testing.T) {
 	tests := []struct {
 		name  string
 		given string
@@ -22,7 +22,7 @@ func TestRunnerWorker_IngressAddresses(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := RunnerWorker{TunnelAddresses: tt.given}
+			c := RunnerOrchestrator{TunnelAddresses: tt.given}
 
 			assert.Equal(t, tt.want, c.IngressAddresses())
 		})

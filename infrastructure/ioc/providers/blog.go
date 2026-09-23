@@ -166,7 +166,7 @@ import (
 	permissionsrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/permissions"
 	rolesrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/roles"
 	userrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/users"
-	runnerClient "github.com/khanzadimahdi/testproject/infrastructure/runner/manager/client"
+	runnerClient "github.com/khanzadimahdi/testproject/infrastructure/runner/controlplane/client"
 	"github.com/khanzadimahdi/testproject/infrastructure/telemetry/profiler"
 	infraWebsocket "github.com/khanzadimahdi/testproject/infrastructure/websocket"
 	"github.com/khanzadimahdi/testproject/infrastructure/websocket/gateway"
@@ -420,7 +420,7 @@ func blog(
 	// the dashboard does not schedule tasks itself. It establishes who is
 	// asking and whether they may, then passes the request to the runner, so
 	// one service owns a task's lifecycle.
-	runner, err := runnerClient.New(blogConfigs.RunnerManagerURL)
+	runner, err := runnerClient.New(blogConfigs.RunnerControlPlaneURL)
 	if err != nil {
 		return nil, err
 	}

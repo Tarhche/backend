@@ -14,7 +14,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/khanzadimahdi/testproject/application/runner/ingress/checkWorkerExists"
+	"github.com/khanzadimahdi/testproject/application/runner/ingress/checkOrchestratorExists"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/runner/ingress"
 )
@@ -44,7 +44,7 @@ func serve(t *testing.T, connected map[string]string) *httptest.Server {
 	}
 
 	mux := http.NewServeMux()
-	mux.Handle("/workers/{name}/{path...}", NewProxyHandler(checkWorkerExists.NewUseCase(registry), transport, slog.New(slog.DiscardHandler)))
+	mux.Handle("/orchestrators/{name}/{path...}", NewProxyHandler(checkOrchestratorExists.NewUseCase(registry), transport, slog.New(slog.DiscardHandler)))
 
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
@@ -66,9 +66,9 @@ func TestProxyHandler(t *testing.T) {
 		}))
 		defer runner.Close()
 
-		ingressServer := serve(t, map[string]string{"runner-worker-01": strings.TrimPrefix(runner.URL, "http://")})
+		ingressServer := serve(t, map[string]string{"runner-orchestrator-01": strings.TrimPrefix(runner.URL, "http://")})
 
-		request, err := http.NewRequest(http.MethodGet, ingressServer.URL+"/workers/runner-worker-01/api/tasks/abc/logs?after=1", nil)
+		request, err := http.NewRequest(http.MethodGet, ingressServer.URL+"/orchestrators/runner-orchestrator-01/api/tasks/abc/logs?after=1", nil)
 		assert.NoError(t, err)
 		request.Header.Set("X-Test", "carried through")
 
@@ -89,7 +89,7 @@ func TestProxyHandler(t *testing.T) {
 	t.Run("a runner that is not connected is not found", func(t *testing.T) {
 		ingressServer := serve(t, nil)
 
-		response, err := http.Get(ingressServer.URL + "/workers/runner-worker-01/api/tasks")
+		response, err := http.Get(ingressServer.URL + "/orchestrators/runner-orchestrator-01/api/tasks")
 		assert.NoError(t, err)
 		defer response.Body.Close()
 
@@ -101,9 +101,9 @@ func TestProxyHandler(t *testing.T) {
 		address := strings.TrimPrefix(unreachable.URL, "http://")
 		unreachable.Close()
 
-		ingressServer := serve(t, map[string]string{"runner-worker-01": address})
+		ingressServer := serve(t, map[string]string{"runner-orchestrator-01": address})
 
-		response, err := http.Get(ingressServer.URL + "/workers/runner-worker-01/api/tasks")
+		response, err := http.Get(ingressServer.URL + "/orchestrators/runner-orchestrator-01/api/tasks")
 		assert.NoError(t, err)
 		defer response.Body.Close()
 
@@ -127,9 +127,9 @@ func TestProxyHandler(t *testing.T) {
 		}))
 		defer runner.Close()
 
-		ingressServer := serve(t, map[string]string{"runner-worker-01": strings.TrimPrefix(runner.URL, "http://")})
+		ingressServer := serve(t, map[string]string{"runner-orchestrator-01": strings.TrimPrefix(runner.URL, "http://")})
 
-		response, err := http.Get(ingressServer.URL + "/workers/runner-worker-01/api/tasks/abc/logs")
+		response, err := http.Get(ingressServer.URL + "/orchestrators/runner-orchestrator-01/api/tasks/abc/logs")
 		assert.NoError(t, err)
 		defer response.Body.Close()
 
@@ -155,7 +155,7 @@ func TestProxyHandler(t *testing.T) {
 	t.Run("the ingress answers for itself when no runner is named", func(t *testing.T) {
 		ingressServer := serve(t, nil)
 
-		response, err := http.Get(ingressServer.URL + "/workers/")
+		response, err := http.Get(ingressServer.URL + "/orchestrators/")
 		assert.NoError(t, err)
 		defer response.Body.Close()
 
@@ -172,16 +172,16 @@ func TestProxyHandler_upstream(t *testing.T) {
 		}))
 		defer runner.Close()
 
-		ingressServer := serve(t, map[string]string{"runner-worker-01": strings.TrimPrefix(runner.URL, "http://")})
+		ingressServer := serve(t, map[string]string{"runner-orchestrator-01": strings.TrimPrefix(runner.URL, "http://")})
 
-		target, err := url.Parse(ingressServer.URL + "/workers/runner-worker-01/health")
+		target, err := url.Parse(ingressServer.URL + "/orchestrators/runner-orchestrator-01/health")
 		assert.NoError(t, err)
 
 		response, err := http.DefaultClient.Do(&http.Request{Method: http.MethodGet, URL: target, Host: "ingress.example"})
 		assert.NoError(t, err)
 		defer response.Body.Close()
 
-		assert.Equal(t, "runner-worker-01", gotHost)
+		assert.Equal(t, "runner-orchestrator-01", gotHost)
 	})
 }
 

@@ -13,14 +13,14 @@ import (
 	"github.com/khanzadimahdi/testproject/application/dashboard/runner/presenter"
 	"github.com/khanzadimahdi/testproject/application/runner/spec"
 	"github.com/khanzadimahdi/testproject/domain"
-	runnerManager "github.com/khanzadimahdi/testproject/domain/runner/manager"
+	runnerControlPlane "github.com/khanzadimahdi/testproject/domain/runner/controlplane"
 	"github.com/khanzadimahdi/testproject/domain/runner/network"
 	"github.com/khanzadimahdi/testproject/domain/runner/port"
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
 	"github.com/khanzadimahdi/testproject/domain/user"
-	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/runner/manager"
+	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/runner/controlplane"
 	usersMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
-	"github.com/khanzadimahdi/testproject/infrastructure/runner/manager/client"
+	"github.com/khanzadimahdi/testproject/infrastructure/runner/controlplane/client"
 	"github.com/khanzadimahdi/testproject/infrastructure/validator"
 )
 
@@ -59,11 +59,11 @@ func TestUseCase_Execute(t *testing.T) {
 	t.Run("hands the specification to the runner as it was written", func(t *testing.T) {
 		t.Parallel()
 
-		var runner manager.MockClient
+		var runner controlplane.MockClient
 
-		var handed runnerManager.TaskSpec
+		var handed runnerControlPlane.TaskSpec
 		runner.On("RunTask", mock.Anything, mock.Anything, "owner-uuid").
-			Run(func(args mock.Arguments) { handed = args.Get(1).(runnerManager.TaskSpec) }).
+			Run(func(args mock.Arguments) { handed = args.Get(1).(runnerControlPlane.TaskSpec) }).
 			Return(task.Task{
 				UUID:         "task-uuid",
 				Name:         "nginx",
@@ -106,7 +106,7 @@ func TestUseCase_Execute(t *testing.T) {
 	t.Run("what the runner refuses is reported as it stands", func(t *testing.T) {
 		t.Parallel()
 
-		var runner manager.MockClient
+		var runner controlplane.MockClient
 
 		// the runner decides what it can run, so its verdict reaches the person
 		// who asked rather than being flattened into a failure.
@@ -128,7 +128,7 @@ func TestUseCase_Execute(t *testing.T) {
 	t.Run("a runner that cannot be reached is a failure, not a refusal", func(t *testing.T) {
 		t.Parallel()
 
-		var runner manager.MockClient
+		var runner controlplane.MockClient
 
 		unreachable := errors.New("the runner is unreachable")
 		runner.On("RunTask", mock.Anything, mock.Anything, "owner-uuid").
@@ -145,7 +145,7 @@ func TestUseCase_Execute(t *testing.T) {
 	t.Run("a request the rules refuse never reaches the runner", func(t *testing.T) {
 		t.Parallel()
 
-		var runner manager.MockClient
+		var runner controlplane.MockClient
 
 		refusal := domain.ValidationErrors{"image": "required_field"}
 

@@ -1,0 +1,59 @@
+package task
+
+import (
+	"encoding/json"
+	"errors"
+	"net/http"
+
+	deletetask "github.com/khanzadimahdi/testproject/application/runner/controlplane/task/deleteTask"
+	"github.com/khanzadimahdi/testproject/domain"
+	infraTrace "github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
+	"go.opentelemetry.io/otel/trace"
+)
+
+type deleteHandler struct {
+	useCase *deletetask.UseCase
+}
+
+func NewDeleteHandler(useCase *deletetask.UseCase) *deleteHandler {
+	return &deleteHandler{
+		useCase: useCase,
+	}
+}
+
+// @Summary		Delete task
+// @Description	remove a task by UUID
+// @Tags			runner tasks
+// @Accept			json
+// @Produce		json
+// @Param			uuid	path		string	true	"Task UUID"
+// @Param			force	query		bool	false	"Remove the task even if it is still running"
+// @Success		204		{object}	map[string]interface{}
+// @Failure		404		{object}	map[string]interface{}
+// @Failure		500		{object}	map[string]interface{}
+// @Router			/tasks/{uuid} [delete]
+func (h *deleteHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
+	UUID := r.PathValue("uuid")
+	request := &deletetask.Request{
+		UUID: UUID,
+
+		// a caller asking for a task to be gone means it, rather than
+		// wanting to be told it is still busy.
+		Force: r.URL.Query().Get("force") == "true",
+	}
+
+	response, err := h.useCase.Execute(r.Context(), request)
+	switch {
+	case errors.Is(err, domain.ErrNotExists):
+		rw.WriteHeader(http.StatusNotFound)
+	case err != nil:
+		infraTrace.RecordError(trace.SpanFromContext(r.Context()), err)
+		rw.WriteHeader(http.StatusInternalServerError)
+	case response != nil && len(response.ValidationErrors) > 0:
+		rw.Header().Add("Content-Type", "application/json")
+		rw.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(rw).Encode(response)
+	default:
+		rw.WriteHeader(http.StatusNoContent)
+	}
+}

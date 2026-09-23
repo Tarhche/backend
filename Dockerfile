@@ -41,14 +41,14 @@ FROM production AS production-blog
 EXPOSE 80
 CMD ["serve-blog", "--port=80"]
 
-# runner manager service
-FROM develop AS develop-runner-manager
+# runner control plane service
+FROM develop AS develop-runner-controlplane
 EXPOSE 80
-CMD ["serve-runner-manager", "--port=80"]
+CMD ["serve-runner-controlplane", "--port=80"]
 
-FROM production AS production-runner-manager
+FROM production AS production-runner-controlplane
 EXPOSE 80
-CMD ["serve-runner-manager", "--port=80"]
+CMD ["serve-runner-controlplane", "--port=80"]
 
 # runner ingress service
 FROM develop AS develop-runner-ingress
@@ -59,13 +59,13 @@ FROM production AS production-runner-ingress
 EXPOSE 80
 CMD ["serve-runner-ingress", "--port=80"]
 
-# runner worker service
-FROM develop AS develop-runner-worker
-ENV RUNNER_WORKER_NAME=runner-worker-01
+# runner orchestrator service
+FROM develop AS develop-runner-orchestrator
+ENV RUNNER_ORCHESTRATOR_NAME=runner-orchestrator-01
 EXPOSE 80
-CMD ["serve-runner-worker", "--port=80"]
+CMD ["serve-runner-orchestrator", "--port=80"]
 
-FROM production AS production-runner-worker
-ENV RUNNER_WORKER_NAME=runner-worker-01
+FROM production AS production-runner-orchestrator
+ENV RUNNER_ORCHESTRATOR_NAME=runner-orchestrator-01
 EXPOSE 80
-CMD ["serve-runner-worker", "--port=80"]
+CMD ["serve-runner-orchestrator", "--port=80"]

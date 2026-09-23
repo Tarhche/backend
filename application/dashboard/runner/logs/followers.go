@@ -1,7 +1,7 @@
 // Package logs carries a task's output to the clients watching it.
 //
-// A task's lines are already published as it writes them — a worker ships
-// them, the manager stores them — so following one is hearing that, not asking
+// A task's lines are already published as it writes them — an orchestrator ships
+// them, the control plane stores them — so following one is hearing that, not asking
 // anybody over and over. Every replica hears every line and answers for the
 // clients it is holding.
 //

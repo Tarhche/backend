@@ -24,12 +24,12 @@ jobs:
         image:
           - name: backend
             target: production-blog
-          - name: runner-manager
-            target: production-runner-manager
+          - name: runner-controlplane
+            target: production-runner-controlplane
           - name: runner-ingress
             target: production-runner-ingress
-          - name: runner-worker
-            target: production-runner-worker
+          - name: runner-orchestrator
+            target: production-runner-orchestrator
 
     steps:
       - name: Checkout code
@@ -72,12 +72,12 @@ jobs:
         image:
           - name: backend
             target: production-blog
-          - name: runner-manager
-            target: production-runner-manager
+          - name: runner-controlplane
+            target: production-runner-controlplane
           - name: runner-ingress
             target: production-runner-ingress
-          - name: runner-worker
-            target: production-runner-worker
+          - name: runner-orchestrator
+            target: production-runner-orchestrator
 
     steps:
       - name: Checkout code
@@ -171,9 +171,9 @@ jobs:
 
             export BACKEND_DOCKER_HOST='${{ secrets.BACKEND_DOCKER_HOST }}'
 
-            export BACKEND_RUNNER_MANAGER_URL='${{ secrets.BACKEND_RUNNER_MANAGER_URL }}'
+            export BACKEND_RUNNER_CONTROLPLANE_URL='${{ secrets.BACKEND_RUNNER_CONTROLPLANE_URL }}'
             export BACKEND_RUNNER_INGRESS_DOMAIN='${{ secrets.BACKEND_RUNNER_INGRESS_DOMAIN }}'
-            export BACKEND_RUNNER_WORKER_ADVERTISE_HOST='${{ secrets.BACKEND_RUNNER_WORKER_ADVERTISE_HOST }}'
+            export BACKEND_RUNNER_ORCHESTRATOR_ADVERTISE_HOST='${{ secrets.BACKEND_RUNNER_ORCHESTRATOR_ADVERTISE_HOST }}'
             export BACKEND_RUNNER_TUNNEL_ADDRESSES='${{ secrets.BACKEND_RUNNER_TUNNEL_ADDRESSES }}'
 
             # each service's own certificate and the authority to check the
@@ -183,25 +183,25 @@ jobs:
             export BACKEND_RUNNER_TUNNEL_SERVER_NAME='${{ secrets.BACKEND_RUNNER_TUNNEL_SERVER_NAME }}'
             export BACKEND_RUNNER_INGRESS_TUNNEL_CERT='${{ secrets.BACKEND_RUNNER_INGRESS_TUNNEL_CERT }}'
             export BACKEND_RUNNER_INGRESS_TUNNEL_KEY='${{ secrets.BACKEND_RUNNER_INGRESS_TUNNEL_KEY }}'
-            export BACKEND_RUNNER_WORKER_01_TUNNEL_CERT='${{ secrets.BACKEND_RUNNER_WORKER_01_TUNNEL_CERT }}'
-            export BACKEND_RUNNER_WORKER_01_TUNNEL_KEY='${{ secrets.BACKEND_RUNNER_WORKER_01_TUNNEL_KEY }}'
-            export BACKEND_RUNNER_WORKER_02_TUNNEL_CERT='${{ secrets.BACKEND_RUNNER_WORKER_02_TUNNEL_CERT }}'
-            export BACKEND_RUNNER_WORKER_02_TUNNEL_KEY='${{ secrets.BACKEND_RUNNER_WORKER_02_TUNNEL_KEY }}'
-            export BACKEND_RUNNER_WORKER_03_TUNNEL_CERT='${{ secrets.BACKEND_RUNNER_WORKER_03_TUNNEL_CERT }}'
-            export BACKEND_RUNNER_WORKER_03_TUNNEL_KEY='${{ secrets.BACKEND_RUNNER_WORKER_03_TUNNEL_KEY }}'
+            export BACKEND_RUNNER_ORCHESTRATOR_01_TUNNEL_CERT='${{ secrets.BACKEND_RUNNER_ORCHESTRATOR_01_TUNNEL_CERT }}'
+            export BACKEND_RUNNER_ORCHESTRATOR_01_TUNNEL_KEY='${{ secrets.BACKEND_RUNNER_ORCHESTRATOR_01_TUNNEL_KEY }}'
+            export BACKEND_RUNNER_ORCHESTRATOR_02_TUNNEL_CERT='${{ secrets.BACKEND_RUNNER_ORCHESTRATOR_02_TUNNEL_CERT }}'
+            export BACKEND_RUNNER_ORCHESTRATOR_02_TUNNEL_KEY='${{ secrets.BACKEND_RUNNER_ORCHESTRATOR_02_TUNNEL_KEY }}'
+            export BACKEND_RUNNER_ORCHESTRATOR_03_TUNNEL_CERT='${{ secrets.BACKEND_RUNNER_ORCHESTRATOR_03_TUNNEL_CERT }}'
+            export BACKEND_RUNNER_ORCHESTRATOR_03_TUNNEL_KEY='${{ secrets.BACKEND_RUNNER_ORCHESTRATOR_03_TUNNEL_KEY }}'
 
-            # the ports arbitrary TCP arrives on, and what a worker will connect
+            # the ports arbitrary TCP arrives on, and what an orchestrator will connect
             # a stream to beyond the services it offers by name.
             export BACKEND_RUNNER_INGRESS_FORWARDS='${{ secrets.BACKEND_RUNNER_INGRESS_FORWARDS }}'
             export BACKEND_RUNNER_TUNNEL_ALLOWED_TARGETS='${{ secrets.BACKEND_RUNNER_TUNNEL_ALLOWED_TARGETS }}'
             # the public half of the key the blog signs access tokens with; the
-            # workers verify against it and never sign anything
+            # orchestrators verify against it and never sign anything
             export BACKEND_PUBLIC_KEY='${{ secrets.BACKEND_PUBLIC_KEY }}'
 
             export APP_IMAGE='${{ secrets.APP_IMAGE }}'
-            export RUNNER_MANAGER_IMAGE='${{ secrets.RUNNER_MANAGER_IMAGE }}'
+            export RUNNER_CONTROLPLANE_IMAGE='${{ secrets.RUNNER_CONTROLPLANE_IMAGE }}'
             export RUNNER_INGRESS_IMAGE='${{ secrets.RUNNER_INGRESS_IMAGE }}'
-            export RUNNER_WORKER_IMAGE='${{ secrets.RUNNER_WORKER_IMAGE }}'
+            export RUNNER_ORCHESTRATOR_IMAGE='${{ secrets.RUNNER_ORCHESTRATOR_IMAGE }}'
 
             export OTEL_EXPORTER_OTLP_INSECURE='${{ secrets.OTEL_EXPORTER_OTLP_INSECURE }}'
             export OTEL_EXPORTER_OTLP_PROTOCOL='${{ secrets.OTEL_EXPORTER_OTLP_PROTOCOL }}'
@@ -230,9 +230,9 @@ jobs:
             }
 
             deploy compose.app.yaml app
-            deploy compose.runner-manager.yaml runner-manager
+            deploy compose.runner-controlplane.yaml runner-controlplane
             deploy compose.runner-ingress.yaml runner-ingress
-            deploy compose.runner-worker-01.yaml runner-worker-01
-            deploy compose.runner-worker-02.yaml runner-worker-02
-            deploy compose.runner-worker-03.yaml runner-worker-03
+            deploy compose.runner-orchestrator-01.yaml runner-orchestrator-01
+            deploy compose.runner-orchestrator-02.yaml runner-orchestrator-02
+            deploy compose.runner-orchestrator-03.yaml runner-orchestrator-03
           EOF

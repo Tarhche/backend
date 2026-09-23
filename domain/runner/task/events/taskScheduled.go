@@ -72,7 +72,7 @@ type ResourceLimits struct {
 	Disk   uint64  `json:"disk"`
 }
 
-// Endpoint is an exposed task port as the worker actually published it.
+// Endpoint is an exposed task port as the orchestrator actually published it.
 type Endpoint struct {
 	TaskPort port.Port `json:"task_port"`
 	HostPort port.Port `json:"host_port"`

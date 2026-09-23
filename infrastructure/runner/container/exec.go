@@ -168,7 +168,7 @@ func (s *execSession) End(ctx context.Context) error {
 //
 // It runs inside the container because that is the only place the session's
 // processes can be named: the pids docker reports are the daemon's, and the
-// worker is not on that host.
+// orchestrator is not on that host.
 func (s *execSession) signal(ctx context.Context, signal string) (bool, error) {
 	created, err := s.client.ContainerExecCreate(ctx, s.containerID, containerTypes.ExecOptions{
 		Cmd:          []string{"/bin/sh", "-c", signalScript(s.terminalID, signal)},

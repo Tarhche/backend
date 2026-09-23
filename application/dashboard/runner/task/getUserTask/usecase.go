@@ -4,18 +4,18 @@ import (
 	"context"
 
 	"github.com/khanzadimahdi/testproject/application/dashboard/runner/presenter"
-	runnerManager "github.com/khanzadimahdi/testproject/domain/runner/manager"
+	runnerControlPlane "github.com/khanzadimahdi/testproject/domain/runner/controlplane"
 )
 
 // UseCase reads one of somebody's own tasks. One that is somebody else's
 // is not found rather than refused.
 type UseCase struct {
-	runner        runnerManager.Client
+	runner        runnerControlPlane.Client
 	owners        *presenter.Directory
 	ingressDomain string
 }
 
-func NewUseCase(runner runnerManager.Client, ownerDirectory *presenter.Directory, ingressDomain string) *UseCase {
+func NewUseCase(runner runnerControlPlane.Client, ownerDirectory *presenter.Directory, ingressDomain string) *UseCase {
 	return &UseCase{runner: runner, owners: ownerDirectory, ingressDomain: ingressDomain}
 }
 

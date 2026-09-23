@@ -17,7 +17,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
 	taskEvents "github.com/khanzadimahdi/testproject/domain/runner/task/events"
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
-	runnerMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/runner/manager"
+	runnerMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/runner/controlplane"
 	"github.com/khanzadimahdi/testproject/infrastructure/validator"
 	"github.com/khanzadimahdi/testproject/infrastructure/websocket/gateway"
 )

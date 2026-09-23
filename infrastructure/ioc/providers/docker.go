@@ -24,15 +24,15 @@ func NewDockerProvider() *dockerProvider {
 }
 
 func (p *dockerProvider) Register(ctx context.Context, c provider.Container) error {
-	var workerConfigs *configs.RunnerWorker
-	if err := c.Resolve(&workerConfigs); err != nil {
+	var orchestratorConfigs *configs.RunnerOrchestrator
+	if err := c.Resolve(&orchestratorConfigs); err != nil {
 		return err
 	}
 
-	dockerHost := workerConfigs.DockerHost
+	dockerHost := orchestratorConfigs.DockerHost
 
 	var logger *slog.Logger
-	if err := c.Resolve(&logger, provider.WithParams("runner-worker")); err != nil {
+	if err := c.Resolve(&logger, provider.WithParams("runner-orchestrator")); err != nil {
 		return err
 	}
 

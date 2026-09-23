@@ -15,7 +15,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
-	runnerMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/runner/manager"
+	runnerMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/runner/controlplane"
 	"github.com/khanzadimahdi/testproject/infrastructure/validator"
 )
 

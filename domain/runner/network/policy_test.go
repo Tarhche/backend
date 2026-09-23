@@ -80,7 +80,7 @@ func TestAttachments(t *testing.T) {
 			name:        "a service with no network is cut off from its own stack too",
 			policy:      PolicyNone,
 			stackSlug:   "myapp-xkfqz",
-			serviceName: "worker",
+			serviceName: "orchestrator",
 			want:        []Attachment{{Name: NoNetworkName}},
 		},
 		{

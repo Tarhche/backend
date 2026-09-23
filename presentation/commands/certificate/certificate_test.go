@@ -26,7 +26,7 @@ func TestGroup(t *testing.T) {
 	})
 
 	t.Run("it holds one group per kind of certificate", func(t *testing.T) {
-		assert.ElementsMatch(t, []string{"authority", "ingress", "worker"}, Group().Groups())
+		assert.ElementsMatch(t, []string{"authority", "ingress", "orchestrator"}, Group().Groups())
 	})
 
 	t.Run("it runs nothing itself", func(t *testing.T) {

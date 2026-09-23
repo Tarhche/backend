@@ -63,7 +63,7 @@ func (c *AuthorityCommand) Run(ctx context.Context) console.ExitStatus {
 
 	report(c.out, files)
 
-	fmt.Fprintf(c.out, "\n%s signs the certificates and is needed nowhere else.\nIt does not belong on an ingress, on a worker, or in a repository.\n", files.PrivateKey)
+	fmt.Fprintf(c.out, "\n%s signs the certificates and is needed nowhere else.\nIt does not belong on an ingress, on an orchestrator, or in a repository.\n", files.PrivateKey)
 
 	return console.ExitSuccess
 }

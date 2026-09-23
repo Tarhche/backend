@@ -6,19 +6,19 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/dashboard/runner/presenter"
 	"github.com/khanzadimahdi/testproject/domain"
-	runnerManager "github.com/khanzadimahdi/testproject/domain/runner/manager"
-	"github.com/khanzadimahdi/testproject/infrastructure/runner/manager/client"
+	runnerControlPlane "github.com/khanzadimahdi/testproject/domain/runner/controlplane"
+	"github.com/khanzadimahdi/testproject/infrastructure/runner/controlplane/client"
 )
 
 // UseCase hands a stack to the runner.
 type UseCase struct {
-	runner        runnerManager.Client
+	runner        runnerControlPlane.Client
 	validator     domain.Validator
 	owners        *presenter.Directory
 	ingressDomain string
 }
 
-func NewUseCase(runner runnerManager.Client, validator domain.Validator, ownerDirectory *presenter.Directory, ingressDomain string) *UseCase {
+func NewUseCase(runner runnerControlPlane.Client, validator domain.Validator, ownerDirectory *presenter.Directory, ingressDomain string) *UseCase {
 	return &UseCase{
 		runner:        runner,
 		validator:     validator,
@@ -32,7 +32,7 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		return &Response{ValidationErrors: validationErrors}, nil
 	}
 
-	created, err := uc.runner.RunStack(ctx, runnerManager.StackSpec{
+	created, err := uc.runner.RunStack(ctx, runnerControlPlane.StackSpec{
 		Name:     request.Name,
 		Services: request.Services,
 	}, request.OwnerUUID)

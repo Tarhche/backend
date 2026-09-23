@@ -16,7 +16,7 @@ import (
 	infraJWT "github.com/khanzadimahdi/testproject/infrastructure/jwt"
 )
 
-// signer mints tokens the way the blog does, and verifier is what a worker is
+// signer mints tokens the way the blog does, and verifier is what an orchestrator is
 // given: the public half, and no way to sign anything.
 func keys(t *testing.T) (*infraJWT.JWT, *infraJWT.JWT) {
 	t.Helper()

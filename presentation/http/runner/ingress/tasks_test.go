@@ -45,7 +45,7 @@ func (r *fakeResolver) GetOne(_ context.Context, uuid string) (task.Task, error)
 	return task.Task{}, domain.ErrNotExists
 }
 
-// node is a worker standing in for the far end of a tunnel: it answers the
+// node is an orchestrator standing in for the far end of a tunnel: it answers the
 // route the ingress sends a task's traffic down, and records what it was
 // asked for.
 type node struct {
@@ -160,14 +160,14 @@ func TestTaskHandler(t *testing.T) {
 		}))
 
 		resolver := &fakeResolver{tasks: map[string]task.Task{
-			"nginx-xkfqz": held("nginx-xkfqz", "runner-worker-02"),
+			"nginx-xkfqz": held("nginx-xkfqz", "runner-orchestrator-02"),
 		}}
 
 		rw := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "/some/path?a=1", nil)
 		request.Host = "nginx-xkfqz." + testDomain
 
-		ingressFor(t, resolver, map[string]*node{"runner-worker-02": n}).ServeHTTP(rw, request)
+		ingressFor(t, resolver, map[string]*node{"runner-orchestrator-02": n}).ServeHTTP(rw, request)
 
 		assert.Equal(t, http.StatusOK, rw.Code)
 		assert.Equal(t, "answered by the task", rw.Body.String())
@@ -180,14 +180,14 @@ func TestTaskHandler(t *testing.T) {
 		n := newNode(t, http.NotFoundHandler())
 
 		resolver := &fakeResolver{tasks: map[string]task.Task{
-			"nginx-xkfqz": held("nginx-xkfqz", "runner-worker-01"),
+			"nginx-xkfqz": held("nginx-xkfqz", "runner-orchestrator-01"),
 		}}
 
 		rw := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
 		request.Host = "nginx-xkfqz." + testDomain
 
-		ingressFor(t, resolver, map[string]*node{"runner-worker-01": n}).ServeHTTP(rw, request)
+		ingressFor(t, resolver, map[string]*node{"runner-orchestrator-01": n}).ServeHTTP(rw, request)
 
 		assert.Equal(t, "0", n.port, "the node picks the lowest one it finds")
 	})
@@ -196,14 +196,14 @@ func TestTaskHandler(t *testing.T) {
 		n := newNode(t, http.NotFoundHandler())
 
 		resolver := &fakeResolver{tasks: map[string]task.Task{
-			"nginx-xkfqz": held("nginx-xkfqz", "runner-worker-01"),
+			"nginx-xkfqz": held("nginx-xkfqz", "runner-orchestrator-01"),
 		}}
 
 		rw := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
 		request.Host = "nginx-xkfqz-8080." + testDomain
 
-		ingressFor(t, resolver, map[string]*node{"runner-worker-01": n}).ServeHTTP(rw, request)
+		ingressFor(t, resolver, map[string]*node{"runner-orchestrator-01": n}).ServeHTTP(rw, request)
 
 		assert.Equal(t, "8080", n.port)
 	})
@@ -226,10 +226,10 @@ func TestTaskHandler(t *testing.T) {
 		}))
 
 		resolver := &fakeResolver{tasks: map[string]task.Task{
-			"app-xkfqz": held("app-xkfqz", "runner-worker-01"),
+			"app-xkfqz": held("app-xkfqz", "runner-orchestrator-01"),
 		}}
 
-		front := httptest.NewServer(ingressFor(t, resolver, map[string]*node{"runner-worker-01": n}))
+		front := httptest.NewServer(ingressFor(t, resolver, map[string]*node{"runner-orchestrator-01": n}))
 		defer front.Close()
 
 		endpoint := "ws://" + strings.TrimPrefix(front.URL, "http://") + "/ws"
@@ -268,7 +268,7 @@ func TestTaskHandler(t *testing.T) {
 
 	t.Run("a task that is not running is unavailable", func(t *testing.T) {
 		resolver := &fakeResolver{tasks: map[string]task.Task{
-			"nginx-xkfqz": {Slug: "nginx-xkfqz", CurrentState: task.Stopped, NodeName: "runner-worker-01"},
+			"nginx-xkfqz": {Slug: "nginx-xkfqz", CurrentState: task.Stopped, NodeName: "runner-orchestrator-01"},
 		}}
 
 		rw := httptest.NewRecorder()
@@ -298,7 +298,7 @@ func TestTaskHandler(t *testing.T) {
 
 	t.Run("a node that is not connected cannot be asked", func(t *testing.T) {
 		resolver := &fakeResolver{tasks: map[string]task.Task{
-			"nginx-xkfqz": held("nginx-xkfqz", "runner-worker-09"),
+			"nginx-xkfqz": held("nginx-xkfqz", "runner-orchestrator-09"),
 		}}
 
 		rw := httptest.NewRecorder()
@@ -306,7 +306,7 @@ func TestTaskHandler(t *testing.T) {
 		request.Host = "nginx-xkfqz." + testDomain
 
 		// the node holding it is not one of the connected ones
-		ingressFor(t, resolver, map[string]*node{"runner-worker-01": newNode(t, http.NotFoundHandler())}).ServeHTTP(rw, request)
+		ingressFor(t, resolver, map[string]*node{"runner-orchestrator-01": newNode(t, http.NotFoundHandler())}).ServeHTTP(rw, request)
 
 		assert.Equal(t, http.StatusServiceUnavailable, rw.Code)
 		assert.Contains(t, rw.Body.String(), "not connected")
@@ -332,7 +332,7 @@ func TestWaitingPage(t *testing.T) {
 	}
 
 	resolver := &fakeResolver{tasks: map[string]task.Task{
-		"nginx-xkfqz": held("nginx-xkfqz", "runner-worker-01"),
+		"nginx-xkfqz": held("nginx-xkfqz", "runner-orchestrator-01"),
 	}}
 
 	t.Run("a browser gets a page that comes back on its own", func(t *testing.T) {
@@ -343,7 +343,7 @@ func TestWaitingPage(t *testing.T) {
 		request.Host = "nginx-xkfqz." + testDomain
 		request.Header.Set("Accept", "text/html,application/xhtml+xml,*/*;q=0.8")
 
-		ingressFor(t, resolver, map[string]*node{"runner-worker-01": n}).ServeHTTP(rw, request)
+		ingressFor(t, resolver, map[string]*node{"runner-orchestrator-01": n}).ServeHTTP(rw, request)
 
 		assert.Equal(t, http.StatusBadGateway, rw.Code)
 		assert.Equal(t, "2", rw.Header().Get("Retry-After"))
@@ -361,7 +361,7 @@ func TestWaitingPage(t *testing.T) {
 		request.Header.Set("Accept", "text/html")
 		request.Header.Set("Accept-Language", "fa-IR,fa;q=0.9,en;q=0.8")
 
-		ingressFor(t, resolver, map[string]*node{"runner-worker-01": n}).ServeHTTP(rw, request)
+		ingressFor(t, resolver, map[string]*node{"runner-orchestrator-01": n}).ServeHTTP(rw, request)
 
 		assert.Contains(t, rw.Body.String(), `lang="fa" dir="rtl"`)
 		assert.Contains(t, rw.Body.String(), "آماده‌سازی")
@@ -374,7 +374,7 @@ func TestWaitingPage(t *testing.T) {
 		request := httptest.NewRequest(http.MethodGet, "/api/health", nil)
 		request.Host = "nginx-xkfqz." + testDomain
 
-		ingressFor(t, resolver, map[string]*node{"runner-worker-01": n}).ServeHTTP(rw, request)
+		ingressFor(t, resolver, map[string]*node{"runner-orchestrator-01": n}).ServeHTTP(rw, request)
 
 		assert.Equal(t, http.StatusBadGateway, rw.Code)
 		assert.Equal(t, "2", rw.Header().Get("Retry-After"))

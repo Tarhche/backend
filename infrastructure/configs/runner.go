@@ -8,14 +8,14 @@ import (
 )
 
 const (
-	defaultRunnerManagerPort   = 80
-	defaultRunnerWorkerPort    = 80
-	defaultRunnerIngressPort   = 80
-	defaultRunnerIngressDomain = "runner.localhost"
-	defaultRunnerMaxLogBytes   = 32 << 20 // 32 MB per task
-	defaultRunnerWorkerCpu     = 0.5
-	defaultRunnerWorkerMemory  = 256 << 20 // 256 MB
-	defaultRunnerWorkerDisk    = 256 << 20 // 256 MB
+	defaultRunnerControlPlanePort   = 80
+	defaultRunnerOrchestratorPort   = 80
+	defaultRunnerIngressPort        = 80
+	defaultRunnerIngressDomain      = "runner.localhost"
+	defaultRunnerMaxLogBytes        = 32 << 20 // 32 MB per task
+	defaultRunnerOrchestratorCpu    = 0.5
+	defaultRunnerOrchestratorMemory = 256 << 20 // 256 MB
+	defaultRunnerOrchestratorDisk   = 256 << 20 // 256 MB
 
 	defaultRunnerTunnelPort = 81
 
@@ -23,12 +23,12 @@ const (
 	defaultRunnerTunnelMaxConnections = 4
 	defaultRunnerTunnelMaxIdleTime    = 2 * time.Minute
 
-	defaultTunnelMaxStreamsPerSession = 256
-	defaultTunnelMaxSessionsPerWorker = 8
+	defaultTunnelMaxStreamsPerSession       = 256
+	defaultTunnelMaxSessionsPerOrchestrator = 8
 )
 
-// RunnerManager holds the configuration of the serve-runner-manager command.
-type RunnerManager struct {
+// RunnerControlPlane holds the configuration of the serve-runner-controlplane command.
+type RunnerControlPlane struct {
 	Port int `usage:"specifies which port server should listen to." env:"SERVER_PORT" long:"port" short:"p"`
 
 	MaxLogBytes int64 `usage:"How much log one task may keep. Past it, further lines are dropped rather than stored." env:"RUNNER_MAX_LOG_BYTES" long:"max-log-bytes"`
@@ -38,15 +38,15 @@ type RunnerManager struct {
 	DefaultDisk   uint64  `usage:"Disk, in bytes, a task is limited to when its specification names no limit." env:"RUNNER_DEFAULT_DISK" long:"default-disk"`
 }
 
-// NewRunnerManager returns the configuration of the serve-runner-manager
+// NewRunnerControlPlane returns the configuration of the serve-runner-controlplane
 // command, holding the defaults it runs with until the console overrides them.
-func NewRunnerManager() *RunnerManager {
-	return &RunnerManager{
-		Port:          defaultRunnerManagerPort,
+func NewRunnerControlPlane() *RunnerControlPlane {
+	return &RunnerControlPlane{
+		Port:          defaultRunnerControlPlanePort,
 		MaxLogBytes:   defaultRunnerMaxLogBytes,
-		DefaultCpu:    defaultRunnerWorkerCpu,
-		DefaultMemory: defaultRunnerWorkerMemory,
-		DefaultDisk:   defaultRunnerWorkerDisk,
+		DefaultCpu:    defaultRunnerOrchestratorCpu,
+		DefaultMemory: defaultRunnerOrchestratorMemory,
+		DefaultDisk:   defaultRunnerOrchestratorDisk,
 	}
 }
 
@@ -56,64 +56,64 @@ type RunnerIngress struct {
 
 	Domain string `usage:"Domain a task's exposed ports are served on, without a leading dot. A request to a hostname under it is routed to the task the hostname names." env:"RUNNER_INGRESS_DOMAIN" long:"domain"`
 
-	TunnelPort int `usage:"Port the workers open their connections to. It carries nothing but them, so it is not the port requests arrive on." env:"RUNNER_TUNNEL_PORT" long:"tunnel-port"`
+	TunnelPort int `usage:"Port the orchestrators open their connections to. It carries nothing but them, so it is not the port requests arrive on." env:"RUNNER_TUNNEL_PORT" long:"tunnel-port"`
 
-	TunnelAuthority   string `usage:"The certificate authority, in PEM form, a worker's own certificate has to be signed by. The authority's private key is never needed here." env:"RUNNER_TUNNEL_CA_CERT" long:"tunnel-ca-cert"`
+	TunnelAuthority   string `usage:"The certificate authority, in PEM form, an orchestrator's own certificate has to be signed by. The authority's private key is never needed here." env:"RUNNER_TUNNEL_CA_CERT" long:"tunnel-ca-cert"`
 	TunnelCertificate string `usage:"The certificate, in PEM form, the ingress answers with." env:"RUNNER_TUNNEL_CERT" long:"tunnel-cert"`
 	TunnelKey         string `usage:"The private key, in PEM form, for that certificate." env:"RUNNER_TUNNEL_KEY" long:"tunnel-key"`
 
-	TunnelIdentitySuffix string `usage:"Domain a worker's certificate carries its name under, dropped to leave the name. Empty takes the first subject alternative name whole." env:"RUNNER_TUNNEL_IDENTITY_SUFFIX" long:"tunnel-identity-suffix"`
-	TunnelAllowedWorkers string `usage:"Workers allowed to connect, separated by commas. Empty allows every worker the authority signed for." env:"RUNNER_TUNNEL_ALLOWED_WORKERS" long:"tunnel-allowed-workers"`
+	TunnelIdentitySuffix       string `usage:"Domain an orchestrator's certificate carries its name under, dropped to leave the name. Empty takes the first subject alternative name whole." env:"RUNNER_TUNNEL_IDENTITY_SUFFIX" long:"tunnel-identity-suffix"`
+	TunnelAllowedOrchestrators string `usage:"Orchestrators allowed to connect, separated by commas. Empty allows every orchestrator the authority signed for." env:"RUNNER_TUNNEL_ALLOWED_ORCHESTRATORS" long:"tunnel-allowed-orchestrators"`
 
-	TunnelMaxStreamsPerSession int `usage:"How many client connections one of a worker's connections will carry before the next is used. It is a blast radius before it is a capacity: they all end when it does." env:"RUNNER_TUNNEL_MAX_STREAMS_PER_SESSION" long:"tunnel-max-streams-per-session"`
-	TunnelMaxSessionsPerWorker int `usage:"How many connections one worker may hold here." env:"RUNNER_TUNNEL_MAX_SESSIONS_PER_WORKER" long:"tunnel-max-sessions-per-worker"`
+	TunnelMaxStreamsPerSession       int `usage:"How many client connections one of an orchestrator's connections will carry before the next is used. It is a blast radius before it is a capacity: they all end when it does." env:"RUNNER_TUNNEL_MAX_STREAMS_PER_SESSION" long:"tunnel-max-streams-per-session"`
+	TunnelMaxSessionsPerOrchestrator int `usage:"How many connections one orchestrator may hold here." env:"RUNNER_TUNNEL_MAX_SESSIONS_PER_ORCHESTRATOR" long:"tunnel-max-sessions-per-orchestrator"`
 
-	ForwardedPorts string `usage:"Ports to carry arbitrary TCP into the tunnel on, as listen=worker:target, separated by commas — 8022=worker-a:22 reaches port 22 on that worker, 9000=:api reaches the api service on whichever worker the router picks. Nothing is forwarded by default." env:"RUNNER_INGRESS_FORWARDS" long:"forward"`
+	ForwardedPorts string `usage:"Ports to carry arbitrary TCP into the tunnel on, as listen=orchestrator:target, separated by commas — 8022=orchestrator-a:22 reaches port 22 on that orchestrator, 9000=:api reaches the api service on whichever orchestrator the router picks. Nothing is forwarded by default." env:"RUNNER_INGRESS_FORWARDS" long:"forward"`
 }
 
 // NewRunnerIngress returns the configuration of the serve-runner-ingress
 // command, holding the defaults it runs with until the console overrides them.
 func NewRunnerIngress() *RunnerIngress {
 	return &RunnerIngress{
-		Port:                       defaultRunnerIngressPort,
-		Domain:                     defaultRunnerIngressDomain,
-		TunnelPort:                 defaultRunnerTunnelPort,
-		TunnelMaxStreamsPerSession: defaultTunnelMaxStreamsPerSession,
-		TunnelMaxSessionsPerWorker: defaultTunnelMaxSessionsPerWorker,
+		Port:                             defaultRunnerIngressPort,
+		Domain:                           defaultRunnerIngressDomain,
+		TunnelPort:                       defaultRunnerTunnelPort,
+		TunnelMaxStreamsPerSession:       defaultTunnelMaxStreamsPerSession,
+		TunnelMaxSessionsPerOrchestrator: defaultTunnelMaxSessionsPerOrchestrator,
 	}
 }
 
-// AllowedWorkers is the workers this ingress will take, or none named at all,
-// which allows every worker the authority signed for.
-func (c *RunnerIngress) AllowedWorkers() []string {
-	return commaSeparated(c.TunnelAllowedWorkers)
+// AllowedOrchestrators is the orchestrators this ingress will take, or none named at all,
+// which allows every orchestrator the authority signed for.
+func (c *RunnerIngress) AllowedOrchestrators() []string {
+	return commaSeparated(c.TunnelAllowedOrchestrators)
 }
 
-// RunnerWorker holds the configuration of the serve-runner-worker command.
-type RunnerWorker struct {
+// RunnerOrchestrator holds the configuration of the serve-runner-orchestrator command.
+type RunnerOrchestrator struct {
 	Port int    `usage:"specifies which port server should listen to." env:"SERVER_PORT" long:"port" short:"p"`
-	Name string `usage:"specifies the unique name of the worker." env:"RUNNER_WORKER_NAME" long:"name" short:"n"`
+	Name string `usage:"specifies the unique name of the orchestrator." env:"RUNNER_ORCHESTRATOR_NAME" long:"name" short:"n"`
 
 	DockerHost string `usage:"Docker daemon the tasks are run on. Empty uses the Docker client's own default." env:"DOCKER_HOST" long:"docker-host"`
 
-	// PublicKey verifies the tokens the blog signs. A worker never mints one,
+	// PublicKey verifies the tokens the blog signs. An orchestrator never mints one,
 	// so it is given the public half and nothing else.
 	PublicKey string `usage:"ECDSA public key, in PEM form, the access tokens are verified against. It is the public half of the key the blog signs them with." env:"PUBLIC_KEY" long:"public-key"`
 
-	// AdvertiseHost is where this worker reaches the ports its own tasks
+	// AdvertiseHost is where this orchestrator reaches the ports its own tasks
 	// publish. It is the docker daemon's host rather than this service's, which
 	// are not the same machine when the daemon is a service of its own.
-	AdvertiseHost string `usage:"Host this worker reaches its tasks' published ports at, which is the docker daemon's own rather than this one." env:"RUNNER_WORKER_ADVERTISE_HOST" long:"advertise-host"`
+	AdvertiseHost string `usage:"Host this orchestrator reaches its tasks' published ports at, which is the docker daemon's own rather than this one." env:"RUNNER_ORCHESTRATOR_ADVERTISE_HOST" long:"advertise-host"`
 
-	TunnelAddresses string `usage:"host:port of every ingress this worker opens connections to, separated by commas. It keeps a pool at each, so it is reachable through all of them." env:"RUNNER_TUNNEL_ADDRESSES" long:"tunnel-addresses"`
+	TunnelAddresses string `usage:"host:port of every ingress this orchestrator opens connections to, separated by commas. It keeps a pool at each, so it is reachable through all of them." env:"RUNNER_TUNNEL_ADDRESSES" long:"tunnel-addresses"`
 
 	TunnelAuthority   string `usage:"The certificate authority, in PEM form, the ingress's certificate has to be signed by. The authority's private key is never needed here." env:"RUNNER_TUNNEL_CA_CERT" long:"tunnel-ca-cert"`
-	TunnelCertificate string `usage:"The certificate, in PEM form, this worker proves itself with." env:"RUNNER_TUNNEL_CERT" long:"tunnel-cert"`
+	TunnelCertificate string `usage:"The certificate, in PEM form, this orchestrator proves itself with." env:"RUNNER_TUNNEL_CERT" long:"tunnel-cert"`
 	TunnelKey         string `usage:"The private key, in PEM form, for that certificate." env:"RUNNER_TUNNEL_KEY" long:"tunnel-key"`
 
-	TunnelServerName string `usage:"Name the ingress's certificate has to answer for. Without it a worker would hand its credentials to anything the authority ever signed." env:"RUNNER_TUNNEL_SERVER_NAME" long:"tunnel-server-name"`
+	TunnelServerName string `usage:"Name the ingress's certificate has to answer for. Without it an orchestrator would hand its credentials to anything the authority ever signed." env:"RUNNER_TUNNEL_SERVER_NAME" long:"tunnel-server-name"`
 
-	TunnelAllowedTargets string `usage:"Addresses this worker will connect a stream to beyond the services it offers, as host:port or host:from-to, separated by commas. Empty offers only named services, which is the only shape an ingress cannot talk a worker out of." env:"RUNNER_TUNNEL_ALLOWED_TARGETS" long:"tunnel-allowed-targets"`
+	TunnelAllowedTargets string `usage:"Addresses this orchestrator will connect a stream to beyond the services it offers, as host:port or host:from-to, separated by commas. Empty offers only named services, which is the only shape an ingress cannot talk an orchestrator out of." env:"RUNNER_TUNNEL_ALLOWED_TARGETS" long:"tunnel-allowed-targets"`
 
 	TunnelMinConnections int           `usage:"How many connections to each ingress are kept open and ready." env:"RUNNER_TUNNEL_MIN_CONNECTIONS" long:"tunnel-min-connections"`
 	TunnelMaxConnections int           `usage:"How many connections to each ingress may be open at once. More is how throughput grows: each is its own congestion window." env:"RUNNER_TUNNEL_MAX_CONNECTIONS" long:"tunnel-max-connections"`
@@ -122,11 +122,11 @@ type RunnerWorker struct {
 	TunnelMaxStreamsPerSession int `usage:"How many client connections one connection to an ingress will carry before the next is used." env:"RUNNER_TUNNEL_MAX_STREAMS_PER_SESSION" long:"tunnel-max-streams-per-session"`
 }
 
-// NewRunnerWorker returns the configuration of the serve-runner-worker
+// NewRunnerOrchestrator returns the configuration of the serve-runner-orchestrator
 // command, holding the defaults it runs with until the console overrides them.
-func NewRunnerWorker() *RunnerWorker {
-	return &RunnerWorker{
-		Port:                       defaultRunnerWorkerPort,
+func NewRunnerOrchestrator() *RunnerOrchestrator {
+	return &RunnerOrchestrator{
+		Port:                       defaultRunnerOrchestratorPort,
 		TunnelMinConnections:       defaultRunnerTunnelMinConnections,
 		TunnelMaxConnections:       defaultRunnerTunnelMaxConnections,
 		TunnelMaxIdleTime:          defaultRunnerTunnelMaxIdleTime,
@@ -134,11 +134,11 @@ func NewRunnerWorker() *RunnerWorker {
 	}
 }
 
-// IngressAddresses is every ingress this worker opens connections to.
+// IngressAddresses is every ingress this orchestrator opens connections to.
 //
 // The console binds scalars, so the list travels as one comma-separated value
 // and is taken apart here — the same way the profiler's headers do.
-func (c *RunnerWorker) IngressAddresses() []string {
+func (c *RunnerOrchestrator) IngressAddresses() []string {
 	return commaSeparated(c.TunnelAddresses)
 }
 
@@ -154,9 +154,9 @@ func commaSeparated(value string) []string {
 	return items
 }
 
-// AllowedTargets is what this worker will connect a stream to beyond the
+// AllowedTargets is what this orchestrator will connect a stream to beyond the
 // services it offers by name.
-func (c *RunnerWorker) AllowedTargets() ([]tunnel.AddressRule, error) {
+func (c *RunnerOrchestrator) AllowedTargets() ([]tunnel.AddressRule, error) {
 	return tunnel.ParseAddressRules(c.TunnelAllowedTargets)
 }
 
