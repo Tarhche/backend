@@ -16,8 +16,8 @@ x-app: &app
   depends_on:
     - mongodb
     - nats
-    - minio
-    - minio_configure
+    - rustfs
+    - rustfs_configure
     - mailserver
     - grafana
   volumes:
@@ -273,29 +273,42 @@ services:
       ME_CONFIG_BASICAUTH_PASSWORD: password
       ME_CONFIG_MONGODB_URL: ${MONGO_SCHEME}://${MONGO_USERNAME}:${MONGO_PASSWORD}@${MONGO_HOST}:${MONGO_PORT}
 
-  minio:
-    image: minio/minio
-    restart: unless-stopped
+  rustfs:
+    image: rustfs/rustfs:latest
     security_opt:
       - no-new-privileges:true
+    environment:
+      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY}
+      RUSTFS_SECRET_KEY: ${S3_SECRET_KEY}
+      RUSTFS_CONSOLE_ENABLE: "true"
+      RUSTFS_CONSOLE_ADDRESS: "0.0.0.0:9001"
     ports:
       - "9100:9000"
       - "9001:9001"
-    environment:
-      MINIO_ROOT_USER: ${S3_ACCESS_KEY}
-      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY}
-    command: ["server", "/data", "--console-address", ":9001"]
+    volumes:
+      - ./tmp/rustfs:/data
+    command: ["/data"]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9000/health"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
 
-  minio_configure:
-    image: minio/mc
+  rustfs_configure:
+    image: rustfs/rc:latest
     security_opt:
       - no-new-privileges:true
     depends_on:
-      - minio
+      rustfs: { condition: service_healthy }
+    environment:
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      S3_BUCKET_NAME: ${S3_BUCKET_NAME}
     entrypoint: >
       /bin/sh -c "
-      mc config host add minio http://minio:9000 ${S3_ACCESS_KEY} ${S3_SECRET_KEY};
-      mc mb minio/blog;"
+        rc alias set local http://rustfs:9000 ${S3_ACCESS_KEY} ${S3_SECRET_KEY} &&
+        rc bucket create -p local/${S3_BUCKET_NAME:-zuora-backup}
+      "
 
   nats:
     image: nats:2.14-alpine3.22
