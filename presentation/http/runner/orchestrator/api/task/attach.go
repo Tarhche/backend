@@ -172,6 +172,16 @@ func (h *attachHandler) pump(conn *websocket.Conn, session task.ExecSession) {
 		}
 	}()
 
+	// a command that has ended is the end of its terminal: the client is told
+	// so, and the loop below, which waits on nobody but the client, is let go.
+	go func() {
+		<-done
+
+		_ = conn.WriteControl(websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""), time.Now().Add(writeWait))
+		_ = conn.Close()
+	}()
+
 	// the client's input, on to the command. Closing the session is what
 	// releases the reader above, so this loop ending ends both.
 	for {
