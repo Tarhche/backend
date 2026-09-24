@@ -4,9 +4,12 @@ package jailer
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -113,6 +116,114 @@ func TestList(t *testing.T) {
 		assert.ErrorIs(t, err, os.ErrNotExist)
 
 		require.NoError(t, v.Kill(context.Background(), "0123456789abcdef"), "a machine that is not there is the outcome asked for")
+	})
+}
+
+// firecracker starts a process the host takes for a firecracker, which only
+// sleeps, and ends it with the test.
+func firecracker(t *testing.T, dir string) *exec.Cmd {
+	t.Helper()
+
+	binary := filepath.Join(t.TempDir(), "firecracker")
+
+	sleep, err := os.ReadFile("/bin/sleep")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(binary, sleep, 0o755))
+
+	command := exec.Command(binary, "60")
+	command.Dir = dir
+	require.NoError(t, command.Start())
+
+	exited := make(chan struct{})
+	go func() {
+		_ = command.Wait()
+		close(exited)
+	}()
+
+	t.Cleanup(func() {
+		_ = command.Process.Kill()
+		<-exited
+	})
+
+	return command
+}
+
+// jailedVMM builds a VMM that jails its machines, over cgroups of its own:
+// nothing here starts a jailer, or needs to be root.
+func jailedVMM(t *testing.T) (*VMM, string) {
+	t.Helper()
+
+	cgroups := t.TempDir()
+
+	return &VMM{
+		config:   Config{StateDir: t.TempDir(), FirecrackerBinary: "/firecracker", JailerBinary: "/jailer"},
+		logger:   slog.New(slog.DiscardHandler),
+		execName: "firecracker",
+		cgroups:  cgroups,
+	}, filepath.Join(cgroups, "firecracker")
+}
+
+// holdIn writes a cgroup that holds the given processes.
+func holdIn(t *testing.T, cgroup string, pids ...int) {
+	t.Helper()
+
+	require.NoError(t, os.MkdirAll(cgroup, 0o755))
+
+	var procs strings.Builder
+	for _, pid := range pids {
+		fmt.Fprintln(&procs, pid)
+	}
+
+	require.NoError(t, os.WriteFile(filepath.Join(cgroup, "cgroup.procs"), []byte(procs.String()), 0o644))
+}
+
+func TestProcesses(t *testing.T) {
+	t.Run("a jailed machine's firecracker is found by the cgroup the jailer put it in", func(t *testing.T) {
+		v, cgroups := jailedVMM(t)
+
+		// it runs in a directory that says nothing, as a jailed one does.
+		running := firecracker(t, "/")
+
+		holdIn(t, filepath.Join(cgroups, "0123456789abcdef"), running.Process.Pid)
+		holdIn(t, filepath.Join(cgroups, "fedcba9876543210"))
+		holdIn(t, filepath.Join(cgroups, "not-a-machine"), running.Process.Pid)
+
+		assert.Equal(t, map[string]int{"0123456789abcdef": running.Process.Pid}, v.processes())
+	})
+
+	t.Run("what else a machine's cgroup holds is not taken for its firecracker", func(t *testing.T) {
+		v, cgroups := jailedVMM(t)
+
+		holdIn(t, filepath.Join(cgroups, "0123456789abcdef"), os.Getpid())
+
+		assert.Empty(t, v.processes())
+	})
+
+	t.Run("a jailed machine is killed by what its cgroup holds, and its directory goes after it", func(t *testing.T) {
+		v, cgroups := jailedVMM(t)
+
+		running := firecracker(t, "/")
+		holdIn(t, filepath.Join(cgroups, "0123456789abcdef"), running.Process.Pid)
+		require.NoError(t, os.MkdirAll(v.rootDir("0123456789abcdef"), 0o755))
+
+		require.NoError(t, v.Kill(context.Background(), "0123456789abcdef"))
+
+		assert.Empty(t, v.processes())
+
+		_, err := os.Stat(v.machineDir("0123456789abcdef"))
+		assert.ErrorIs(t, err, os.ErrNotExist)
+	})
+
+	t.Run("one that is not jailed is found by the directory it was started in", func(t *testing.T) {
+		v, _ := vmm(t)
+
+		root := v.rootDir("0123456789abcdef")
+		require.NoError(t, os.MkdirAll(root, 0o755))
+
+		running := firecracker(t, root)
+		firecracker(t, t.TempDir())
+
+		assert.Equal(t, map[string]int{"0123456789abcdef": running.Process.Pid}, v.processes())
 	})
 }
 

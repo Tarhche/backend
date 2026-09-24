@@ -10,8 +10,9 @@
 //
 // Nothing is written down about a machine but its directory: which machines
 // there are is read off the directories, and which of them run is read off the
-// processes whose working directory is one. So the launcher can restart, or be
-// replaced, while its machines keep running, and find them where it left them.
+// cgroups the jailer puts them in, which are named after them. So the launcher
+// can restart, or be replaced, while its machines keep running, and find them
+// where it left them.
 package jailer
 
 import (
@@ -98,8 +99,13 @@ type VMM struct {
 	logger *slog.Logger
 
 	// execName is what the jailer names machines' directories after: the
-	// name of the firecracker binary it runs.
+	// name of the firecracker binary it runs. It names the cgroup it puts
+	// them under too.
 	execName string
+
+	// cgroups is where the host's cgroups are, which is only ever somewhere
+	// else in tests.
+	cgroups string
 
 	lock sync.Mutex
 }
@@ -119,7 +125,7 @@ func New(config Config, logger *slog.Logger) (*VMM, error) {
 		}
 	}
 
-	v := &VMM{config: config, logger: logger, execName: filepath.Base(config.FirecrackerBinary)}
+	v := &VMM{config: config, logger: logger, execName: filepath.Base(config.FirecrackerBinary), cgroups: cgroupRoot}
 
 	if err := os.MkdirAll(v.baseDir(), 0o755); err != nil {
 		return nil, err
@@ -162,6 +168,12 @@ func (v *VMM) machineDir(id string) string {
 
 func (v *VMM) rootDir(id string) string {
 	return filepath.Join(v.machineDir(id), "root")
+}
+
+// cgroupDir is the cgroup the jailer makes each machine's own cgroup in, which
+// it names after the binary it runs, as it does their directories.
+func (v *VMM) cgroupDir() string {
+	return filepath.Join(v.cgroups, v.execName)
 }
 
 func (v *VMM) Spawn(ctx context.Context, spec machine.Spec, taps []machine.AttachedTap) (machine.Machine, error) {
@@ -409,7 +421,7 @@ func (v *VMM) Kill(ctx context.Context, id string) error {
 	}
 
 	// the jailer's cgroup for the machine is empty now, and goes with it.
-	_ = os.Remove(filepath.Join(cgroupRoot, v.execName, id))
+	_ = os.Remove(filepath.Join(v.cgroupDir(), id))
 
 	v.logger.Info("machine terminated", "machine", id)
 
@@ -456,10 +468,55 @@ func (v *VMM) describe(id string, owner string, pid int, taps []machine.Attached
 	}
 }
 
-// processes finds every machine's firecracker that is running, by the
-// directory each runs in: a jailed one runs chrooted there, and one that is not
-// was started there.
+// processes finds every machine's firecracker that is running.
+//
+// A jailed one is found by its cgroup: the jailer moves each machine's
+// firecracker into a cgroup of its own, named after the machine, before it
+// becomes firecracker, and nothing inside the jail can leave it. Where it runs
+// would not say which machine it is: the jailer makes the machine's directory
+// the root of a mount namespace of its own, and from outside that its working
+// directory reads as "/". One that is not jailed runs where it was started,
+// which is its machine's directory, and is found by that.
 func (v *VMM) processes() map[string]int {
+	if v.jailed() {
+		return v.jailedProcesses()
+	}
+
+	return v.startedProcesses()
+}
+
+func (v *VMM) jailedProcesses() map[string]int {
+	found := make(map[string]int)
+
+	entries, err := os.ReadDir(v.cgroupDir())
+	if err != nil {
+		return found
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() || !machine.IsID(entry.Name()) {
+			continue
+		}
+
+		procs, err := os.ReadFile(filepath.Join(v.cgroupDir(), entry.Name(), "cgroup.procs"))
+		if err != nil {
+			continue
+		}
+
+		for field := range strings.FieldsSeq(string(procs)) {
+			pid, err := strconv.Atoi(field)
+			if err == nil && v.isFirecracker(pid) {
+				found[entry.Name()] = pid
+
+				break
+			}
+		}
+	}
+
+	return found
+}
+
+func (v *VMM) startedProcesses() map[string]int {
 	found := make(map[string]int)
 
 	entries, err := os.ReadDir("/proc")
@@ -471,30 +528,36 @@ func (v *VMM) processes() map[string]int {
 
 	for _, entry := range entries {
 		pid, err := strconv.Atoi(entry.Name())
-		if err != nil {
+		if err != nil || !v.isFirecracker(pid) {
 			continue
 		}
 
-		dir := filepath.Join("/proc", entry.Name())
-
-		comm, err := os.ReadFile(filepath.Join(dir, "comm"))
-		if err != nil || !strings.HasPrefix(string(comm), "firecracker") {
-			continue
-		}
-
-		cwd, err := os.Readlink(filepath.Join(dir, "cwd"))
+		cwd, err := os.Readlink(filepath.Join("/proc", entry.Name(), "cwd"))
 		if err != nil || !strings.HasPrefix(cwd, prefix) {
 			continue
 		}
 
 		id, _, _ := strings.Cut(strings.TrimPrefix(cwd, prefix), string(filepath.Separator))
 
-		if machine.IsID(id) && !isZombie(dir) {
+		if machine.IsID(id) {
 			found[id] = pid
 		}
 	}
 
 	return found
+}
+
+// isFirecracker reports whether a process is a firecracker that is still
+// running.
+func (v *VMM) isFirecracker(pid int) bool {
+	dir := filepath.Join("/proc", strconv.Itoa(pid))
+
+	comm, err := os.ReadFile(filepath.Join(dir, "comm"))
+	if err != nil || !strings.HasPrefix(string(comm), "firecracker") {
+		return false
+	}
+
+	return !isZombie(dir)
 }
 
 // isZombie reports whether a process has ended and is waiting to be collected.

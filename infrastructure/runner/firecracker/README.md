@@ -46,6 +46,13 @@ host's pid namespace and cgroups, and the jailer puts each firecracker into a
 cgroup of its own, so an orchestrator redeployed — which happens on every push —
 leaves every machine running. The next orchestrator takes them back.
 
+The launcher writes none of this down, so it can be restarted or replaced too.
+Which machines there are it reads off their directories, and which of them run
+off the cgroups the jailer made for them, which are named after them. Where a
+jailed firecracker runs would not say: the jailer makes its machine's directory
+the root of a mount namespace of its own, and from outside that the process's
+working directory reads as `/`.
+
 ## The state directory
 
 Shared by the launcher and every orchestrator on a host, **at the same path on
