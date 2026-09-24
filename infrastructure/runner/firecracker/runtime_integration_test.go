@@ -329,9 +329,13 @@ func TestRuntime(t *testing.T) {
 		assert.Equal(t, 143, stopped.ExitCode, "sleep ends on the TERM a stop sends")
 		assert.Contains(t, logsOf(t, r, id), "up\n")
 
-		// started again from the same disks: what it wrote is still there.
-		require.NoError(t, r.Start(ctx, id))
-		waitFor(t, r, id, func(e task.Execution) bool { return e.Status == task.StatusRunning })
+		// started again from the same disks, and never taken for ended while it
+		// boots: what it wrote is still there.
+		statuses := watchedWhile(t, r, id, r.Start)
+		assert.Contains(t, statuses, task.StatusRestarting, "a stopped machine booting again says so")
+		for _, status := range statuses {
+			assert.Contains(t, []task.Status{task.StatusRunning, task.StatusRestarting}, status, "a stopped machine starting again reported %d", status)
+		}
 
 		check, err := r.Exec(ctx, id, task.ExecOptions{Command: []string{"cat", "/tmp/answer"}})
 		require.NoError(t, err)
@@ -341,32 +345,20 @@ func TestRuntime(t *testing.T) {
 		assert.Equal(t, "42\n", string(kept))
 		require.NoError(t, check.Close())
 
-		// a restart is never an end, to anybody watching it.
-		seen := make(chan []task.Status, 1)
-		stopWatching := make(chan struct{})
-		go func() {
-			var statuses []task.Status
-			for {
-				select {
-				case <-stopWatching:
-					seen <- statuses
-					return
-				default:
-				}
-
-				if inspected, err := r.Inspect(ctx, id); err == nil {
-					statuses = append(statuses, inspected.Status)
-				}
-
-				time.Sleep(5 * time.Millisecond)
-			}
-		}()
-
-		require.NoError(t, r.Restart(ctx, id))
-		close(stopWatching)
-
-		for _, status := range <-seen {
+		// a restart is never an end, to anybody watching it, whether the
+		// machine was running...
+		for _, status := range watchedWhile(t, r, id, r.Restart) {
 			assert.Contains(t, []task.Status{task.StatusRunning, task.StatusRestarting}, status, "a restarting machine reported %d", status)
+		}
+
+		// ...or had been stopped, and has a machine to boot before it runs.
+		require.NoError(t, r.Stop(ctx, id))
+		waitFor(t, r, id, ended)
+
+		statuses = watchedWhile(t, r, id, r.Restart)
+		assert.Contains(t, statuses, task.StatusRestarting, "a stopped machine booting again says so")
+		for _, status := range statuses {
+			assert.Contains(t, []task.Status{task.StatusRunning, task.StatusRestarting}, status, "a stopped machine restarting reported %d", status)
 		}
 
 		require.NoError(t, r.Kill(ctx, id))
@@ -404,6 +396,34 @@ func TestRuntime(t *testing.T) {
 
 		require.NoError(t, r.Delete(ctx, id))
 	})
+}
+
+// watchedWhile does something to a machine, and says every status it read as
+// while that was done.
+func watchedWhile(t *testing.T, r *Runtime, id string, do func(context.Context, string) error) []task.Status {
+	t.Helper()
+
+	done := make(chan error, 1)
+	go func() { done <- do(context.Background(), id) }()
+
+	// what it read as before what was asked took hold is not what is watched.
+	time.Sleep(100 * time.Millisecond)
+
+	var statuses []task.Status
+
+	for {
+		if inspected, err := r.Inspect(context.Background(), id); err == nil {
+			statuses = append(statuses, inspected.Status)
+		}
+
+		select {
+		case err := <-done:
+			require.NoError(t, err)
+
+			return statuses
+		case <-time.After(5 * time.Millisecond):
+		}
+	}
 }
 
 func TestRuntimeTakesItsMachinesBack(t *testing.T) {

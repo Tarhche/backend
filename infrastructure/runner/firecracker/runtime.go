@@ -319,7 +319,7 @@ func (r *Runtime) Start(ctx context.Context, id string) error {
 }
 
 // start boots a machine and runs its task. The lock is held.
-func (r *Runtime) start(ctx context.Context, id string) error {
+func (r *Runtime) start(ctx context.Context, id string) (err error) {
 	rec, found := r.store.get(id)
 	if !found {
 		return errNoMachine
@@ -328,6 +328,21 @@ func (r *Runtime) start(ctx context.Context, id string) error {
 	// starting a machine that runs is starting nothing, as for a container.
 	if r.keeper(id) != nil {
 		return nil
+	}
+
+	// a machine that had ended is on its way back up from here, and says so:
+	// booting it takes seconds, and it has not ended again in any of them. It
+	// says it ended only if it could not be started after all.
+	if rec.Status.Ended() {
+		if _, err := r.store.update(id, func(rec *record) { rec.Status = task.StatusRestarting }); err != nil {
+			return err
+		}
+
+		defer func() {
+			if err != nil {
+				err = errors.Join(err, r.settle(id))
+			}
+		}()
 	}
 
 	interfaces, err := r.leaseInterfaces(ctx, rec)
