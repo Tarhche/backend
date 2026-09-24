@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```sh
-# Run the full local stack (app + mongodb + minio + nats + grafana + runner services)
+# Run the full local stack (app + mongodb + rustfs (S3 file storage) + nats + grafana + runner services)
 make up            # docker compose up --build -d
 make down          # tears down containers AND volumes
 make logs-app      # follow logs of a service (logs-<service>)
