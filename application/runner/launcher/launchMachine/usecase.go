@@ -43,19 +43,49 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		return &Response{ValidationErrors: validationErrors}, nil
 	}
 
-	// the network ends are there before the process is, so a machine never
-	// comes up without the devices it was promised.
-	taps, err := uc.network.Plug(ctx, request.Owner, request.ID, request.Taps)
+	// a machine asked for again while it runs is the one that is running,
+	// and its taps are in use: they are left as they are.
+	running, found, err := uc.running(ctx, request.ID)
 	if err != nil {
-		return nil, errors.Join(err, uc.network.Unplug(ctx, request.ID))
+		return nil, err
 	}
 
-	launched, err := uc.vmm.Spawn(ctx, request.Spec, taps)
-	if err != nil {
-		return nil, errors.Join(err, uc.network.Unplug(ctx, request.ID))
+	if found {
+		return &Response{Machine: running}, nil
 	}
+
+	launched, err := uc.vmm.Spawn(ctx, request.Spec)
+	if err != nil {
+		return nil, err
+	}
+
+	// the process opens its taps only once it is configured, which is after
+	// this answers, so they are made now, for the user it runs as. A machine
+	// is never handed over without the devices it was promised.
+	taps, err := uc.network.Plug(ctx, request.Owner, request.ID, launched.User, request.Taps)
+	if err != nil {
+		return nil, errors.Join(err, uc.network.Unplug(ctx, request.ID), uc.vmm.Kill(ctx, request.ID))
+	}
+
+	launched.Taps = taps
 
 	return &Response{Machine: launched}, nil
+}
+
+// running is the machine by that id, if its process is running.
+func (uc *UseCase) running(ctx context.Context, id string) (machine.Machine, bool, error) {
+	held, err := uc.vmm.List(ctx)
+	if err != nil {
+		return machine.Machine{}, false, err
+	}
+
+	for _, m := range held {
+		if m.ID == id && m.Running {
+			return m, true, nil
+		}
+	}
+
+	return machine.Machine{}, false, nil
 }
 
 func (uc *UseCase) withinLimits(spec machine.Spec) domain.ValidationErrors {

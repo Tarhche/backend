@@ -18,8 +18,8 @@ import (
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	"github.com/khanzadimahdi/testproject/infrastructure/runner/firecracker/hostnet"
-	"github.com/khanzadimahdi/testproject/infrastructure/runner/firecracker/jailer"
 	"github.com/khanzadimahdi/testproject/infrastructure/runner/firecracker/layout"
+	"github.com/khanzadimahdi/testproject/infrastructure/runner/firecracker/vmm"
 	healthAPI "github.com/khanzadimahdi/testproject/presentation/http/health"
 	"github.com/khanzadimahdi/testproject/presentation/http/middleware"
 	launcherAPI "github.com/khanzadimahdi/testproject/presentation/http/runner/launcher/api"
@@ -69,25 +69,25 @@ func (p *launcherProvider) Boot(ctx context.Context, c provider.Container) error
 
 	// what the orchestrators write is theirs, and where machines are kept is
 	// the launcher's; and the kernel is where machines boot it from.
-	if err := layout.Prepare(launcherConfigs.StateDir, launcherConfigs.Kernel, launcherConfigs.MachineUID, launcherConfigs.MachineGID); err != nil {
+	if err := layout.Prepare(launcherConfigs.StateDir, launcherConfigs.Kernel, launcherConfigs.OrchestratorUID, launcherConfigs.OrchestratorGID); err != nil {
 		return err
 	}
 
-	vmm, err := jailer.New(jailer.Config{
+	machines, err := vmm.New(vmm.Config{
 		StateDir:          launcherConfigs.StateDir,
 		FirecrackerBinary: launcherConfigs.FirecrackerBinary,
-		JailerBinary:      launcherConfigs.JailerBinary,
-		UID:               launcherConfigs.MachineUID,
-		GID:               launcherConfigs.MachineGID,
+		FirstUID:          launcherConfigs.MachineFirstUID,
+		UIDs:              launcherConfigs.MachineUIDs,
+		ClientGID:         launcherConfigs.OrchestratorGID,
 	}, logger)
 	if err != nil {
 		return err
 	}
 
 	network, err := hostnet.New(hostnet.Config{
-		Pool: pool,
-		UID:  uint32(launcherConfigs.MachineUID),
-		GID:  uint32(launcherConfigs.MachineGID),
+		Pool:     pool,
+		FirstUID: launcherConfigs.MachineFirstUID,
+		UIDs:     launcherConfigs.MachineUIDs,
 	}, logger)
 	if err != nil {
 		return err
@@ -96,9 +96,9 @@ func (p *launcherProvider) Boot(ctx context.Context, c provider.Container) error
 	limits := launchMachine.Limits{VCPUs: launcherConfigs.MaxVCPUs, MemoryMiB: launcherConfigs.MaxMemoryMiB}
 
 	mux := http.NewServeMux()
-	mux.Handle("POST /machines", launcherAPI.NewLaunchHandler(launchMachine.NewUseCase(vmm, network, validator, limits)))
-	mux.Handle("GET /machines", launcherAPI.NewIndexHandler(getMachines.NewUseCase(vmm, validator)))
-	mux.Handle("DELETE /machines/{id}", launcherAPI.NewTerminateHandler(terminateMachine.NewUseCase(vmm, network, validator)))
+	mux.Handle("POST /machines", launcherAPI.NewLaunchHandler(launchMachine.NewUseCase(machines, network, validator, limits)))
+	mux.Handle("GET /machines", launcherAPI.NewIndexHandler(getMachines.NewUseCase(machines, validator)))
+	mux.Handle("DELETE /machines/{id}", launcherAPI.NewTerminateHandler(terminateMachine.NewUseCase(machines, network, validator)))
 	mux.Handle("PUT /networks/{owner}/{name}", launcherAPI.NewEnsureNetworkHandler(ensureNetwork.NewUseCase(network, validator)))
 	mux.Handle("DELETE /networks/{owner}/{name}", launcherAPI.NewRemoveNetworkHandler(removeNetwork.NewUseCase(network, validator)))
 

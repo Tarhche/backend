@@ -41,9 +41,8 @@ type record struct {
 	Image   string `json:"image"`
 	Scratch string `json:"scratch,omitempty"`
 
-	VCPUs     int     `json:"vcpus"`
-	CPUQuota  float64 `json:"cpu_quota,omitempty"`
-	MemoryMiB int     `json:"memory_mib"`
+	VCPUs     int `json:"vcpus"`
+	MemoryMiB int `json:"memory_mib"`
 
 	// Interfaces are the machine's network devices while it runs. They are
 	// given when it starts and taken back when it stops, since what a network

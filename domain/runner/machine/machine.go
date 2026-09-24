@@ -2,12 +2,13 @@
 // on, and what the host does to answer.
 //
 // Starting a microVM is two jobs. One is deciding what it is — its disks, its
-// kernel, its task — which is the orchestrator's, and needs no privilege at
-// all. The other is giving it a process of its own with a way to the hardware,
-// and plugging it into the host's network, which only something privileged on
-// the host can do. The launcher does the second and nothing else, so the part
-// that is reachable from outside holds no privilege, and the part that holds
-// it is reachable only through a socket on the host.
+// kernel, its task — which is the orchestrator's. The other is giving it a
+// process of its own with a way to the hardware, and plugging it into a
+// network. The launcher does the second and nothing else, in a container of
+// its own that holds no privilege on the host: the part reachable from
+// outside never runs a machine itself, and asks the launcher through a socket
+// made for the orchestrators alone. Each machine runs as a user of its own,
+// which owns what that machine uses and nothing any other machine does.
 package machine
 
 import (
@@ -26,10 +27,9 @@ type Spec struct {
 	// and each only ever sees its own.
 	Owner string `json:"owner"`
 
-	// VCPUs is how many CPUs the machine has, and CPUQuota how much of them
-	// it may use: half a CPU is one CPU used half the time.
-	VCPUs    int     `json:"vcpus"`
-	CPUQuota float64 `json:"cpu_quota,omitempty"`
+	// VCPUs is how many CPUs the machine has, which is also the most of the
+	// host's it can keep busy at once.
+	VCPUs int `json:"vcpus"`
 
 	// MemoryMiB is the machine's memory.
 	MemoryMiB int `json:"memory_mib"`
@@ -51,9 +51,17 @@ type Tap struct {
 // Files are what a machine boots from: a kernel, the initramfs holding its
 // agent, and its disks in the order the machine finds them.
 type Files struct {
-	Kernel string   `json:"kernel"`
-	Initrd string   `json:"initrd"`
-	Drives []string `json:"drives,omitempty"`
+	Kernel string  `json:"kernel"`
+	Initrd string  `json:"initrd"`
+	Drives []Drive `json:"drives,omitempty"`
+}
+
+// Drive is one of a machine's disks. One that is read only may be shared by
+// many machines, as an image's root is, and is only ever read by any of them;
+// one that is not is the machine's own, and is made its alone while it runs.
+type Drive struct {
+	Path     string `json:"path"`
+	ReadOnly bool   `json:"read_only,omitempty"`
 }
 
 // Machine is a machine the host holds.
@@ -66,6 +74,10 @@ type Machine struct {
 	// terminated, so its end can be told apart from its never having been.
 	PID     int  `json:"pid"`
 	Running bool `json:"running"`
+
+	// User is who the machine's process runs as: a user of its own, with a
+	// group of the same number, owning its directory, its disk and its taps.
+	User int `json:"user"`
 
 	// Socket is where the machine's firecracker takes its API on the host.
 	Socket string `json:"socket"`
@@ -129,7 +141,10 @@ type Launcher interface {
 
 // VMM starts, ends and finds the processes machines run in.
 type VMM interface {
-	Spawn(ctx context.Context, spec Spec, taps []AttachedTap) (Machine, error)
+	// Spawn starts a machine's process, as a user of its own. The process
+	// opens nothing of its network until it is configured, so its taps can be
+	// made after it, for the user it runs as.
+	Spawn(ctx context.Context, spec Spec) (Machine, error)
 	Kill(ctx context.Context, id string) error
 	List(ctx context.Context) ([]Machine, error)
 }
@@ -139,9 +154,9 @@ type HostNetwork interface {
 	EnsureNetwork(ctx context.Context, owner string, name string, masquerade bool) (Network, error)
 	RemoveNetwork(ctx context.Context, owner string, name string) error
 
-	// Plug makes a machine's tap devices and plugs each into its network;
-	// Unplug takes them away again.
-	Plug(ctx context.Context, owner string, id string, taps []Tap) ([]AttachedTap, error)
+	// Plug makes a machine's tap devices, for the user it runs as to open,
+	// and plugs each into its network; Unplug takes them away again.
+	Plug(ctx context.Context, owner string, id string, user int, taps []Tap) ([]AttachedTap, error)
 	Unplug(ctx context.Context, id string) error
 }
 

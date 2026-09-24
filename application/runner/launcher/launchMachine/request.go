@@ -21,7 +21,8 @@ const (
 
 // Request is a machine to launch. It comes from an orchestrator, which is
 // trusted to ask for what its tasks need and nothing more, and is checked all
-// the same: the launcher is the one holding privilege.
+// the same: the launcher is the one that starts processes and gives files
+// away.
 type Request struct {
 	machine.Spec
 }
@@ -49,10 +50,6 @@ func (r *Request) Validate() domain.ValidationErrors {
 		validationErrors["vcpus"] = "invalid_value"
 	}
 
-	if r.CPUQuota < 0 || r.CPUQuota > float64(r.VCPUs) {
-		validationErrors["cpu_quota"] = "invalid_value"
-	}
-
 	if r.MemoryMiB < minMemoryMiB {
 		validationErrors["memory_mib"] = "invalid_value"
 	}
@@ -77,6 +74,12 @@ func (r *Request) Validate() domain.ValidationErrors {
 
 	if len(r.Files.Drives) > maxDrives {
 		validationErrors["files.drives"] = "too_many"
+	}
+
+	for _, drive := range r.Files.Drives {
+		if len(drive.Path) == 0 {
+			validationErrors["files.drives"] = "invalid_value"
+		}
 	}
 
 	return validationErrors

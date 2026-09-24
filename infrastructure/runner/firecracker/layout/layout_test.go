@@ -22,13 +22,18 @@ func TestPrepare(t *testing.T) {
 			info, err := os.Stat(filepath.Join(state, dir))
 			require.NoError(t, err)
 			assert.True(t, info.IsDir())
+			assert.Equal(t, os.FileMode(0o750), info.Mode().Perm(), "what the orchestrators write is theirs alone")
 		}
+
+		info, err := os.Stat(state)
+		require.NoError(t, err)
+		assert.Equal(t, os.FileMode(0o711), info.Mode().Perm(), "gone through by everybody, listed by nobody")
 
 		installed, err := os.ReadFile(Kernel(state))
 		require.NoError(t, err)
 		assert.Equal(t, "a kernel", string(installed))
 
-		info, err := os.Stat(Kernel(state))
+		info, err = os.Stat(Kernel(state))
 		require.NoError(t, err)
 		assert.Equal(t, os.FileMode(0o644), info.Mode().Perm(), "every machine reads the kernel")
 

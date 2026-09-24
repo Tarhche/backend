@@ -48,8 +48,8 @@ type MockVMM struct {
 
 var _ machine.VMM = &MockVMM{}
 
-func (m *MockVMM) Spawn(ctx context.Context, spec machine.Spec, taps []machine.AttachedTap) (machine.Machine, error) {
-	args := m.Called(ctx, spec, taps)
+func (m *MockVMM) Spawn(ctx context.Context, spec machine.Spec) (machine.Machine, error) {
+	args := m.Called(ctx, spec)
 
 	return args.Get(0).(machine.Machine), args.Error(1)
 }
@@ -81,8 +81,8 @@ func (m *MockHostNetwork) RemoveNetwork(ctx context.Context, owner string, name 
 	return m.Called(ctx, owner, name).Error(0)
 }
 
-func (m *MockHostNetwork) Plug(ctx context.Context, owner string, id string, taps []machine.Tap) ([]machine.AttachedTap, error) {
-	args := m.Called(ctx, owner, id, taps)
+func (m *MockHostNetwork) Plug(ctx context.Context, owner string, id string, user int, taps []machine.Tap) ([]machine.AttachedTap, error) {
+	args := m.Called(ctx, owner, id, user, taps)
 
 	return args.Get(0).([]machine.AttachedTap), args.Error(1)
 }

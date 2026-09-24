@@ -22,14 +22,14 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/runner/network"
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
 	"github.com/khanzadimahdi/testproject/infrastructure/runner/firecracker/initrd"
-	"github.com/khanzadimahdi/testproject/infrastructure/runner/firecracker/jailer"
 	"github.com/khanzadimahdi/testproject/infrastructure/runner/firecracker/layout"
+	"github.com/khanzadimahdi/testproject/infrastructure/runner/firecracker/vmm"
 )
 
 // These run real machines: they need /dev/kvm, firecracker, mke2fs, a kernel
 // at RUNNER_TEST_KERNEL, and a registry to pull alpine from. The launcher's
-// half runs in the test, unjailed, and its tasks are on no network, so none of
-// it needs root.
+// half runs in the test, as whoever runs it, and its tasks are on no network,
+// so none of it needs root.
 //
 //	RUNNER_TEST_KERNEL=/path/to/vmlinux go test -tags firecracker ./infrastructure/runner/firecracker/
 
@@ -38,7 +38,7 @@ const testOwner = "runner-orchestrator-test"
 // localLauncher is the launcher's half, in the test: machines' processes, and
 // no networks at all.
 type localLauncher struct {
-	vmm *jailer.VMM
+	vmm *vmm.VMM
 }
 
 func (l *localLauncher) Launch(ctx context.Context, spec machine.Spec) (machine.Machine, error) {
@@ -46,7 +46,7 @@ func (l *localLauncher) Launch(ctx context.Context, spec machine.Spec) (machine.
 		return machine.Machine{}, errors.New("there are no networks here")
 	}
 
-	return l.vmm.Spawn(ctx, spec, nil)
+	return l.vmm.Spawn(ctx, spec)
 }
 
 func (l *localLauncher) Terminate(ctx context.Context, id string) error {
@@ -120,7 +120,9 @@ func newHarness(t *testing.T) *harness {
 		logger = slog.New(slog.NewTextHandler(os.Stderr, nil))
 	}
 
-	vmm, err := jailer.New(jailer.Config{StateDir: state, FirecrackerBinary: firecrackerBinary, UID: os.Getuid(), GID: os.Getgid()}, logger)
+	// every machine runs as whoever runs the test: nothing here can be anybody
+	// else.
+	machines, err := vmm.New(vmm.Config{StateDir: state, FirecrackerBinary: firecrackerBinary}, logger)
 	require.NoError(t, err)
 
 	return &harness{
@@ -133,7 +135,7 @@ func newHarness(t *testing.T) *harness {
 			UID:      os.Getuid(),
 			GID:      os.Getgid(),
 		},
-		launcher: &localLauncher{vmm: vmm},
+		launcher: &localLauncher{vmm: machines},
 		logger:   logger,
 	}
 }

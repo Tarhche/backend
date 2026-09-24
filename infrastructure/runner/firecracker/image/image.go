@@ -190,6 +190,12 @@ func (s *Store) build(ctx context.Context, reference string, digest v1.Hash, pul
 		return Image{}, trace.RecordError(span, fmt.Errorf("failed to make %s into a root: %w", reference, err))
 	}
 
+	// every machine that boots the image reads it as a user of its own, so it
+	// is everybody's to read, whatever sqfstar made it.
+	if err := os.Chmod(root, 0o644); err != nil {
+		return Image{}, trace.RecordError(span, err)
+	}
+
 	encoded, err := json.Marshal(config)
 	if err != nil {
 		return Image{}, trace.RecordError(span, err)

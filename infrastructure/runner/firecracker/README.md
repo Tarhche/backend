@@ -13,16 +13,16 @@ firecracker emulates. That is the whole reason for the change.
 ## Three processes
 
 ```
-host with /dev/kvm                                      tunnel-facing, unprivileged
+host with /dev/kvm; nothing below holds any privilege on it
 ┌──────────────────────────────────┐   unix socket   ┌─────────────────────────────────┐
-│ launcher (privileged)            │◄───────────────►│ orchestrator                    │
-│  jailer → firecracker, per VM    │  HTTP, JSON     │  images → squashfs              │
-│  bridges, taps, iptables         │                 │  firecracker API → each machine │
-│  keeps no state of its own       │                 │  vsock → each machine's agent   │
+│ launcher (its own container)     │◄───────────────►│ orchestrator                    │
+│  firecracker per VM, as its user │  HTTP, JSON     │  images → squashfs              │
+│  bridges, taps, iptables, all in │                 │  firecracker API → each machine │
+│  the container's own namespace   │                 │  vsock → each machine's agent   │
 └────────────────┬─────────────────┘                 │  records, output, restarts      │
                  │ starts                            └───────────────┬─────────────────┘
                  ▼                                                   │
-     firecracker (jailed: chroot, uid 10000, own cgroup) ◄───────────┘
+     firecracker (a user of its own, seccomp) ◄──────────────────────┘
                  │ virtio-vsock
                  ▼
      agent: the machine's init (cmd/runner-guest)
@@ -30,28 +30,41 @@ host with /dev/kvm                                      tunnel-facing, unprivile
 
 | | holds | reachable from |
 |---|---|---|
-| **launcher** (`serve-runner-launcher`) | root, `/dev/kvm`, the host's network | a unix socket, made for the machines' uid alone |
+| **launcher** (`serve-runner-launcher`) | `/dev/kvm`, `/dev/net/tun`, and capabilities that reach no further than its own container | a unix socket, made for the orchestrators' uid alone |
 | **orchestrator** (`serve-runner-orchestrator`) | nothing | the tunnel |
-| **agent** (`runner-guest`) | the machine it is init of | its machine's vsock, which only the host reaches |
+| **agent** (`runner-guest`) | the machine it is init of | its machine's vsock, which only its orchestrator reaches |
 
 Starting a microVM is two jobs. One is deciding what it is — its disks, its
-kernel, its task — which needs no privilege. The other is giving it a process
-with a way to the hardware and a tap plugged into a bridge, which only
-something privileged on the host can do. So the part that can be reached from
-outside decides, and holds nothing; the part that holds privilege is reached by
-nothing but the orchestrators, through a socket.
+kernel, its task. The other is giving it a process with a way to the hardware
+and a tap plugged into a bridge. The part that can be reached from outside
+does the first, and never runs a machine itself; the launcher does the second,
+and is reached by nothing but the orchestrators, through a socket.
 
-Machines are the host's, not the orchestrator's: the launcher runs with the
-host's pid namespace and cgroups, and the jailer puts each firecracker into a
-cgroup of its own, so an orchestrator redeployed — which happens on every push —
-leaves every machine running. The next orchestrator takes them back.
+**Nothing of the runner's holds privilege on the host.** The launcher is an
+ordinary container, given `/dev/kvm`, `/dev/net/tun` and a handful of
+capabilities, none of which reach past the container: it has none of the
+host's namespaces, and cannot see, signal or configure anything of the host's.
+The machines' bridges, taps and firewall live in the container's own network
+namespace, and their traffic leaves through docker's, as any container's does.
 
-The launcher writes none of this down, so it can be restarted or replaced too.
-Which machines there are it reads off their directories, and which of them run
-off the cgroups the jailer made for them, which are named after them. Where a
-jailed firecracker runs would not say: the jailer makes its machine's directory
-the root of a mount namespace of its own, and from outside that the process's
-working directory reads as `/`.
+**Every machine runs as a user of its own**: a uid out of
+`RUNNER_MACHINE_FIRST_UID` and the `RUNNER_MACHINE_UIDS` after it, a range
+nothing else uses, and a group of the same number. That user owns the
+machine's directory, the disk it writes and its taps, and nothing of any other
+machine's; its firecracker runs under firecracker's own seccomp filters, with
+none of the launcher's environment, and nothing it sends from the launcher's
+own address goes anywhere. A machine whose firecracker were ever broken into
+would hold what it held already, and the container around it besides.
+
+Machines are the launcher's processes, and end with its container. An
+orchestrator redeployed — which happens on every push — leaves every machine
+running, and the next orchestrator takes them back; a launcher recreated ends
+them, and their orchestrators start them again once it is back.
+
+The launcher writes none of this down. Which machines there are it reads off
+their directories, who each runs as off who owns its directory, and which of
+them run off the processes running as those users. Who a process runs as is
+the kernel's to say, and nothing the process can change about itself.
 
 ## The state directory
 
@@ -66,15 +79,26 @@ by its name. `infrastructure/runner/firecracker/layout` is where the two agree.
   images/<digest>/rootfs.squashfs      an image's root, read only, shared by every machine running it
   nodes/<orchestrator>/networks.json   which address on which network is whose
   nodes/<orchestrator>/machines/<id>/  a machine's record, scratch disk and output
-  j/firecracker/<id>/root/             a machine's own directory: its chroot
+  j/firecracker/<id>/root/             a machine's own directory, where it runs
   launcher.sock                        where the launcher takes orders
 ```
 
-The directory itself, `j/` and the socket are root's; `boot/`, `images/` and
-`nodes/` are made for whoever machines run as. So an orchestrator can make what
-its machines boot from, and cannot touch where the launcher keeps them. Paths
-are short on purpose: a unix socket's path is at most 108 bytes, and a machine's
-API socket lives several directories down.
+| path | whose | mode |
+|---|---|---|
+| the directory itself, `j/`, `j/firecracker/`, `j/firecracker/<id>/` | the launcher's | `0711`: gone through by everybody, listed by nobody |
+| `boot/`, `images/`, `nodes/` | the orchestrators', and their group's | `0750` |
+| `j/firecracker/<id>/root/` | the machine's user, and the orchestrators' group | `0750` |
+| `j/firecracker/<id>/root/run/` | the same | `2770`: what firecracker makes there, its sockets, is the group's to open |
+| `launcher.sock` | the orchestrators' | `0660` |
+
+So an orchestrator can make what its machines boot from, and cannot touch
+where the launcher keeps them; and a machine reaches nothing but its own
+directory, where the launcher links what it boots from. The kernel, the
+initramfs and an image's root are everybody's to read, since every machine
+reads them and none of them is given them; the scratch disk is its machine's
+alone, `0600`, for as long as it runs. Paths are short on purpose: a unix
+socket's path is at most 108 bytes, and a machine's API socket lives several
+directories down.
 
 ## A machine's life
 
@@ -85,12 +109,13 @@ laid over the image's. It makes a scratch disk for a task that may write, and a
 record. It boots nothing.
 
 **Start** hands the machine an address on each of its networks, and asks the
-launcher for a process: the launcher makes its taps, plugs them into their
-bridges, links the kernel, the initramfs and the disks into the machine's
-directory, and starts firecracker through the jailer. The orchestrator then
-configures firecracker over its API socket with the SDK (size, kernel, disks,
-network devices, vsock) and starts the machine. Once the agent answers, it is
-told what it is, and told to run the task.
+launcher for a process: the launcher gives the machine a user of its own, links
+the kernel, the initramfs and the disks into the machine's directory, starts
+firecracker as that user, and makes its taps for that user to open, plugged
+into their bridges. The orchestrator then configures firecracker over its API
+socket with the SDK (size, kernel, disks, network devices, vsock) and starts
+the machine. Once the agent answers, it is told what it is, and told to run the
+task.
 
 **The keeper.** Docker watched its containers itself; a microVM has nobody but
 the orchestrator. For each running machine a keeper follows what the task
@@ -188,24 +213,32 @@ image it holds.
 |---|---|---|
 | `none` | none | nothing; no port can be exposed |
 | `isolated` | `runner-isolated`, or its stack's `runner-stack-<slug>` | its own network, and nothing else |
-| `public` | the above and `runner-public`, routed through | the internet as well, masqueraded as the host |
+| `public` | the above and `runner-public`, routed through | the internet as well, masqueraded as the launcher |
 
-Each network is a bridge on the host with a /24 of its own out of
-`RUNNER_NETWORK_POOL`, named after its orchestrator and itself, and carrying
+Each network is a bridge in the launcher's container with a /24 of its own out
+of `RUNNER_NETWORK_POOL`, named after its orchestrator and itself, and carrying
 what it is for in its alias: the kernel is the only record of it, which is what
 lets the launcher keep no state. Addresses on it are handed out by the
 orchestrator that owns it. A machine gets a MAC that carries its address.
 
 The firewall is rebuilt from the networks as they are, in chains of the
-runner's own:
+runner's own, in the container's own network namespace:
 
-- **forward**: established traffic, a network's own traffic, and a public
-  network's traffic leaving the pool are accepted; everything else from or to
-  the pool is dropped. On a Docker host the chain is jumped to from
-  `DOCKER-USER`, since Docker drops forwarded traffic its own rules do not let
-  through.
-- **input**: nothing a machine starts reaches the host.
-- **postrouting**: a public network is masqueraded as the host.
+- **forward**: established traffic and a network's own traffic are accepted. A
+  public network's traffic is accepted to the internet, and to **nothing
+  private or local**: 10/8, 100.64/10, 127/8, 169.254/16 — which a cloud's
+  metadata service is on — 172.16/12 and 192.168/16 are dropped first, which
+  keeps a machine off the host, its LAN, a cloud's private networks and the
+  containers beside the launcher's. Everything else from or to the pool is
+  dropped. Where a `DOCKER-USER` chain is there to go ahead of Docker's own
+  rules, the chain is jumped to from it; in the launcher's container there is
+  none, and it is jumped to from `FORWARD`.
+- **input**: nothing a machine starts reaches the launcher.
+- **output**: nothing a machine's own process sends goes anywhere. What a
+  machine says goes through its taps; a firecracker making connections of its
+  own is one that has been broken into.
+- **postrouting**: a public network is masqueraded as the launcher, and docker
+  masquerades the launcher as the host, as it does any container.
 
 Machines on the public network do not reach each other at all — its bridge
 ports are isolated — since all a public network gives a machine is the way out.
@@ -219,8 +252,10 @@ which the orchestrator rewrites on every member whenever one comes or goes.
 - Exposed ports are reached through the agent, never published on the host.
   `RUNNER_DOCKER_ADVERTISE_HOST` is Docker's alone.
 - Memory is a machine's size, so a task cannot use more than it was given even
-  where the host has no memory controller; CPU is whole vCPUs, with the share a
-  task asked for enforced by the jailer's `cpu.max`.
+  where the host has no memory controller. CPU is whole vCPUs, and a share of a
+  CPU is a whole one: the most of the host's a machine keeps busy is how many
+  it has. What every machine together may use is the launcher's container's,
+  capped where it is deployed.
 - A machine that exited is let go at once; its record, disk and output remain
   until it is deleted, and starting it again boots it from them.
 - The task is not PID 1 of anything: the agent is. A task that ignores TERM as
@@ -229,14 +264,26 @@ which the orchestrator rewrites on every member whenever one comes or goes.
 ## Running it
 
 The launcher needs a host with `/dev/kvm`; a cloud VPS without nested
-virtualization has none. Its image carries firecracker, the jailer and the
-kernel for its platform. The state directory has to be on one filesystem that
-is not mounted `nodev` — the jailer makes each machine's devices inside its
-directory — which rules out a `/tmp` of that kind; the launcher refuses one.
+virtualization has none. Its image carries firecracker and the kernel for its
+platform, and it runs as root inside its container — root of a container that
+has none of the host's namespaces, and only these capabilities:
 
-For development, `RUNNER_JAILER_BINARY=` (empty) starts firecracker unjailed,
-as whoever the launcher runs as. That is for development and tests and nothing
-else. The integration tests boot real machines that way, with no root:
+| capability | for |
+|---|---|
+| `SETUID`, `SETGID` | starting a machine's firecracker as the machine's user |
+| `CHOWN`, `FOWNER`, `DAC_OVERRIDE` | giving a machine its directory and its disk, and linking what it boots from |
+| `KILL` | ending a machine |
+| `NET_ADMIN` | the machines' bridges, taps and firewall, in the container's own network namespace |
+
+`net.ipv4.ip_forward` is set for the container, which a container cannot do
+for itself, and IPv6 is off on every device it makes. `/dev/kvm` and
+`/dev/net/tun` are passed in as devices; a machine's user is given whatever
+group they are open to. The state directory has to be on one filesystem, since
+what a machine boots from is hard-linked into its directory.
+
+`RUNNER_MACHINE_UIDS=0` runs every machine as whoever the launcher runs as,
+which is for development and tests and nothing else. The integration tests boot
+real machines that way, with no root:
 
 ```sh
 RUNNER_TEST_KERNEL=/path/to/vmlinux go test -tags firecracker ./infrastructure/runner/firecracker/...

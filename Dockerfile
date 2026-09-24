@@ -18,7 +18,7 @@ FROM base AS build-guest
 RUN go build -v -o /opt/guest/runner-guest ./cmd/runner-guest
 
 # what a launcher starts microVMs with, pinned, for the platform the image is
-# built for: firecracker, its jailer, and the kernel machines boot.
+# built for: firecracker, and the kernel machines boot.
 FROM alpine:latest AS firecracker
 ARG TARGETARCH
 ARG FIRECRACKER_VERSION=v1.17.0
@@ -34,8 +34,7 @@ RUN apk add --no-cache curl tar \
     && curl -fsSL "${release}/firecracker-${FIRECRACKER_VERSION}-${arch}.tgz" | tar -xz -C /tmp \
     && mkdir -p /opt/runner/bin \
     && cp "/tmp/release-${FIRECRACKER_VERSION}-${arch}/firecracker-${FIRECRACKER_VERSION}-${arch}" /opt/runner/bin/firecracker \
-    && cp "/tmp/release-${FIRECRACKER_VERSION}-${arch}/jailer-${FIRECRACKER_VERSION}-${arch}" /opt/runner/bin/jailer \
-    && chmod 0755 /opt/runner/bin/firecracker /opt/runner/bin/jailer \
+    && chmod 0755 /opt/runner/bin/firecracker \
     && curl -fsSLo /opt/runner/vmlinux "https://s3.amazonaws.com/spec.ccfc.min/firecracker-ci/${KERNEL_CI_VERSION}/${arch}/vmlinux-${KERNEL_VERSION}"
 
 FROM base AS develop
@@ -106,9 +105,9 @@ ENV RUNNER_ORCHESTRATOR_NAME=runner-orchestrator-01
 EXPOSE 80
 CMD ["serve-runner-orchestrator", "--port=80"]
 
-# runner launcher service: the one part of the runner that is privileged. It
-# runs as root on purpose, and starts every machine's firecracker as the
-# unprivileged user through the jailer.
+# runner launcher service. It runs as root inside its own container, which is
+# given no privilege on the host, and starts every machine's firecracker as a
+# user of that machine's own.
 FROM develop AS develop-runner-launcher
 RUN apk add --no-cache iptables
 COPY --from=firecracker /opt/runner/bin/ /usr/local/bin/

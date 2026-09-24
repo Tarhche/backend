@@ -80,9 +80,11 @@ func TestRules(t *testing.T) {
 		{owner: "runner-orchestrator-01", name: "runner-isolated", subnet: cidr(t, "10.200.0.0/24")},
 	}
 
+	machines := users{first: 1000000000, count: 65536}
+
 	specs := func(chain string) []string {
 		var result []string
-		for _, r := range rules(pool, networks) {
+		for _, r := range rules(pool, networks, machines) {
 			if r.chain == chain {
 				result = append(result, strings.Join(r.spec, " "))
 			}
@@ -108,6 +110,14 @@ func TestRules(t *testing.T) {
 		}, specs(forwardChain))
 	})
 
+	t.Run("nothing a machine's own process sends goes anywhere", func(t *testing.T) {
+		assert.Equal(t, []string{"-m owner --uid-owner 1000000000-1000065535 -j DROP"}, specs(outputChain))
+
+		for _, r := range rules(pool, networks, users{}) {
+			assert.NotEqual(t, outputChain, r.chain, "machines that run as the launcher itself are not told apart from it")
+		}
+	})
+
 	t.Run("only a public network is masqueraded", func(t *testing.T) {
 		assert.Equal(t, []string{"-s 10.200.1.0/24 ! -d 10.200.0.0/16 -j MASQUERADE"}, specs(postroutingChain))
 	})
@@ -122,5 +132,14 @@ func TestRules(t *testing.T) {
 	t.Run("forwarded traffic goes through docker's own chain for rules like these, when docker is there", func(t *testing.T) {
 		assert.Equal(t, "DOCKER-USER", jumps(true)[0].from)
 		assert.Equal(t, "FORWARD", jumps(false)[0].from)
+	})
+
+	t.Run("every chain of the runner's is jumped to", func(t *testing.T) {
+		var to []string
+		for _, j := range jumps(false) {
+			to = append(to, j.to)
+		}
+
+		assert.ElementsMatch(t, []string{forwardChain, inputChain, outputChain, postroutingChain}, to)
 	})
 }

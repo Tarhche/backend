@@ -34,27 +34,48 @@ func spec() machine.Spec {
 }
 
 func TestUseCase_Execute(t *testing.T) {
-	t.Run("a machine is plugged in before its process starts", func(t *testing.T) {
+	t.Run("a machine's taps are made for the user its process runs as", func(t *testing.T) {
 		var (
 			vmm     machineMock.MockVMM
 			network machineMock.MockHostNetwork
 		)
 
 		taps := []machine.AttachedTap{{Network: "runner-isolated", Device: "rnt01234567890"}}
-		launched := machine.Machine{ID: "0123456789abcdef", Running: true}
 
-		network.On("Plug", mock.Anything, "runner-orchestrator-01", "0123456789abcdef", spec().Taps).Once().Return(taps, nil)
-		vmm.On("Spawn", mock.Anything, spec(), taps).Once().Return(launched, nil)
+		vmm.On("List", mock.Anything).Once().Return([]machine.Machine{}, nil)
+		vmm.On("Spawn", mock.Anything, spec()).Once().Return(machine.Machine{ID: "0123456789abcdef", Running: true, User: 1000000007}, nil)
+		network.On("Plug", mock.Anything, "runner-orchestrator-01", "0123456789abcdef", 1000000007, spec().Taps).Once().Return(taps, nil)
 		defer network.AssertExpectations(t)
 		defer vmm.AssertExpectations(t)
 
 		response, err := NewUseCase(&vmm, &network, accepts(), Limits{}).Execute(context.Background(), &Request{Spec: spec()})
 
 		require.NoError(t, err)
-		assert.Equal(t, launched, response.Machine)
+		assert.Equal(t, machine.Machine{ID: "0123456789abcdef", Running: true, User: 1000000007, Taps: taps}, response.Machine)
 	})
 
-	t.Run("a machine that does not start is unplugged again", func(t *testing.T) {
+	t.Run("a machine that cannot be plugged in is not handed over", func(t *testing.T) {
+		var (
+			vmm     machineMock.MockVMM
+			network machineMock.MockHostNetwork
+		)
+
+		failed := errors.New("no such network")
+
+		vmm.On("List", mock.Anything).Once().Return([]machine.Machine{}, nil)
+		vmm.On("Spawn", mock.Anything, mock.Anything).Once().Return(machine.Machine{ID: "0123456789abcdef", Running: true, User: 1000000007}, nil)
+		network.On("Plug", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Once().Return([]machine.AttachedTap{}, failed)
+		network.On("Unplug", mock.Anything, "0123456789abcdef").Once().Return(nil)
+		vmm.On("Kill", mock.Anything, "0123456789abcdef").Once().Return(nil)
+		defer network.AssertExpectations(t)
+		defer vmm.AssertExpectations(t)
+
+		_, err := NewUseCase(&vmm, &network, accepts(), Limits{}).Execute(context.Background(), &Request{Spec: spec()})
+
+		assert.ErrorIs(t, err, failed)
+	})
+
+	t.Run("a machine that does not start is not plugged in", func(t *testing.T) {
 		var (
 			vmm     machineMock.MockVMM
 			network machineMock.MockHostNetwork
@@ -62,14 +83,31 @@ func TestUseCase_Execute(t *testing.T) {
 
 		failed := errors.New("no /dev/kvm")
 
-		network.On("Plug", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Once().Return([]machine.AttachedTap{}, nil)
-		vmm.On("Spawn", mock.Anything, mock.Anything, mock.Anything).Once().Return(machine.Machine{}, failed)
-		network.On("Unplug", mock.Anything, "0123456789abcdef").Once().Return(nil)
-		defer network.AssertExpectations(t)
+		vmm.On("List", mock.Anything).Once().Return([]machine.Machine{}, nil)
+		vmm.On("Spawn", mock.Anything, mock.Anything).Once().Return(machine.Machine{}, failed)
 
 		_, err := NewUseCase(&vmm, &network, accepts(), Limits{}).Execute(context.Background(), &Request{Spec: spec()})
 
 		assert.ErrorIs(t, err, failed)
+		network.AssertNotCalled(t, "Plug", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+	})
+
+	t.Run("a machine asked for again while it runs is the one running, taps and all", func(t *testing.T) {
+		var (
+			vmm     machineMock.MockVMM
+			network machineMock.MockHostNetwork
+		)
+
+		running := machine.Machine{ID: "0123456789abcdef", Owner: "runner-orchestrator-01", Running: true, PID: 42}
+
+		vmm.On("List", mock.Anything).Once().Return([]machine.Machine{running}, nil)
+
+		response, err := NewUseCase(&vmm, &network, accepts(), Limits{}).Execute(context.Background(), &Request{Spec: spec()})
+
+		require.NoError(t, err)
+		assert.Equal(t, running, response.Machine)
+		vmm.AssertNotCalled(t, "Spawn", mock.Anything, mock.Anything)
+		network.AssertNotCalled(t, "Plug", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 	})
 
 	t.Run("more than the host can spare is refused", func(t *testing.T) {
@@ -86,7 +124,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		require.NoError(t, err)
 		assert.Equal(t, domain.ValidationErrors{"vcpus": "too_many", "memory_mib": "too_many"}, response.ValidationErrors)
-		network.AssertNotCalled(t, "Plug", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+		vmm.AssertNotCalled(t, "Spawn", mock.Anything, mock.Anything)
 	})
 }
 
@@ -123,10 +161,10 @@ func TestRequest_Validate(t *testing.T) {
 		}, validationErrors)
 	})
 
-	t.Run("a machine may not use more CPU than it has", func(t *testing.T) {
+	t.Run("a disk has to say where it is", func(t *testing.T) {
 		asked := spec()
-		asked.CPUQuota = 1.5
+		asked.Files.Drives = []machine.Drive{{Path: "/var/lib/runner/images/rootfs.squashfs", ReadOnly: true}, {}}
 
-		assert.Equal(t, "invalid_value", (&Request{Spec: asked}).Validate()["cpu_quota"])
+		assert.Equal(t, "invalid_value", (&Request{Spec: asked}).Validate()["files.drives"])
 	})
 }

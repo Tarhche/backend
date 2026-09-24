@@ -3,16 +3,18 @@ package hostnet
 import (
 	"net"
 	"slices"
+	"strconv"
 	"strings"
 )
 
 // The chains the runner keeps its rules in. They are its own, flushed and
 // written again whenever a network comes or goes, and jumped to from the top
-// of the chains the kernel runs, so nothing else on the host has to be touched
-// to change them.
+// of the chains the kernel runs, so nothing else has to be touched to change
+// them.
 const (
 	forwardChain     = "RUNNER-FORWARD"
 	inputChain       = "RUNNER-INPUT"
+	outputChain      = "RUNNER-OUTPUT"
 	postroutingChain = "RUNNER-POSTROUTING"
 
 	// dockerUserChain is where docker lets rules of its own go ahead of its
@@ -39,8 +41,8 @@ type rule struct {
 // deniedDestinations are what no machine reaches out to, whatever network it
 // is on: everything private or local. That is the host's own networks, its
 // LAN, a cloud's private networks and its metadata service, and the networks
-// of the containers beside the runner's. The pool is in one of them, and what
-// a network's machines say to each other is let through before these are
+// of the containers beside the launcher's. The pool is in one of them, and
+// what a network's machines say to each other is let through before these are
 // reached. The pool is IPv4 alone, and IPv6 is off on every runner device, so
 // there is nothing of IPv6 to deny.
 var deniedDestinations = []string{
@@ -52,19 +54,27 @@ var deniedDestinations = []string{
 	"192.168.0.0/16", // private
 }
 
+// users are the users machines run as: the first of them, and how many.
+type users struct {
+	first int
+	count int
+}
+
 // rules are what the firewall says about the pool and the networks in it.
 //
 // Every network is its own subnet of the pool. Machines on one reach each
 // other there, and nothing else inside the pool; a public network also reaches
-// out of the pool to the internet, masqueraded as the host, and to nothing
-// private or local on the way. Machines on a public network are
-// kept from each other rather than let through: all a public network gives a
-// machine is the way out. And nothing of the pool reaches the host itself,
-// which answers only what the machines started.
+// out of the pool to the internet, masqueraded as the launcher, and to nothing
+// private or local on the way. Machines on a public network are kept from each
+// other rather than let through: all a public network gives a machine is the
+// way out. Nothing of the pool reaches the launcher itself, which answers only
+// what the machines started. And a machine's own process sends nothing at
+// all: what a machine says goes through its taps, never out of the launcher's
+// own address.
 //
 // Traffic that is neither from the pool nor to it is left for the rest of the
-// host's rules to decide.
-func rules(pool *net.IPNet, networks []networkState) []rule {
+// rules to decide.
+func rules(pool *net.IPNet, networks []networkState, machines users) []rule {
 	poolCIDR := pool.String()
 
 	sorted := slices.Clone(networks)
@@ -118,7 +128,16 @@ func rules(pool *net.IPNet, networks []networkState) []rule {
 		{table: "filter", chain: inputChain, spec: []string{"-i", bridgePrefix + "+", "-j", "DROP"}},
 	}
 
-	return append(append(forward, input...), postrouting...)
+	var output []rule
+	if machines.count > 0 {
+		owners := strconv.Itoa(machines.first) + "-" + strconv.Itoa(machines.first+machines.count-1)
+
+		output = append(output,
+			rule{table: "filter", chain: outputChain, spec: []string{"-m", "owner", "--uid-owner", owners, "-j", "DROP"}},
+		)
+	}
+
+	return slices.Concat(forward, input, output, postrouting)
 }
 
 // jump is where one of the runner's chains is jumped to from.
@@ -130,7 +149,8 @@ type jump struct {
 
 // jumps are where the runner's chains are jumped to from. Forwarded traffic
 // goes through docker's own chain for rules like these when there is one,
-// since docker drops what its own rules do not let through.
+// since docker drops what its own rules do not let through; in the launcher's
+// own container there is none, and the kernel's chain is the one.
 func jumps(dockerUser bool) []jump {
 	forwardFrom := "FORWARD"
 	if dockerUser {
@@ -140,6 +160,7 @@ func jumps(dockerUser bool) []jump {
 	return []jump{
 		{table: "filter", from: forwardFrom, to: forwardChain},
 		{table: "filter", from: "INPUT", to: inputChain},
+		{table: "filter", from: "OUTPUT", to: outputChain},
 		{table: "nat", from: "POSTROUTING", to: postroutingChain},
 	}
 }

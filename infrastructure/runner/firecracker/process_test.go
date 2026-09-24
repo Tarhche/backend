@@ -90,26 +90,22 @@ func TestResolveProcess(t *testing.T) {
 }
 
 func TestResources(t *testing.T) {
-	t.Run("a share of a CPU is a whole one used that share of the time", func(t *testing.T) {
-		vcpus, quota, _ := resources(task.ResourceLimits{Cpu: 0.5})
-
+	t.Run("a share of a CPU is a whole one, since a machine's CPUs are whole", func(t *testing.T) {
+		vcpus, _ := resources(task.ResourceLimits{Cpu: 0.5})
 		assert.Equal(t, 1, vcpus)
-		assert.Equal(t, 0.5, quota)
 
-		vcpus, quota, _ = resources(task.ResourceLimits{Cpu: 1.5})
-
+		vcpus, _ = resources(task.ResourceLimits{Cpu: 1.5})
 		assert.Equal(t, 2, vcpus)
-		assert.Equal(t, 1.5, quota)
 	})
 
 	t.Run("memory is in bytes, and a machine is never given less than it boots in", func(t *testing.T) {
-		_, _, memory := resources(task.ResourceLimits{Memory: 200 << 20})
+		_, memory := resources(task.ResourceLimits{Memory: 200 << 20})
 		assert.Equal(t, 200, memory)
 
-		_, _, memory = resources(task.ResourceLimits{Memory: 16 << 20})
+		_, memory = resources(task.ResourceLimits{Memory: 16 << 20})
 		assert.Equal(t, minimumMemoryMiB, memory)
 
-		_, _, memory = resources(task.ResourceLimits{})
+		_, memory = resources(task.ResourceLimits{})
 		assert.Equal(t, defaultMemoryMiB, memory)
 	})
 

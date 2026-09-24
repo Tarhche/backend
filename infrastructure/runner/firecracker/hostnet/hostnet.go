@@ -18,20 +18,22 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/runner/machine"
 )
 
-// Config is what the host's networks are made of.
+// Config is what machines' networks are made of.
 type Config struct {
 	// Pool is where every network's /24 comes from. It must be the runner's
-	// alone: the firewall keeps it apart from the rest of the host.
+	// alone: the firewall keeps it apart from everything else.
 	Pool *net.IPNet
 
-	// UID and GID own the machines' taps, which is what lets a firecracker
-	// running as them open one without being privileged.
-	UID uint32
-	GID uint32
+	// FirstUID and UIDs are the users machines run as. Nothing they send
+	// from the launcher's own address goes anywhere.
+	FirstUID int
+	UIDs     int
 }
 
 // HostNetwork makes the bridges and taps machines are plugged into, and the
-// firewall that says what may reach what.
+// firewall that says what may reach what. It does all of it in the network
+// namespace the launcher runs in, which is its container's own: the host's
+// devices and firewall are never touched.
 type HostNetwork struct {
 	config Config
 	logger *slog.Logger
@@ -43,13 +45,13 @@ type HostNetwork struct {
 
 var _ machine.HostNetwork = &HostNetwork{}
 
-// New prepares the host for the runner's networks: forwarding on, and the
-// firewall as the networks already there say it should be.
+// New prepares for the runner's networks: forwarding on, and the firewall as
+// the networks already there say it should be.
 func New(config Config, logger *slog.Logger) (*HostNetwork, error) {
 	h := &HostNetwork{config: config, logger: logger}
 
-	if err := os.WriteFile("/proc/sys/net/ipv4/ip_forward", []byte("1"), 0o644); err != nil {
-		return nil, fmt.Errorf("failed to let the host forward the machines' traffic: %w", err)
+	if err := forwarding(); err != nil {
+		return nil, err
 	}
 
 	networks, err := h.networks()
@@ -180,7 +182,7 @@ func (h *HostNetwork) RemoveNetwork(ctx context.Context, owner string, name stri
 	return h.applyFirewall(networks)
 }
 
-func (h *HostNetwork) Plug(ctx context.Context, owner string, id string, taps []machine.Tap) ([]machine.AttachedTap, error) {
+func (h *HostNetwork) Plug(ctx context.Context, owner string, id string, user int, taps []machine.Tap) ([]machine.AttachedTap, error) {
 	h.lock.Lock()
 	defer h.lock.Unlock()
 
@@ -202,12 +204,14 @@ func (h *HostNetwork) Plug(ctx context.Context, owner string, id string, taps []
 			_ = netlink.LinkDel(stale)
 		}
 
+		// a tap is its machine's user's alone to open, which is what lets the
+		// machine's firecracker open it without any privilege at all.
 		created := &netlink.Tuntap{
 			LinkAttrs: netlink.LinkAttrs{Name: device},
 			Mode:      netlink.TUNTAP_MODE_TAP,
 			Flags:     netlink.TUNTAP_NO_PI,
-			Owner:     h.config.UID,
-			Group:     h.config.GID,
+			Owner:     uint32(user),
+			Group:     uint32(user),
 		}
 
 		if err := netlink.LinkAdd(created); err != nil {
@@ -301,12 +305,13 @@ func (h *HostNetwork) networks() ([]networkState, error) {
 func (h *HostNetwork) applyFirewall(networks []networkState) error {
 	ipt, err := iptables.New()
 	if err != nil {
-		return fmt.Errorf("the host's firewall cannot be reached: %w", err)
+		return fmt.Errorf("the firewall cannot be reached: %w", err)
 	}
 
 	for _, chain := range []struct{ table, name string }{
 		{"filter", forwardChain},
 		{"filter", inputChain},
+		{"filter", outputChain},
 		{"nat", postroutingChain},
 	} {
 		if err := ipt.ClearChain(chain.table, chain.name); err != nil {
@@ -314,7 +319,7 @@ func (h *HostNetwork) applyFirewall(networks []networkState) error {
 		}
 	}
 
-	for _, r := range rules(h.config.Pool, networks) {
+	for _, r := range rules(h.config.Pool, networks, users{first: h.config.FirstUID, count: h.config.UIDs}) {
 		if err := ipt.Append(r.table, r.chain, r.spec...); err != nil {
 			return err
 		}
@@ -351,8 +356,26 @@ func toNetwork(n networkState) machine.Network {
 	}
 }
 
+// forwarding makes sure machines' traffic is forwarded. A container is not let
+// change it for itself — its /proc/sys is read only — so a launcher in one
+// has it set for the container, and only has to find it on.
+func forwarding() error {
+	const path = "/proc/sys/net/ipv4/ip_forward"
+
+	if current, err := os.ReadFile(path); err == nil && strings.TrimSpace(string(current)) == "1" {
+		return nil
+	}
+
+	if err := os.WriteFile(path, []byte("1"), 0o644); err != nil {
+		return fmt.Errorf("machines' traffic is not forwarded, and cannot be made to be here: set net.ipv4.ip_forward=1 for the launcher's container: %w", err)
+	}
+
+	return nil
+}
+
 // disableIPv6 keeps a runner device off IPv6, which nothing of the runner's
-// uses and the firewall does not cover.
+// uses and the firewall does not cover. A container cannot do this for itself,
+// and is set to make every device without IPv6 instead.
 func disableIPv6(device string) {
 	_ = os.WriteFile("/proc/sys/net/ipv6/conf/"+device+"/disable_ipv6", []byte("1"), 0o644)
 }

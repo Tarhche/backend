@@ -46,14 +46,18 @@ const (
 	defaultRunnerNameservers    = "1.1.1.1,8.8.8.8"
 	defaultRunnerNetworkPool    = "10.200.0.0/16"
 
-	// the uid and gid the app runs as in its image, so a machine's
-	// firecracker runs as the orchestrator that made it does.
-	defaultRunnerMachineUID = 10000
-	defaultRunnerMachineGID = 10001
+	// the uid and gid the app runs as in its image, which is who the
+	// orchestrators are.
+	defaultRunnerOrchestratorUID = 10000
+	defaultRunnerOrchestratorGID = 10001
+
+	// the users machines run as: a range well clear of any a host hands out,
+	// and still under the 2^31 some tools stumble at.
+	defaultRunnerMachineFirstUID = 1_000_000_000
+	defaultRunnerMachineUIDs     = 65536
 
 	defaultRunnerLauncherHealthPort   = 8050
 	defaultRunnerFirecrackerBinary    = "/usr/local/bin/firecracker"
-	defaultRunnerJailerBinary         = "/usr/local/bin/jailer"
 	defaultRunnerLauncherMaxVCPUs     = 2
 	defaultRunnerLauncherMaxMemoryMiB = 2048
 )
@@ -147,10 +151,11 @@ type RunnerOrchestrator struct {
 	GuestBinary    string `usage:"The agent every machine boots with as its init." env:"RUNNER_GUEST_BINARY" long:"guest-binary"`
 	Nameservers    string `usage:"Nameservers a machine that routes out is given, separated by commas." env:"RUNNER_NAMESERVERS" long:"nameservers"`
 
-	// MachineUID and MachineGID are who a machine's firecracker runs as.
-	// What the orchestrator makes for a machine has to be theirs.
-	MachineUID int `usage:"Who a machine's firecracker runs as, and whose what it boots from has to be." env:"RUNNER_MACHINE_UID" long:"machine-uid"`
-	MachineGID int `usage:"The group a machine's firecracker runs as." env:"RUNNER_MACHINE_GID" long:"machine-gid"`
+	// OrchestratorUID and OrchestratorGID are who the orchestrators run as.
+	// What an orchestrator makes while it runs as root is made theirs, as the
+	// launcher expects it to be.
+	OrchestratorUID int `usage:"Who the orchestrators run as. What an orchestrator makes while it runs as root is made theirs." env:"RUNNER_ORCHESTRATOR_UID" long:"orchestrator-uid"`
+	OrchestratorGID int `usage:"The orchestrators' group." env:"RUNNER_ORCHESTRATOR_GID" long:"orchestrator-gid"`
 
 	// PublicKey verifies the tokens the blog signs. An orchestrator never mints one,
 	// so it is given the public half and nothing else.
@@ -183,8 +188,8 @@ func NewRunnerOrchestrator() *RunnerOrchestrator {
 		LauncherSocket:             defaultRunnerLauncherSocket,
 		GuestBinary:                defaultRunnerGuestBinary,
 		Nameservers:                defaultRunnerNameservers,
-		MachineUID:                 defaultRunnerMachineUID,
-		MachineGID:                 defaultRunnerMachineGID,
+		OrchestratorUID:            defaultRunnerOrchestratorUID,
+		OrchestratorGID:            defaultRunnerOrchestratorGID,
 		TunnelMinConnections:       defaultRunnerTunnelMinConnections,
 		TunnelMaxConnections:       defaultRunnerTunnelMaxConnections,
 		TunnelMaxIdleTime:          defaultRunnerTunnelMaxIdleTime,
@@ -231,8 +236,8 @@ func (c *RunnerOrchestrator) NameserverList() []string {
 // RunnerLauncher holds the configuration of the serve-runner-launcher command.
 type RunnerLauncher struct {
 	// Socket is where the launcher takes orders. Whoever can open it can start
-	// machines, so it is made for MachineUID and MachineGID alone.
-	Socket string `usage:"Unix socket the launcher takes orders on. It is made for the machines' uid and gid alone." env:"RUNNER_LAUNCHER_SOCKET" long:"socket"`
+	// machines, so it is made for the orchestrators alone.
+	Socket string `usage:"Unix socket the launcher takes orders on. It is made for the orchestrators' uid and gid alone." env:"RUNNER_LAUNCHER_SOCKET" long:"socket"`
 
 	HealthPort int `usage:"Port on 127.0.0.1 the launcher answers its healthcheck on." env:"RUNNER_LAUNCHER_HEALTH_PORT" long:"health-port"`
 
@@ -243,10 +248,17 @@ type RunnerLauncher struct {
 	Kernel string `usage:"Kernel machines boot, installed into the state directory when the launcher starts." env:"RUNNER_KERNEL" long:"kernel"`
 
 	FirecrackerBinary string `usage:"The firecracker a machine runs in." env:"RUNNER_FIRECRACKER_BINARY" long:"firecracker-binary"`
-	JailerBinary      string `usage:"The jailer a machine's firecracker is started through. Empty starts it unjailed, which is for development and nothing else." env:"RUNNER_JAILER_BINARY" long:"jailer-binary"`
 
-	MachineUID int `usage:"Who a machine's firecracker runs as. The socket, the taps and the state directory are made theirs." env:"RUNNER_MACHINE_UID" long:"machine-uid"`
-	MachineGID int `usage:"The group a machine's firecracker runs as." env:"RUNNER_MACHINE_GID" long:"machine-gid"`
+	// OrchestratorUID and OrchestratorGID are who the orchestrators run as.
+	// The socket is theirs, and what they write in the state directory; and
+	// a machine's directory and sockets are open to their group.
+	OrchestratorUID int `usage:"Who the orchestrators run as. The launcher's socket is theirs alone, and so is what they write in the state directory." env:"RUNNER_ORCHESTRATOR_UID" long:"orchestrator-uid"`
+	OrchestratorGID int `usage:"The orchestrators' group, which a machine's directory and sockets are open to." env:"RUNNER_ORCHESTRATOR_GID" long:"orchestrator-gid"`
+
+	// MachineFirstUID and MachineUIDs are the users machines run as: each
+	// machine is given one of its own, and a group of the same number.
+	MachineFirstUID int `usage:"The first of the users machines run as. Each machine runs as one of its own, counting up from this one, with a group of the same number; nothing else may use them." env:"RUNNER_MACHINE_FIRST_UID" long:"machine-first-uid"`
+	MachineUIDs     int `usage:"How many users machines may run as, which is also the most machines the launcher runs at once. Zero runs every machine as the launcher itself, which is for development and nothing else." env:"RUNNER_MACHINE_UIDS" long:"machine-uids"`
 
 	NetworkPool string `usage:"Addresses machines' networks are carved out of, a /24 each. They must be the runner's alone." env:"RUNNER_NETWORK_POOL" long:"network-pool"`
 
@@ -263,9 +275,10 @@ func NewRunnerLauncher() *RunnerLauncher {
 		StateDir:          defaultRunnerStateDir,
 		Kernel:            defaultRunnerKernel,
 		FirecrackerBinary: defaultRunnerFirecrackerBinary,
-		JailerBinary:      defaultRunnerJailerBinary,
-		MachineUID:        defaultRunnerMachineUID,
-		MachineGID:        defaultRunnerMachineGID,
+		OrchestratorUID:   defaultRunnerOrchestratorUID,
+		OrchestratorGID:   defaultRunnerOrchestratorGID,
+		MachineFirstUID:   defaultRunnerMachineFirstUID,
+		MachineUIDs:       defaultRunnerMachineUIDs,
 		NetworkPool:       defaultRunnerNetworkPool,
 		MaxVCPUs:          defaultRunnerLauncherMaxVCPUs,
 		MaxMemoryMiB:      defaultRunnerLauncherMaxMemoryMiB,

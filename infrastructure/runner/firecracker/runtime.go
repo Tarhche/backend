@@ -240,7 +240,7 @@ func (r *Runtime) Create(ctx context.Context, execution *task.Execution) (string
 		return "", trace.RecordError(span, err)
 	}
 
-	vcpus, quota, memoryMiB := resources(execution.ResourceLimits)
+	vcpus, memoryMiB := resources(execution.ResourceLimits)
 
 	rec := record{
 		Execution: *execution,
@@ -248,7 +248,6 @@ func (r *Runtime) Create(ctx context.Context, execution *task.Execution) (string
 		Hostname:  hostnameOf(execution, id),
 		Image:     built.Root,
 		VCPUs:     vcpus,
-		CPUQuota:  quota,
 		MemoryMiB: memoryMiB,
 		Status:    task.StatusCreated,
 		CreatedAt: time.Now().UTC(),
@@ -452,16 +451,17 @@ func (r *Runtime) specOf(rec record) machine.Spec {
 		taps[i] = machine.Tap{Network: leased.Network}
 	}
 
-	drives := []string{rec.Image}
+	// the image is shared by every machine that runs it, and only ever read;
+	// the scratch disk is the machine's own.
+	drives := []machine.Drive{{Path: rec.Image, ReadOnly: true}}
 	if len(rec.Scratch) > 0 {
-		drives = append(drives, rec.Scratch)
+		drives = append(drives, machine.Drive{Path: rec.Scratch})
 	}
 
 	return machine.Spec{
 		ID:        rec.Execution.ID,
 		Owner:     r.config.Owner,
 		VCPUs:     rec.VCPUs,
-		CPUQuota:  rec.CPUQuota,
 		MemoryMiB: rec.MemoryMiB,
 		Taps:      taps,
 		Files:     machine.Files{Kernel: r.config.Kernel, Initrd: r.config.Initrd, Drives: drives},

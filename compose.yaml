@@ -331,22 +331,44 @@ services:
     ports:
       - "8082:31311"
 
-  # the launcher: the one part of the runner that is privileged. It starts
-  # every microVM's firecracker through the jailer and plugs it into the host's
-  # network, so it runs on the host's network, pids and cgroups -- which is also
-  # what leaves the machines running when an orchestrator is restarted.
-  # Nothing reaches it but the orchestrators, through its socket in the state
-  # directory. It needs /dev/kvm.
+  # The launcher starts every microVM's firecracker, each as a user of its
+  # own, and makes the networks the machines are plugged into. It holds no
+  # privilege on the host: it is given /dev/kvm and /dev/net/tun and the few
+  # capabilities it uses, none of which reach past this container, and the
+  # machines' networks are in its own network namespace. Nothing reaches it but
+  # the orchestrators, through its socket in the state directory.
   runner-launcher:
     build:
       context: .
       dockerfile: Dockerfile
       target: develop-runner-launcher
     restart: unless-stopped
-    privileged: true
-    pid: host
-    cgroup: host
-    network_mode: host
+    user: root
+    devices:
+      - /dev/kvm:/dev/kvm
+      - /dev/net/tun:/dev/net/tun
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - KILL
+      - SETUID
+      - SETGID
+      - NET_ADMIN
+    security_opt:
+      - no-new-privileges:true
+    sysctls:
+      net.ipv4.ip_forward: 1
+      net.ipv6.conf.all.disable_ipv6: 1
+      net.ipv6.conf.default.disable_ipv6: 1
+    networks:
+      # machines' traffic leaves through this one, which is the launcher's
+      # alone; the priority makes it the one the default route is on.
+      runner_machines:
+        priority: 1000
+      default: {}
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:8050/health"]
       interval: 10s
@@ -362,11 +384,10 @@ services:
       RUNNER_LAUNCHER_SOCKET: ${RUNNER_STATE_DIR}/launcher.sock
       RUNNER_LAUNCHER_HEALTH_PORT: 8050
       RUNNER_NETWORK_POOL: ${RUNNER_NETWORK_POOL}
-      # on the host's network, the collector is where grafana publishes it.
       OTEL_EXPORTER_OTLP_INSECURE: ${OTEL_EXPORTER_OTLP_INSECURE}
       OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL}
       OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES}
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://127.0.0.1:4318
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
 
   # docker-in-docker, for RUNNER_RUNTIME=docker only:
   #   docker compose --profile docker up
@@ -451,3 +472,7 @@ services:
     environment:
       MONGODB_URI: ${MONGO_SCHEME}://${MONGO_USERNAME}:${MONGO_PASSWORD}@${MONGO_HOST}:${MONGO_PORT}/admin
     command: ["--collector.diagnosticdata", "--collector.dbstats"]
+
+networks:
+  # the launcher's alone, for machines' traffic to leave through.
+  runner_machines: {}

@@ -24,9 +24,10 @@ import (
 
 const serveName string = "serve-runner-launcher"
 
-// ServeCommand runs the launcher: the one part of the runner that holds
-// privilege on the host, and that nothing reaches but the orchestrators, through
-// a unix socket made for them alone.
+// ServeCommand runs the launcher: the part of the runner that starts machines'
+// processes and plugs them into their networks, in a container of its own that
+// holds no privilege on the host. Nothing reaches it but the orchestrators,
+// through a unix socket made for them alone.
 type ServeCommand struct {
 	configs *configs.RunnerLauncher
 	handler http.Handler
@@ -108,7 +109,8 @@ func (c *ServeCommand) Terminate(ctx context.Context) error {
 }
 
 // Run takes orders on the launcher's socket until ctx is done. The machines it
-// started keep running when it stops: they are the host's, not its own.
+// started are its container's, and end with it; their orchestrators start them
+// again once a launcher is back.
 func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 	listener, err := c.listen()
 	if err != nil {
@@ -119,8 +121,8 @@ func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 
 	server := &http.Server{Handler: c.handler, ReadHeaderTimeout: 10 * time.Second}
 
-	// the healthcheck is on loopback, where the host's own healthcheck can
-	// reach it and nothing else can.
+	// the healthcheck is on loopback, where the container's own healthcheck
+	// can reach it and nothing else can.
 	health := &http.Server{
 		Addr:              net.JoinHostPort("127.0.0.1", strconv.Itoa(c.configs.HealthPort)),
 		Handler:           c.health,
@@ -154,9 +156,9 @@ func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 	return console.ExitSuccess
 }
 
-// listen makes the launcher's socket, for the machines' uid and gid alone.
-// Whoever can open it can start machines on this host, so that is all it is
-// open to. A socket left by a launcher before this one is replaced.
+// listen makes the launcher's socket, for the orchestrators' uid and gid
+// alone. Whoever can open it can start machines on this host, so that is all
+// it is open to. A socket left by a launcher before this one is replaced.
 func (c *ServeCommand) listen() (net.Listener, error) {
 	if err := os.Remove(c.configs.Socket); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, err
@@ -173,7 +175,7 @@ func (c *ServeCommand) listen() (net.Listener, error) {
 		return nil, err
 	}
 
-	if err := os.Chown(c.configs.Socket, c.configs.MachineUID, c.configs.MachineGID); err != nil && os.Geteuid() == 0 {
+	if err := os.Chown(c.configs.Socket, c.configs.OrchestratorUID, c.configs.OrchestratorGID); err != nil && os.Geteuid() == 0 {
 		listener.Close()
 
 		return nil, err

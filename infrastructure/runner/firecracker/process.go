@@ -88,21 +88,18 @@ func mergeEnv(base []string, overrides []string) []string {
 	return merged
 }
 
-// resources is what a machine is given for what its task may use. A share of
-// a CPU is a whole CPU used that share of the time, and memory is in bytes.
-func resources(limits task.ResourceLimits) (vcpus int, quota float64, memoryMiB int) {
+// resources is what a machine is given for what its task may use. A machine's
+// CPUs are whole ones, so a share of a CPU is a whole one, and the most of the
+// host's a machine keeps busy is how many it has. Memory is in bytes.
+func resources(limits task.ResourceLimits) (vcpus int, memoryMiB int) {
 	vcpus = max(1, int(math.Ceil(limits.Cpu)))
-
-	if limits.Cpu > 0 {
-		quota = limits.Cpu
-	}
 
 	memoryMiB = defaultMemoryMiB
 	if limits.Memory > 0 {
 		memoryMiB = max(minimumMemoryMiB, int((limits.Memory+mebibyte-1)/mebibyte))
 	}
 
-	return vcpus, quota, memoryMiB
+	return vcpus, memoryMiB
 }
 
 // scratchBytes is how large a task's scratch disk is made.

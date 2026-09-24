@@ -8,10 +8,12 @@
 //	j/…                                machines' own directories, the launcher's alone
 //	launcher.sock                      where the launcher takes orders
 //
-// The state directory itself, j/ and the socket are the launcher's, and root's.
-// Everything an orchestrator writes is under boot/, images/ and nodes/, which
-// are made for whoever machines run as. So an orchestrator can make what its
-// machines boot from, and cannot touch where the launcher keeps them.
+// The state directory itself, j/ and the socket are the launcher's. Everything
+// an orchestrator writes is under boot/, images/ and nodes/, which are the
+// orchestrators' and their group's alone. So an orchestrator can make what its
+// machines boot from, and cannot touch where the launcher keeps them; and a
+// machine, which runs as a user of its own, reaches what it boots from only
+// through what the launcher links into its own directory.
 package layout
 
 import (
@@ -63,9 +65,13 @@ func Machines(stateDir string, owner string) string {
 }
 
 // Prepare lays the state directory out for machines to be made in, and
-// installs the kernel they boot.
+// installs the kernel they boot. uid and gid are the orchestrators'.
+//
+// The state directory is gone through by everybody and listed by nobody: a
+// machine's user passes through it on the way to its own directory and sees
+// nothing on the way.
 func Prepare(stateDir string, kernel string, uid int, gid int) error {
-	if err := os.MkdirAll(stateDir, 0o755); err != nil {
+	if err := os.MkdirAll(stateDir, 0o711); err != nil {
 		return err
 	}
 
@@ -78,15 +84,23 @@ func Prepare(stateDir string, kernel string, uid int, gid int) error {
 		return fmt.Errorf("%s is not a directory", stateDir)
 	}
 
+	if err := os.Chmod(stateDir, 0o711); err != nil {
+		return err
+	}
+
 	for _, dir := range []string{BootDir, ImagesDir, NodesDir} {
 		path := filepath.Join(stateDir, dir)
 
-		if err := os.Mkdir(path, 0o755); err != nil && !errors.Is(err, os.ErrExist) {
+		if err := os.Mkdir(path, 0o750); err != nil && !errors.Is(err, os.ErrExist) {
 			return err
 		}
 
 		if err := os.Chown(path, uid, gid); err != nil {
-			return fmt.Errorf("failed to give %s to whoever machines run as: %w", path, err)
+			return fmt.Errorf("failed to give %s to the orchestrators: %w", path, err)
+		}
+
+		if err := os.Chmod(path, 0o750); err != nil {
+			return err
 		}
 	}
 

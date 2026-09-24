@@ -1,20 +1,52 @@
-# The launcher: the one part of the runner that is privileged. It starts every
-# microVM's firecracker through the jailer and plugs it into the host's network,
-# so it runs on the host's network, pids and cgroups -- which is also what
-# leaves the machines running when an orchestrator is redeployed. Nothing
-# reaches it but the orchestrators on this host, through its socket in
-# /var/lib/runner, which is made for the uid they run as.
+# The launcher starts every microVM's firecracker, each as a user of its own,
+# and makes the networks the machines are plugged into. It holds no privilege
+# on the host: it is an ordinary container, given /dev/kvm and /dev/net/tun and
+# the few capabilities it uses, none of which reach past the container itself.
+# The machines' bridges, taps and firewall are in the container's own network
+# namespace, and their traffic leaves through docker's like any container's;
+# the host's devices and firewall are never touched.
 #
-# It is not a swarm service: it needs /dev/kvm and privileges a swarm service
-# cannot be given, and it belongs to this host rather than to the cluster.
+# Machines are the container's processes, and end with it: redeploying an
+# orchestrator leaves them running, recreating this container does not, and
+# their orchestrators start them again once it is back.
+#
+# Nothing reaches it but the orchestrators on this host, through its socket in
+# /var/lib/runner, which is made for the uid they run as. It is not a swarm
+# service: it needs /dev/kvm, and it belongs to this host rather than to the
+# cluster.
 services:
   runner-launcher:
     image: ${RUNNER_LAUNCHER_IMAGE}
-    privileged: true
-    pid: host
-    cgroup: host
-    network_mode: host
     restart: unless-stopped
+    devices:
+      - /dev/kvm:/dev/kvm
+      - /dev/net/tun:/dev/net/tun
+    # a machine is started as a user of its own (SETUID, SETGID), given what
+    # it uses (CHOWN, FOWNER, DAC_OVERRIDE), ended (KILL) and networked
+    # (NET_ADMIN, over the container's own network namespace alone).
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - KILL
+      - SETUID
+      - SETGID
+      - NET_ADMIN
+    security_opt:
+      - no-new-privileges:true
+    # a container is not let change these for itself.
+    sysctls:
+      net.ipv4.ip_forward: 1
+      net.ipv6.conf.all.disable_ipv6: 1
+      net.ipv6.conf.default.disable_ipv6: 1
+    networks:
+      # machines' traffic leaves through this one, which is the launcher's
+      # alone; the priority makes it the one the default route is on.
+      runner_machines:
+        priority: 1000
+      monitoring: {}
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:8050/health"]
       interval: 10s
@@ -27,6 +59,13 @@ services:
       options:
         max-size: "50m"
         max-file: "3"
+    deploy:
+      resources:
+        # every machine's memory and CPU are the container's, so these are the
+        # most all of them have between them.
+        limits:
+          cpus: ${BACKEND_RUNNER_LAUNCHER_CPUS:-8.0}
+          memory: ${BACKEND_RUNNER_LAUNCHER_MEMORY:-12G}
     volumes:
       - /var/lib/runner:/var/lib/runner
     environment:
@@ -34,7 +73,7 @@ services:
       RUNNER_LAUNCHER_SOCKET: /var/lib/runner/launcher.sock
       RUNNER_LAUNCHER_HEALTH_PORT: "8050"
       # the addresses machines' networks are carved out of, a /24 each. They
-      # must be the runner's alone on this host.
+      # must be the runner's alone.
       RUNNER_NETWORK_POOL: ${BACKEND_RUNNER_NETWORK_POOL:-10.200.0.0/16}
       # the most one machine may have.
       RUNNER_MAX_VCPUS: ${BACKEND_RUNNER_MAX_VCPUS:-2}
@@ -44,3 +83,9 @@ services:
       OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
       OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
+networks:
+  runner_machines:
+    name: runner_machines
+  monitoring:
+    name: monitoring
+    external: true

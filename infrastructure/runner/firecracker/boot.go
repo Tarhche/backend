@@ -49,11 +49,7 @@ func (r *Runtime) boot(ctx context.Context, launched machine.Machine, rec record
 
 	for i, drive := range launched.Files.Drives {
 		id := fmt.Sprintf("drive%d", i)
-		path := drive
-
-		// the image is shared by every machine that runs it, and only ever
-		// read; the scratch disk is the machine's own.
-		readOnly, root := i == 0, false
+		path, readOnly, root := drive.Path, drive.ReadOnly, false
 
 		if _, err := client.PutGuestDriveByID(ctx, id, &models.Drive{DriveID: &id, PathOnHost: &path, IsReadOnly: &readOnly, IsRootDevice: &root}); err != nil {
 			return fmt.Errorf("the machine's disk %d was refused: %w", i, err)

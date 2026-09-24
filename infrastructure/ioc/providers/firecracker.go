@@ -34,8 +34,8 @@ func firecrackerRuntime(orchestratorConfigs *configs.RunnerOrchestrator, logger 
 		Kernel:      kernel,
 		Initrd:      initramfs,
 		Nameservers: orchestratorConfigs.NameserverList(),
-		UID:         orchestratorConfigs.MachineUID,
-		GID:         orchestratorConfigs.MachineGID,
+		UID:         orchestratorConfigs.OrchestratorUID,
+		GID:         orchestratorConfigs.OrchestratorGID,
 	}, launcher.NewClient(orchestratorConfigs.LauncherSocket), logger)
 	if err != nil {
 		return runtime{}, err
