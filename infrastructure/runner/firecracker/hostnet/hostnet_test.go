@@ -91,11 +91,17 @@ func TestRules(t *testing.T) {
 		return result
 	}
 
-	t.Run("machines reach their own network's neighbours, and a public network reaches out", func(t *testing.T) {
+	t.Run("machines reach their own network's neighbours, and a public network reaches out to the internet alone", func(t *testing.T) {
 		assert.Equal(t, []string{
 			"-m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT",
 			"-s 10.200.0.0/24 -d 10.200.0.0/24 -j ACCEPT",
 			"-s 10.200.1.0/24 -d 10.200.1.0/24 -j DROP",
+			"-s 10.200.1.0/24 -d 10.0.0.0/8 -j DROP",
+			"-s 10.200.1.0/24 -d 100.64.0.0/10 -j DROP",
+			"-s 10.200.1.0/24 -d 127.0.0.0/8 -j DROP",
+			"-s 10.200.1.0/24 -d 169.254.0.0/16 -j DROP",
+			"-s 10.200.1.0/24 -d 172.16.0.0/12 -j DROP",
+			"-s 10.200.1.0/24 -d 192.168.0.0/16 -j DROP",
 			"-s 10.200.1.0/24 ! -d 10.200.0.0/16 -j ACCEPT",
 			"-s 10.200.0.0/16 -j DROP",
 			"-d 10.200.0.0/16 -j DROP",

@@ -36,11 +36,28 @@ type rule struct {
 	spec  []string
 }
 
+// deniedDestinations are what no machine reaches out to, whatever network it
+// is on: everything private or local. That is the host's own networks, its
+// LAN, a cloud's private networks and its metadata service, and the networks
+// of the containers beside the runner's. The pool is in one of them, and what
+// a network's machines say to each other is let through before these are
+// reached. The pool is IPv4 alone, and IPv6 is off on every runner device, so
+// there is nothing of IPv6 to deny.
+var deniedDestinations = []string{
+	"10.0.0.0/8",     // private
+	"100.64.0.0/10",  // shared address space, which some clouds keep their own services in
+	"127.0.0.0/8",    // loopback
+	"169.254.0.0/16", // link-local, which a cloud's metadata service is on
+	"172.16.0.0/12",  // private
+	"192.168.0.0/16", // private
+}
+
 // rules are what the firewall says about the pool and the networks in it.
 //
 // Every network is its own subnet of the pool. Machines on one reach each
 // other there, and nothing else inside the pool; a public network also reaches
-// out of the pool, masqueraded as the host. Machines on a public network are
+// out of the pool to the internet, masqueraded as the host, and to nothing
+// private or local on the way. Machines on a public network are
 // kept from each other rather than let through: all a public network gives a
 // machine is the way out. And nothing of the pool reaches the host itself,
 // which answers only what the machines started.
@@ -67,6 +84,15 @@ func rules(pool *net.IPNet, networks []networkState) []rule {
 		if n.masquerade {
 			forward = append(forward,
 				rule{table: "filter", chain: forwardChain, spec: []string{"-s", subnet, "-d", subnet, "-j", "DROP"}},
+			)
+
+			for _, denied := range deniedDestinations {
+				forward = append(forward,
+					rule{table: "filter", chain: forwardChain, spec: []string{"-s", subnet, "-d", denied, "-j", "DROP"}},
+				)
+			}
+
+			forward = append(forward,
 				rule{table: "filter", chain: forwardChain, spec: []string{"-s", subnet, "!", "-d", poolCIDR, "-j", "ACCEPT"}},
 			)
 
