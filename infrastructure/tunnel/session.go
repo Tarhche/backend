@@ -89,6 +89,28 @@ func (s *Session) Done() <-chan struct{} { return s.session.CloseChan() }
 // Close ends the session and everything on it.
 func (s *Session) Close() error { return s.session.Close() }
 
+// closeWhenGone closes the session once its connection has ended.
+//
+// smux tells of a connection that has ended only whoever is waiting for a
+// stream from the other side, and the hub never takes one — it is the one that
+// opens them — so it waits here for one that never comes. Without this, a
+// session whose agent has gone is open until its keepalive gives up on it, and
+// being the emptiest of the agent's sessions, it is the one every stream is
+// picked onto until then. An agent does not open streams; one that does has
+// it closed.
+func (s *Session) closeWhenGone() {
+	for {
+		stream, err := s.session.AcceptStream()
+		if err != nil {
+			s.session.Close()
+
+			return
+		}
+
+		stream.Close()
+	}
+}
+
 // reserve takes one of the session's places, or reports that there were none.
 // It is a compare-and-swap rather than a lock because it is on the path of
 // every client connection, and because the only thing it guards is a number.

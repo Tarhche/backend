@@ -244,6 +244,8 @@ func (i *Hub) streamsPerSession(identity Identity) int {
 // what makes an agent's existence follow its connections rather than anything
 // it has to say.
 func (i *Hub) watch(ctx context.Context, session *Session) {
+	go session.closeWhenGone()
+
 	select {
 	case <-session.Done():
 	case <-i.closed:

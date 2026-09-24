@@ -356,7 +356,7 @@ different one and break the bound.
 |---|---|
 | one session's TCP connection dies | its streams fail the way a TCP connection fails. Sessions beside it carry on. Nothing is migrated — replaying bytes is not possible, so a dead stream stays dead and only new ones are routed elsewhere. |
 | every session of an agent dies | the agent stops existing in the registry. `Dial` reports `ErrNoSuchAgent`. |
-| the agent process stops | same, within a sweep — the hub finds out because the connections went, not because anything said so. |
+| the agent process stops | same, at once — the hub finds out because the connections went, not because anything said so. smux tells of a connection that ended only whoever waits for a stream from the other side, so the hub waits on each session for one the agent never sends. |
 | the hub restarts | every session dies; agents reconnect with jittered backoff. Clients in flight fail. |
 | the agent is unplugged (no FIN) | the keepalive notices within `KeepAliveTimeout` (30 s). This is the one case that takes time. |
 | every session at capacity | `Dial` waits `CapacityWait` (5 s) for the agent to grow, then reports `ErrAtCapacity`. |

@@ -262,6 +262,39 @@ func TestAgentDisconnect(t *testing.T) {
 	assert.Equal(t, "back", roundTrip(t, conn, "back"))
 }
 
+// An agent that has gone is let go at once, rather than when the keepalive
+// notices: until then the hub would go on picking its connections, and every
+// stream it opened on one would fail.
+func TestGoneAgentIsLetGoAtOnce(t *testing.T) {
+	config := testConfig()
+
+	// long enough that nothing but the connections ending can be what tells.
+	config.KeepAliveInterval = 10 * time.Second
+	config.KeepAliveTimeout = 30 * time.Second
+
+	hub := startHub(t, config, AllowAll())
+	address := echoServer(t, "")
+
+	gone := startAgent(t, "agent-a", []string{hub.address}, config, NewServiceTargets(map[string]string{"echo": address}))
+	waitFor(t, "the agent", func() bool { return len(hub.Agents()) == 1 })
+
+	gone.stop()
+	waitFor(t, "its connections to be let go", func() bool { return len(hub.Agents()) == 0 })
+
+	// the one that takes its place, as an agent redeployed does, is
+	// reached through its own connections from the first stream on.
+	startAgent(t, "agent-a", []string{hub.address}, config, NewServiceTargets(map[string]string{"echo": address}))
+	waitFor(t, "the agent to come back", func() bool { return len(hub.Agents()) == 1 })
+
+	for range 5 {
+		conn, err := hub.Dial(t.Context(), "agent-a", Target{Service: "echo"})
+		require.NoError(t, err)
+
+		assert.Equal(t, "back", roundTrip(t, conn, "back"))
+		require.NoError(t, conn.Close())
+	}
+}
+
 // 10. One session dying takes only its own streams with it
 func TestSessionIsolation(t *testing.T) {
 	config := testConfig()
