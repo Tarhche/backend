@@ -103,6 +103,10 @@ type Runtime struct {
 
 	lock    sync.Mutex
 	keepers map[string]*keeper
+
+	// restarting is the machines being restarted: stopped only to be started
+	// again, which is not an end anybody is to be told about.
+	restarting map[string]bool
 }
 
 var _ task.Runtime = &Runtime{}
@@ -134,16 +138,17 @@ func New(config Config, launcher machine.Launcher, logger *slog.Logger) (*Runtim
 	ctx, cancel := context.WithCancel(context.Background())
 
 	r := &Runtime{
-		config:   config,
-		launcher: launcher,
-		images:   images,
-		networks: networks,
-		store:    records,
-		logger:   logger,
-		tracer:   otel.Tracer("firecracker"),
-		ctx:      ctx,
-		cancel:   cancel,
-		keepers:  make(map[string]*keeper),
+		config:     config,
+		launcher:   launcher,
+		images:     images,
+		networks:   networks,
+		store:      records,
+		logger:     logger,
+		tracer:     otel.Tracer("firecracker"),
+		ctx:        ctx,
+		cancel:     cancel,
+		keepers:    make(map[string]*keeper),
+		restarting: make(map[string]bool),
 	}
 
 	// the launcher may not be up yet — it restarts, or it comes up after the
@@ -557,16 +562,60 @@ func (r *Runtime) Restart(ctx context.Context, id string) error {
 	unlock := r.locks.lock(id)
 	defer unlock()
 
+	// the machine says it is restarting from the moment it is stopped until
+	// it runs again, as a container does: a task that is on its way back up
+	// has not ended, and nothing watching it is to think it has.
+	r.markRestarting(id, true)
+	defer r.markRestarting(id, false)
+
 	err := r.halt(ctx, id, func(k *keeper) error {
 		_, err := k.client.Stop(ctx, stopTimeout)
 
 		return err
 	})
 	if err != nil {
-		return trace.RecordError(span, err)
+		return trace.RecordError(span, errors.Join(err, r.settle(id)))
 	}
 
-	return trace.RecordError(span, r.start(ctx, id))
+	if err := r.start(ctx, id); err != nil {
+		return trace.RecordError(span, errors.Join(err, r.settle(id)))
+	}
+
+	return nil
+}
+
+func (r *Runtime) markRestarting(id string, restarting bool) {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	if restarting {
+		r.restarting[id] = true
+	} else {
+		delete(r.restarting, id)
+	}
+}
+
+func (r *Runtime) isRestarting(id string) bool {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	return r.restarting[id]
+}
+
+// settle says a machine that was to be restarted and is not running has
+// ended after all.
+func (r *Runtime) settle(id string) error {
+	_, err := r.store.update(id, func(rec *record) {
+		if rec.Status == task.StatusRestarting {
+			rec.Status = task.StatusExited
+		}
+	})
+
+	if errors.Is(err, errNoMachine) {
+		return nil
+	}
+
+	return err
 }
 
 // Kill ends a machine's task at once, without the grace Stop gives it.

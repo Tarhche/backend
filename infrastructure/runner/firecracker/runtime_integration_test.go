@@ -341,6 +341,34 @@ func TestRuntime(t *testing.T) {
 		assert.Equal(t, "42\n", string(kept))
 		require.NoError(t, check.Close())
 
+		// a restart is never an end, to anybody watching it.
+		seen := make(chan []task.Status, 1)
+		stopWatching := make(chan struct{})
+		go func() {
+			var statuses []task.Status
+			for {
+				select {
+				case <-stopWatching:
+					seen <- statuses
+					return
+				default:
+				}
+
+				if inspected, err := r.Inspect(ctx, id); err == nil {
+					statuses = append(statuses, inspected.Status)
+				}
+
+				time.Sleep(5 * time.Millisecond)
+			}
+		}()
+
+		require.NoError(t, r.Restart(ctx, id))
+		close(stopWatching)
+
+		for _, status := range <-seen {
+			assert.Contains(t, []task.Status{task.StatusRunning, task.StatusRestarting}, status, "a restarting machine reported %d", status)
+		}
+
 		require.NoError(t, r.Kill(ctx, id))
 
 		killed := waitFor(t, r, id, ended)

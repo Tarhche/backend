@@ -236,12 +236,18 @@ func (r *Runtime) finalize(k *keeper, ended guest.Status, lost bool) {
 
 	var held []iface
 
+	restarting := r.isRestarting(k.id)
+
 	rec, err := r.store.update(k.id, func(rec *record) {
 		held = rec.Interfaces
 
-		rec.Status = task.StatusExited
-		if lost {
+		switch {
+		case lost:
 			rec.Status = task.StatusDead
+		case restarting:
+			rec.Status = task.StatusRestarting
+		default:
+			rec.Status = task.StatusExited
 		}
 
 		rec.ExitCode = ended.ExitCode
@@ -277,7 +283,7 @@ func (r *Runtime) finalize(k *keeper, ended guest.Status, lost bool) {
 
 	r.logger.Info("machine stopped", "machine", k.id, "exit_code", ended.ExitCode, "lost", lost)
 
-	if err == nil && rec.Execution.AutoRemove {
+	if err == nil && rec.Execution.AutoRemove && !restarting {
 		go func() {
 			if err := r.Delete(context.WithoutCancel(ctx), k.id); err != nil {
 				r.logger.Error("a machine that removes itself could not be removed", "machine", k.id, "error", err)
