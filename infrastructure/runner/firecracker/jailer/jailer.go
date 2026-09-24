@@ -125,7 +125,31 @@ func New(config Config, logger *slog.Logger) (*VMM, error) {
 		return nil, err
 	}
 
+	// the jailer makes the devices a machine uses inside its directory, and a
+	// device on a filesystem mounted nodev cannot be opened: every machine
+	// would fail as its firecracker reached for one, which is better said now.
+	if v.jailed() {
+		nodev, err := mountedNodev(v.baseDir())
+		if err != nil {
+			return nil, err
+		}
+
+		if nodev {
+			return nil, fmt.Errorf("%s is on a filesystem mounted nodev, where the devices a jailed machine uses cannot be opened", config.StateDir)
+		}
+	}
+
 	return v, nil
+}
+
+// mountedNodev reports whether the filesystem path is on is mounted nodev.
+func mountedNodev(path string) (bool, error) {
+	var stat unix.Statfs_t
+	if err := unix.Statfs(path, &stat); err != nil {
+		return false, err
+	}
+
+	return stat.Flags&unix.ST_NODEV != 0, nil
 }
 
 func (v *VMM) baseDir() string {

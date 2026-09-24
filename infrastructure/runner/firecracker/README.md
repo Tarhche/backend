@@ -223,7 +223,9 @@ which the orchestrator rewrites on every member whenever one comes or goes.
 
 The launcher needs a host with `/dev/kvm`; a cloud VPS without nested
 virtualization has none. Its image carries firecracker, the jailer and the
-kernel for its platform.
+kernel for its platform. The state directory has to be on one filesystem that
+is not mounted `nodev` — the jailer makes each machine's devices inside its
+directory — which rules out a `/tmp` of that kind; the launcher refuses one.
 
 For development, `RUNNER_JAILER_BINARY=` (empty) starts firecracker unjailed,
 as whoever the launcher runs as. That is for development and tests and nothing

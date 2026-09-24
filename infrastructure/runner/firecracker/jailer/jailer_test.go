@@ -125,3 +125,17 @@ func TestIsZombie(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "stat"), []byte("42 (firecracker) S 1 2 3"), 0o644))
 	assert.False(t, isZombie(dir))
 }
+
+func TestMountedNodev(t *testing.T) {
+	t.Run("a directory's filesystem says whether it takes devices", func(t *testing.T) {
+		_, err := mountedNodev(t.TempDir())
+
+		assert.NoError(t, err)
+	})
+
+	t.Run("a directory that is not there says so", func(t *testing.T) {
+		_, err := mountedNodev(filepath.Join(t.TempDir(), "missing"))
+
+		assert.Error(t, err)
+	})
+}
