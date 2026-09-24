@@ -38,4 +38,14 @@ func TestPull(t *testing.T) {
 	again, err := store.Ensure(ctx, "alpine:3.20")
 	require.NoError(t, err)
 	assert.Equal(t, built, again, "an image already here is not built again")
+
+	// busybox's layers name their entries "./bin/…", with one for "./" itself.
+	busybox, err := store.Ensure(ctx, "busybox:1.36")
+	require.NoError(t, err)
+
+	listing, err = exec.Command("unsquashfs", "-lln", busybox.Root).CombinedOutput()
+	require.NoError(t, err, string(listing))
+	assert.Contains(t, string(listing), "0/0")
+	assert.Contains(t, string(listing), "squashfs-root/bin/sh")
+	assert.NotContains(t, string(listing), " 1000/1000 ", "nothing in an image is whoever built it's")
 }

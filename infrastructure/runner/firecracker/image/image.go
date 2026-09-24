@@ -13,14 +13,18 @@
 package image
 
 import (
+	"archive/tar"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"os/exec"
+	pathpkg "path"
 	"path/filepath"
 	goruntime "runtime"
 	"slices"
@@ -283,25 +287,94 @@ func (s *Store) own(path string) error {
 // squashfs filesystem at path. The layers travel as a tarball straight into
 // sqfstar, which keeps whose each file is as the tarball says it: extracting
 // them first would lose that, unless whoever did it were root.
+//
+// The root is root's, and so is any directory the tarball only implies, as
+// they would be in a container: sqfstar would otherwise give them to whoever
+// runs it.
 func makeFilesystem(ctx context.Context, img v1.Image, path string) error {
 	layers := mutate.Extract(img)
 	defer layers.Close()
+
+	reader, writer := io.Pipe()
+
+	go func() {
+		writer.CloseWithError(normalize(layers, writer))
+	}()
 
 	command := exec.CommandContext(ctx, "sqfstar",
 		"-quiet",
 		"-no-progress",
 		"-comp", "zstd",
 		"-Xcompression-level", compressionLevel,
+		"-root-uid", "0",
+		"-root-gid", "0",
+		"-root-mode", "0755",
+		"-default-uid", "0",
+		"-default-gid", "0",
+		"-default-mode", "0755",
 		path,
 	)
-	command.Stdin = layers
+	command.Stdin = reader
 
 	output, err := command.CombinedOutput()
+
+	// whatever sqfstar left unread is let go of, so normalize is not left
+	// waiting to write it.
+	reader.CloseWithError(io.ErrClosedPipe)
+
 	if err != nil {
 		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(output)))
 	}
 
 	return nil
+}
+
+// normalize copies a tarball, naming every entry the way sqfstar takes it:
+// relative, and with nothing in it that is "." or "..". Layers are written by
+// whatever built the image, and plenty of them name their entries "./bin/sh"
+// or have one for "./" itself. The root is left out, since sqfstar makes it.
+func normalize(in io.Reader, out io.Writer) error {
+	source := tar.NewReader(in)
+	target := tar.NewWriter(out)
+
+	for {
+		header, err := source.Next()
+		if errors.Is(err, io.EOF) {
+			return target.Close()
+		}
+
+		if err != nil {
+			return err
+		}
+
+		header.Name = cleanEntry(header.Name)
+		if len(header.Name) == 0 {
+			continue
+		}
+
+		// a hard link names another entry of the tarball, which is named the
+		// same way; a symlink's target is what the link says, and is left as
+		// it is.
+		if header.Typeflag == tar.TypeLink {
+			header.Linkname = cleanEntry(header.Linkname)
+		}
+
+		if err := target.WriteHeader(header); err != nil {
+			return err
+		}
+
+		if _, err := io.Copy(target, source); err != nil {
+			return err
+		}
+	}
+}
+
+// cleanEntry is an entry's name relative to the root, or empty for the root
+// itself. It is cleaned as though the root were the whole filesystem, so a
+// name climbing out of the root lands inside it instead, as it would inside a
+// container.
+func cleanEntry(name string) string {
+	return strings.TrimPrefix(pathpkg.Clean("/"+name), "/")
 }
 
 // configOf reads what an image says about how it is run.
