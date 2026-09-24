@@ -76,6 +76,45 @@ func TestTaskScheduled_Handle(t *testing.T) {
 		assert.Contains(t, failed.Reason, "no such image")
 	})
 
+	t.Run("a task is created as its owner's, so its node can say who may open a terminal in it", func(t *testing.T) {
+		t.Parallel()
+
+		var (
+			taskManager    runtime.MockRuntime
+			networkManager runtime.MockNetworkManager
+			producer       messagingMock.MockProduceConsumer
+		)
+
+		networkManager.On("EnsureIsolatedNetwork", mock.Anything).Return(nil).Maybe()
+
+		var created *task.Execution
+		taskManager.On("Of", mock.Anything, mock.Anything).Return([]task.Execution{}, nil).Maybe()
+		taskManager.On("EnsureImage", mock.Anything, mock.Anything).Return(nil).Once()
+		taskManager.On("Create", mock.Anything, mock.Anything).
+			Run(func(args mock.Arguments) { created = args.Get(1).(*task.Execution) }).
+			Return("task-id", nil).Once()
+		taskManager.On("Start", mock.Anything, "task-id").Return(nil).Once()
+		defer taskManager.AssertExpectations(t)
+
+		payload, err := json.Marshal(events.TaskScheduled{
+			UUID:          "task-uuid",
+			Name:          "a-request-id",
+			Image:         "ghcr.io/example/runner:latest",
+			NominatedNode: nodeName,
+			OwnerUUID:     "owner-uuid",
+		})
+		require.NoError(t, err)
+
+		useCase := NewUseCase(&taskManager, &networkManager, accepts(), nodeName)
+
+		require.NoError(t, NewTaskScheduled(useCase, &producer, nodeName, discardLogger()).
+			Handle(context.Background(), payload))
+
+		require.NotNil(t, created)
+		assert.Equal(t, "owner-uuid", created.OwnerUUID)
+		producer.AssertNotCalled(t, "Produce", mock.Anything, mock.Anything, mock.Anything)
+	})
+
 	t.Run("a task nominated for another node is left to it", func(t *testing.T) {
 		t.Parallel()
 

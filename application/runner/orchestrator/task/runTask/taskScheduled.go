@@ -89,6 +89,11 @@ func (uc *TaskScheduled) Handle(ctx context.Context, data []byte) error {
 		},
 		Attempt:    taskScheduled.Attempt,
 		MaxRetries: taskScheduled.MaxRetries,
+
+		// whose it is, which the node holding it is the one to answer for:
+		// a task without an owner is a snippet, and anybody's to open a
+		// terminal in.
+		OwnerUUID: taskScheduled.OwnerUUID,
 	}
 
 	if _, err := uc.useCase.Execute(ctx, request); err != nil {
