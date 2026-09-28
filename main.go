@@ -8,7 +8,9 @@ import (
 	"path"
 
 	"github.com/danceable/console"
+	"github.com/danceable/container"
 	"github.com/danceable/provider"
+	"github.com/danceable/provider/adapters/danceable"
 
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	"github.com/khanzadimahdi/testproject/presentation/commands/blog"
@@ -28,12 +30,14 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancel()
 
-	c := console.NewConsole(
+	serviceProvider := provider.New(danceable.New(container.New()))
+
+	c := console.NewWithServiceProvider(
 		path.Base(os.Args[0]),
 		"Application description",
 		os.Stdout,
 		os.Stderr,
-		provider.Default,
+		serviceProvider,
 	)
 
 	// the settings every command reads are parsed before the command name, so
@@ -44,7 +48,7 @@ func main() {
 	}
 	c.Flags(globalFlags)
 
-	c.Register(blog.NewServeCommand())
+	c.Register(blog.NewServeCommand(serviceProvider))
 	c.Register(manager.NewServeCommand())
 	c.Register(worker.NewServeCommand())
 	c.Register(ingress.NewServeCommand())

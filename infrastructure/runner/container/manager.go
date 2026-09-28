@@ -170,10 +170,8 @@ func (m *DockerManager) Create(ctx context.Context, c *task.Execution) (string, 
 	}
 
 	hostConfig := &containerTypes.HostConfig{
-		Resources: containerTypes.Resources{
-			Memory:   int64(c.ResourceLimits.Memory * 1024 * 1024),
-			NanoCPUs: int64(c.ResourceLimits.Cpu * 1e9),
-		},
+		Memory:   int64(c.ResourceLimits.Memory * 1024 * 1024),
+		NanoCPUs: int64(c.ResourceLimits.Cpu * 1e9),
 		RestartPolicy: containerTypes.RestartPolicy{
 			Name: containerTypes.RestartPolicyMode(c.RestartPolicy),
 		},

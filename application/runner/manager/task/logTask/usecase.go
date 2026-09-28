@@ -77,11 +77,9 @@ func (uc *TaskLogged) Handle(ctx context.Context, data []byte) error {
 		logs[i] = task.Log{
 			TaskUUID:    logged.UUID,
 			ExecutionID: logged.ExecutionID,
-			LogLine: task.LogLine{
-				Stream:  task.Stream(line.Stream),
-				Content: line.Content,
-				At:      line.At,
-			},
+			Stream:      task.Stream(line.Stream),
+			Content:     line.Content,
+			At:          line.At,
 		}
 	}
 

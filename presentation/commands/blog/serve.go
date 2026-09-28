@@ -13,6 +13,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers"
+	"github.com/khanzadimahdi/testproject/presentation/http/middleware"
 )
 
 const (
@@ -21,6 +22,7 @@ const (
 
 type ServeCommand struct {
 	configs   *configs.Blog
+	scoper    middleware.Scoper
 	handler   http.Handler
 	consumer  domain.Consumer
 	consumers map[string]domain.MessageHandler
@@ -33,8 +35,10 @@ var (
 	_ provider.Provider = &ServeCommand{}
 )
 
-func NewServeCommand() *ServeCommand {
-	return &ServeCommand{configs: configs.NewBlog()}
+// NewServeCommand takes the scoper that opens each request's scope, which must
+// be the manager the command's providers are registered with.
+func NewServeCommand(scoper middleware.Scoper) *ServeCommand {
+	return &ServeCommand{configs: configs.NewBlog(), scoper: scoper}
 }
 
 // Name returns the name of the command which is used to identify it.
@@ -82,7 +86,7 @@ func (c *ServeCommand) Providers() []provider.Provider {
 		providers.NewStorageProvider(),
 		providers.NewTemplateProvider(),
 		providers.NewContainerProvider(),
-		providers.NewBlogProvider(),
+		providers.NewBlogProvider(c.scoper),
 		c,
 	}
 }

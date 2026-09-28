@@ -9,7 +9,6 @@ import (
 
 	"github.com/khanzadimahdi/testproject/domain"
 	runnerManager "github.com/khanzadimahdi/testproject/domain/runner/manager"
-	"github.com/khanzadimahdi/testproject/domain/runner/stack"
 	runnerMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/runner/manager"
 )
 
@@ -25,7 +24,7 @@ func TestUseCase_Execute(t *testing.T) {
 			r = Request{UUID: "stack-uuid", OwnerUUID: "owner-uuid"}
 		)
 
-		runner.On("StackOf", mock.Anything, r.OwnerUUID, r.UUID).Once().Return(runnerManager.Stack{Stack: stack.Stack{UUID: r.UUID, OwnerUUID: r.OwnerUUID}}, nil)
+		runner.On("StackOf", mock.Anything, r.OwnerUUID, r.UUID).Once().Return(runnerManager.Stack{UUID: r.UUID, OwnerUUID: r.OwnerUUID}, nil)
 		runner.On("DeleteStack", mock.Anything, r.UUID).Once().Return(nil)
 		defer runner.AssertExpectations(t)
 

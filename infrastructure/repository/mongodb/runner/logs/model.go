@@ -23,11 +23,9 @@ func toLog(l *LogBson) task.Log {
 	return task.Log{
 		TaskUUID:    l.TaskUUID,
 		ExecutionID: l.ExecutionID,
-		LogLine: task.LogLine{
-			Stream:  task.Stream(l.Stream),
-			Content: l.Content,
-			At:      l.At,
-		},
+		Stream:      task.Stream(l.Stream),
+		Content:     l.Content,
+		At:          l.At,
 	}
 }
 

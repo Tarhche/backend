@@ -71,7 +71,7 @@ func TestUseCase_Handle(t *testing.T) {
 		runner.On("TaskOf", mock.Anything, userUUID, taskUUID).
 			Return(task.Task{UUID: taskUUID, OwnerUUID: userUUID}, nil).Once()
 		runner.On("TaskLogs", mock.Anything, taskUUID, time.Time{}, backlog).Return([]task.Log{
-			{TaskUUID: taskUUID, LogLine: task.LogLine{Stream: task.StreamStdout, Content: "listening on :80", At: written}},
+			{TaskUUID: taskUUID, Stream: task.StreamStdout, Content: "listening on :80", At: written},
 		}, nil).Once()
 		defer runner.AssertExpectations(t)
 

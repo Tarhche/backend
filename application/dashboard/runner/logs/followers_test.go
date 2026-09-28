@@ -114,8 +114,8 @@ func TestFollowers(t *testing.T) {
 		assert.Empty(t, replyer.Replies(), "nothing is sent before the backlog it belongs after")
 
 		follower.CatchUp(context.Background(), []task.Log{
-			{TaskUUID: taskUUID, LogLine: task.LogLine{Content: "first", At: written}},
-			{TaskUUID: taskUUID, LogLine: task.LogLine{Content: "second", At: written.Add(time.Second)}},
+			{TaskUUID: taskUUID, Content: "first", At: written},
+			{TaskUUID: taskUUID, Content: "second", At: written.Add(time.Second)},
 		})
 
 		assert.Equal(t, []string{"first", "second", "third"}, contents(sent(t, &replyer)))
@@ -132,8 +132,8 @@ func TestFollowers(t *testing.T) {
 		// the follower starts.
 		follower := followers.Follow(requestID, taskUUID, written)
 		follower.CatchUp(context.Background(), []task.Log{
-			{LogLine: task.LogLine{Content: "already read", At: written}},
-			{LogLine: task.LogLine{Content: "new", At: written.Add(time.Second)}},
+			{Content: "already read", At: written},
+			{Content: "new", At: written.Add(time.Second)},
 		})
 
 		// the batch the store was written from arrives too, carrying both.

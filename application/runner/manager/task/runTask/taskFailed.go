@@ -139,11 +139,9 @@ func (uc *TaskFailed) record(ctx context.Context, t *task.Task, failure *events.
 	return uc.logRepository.Append(ctx, []task.Log{{
 		TaskUUID:    t.UUID,
 		ExecutionID: failure.ExecutionID,
-		LogLine: task.LogLine{
-			Stream:  task.StreamStderr,
-			Content: t.Reason,
-			At:      at,
-		},
+		Stream:      task.StreamStderr,
+		Content:     t.Reason,
+		At:          at,
 	}})
 }
 

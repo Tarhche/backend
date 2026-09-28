@@ -15,7 +15,6 @@ import (
 	"github.com/khanzadimahdi/testproject/application/dashboard/runner/presenter"
 	"github.com/khanzadimahdi/testproject/domain"
 	runnerManager "github.com/khanzadimahdi/testproject/domain/runner/manager"
-	runnerStack "github.com/khanzadimahdi/testproject/domain/runner/stack"
 	stackEvents "github.com/khanzadimahdi/testproject/domain/runner/stack/events"
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
 	taskEvents "github.com/khanzadimahdi/testproject/domain/runner/task/events"
@@ -205,7 +204,7 @@ func TestChanges_Heartbeat(t *testing.T) {
 		)
 
 		runner.On("Stack", mock.Anything, stackUUID).Return(runnerManager.Stack{
-			Stack:    runnerStack.Stack{UUID: stackUUID, Name: "blog", OwnerUUID: ownerUUID},
+			UUID: stackUUID, Name: "blog", OwnerUUID: ownerUUID,
 			State:    task.Running,
 			Services: []task.Task{{UUID: taskUUID, Slug: "nginx-xkfqz"}},
 		}, nil).Once()

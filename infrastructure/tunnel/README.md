@@ -384,7 +384,7 @@ different one and break the bound.
 
 ## Tuning
 
-Measured on loopback (Apple M-series, Go 1.26), 64 streams held constant and
+Measured on loopback (Apple M-series, Go 1.27), 64 streams held constant and
 only their division varied:
 
 ```

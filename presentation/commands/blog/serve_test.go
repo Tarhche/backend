@@ -30,7 +30,7 @@ func findAvailablePort() int {
 
 func TestServe(t *testing.T) {
 	t.Run("name", func(t *testing.T) {
-		command := NewServeCommand()
+		command := NewServeCommand(nil)
 
 		want := "serve-blog"
 		got := command.Name()
@@ -41,7 +41,7 @@ func TestServe(t *testing.T) {
 	})
 
 	t.Run("description", func(t *testing.T) {
-		command := NewServeCommand()
+		command := NewServeCommand(nil)
 
 		want := "serves a http server."
 		got := command.Description()
@@ -52,7 +52,7 @@ func TestServe(t *testing.T) {
 	})
 
 	t.Run("usage", func(t *testing.T) {
-		command := NewServeCommand()
+		command := NewServeCommand(nil)
 
 		want := "serve-blog [arguments]"
 		got := command.Usage()
@@ -63,7 +63,7 @@ func TestServe(t *testing.T) {
 	})
 
 	t.Run("configure", func(t *testing.T) {
-		command := NewServeCommand()
+		command := NewServeCommand(nil)
 
 		flagSet := console.NewFlagSet(command.Name(), io.Discard)
 
@@ -100,7 +100,7 @@ func TestServe(t *testing.T) {
 	})
 
 	t.Run("configure with the short flag", func(t *testing.T) {
-		command := NewServeCommand()
+		command := NewServeCommand(nil)
 
 		flagSet := console.NewFlagSet(command.Name(), io.Discard)
 
@@ -118,7 +118,7 @@ func TestServe(t *testing.T) {
 	t.Run("configure from the environment", func(t *testing.T) {
 		t.Setenv("SERVER_PORT", "100")
 
-		command := NewServeCommand()
+		command := NewServeCommand(nil)
 
 		flagSet := console.NewFlagSet(command.Name(), io.Discard)
 
@@ -151,7 +151,7 @@ func TestServe(t *testing.T) {
 		consumer.On("Consume", ctx, mock.Anything, mock.Anything).Times(len(subscribers)).Return(nil)
 		defer consumer.AssertExpectations(t)
 
-		command := NewServeCommand()
+		command := NewServeCommand(nil)
 		command.configs.Port = findAvailablePort()
 		command.handler = handler
 		command.consumer = &consumer

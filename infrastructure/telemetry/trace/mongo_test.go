@@ -50,10 +50,8 @@ func TestNewMongoCommandMonitor(t *testing.T) {
 			RequestID:    1,
 		})
 		monitor.Succeeded(ctx, &event.CommandSucceededEvent{
-			CommandFinishedEvent: event.CommandFinishedEvent{
-				CommandName: "find",
-				RequestID:   1,
-			},
+			CommandName: "find",
+			RequestID:   1,
 		})
 
 		spans := exporter.GetSpans()
@@ -80,11 +78,9 @@ func TestNewMongoCommandMonitor(t *testing.T) {
 			RequestID:    2,
 		})
 		monitor.Failed(ctx, &event.CommandFailedEvent{
-			CommandFinishedEvent: event.CommandFinishedEvent{
-				CommandName: "find",
-				RequestID:   2,
-			},
-			Failure: wantErr,
+			CommandName: "find",
+			RequestID:   2,
+			Failure:     wantErr,
 		})
 
 		spans := exporter.GetSpans()
@@ -105,11 +101,11 @@ func TestNewMongoCommandMonitor(t *testing.T) {
 
 		assert.NotPanics(t, func() {
 			monitor.Succeeded(ctx, &event.CommandSucceededEvent{
-				CommandFinishedEvent: event.CommandFinishedEvent{RequestID: 99},
+				RequestID: 99,
 			})
 			monitor.Failed(ctx, &event.CommandFailedEvent{
-				CommandFinishedEvent: event.CommandFinishedEvent{RequestID: 100},
-				Failure:              errors.New("boom"),
+				RequestID: 100,
+				Failure:   errors.New("boom"),
 			})
 		})
 
@@ -135,7 +131,7 @@ func TestNewMongoCommandMonitor(t *testing.T) {
 			RequestID:    3,
 		})
 		monitor.Succeeded(ctx, &event.CommandSucceededEvent{
-			CommandFinishedEvent: event.CommandFinishedEvent{CommandName: "ping", RequestID: 3},
+			CommandName: "ping", RequestID: 3,
 		})
 
 		spans := exporter.GetSpans()

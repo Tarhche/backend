@@ -15,11 +15,14 @@ make sh-app        # shell into a service (sh-<service>)
 go test ./... -race -cover
 go test ./application/article/getArticle -run TestUseCase -v   # single package/test
 
+# Dependency graph of a service's DI container (ascii by default; dot or html)
+app graph serve-blog --output=dot | dot -Tsvg -o blog.svg
+
 # Regenerate OpenAPI docs (swag, output to resources/docs/blog/openapi)
 make generate      # runs `go generate` inside the app container
 ```
 
-Go 1.26. Local dev containers run under `go tool air` (hot reload with build polling), so code changes are picked up without restarting. The blog API is on http://localhost:8000, runner-manager on :8020, runner-ingress on :8030, workers on :8040–8042. `.env` holds local config (compose interpolates it).
+Go 1.27. Local dev containers run under `go tool air` (hot reload with build polling), so code changes are picked up without restarting. The blog API is on http://localhost:8000, runner-manager on :8020, runner-ingress on :8030, workers on :8040–8042. `.env` holds local config (compose interpolates it).
 
 ## Architecture
 

@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/khanzadimahdi/testproject/domain/runner/port"
-	"github.com/khanzadimahdi/testproject/domain/runner/stack"
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
 )
 
@@ -151,14 +150,12 @@ func (p *stackPayload) toStack() managerStack {
 	}
 
 	return managerStack{
-		Stack: stack.Stack{
-			UUID:      p.UUID,
-			Name:      p.Name,
-			Slug:      p.Slug,
-			NodeName:  p.NodeName,
-			OwnerUUID: p.OwnerUUID,
-			CreatedAt: p.CreatedAt,
-		},
+		UUID:          p.UUID,
+		Name:          p.Name,
+		Slug:          p.Slug,
+		NodeName:      p.NodeName,
+		OwnerUUID:     p.OwnerUUID,
+		CreatedAt:     p.CreatedAt,
 		State:         states[p.State],
 		ExpectedState: states[p.ExpectedState],
 		Services:      services,
@@ -168,10 +165,8 @@ func (p *stackPayload) toStack() managerStack {
 func (p *logPayload) toLog(taskUUID string) task.Log {
 	return task.Log{
 		TaskUUID: taskUUID,
-		LogLine: task.LogLine{
-			Stream:  streams[p.Stream],
-			Content: p.Content,
-			At:      p.At,
-		},
+		Stream:   streams[p.Stream],
+		Content:  p.Content,
+		At:       p.At,
 	}
 }

@@ -217,17 +217,20 @@ const (
 // blogProvider builds the blog service's messaging singletons, HTTP handler and
 // message subscribers. It must be registered after its dependencies.
 type blogProvider struct {
+	scoper    middleware.Scoper
 	terminate func()
 }
 
 var _ provider.Provider = &blogProvider{}
 
-func NewBlogProvider() *blogProvider {
-	return &blogProvider{}
+// NewBlogProvider takes the scoper that opens each request's scope, which must
+// be the manager this provider and the scoped providers are registered with.
+func NewBlogProvider(scoper middleware.Scoper) *blogProvider {
+	return &blogProvider{scoper: scoper}
 }
 
 func (p *blogProvider) Register(ctx context.Context, c provider.Container) error {
-	return nil
+	return c.Bind(func() middleware.Scoper { return p.scoper }, provider.Singleton())
 }
 
 func (p *blogProvider) Boot(ctx context.Context, c provider.Container) error {
@@ -325,6 +328,7 @@ func blog(
 	renderer domain.Renderer,
 	cachedGateway *gateway.CacheDecorator,
 	websocketTransport *infraWebsocket.Handler,
+	scoper middleware.Scoper,
 	iocContainer provider.Container,
 ) (http.Handler, error) {
 	var logger *slog.Logger
@@ -380,7 +384,7 @@ func blog(
 	// so tr/va yield language-aware translation and validation.
 	localizer := localize.New(languageResolver)
 	localized := func(next http.Handler) http.Handler {
-		return middleware.NewLocalizeMiddleware(next, localizer, provider.Default)
+		return middleware.NewLocalizeMiddleware(next, localizer, scoper)
 	}
 	scoped := func(build func(c provider.Container) http.Handler) http.Handler {
 		return localized(middleware.NewScopedHandler(build))
