@@ -15,12 +15,12 @@ import (
 // asked records what the transport dialled for, which is the whole of what it
 // decides.
 type asked struct {
-	worker string
-	target tunnel.Target
+	orchestrator string
+	target       tunnel.Target
 }
 
-func (a *asked) Dial(_ context.Context, worker string, target tunnel.Target) (net.Conn, error) {
-	a.worker = worker
+func (a *asked) Dial(_ context.Context, orchestrator string, target tunnel.Target) (net.Conn, error) {
+	a.orchestrator = orchestrator
 	a.target = target
 
 	left, right := net.Pipe()
@@ -35,9 +35,9 @@ func TestNewTransport(t *testing.T) {
 			address string
 			want    string
 		}{
-			{address: "runner-worker-01:80", want: "runner-worker-01"},
-			{address: "runner-worker-01", want: "runner-worker-01"},
-			{address: "runner-worker-01:8080", want: "runner-worker-01"},
+			{address: "runner-orchestrator-01:80", want: "runner-orchestrator-01"},
+			{address: "runner-orchestrator-01", want: "runner-orchestrator-01"},
+			{address: "runner-orchestrator-01:8080", want: "runner-orchestrator-01"},
 		}
 
 		for _, test := range tests {
@@ -50,7 +50,7 @@ func TestNewTransport(t *testing.T) {
 				require.NoError(t, err)
 				defer conn.Close()
 
-				assert.Equal(t, test.want, recorded.worker)
+				assert.Equal(t, test.want, recorded.orchestrator)
 				assert.Equal(t, tunnel.Target{Service: "api"}, recorded.target,
 					"a runner is asked for a service it offers, not for an address")
 			})
@@ -62,7 +62,7 @@ func TestNewTransport(t *testing.T) {
 
 		transport := NewTransport(&recorded, "ssh", time.Minute)
 
-		conn, err := transport.DialContext(t.Context(), "tcp", "runner-worker-01:22")
+		conn, err := transport.DialContext(t.Context(), "tcp", "runner-orchestrator-01:22")
 		require.NoError(t, err)
 		defer conn.Close()
 

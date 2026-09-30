@@ -8,8 +8,8 @@ import (
 	"github.com/stretchr/testify/mock"
 
 	"github.com/khanzadimahdi/testproject/domain"
-	runnerManager "github.com/khanzadimahdi/testproject/domain/runner/manager"
-	runnerMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/runner/manager"
+	runnerControlPlane "github.com/khanzadimahdi/testproject/domain/runner/controlplane"
+	runnerMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/runner/controlplane"
 )
 
 func TestUseCase_Execute(t *testing.T) {
@@ -24,7 +24,7 @@ func TestUseCase_Execute(t *testing.T) {
 			r = Request{UUID: "stack-uuid", OwnerUUID: "owner-uuid"}
 		)
 
-		runner.On("StackOf", mock.Anything, r.OwnerUUID, r.UUID).Once().Return(runnerManager.Stack{UUID: r.UUID, OwnerUUID: r.OwnerUUID}, nil)
+		runner.On("StackOf", mock.Anything, r.OwnerUUID, r.UUID).Once().Return(runnerControlPlane.Stack{UUID: r.UUID, OwnerUUID: r.OwnerUUID}, nil)
 		runner.On("DeleteStack", mock.Anything, r.UUID).Once().Return(nil)
 		defer runner.AssertExpectations(t)
 
@@ -42,7 +42,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		// asked for as this person's, a stack that is not theirs is not
 		// found — the same answer as one that does not exist.
-		runner.On("StackOf", mock.Anything, r.OwnerUUID, r.UUID).Once().Return(runnerManager.Stack{}, domain.ErrNotExists)
+		runner.On("StackOf", mock.Anything, r.OwnerUUID, r.UUID).Once().Return(runnerControlPlane.Stack{}, domain.ErrNotExists)
 		defer runner.AssertExpectations(t)
 
 		assert.ErrorIs(t, NewUseCase(&runner).Execute(context.Background(), &r), domain.ErrNotExists)

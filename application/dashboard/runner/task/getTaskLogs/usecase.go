@@ -3,7 +3,7 @@ package getTaskLogs
 import (
 	"context"
 
-	runnerManager "github.com/khanzadimahdi/testproject/domain/runner/manager"
+	runnerControlPlane "github.com/khanzadimahdi/testproject/domain/runner/controlplane"
 )
 
 // defaultLimit is how many lines one read returns when the caller names no
@@ -14,10 +14,10 @@ const defaultLimit uint = 1000
 // lines are kept against the task until it is deleted, so a stopped
 // task still has its whole history.
 type UseCase struct {
-	runner runnerManager.Client
+	runner runnerControlPlane.Client
 }
 
-func NewUseCase(runner runnerManager.Client) *UseCase {
+func NewUseCase(runner runnerControlPlane.Client) *UseCase {
 	return &UseCase{runner: runner}
 }
 

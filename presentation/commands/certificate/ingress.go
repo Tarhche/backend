@@ -11,7 +11,7 @@ import (
 // IngressCommand makes the certificate an ingress answers with.
 //
 // It issues for serverAuth, which is the whole of what makes it an ingress
-// certificate rather than a worker one.
+// certificate rather than an orchestrator one.
 type IngressCommand struct {
 	certificateCommand
 }

@@ -29,7 +29,7 @@ func NewUseCase(dependencies ...Dependency) *UseCase {
 // dependency's name, so a failing probe says which dependency is at fault
 // without waiting for the remaining ones to time out.
 //
-// each service passes the dependencies it actually has: the runner worker, for
+// each service passes the dependencies it actually has: the runner orchestrator, for
 // instance, talks to no database.
 func (uc *UseCase) Execute(ctx context.Context) error {
 	for _, dependency := range uc.dependencies {

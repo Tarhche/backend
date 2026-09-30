@@ -10,7 +10,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	checkhealth "github.com/khanzadimahdi/testproject/application/app/checkHealth"
-	ingressCheckWorkerExists "github.com/khanzadimahdi/testproject/application/runner/ingress/checkWorkerExists"
+	ingressCheckOrchestratorExists "github.com/khanzadimahdi/testproject/application/runner/ingress/checkOrchestratorExists"
 	ingressContract "github.com/khanzadimahdi/testproject/domain/runner/ingress"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/certificate"
@@ -26,28 +26,28 @@ import (
 
 const (
 	// IngressTunnel is the tunnel, which the serve command needs in order to
-	// take the workers' connections.
+	// take the orchestrators' connections.
 	IngressTunnel = "runner:ingress:tunnel"
 
 	// IngressForwarder is the ports arbitrary TCP arrives on, which the serve
 	// command needs in order to listen on them.
 	IngressForwarder = "runner:ingress:forwarder"
 
-	// runnerAPIService is the name a worker offers its own http api under. The
-	// ingress asks for a service rather than an address, so where the worker
-	// serves it is the worker's own business.
+	// runnerAPIService is the name an orchestrator offers its own http api under. The
+	// ingress asks for a service rather than an address, so where the orchestrator
+	// serves it is the orchestrator's own business.
 	runnerAPIService = "api"
 
 	ingressLoggerName string = "runner-ingress"
 
-	// idleConnectionTimeout is how long the ingress keeps a worker's connection
+	// idleConnectionTimeout is how long the ingress keeps an orchestrator's connection
 	// after a request, ready for the next one. It is deliberately shorter than
-	// the worker's own idle time, so the side that opened a connection is never
+	// the orchestrator's own idle time, so the side that opened a connection is never
 	// the one surprised by it closing.
 	idleConnectionTimeout = 3 * time.Minute
 )
 
-// ingressProvider builds the tunnel the workers connect to, the registry of
+// ingressProvider builds the tunnel the orchestrators connect to, the registry of
 // what is connected, and the HTTP handler that routes to them.
 type ingressProvider struct{}
 
@@ -75,13 +75,13 @@ func (p *ingressProvider) Boot(ctx context.Context, c provider.Container) error 
 
 	tunnelConfig := tunnel.DefaultConfig()
 	tunnelConfig.MaxStreamsPerSession = ingressConfigs.TunnelMaxStreamsPerSession
-	tunnelConfig.MaxSessions = ingressConfigs.TunnelMaxSessionsPerWorker
+	tunnelConfig.MaxSessions = ingressConfigs.TunnelMaxSessionsPerOrchestrator
 
-	// who a worker is comes from the certificate TLS already verified, not from
-	// what it said. Whether that worker may stay is a separate question, asked
+	// who an orchestrator is comes from the certificate TLS already verified, not from
+	// what it said. Whether that orchestrator may stay is a separate question, asked
 	// of the authorizer.
 	authorizer := tunnel.AllowSignedAgents()
-	if allowed := ingressConfigs.AllowedWorkers(); len(allowed) > 0 {
+	if allowed := ingressConfigs.AllowedOrchestrators(); len(allowed) > 0 {
 		authorizer = tunnel.AllowAgents(allowed...)
 	}
 
@@ -89,7 +89,7 @@ func (p *ingressProvider) Boot(ctx context.Context, c provider.Container) error 
 		certificate.SubjectAlternativeName(ingressConfigs.TunnelIdentitySuffix),
 		authorizer,
 	)
-	auth.MaxSessions = ingressConfigs.TunnelMaxSessionsPerWorker
+	auth.MaxSessions = ingressConfigs.TunnelMaxSessionsPerOrchestrator
 
 	// the tunnel is the registry: a runner is reachable for exactly as long as
 	// its connections are open, so there is one thing holding both facts.
@@ -103,8 +103,8 @@ func (p *ingressProvider) Boot(ctx context.Context, c provider.Container) error 
 	}
 
 	// the ports arbitrary TCP arrives on. They carry onto the connections the
-	// workers already opened, so forwarding a port adds a way in for clients
-	// and no way in to a worker.
+	// orchestrators already opened, so forwarding a port adds a way in for clients
+	// and no way in to an orchestrator.
 	forwards, err := ingressConfigs.Forwards()
 	if err != nil {
 		return err
@@ -151,9 +151,9 @@ func ingressConsoleCommand(
 		return nil, err
 	}
 
-	checkWorkerExistsUseCase := ingressCheckWorkerExists.NewUseCase(registry)
+	checkOrchestratorExistsUseCase := ingressCheckOrchestratorExists.NewUseCase(registry)
 
-	// which node is holding a task is the manager's record of it, and the
+	// which node is holding a task is the control plane's record of it, and the
 	// only thing here that outlives a connection.
 	taskRepository := taskrepository.NewRepository(database)
 
@@ -169,13 +169,13 @@ func ingressConsoleCommand(
 	mux := http.NewServeMux()
 
 	// CORS goes on the ingress's own answers and no further: what it proxies is
-	// the worker's or the task's to answer for, a preflight included. A
+	// the orchestrator's or the task's to answer for, a preflight included. A
 	// header set here would otherwise arrive alongside the one upstream sent,
 	// and two Access-Control-Allow-Origin headers are worse than none.
 
 	// the task healthcheck probes this
 	mux.Handle("GET /health", middleware.NewCORSMiddleware(healthAPI.NewHealthHandler(checkHealthUseCase)))
-	mux.Handle("/workers/{name}/{path...}", ingressAPI.NewProxyHandler(checkWorkerExistsUseCase, transport, logger))
+	mux.Handle("/orchestrators/{name}/{path...}", ingressAPI.NewProxyHandler(checkOrchestratorExistsUseCase, transport, logger))
 
 	// a terminal, which the browser opens here rather than anywhere else: the
 	// ingress works out which node is holding the task and carries the

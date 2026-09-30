@@ -3,7 +3,7 @@
 //
 // A client opens a watch and is told what changes: the runner already says what
 // becomes of its tasks — every node reports the ones it holds, and the
-// manager says when one is scheduled, fails or is taken away — so a watch is
+// control plane says when one is scheduled, fails or is taken away — so a watch is
 // those reports, turned into replies for whoever is looking at them. Nothing is
 // polled, and nothing follows anything from the runner.
 //

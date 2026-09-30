@@ -3,9 +3,9 @@ package configs
 const (
 	defaultBlogPort = 80
 
-	// defaultRunnerManagerURL is where the runner manager sits on the local
+	// defaultRunnerControlPlaneURL is where the runner control plane sits on the local
 	// stack, which is also what it is called in production.
-	defaultRunnerManagerURL = "http://runner-manager:80"
+	defaultRunnerControlPlaneURL = "http://runner-controlplane:80"
 
 	// defaultRunnerPublicIngressDomain is where a browser reaches a task,
 	// which is the ingress's own domain with the port it is published on — the
@@ -35,8 +35,8 @@ type Blog struct {
 	MailUsername string `usage:"SMTP user, when the relay authenticates." env:"MAIL_SMTP_USERNAME" long:"mail-smtp-username"`
 	MailPassword string `usage:"SMTP password, when the relay authenticates." env:"MAIL_SMTP_PASSWORD" long:"mail-smtp-password"`
 
-	RunnerManagerURL    string `usage:"Base URL of the runner manager's API, which the dashboard passes task and stack commands to." env:"RUNNER_MANAGER_URL" long:"runner-manager-url"`
-	RunnerIngressDomain string `usage:"Domain a runner task's exposed ports are served on, used to build the addresses the dashboard shows." env:"RUNNER_INGRESS_DOMAIN" long:"runner-ingress-domain"`
+	RunnerControlPlaneURL string `usage:"Base URL of the runner control plane's API, which the dashboard passes task and stack commands to." env:"RUNNER_CONTROLPLANE_URL" long:"runner-controlplane-url"`
+	RunnerIngressDomain   string `usage:"Domain a runner task's exposed ports are served on, used to build the addresses the dashboard shows." env:"RUNNER_INGRESS_DOMAIN" long:"runner-ingress-domain"`
 }
 
 // NewBlog returns the configuration of the serve-blog command, holding the
@@ -44,8 +44,8 @@ type Blog struct {
 // struct it is given, so nothing it parses reaches another command.
 func NewBlog() *Blog {
 	return &Blog{
-		Port:                defaultBlogPort,
-		RunnerManagerURL:    defaultRunnerManagerURL,
-		RunnerIngressDomain: defaultRunnerPublicIngressDomain,
+		Port:                  defaultBlogPort,
+		RunnerControlPlaneURL: defaultRunnerControlPlaneURL,
+		RunnerIngressDomain:   defaultRunnerPublicIngressDomain,
 	}
 }

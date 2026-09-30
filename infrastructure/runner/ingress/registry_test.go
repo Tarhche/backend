@@ -16,44 +16,44 @@ type connected []tunnel.AgentState
 func (c connected) Agents() []tunnel.AgentState { return c }
 
 func TestRegistry_Exists(t *testing.T) {
-	t.Run("a worker holding connections is there", func(t *testing.T) {
+	t.Run("an orchestrator holding connections is there", func(t *testing.T) {
 		registry := NewRegistry(connected{
-			{Name: "runner-worker-01", Sessions: 2},
-			{Name: "runner-worker-02", Sessions: 3},
+			{Name: "runner-orchestrator-01", Sessions: 2},
+			{Name: "runner-orchestrator-02", Sessions: 3},
 		})
 
-		exists, err := registry.Exists(t.Context(), "runner-worker-02")
+		exists, err := registry.Exists(t.Context(), "runner-orchestrator-02")
 
 		require.NoError(t, err)
 		assert.True(t, exists)
 	})
 
-	t.Run("a worker that never connected is not there", func(t *testing.T) {
-		registry := NewRegistry(connected{{Name: "runner-worker-01", Sessions: 2}})
+	t.Run("an orchestrator that never connected is not there", func(t *testing.T) {
+		registry := NewRegistry(connected{{Name: "runner-orchestrator-01", Sessions: 2}})
 
-		exists, err := registry.Exists(t.Context(), "runner-worker-09")
+		exists, err := registry.Exists(t.Context(), "runner-orchestrator-09")
 
-		require.NoError(t, err, "a worker that is not there is an answer, not a failure")
+		require.NoError(t, err, "an orchestrator that is not there is an answer, not a failure")
 		assert.False(t, exists)
 	})
 
 	t.Run("nothing connected means nothing is there", func(t *testing.T) {
 		registry := NewRegistry(connected{})
 
-		exists, err := registry.Exists(t.Context(), "runner-worker-01")
+		exists, err := registry.Exists(t.Context(), "runner-orchestrator-01")
 
 		require.NoError(t, err)
 		assert.False(t, exists)
 	})
 
 	t.Run("a name is matched whole, not by resemblance", func(t *testing.T) {
-		registry := NewRegistry(connected{{Name: "runner-worker-01", Sessions: 2}})
+		registry := NewRegistry(connected{{Name: "runner-orchestrator-01", Sessions: 2}})
 
-		for _, name := range []string{"runner-worker-0", "runner-worker-011", "RUNNER-WORKER-01", ""} {
+		for _, name := range []string{"runner-orchestrator-0", "runner-orchestrator-011", "RUNNER-ORCHESTRATOR-01", ""} {
 			exists, err := registry.Exists(t.Context(), name)
 
 			require.NoError(t, err)
-			assert.False(t, exists, "%q is not runner-worker-01", name)
+			assert.False(t, exists, "%q is not runner-orchestrator-01", name)
 		}
 	})
 }

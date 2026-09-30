@@ -6,7 +6,7 @@ import (
 
 const (
 	// defaultSubjectPrefix namespaces a gateway's subjects on the broker. It is
-	// part of the wire contract: the workers that answer these requests consume
+	// part of the wire contract: the orchestrators that answer these requests consume
 	// the prefixed subjects, so changing it means changing them too.
 	defaultSubjectPrefix = "websocket_"
 
@@ -79,7 +79,7 @@ func (c configuration) validate() error {
 }
 
 // WithSubjectPrefix namespaces the subjects this gateway produces and consumes
-// on. It has to match what the workers on the other side listen to.
+// on. It has to match what the orchestrators on the other side listen to.
 func WithSubjectPrefix(prefix string) Option {
 	return func(c *configuration) {
 		c.subjectPrefix = prefix

@@ -15,14 +15,14 @@ func NewGenerateAuthority() *GenerateAuthority {
 	return &GenerateAuthority{OutputDir: "./certs/ca", Name: "runner tunnel authority"}
 }
 
-// GenerateCertificate holds the configuration of the ingress and worker
+// GenerateCertificate holds the configuration of the ingress and orchestrator
 // certificate generate commands, which differ only in what they are for.
 type GenerateCertificate struct {
 	AuthorityCertificate string `usage:"The authority's certificate, which signs this one." long:"ca-cert"`
 	AuthorityKey         string `usage:"The authority's private key. It is read here and nowhere else: nothing that runs needs it." long:"ca-key"`
 
 	OutputDir string `usage:"Directory the certificate is written to, as tls.crt and tls.key." long:"output-dir" short:"o"`
-	Name      string `usage:"Who this is: the ingress's own name, or a worker's identity. It becomes the first subject alternative name." long:"name" short:"n"`
+	Name      string `usage:"Who this is: the ingress's own name, or an orchestrator's identity. It becomes the first subject alternative name." long:"name" short:"n"`
 
 	DNS string `usage:"Other names it answers for, separated by commas." long:"dns"`
 	IP  string `usage:"Addresses it answers at, separated by commas. Nothing is put in that was not asked for." long:"ip"`

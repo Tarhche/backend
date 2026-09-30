@@ -14,13 +14,13 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/dashboard/runner/presenter"
 	"github.com/khanzadimahdi/testproject/domain"
-	runnerManager "github.com/khanzadimahdi/testproject/domain/runner/manager"
+	runnerControlPlane "github.com/khanzadimahdi/testproject/domain/runner/controlplane"
 	stackEvents "github.com/khanzadimahdi/testproject/domain/runner/stack/events"
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
 	taskEvents "github.com/khanzadimahdi/testproject/domain/runner/task/events"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
-	runnerMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/runner/manager"
+	runnerMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/runner/controlplane"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
 )
 
@@ -72,7 +72,7 @@ func running() taskEvents.Heartbeat {
 		OwnerUUID: ownerUUID,
 		Image:     "nginx:alpine",
 		State:     int(task.Running),
-		NodeName:  "worker-a",
+		NodeName:  "orchestrator-a",
 		At:        time.Date(2026, 9, 14, 9, 0, 0, 0, time.UTC),
 	}
 }
@@ -117,7 +117,7 @@ func TestChanges_Heartbeat(t *testing.T) {
 		assert.Equal(t, taskUUID, change.UUID)
 		require.NotNil(t, change.Task)
 		assert.Equal(t, task.Running.String(), change.Task.State)
-		assert.Equal(t, "worker-a", change.Task.NodeName)
+		assert.Equal(t, "orchestrator-a", change.Task.NodeName)
 	})
 
 	t.Run("a beat that repeats the last one says nothing", func(t *testing.T) {
@@ -203,7 +203,7 @@ func TestChanges_Heartbeat(t *testing.T) {
 			replyer messagingMock.RecordingReplyer
 		)
 
-		runner.On("Stack", mock.Anything, stackUUID).Return(runnerManager.Stack{
+		runner.On("Stack", mock.Anything, stackUUID).Return(runnerControlPlane.Stack{
 			UUID: stackUUID, Name: "blog", OwnerUUID: ownerUUID,
 			State:    task.Running,
 			Services: []task.Task{{UUID: taskUUID, Slug: "nginx-xkfqz"}},
@@ -266,7 +266,7 @@ func TestChanges_Scheduled(t *testing.T) {
 			Name:          "nginx",
 			OwnerUUID:     ownerUUID,
 			Image:         "nginx:alpine",
-			NominatedNode: "worker-a",
+			NominatedNode: "orchestrator-a",
 		})
 		require.NoError(t, err)
 

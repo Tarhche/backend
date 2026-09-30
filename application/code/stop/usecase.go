@@ -8,7 +8,7 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/code/runCode"
 	"github.com/khanzadimahdi/testproject/domain"
-	runnerManager "github.com/khanzadimahdi/testproject/domain/runner/manager"
+	runnerControlPlane "github.com/khanzadimahdi/testproject/domain/runner/controlplane"
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
 )
 
@@ -17,7 +17,7 @@ import (
 const StopName = "codeStop"
 
 type UseCase struct {
-	runner    runnerManager.Client
+	runner    runnerControlPlane.Client
 	validator domain.Validator
 	replyer   domain.Replyer
 
@@ -28,7 +28,7 @@ type UseCase struct {
 var _ domain.MessageHandler = &UseCase{}
 
 func NewUseCase(
-	runner runnerManager.Client,
+	runner runnerControlPlane.Client,
 	validator domain.Validator,
 	replyer domain.Replyer,
 	logger *slog.Logger,

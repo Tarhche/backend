@@ -6,21 +6,21 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/dashboard/runner/presenter"
 	"github.com/khanzadimahdi/testproject/domain"
-	runnerManager "github.com/khanzadimahdi/testproject/domain/runner/manager"
-	"github.com/khanzadimahdi/testproject/infrastructure/runner/manager/client"
+	runnerControlPlane "github.com/khanzadimahdi/testproject/domain/runner/controlplane"
+	"github.com/khanzadimahdi/testproject/infrastructure/runner/controlplane/client"
 )
 
 // UseCase hands a task to the runner. The runner is what owns a
 // task's lifecycle; this decides only whether the request is well formed
 // before passing it on.
 type UseCase struct {
-	runner        runnerManager.Client
+	runner        runnerControlPlane.Client
 	validator     domain.Validator
 	owners        *presenter.Directory
 	ingressDomain string
 }
 
-func NewUseCase(runner runnerManager.Client, validator domain.Validator, ownerDirectory *presenter.Directory, ingressDomain string) *UseCase {
+func NewUseCase(runner runnerControlPlane.Client, validator domain.Validator, ownerDirectory *presenter.Directory, ingressDomain string) *UseCase {
 	return &UseCase{
 		runner:        runner,
 		validator:     validator,
@@ -34,7 +34,7 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		return &Response{ValidationErrors: validationErrors}, nil
 	}
 
-	created, err := uc.runner.RunTask(ctx, runnerManager.TaskSpec{
+	created, err := uc.runner.RunTask(ctx, runnerControlPlane.TaskSpec{
 		Name:    request.Name,
 		Service: request.Service,
 	}, request.OwnerUUID)

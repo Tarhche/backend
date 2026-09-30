@@ -3,7 +3,7 @@ package killuserstack
 import (
 	"context"
 
-	runnerManager "github.com/khanzadimahdi/testproject/domain/runner/manager"
+	runnerControlPlane "github.com/khanzadimahdi/testproject/domain/runner/controlplane"
 )
 
 // UseCase kills one of somebody's own stacks.
@@ -11,10 +11,10 @@ import (
 // The stack is read as theirs first, so one that is somebody else's is not
 // found rather than refused, and nothing is asked of the runner about it.
 type UseCase struct {
-	runner runnerManager.Client
+	runner runnerControlPlane.Client
 }
 
-func NewUseCase(runner runnerManager.Client) *UseCase {
+func NewUseCase(runner runnerControlPlane.Client) *UseCase {
 	return &UseCase{runner: runner}
 }
 

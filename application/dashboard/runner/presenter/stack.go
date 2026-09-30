@@ -3,7 +3,7 @@ package presenter
 import (
 	"time"
 
-	runnerManager "github.com/khanzadimahdi/testproject/domain/runner/manager"
+	runnerControlPlane "github.com/khanzadimahdi/testproject/domain/runner/controlplane"
 )
 
 // Stack is a stack and the services in it, as the dashboard shows it.
@@ -23,7 +23,7 @@ type Stack struct {
 	Owner Owner `json:"owner"`
 }
 
-func NewStack(s runnerManager.Stack, ingressDomain string, owners Owners) Stack {
+func NewStack(s runnerControlPlane.Stack, ingressDomain string, owners Owners) Stack {
 	return Stack{
 		UUID:          s.UUID,
 		Name:          s.Name,
@@ -36,7 +36,7 @@ func NewStack(s runnerManager.Stack, ingressDomain string, owners Owners) Stack 
 	}
 }
 
-func NewStacks(stacks []runnerManager.Stack, ingressDomain string, owners Owners) []Stack {
+func NewStacks(stacks []runnerControlPlane.Stack, ingressDomain string, owners Owners) []Stack {
 	items := make([]Stack, len(stacks))
 	for i := range stacks {
 		items[i] = NewStack(stacks[i], ingressDomain, owners)

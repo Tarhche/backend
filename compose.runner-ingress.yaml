@@ -5,7 +5,7 @@ services:
       - no-new-privileges:true
     networks:
       # everything that reaches the ingress: the proxy routes container
-      # hostnames to it, and the workers dial in. The manager is not here --
+      # hostnames to it, and the orchestrators dial in. The control plane is not here --
       # it schedules over NATS and asks the ingress for nothing.
       - runner_ingress
       # which node is holding a container is the one thing it looks up
@@ -20,11 +20,11 @@ services:
     stop_grace_period: 30s
     deploy:
       mode: replicated
-      # one replica per address: a worker's connections land on whichever
+      # one replica per address: an orchestrator's connections land on whichever
       # replica it dialled, and one name in front of several replicas hands
       # each connection to a different one. Several ingresses are had by
       # running several of these with an address each and naming them all in
-      # RUNNER_TUNNEL_ADDRESSES, which is what a worker keeps a pool per.
+      # RUNNER_TUNNEL_ADDRESSES, which is what an orchestrator keeps a pool per.
       replicas: 1
       endpoint_mode: vip
       update_config:
@@ -73,7 +73,7 @@ services:
       OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT: ${OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT:-}
       OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
       PROFILING_ENABLED: ${PROFILING_ENABLED:-true}
-      # ports arbitrary TCP arrives on, as listen=worker:target. Nothing is
+      # ports arbitrary TCP arrives on, as listen=orchestrator:target. Nothing is
       # forwarded unless it is named here.
       RUNNER_INGRESS_FORWARDS: ${BACKEND_RUNNER_INGRESS_FORWARDS:-}
 

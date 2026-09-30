@@ -10,15 +10,15 @@ import (
 )
 
 // Streams is the part of the tunnel a transport needs: a stream to one named
-// worker's service. Asking for no more than this is what lets the transport be
+// orchestrator's service. Asking for no more than this is what lets the transport be
 // driven by a double in tests.
 type Streams interface {
-	Dial(ctx context.Context, worker string, target tunnel.Target) (net.Conn, error)
+	Dial(ctx context.Context, orchestrator string, target tunnel.Target) (net.Conn, error)
 }
 
 // NewTransport builds an http.Transport that dials nothing.
 //
-// The address it is handed names a worker rather than a machine, and what comes
+// The address it is handed names an orchestrator rather than a machine, and what comes
 // back is a stream on one of the connections that runner already opened,
 // carried to the service named here. Nothing below this knows the tunnel is not
 // a network, which is what lets an ordinary reverse proxy sit on top of it.
@@ -27,12 +27,12 @@ func NewTransport(streams Streams, service string, idleTimeout time.Duration) *h
 		DialContext: func(ctx context.Context, _ string, address string) (net.Conn, error) {
 			// a URL host carries a port whether or not one means anything here,
 			// and what is left of it is the runner's name.
-			worker, _, err := net.SplitHostPort(address)
+			orchestrator, _, err := net.SplitHostPort(address)
 			if err != nil {
-				worker = address
+				orchestrator = address
 			}
 
-			return streams.Dial(ctx, worker, tunnel.Target{Service: service})
+			return streams.Dial(ctx, orchestrator, tunnel.Target{Service: service})
 		},
 		IdleConnTimeout: idleTimeout,
 	}

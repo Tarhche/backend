@@ -4,8 +4,8 @@ import "time"
 
 const TaskLoggedName = "runnerTaskLogged"
 
-// TaskLogged carries a batch of lines a task wrote. The worker ships them
-// as they are produced and the manager is what stores them, so a line survives
+// TaskLogged carries a batch of lines a task wrote. The orchestrator ships them
+// as they are produced and the control plane is what stores them, so a line survives
 // its task.
 type TaskLogged struct {
 	UUID        string    `json:"uuid"`

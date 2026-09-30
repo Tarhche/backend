@@ -1150,16 +1150,16 @@ definitions:
       name:
         type: string
     type: object
-  github_com_khanzadimahdi_testproject_application_runner_manager_task_getTasks.Response:
+  github_com_khanzadimahdi_testproject_application_runner_controlplane_task_getTasks.Response:
     properties:
       items:
         items:
-          $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_runner_manager_task_getTasks.TaskResponse'
+          $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_runner_controlplane_task_getTasks.TaskResponse'
         type: array
       pagination:
         $ref: '#/definitions/gettasks.Pagination'
     type: object
-  github_com_khanzadimahdi_testproject_application_runner_manager_task_getTasks.TaskResponse:
+  github_com_khanzadimahdi_testproject_application_runner_controlplane_task_getTasks.TaskResponse:
     properties:
       created_at:
         type: string
@@ -1176,7 +1176,7 @@ definitions:
       uuid:
         type: string
     type: object
-  github_com_khanzadimahdi_testproject_application_runner_manager_task_runTask.Mount:
+  github_com_khanzadimahdi_testproject_application_runner_controlplane_task_runTask.Mount:
     properties:
       read_only:
         type: boolean
@@ -1187,14 +1187,14 @@ definitions:
       type:
         type: string
     type: object
-  github_com_khanzadimahdi_testproject_application_runner_manager_task_runTask.PortBinding:
+  github_com_khanzadimahdi_testproject_application_runner_controlplane_task_runTask.PortBinding:
     properties:
       host_ip:
         type: string
       host_port:
         type: integer
     type: object
-  github_com_khanzadimahdi_testproject_application_runner_manager_task_runTask.Request:
+  github_com_khanzadimahdi_testproject_application_runner_controlplane_task_runTask.Request:
     properties:
       attach_stderr:
         type: boolean
@@ -1222,24 +1222,24 @@ definitions:
         type: string
       mounts:
         items:
-          $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_runner_manager_task_runTask.Mount'
+          $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_runner_controlplane_task_runTask.Mount'
         type: array
       name:
         type: string
       port_bindings:
         additionalProperties:
           items:
-            $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_runner_manager_task_runTask.PortBinding'
+            $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_runner_controlplane_task_runTask.PortBinding'
           type: array
         type: object
       resource_limits:
-        $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_runner_manager_task_runTask.ResourceLimits'
+        $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_runner_controlplane_task_runTask.ResourceLimits'
       restart_count:
         type: integer
       restart_policy:
         type: string
     type: object
-  github_com_khanzadimahdi_testproject_application_runner_manager_task_runTask.ResourceLimits:
+  github_com_khanzadimahdi_testproject_application_runner_controlplane_task_runTask.ResourceLimits:
     properties:
       cpu:
         type: number
@@ -1248,21 +1248,21 @@ definitions:
       memory:
         type: integer
     type: object
-  github_com_khanzadimahdi_testproject_application_runner_manager_task_runTask.Response:
+  github_com_khanzadimahdi_testproject_application_runner_controlplane_task_runTask.Response:
     properties:
       errors:
         $ref: '#/definitions/domain.ValidationErrors'
       uuid:
         type: string
     type: object
-  github_com_khanzadimahdi_testproject_application_runner_worker_task_getTasks.Response:
+  github_com_khanzadimahdi_testproject_application_runner_orchestrator_task_getTasks.Response:
     properties:
       items:
         items:
-          $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_runner_worker_task_getTasks.TaskResponse'
+          $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_runner_orchestrator_task_getTasks.TaskResponse'
         type: array
     type: object
-  github_com_khanzadimahdi_testproject_application_runner_worker_task_getTasks.TaskResponse:
+  github_com_khanzadimahdi_testproject_application_runner_orchestrator_task_getTasks.TaskResponse:
     properties:
       created_at:
         type: string
@@ -1279,7 +1279,7 @@ definitions:
       uuid:
         type: string
     type: object
-  github_com_khanzadimahdi_testproject_application_runner_worker_task_runTask.Mount:
+  github_com_khanzadimahdi_testproject_application_runner_orchestrator_task_runTask.Mount:
     properties:
       read_only:
         type: boolean
@@ -1290,14 +1290,14 @@ definitions:
       type:
         type: string
     type: object
-  github_com_khanzadimahdi_testproject_application_runner_worker_task_runTask.PortBinding:
+  github_com_khanzadimahdi_testproject_application_runner_orchestrator_task_runTask.PortBinding:
     properties:
       host_ip:
         type: string
       host_port:
         type: integer
     type: object
-  github_com_khanzadimahdi_testproject_application_runner_worker_task_runTask.Request:
+  github_com_khanzadimahdi_testproject_application_runner_orchestrator_task_runTask.Request:
     properties:
       attach_stderr:
         type: boolean
@@ -1325,18 +1325,18 @@ definitions:
         type: string
       mounts:
         items:
-          $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_runner_worker_task_runTask.Mount'
+          $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_runner_orchestrator_task_runTask.Mount'
         type: array
       name:
         type: string
       port_bindings:
         additionalProperties:
           items:
-            $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_runner_worker_task_runTask.PortBinding'
+            $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_runner_orchestrator_task_runTask.PortBinding'
           type: array
         type: object
       resource_limits:
-        $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_runner_worker_task_runTask.ResourceLimits'
+        $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_runner_orchestrator_task_runTask.ResourceLimits'
       restart_count:
         type: integer
       restart_policy:
@@ -1344,7 +1344,7 @@ definitions:
       uuid:
         type: string
     type: object
-  github_com_khanzadimahdi_testproject_application_runner_worker_task_runTask.ResourceLimits:
+  github_com_khanzadimahdi_testproject_application_runner_orchestrator_task_runTask.ResourceLimits:
     properties:
       cpu:
         type: number
@@ -3717,20 +3717,20 @@ paths:
     get:
       consumes:
       - application/json
-      description: return tasks scheduled for this worker
+      description: return tasks scheduled for this orchestrator
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_runner_worker_task_getTasks.Response'
+            $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_runner_orchestrator_task_getTasks.Response'
         "500":
           description: Internal Server Error
           schema:
             additionalProperties: true
             type: object
-      summary: List worker tasks
+      summary: List orchestrator tasks
       tags:
       - runner tasks
   /tasks/{uuid}:
@@ -3799,7 +3799,7 @@ paths:
     post:
       consumes:
       - application/json
-      description: instruct worker to halt a task
+      description: instruct orchestrator to halt a task
       parameters:
       - description: Task UUID
         in: path
@@ -3824,21 +3824,21 @@ paths:
           schema:
             additionalProperties: true
             type: object
-      summary: Stop worker task
+      summary: Stop orchestrator task
       tags:
       - runner tasks
   /tasks/run:
     post:
       consumes:
       - application/json
-      description: accept a task result or status update from worker
+      description: accept a task result or status update from orchestrator
       parameters:
       - description: Task operation
         in: body
         name: body
         required: true
         schema:
-          $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_runner_worker_task_runTask.Request'
+          $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_runner_orchestrator_task_runTask.Request'
       produces:
       - application/json
       responses:
@@ -3862,7 +3862,7 @@ paths:
           schema:
             additionalProperties: true
             type: object
-      summary: Run worker task
+      summary: Run orchestrator task
       tags:
       - runner tasks
 schemes:

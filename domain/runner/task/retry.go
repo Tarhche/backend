@@ -78,7 +78,7 @@ func (t *Task) MayRetry(attempt int) bool {
 // The wait grows with the attempts behind it, so a task that fails the
 // moment it starts is not started over and over as fast as it can fail. It is
 // measured from the failure itself, which is written down, so the wait survives
-// a manager that is restarted in the middle of it.
+// a control plane that is restarted in the middle of it.
 func (t *Task) RetryDue(now time.Time, attempt int) bool {
 	if t.ExpectedState != Running || t.FinishedAt.IsZero() {
 		return false

@@ -9,7 +9,7 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/dashboard/runner/presenter"
 	"github.com/khanzadimahdi/testproject/domain"
-	runnerManager "github.com/khanzadimahdi/testproject/domain/runner/manager"
+	runnerControlPlane "github.com/khanzadimahdi/testproject/domain/runner/controlplane"
 	stackEvents "github.com/khanzadimahdi/testproject/domain/runner/stack/events"
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
 	taskEvents "github.com/khanzadimahdi/testproject/domain/runner/task/events"
@@ -23,7 +23,7 @@ import (
 // clients it holds, so which replica a watch was opened on does not matter.
 type Changes struct {
 	watchers      *Watchers
-	runner        runnerManager.Client
+	runner        runnerControlPlane.Client
 	owners        *presenter.Directory
 	replyer       domain.Replyer
 	ingressDomain string
@@ -33,7 +33,7 @@ type Changes struct {
 
 func NewChanges(
 	watchers *Watchers,
-	runner runnerManager.Client,
+	runner runnerControlPlane.Client,
 	ownerDirectory *presenter.Directory,
 	replyer domain.Replyer,
 	ingressDomain string,

@@ -9,7 +9,7 @@ import (
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/runner/task"
-	runnerMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/runner/manager"
+	runnerMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/runner/controlplane"
 )
 
 func TestUseCase_Execute(t *testing.T) {

@@ -3,16 +3,16 @@ package stopTask
 import (
 	"context"
 
-	runnerManager "github.com/khanzadimahdi/testproject/domain/runner/manager"
+	runnerControlPlane "github.com/khanzadimahdi/testproject/domain/runner/controlplane"
 )
 
 // UseCase stops a task. The runner owns its lifecycle, so this passes the
 // command on rather than deciding anything about it.
 type UseCase struct {
-	runner runnerManager.Client
+	runner runnerControlPlane.Client
 }
 
-func NewUseCase(runner runnerManager.Client) *UseCase {
+func NewUseCase(runner runnerControlPlane.Client) *UseCase {
 	return &UseCase{runner: runner}
 }
 

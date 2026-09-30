@@ -53,7 +53,7 @@ func (r *LogsRepository) EnsureIndexes(ctx context.Context) error {
 }
 
 // Append stores lines, skipping the ones already held. A line is identified by
-// its own content, so a worker replaying part of a stream it has already
+// its own content, so an orchestrator replaying part of a stream it has already
 // shipped costs a no-op write rather than a duplicate.
 func (r *LogsRepository) Append(ctx context.Context, logs []task.Log) error {
 	if len(logs) == 0 {
@@ -131,7 +131,7 @@ func (r *LogsRepository) DeleteByTask(ctx context.Context, taskUUID string) erro
 }
 
 // Size reports how many bytes of content a task has stored, which is what the
-// manager caps a chatty task against.
+// control plane caps a chatty task against.
 func (r *LogsRepository) Size(ctx context.Context, taskUUID string) (int64, error) {
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()

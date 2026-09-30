@@ -122,7 +122,7 @@ func (m *Manager) ensure(ctx context.Context, name string) error {
 		Driver:  "bridge",
 		Options: map[string]string{"com.docker.network.bridge.enable_ip_masquerade": "false"},
 	}); err != nil {
-		// another worker on the same daemon may have won the race, which
+		// another orchestrator on the same daemon may have won the race, which
 		// leaves exactly the network this was asking for.
 		if _, inspectErr := m.client.NetworkInspect(ctx, name, networkTypes.InspectOptions{}); inspectErr == nil {
 			return nil

@@ -59,13 +59,13 @@ services:
       OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT: ${OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT:-}
       OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
       PROFILING_ENABLED: ${PROFILING_ENABLED:-true}
-      RUNNER_MANAGER_URL: ${RUNNER_MANAGER_URL}
+      RUNNER_CONTROLPLANE_URL: ${RUNNER_CONTROLPLANE_URL}
       RUNNER_INGRESS_DOMAIN: ${RUNNER_PUBLIC_INGRESS_DOMAIN}
 
-  runner-manager:
+  runner-controlplane:
     <<: *app
     build:
-      target: develop-runner-manager
+      target: develop-runner-controlplane
     ports:
       - "8020:80"
     environment:
@@ -91,7 +91,7 @@ services:
     ports:
       # the ingress's own routes and, by hostname, the containers' exposed ports
       - "8030:80"
-      # a forwarded port, carrying arbitrary TCP to a worker through the tunnel
+      # a forwarded port, carrying arbitrary TCP to an orchestrator through the tunnel
       - "8031:8031"
     environment:
       RUNNER_INGRESS_DOMAIN: ${RUNNER_INGRESS_DOMAIN}
@@ -113,21 +113,21 @@ services:
       OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
       PROFILING_ENABLED: ${PROFILING_ENABLED:-true}
 
-  runner-worker-01:
+  runner-orchestrator-01:
     <<: *app
     build:
-      target: develop-runner-worker
+      target: develop-runner-orchestrator
     ports:
       - "8040:80"
     environment:
-      RUNNER_WORKER_NAME: runner-worker-01
+      RUNNER_ORCHESTRATOR_NAME: runner-orchestrator-01
       # the containers' ports are published on the docker daemon's own host,
       # which is the dind service rather than this one.
-      RUNNER_WORKER_ADVERTISE_HOST: ${RUNNER_WORKER_ADVERTISE_HOST}
+      RUNNER_ORCHESTRATOR_ADVERTISE_HOST: ${RUNNER_ORCHESTRATOR_ADVERTISE_HOST}
       RUNNER_TUNNEL_ADDRESSES: ${RUNNER_TUNNEL_ADDRESSES}
       RUNNER_TUNNEL_CA_CERT: ${RUNNER_TUNNEL_CA_CERT}
-      RUNNER_TUNNEL_CERT: ${RUNNER_WORKER_01_TUNNEL_CERT}
-      RUNNER_TUNNEL_KEY: ${RUNNER_WORKER_01_TUNNEL_KEY}
+      RUNNER_TUNNEL_CERT: ${RUNNER_ORCHESTRATOR_01_TUNNEL_CERT}
+      RUNNER_TUNNEL_KEY: ${RUNNER_ORCHESTRATOR_01_TUNNEL_KEY}
       RUNNER_TUNNEL_SERVER_NAME: ${RUNNER_TUNNEL_SERVER_NAME}
       PUBLIC_KEY: ${PUBLIC_KEY}
       RUNNER_TUNNEL_ALLOWED_TARGETS: ${RUNNER_TUNNEL_ALLOWED_TARGETS}
@@ -140,21 +140,21 @@ services:
       OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT: ${OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT:-}
       OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
       PROFILING_ENABLED: ${PROFILING_ENABLED:-true}
-  runner-worker-02:
+  runner-orchestrator-02:
     <<: *app
     build:
-      target: develop-runner-worker
+      target: develop-runner-orchestrator
     ports:
       - "8041:80"
     environment:
-      RUNNER_WORKER_NAME: runner-worker-02
+      RUNNER_ORCHESTRATOR_NAME: runner-orchestrator-02
       # the containers' ports are published on the docker daemon's own host,
       # which is the dind service rather than this one.
-      RUNNER_WORKER_ADVERTISE_HOST: ${RUNNER_WORKER_ADVERTISE_HOST}
+      RUNNER_ORCHESTRATOR_ADVERTISE_HOST: ${RUNNER_ORCHESTRATOR_ADVERTISE_HOST}
       RUNNER_TUNNEL_ADDRESSES: ${RUNNER_TUNNEL_ADDRESSES}
       RUNNER_TUNNEL_CA_CERT: ${RUNNER_TUNNEL_CA_CERT}
-      RUNNER_TUNNEL_CERT: ${RUNNER_WORKER_02_TUNNEL_CERT}
-      RUNNER_TUNNEL_KEY: ${RUNNER_WORKER_02_TUNNEL_KEY}
+      RUNNER_TUNNEL_CERT: ${RUNNER_ORCHESTRATOR_02_TUNNEL_CERT}
+      RUNNER_TUNNEL_KEY: ${RUNNER_ORCHESTRATOR_02_TUNNEL_KEY}
       RUNNER_TUNNEL_SERVER_NAME: ${RUNNER_TUNNEL_SERVER_NAME}
       PUBLIC_KEY: ${PUBLIC_KEY}
       RUNNER_TUNNEL_ALLOWED_TARGETS: ${RUNNER_TUNNEL_ALLOWED_TARGETS}
@@ -167,21 +167,21 @@ services:
       OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT: ${OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT:-}
       OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
       PROFILING_ENABLED: ${PROFILING_ENABLED:-true}
-  runner-worker-03:
+  runner-orchestrator-03:
     <<: *app
     build:
-      target: develop-runner-worker
+      target: develop-runner-orchestrator
     ports:
       - "8042:80"
     environment:
-      RUNNER_WORKER_NAME: runner-worker-03
+      RUNNER_ORCHESTRATOR_NAME: runner-orchestrator-03
       # the containers' ports are published on the docker daemon's own host,
       # which is the dind service rather than this one.
-      RUNNER_WORKER_ADVERTISE_HOST: ${RUNNER_WORKER_ADVERTISE_HOST}
+      RUNNER_ORCHESTRATOR_ADVERTISE_HOST: ${RUNNER_ORCHESTRATOR_ADVERTISE_HOST}
       RUNNER_TUNNEL_ADDRESSES: ${RUNNER_TUNNEL_ADDRESSES}
       RUNNER_TUNNEL_CA_CERT: ${RUNNER_TUNNEL_CA_CERT}
-      RUNNER_TUNNEL_CERT: ${RUNNER_WORKER_03_TUNNEL_CERT}
-      RUNNER_TUNNEL_KEY: ${RUNNER_WORKER_03_TUNNEL_KEY}
+      RUNNER_TUNNEL_CERT: ${RUNNER_ORCHESTRATOR_03_TUNNEL_CERT}
+      RUNNER_TUNNEL_KEY: ${RUNNER_ORCHESTRATOR_03_TUNNEL_KEY}
       RUNNER_TUNNEL_SERVER_NAME: ${RUNNER_TUNNEL_SERVER_NAME}
       PUBLIC_KEY: ${PUBLIC_KEY}
       RUNNER_TUNNEL_ALLOWED_TARGETS: ${RUNNER_TUNNEL_ALLOWED_TARGETS}
