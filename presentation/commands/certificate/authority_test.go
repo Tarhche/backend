@@ -74,7 +74,7 @@ func TestAuthority(t *testing.T) {
 			t.Error("unexpected output-dir flag default value")
 		}
 
-		if command.configs.Name != "runner tunnel authority" {
+		if command.configs.Name != "workload tunnel authority" {
 			t.Error("unexpected name flag default value")
 		}
 

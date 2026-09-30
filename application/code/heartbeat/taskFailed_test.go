@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/khanzadimahdi/testproject/domain/runner/task/events"
+	"github.com/khanzadimahdi/testproject/domain/workload/task/events"
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
 )
 
@@ -39,9 +39,9 @@ func TestTaskFailed_Handle(t *testing.T) {
 		require.NoError(t, NewTaskFailedHandler(&replyer, discardLogger()).Handle(context.Background(), failure(t, events.TaskFailed{
 			UUID:     "task-uuid",
 			Name:     "a-request-id",
-			NodeName: "runner-orchestrator-01",
+			NodeName: "workload-orchestrator-01",
 			At:       time.Now(),
-			Reason:   "no such image: ghcr.io/example/runner:latest",
+			Reason:   "no such image: ghcr.io/example/workload:latest",
 		})))
 
 		replies := replyer.Replies()

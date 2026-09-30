@@ -3055,7 +3055,7 @@
         },
         "/nodes": {
             "get": {
-                "description": "return a page of runner nodes",
+                "description": "return a page of workload nodes",
                 "consumes": [
                     "application/json"
                 ],
@@ -3063,7 +3063,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "runner nodes"
+                    "workload nodes"
                 ],
                 "summary": "List nodes",
                 "parameters": [
@@ -3094,7 +3094,7 @@
         },
         "/nodes/{name}": {
             "get": {
-                "description": "retrieve information about a runner node",
+                "description": "retrieve information about a workload node",
                 "consumes": [
                     "application/json"
                 ],
@@ -3102,7 +3102,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "runner nodes"
+                    "workload nodes"
                 ],
                 "summary": "Get node",
                 "parameters": [
@@ -3148,14 +3148,14 @@
                     "application/json"
                 ],
                 "tags": [
-                    "runner tasks"
+                    "workload tasks"
                 ],
                 "summary": "List orchestrator tasks",
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_runner_orchestrator_task_getTasks.Response"
+                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_workload_orchestrator_task_getTasks.Response"
                         }
                     },
                     "500": {
@@ -3178,7 +3178,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "runner tasks"
+                    "workload tasks"
                 ],
                 "summary": "Run orchestrator task",
                 "parameters": [
@@ -3188,7 +3188,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_runner_orchestrator_task_runTask.Request"
+                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_workload_orchestrator_task_runTask.Request"
                         }
                     }
                 ],
@@ -3234,7 +3234,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "runner tasks"
+                    "workload tasks"
                 ],
                 "summary": "Get task",
                 "parameters": [
@@ -3278,7 +3278,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "runner tasks"
+                    "workload tasks"
                 ],
                 "summary": "Delete task",
                 "parameters": [
@@ -3325,7 +3325,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "runner tasks"
+                    "workload tasks"
                 ],
                 "summary": "Stop orchestrator task",
                 "parameters": [
@@ -5137,13 +5137,13 @@
                 }
             }
         },
-        "github_com_khanzadimahdi_testproject_application_runner_controlplane_task_getTasks.Response": {
+        "github_com_khanzadimahdi_testproject_application_workload_controlplane_task_getTasks.Response": {
             "type": "object",
             "properties": {
                 "items": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_runner_controlplane_task_getTasks.TaskResponse"
+                        "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_workload_controlplane_task_getTasks.TaskResponse"
                     }
                 },
                 "pagination": {
@@ -5151,7 +5151,7 @@
                 }
             }
         },
-        "github_com_khanzadimahdi_testproject_application_runner_controlplane_task_getTasks.TaskResponse": {
+        "github_com_khanzadimahdi_testproject_application_workload_controlplane_task_getTasks.TaskResponse": {
             "type": "object",
             "properties": {
                 "created_at": {
@@ -5177,7 +5177,7 @@
                 }
             }
         },
-        "github_com_khanzadimahdi_testproject_application_runner_controlplane_task_runTask.Mount": {
+        "github_com_khanzadimahdi_testproject_application_workload_controlplane_task_runTask.Mount": {
             "type": "object",
             "properties": {
                 "read_only": {
@@ -5194,7 +5194,7 @@
                 }
             }
         },
-        "github_com_khanzadimahdi_testproject_application_runner_controlplane_task_runTask.PortBinding": {
+        "github_com_khanzadimahdi_testproject_application_workload_controlplane_task_runTask.PortBinding": {
             "type": "object",
             "properties": {
                 "host_ip": {
@@ -5205,7 +5205,7 @@
                 }
             }
         },
-        "github_com_khanzadimahdi_testproject_application_runner_controlplane_task_runTask.Request": {
+        "github_com_khanzadimahdi_testproject_application_workload_controlplane_task_runTask.Request": {
             "type": "object",
             "properties": {
                 "attach_stderr": {
@@ -5247,7 +5247,7 @@
                 "mounts": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_runner_controlplane_task_runTask.Mount"
+                        "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_workload_controlplane_task_runTask.Mount"
                     }
                 },
                 "name": {
@@ -5258,12 +5258,12 @@
                     "additionalProperties": {
                         "type": "array",
                         "items": {
-                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_runner_controlplane_task_runTask.PortBinding"
+                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_workload_controlplane_task_runTask.PortBinding"
                         }
                     }
                 },
                 "resource_limits": {
-                    "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_runner_controlplane_task_runTask.ResourceLimits"
+                    "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_workload_controlplane_task_runTask.ResourceLimits"
                 },
                 "restart_count": {
                     "type": "integer"
@@ -5273,7 +5273,7 @@
                 }
             }
         },
-        "github_com_khanzadimahdi_testproject_application_runner_controlplane_task_runTask.ResourceLimits": {
+        "github_com_khanzadimahdi_testproject_application_workload_controlplane_task_runTask.ResourceLimits": {
             "type": "object",
             "properties": {
                 "cpu": {
@@ -5287,7 +5287,7 @@
                 }
             }
         },
-        "github_com_khanzadimahdi_testproject_application_runner_controlplane_task_runTask.Response": {
+        "github_com_khanzadimahdi_testproject_application_workload_controlplane_task_runTask.Response": {
             "type": "object",
             "properties": {
                 "errors": {
@@ -5298,18 +5298,18 @@
                 }
             }
         },
-        "github_com_khanzadimahdi_testproject_application_runner_orchestrator_task_getTasks.Response": {
+        "github_com_khanzadimahdi_testproject_application_workload_orchestrator_task_getTasks.Response": {
             "type": "object",
             "properties": {
                 "items": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_runner_orchestrator_task_getTasks.TaskResponse"
+                        "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_workload_orchestrator_task_getTasks.TaskResponse"
                     }
                 }
             }
         },
-        "github_com_khanzadimahdi_testproject_application_runner_orchestrator_task_getTasks.TaskResponse": {
+        "github_com_khanzadimahdi_testproject_application_workload_orchestrator_task_getTasks.TaskResponse": {
             "type": "object",
             "properties": {
                 "created_at": {
@@ -5335,7 +5335,7 @@
                 }
             }
         },
-        "github_com_khanzadimahdi_testproject_application_runner_orchestrator_task_runTask.Mount": {
+        "github_com_khanzadimahdi_testproject_application_workload_orchestrator_task_runTask.Mount": {
             "type": "object",
             "properties": {
                 "read_only": {
@@ -5352,7 +5352,7 @@
                 }
             }
         },
-        "github_com_khanzadimahdi_testproject_application_runner_orchestrator_task_runTask.PortBinding": {
+        "github_com_khanzadimahdi_testproject_application_workload_orchestrator_task_runTask.PortBinding": {
             "type": "object",
             "properties": {
                 "host_ip": {
@@ -5363,7 +5363,7 @@
                 }
             }
         },
-        "github_com_khanzadimahdi_testproject_application_runner_orchestrator_task_runTask.Request": {
+        "github_com_khanzadimahdi_testproject_application_workload_orchestrator_task_runTask.Request": {
             "type": "object",
             "properties": {
                 "attach_stderr": {
@@ -5405,7 +5405,7 @@
                 "mounts": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_runner_orchestrator_task_runTask.Mount"
+                        "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_workload_orchestrator_task_runTask.Mount"
                     }
                 },
                 "name": {
@@ -5416,12 +5416,12 @@
                     "additionalProperties": {
                         "type": "array",
                         "items": {
-                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_runner_orchestrator_task_runTask.PortBinding"
+                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_workload_orchestrator_task_runTask.PortBinding"
                         }
                     }
                 },
                 "resource_limits": {
-                    "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_runner_orchestrator_task_runTask.ResourceLimits"
+                    "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_workload_orchestrator_task_runTask.ResourceLimits"
                 },
                 "restart_count": {
                     "type": "integer"
@@ -5434,7 +5434,7 @@
                 }
             }
         },
-        "github_com_khanzadimahdi_testproject_application_runner_orchestrator_task_runTask.ResourceLimits": {
+        "github_com_khanzadimahdi_testproject_application_workload_orchestrator_task_runTask.ResourceLimits": {
             "type": "object",
             "properties": {
                 "cpu": {

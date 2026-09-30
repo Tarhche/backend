@@ -498,7 +498,7 @@ definitions:
       max_retries:
         description: |-
           MaxRetries is how many times a task that fails is asked for again
-          before the runner gives up on it. -1 never gives up. Retries is how many
+          before the workload gives up on it. -1 never gives up. Retries is how many
           of those have happened, so a task that keeps failing can say what is
           being done about it.
         type: integer
@@ -511,7 +511,7 @@ definitions:
       read_only:
         type: boolean
       reason:
-        description: Reason is why a task failed, when the runner can say so.
+        description: Reason is why a task failed, when the workload can say so.
         type: string
       resource_limits:
         $ref: '#/definitions/presenter.Limits'
@@ -528,7 +528,7 @@ definitions:
       state:
         description: |-
           State is what the task is doing; ExpectedState is what it was asked
-          to be doing. They differ while the runner is closing the gap.
+          to be doing. They differ while the workload is closing the gap.
         type: string
       uuid:
         type: string
@@ -1130,7 +1130,7 @@ definitions:
       max_retries:
         description: |-
           MaxRetries is how many times a task that fails is asked for again
-          before the runner gives up on it. -1 never gives up. Retries is how many
+          before the workload gives up on it. -1 never gives up. Retries is how many
           of those have happened, so a task that keeps failing can say what is
           being done about it.
         type: integer
@@ -1143,7 +1143,7 @@ definitions:
       read_only:
         type: boolean
       reason:
-        description: Reason is why a task failed, when the runner can say so.
+        description: Reason is why a task failed, when the workload can say so.
         type: string
       resource_limits:
         $ref: '#/definitions/presenter.Limits'
@@ -1160,7 +1160,7 @@ definitions:
       state:
         description: |-
           State is what the task is doing; ExpectedState is what it was asked
-          to be doing. They differ while the runner is closing the gap.
+          to be doing. They differ while the workload is closing the gap.
         type: string
       uuid:
         type: string
@@ -1464,7 +1464,7 @@ definitions:
       name:
         type: string
     type: object
-  github_com_khanzadimahdi_testproject_application_dashboard_runner_stack_getStack.Response:
+  github_com_khanzadimahdi_testproject_application_dashboard_workload_stack_getStack.Response:
     properties:
       created_at:
         type: string
@@ -1490,7 +1490,7 @@ definitions:
       uuid:
         type: string
     type: object
-  github_com_khanzadimahdi_testproject_application_dashboard_runner_stack_getStacks.Response:
+  github_com_khanzadimahdi_testproject_application_dashboard_workload_stack_getStacks.Response:
     properties:
       items:
         items:
@@ -1499,7 +1499,7 @@ definitions:
       pagination:
         $ref: '#/definitions/presenter.Pagination'
     type: object
-  github_com_khanzadimahdi_testproject_application_dashboard_runner_stack_runStack.Request:
+  github_com_khanzadimahdi_testproject_application_dashboard_workload_stack_runStack.Request:
     properties:
       name:
         type: string
@@ -1508,7 +1508,7 @@ definitions:
           $ref: '#/definitions/spec.Service'
         type: object
     type: object
-  github_com_khanzadimahdi_testproject_application_dashboard_runner_stack_runStack.Response:
+  github_com_khanzadimahdi_testproject_application_dashboard_workload_stack_runStack.Response:
     properties:
       created_at:
         type: string
@@ -1536,14 +1536,14 @@ definitions:
       uuid:
         type: string
     type: object
-  github_com_khanzadimahdi_testproject_application_dashboard_runner_task_getTaskLogs.Response:
+  github_com_khanzadimahdi_testproject_application_dashboard_workload_task_getTaskLogs.Response:
     properties:
       items:
         items:
           $ref: '#/definitions/getTaskLogs.log'
         type: array
     type: object
-  github_com_khanzadimahdi_testproject_application_dashboard_runner_task_runTask.Request:
+  github_com_khanzadimahdi_testproject_application_dashboard_workload_task_runTask.Request:
     properties:
       command:
         items:
@@ -1566,7 +1566,7 @@ definitions:
       network_mode:
         description: |-
           NetworkMode is how much of the network the task reaches: "none",
-          "isolated" or "public". It is not docker's own network_mode — the runner
+          "isolated" or "public". It is not docker's own network_mode — the workload
           decides which networks a task joins — but it sits in the same place
           a compose file puts that decision.
         type: string
@@ -1584,7 +1584,7 @@ definitions:
       working_dir:
         type: string
     type: object
-  github_com_khanzadimahdi_testproject_application_dashboard_runner_task_runTask.Response:
+  github_com_khanzadimahdi_testproject_application_dashboard_workload_task_runTask.Response:
     properties:
       command:
         items:
@@ -1620,7 +1620,7 @@ definitions:
       max_retries:
         description: |-
           MaxRetries is how many times a task that fails is asked for again
-          before the runner gives up on it. -1 never gives up. Retries is how many
+          before the workload gives up on it. -1 never gives up. Retries is how many
           of those have happened, so a task that keeps failing can say what is
           being done about it.
         type: integer
@@ -1633,7 +1633,7 @@ definitions:
       read_only:
         type: boolean
       reason:
-        description: Reason is why a task failed, when the runner can say so.
+        description: Reason is why a task failed, when the workload can say so.
         type: string
       resource_limits:
         $ref: '#/definitions/presenter.Limits'
@@ -1650,7 +1650,7 @@ definitions:
       state:
         description: |-
           State is what the task is doing; ExpectedState is what it was asked
-          to be doing. They differ while the runner is closing the gap.
+          to be doing. They differ while the workload is closing the gap.
         type: string
       uuid:
         type: string
@@ -1882,7 +1882,7 @@ definitions:
       max_retries:
         description: |-
           MaxRetries is how many times a task that fails is asked for again
-          before the runner gives up on it. -1 never gives up. Retries is how many
+          before the workload gives up on it. -1 never gives up. Retries is how many
           of those have happened, so a task that keeps failing can say what is
           being done about it.
         type: integer
@@ -1895,7 +1895,7 @@ definitions:
       read_only:
         type: boolean
       reason:
-        description: Reason is why a task failed, when the runner can say so.
+        description: Reason is why a task failed, when the workload can say so.
         type: string
       resource_limits:
         $ref: '#/definitions/presenter.Limits'
@@ -1912,7 +1912,7 @@ definitions:
       state:
         description: |-
           State is what the task is doing; ExpectedState is what it was asked
-          to be doing. They differ while the runner is closing the gap.
+          to be doing. They differ while the workload is closing the gap.
         type: string
       uuid:
         type: string
@@ -2038,7 +2038,7 @@ definitions:
       max_attempts:
         description: |-
           MaxAttempts is how many times a task that failed is asked for
-          again. Nothing at all leaves it to the runner, zero is not at all, and
+          again. Nothing at all leaves it to the workload, zero is not at all, and
           -1 never gives up.
         type: integer
     type: object
@@ -2063,7 +2063,7 @@ definitions:
       network_mode:
         description: |-
           NetworkMode is how much of the network the task reaches: "none",
-          "isolated" or "public". It is not docker's own network_mode — the runner
+          "isolated" or "public". It is not docker's own network_mode — the workload
           decides which networks a task joins — but it sits in the same place
           a compose file puts that decision.
         type: string
@@ -4014,7 +4014,7 @@ paths:
       summary: Delete own file
       tags:
       - dashboard files
-  /dashboard/my/runner/stacks:
+  /dashboard/my/workload/stacks:
     get:
       consumes:
       - application/json
@@ -4039,8 +4039,8 @@ paths:
             type: object
       summary: List my stacks
       tags:
-      - dashboard runner
-  /dashboard/my/runner/stacks/{uuid}:
+      - dashboard workload
+  /dashboard/my/workload/stacks/{uuid}:
     delete:
       description: stop and remove one of your own stacks
       parameters:
@@ -4062,7 +4062,7 @@ paths:
             type: object
       summary: Delete own stack
       tags:
-      - dashboard runner
+      - dashboard workload
     get:
       consumes:
       - application/json
@@ -4092,8 +4092,8 @@ paths:
             type: object
       summary: Show own stack
       tags:
-      - dashboard runner
-  /dashboard/my/runner/stacks/{uuid}/kill:
+      - dashboard workload
+  /dashboard/my/workload/stacks/{uuid}/kill:
     post:
       description: stop every service of one of your own stacks at once
       parameters:
@@ -4115,8 +4115,8 @@ paths:
             type: object
       summary: Kill own stack
       tags:
-      - dashboard runner
-  /dashboard/my/runner/stacks/{uuid}/restart:
+      - dashboard workload
+  /dashboard/my/workload/stacks/{uuid}/restart:
     post:
       description: restart every service of one of your own stacks
       parameters:
@@ -4138,8 +4138,8 @@ paths:
             type: object
       summary: Restart own stack
       tags:
-      - dashboard runner
-  /dashboard/my/runner/stacks/{uuid}/stop:
+      - dashboard workload
+  /dashboard/my/workload/stacks/{uuid}/stop:
     post:
       description: stop every service of one of your own stacks
       parameters:
@@ -4161,8 +4161,8 @@ paths:
             type: object
       summary: Stop own stack
       tags:
-      - dashboard runner
-  /dashboard/my/runner/tasks:
+      - dashboard workload
+  /dashboard/my/workload/tasks:
     get:
       consumes:
       - application/json
@@ -4187,8 +4187,8 @@ paths:
             type: object
       summary: List my tasks
       tags:
-      - dashboard runner
-  /dashboard/my/runner/tasks/{uuid}:
+      - dashboard workload
+  /dashboard/my/workload/tasks/{uuid}:
     delete:
       description: stop and remove one of your own tasks
       parameters:
@@ -4210,7 +4210,7 @@ paths:
             type: object
       summary: Delete own task
       tags:
-      - dashboard runner
+      - dashboard workload
     get:
       consumes:
       - application/json
@@ -4240,8 +4240,8 @@ paths:
             type: object
       summary: Show own task
       tags:
-      - dashboard runner
-  /dashboard/my/runner/tasks/{uuid}/kill:
+      - dashboard workload
+  /dashboard/my/workload/tasks/{uuid}/kill:
     post:
       description: stop one of your own tasks at once
       parameters:
@@ -4263,8 +4263,8 @@ paths:
             type: object
       summary: Kill own task
       tags:
-      - dashboard runner
-  /dashboard/my/runner/tasks/{uuid}/logs:
+      - dashboard workload
+  /dashboard/my/workload/tasks/{uuid}/logs:
     get:
       consumes:
       - application/json
@@ -4302,8 +4302,8 @@ paths:
             type: object
       summary: Own task logs
       tags:
-      - dashboard runner
-  /dashboard/my/runner/tasks/{uuid}/restart:
+      - dashboard workload
+  /dashboard/my/workload/tasks/{uuid}/restart:
     post:
       description: restart one of your own tasks
       parameters:
@@ -4325,8 +4325,8 @@ paths:
             type: object
       summary: Restart own task
       tags:
-      - dashboard runner
-  /dashboard/my/runner/tasks/{uuid}/stop:
+      - dashboard workload
+  /dashboard/my/workload/tasks/{uuid}/stop:
     post:
       description: stop one of your own tasks
       parameters:
@@ -4348,7 +4348,7 @@ paths:
             type: object
       summary: Stop own task
       tags:
-      - dashboard runner
+      - dashboard workload
   /dashboard/permissions:
     get:
       consumes:
@@ -4638,11 +4638,11 @@ paths:
       summary: Get role
       tags:
       - dashboard roles
-  /dashboard/runner/stacks:
+  /dashboard/workload/stacks:
     get:
       consumes:
       - application/json
-      description: paginated list of the stacks the runner is holding
+      description: paginated list of the stacks the workload is holding
       parameters:
       - default: 1
         description: Page
@@ -4655,7 +4655,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_runner_stack_getStacks.Response'
+            $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_workload_stack_getStacks.Response'
         "500":
           description: Internal Server Error
           schema:
@@ -4663,7 +4663,7 @@ paths:
             type: object
       summary: List stacks
       tags:
-      - dashboard runner
+      - dashboard workload
     post:
       consumes:
       - application/json
@@ -4674,14 +4674,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_runner_stack_runStack.Request'
+          $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_workload_stack_runStack.Request'
       produces:
       - application/json
       responses:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_runner_stack_runStack.Response'
+            $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_workload_stack_runStack.Response'
         "400":
           description: Bad Request
           schema:
@@ -4694,8 +4694,8 @@ paths:
             type: object
       summary: Run a stack
       tags:
-      - dashboard runner
-  /dashboard/runner/stacks/{uuid}:
+      - dashboard workload
+  /dashboard/workload/stacks/{uuid}:
     delete:
       description: 'remove a stack and everything it holds: its ports, its log and
         the task itself'
@@ -4718,7 +4718,7 @@ paths:
             type: object
       summary: Delete stack
       tags:
-      - dashboard runner
+      - dashboard workload
     get:
       consumes:
       - application/json
@@ -4735,7 +4735,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_runner_stack_getStack.Response'
+            $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_workload_stack_getStack.Response'
         "404":
           description: Not Found
           schema:
@@ -4748,8 +4748,8 @@ paths:
             type: object
       summary: Get stack
       tags:
-      - dashboard runner
-  /dashboard/runner/stacks/{uuid}/kill:
+      - dashboard workload
+  /dashboard/workload/stacks/{uuid}/kill:
     post:
       description: stop every service of a stack at once, without a grace period
       parameters:
@@ -4771,8 +4771,8 @@ paths:
             type: object
       summary: Kill stack
       tags:
-      - dashboard runner
-  /dashboard/runner/stacks/{uuid}/restart:
+      - dashboard workload
+  /dashboard/workload/stacks/{uuid}/restart:
     post:
       description: restart every service of a stack
       parameters:
@@ -4794,8 +4794,8 @@ paths:
             type: object
       summary: Restart stack
       tags:
-      - dashboard runner
-  /dashboard/runner/stacks/{uuid}/stop:
+      - dashboard workload
+  /dashboard/workload/stacks/{uuid}/stop:
     post:
       description: stop every service of a stack, giving each a moment to shut down
         on its own
@@ -4818,12 +4818,12 @@ paths:
             type: object
       summary: Stop stack
       tags:
-      - dashboard runner
-  /dashboard/runner/tasks:
+      - dashboard workload
+  /dashboard/workload/tasks:
     get:
       consumes:
       - application/json
-      description: paginated list of the tasks the runner is holding
+      description: paginated list of the tasks the workload is holding
       parameters:
       - default: 1
         description: Page
@@ -4844,7 +4844,7 @@ paths:
             type: object
       summary: List tasks
       tags:
-      - dashboard runner
+      - dashboard workload
     post:
       consumes:
       - application/json
@@ -4855,14 +4855,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_runner_task_runTask.Request'
+          $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_workload_task_runTask.Request'
       produces:
       - application/json
       responses:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_runner_task_runTask.Response'
+            $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_workload_task_runTask.Response'
         "400":
           description: Bad Request
           schema:
@@ -4875,8 +4875,8 @@ paths:
             type: object
       summary: Run a task
       tags:
-      - dashboard runner
-  /dashboard/runner/tasks/{uuid}:
+      - dashboard workload
+  /dashboard/workload/tasks/{uuid}:
     delete:
       description: 'remove a task and everything it holds: its ports, its log and
         the task itself'
@@ -4899,7 +4899,7 @@ paths:
             type: object
       summary: Delete task
       tags:
-      - dashboard runner
+      - dashboard workload
     get:
       consumes:
       - application/json
@@ -4929,8 +4929,8 @@ paths:
             type: object
       summary: Get task
       tags:
-      - dashboard runner
-  /dashboard/runner/tasks/{uuid}/kill:
+      - dashboard workload
+  /dashboard/workload/tasks/{uuid}/kill:
     post:
       description: stop a task at once, without a grace period
       parameters:
@@ -4952,8 +4952,8 @@ paths:
             type: object
       summary: Kill task
       tags:
-      - dashboard runner
-  /dashboard/runner/tasks/{uuid}/logs:
+      - dashboard workload
+  /dashboard/workload/tasks/{uuid}/logs:
     get:
       consumes:
       - application/json
@@ -4978,7 +4978,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_runner_task_getTaskLogs.Response'
+            $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_workload_task_getTaskLogs.Response'
         "500":
           description: Internal Server Error
           schema:
@@ -4986,8 +4986,8 @@ paths:
             type: object
       summary: Task logs
       tags:
-      - dashboard runner
-  /dashboard/runner/tasks/{uuid}/restart:
+      - dashboard workload
+  /dashboard/workload/tasks/{uuid}/restart:
     post:
       description: stop a task and start it again in place
       parameters:
@@ -5009,8 +5009,8 @@ paths:
             type: object
       summary: Restart task
       tags:
-      - dashboard runner
-  /dashboard/runner/tasks/{uuid}/stop:
+      - dashboard workload
+  /dashboard/workload/tasks/{uuid}/stop:
     post:
       description: stop a task, giving it a moment to shut down on its own
       parameters:
@@ -5032,7 +5032,7 @@ paths:
             type: object
       summary: Stop task
       tags:
-      - dashboard runner
+      - dashboard workload
   /dashboard/users:
     get:
       consumes:

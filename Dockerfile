@@ -41,31 +41,31 @@ FROM production AS production-blog
 EXPOSE 80
 CMD ["serve-blog", "--port=80"]
 
-# runner control plane service
-FROM develop AS develop-runner-controlplane
+# workload control plane service
+FROM develop AS develop-workload-controlplane
 EXPOSE 80
-CMD ["serve-runner-controlplane", "--port=80"]
+CMD ["serve-workload-controlplane", "--port=80"]
 
-FROM production AS production-runner-controlplane
+FROM production AS production-workload-controlplane
 EXPOSE 80
-CMD ["serve-runner-controlplane", "--port=80"]
+CMD ["serve-workload-controlplane", "--port=80"]
 
-# runner ingress service
-FROM develop AS develop-runner-ingress
+# workload ingress service
+FROM develop AS develop-workload-ingress
 EXPOSE 80
-CMD ["serve-runner-ingress", "--port=80"]
+CMD ["serve-workload-ingress", "--port=80"]
 
-FROM production AS production-runner-ingress
+FROM production AS production-workload-ingress
 EXPOSE 80
-CMD ["serve-runner-ingress", "--port=80"]
+CMD ["serve-workload-ingress", "--port=80"]
 
-# runner orchestrator service
-FROM develop AS develop-runner-orchestrator
-ENV RUNNER_ORCHESTRATOR_NAME=runner-orchestrator-01
+# workload orchestrator service
+FROM develop AS develop-workload-orchestrator
+ENV WORKLOAD_ORCHESTRATOR_NAME=workload-orchestrator-01
 EXPOSE 80
-CMD ["serve-runner-orchestrator", "--port=80"]
+CMD ["serve-workload-orchestrator", "--port=80"]
 
-FROM production AS production-runner-orchestrator
-ENV RUNNER_ORCHESTRATOR_NAME=runner-orchestrator-01
+FROM production AS production-workload-orchestrator
+ENV WORKLOAD_ORCHESTRATOR_NAME=workload-orchestrator-01
 EXPOSE 80
-CMD ["serve-runner-orchestrator", "--port=80"]
+CMD ["serve-workload-orchestrator", "--port=80"]

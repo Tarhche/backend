@@ -6,7 +6,7 @@ import (
 	"log/slog"
 
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/runner/task/events"
+	"github.com/khanzadimahdi/testproject/domain/workload/task/events"
 )
 
 type taskFailed struct {

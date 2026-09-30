@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/khanzadimahdi/testproject/application/runner/spec"
+	"github.com/khanzadimahdi/testproject/application/workload/spec"
 	"github.com/khanzadimahdi/testproject/domain"
 )
 
@@ -42,7 +42,7 @@ func (r *articleRequest) Validate() domain.ValidationErrors {
 	return errors
 }
 
-// composeRequest stands in for the runner's own requests, which carry the
+// composeRequest stands in for the workload's own requests, which carry the
 // fields a compose file may write in more than one shape.
 type composeRequest struct {
 	Name string `json:"name"`

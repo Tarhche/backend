@@ -3,16 +3,16 @@ package configs
 const (
 	defaultBlogPort = 80
 
-	// defaultRunnerControlPlaneURL is where the runner control plane sits on the local
+	// defaultWorkloadControlPlaneURL is where the workload control plane sits on the local
 	// stack, which is also what it is called in production.
-	defaultRunnerControlPlaneURL = "http://runner-controlplane:80"
+	defaultWorkloadControlPlaneURL = "http://workload-controlplane:80"
 
-	// defaultRunnerPublicIngressDomain is where a browser reaches a task,
+	// defaultWorkloadPublicIngressDomain is where a browser reaches a task,
 	// which is the ingress's own domain with the port it is published on — the
 	// ingress matches the hostname alone, so its copy carries no port. Every
 	// *.localhost name resolves to the loopback address, so a task is
 	// reachable without touching any DNS.
-	defaultRunnerPublicIngressDomain = "runner.localhost:8030"
+	defaultWorkloadPublicIngressDomain = "workload.localhost:8030"
 )
 
 // Blog holds the configuration of the serve-blog command.
@@ -35,8 +35,8 @@ type Blog struct {
 	MailUsername string `usage:"SMTP user, when the relay authenticates." env:"MAIL_SMTP_USERNAME" long:"mail-smtp-username"`
 	MailPassword string `usage:"SMTP password, when the relay authenticates." env:"MAIL_SMTP_PASSWORD" long:"mail-smtp-password"`
 
-	RunnerControlPlaneURL string `usage:"Base URL of the runner control plane's API, which the dashboard passes task and stack commands to." env:"RUNNER_CONTROLPLANE_URL" long:"runner-controlplane-url"`
-	RunnerIngressDomain   string `usage:"Domain a runner task's exposed ports are served on, used to build the addresses the dashboard shows." env:"RUNNER_INGRESS_DOMAIN" long:"runner-ingress-domain"`
+	WorkloadControlPlaneURL string `usage:"Base URL of the workload control plane's API, which the dashboard passes task and stack commands to." env:"WORKLOAD_CONTROLPLANE_URL" long:"workload-controlplane-url"`
+	WorkloadIngressDomain   string `usage:"Domain a workload task's exposed ports are served on, used to build the addresses the dashboard shows." env:"WORKLOAD_INGRESS_DOMAIN" long:"workload-ingress-domain"`
 }
 
 // NewBlog returns the configuration of the serve-blog command, holding the
@@ -44,8 +44,8 @@ type Blog struct {
 // struct it is given, so nothing it parses reaches another command.
 func NewBlog() *Blog {
 	return &Blog{
-		Port:                  defaultBlogPort,
-		RunnerControlPlaneURL: defaultRunnerControlPlaneURL,
-		RunnerIngressDomain:   defaultRunnerPublicIngressDomain,
+		Port:                    defaultBlogPort,
+		WorkloadControlPlaneURL: defaultWorkloadControlPlaneURL,
+		WorkloadIngressDomain:   defaultWorkloadPublicIngressDomain,
 	}
 }

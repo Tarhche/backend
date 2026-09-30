@@ -5,7 +5,7 @@ inbound port and no address anyone could dial; they open a few persistent TCP
 connections outwards to a hub, and the hub multiplexes every client connection
 it receives onto them as independent streams.
 
-The package knows nothing about what is at either end of it. The runner uses it
+The package knows nothing about what is at either end of it. The workload uses it
 to reach its orchestrators, and calls an agent an orchestrator; anything else can use it to
 reach anything else.
 
@@ -202,7 +202,7 @@ deployment that encodes identity differently — a URI SAN, an organizational un
 
 ### Authorization
 
-`RUNNER_TUNNEL_ALLOWED_ORCHESTRATORS` restricts which identities may connect. Empty
+`WORKLOAD_TUNNEL_ALLOWED_ORCHESTRATORS` restricts which identities may connect. Empty
 allows every agent the authority signed for, which is the right default because
 the authority is private: something holding a certificate it signed is something
 that was deliberately given one. `AgentAuthorizer` is the interface to replace
@@ -227,7 +227,7 @@ Rotating in order, without downtime:
    agent whose certificate expires simply fails the handshake and reconnects
    with backoff — it does not take its sessions' streams with it until it does.
 3. **Revocation** is by reissuing the authority or by naming the survivors in
-   `RUNNER_TUNNEL_ALLOWED_ORCHESTRATORS`. There is no CRL or OCSP, deliberately: both
+   `WORKLOAD_TUNNEL_ALLOWED_ORCHESTRATORS`. There is no CRL or OCSP, deliberately: both
    are a network dependency in the authentication path, and the population here
    is small enough to name.
 
@@ -279,7 +279,7 @@ A rule is `listen=agent:target`:
 
 A service is the safer of the two forms: an agent offering only names cannot be
 talked into connecting anywhere else at all. An address is checked against
-`RUNNER_TUNNEL_ALLOWED_TARGETS` on the agent, which is empty by default and
+`WORKLOAD_TUNNEL_ALLOWED_TARGETS` on the agent, which is empty by default and
 therefore allows nothing.
 
 Every port opens before any is served, so a port already taken is a refusal to
@@ -433,9 +433,9 @@ Steady state is one extra `io.CopyBuffer` hop and nothing else. Accepting costs
 more because it is a whole TCP handshake the client makes and the hub
 answers, before any of the tunnel's work begins.
 
-## Running it, as the runner does
+## Running it, as the workload does
 
-Every command below is the runner's. Its hub is the `runner-ingress` service and
+Every command below is the workload's. Its hub is the `workload-ingress` service and
 its agents are its orchestrators, which is why the flags and variables say so — the
 package itself has no idea.
 
@@ -443,31 +443,31 @@ package itself has no idea.
 # 1. the authority, once
 app certificate authority generate --output-dir ./certs/ca --name "My Tunnel CA"
 
-# 2. the hub, which the runner calls its ingress
+# 2. the hub, which the workload calls its ingress
 app certificate ingress generate \
     --ca-cert ./certs/ca/ca.crt --ca-key ./certs/ca/ca.key \
     --output-dir ./certs/ingress --name ingress.example.internal
 
-# 3. an agent, which the runner calls an orchestrator
+# 3. an agent, which the workload calls an orchestrator
 app certificate orchestrator generate \
     --ca-cert ./certs/ca/ca.crt --ca-key ./certs/ca/ca.key \
     --output-dir ./certs/orchestrator-001 --name orchestrator-001
 
 # 4. the hub — ca.key is not among what it is given
-RUNNER_TUNNEL_CA_CERT=./certs/ca/ca.crt \
-RUNNER_TUNNEL_CERT=./certs/ingress/tls.crt \
-RUNNER_TUNNEL_KEY=./certs/ingress/tls.key \
-  app serve-runner-ingress --port=80 --tunnel-port=81 \
+WORKLOAD_TUNNEL_CA_CERT=./certs/ca/ca.crt \
+WORKLOAD_TUNNEL_CERT=./certs/ingress/tls.crt \
+WORKLOAD_TUNNEL_KEY=./certs/ingress/tls.key \
+  app serve-workload-ingress --port=80 --tunnel-port=81 \
       --forward='8022=orchestrator-001:22,5432=orchestrator-001:5432,9000=:api'
 
 # 5. the agent itself, which needs no inbound port of any kind
-RUNNER_TUNNEL_CA_CERT=./certs/ca/ca.crt \
-RUNNER_TUNNEL_CERT=./certs/orchestrator-001/tls.crt \
-RUNNER_TUNNEL_KEY=./certs/orchestrator-001/tls.key \
-RUNNER_TUNNEL_SERVER_NAME=ingress.example.internal \
-RUNNER_TUNNEL_ADDRESSES='ingress-a:81,ingress-b:81' \
-RUNNER_TUNNEL_ALLOWED_TARGETS='127.0.0.1:22,127.0.0.1:5432' \
-  app serve-runner-orchestrator --name=orchestrator-001 --port=80
+WORKLOAD_TUNNEL_CA_CERT=./certs/ca/ca.crt \
+WORKLOAD_TUNNEL_CERT=./certs/orchestrator-001/tls.crt \
+WORKLOAD_TUNNEL_KEY=./certs/orchestrator-001/tls.key \
+WORKLOAD_TUNNEL_SERVER_NAME=ingress.example.internal \
+WORKLOAD_TUNNEL_ADDRESSES='ingress-a:81,ingress-b:81' \
+WORKLOAD_TUNNEL_ALLOWED_TARGETS='127.0.0.1:22,127.0.0.1:5432' \
+  app serve-workload-orchestrator --name=orchestrator-001 --port=80
 
 # 6. a client connection, which reaches the agent's target through the tunnel
 curl http://ingress:80/orchestrators/orchestrator-001/health

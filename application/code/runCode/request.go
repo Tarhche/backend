@@ -6,7 +6,7 @@ import (
 	"slices"
 
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/runner/port"
+	"github.com/khanzadimahdi/testproject/domain/workload/port"
 )
 
 const (
@@ -21,7 +21,7 @@ type Request struct {
 	Code   string `json:"code"`
 	Runner string `json:"runner"`
 
-	// Ports are the ports the code listens on, which the runner publishes and
+	// Ports are the ports the code listens on, which the workload publishes and
 	// answers for by name while the code is running. A snippet that only prints
 	// something names none.
 	Ports []port.Port `json:"ports,omitempty"`

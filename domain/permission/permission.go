@@ -70,21 +70,21 @@ const (
 	LanguagesUpdate = "languages.update"
 	LanguagesDelete = "languages.delete"
 
-	RunnerTasksIndex  = "runner.tasks.index"
-	RunnerTasksCreate = "runner.tasks.create"
-	RunnerTasksShow   = "runner.tasks.show"
-	RunnerTasksDelete = "runner.tasks.delete"
-	RunnerTasksLogs   = "runner.tasks.logs"
-	RunnerTasksAttach = "runner.tasks.attach"
+	WorkloadTasksIndex  = "workload.tasks.index"
+	WorkloadTasksCreate = "workload.tasks.create"
+	WorkloadTasksShow   = "workload.tasks.show"
+	WorkloadTasksDelete = "workload.tasks.delete"
+	WorkloadTasksLogs   = "workload.tasks.logs"
+	WorkloadTasksAttach = "workload.tasks.attach"
 
-	// RunnerTasksManage covers stopping, killing and restarting.
-	RunnerTasksManage = "runner.tasks.manage"
+	// WorkloadTasksManage covers stopping, killing and restarting.
+	WorkloadTasksManage = "workload.tasks.manage"
 
-	RunnerStacksIndex  = "runner.stacks.index"
-	RunnerStacksCreate = "runner.stacks.create"
-	RunnerStacksShow   = "runner.stacks.show"
-	RunnerStacksDelete = "runner.stacks.delete"
-	RunnerStacksManage = "runner.stacks.manage"
+	WorkloadStacksIndex  = "workload.stacks.index"
+	WorkloadStacksCreate = "workload.stacks.create"
+	WorkloadStacksShow   = "workload.stacks.show"
+	WorkloadStacksDelete = "workload.stacks.delete"
+	WorkloadStacksManage = "workload.stacks.manage"
 )
 
 // user's self related accesses
@@ -105,15 +105,15 @@ const (
 	SelfFilesIndex  = "self.files.index"
 	SelfFilesDelete = "self.files.delete"
 
-	SelfRunnerTasksIndex  = "self.runner.tasks.index"
-	SelfRunnerTasksShow   = "self.runner.tasks.show"
-	SelfRunnerTasksLogs   = "self.runner.tasks.logs"
-	SelfRunnerTasksManage = "self.runner.tasks.manage"
-	SelfRunnerTasksAttach = "self.runner.tasks.attach"
-	SelfRunnerTasksDelete = "self.runner.tasks.delete"
+	SelfWorkloadTasksIndex  = "self.workload.tasks.index"
+	SelfWorkloadTasksShow   = "self.workload.tasks.show"
+	SelfWorkloadTasksLogs   = "self.workload.tasks.logs"
+	SelfWorkloadTasksManage = "self.workload.tasks.manage"
+	SelfWorkloadTasksAttach = "self.workload.tasks.attach"
+	SelfWorkloadTasksDelete = "self.workload.tasks.delete"
 
-	SelfRunnerStacksIndex  = "self.runner.stacks.index"
-	SelfRunnerStacksShow   = "self.runner.stacks.show"
-	SelfRunnerStacksManage = "self.runner.stacks.manage"
-	SelfRunnerStacksDelete = "self.runner.stacks.delete"
+	SelfWorkloadStacksIndex  = "self.workload.stacks.index"
+	SelfWorkloadStacksShow   = "self.workload.stacks.show"
+	SelfWorkloadStacksManage = "self.workload.stacks.manage"
+	SelfWorkloadStacksDelete = "self.workload.stacks.delete"
 )

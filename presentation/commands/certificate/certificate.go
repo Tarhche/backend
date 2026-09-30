@@ -1,4 +1,4 @@
-// Package certificate makes the certificates the runner's tunnel authenticates
+// Package certificate makes the certificates the workload's tunnel authenticates
 // with: one authority, one certificate for the ingress, and one for each
 // orchestrator.
 //

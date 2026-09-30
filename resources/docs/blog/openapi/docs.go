@@ -2607,7 +2607,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/dashboard/my/runner/stacks": {
+        "/dashboard/my/workload/stacks": {
             "get": {
                 "description": "paginated list of the stacks the current user owns",
                 "consumes": [
@@ -2617,7 +2617,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "dashboard runner"
+                    "dashboard workload"
                 ],
                 "summary": "List my stacks",
                 "parameters": [
@@ -2646,7 +2646,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/dashboard/my/runner/stacks/{uuid}": {
+        "/dashboard/my/workload/stacks/{uuid}": {
             "get": {
                 "description": "one of the stacks the current user owns",
                 "consumes": [
@@ -2656,7 +2656,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "dashboard runner"
+                    "dashboard workload"
                 ],
                 "summary": "Show own stack",
                 "parameters": [
@@ -2694,7 +2694,7 @@ const docTemplate = `{
             "delete": {
                 "description": "stop and remove one of your own stacks",
                 "tags": [
-                    "dashboard runner"
+                    "dashboard workload"
                 ],
                 "summary": "Delete own stack",
                 "parameters": [
@@ -2724,11 +2724,11 @@ const docTemplate = `{
                 }
             }
         },
-        "/dashboard/my/runner/stacks/{uuid}/kill": {
+        "/dashboard/my/workload/stacks/{uuid}/kill": {
             "post": {
                 "description": "stop every service of one of your own stacks at once",
                 "tags": [
-                    "dashboard runner"
+                    "dashboard workload"
                 ],
                 "summary": "Kill own stack",
                 "parameters": [
@@ -2758,11 +2758,11 @@ const docTemplate = `{
                 }
             }
         },
-        "/dashboard/my/runner/stacks/{uuid}/restart": {
+        "/dashboard/my/workload/stacks/{uuid}/restart": {
             "post": {
                 "description": "restart every service of one of your own stacks",
                 "tags": [
-                    "dashboard runner"
+                    "dashboard workload"
                 ],
                 "summary": "Restart own stack",
                 "parameters": [
@@ -2792,11 +2792,11 @@ const docTemplate = `{
                 }
             }
         },
-        "/dashboard/my/runner/stacks/{uuid}/stop": {
+        "/dashboard/my/workload/stacks/{uuid}/stop": {
             "post": {
                 "description": "stop every service of one of your own stacks",
                 "tags": [
-                    "dashboard runner"
+                    "dashboard workload"
                 ],
                 "summary": "Stop own stack",
                 "parameters": [
@@ -2826,7 +2826,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/dashboard/my/runner/tasks": {
+        "/dashboard/my/workload/tasks": {
             "get": {
                 "description": "paginated list of the tasks the current user owns",
                 "consumes": [
@@ -2836,7 +2836,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "dashboard runner"
+                    "dashboard workload"
                 ],
                 "summary": "List my tasks",
                 "parameters": [
@@ -2865,7 +2865,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/dashboard/my/runner/tasks/{uuid}": {
+        "/dashboard/my/workload/tasks/{uuid}": {
             "get": {
                 "description": "one of the tasks the current user owns",
                 "consumes": [
@@ -2875,7 +2875,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "dashboard runner"
+                    "dashboard workload"
                 ],
                 "summary": "Show own task",
                 "parameters": [
@@ -2913,7 +2913,7 @@ const docTemplate = `{
             "delete": {
                 "description": "stop and remove one of your own tasks",
                 "tags": [
-                    "dashboard runner"
+                    "dashboard workload"
                 ],
                 "summary": "Delete own task",
                 "parameters": [
@@ -2943,11 +2943,11 @@ const docTemplate = `{
                 }
             }
         },
-        "/dashboard/my/runner/tasks/{uuid}/kill": {
+        "/dashboard/my/workload/tasks/{uuid}/kill": {
             "post": {
                 "description": "stop one of your own tasks at once",
                 "tags": [
-                    "dashboard runner"
+                    "dashboard workload"
                 ],
                 "summary": "Kill own task",
                 "parameters": [
@@ -2977,7 +2977,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/dashboard/my/runner/tasks/{uuid}/logs": {
+        "/dashboard/my/workload/tasks/{uuid}/logs": {
             "get": {
                 "description": "what one of your own tasks has written",
                 "consumes": [
@@ -2987,7 +2987,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "dashboard runner"
+                    "dashboard workload"
                 ],
                 "summary": "Own task logs",
                 "parameters": [
@@ -3035,11 +3035,11 @@ const docTemplate = `{
                 }
             }
         },
-        "/dashboard/my/runner/tasks/{uuid}/restart": {
+        "/dashboard/my/workload/tasks/{uuid}/restart": {
             "post": {
                 "description": "restart one of your own tasks",
                 "tags": [
-                    "dashboard runner"
+                    "dashboard workload"
                 ],
                 "summary": "Restart own task",
                 "parameters": [
@@ -3069,11 +3069,11 @@ const docTemplate = `{
                 }
             }
         },
-        "/dashboard/my/runner/tasks/{uuid}/stop": {
+        "/dashboard/my/workload/tasks/{uuid}/stop": {
             "post": {
                 "description": "stop one of your own tasks",
                 "tags": [
-                    "dashboard runner"
+                    "dashboard workload"
                 ],
                 "summary": "Stop own task",
                 "parameters": [
@@ -3531,9 +3531,9 @@ const docTemplate = `{
                 }
             }
         },
-        "/dashboard/runner/stacks": {
+        "/dashboard/workload/stacks": {
             "get": {
-                "description": "paginated list of the stacks the runner is holding",
+                "description": "paginated list of the stacks the workload is holding",
                 "consumes": [
                     "application/json"
                 ],
@@ -3541,7 +3541,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "dashboard runner"
+                    "dashboard workload"
                 ],
                 "summary": "List stacks",
                 "parameters": [
@@ -3557,7 +3557,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_runner_stack_getStacks.Response"
+                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_workload_stack_getStacks.Response"
                         }
                     },
                     "500": {
@@ -3578,7 +3578,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "dashboard runner"
+                    "dashboard workload"
                 ],
                 "summary": "Run a stack",
                 "parameters": [
@@ -3588,7 +3588,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_runner_stack_runStack.Request"
+                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_workload_stack_runStack.Request"
                         }
                     }
                 ],
@@ -3596,7 +3596,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_runner_stack_runStack.Response"
+                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_workload_stack_runStack.Response"
                         }
                     },
                     "400": {
@@ -3616,7 +3616,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/dashboard/runner/stacks/{uuid}": {
+        "/dashboard/workload/stacks/{uuid}": {
             "get": {
                 "description": "retrieve a stack and the services in it",
                 "consumes": [
@@ -3626,7 +3626,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "dashboard runner"
+                    "dashboard workload"
                 ],
                 "summary": "Get stack",
                 "parameters": [
@@ -3642,7 +3642,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_runner_stack_getStack.Response"
+                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_workload_stack_getStack.Response"
                         }
                     },
                     "404": {
@@ -3664,7 +3664,7 @@ const docTemplate = `{
             "delete": {
                 "description": "remove a stack and everything it holds: its ports, its log and the task itself",
                 "tags": [
-                    "dashboard runner"
+                    "dashboard workload"
                 ],
                 "summary": "Delete stack",
                 "parameters": [
@@ -3694,11 +3694,11 @@ const docTemplate = `{
                 }
             }
         },
-        "/dashboard/runner/stacks/{uuid}/kill": {
+        "/dashboard/workload/stacks/{uuid}/kill": {
             "post": {
                 "description": "stop every service of a stack at once, without a grace period",
                 "tags": [
-                    "dashboard runner"
+                    "dashboard workload"
                 ],
                 "summary": "Kill stack",
                 "parameters": [
@@ -3728,11 +3728,11 @@ const docTemplate = `{
                 }
             }
         },
-        "/dashboard/runner/stacks/{uuid}/restart": {
+        "/dashboard/workload/stacks/{uuid}/restart": {
             "post": {
                 "description": "restart every service of a stack",
                 "tags": [
-                    "dashboard runner"
+                    "dashboard workload"
                 ],
                 "summary": "Restart stack",
                 "parameters": [
@@ -3762,11 +3762,11 @@ const docTemplate = `{
                 }
             }
         },
-        "/dashboard/runner/stacks/{uuid}/stop": {
+        "/dashboard/workload/stacks/{uuid}/stop": {
             "post": {
                 "description": "stop every service of a stack, giving each a moment to shut down on its own",
                 "tags": [
-                    "dashboard runner"
+                    "dashboard workload"
                 ],
                 "summary": "Stop stack",
                 "parameters": [
@@ -3796,9 +3796,9 @@ const docTemplate = `{
                 }
             }
         },
-        "/dashboard/runner/tasks": {
+        "/dashboard/workload/tasks": {
             "get": {
-                "description": "paginated list of the tasks the runner is holding",
+                "description": "paginated list of the tasks the workload is holding",
                 "consumes": [
                     "application/json"
                 ],
@@ -3806,7 +3806,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "dashboard runner"
+                    "dashboard workload"
                 ],
                 "summary": "List tasks",
                 "parameters": [
@@ -3843,7 +3843,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "dashboard runner"
+                    "dashboard workload"
                 ],
                 "summary": "Run a task",
                 "parameters": [
@@ -3853,7 +3853,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_runner_task_runTask.Request"
+                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_workload_task_runTask.Request"
                         }
                     }
                 ],
@@ -3861,7 +3861,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_runner_task_runTask.Response"
+                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_workload_task_runTask.Response"
                         }
                     },
                     "400": {
@@ -3881,7 +3881,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/dashboard/runner/tasks/{uuid}": {
+        "/dashboard/workload/tasks/{uuid}": {
             "get": {
                 "description": "retrieve one task, with the addresses its ports are served on",
                 "consumes": [
@@ -3891,7 +3891,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "dashboard runner"
+                    "dashboard workload"
                 ],
                 "summary": "Get task",
                 "parameters": [
@@ -3929,7 +3929,7 @@ const docTemplate = `{
             "delete": {
                 "description": "remove a task and everything it holds: its ports, its log and the task itself",
                 "tags": [
-                    "dashboard runner"
+                    "dashboard workload"
                 ],
                 "summary": "Delete task",
                 "parameters": [
@@ -3959,11 +3959,11 @@ const docTemplate = `{
                 }
             }
         },
-        "/dashboard/runner/tasks/{uuid}/kill": {
+        "/dashboard/workload/tasks/{uuid}/kill": {
             "post": {
                 "description": "stop a task at once, without a grace period",
                 "tags": [
-                    "dashboard runner"
+                    "dashboard workload"
                 ],
                 "summary": "Kill task",
                 "parameters": [
@@ -3993,7 +3993,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/dashboard/runner/tasks/{uuid}/logs": {
+        "/dashboard/workload/tasks/{uuid}/logs": {
             "get": {
                 "description": "read what a task has written, from its first line onward",
                 "consumes": [
@@ -4003,7 +4003,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "dashboard runner"
+                    "dashboard workload"
                 ],
                 "summary": "Task logs",
                 "parameters": [
@@ -4031,7 +4031,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_runner_task_getTaskLogs.Response"
+                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_workload_task_getTaskLogs.Response"
                         }
                     },
                     "500": {
@@ -4044,11 +4044,11 @@ const docTemplate = `{
                 }
             }
         },
-        "/dashboard/runner/tasks/{uuid}/restart": {
+        "/dashboard/workload/tasks/{uuid}/restart": {
             "post": {
                 "description": "stop a task and start it again in place",
                 "tags": [
-                    "dashboard runner"
+                    "dashboard workload"
                 ],
                 "summary": "Restart task",
                 "parameters": [
@@ -4078,11 +4078,11 @@ const docTemplate = `{
                 }
             }
         },
-        "/dashboard/runner/tasks/{uuid}/stop": {
+        "/dashboard/workload/tasks/{uuid}/stop": {
             "post": {
                 "description": "stop a task, giving it a moment to shut down on its own",
                 "tags": [
-                    "dashboard runner"
+                    "dashboard workload"
                 ],
                 "summary": "Stop task",
                 "parameters": [
@@ -5674,7 +5674,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "max_retries": {
-                    "description": "MaxRetries is how many times a task that fails is asked for again\nbefore the runner gives up on it. -1 never gives up. Retries is how many\nof those have happened, so a task that keeps failing can say what is\nbeing done about it.",
+                    "description": "MaxRetries is how many times a task that fails is asked for again\nbefore the workload gives up on it. -1 never gives up. Retries is how many\nof those have happened, so a task that keeps failing can say what is\nbeing done about it.",
                     "type": "integer"
                 },
                 "name": {
@@ -5692,7 +5692,7 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "reason": {
-                    "description": "Reason is why a task failed, when the runner can say so.",
+                    "description": "Reason is why a task failed, when the workload can say so.",
                     "type": "string"
                 },
                 "resource_limits": {
@@ -5714,7 +5714,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "state": {
-                    "description": "State is what the task is doing; ExpectedState is what it was asked\nto be doing. They differ while the runner is closing the gap.",
+                    "description": "State is what the task is doing; ExpectedState is what it was asked\nto be doing. They differ while the workload is closing the gap.",
                     "type": "string"
                 },
                 "uuid": {
@@ -6631,7 +6631,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "max_retries": {
-                    "description": "MaxRetries is how many times a task that fails is asked for again\nbefore the runner gives up on it. -1 never gives up. Retries is how many\nof those have happened, so a task that keeps failing can say what is\nbeing done about it.",
+                    "description": "MaxRetries is how many times a task that fails is asked for again\nbefore the workload gives up on it. -1 never gives up. Retries is how many\nof those have happened, so a task that keeps failing can say what is\nbeing done about it.",
                     "type": "integer"
                 },
                 "name": {
@@ -6649,7 +6649,7 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "reason": {
-                    "description": "Reason is why a task failed, when the runner can say so.",
+                    "description": "Reason is why a task failed, when the workload can say so.",
                     "type": "string"
                 },
                 "resource_limits": {
@@ -6671,7 +6671,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "state": {
-                    "description": "State is what the task is doing; ExpectedState is what it was asked\nto be doing. They differ while the runner is closing the gap.",
+                    "description": "State is what the task is doing; ExpectedState is what it was asked\nto be doing. They differ while the workload is closing the gap.",
                     "type": "string"
                 },
                 "uuid": {
@@ -7139,7 +7139,7 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_khanzadimahdi_testproject_application_dashboard_runner_stack_getStack.Response": {
+        "github_com_khanzadimahdi_testproject_application_dashboard_workload_stack_getStack.Response": {
             "type": "object",
             "properties": {
                 "created_at": {
@@ -7177,7 +7177,7 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_khanzadimahdi_testproject_application_dashboard_runner_stack_getStacks.Response": {
+        "github_com_khanzadimahdi_testproject_application_dashboard_workload_stack_getStacks.Response": {
             "type": "object",
             "properties": {
                 "items": {
@@ -7191,7 +7191,7 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_khanzadimahdi_testproject_application_dashboard_runner_stack_runStack.Request": {
+        "github_com_khanzadimahdi_testproject_application_dashboard_workload_stack_runStack.Request": {
             "type": "object",
             "properties": {
                 "name": {
@@ -7205,7 +7205,7 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_khanzadimahdi_testproject_application_dashboard_runner_stack_runStack.Response": {
+        "github_com_khanzadimahdi_testproject_application_dashboard_workload_stack_runStack.Response": {
             "type": "object",
             "properties": {
                 "created_at": {
@@ -7246,7 +7246,7 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_khanzadimahdi_testproject_application_dashboard_runner_task_getTaskLogs.Response": {
+        "github_com_khanzadimahdi_testproject_application_dashboard_workload_task_getTaskLogs.Response": {
             "type": "object",
             "properties": {
                 "items": {
@@ -7257,7 +7257,7 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_khanzadimahdi_testproject_application_dashboard_runner_task_runTask.Request": {
+        "github_com_khanzadimahdi_testproject_application_dashboard_workload_task_runTask.Request": {
             "type": "object",
             "properties": {
                 "command": {
@@ -7288,7 +7288,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "network_mode": {
-                    "description": "NetworkMode is how much of the network the task reaches: \"none\",\n\"isolated\" or \"public\". It is not docker's own network_mode — the runner\ndecides which networks a task joins — but it sits in the same place\na compose file puts that decision.",
+                    "description": "NetworkMode is how much of the network the task reaches: \"none\",\n\"isolated\" or \"public\". It is not docker's own network_mode — the workload\ndecides which networks a task joins — but it sits in the same place\na compose file puts that decision.",
                     "type": "string"
                 },
                 "ports": {
@@ -7309,7 +7309,7 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_khanzadimahdi_testproject_application_dashboard_runner_task_runTask.Response": {
+        "github_com_khanzadimahdi_testproject_application_dashboard_workload_task_runTask.Response": {
             "type": "object",
             "properties": {
                 "command": {
@@ -7356,7 +7356,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "max_retries": {
-                    "description": "MaxRetries is how many times a task that fails is asked for again\nbefore the runner gives up on it. -1 never gives up. Retries is how many\nof those have happened, so a task that keeps failing can say what is\nbeing done about it.",
+                    "description": "MaxRetries is how many times a task that fails is asked for again\nbefore the workload gives up on it. -1 never gives up. Retries is how many\nof those have happened, so a task that keeps failing can say what is\nbeing done about it.",
                     "type": "integer"
                 },
                 "name": {
@@ -7374,7 +7374,7 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "reason": {
-                    "description": "Reason is why a task failed, when the runner can say so.",
+                    "description": "Reason is why a task failed, when the workload can say so.",
                     "type": "string"
                 },
                 "resource_limits": {
@@ -7396,7 +7396,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "state": {
-                    "description": "State is what the task is doing; ExpectedState is what it was asked\nto be doing. They differ while the runner is closing the gap.",
+                    "description": "State is what the task is doing; ExpectedState is what it was asked\nto be doing. They differ while the workload is closing the gap.",
                     "type": "string"
                 },
                 "uuid": {
@@ -7740,7 +7740,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "max_retries": {
-                    "description": "MaxRetries is how many times a task that fails is asked for again\nbefore the runner gives up on it. -1 never gives up. Retries is how many\nof those have happened, so a task that keeps failing can say what is\nbeing done about it.",
+                    "description": "MaxRetries is how many times a task that fails is asked for again\nbefore the workload gives up on it. -1 never gives up. Retries is how many\nof those have happened, so a task that keeps failing can say what is\nbeing done about it.",
                     "type": "integer"
                 },
                 "name": {
@@ -7758,7 +7758,7 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "reason": {
-                    "description": "Reason is why a task failed, when the runner can say so.",
+                    "description": "Reason is why a task failed, when the workload can say so.",
                     "type": "string"
                 },
                 "resource_limits": {
@@ -7780,7 +7780,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "state": {
-                    "description": "State is what the task is doing; ExpectedState is what it was asked\nto be doing. They differ while the runner is closing the gap.",
+                    "description": "State is what the task is doing; ExpectedState is what it was asked\nto be doing. They differ while the workload is closing the gap.",
                     "type": "string"
                 },
                 "uuid": {
@@ -7961,7 +7961,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "max_attempts": {
-                    "description": "MaxAttempts is how many times a task that failed is asked for\nagain. Nothing at all leaves it to the runner, zero is not at all, and\n-1 never gives up.",
+                    "description": "MaxAttempts is how many times a task that failed is asked for\nagain. Nothing at all leaves it to the workload, zero is not at all, and\n-1 never gives up.",
                     "type": "integer"
                 }
             }
@@ -7994,7 +7994,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "network_mode": {
-                    "description": "NetworkMode is how much of the network the task reaches: \"none\",\n\"isolated\" or \"public\". It is not docker's own network_mode — the runner\ndecides which networks a task joins — but it sits in the same place\na compose file puts that decision.",
+                    "description": "NetworkMode is how much of the network the task reaches: \"none\",\n\"isolated\" or \"public\". It is not docker's own network_mode — the workload\ndecides which networks a task joins — but it sits in the same place\na compose file puts that decision.",
                     "type": "string"
                 },
                 "ports": {

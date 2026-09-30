@@ -13,9 +13,9 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/code/runCode"
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/runner/task"
+	"github.com/khanzadimahdi/testproject/domain/workload/task"
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
-	runnerMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/runner/controlplane"
+	workloadMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/infrastructure/validator"
 )
 
@@ -62,16 +62,16 @@ func TestUseCase_Handle(t *testing.T) {
 		t.Parallel()
 
 		var (
-			runner  runnerMock.MockClient
-			replyer messagingMock.RecordingReplyer
+			workload workloadMock.MockClient
+			replyer  messagingMock.RecordingReplyer
 		)
 
-		runner.On("Task", mock.Anything, taskUUID).Once().
+		workload.On("Task", mock.Anything, taskUUID).Once().
 			Return(task.Task{UUID: taskUUID, Kind: task.KindJob, OwnerUUID: runCode.CodeRunnerOwnerUUID}, nil)
-		runner.On("DeleteTask", mock.Anything, taskUUID).Once().Return(nil)
-		defer runner.AssertExpectations(t)
+		workload.On("DeleteTask", mock.Anything, taskUUID).Once().Return(nil)
+		defer workload.AssertExpectations(t)
 
-		require.NoError(t, NewUseCase(&runner, accepts(), &replyer, discardLogger()).
+		require.NoError(t, NewUseCase(&workload, accepts(), &replyer, discardLogger()).
 			Handle(context.Background(), request(t)))
 
 		assert.Empty(t, refusal(t, replyer.Replies()), "a task that is gone is nothing to report")
@@ -81,57 +81,57 @@ func TestUseCase_Handle(t *testing.T) {
 		t.Parallel()
 
 		var (
-			runner  runnerMock.MockClient
-			replyer messagingMock.RecordingReplyer
+			workload workloadMock.MockClient
+			replyer  messagingMock.RecordingReplyer
 		)
 
 		// somebody's own task from the dashboard: naming it here does not
 		// make it a snippet's.
-		runner.On("Task", mock.Anything, taskUUID).Once().
+		workload.On("Task", mock.Anything, taskUUID).Once().
 			Return(task.Task{UUID: taskUUID, Kind: task.KindService, OwnerUUID: "somebody"}, nil)
-		defer runner.AssertExpectations(t)
+		defer workload.AssertExpectations(t)
 
-		require.NoError(t, NewUseCase(&runner, accepts(), &replyer, discardLogger()).
+		require.NoError(t, NewUseCase(&workload, accepts(), &replyer, discardLogger()).
 			Handle(context.Background(), request(t)))
 
 		assert.Equal(t, "not_exists", refusal(t, replyer.Replies())["task_uuid"])
-		runner.AssertNotCalled(t, "DeleteTask", mock.Anything, mock.Anything)
+		workload.AssertNotCalled(t, "DeleteTask", mock.Anything, mock.Anything)
 	})
 
 	t.Run("a job that belongs to somebody is not a snippet's either", func(t *testing.T) {
 		t.Parallel()
 
 		var (
-			runner  runnerMock.MockClient
-			replyer messagingMock.RecordingReplyer
+			workload workloadMock.MockClient
+			replyer  messagingMock.RecordingReplyer
 		)
 
-		runner.On("Task", mock.Anything, taskUUID).Once().
+		workload.On("Task", mock.Anything, taskUUID).Once().
 			Return(task.Task{UUID: taskUUID, Kind: task.KindJob, OwnerUUID: "somebody"}, nil)
-		defer runner.AssertExpectations(t)
+		defer workload.AssertExpectations(t)
 
-		require.NoError(t, NewUseCase(&runner, accepts(), &replyer, discardLogger()).
+		require.NoError(t, NewUseCase(&workload, accepts(), &replyer, discardLogger()).
 			Handle(context.Background(), request(t)))
 
 		assert.Equal(t, "not_exists", refusal(t, replyer.Replies())["task_uuid"])
-		runner.AssertNotCalled(t, "DeleteTask", mock.Anything, mock.Anything)
+		workload.AssertNotCalled(t, "DeleteTask", mock.Anything, mock.Anything)
 	})
 
 	t.Run("a task that is already gone is what was asked for", func(t *testing.T) {
 		t.Parallel()
 
 		var (
-			runner  runnerMock.MockClient
-			replyer messagingMock.RecordingReplyer
+			workload workloadMock.MockClient
+			replyer  messagingMock.RecordingReplyer
 		)
 
-		runner.On("Task", mock.Anything, taskUUID).Once().Return(task.Task{}, domain.ErrNotExists)
-		defer runner.AssertExpectations(t)
+		workload.On("Task", mock.Anything, taskUUID).Once().Return(task.Task{}, domain.ErrNotExists)
+		defer workload.AssertExpectations(t)
 
-		require.NoError(t, NewUseCase(&runner, accepts(), &replyer, discardLogger()).
+		require.NoError(t, NewUseCase(&workload, accepts(), &replyer, discardLogger()).
 			Handle(context.Background(), request(t)))
 
 		assert.Empty(t, refusal(t, replyer.Replies()))
-		runner.AssertNotCalled(t, "DeleteTask", mock.Anything, mock.Anything)
+		workload.AssertNotCalled(t, "DeleteTask", mock.Anything, mock.Anything)
 	})
 }

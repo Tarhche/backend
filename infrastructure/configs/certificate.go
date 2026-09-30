@@ -12,7 +12,7 @@ type GenerateAuthority struct {
 }
 
 func NewGenerateAuthority() *GenerateAuthority {
-	return &GenerateAuthority{OutputDir: "./certs/ca", Name: "runner tunnel authority"}
+	return &GenerateAuthority{OutputDir: "./certs/ca", Name: "workload tunnel authority"}
 }
 
 // GenerateCertificate holds the configuration of the ingress and orchestrator
