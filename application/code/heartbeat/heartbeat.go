@@ -8,14 +8,14 @@ import (
 	"time"
 
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/runner/task"
-	"github.com/khanzadimahdi/testproject/domain/runner/task/events"
+	"github.com/khanzadimahdi/testproject/domain/workload/task"
+	"github.com/khanzadimahdi/testproject/domain/workload/task/events"
 )
 
 type heartbeat struct {
 	replyer domain.Replyer
 
-	// ingressDomain is what the runner answers a task's ports under, so
+	// ingressDomain is what the workload answers a task's ports under, so
 	// that an exposed port becomes an address a reader can open.
 	ingressDomain string
 
@@ -42,7 +42,7 @@ func kindOf(h *events.Heartbeat) task.Kind {
 	return task.DefaultKind
 }
 
-// deadline is when a snippet being watched will be stopped. The runner sets it
+// deadline is when a snippet being watched will be stopped. The workload sets it
 // as the task is made and reports it with every beat; a snippet that is
 // not running any more has none left to report.
 func deadline(h *events.Heartbeat, state task.State) *time.Time {

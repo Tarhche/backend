@@ -50,7 +50,7 @@ The tools you are shown are the ones your session may use: something you cannot 
 
 Articles are kept once per language, and the identity an article keeps across its languages is its correlation uuid: that is what a public listing gives you, and what the dashboard tools ask for alongside a language code.
 
-Tasks and stacks are containers the runner holds. Following a task's output as it is written, and opening a terminal inside one, are streams rather than answers, so they are not here: read what a task has written with the logs tools instead.`
+Tasks and stacks are containers the workload holds. Following a task's output as it is written, and opening a terminal inside one, are streams rather than answers, so they are not here: read what a task has written with the logs tools instead.`
 )
 
 // server holds what the tools are and what each of their routes asks of

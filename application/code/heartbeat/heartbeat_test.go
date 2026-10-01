@@ -7,8 +7,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/khanzadimahdi/testproject/domain/runner/task"
-	"github.com/khanzadimahdi/testproject/domain/runner/task/events"
+	"github.com/khanzadimahdi/testproject/domain/workload/task"
+	"github.com/khanzadimahdi/testproject/domain/workload/task/events"
 )
 
 func TestDeadline(t *testing.T) {

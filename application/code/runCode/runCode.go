@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/runner/task"
-	"github.com/khanzadimahdi/testproject/domain/runner/task/events"
+	"github.com/khanzadimahdi/testproject/domain/workload/task"
+	"github.com/khanzadimahdi/testproject/domain/workload/task/events"
 )
 
 const (
@@ -26,7 +26,7 @@ const (
 	CodeTimeout = 30 * time.Second
 
 	// TTL is how long the task is allowed to exist at all. It is the
-	// backstop for a task that ignores the timeout above — the runner
+	// backstop for a task that ignores the timeout above — the workload
 	// takes it away regardless — so it is the longer of the two.
 	TTL = 2 * CodeTimeout
 
@@ -40,7 +40,7 @@ const (
 
 	// LiveTTL is the same: what a snippet is given is what its task is
 	// allowed, so the countdown a reader watches is the whole of its time. The
-	// image's own limit is what usually ends it; the runner takes the
+	// image's own limit is what usually ends it; the workload takes the
 	// task away if it does not.
 	LiveTTL = LiveCodeTimeout
 )
@@ -134,7 +134,7 @@ func (h *runCode) Handle(ctx context.Context, data []byte) error {
 		},
 		OwnerUUID: CodeRunnerOwnerUUID,
 
-		// a snippet that serves something is reached by name: the runner
+		// a snippet that serves something is reached by name: the workload
 		// publishes these on the node and answers for them at the ingress.
 		ExposedPorts: request.Ports,
 

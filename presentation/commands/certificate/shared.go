@@ -26,7 +26,7 @@ type certificateCommand struct {
 	err io.Writer
 
 	// server issues for serverAuth rather than clientAuth. A certificate good
-	// for both is one an ingress could be impersonated with by any worker
+	// for both is one an ingress could be impersonated with by any orchestrator
 	// holding one.
 	server bool
 }

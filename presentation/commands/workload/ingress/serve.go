@@ -1,0 +1,200 @@
+package ingress
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"time"
+
+	"github.com/danceable/console"
+	"github.com/danceable/provider"
+
+	"github.com/khanzadimahdi/testproject/infrastructure/configs"
+	"github.com/khanzadimahdi/testproject/infrastructure/crypto/certificate"
+	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers"
+	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers/workload"
+	"github.com/khanzadimahdi/testproject/infrastructure/tunnel"
+)
+
+const (
+	serveName string = "serve-workload-ingress"
+)
+
+type ServeCommand struct {
+	configs *configs.WorkloadIngress
+	handler http.Handler
+
+	// tunnel is where the orchestrators connect. Requests go back down those
+	// connections, so this is the only way into an orchestrator and the only thing
+	// that says an orchestrator is there at all.
+	tunnel *tunnel.Hub
+
+	// forwarder is the ports arbitrary TCP arrives on, each carried onto those
+	// same connections. It is layer four: what comes in is a byte pipe, so ssh
+	// travels it as readily as anything else.
+	forwarder *tunnel.Forwarder
+
+	logger *slog.Logger
+}
+
+var (
+	_ console.Command   = &ServeCommand{}
+	_ console.Service   = &ServeCommand{}
+	_ provider.Provider = &ServeCommand{}
+)
+
+func NewServeCommand() *ServeCommand {
+	return &ServeCommand{configs: configs.NewWorkloadIngress()}
+}
+
+// Name returns the name of the command which is used to identify it.
+func (c *ServeCommand) Name() string {
+	return serveName
+}
+
+// Description returns a short string (less than one line) describing the command.
+func (c *ServeCommand) Description() string {
+	return "serves a http server."
+}
+
+// Usage returns a long string explaining the command and giving usage
+// information.
+func (c *ServeCommand) Usage() string {
+	return fmt.Sprintf("%s [arguments]", serveName)
+}
+
+// Configure defines this command's flags, which are the fields of its
+// configuration struct. A struct which cannot be bound is a programming
+// mistake rather than user input, so it panics the way the console itself does
+// for a flag it cannot define.
+func (c *ServeCommand) Configure(flagSet *console.FlagSet) {
+	if err := flagSet.Struct(c.configs); err != nil {
+		panic(err)
+	}
+}
+
+// Providers returns the service providers required to serve the workload ingress.
+// The orchestrators come to it, so it reaches none of them; the database is only for
+// looking up which node is holding a task.
+func (c *ServeCommand) Providers() []provider.Provider {
+	return []provider.Provider{
+		providers.NewConfigsProvider(c.configs),
+		providers.NewOpenTelemetryProvider("workload-ingress", "workload-ingress"),
+		providers.NewProfilerProvider("workload-ingress"),
+		providers.NewMongodbProvider(),
+		providers.NewContainerProvider(),
+		workload.NewIngressProvider(),
+		c,
+	}
+}
+
+// Register registers the command's own dependencies, of which it has none.
+func (c *ServeCommand) Register(ctx context.Context, task provider.Container) error {
+	return nil
+}
+
+// Boot resolves the command's dependencies from the booted task.
+func (c *ServeCommand) Boot(ctx context.Context, task provider.Container) error {
+	if err := task.Resolve(&c.handler); err != nil {
+		return err
+	}
+
+	if err := task.Resolve(&c.logger, provider.WithParams("workload-ingress")); err != nil {
+		return err
+	}
+
+	if err := task.Resolve(&c.tunnel, provider.ResolveName(workload.IngressTunnel)); err != nil {
+		return err
+	}
+
+	return task.Resolve(&c.forwarder, provider.ResolveName(workload.IngressForwarder))
+}
+
+// Terminate terminates the command's own resources, of which it has none. The
+// providers it returned are terminated by the manager.
+func (c *ServeCommand) Terminate(ctx context.Context) error {
+	return nil
+}
+
+// @title			Workload Ingress API
+// @version		1.0
+// @description	Swagger/OpenAPI documentation for the workload ingress service.
+// @termsOfService	http://swagger.io/terms/
+//
+// @license.name	Apache 2.0
+// @license.url	http://www.apache.org/licenses/LICENSE-2.0.html
+//
+// @host			0.0.0.0:80
+// @basePath		/
+// @schemes		http
+func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
+	tunnelConfig, err := tunnel.ServerTLS(certificate.Credentials{
+		Authority:   c.configs.TunnelAuthority,
+		Certificate: c.configs.TunnelCertificate,
+		PrivateKey:  c.configs.TunnelKey,
+	})
+	if err != nil {
+		c.logger.ErrorContext(ctx, "the tunnel's certificates are unusable", "error", err)
+		return console.ExitFailure
+	}
+
+	// the orchestrators have to be able to arrive before the first request does, or
+	// the ingress answers for workloads it has simply not met yet.
+	listener, err := tunnel.Listen(fmt.Sprintf("0.0.0.0:%d", c.configs.TunnelPort), tunnelConfig)
+	if err != nil {
+		c.logger.ErrorContext(ctx, "the tunnel could not listen", "error", err)
+		return console.ExitFailure
+	}
+
+	go func() {
+		if err := c.tunnel.Serve(ctx, listener); err != nil {
+			c.logger.ErrorContext(ctx, "the tunnel failed", "error", err)
+		}
+	}()
+
+	// the forwarded ports open before the http server does, so a port already
+	// taken is a refusal to start rather than something found once traffic is
+	// arriving on the others.
+	if err := c.forwarder.Listen(); err != nil {
+		c.logger.ErrorContext(ctx, "a forwarded port could not be opened", "error", err)
+		return console.ExitFailure
+	}
+
+	forwarding := make(chan error, 1)
+	go func() {
+		forwarding <- c.forwarder.Serve(ctx)
+	}()
+
+	// no read timeout: what this carries is a workload's own traffic, which may
+	// be an attached terminal or a log being followed rather than a request
+	// that finishes.
+	server := http.Server{
+		Addr:        fmt.Sprintf("0.0.0.0:%d", c.configs.Port),
+		Handler:     c.handler,
+		IdleTimeout: 120 * time.Second,
+	}
+
+	go func() {
+		<-ctx.Done()
+
+		// Shutdown the server after getting a signal with a timeout to ensure graceful shutdown.
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		_ = server.Shutdown(shutdownCtx)
+		_ = c.forwarder.Close()
+	}()
+
+	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		c.logger.ErrorContext(ctx, "server failed", "error", err)
+		return console.ExitFailure
+	}
+
+	if err := <-forwarding; err != nil {
+		c.logger.ErrorContext(ctx, "a forwarded port failed", "error", err)
+		return console.ExitFailure
+	}
+
+	return console.ExitSuccess
+}

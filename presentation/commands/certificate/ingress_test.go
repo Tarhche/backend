@@ -130,7 +130,7 @@ func TestIngress(t *testing.T) {
 
 		// an ingress is dialled, so it is good for serverAuth and for nothing
 		// else: a certificate good for both is one an ingress could be
-		// impersonated with by any worker holding one.
+		// impersonated with by any orchestrator holding one.
 		assert.Equal(t, []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}, issued.ExtKeyUsage)
 		assert.False(t, issued.IsCA)
 
@@ -259,7 +259,7 @@ func TestIngress(t *testing.T) {
 			Roots:     pool,
 			KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
 		})
-		assert.Error(t, err, "an ingress certificate is not a worker one")
+		assert.Error(t, err, "an ingress certificate is not an orchestrator one")
 	})
 }
 

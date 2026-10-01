@@ -8,8 +8,8 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/code/runCode"
 	"github.com/khanzadimahdi/testproject/domain"
-	runnerManager "github.com/khanzadimahdi/testproject/domain/runner/manager"
-	"github.com/khanzadimahdi/testproject/domain/runner/task"
+	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
+	"github.com/khanzadimahdi/testproject/domain/workload/task"
 )
 
 // StopName is what a reader asks on to have the task their snippet is
@@ -17,7 +17,7 @@ import (
 const StopName = "codeStop"
 
 type UseCase struct {
-	runner    runnerManager.Client
+	workload  workloadControlPlane.Client
 	validator domain.Validator
 	replyer   domain.Replyer
 
@@ -28,13 +28,13 @@ type UseCase struct {
 var _ domain.MessageHandler = &UseCase{}
 
 func NewUseCase(
-	runner runnerManager.Client,
+	workload workloadControlPlane.Client,
 	validator domain.Validator,
 	replyer domain.Replyer,
 	logger *slog.Logger,
 ) *UseCase {
 	return &UseCase{
-		runner:    runner,
+		workload:  workload,
 		validator: validator,
 		replyer:   replyer,
 		logger:    logger,
@@ -51,7 +51,7 @@ func (uc *UseCase) Handle(ctx context.Context, data []byte) error {
 		return uc.reply(ctx, request.ID, &Response{ValidationErrors: validationErrors})
 	}
 
-	c, err := uc.runner.Task(ctx, request.TaskUUID)
+	c, err := uc.workload.Task(ctx, request.TaskUUID)
 	if errors.Is(err, domain.ErrNotExists) {
 		return uc.reply(ctx, request.ID, &Response{})
 	} else if err != nil {
@@ -66,7 +66,7 @@ func (uc *UseCase) Handle(ctx context.Context, data []byte) error {
 		})
 	}
 
-	if err := uc.runner.DeleteTask(ctx, request.TaskUUID); err != nil && !errors.Is(err, domain.ErrNotExists) {
+	if err := uc.workload.DeleteTask(ctx, request.TaskUUID); err != nil && !errors.Is(err, domain.ErrNotExists) {
 		return err
 	}
 

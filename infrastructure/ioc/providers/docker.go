@@ -6,13 +6,13 @@ import (
 
 	"github.com/danceable/provider"
 
-	networkContract "github.com/khanzadimahdi/testproject/domain/runner/network"
-	"github.com/khanzadimahdi/testproject/domain/runner/node"
-	"github.com/khanzadimahdi/testproject/domain/runner/task"
+	networkContract "github.com/khanzadimahdi/testproject/domain/workload/network"
+	"github.com/khanzadimahdi/testproject/domain/workload/node"
+	"github.com/khanzadimahdi/testproject/domain/workload/task"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
-	infraContainer "github.com/khanzadimahdi/testproject/infrastructure/runner/container"
-	infraNetwork "github.com/khanzadimahdi/testproject/infrastructure/runner/network"
-	infraNode "github.com/khanzadimahdi/testproject/infrastructure/runner/node"
+	infraContainer "github.com/khanzadimahdi/testproject/infrastructure/workload/container"
+	infraNetwork "github.com/khanzadimahdi/testproject/infrastructure/workload/network"
+	infraNode "github.com/khanzadimahdi/testproject/infrastructure/workload/node"
 )
 
 type dockerProvider struct{}
@@ -24,15 +24,15 @@ func NewDockerProvider() *dockerProvider {
 }
 
 func (p *dockerProvider) Register(ctx context.Context, c provider.Container) error {
-	var workerConfigs *configs.RunnerWorker
-	if err := c.Resolve(&workerConfigs); err != nil {
+	var orchestratorConfigs *configs.WorkloadOrchestrator
+	if err := c.Resolve(&orchestratorConfigs); err != nil {
 		return err
 	}
 
-	dockerHost := workerConfigs.DockerHost
+	dockerHost := orchestratorConfigs.DockerHost
 
 	var logger *slog.Logger
-	if err := c.Resolve(&logger, provider.WithParams("runner-worker")); err != nil {
+	if err := c.Resolve(&logger, provider.WithParams("workload-orchestrator")); err != nil {
 		return err
 	}
 

@@ -3058,7 +3058,7 @@ const docTemplateblog = `{
         },
         "/nodes": {
             "get": {
-                "description": "return a page of runner nodes",
+                "description": "return a page of workload nodes",
                 "consumes": [
                     "application/json"
                 ],
@@ -3066,7 +3066,7 @@ const docTemplateblog = `{
                     "application/json"
                 ],
                 "tags": [
-                    "runner nodes"
+                    "workload nodes"
                 ],
                 "summary": "List nodes",
                 "parameters": [
@@ -3097,7 +3097,7 @@ const docTemplateblog = `{
         },
         "/nodes/{name}": {
             "get": {
-                "description": "retrieve information about a runner node",
+                "description": "retrieve information about a workload node",
                 "consumes": [
                     "application/json"
                 ],
@@ -3105,7 +3105,7 @@ const docTemplateblog = `{
                     "application/json"
                 ],
                 "tags": [
-                    "runner nodes"
+                    "workload nodes"
                 ],
                 "summary": "Get node",
                 "parameters": [
@@ -3143,7 +3143,7 @@ const docTemplateblog = `{
         },
         "/tasks": {
             "get": {
-                "description": "return tasks scheduled for this worker",
+                "description": "return tasks scheduled for this orchestrator",
                 "consumes": [
                     "application/json"
                 ],
@@ -3151,14 +3151,14 @@ const docTemplateblog = `{
                     "application/json"
                 ],
                 "tags": [
-                    "runner tasks"
+                    "workload tasks"
                 ],
-                "summary": "List worker tasks",
+                "summary": "List orchestrator tasks",
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_runner_worker_task_getTasks.Response"
+                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_workload_orchestrator_task_getTasks.Response"
                         }
                     },
                     "500": {
@@ -3173,7 +3173,7 @@ const docTemplateblog = `{
         },
         "/tasks/run": {
             "post": {
-                "description": "accept a task result or status update from worker",
+                "description": "accept a task result or status update from orchestrator",
                 "consumes": [
                     "application/json"
                 ],
@@ -3181,9 +3181,9 @@ const docTemplateblog = `{
                     "application/json"
                 ],
                 "tags": [
-                    "runner tasks"
+                    "workload tasks"
                 ],
-                "summary": "Run worker task",
+                "summary": "Run orchestrator task",
                 "parameters": [
                     {
                         "description": "Task operation",
@@ -3191,7 +3191,7 @@ const docTemplateblog = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_runner_worker_task_runTask.Request"
+                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_workload_orchestrator_task_runTask.Request"
                         }
                     }
                 ],
@@ -3237,7 +3237,7 @@ const docTemplateblog = `{
                     "application/json"
                 ],
                 "tags": [
-                    "runner tasks"
+                    "workload tasks"
                 ],
                 "summary": "Get task",
                 "parameters": [
@@ -3281,7 +3281,7 @@ const docTemplateblog = `{
                     "application/json"
                 ],
                 "tags": [
-                    "runner tasks"
+                    "workload tasks"
                 ],
                 "summary": "Delete task",
                 "parameters": [
@@ -3320,7 +3320,7 @@ const docTemplateblog = `{
         },
         "/tasks/{uuid}/stop": {
             "post": {
-                "description": "instruct worker to halt a task",
+                "description": "instruct orchestrator to halt a task",
                 "consumes": [
                     "application/json"
                 ],
@@ -3328,9 +3328,9 @@ const docTemplateblog = `{
                     "application/json"
                 ],
                 "tags": [
-                    "runner tasks"
+                    "workload tasks"
                 ],
-                "summary": "Stop worker task",
+                "summary": "Stop orchestrator task",
                 "parameters": [
                     {
                         "type": "string",
@@ -5140,13 +5140,13 @@ const docTemplateblog = `{
                 }
             }
         },
-        "github_com_khanzadimahdi_testproject_application_runner_manager_task_getTasks.Response": {
+        "github_com_khanzadimahdi_testproject_application_workload_controlplane_task_getTasks.Response": {
             "type": "object",
             "properties": {
                 "items": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_runner_manager_task_getTasks.TaskResponse"
+                        "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_workload_controlplane_task_getTasks.TaskResponse"
                     }
                 },
                 "pagination": {
@@ -5154,7 +5154,7 @@ const docTemplateblog = `{
                 }
             }
         },
-        "github_com_khanzadimahdi_testproject_application_runner_manager_task_getTasks.TaskResponse": {
+        "github_com_khanzadimahdi_testproject_application_workload_controlplane_task_getTasks.TaskResponse": {
             "type": "object",
             "properties": {
                 "created_at": {
@@ -5180,7 +5180,7 @@ const docTemplateblog = `{
                 }
             }
         },
-        "github_com_khanzadimahdi_testproject_application_runner_manager_task_runTask.Mount": {
+        "github_com_khanzadimahdi_testproject_application_workload_controlplane_task_runTask.Mount": {
             "type": "object",
             "properties": {
                 "read_only": {
@@ -5197,7 +5197,7 @@ const docTemplateblog = `{
                 }
             }
         },
-        "github_com_khanzadimahdi_testproject_application_runner_manager_task_runTask.PortBinding": {
+        "github_com_khanzadimahdi_testproject_application_workload_controlplane_task_runTask.PortBinding": {
             "type": "object",
             "properties": {
                 "host_ip": {
@@ -5208,7 +5208,7 @@ const docTemplateblog = `{
                 }
             }
         },
-        "github_com_khanzadimahdi_testproject_application_runner_manager_task_runTask.Request": {
+        "github_com_khanzadimahdi_testproject_application_workload_controlplane_task_runTask.Request": {
             "type": "object",
             "properties": {
                 "attach_stderr": {
@@ -5250,7 +5250,7 @@ const docTemplateblog = `{
                 "mounts": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_runner_manager_task_runTask.Mount"
+                        "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_workload_controlplane_task_runTask.Mount"
                     }
                 },
                 "name": {
@@ -5261,12 +5261,12 @@ const docTemplateblog = `{
                     "additionalProperties": {
                         "type": "array",
                         "items": {
-                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_runner_manager_task_runTask.PortBinding"
+                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_workload_controlplane_task_runTask.PortBinding"
                         }
                     }
                 },
                 "resource_limits": {
-                    "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_runner_manager_task_runTask.ResourceLimits"
+                    "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_workload_controlplane_task_runTask.ResourceLimits"
                 },
                 "restart_count": {
                     "type": "integer"
@@ -5276,7 +5276,7 @@ const docTemplateblog = `{
                 }
             }
         },
-        "github_com_khanzadimahdi_testproject_application_runner_manager_task_runTask.ResourceLimits": {
+        "github_com_khanzadimahdi_testproject_application_workload_controlplane_task_runTask.ResourceLimits": {
             "type": "object",
             "properties": {
                 "cpu": {
@@ -5290,7 +5290,7 @@ const docTemplateblog = `{
                 }
             }
         },
-        "github_com_khanzadimahdi_testproject_application_runner_manager_task_runTask.Response": {
+        "github_com_khanzadimahdi_testproject_application_workload_controlplane_task_runTask.Response": {
             "type": "object",
             "properties": {
                 "errors": {
@@ -5301,18 +5301,18 @@ const docTemplateblog = `{
                 }
             }
         },
-        "github_com_khanzadimahdi_testproject_application_runner_worker_task_getTasks.Response": {
+        "github_com_khanzadimahdi_testproject_application_workload_orchestrator_task_getTasks.Response": {
             "type": "object",
             "properties": {
                 "items": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_runner_worker_task_getTasks.TaskResponse"
+                        "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_workload_orchestrator_task_getTasks.TaskResponse"
                     }
                 }
             }
         },
-        "github_com_khanzadimahdi_testproject_application_runner_worker_task_getTasks.TaskResponse": {
+        "github_com_khanzadimahdi_testproject_application_workload_orchestrator_task_getTasks.TaskResponse": {
             "type": "object",
             "properties": {
                 "created_at": {
@@ -5338,7 +5338,7 @@ const docTemplateblog = `{
                 }
             }
         },
-        "github_com_khanzadimahdi_testproject_application_runner_worker_task_runTask.Mount": {
+        "github_com_khanzadimahdi_testproject_application_workload_orchestrator_task_runTask.Mount": {
             "type": "object",
             "properties": {
                 "read_only": {
@@ -5355,7 +5355,7 @@ const docTemplateblog = `{
                 }
             }
         },
-        "github_com_khanzadimahdi_testproject_application_runner_worker_task_runTask.PortBinding": {
+        "github_com_khanzadimahdi_testproject_application_workload_orchestrator_task_runTask.PortBinding": {
             "type": "object",
             "properties": {
                 "host_ip": {
@@ -5366,7 +5366,7 @@ const docTemplateblog = `{
                 }
             }
         },
-        "github_com_khanzadimahdi_testproject_application_runner_worker_task_runTask.Request": {
+        "github_com_khanzadimahdi_testproject_application_workload_orchestrator_task_runTask.Request": {
             "type": "object",
             "properties": {
                 "attach_stderr": {
@@ -5408,7 +5408,7 @@ const docTemplateblog = `{
                 "mounts": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_runner_worker_task_runTask.Mount"
+                        "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_workload_orchestrator_task_runTask.Mount"
                     }
                 },
                 "name": {
@@ -5419,12 +5419,12 @@ const docTemplateblog = `{
                     "additionalProperties": {
                         "type": "array",
                         "items": {
-                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_runner_worker_task_runTask.PortBinding"
+                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_workload_orchestrator_task_runTask.PortBinding"
                         }
                     }
                 },
                 "resource_limits": {
-                    "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_runner_worker_task_runTask.ResourceLimits"
+                    "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_workload_orchestrator_task_runTask.ResourceLimits"
                 },
                 "restart_count": {
                     "type": "integer"
@@ -5437,7 +5437,7 @@ const docTemplateblog = `{
                 }
             }
         },
-        "github_com_khanzadimahdi_testproject_application_runner_worker_task_runTask.ResourceLimits": {
+        "github_com_khanzadimahdi_testproject_application_workload_orchestrator_task_runTask.ResourceLimits": {
             "type": "object",
             "properties": {
                 "cpu": {

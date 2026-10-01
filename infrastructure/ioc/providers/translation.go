@@ -11,7 +11,7 @@ import (
 )
 
 // translationProvider binds the default (non request-scoped) translator. It is
-// used by paths that are not bound to a single HTTP request (the runner
+// used by paths that are not bound to a single HTTP request (the workload
 // service, websocket replies, async defaults). Request-scoped, language-aware
 // translation is provided by scopedTranslationProvider.
 type translationProvider struct{}

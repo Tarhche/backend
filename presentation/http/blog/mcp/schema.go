@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/jsonschema-go/jsonschema"
 
-	"github.com/khanzadimahdi/testproject/application/runner/spec"
+	"github.com/khanzadimahdi/testproject/application/workload/spec"
 	"github.com/khanzadimahdi/testproject/domain"
 )
 
@@ -38,7 +38,7 @@ var composeSchemas = map[reflect.Type]*jsonschema.Schema{
 		},
 	},
 	reflect.TypeFor[spec.Port](): {
-		Description: `a port the task listens on, as a number or in compose's own "8080:80" form; the runner picks the host side itself`,
+		Description: `a port the task listens on, as a number or in compose's own "8080:80" form; the workload picks the host side itself`,
 		AnyOf: []*jsonschema.Schema{
 			{Type: "integer", Minimum: new(1.0), Maximum: new(65535.0)},
 			{Type: "string"},

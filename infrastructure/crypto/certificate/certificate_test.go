@@ -63,7 +63,7 @@ func TestGenerateCA(t *testing.T) {
 	})
 }
 
-// 2 & 3. Valid ingress and worker certificates
+// 2 & 3. Valid ingress and orchestrator certificates
 func TestIssue(t *testing.T) {
 	authority, err := GenerateCA("test authority", 0)
 	require.NoError(t, err)
@@ -78,7 +78,7 @@ func TestIssue(t *testing.T) {
 
 		assert.Equal(t, []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}, issued.ExtKeyUsage)
 		assert.NotContains(t, issued.ExtKeyUsage, x509.ExtKeyUsageClientAuth,
-			"an ingress certificate good for both is one a worker could impersonate it with")
+			"an ingress certificate good for both is one an orchestrator could impersonate it with")
 
 		assert.Equal(t, []string{"ingress.example.internal", "ingress"}, issued.DNSNames)
 		assert.Len(t, issued.IPAddresses, 1)
@@ -86,30 +86,30 @@ func TestIssue(t *testing.T) {
 		assert.NotNil(t, key)
 	})
 
-	t.Run("a worker certificate is for connecting and not for serving", func(t *testing.T) {
-		issued, _, err := authority.GenerateClientCertificate(Request{Name: "worker-001"})
+	t.Run("an orchestrator certificate is for connecting and not for serving", func(t *testing.T) {
+		issued, _, err := authority.GenerateClientCertificate(Request{Name: "orchestrator-001"})
 		require.NoError(t, err)
 
 		assert.Equal(t, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}, issued.ExtKeyUsage)
-		assert.Equal(t, []string{"worker-001"}, issued.DNSNames)
+		assert.Equal(t, []string{"orchestrator-001"}, issued.DNSNames)
 	})
 
 	t.Run("the name is a subject alternative name, not only a common name", func(t *testing.T) {
-		issued, _, err := authority.GenerateClientCertificate(Request{Name: "worker-001"})
+		issued, _, err := authority.GenerateClientCertificate(Request{Name: "orchestrator-001"})
 		require.NoError(t, err)
 
-		assert.Contains(t, issued.DNSNames, "worker-001",
+		assert.Contains(t, issued.DNSNames, "orchestrator-001",
 			"verification ignores the common name, so a name only there is a name nothing checks")
 	})
 
 	t.Run("the name is not repeated when it is given twice", func(t *testing.T) {
 		issued, _, err := authority.GenerateClientCertificate(Request{
-			Name:     "worker-001",
-			DNSNames: []string{"worker-001", "worker-001.example.internal"},
+			Name:     "orchestrator-001",
+			DNSNames: []string{"orchestrator-001", "orchestrator-001.example.internal"},
 		})
 		require.NoError(t, err)
 
-		assert.Equal(t, []string{"worker-001", "worker-001.example.internal"}, issued.DNSNames)
+		assert.Equal(t, []string{"orchestrator-001", "orchestrator-001.example.internal"}, issued.DNSNames)
 	})
 
 	t.Run("nothing is put in that was not asked for", func(t *testing.T) {
@@ -120,7 +120,7 @@ func TestIssue(t *testing.T) {
 	})
 
 	t.Run("a certificate chains to the authority", func(t *testing.T) {
-		issued, _, err := authority.GenerateClientCertificate(Request{Name: "worker-001"})
+		issued, _, err := authority.GenerateClientCertificate(Request{Name: "orchestrator-001"})
 		require.NoError(t, err)
 
 		pool := x509.NewCertPool()
@@ -140,15 +140,15 @@ func TestIssue(t *testing.T) {
 	})
 
 	t.Run("something that is not an authority cannot sign", func(t *testing.T) {
-		issued, key, err := authority.GenerateClientCertificate(Request{Name: "worker-001"})
+		issued, key, err := authority.GenerateClientCertificate(Request{Name: "orchestrator-001"})
 		require.NoError(t, err)
 
-		_, _, err = (&Authority{Certificate: issued, PrivateKey: key}).GenerateClientCertificate(Request{Name: "worker-002"})
+		_, _, err = (&Authority{Certificate: issued, PrivateKey: key}).GenerateClientCertificate(Request{Name: "orchestrator-002"})
 		assert.ErrorIs(t, err, ErrNotAnAuthority)
 	})
 
 	t.Run("the keys are P-256, which is what TLS 1.3 agrees on", func(t *testing.T) {
-		_, key, err := authority.GenerateClientCertificate(Request{Name: "worker-001"})
+		_, key, err := authority.GenerateClientCertificate(Request{Name: "orchestrator-001"})
 		require.NoError(t, err)
 
 		assert.Equal(t, elliptic.P256(), key.Curve)
@@ -224,7 +224,7 @@ func TestFiles(t *testing.T) {
 		authority, err := GenerateCA("test authority", 0)
 		require.NoError(t, err)
 
-		issued, key, err := authority.GenerateClientCertificate(Request{Name: "worker-001"})
+		issued, key, err := authority.GenerateClientCertificate(Request{Name: "orchestrator-001"})
 		require.NoError(t, err)
 
 		files := AuthorityFiles(directory)
@@ -273,45 +273,45 @@ func TestFiles(t *testing.T) {
 	})
 }
 
-// 18. Worker identity extraction
+// 18. Orchestrator identity extraction
 func TestSubjectAlternativeName(t *testing.T) {
 	authority, err := GenerateCA("test authority", 0)
 	require.NoError(t, err)
 
 	t.Run("a bare name comes back whole", func(t *testing.T) {
-		issued, _, err := authority.GenerateClientCertificate(Request{Name: "worker-001"})
+		issued, _, err := authority.GenerateClientCertificate(Request{Name: "orchestrator-001"})
 		require.NoError(t, err)
 
 		name, err := SubjectAlternativeName("").Identify(issued)
 		assert.NoError(t, err)
-		assert.Equal(t, "worker-001", name)
+		assert.Equal(t, "orchestrator-001", name)
 	})
 
 	t.Run("a qualified name has its domain taken off", func(t *testing.T) {
-		issued, _, err := authority.GenerateClientCertificate(Request{Name: "worker-001.example.internal"})
+		issued, _, err := authority.GenerateClientCertificate(Request{Name: "orchestrator-001.example.internal"})
 		require.NoError(t, err)
 
 		name, err := SubjectAlternativeName("example.internal").Identify(issued)
 		assert.NoError(t, err)
-		assert.Equal(t, "worker-001", name)
+		assert.Equal(t, "orchestrator-001", name)
 	})
 
 	t.Run("a leading dot on the domain makes no difference", func(t *testing.T) {
-		issued, _, err := authority.GenerateClientCertificate(Request{Name: "worker-001.example.internal"})
+		issued, _, err := authority.GenerateClientCertificate(Request{Name: "orchestrator-001.example.internal"})
 		require.NoError(t, err)
 
 		name, err := SubjectAlternativeName(".example.internal").Identify(issued)
 		assert.NoError(t, err)
-		assert.Equal(t, "worker-001", name)
+		assert.Equal(t, "orchestrator-001", name)
 	})
 
 	t.Run("a name under another domain is left alone", func(t *testing.T) {
-		issued, _, err := authority.GenerateClientCertificate(Request{Name: "worker-001.elsewhere"})
+		issued, _, err := authority.GenerateClientCertificate(Request{Name: "orchestrator-001.elsewhere"})
 		require.NoError(t, err)
 
 		name, err := SubjectAlternativeName("example.internal").Identify(issued)
 		assert.NoError(t, err)
-		assert.Equal(t, "worker-001.elsewhere", name)
+		assert.Equal(t, "orchestrator-001.elsewhere", name)
 	})
 
 	t.Run("a certificate with no subject alternative name identifies nobody", func(t *testing.T) {

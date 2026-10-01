@@ -15,17 +15,18 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	"github.com/khanzadimahdi/testproject/presentation/commands/blog"
 	"github.com/khanzadimahdi/testproject/presentation/commands/certificate"
-	"github.com/khanzadimahdi/testproject/presentation/commands/runner/ingress"
-	"github.com/khanzadimahdi/testproject/presentation/commands/runner/manager"
-	"github.com/khanzadimahdi/testproject/presentation/commands/runner/worker"
+	"github.com/khanzadimahdi/testproject/presentation/commands/database"
+	"github.com/khanzadimahdi/testproject/presentation/commands/workload/controlplane"
+	"github.com/khanzadimahdi/testproject/presentation/commands/workload/ingress"
+	"github.com/khanzadimahdi/testproject/presentation/commands/workload/orchestrator"
 )
 
-// the blog's specification documents the blog. The runner services carry
+// the blog's specification documents the blog. The workload services carry
 // annotations of their own and are served elsewhere, so scanning them here
 // only puts routes in this spec that this service does not answer — and makes
-// the manager and the worker collide over the paths they share.
+// the control plane and the orchestrator collide over the paths they share.
 //
-//go:generate go tool swag init --generalInfo ./presentation/commands/blog/serve.go --dir ./ --exclude ./presentation/http/runner --output ./resources/docs/blog/openapi
+//go:generate go tool swag init --generalInfo ./presentation/commands/blog/serve.go --dir ./ --exclude ./presentation/http/workload --output ./resources/docs/blog/openapi
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancel()
@@ -49,11 +50,14 @@ func main() {
 	c.Flags(globalFlags)
 
 	c.Register(blog.NewServeCommand(serviceProvider))
-	c.Register(manager.NewServeCommand())
-	c.Register(worker.NewServeCommand())
+	c.Register(controlplane.NewServeCommand())
+	c.Register(orchestrator.NewServeCommand())
 	c.Register(ingress.NewServeCommand())
 
-	// the certificates the runner's tunnel authenticates with
+	// brings what is stored up to what this version reads
+	c.Register(database.NewMigrateCommand())
+
+	// the certificates the workload's tunnel authenticates with
 	c.RegisterGroup(certificate.Group())
 
 	code := c.Run(ctx, os.Args)

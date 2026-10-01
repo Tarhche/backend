@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/runner/port"
+	"github.com/khanzadimahdi/testproject/domain/workload/port"
 )
 
 func TestRequest_Validate(t *testing.T) {
