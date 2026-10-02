@@ -19,7 +19,6 @@ import (
 	orchestratorTaskHeartbeat "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/beatHeart"
 	orchestratorDeleteTask "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/deleteTask"
 	orchestratorGetEndpoint "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/getEndpoint"
-	orchestratorgettasks "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/getTasks"
 	orchestratorkilltask "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/killTask"
 	orchestratorrestarttask "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/restartTask"
 	orchestratorruntask "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/runTask"
@@ -202,7 +201,6 @@ func orchestratorConsoleCommand(
 	// otherwise fail to start at all, and stay down until somebody noticed.
 
 	// tasks
-	getTasksUseCase := orchestratorgettasks.NewUseCase(taskManager, nodeName)
 	runTaskUseCase := orchestratorruntask.NewUseCase(taskManager, networkManager, validator, nodeName)
 	stopTaskUseCase := orchestratorstoptask.NewUseCase(taskManager, validator)
 	killTaskUseCase := orchestratorkilltask.NewUseCase(taskManager, validator)
@@ -224,32 +222,23 @@ func orchestratorConsoleCommand(
 
 	verifier := jwt.NewJWT(nil, publicKey)
 
-	// everything under /api is reachable from outside, through the ingress, so
-	// everything under /api says who it is -- everything, that is, but the
-	// terminal, which is opened on snippets that belong to nobody as readily as
-	// on tasks that belong to somebody. Whose a task is decides that,
-	// and only the node holding it knows.
-	tasks := http.NewServeMux()
-
-	tasks.Handle("GET /api/tasks", orchestratorTaskAPI.NewIndexHandler(getTasksUseCase))
-	tasks.Handle("POST /api/tasks/run", orchestratorTaskAPI.NewRunHandler(runTaskUseCase))
-	tasks.Handle("POST /api/tasks/{uuid}/stop", orchestratorTaskAPI.NewStopHandler(stopTaskUseCase))
-	tasks.Handle("POST /api/tasks/{uuid}/kill", orchestratorTaskAPI.NewKillHandler(killTaskUseCase))
-	tasks.Handle("POST /api/tasks/{uuid}/restart", orchestratorTaskAPI.NewRestartHandler(restartTaskUseCase))
-
-	// a terminal inside a task. Only the control plane reaches this, and it is
-	// what decides who may open one.
-
+	// what a task is told to do -- run, stop, kill, restart, be deleted -- reaches
+	// this node as the control plane's messages, below, and in no other way, and
+	// what the node is holding goes back the same way, in its heartbeats. So
+	// there is no route for either. Everything under /api is reachable from
+	// outside, through the ingress, and a token proves only that the estate
+	// signed it for somebody: a route that ran or stopped a task would do it for
+	// anybody signed in, to anybody's task, with whatever image and resources
+	// they named, and the control plane would never hear of it.
 	api := http.NewServeMux()
 
 	// the task healthcheck probes this, from inside the task, and it
 	// says nothing a caller could not find out by the service being up
 	api.Handle("GET /health", healthAPI.NewHealthHandler(checkHealthUseCase))
 
-	api.Handle("/api/", middleware.NewTokenMiddleware(tasks, verifier))
-
-	// a terminal, which asks for a token and does not insist on one: a snippet
-	// has no owner, so there is nobody it could be checked against.
+	// a terminal inside a task, which the ingress carries here. It asks for a
+	// token and does not insist on one: a snippet has no owner, so there is
+	// nobody it could be checked against.
 	api.Handle("GET /api/tasks/{uuid}/attach", middleware.NewOptionalTokenMiddleware(
 		orchestratorTaskAPI.NewAttachHandler(attachTaskUseCase, logger),
 		verifier,
