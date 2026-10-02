@@ -16,9 +16,10 @@ import (
 
 // entry is one entry of a cpio archive, as read back.
 type entry struct {
-	name    string
-	mode    uint64
-	content []byte
+	name         string
+	mode         uint64
+	major, minor uint64
+	content      []byte
 }
 
 // read reads a compressed newc archive back, the way the kernel would.
@@ -44,7 +45,7 @@ func read(t *testing.T, archive []byte) []entry {
 			return value
 		}
 
-		mode, size, nameSize := field(1), field(6), field(11)
+		mode, size, major, minor, nameSize := field(1), field(6), field(9), field(10), field(11)
 
 		name := string(raw[offset+110 : offset+110+int(nameSize)-1])
 		offset = align(offset + 110 + int(nameSize))
@@ -53,7 +54,7 @@ func read(t *testing.T, archive []byte) []entry {
 			return entries
 		}
 
-		entries = append(entries, entry{name: name, mode: mode, content: raw[offset : offset+int(size)]})
+		entries = append(entries, entry{name: name, mode: mode, major: major, minor: minor, content: raw[offset : offset+int(size)]})
 		offset = align(offset + int(size))
 	}
 }
@@ -76,12 +77,31 @@ func TestBuild(t *testing.T) {
 			names[i] = e.name
 		}
 
-		assert.Equal(t, []string{"dev", "mnt", "proc", "run", "sys", "tmp", "init"}, names)
+		assert.Equal(t, []string{"dev", "mnt", "proc", "run", "sys", "tmp", "dev/console", "dev/null", "init"}, names)
 
 		init := entries[len(entries)-1]
 		assert.Equal(t, agent, init.content)
 		assert.Equal(t, uint64(modeRegular|0o755), init.mode)
 		assert.Equal(t, uint64(modeDirectory|0o755), entries[0].mode)
+	})
+
+	t.Run("the console and /dev/null are there before anything is mounted", func(t *testing.T) {
+		var archive bytes.Buffer
+		require.NoError(t, Build(&archive, bytes.NewReader(nil), 0))
+
+		found := make(map[string]entry)
+		for _, e := range read(t, archive.Bytes()) {
+			found[e.name] = e
+		}
+
+		console := found["dev/console"]
+		assert.Equal(t, uint64(modeCharacter|0o600), console.mode)
+		assert.Equal(t, [2]uint64{5, 1}, [2]uint64{console.major, console.minor})
+		assert.Empty(t, console.content)
+
+		null := found["dev/null"]
+		assert.Equal(t, uint64(modeCharacter|0o666), null.mode)
+		assert.Equal(t, [2]uint64{1, 3}, [2]uint64{null.major, null.minor})
 	})
 }
 
