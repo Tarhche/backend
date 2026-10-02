@@ -58,7 +58,8 @@ type Resources struct {
 }
 
 // Limits accepts compose's own units: cpus as a decimal string or number, and
-// memory as a size like "256M".
+// memory and disk as a size like "256M", which is held in bytes from the moment
+// it is read.
 type Limits struct {
 	CPUs   Decimal  `json:"cpus,omitempty"`
 	Memory ByteSize `json:"memory,omitempty"`
@@ -115,8 +116,16 @@ func (s *Service) Validate(prefix string) domain.ValidationErrors {
 		validationErrors[field("ports")] = "ports_require_network"
 	}
 
-	if s.Deploy.Resources.Limits.CPUs < 0 || s.Deploy.Resources.Limits.Memory < 0 || s.Deploy.Resources.Limits.Disk < 0 {
+	limits := s.Deploy.Resources.Limits
+	switch {
+	case limits.CPUs < 0 || limits.Memory < 0 || limits.Disk < 0:
 		validationErrors[field("deploy.resources.limits")] = "invalid_value"
+
+	// docker will not create a container with less memory than this. Saying
+	// so here, before anything is created, is what keeps a stack from being
+	// stood up halfway and a task from failing on its node over a typo.
+	case limits.Memory > 0 && limits.Memory < task.MinMemory:
+		validationErrors[field("deploy.resources.limits")] = "memory_below_minimum"
 	}
 
 	if attempts := s.Deploy.RestartPolicy.MaxAttempts; attempts != nil && *attempts < task.RetryForever {

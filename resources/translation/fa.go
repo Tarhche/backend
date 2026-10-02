@@ -11,6 +11,8 @@ var farsi = map[string]string{
 	"invalid_network_policy":            "دسترسی شبکه باید یکی از این موارد باشد: none، isolated، public",
 	"container_is_not_running":          "کانتینر در حال اجرا نیست",
 	"too_many_services":                 "تعداد سرویس‌های استک بیش از حد مجاز است",
+	"memory_below_minimum":              "حافظهٔ هر تسک باید دست‌کم ۶ مگابایت باشد",
+	"not_supported":                     "این فیلد هنوز پشتیبانی نمی‌شود",
 	"required_field":                    "این فیلد اجباری است",
 	"invalid_value":                     "مقدار ارائه شده نامعتبر است",
 	"invalid_email":                     "مقدار ارائه شده باید یک آدرس ایمیل معتبر باشد",

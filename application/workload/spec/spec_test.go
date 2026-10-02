@@ -176,6 +176,21 @@ func TestServiceValidate(t *testing.T) {
 			service: Service{Image: "a:1", Ports: Ports{{Task: 0}}},
 			want:    domain.ValidationErrors{"ports": "invalid_value"},
 		},
+		{
+			name:    "a negative limit is rejected",
+			service: Service{Image: "a:1", Deploy: Deploy{Resources: Resources{Limits: Limits{Memory: -1}}}},
+			want:    domain.ValidationErrors{"deploy.resources.limits": "invalid_value"},
+		},
+		{
+			name:    "as little memory as docker allows is enough",
+			service: Service{Image: "a:1", Deploy: Deploy{Resources: Resources{Limits: Limits{Memory: 6 << 20}}}},
+			want:    domain.ValidationErrors{},
+		},
+		{
+			name:    "less memory than docker allows is rejected",
+			service: Service{Image: "a:1", Deploy: Deploy{Resources: Resources{Limits: Limits{Memory: 6<<20 - 1}}}},
+			want:    domain.ValidationErrors{"deploy.resources.limits": "memory_below_minimum"},
+		},
 	}
 
 	for _, tt := range testcases {
@@ -192,6 +207,24 @@ func TestServiceValidate(t *testing.T) {
 		service := Service{}
 
 		assert.Equal(t, domain.ValidationErrors{"services.api.image": "required_field"}, service.Validate("services.api"))
+	})
+
+	t.Run("a compose size under docker's floor is refused before anything runs", func(t *testing.T) {
+		t.Parallel()
+
+		// "4M" is read as 4 MiB in bytes, and a stack is validated whole
+		// before any of it is created, so a service asking for too little
+		// stops the stack rather than half of it.
+		var stack Stack
+		require.NoError(t, json.Unmarshal([]byte(`{
+			"name": "myapp",
+			"services": {
+				"web": {"image": "nginx:alpine"},
+				"api": {"image": "api:1", "deploy": {"resources": {"limits": {"memory": "4M"}}}}
+			}
+		}`), &stack))
+
+		assert.Equal(t, domain.ValidationErrors{"services.api.deploy.resources.limits": "memory_below_minimum"}, stack.Validate())
 	})
 }
 

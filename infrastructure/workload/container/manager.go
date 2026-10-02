@@ -170,7 +170,16 @@ func (m *DockerManager) Create(ctx context.Context, c *task.Execution) (string, 
 	}
 
 	hostConfig := &containerTypes.HostConfig{
-		Memory:   int64(c.ResourceLimits.Memory * 1024 * 1024),
+		// memory is in bytes here as it is everywhere else, and a cpu is
+		// counted in billionths of one.
+		//
+		// The disk limit every task has to name is not applied. Docker can
+		// only hold a container to one with storage-opt size=, which needs
+		// overlay2 on an XFS filesystem mounted with project quotas, and the
+		// dind daemon the workload runs on has neither. Until a runtime can say
+		// that it holds one, a task's disk limit is what it said it needs
+		// rather than something it is held to.
+		Memory:   memoryLimit(c.ResourceLimits.Memory),
 		NanoCPUs: int64(c.ResourceLimits.Cpu * 1e9),
 		RestartPolicy: containerTypes.RestartPolicy{
 			Name: containerTypes.RestartPolicyMode(c.RestartPolicy),
@@ -187,6 +196,14 @@ func (m *DockerManager) Create(ctx context.Context, c *task.Execution) (string, 
 	resp, err := m.client.ContainerCreate(ctx, config, hostConfig, endpointsConfig(c.Networks), nil, c.Name)
 	if err != nil {
 		return "", trace.RecordError(span, err)
+	}
+
+	// a limit docker cannot apply — memory on a daemon whose cgroups have no
+	// memory controller, say — is dropped, and this is the only place it says
+	// so. Written down, so a task running without a limit it asked for does
+	// not go unnoticed.
+	if len(resp.Warnings) > 0 {
+		m.logger.Warn("container created with warnings", "name", c.Name, "containerID", resp.ID, "warnings", resp.Warnings)
 	}
 
 	// a container that reaches both its own stack and the internet sits on two
@@ -332,6 +349,9 @@ func (m *DockerManager) Inspect(ctx context.Context, containerUUID string) (task
 		ExitCode:         info.State.ExitCode,
 		ExposedPorts:     convertDockerPortSetFromMap(info.NetworkSettings.Ports),
 		PortBindings:     convertDockerPortMapFromMap(info.NetworkSettings.Ports),
+		// read back in the units they were given in, so a task's limits are the
+		// same number on the way in and on the way out. There is no disk limit
+		// to read: docker was never given one.
 		ResourceLimits: task.ResourceLimits{
 			Memory: uint64(info.HostConfig.Resources.Memory),
 			Cpu:    float64(info.HostConfig.Resources.NanoCPUs) / 1e9,
