@@ -114,12 +114,24 @@ type Mount struct {
 	ReadOnly bool
 }
 
-// ResourceLimits represents the resource limits of the task
+// ResourceLimits represents the resource limits of the task.
+//
+// Cpu is in cores. Memory and Disk are in bytes, and stay in bytes all the
+// way down: a compose size like "256M" is turned into bytes when it is read,
+// and nothing between there and the runtime converts it again.
 type ResourceLimits struct {
 	Cpu    float64
 	Memory uint64
 	Disk   uint64
 }
+
+// MinMemory is the least memory, in bytes, a task may be limited to.
+//
+// It is docker's floor rather than one the workload chose: the engine refuses
+// to create a container whose memory limit is under 6 MiB, to leave room for
+// what starting one costs. A task asking for less is told so when it is asked
+// for, rather than accepted and then failed on whichever node it was given to.
+const MinMemory = 6 << 20
 
 // Repository represents a repository of tasks
 type Repository interface {

@@ -11,6 +11,8 @@ var english = map[string]string{
 	"invalid_network_policy":            "the network access must be one of: none, isolated, public",
 	"container_is_not_running":          "the container is not running",
 	"too_many_services":                 "a stack holds too many services",
+	"memory_below_minimum":              "a task needs at least 6 MiB of memory",
+	"not_supported":                     "this field is not supported yet",
 	"required_field":                    "this field is required",
 	"invalid_value":                     "the provided value is invalid",
 	"invalid_email":                     "should be a valid email address",

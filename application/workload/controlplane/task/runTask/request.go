@@ -69,7 +69,8 @@ type Mount struct {
 	ReadOnly bool   `json:"read_only"`
 }
 
-// ResourceLimits represents the resource limits of the task
+// ResourceLimits represents the resource limits of the task. Cpu is in cores,
+// and Memory and Disk are in bytes, as they are everywhere in the workload.
 type ResourceLimits struct {
 	Cpu    float64 `json:"cpu"`
 	Memory uint64  `json:"memory"`
@@ -120,10 +121,21 @@ func (r *Request) Validate() domain.ValidationErrors {
 		validationErrors["resource_limits.cpu"] = "required_field"
 	}
 
-	if r.ResourceLimits.Memory <= 0 {
+	switch {
+	case r.ResourceLimits.Memory <= 0:
 		validationErrors["resource_limits.memory"] = "required_field"
+
+	// docker will not create a container with less. Every task is asked for
+	// through here — the code runner, a configured default and this API as
+	// well as a compose service — so this is where it is told so, rather than
+	// on whichever node it would have been given to.
+	case r.ResourceLimits.Memory < task.MinMemory:
+		validationErrors["resource_limits.memory"] = "memory_below_minimum"
 	}
 
+	// required so that every task says how much it means to write, although
+	// docker does not hold a task to it yet: see Create in
+	// infrastructure/workload/container.
 	if r.ResourceLimits.Disk <= 0 {
 		validationErrors["resource_limits.disk"] = "required_field"
 	}
@@ -161,6 +173,18 @@ func (r *Request) Validate() domain.ValidationErrors {
 	// a task with no network has nothing to publish a port on.
 	if len(r.ExposedPorts) > 0 && r.Policy().IsValid() && !r.Policy().AllowsPorts() {
 		validationErrors["exposed_ports"] = "ports_require_network"
+	}
+
+	// nothing applies either of these yet: no runtime mounts a volume into a
+	// task or checks on its health. They used to be taken and then dropped on
+	// the way to the node, which told whoever asked that something held when
+	// nothing did, so they are refused until a runtime can honour them.
+	if len(r.Mounts) > 0 {
+		validationErrors["mounts"] = "not_supported"
+	}
+
+	if len(r.HealthCheck) > 0 {
+		validationErrors["health_check"] = "not_supported"
 	}
 
 	return validationErrors

@@ -22,7 +22,6 @@ func TestRequest_Validate(t *testing.T) {
 				PortBindings:  map[uint][]PortBinding{},
 				RestartPolicy: "always",
 				RestartCount:  3,
-				HealthCheck:   "http://localhost:8080/health",
 				AttachStdin:   false,
 				AttachStdout:  true,
 				AttachStderr:  true,
@@ -32,8 +31,8 @@ func TestRequest_Validate(t *testing.T) {
 				Mounts:        []Mount{},
 				ResourceLimits: ResourceLimits{
 					Cpu:    1.0,
-					Memory: 1024,
-					Disk:   2048,
+					Memory: 256 << 20,
+					Disk:   512 << 20,
 				},
 				OwnerUUID: "owner-uuid-123",
 			},
@@ -46,8 +45,8 @@ func TestRequest_Validate(t *testing.T) {
 				Image: "test-image:latest",
 				ResourceLimits: ResourceLimits{
 					Cpu:    1.0,
-					Memory: 1024,
-					Disk:   2048,
+					Memory: 256 << 20,
+					Disk:   512 << 20,
 				},
 				OwnerUUID: "owner-uuid-123",
 			},
@@ -62,8 +61,8 @@ func TestRequest_Validate(t *testing.T) {
 				Image: "",
 				ResourceLimits: ResourceLimits{
 					Cpu:    1.0,
-					Memory: 1024,
-					Disk:   2048,
+					Memory: 256 << 20,
+					Disk:   512 << 20,
 				},
 				OwnerUUID: "owner-uuid-123",
 			},
@@ -78,8 +77,8 @@ func TestRequest_Validate(t *testing.T) {
 				Image: "test-image:latest",
 				ResourceLimits: ResourceLimits{
 					Cpu:    0,
-					Memory: 1024,
-					Disk:   2048,
+					Memory: 256 << 20,
+					Disk:   512 << 20,
 				},
 				OwnerUUID: "owner-uuid-123",
 			},
@@ -95,7 +94,7 @@ func TestRequest_Validate(t *testing.T) {
 				ResourceLimits: ResourceLimits{
 					Cpu:    1.0,
 					Memory: 0,
-					Disk:   2048,
+					Disk:   512 << 20,
 				},
 				OwnerUUID: "owner-uuid-123",
 			},
@@ -110,7 +109,7 @@ func TestRequest_Validate(t *testing.T) {
 				Image: "test-image:latest",
 				ResourceLimits: ResourceLimits{
 					Cpu:    1.0,
-					Memory: 1024,
+					Memory: 256 << 20,
 					Disk:   0,
 				},
 				OwnerUUID: "owner-uuid-123",
@@ -126,8 +125,8 @@ func TestRequest_Validate(t *testing.T) {
 				Image: "test-image:latest",
 				ResourceLimits: ResourceLimits{
 					Cpu:    1.0,
-					Memory: 1024,
-					Disk:   2048,
+					Memory: 256 << 20,
+					Disk:   512 << 20,
 				},
 				OwnerUUID: "",
 			},
@@ -154,6 +153,88 @@ func TestRequest_Validate(t *testing.T) {
 				"resource_limits.memory": "required_field",
 				"resource_limits.disk":   "required_field",
 				"owner_uuid":             "required_field",
+			},
+		},
+		{
+			name: "valid request with as little memory as docker allows",
+			request: Request{
+				Name:  "test-task",
+				Image: "test-image:latest",
+				ResourceLimits: ResourceLimits{
+					Cpu:    1.0,
+					Memory: 6 << 20,
+					Disk:   512 << 20,
+				},
+				OwnerUUID: "owner-uuid-123",
+			},
+			want: domain.ValidationErrors{},
+		},
+		{
+			name: "invalid request with a byte less memory than docker allows",
+			request: Request{
+				Name:  "test-task",
+				Image: "test-image:latest",
+				ResourceLimits: ResourceLimits{
+					Cpu:    1.0,
+					Memory: 6<<20 - 1,
+					Disk:   512 << 20,
+				},
+				OwnerUUID: "owner-uuid-123",
+			},
+			want: domain.ValidationErrors{
+				"resource_limits.memory": "memory_below_minimum",
+			},
+		},
+		{
+			// memory is in bytes, so 256 meant as mebibytes is 256 bytes:
+			// refused here rather than by docker on the node.
+			name: "invalid request with memory written as if in mebibytes",
+			request: Request{
+				Name:  "test-task",
+				Image: "test-image:latest",
+				ResourceLimits: ResourceLimits{
+					Cpu:    1.0,
+					Memory: 256,
+					Disk:   512 << 20,
+				},
+				OwnerUUID: "owner-uuid-123",
+			},
+			want: domain.ValidationErrors{
+				"resource_limits.memory": "memory_below_minimum",
+			},
+		},
+		{
+			name: "invalid request with mounts, which no runtime applies yet",
+			request: Request{
+				Name:   "test-task",
+				Image:  "test-image:latest",
+				Mounts: []Mount{{Source: "/host/path", Target: "/task/path", Type: "bind"}},
+				ResourceLimits: ResourceLimits{
+					Cpu:    1.0,
+					Memory: 256 << 20,
+					Disk:   512 << 20,
+				},
+				OwnerUUID: "owner-uuid-123",
+			},
+			want: domain.ValidationErrors{
+				"mounts": "not_supported",
+			},
+		},
+		{
+			name: "invalid request with a health check, which no runtime applies yet",
+			request: Request{
+				Name:        "test-task",
+				Image:       "test-image:latest",
+				HealthCheck: "http://localhost:8080/health",
+				ResourceLimits: ResourceLimits{
+					Cpu:    1.0,
+					Memory: 256 << 20,
+					Disk:   512 << 20,
+				},
+				OwnerUUID: "owner-uuid-123",
+			},
+			want: domain.ValidationErrors{
+				"health_check": "not_supported",
 			},
 		},
 	}
