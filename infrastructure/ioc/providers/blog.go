@@ -3,6 +3,7 @@ package providers
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -91,6 +92,8 @@ import (
 	"github.com/khanzadimahdi/testproject/application/dashboard/user/userchangepassword"
 	dashboardLogs "github.com/khanzadimahdi/testproject/application/dashboard/workload/logs"
 	workloadPresenter "github.com/khanzadimahdi/testproject/application/dashboard/workload/presenter"
+	dashboardGetRuntimes "github.com/khanzadimahdi/testproject/application/dashboard/workload/runtime/getRuntimes"
+	dashboardGetUserRuntimes "github.com/khanzadimahdi/testproject/application/dashboard/workload/runtime/getUserRuntimes"
 	dashboardDeleteStack "github.com/khanzadimahdi/testproject/application/dashboard/workload/stack/deleteStack"
 	dashboardUserDeleteStack "github.com/khanzadimahdi/testproject/application/dashboard/workload/stack/deleteUserStack"
 	dashboardGetStack "github.com/khanzadimahdi/testproject/application/dashboard/workload/stack/getStack"
@@ -144,6 +147,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/password"
 	"github.com/khanzadimahdi/testproject/domain/permission"
 	translatorContract "github.com/khanzadimahdi/testproject/domain/translator"
+	workloadRuntime "github.com/khanzadimahdi/testproject/domain/workload/runtime"
 	stackEvents "github.com/khanzadimahdi/testproject/domain/workload/stack/events"
 	taskEvents "github.com/khanzadimahdi/testproject/domain/workload/task/events"
 	"github.com/khanzadimahdi/testproject/infrastructure/cache"
@@ -188,6 +192,7 @@ import (
 	"github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/profile"
 	dashboardRoleAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/role"
 	dashboardUserAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/user"
+	dashboardWorkloadRuntimeAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/workload/runtime"
 	dashboardWorkloadStackAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/workload/stack"
 	dashboardWorkloadTaskAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/workload/task"
 	fileAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/file"
@@ -411,10 +416,18 @@ func blog(
 	getLanguagesUseCase := getLanguages.NewUseCase(languageRepository, languageResolver)
 	getFileUseCase := getFile.NewUseCase(filesRepository, fileStorage)
 
+	// the class every snippet is run with is the platform's to choose. Which
+	// classes the workload allows is the control plane's to say, so only that
+	// this can be one at all is checked here.
+	codeRunnerRuntime := workloadRuntime.Class(blogConfigs.CodeRunnerRuntime)
+	if len(codeRunnerRuntime) > 0 && !codeRunnerRuntime.IsValid() {
+		return nil, fmt.Errorf("WORKLOAD_CODE_RUNNER_RUNTIME: %q cannot name a runtime class", codeRunnerRuntime)
+	}
+
 	if err := cachedGateway.Consume(
 		context.Background(),
 		runCode.RunCodeRequest,
-		runCode.NewRunCodeHandler(validator, asyncProduceConsumer, cachedGateway, logger),
+		runCode.NewRunCodeHandler(validator, asyncProduceConsumer, cachedGateway, codeRunnerRuntime, logger),
 	); err != nil {
 		return nil, err
 	}
@@ -465,6 +478,11 @@ func blog(
 	dashboardUserRestartStackUseCase := dashboardUserRestartStack.NewUseCase(workload)
 	dashboardDeleteStackUseCase := dashboardDeleteStack.NewUseCase(workload)
 	dashboardUserDeleteStackUseCase := dashboardUserDeleteStack.NewUseCase(workload)
+
+	// the classes a task may be run with, which the task and stack forms are
+	// built from.
+	dashboardGetRuntimesUseCase := dashboardGetRuntimes.NewUseCase(workload)
+	dashboardGetUserRuntimesUseCase := dashboardGetUserRuntimes.NewUseCase(workload)
 
 	// a terminal and a live log are streams rather than answers, so they travel
 	// over the websocket the gateway already serves: one request opens the
@@ -901,6 +919,12 @@ func blog(
 	mux.Handle("POST /api/dashboard/my/workload/stacks/{uuid}/stop", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardWorkloadStackAPI.NewStopUserHandler(dashboardUserStopStackUseCase), authorizer, permission.SelfWorkloadStacksManage), jwt, userRepository))
 	mux.Handle("POST /api/dashboard/my/workload/stacks/{uuid}/kill", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardWorkloadStackAPI.NewKillUserHandler(dashboardUserKillStackUseCase), authorizer, permission.SelfWorkloadStacksManage), jwt, userRepository))
 	mux.Handle("POST /api/dashboard/my/workload/stacks/{uuid}/restart", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardWorkloadStackAPI.NewRestartUserHandler(dashboardUserRestartStackUseCase), authorizer, permission.SelfWorkloadStacksManage), jwt, userRepository))
+
+	// workload runtime classes: whoever may list tasks may see what they can
+	// be run with. There is no permission per class yet, so the workload's
+	// permissions cover every class.
+	mux.Handle("GET /api/dashboard/workload/runtimes", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardWorkloadRuntimeAPI.NewIndexHandler(dashboardGetRuntimesUseCase), authorizer, permission.WorkloadTasksIndex), jwt, userRepository))
+	mux.Handle("GET /api/dashboard/my/workload/runtimes", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardWorkloadRuntimeAPI.NewIndexUserHandler(dashboardGetUserRuntimesUseCase), authorizer, permission.SelfWorkloadTasksIndex), jwt, userRepository))
 
 	// config
 	mux.Handle("GET /api/dashboard/config", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardConfigAPI.NewShowHandler(dashboardGetConfigUsecase), authorizer, permission.ConfigShow), jwt, userRepository))

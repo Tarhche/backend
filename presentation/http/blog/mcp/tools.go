@@ -161,6 +161,7 @@ func tools() []tool {
 		contactTools(),
 		taskTools(),
 		stackTools(),
+		runtimeTools(),
 		configTools(),
 	)
 }
@@ -882,7 +883,7 @@ func taskTools() []tool {
 		},
 		{
 			name:        "dashboard_task_run",
-			description: "Run a container from a compose service specification. It keeps running until it is stopped, and the ports it exposes are served under a name of its own.",
+			description: "Run a container from a compose service specification. It keeps running until it is stopped, and the ports it exposes are served under a name of its own. It runs with the runtime class it names, or the workload's default; dashboard_runtimes_list says which there are.",
 			route:       "POST /api/dashboard/workload/tasks",
 			body:        body[dashboardRunTask.Request](),
 		},
@@ -996,7 +997,7 @@ func stackTools() []tool {
 		},
 		{
 			name:        "dashboard_stack_run",
-			description: "Run a set of connected services from a compose specification. Each service needs at least an image, and they reach each other by the names they are keyed under.",
+			description: "Run a set of connected services from a compose specification. Each service needs at least an image, and they reach each other by the names they are keyed under. A runtime class named for the stack is every service's that names none, and all of them run with one class.",
 			route:       "POST /api/dashboard/workload/stacks",
 			body:        body[dashboardRunStack.Request](),
 		},
@@ -1071,6 +1072,26 @@ func stackTools() []tool {
 			params:      []Parameter{stackUUID()},
 			destructive: true,
 			idempotent:  true,
+		},
+	}
+}
+
+// runtimeTools say which classes a task may be run with, which is what a
+// caller choosing a runtime for a task or a stack needs to know first: which
+// ones there are, which is the default, and what each can do right now.
+func runtimeTools() []tool {
+	return []tool{
+		{
+			name:        "dashboard_runtimes_list",
+			description: "Every runtime class a task may be run with: whether it is the default, whether any node can run it right now, what the nodes that can are all able to do, and what they hold between them.",
+			route:       "GET /api/dashboard/workload/runtimes",
+			readOnly:    true,
+		},
+		{
+			name:        "my_runtimes_list",
+			description: "Every runtime class this session owner's own tasks may be run with, and what each can do right now.",
+			route:       "GET /api/dashboard/my/workload/runtimes",
+			readOnly:    true,
 		},
 	}
 }

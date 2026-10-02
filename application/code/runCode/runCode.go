@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/workload/runtime"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 	"github.com/khanzadimahdi/testproject/domain/workload/task/events"
 )
@@ -55,7 +56,14 @@ type runCode struct {
 	validator domain.Validator
 	producer  domain.Producer
 	response  domain.Replyer
-	logger    *slog.Logger
+
+	// runtime is the class every snippet is run with
+	// (WORKLOAD_CODE_RUNNER_RUNTIME). It is the platform's to choose rather
+	// than the visitor's: whoever opens a page cannot pick how what they
+	// type is isolated. Empty is the workload's default.
+	runtime runtime.Class
+
+	logger *slog.Logger
 }
 
 var _ domain.MessageHandler = &runCode{}
@@ -64,12 +72,14 @@ func NewRunCodeHandler(
 	validator domain.Validator,
 	producer domain.Producer,
 	replyer domain.Replyer,
+	runtimeClass runtime.Class,
 	logger *slog.Logger,
 ) *runCode {
 	return &runCode{
 		validator: validator,
 		producer:  producer,
 		response:  replyer,
+		runtime:   runtimeClass,
 		logger:    logger,
 	}
 }
@@ -123,6 +133,7 @@ func (h *runCode) Handle(ctx context.Context, data []byte) error {
 	event := &events.TaskRunRequested{
 		Name:       request.ID,
 		Kind:       string(task.KindJob),
+		Runtime:    h.runtime,
 		Image:      request.Image(),
 		TTL:        ttl,
 		MaxRetries: &codeRetries,
