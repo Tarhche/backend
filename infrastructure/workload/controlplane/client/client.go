@@ -21,6 +21,7 @@ import (
 
 	"github.com/khanzadimahdi/testproject/domain"
 	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
+	"github.com/khanzadimahdi/testproject/domain/workload/runtime"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 )
 
@@ -221,6 +222,21 @@ func (c *Client) RestartStack(ctx context.Context, uuid string) error {
 
 func (c *Client) DeleteStack(ctx context.Context, uuid string) error {
 	return c.call(ctx, http.MethodDelete, c.path("/api/stacks/"+url.PathEscape(uuid), nil), nil, nil)
+}
+
+// Runtimes is every class a task may ask for, as the control plane's
+// GET /api/runtimes reports them.
+func (c *Client) Runtimes(ctx context.Context) ([]runtime.Availability, error) {
+	var payload runtimesPayload
+	if err := c.call(ctx, http.MethodGet, c.path("/api/runtimes", nil), nil, &payload); err != nil {
+		return nil, err
+	}
+
+	if payload.Items == nil {
+		return []runtime.Availability{}, nil
+	}
+
+	return payload.Items, nil
 }
 
 // ValidationError carries what the control plane refused, so the dashboard can show

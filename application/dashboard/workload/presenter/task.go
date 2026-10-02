@@ -15,6 +15,12 @@ type Task struct {
 	UUID string `json:"uuid"`
 	Name string `json:"name"`
 	Slug string `json:"slug"`
+
+	// Runtime is the class the task runs with, and Node the node holding
+	// it, which is empty until one does.
+	Runtime string `json:"runtime"`
+	Node    string `json:"node"`
+
 	// State is what the task is doing; ExpectedState is what it was asked
 	// to be doing. They differ while the workload is closing the gap.
 	State         string     `json:"state"`
@@ -73,6 +79,8 @@ func NewTask(t task.Task, ingressDomain string, owners Owners) Task {
 		UUID:          t.UUID,
 		Name:          t.Name,
 		Slug:          t.Slug,
+		Runtime:       t.Runtime.OrSysbox().String(),
+		Node:          t.NodeName,
 		State:         t.CurrentState.String(),
 		ExpectedState: t.ExpectedState.String(),
 		Image:         t.Image,

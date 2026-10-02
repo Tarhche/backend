@@ -2,6 +2,8 @@ package events
 
 import (
 	"time"
+
+	"github.com/khanzadimahdi/testproject/domain/workload/runtime"
 )
 
 const HeartbeatName = "workloadTaskHeartbeat"
@@ -24,6 +26,10 @@ type Heartbeat struct {
 	// this is, and what else it changes, without asking anything.
 	OwnerUUID string
 	StackUUID string
+
+	// Runtime is the class running the task, which the node holding it read
+	// off the run itself.
+	Runtime runtime.Class
 
 	Image       string
 	ExecutionID string

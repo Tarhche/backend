@@ -7,6 +7,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/network"
 	"github.com/khanzadimahdi/testproject/domain/workload/node"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
+	"github.com/khanzadimahdi/testproject/domain/workload/runtime"
 )
 
 // Task represents a task specification
@@ -15,6 +16,13 @@ type Task struct {
 	Name string
 	Slug string
 	Kind Kind
+
+	// Runtime is the class the task is run with. It is resolved when the
+	// task is created — what it asked for, or the platform's default — and
+	// stored, so changing the default later never moves a task that is
+	// already there. One stored before there were classes names none, which
+	// reads as sysbox (runtime.Class.OrSysbox).
+	Runtime runtime.Class
 
 	// StackUUID is the stack this task is a service of, empty for one
 	// that stands on its own. ServiceName is what its neighbours in that stack

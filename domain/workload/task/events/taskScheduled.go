@@ -5,16 +5,24 @@ import (
 
 	"github.com/khanzadimahdi/testproject/domain/workload/network"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
+	"github.com/khanzadimahdi/testproject/domain/workload/runtime"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 )
 
 const TaskScheduledName = "workloadTaskScheduled"
 
 type TaskScheduled struct {
-	UUID          string         `json:"uuid"`
-	Name          string         `json:"name"`
-	Slug          string         `json:"slug"`
-	Kind          string         `json:"kind"`
+	UUID string `json:"uuid"`
+	Name string `json:"name"`
+	Slug string `json:"slug"`
+	Kind string `json:"kind"`
+
+	// Runtime is the class the task is run with. A node that does not offer
+	// it says so with a TaskFailed whose reason is
+	// runtime.ReasonRuntimeNotOffered, rather than running it as something
+	// else. Empty, from a control plane older than classes, is sysbox.
+	Runtime runtime.Class `json:"runtime,omitempty"`
+
 	OwnerUUID     string         `json:"owner_uuid,omitempty"`
 	StackUUID     string         `json:"stack_uuid,omitempty"`
 	StackSlug     string         `json:"stack_slug,omitempty"`
@@ -89,6 +97,7 @@ func NewTaskScheduled(t *task.Task, stackSlug string, nominatedNode string, atte
 		Name:          t.Name,
 		Slug:          t.Slug,
 		Kind:          string(t.Kind),
+		Runtime:       t.Runtime.OrSysbox(),
 		OwnerUUID:     t.OwnerUUID,
 		StackUUID:     t.StackUUID,
 		StackSlug:     stackSlug,

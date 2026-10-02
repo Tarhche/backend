@@ -13,6 +13,10 @@ const (
 	// *.localhost name resolves to the loopback address, so a task is
 	// reachable without touching any DNS.
 	defaultWorkloadPublicIngressDomain = "workload.localhost:8030"
+
+	// defaultWorkloadCodeRunnerRuntime keeps snippets where they always ran
+	// until the platform says otherwise.
+	defaultWorkloadCodeRunnerRuntime = "sysbox"
 )
 
 // Blog holds the configuration of the serve-blog command.
@@ -37,6 +41,10 @@ type Blog struct {
 
 	WorkloadControlPlaneURL string `usage:"Base URL of the workload control plane's API, which the dashboard passes task and stack commands to." env:"WORKLOAD_CONTROLPLANE_URL" long:"workload-controlplane-url"`
 	WorkloadIngressDomain   string `usage:"Domain a workload task's exposed ports are served on, used to build the addresses the dashboard shows." env:"WORKLOAD_INGRESS_DOMAIN" long:"workload-ingress-domain"`
+
+	// CodeRunnerRuntime is the class a code-runner snippet is run with,
+	// which is the platform's to choose rather than the visitor's.
+	CodeRunnerRuntime string `usage:"Runtime class code-runner snippets are run with. It has to be one the workload allows." env:"WORKLOAD_CODE_RUNNER_RUNTIME" long:"code-runner-runtime"`
 }
 
 // NewBlog returns the configuration of the serve-blog command, holding the
@@ -47,5 +55,6 @@ func NewBlog() *Blog {
 		Port:                    defaultBlogPort,
 		WorkloadControlPlaneURL: defaultWorkloadControlPlaneURL,
 		WorkloadIngressDomain:   defaultWorkloadPublicIngressDomain,
+		CodeRunnerRuntime:       defaultWorkloadCodeRunnerRuntime,
 	}
 }

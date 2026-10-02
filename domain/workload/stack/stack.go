@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/khanzadimahdi/testproject/domain/workload/runtime"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 )
 
@@ -16,6 +17,12 @@ type Stack struct {
 	UUID string
 	Name string
 	Slug string
+
+	// Runtime is the one class every service of the stack runs with. A
+	// stack's services share a network on one node, and a network belongs to
+	// one driver, so a stack cannot mix classes. One stored before there were
+	// classes names none, which reads as sysbox.
+	Runtime runtime.Class
 
 	// ExpectedState is what the stack was asked to be. It is kept here rather
 	// than read off the services because a stack is asked for as a whole: while

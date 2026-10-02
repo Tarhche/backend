@@ -1,9 +1,12 @@
 package configs
 
 import (
+	"net/url"
 	"strings"
 	"time"
 
+	"github.com/khanzadimahdi/testproject/domain/workload/driver"
+	"github.com/khanzadimahdi/testproject/domain/workload/runtime"
 	"github.com/khanzadimahdi/testproject/infrastructure/tunnel"
 )
 
@@ -25,6 +28,16 @@ const (
 
 	defaultTunnelMaxStreamsPerSession       = 256
 	defaultTunnelMaxSessionsPerOrchestrator = 8
+
+	// every task ran under sysbox before there were classes, and a platform
+	// configured as it always was keeps running them that way.
+	defaultWorkloadRuntimes       = string(runtime.Sysbox)
+	defaultWorkloadDefaultRuntime = string(runtime.Sysbox)
+
+	// defaultWorkloadRuntimeOutageGrace is how long a class a node says is
+	// unhealthy keeps that node's tasks of the class unknown, rather than
+	// silent: long enough for a vmhost to be redeployed.
+	defaultWorkloadRuntimeOutageGrace = 2 * time.Minute
 )
 
 // WorkloadControlPlane holds the configuration of the serve-workload-controlplane command.
@@ -36,6 +49,10 @@ type WorkloadControlPlane struct {
 	DefaultCpu    float64 `usage:"CPUs a task is limited to when its specification names no limit." env:"WORKLOAD_DEFAULT_CPU" long:"default-cpu"`
 	DefaultMemory uint64  `usage:"Memory, in bytes, a task is limited to when its specification names no limit." env:"WORKLOAD_DEFAULT_MEMORY" long:"default-memory"`
 	DefaultDisk   uint64  `usage:"Disk, in bytes, a task is limited to when its specification names no limit." env:"WORKLOAD_DEFAULT_DISK" long:"default-disk"`
+
+	Runtimes           string        `usage:"Runtime classes a task may ask for, separated by commas. Taking one away turns new tasks of it away; those already running carry on." env:"WORKLOAD_RUNTIMES" long:"runtimes"`
+	DefaultRuntime     string        `usage:"Runtime class a task that names none is run with. It has to be one of the classes a task may ask for." env:"WORKLOAD_DEFAULT_RUNTIME" long:"default-runtime"`
+	RuntimeOutageGrace time.Duration `usage:"How long a node's tasks of a class the node says is unhealthy are taken for unknown rather than lost, before they are asked for again elsewhere." env:"WORKLOAD_RUNTIME_OUTAGE_GRACE" long:"runtime-outage-grace"`
 }
 
 // NewWorkloadControlPlane returns the configuration of the serve-workload-controlplane
@@ -47,7 +64,16 @@ func NewWorkloadControlPlane() *WorkloadControlPlane {
 		DefaultCpu:    defaultWorkloadOrchestratorCpu,
 		DefaultMemory: defaultWorkloadOrchestratorMemory,
 		DefaultDisk:   defaultWorkloadOrchestratorDisk,
+
+		Runtimes:           defaultWorkloadRuntimes,
+		DefaultRuntime:     defaultWorkloadDefaultRuntime,
+		RuntimeOutageGrace: defaultWorkloadRuntimeOutageGrace,
 	}
+}
+
+// AllowedRuntimes is every class a task may ask for.
+func (c *WorkloadControlPlane) AllowedRuntimes() ([]runtime.Class, error) {
+	return runtime.ParseClasses(c.Runtimes)
 }
 
 // WorkloadIngress holds the configuration of the serve-workload-ingress command.
@@ -96,6 +122,11 @@ type WorkloadOrchestrator struct {
 
 	DockerHost string `usage:"Docker daemon the tasks are run on. Empty uses the Docker client's own default." env:"DOCKER_HOST" long:"docker-host"`
 
+	// Runtimes is every class this orchestrator offers, and what runs each.
+	// Empty is sysbox alone, on DockerHost, which is what an orchestrator
+	// did before there were classes.
+	Runtimes string `usage:"Runtime classes this orchestrator offers, as class=kind@endpoint separated by commas, with a driver's options as the endpoint's query: sysbox=container@tcp://docker:2375,firecracker=microvm@unix:///run/workload-vmhost/vmhost.sock. Empty offers sysbox alone, on the docker daemon the tasks are run on." env:"WORKLOAD_ORCHESTRATOR_RUNTIMES" long:"runtimes"`
+
 	// PublicKey verifies the tokens the blog signs. An orchestrator never mints one,
 	// so it is given the public half and nothing else.
 	PublicKey string `usage:"ECDSA public key, in PEM form, the access tokens are verified against. It is the public half of the key the blog signs them with." env:"PUBLIC_KEY" long:"public-key"`
@@ -140,6 +171,36 @@ func NewWorkloadOrchestrator() *WorkloadOrchestrator {
 // and is taken apart here — the same way the profiler's headers do.
 func (c *WorkloadOrchestrator) IngressAddresses() []string {
 	return commaSeparated(c.TunnelAddresses)
+}
+
+// RuntimeSpecs is every class this orchestrator offers.
+//
+// Naming none offers sysbox alone, on DockerHost: an orchestrator configured as
+// it always was runs as it always did. A container driver whose options say
+// nothing about where its daemon publishes ports is told AdvertiseHost, which
+// is where that used to be said.
+func (c *WorkloadOrchestrator) RuntimeSpecs() ([]driver.Spec, error) {
+	specs, err := driver.ParseSpecs(c.Runtimes)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(specs) == 0 {
+		specs = []driver.Spec{{
+			Class:    runtime.Sysbox,
+			Kind:     driver.KindContainer,
+			Endpoint: c.DockerHost,
+			Options:  url.Values{},
+		}}
+	}
+
+	for i := range specs {
+		if specs[i].Kind == driver.KindContainer && len(specs[i].Option(driver.OptionAdvertiseHost)) == 0 && len(c.AdvertiseHost) > 0 {
+			specs[i].Options.Set(driver.OptionAdvertiseHost, c.AdvertiseHost)
+		}
+	}
+
+	return specs, nil
 }
 
 func commaSeparated(value string) []string {

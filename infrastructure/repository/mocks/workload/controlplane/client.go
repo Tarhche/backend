@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/mock"
 
 	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
+	"github.com/khanzadimahdi/testproject/domain/workload/runtime"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 )
 
@@ -102,4 +103,12 @@ func (m *MockClient) RestartStack(ctx context.Context, uuid string) error {
 
 func (m *MockClient) DeleteStack(ctx context.Context, uuid string) error {
 	return m.Called(ctx, uuid).Error(0)
+}
+
+func (m *MockClient) Runtimes(ctx context.Context) ([]runtime.Availability, error) {
+	args := m.Called(ctx)
+
+	availability, _ := args.Get(0).([]runtime.Availability)
+
+	return availability, args.Error(1)
 }

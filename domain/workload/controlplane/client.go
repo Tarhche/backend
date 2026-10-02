@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/khanzadimahdi/testproject/domain/workload/runtime"
 	"github.com/khanzadimahdi/testproject/domain/workload/stack"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 )
@@ -66,6 +67,12 @@ type Client interface {
 	KillStack(ctx context.Context, uuid string) error
 	RestartStack(ctx context.Context, uuid string) error
 	DeleteStack(ctx context.Context, uuid string) error
+
+	// Runtimes is every class a task may ask for, the default among them,
+	// and what the nodes offering each can do and hold between them right
+	// now. A class no healthy node offers is still there, unavailable, so
+	// that whoever is choosing can see why it cannot be chosen.
+	Runtimes(ctx context.Context) ([]runtime.Availability, error)
 }
 
 // Stack is a stack together with the services in it, which is how the workload
