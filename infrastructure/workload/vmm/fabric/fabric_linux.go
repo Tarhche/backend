@@ -24,10 +24,12 @@ import (
 // made, which has nothing else to bound it.
 const setupTimeout = 30 * time.Second
 
-// New prepares machines' networks in the namespace vmhost runs in: forwarding
-// on, and the firewall as the networks already there say it should be. A
-// vmhost that starts again finds the firewall as it left it, and changes
-// nothing, so machines running across the restart never notice.
+// New prepares machines' networks in the namespace vmhost runs in: it finds
+// forwarding on there, which the holder container is made with and the
+// fabric never sets, and makes the firewall what the networks already there
+// say it should be. A vmhost that starts again finds the firewall as it left
+// it, and changes nothing, so machines running across the restart never
+// notice.
 func New(config Config, logger *slog.Logger) (*Fabric, error) {
 	if err := config.validate(); err != nil {
 		return nil, err
@@ -59,7 +61,7 @@ func newFabric(config Config, logger *slog.Logger, firewall tables) (*Fabric, er
 
 	f := &Fabric{config: config, logger: logger, tables: firewall, leases: book, repairs: repairs}
 
-	if err := forwarding(); err != nil {
+	if err := checkForwarding(forwardingPath); err != nil {
 		return nil, err
 	}
 
@@ -592,26 +594,11 @@ func deleteTaps(matches func(device string) bool) error {
 	return errors.Join(errs...)
 }
 
-// forwarding makes sure machines' traffic is forwarded. A container is not
-// always let change it for itself, so the holder container is made with it
-// set, and the fabric only has to find it on.
-func forwarding() error {
-	const path = "/proc/sys/net/ipv4/ip_forward"
-
-	if current, err := os.ReadFile(path); err == nil && strings.TrimSpace(string(current)) == "1" {
-		return nil
-	}
-
-	if err := os.WriteFile(path, []byte("1"), 0o644); err != nil {
-		return fmt.Errorf("%w: machines' traffic is not forwarded, and cannot be made to be here: set net.ipv4.ip_forward=1 for the namespace's holder: %w", vm.ErrUnavailable, err)
-	}
-
-	return nil
-}
-
 // disableIPv6 keeps a device of the fabric's off IPv6, which nothing of the
-// fabric's uses and the firewall does not cover. Where it cannot, IPv6 is off
-// in the whole namespace already, and there is nothing to keep it off.
+// fabric's uses and the firewall does not cover. It is the device's own
+// setting, never the namespace's as a whole (all, default), let alone the
+// host's. Where it cannot be written, IPv6 is off in the whole namespace
+// already, and there is nothing to keep it off.
 func disableIPv6(device string) {
 	_ = os.WriteFile("/proc/sys/net/ipv6/conf/"+device+"/disable_ipv6", []byte("1"), 0o644)
 }

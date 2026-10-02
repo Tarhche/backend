@@ -40,8 +40,10 @@ import (
 	"log/slog"
 	"math"
 	"net"
+	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 
 	"go.opentelemetry.io/otel/metric"
@@ -180,4 +182,31 @@ func (c Config) owner(uid int, self int) (int, error) {
 	}
 
 	return uid, nil
+}
+
+// forwardingPath is where a network namespace says whether it forwards. What
+// is read there is the namespace of whoever reads it.
+const forwardingPath = "/proc/sys/net/ipv4/ip_forward"
+
+// checkForwarding makes sure the namespace the fabric runs in forwards
+// machines' traffic, and changes nothing when it does not.
+//
+// Forwarding is a namespace's own setting. The holder container is made with
+// it (its sysctls), which sets it for the holder's namespace and nowhere else.
+// The fabric never sets it itself: run in the host's namespace by mistake, it
+// would turn forwarding on for the whole host, and a host whose forwarding is
+// on before docker starts is one where docker leaves its FORWARD policy at
+// ACCEPT rather than DROP. Refusing to start says what is wrong without
+// changing anything.
+func checkForwarding(path string) error {
+	current, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("%w: whether machines' traffic is forwarded cannot be read: %w", vm.ErrUnavailable, err)
+	}
+
+	if strings.TrimSpace(string(current)) != "1" {
+		return fmt.Errorf("%w: machines' traffic is not forwarded in the namespace the fabric runs in; set net.ipv4.ip_forward=1 in the sysctls of the container holding it (workload-vmnet), which sets it for that namespace alone: the fabric does not set it, and nothing is to set it for the host", vm.ErrUnavailable)
+	}
+
+	return nil
 }

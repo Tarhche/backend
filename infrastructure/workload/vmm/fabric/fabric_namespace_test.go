@@ -102,6 +102,23 @@ func scenario(t *testing.T, firewall iptables, iptablesBinary string) {
 
 	var fabric *Fabric
 	in(t, fabricNS, func() {
+		// a namespace that forwards nothing — a new one takes the host's
+		// setting, so this one is told to — is refused rather than having
+		// forwarding turned on: wherever the fabric runs, the host's
+		// namespace included, it changes no setting of the namespace's.
+		require.NoError(t, os.WriteFile(forwardingPath, []byte("0"), 0o644))
+
+		_, err = newFabric(config, slog.New(slog.DiscardHandler), recorded)
+		require.ErrorIs(t, err, vm.ErrUnavailable)
+		assert.Zero(t, recorded.restores, "nothing is written to a namespace the fabric refused")
+
+		forwarding, err := os.ReadFile(forwardingPath)
+		require.NoError(t, err)
+		assert.Equal(t, "0", strings.TrimSpace(string(forwarding)), "forwarding is left as it was")
+
+		// what the holder container's sysctls do, for its namespace alone.
+		require.NoError(t, os.WriteFile(forwardingPath, []byte("1"), 0o644))
+
 		fabric, err = newFabric(config, slog.New(slog.DiscardHandler), recorded)
 		require.NoError(t, err)
 	})
