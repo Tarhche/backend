@@ -393,6 +393,51 @@ func TestMultiplexer_Node(t *testing.T) {
 		assert.Equal(t, uint64(2), stats.PIDs)
 	})
 
+	t.Run("a class whose runs' use cannot be read is offered unhealthy until it can", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture()
+
+		f.sysboxNode.On("Stats", mock.Anything, "node-1").Return(node.Stats{PIDs: 2}, nil)
+		f.firecrackerNode.On("Stats", mock.Anything, "node-1").Return(node.Stats{}, errors.New("vmhost cannot be reached")).Once()
+
+		_, err := f.multiplexer.Node().Stats(ctx, "node-1")
+		require.NoError(t, err)
+
+		offers := offersOf(f.multiplexer.Drivers())
+		assert.True(t, offers[0].Healthy)
+		assert.False(t, offers[1].Healthy)
+		assert.Equal(t, "what its runs use cannot be read: vmhost cannot be reached", offers[1].Reason)
+
+		f.firecrackerNode.On("Stats", mock.Anything, "node-1").Return(node.Stats{PIDs: 1}, nil).Once()
+
+		_, err = f.multiplexer.Node().Stats(ctx, "node-1")
+		require.NoError(t, err)
+
+		assert.True(t, offersOf(f.multiplexer.Drivers())[1].Healthy)
+	})
+
+	t.Run("a class answering one question is not taken for answering the other", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture()
+
+		f.sysboxTasks.On("OnNode", mock.Anything, "node-1").Return([]task.Execution{}, nil)
+		f.firecrackerTasks.On("OnNode", mock.Anything, "node-1").Return([]task.Execution(nil), errors.New("vmhost cannot be reached"))
+		f.sysboxNode.On("Stats", mock.Anything, "node-1").Return(node.Stats{}, nil)
+		f.firecrackerNode.On("Stats", mock.Anything, "node-1").Return(node.Stats{}, nil)
+
+		_, err := f.multiplexer.OnNode(ctx, "node-1")
+		require.NoError(t, err)
+
+		_, err = f.multiplexer.Node().Stats(ctx, "node-1")
+		require.NoError(t, err)
+
+		offer := offersOf(f.multiplexer.Drivers())[1]
+		assert.False(t, offer.Healthy)
+		assert.Equal(t, "its runs cannot be listed: vmhost cannot be reached", offer.Reason)
+	})
+
 	t.Run("a node none of whose classes can say has nothing to report", func(t *testing.T) {
 		t.Parallel()
 

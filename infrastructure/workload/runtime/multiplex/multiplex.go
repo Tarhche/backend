@@ -52,11 +52,36 @@ type Multiplexer struct {
 	drivers driver.Set
 	logger  *slog.Logger
 
-	// outages are the classes whose runs could not be listed the last time
-	// they were asked for, and why.
+	// outages are the classes that could not answer the last time they were
+	// asked about their runs, by what they were asked, and why.
 	mu      sync.Mutex
-	outages map[runtime.Class]error
+	outages map[runtime.Class]outage
 }
+
+// question is what a class is asked about its runs.
+type question int
+
+const (
+	// holding is what runs a class holds: a node's, a task's, a slug's.
+	holding question = iota
+
+	// using is what a class's runs use between them.
+	using
+)
+
+// failing is what a question that went unanswered says about its class.
+func (q question) failing() string {
+	if q == using {
+		return "what its runs use cannot be read"
+	}
+
+	return "its runs cannot be listed"
+}
+
+// outage is what a class could not answer the last time it was asked, and
+// why. Each question is answered on its own, so one answered is not taken
+// for the other.
+type outage map[question]error
 
 var (
 	_ task.Runtime    = &Multiplexer{}
@@ -69,7 +94,7 @@ func New(drivers driver.Set, logger *slog.Logger) *Multiplexer {
 	return &Multiplexer{
 		drivers: drivers,
 		logger:  logger,
-		outages: make(map[runtime.Class]error),
+		outages: make(map[runtime.Class]outage),
 	}
 }
 
@@ -121,14 +146,13 @@ func (m *Multiplexer) gather(ctx context.Context, ask func(context.Context, task
 	for i, d := range drivers {
 		class := d.Class()
 
+		m.answered(ctx, class, holding, errs[i])
+
 		if errs[i] != nil {
-			m.lost(ctx, class, errs[i])
 			failed = append(failed, fmt.Errorf("the %q runtime class: %w", class, errs[i]))
 
 			continue
 		}
-
-		m.found(ctx, class)
 
 		for _, run := range answers[i] {
 			runs = append(runs, qualified(class, run))
@@ -345,8 +369,9 @@ type nodeStats struct {
 var _ node.Manager = &nodeStats{}
 
 // Stats is what the node's runs use, every class's added up. A class that
-// cannot say is left out, as it is from the node's runs; only a node none of
-// whose classes can say has nothing to report.
+// cannot say is left out, as it is from the node's runs, and is offered
+// unhealthy until it can; only a node none of whose classes can say has
+// nothing to report.
 func (n *nodeStats) Stats(ctx context.Context, nodeName string) (node.Stats, error) {
 	drivers := n.multiplexer.drivers.All()
 
@@ -367,6 +392,8 @@ func (n *nodeStats) Stats(ctx context.Context, nodeName string) (node.Stats, err
 	)
 
 	for i, d := range drivers {
+		n.multiplexer.answered(ctx, d.Class(), using, errs[i])
+
 		if errs[i] != nil {
 			failed = append(failed, fmt.Errorf("the %q runtime class: %w", d.Class(), errs[i]))
 
@@ -395,7 +422,7 @@ func (n *nodeStats) Stats(ctx context.Context, nodeName string) (node.Stats, err
 }
 
 // Drivers is the node's drivers as the use cases see them: the same drivers,
-// whose offers also say when their runs could not be listed here.
+// whose offers also say when they could not answer for their runs here.
 func (m *Multiplexer) Drivers() driver.Set {
 	return &watchedSet{multiplexer: m}
 }
@@ -427,8 +454,8 @@ func (s *watchedSet) All() []driver.Driver {
 	return result
 }
 
-// watched is a driver whose offer also says when its runs could not be
-// listed.
+// watched is a driver whose offer also says when it could not answer for its
+// runs: what it holds, or what they use.
 //
 // A driver answers for what stands behind it from what it last heard, and may
 // not have heard yet that it is gone; the runs that went missing from a
@@ -444,46 +471,59 @@ type watched struct {
 func (w *watched) Offer(ctx context.Context) runtime.Offer {
 	offer := w.Driver.Offer(ctx)
 
-	if err := w.multiplexer.outage(w.Class()); err != nil && offer.Healthy {
+	if reason, failing := w.multiplexer.outage(w.Class()); failing && offer.Healthy {
 		offer.Healthy = false
-		offer.Reason = fmt.Sprintf("its runs cannot be listed: %v", err)
+		offer.Reason = reason
 	}
 
 	return offer
 }
 
-// outage is why a class's runs could not be listed the last time they were
-// asked for, or nil when they could.
-func (m *Multiplexer) outage(class runtime.Class) error {
+// outage is why a class could not answer for its runs the last time it was
+// asked, if it could not.
+func (m *Multiplexer) outage(class runtime.Class) (string, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	return m.outages[class]
-}
-
-// lost writes down that a class's runs could not be listed, and says so once
-// rather than every time a heartbeat finds it still so.
-func (m *Multiplexer) lost(ctx context.Context, class runtime.Class, err error) {
-	m.mu.Lock()
-	_, already := m.outages[class]
-	m.outages[class] = err
-	m.mu.Unlock()
-
-	if !already {
-		m.logger.WarnContext(ctx, "a runtime class's runs cannot be listed; they are left out until they can",
-			"class", class, "error", err)
+	for _, q := range []question{holding, using} {
+		if err, failing := m.outages[class][q]; failing {
+			return fmt.Sprintf("%s: %v", q.failing(), err), true
+		}
 	}
+
+	return "", false
 }
 
-// found writes down that a class's runs could be listed, and says so when they
-// could not before.
-func (m *Multiplexer) found(ctx context.Context, class runtime.Class) {
+// answered writes down how a class answered a question about its runs, and
+// says so when that changes rather than every time a heartbeat finds it the
+// same.
+func (m *Multiplexer) answered(ctx context.Context, class runtime.Class, q question, err error) {
 	m.mu.Lock()
-	_, was := m.outages[class]
-	delete(m.outages, class)
+	failing := m.outages[class]
+	_, was := failing[q]
+
+	switch {
+	case err != nil:
+		if failing == nil {
+			failing = make(outage)
+			m.outages[class] = failing
+		}
+
+		failing[q] = err
+	case was:
+		delete(failing, q)
+
+		if len(failing) == 0 {
+			delete(m.outages, class)
+		}
+	}
 	m.mu.Unlock()
 
-	if was {
-		m.logger.InfoContext(ctx, "a runtime class's runs can be listed again", "class", class)
+	switch {
+	case err != nil && !was:
+		m.logger.WarnContext(ctx, "a runtime class cannot answer for its runs; it is left out, and offered unhealthy, until it can",
+			"class", class, "question", q.failing(), "error", err)
+	case err == nil && was:
+		m.logger.InfoContext(ctx, "a runtime class answers for its runs again", "class", class)
 	}
 }
