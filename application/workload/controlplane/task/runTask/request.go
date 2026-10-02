@@ -8,6 +8,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/network"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
+	"github.com/khanzadimahdi/testproject/domain/workload/runtime"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 )
 
@@ -15,6 +16,11 @@ import (
 type Request struct {
 	Name string    `json:"name"`
 	Kind task.Kind `json:"kind"`
+
+	// Runtime is the class the task asks to be run with. Empty is the
+	// platform's default, which is resolved and stored on the task when it
+	// is created, so that a default changed later never moves it.
+	Runtime runtime.Class `json:"runtime,omitempty"`
 
 	// StackUUID, StackSlug and ServiceName are set when this task is one
 	// service of a stack. NominatedNode is the node the rest of that stack was
@@ -85,6 +91,7 @@ func FromSpec(name string, service *spec.Service, defaults task.ResourceLimits) 
 	return &Request{
 		Name:          name,
 		Kind:          task.KindService,
+		Runtime:       service.Runtime,
 		Image:         service.Image,
 		Command:       service.Command,
 		Entrypoint:    service.Entrypoint,
@@ -115,6 +122,13 @@ func (r *Request) Validate() domain.ValidationErrors {
 
 	if len(r.Image) == 0 {
 		validationErrors["image"] = "required_field"
+	}
+
+	// whether the class may be asked for is the platform's to say, which the
+	// use case asks it (admission); whether it can be a class at all is
+	// something the request can answer for itself.
+	if len(r.Runtime) > 0 && !r.Runtime.IsValid() {
+		validationErrors["runtime"] = "invalid_value"
 	}
 
 	if r.ResourceLimits.Cpu <= 0 {

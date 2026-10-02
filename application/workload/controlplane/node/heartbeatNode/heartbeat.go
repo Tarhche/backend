@@ -33,6 +33,12 @@ func (h *Heartbeat) Handle(ctx context.Context, data []byte) error {
 	n.Name = heartbeat.Name
 	n.Role = heartbeat.Role
 	n.Stats = heartbeat.Stats
+
+	// what the node offers is what it says now, as a whole: a class it has
+	// stopped offering is gone, and a node that says nothing about classes —
+	// an orchestrator from before there were any — offers none it has said.
+	n.Runtimes = heartbeat.Runtimes
+
 	n.LastHeartbeatAt = heartbeat.At
 
 	_, err = h.nodeRepository.Save(ctx, &n)

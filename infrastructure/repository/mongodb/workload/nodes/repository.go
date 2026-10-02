@@ -55,22 +55,7 @@ func (r *NodesRepository) GetAll(ctx context.Context, offset uint, limit uint) (
 		if err := cur.Decode(&t); err != nil {
 			return nil, err
 		}
-		items = append(items, node.Node{
-			Name: t.Name,
-			Role: node.Role(t.Role),
-			Stats: node.Stats{
-				PIDs:          t.Stats.PIDs,
-				CPUPercent:    t.Stats.CPUPercent,
-				MemoryUsage:   t.Stats.MemoryUsage,
-				MemoryLimit:   t.Stats.MemoryLimit,
-				MemoryPercent: t.Stats.MemoryPercent,
-				NetworkInput:  t.Stats.NetworkInput,
-				NetworkOutput: t.Stats.NetworkOutput,
-				BlockInput:    t.Stats.BlockInput,
-				BlockOutput:   t.Stats.BlockOutput,
-			},
-			LastHeartbeatAt: t.LastHeartbeatAt,
-		})
+		items = append(items, toNode(&t))
 	}
 
 	if err := cur.Err(); err != nil {
@@ -94,46 +79,16 @@ func (r *NodesRepository) GetOne(ctx context.Context, UUID string) (node.Node, e
 		return node.Node{}, err
 	}
 
-	return node.Node{
-		Name: t.Name,
-		Role: node.Role(t.Role),
-		Stats: node.Stats{
-			PIDs:          t.Stats.PIDs,
-			CPUPercent:    t.Stats.CPUPercent,
-			MemoryUsage:   t.Stats.MemoryUsage,
-			MemoryLimit:   t.Stats.MemoryLimit,
-			MemoryPercent: t.Stats.MemoryPercent,
-			NetworkInput:  t.Stats.NetworkInput,
-			NetworkOutput: t.Stats.NetworkOutput,
-			BlockInput:    t.Stats.BlockInput,
-			BlockOutput:   t.Stats.BlockOutput,
-		},
-		LastHeartbeatAt: t.LastHeartbeatAt,
-	}, nil
+	return toNode(&t), nil
 }
 
 func (r *NodesRepository) Save(ctx context.Context, n *node.Node) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
-	update := NodeBson{
-		Name: n.Name,
-		Role: string(n.Role),
-		Stats: Stats{
-			PIDs:          n.Stats.PIDs,
-			CPUPercent:    n.Stats.CPUPercent,
-			MemoryUsage:   n.Stats.MemoryUsage,
-			MemoryLimit:   n.Stats.MemoryLimit,
-			MemoryPercent: n.Stats.MemoryPercent,
-			NetworkInput:  n.Stats.NetworkInput,
-			NetworkOutput: n.Stats.NetworkOutput,
-			BlockInput:    n.Stats.BlockInput,
-			BlockOutput:   n.Stats.BlockOutput,
-		},
-		LastHeartbeatAt: n.LastHeartbeatAt,
-		CreatedAt:       time.Now(),
-		UpdatedAt:       time.Now(),
-	}
+	update := toBson(n)
+	update.CreatedAt = time.Now()
+	update.UpdatedAt = time.Now()
 
 	if _, err := r.collection.UpdateOne(
 		ctx,

@@ -21,6 +21,10 @@ type Stack struct {
 	// state while a command is still reaching its services.
 	ExpectedState string `json:"expected_state,omitempty"`
 
+	// Runtime is the one class every service of the stack runs with. One
+	// stored before there were classes ran under sysbox, and says so.
+	Runtime string `json:"runtime"`
+
 	NodeName  string    `json:"node_name,omitempty"`
 	OwnerUUID string    `json:"owner_uuid"`
 	Services  []Service `json:"services"`
@@ -33,6 +37,13 @@ type Service struct {
 	Slug          string `json:"slug"`
 	State         string `json:"state"`
 	ExpectedState string `json:"expected_state,omitempty"`
+
+	// Runtime is the class the service runs with, which is the stack's, and
+	// NodeName the node holding it, empty until one does: they are said of
+	// each service as they are of any task, so a service reads the same
+	// wherever it is listed.
+	Runtime  string `json:"runtime"`
+	NodeName string `json:"node_name,omitempty"`
 
 	Image     string     `json:"image"`
 	Endpoints []Endpoint `json:"endpoints"`
@@ -59,6 +70,8 @@ func NewStack(s stack.Stack, services []task.Task) Stack {
 			Slug:          service.Slug,
 			State:         service.CurrentState.String(),
 			ExpectedState: service.ExpectedState.String(),
+			Runtime:       service.Runtime.OrSysbox().String(),
+			NodeName:      service.NodeName,
 			Image:         service.Image,
 			Endpoints:     endpoints(service),
 			CreatedAt:     service.CreatedAt,
@@ -73,6 +86,7 @@ func NewStack(s stack.Stack, services []task.Task) Stack {
 		Slug:          s.Slug,
 		State:         stack.State(services).String(),
 		ExpectedState: expectedStateOf(s, services).String(),
+		Runtime:       s.Runtime.OrSysbox().String(),
 		NodeName:      s.NodeName,
 		OwnerUUID:     s.OwnerUUID,
 		Services:      items,

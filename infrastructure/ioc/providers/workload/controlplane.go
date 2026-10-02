@@ -13,6 +13,8 @@ import (
 	controlPlaneGetNode "github.com/khanzadimahdi/testproject/application/workload/controlplane/node/getNode"
 	controlPlaneGetNodes "github.com/khanzadimahdi/testproject/application/workload/controlplane/node/getNodes"
 	controlPlaneHeartbeatNode "github.com/khanzadimahdi/testproject/application/workload/controlplane/node/heartbeatNode"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/runtime/allowed"
+	controlPlaneGetRuntimes "github.com/khanzadimahdi/testproject/application/workload/controlplane/runtime/getRuntimes"
 	controlPlaneDeleteStack "github.com/khanzadimahdi/testproject/application/workload/controlplane/stack/deleteStack"
 	controlPlaneGetStack "github.com/khanzadimahdi/testproject/application/workload/controlplane/stack/getStack"
 	controlPlaneGetStacks "github.com/khanzadimahdi/testproject/application/workload/controlplane/stack/getStacks"
@@ -27,6 +29,7 @@ import (
 	controlPlaneHeartbeatTask "github.com/khanzadimahdi/testproject/application/workload/controlplane/task/heartbeatTask"
 	controlPlaneKillTask "github.com/khanzadimahdi/testproject/application/workload/controlplane/task/killTask"
 	controlPlaneLogTask "github.com/khanzadimahdi/testproject/application/workload/controlplane/task/logTask"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/task/placement"
 	controlPlaneReconcile "github.com/khanzadimahdi/testproject/application/workload/controlplane/task/reconcile"
 	controlPlaneRestartTask "github.com/khanzadimahdi/testproject/application/workload/controlplane/task/restartTask"
 	controlPlaneRunTask "github.com/khanzadimahdi/testproject/application/workload/controlplane/task/runTask"
@@ -35,6 +38,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain"
 	translatorContract "github.com/khanzadimahdi/testproject/domain/translator"
 	nodeEvents "github.com/khanzadimahdi/testproject/domain/workload/node/events"
+	"github.com/khanzadimahdi/testproject/domain/workload/runtime"
 	stackEvents "github.com/khanzadimahdi/testproject/domain/workload/stack/events"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 	taskEvents "github.com/khanzadimahdi/testproject/domain/workload/task/events"
@@ -50,6 +54,7 @@ import (
 	healthAPI "github.com/khanzadimahdi/testproject/presentation/http/health"
 	"github.com/khanzadimahdi/testproject/presentation/http/middleware"
 	controlPlaneNodeAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/controlplane/api/node"
+	controlPlaneRuntimeAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/controlplane/api/runtime"
 	controlPlaneStackAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/controlplane/api/stack"
 	controlPlaneTaskAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/controlplane/api/task"
 	"github.com/nats-io/nats.go"
@@ -140,6 +145,19 @@ func controlPlaneConsoleCommand(
 		Disk:   controlPlaneConfigs.DefaultDisk,
 	}
 
+	// which classes a task may be run with, and which one it gets when it
+	// names none. Both are checked here, at start: a default nobody may ask
+	// for would turn away every task that asks for nothing.
+	allowedRuntimes, err := controlPlaneConfigs.AllowedRuntimes()
+	if err != nil {
+		return nil, err
+	}
+
+	runtimeClasses, err := allowed.New(allowedRuntimes, runtime.Class(controlPlaneConfigs.DefaultRuntime))
+	if err != nil {
+		return nil, err
+	}
+
 	taskScheduler := roundrobin.New()
 
 	taskRepository := taskrepository.NewRepository(database)
@@ -157,7 +175,12 @@ func controlPlaneConsoleCommand(
 	// for the first time, again, or after a failure.
 	taskSchedule := schedule.New(stackRepository, jetStreamProduceConsumer)
 
-	controlPlaneRunTaskUseCase := controlPlaneRunTask.NewUseCase(taskRepository, jetStreamProduceConsumer, validator)
+	// where a task can go: a node that is speaking, offers its class
+	// healthy, and can do what the task asks, among which the scheduler
+	// picks.
+	taskPlacement := placement.New(nodeRepository, taskScheduler)
+
+	controlPlaneRunTaskUseCase := controlPlaneRunTask.NewUseCase(taskRepository, jetStreamProduceConsumer, validator, runtimeClasses)
 	controlPlaneDeleteTaskUseCase := controlPlaneDeleteTask.NewUseCase(taskRepository, logRepository, jetStreamProduceConsumer, translator)
 	controlPlaneStopTaskUseCase := controlPlaneStopTask.NewUseCase(taskRepository, jetStreamProduceConsumer, translator)
 	controlPlaneKillTaskUseCase := controlPlaneKillTask.NewUseCase(taskRepository, jetStreamProduceConsumer, translator)
@@ -167,14 +190,14 @@ func controlPlaneConsoleCommand(
 
 	// the control plane's own heartbeat, which the serve command runs on a ticker.
 	if err := iocContainer.Bind(func() *controlPlaneReconcile.UseCase {
-		return controlPlaneReconcile.NewUseCase(taskRepository, taskSchedule, jetStreamProduceConsumer, logger)
+		return controlPlaneReconcile.NewUseCase(taskRepository, nodeRepository, taskSchedule, jetStreamProduceConsumer, controlPlaneConfigs.RuntimeOutageGrace, logger)
 	}, provider.Singleton()); err != nil {
 		return nil, err
 	}
 
 	controlPlaneGetTaskLogsUseCase := controlPlaneGetTaskLogs.NewUseCase(logRepository, validator)
 
-	controlPlaneRunStackUseCase := controlPlaneRunStack.NewUseCase(stackRepository, nodeRepository, controlPlaneRunTaskUseCase, taskScheduler, defaultLimits, validator, logger)
+	controlPlaneRunStackUseCase := controlPlaneRunStack.NewUseCase(stackRepository, controlPlaneRunTaskUseCase, taskPlacement, defaultLimits, runtimeClasses, validator, logger)
 	controlPlaneGetStackUseCase := controlPlaneGetStack.NewUseCase(stackRepository, taskRepository)
 	controlPlaneGetStacksUseCase := controlPlaneGetStacks.NewUseCase(stackRepository, taskRepository)
 	controlPlaneStopStackUseCase := controlPlaneStopStack.NewUseCase(stackRepository, taskRepository, controlPlaneStopTaskUseCase, logger)
@@ -184,6 +207,8 @@ func controlPlaneConsoleCommand(
 
 	controlPlaneGetNodeUseCase := controlPlaneGetNode.NewUseCase(nodeRepository)
 	controlPlaneGetNodesUseCase := controlPlaneGetNodes.NewUseCase(nodeRepository)
+
+	controlPlaneGetRuntimesUseCase := controlPlaneGetRuntimes.NewUseCase(nodeRepository, runtimeClasses)
 
 	checkHealthUseCase := checkhealth.NewUseCase(
 		checkhealth.Dependency{Name: "database", Pinger: infraHealth.NewMongodbPinger(database)},
@@ -214,6 +239,8 @@ func controlPlaneConsoleCommand(
 
 	mux.Handle("GET /api/nodes", controlPlaneNodeAPI.NewIndexHandler(controlPlaneGetNodesUseCase))
 	mux.Handle("GET /api/nodes/{name}", controlPlaneNodeAPI.NewShowHandler(controlPlaneGetNodeUseCase))
+
+	mux.Handle("GET /api/runtimes", controlPlaneRuntimeAPI.NewIndexHandler(controlPlaneGetRuntimesUseCase))
 
 	rateLimited, err := middleware.NewRateLimitMiddleware(mux, 600, 1*time.Minute)
 	if err != nil {
@@ -248,7 +275,7 @@ func controlPlaneConsoleCommand(
 		nodeEvents.HeartbeatName:        controlPlaneHeartbeatNode.NewHeartbeatHandler(nodeRepository),
 		taskEvents.HeartbeatName:        controlPlaneHeartbeatTask.NewHeartbeatHandler(taskRepository, jetStreamProduceConsumer, controlPlaneDeleteTaskUseCase, controlPlaneKillTaskUseCase),
 		taskEvents.TaskRunRequestedName: controlPlaneRunTask.NewTaskRunRequested(controlPlaneRunTaskUseCase, logger),
-		taskEvents.TaskCreatedName:      controlPlaneRunTask.NewTaskCreated(taskRepository, nodeRepository, stackRepository, taskScheduler, taskSchedule, logger),
+		taskEvents.TaskCreatedName:      controlPlaneRunTask.NewTaskCreated(taskRepository, stackRepository, taskPlacement, taskSchedule, jetStreamProduceConsumer, logger),
 		taskEvents.TaskRanName:          controlPlaneRunTask.NewTaskRan(taskRepository),
 		taskEvents.TaskRestartedName:    controlPlaneRunTask.NewTaskRestarted(taskRepository),
 		taskEvents.TaskCompletedName:    controlPlaneRunTask.NewTaskCompleted(taskRepository),

@@ -62,7 +62,12 @@ func (uc *TaskRunRequested) Handle(ctx context.Context, data []byte) error {
 	}
 
 	request := &Request{
-		Name:           event.Name,
+		Name: event.Name,
+
+		// what the code runner was configured to ask for; empty is the
+		// platform's default, as it is for anything else that names none.
+		Runtime: event.Runtime,
+
 		Image:          event.Image,
 		StackUUID:      event.StackUUID,
 		StackSlug:      event.StackSlug,
@@ -94,13 +99,18 @@ func (uc *TaskRunRequested) Handle(ctx context.Context, data []byte) error {
 
 	// TODO: using usecase in handler ? (is this a good idea?)
 	response, err := uc.usecase.Execute(ctx, request)
+
+	// a use case that failed answers nothing, so there is no refusal to read
+	// off it.
+	if err != nil {
+		uc.logger.Error("error running task", "error", err)
+
+		return err
+	}
+
 	if len(response.ValidationErrors) > 0 {
 		uc.logger.Warn("validation errors", "validationErrors", response.ValidationErrors)
 	}
 
-	if err != nil {
-		uc.logger.Error("error running task", "error", err)
-	}
-
-	return err
+	return nil
 }

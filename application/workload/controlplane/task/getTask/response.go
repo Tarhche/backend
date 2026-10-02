@@ -8,10 +8,15 @@ import (
 
 // Response represents the response for getting a task
 type Response struct {
-	UUID          string             `json:"uuid"`
-	Name          string             `json:"name"`
-	Slug          string             `json:"slug"`
-	Kind          string             `json:"kind"`
+	UUID string `json:"uuid"`
+	Name string `json:"name"`
+	Slug string `json:"slug"`
+	Kind string `json:"kind"`
+
+	// Runtime is the class the task is run with. One stored before there
+	// were classes ran under sysbox, and says so.
+	Runtime string `json:"runtime"`
+
 	CurrentState  string             `json:"current_state"`
 	ExpectedState string             `json:"expected_state,omitempty"`
 	Image         string             `json:"image"`
@@ -80,6 +85,7 @@ func NewResponse(t task.Task) *Response {
 		Name:          t.Name,
 		Slug:          t.Slug,
 		Kind:          string(t.Kind),
+		Runtime:       t.Runtime.OrSysbox().String(),
 		CurrentState:  t.CurrentState.String(),
 		ExpectedState: t.ExpectedState.String(),
 		Image:         t.Image,
