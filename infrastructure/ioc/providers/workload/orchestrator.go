@@ -25,6 +25,7 @@ import (
 	orchestratorShipLogs "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/shipLogs"
 	orchestratorstoptask "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/stopTask"
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/workload/driver"
 	networkContract "github.com/khanzadimahdi/testproject/domain/workload/network"
 	nodeContract "github.com/khanzadimahdi/testproject/domain/workload/node"
 	stackEvents "github.com/khanzadimahdi/testproject/domain/workload/stack/events"
@@ -171,11 +172,19 @@ func (p *orchestratorProvider) Terminate(ctx context.Context) error {
 	return nil
 }
 
+// orchestratorConsoleCommand builds the orchestrator's handler, subscribers and
+// background work.
+//
+// taskManager, networkManager and nodeManager are every class this node offers
+// at once, which is all most of it needs. drivers is each class on its own, for
+// what has to pick one: running a task, saying what each class offers, and
+// dropping a stack's network where its class made it.
 func orchestratorConsoleCommand(
 	natsConnection *nats.Conn,
 	taskManager task.Runtime,
 	networkManager networkContract.Manager,
 	nodeManager nodeContract.Manager,
+	drivers driver.Set,
 	asyncProduceConsumer domain.ProduceConsumer,
 	validator domain.Validator,
 	iocContainer provider.Container,
@@ -201,7 +210,7 @@ func orchestratorConsoleCommand(
 	// otherwise fail to start at all, and stay down until somebody noticed.
 
 	// tasks
-	runTaskUseCase := orchestratorruntask.NewUseCase(taskManager, networkManager, validator, nodeName)
+	runTaskUseCase := orchestratorruntask.NewUseCase(drivers, validator, nodeName)
 	stopTaskUseCase := orchestratorstoptask.NewUseCase(taskManager, validator)
 	killTaskUseCase := orchestratorkilltask.NewUseCase(taskManager, validator)
 	restartTaskUseCase := orchestratorrestarttask.NewUseCase(taskManager, validator)
@@ -289,7 +298,7 @@ func orchestratorConsoleCommand(
 		taskEvents.TaskKillRequestedName:     orchestratorkilltask.NewKillTaskHandler(killTaskUseCase),
 		taskEvents.TaskRestartRequestedName:  orchestratorrestarttask.NewRestartTaskHandler(restartTaskUseCase),
 		taskEvents.TaskDeletedName:           orchestratorDeleteTask.NewDeleteTaskHandler(deleteTaskUseCase),
-		stackEvents.StackDeletedName:         orchestratorDeleteStack.NewStackDeletedHandler(networkManager, nodeName, logger),
+		stackEvents.StackDeletedName:         orchestratorDeleteStack.NewStackDeletedHandler(drivers, networkManager, nodeName, logger),
 	}
 
 	// orchestrator subscribers
@@ -301,7 +310,7 @@ func orchestratorConsoleCommand(
 
 	// orchestrator heartbeat
 	if err := iocContainer.Bind(func() *orchestratorHeartbeat.UseCase {
-		return orchestratorHeartbeat.NewUseCase(asyncProduceConsumer, nodeManager, nodeName)
+		return orchestratorHeartbeat.NewUseCase(asyncProduceConsumer, nodeManager, drivers, nodeName)
 	}, provider.Singleton()); err != nil {
 		return nil, err
 	}

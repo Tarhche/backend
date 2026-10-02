@@ -59,8 +59,10 @@ func TestDockerManager_ResourceLimits(t *testing.T) {
 			server := httptest.NewServer(daemon)
 			defer server.Close()
 
-			manager, err := NewDockerManager("tcp://"+server.Listener.Addr().String(), slog.New(slog.DiscardHandler))
+			cli, err := newClient("tcp://" + server.Listener.Addr().String())
 			require.NoError(t, err)
+
+			manager := NewDockerManager(cli, Scope{Node: "node-1"}, slog.New(slog.DiscardHandler))
 
 			id, err := manager.Create(context.Background(), &task.Execution{
 				Name:           "nginx-xkfqz",

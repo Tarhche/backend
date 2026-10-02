@@ -10,9 +10,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/workload/driver"
 	"github.com/khanzadimahdi/testproject/domain/workload/network"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
+	workloadRuntime "github.com/khanzadimahdi/testproject/domain/workload/runtime"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
+	driverMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/driver"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/runtime"
 	"github.com/khanzadimahdi/testproject/infrastructure/validator"
 )
@@ -37,6 +40,36 @@ func refuses(validationErrors domain.ValidationErrors) *validator.MockValidator 
 
 const nodeName = "workload-orchestrator-01"
 
+// classDriver is the driver of a class, whose runs are tasks and whose
+// networks are networks.
+func classDriver(class workloadRuntime.Class, tasks task.Runtime, networks network.Manager) *driverMock.MockDriver {
+	d := &driverMock.MockDriver{}
+	d.On("Class").Return(class).Maybe()
+	d.On("Tasks").Return(tasks).Maybe()
+	d.On("Networks").Return(networks).Maybe()
+
+	return d
+}
+
+// node is a node offering the drivers it is given, and no other class.
+func node(drivers ...*driverMock.MockDriver) *driverMock.MockSet {
+	set := &driverMock.MockSet{}
+
+	for _, d := range drivers {
+		set.On("For", d.Class()).Return(d, nil).Maybe()
+	}
+
+	set.On("For", mock.Anything).Return(nil, driver.ErrUnknownClass).Maybe()
+
+	return set
+}
+
+// sysboxOnly is a node that offers sysbox alone, as every node did before
+// there were classes.
+func sysboxOnly(tasks task.Runtime, networks network.Manager) *driverMock.MockSet {
+	return node(classDriver(workloadRuntime.Sysbox, tasks, networks))
+}
+
 func TestUseCase_Execute(t *testing.T) {
 	t.Parallel()
 
@@ -60,7 +93,7 @@ func TestUseCase_Execute(t *testing.T) {
 		taskManager.On("Start", mock.Anything, "task-id").Return(nil).Once()
 		defer taskManager.AssertExpectations(t)
 
-		response, err := NewUseCase(&taskManager, &networkManager, accepts(), nodeName).
+		response, err := NewUseCase(sysboxOnly(&taskManager, &networkManager), accepts(), nodeName).
 			Execute(context.Background(), validRequest(func(r *Request) {
 				r.ExposedPorts = []port.Port{80, 443}
 			}))
@@ -100,7 +133,7 @@ func TestUseCase_Execute(t *testing.T) {
 			Return("task-id", nil).Once()
 		taskManager.On("Start", mock.Anything, "task-id").Return(nil).Once()
 
-		_, err := NewUseCase(&taskManager, &networkManager, accepts(), nodeName).
+		_, err := NewUseCase(sysboxOnly(&taskManager, &networkManager), accepts(), nodeName).
 			Execute(context.Background(), validRequest(nil))
 
 		require.NoError(t, err)
@@ -134,7 +167,7 @@ func TestUseCase_Execute(t *testing.T) {
 			Return("task-id", nil).Once()
 		taskManager.On("Start", mock.Anything, "task-id").Return(nil).Once()
 
-		_, err := NewUseCase(&taskManager, &networkManager, accepts(), nodeName).
+		_, err := NewUseCase(sysboxOnly(&taskManager, &networkManager), accepts(), nodeName).
 			Execute(context.Background(), validRequest(func(r *Request) {
 				r.StackUUID = "stack-uuid"
 				r.StackSlug = "myapp-abcde"
@@ -166,7 +199,7 @@ func TestUseCase_Execute(t *testing.T) {
 			Return("task-id", nil).Once()
 		taskManager.On("Start", mock.Anything, "task-id").Return(nil).Once()
 
-		_, err := NewUseCase(&taskManager, &networkManager, accepts(), nodeName).
+		_, err := NewUseCase(sysboxOnly(&taskManager, &networkManager), accepts(), nodeName).
 			Execute(context.Background(), validRequest(func(r *Request) {
 				r.NetworkPolicy = network.PolicyPublic
 			}))
@@ -195,7 +228,7 @@ func TestUseCase_Execute(t *testing.T) {
 			Return("task-id", nil).Once()
 		taskManager.On("Start", mock.Anything, "task-id").Return(nil).Once()
 
-		_, err := NewUseCase(&taskManager, &networkManager, accepts(), nodeName).
+		_, err := NewUseCase(sysboxOnly(&taskManager, &networkManager), accepts(), nodeName).
 			Execute(context.Background(), validRequest(func(r *Request) {
 				r.NetworkPolicy = network.PolicyNone
 				r.ExposedPorts = nil
@@ -217,7 +250,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		refusal := domain.ValidationErrors{"exposed_ports": "ports_require_network"}
 
-		response, err := NewUseCase(&taskManager, &networkManager, refuses(refusal), nodeName).
+		response, err := NewUseCase(sysboxOnly(&taskManager, &networkManager), refuses(refusal), nodeName).
 			Execute(context.Background(), validRequest(nil))
 
 		require.NoError(t, err)
@@ -245,7 +278,7 @@ func TestUseCase_Execute(t *testing.T) {
 		taskManager.On("Of", mock.Anything, mock.Anything).
 			Return([]task.Execution{}, nil).Once()
 
-		_, err := NewUseCase(&taskManager, &networkManager, accepts(), nodeName).
+		_, err := NewUseCase(sysboxOnly(&taskManager, &networkManager), accepts(), nodeName).
 			Execute(context.Background(), validRequest(nil))
 
 		assert.ErrorIs(t, err, expected)
@@ -274,7 +307,7 @@ func TestUseCase_Execute(t *testing.T) {
 		taskManager.On("Start", mock.Anything, "task-id").Return(nil).Once()
 		defer taskManager.AssertExpectations(t)
 
-		response, err := NewUseCase(&taskManager, &networkManager, accepts(), nodeName).
+		response, err := NewUseCase(sysboxOnly(&taskManager, &networkManager), accepts(), nodeName).
 			Execute(context.Background(), validRequest(nil))
 
 		require.NoError(t, err)
@@ -292,7 +325,7 @@ func TestUseCase_Execute(t *testing.T) {
 		expected := errors.New("the network cannot be created")
 		networkManager.On("EnsureIsolatedNetwork", mock.Anything).Return(expected).Once()
 
-		_, err := NewUseCase(&taskManager, &networkManager, accepts(), nodeName).
+		_, err := NewUseCase(sysboxOnly(&taskManager, &networkManager), accepts(), nodeName).
 			Execute(context.Background(), validRequest(nil))
 
 		assert.ErrorIs(t, err, expected)
@@ -378,7 +411,7 @@ func TestUseCase_Execute_retrying(t *testing.T) {
 		taskManager.On("Start", mock.Anything, "task-id").Return(nil).Once()
 		defer taskManager.AssertExpectations(t)
 
-		useCase := NewUseCase(&taskManager, &networkManager, accepts(), nodeName)
+		useCase := NewUseCase(sysboxOnly(&taskManager, &networkManager), accepts(), nodeName)
 
 		response, err := useCase.Execute(context.Background(), &Request{
 			UUID:       "task-uuid",
@@ -418,7 +451,7 @@ func TestUseCase_Execute_retrying(t *testing.T) {
 		taskManager.On("Start", mock.Anything, "existing-task-id").Return(nil).Once()
 		defer taskManager.AssertExpectations(t)
 
-		useCase := NewUseCase(&taskManager, &networkManager, accepts(), nodeName)
+		useCase := NewUseCase(sysboxOnly(&taskManager, &networkManager), accepts(), nodeName)
 
 		response, err := useCase.Execute(context.Background(), &Request{
 			UUID:  "task-uuid",
@@ -458,7 +491,7 @@ func TestUseCase_Execute_adopting(t *testing.T) {
 		taskManager.On("Start", mock.Anything, "running-task-id").Return(nil).Once()
 		defer taskManager.AssertExpectations(t)
 
-		_, err := NewUseCase(&taskManager, &networkManager, accepts(), nodeName).
+		_, err := NewUseCase(sysboxOnly(&taskManager, &networkManager), accepts(), nodeName).
 			Execute(context.Background(), &Request{
 				UUID:  "task-uuid",
 				Name:  "api",
@@ -470,5 +503,100 @@ func TestUseCase_Execute_adopting(t *testing.T) {
 		require.NoError(t, err)
 
 		taskManager.AssertNotCalled(t, "Delete", mock.Anything, mock.Anything)
+	})
+}
+
+func TestUseCase_Execute_classes(t *testing.T) {
+	t.Parallel()
+
+	// vmID is what vmhost calls a VM.
+	const vmID = "0123456789abcdef"
+
+	t.Run("a task is run by the driver of its class, and named by it", func(t *testing.T) {
+		t.Parallel()
+
+		var (
+			sysboxTasks         runtime.MockRuntime
+			sysboxNetworks      runtime.MockNetworkManager
+			firecrackerTasks    runtime.MockRuntime
+			firecrackerNetworks runtime.MockNetworkManager
+		)
+
+		drivers := node(
+			classDriver(workloadRuntime.Sysbox, &sysboxTasks, &sysboxNetworks),
+			classDriver(workloadRuntime.Firecracker, &firecrackerTasks, &firecrackerNetworks),
+		)
+
+		firecrackerNetworks.On("EnsureIsolatedNetwork", mock.Anything).Return(nil).Once()
+
+		var created *task.Execution
+		firecrackerTasks.On("Of", mock.Anything, "task-uuid").Return([]task.Execution{}, nil).Once()
+		firecrackerTasks.On("EnsureImage", mock.Anything, "nginx:alpine").Return(nil).Once()
+		firecrackerTasks.On("Create", mock.Anything, mock.Anything).
+			Run(func(args mock.Arguments) { created = args.Get(1).(*task.Execution) }).
+			Return(vmID, nil).Once()
+		firecrackerTasks.On("Start", mock.Anything, vmID).Return(nil).Once()
+		defer firecrackerTasks.AssertExpectations(t)
+		defer firecrackerNetworks.AssertExpectations(t)
+
+		response, err := NewUseCase(drivers, accepts(), nodeName).
+			Execute(context.Background(), validRequest(func(r *Request) {
+				r.Runtime = workloadRuntime.Firecracker
+			}))
+		require.NoError(t, err)
+
+		// named the way the rest of the node names it.
+		assert.Equal(t, "firecracker:"+vmID, response.UUID)
+		assert.Equal(t, workloadRuntime.Firecracker, created.Runtime)
+
+		sysboxTasks.AssertNotCalled(t, "Create", mock.Anything, mock.Anything)
+		sysboxNetworks.AssertNotCalled(t, "EnsureIsolatedNetwork", mock.Anything)
+	})
+
+	t.Run("a task that names no class is run as sysbox, as every task was", func(t *testing.T) {
+		t.Parallel()
+
+		var (
+			taskManager    runtime.MockRuntime
+			networkManager runtime.MockNetworkManager
+		)
+
+		networkManager.On("EnsureIsolatedNetwork", mock.Anything).Return(nil).Once()
+
+		var created *task.Execution
+		taskManager.On("Of", mock.Anything, mock.Anything).Return([]task.Execution{}, nil).Maybe()
+		taskManager.On("EnsureImage", mock.Anything, mock.Anything).Return(nil).Once()
+		taskManager.On("Create", mock.Anything, mock.Anything).
+			Run(func(args mock.Arguments) { created = args.Get(1).(*task.Execution) }).
+			Return("4f2c9d0b7a1e", nil).Once()
+		taskManager.On("Start", mock.Anything, "4f2c9d0b7a1e").Return(nil).Once()
+
+		response, err := NewUseCase(sysboxOnly(&taskManager, &networkManager), accepts(), nodeName).
+			Execute(context.Background(), validRequest(nil))
+		require.NoError(t, err)
+
+		// a sysbox run keeps the bare name docker gave it.
+		assert.Equal(t, "4f2c9d0b7a1e", response.UUID)
+		assert.Equal(t, workloadRuntime.Sysbox, created.Runtime)
+	})
+
+	t.Run("a class this node does not offer is not run as anything else", func(t *testing.T) {
+		t.Parallel()
+
+		var (
+			taskManager    runtime.MockRuntime
+			networkManager runtime.MockNetworkManager
+		)
+
+		_, err := NewUseCase(sysboxOnly(&taskManager, &networkManager), accepts(), nodeName).
+			Execute(context.Background(), validRequest(func(r *Request) {
+				r.Runtime = workloadRuntime.Firecracker
+			}))
+
+		assert.ErrorIs(t, err, driver.ErrUnknownClass)
+
+		networkManager.AssertNotCalled(t, "EnsureIsolatedNetwork", mock.Anything)
+		taskManager.AssertNotCalled(t, "EnsureImage", mock.Anything, mock.Anything)
+		taskManager.AssertNotCalled(t, "Create", mock.Anything, mock.Anything)
 	})
 }
