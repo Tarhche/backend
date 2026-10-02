@@ -54,3 +54,17 @@ func TestNewStack_Runtime(t *testing.T) {
 		assert.Equal(t, "sysbox", reported.Services[0].Runtime)
 	})
 }
+
+func TestNewStack_Endpoints(t *testing.T) {
+	t.Parallel()
+
+	reported := NewStack(stack.Stack{UUID: "stack-uuid", Runtime: runtime.Firecracker}, []task.Task{
+		{UUID: "web-uuid", Runtime: runtime.Firecracker, Endpoints: []task.Endpoint{{TaskPort: 80}}},
+		{UUID: "api-uuid", Endpoints: []task.Endpoint{{TaskPort: 8080, HostPort: 32768}}},
+	})
+
+	// a port the node dials itself has no host port, and is reachable all
+	// the same as one docker published.
+	assert.Equal(t, []Endpoint{{TaskPort: 80}}, reported.Services[0].Endpoints)
+	assert.Equal(t, []Endpoint{{TaskPort: 8080}}, reported.Services[1].Endpoints)
+}

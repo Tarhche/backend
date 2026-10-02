@@ -108,10 +108,14 @@ func expectedStateOf(s stack.Stack, services []task.Task) task.State {
 // endpoints reports which task ports are reachable. The host and host port
 // a task sits on are the workload's own business, so they stay inside it —
 // a caller reaches a port by the task's hostname, not by its node.
+//
+// Reachable is what the node holding the task said: a port it reaches by
+// dialling it, as it does a microVM's, has no host port and is reachable all
+// the same.
 func endpoints(t task.Task) []Endpoint {
 	items := make([]Endpoint, 0, len(t.Endpoints))
 	for _, e := range t.Endpoints {
-		if e.HostPort == 0 {
+		if e.TaskPort == 0 {
 			continue
 		}
 

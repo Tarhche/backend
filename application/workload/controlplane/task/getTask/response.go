@@ -127,10 +127,16 @@ func NewResponse(t task.Task) *Response {
 }
 
 // NewEndpoints reports which of a task's ports are actually reachable.
+//
+// They are the ones the node holding the task said it can reach, which is
+// already the whole of the question. A host port is how docker publishes one,
+// and a node that dials its runs' ports itself, as it does a microVM's,
+// publishes nothing: an endpoint without a host port is reachable all the
+// same, and leaving it out would hide every port such a task serves.
 func NewEndpoints(t task.Task) []EndpointResponse {
 	endpoints := make([]EndpointResponse, 0, len(t.Endpoints))
 	for _, e := range t.Endpoints {
-		if e.HostPort == 0 {
+		if e.TaskPort == 0 {
 			continue
 		}
 
