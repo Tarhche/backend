@@ -1,10 +1,11 @@
 // Package initrd builds the initramfs every microVM boots from.
 //
-// It holds the agent as /init and the directories it mounts over, and nothing
-// else: the task's own root comes from its disks, so the one initramfs serves
-// every machine whatever it runs. The kernel unpacks it into the machine's
-// memory before anything runs there, which is why the agent is a small binary
-// of its own.
+// It holds the agent as /init, the directories it mounts over, and the two
+// devices a program needs before anything is mounted, and nothing else: the
+// task's own root comes from its disks, so the one initramfs serves every
+// machine whatever it runs. The kernel unpacks it into the machine's memory
+// before anything runs there, which is why the agent is a small binary of its
+// own.
 package initrd
 
 import (
@@ -22,10 +23,34 @@ import (
 // the directories the agent mounts over, which the kernel expects to find.
 var directories = []string{"dev", "mnt", "proc", "run", "sys", "tmp"}
 
+// device is a device node the initramfs holds.
+type device struct {
+	name         string
+	perm         uint32
+	major, minor uint32
+}
+
+// devices are there before anything is mounted. The kernel opens the console
+// as init's standard input and output before it runs it, and only finds it if
+// the initramfs holds it; when it cannot, the Go runtime opens /dev/null in
+// their place, and a Go program that finds neither does not start at all. The
+// agent mounts the kernel's own devices over both once it runs.
+var devices = []device{
+	{name: "dev/console", perm: 0o600, major: 5, minor: 1},
+	{name: "dev/null", perm: 0o666, major: 1, minor: 3},
+}
+
+// format names what an initramfs holds besides the agent, and is part of
+// what names it: an initramfs laid out differently is a different one, even
+// around the same agent.
+const format = "workload initramfs 2\n"
+
 // Ensure builds the initramfs for the agent at agentPath into dir, unless one
 // for the same agent is already there, and says where it is. It is named by
 // what it holds, so a vmhost that comes back with the same agent finds it
 // made, and a new agent never overwrites one a machine is still booting from.
+// What it holds is the agent and the layout around it, so either changing
+// names another one.
 func Ensure(dir string, agentPath string) (string, error) {
 	agent, err := os.Open(agentPath)
 	if err != nil {
@@ -39,6 +64,8 @@ func Ensure(dir string, agentPath string) (string, error) {
 	}
 
 	digest := sha256.New()
+	_, _ = io.WriteString(digest, format)
+
 	if _, err := io.Copy(digest, agent); err != nil {
 		return "", err
 	}
@@ -98,6 +125,12 @@ func Build(w io.Writer, init io.Reader, size int64) error {
 		}
 	}
 
+	for _, d := range devices {
+		if err := archive.device(d); err != nil {
+			return err
+		}
+	}
+
 	if err := archive.file("init", 0o755, init, size); err != nil {
 		return err
 	}
@@ -119,24 +152,31 @@ type writer struct {
 
 const (
 	modeDirectory = 0o040000
+	modeCharacter = 0o020000
 	modeRegular   = 0o100000
 
 	trailer = "TRAILER!!!"
 )
 
 func (a *writer) directory(name string) error {
-	return a.entry(name, modeDirectory|0o755, 2, nil, 0)
+	return a.entry(name, modeDirectory|0o755, 2, device{}, nil, 0)
+}
+
+func (a *writer) device(d device) error {
+	return a.entry(d.name, modeCharacter|d.perm, 1, d, nil, 0)
 }
 
 func (a *writer) file(name string, perm uint32, content io.Reader, size int64) error {
-	return a.entry(name, modeRegular|perm, 1, content, size)
+	return a.entry(name, modeRegular|perm, 1, device{}, content, size)
 }
 
 func (a *writer) close() error {
-	return a.entry(trailer, 0, 1, nil, 0)
+	return a.entry(trailer, 0, 1, device{}, nil, 0)
 }
 
-func (a *writer) entry(name string, mode uint32, links uint32, content io.Reader, size int64) error {
+// entry writes one entry. A device node says which device it is in rdev,
+// and is zero for anything else.
+func (a *writer) entry(name string, mode uint32, links uint32, rdev device, content io.Reader, size int64) error {
 	if size > 0xffffffff {
 		return errors.New("an initramfs entry cannot be larger than 4 GiB")
 	}
@@ -144,7 +184,7 @@ func (a *writer) entry(name string, mode uint32, links uint32, content io.Reader
 	a.inode++
 
 	header := fmt.Sprintf("070701%08x%08x%08x%08x%08x%08x%08x%08x%08x%08x%08x%08x%08x",
-		a.inode, mode, 0, 0, links, time.Unix(0, 0).Unix(), size, 0, 0, 0, 0, len(name)+1, 0)
+		a.inode, mode, 0, 0, links, time.Unix(0, 0).Unix(), size, 0, 0, rdev.major, rdev.minor, len(name)+1, 0)
 
 	if _, err := io.WriteString(a.w, header+name+"\x00"); err != nil {
 		return err
