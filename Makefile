@@ -116,15 +116,29 @@ microvm-install: microvm-artifacts
 
 # boots real microVMs: the tests built with the microvm tag, run as root, since
 # they make taps, units and users of their own. WORKLOAD_TEST_KERNEL is the
-# kernel they boot.
+# kernel they boot. The hypervisor's own tests boot the agent
+# (WORKLOAD_TEST_GUEST) on a root image of their own (WORKLOAD_TEST_IMAGE,
+# MICROVM_TEST_IMAGE's files as a squashfs), and skip without them. vmhost's
+# run twice: with its machines as its children, then as units of this machine's
+# systemd, as production runs them.
 MICROVM_PACKAGES ?= ./application/workload/vmhost/... ./infrastructure/workload/...
+MICROVM_TEST_IMAGE ?= busybox:1.36
 
-test-microvm: microvm-artifacts
+microvm-test-boot: microvm-artifacts
+	CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o $(MICROVM_ARTIFACTS)/workload-guest ./cmd/workload-guest
+	cid=$$(docker create $(MICROVM_TEST_IMAGE)) && \
+		{ docker export "$$cid" | sqfstar -quiet -force $(MICROVM_ARTIFACTS)/rootfs.squashfs > /dev/null; status=$$?; \
+		docker rm "$$cid" > /dev/null; exit $$status; }
+
+test-microvm: microvm-test-boot
 	@test -c /dev/kvm || { echo "test-microvm needs /dev/kvm: run it in the Lima VM (make lima-up, then make lima-shell)" >&2; exit 1; }
 	export PATH="$(abspath $(MICROVM_ARTIFACTS))/bin:$$PATH" \
 		WORKLOAD_TEST_KERNEL="$(abspath $(MICROVM_ARTIFACTS))/vmlinux" \
-		WORKLOAD_TEST_FIRECRACKER="$(abspath $(MICROVM_ARTIFACTS))/bin/firecracker"; \
-	go test -exec "sudo -E env PATH=$$PATH" -tags microvm -count=1 $(MICROVM_PACKAGES)
+		WORKLOAD_TEST_FIRECRACKER="$(abspath $(MICROVM_ARTIFACTS))/bin/firecracker" \
+		WORKLOAD_TEST_GUEST="$(abspath $(MICROVM_ARTIFACTS))/workload-guest" \
+		WORKLOAD_TEST_IMAGE="$(abspath $(MICROVM_ARTIFACTS))/rootfs.squashfs"; \
+	go test -exec "sudo -E env PATH=$$PATH" -tags microvm -count=1 $(MICROVM_PACKAGES) && \
+	WORKLOAD_TEST_PROCESS_MODE=systemd go test -exec "sudo -E env PATH=$$PATH" -tags microvm -count=1 ./application/workload/vmhost/
 
 # the runtime conformance suite against the microvm driver and a real vmhost,
 # deployed as production deploys it (compose.workload-vmhost.yaml) from an image
@@ -154,5 +168,5 @@ e2e-sysbox:
 	E2E_RUNTIME=sysbox ./tests/e2e/microvm.sh
 
 .PHONY: ps up down restart restart-% sh-% logs-% certs certs-env migrate \
-	lima-up lima-shell lima-down lima-delete microvm-artifacts microvm-install \
+	lima-up lima-shell lima-down lima-delete microvm-artifacts microvm-install microvm-test-boot \
 	test-microvm test-conformance-microvm up-microvm e2e-microvm e2e-sysbox
