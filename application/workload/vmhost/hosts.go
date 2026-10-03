@@ -9,10 +9,11 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
 
-// A stack's services reach each other by service name, as they do on a
-// docker network. There is no DNS server for that: every machine's /etc/hosts
-// names its neighbours, and vmhost writes it again in every machine on a
-// network whenever one of its members comes or goes.
+// Machines reach their neighbours by name, as containers do on a docker
+// network: a stack's services by service name, and any machine on a network
+// it shares with another by that one's name. There is no DNS server for that:
+// every machine's /etc/hosts names its neighbours, and vmhost writes it again
+// in every machine on a network whenever one of its members comes or goes.
 
 // hostnameOf is what a VM calls itself: what its spec says, or failing that
 // the beginning of its own ID, as a container's is.
@@ -37,9 +38,11 @@ func (e *Engine) hostsOf(ctx context.Context, v vm.VM) []guest.Host {
 }
 
 // hostsFor is the names v's neighbours answer to, on every network it shares
-// with them under a name of their own: the services of its stack, each under
-// its service name and its hostname. A neighbour on its way back up keeps its
-// address, so it keeps its name.
+// with them, as a container's do on the workload's docker networks: its name
+// and its hostname, and on a stack's network its service name before them.
+// The public network is left out: its machines cannot reach each other, so
+// their names would tell nothing but who else runs there. A neighbour on its
+// way back up keeps its address, so it keeps its name.
 func hostsFor(all []vm.VM, v vm.VM) []guest.Host {
 	var hosts []guest.Host
 
@@ -49,16 +52,30 @@ func hostsFor(all []vm.VM, v vm.VM) []guest.Host {
 		}
 
 		for _, theirs := range other.Interfaces {
-			if len(theirs.Aliases) == 0 || !sharesNetwork(v.Interfaces, theirs.Network) {
+			if theirs.Network == vm.PublicNetwork || len(theirs.Address) == 0 || !sharesNetwork(v.Interfaces, theirs.Network) {
 				continue
 			}
 
 			address, _, _ := strings.Cut(theirs.Address, "/")
-			hosts = append(hosts, guest.Host{Address: address, Names: append(slices.Clone(theirs.Aliases), hostnameOf(other))})
+			hosts = append(hosts, guest.Host{Address: address, Names: namesOf(other, theirs)})
 		}
 	}
 
 	return hosts
+}
+
+// namesOf is what a VM answers to on one of its networks: its aliases there,
+// then its name and its hostname, each once.
+func namesOf(v vm.VM, on vm.Interface) []string {
+	names := slices.Clone(on.Aliases)
+
+	for _, name := range []string{v.Spec.Name, hostnameOf(v)} {
+		if len(name) > 0 && !slices.Contains(names, name) {
+			names = append(names, name)
+		}
+	}
+
+	return names
 }
 
 func sharesNetwork(interfaces []vm.Interface, network string) bool {

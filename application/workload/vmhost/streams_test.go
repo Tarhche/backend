@@ -356,6 +356,67 @@ func TestEngine_Hosts(t *testing.T) {
 	assert.Empty(t, w.agent(api).Hosts())
 }
 
+func TestEngine_HostsOnSharedNetworks(t *testing.T) {
+	t.Parallel()
+
+	address := func(w *world, id string) string {
+		v := w.vm(id)
+		require.NotEmpty(t, v.Interfaces)
+
+		ip, _, _ := cutAddress(v.Interfaces[0].Address)
+
+		return ip
+	}
+
+	t.Run("machines on the isolated network know each other by name, as containers on it do", func(t *testing.T) {
+		t.Parallel()
+
+		w := newWorld(t, nil)
+
+		peer := w.run(spec("peer"))
+		client := w.run(spec("client"))
+
+		assert.Equal(t, []guest.Host{{Address: address(w, peer), Names: []string{"peer"}}}, w.agent(client).Configured().Hosts)
+		assert.Equal(t, []guest.Host{{Address: address(w, client), Names: []string{"client"}}}, w.agent(peer).Hosts())
+	})
+
+	t.Run("a machine's name and hostname are both names it answers to", func(t *testing.T) {
+		t.Parallel()
+
+		w := newWorld(t, nil)
+
+		named := spec("cf-peer-x1")
+		named.Hostname = "peer-x1"
+
+		peer := w.run(named)
+		client := w.run(spec("client"))
+
+		assert.Equal(t, []guest.Host{{Address: address(w, peer), Names: []string{"cf-peer-x1", "peer-x1"}}}, w.agent(client).Configured().Hosts)
+	})
+
+	t.Run("machines on the public network are not told who else runs there, since they cannot reach each other", func(t *testing.T) {
+		t.Parallel()
+
+		w := newWorld(t, nil)
+
+		_, err := w.fabric.EnsureNetwork(w.ctx, vm.PublicNetwork, true)
+		require.NoError(t, err)
+
+		public := func(name string) vm.Spec {
+			s := spec(name)
+			s.Networks = []vm.Attachment{{Network: vm.PublicNetwork}}
+
+			return s
+		}
+
+		first := w.run(public("first"))
+		second := w.run(public("second"))
+
+		assert.Empty(t, w.agent(second).Configured().Hosts)
+		assert.Empty(t, w.agent(first).Hosts())
+	})
+}
+
 func cutAddress(address string) (string, string, bool) {
 	for i := range address {
 		if address[i] == '/' {
