@@ -144,7 +144,7 @@ func (e *Engine) reconcileVM(ctx context.Context, id string, machine vm.Machine,
 			return e.adopt(ctx, v, machine)
 		}
 
-		return e.lost(ctx, v, present)
+		return e.lost(ctx, v, present, reasonLost)
 	case present:
 		// a machine left behind by a VM that does not run: a boot or an
 		// end that a vmhost did not see through. Its VM is known, so it is
@@ -183,14 +183,12 @@ func (e *Engine) adopt(ctx context.Context, v vm.VM, machine vm.Machine) error {
 		e.metrics.agentFailed(ctx, "ready")
 		e.logger.WarnContext(ctx, "the agent of a vm being taken back is refused", "vm", v.ID, "error", err)
 
-		_, updateErr := e.states.Update(ctx, v.ID, func(v *vm.VM) {
-			v.State = vm.StateDead
-			v.ExitCode = lostExitCode
-			v.FinishedAt = time.Now().UTC()
-			v.Reason = reason(fmt.Errorf("its agent was refused when vmhost took it back: %w", err))
-		})
+		// it cannot be driven, and is let go of as one whose machine went
+		// away: its restart policy boots it again, with the agent this
+		// vmhost brought along, or it is dead.
+		refused := fmt.Errorf("its agent was refused when vmhost took it back: %w", err)
 
-		return errors.Join(updateErr, client.Close(), e.hypervisor.Terminate(ctx, v.ID), e.unplug(ctx, v.ID))
+		return errors.Join(client.Close(), e.lost(ctx, v, true, refused.Error()))
 	}
 
 	if answering {
@@ -240,10 +238,10 @@ func (e *Engine) adopt(ctx context.Context, v vm.VM, machine vm.Machine) error {
 }
 
 // lost lets go of what is left of a VM whose machine went away while nobody
-// was looking, and boots it again if its restart policy says so. The VM's lock
-// is held.
-func (e *Engine) lost(ctx context.Context, v vm.VM, present bool) error {
-	e.logger.WarnContext(ctx, "a vm's machine went away while vmhost was not looking", "vm", v.ID, "state", v.State)
+// was looking, or cannot be driven, and boots it again if its restart policy
+// says so; why says why it went. The VM's lock is held.
+func (e *Engine) lost(ctx context.Context, v vm.VM, present bool, why string) error {
+	e.logger.WarnContext(ctx, "a vm's machine is let go of", "vm", v.ID, "state", v.State, "reason", why)
 
 	var cleared error
 	if present {
@@ -261,7 +259,7 @@ func (e *Engine) lost(ctx context.Context, v vm.VM, present bool) error {
 			v.State = vm.StateRestarting
 			v.ExitCode = lostExitCode
 			v.FinishedAt = now
-			v.Reason = reasonLost + ", and is booted again"
+			v.Reason = reason(fmt.Errorf("%s, and is booted again", why))
 		})
 		if err != nil {
 			return err
@@ -276,7 +274,7 @@ func (e *Engine) lost(ctx context.Context, v vm.VM, present bool) error {
 		v.State = vm.StateDead
 		v.ExitCode = lostExitCode
 		v.FinishedAt = now
-		v.Reason = reasonLost
+		v.Reason = reason(errors.New(why))
 	})
 	if err != nil {
 		return err

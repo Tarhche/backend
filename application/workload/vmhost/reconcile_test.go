@@ -120,6 +120,37 @@ func TestEngine_Reconcile(t *testing.T) {
 		assert.ErrorIs(t, err, vm.ErrNotFound, "its machine is ended")
 	})
 
+	t.Run("a vm whose agent is refused is booted again, with this vmhost's agent, when its policy says so", func(t *testing.T) {
+		t.Parallel()
+
+		w := newWorld(t, nil)
+
+		s := spec("restarted")
+		s.RestartPolicy = "always"
+
+		id := w.create(s)
+
+		_, err := w.states.Update(w.ctx, id, func(v *vm.VM) {
+			v.State = vm.StateRunning
+			v.Generation = 1
+		})
+		require.NoError(t, err)
+
+		old := vmMock.NewFakeAgent(nil).Running(1)
+		old.Refuse(errors.New("the agent speaks protocol 0, which this vmhost does not know"))
+		w.hypervisor.Leave(vm.Machine{ID: id, Running: true, VsockPath: "fake://" + id + "/old/v.sock"}, old)
+
+		require.NoError(t, w.engine.Reconcile(w.ctx))
+
+		running := w.vm(id)
+		assert.Equal(t, vm.StateRunning, running.State)
+		assert.Equal(t, uint(1), running.RestartCount)
+		assert.Empty(t, running.Reason)
+		assert.True(t, old.Gone(), "the machine whose agent was refused is ended")
+		assert.Len(t, w.hypervisor.Booted(), 1, "booted again")
+		assert.NotNil(t, w.agent(id).Configured())
+	})
+
 	t.Run("an agent that does not answer is looked after all the same, since its machine runs", func(t *testing.T) {
 		t.Parallel()
 

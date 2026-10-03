@@ -329,7 +329,14 @@ func (e *Engine) Close(ctx context.Context) error {
 		err = ctx.Err()
 	}
 
-	return errors.Join(err, e.metrics.close())
+	// a hypervisor holding anything of its own — a connection to the host's
+	// systemd — lets go of it last, once nothing asks it anything.
+	var closed error
+	if closer, ok := e.hypervisor.(interface{ Close() error }); ok {
+		closed = closer.Close()
+	}
+
+	return errors.Join(err, closed, e.metrics.close())
 }
 
 // Health says whether vmhost can make and boot machines right now, and why

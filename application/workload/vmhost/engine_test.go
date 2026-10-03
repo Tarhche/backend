@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -273,6 +274,45 @@ func TestNew(t *testing.T) {
 		assert.True(t, healthy)
 		assert.Empty(t, reason)
 	})
+}
+
+// closingHypervisor holds something of its own until it is closed.
+type closingHypervisor struct {
+	*vmMock.FakeHypervisor
+
+	closed atomic.Bool
+}
+
+func (h *closingHypervisor) Close() error {
+	h.closed.Store(true)
+
+	return nil
+}
+
+func TestEngine_Close(t *testing.T) {
+	t.Parallel()
+
+	w := newWorld(t, nil)
+
+	hypervisor := &closingHypervisor{FakeHypervisor: w.hypervisor}
+	w.engine.hypervisor = hypervisor
+
+	id := w.run(spec("service"))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	require.NoError(t, w.engine.Close(ctx))
+
+	assert.True(t, hypervisor.closed.Load(), "the hypervisor lets go of what it holds")
+
+	machine, err := w.hypervisor.Machine(w.ctx, id)
+	require.NoError(t, err)
+	assert.True(t, machine.Running, "the vm keeps running: it is the host's")
+
+	v, err := w.states.Get(w.ctx, id)
+	require.NoError(t, err)
+	assert.Equal(t, vm.StateRunning, v.State)
 }
 
 func TestEngine_Info(t *testing.T) {
