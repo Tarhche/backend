@@ -9,21 +9,22 @@ import (
 	networkTypes "github.com/docker/docker/api/types/network"
 
 	"github.com/khanzadimahdi/testproject/domain/workload/network"
+	infraNetwork "github.com/khanzadimahdi/testproject/infrastructure/workload/network"
 )
 
 // networkMode is the network a container is created on. Docker takes exactly
 // one at create time; anything else is connected afterwards.
-func networkMode(attachments []network.Attachment) containerTypes.NetworkMode {
+func networkMode(attachments []network.Attachment, names infraNetwork.Names) containerTypes.NetworkMode {
 	if len(attachments) == 0 {
 		return containerTypes.NetworkMode(network.NoNetworkName)
 	}
 
-	return containerTypes.NetworkMode(attachments[0].Name)
+	return containerTypes.NetworkMode(names.Docker(attachments[0].Name))
 }
 
 // endpointsConfig carries the names a container answers to on the network it is
 // created on, so its neighbours reach it by service name.
-func endpointsConfig(attachments []network.Attachment) *networkTypes.NetworkingConfig {
+func endpointsConfig(attachments []network.Attachment, names infraNetwork.Names) *networkTypes.NetworkingConfig {
 	if len(attachments) == 0 {
 		return nil
 	}
@@ -35,7 +36,7 @@ func endpointsConfig(attachments []network.Attachment) *networkTypes.NetworkingC
 
 	return &networkTypes.NetworkingConfig{
 		EndpointsConfig: map[string]*networkTypes.EndpointSettings{
-			attachments[0].Name: settings,
+			names.Docker(attachments[0].Name): settings,
 		},
 	}
 }
@@ -69,7 +70,7 @@ func (m *DockerManager) connectRemainingNetworks(ctx context.Context, containerI
 			settings = &networkTypes.EndpointSettings{}
 		}
 
-		if err := m.client.NetworkConnect(ctx, attachment.Name, containerID, settings); err != nil {
+		if err := m.client.NetworkConnect(ctx, m.names.Docker(attachment.Name), containerID, settings); err != nil {
 			return err
 		}
 	}
@@ -78,15 +79,16 @@ func (m *DockerManager) connectRemainingNetworks(ctx context.Context, containerI
 }
 
 // inspectedNetworks reads back the networks a container is on, so that what a
-// container reports about itself is the same shape as what it was asked for.
-func inspectedNetworks(settings *containerTypes.NetworkSettings) []network.Attachment {
+// container reports about itself is the same shape, and the same names, as
+// what it was asked for.
+func inspectedNetworks(settings *containerTypes.NetworkSettings, names infraNetwork.Names) []network.Attachment {
 	if settings == nil {
 		return nil
 	}
 
 	attachments := make([]network.Attachment, 0, len(settings.Networks))
 	for name, endpoint := range settings.Networks {
-		attachment := network.Attachment{Name: name}
+		attachment := network.Attachment{Name: names.Workload(name)}
 		if endpoint != nil {
 			attachment.Aliases = endpoint.Aliases
 		}

@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	workloadRuntime "github.com/khanzadimahdi/testproject/domain/workload/runtime"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 	"github.com/khanzadimahdi/testproject/domain/workload/task/events"
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
@@ -60,7 +61,7 @@ func TestTaskScheduled_Handle(t *testing.T) {
 		producer.On("Produce", mock.Anything, events.TaskFailedName, mock.Anything).Return(nil).Once()
 		defer producer.AssertExpectations(t)
 
-		useCase := NewUseCase(&taskManager, &networkManager, accepts(), nodeName)
+		useCase := NewUseCase(sysboxOnly(&taskManager, &networkManager), accepts(), nodeName)
 
 		// no error: the failure is announced rather than handed back, which is
 		// what would have the message delivered again.
@@ -85,12 +86,84 @@ func TestTaskScheduled_Handle(t *testing.T) {
 			producer       messagingMock.MockProduceConsumer
 		)
 
-		useCase := NewUseCase(&taskManager, &networkManager, accepts(), nodeName)
+		useCase := NewUseCase(sysboxOnly(&taskManager, &networkManager), accepts(), nodeName)
 
 		require.NoError(t, NewTaskScheduled(useCase, &producer, "workload-orchestrator-99", discardLogger()).
 			Handle(context.Background(), scheduled(t)))
 
 		taskManager.AssertNotCalled(t, "Create", mock.Anything, mock.Anything)
+		producer.AssertNotCalled(t, "Produce", mock.Anything, mock.Anything, mock.Anything)
+	})
+}
+
+func TestTaskScheduled_Handle_classes(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a class this node does not offer fails the task with the reason's code, and is not handed back", func(t *testing.T) {
+		t.Parallel()
+
+		var (
+			taskManager    runtime.MockRuntime
+			networkManager runtime.MockNetworkManager
+			producer       messagingMock.MockProduceConsumer
+		)
+
+		producer.On("Produce", mock.Anything, events.TaskFailedName, mock.Anything).Return(nil).Once()
+		defer producer.AssertExpectations(t)
+
+		payload, err := json.Marshal(events.TaskScheduled{
+			UUID:          "task-uuid",
+			Name:          "a-request-id",
+			Runtime:       workloadRuntime.Firecracker,
+			Image:         "ghcr.io/example/workload:latest",
+			NominatedNode: nodeName,
+			Attempt:       1,
+			MaxRetries:    3,
+		})
+		require.NoError(t, err)
+
+		useCase := NewUseCase(sysboxOnly(&taskManager, &networkManager), accepts(), nodeName)
+
+		// no error: returning one would have the message delivered again, to a
+		// node that will never offer the class.
+		require.NoError(t, NewTaskScheduled(useCase, &producer, nodeName, discardLogger()).
+			Handle(context.Background(), payload))
+
+		var failed events.TaskFailed
+		require.NoError(t, json.Unmarshal(producer.Calls[0].Arguments.Get(2).([]byte), &failed))
+
+		// a code, as it is, which the dashboard says in the reader's language.
+		assert.Equal(t, workloadRuntime.ReasonRuntimeNotOffered, failed.Reason)
+		assert.Equal(t, "task-uuid", failed.UUID)
+		assert.Equal(t, nodeName, failed.NodeName)
+		assert.Equal(t, 1, failed.Attempt)
+		assert.Equal(t, 3, failed.MaxRetries)
+
+		taskManager.AssertNotCalled(t, "Create", mock.Anything, mock.Anything)
+	})
+
+	t.Run("a control plane from before there were classes asks for sysbox", func(t *testing.T) {
+		t.Parallel()
+
+		var (
+			taskManager    runtime.MockRuntime
+			networkManager runtime.MockNetworkManager
+			producer       messagingMock.MockProduceConsumer
+		)
+
+		networkManager.On("EnsureIsolatedNetwork", mock.Anything).Return(nil).Once()
+		taskManager.On("Of", mock.Anything, "task-uuid").Return([]task.Execution{}, nil).Once()
+		taskManager.On("EnsureImage", mock.Anything, mock.Anything).Return(nil).Once()
+		taskManager.On("Create", mock.Anything, mock.Anything).Return("4f2c9d0b7a1e", nil).Once()
+		taskManager.On("Start", mock.Anything, "4f2c9d0b7a1e").Return(nil).Once()
+		defer taskManager.AssertExpectations(t)
+
+		// scheduled(t) names no class, as an older control plane's message does.
+		useCase := NewUseCase(sysboxOnly(&taskManager, &networkManager), accepts(), nodeName)
+
+		require.NoError(t, NewTaskScheduled(useCase, &producer, nodeName, discardLogger()).
+			Handle(context.Background(), scheduled(t)))
+
 		producer.AssertNotCalled(t, "Produce", mock.Anything, mock.Anything, mock.Anything)
 	})
 }

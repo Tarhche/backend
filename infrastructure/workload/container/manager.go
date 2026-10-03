@@ -3,27 +3,25 @@ package container
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"log/slog"
 	"strings"
 	"time"
 
-	"github.com/docker/docker/api/types"
 	containerTypes "github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
-	"github.com/docker/go-connections/nat"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	oteltrace "go.opentelemetry.io/otel/trace"
 
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/workload/port"
+	"github.com/khanzadimahdi/testproject/domain/workload/runtime"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 	"github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
+	infraNetwork "github.com/khanzadimahdi/testproject/infrastructure/workload/network"
 )
 
 var statusMap = map[string]task.Status{
@@ -45,53 +43,122 @@ const (
 	stopTimeout = 10
 )
 
+// DockerManager runs one class's tasks as containers on a docker daemon, for
+// one node.
+//
+// It sees and touches only what is its own: containers labelled with its node's
+// name, of its class. Several orchestrators share one daemon, and two classes
+// may share one too, and without that each would list, stop and delete the
+// others' containers as its own.
 type DockerManager struct {
 	client *client.Client
 	logger *slog.Logger
 	tracer oteltrace.Tracer
+
+	// node is the orchestrator the containers are run for, and class what
+	// they are run as.
+	node  string
+	class runtime.Class
+
+	// ociRuntime is the OCI runtime the daemon is asked to run a container
+	// with, such as sysbox-runc or runsc. Empty is the daemon's default.
+	ociRuntime string
+
+	// advertiseHost is where this node reaches the ports its containers are
+	// published on. That is the docker daemon's own host, which is not always
+	// this one.
+	advertiseHost string
+
+	// names is what the class calls the workload's networks on the daemon.
+	names infraNetwork.Names
 }
 
 var _ task.Runtime = &DockerManager{}
 
-func NewDockerManager(dockerHost string, logger *slog.Logger) (*DockerManager, error) {
-	cli, err := client.NewClientWithOpts(
-		client.WithHost(dockerHost),
-		client.WithAPIVersionNegotiation(),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create docker client: %w", err)
+// Scope is what a DockerManager runs its containers as, and for whom.
+type Scope struct {
+	// Node is the orchestrator the containers are run for. They are labelled
+	// with it, and only containers labelled with it are seen.
+	Node string
+
+	// Class is what the containers are run as. Empty is sysbox, as every
+	// container from before there were classes was.
+	Class runtime.Class
+
+	// OCIRuntime is what the daemon is asked to run them with; empty is the
+	// daemon's own default.
+	OCIRuntime string
+
+	// AdvertiseHost is where the ports the daemon publishes are reached.
+	AdvertiseHost string
+
+	// Networks is what the class calls the workload's networks on the daemon.
+	Networks infraNetwork.Names
+}
+
+// NewDockerManager runs containers for one node and class on the daemon cli
+// reaches. The client is the class's own, shared with its networks, and is not
+// closed here.
+func NewDockerManager(cli *client.Client, scope Scope, logger *slog.Logger) *DockerManager {
+	return &DockerManager{
+		client:        cli,
+		logger:        logger,
+		tracer:        otel.Tracer("docker"),
+		node:          scope.Node,
+		class:         scope.Class.OrSysbox(),
+		ociRuntime:    scope.OCIRuntime,
+		advertiseHost: scope.AdvertiseHost,
+		names:         scope.Networks,
 	}
-
-	return &DockerManager{client: cli, logger: logger, tracer: otel.Tracer("docker")}, nil
 }
 
-// OnNode is every container this node is holding.
+// OnNode is every container of this class the named node is holding.
 func (m *DockerManager) OnNode(ctx context.Context, nodeName string) ([]task.Execution, error) {
-	return m.byLabel(ctx, NodeNameLabel, nodeName)
+	return m.byLabel(ctx, label(NodeNameLabel, nodeName))
 }
 
-// Of is the containers running one task, latest attempt and whatever is left
-// of the ones before it.
+// Of is the containers running one task on this node, latest attempt and
+// whatever is left of the ones before it.
+//
+// Only this node's: another orchestrator on the same daemon may hold the same
+// task's earlier attempts, and those are its to deal with, since every node
+// hears every command.
 func (m *DockerManager) Of(ctx context.Context, taskUUID string) ([]task.Execution, error) {
-	return m.byLabel(ctx, taskUUIDLabel, taskUUID)
+	return m.byLabel(ctx, label(taskUUIDLabel, taskUUID), label(NodeNameLabel, m.node))
 }
 
-// BySlug is the containers answering to the name a task's ports are served
-// under.
+// BySlug is the containers on this node answering to the name a task's ports
+// are served under.
 func (m *DockerManager) BySlug(ctx context.Context, slug string) ([]task.Execution, error) {
-	return m.byLabel(ctx, taskSlugLabel, slug)
+	return m.byLabel(ctx, label(taskSlugLabel, slug), label(NodeNameLabel, m.node))
+}
+
+// label is a docker filter on one label's value.
+func label(key string, value string) string {
+	return key + "=" + value
 }
 
 // byLabel is how docker is asked all three of those: what a container is
 // running is written on it, so looking one up is looking at what it says.
-func (m *DockerManager) byLabel(ctx context.Context, label string, value string) ([]task.Execution, error) {
+//
+// A container of another class is left out. Docker can only be asked for a
+// label that is there, and sysbox's containers from before there were classes
+// carry none, so what docker answers is sorted here; another class's are
+// asked for by name, which spares listing what would be left out.
+func (m *DockerManager) byLabel(ctx context.Context, labels ...string) ([]task.Execution, error) {
 	ctx, span := m.tracer.Start(ctx, "docker.task.list",
-		oteltrace.WithAttributes(attribute.String("label", label+"="+value)),
+		oteltrace.WithAttributes(attribute.StringSlice("labels", labels)),
 	)
 	defer span.End()
 
 	filter := filters.NewArgs()
-	filter.Add("label", fmt.Sprintf("%s=%s", label, value))
+	for _, l := range labels {
+		filter.Add("label", l)
+	}
+
+	if m.class != runtime.Sysbox {
+		filter.Add("label", label(taskRuntimeLabel, string(m.class)))
+	}
 
 	containers, err := m.client.ContainerList(ctx, containerTypes.ListOptions{
 		All:     true,
@@ -101,9 +168,13 @@ func (m *DockerManager) byLabel(ctx context.Context, label string, value string)
 		return nil, trace.RecordError(span, err)
 	}
 
-	result := make([]task.Execution, len(containers))
-	for i, c := range containers {
-		result[i] = task.Execution{
+	result := make([]task.Execution, 0, len(containers))
+	for _, c := range containers {
+		if classOf(c.Labels) != m.class {
+			continue
+		}
+
+		execution := task.Execution{
 			ID:           c.ID,
 			Name:         c.Names[0],
 			Status:       convertToContainerStatus(c.State),
@@ -111,9 +182,12 @@ func (m *DockerManager) byLabel(ctx context.Context, label string, value string)
 			CreatedAt:    time.Unix(c.Created, 0),
 			ExposedPorts: convertDockerPortSet(c.Ports),
 			PortBindings: convertDockerPortMap(c.Ports),
+			Endpoints:    listedEndpoints(c.Ports),
 		}
 
-		identify(&result[i], c.Labels)
+		identify(&execution, c.Labels)
+
+		result = append(result, execution)
 	}
 
 	return result, nil
@@ -159,11 +233,19 @@ func (m *DockerManager) Create(ctx context.Context, c *task.Execution) (string, 
 		return "", trace.RecordError(span, err)
 	}
 
+	labels := labelsOf(c, m.class)
+
+	// the run is this node's, whatever it was asked to be: this node is the
+	// only one that will ever list it again.
+	if len(m.node) > 0 {
+		labels[NodeNameLabel] = m.node
+	}
+
 	config := &containerTypes.Config{
 		Image:        c.Image,
 		Cmd:          c.Command,
 		Env:          c.Environment,
-		Labels:       labelsOf(c),
+		Labels:       labels,
 		ExposedPorts: convertPortSet(c.ExposedPorts),
 		WorkingDir:   c.WorkingDirectory,
 		Entrypoint:   c.Entrypoint,
@@ -189,11 +271,16 @@ func (m *DockerManager) Create(ctx context.Context, c *task.Execution) (string, 
 
 		// an immutable container writes only to what is mounted into it.
 		ReadonlyRootfs: c.ReadOnly,
-		NetworkMode:    networkMode(c.Networks),
+		NetworkMode:    networkMode(c.Networks, m.names),
+
+		// the OCI runtime is what makes a class out of a daemon: the same
+		// daemon runs sysbox's containers under one and gvisor's under
+		// another. Empty is the daemon's own default.
+		Runtime: m.ociRuntime,
 	}
 
 	m.logger.Info("creating container", "name", c.Name, "networks", c.Networks)
-	resp, err := m.client.ContainerCreate(ctx, config, hostConfig, endpointsConfig(c.Networks), nil, c.Name)
+	resp, err := m.client.ContainerCreate(ctx, config, hostConfig, endpointsConfig(c.Networks, m.names), nil, c.Name)
 	if err != nil {
 		return "", trace.RecordError(span, err)
 	}
@@ -349,6 +436,7 @@ func (m *DockerManager) Inspect(ctx context.Context, containerUUID string) (task
 		ExitCode:         info.State.ExitCode,
 		ExposedPorts:     convertDockerPortSetFromMap(info.NetworkSettings.Ports),
 		PortBindings:     convertDockerPortMapFromMap(info.NetworkSettings.Ports),
+		Endpoints:        inspectedEndpoints(info.NetworkSettings.Ports),
 		// read back in the units they were given in, so a task's limits are the
 		// same number on the way in and on the way out. There is no disk limit
 		// to read: docker was never given one.
@@ -357,7 +445,7 @@ func (m *DockerManager) Inspect(ctx context.Context, containerUUID string) (task
 			Cpu:    float64(info.HostConfig.Resources.NanoCPUs) / 1e9,
 		},
 		AutoRemove: info.HostConfig.AutoRemove,
-		Networks:   inspectedNetworks(info.NetworkSettings),
+		Networks:   inspectedNetworks(info.NetworkSettings, m.names),
 	}
 
 	identify(&execution, info.Config.Labels)
@@ -456,89 +544,6 @@ func (m *DockerManager) Logs(ctx context.Context, containerUUID string, writer i
 	_, err = stdcopy.StdCopy(writer, writer, readCloser)
 
 	return trace.RecordError(span, err)
-}
-
-func convertPortSet(ports port.PortSet) nat.PortSet {
-	result := make(nat.PortSet)
-	for p := range ports {
-		result[nat.Port(fmt.Sprintf("%d/tcp", p))] = struct{}{}
-	}
-	return result
-}
-
-// convertPortMap turns the bindings a container asks for into docker's own
-// shape. A binding with no host port asks docker to pick a free one, which is
-// how the workload publishes a container's ports without having to keep track of
-// what is already taken on the node.
-func convertPortMap(bindings port.PortMap) nat.PortMap {
-	result := make(nat.PortMap)
-	for p, bindings := range bindings {
-		portStr := fmt.Sprintf("%d/tcp", p)
-		result[nat.Port(portStr)] = make([]nat.PortBinding, len(bindings))
-		for i, b := range bindings {
-			hostPort := ""
-			if b.HostPort > 0 {
-				hostPort = fmt.Sprintf("%d", b.HostPort)
-			}
-
-			result[nat.Port(portStr)][i] = nat.PortBinding{
-				HostIP:   b.HostIP,
-				HostPort: hostPort,
-			}
-		}
-	}
-	return result
-}
-
-func convertDockerPortSet(ports []types.Port) port.PortSet {
-	result := make(port.PortSet)
-	for _, p := range ports {
-		result[port.Port(p.PrivatePort)] = struct{}{}
-	}
-	return result
-}
-
-func convertDockerPortMap(ports []types.Port) port.PortMap {
-	result := make(port.PortMap)
-	for _, p := range ports {
-		if p.PublicPort != 0 {
-			result[port.Port(p.PrivatePort)] = []port.PortBinding{
-				{
-					HostIP:   "0.0.0.0",
-					HostPort: port.Port(p.PublicPort),
-				},
-			}
-		}
-	}
-	return result
-}
-
-func convertDockerPortSetFromMap(ports nat.PortMap) port.PortSet {
-	result := make(port.PortSet)
-	for p := range ports {
-		var portNum port.Port
-		fmt.Sscanf(string(p), "%d/tcp", &portNum)
-		result[portNum] = struct{}{}
-	}
-	return result
-}
-
-func convertDockerPortMapFromMap(ports nat.PortMap) port.PortMap {
-	result := make(port.PortMap)
-	for p, bindings := range ports {
-		var portNum port.Port
-		fmt.Sscanf(string(p), "%d/tcp", &portNum)
-		result[portNum] = make([]port.PortBinding, len(bindings))
-		for i, b := range bindings {
-			var hostPort port.Port
-			fmt.Sscanf(b.HostPort, "%d", &hostPort)
-			result[portNum][i] = port.PortBinding{
-				HostIP:   b.HostIP,
-				HostPort: hostPort,
-			}
-		}
-	}
-	return result
 }
 
 func convertToContainerStatus(status string) task.Status {

@@ -16,9 +16,11 @@ import (
 	taskHeartbeat "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/beatHeart"
 	shipLogs "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/shipLogs"
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/workload/driver"
 	"github.com/khanzadimahdi/testproject/domain/workload/node"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 	messaging "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
+	driverMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/driver"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/runtime"
 	"github.com/khanzadimahdi/testproject/infrastructure/tunnel"
 	"github.com/stretchr/testify/assert"
@@ -207,6 +209,9 @@ func TestServe(t *testing.T) {
 		var nodeManager runtime.MockNodeManager
 		nodeManager.On("Stats", mock.Anything, mock.Anything).Return(node.Stats{}, nil).Maybe()
 
+		var drivers driverMock.MockSet
+		drivers.On("All").Return([]driver.Driver{}).Maybe()
+
 		var taskManager runtime.MockRuntime
 		taskManager.On("Of", mock.Anything, mock.Anything).
 			Return([]task.Execution{}, nil).Maybe()
@@ -224,7 +229,7 @@ func TestServe(t *testing.T) {
 		// completely.
 		command.logShipper = shipLogs.NewUseCase(&taskManager, &consumer, consumerName, command.logger)
 		command.taskHeartBeat = taskHeartbeat.NewUseCase(&taskManager, &consumer, consumerName, command.logger)
-		command.orchestratorHeartBeat = orchestratorHeartbeat.NewUseCase(&consumer, &nodeManager, consumerName)
+		command.orchestratorHeartBeat = orchestratorHeartbeat.NewUseCase(&consumer, &nodeManager, &drivers, consumerName)
 
 		// nothing is listening for it, so the pool spends the test trying to
 		// connect and the orchestrator serves its own port regardless — which is the

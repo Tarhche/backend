@@ -3,10 +3,13 @@ package runTask
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"time"
 
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/workload/driver"
+	"github.com/khanzadimahdi/testproject/domain/workload/runtime"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 	"github.com/khanzadimahdi/testproject/domain/workload/task/events"
 )
@@ -76,6 +79,7 @@ func (uc *TaskScheduled) Handle(ctx context.Context, data []byte) error {
 		Name:          taskScheduled.Name,
 		Slug:          taskScheduled.Slug,
 		Kind:          task.Kind(taskScheduled.Kind),
+		Runtime:       taskScheduled.Runtime,
 		StackUUID:     taskScheduled.StackUUID,
 		StackSlug:     taskScheduled.StackSlug,
 		ServiceName:   taskScheduled.ServiceName,
@@ -124,9 +128,20 @@ func (uc *TaskScheduled) Handle(ctx context.Context, data []byte) error {
 // the message to be delivered again: an image that cannot be pulled will not
 // pull on the next attempt either, and the person waiting deserves to be told
 // rather than left watching a task that never moves.
+//
+// A task of a class this node does not offer fails with a code rather than a
+// sentence (runtime.ReasonRuntimeNotOffered), which the dashboard says in the
+// reader's own language, and which tells the control plane the node was the
+// wrong one to ask rather than the task the wrong one to run.
 func (uc *TaskScheduled) reportFailure(ctx context.Context, scheduled *events.TaskScheduled, cause error) error {
 	uc.logger.ErrorContext(ctx, "could not start a task",
-		"error", cause, "uuid", scheduled.UUID, "image", scheduled.Image, "attempt", scheduled.Attempt)
+		"error", cause, "uuid", scheduled.UUID, "image", scheduled.Image, "attempt", scheduled.Attempt,
+		"runtime", scheduled.Runtime.OrSysbox())
+
+	reason := cause.Error()
+	if errors.Is(cause, driver.ErrUnknownClass) {
+		reason = runtime.ReasonRuntimeNotOffered
+	}
 
 	event := events.TaskFailed{
 		UUID:       scheduled.UUID,
@@ -136,7 +151,7 @@ func (uc *TaskScheduled) reportFailure(ctx context.Context, scheduled *events.Ta
 		At:         time.Now(),
 		Attempt:    scheduled.Attempt,
 		MaxRetries: scheduled.MaxRetries,
-		Reason:     cause.Error(),
+		Reason:     reason,
 	}
 
 	payload, err := json.Marshal(event)
