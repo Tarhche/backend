@@ -24,8 +24,11 @@ import (
 
 const (
 	// service is a service that runs until it is stopped, and stops cleanly
-	// when it is asked to.
-	service = `trap 'exit 0' TERM; while true; do sleep 1; done`
+	// when it is asked to once it has said serviceReady.
+	service = `trap 'exit 0' TERM; echo ` + serviceReady + `; while true; do sleep 1; done`
+
+	// serviceReady is what service writes once it would stop cleanly.
+	serviceReady = "conformance-ready"
 
 	// marker is what a peer serves, so whoever reaches it knows it did.
 	marker = "conformance-peer"
@@ -96,6 +99,10 @@ func (s *suite) lifecycle(t *testing.T) {
 	up := waitFor(t, ctx, s.driver, id, "running", running)
 	assert.Equal(t, task.Running, task.EvaluateState(up.Status, up.Kind, up.ExitCode))
 	assert.False(t, up.StartedAt.IsZero(), "a running task says when it started")
+
+	// a stop that reaches the program before it has set up how it stops ends
+	// it as TERM does, whatever the class: it is asked once it says it is ready.
+	says(t, ctx, s.driver, id, serviceReady)
 
 	require.NoError(t, tasks.Stop(ctx, id))
 	stopped := waitFor(t, ctx, s.driver, id, "stopped", ended)

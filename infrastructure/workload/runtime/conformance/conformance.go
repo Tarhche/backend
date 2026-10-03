@@ -304,6 +304,29 @@ func waitFor(t *testing.T, ctx context.Context, d driver.Driver, id string, what
 	}
 }
 
+// says waits until a run has written text. A run counts as running from the
+// moment its program is started, before the program has done anything at
+// all, such as set up how it ends when it is asked to; what the program
+// writes once it has is what says it is ready.
+func says(t *testing.T, ctx context.Context, d driver.Driver, id string, text string) {
+	t.Helper()
+
+	var written bytes.Buffer
+
+	for {
+		written.Reset()
+		if err := d.Tasks().Logs(ctx, id, &written); err == nil && strings.Contains(written.String(), text) {
+			return
+		}
+
+		select {
+		case <-time.After(200 * time.Millisecond):
+		case <-ctx.Done():
+			t.Fatalf("%s never wrote %q: it wrote %q", id, text, written.String())
+		}
+	}
+}
+
 func running(e task.Execution) bool {
 	return e.Status == task.StatusRunning
 }
