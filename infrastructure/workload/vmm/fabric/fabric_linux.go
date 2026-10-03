@@ -59,6 +59,11 @@ func newFabric(config Config, logger *slog.Logger, firewall tables) (*Fabric, er
 		return nil, err
 	}
 
+	// the series is there from the start, at nought, so an alert on any repair
+	// has something to compare the first one with; a counter nothing was ever
+	// added to is not exported at all.
+	repairs.Add(context.Background(), 0)
+
 	f := &Fabric{config: config, logger: logger, tables: firewall, leases: book, repairs: repairs}
 
 	if err := checkForwarding(forwardingPath); err != nil {
