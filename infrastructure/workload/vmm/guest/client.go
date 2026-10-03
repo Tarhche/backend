@@ -520,6 +520,13 @@ func refusal(response *http.Response) error {
 
 // bufferedConn is a connection whose first bytes were already read while the
 // handshake was.
+//
+// It offers no CloseWrite, which PR #101's did. Firecracker's vsock carries
+// no half-close: a host that stops writing to its end of a connection ends the
+// whole connection, and with it whatever the agent was still to send back. So
+// nothing that passes the connection on, splicing it to another, finds a way
+// to half-close it, and has to close it whole once it is done with it. A
+// command's input ends with guest.FrameCloseStdin instead.
 type bufferedConn struct {
 	net.Conn
 	reader *bufio.Reader
@@ -527,14 +534,4 @@ type bufferedConn struct {
 
 func (c *bufferedConn) Read(p []byte) (int, error) {
 	return c.reader.Read(p)
-}
-
-// CloseWrite passes a half-close on, so a peer that finished sending can say so
-// while still reading.
-func (c *bufferedConn) CloseWrite() error {
-	if closer, ok := c.Conn.(interface{ CloseWrite() error }); ok {
-		return closer.CloseWrite()
-	}
-
-	return c.Conn.Close()
 }

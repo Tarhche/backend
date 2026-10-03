@@ -532,6 +532,9 @@ func TestClient(t *testing.T) {
 		require.NoError(t, err)
 		defer conn.Close()
 
+		_, halfCloses := conn.(interface{ CloseWrite() error })
+		assert.False(t, halfCloses, "firecracker's vsock ends the whole connection on a half-close, so none is offered")
+
 		_, err = io.WriteString(conn, "hello\n")
 		require.NoError(t, err)
 
