@@ -157,7 +157,9 @@ CMD ["serve-workload-orchestrator", "--port=80"]
 # is vmhost alone, so a change to the agent takes the image built again.
 FROM develop AS develop-workload-vmhost
 RUN apk add --no-cache ca-certificates curl e2fsprogs iptables squashfs-tools \
-    && command -v sqfstar mke2fs iptables-save iptables-restore
+    && for tool in sqfstar mke2fs iptables-save iptables-restore curl; do \
+        command -v "$tool" > /dev/null || { echo "vmhost runs $tool, which is missing" >&2; exit 1; }; \
+    done
 COPY --from=build-guest /opt/guest/workload-guest /usr/bin/workload-guest
 COPY --from=firecracker /opt/workload-vmhost/bin/firecracker /usr/local/bin/firecracker
 COPY --from=firecracker /opt/workload-vmhost/vmlinux /opt/workload-vmhost/vmlinux
@@ -165,7 +167,9 @@ CMD ["serve-workload-vmhost"]
 
 FROM alpine:3.24 AS production-workload-vmhost
 RUN apk add --no-cache ca-certificates curl e2fsprogs iptables squashfs-tools \
-    && command -v sqfstar mke2fs iptables-save iptables-restore
+    && for tool in sqfstar mke2fs iptables-save iptables-restore curl; do \
+        command -v "$tool" > /dev/null || { echo "vmhost runs $tool, which is missing" >&2; exit 1; }; \
+    done
 COPY --from=build /opt/dist /usr/bin
 COPY --from=build-guest /opt/guest/workload-guest /usr/bin/workload-guest
 COPY --from=firecracker /opt/workload-vmhost/bin/firecracker /usr/local/bin/firecracker
