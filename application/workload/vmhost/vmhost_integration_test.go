@@ -122,10 +122,13 @@ func newHost(t *testing.T) *host {
 
 	// clear of the subordinate ids a host gives its users, which on a Lima
 	// VM (524288-1074266111) cover vmhost's default first machine user, and
-	// which the hypervisor refuses to share; the firecracker package's own
-	// tests count up from here too.
+	// which the hypervisor refuses to share. Clear too of the firecracker
+	// package's tests (2000000000 on), which go test runs at the same time:
+	// a vmhost takes every machine of its users for its own, and would end
+	// theirs as orphans. And clear of the local stack's vmhost (2000000000
+	// and the 65536 after it).
 	const (
-		firstUID = 2_000_000_000
+		firstUID = 2_000_100_000
 		uids     = 64
 	)
 
