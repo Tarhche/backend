@@ -77,7 +77,9 @@ eventually() {
 
 task_state() { api GET "/api/tasks/$1" | jq -r '.current_state'; }
 task_is() { [[ $(task_state "$1" 2>/dev/null) == "$2" ]]; }
-task_is_not() { [[ $(task_state "$1" 2>/dev/null) != "$2" ]]; }
+# a task at rest after it ran: stopped, completed or failed, which is when the
+# control plane lets it be deleted
+task_has_ended() { [[ $(task_state "$1" 2>/dev/null) =~ ^(stopped|completed|failed)$ ]]; }
 task_is_gone() { ! api GET "/api/tasks/$1" >/dev/null 2>&1 && [[ $(cat "$work/answer") != *current_state* ]]; }
 stack_is_gone() { ! api GET "/api/stacks/$1" >/dev/null 2>&1 && [[ $(cat "$work/answer") != *services* ]]; }
 stack_is_running() { api GET "/api/stacks/$1" | jq -e '(.services | length) > 0 and all(.services[]; .state == "running")' >/dev/null; }
@@ -120,7 +122,7 @@ cleanup() {
 		api DELETE "/api/stacks/$uuid" >/dev/null 2>&1
 	done
 	for uuid in "${tasks[@]+"${tasks[@]}"}"; do
-		api DELETE "/api/tasks/$uuid" >/dev/null 2>&1
+		api DELETE "/api/tasks/$uuid?force=true" >/dev/null 2>&1
 	done
 	rm -rf "$work"
 	if ((status == 0)); then
@@ -185,7 +187,7 @@ eventually task_is "$uuid" running || fail "task $uuid never ran again: $(descri
 eventually fetch_holds "$slug" 80 / 'Welcome to nginx' || fail "the restarted task never answered through the ingress"
 ok "restarted, and answering again"
 api POST "/api/tasks/$uuid/kill" >/dev/null || fail "kill was refused: $(cat "$work/answer")"
-eventually task_is_not "$uuid" running || fail "task $uuid survived being killed: $(describe_task "$uuid")"
+eventually task_has_ended "$uuid" || fail "task $uuid survived being killed: $(describe_task "$uuid")"
 ok "killed: $(task_state "$uuid")"
 api DELETE "/api/tasks/$uuid" >/dev/null || fail "delete was refused: $(cat "$work/answer")"
 eventually task_is_gone "$uuid" || fail "task $uuid is still there"
