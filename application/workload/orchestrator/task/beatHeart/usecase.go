@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/workload/port"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 	"github.com/khanzadimahdi/testproject/domain/workload/task/events"
 )
@@ -65,6 +66,7 @@ func (uc *UseCase) Execute(ctx context.Context) error {
 			Kind:        string(c.Kind),
 			OwnerUUID:   c.OwnerUUID,
 			StackUUID:   c.StackUUID,
+			Runtime:     c.Runtime.OrSysbox(),
 			Image:       c.Image,
 			ExecutionID: c.ID,
 			State:       int(task.EvaluateState(c.Status, c.Kind, uc.exitCode(ctx, &c))),
@@ -211,32 +213,77 @@ func (uc *UseCase) logs(ctx context.Context, c *task.Execution) []byte {
 	return buffer.Bytes()
 }
 
-// endpoints reports which of a task's exposed ports docker actually
-// published. They are read from docker every heartbeat because a restarted
-// task comes back on different host ports.
+// endpoints reports which of a task's exposed ports can be reached right now.
+// They are read off the run every heartbeat, because a restarted task may
+// come back on different host ports, or with fewer of its ports up.
+//
+// The run says which ports are up whatever runs it (Execution.Endpoints): a
+// container's are the ones docker published, a microVM's the ones its vmhost
+// can dial. A run that does not say is read the way it always was, by what
+// docker published.
 func (uc *UseCase) endpoints(c *task.Execution) []events.Endpoint {
-	endpoints := make([]events.Endpoint, 0, len(c.PortBindings))
+	if len(c.Endpoints) == 0 {
+		return published(c.PortBindings)
+	}
 
-	for taskPort, bindings := range c.PortBindings {
-		for _, binding := range bindings {
-			if binding.HostPort == 0 {
-				continue
-			}
+	endpoints := make([]events.Endpoint, 0, len(c.Endpoints))
 
-			endpoints = append(endpoints, events.Endpoint{
-				TaskPort: taskPort,
-				HostPort: binding.HostPort,
-			})
+	for _, taskPort := range c.Endpoints {
+		if slices.ContainsFunc(endpoints, func(e events.Endpoint) bool { return e.TaskPort == taskPort }) {
+			continue
+		}
 
-			break
+		// a port reached through the runtime rather than published, as a
+		// microVM's is, has no host port of its own, and is reported with
+		// none: the control plane keeps every endpoint that names a port,
+		// published or not, and where a port is reached never leaves the node.
+		hostPort, _ := publishedOn(c.PortBindings, taskPort)
+
+		endpoints = append(endpoints, events.Endpoint{TaskPort: taskPort, HostPort: hostPort})
+	}
+
+	sortByTaskPort(endpoints)
+
+	return endpoints
+}
+
+// published reports which of a task's exposed ports docker published, which
+// is what makes them reachable.
+func published(bindings port.PortMap) []events.Endpoint {
+	endpoints := make([]events.Endpoint, 0, len(bindings))
+
+	for taskPort := range bindings {
+		hostPort, found := publishedOn(bindings, taskPort)
+		if !found {
+			continue
+		}
+
+		endpoints = append(endpoints, events.Endpoint{
+			TaskPort: taskPort,
+			HostPort: hostPort,
+		})
+	}
+
+	sortByTaskPort(endpoints)
+
+	return endpoints
+}
+
+// publishedOn is the host port a task port was published on, if it was.
+func publishedOn(bindings port.PortMap, taskPort port.Port) (port.Port, bool) {
+	for _, binding := range bindings[taskPort] {
+		if binding.HostPort != 0 {
+			return binding.HostPort, true
 		}
 	}
 
-	// docker hands back the bindings in no particular order, and the lowest
-	// exposed port is the one a bare hostname reaches.
+	return 0, false
+}
+
+// sortByTaskPort puts the lowest exposed port first, which is the one a bare
+// hostname reaches. Docker hands back the bindings in no particular order.
+func sortByTaskPort(endpoints []events.Endpoint) {
 	slices.SortFunc(endpoints, func(a events.Endpoint, b events.Endpoint) int {
 		return int(a.TaskPort) - int(b.TaskPort)
 	})
-
-	return endpoints
 }

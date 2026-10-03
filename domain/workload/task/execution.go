@@ -7,16 +7,23 @@ import (
 
 	"github.com/khanzadimahdi/testproject/domain/workload/network"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
+	"github.com/khanzadimahdi/testproject/domain/workload/runtime"
 )
 
 // Execution is one run of a task, as whatever runs it holds one: what it was
-// asked to be, and what it has become. Docker calls this a container; nothing
-// above this line needs to know that.
+// asked to be, and what it has become. Docker calls this a container and
+// vmhost a VM; nothing above this line needs to know which.
 type Execution struct {
 	// ID is what the runtime calls this run, and Name what it answers to
-	// there.
+	// there. Behind several runtimes the ID carries the class that runs it
+	// (runtime.Qualify), so whatever asks about the run later reaches the
+	// one holding it; a bare ID is sysbox's.
 	ID   string
 	Name string
+
+	// Runtime is the class running this, which whatever holds several
+	// runtimes sets on everything it hands back.
+	Runtime runtime.Class
 
 	// What this is running, as the runtime was told when the run was made. A
 	// runtime keeps it alongside the run -- docker as labels -- so that a node
@@ -42,15 +49,23 @@ type Execution struct {
 	WorkingDirectory string
 	ExposedPorts     port.PortSet
 	PortBindings     port.PortMap
-	Networks         []network.Attachment
-	HealthCheck      string
-	AutoRemove       bool
-	Environment      []string
-	Entrypoint       []string
-	Command          []string
-	CreatedAt        time.Time
-	StartedAt        time.Time
-	ExitCode         int
+
+	// Endpoints are the exposed ports the node holding this run can reach it
+	// on right now. How they are reached is the runtime's business: docker
+	// publishes them on its host (PortBindings says where), a microVM is
+	// dialled through vmhost (Dialer). Either way, these are the ports the
+	// heartbeat reports and the ingress serves.
+	Endpoints []port.Port
+
+	Networks    []network.Attachment
+	HealthCheck string
+	AutoRemove  bool
+	Environment []string
+	Entrypoint  []string
+	Command     []string
+	CreatedAt   time.Time
+	StartedAt   time.Time
+	ExitCode    int
 
 	// ReadOnly makes the task's root filesystem immutable, so nothing it
 	// runs can change the image it was started from.
@@ -98,9 +113,11 @@ type ExecSession interface {
 	End(ctx context.Context) error
 }
 
-// Runtime is whatever runs the tasks. Docker does today, behind
-// infrastructure/workload/container; a microvm could tomorrow, and nothing that
-// asks for a task to be run would have to say anything different.
+// Runtime is whatever runs the tasks. On an orchestrator it is every class the
+// node offers at once: a driver per class (domain/workload/driver) behind one
+// Runtime that sends each run's commands to the driver holding it, so nothing
+// that asks for a task to be run has to say anything different whichever
+// class runs it.
 type Runtime interface {
 	// OnNode is every run the named node is holding, whatever state it is in.
 	OnNode(ctx context.Context, nodeName string) ([]Execution, error)

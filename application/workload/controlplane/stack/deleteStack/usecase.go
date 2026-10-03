@@ -74,12 +74,15 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 }
 
 // publishStackDeleted tells the node that ran the stack to drop the private
-// network its services shared, now that nothing is left on it.
+// network its services shared, now that nothing is left on it. The network
+// belongs to the class that made it, which the message names, so that the
+// node asks only that class's driver to take it away.
 func (uc *UseCase) publishStackDeleted(ctx context.Context, s *stack.Stack) error {
 	payload, err := json.Marshal(stackEvents.StackDeleted{
 		UUID:     s.UUID,
 		Slug:     s.Slug,
 		NodeName: s.NodeName,
+		Runtime:  s.Runtime.OrSysbox(),
 		At:       time.Now(),
 	})
 	if err != nil {

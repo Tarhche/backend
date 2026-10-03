@@ -3,19 +3,30 @@ package node
 import (
 	"context"
 	"time"
+
+	"github.com/khanzadimahdi/testproject/domain/workload/runtime"
 )
 
 // Node represents a node in the cluster
 type Node struct {
-	Name            string
-	Role            Role
-	Stats           Stats
+	Name  string
+	Role  Role
+	Stats Stats
+
+	// Runtimes are the classes the node offers, as its last heartbeat said:
+	// whether each is healthy there, what it can do and how much room it has.
+	// Placement reads them; a node from before there were classes offers none
+	// it has said, and runs sysbox.
+	Runtimes []runtime.Offer
+
 	LastHeartbeatAt time.Time
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
 }
 
-// Manager represents a manager of nodes
+// Manager represents a manager of nodes. Stats is what the node's runs use
+// between them, over every class it offers; what each class offers is
+// driver.Set's to say.
 type Manager interface {
 	Stats(ctx context.Context, nodeName string) (Stats, error)
 }

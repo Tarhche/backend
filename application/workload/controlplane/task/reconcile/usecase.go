@@ -7,7 +7,9 @@
 // task for the one thing that would close it.
 //
 // It says nothing about tasks on their way somewhere: something has been
-// asked of those already, and asking again would only ask twice.
+// asked of those already, and asking again would only ask twice. Nor, for a
+// while, about tasks their node cannot see because the class running them is
+// out: those are unknown rather than gone.
 package reconcile
 
 import (
@@ -18,6 +20,7 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/task/schedule"
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/workload/node"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 	"github.com/khanzadimahdi/testproject/domain/workload/task/events"
 )
@@ -38,21 +41,32 @@ const (
 // UseCase is one pass over the tasks the workload holds.
 type UseCase struct {
 	taskRepository  task.Repository
+	nodeRepository  node.Repository
 	scheduler       *schedule.Scheduler
 	asyncCommandBus domain.Producer
-	logger          *slog.Logger
+
+	// outageGrace is how long a task whose node says the class running it is
+	// out is taken for unknown rather than silent
+	// (WORKLOAD_RUNTIME_OUTAGE_GRACE). Zero takes none for unknown.
+	outageGrace time.Duration
+
+	logger *slog.Logger
 }
 
 func NewUseCase(
 	taskRepository task.Repository,
+	nodeRepository node.Repository,
 	scheduler *schedule.Scheduler,
 	asyncCommandBus domain.Producer,
+	outageGrace time.Duration,
 	logger *slog.Logger,
 ) *UseCase {
 	return &UseCase{
 		taskRepository:  taskRepository,
+		nodeRepository:  nodeRepository,
 		scheduler:       scheduler,
 		asyncCommandBus: asyncCommandBus,
+		outageGrace:     outageGrace,
 		logger:          logger,
 	}
 }
@@ -75,6 +89,10 @@ func (uc *UseCase) Execute(ctx context.Context) error {
 	// is not called silent for the time a long pass took to reach it.
 	now := time.Now()
 
+	// the nodes holding silent tasks, each read once a pass however many
+	// of its tasks are silent.
+	holders := newNodes(uc.nodeRepository)
+
 	for offset := uint(0); offset < count; offset += batch {
 		tasks, err := uc.taskRepository.GetAll(ctx, offset, batch)
 		if err != nil {
@@ -88,7 +106,7 @@ func (uc *UseCase) Execute(ctx context.Context) error {
 		}
 
 		for i := range tasks {
-			uc.look(ctx, &tasks[i], now)
+			uc.look(ctx, &tasks[i], now, holders)
 		}
 	}
 
@@ -96,7 +114,7 @@ func (uc *UseCase) Execute(ctx context.Context) error {
 }
 
 // look asks for what one task is missing, if it is missing anything.
-func (uc *UseCase) look(ctx context.Context, t *task.Task, now time.Time) {
+func (uc *UseCase) look(ctx context.Context, t *task.Task, now time.Time, holders *nodes) {
 	if !t.Drifted(now, silentAfter) {
 		return
 	}
@@ -108,6 +126,24 @@ func (uc *UseCase) look(ctx context.Context, t *task.Task, now time.Time) {
 	// brings it back.
 	if task.IsTerminalState(t.CurrentState) && !t.Silent(now, silentAfter) {
 		return
+	}
+
+	if t.Silent(now, silentAfter) {
+		unknown, err := uc.outage(ctx, t, now, holders)
+		if err != nil {
+			// whether it is gone cannot be told, and the next pass asks
+			// again: that is ten seconds, against a duplicate of it.
+			uc.logger.ErrorContext(ctx, "could not tell whether a silent task is gone", "error", err, "uuid", t.UUID, "node", t.NodeName)
+
+			return
+		}
+
+		if unknown {
+			uc.logger.InfoContext(ctx, "a task is not heard from while its node says its class is out; it is left as it is",
+				"uuid", t.UUID, "name", t.Name, "node", t.NodeName, "runtime", t.Runtime.OrSysbox().String())
+
+			return
+		}
 	}
 
 	if err := uc.close(ctx, t); err != nil {

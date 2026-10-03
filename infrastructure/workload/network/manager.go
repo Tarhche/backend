@@ -1,6 +1,10 @@
 // Package network owns the docker networks the workload puts tasks on: the
 // shared one standalone isolated tasks join, and the private one each
 // stack gets so its services reach each other by name.
+//
+// It owns them for one class at a time. A stack's network belongs to the
+// driver that made it, and two classes on one daemon keep theirs apart by name
+// (Names).
 package network
 
 import (
@@ -26,35 +30,33 @@ const (
 	detachInterval = time.Second
 )
 
-// Manager owns the networks the workload puts tasks on.
+// Manager owns the networks one class puts its tasks on.
 type Manager struct {
 	client *client.Client
+	names  Names
 	logger *slog.Logger
 }
 
-func NewManager(dockerHost string, logger *slog.Logger) (*Manager, error) {
-	cli, err := client.NewClientWithOpts(
-		client.WithHost(dockerHost),
-		client.WithAPIVersionNegotiation(),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create docker client: %w", err)
-	}
+var _ network.Manager = &Manager{}
 
-	return &Manager{client: cli, logger: logger}, nil
+// NewManager is the networks of the class whose daemon cli reaches, called
+// what names says they are called there. The client is the class's own, shared
+// with what runs its tasks, and is not closed here.
+func NewManager(cli *client.Client, names Names, logger *slog.Logger) *Manager {
+	return &Manager{client: cli, names: names, logger: logger}
 }
 
 // EnsureIsolatedNetwork creates the network standalone isolated tasks
 // join, if it is not there already.
 func (m *Manager) EnsureIsolatedNetwork(ctx context.Context) error {
-	return m.ensure(ctx, network.IsolatedNetworkName)
+	return m.ensure(ctx, m.names.Docker(network.IsolatedNetworkName))
 }
 
 // EnsureStackNetwork creates the private network a stack's services share.
 // Every service of a stack runs on one node, so the network is local to that
 // node and a plain bridge is all it takes.
 func (m *Manager) EnsureStackNetwork(ctx context.Context, stackSlug string) error {
-	return m.ensure(ctx, network.StackNetworkName(stackSlug))
+	return m.ensure(ctx, m.names.Docker(network.StackNetworkName(stackSlug)))
 }
 
 // RemoveStackNetwork drops a stack's private network once its tasks are
@@ -66,7 +68,7 @@ func (m *Manager) EnsureStackNetwork(ctx context.Context, stackSlug string) erro
 // services are on their way out will be free within moments — so this waits for
 // them rather than leaving the network behind for good.
 func (m *Manager) RemoveStackNetwork(ctx context.Context, stackSlug string) error {
-	name := network.StackNetworkName(stackSlug)
+	name := m.names.Docker(network.StackNetworkName(stackSlug))
 
 	deadline := time.Now().Add(detachTimeout)
 

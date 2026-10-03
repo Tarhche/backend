@@ -3,36 +3,46 @@ package runTask
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/workload/driver"
 	"github.com/khanzadimahdi/testproject/domain/workload/network"
+	"github.com/khanzadimahdi/testproject/domain/workload/runtime"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 )
 
-// UseCase runs a task on this node.
+// UseCase runs a task on this node, as the class it asks to be run with.
+//
+// Running a task is the one place a class is chosen, so it is the one use case
+// that asks for a class's driver by name: its network, its image and the run
+// itself are made by that driver, and every command about the run afterwards
+// finds it by its ID.
 type UseCase struct {
-	taskManager    task.Runtime
-	networkManager network.Manager
-	validator      domain.Validator
-	nodeName       string
+	drivers   driver.Set
+	validator domain.Validator
+	nodeName  string
 }
 
 // NewUseCase creates a new UseCase
 func NewUseCase(
-	taskManager task.Runtime,
-	networkManager network.Manager,
+	drivers driver.Set,
 	validator domain.Validator,
 	nodeName string,
 ) *UseCase {
 	return &UseCase{
-		taskManager:    taskManager,
-		networkManager: networkManager,
-		validator:      validator,
-		nodeName:       nodeName,
+		drivers:   drivers,
+		validator: validator,
+		nodeName:  nodeName,
 	}
 }
 
-// Execute executes the use case
+// Execute executes the use case.
+//
+// A class this node does not offer is an error wrapping
+// driver.ErrUnknownClass, which whoever asked turns into a failure of the
+// task with runtime.ReasonRuntimeNotOffered: placement should never have
+// asked it of this node, and another node may still run it.
 func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
 	if validationErrors := uc.validator.Validate(request); len(validationErrors) > 0 {
 		return &Response{
@@ -40,7 +50,16 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		}, nil
 	}
 
-	if err := uc.ensureNetwork(ctx, request); err != nil {
+	class := request.Class()
+
+	runner, err := uc.drivers.For(class)
+	if err != nil {
+		return nil, fmt.Errorf("this node cannot run the task as %q: %w", class, err)
+	}
+
+	tasks := runner.Tasks()
+
+	if err := uc.ensureNetwork(ctx, runner.Networks(), request); err != nil {
 		return nil, err
 	}
 
@@ -48,7 +67,7 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 	// run for is counted from when it runs rather than from when it was asked
 	// for: pulling an image it has never seen can take longer than the whole
 	// of that.
-	if err := uc.taskManager.EnsureImage(ctx, request.Image); err != nil {
+	if err := tasks.EnsureImage(ctx, request.Image); err != nil {
 		return nil, err
 	}
 
@@ -71,6 +90,9 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		Slug:     request.Slug,
 		Kind:     request.TaskKind(),
 		NodeName: uc.nodeName,
+
+		// the class running it, which its driver keeps with it too.
+		Runtime: class,
 
 		// whose it is, so that the node holding it can answer for itself who
 		// may be let in.
@@ -106,17 +128,17 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		c.StackUUID = request.StackUUID
 	}
 
-	if err := uc.clearEarlierAttempts(ctx, request); err != nil {
+	if err := uc.clearEarlierAttempts(ctx, tasks, request); err != nil {
 		return nil, err
 	}
 
-	taskID, err := uc.taskManager.Create(ctx, c)
+	taskID, err := tasks.Create(ctx, c)
 	if err != nil {
 		// the task may already be there: this task was asked for twice,
 		// which is what happens when the first attempt was cut short after it
 		// had already created one. Taking the one that exists is the outcome
 		// that was wanted either way.
-		existing, lookupErr := uc.taskManager.Of(ctx, request.UUID)
+		existing, lookupErr := tasks.Of(ctx, request.UUID)
 		if lookupErr != nil || len(existing) == 0 {
 			return nil, err
 		}
@@ -124,11 +146,13 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		taskID = existing[0].ID
 	}
 
-	if err := uc.taskManager.Start(ctx, taskID); err != nil {
+	if err := tasks.Start(ctx, taskID); err != nil {
 		return nil, err
 	}
 
-	return &Response{UUID: taskID}, nil
+	// named the way every other part of the node names it, with its class in
+	// front unless it is sysbox's.
+	return &Response{UUID: runtime.Qualify(class, taskID)}, nil
 }
 
 // clearEarlierAttempts takes away what is left of an earlier attempt at this
@@ -139,8 +163,11 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 // is asked for its tasks again, and they are still standing. And one of
 // the attempt that was asked for is the same request arriving twice, which is
 // started below either way.
-func (uc *UseCase) clearEarlierAttempts(ctx context.Context, request *Request) error {
-	previous, err := uc.taskManager.Of(ctx, request.UUID)
+//
+// A task is only ever run as its own class, so its earlier attempts are that
+// class's runs, and are asked of that class's driver.
+func (uc *UseCase) clearEarlierAttempts(ctx context.Context, tasks task.Runtime, request *Request) error {
+	previous, err := tasks.Of(ctx, request.UUID)
 	if err != nil {
 		return err
 	}
@@ -150,7 +177,7 @@ func (uc *UseCase) clearEarlierAttempts(ctx context.Context, request *Request) e
 			continue
 		}
 
-		if err := uc.taskManager.Delete(ctx, c.ID); err != nil && !errors.Is(err, domain.ErrNotExists) {
+		if err := tasks.Delete(ctx, c.ID); err != nil && !errors.Is(err, domain.ErrNotExists) {
 			return err
 		}
 	}
@@ -160,15 +187,15 @@ func (uc *UseCase) clearEarlierAttempts(ctx context.Context, request *Request) e
 
 // ensureNetwork makes the network this task joins exist before it tries to
 // join it. A stack's services all run on this node, so the network they share
-// is created here too.
-func (uc *UseCase) ensureNetwork(ctx context.Context, request *Request) error {
+// is created here too, by the driver of the stack's class.
+func (uc *UseCase) ensureNetwork(ctx context.Context, networks network.Manager, request *Request) error {
 	if request.Policy() == network.PolicyNone {
 		return nil
 	}
 
 	if len(request.StackSlug) > 0 {
-		return uc.networkManager.EnsureStackNetwork(ctx, request.StackSlug)
+		return networks.EnsureStackNetwork(ctx, request.StackSlug)
 	}
 
-	return uc.networkManager.EnsureIsolatedNetwork(ctx)
+	return networks.EnsureIsolatedNetwork(ctx)
 }

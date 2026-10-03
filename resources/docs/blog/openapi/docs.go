@@ -2607,6 +2607,36 @@ const docTemplate = `{
                 }
             }
         },
+        "/dashboard/my/workload/runtimes": {
+            "get": {
+                "description": "every class the current user's own tasks may be run with: whether it is the default, whether any node can run it right now, what the nodes that can are all able to do and what they hold between them",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload"
+                ],
+                "summary": "List the runtime classes of my tasks",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/getUserRuntimes.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/dashboard/my/workload/stacks": {
             "get": {
                 "description": "paginated list of the stacks the current user owns",
@@ -3531,6 +3561,363 @@ const docTemplate = `{
                 }
             }
         },
+        "/dashboard/users": {
+            "get": {
+                "description": "paginated list of users",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard users"
+                ],
+                "summary": "List users",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page",
+                        "name": "page",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/getusers.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "update a user's data",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard users"
+                ],
+                "summary": "Update user",
+                "parameters": [
+                    {
+                        "description": "User update",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/updateuser.Request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "register a new user via dashboard",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard users"
+                ],
+                "summary": "Create a new user",
+                "parameters": [
+                    {
+                        "description": "User data",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/createuser.Request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/createuser.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/users/password": {
+            "put": {
+                "description": "change another user's password (admin action)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard users"
+                ],
+                "summary": "Change password for a user",
+                "parameters": [
+                    {
+                        "description": "Password data",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/userchangepassword.Request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/users/{uuid}": {
+            "get": {
+                "description": "fetch a user by UUID",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard users"
+                ],
+                "summary": "Get user",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "User UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/getuser.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "remove a user by UUID",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard users"
+                ],
+                "summary": "Delete user",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "User UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/users/{uuid}/impersonate": {
+            "post": {
+                "description": "obtain a session that acts as the given user, saying who is behind it",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard users"
+                ],
+                "summary": "Sign in as a user",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "User UUID",
+                        "name": "uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/impersonateuser.Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/dashboard/workload/runtimes": {
+            "get": {
+                "description": "every class a task may be run with: whether it is the default, whether any node can run it right now, what the nodes that can are all able to do and what they hold between them",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "dashboard workload"
+                ],
+                "summary": "List runtime classes",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_workload_runtime_getRuntimes.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/dashboard/workload/stacks": {
             "get": {
                 "description": "paginated list of the stacks the workload is holding",
@@ -4104,333 +4491,6 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/dashboard/users": {
-            "get": {
-                "description": "paginated list of users",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "dashboard users"
-                ],
-                "summary": "List users",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "default": 1,
-                        "description": "Page",
-                        "name": "page",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/getusers.Response"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            },
-            "put": {
-                "description": "update a user's data",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "dashboard users"
-                ],
-                "summary": "Update user",
-                "parameters": [
-                    {
-                        "description": "User update",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/updateuser.Request"
-                        }
-                    }
-                ],
-                "responses": {
-                    "204": {
-                        "description": "No Content"
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            },
-            "post": {
-                "description": "register a new user via dashboard",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "dashboard users"
-                ],
-                "summary": "Create a new user",
-                "parameters": [
-                    {
-                        "description": "User data",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/createuser.Request"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Created",
-                        "schema": {
-                            "$ref": "#/definitions/createuser.Response"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/dashboard/users/password": {
-            "put": {
-                "description": "change another user's password (admin action)",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "dashboard users"
-                ],
-                "summary": "Change password for a user",
-                "parameters": [
-                    {
-                        "description": "Password data",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/userchangepassword.Request"
-                        }
-                    }
-                ],
-                "responses": {
-                    "204": {
-                        "description": "No Content"
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/dashboard/users/{uuid}": {
-            "get": {
-                "description": "fetch a user by UUID",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "dashboard users"
-                ],
-                "summary": "Get user",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "User UUID",
-                        "name": "uuid",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/getuser.Response"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "description": "remove a user by UUID",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "dashboard users"
-                ],
-                "summary": "Delete user",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "User UUID",
-                        "name": "uuid",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "204": {
-                        "description": "No Content"
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/dashboard/users/{uuid}/impersonate": {
-            "post": {
-                "description": "obtain a session that acts as the given user, saying who is behind it",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "dashboard users"
-                ],
-                "summary": "Sign in as a user",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "User UUID",
-                        "name": "uuid",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/impersonateuser.Response"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -5680,6 +5740,9 @@ const docTemplate = `{
                 "name": {
                     "type": "string"
                 },
+                "node": {
+                    "type": "string"
+                },
                 "owner": {
                     "description": "Owner is who asked for this task.",
                     "allOf": [
@@ -5700,6 +5763,10 @@ const docTemplate = `{
                 },
                 "retries": {
                     "type": "integer"
+                },
+                "runtime": {
+                    "description": "Runtime is the class the task runs with, and Node the node holding\nit, which is empty until one does.",
+                    "type": "string"
                 },
                 "service_name": {
                     "type": "string"
@@ -5921,6 +5988,17 @@ const docTemplate = `{
                 },
                 "total_pages": {
                     "type": "integer"
+                }
+            }
+        },
+        "getUserRuntimes.Response": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/presenter.Runtime"
+                    }
                 }
             }
         },
@@ -6556,6 +6634,10 @@ const docTemplate = `{
                         }
                     ]
                 },
+                "runtime": {
+                    "description": "Runtime is the one class every service of the stack runs with.",
+                    "type": "string"
+                },
                 "services": {
                     "type": "array",
                     "items": {
@@ -6637,6 +6719,9 @@ const docTemplate = `{
                 "name": {
                     "type": "string"
                 },
+                "node": {
+                    "type": "string"
+                },
                 "owner": {
                     "description": "Owner is who asked for this task.",
                     "allOf": [
@@ -6657,6 +6742,10 @@ const docTemplate = `{
                 },
                 "retries": {
                     "type": "integer"
+                },
+                "runtime": {
+                    "description": "Runtime is the class the task runs with, and Node the node holding\nit, which is empty until one does.",
+                    "type": "string"
                 },
                 "service_name": {
                     "type": "string"
@@ -7139,6 +7228,17 @@ const docTemplate = `{
                 }
             }
         },
+        "github_com_khanzadimahdi_testproject_application_dashboard_workload_runtime_getRuntimes.Response": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/presenter.Runtime"
+                    }
+                }
+            }
+        },
         "github_com_khanzadimahdi_testproject_application_dashboard_workload_stack_getStack.Response": {
             "type": "object",
             "properties": {
@@ -7159,6 +7259,10 @@ const docTemplate = `{
                             "$ref": "#/definitions/presenter.Owner"
                         }
                     ]
+                },
+                "runtime": {
+                    "description": "Runtime is the one class every service of the stack runs with.",
+                    "type": "string"
                 },
                 "services": {
                     "type": "array",
@@ -7197,6 +7301,14 @@ const docTemplate = `{
                 "name": {
                     "type": "string"
                 },
+                "runtime": {
+                    "description": "Runtime is the class every service that names none is run with.\n\nA stack is run as one class or not at all: its services share a\nnetwork on one node, and a network belongs to the one class that made\nit. So a class can be named once, here, for the whole stack, and a\nservice naming its own has to name the same one.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/runtime.Class"
+                        }
+                    ]
+                },
                 "services": {
                     "type": "object",
                     "additionalProperties": {
@@ -7228,6 +7340,10 @@ const docTemplate = `{
                             "$ref": "#/definitions/presenter.Owner"
                         }
                     ]
+                },
+                "runtime": {
+                    "description": "Runtime is the one class every service of the stack runs with.",
+                    "type": "string"
                 },
                 "services": {
                     "type": "array",
@@ -7304,6 +7420,14 @@ const docTemplate = `{
                 "restart": {
                     "type": "string"
                 },
+                "runtime": {
+                    "description": "Runtime is the class the task is run with — sysbox, firecracker —\nunder compose's own runtime: key, which is where a compose file says\nwhat a container is run under. Naming none leaves it to the workload's\ndefault. Which classes may be named is the workload's to say as well,\nso only the shape of a name is checked here.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/runtime.Class"
+                        }
+                    ]
+                },
                 "working_dir": {
                     "type": "string"
                 }
@@ -7362,6 +7486,9 @@ const docTemplate = `{
                 "name": {
                     "type": "string"
                 },
+                "node": {
+                    "type": "string"
+                },
                 "owner": {
                     "description": "Owner is who asked for this task.",
                     "allOf": [
@@ -7382,6 +7509,10 @@ const docTemplate = `{
                 },
                 "retries": {
                     "type": "integer"
+                },
+                "runtime": {
+                    "description": "Runtime is the class the task runs with, and Node the node holding\nit, which is empty until one does.",
+                    "type": "string"
                 },
                 "service_name": {
                     "type": "string"
@@ -7658,6 +7789,97 @@ const docTemplate = `{
                 }
             }
         },
+        "presenter.Runtime": {
+            "type": "object",
+            "properties": {
+                "available": {
+                    "description": "Available says at least one healthy node offers the class; Nodes is\nhow many do.",
+                    "type": "boolean"
+                },
+                "capabilities": {
+                    "$ref": "#/definitions/presenter.RuntimeCapabilities"
+                },
+                "capacity": {
+                    "$ref": "#/definitions/presenter.RuntimeCapacity"
+                },
+                "class": {
+                    "type": "string"
+                },
+                "default": {
+                    "type": "boolean"
+                },
+                "nodes": {
+                    "type": "integer"
+                }
+            }
+        },
+        "presenter.RuntimeCapabilities": {
+            "type": "object",
+            "properties": {
+                "architectures": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "disk_limit": {
+                    "type": "boolean"
+                },
+                "isolation": {
+                    "type": "string"
+                },
+                "max_cpu": {
+                    "type": "number"
+                },
+                "max_memory": {
+                    "type": "integer"
+                },
+                "min_memory": {
+                    "type": "integer"
+                },
+                "network_policies": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "read_only_root": {
+                    "type": "boolean"
+                },
+                "restart_policies": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "stack_networks": {
+                    "type": "boolean"
+                },
+                "tty": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "presenter.RuntimeCapacity": {
+            "type": "object",
+            "properties": {
+                "allocated_cpu": {
+                    "type": "number"
+                },
+                "allocated_memory": {
+                    "type": "integer"
+                },
+                "cpu": {
+                    "type": "number"
+                },
+                "memory": {
+                    "type": "integer"
+                },
+                "reserved": {
+                    "type": "boolean"
+                }
+            }
+        },
         "presenter.Stack": {
             "type": "object",
             "properties": {
@@ -7678,6 +7900,10 @@ const docTemplate = `{
                             "$ref": "#/definitions/presenter.Owner"
                         }
                     ]
+                },
+                "runtime": {
+                    "description": "Runtime is the one class every service of the stack runs with.",
+                    "type": "string"
                 },
                 "services": {
                     "type": "array",
@@ -7746,6 +7972,9 @@ const docTemplate = `{
                 "name": {
                     "type": "string"
                 },
+                "node": {
+                    "type": "string"
+                },
                 "owner": {
                     "description": "Owner is who asked for this task.",
                     "allOf": [
@@ -7766,6 +7995,10 @@ const docTemplate = `{
                 },
                 "retries": {
                     "type": "integer"
+                },
+                "runtime": {
+                    "description": "Runtime is the class the task runs with, and Node the node holding\nit, which is empty until one does.",
+                    "type": "string"
                 },
                 "service_name": {
                     "type": "string"
@@ -7916,6 +8149,17 @@ const docTemplate = `{
                 }
             }
         },
+        "runtime.Class": {
+            "type": "string",
+            "enum": [
+                "sysbox",
+                "firecracker"
+            ],
+            "x-enum-varnames": [
+                "Sysbox",
+                "Firecracker"
+            ]
+        },
         "spec.Deploy": {
             "type": "object",
             "properties": {
@@ -8009,6 +8253,14 @@ const docTemplate = `{
                 },
                 "restart": {
                     "type": "string"
+                },
+                "runtime": {
+                    "description": "Runtime is the class the task is run with — sysbox, firecracker —\nunder compose's own runtime: key, which is where a compose file says\nwhat a container is run under. Naming none leaves it to the workload's\ndefault. Which classes may be named is the workload's to say as well,\nso only the shape of a name is checked here.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/runtime.Class"
+                        }
+                    ]
                 },
                 "working_dir": {
                     "type": "string"

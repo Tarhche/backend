@@ -5,13 +5,19 @@ import (
 
 	"github.com/khanzadimahdi/testproject/domain/workload/network"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
+	"github.com/khanzadimahdi/testproject/domain/workload/runtime"
 )
 
 const TaskRunRequestedName = "workloadTaskRunRequested"
 
 type TaskRunRequested struct {
-	Name          string                 `json:"name"`
-	Kind          string                 `json:"kind"`
+	Name string `json:"name"`
+	Kind string `json:"kind"`
+
+	// Runtime is the class the task asks to be run with. Empty is the
+	// platform's default, which the control plane decides.
+	Runtime runtime.Class `json:"runtime,omitempty"`
+
 	StackUUID     string                 `json:"stack_uuid,omitempty"`
 	StackSlug     string                 `json:"stack_slug,omitempty"`
 	ServiceName   string                 `json:"service_name,omitempty"`

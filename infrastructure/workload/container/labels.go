@@ -4,6 +4,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/khanzadimahdi/testproject/domain/workload/runtime"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 )
 
@@ -25,11 +26,17 @@ const (
 	taskInteractive  = "task.interactive"
 	taskTTLLabel     = "task.ttl"
 	taskAttemptLabel = "task.attempt"
+
+	// taskRuntimeLabel is the class a container was run as. Two classes may
+	// share a daemon — sysbox and gvisor are both containers — and this is how
+	// each tells its own containers from the other's. A container from before
+	// there were classes carries none, and was run as sysbox.
+	taskRuntimeLabel = "task.runtime"
 )
 
-// labelsOf writes down what a container is running, so that reading the
-// container back says it again.
-func labelsOf(execution *task.Execution) map[string]string {
+// labelsOf writes down what a container is running, and as which class, so
+// that reading the container back says it again.
+func labelsOf(execution *task.Execution, class runtime.Class) map[string]string {
 	labels := map[string]string{
 		taskUUIDLabel:    execution.TaskUUID,
 		taskNameLabel:    execution.TaskName,
@@ -39,6 +46,7 @@ func labelsOf(execution *task.Execution) map[string]string {
 		taskOwnerLabel:   execution.OwnerUUID,
 		taskAttemptLabel: strconv.Itoa(execution.Attempt),
 		taskInteractive:  strconv.FormatBool(execution.Interactive),
+		taskRuntimeLabel: string(class.OrSysbox()),
 	}
 
 	if len(execution.StackUUID) > 0 {
@@ -54,8 +62,13 @@ func labelsOf(execution *task.Execution) map[string]string {
 	return labels
 }
 
-// identify reads back what a container is running. A container from before a
-// label was written carries none of it, which reads as nothing rather than as
+// classOf is the class a container was run as.
+func classOf(labels map[string]string) runtime.Class {
+	return runtime.Class(labels[taskRuntimeLabel]).OrSysbox()
+}
+
+// identify reads back what a container is running. A container from before
+// a label was written carries none of it, which reads as nothing rather than as
 // an error: it is still a container this node is holding.
 func identify(execution *task.Execution, labels map[string]string) {
 	execution.TaskUUID = labels[taskUUIDLabel]
@@ -65,6 +78,7 @@ func identify(execution *task.Execution, labels map[string]string) {
 	execution.OwnerUUID = labels[taskOwnerLabel]
 	execution.StackUUID = labels[taskStackLabel]
 	execution.Interactive = labels[taskInteractive] == "true"
+	execution.Runtime = classOf(labels)
 
 	if kind := task.Kind(labels[taskKindLabel]); kind.IsValid() {
 		execution.Kind = kind

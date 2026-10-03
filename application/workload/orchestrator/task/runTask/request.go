@@ -1,11 +1,13 @@
 package runTask
 
 import (
+	"time"
+
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/network"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
+	"github.com/khanzadimahdi/testproject/domain/workload/runtime"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
-	"time"
 )
 
 // Request represents a request to run a task
@@ -14,6 +16,10 @@ type Request struct {
 	Name string    `json:"name"`
 	Slug string    `json:"slug"`
 	Kind task.Kind `json:"kind"`
+
+	// Runtime is the class the task is run with. Empty, from a control plane
+	// older than classes, is sysbox.
+	Runtime runtime.Class `json:"runtime,omitempty"`
 
 	// OwnerUUID is whose task this is. It is written onto the task so
 	// that the node holding it can answer for itself who may be let in, without
@@ -129,6 +135,12 @@ func (r *Request) TaskKind() task.Kind {
 	}
 
 	return r.Kind
+}
+
+// Class is the class this request asked to be run with. One that names none
+// comes from before there were classes, when every task ran as sysbox.
+func (r *Request) Class() runtime.Class {
+	return r.Runtime.OrSysbox()
 }
 
 // Policy is the network policy this request asked for, or the default when it

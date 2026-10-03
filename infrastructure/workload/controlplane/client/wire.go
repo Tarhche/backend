@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
+	"github.com/khanzadimahdi/testproject/domain/workload/runtime"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 )
 
@@ -16,6 +17,7 @@ type taskPayload struct {
 	Name          string            `json:"name"`
 	Slug          string            `json:"slug"`
 	Kind          string            `json:"kind"`
+	Runtime       string            `json:"runtime"`
 	CurrentState  string            `json:"current_state"`
 	ExpectedState string            `json:"expected_state"`
 	Image         string            `json:"image"`
@@ -66,10 +68,17 @@ type stackPayload struct {
 	Slug          string        `json:"slug"`
 	State         string        `json:"state"`
 	ExpectedState string        `json:"expected_state"`
+	Runtime       string        `json:"runtime"`
 	NodeName      string        `json:"node_name"`
 	OwnerUUID     string        `json:"owner_uuid"`
 	Services      []taskPayload `json:"services"`
 	CreatedAt     time.Time     `json:"created_at"`
+}
+
+// runtimesPayload is the control plane's GET /api/runtimes, whose items are
+// runtime.Availability as the domain writes it.
+type runtimesPayload struct {
+	Items []runtime.Availability `json:"items"`
 }
 
 type stacksPayload struct {
@@ -115,6 +124,7 @@ func (p *taskPayload) toTask() task.Task {
 		Name:          p.Name,
 		Slug:          p.Slug,
 		Kind:          task.Kind(p.Kind),
+		Runtime:       runtime.Class(p.Runtime).OrSysbox(),
 		StackUUID:     p.StackUUID,
 		ServiceName:   p.ServiceName,
 		CurrentState:  states[p.CurrentState],
@@ -153,6 +163,7 @@ func (p *stackPayload) toStack() controlPlaneStack {
 		UUID:          p.UUID,
 		Name:          p.Name,
 		Slug:          p.Slug,
+		Runtime:       runtime.Class(p.Runtime).OrSysbox(),
 		NodeName:      p.NodeName,
 		OwnerUUID:     p.OwnerUUID,
 		CreatedAt:     p.CreatedAt,
