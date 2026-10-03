@@ -122,21 +122,11 @@ services:
       target: develop-workload-orchestrator
     ports:
       - "8040:80"
-    depends_on:
-      mongodb: { condition: service_started }
-      nats: { condition: service_started }
-      rustfs: { condition: service_started }
-      rustfs_configure: { condition: service_started }
-      docker: { condition: service_started }
-      mailserver: { condition: service_started }
-      grafana: { condition: service_started }
-      # with the microvm profile, this node offers firecracker through vmhost,
-      # and does not start before it answers; without it, there is no vmhost
-      # and nothing to wait for.
-      workload-vmhost: { condition: service_healthy, required: false }
     volumes:
       - ./:/opt/app
-      # where vmhost takes requests, when it runs (profile microvm)
+      # where vmhost takes requests, when it runs (profile microvm). This node
+      # does not wait for it: while vmhost is away, firecracker is offered
+      # unhealthy until it answers, and sysbox runs here all the same.
       - workload-vmhost-run:/run/workload-vmhost:ro
     environment:
       WORKLOAD_ORCHESTRATOR_NAME: workload-orchestrator-01
@@ -242,7 +232,8 @@ services:
       net.ipv6.conf.all.disable_ipv6: 1
       net.ipv6.conf.default.disable_ipv6: 1
     networks:
-      # the microVMs' way out, and the namespace's default route
+      # the microVMs' way out, and the namespace's default route (gw_priority:
+      # Docker Engine 28+ and Compose 2.34.0+, as compose.workload-vmhost.yaml says)
       workload_vms:
         priority: 1000
         gw_priority: 1000
