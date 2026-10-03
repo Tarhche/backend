@@ -55,7 +55,8 @@ services:
       # the way out for the microVMs that may have one, NATed by docker like
       # any container's traffic, so docker's firewall on the host never sees
       # theirs. It is this namespace's default route whatever the names of its
-      # networks are (gw_priority, Docker 28 and Compose 2.33 or later).
+      # networks are: gw_priority, which needs Docker Engine 28+ and Compose
+      # 2.34.0+ (2.33 takes it and silently drops it; the host preflight checks).
       workload_vms:
         priority: 1000
         gw_priority: 1000
