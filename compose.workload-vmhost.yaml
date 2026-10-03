@@ -1,0 +1,162 @@
+# vmhost runs the workload's microVMs (the firecracker runtime class) for the
+# orchestrator on this host, workload-orchestrator-01, which reaches it through
+# its socket in /run/workload-vmhost and nothing else. Two services:
+#
+#   workload-vmnet   holds the network namespace every microVM's network is
+#                    made in: its bridges, taps, addresses and firewall. It runs
+#                    nothing but pause, and is never redeployed.
+#   workload-vmhost  the daemon itself, inside that namespace. It is redeployed
+#                    when its own code changes, and only then (see the backend
+#                    workflow), and that leaves the microVMs running: each is a
+#                    systemd unit of the host (workload-vm-<id>.service in
+#                    workload-vm.slice), started over the host's D-Bus, so it
+#                    is the host's process and not this container's. A new
+#                    vmhost finds them again by their records in
+#                    /var/lib/workload-vmhost and takes them back.
+#
+# !!! NEVER RECREATE, STOP OR RESTART workload-vmnet WHILE MICROVMS RUN HERE !!!
+#
+# Its network namespace is the one the microVMs' taps are in. A new container
+# is a new namespace: the microVMs would keep running with networks that lead
+# nowhere, and nothing short of rebooting each of them brings them back. So:
+#
+#   - its image is pinned by digest, and the deploy brings it up with
+#     --no-recreate, so neither a pull nor a change to this file replaces it;
+#   - a change to it below only reaches a host where it is not running yet. To
+#     apply one, drain the host's microVMs first (stop their tasks, or move
+#     them), then: docker compose -f compose.workload-vmhost.yaml
+#     --project-name workload-vmhost up --detach --force-recreate workload-vmnet
+#     and recreate workload-vmhost after it, which follows its namespace;
+#   - dockerd must run with live-restore, or restarting it restarts this too
+#     (the host preflight fails without it, Tarhche/infrastructure vmhost/).
+#
+# Deployed by .github/workflows/backend.yaml, only when the host has a budget
+# for microVMs (BACKEND_WORKLOAD_VMHOST_MAX_MEMORY) and its preflight passes.
+# Neither service is a swarm service: vmhost belongs to this host and its
+# devices, and there is exactly one of each.
+services:
+  workload-vmnet:
+    image: registry.k8s.io/pause:3.10.1@sha256:278fb9dbcca9518083ad1e11276933a2e96f23de604a3a08cc3c80002767d24c
+    restart: unless-stopped
+    # pause needs nothing, and is given nothing
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    # these are the namespace's own, never the host's: the microVMs' traffic is
+    # forwarded here between their bridges and the way out, and vmhost refuses
+    # to start where forwarding is off. They have no IPv6.
+    sysctls:
+      net.ipv4.ip_forward: 1
+      net.ipv6.conf.all.disable_ipv6: 1
+      net.ipv6.conf.default.disable_ipv6: 1
+    networks:
+      # the way out for the microVMs that may have one, NATed by docker like
+      # any container's traffic, so docker's firewall on the host never sees
+      # theirs. It is this namespace's default route whatever the names of its
+      # networks are (gw_priority, Docker 28 and Compose 2.33 or later).
+      workload_vms:
+        priority: 1000
+        gw_priority: 1000
+      # where vmhost sends its telemetry. The microVMs reach no private address,
+      # this network's included: vmhost's firewall drops every one of them.
+      monitoring: {}
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  workload-vmhost:
+    image: ${WORKLOAD_VMHOST_IMAGE}
+    restart: unless-stopped
+    # root on the host, which vmhost is: it makes the microVMs' networks and
+    # firewall, opens /dev/kvm, starts their units over the host's D-Bus, and
+    # reads their cgroups. Only the orchestrators' group reaches its socket.
+    privileged: true
+    # the microVMs' namespace (above), which vmhost makes their networks in.
+    network_mode: service:workload-vmnet
+    # its process ids are the host's, so /proc/<its pid>/ns/net, the path a
+    # microVM's unit joins that namespace by, means the same thing to systemd.
+    pid: host
+    # the host's cgroups, where the microVMs' units are, for their stats.
+    cgroup: host
+    depends_on:
+      - workload-vmnet
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "--max-time", "4", "--unix-socket", "/run/workload-vmhost/vmhost.sock", "http://vmhost/v1/info"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    # it ends its API and leaves the microVMs to the host; nothing waits on them
+    stop_grace_period: 30s
+    deploy:
+      resources:
+        # vmhost's own: it pulls images and makes them into disks. The
+        # microVMs are outside it, in workload-vm.slice, and their memory is
+        # WORKLOAD_VMHOST_MAX_MEMORY's.
+        limits:
+          cpus: '1.0'
+          memory: 512M
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+    volumes:
+      # the same path inside and on the host: the microVMs' units run the
+      # firecracker, kernel and disks vmhost keeps there, by those paths.
+      - /var/lib/workload-vmhost:/var/lib/workload-vmhost
+      # its socket, which workload-orchestrator-01 mounts as well
+      - /run/workload-vmhost:/run/workload-vmhost
+      # the host's systemd, which runs the microVMs' units
+      - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
+      - /sys/fs/cgroup:/sys/fs/cgroup
+      # credentials for the registries task images come from: a docker
+      # config.json in this directory, when there is one. A directory rather
+      # than the file, so a host without one pulls anonymously instead of
+      # failing on the directory docker would make in the file's place.
+      - ${BACKEND_WORKLOAD_VMHOST_REGISTRY_AUTH_DIR:-/etc/workload-vmhost/registry}:/etc/workload-vmhost/registry:ro
+    environment:
+      WORKLOAD_VMHOST_LISTEN: unix:///run/workload-vmhost/vmhost.sock
+      # the orchestrators' group, the only one that reaches the socket
+      WORKLOAD_VMHOST_SOCKET_GID: "10001"
+      WORKLOAD_VMHOST_DATA_DIR: /var/lib/workload-vmhost
+      # the microVMs outlive vmhost as units of the host's systemd
+      WORKLOAD_VMHOST_PROCESS_MODE: systemd
+      DOCKER_CONFIG: /etc/workload-vmhost/registry
+      # the share of the host's memory every microVM together may have, VMM
+      # overhead included, beside everything else the host runs. vmhost will
+      # not start without it.
+      WORKLOAD_VMHOST_MAX_MEMORY: ${BACKEND_WORKLOAD_VMHOST_MAX_MEMORY:?the host has no memory budget for microVMs (BACKEND_WORKLOAD_VMHOST_MAX_MEMORY, in bytes)}
+      # the rest has vmhost's own defaults (infrastructure/configs/vmhost.go)
+      # unless it is set; an empty value keeps the default.
+      WORKLOAD_VMHOST_MAX_VM_MEMORY: ${BACKEND_WORKLOAD_VMHOST_MAX_VM_MEMORY:-}
+      WORKLOAD_VMHOST_MAX_VM_CPU: ${BACKEND_WORKLOAD_VMHOST_MAX_VM_CPU:-}
+      WORKLOAD_VMHOST_CPU_OVERCOMMIT: ${BACKEND_WORKLOAD_VMHOST_CPU_OVERCOMMIT:-}
+      WORKLOAD_VMHOST_DISK_RESERVE: ${BACKEND_WORKLOAD_VMHOST_DISK_RESERVE:-}
+      WORKLOAD_VMHOST_DISK_OVERCOMMIT: ${BACKEND_WORKLOAD_VMHOST_DISK_OVERCOMMIT:-}
+      WORKLOAD_VMHOST_IMAGE_CACHE_MAX: ${BACKEND_WORKLOAD_VMHOST_IMAGE_CACHE_MAX:-}
+      WORKLOAD_VMHOST_NETWORK_POOL: ${BACKEND_WORKLOAD_VMHOST_NETWORK_POOL:-}
+      WORKLOAD_VMHOST_ALLOWED_REGISTRIES: ${BACKEND_WORKLOAD_VMHOST_ALLOWED_REGISTRIES:-}
+      # the host users the microVMs run as. The host preflight checks the same
+      # range, so a change here is a change there too.
+      WORKLOAD_VMHOST_MACHINE_FIRST_UID: ${BACKEND_WORKLOAD_VMHOST_MACHINE_FIRST_UID:-}
+      WORKLOAD_VMHOST_MACHINE_UIDS: ${BACKEND_WORKLOAD_VMHOST_MACHINE_UIDS:-}
+      OTEL_EXPORTER_OTLP_INSECURE: ${OTEL_EXPORTER_OTLP_INSECURE}
+      OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL}
+      OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
+      OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT: ${OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT:-}
+      OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
+      PROFILING_ENABLED: ${PROFILING_ENABLED:-true}
+
+networks:
+  # this file's own: the microVMs' way out, and nothing else's
+  workload_vms:
+    name: workload_vms
+  monitoring:
+    name: monitoring
+    external: true
