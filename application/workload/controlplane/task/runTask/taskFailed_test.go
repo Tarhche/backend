@@ -14,6 +14,7 @@ import (
 
 	deletetask "github.com/khanzadimahdi/testproject/application/workload/controlplane/task/deleteTask"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/task/schedule"
+	"github.com/khanzadimahdi/testproject/domain/workload/runtime"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 	"github.com/khanzadimahdi/testproject/domain/workload/task/events"
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
@@ -298,5 +299,158 @@ func TestTaskFailed_Handle(t *testing.T) {
 		})))
 
 		producer.AssertNotCalled(t, "Produce", mock.Anything, events.TaskScheduledName, mock.Anything)
+	})
+}
+
+func TestTaskFailed_Handle_Runtime(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a task no node offers its class is given up on at once, under the code alone", func(t *testing.T) {
+		t.Parallel()
+
+		var (
+			tasks      tasksMock.MockTasksRepository
+			stacks     stacksMock.MockStacksRepository
+			producer   messagingMock.MockProduceConsumer
+			translator translator.TranslatorMock
+			logs       = logsMock.NewInMemoryRepository()
+		)
+
+		// worth three more attempts, none of which a class nobody offers
+		// would be any different for.
+		unplaced := task.Task{
+			UUID:          "task-uuid",
+			Name:          "api",
+			Kind:          task.KindService,
+			Runtime:       runtime.Firecracker,
+			MaxRetries:    3,
+			CurrentState:  task.Created,
+			ExpectedState: task.Running,
+		}
+
+		tasks.On("GetOne", mock.Anything, unplaced.UUID).Return(unplaced, nil).Once()
+
+		// the code as it stands, which the dashboard says in the reader's
+		// own language, with no attempt counted in front of it.
+		tasks.On("Save", mock.Anything, mock.MatchedBy(func(t *task.Task) bool {
+			return t.CurrentState == task.Failed && t.Reason == runtime.ReasonNoNodeOffersRuntime && t.ExpectedState == task.Running
+		})).Return(unplaced.UUID, nil).Once()
+		tasks.On("Save", mock.Anything, mock.MatchedBy(func(t *task.Task) bool {
+			return t.CurrentState == task.Failed && t.ExpectedState == task.Failed
+		})).Return(unplaced.UUID, nil).Once()
+		defer tasks.AssertExpectations(t)
+
+		handler := NewTaskFailed(
+			&tasks,
+			logs,
+			schedule.New(&stacks, &producer),
+			deletetask.NewUseCase(&tasks, logs, &producer, &translator),
+			discardLogger(),
+		)
+
+		require.NoError(t, handler.Handle(context.Background(), failure(t, events.TaskFailed{
+			UUID:   unplaced.UUID,
+			Name:   unplaced.Name,
+			At:     time.Now().Add(-time.Minute),
+			Reason: runtime.ReasonNoNodeOffersRuntime,
+		})))
+
+		producer.AssertNotCalled(t, "Produce", mock.Anything, events.TaskScheduledName, mock.Anything)
+		assert.Equal(t, 1, logs.Count(unplaced.UUID), "and it is in the task's log like any other failure")
+	})
+
+	t.Run("a node refusing a class it does not offer is not asked again, however long the task would be tried for", func(t *testing.T) {
+		t.Parallel()
+
+		var (
+			tasks      tasksMock.MockTasksRepository
+			stacks     stacksMock.MockStacksRepository
+			producer   messagingMock.MockProduceConsumer
+			translator translator.TranslatorMock
+			logs       = logsMock.NewInMemoryRepository()
+		)
+
+		refused := task.Task{
+			UUID:          "task-uuid",
+			Name:          "api",
+			Kind:          task.KindService,
+			Runtime:       runtime.Firecracker,
+			NodeName:      "workload-orchestrator-01",
+			MaxRetries:    task.RetryForever,
+			CurrentState:  task.Scheduled,
+			ExpectedState: task.Running,
+		}
+
+		tasks.On("GetOne", mock.Anything, refused.UUID).Return(refused, nil).Once()
+		tasks.On("Save", mock.Anything, mock.MatchedBy(func(t *task.Task) bool {
+			return t.CurrentState == task.Failed && t.Reason == runtime.ReasonRuntimeNotOffered
+		})).Return(refused.UUID, nil).Once()
+		tasks.On("Save", mock.Anything, mock.MatchedBy(func(t *task.Task) bool {
+			return t.ExpectedState == task.Failed
+		})).Return(refused.UUID, nil).Once()
+		defer tasks.AssertExpectations(t)
+
+		handler := NewTaskFailed(
+			&tasks,
+			logs,
+			schedule.New(&stacks, &producer),
+			deletetask.NewUseCase(&tasks, logs, &producer, &translator),
+			discardLogger(),
+		)
+
+		require.NoError(t, handler.Handle(context.Background(), failure(t, events.TaskFailed{
+			UUID:       refused.UUID,
+			NodeName:   refused.NodeName,
+			At:         time.Now().Add(-time.Minute),
+			MaxRetries: refused.MaxRetries,
+			Reason:     runtime.ReasonRuntimeNotOffered,
+		})))
+
+		producer.AssertNotCalled(t, "Produce", mock.Anything, events.TaskScheduledName, mock.Anything)
+	})
+
+	t.Run("a snippet of a class no node offers is taken away, as any job that could not run is", func(t *testing.T) {
+		t.Parallel()
+
+		var (
+			tasks      tasksMock.MockTasksRepository
+			stacks     stacksMock.MockStacksRepository
+			producer   messagingMock.MockProduceConsumer
+			translator translator.TranslatorMock
+			logs       = logsMock.NewInMemoryRepository()
+		)
+
+		job := task.Task{
+			UUID:          "task-uuid",
+			Name:          "code-request-id",
+			Kind:          task.KindJob,
+			Runtime:       runtime.Firecracker,
+			CurrentState:  task.Created,
+			ExpectedState: task.Running,
+		}
+
+		// once here, and once by the delete that takes it away.
+		tasks.On("GetOne", mock.Anything, job.UUID).Return(job, nil).Twice()
+		tasks.On("Save", mock.Anything, mock.Anything).Return(job.UUID, nil).Twice()
+		tasks.On("Delete", mock.Anything, job.UUID).Return(nil).Once()
+		defer tasks.AssertExpectations(t)
+
+		producer.On("Produce", mock.Anything, events.TaskDeletedName, mock.Anything).Return(nil).Once()
+		defer producer.AssertExpectations(t)
+
+		handler := NewTaskFailed(
+			&tasks,
+			logs,
+			schedule.New(&stacks, &producer),
+			deletetask.NewUseCase(&tasks, logs, &producer, &translator),
+			discardLogger(),
+		)
+
+		require.NoError(t, handler.Handle(context.Background(), failure(t, events.TaskFailed{
+			UUID:   job.UUID,
+			Name:   job.Name,
+			At:     time.Now(),
+			Reason: runtime.ReasonNoNodeOffersRuntime,
+		})))
 	})
 }

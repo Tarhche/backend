@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/runtime/allowed"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 	"github.com/khanzadimahdi/testproject/domain/workload/task/events"
@@ -14,22 +15,28 @@ type UseCase struct {
 	taskRepository  task.Repository
 	asyncCommandBus domain.Producer
 	validator       domain.Validator
+
+	// classes are the runtime classes a task may be run with, and the one a
+	// task naming none is given.
+	classes allowed.Classes
 }
 
 func NewUseCase(
 	taskRepository task.Repository,
 	asyncCommandBus domain.Producer,
 	validator domain.Validator,
+	classes allowed.Classes,
 ) *UseCase {
 	return &UseCase{
 		taskRepository:  taskRepository,
 		asyncCommandBus: asyncCommandBus,
 		validator:       validator,
+		classes:         classes,
 	}
 }
 
 func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
-	if validationErrors := uc.validator.Validate(request); len(validationErrors) > 0 {
+	if validationErrors := uc.validator.Validate(admission{Request: request, classes: uc.classes}); len(validationErrors) > 0 {
 		return &Response{
 			ValidationErrors: validationErrors,
 		}, nil
@@ -44,9 +51,14 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 	}
 
 	t := task.Task{
-		Name:          request.Name,
-		Slug:          taskSlug,
-		Kind:          request.TaskKind(),
+		Name: request.Name,
+		Slug: taskSlug,
+		Kind: request.TaskKind(),
+
+		// the class is resolved here, once, and stored: what the default is
+		// later is no business of a task that already exists.
+		Runtime: uc.classes.Resolve(request.Runtime),
+
 		StackUUID:     request.StackUUID,
 		ServiceName:   request.ServiceName,
 		CurrentState:  task.Created,

@@ -11,6 +11,7 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/workload/spec"
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/workload/runtime"
 )
 
 // requiredField is what a use case says about a field it cannot do without.
@@ -50,6 +51,12 @@ var composeSchemas = map[reflect.Type]*jsonschema.Schema{
 			{Type: "number"},
 			{Type: "string"},
 		},
+	},
+	// a class is a plain string, which says nothing of where the names come
+	// from or what naming none means.
+	reflect.TypeFor[runtime.Class](): {
+		Type:        "string",
+		Description: "the runtime class to run with, such as sysbox (a container) or firecracker (a microVM). The runtimes listing says which there are and which is the default, which is what naming none gets",
 	},
 	reflect.TypeFor[spec.ByteSize](): {
 		Description: `a size in bytes, or with a unit the way compose writes one, such as "256M"`,

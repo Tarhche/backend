@@ -11,6 +11,7 @@ import (
 	deletetask "github.com/khanzadimahdi/testproject/application/workload/controlplane/task/deleteTask"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/task/schedule"
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/workload/runtime"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 	"github.com/khanzadimahdi/testproject/domain/workload/task/events"
 )
@@ -22,6 +23,11 @@ import (
 // attempt further along; one that has run out of attempts is left where it is,
 // and what was expected of it is set to that, so nothing keeps asking for
 // something that is not going to happen.
+//
+// A task that failed for its class is out of attempts whatever it was worth.
+// No node offering the class, or the node it was given to not offering it, is
+// not something another attempt on that node changes, and asking again would
+// only fail again, as often as it was worth.
 type TaskFailed struct {
 	taskRepository task.Repository
 	logRepository  task.LogRepository
@@ -73,7 +79,7 @@ func (uc *TaskFailed) Handle(ctx context.Context, data []byte) error {
 
 	// whether there is another attempt coming is decided before the failure is
 	// written down, because part of what is written down is that there is one.
-	retrying := t.ExpectedState == task.Running && t.MayRetry(attempt)
+	retrying := t.ExpectedState == task.Running && !final(taskFailed.Reason) && t.MayRetry(attempt)
 
 	if err := uc.record(ctx, &t, &taskFailed, attempt, retrying); err != nil {
 		return err
@@ -154,6 +160,12 @@ func (uc *TaskFailed) reason(t *task.Task, failure *events.TaskFailed, attempt i
 	}
 
 	switch {
+	// a code is said in the reader's own language by whoever shows it, which
+	// it can only do with the code as it stands. There is no attempt to count
+	// in front of it either: it is the last one.
+	case final(cause):
+		return cause
+
 	case t.MaxRetries == task.RetryForever:
 		return fmt.Sprintf("attempt %d: %s", attempt+1, cause)
 
@@ -163,6 +175,13 @@ func (uc *TaskFailed) reason(t *task.Task, failure *events.TaskFailed, attempt i
 	default:
 		return fmt.Sprintf("attempt %d of %d: %s", attempt+1, t.MaxRetries+1, cause)
 	}
+}
+
+// final reports whether a failure is the end of a task whatever it was worth:
+// one of the reasons a task fails for its class, which are codes rather than
+// sentences, said in the reader's own language by whoever shows them.
+func final(reason string) bool {
+	return reason == runtime.ReasonNoNodeOffersRuntime || reason == runtime.ReasonRuntimeNotOffered
 }
 
 // again asks for the task one more time.

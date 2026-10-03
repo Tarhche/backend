@@ -504,6 +504,8 @@ definitions:
         type: integer
       name:
         type: string
+      node:
+        type: string
       owner:
         allOf:
         - $ref: '#/definitions/presenter.Owner'
@@ -517,6 +519,11 @@ definitions:
         $ref: '#/definitions/presenter.Limits'
       retries:
         type: integer
+      runtime:
+        description: |-
+          Runtime is the class the task runs with, and Node the node holding
+          it, which is empty until one does.
+        type: string
       service_name:
         type: string
       slug:
@@ -663,6 +670,13 @@ definitions:
         type: integer
       total_pages:
         type: integer
+    type: object
+  getUserRuntimes.Response:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/presenter.Runtime'
+        type: array
     type: object
   getarticle.author:
     properties:
@@ -1076,6 +1090,9 @@ definitions:
         allOf:
         - $ref: '#/definitions/presenter.Owner'
         description: Owner is who asked for this stack.
+      runtime:
+        description: Runtime is the one class every service of the stack runs with.
+        type: string
       services:
         items:
           $ref: '#/definitions/presenter.Task'
@@ -1136,6 +1153,8 @@ definitions:
         type: integer
       name:
         type: string
+      node:
+        type: string
       owner:
         allOf:
         - $ref: '#/definitions/presenter.Owner'
@@ -1149,6 +1168,11 @@ definitions:
         $ref: '#/definitions/presenter.Limits'
       retries:
         type: integer
+      runtime:
+        description: |-
+          Runtime is the class the task runs with, and Node the node holding
+          it, which is empty until one does.
+        type: string
       service_name:
         type: string
       slug:
@@ -1464,6 +1488,13 @@ definitions:
       name:
         type: string
     type: object
+  github_com_khanzadimahdi_testproject_application_dashboard_workload_runtime_getRuntimes.Response:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/presenter.Runtime'
+        type: array
+    type: object
   github_com_khanzadimahdi_testproject_application_dashboard_workload_stack_getStack.Response:
     properties:
       created_at:
@@ -1479,6 +1510,9 @@ definitions:
         allOf:
         - $ref: '#/definitions/presenter.Owner'
         description: Owner is who asked for this stack.
+      runtime:
+        description: Runtime is the one class every service of the stack runs with.
+        type: string
       services:
         items:
           $ref: '#/definitions/presenter.Task'
@@ -1503,6 +1537,16 @@ definitions:
     properties:
       name:
         type: string
+      runtime:
+        allOf:
+        - $ref: '#/definitions/runtime.Class'
+        description: |-
+          Runtime is the class every service that names none is run with.
+
+          A stack is run as one class or not at all: its services share a
+          network on one node, and a network belongs to the one class that made
+          it. So a class can be named once, here, for the whole stack, and a
+          service naming its own has to name the same one.
       services:
         additionalProperties:
           $ref: '#/definitions/spec.Service'
@@ -1525,6 +1569,9 @@ definitions:
         allOf:
         - $ref: '#/definitions/presenter.Owner'
         description: Owner is who asked for this stack.
+      runtime:
+        description: Runtime is the one class every service of the stack runs with.
+        type: string
       services:
         items:
           $ref: '#/definitions/presenter.Task'
@@ -1581,6 +1628,15 @@ definitions:
         type: boolean
       restart:
         type: string
+      runtime:
+        allOf:
+        - $ref: '#/definitions/runtime.Class'
+        description: |-
+          Runtime is the class the task is run with — sysbox, firecracker —
+          under compose's own runtime: key, which is where a compose file says
+          what a container is run under. Naming none leaves it to the workload's
+          default. Which classes may be named is the workload's to say as well,
+          so only the shape of a name is checked here.
       working_dir:
         type: string
     type: object
@@ -1626,6 +1682,8 @@ definitions:
         type: integer
       name:
         type: string
+      node:
+        type: string
       owner:
         allOf:
         - $ref: '#/definitions/presenter.Owner'
@@ -1639,6 +1697,11 @@ definitions:
         $ref: '#/definitions/presenter.Limits'
       retries:
         type: integer
+      runtime:
+        description: |-
+          Runtime is the class the task runs with, and Node the node holding
+          it, which is empty until one does.
+        type: string
       service_name:
         type: string
       slug:
@@ -1822,6 +1885,68 @@ definitions:
       total_pages:
         type: integer
     type: object
+  presenter.Runtime:
+    properties:
+      available:
+        description: |-
+          Available says at least one healthy node offers the class; Nodes is
+          how many do.
+        type: boolean
+      capabilities:
+        $ref: '#/definitions/presenter.RuntimeCapabilities'
+      capacity:
+        $ref: '#/definitions/presenter.RuntimeCapacity'
+      class:
+        type: string
+      default:
+        type: boolean
+      nodes:
+        type: integer
+    type: object
+  presenter.RuntimeCapabilities:
+    properties:
+      architectures:
+        items:
+          type: string
+        type: array
+      disk_limit:
+        type: boolean
+      isolation:
+        type: string
+      max_cpu:
+        type: number
+      max_memory:
+        type: integer
+      min_memory:
+        type: integer
+      network_policies:
+        items:
+          type: string
+        type: array
+      read_only_root:
+        type: boolean
+      restart_policies:
+        items:
+          type: string
+        type: array
+      stack_networks:
+        type: boolean
+      tty:
+        type: boolean
+    type: object
+  presenter.RuntimeCapacity:
+    properties:
+      allocated_cpu:
+        type: number
+      allocated_memory:
+        type: integer
+      cpu:
+        type: number
+      memory:
+        type: integer
+      reserved:
+        type: boolean
+    type: object
   presenter.Stack:
     properties:
       created_at:
@@ -1837,6 +1962,9 @@ definitions:
         allOf:
         - $ref: '#/definitions/presenter.Owner'
         description: Owner is who asked for this stack.
+      runtime:
+        description: Runtime is the one class every service of the stack runs with.
+        type: string
       services:
         items:
           $ref: '#/definitions/presenter.Task'
@@ -1888,6 +2016,8 @@ definitions:
         type: integer
       name:
         type: string
+      node:
+        type: string
       owner:
         allOf:
         - $ref: '#/definitions/presenter.Owner'
@@ -1901,6 +2031,11 @@ definitions:
         $ref: '#/definitions/presenter.Limits'
       retries:
         type: integer
+      runtime:
+        description: |-
+          Runtime is the class the task runs with, and Node the node holding
+          it, which is empty until one does.
+        type: string
       service_name:
         type: string
       slug:
@@ -2007,6 +2142,14 @@ definitions:
       token:
         type: string
     type: object
+  runtime.Class:
+    enum:
+    - sysbox
+    - firecracker
+    type: string
+    x-enum-varnames:
+    - Sysbox
+    - Firecracker
   spec.Deploy:
     properties:
       resources:
@@ -2078,6 +2221,15 @@ definitions:
         type: boolean
       restart:
         type: string
+      runtime:
+        allOf:
+        - $ref: '#/definitions/runtime.Class'
+        description: |-
+          Runtime is the class the task is run with — sysbox, firecracker —
+          under compose's own runtime: key, which is where a compose file says
+          what a container is run under. Naming none leaves it to the workload's
+          default. Which classes may be named is the workload's to say as well,
+          so only the shape of a name is checked here.
       working_dir:
         type: string
     type: object
@@ -4014,6 +4166,28 @@ paths:
       summary: Delete own file
       tags:
       - dashboard files
+  /dashboard/my/workload/runtimes:
+    get:
+      consumes:
+      - application/json
+      description: 'every class the current user''s own tasks may be run with: whether
+        it is the default, whether any node can run it right now, what the nodes that
+        can are all able to do and what they hold between them'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getUserRuntimes.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List the runtime classes of my tasks
+      tags:
+      - dashboard workload
   /dashboard/my/workload/stacks:
     get:
       consumes:
@@ -4638,6 +4812,250 @@ paths:
       summary: Get role
       tags:
       - dashboard roles
+  /dashboard/users:
+    get:
+      consumes:
+      - application/json
+      description: paginated list of users
+      parameters:
+      - default: 1
+        description: Page
+        in: query
+        name: page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getusers.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List users
+      tags:
+      - dashboard users
+    post:
+      consumes:
+      - application/json
+      description: register a new user via dashboard
+      parameters:
+      - description: User data
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/createuser.Request'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/createuser.Response'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Create a new user
+      tags:
+      - dashboard users
+    put:
+      consumes:
+      - application/json
+      description: update a user's data
+      parameters:
+      - description: User update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/updateuser.Request'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Update user
+      tags:
+      - dashboard users
+  /dashboard/users/{uuid}:
+    delete:
+      consumes:
+      - application/json
+      description: remove a user by UUID
+      parameters:
+      - description: User UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Delete user
+      tags:
+      - dashboard users
+    get:
+      consumes:
+      - application/json
+      description: fetch a user by UUID
+      parameters:
+      - description: User UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getuser.Response'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get user
+      tags:
+      - dashboard users
+  /dashboard/users/{uuid}/impersonate:
+    post:
+      consumes:
+      - application/json
+      description: obtain a session that acts as the given user, saying who is behind
+        it
+      parameters:
+      - description: User UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/impersonateuser.Response'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Sign in as a user
+      tags:
+      - dashboard users
+  /dashboard/users/password:
+    put:
+      consumes:
+      - application/json
+      description: change another user's password (admin action)
+      parameters:
+      - description: Password data
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/userchangepassword.Request'
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Change password for a user
+      tags:
+      - dashboard users
+  /dashboard/workload/runtimes:
+    get:
+      consumes:
+      - application/json
+      description: 'every class a task may be run with: whether it is the default,
+        whether any node can run it right now, what the nodes that can are all able
+        to do and what they hold between them'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_workload_runtime_getRuntimes.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List runtime classes
+      tags:
+      - dashboard workload
   /dashboard/workload/stacks:
     get:
       consumes:
@@ -5033,228 +5451,6 @@ paths:
       summary: Stop task
       tags:
       - dashboard workload
-  /dashboard/users:
-    get:
-      consumes:
-      - application/json
-      description: paginated list of users
-      parameters:
-      - default: 1
-        description: Page
-        in: query
-        name: page
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/getusers.Response'
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: List users
-      tags:
-      - dashboard users
-    post:
-      consumes:
-      - application/json
-      description: register a new user via dashboard
-      parameters:
-      - description: User data
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/createuser.Request'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            $ref: '#/definitions/createuser.Response'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Create a new user
-      tags:
-      - dashboard users
-    put:
-      consumes:
-      - application/json
-      description: update a user's data
-      parameters:
-      - description: User update
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/updateuser.Request'
-      produces:
-      - application/json
-      responses:
-        "204":
-          description: No Content
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Update user
-      tags:
-      - dashboard users
-  /dashboard/users/{uuid}:
-    delete:
-      consumes:
-      - application/json
-      description: remove a user by UUID
-      parameters:
-      - description: User UUID
-        in: path
-        name: uuid
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "204":
-          description: No Content
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Delete user
-      tags:
-      - dashboard users
-    get:
-      consumes:
-      - application/json
-      description: fetch a user by UUID
-      parameters:
-      - description: User UUID
-        in: path
-        name: uuid
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/getuser.Response'
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get user
-      tags:
-      - dashboard users
-  /dashboard/users/{uuid}/impersonate:
-    post:
-      consumes:
-      - application/json
-      description: obtain a session that acts as the given user, saying who is behind
-        it
-      parameters:
-      - description: User UUID
-        in: path
-        name: uuid
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/impersonateuser.Response'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Sign in as a user
-      tags:
-      - dashboard users
-  /dashboard/users/password:
-    put:
-      consumes:
-      - application/json
-      description: change another user's password (admin action)
-      parameters:
-      - description: Password data
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/userchangepassword.Request'
-      produces:
-      - application/json
-      responses:
-        "204":
-          description: No Content
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Change password for a user
-      tags:
-      - dashboard users
   /files/{uuid}:
     get:
       consumes:

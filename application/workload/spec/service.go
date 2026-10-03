@@ -11,12 +11,21 @@ import (
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/network"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
+	"github.com/khanzadimahdi/testproject/domain/workload/runtime"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 )
 
 // Service is one task, in a compose service's shape.
 type Service struct {
-	Image       string        `json:"image"`
+	Image string `json:"image"`
+
+	// Runtime is the class the task is run with — sysbox, firecracker —
+	// under compose's own runtime: key, which is where a compose file says
+	// what a container is run under. Naming none leaves it to the workload's
+	// default. Which classes may be named is the workload's to say as well,
+	// so only the shape of a name is checked here.
+	Runtime runtime.Class `json:"runtime,omitempty"`
+
 	Command     StringOrSlice `json:"command,omitempty"`
 	Entrypoint  StringOrSlice `json:"entrypoint,omitempty"`
 	WorkingDir  string        `json:"working_dir,omitempty"`
@@ -91,6 +100,10 @@ func (s *Service) Validate(prefix string) domain.ValidationErrors {
 
 	if len(s.Image) == 0 {
 		validationErrors[field("image")] = "required_field"
+	}
+
+	if len(s.Runtime) > 0 && !s.Runtime.IsValid() {
+		validationErrors[field("runtime")] = "invalid_value"
 	}
 
 	if _, ok := restartPolicies[s.Restart]; !ok {

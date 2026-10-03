@@ -17,6 +17,7 @@ import (
 	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/domain/workload/network"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
+	"github.com/khanzadimahdi/testproject/domain/workload/runtime"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 	usersMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/users"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/controlplane"
@@ -142,6 +143,37 @@ func TestUseCase_Execute(t *testing.T) {
 		assert.ErrorIs(t, err, unreachable)
 	})
 
+	t.Run("the class a task asks for travels to the workload, and comes back with the node holding it", func(t *testing.T) {
+		t.Parallel()
+
+		var workload controlplane.MockClient
+
+		var handed workloadControlPlane.TaskSpec
+		workload.On("RunTask", mock.Anything, mock.Anything, "owner-uuid").
+			Run(func(args mock.Arguments) { handed = args.Get(1).(workloadControlPlane.TaskSpec) }).
+			Return(task.Task{
+				UUID:     "task-uuid",
+				Name:     "nginx",
+				Slug:     "nginx-xkfqz",
+				Runtime:  runtime.Firecracker,
+				NodeName: "workload-orchestrator-01",
+			}, nil).Once()
+
+		response, err := NewUseCase(&workload, accepts(), directory(), ingressDomain).Execute(
+			context.Background(),
+			composeRequest(t, `{"name": "nginx", "image": "nginx:alpine", "runtime": "firecracker"}`),
+		)
+		require.NoError(t, err)
+
+		service, ok := handed.Service.(spec.Service)
+		require.True(t, ok)
+		assert.Equal(t, runtime.Firecracker, service.Runtime, "under compose's own key, where the workload reads it")
+
+		require.NotNil(t, response.Task)
+		assert.Equal(t, "firecracker", response.Task.Runtime)
+		assert.Equal(t, "workload-orchestrator-01", response.Task.Node)
+	})
+
 	t.Run("a request the rules refuse never reaches the workload", func(t *testing.T) {
 		t.Parallel()
 
@@ -189,6 +221,16 @@ func TestRequest_Validate(t *testing.T) {
 				"image": "required_field",
 				"ports": "ports_require_network",
 			},
+		},
+		{
+			name: "a class is named at the top of the task, as compose names it",
+			body: `{"name": "nginx", "image": "nginx:alpine", "runtime": "firecracker"}`,
+			want: domain.ValidationErrors{},
+		},
+		{
+			name: "what cannot be a class is refused here; which classes are allowed is the workload's to say",
+			body: `{"name": "nginx", "image": "nginx:alpine", "runtime": "Fire Cracker"}`,
+			want: domain.ValidationErrors{"runtime": "invalid_value"},
 		},
 	}
 

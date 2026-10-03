@@ -5,14 +5,21 @@ import (
 
 	"github.com/khanzadimahdi/testproject/domain/workload/network"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
+	"github.com/khanzadimahdi/testproject/domain/workload/runtime"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 )
 
 type TaskBson struct {
-	UUID          string `bson:"_id,omitempty"`
-	Name          string `bson:"name"`
-	Slug          string `bson:"slug,omitempty"`
-	Kind          string `bson:"kind,omitempty"`
+	UUID string `bson:"_id,omitempty"`
+	Name string `bson:"name"`
+	Slug string `bson:"slug,omitempty"`
+	Kind string `bson:"kind,omitempty"`
+
+	// Runtime is the class the task is run with. A task stored before there
+	// were classes has none, and is read as sysbox, which is what ran it; the
+	// backfill-runtime migration writes that down.
+	Runtime string `bson:"runtime,omitempty"`
+
 	StackUUID     string `bson:"stack_uuid,omitempty"`
 	ServiceName   string `bson:"service_name,omitempty"`
 	CurrentState  uint   `bson:"current_state"`
@@ -89,6 +96,7 @@ func toTask(t *TaskBson) task.Task {
 		Name:            t.Name,
 		Slug:            t.Slug,
 		Kind:            kind(t.Kind),
+		Runtime:         runtime.Class(t.Runtime).OrSysbox(),
 		StackUUID:       t.StackUUID,
 		ServiceName:     t.ServiceName,
 		CurrentState:    task.State(t.CurrentState),
@@ -151,6 +159,7 @@ func toBson(t *task.Task) TaskBson {
 		Name:            t.Name,
 		Slug:            t.Slug,
 		Kind:            string(t.Kind),
+		Runtime:         string(t.Runtime),
 		StackUUID:       t.StackUUID,
 		ServiceName:     t.ServiceName,
 		CurrentState:    uint(t.CurrentState),

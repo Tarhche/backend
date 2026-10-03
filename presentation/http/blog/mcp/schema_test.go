@@ -7,6 +7,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	dashboardRunStack "github.com/khanzadimahdi/testproject/application/dashboard/workload/stack/runStack"
+	dashboardRunTask "github.com/khanzadimahdi/testproject/application/dashboard/workload/task/runTask"
 	"github.com/khanzadimahdi/testproject/application/workload/spec"
 	"github.com/khanzadimahdi/testproject/domain"
 )
@@ -115,6 +117,26 @@ func TestBody(t *testing.T) {
 		// than the request's
 		assert.Contains(t, schema.Required, "image")
 		assert.Contains(t, schema.Required, "name")
+	})
+
+	t.Run("a task and a stack name the class they are run with, which nobody has to", func(t *testing.T) {
+		task := body[dashboardRunTask.Request]()
+
+		require.Contains(t, task.Properties, "runtime")
+		assert.Equal(t, "string", task.Properties["runtime"].Type)
+		assert.Contains(t, task.Properties["runtime"].Description, "default", "it says what naming none gets")
+		assert.NotContains(t, task.Required, "runtime")
+
+		// a stack names one for every service, and a service may name its
+		// own, where compose puts it.
+		stack := body[dashboardRunStack.Request]()
+
+		require.Contains(t, stack.Properties, "runtime")
+		assert.NotContains(t, stack.Required, "runtime")
+
+		require.Contains(t, stack.Properties, "services")
+		require.NotNil(t, stack.Properties["services"].AdditionalProperties)
+		assert.Contains(t, stack.Properties["services"].AdditionalProperties.Properties, "runtime")
 	})
 
 	t.Run("a shape written by hand says what it requires itself", func(t *testing.T) {
