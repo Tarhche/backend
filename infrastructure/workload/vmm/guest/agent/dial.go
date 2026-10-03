@@ -68,9 +68,15 @@ func (a *Agent) dial(rw http.ResponseWriter, r *http.Request) {
 	go pipe(conn, buffered, upstream)
 }
 
-// pipe carries bytes both ways until both ways are done. Each way ending is
-// passed on as a half-close, so a peer that finished sending can still read
-// the answer.
+// pipe carries bytes both ways until both ways are done.
+//
+// Whoever dialled finishing sending is passed on to the task as a half-close,
+// so it can still read the answer. The task finishing sending ends the
+// connection instead: firecracker passes no half-close from the guest on to
+// the host, so a connection the agent only stopped sending on would look to
+// whoever dialled like one with more to come, and an answer that ends when
+// the task closes — HTTP/1.0's, any "Connection: close" without a length —
+// would never end.
 func pipe(conn net.Conn, buffered io.Reader, upstream net.Conn) {
 	defer conn.Close()
 	defer upstream.Close()
@@ -89,7 +95,7 @@ func pipe(conn net.Conn, buffered io.Reader, upstream net.Conn) {
 		defer both.Done()
 
 		_, _ = io.Copy(conn, upstream)
-		closeWrite(conn)
+		_ = conn.Close()
 	}()
 
 	both.Wait()

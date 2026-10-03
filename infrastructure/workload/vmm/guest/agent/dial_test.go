@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -106,5 +107,54 @@ func TestDial(t *testing.T) {
 
 		_, _, response := a.upgrade(t, "/dial?port="+strconv.Itoa(int(echo(t))), guest.UpgradeDial, nil)
 		assert.Equal(t, http.StatusNotFound, response.StatusCode)
+	})
+}
+
+// deafToHalfCloses is a connection whose half-close goes nowhere, as one over
+// firecracker's vsock does: the guest saying it is done sending never reaches
+// the host.
+type deafToHalfCloses struct {
+	net.Conn
+
+	halfClosed atomic.Bool
+}
+
+func (c *deafToHalfCloses) CloseWrite() error {
+	c.halfClosed.Store(true)
+
+	return nil
+}
+
+func TestPipe(t *testing.T) {
+	t.Run("the task ending its side ends the connection, which is all firecracker's vsock tells the host", func(t *testing.T) {
+		host, agentSide := net.Pipe()
+		task, upstream := net.Pipe()
+
+		conn := &deafToHalfCloses{Conn: agentSide}
+
+		piped := make(chan struct{})
+		go func() {
+			pipe(conn, conn, upstream)
+			close(piped)
+		}()
+
+		// the task answers, and closes, as an HTTP/1.0 server does; the host
+		// has said nothing about being done.
+		go func() {
+			_, _ = task.Write([]byte("bye"))
+			_ = task.Close()
+		}()
+
+		require.NoError(t, host.SetReadDeadline(time.Now().Add(5*time.Second)))
+
+		answer, err := io.ReadAll(host)
+		require.NoError(t, err, "the end of the answer reached the host")
+		assert.Equal(t, "bye", string(answer))
+
+		select {
+		case <-piped:
+		case <-time.After(5 * time.Second):
+			t.Fatal("the connection outlived both its ends")
+		}
 	})
 }
