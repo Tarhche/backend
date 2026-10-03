@@ -23,6 +23,10 @@ x-app: &app
     - grafana
   volumes:
     - ./:/opt/app
+    # each service's own build output. The services share the source, and air
+    # builds each into tmp/main: in one directory, one's build hits another's
+    # running binary ("text file busy") and that service does not start.
+    - /opt/app/tmp
 
 services:
   app:
@@ -61,6 +65,7 @@ services:
       PROFILING_ENABLED: ${PROFILING_ENABLED:-true}
       WORKLOAD_CONTROLPLANE_URL: ${WORKLOAD_CONTROLPLANE_URL}
       WORKLOAD_INGRESS_DOMAIN: ${WORKLOAD_PUBLIC_INGRESS_DOMAIN}
+      WORKLOAD_CODE_RUNNER_RUNTIME: ${WORKLOAD_CODE_RUNNER_RUNTIME:-sysbox}
 
   workload-controlplane:
     <<: *app
@@ -69,6 +74,8 @@ services:
     ports:
       - "8020:80"
     environment:
+      WORKLOAD_RUNTIMES: ${WORKLOAD_RUNTIMES:-sysbox}
+      WORKLOAD_DEFAULT_RUNTIME: ${WORKLOAD_DEFAULT_RUNTIME:-sysbox}
       MONGO_SCHEME: ${MONGO_SCHEME}
       MONGO_USERNAME: ${MONGO_USERNAME}
       MONGO_PASSWORD: ${MONGO_PASSWORD}
@@ -119,8 +126,18 @@ services:
       target: develop-workload-orchestrator
     ports:
       - "8040:80"
+    volumes:
+      - ./:/opt/app
+      - /opt/app/tmp
+      # where vmhost takes requests, when it runs (profile microvm). This node
+      # does not wait for it: while vmhost is away, firecracker is offered
+      # unhealthy until it answers, and sysbox runs here all the same.
+      - workload-vmhost-run:/run/workload-vmhost:ro
     environment:
       WORKLOAD_ORCHESTRATOR_NAME: workload-orchestrator-01
+      # the classes this node offers, as class=kind@endpoint. Empty is sysbox
+      # alone on the docker daemon below; make up-microvm adds firecracker.
+      WORKLOAD_ORCHESTRATOR_RUNTIMES: ${WORKLOAD_ORCHESTRATOR_01_RUNTIMES:-}
       # the containers' ports are published on the docker daemon's own host,
       # which is the dind service rather than this one.
       WORKLOAD_ORCHESTRATOR_ADVERTISE_HOST: ${WORKLOAD_ORCHESTRATOR_ADVERTISE_HOST}
@@ -187,6 +204,97 @@ services:
       WORKLOAD_TUNNEL_ALLOWED_TARGETS: ${WORKLOAD_TUNNEL_ALLOWED_TARGETS}
       NATS_URL: ${NATS_URL}
       DOCKER_HOST: ${BACKEND_DOCKER_HOST}
+      OTEL_EXPORTER_OTLP_INSECURE: ${OTEL_EXPORTER_OTLP_INSECURE}
+      OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL}
+      OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
+      OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT: ${OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT:-}
+      OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
+      PROFILING_ENABLED: ${PROFILING_ENABLED:-true}
+
+  # The firecracker runtime class: vmhost and the holder of its microVMs'
+  # network namespace, as compose.workload-vmhost.yaml runs them in production.
+  # They need Linux with /dev/kvm and systemd, so they only run with the
+  # microvm profile, in the Lima VM (lima/workload.yaml):
+  #
+  #   make lima-up && make lima-shell
+  #   make up-microvm
+  #
+  # Without the profile, make up is what it always was: docker alone.
+  workload-vmnet:
+    image: registry.k8s.io/pause:3.10.1@sha256:278fb9dbcca9518083ad1e11276933a2e96f23de604a3a08cc3c80002767d24c
+    profiles: ["microvm"]
+    restart: unless-stopped
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    # the namespace's own, never the host's: vmhost forwards the microVMs'
+    # traffic here, and refuses to start where forwarding is off
+    sysctls:
+      net.ipv4.ip_forward: 1
+      net.ipv6.conf.all.disable_ipv6: 1
+      net.ipv6.conf.default.disable_ipv6: 1
+    networks:
+      # the microVMs' way out, and the namespace's default route (gw_priority:
+      # Docker Engine 28+ and Compose 2.34.0+, as compose.workload-vmhost.yaml says)
+      workload_vms:
+        priority: 1000
+        gw_priority: 1000
+      # the rest of the stack: grafana, which vmhost sends its telemetry to
+      default: {}
+
+  workload-vmhost:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: develop-workload-vmhost
+      # what the host trusts, trusted while firecracker and the kernel are
+      # fetched too: a network that inspects TLS breaks those downloads
+      # otherwise. The Lima VM trusts the CA bundle it was made with
+      # (LIMA_CA_CERTS).
+      secrets:
+        - ca-certificates
+    profiles: ["microvm"]
+    restart: unless-stopped
+    privileged: true
+    network_mode: service:workload-vmnet
+    pid: host
+    cgroup: host
+    depends_on:
+      - workload-vmnet
+      - grafana
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "--max-time", "4", "--unix-socket", "/run/workload-vmhost/vmhost.sock", "http://vmhost/v1/info"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      # air builds it before it can answer
+      start_period: 180s
+    stop_grace_period: 30s
+    volumes:
+      - ./:/opt/app
+      - /opt/app/tmp
+      # the same path inside and on the host, which matters in systemd mode,
+      # where the microVMs are the host's units and run what is kept there
+      - /var/lib/workload-vmhost:/var/lib/workload-vmhost
+      - workload-vmhost-run:/run/workload-vmhost
+      - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
+      - /sys/fs/cgroup:/sys/fs/cgroup
+      # registries are trusted as the host trusts them, a CA it was given to
+      # get past a network that inspects TLS included
+      - ${WORKLOAD_VMHOST_CA_CERTIFICATES:-/etc/ssl/certs/ca-certificates.crt}:/etc/ssl/certs/ca-certificates.crt:ro
+    environment:
+      # child: the microVMs are vmhost's children and end with it, which air
+      # does at every change. systemd: they are units of the Lima VM and
+      # outlive it, as in production.
+      WORKLOAD_VMHOST_PROCESS_MODE: ${WORKLOAD_VMHOST_PROCESS_MODE:-child}
+      WORKLOAD_VMHOST_MAX_MEMORY: ${WORKLOAD_VMHOST_MAX_MEMORY}
+      # Lima gives its user the subordinate ids 524288-1074266111, which
+      # overlap vmhost's default machine users (1000000000 on), so the
+      # microVMs run as users from 2000000000 here.
+      WORKLOAD_VMHOST_MACHINE_FIRST_UID: ${WORKLOAD_VMHOST_MACHINE_FIRST_UID:-2000000000}
       OTEL_EXPORTER_OTLP_INSECURE: ${OTEL_EXPORTER_OTLP_INSECURE}
       OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL}
       OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES}
@@ -360,3 +468,16 @@ services:
     environment:
       MONGODB_URI: ${MONGO_SCHEME}://${MONGO_USERNAME}:${MONGO_PASSWORD}@${MONGO_HOST}:${MONGO_PORT}/admin
     command: ["--collector.diagnosticdata", "--collector.dbstats"]
+
+networks:
+  # the microVMs' way out, the workload-vmnet holder's alone
+  workload_vms: {}
+
+volumes:
+  # vmhost's socket, shared with workload-orchestrator-01
+  workload-vmhost-run: {}
+
+secrets:
+  # what the host trusts, for the downloads in vmhost's image build
+  ca-certificates:
+    file: ${WORKLOAD_BUILD_CA_CERTIFICATES:-/etc/ssl/certs/ca-certificates.crt}

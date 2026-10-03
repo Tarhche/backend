@@ -1,0 +1,7 @@
+# What a checkout keeps for itself and never builds from: the local stack's
+# data and the certificates made for it (tmp), and the local key pair
+# (private, private.pub), all of which .gitignore leaves out of the repository
+# too. Without this, COPY . . carried them into every image built here.
+tmp
+private
+private.pub

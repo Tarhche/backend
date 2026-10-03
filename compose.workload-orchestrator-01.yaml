@@ -41,6 +41,11 @@ services:
         limits:
           cpus: '0.10'
           memory: 50M
+    volumes:
+      # where this host's vmhost takes requests (compose.workload-vmhost.yaml).
+      # Its socket is made for this service's group, and this is all of vmhost
+      # it can reach: read-only, since connecting to a socket writes nothing.
+      - /run/workload-vmhost:/run/workload-vmhost:ro
     logging:
       driver: json-file
       options:
@@ -64,6 +69,14 @@ services:
       PUBLIC_KEY: ${BACKEND_PUBLIC_KEY}
       NATS_URL: ${BACKEND_NATS_URL}
       DOCKER_HOST: ${BACKEND_DOCKER_HOST}
+      # the runtime classes this node offers, and what runs each: sysbox
+      # containers on the docker daemon, and firecracker microVMs on this host's
+      # vmhost, which serves this one orchestrator alone (one orchestrator per
+      # vmhost: a vmhost reports the whole host's capacity to whoever asks).
+      # The deploy names sysbox alone here on a host with no budget for
+      # microVMs. Taking firecracker away while its tasks run loses track of
+      # them: drain them first.
+      WORKLOAD_ORCHESTRATOR_RUNTIMES: ${BACKEND_WORKLOAD_ORCHESTRATOR_01_RUNTIMES:-sysbox=container@${BACKEND_DOCKER_HOST},firecracker=microvm@unix:///run/workload-vmhost/vmhost.sock}
       OTEL_EXPORTER_OTLP_INSECURE: ${OTEL_EXPORTER_OTLP_INSECURE}
       OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL}
       OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES}

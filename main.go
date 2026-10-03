@@ -53,6 +53,7 @@ func main() {
 	c.Register(controlplane.NewServeCommand())
 	c.Register(orchestrator.NewServeCommand())
 	c.Register(ingress.NewServeCommand())
+	registerVMHost(c)
 
 	// brings what is stored up to what this version reads
 	c.Register(database.NewMigrateCommand())

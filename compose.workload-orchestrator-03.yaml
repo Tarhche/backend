@@ -63,6 +63,10 @@ services:
       # the public half of the key the blog signs access tokens with
       PUBLIC_KEY: ${BACKEND_PUBLIC_KEY}
       NATS_URL: ${BACKEND_NATS_URL}
+      # sysbox alone, on this daemon: WORKLOAD_ORCHESTRATOR_RUNTIMES is not set,
+      # which is what an orchestrator offered before there were classes. The
+      # host's vmhost serves workload-orchestrator-01 alone, since each would
+      # report the whole host's capacity as its own.
       DOCKER_HOST: ${BACKEND_DOCKER_HOST}
       OTEL_EXPORTER_OTLP_INSECURE: ${OTEL_EXPORTER_OTLP_INSECURE}
       OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL}
