@@ -308,12 +308,12 @@ func TestUseCase_Execute_endpoints(t *testing.T) {
 			}),
 			want: []events.Endpoint{{TaskPort: 80, HostPort: 32768}, {TaskPort: 8080, HostPort: 32769}},
 		},
-		"a port reached through its runtime is up on its own number": {
+		"a port reached through its runtime is up with no host port": {
 			held: heldTask(func(held *task.Execution) {
 				held.Runtime = runtime.Firecracker
 				held.Endpoints = []port.Port{80}
 			}),
-			want: []events.Endpoint{{TaskPort: 80, HostPort: 80}},
+			want: []events.Endpoint{{TaskPort: 80}},
 		},
 		"a run that does not say is read by what docker published": {
 			held: heldTask(func(held *task.Execution) {

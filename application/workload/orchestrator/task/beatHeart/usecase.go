@@ -233,14 +233,11 @@ func (uc *UseCase) endpoints(c *task.Execution) []events.Endpoint {
 			continue
 		}
 
-		// a port reached through the runtime rather than published has no host
-		// port of its own. It is reported as reached on its own number, since
-		// what reads these takes a port with no host port for one that did not
-		// come up; where it is reached never leaves the node either way.
-		hostPort, found := publishedOn(c.PortBindings, taskPort)
-		if !found {
-			hostPort = taskPort
-		}
+		// a port reached through the runtime rather than published, as a
+		// microVM's is, has no host port of its own, and is reported with
+		// none: the control plane keeps every endpoint that names a port,
+		// published or not, and where a port is reached never leaves the node.
+		hostPort, _ := publishedOn(c.PortBindings, taskPort)
 
 		endpoints = append(endpoints, events.Endpoint{TaskPort: taskPort, HostPort: hostPort})
 	}
