@@ -23,6 +23,10 @@ x-app: &app
     - grafana
   volumes:
     - ./:/opt/app
+    # each service's own build output. The services share the source, and air
+    # builds each into tmp/main: in one directory, one's build hits another's
+    # running binary ("text file busy") and that service does not start.
+    - /opt/app/tmp
 
 services:
   app:
@@ -124,6 +128,7 @@ services:
       - "8040:80"
     volumes:
       - ./:/opt/app
+      - /opt/app/tmp
       # where vmhost takes requests, when it runs (profile microvm). This node
       # does not wait for it: while vmhost is away, firecracker is offered
       # unhealthy until it answers, and sysbox runs here all the same.
@@ -270,6 +275,7 @@ services:
     stop_grace_period: 30s
     volumes:
       - ./:/opt/app
+      - /opt/app/tmp
       # the same path inside and on the host, which matters in systemd mode,
       # where the microVMs are the host's units and run what is kept there
       - /var/lib/workload-vmhost:/var/lib/workload-vmhost
