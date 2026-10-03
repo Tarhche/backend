@@ -118,6 +118,8 @@ func openCgroup(task string, dir string) (*os.File, error) {
 		if failed := enableControllers(task); len(failed) > 0 {
 			return nil, errors.Join(failed...)
 		}
+
+		limitMemory(task, readText("/proc/meminfo"))
 	}
 
 	if err := os.Mkdir(dir, 0o755); err != nil && !errors.Is(err, os.ErrExist) {
@@ -125,6 +127,32 @@ func openCgroup(task string, dir string) (*os.File, error) {
 	}
 
 	return os.Open(dir)
+}
+
+// taskMemoryReserve is what the agent keeps for itself when it holds the task
+// to the machine's memory: its log ring, the buffers of the commands and
+// connections it carries, and room to answer while the task is being ended.
+const taskMemoryReserve = 8 << 20
+
+// limitMemory holds the task to what the machine has left once it is up,
+// short of what the agent keeps for itself.
+//
+// A machine is as big as its task asked for, so a task that takes more takes
+// the whole machine with it. The kernel then takes back every page it can
+// before it ends anything, and the pages a machine runs from are read again
+// from its compressed image every time they are wanted, which on a busy host
+// goes on for minutes while the task neither runs nor ends. A cgroup at its
+// limit is ended at once instead, as a container is at its own.
+//
+// It is the most the task can have, not what it is promised. A kernel without
+// the memory controller runs the task as before.
+func limitMemory(task string, meminfo string) {
+	_, available := memoryInfo(meminfo)
+	if available <= taskMemoryReserve {
+		return
+	}
+
+	_ = os.WriteFile(filepath.Join(task, "memory.max"), []byte(strconv.FormatUint(available-taskMemoryReserve, 10)), 0o644)
 }
 
 // killCgroup ends everything in a cgroup at once, and waits for it to be
