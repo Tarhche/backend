@@ -127,6 +127,14 @@ func mountInsideRoot(logger *slog.Logger, root string, readOnly bool, create boo
 		if err := unix.Mount(m.source, target, m.fstype, m.flags, m.data); err != nil {
 			return fmt.Errorf("failed to mount %s inside the task's root: %w", m.target, err)
 		}
+
+		// a copy of the agent's mounts is made the task's own, so that what
+		// the task mounts or unmounts in it never reaches the agent's.
+		if m.flags&unix.MS_BIND != 0 {
+			if err := unix.Mount("", target, "", unix.MS_REC|unix.MS_PRIVATE, ""); err != nil {
+				return fmt.Errorf("failed to make %s inside the task's root its own: %w", m.target, err)
+			}
+		}
 	}
 
 	return nil
