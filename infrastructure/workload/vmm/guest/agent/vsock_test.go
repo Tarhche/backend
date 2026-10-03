@@ -3,11 +3,14 @@
 package agent
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"io"
 	"net"
 	"net/http"
 	"os"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -164,7 +167,47 @@ func TestVsock(t *testing.T) {
 		}
 	})
 
-	t.Run("the agent is served on it", func(t *testing.T) {
+	t.Run("a read interrupted by its deadline says it timed out, as a network connection's does", func(t *testing.T) {
+		listener := listenLocal(t, func(cid uint32) bool { return cid == unix.VMADDR_CID_LOCAL })
+
+		accepted := make(chan net.Conn, 1)
+		go func() {
+			conn, err := listener.Accept()
+			if err == nil {
+				accepted <- conn
+			}
+		}()
+
+		client := dialLocal(t, vsockPort)
+
+		var server net.Conn
+		select {
+		case server = <-accepted:
+		case <-time.After(5 * time.Second):
+			t.Fatal("the connection was not accepted")
+		}
+		defer server.Close()
+
+		require.NoError(t, server.SetReadDeadline(time.Now().Add(50*time.Millisecond)))
+
+		_, err := server.Read(make([]byte, 1))
+
+		// an http server asks the error itself, not what it wraps, whether
+		// it is a net.Error that timed out: that is how it tells a read it
+		// interrupted from a peer that left.
+		timedOut, ok := err.(net.Error) //nolint:errorlint // what net/http does
+		require.True(t, ok, "%T is no net.Error", err)
+		assert.True(t, timedOut.Timeout())
+		assert.ErrorIs(t, err, os.ErrDeadlineExceeded)
+
+		require.NoError(t, client.Close())
+		require.NoError(t, server.SetReadDeadline(time.Now().Add(5*time.Second)))
+
+		_, err = server.Read(make([]byte, 1))
+		assert.Equal(t, io.EOF, err, "a peer that is done is io.EOF itself")
+	})
+
+	t.Run("the agent is served on it, request after request on one connection", func(t *testing.T) {
 		listener := listenLocal(t, func(cid uint32) bool { return cid == unix.VMADDR_CID_LOCAL })
 
 		a := newTestAgent(t, newProcessGroups())
@@ -173,16 +216,66 @@ func TestVsock(t *testing.T) {
 		go func() { _ = server.Serve(listener) }()
 		t.Cleanup(func() { server.Close() })
 
+		var dials atomic.Int32
 		client := &http.Client{Transport: &http.Transport{
-			Dial: func(string, string) (net.Conn, error) { return dialLocal(t, vsockPort), nil },
+			Dial: func(string, string) (net.Conn, error) {
+				dials.Add(1)
+
+				return dialLocal(t, vsockPort), nil
+			},
+			MaxConnsPerHost: 1,
 		}}
+		t.Cleanup(client.CloseIdleConnections)
 
-		response, err := client.Get("http://agent/health")
-		require.NoError(t, err)
-		response.Body.Close()
+		do := func(method string, path string, body any) (*http.Response, []byte) {
+			t.Helper()
 
+			var payload io.Reader
+			if body != nil {
+				encoded, err := json.Marshal(body)
+				require.NoError(t, err)
+
+				payload = bytes.NewReader(encoded)
+			}
+
+			request, err := http.NewRequest(method, "http://agent"+path, payload)
+			require.NoError(t, err)
+
+			response, err := client.Do(request)
+			require.NoError(t, err)
+			defer response.Body.Close()
+
+			content, err := io.ReadAll(response.Body)
+			require.NoError(t, err)
+
+			return response, content
+		}
+
+		response, _ := do(http.MethodGet, "/health", nil)
 		assert.Equal(t, http.StatusNoContent, response.StatusCode)
 		assert.Equal(t, guest.ProtocolVersion, response.Header.Get(guest.VersionHeader))
+
+		response, _ = do(http.MethodPut, "/config", testConfig())
+		require.Equal(t, http.StatusNoContent, response.StatusCode)
+
+		response, _ = do(http.MethodPost, "/process", guest.Process{Args: []string{"sleep", "0.3"}})
+		require.Equal(t, http.StatusOK, response.StatusCode)
+
+		// a request that waits is answered once there is something to say, on
+		// the connection the others were asked on: a server that took the
+		// connection for gone after its first answer cancels it at once, and
+		// says nothing.
+		began := time.Now()
+		response, content := do(http.MethodGet, "/process/wait?generation=1", nil)
+		require.Equal(t, http.StatusOK, response.StatusCode)
+
+		var status guest.Status
+		require.NoError(t, json.Unmarshal(content, &status), "the wait was answered: %q", content)
+		assert.Equal(t, guest.StateExited, status.State)
+		assert.Equal(t, 0, status.ExitCode)
+		assert.GreaterOrEqual(t, time.Since(began), 100*time.Millisecond, "it waited for the task")
+
+		assert.Equal(t, int32(1), dials.Load(), "every request went over the one connection")
 	})
 
 	t.Run("closing the listener ends an accept that is waiting", func(t *testing.T) {

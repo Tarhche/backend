@@ -4,6 +4,7 @@ package agent
 
 import (
 	"errors"
+	"io"
 	"net"
 	"os"
 	"strconv"
@@ -154,11 +155,37 @@ type vsockConn struct {
 var _ net.Conn = (*vsockConn)(nil)
 
 func (c *vsockConn) Read(p []byte) (int, error) {
-	return c.file.Read(p)
+	n, err := c.file.Read(p)
+
+	return n, c.wrap("read", err)
 }
 
 func (c *vsockConn) Write(p []byte) (int, error) {
-	return c.file.Write(p)
+	n, err := c.file.Write(p)
+
+	return n, c.wrap("write", err)
+}
+
+// wrap says what went wrong the way a connection of the net package does.
+// An http server tells a read it interrupted itself, once an answer is done,
+// from a peer that went away by the error being a net.Error that timed out. A
+// file's error is neither, so the server would take every connection for gone
+// after its first answer, and cancel whatever was asked on it next.
+func (c *vsockConn) wrap(op string, err error) error {
+	if err == nil {
+		return nil
+	}
+
+	if errors.Is(err, io.EOF) {
+		return io.EOF
+	}
+
+	var path *os.PathError
+	if errors.As(err, &path) {
+		err = path.Err
+	}
+
+	return &net.OpError{Op: op, Net: "vsock", Source: c.local, Addr: c.remote, Err: err}
 }
 
 func (c *vsockConn) Close() error {
