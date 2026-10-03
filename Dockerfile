@@ -38,6 +38,7 @@ RUN go build -v -trimpath -ldflags="-s -w" -o /opt/guest/workload-guest ./cmd/wo
 #
 #   docker build --secret id=ca-certificates,src=<bundle.pem> ...
 FROM --platform=$BUILDPLATFORM alpine:3.24 AS firecracker
+SHELL ["/bin/ash", "-eo", "pipefail", "-c"]
 ARG TARGETARCH
 ARG FIRECRACKER_RELEASES=https://github.com/firecracker-microvm/firecracker/releases/download
 ARG FIRECRACKER_VERSION=v1.17.0
