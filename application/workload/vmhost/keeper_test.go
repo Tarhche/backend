@@ -162,6 +162,49 @@ func TestKeeper(t *testing.T) {
 		assert.NotEmpty(t, w.fabric.Plugged(id))
 	})
 
+	t.Run("a vm whose boot again fails waits and is booted again until one comes up, as its policy says", func(t *testing.T) {
+		t.Parallel()
+
+		w := newWorld(t, nil)
+
+		s := spec("service")
+		s.RestartPolicy = "unless-stopped"
+
+		id := w.run(s)
+
+		// the host going down: systemd starts no more units.
+		w.hypervisor.FailBoot(errors.New("transaction is destructive: the host is going down"))
+		w.hypervisor.Crash(id)
+
+		failing := w.waitFor(id, func(v vm.VM) bool { return v.RestartCount >= 2 })
+		assert.Equal(t, vm.StateRestarting, failing.State, "never dead, which would keep it down for good")
+		assert.Contains(t, failing.Reason, "the host is going down")
+
+		w.hypervisor.FailBoot(nil)
+
+		running := w.waitFor(id, inState(vm.StateRunning))
+		assert.Empty(t, running.Reason)
+		assert.NotEmpty(t, w.fabric.Plugged(id))
+	})
+
+	t.Run("a vm whose boot again fails is dead once its policy allows no more", func(t *testing.T) {
+		t.Parallel()
+
+		w := newWorld(t, nil)
+
+		s := spec("service")
+		s.RestartPolicy = "on-failure:1"
+
+		id := w.run(s)
+
+		w.hypervisor.FailBoot(errors.New("the kernel is not there"))
+		w.hypervisor.Crash(id)
+
+		dead := w.waitFor(id, inState(vm.StateDead))
+		assert.Equal(t, uint(1), dead.RestartCount)
+		assert.Contains(t, dead.Reason, "the kernel is not there")
+	})
+
 	t.Run("a vm that removes itself is deleted once its task ended", func(t *testing.T) {
 		t.Parallel()
 

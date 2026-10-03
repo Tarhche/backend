@@ -470,16 +470,34 @@ func (e *Engine) rebootNow(id string, seq uint64) {
 }
 
 // reboot boots a VM again because its restart policy says so, which counts as
-// one of its restarts. A VM that cannot be booted again is dead. The VM's lock
-// is held.
+// one of its restarts. A boot that fails counts as one too: the VM stays
+// restarting and is booted again after its wait for as long as its policy
+// says, which always and unless-stopped say for ever, and is dead only once
+// the policy says no more. A boot can fail for reasons that pass: the host
+// going down, where systemd starts no more units, is the common one. A vmhost
+// that stops meanwhile leaves the VM restarting, which the next one takes for
+// a machine that went away and boots again, so a host that reboots brings its
+// VMs back as docker brings back its containers. The VM's lock is held.
 func (e *Engine) reboot(ctx context.Context, id string) {
-	if _, err := e.states.Update(ctx, id, func(v *vm.VM) { v.RestartCount++ }); err != nil {
+	v, err := e.states.Update(ctx, id, func(v *vm.VM) { v.RestartCount++ })
+	if err != nil {
 		return
 	}
 
 	e.metrics.restarted(ctx, "machine")
 
-	if err := e.start(ctx, id, vm.StateDead); err != nil {
-		e.logger.Error("a vm whose machine went away could not be booted again", "vm", id, "error", err)
+	again := vm.ParseRestartPolicy(v.Spec.RestartPolicy).Restarts(lostExitCode, v.RestartCount, v.Stopped)
+
+	fallback := vm.StateDead
+	if again {
+		fallback = vm.StateRestarting
+	}
+
+	if err := e.start(ctx, id, fallback); err != nil {
+		e.logger.Error("a vm whose machine went away could not be booted again", "vm", id, "error", err, "again", again)
+
+		if again {
+			e.scheduleReboot(id, e.timing.backoff(v.RestartCount))
+		}
 	}
 }
