@@ -458,9 +458,15 @@ func (s *suite) limits(t *testing.T) {
 	t.Run("memory past the limit is not given", func(t *testing.T) {
 		t.Parallel()
 
-		// a shell holding 96 MiB in a variable, limited to 16.
+		// one process taking 96 MiB at once, limited to 16; a class that gives
+		// every task more than that still gives it less than 96, as a
+		// microVM's least does. It is one process on purpose:
+		// several that run one program, as a pipeline of busybox applets is,
+		// can keep the kernel reading that program's pages back in, and so
+		// reclaiming rather than ending anything, for minutes, whatever the
+		// class. That is the kernel's, and not what this asks.
 		finished, out := job(t, s.context(t), s.driver, s.execution("memory", task.KindJob,
-			`x=$(yes | head -c 100663296); echo survived`, func(e *task.Execution) {
+			`dd if=/dev/zero of=/dev/null bs=100663296 count=1 && echo survived`, func(e *task.Execution) {
 				e.ResourceLimits.Memory = 16 << 20
 			}))
 
