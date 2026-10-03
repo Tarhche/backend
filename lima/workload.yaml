@@ -1,0 +1,157 @@
+# The Lima VM the firecracker runtime class is developed in: Ubuntu 24.04 with
+# rootful docker and /dev/kvm, through Apple's nested virtualization (an M3 or
+# later, and macOS 15 or later). The whole local stack runs in it, vmhost and
+# its microVMs included, as it would on a production host:
+#
+#   make lima-up        make the VM (once) and start it
+#   make lima-shell     a shell in it, in this checkout
+#   make up-microvm     in there: the stack, with the microvm profile
+#   make e2e-microvm    in there: tests/e2e/microvm.sh against it
+#   make lima-down      stop it; make lima-delete removes it
+#
+# make lima-up mounts this checkout at the same path, writable, and installs
+# firecracker and the kernel from the Dockerfile's pins (make microvm-install).
+# By hand, that is:
+#
+#   limactl create --name=workload --mount="$PWD:w" ./lima/workload.yaml
+#   limactl start workload
+#   limactl shell --workdir "$PWD" workload make microvm-install
+#
+# On a network that inspects TLS, the VM has to trust that network's CA before
+# it can fetch anything over HTTPS (Go, task images, firecracker): give
+# make lima-up LIMA_CA_CERTS=<bundle.pem>, a PEM bundle on the Mac, which
+# cloud-init installs into the VM's trust store when the VM is made
+# (caCerts.files). Nothing of it is written here. The image builds and vmhost in
+# the local stack trust what the VM trusts.
+#
+# Two things differ from a production host on purpose:
+#
+#   - Lima gives its user the subordinate ids 524288-1074266111, which cover
+#     vmhost's default machine users (1000000000 on). Nothing here uses them
+#     (docker is rootful), but the local stack runs microVMs as users from
+#     2000000000 all the same (compose.yaml), so they are nobody else's.
+#   - Nothing turns IP forwarding on for the VM. docker does that for itself,
+#     as it does on a production host, and the microVMs' traffic is forwarded
+#     inside the network namespace of their holder (workload-vmnet), which turns
+#     forwarding on for that namespace alone.
+
+minimumLimaVersion: 2.0.0
+
+base:
+  - template:_images/ubuntu-24.04
+
+vmType: vz
+nestedVirtualization: true
+
+cpus: 8
+memory: 16GiB
+disk: 60GiB
+
+# make lima-up mounts this checkout; nothing else of the Mac is shared
+mounts: []
+
+# docker is the VM's own, and rootful: no containerd or nerdctl of Lima's
+containerd:
+  system: false
+  user: false
+
+provision:
+  # docker from Ubuntu's own archive (29.x, with compose 2.40 and buildx),
+  # rootful, with live-restore, which the production host preflight requires:
+  # restarting dockerd then leaves containers running, the holder of the
+  # microVMs' network among them. The tools beside it are what vmhost's own
+  # tests run (sqfstar, mke2fs, iptables) and what the Makefile and the e2e
+  # script use.
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -eux -o pipefail
+      export DEBIAN_FRONTEND=noninteractive
+
+      apt-get update
+      apt-get install -y --no-install-recommends \
+        ca-certificates curl jq make git gcc libc6-dev \
+        squashfs-tools e2fsprogs iptables iproute2 socat \
+        docker.io docker-compose-v2 docker-buildx
+
+      mkdir -p /etc/docker
+      if [ ! -s /etc/docker/daemon.json ]; then
+        echo '{"live-restore": true}' > /etc/docker/daemon.json
+      fi
+      usermod -aG docker,kvm "{{.User}}"
+
+      # the user reaches docker's socket without a new login
+      mkdir -p /etc/systemd/system/docker.socket.d
+      printf '[Socket]\nSocketUser=%s\n' "{{.User}}" > /etc/systemd/system/docker.socket.d/override.conf
+      systemctl daemon-reload
+      systemctl enable docker.socket docker.service
+      systemctl restart docker.socket docker.service
+
+  # what the production host's setup does (Tarhche/infrastructure, vmhost/):
+  # the modules microVMs need, and vmhost's two directories, made again at boot
+  # since /run is a tmpfs. KVM is built into arm64 kernels.
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -eux -o pipefail
+      printf 'tun\noverlay\n' > /etc/modules-load.d/workload-vmhost.conf
+      modprobe tun
+      modprobe overlay
+      cat > /etc/tmpfiles.d/workload-vmhost.conf <<'EOF'
+      d /var/lib/workload-vmhost 0711 root root -
+      d /run/workload-vmhost 0750 root 10001 -
+      EOF
+      systemd-tmpfiles --create /etc/tmpfiles.d/workload-vmhost.conf
+
+  # Go, the release go.mod asks for, from go.dev and checked against the
+  # checksum go.dev publishes for it: for make test-microvm and the e2e script.
+  # The stack itself builds in docker and needs none.
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -eux -o pipefail
+      if /usr/local/go/bin/go version 2>/dev/null | grep -q ' go1\.27'; then
+        exit 0
+      fi
+      arch=$(dpkg --print-architecture)
+      read -r filename sha256 < <(
+        curl -fsSL 'https://go.dev/dl/?mode=json&include=all' | jq -r --arg arch "$arch" '
+          [.[] | select(.stable and (.version | test("^go1\\.27(\\.[0-9]+)?$")))][0].files[]
+          | select(.os == "linux" and .arch == $arch and .kind == "archive")
+          | "\(.filename) \(.sha256)"'
+      )
+      curl -fsSLo "/tmp/$filename" "https://go.dev/dl/$filename"
+      echo "$sha256  /tmp/$filename" | sha256sum -c -
+      rm -rf /usr/local/go
+      tar -C /usr/local -xzf "/tmp/$filename"
+      rm -f "/tmp/$filename"
+      ln -sf /usr/local/go/bin/go /usr/local/go/bin/gofmt /usr/local/bin/
+
+probes:
+  - description: docker is running
+    script: |
+      #!/bin/bash
+      set -eux -o pipefail
+      if ! timeout 300s bash -c 'until command -v docker >/dev/null 2>&1 && pgrep dockerd >/dev/null; do sleep 3; done'; then
+        echo >&2 "docker is not running yet"
+        exit 1
+      fi
+    hint: See /var/log/cloud-init-output.log in the VM
+  - description: /dev/kvm is there
+    script: |
+      #!/bin/bash
+      set -eux -o pipefail
+      test -c /dev/kvm
+    hint: Nested virtualization needs an M3 or later and macOS 15 or later (vmType vz)
+
+# docker in the VM, for a docker CLI on the Mac:
+#   docker context create lima-workload --docker "host=unix://$HOME/.lima/workload/sock/docker.sock"
+portForwards:
+  - guestSocket: /var/run/docker.sock
+    hostSocket: "{{.Dir}}/sock/docker.sock"
+
+message: |
+  The VM is ready. In it, in this checkout (make lima-shell):
+    make up-microvm      the local stack, with the firecracker class
+    make e2e-microvm     tests/e2e/microvm.sh against it
+    make test-microvm    the tests that boot real microVMs
