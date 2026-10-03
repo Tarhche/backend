@@ -91,32 +91,4 @@ sudo install -d -m 0750 -o root -g 10001 /run/workload-vmhost
 
 compose up --detach --wait --wait-timeout 180
 
-# TEMPORARY DIAGNOSTIC (integration): what a guest does at its memory limit on
-# this host, printed before the suite runs. To be removed.
-vmx() {
-	local args=(-sS --max-time 120 --unix-socket "$socket" -X "$1")
-	if [[ $# -ge 3 ]]; then args+=(-H 'Content-Type: application/json' --data "$3"); fi
-	docker exec "$project-workload-vmhost-1" curl "${args[@]}" "http://vmhost$2"
-}
-diagnose_memory() {
-	local cmd spec id state
-	# shellcheck disable=SC2016 # the command runs in the guest, which expands it
-	cmd='mkdir -p /c && mount -t cgroup2 none /c; echo "kernel: $(uname -r -m)"; echo "root subtree: $(cat /c/cgroup.subtree_control)"; echo "task memory.max: $(cat /c/task/memory.max 2>&1)"; grep -E "MemTotal|MemAvailable" /proc/meminfo; echo "psi: $(ls /proc/pressure 2>&1 | tr "\n" " ")"; (x=$(yes | head -c 100663296); echo survived) & p=$!; for i in $(seq 1 45); do sleep 2; kill -0 $p 2>/dev/null || { echo "hog ended within $((i*2))s"; break; }; echo "t=$((i*2))s current=$(($(cat /c/task/memory.current)>>20))MiB events=[$(tr "\n" " " < /c/task/memory.events)] psi=[$(head -1 /c/task/memory.pressure 2>/dev/null)] meminfo=[$(grep -E "MemFree|MemAvailable|^Cached" /proc/meminfo | tr -s " " | tr "\n" " ")]"; done; wait $p; echo "hog exit=$?"'
-	vmx POST /v1/images/prepare '{"image":"busybox:1.36"}' >/dev/null
-	spec=$(jq -cn --arg cmd "$cmd" '{name: "diagnose-memory", image: "busybox:1.36", labels: {"node.name": "diagnose"}, command: ["sh", "-c", $cmd], resources: {cpu: 0.5, memory: 16777216, disk: 134217728}}')
-	id=$(vmx POST /v1/vms "$spec" | jq -r .id)
-	vmx POST "/v1/vms/$id/start" >/dev/null
-	for _ in $(seq 1 150); do
-		state=$(vmx GET "/v1/vms/$id" | jq -r .state)
-		[[ $state == exited || $state == dead ]] && break
-		sleep 1
-	done
-	echo "diagnose-memory: $(vmx GET "/v1/vms/$id" | jq -c '{state, exit_code}')"
-	vmx GET "/v1/vms/$id/logs" | jq -r '.content'
-	vmx POST "/v1/vms/$id/kill" >/dev/null 2>&1 || true
-	sleep 2
-	vmx DELETE "/v1/vms/$id" >/dev/null 2>&1 || true
-}
-diagnose_memory || echo "diagnose-memory failed"
-
 WORKLOAD_CONFORMANCE_VMHOST="unix://$socket" go test -exec 'sudo -E' -tags conformance -count=1 "${packages[@]}"
