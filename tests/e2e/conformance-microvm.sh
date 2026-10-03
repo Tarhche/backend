@@ -9,10 +9,14 @@
 #   make test-conformance-microvm
 #
 # The suite is the conformance-tagged tests of CONFORMANCE_PACKAGES (the microvm
-# driver's by default), which find vmhost by WORKLOAD_TEST_VMHOST. They run as
-# root, since vmhost's socket is its group's. BUILD_CA_CERTIFICATES is a CA
-# bundle the image build trusts while it downloads firecracker and the kernel:
-# the machine's own by default, which in the Lima VM holds LIMA_CA_CERTS.
+# driver's by default), which find vmhost by WORKLOAD_CONFORMANCE_VMHOST, as the
+# container driver's find docker by WORKLOAD_CONFORMANCE_DOCKER_HOST
+# (WORKLOAD_TEST_* is for the microvm-tagged tests that boot machines of their
+# own). They run as root, since vmhost's socket is its group's.
+# WORKLOAD_CONFORMANCE_FORBIDDEN and WORKLOAD_CONFORMANCE_OFFLINE are passed on.
+# BUILD_CA_CERTIFICATES is a CA bundle the image build trusts while it downloads
+# firecracker and the kernel: the machine's own by default, which in the Lima VM
+# holds LIMA_CA_CERTS.
 #
 # It leaves nothing behind: vmhost and its holder are taken down, and so is any
 # microVM a test left running. Do not run it beside make up-microvm, whose
@@ -87,4 +91,4 @@ sudo install -d -m 0750 -o root -g 10001 /run/workload-vmhost
 
 compose up --detach --wait --wait-timeout 180
 
-WORKLOAD_TEST_VMHOST="unix://$socket" go test -exec 'sudo -E' -tags conformance -count=1 "${packages[@]}"
+WORKLOAD_CONFORMANCE_VMHOST="unix://$socket" go test -exec 'sudo -E' -tags conformance -count=1 "${packages[@]}"

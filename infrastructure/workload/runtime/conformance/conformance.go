@@ -43,6 +43,10 @@ type options struct {
 	internet  string
 	forbidden []string
 	timeout   time.Duration
+
+	// scratchOnReadOnlyRoot says a task on a read-only root still has /tmp
+	// and /run to write to.
+	scratchOnReadOnlyRoot bool
 }
 
 const (
@@ -87,6 +91,16 @@ func WithForbidden(addresses ...string) Option {
 // WithTimeout is how long one scenario may take.
 func WithTimeout(timeout time.Duration) Option {
 	return func(o *options) { o.timeout = timeout }
+}
+
+// ScratchOnReadOnlyRoot is a class whose task on a read-only root still has
+// /tmp and /run to write to, as a microVM's has: its guest lays a tmpfs over
+// each, since a machine's init needs somewhere to write and the image may have
+// nowhere. A container on a read-only root has neither, unless it asks for a
+// tmpfs. Capabilities has no word for the difference, so a class says which it
+// is here, and the suite holds it to that either way.
+func ScratchOnReadOnlyRoot() Option {
+	return func(o *options) { o.scratchOnReadOnlyRoot = true }
 }
 
 // suite is one run of the scenarios: the driver under test for a node of its
