@@ -90,8 +90,10 @@ func newHost(t *testing.T) *host {
 	}
 
 	// short on purpose: a socket's path is at most 108 bytes, and a
-	// machine's sockets are several directories down.
-	dataDir, err := os.MkdirTemp("", "vh")
+	// machine's sockets are several directories down. Under /var/lib, as
+	// vmhost's own is, rather than /tmp: a machine's unit has a /tmp of its
+	// own (PrivateTmp), and would not find its directory in the host's.
+	dataDir, err := os.MkdirTemp("/var/lib", "vh")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = os.RemoveAll(dataDir) })
 
@@ -118,8 +120,12 @@ func newHost(t *testing.T) *host {
 		logger = slog.New(slog.NewTextHandler(os.Stderr, nil))
 	}
 
+	// clear of the subordinate ids a host gives its users, which on a Lima
+	// VM (524288-1074266111) cover vmhost's default first machine user, and
+	// which the hypervisor refuses to share; the firecracker package's own
+	// tests count up from here too.
 	const (
-		firstUID = 1_000_000_000
+		firstUID = 2_000_000_000
 		uids     = 64
 	)
 
