@@ -1,0 +1,98 @@
+# workload-microsandbox runs the workload's tasks as microVMs, for the
+# orchestrators whose WORKLOAD_ORCHESTRATOR_RUNTIME is microsandbox. It is
+# deployed apart from everything else, by .github/workflows/workload-microsandbox.yaml,
+# and only when its own files change (.github/microsandbox-paths.txt): any
+# restart of this container restarts every microVM task, because a task's main
+# process cannot outlive the service that started it.
+services:
+  workload-microsandbox:
+    # pinned by the commit it was built from, so a redeploy is a decision
+    # rather than a side effect of a tag moving
+    image: ${WORKLOAD_MICROSANDBOX_IMAGE}
+    # one per host, and never two on one volume: microsandbox has no daemon,
+    # and two processes on one MSB_HOME break its database
+    container_name: workload-microsandbox
+    hostname: workload-microsandbox
+    user: "10001:10001"
+    # the host's kvm group, which /dev/kvm belongs to. The deploy reads its gid.
+    group_add:
+      - "${BACKEND_KVM_GID:?the gid of the host's kvm group}"
+    # /dev/kvm is all it takes from the host: no privileged mode, no
+    # capabilities, no host PID namespace and no docker socket
+    devices:
+      - /dev/kvm:/dev/kvm
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    # main.go stops on an interrupt. The service then stops every run, marks it
+    # to be resumed, and exits within 45s: the grace is longer, so it is never
+    # killed halfway.
+    stop_signal: SIGINT
+    stop_grace_period: 60s
+    # never start-first: a second container on the same volume would break it
+    restart: unless-stopped
+    networks:
+      # egress: pulling images, and the guests whose policy is public
+      default: {}
+      # where the orchestrators reach the API, and the tasks' ports, which
+      # are bound to this address and no other
+      workload_microsandbox:
+        ipv4_address: 10.89.0.10
+      monitoring: {}
+    volumes:
+      # MSB_HOME (/data/msb: microsandbox's database, image cache and the
+      # sandboxes' disks), and the service's run records and log journals
+      # (/data/service). Recreating the container keeps them all.
+      - workload_microsandbox_data:/data
+    deploy:
+      resources:
+        limits:
+          # the service admits VMs against 80% of this, less 512 MiB, and
+          # refuses to start without a limit
+          memory: ${BACKEND_WORKLOAD_MICROSANDBOX_MEMORY_LIMIT:-16G}
+          # at most the host's own
+          cpus: "${BACKEND_WORKLOAD_MICROSANDBOX_CPUS:-8}"
+          # about 20 for each VM
+          pids: 16384
+    # plain HTTP on the loopback, which nothing outside the container reaches
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8081/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+    environment:
+      MSB_HOME: /data/msb
+      # the tunnel's authority, which every orchestrator's certificate is
+      # issued by, and this service's own certificate, as the PEM itself
+      WORKLOAD_MICROSANDBOX_CA_CERT: ${BACKEND_WORKLOAD_TUNNEL_CA_CERT}
+      WORKLOAD_MICROSANDBOX_CERT: ${BACKEND_WORKLOAD_MICROSANDBOX_CERT}
+      WORKLOAD_MICROSANDBOX_KEY: ${BACKEND_WORKLOAD_MICROSANDBOX_KEY}
+      WORKLOAD_MICROSANDBOX_PORT_BIND_ADDRESS: 10.89.0.10
+      OTEL_EXPORTER_OTLP_INSECURE: ${OTEL_EXPORTER_OTLP_INSECURE}
+      OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL}
+      OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
+      OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT: ${OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT:-}
+      OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
+      PROFILING_ENABLED: ${PROFILING_ENABLED:-true}
+
+volumes:
+  workload_microsandbox_data:
+    name: workload_microsandbox_data
+
+networks:
+  # internal, and created by the deploys before anything joins it, with the
+  # service's address outside the range the others are given theirs from
+  workload_microsandbox:
+    name: workload_microsandbox
+    external: true
+  monitoring:
+    name: monitoring
+    external: true

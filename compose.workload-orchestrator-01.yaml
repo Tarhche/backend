@@ -9,6 +9,9 @@ services:
       # for dialling the ingress, which is the whole of what this is for. An
       # orchestrator has no business reaching the control plane or another orchestrator.
       - workload_ingress
+      # the microsandbox service's API and its tasks' ports, which only matter
+      # while this orchestrator runs its tasks as microVMs
+      - workload_microsandbox
       - monitoring
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:80/health"]
@@ -74,6 +77,15 @@ services:
       # addresses a stream may be connected to beyond the services this orchestrator
       # offers by name. Empty allows none.
       WORKLOAD_TUNNEL_ALLOWED_TARGETS: ${BACKEND_WORKLOAD_TUNNEL_ALLOWED_TARGETS:-}
+      # what this orchestrator runs its tasks as: sysbox, containers on the docker
+      # daemon, or microsandbox, microVMs in workload-microsandbox. One setting
+      # switches them all and this orchestrator's own overrides it, so they can be
+      # switched one after another. Drain it first: it stops seeing what the
+      # other one runs.
+      WORKLOAD_ORCHESTRATOR_RUNTIME: ${BACKEND_WORKLOAD_ORCHESTRATOR_01_RUNTIME:-${BACKEND_WORKLOAD_ORCHESTRATOR_RUNTIME:-sysbox}}
+      # the microsandbox service, in microsandbox mode, whose host is also where
+      # the tasks' ports are reached. Ignored in sysbox mode.
+      WORKLOAD_MICROSANDBOX_URL: ${BACKEND_WORKLOAD_MICROSANDBOX_URL:-https://workload-microsandbox:8443}
 
 networks:
   nats:
@@ -84,6 +96,9 @@ networks:
     external: true
   docker:
     name: docker
+    external: true
+  workload_microsandbox:
+    name: workload_microsandbox
     external: true
   monitoring:
     name: monitoring

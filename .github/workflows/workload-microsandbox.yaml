@@ -1,0 +1,422 @@
+name: Workload microsandbox
+
+# The workload-microsandbox service, built, tested and deployed apart from the
+# rest of the backend: its image is cgo, its tests need /dev/kvm, and every
+# redeploy restarts every microVM task it runs, so it is redeployed only when
+# its own files change (.github/microsandbox-paths.txt).
+#
+# - A pull request has the microsandbox build vetted and its versions checked,
+#   and, when anything of microsandbox's changed, the service run for real on a
+#   runner with KVM.
+# - A push to main rebuilds and redeploys the service when its own files
+#   changed since the last run here that succeeded, and only once the
+#   repository variable BACKEND_WORKLOAD_MICROSANDBOX_DEPLOY is true.
+# - Run by hand on main, it redeploys main as it is: the first deploy after
+#   that variable is set, or a redeploy on purpose.
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  HETZNER_SSH_ADDRESS: ${{ secrets.HETZNER_SSH_ADDRESS }}
+  HETZNER_SSH_ENDPOINT: ${{ secrets.HETZNER_SSH_USER }}@${{ secrets.HETZNER_SSH_ADDRESS }}
+
+# a pull request's run gives way to its next push. A deploy is never cancelled
+# halfway: one stopped between the old container and the new leaves no service.
+concurrency:
+  group: workload-microsandbox-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    # with pipefail, so a command piped into tee still fails the step
+    shell: bash
+
+jobs:
+  changes:
+    runs-on: ubuntu-24.04
+
+    permissions:
+      contents: read
+      # to find the last run here that succeeded
+      actions: read
+
+    outputs:
+      # the service's own files changed: rebuild and redeploy it
+      deploy: ${{ steps.diff.outputs.deploy }}
+      # anything of microsandbox's changed: run it on a runner with KVM
+      test: ${{ steps.diff.outputs.test }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Find what changed
+        id: diff
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          PULL_REQUEST_BASE: ${{ github.event.pull_request.base.sha }}
+          BEFORE: ${{ github.event.before }}
+          HEAD: ${{ github.sha }}
+        run: |
+          # by hand: deploy main as it is
+          if [ "$EVENT" = workflow_dispatch ]; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+            echo "test=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # a pull request against what it would merge into; a push against the
+          # last run here that succeeded, so whatever a superseded or failed run
+          # left undeployed is deployed by the next one
+          if [ "$EVENT" = pull_request ]; then
+            base=$PULL_REQUEST_BASE
+          else
+            base=$(gh run list --workflow workload-microsandbox.yaml --branch main --status success \
+              --limit 1 --json headSha --jq '.[0].headSha // empty') || base=
+            base=${base:-$BEFORE}
+          fi
+
+          if ! git cat-file -e "${base}^{commit}" 2> /dev/null; then
+            echo "nothing to compare $HEAD with, so all of it counts as changed"
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+            echo "test=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # the service's own files: pathspecs, and files of which only lines
+          # containing a text count
+          pathspecs=()
+          texts=()
+          while IFS= read -r line || [ -n "$line" ]; do
+            case "$line" in '' | '#'*) continue ;; esac
+            read -r path text <<< "$line"
+            if [ -n "$text" ]; then
+              texts+=("$path"$'\t'"$text")
+            else
+              pathspecs+=("$path")
+            fi
+          done < .github/microsandbox-paths.txt
+
+          deploy=false
+          if [ -n "$(git diff --name-only "$base" "$HEAD" -- "${pathspecs[@]}")" ]; then
+            deploy=true
+          fi
+          for entry in "${texts[@]}"; do
+            path=${entry%%$'\t'*}
+            text=${entry#*$'\t'}
+            changed=$(git diff --unified=0 "$base" "$HEAD" -- "$path" | grep -E '^[-+]' | grep -vE '^(\+\+\+|---) ' || true)
+            if grep -qF -- "$text" <<< "$changed"; then
+              deploy=true
+            fi
+          done
+
+          # and what only a test of it would notice: the orchestrator's client,
+          # the e2e suite, and this workflow's own files
+          test=$deploy
+          if [ -n "$(git diff --name-only "$base" "$HEAD" -- infrastructure/workload/microsandbox/ test/e2e/ \
+            .github/workflows/workload-microsandbox.yaml .github/microsandbox-paths.txt scripts/check-microsandbox-version.sh)" ]; then
+            test=true
+          fi
+
+          echo "compared ${base} with ${HEAD}: deploy=$deploy test=$test"
+          echo "deploy=$deploy" >> "$GITHUB_OUTPUT"
+          echo "test=$test" >> "$GITHUB_OUTPUT"
+
+  build:
+    runs-on: ubuntu-24.04
+
+    if: ${{ github.event_name == 'pull_request' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.x'
+          cache: true
+
+      - name: Check go.mod and the image are one microsandbox release
+        run: scripts/check-microsandbox-version.sh
+
+      # every build tag nothing else compiles: the service and its SDK
+      # adapter (cgo), the integration suite and the e2e suite
+      - name: Vet the microsandbox build
+        run: CGO_ENABLED=1 go vet -tags microsandbox,microsandbox_integration,e2e ./...
+
+  kvm:
+    # GitHub's own runners expose /dev/kvm
+    runs-on: ubuntu-24.04
+
+    needs:
+      - changes
+      - build
+
+    if: ${{ github.event_name == 'pull_request' && needs.changes.outputs.test == 'true' }}
+
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.x'
+          cache: true
+
+      - name: Let the kvm group open /dev/kvm
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0660", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm
+
+      - name: Build the image
+        run: docker build --target production-workload-microsandbox --tag workload-microsandbox:ci .
+
+      # what a deploy checks on the host: KVM read and write, as the service's
+      # user, and the msb the image carries
+      - name: Preflight
+        run: |
+          kvm=$(stat -c %g /dev/kvm)
+          docker run --rm --device /dev/kvm --user 10001:10001 --group-add "$kvm" \
+            --cap-drop ALL --security-opt no-new-privileges:true \
+            --entrypoint msb workload-microsandbox:ci doctor | tee "$RUNNER_TEMP/doctor.log"
+          grep -q 'read/write' "$RUNNER_TEMP/doctor.log"
+
+          version=$(sed -n 's/^ARG MICROSANDBOX_VERSION=//p' Dockerfile)
+          docker run --rm --entrypoint msb workload-microsandbox:ci --version | tee "$RUNNER_TEMP/msb-version.log"
+          grep -qx "msb $version" "$RUNNER_TEMP/msb-version.log"
+
+      # a throwaway authority, the service's certificate, and a client's, which
+      # is what an orchestrator presents
+      - name: Issue certificates
+        run: |
+          certs=$RUNNER_TEMP/certs
+          go run . certificate authority generate --output-dir "$certs/ca" --name "workload-microsandbox ci authority"
+          go run . certificate ingress generate --ca-cert "$certs/ca/ca.crt" --ca-key "$certs/ca/ca.key" \
+            --output-dir "$certs/workload-microsandbox" --name workload-microsandbox --dns localhost --ip 127.0.0.1
+          go run . certificate orchestrator generate --ca-cert "$certs/ca/ca.crt" --ca-key "$certs/ca/ca.key" \
+            --output-dir "$certs/client" --name workload-orchestrator-ci
+
+          # the client's side, for the suites below, as an orchestrator is configured
+          {
+            echo "WORKLOAD_MICROSANDBOX_URL=https://localhost:8443"
+            echo "WORKLOAD_TUNNEL_CA_CERT<<PEM"
+            cat "$certs/ca/ca.crt"
+            echo "PEM"
+            echo "WORKLOAD_TUNNEL_CERT<<PEM"
+            cat "$certs/client/tls.crt"
+            echo "PEM"
+            echo "WORKLOAD_TUNNEL_KEY<<PEM"
+            cat "$certs/client/tls.key"
+            echo "PEM"
+          } >> "$GITHUB_ENV"
+
+      # hardened as in compose.workload-microsandbox.yaml, on the host's network
+      # so the suites reach the API and the tasks' ports on the loopback
+      - name: Start the service
+        run: |
+          certs=$RUNNER_TEMP/certs
+          docker run --detach --name workload-microsandbox --network host \
+            --user 10001:10001 --group-add "$(stat -c %g /dev/kvm)" --device /dev/kvm \
+            --cap-drop ALL --security-opt no-new-privileges:true --pids-limit 16384 --memory 6g \
+            --stop-signal SIGINT --stop-timeout 60 \
+            --volume workload_microsandbox_data:/data \
+            --env WORKLOAD_MICROSANDBOX_CA_CERT="$(cat "$certs/ca/ca.crt")" \
+            --env WORKLOAD_MICROSANDBOX_CERT="$(cat "$certs/workload-microsandbox/tls.crt")" \
+            --env WORKLOAD_MICROSANDBOX_KEY="$(cat "$certs/workload-microsandbox/tls.key")" \
+            --env WORKLOAD_MICROSANDBOX_PORT_BIND_ADDRESS=127.0.0.1 \
+            workload-microsandbox:ci
+
+          for _ in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8081/health; then
+              exit 0
+            fi
+            if [ "$(docker inspect --format '{{.State.Running}}' workload-microsandbox)" != true ]; then
+              echo "::error::workload-microsandbox exited"
+              exit 1
+            fi
+            sleep 2
+          done
+
+          echo "::error::workload-microsandbox never became healthy"
+          exit 1
+
+      - name: Run the integration suite
+        run: go test -tags microsandbox_integration -count=1 -race -v ./infrastructure/workload/microsandbox/client/...
+
+      # drill 1 restarts the container under the service's runs, against the
+      # service alone: there is no control plane here
+      - name: Run drill 1
+        run: go test -tags e2e -count=1 -v -run 'TestMicrosandboxDrills/1_' ./test/e2e/ -args -drills -controlplane=
+
+      - name: What the service said
+        if: ${{ always() }}
+        run: docker logs --tail 500 workload-microsandbox 2>&1 || true
+
+  deploy:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+
+    needs:
+      - changes
+
+    # from main only; only once BACKEND_WORKLOAD_MICROSANDBOX_DEPLOY says so,
+    # because the service needs its own certificate in the secrets and /dev/kvm
+    # on the host; and only for a change to its own files, or by hand
+    if: >-
+      ${{
+        github.ref == 'refs/heads/main'
+        && vars.BACKEND_WORKLOAD_MICROSANDBOX_DEPLOY == 'true'
+        && needs.changes.outputs.deploy == 'true'
+      }}
+
+    timeout-minutes: 45
+
+    permissions:
+      packages: write
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Build and push the workload-microsandbox image
+        uses: ./.github/actions/docker-build
+        with:
+          context: .
+          dockerfile: Dockerfile
+          image-name: workload-microsandbox
+          target: production-workload-microsandbox
+          push: true
+          container-registry: ${{ env.REGISTRY }}
+          container-registry-username: ${{ github.actor }}
+          container-registry-password: ${{ secrets.GITHUB_TOKEN }}
+
+      # the commit's tag, pinned by the digest it was pushed with, so what is
+      # deployed is exactly what was built here
+      - name: Pin the image
+        id: image
+        env:
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          image="$REGISTRY/${OWNER,,}/workload-microsandbox:${GITHUB_SHA::7}"
+          digest=$(docker buildx imagetools inspect "$image" --format '{{json .Manifest}}' | jq -r .digest)
+          echo "reference=$image@$digest" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy workload-microsandbox
+        run: |
+          # Setup ssh key
+          echo '${{ secrets.HETZNER_SSH_PRIVATE_KEY }}' > ~/hetzner-key.pem
+          chmod 400 ~/hetzner-key.pem
+
+          mkdir -p ~/.ssh
+          ssh-keyscan -H "$HETZNER_SSH_ADDRESS" >> ~/.ssh/known_hosts 2>/dev/null
+
+          # Ensure remote directory exists
+          ssh -q -i ~/hetzner-key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$HETZNER_SSH_ENDPOINT" << 'EOF' >/dev/null 2>&1
+            mkdir -p /tmp/deployment_workload_microsandbox
+            chown ${{ secrets.HETZNER_SSH_USER }}:${{ secrets.HETZNER_SSH_USER }} /tmp/deployment_workload_microsandbox
+          EOF
+
+          # Copy files
+          scp -q -i ~/hetzner-key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ./compose.workload-microsandbox.yaml "$HETZNER_SSH_ENDPOINT:/tmp/deployment_workload_microsandbox/" 2>/dev/null
+
+          # Connect and deploy. As in the backend's deploy, what the remote shell
+          # prints comes back here, and the exports are never echoed.
+          ssh -q -i ~/hetzner-key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$HETZNER_SSH_ENDPOINT" << 'EOF'
+            set -e
+            trap 'rm -rf /tmp/deployment_workload_microsandbox' EXIT
+
+            echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u ${{ github.actor }} --password-stdin > /dev/null
+
+            export WORKLOAD_MICROSANDBOX_IMAGE='${{ steps.image.outputs.reference }}'
+
+            # the authority every orchestrator's certificate is issued by, and the
+            # service's own certificate, as the PEM itself
+            export BACKEND_WORKLOAD_TUNNEL_CA_CERT='${{ secrets.BACKEND_WORKLOAD_TUNNEL_CA_CERT }}'
+            export BACKEND_WORKLOAD_MICROSANDBOX_CERT='${{ secrets.BACKEND_WORKLOAD_MICROSANDBOX_CERT }}'
+            export BACKEND_WORKLOAD_MICROSANDBOX_KEY='${{ secrets.BACKEND_WORKLOAD_MICROSANDBOX_KEY }}'
+
+            # how much of the host the service and its microVMs may have; empty
+            # leaves it to the compose file
+            export BACKEND_WORKLOAD_MICROSANDBOX_MEMORY_LIMIT='${{ vars.BACKEND_WORKLOAD_MICROSANDBOX_MEMORY_LIMIT }}'
+            export BACKEND_WORKLOAD_MICROSANDBOX_CPUS='${{ vars.BACKEND_WORKLOAD_MICROSANDBOX_CPUS }}'
+
+            export OTEL_EXPORTER_OTLP_INSECURE='${{ secrets.OTEL_EXPORTER_OTLP_INSECURE }}'
+            export OTEL_EXPORTER_OTLP_PROTOCOL='${{ secrets.OTEL_EXPORTER_OTLP_PROTOCOL }}'
+            export OTEL_RESOURCE_ATTRIBUTES='${{ secrets.OTEL_RESOURCE_ATTRIBUTES }}'
+            export OTEL_EXPORTER_OTLP_ENDPOINT='${{ secrets.OTEL_EXPORTER_OTLP_ENDPOINT }}'
+            export OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT='${{ secrets.OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT }}'
+
+            # the group /dev/kvm belongs to on this host, which the service joins
+            export BACKEND_KVM_GID="$(stat -c %g /dev/kvm)"
+
+            cd /tmp/deployment_workload_microsandbox/
+
+            compose() {
+                docker compose -f compose.workload-microsandbox.yaml --project-name workload-microsandbox "$@"
+            }
+
+            # as in the backend's deploy, which creates it for the orchestrators
+            docker network inspect workload_microsandbox > /dev/null 2>&1 \
+              || docker network create --internal --subnet 10.89.0.0/24 --ip-range 10.89.0.128/25 workload_microsandbox > /dev/null \
+              || docker network inspect workload_microsandbox > /dev/null
+
+            docker pull --quiet "$WORKLOAD_MICROSANDBOX_IMAGE" > /dev/null
+
+            # the new image has to be able to use KVM here, as the service's own
+            # user, before the running service is touched
+            if ! docker run --rm --device /dev/kvm --user 10001:10001 --group-add "$BACKEND_KVM_GID" \
+                --cap-drop ALL --security-opt no-new-privileges:true \
+                --entrypoint msb "$WORKLOAD_MICROSANDBOX_IMAGE" doctor > doctor.log 2>&1 \
+              || ! grep -q 'read/write' doctor.log; then
+                cat doctor.log
+                echo "::error::the new image cannot use /dev/kvm on this host; the running service is untouched"
+                exit 1
+            fi
+
+            # microsandbox's database, copied with the service stopped so the copy
+            # is consistent. A newer msb may migrate it and an older one may then
+            # refuse it, so rolling back takes the previous image and this copy.
+            # Stopping costs nothing more: recreating the container restarts every
+            # microVM anyway. The last ten are kept, in their own volume.
+            if docker volume inspect workload_microsandbox_data > /dev/null 2>&1; then
+                compose stop
+
+                docker run --rm --network none --user 0:0 --entrypoint sh \
+                    --volume workload_microsandbox_data:/data:ro \
+                    --volume workload_microsandbox_backups:/backups \
+                    "$WORKLOAD_MICROSANDBOX_IMAGE" -c '
+                        set -e
+                        [ -d /data/msb/db ] || exit 0
+                        backup=/backups/$(date -u +%Y%m%dT%H%M%SZ)
+                        cp -a /data/msb/db "$backup"
+                        ls -1d /backups/*/ | sort | head -n -10 | xargs -r rm -rf
+                        echo "microsandbox database backed up to workload_microsandbox_backups:${backup#/backups/}"
+                    '
+            fi
+
+            # --wait holds the deploy until the healthcheck passes, which it does
+            # only once the service has checked the runtime and adopted its runs
+            if ! compose up --detach --wait --wait-timeout 300; then
+                echo "::error::workload-microsandbox did not come up; what it said follows"
+                compose ps -a
+                compose logs --tail 100 --no-color
+                exit 1
+            fi
+          EOF
