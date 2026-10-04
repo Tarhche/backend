@@ -75,6 +75,9 @@ services:
       PROFILING_ENABLED: ${PROFILING_ENABLED:-true}
       WORKLOAD_CONTROLPLANE_URL: ${BACKEND_WORKLOAD_CONTROLPLANE_URL}
       WORKLOAD_INGRESS_DOMAIN: ${BACKEND_WORKLOAD_INGRESS_DOMAIN}
+      # the runtime class code-runner snippets are run with: the platform's
+      # choice, never the visitor's, and one the control plane allows
+      WORKLOAD_CODE_RUNNER_RUNTIME: ${BACKEND_WORKLOAD_CODE_RUNNER_RUNTIME:-sysbox}
 
 networks:
   app:

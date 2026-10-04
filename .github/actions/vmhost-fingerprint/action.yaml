@@ -1,0 +1,43 @@
+name: 'vmhost fingerprint'
+description: >-
+  Fingerprints what the workload-vmhost image is made of (fingerprint.sh), and
+  names the image built from it, so vmhost is rebuilt and redeployed only when
+  that changes. It needs the repository checked out and Go set up.
+
+inputs:
+  container-registry:
+    description: 'container registry address (example: ghcr.io)'
+    required: true
+
+outputs:
+  fingerprint:
+    description: 'the fingerprint, 24 hexadecimal digits'
+    value: ${{ steps.fingerprint.outputs.fingerprint }}
+  tag:
+    description: 'the tag the image built from it carries'
+    value: ${{ steps.fingerprint.outputs.tag }}
+  image:
+    description: 'the image built from it, by that tag'
+    value: ${{ steps.fingerprint.outputs.image }}
+
+runs:
+  using: 'composite'
+
+  steps:
+    - name: Fingerprint workload-vmhost
+      id: fingerprint
+      shell: bash
+      env:
+        REGISTRY: ${{ inputs.container-registry }}
+        OWNER: ${{ github.repository_owner }}
+      run: |
+        fingerprint=$("${{ github.action_path }}/fingerprint.sh")
+        tag="src-${fingerprint}"
+        # as docker/metadata-action names it: an image name is lowercase
+        image="${REGISTRY}/${OWNER,,}/workload-vmhost:${tag}"
+        {
+          echo "fingerprint=${fingerprint}"
+          echo "tag=${tag}"
+          echo "image=${image}"
+        } >> "$GITHUB_OUTPUT"
+        echo "workload-vmhost is ${image}"

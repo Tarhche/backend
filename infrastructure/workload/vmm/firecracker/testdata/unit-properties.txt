@@ -1,0 +1,24 @@
+Description s "workload vm 0123456789abcdef"
+Type s "exec"
+ExecStart a(sasb) [{Path:/usr/bin/setpriv Args:[/usr/bin/setpriv --reuid=1000000007 --regid=1000000007 --groups=993 --inh-caps=-all --bounding-set=-all -- /var/lib/workload-vmhost/j/0123456789abcdef/firecracker --api-sock run/firecracker.socket --id 0123456789abcdef] UncleanIsFailure:false}]
+WorkingDirectory s "/var/lib/workload-vmhost/j/0123456789abcdef/root"
+Slice s "workload-vm.slice"
+CollectMode s "inactive-or-failed"
+KillMode s "mixed"
+TimeoutStopUSec t @t 10000000
+StandardOutputFileToAppend s "/var/lib/workload-vmhost/j/0123456789abcdef/console.log"
+StandardErrorFileToAppend s "/var/lib/workload-vmhost/j/0123456789abcdef/console.log"
+NoNewPrivileges b true
+PrivateTmp b true
+ProtectSystem s "strict"
+ProtectHome s "yes"
+ReadWritePaths as ["/var/lib/workload-vmhost/j/0123456789abcdef/root"]
+UMask u @u 63
+CPUAccounting b true
+MemoryAccounting b true
+IOAccounting b true
+TasksAccounting b true
+MemoryMax t @t 335544320
+CPUQuotaPerSecUSec t @t 1500000
+NetworkNamespacePath s "/proc/4242/ns/net"
+CapabilityBoundingSet t @t 448

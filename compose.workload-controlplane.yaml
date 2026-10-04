@@ -46,6 +46,12 @@ services:
         max-file: "3"
     environment:
       WORKLOAD_MAX_LOG_BYTES: ${BACKEND_WORKLOAD_MAX_LOG_BYTES:-33554432}
+      # the runtime classes a task may ask for, separated by commas, and the one
+      # a task that names none is run with. A class is offered to users only
+      # once it is here and a node offers it; taking it away turns new tasks of
+      # it away and leaves running ones be.
+      WORKLOAD_RUNTIMES: ${BACKEND_WORKLOAD_RUNTIMES:-sysbox}
+      WORKLOAD_DEFAULT_RUNTIME: ${BACKEND_WORKLOAD_DEFAULT_RUNTIME:-sysbox}
       MONGO_SCHEME: ${BACKEND_MONGO_SCHEME}
       MONGO_USERNAME: ${BACKEND_MONGO_USERNAME}
       MONGO_PASSWORD: ${BACKEND_MONGO_PASSWORD}

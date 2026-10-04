@@ -507,7 +507,9 @@ func (s *suite) limits(t *testing.T) {
 }
 
 // readOnly: a task with a read-only root cannot write to it, and one without
-// can.
+// can. Whether /tmp and /run are still there to write to on a read-only root
+// differs between classes (ScratchOnReadOnlyRoot), and is held to what the
+// class says.
 func (s *suite) readOnly(t *testing.T) {
 	if !s.declared.ReadOnlyRoot {
 		t.Skip("the class cannot keep a task's root from being written to")
@@ -521,6 +523,16 @@ func (s *suite) readOnly(t *testing.T) {
 
 	assert.NotEqual(t, 0, finished.ExitCode, "a task wrote to a root it was not to write to")
 	assert.True(t, finished.ReadOnly)
+
+	scratch, out := job(t, ctx, s.driver, s.execution("scratch", task.KindJob, "touch /tmp/probe /run/probe", func(e *task.Execution) {
+		e.ReadOnly = true
+	}))
+
+	if s.options.scratchOnReadOnlyRoot {
+		assert.Equal(t, 0, scratch.ExitCode, "a task on a read-only root of a class that keeps /tmp and /run writable could not write there: %s", out)
+	} else {
+		assert.NotEqual(t, 0, scratch.ExitCode, "a task on a read-only root wrote to /tmp or /run, which its class does not say it may")
+	}
 
 	writable, _ := job(t, ctx, s.driver, s.execution("writable", task.KindJob, "touch /probe"))
 	assert.Equal(t, 0, writable.ExitCode, "a task could not write to its own root")

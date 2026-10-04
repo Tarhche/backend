@@ -16,6 +16,10 @@ inputs:
   image-name:
     description: 'The name of the image to build'
     required: true
+  tag:
+    description: 'One more tag for the image, beside latest and the commit (optional)'
+    required: false
+    default: ''
   push:
     description: 'Determines if the built image should be pushed'
     required: true
@@ -69,6 +73,7 @@ runs:
         tags: |
           type=raw,value=latest,priority=200,enable={{is_default_branch}}
           type=sha,enable=true,priority=100,prefix=,suffix=,format=short
+          type=raw,value=${{ inputs.tag || 'none' }},priority=50,enable=${{ inputs.tag != '' }}
 
     - name: Build image and push (optional)
       uses: useblacksmith/build-push-action@v2
