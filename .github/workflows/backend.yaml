@@ -205,7 +205,6 @@ jobs:
             export BACKEND_WORKLOAD_ORCHESTRATOR_01_RUNTIME='${{ vars.BACKEND_WORKLOAD_ORCHESTRATOR_01_RUNTIME }}'
             export BACKEND_WORKLOAD_ORCHESTRATOR_02_RUNTIME='${{ vars.BACKEND_WORKLOAD_ORCHESTRATOR_02_RUNTIME }}'
             export BACKEND_WORKLOAD_ORCHESTRATOR_03_RUNTIME='${{ vars.BACKEND_WORKLOAD_ORCHESTRATOR_03_RUNTIME }}'
-            export BACKEND_WORKLOAD_MICROSANDBOX_URL='${{ vars.BACKEND_WORKLOAD_MICROSANDBOX_URL }}'
 
             export APP_IMAGE='${{ secrets.APP_IMAGE }}'
             export WORKLOAD_CONTROLPLANE_IMAGE='${{ secrets.WORKLOAD_CONTROLPLANE_IMAGE }}'
@@ -238,18 +237,18 @@ jobs:
                 return 1
             }
 
-            # the network the orchestrators reach workload-microsandbox on, which
-            # they join whatever they run their tasks as, so it has to be there
-            # first. Internal: nothing on it reaches anywhere else. The service
-            # holds 10.89.0.10, outside the range the others are handed
-            # addresses from, so none of them can take it first.
+            deploy compose.app.yaml app
+            deploy compose.workload-controlplane.yaml workload-controlplane
+            deploy compose.workload-ingress.yaml workload-ingress
+
+            # the orchestrators join workload_microsandbox whatever they run their
+            # tasks as, so it is made first if it is missing: internal, with the
+            # service's 10.89.0.10 outside the range the others are given theirs
+            # from. The microsandbox deploy makes it the same way, maybe at once.
             docker network inspect workload_microsandbox > /dev/null 2>&1 \
               || docker network create --internal --subnet 10.89.0.0/24 --ip-range 10.89.0.128/25 workload_microsandbox > /dev/null \
               || docker network inspect workload_microsandbox > /dev/null
 
-            deploy compose.app.yaml app
-            deploy compose.workload-controlplane.yaml workload-controlplane
-            deploy compose.workload-ingress.yaml workload-ingress
             deploy compose.workload-orchestrator-01.yaml workload-orchestrator-01
             deploy compose.workload-orchestrator-02.yaml workload-orchestrator-02
             deploy compose.workload-orchestrator-03.yaml workload-orchestrator-03
