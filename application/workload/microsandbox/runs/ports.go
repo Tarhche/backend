@@ -63,9 +63,11 @@ type Sandboxes interface {
 // Sandbox is a live handle on a running sandbox, and the connection to its
 // guest agent that comes with it.
 //
-// Closing it ends every command started through it, because microsandbox kills
-// the commands of a client that disconnects. That is why the supervisor holds
-// a run's handle for as long as the run's main process runs, and why a main
+// Closing it only lets go of the handle: the VM carries on, and so does every
+// command started through it. A command ends when its own Process is closed,
+// or when the process holding it exits, because microsandbox kills the
+// commands of a client that goes away. That is why the supervisor holds a
+// run's main Process for as long as the main process runs, and why a main
 // process cannot outlive the supervisor.
 type Sandbox interface {
 	Name() string
@@ -74,6 +76,8 @@ type Sandbox interface {
 	// running it.
 	Exec(ctx context.Context, command Command) (Process, error)
 
+	// Close lets go of the handle. The VM, and the commands started
+	// through it, carry on.
 	Close() error
 }
 
@@ -95,7 +99,9 @@ type Process interface {
 	// Resize changes the size of the command's terminal.
 	Resize(ctx context.Context, rows, cols uint16) error
 
-	// Close lets go of the handle. The command carries on.
+	// Close ends the command if it is still running, and then lets go of
+	// the handle, as microsandbox ends a command whose handle goes. The
+	// events are closed by the time it returns.
 	Close() error
 }
 
