@@ -859,6 +859,14 @@ func (s *service) pull(rw http.ResponseWriter, r *http.Request) {
 // it is resized, and exits once its stdin is closed. A command that is exit
 // and a number writes a line to stderr and exits with that number at once.
 func (s *service) exec(rw http.ResponseWriter, r *http.Request) {
+	// as the service does: an exec is refused before the upgrade unless the
+	// client offers the frames it is carried in.
+	if !slices.Contains(websocket.Subprotocols(r), api.ExecSubprotocol) {
+		refuse(rw, http.StatusBadRequest, api.CodeInvalid, "an exec is carried in "+api.ExecSubprotocol+" frames, which the client did not offer")
+
+		return
+	}
+
 	s.lock.Lock()
 	run, ok := s.found(rw, r)
 	running := ok && run.State == api.StateRunning
