@@ -154,13 +154,37 @@ func exited(e task.Execution) bool {
 	return e.Status == task.StatusExited
 }
 
+// logged waits until a run's log holds text, and fails the test if it never
+// does.
+func logged(t *testing.T, runtime *client.Runtime, id string, text string) {
+	t.Helper()
+
+	deadline := time.Now().Add(settle)
+
+	for {
+		var log bytes.Buffer
+		require.NoError(t, runtime.Logs(t.Context(), id, &log))
+
+		if strings.Contains(log.String(), text) {
+			return
+		}
+
+		if time.Now().After(deadline) {
+			t.Fatalf("run %s never logged %q: its log is %q", id, text, log.String())
+		}
+
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
 func TestService_Lifecycle(t *testing.T) {
 	c := realConfigs(t)
 	node, runtime := realNode(t, c, "lifecycle")
 	ctx := t.Context()
 
-	// a service that finishes cleanly when it is asked to stop.
-	execution := job(node, "lifecycle", `trap "exit 0" TERM; while true; do sleep 1; done`)
+	// a service that finishes cleanly when it is asked to stop, once it has
+	// said it will.
+	execution := job(node, "lifecycle", `trap "exit 0" TERM; echo trapped; while true; do sleep 1; done`)
 	execution.Kind = task.KindService
 
 	id, err := runtime.Create(ctx, execution)
@@ -175,6 +199,10 @@ func TestService_Lifecycle(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, task.StatusRunning, inspected.Status)
 	assert.False(t, inspected.StartedAt.IsZero())
+
+	// started is the process running, not its shell having set the trap
+	// yet: a stop sent before that ends it with 143, as it would on docker.
+	logged(t, runtime, id, "trapped")
 
 	require.NoError(t, runtime.Stop(ctx, id))
 	inspected, err = runtime.Inspect(ctx, id)
@@ -289,7 +317,23 @@ func TestService_Logs(t *testing.T) {
 		return nil
 	}))
 	require.Len(t, lines, 101)
-	assert.Equal(t, task.StreamStderr, lines[100].Stream)
+
+	// lines keep their order within a stream. Between stdout and stderr
+	// nothing promises one, here as on docker: the guest reads the two apart.
+	var stdout, stderr []string
+	for _, line := range lines {
+		if line.Stream == task.StreamStderr {
+			stderr = append(stderr, line.Content)
+		} else {
+			stdout = append(stdout, line.Content)
+		}
+	}
+
+	assert.Equal(t, []string{"done"}, stderr)
+	require.Len(t, stdout, 100)
+	for i, content := range stdout {
+		assert.Equal(t, fmt.Sprintf("line-%d", i+1), content)
+	}
 
 	for i := 1; i < len(lines); i++ {
 		assert.True(t, lines[i].At.After(lines[i-1].At), "every line is later than the one before")
@@ -381,10 +425,13 @@ func TestService_Limits(t *testing.T) {
 	ctx := t.Context()
 
 	t.Run("memory past the limit is a kill", func(t *testing.T) {
-		// a shell holds what a command substitution prints in memory, all of
-		// it, and busybox's tr makes the zeros something it keeps.
-		hungry := job(node, "hungry", `x=$(head -c 400000000 /dev/zero | tr '\000' a); echo survived`)
-		hungry.ResourceLimits.Memory = 96 << 20
+		// one buffer of 96 MiB, filled at once, in a guest of 128 MiB whose
+		// kernel keeps about 24 of them; dd is the main process, so what the
+		// guest kills is the run. Memory taken a little at a time can leave a
+		// guest reclaiming for minutes before anything is killed, and a buffer
+		// larger than all of the guest's memory is refused before anything is
+		// touched, so the process merely exits 1.
+		hungry := job(node, "hungry", `exec dd if=/dev/zero of=/dev/null bs=96M count=1`)
 
 		id, err := runtime.Create(ctx, hungry)
 		require.NoError(t, err)
