@@ -228,7 +228,9 @@ jobs:
           } >> "$GITHUB_ENV"
 
       # hardened as in compose.workload-microsandbox.yaml, on the host's network
-      # so the suites reach the API and the tasks' ports on the loopback
+      # so the suites reach the API and the tasks' ports on the loopback. Nothing
+      # here collects telemetry, and the profiler refuses to start against the
+      # plain-text endpoint it would default to, so it is switched off.
       - name: Start the service
         run: |
           certs=$RUNNER_TEMP/certs
@@ -241,6 +243,7 @@ jobs:
             --env WORKLOAD_MICROSANDBOX_CERT="$(cat "$certs/workload-microsandbox/tls.crt")" \
             --env WORKLOAD_MICROSANDBOX_KEY="$(cat "$certs/workload-microsandbox/tls.key")" \
             --env WORKLOAD_MICROSANDBOX_PORT_BIND_ADDRESS=127.0.0.1 \
+            --env PROFILING_ENABLED=false \
             workload-microsandbox:ci
 
           for _ in $(seq 1 60); do
