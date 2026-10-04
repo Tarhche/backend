@@ -54,6 +54,10 @@ func main() {
 	c.Register(orchestrator.NewServeCommand())
 	c.Register(ingress.NewServeCommand())
 
+	// commands only some builds have: serve-workload-microsandbox, in the
+	// build tagged microsandbox
+	registerOptionalCommands(c)
+
 	// brings what is stored up to what this version reads
 	c.Register(database.NewMigrateCommand())
 
