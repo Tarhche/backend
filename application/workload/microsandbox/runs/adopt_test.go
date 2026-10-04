@@ -300,6 +300,30 @@ func TestReadoption(t *testing.T) {
 		assert.False(t, h.saved("a2", api.StateExited).Resume, "a run is resumed once, if at all")
 	})
 
+	t.Run("a run the service went away before starting again is started the next time it comes back", func(t *testing.T) {
+		t.Parallel()
+
+		h := unopened(t, withRecords(record("a1", api.StateRunning, withRecordPolicy("always"))))
+		h.seed("a1", true)
+
+		// it is told to go away before it has made itself ready.
+		require.NoError(t, h.supervisor.Shutdown(context.Background()))
+		require.Error(t, h.supervisor.Open(context.Background()))
+
+		left := h.saved("a1", api.StateExited)
+		assert.True(t, left.Resume)
+		assert.Equal(t, runs.ReasonServiceRestarted, left.Error)
+
+		again := runs.New(h.fake, h.records, h.journal, h.ports, h.config, slog.New(slog.DiscardHandler))
+		t.Cleanup(func() { _ = again.Shutdown(context.Background()) })
+
+		require.NoError(t, again.Open(context.Background()))
+
+		run, err := again.Get("a1")
+		require.NoError(t, err)
+		assert.Equal(t, api.StateRunning, run.State)
+	})
+
 	t.Run("a run that was being stopped by request is not started again", func(t *testing.T) {
 		t.Parallel()
 

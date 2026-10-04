@@ -253,16 +253,11 @@ func (s *Supervisor) start(r *run, image ImageConfig, cause startCause) (api.Run
 	prior := r.record.State
 	spec := cloneSpec(r.record.Spec)
 
-	var refusal error
 	if s.closing {
-		refusal = newError(api.CodeUnavailable, "the service is shutting down")
+		return s.refuseClosing(r, cause)
 	}
 
 	s.mu.Unlock()
-
-	if refusal != nil {
-		return s.failedStart(r, cause, prior, nil, refusal)
-	}
 
 	argv, err := resolveArgv(spec.Entrypoint, spec.Command, image)
 	if err != nil {
@@ -272,6 +267,13 @@ func (s *Supervisor) start(r *run, image ImageConfig, cause startCause) (api.Run
 	admitted := s.admission(spec.Memory)
 
 	s.mu.Lock()
+
+	// checked again under the lock that marks the run starting: Shutdown
+	// stops every run it finds up, so a run is either marked before it looks,
+	// and stopped by it, or not started at all.
+	if s.closing {
+		return s.refuseClosing(r, cause)
+	}
 
 	if s.admitted+admitted > s.config.Budget {
 		inUse := s.admitted
@@ -324,6 +326,29 @@ func (s *Supervisor) start(r *run, image ImageConfig, cause startCause) (api.Run
 	s.persist(r)
 
 	return view, nil
+}
+
+// refuseClosing refuses to start a run because the service is going away,
+// with mu held, which it releases.
+//
+// A run the restart policy or the service's coming back would have started is
+// left to be started when the service comes back again, as Shutdown leaves the
+// runs it stops, rather than recorded as having failed to start.
+func (s *Supervisor) refuseClosing(r *run, cause startCause) (api.Run, error) {
+	if cause == causePolicy {
+		r.record.State = api.StateExited
+		r.record.Error = ReasonServiceRestarted
+		r.record.Resume = true
+		s.notify(r)
+	}
+
+	s.mu.Unlock()
+
+	if cause == causePolicy {
+		s.persist(r)
+	}
+
+	return api.Run{}, newError(api.CodeUnavailable, "the service is shutting down")
 }
 
 // failedStart records a start that failed, and hands back why.

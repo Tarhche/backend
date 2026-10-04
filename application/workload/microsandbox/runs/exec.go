@@ -181,6 +181,15 @@ func (s *Supervisor) Exec(ctx context.Context, id string, request api.ExecReques
 
 	started, err := l.sandbox.Exec(startCtx, command)
 	if err != nil {
+		// a run that ended in the meantime took its VM with it.
+		s.mu.Lock()
+		ended := r.live != l
+		s.mu.Unlock()
+
+		if ended {
+			return nil, notRunning(id)
+		}
+
 		return nil, fmt.Errorf("the command could not be started: %w", err)
 	}
 
@@ -224,8 +233,9 @@ func (s *Supervisor) Exec(ctx context.Context, id string, request api.ExecReques
 	s.mu.Lock()
 
 	// the run may have ended while the command was starting, and its VM
-	// with it.
-	if r.live != l {
+	// with it; and a service shutting down starts nothing it would have to
+	// wait for.
+	if r.live != l || s.closing {
 		s.mu.Unlock()
 
 		_ = process.Close()

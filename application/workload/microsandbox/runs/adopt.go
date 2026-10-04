@@ -254,11 +254,15 @@ func (s *Supervisor) reconcile(ctx context.Context) ([]*run, error) {
 
 		policy, _ := parsePolicy(r.record.Spec.RestartPolicy)
 
-		if (up || r.record.Resume) && !r.record.StoppedByRequest && policy.revives() {
+		// a run to be started again stays marked to be until it has been,
+		// so that one the service did not get to before it went away again
+		// is started the next time it comes back.
+		revives := (up || r.record.Resume) && !r.record.StoppedByRequest && policy.revives()
+		r.record.Resume = revives
+
+		if revives {
 			revive = append(revive, r)
 		}
-
-		r.record.Resume = false
 
 		s.mu.Unlock()
 
