@@ -258,7 +258,7 @@ func orchestratorConsoleCommand(
 	// ingress works out whose it is and sends the request here. Neither the cap
 	// nor the headers belong on it — what comes through is the task's own
 	// traffic, and answering for it is the task's, a preflight included.
-	getEndpointUseCase := orchestratorGetEndpoint.NewUseCase(taskManager, orchestratorConfigs.AdvertiseHost)
+	getEndpointUseCase := orchestratorGetEndpoint.NewUseCase(taskManager, orchestratorConfigs.PortsHost())
 	mux.Handle("/tasks/{slug}/{port}/{path...}", orchestratorTaskAPI.NewProxyHandler(getEndpointUseCase, logger))
 
 	var tracedProfiler *profiler.TracedProfiler
