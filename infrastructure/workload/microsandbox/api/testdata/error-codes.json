@@ -1,0 +1,11 @@
+[
+  "invalid",
+  "not_supported",
+  "not_found",
+  "name_in_use",
+  "not_running",
+  "capacity",
+  "pull_failed",
+  "unavailable",
+  "internal"
+]

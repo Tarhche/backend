@@ -1,0 +1,5 @@
+{
+  "stream": "stderr",
+  "at": "2026-10-04T09:30:02.000000001Z",
+  "content": "2026/10/04 09:30:02 [notice] 1#1: using the \"epoll\" event method"
+}

@@ -1,0 +1,9 @@
+{
+  "cpu_percent": 12.5,
+  "memory_usage": 52428800,
+  "memory_limit": 268435456,
+  "network_input": 1048576,
+  "network_output": 2097152,
+  "block_input": 4096,
+  "block_output": 8192
+}

@@ -1,0 +1,9 @@
+{
+  "cpu_percent": 0,
+  "memory_usage": 0,
+  "memory_limit": 0,
+  "network_input": 0,
+  "network_output": 0,
+  "block_input": 0,
+  "block_output": 0
+}

@@ -1,0 +1,4 @@
+{"stream":"stdout","at":"2026-10-04T09:30:02Z","content":"/docker-entrypoint.sh: Configuration complete; ready for start up"}
+{"stream":"stderr","at":"2026-10-04T09:30:02.000000001Z","content":"2026/10/04 09:30:02 [notice] 1#1: using the \"epoll\" event method"}
+{"stream":"stdout","at":"2026-10-04T09:30:02.000000002Z","content":""}
+{"stream":"stdout","at":"2026-10-04T09:30:05.1Z","content":"10.89.0.21 - - [04/Oct/2026:09:30:05 +0000] \"GET / HTTP/1.1\" 200 615\t\"-\" \"curl/8.10.1\" é"}

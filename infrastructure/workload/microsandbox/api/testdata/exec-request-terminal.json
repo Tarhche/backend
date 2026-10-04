@@ -1,0 +1,8 @@
+{
+  "command": ["/bin/sh", "-l"],
+  "tty": true,
+  "env": ["TERM=xterm-256color"],
+  "workdir": "/root",
+  "rows": 24,
+  "cols": 80
+}

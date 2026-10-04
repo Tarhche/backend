@@ -1,0 +1,26 @@
+{
+  "node": "orchestrator-01",
+  "name": "web-xkfqz",
+  "image": "nginx:alpine",
+  "entrypoint": ["/docker-entrypoint.sh"],
+  "command": ["nginx", "-g", "daemon off;"],
+  "environment": ["NGINX_PORT=80", "TZ=UTC"],
+  "working_dir": "/usr/share/nginx/html",
+  "cpu": 0.25,
+  "memory": 268435456,
+  "disk": 1073741824,
+  "network": "public",
+  "ports": [80, 443],
+  "restart_policy": "on-failure:3",
+  "task": {
+    "uuid": "4f1c2a9e-8d3b-4c7a-9e2f-1a2b3c4d5e6f",
+    "name": "web",
+    "slug": "web-xkfqz",
+    "kind": "service",
+    "owner": "8a7b6c5d-4e3f-4a1b-9c8d-7e6f5a4b3c2d",
+    "stack": "c3d2e1f0-a9b8-4c7d-8e6f-5a4b3c2d1e0f",
+    "attempt": 2,
+    "interactive": true,
+    "ttl_seconds": 3600
+  }
+}

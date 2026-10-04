@@ -1,0 +1,21 @@
+{
+  "id": "01926f3b1d2e7a4b8c5d6e7f8a9b0c1d",
+  "node": "orchestrator-02",
+  "name": "snippet-q7w2e",
+  "image": "busybox:1.37",
+  "cpu": 1,
+  "memory": 67108864,
+  "disk": 0,
+  "network": "isolated",
+  "task": {
+    "uuid": "9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b",
+    "name": "snippet",
+    "slug": "snippet-q7w2e",
+    "kind": "job",
+    "attempt": 0
+  },
+  "state": "created",
+  "exit_code": 0,
+  "restart_count": 0,
+  "created_at": "2026-10-04T09:30:00Z"
+}

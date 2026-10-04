@@ -1,0 +1,8 @@
+{
+  "api_version": "1",
+  "service_version": "b7c60ec1",
+  "microsandbox_version": "0.7.5",
+  "ready": false,
+  "reason": "msb is 0.7.5 but the SDK is 0.7.6",
+  "architecture": "arm64"
+}
