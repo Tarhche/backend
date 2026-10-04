@@ -73,6 +73,9 @@ type fakeVM struct {
 	running bool
 	boots   int
 
+	// stuck is a sandbox microsandbox takes for running though no VM runs it.
+	stuck bool
+
 	processes []*FakeProcess
 
 	// mains are the main processes, one for each boot.
@@ -222,6 +225,31 @@ func (f *FakeSandboxes) Seed(name string, labels map[string]string, running bool
 		labels:  maps.Clone(labels),
 		running: running,
 		boots:   1,
+	}
+}
+
+// Stick makes a sandbox one microsandbox takes for running though no VM runs
+// it, as a restart of the container can leave one (microsandbox issue #1642):
+// it lists as running, starting and removing it fail with runs.ErrStuck, and
+// stopping it fails, until Unstick.
+func (f *FakeSandboxes) Stick(name string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if vm, exists := f.vms[name]; exists {
+		vm.stuck = true
+		vm.running = false
+	}
+}
+
+// Unstick is microsandbox seeing that no VM runs a stuck sandbox, as it does
+// once nothing has the PID its VM had.
+func (f *FakeSandboxes) Unstick(name string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if vm, exists := f.vms[name]; exists {
+		vm.stuck = false
 	}
 }
 
@@ -411,6 +439,10 @@ func (f *FakeSandboxes) Start(ctx context.Context, name string) (runs.Sandbox, e
 		return nil, fmt.Errorf("there is no sandbox named %s", name)
 	}
 
+	if vm.stuck {
+		return nil, fmt.Errorf("sandbox %s is still running: %w", name, runs.ErrStuck)
+	}
+
 	if vm.running {
 		return nil, fmt.Errorf("sandbox %s is already running", name)
 	}
@@ -445,6 +477,10 @@ func (f *FakeSandboxes) Stop(ctx context.Context, name string, timeout time.Dura
 		return nil
 	}
 
+	if vm.stuck {
+		return fmt.Errorf("sandbox %s could not be stopped, and then not killed", name)
+	}
+
 	vm.stops++
 	vm.running = false
 
@@ -465,6 +501,10 @@ func (f *FakeSandboxes) Remove(ctx context.Context, name string) error {
 	vm, exists := f.vms[name]
 	if !exists {
 		return nil
+	}
+
+	if vm.stuck {
+		return fmt.Errorf("sandbox %s is still running: %w", name, runs.ErrStuck)
 	}
 
 	for _, process := range vm.processes {
@@ -498,7 +538,7 @@ func (f *FakeSandboxes) List(ctx context.Context, labels map[string]string) ([]r
 		}
 
 		if matches {
-			infos = append(infos, runs.SandboxInfo{Name: name, Labels: maps.Clone(vm.labels), Running: vm.running})
+			infos = append(infos, runs.SandboxInfo{Name: name, Labels: maps.Clone(vm.labels), Running: vm.running || vm.stuck})
 		}
 	}
 

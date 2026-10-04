@@ -2,10 +2,24 @@ package runs
 
 import (
 	"context"
+	"errors"
 	"io"
 	"syscall"
 	"time"
 )
+
+// ErrStuck is a sandbox microsandbox takes for running though no VM runs it,
+// and so will neither start, nor stop, nor destroy.
+//
+// Microsandbox 0.7.6 judges whether the VM of a sandbox it recorded as running
+// is still alive by its PID alone (microsandbox issue #1642). A restarted
+// container's PIDs start over, so after the service's container restarts that
+// PID can be a thread's of the new service, and nothing clears the record
+// while it is. Start and Remove wrap ErrStuck for such a sandbox. The
+// supervisor then gives the run a new sandbox under a name of its own, which
+// loses what was on the old one's disk, and leaves the old one to be destroyed
+// once microsandbox lets it be.
+var ErrStuck = errors.New("microsandbox takes the sandbox for running though no VM runs it (microsandbox issue #1642)")
 
 // Sandboxes is microsandbox as the run supervisor uses it: one detached
 // sandbox for each run, booted when the run starts and stopped when its main
@@ -38,7 +52,8 @@ type Sandboxes interface {
 	// detached, so that it outlives the process that made it.
 	Create(ctx context.Context, spec SandboxSpec) (Sandbox, error)
 
-	// Start boots a stopped sandbox, detached.
+	// Start boots a stopped sandbox, detached. One microsandbox takes for
+	// running though no VM runs it fails with ErrStuck.
 	Start(ctx context.Context, name string) (Sandbox, error)
 
 	// Connect takes a handle on a sandbox that is already running.
@@ -48,7 +63,9 @@ type Sandboxes interface {
 	// killing it after that, since microsandbox never kills one by itself.
 	Stop(ctx context.Context, name string, timeout time.Duration) error
 
-	// Remove destroys a sandbox. One that is already gone is no error.
+	// Remove destroys a sandbox. One that is already gone is no error, and
+	// one microsandbox takes for running though no VM runs it fails with
+	// ErrStuck.
 	Remove(ctx context.Context, name string) error
 
 	// List is every sandbox carrying all of the given labels, running or

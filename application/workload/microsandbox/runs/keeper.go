@@ -64,7 +64,7 @@ func (s *Supervisor) keep(r *run, l *live, pending []Event) {
 
 	// the VM stops with its main process, so nothing of this run survives
 	// into the next but its disk.
-	s.halt(r.id, l.sandbox, l.process)
+	s.halt(r, l.sandbox, l.process)
 
 	s.mu.Lock()
 

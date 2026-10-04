@@ -205,7 +205,7 @@ func (s *Supervisor) reconcile(ctx context.Context) ([]*run, error) {
 	for _, info := range infos {
 		id := info.Labels[LabelRun]
 
-		if _, known := s.runs[id]; known && info.Name == SandboxName(id) {
+		if r, known := s.runs[id]; known && info.Name == r.record.sandboxName() {
 			found[id] = info
 
 			continue

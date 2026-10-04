@@ -171,8 +171,18 @@ func (s *Supervisor) Delete(ctx context.Context, id string) error {
 	callCtx, cancel := context.WithTimeout(context.Background(), s.config.CallTimeout)
 	defer cancel()
 
-	if err := s.sandboxes.Remove(callCtx, SandboxName(id)); err != nil {
-		return fmt.Errorf("the run's sandbox could not be destroyed: %w", err)
+	name := s.sandboxOf(r)
+
+	if err := s.sandboxes.Remove(callCtx, name); err != nil {
+		if !errors.Is(err, ErrStuck) {
+			return fmt.Errorf("the run's sandbox could not be destroyed: %w", err)
+		}
+
+		// microsandbox will not destroy it yet, and the run goes all the
+		// same: once its record has gone, the sandbox belongs to no run, and
+		// the service destroys it when it next starts, if microsandbox lets
+		// it then.
+		s.logger.Warn("a deleted run's sandbox is left to be destroyed later", "run", id, "sandbox", name, "error", err)
 	}
 
 	s.mu.Lock()
@@ -417,7 +427,7 @@ func (s *Supervisor) launch(r *run, spec api.RunSpec, argv []string, stopSignal 
 
 	started, err := sandbox.Exec(ctx, Command{Argv: argv})
 	if err != nil {
-		s.halt(r.id, sandbox, nil)
+		s.halt(r, sandbox, nil)
 
 		return nil, nil, nil, fmt.Errorf("the run's main process could not be started: %w", err)
 	}
@@ -439,19 +449,19 @@ func (s *Supervisor) launch(r *run, spec api.RunSpec, argv []string, stopSignal 
 			ended:      make(chan struct{}),
 		}, pending, nil, nil
 	case outcomeFailed:
-		s.halt(r.id, sandbox, process)
+		s.halt(r, sandbox, process)
 
 		end := endingOf(last, true, 0, false)
 
 		return nil, nil, &end, fmt.Errorf("the run's main process %q could not be started: %s", argv[0], end.reason)
 	case outcomeLost:
-		s.halt(r.id, sandbox, process)
+		s.halt(r, sandbox, process)
 
 		end := ending{code: exitKilled, reason: ReasonVMLost}
 
 		return nil, nil, &end, errors.New("the run's VM went away before its main process started")
 	default:
-		s.halt(r.id, sandbox, process)
+		s.halt(r, sandbox, process)
 
 		return nil, nil, nil, fmt.Errorf("the run's main process did not start within %s", s.config.BootTimeout)
 	}
@@ -460,10 +470,9 @@ func (s *Supervisor) launch(r *run, spec api.RunSpec, argv []string, stopSignal 
 // boot boots a run's VM: makes its sandbox at the run's first start, and
 // starts the one it already has after that.
 func (s *Supervisor) boot(ctx context.Context, r *run, spec api.RunSpec) (Sandbox, error) {
-	name := SandboxName(r.id)
-
 	s.mu.Lock()
 	made := r.record.Sandbox
+	name := r.record.sandboxName()
 	s.mu.Unlock()
 
 	if made {
@@ -472,16 +481,21 @@ func (s *Supervisor) boot(ctx context.Context, r *run, spec api.RunSpec) (Sandbo
 			return sandbox, nil
 		}
 
-		// a sandbox that is not there any more is made again, on the same
-		// host ports. One that is there and will not boot is a failure.
-		there, listErr := s.exists(ctx, r.id)
-		if listErr != nil || there {
-			return nil, fmt.Errorf("the run's VM could not be booted: %w", err)
-		}
+		if errors.Is(err, ErrStuck) {
+			name = s.replaceStuck(r, name, err)
+		} else {
+			// a sandbox that is not there any more is made again, on the
+			// same host ports. One that is there and will not boot is a
+			// failure.
+			there, listErr := s.exists(ctx, r.id, name)
+			if listErr != nil || there {
+				return nil, fmt.Errorf("the run's VM could not be booted: %w", err)
+			}
 
-		s.mu.Lock()
-		r.record.Sandbox = false
-		s.mu.Unlock()
+			s.mu.Lock()
+			r.record.Sandbox = false
+			s.mu.Unlock()
+		}
 	}
 
 	endpoints, err := s.endpointsOf(r, spec)
@@ -489,7 +503,7 @@ func (s *Supervisor) boot(ctx context.Context, r *run, spec api.RunSpec) (Sandbo
 		return nil, err
 	}
 
-	sandbox, err := s.sandboxes.Create(ctx, s.sandboxSpec(r.id, spec, endpoints))
+	sandbox, err := s.sandboxes.Create(ctx, s.sandboxSpec(name, r.id, spec, endpoints))
 	if err != nil {
 		// microsandbox can leave a stopped sandbox behind a create that
 		// failed, which would then refuse the next create by its name. So
@@ -513,20 +527,53 @@ func (s *Supervisor) boot(ctx context.Context, r *run, spec api.RunSpec) (Sandbo
 	return sandbox, nil
 }
 
-// exists is whether a run's sandbox is there.
-func (s *Supervisor) exists(ctx context.Context, id string) (bool, error) {
+// replaceStuck gives a run a new sandbox in place of one microsandbox takes for
+// running though no VM runs it, and so will not start (ErrStuck), and is the
+// new one's name. The new one is made under a name of its own, on the same host
+// ports, and starts from the image: what was on the old one's disk is lost.
+//
+// The old one is left where it is, since microsandbox will not destroy it
+// either while it takes it for running. It belongs to no run from now on, and
+// the service destroys it when it next starts, if microsandbox lets it then.
+func (s *Supervisor) replaceStuck(r *run, stuck string, err error) string {
+	s.mu.Lock()
+	r.record.Generation++
+	r.record.Sandbox = false
+	name := r.record.sandboxName()
+	s.mu.Unlock()
+
+	// recorded before anything is made under the new name, so that a service
+	// that goes away in between makes the new one rather than boot the old.
+	s.persist(r)
+
+	s.logger.Warn("microsandbox will not start a run's sandbox again, so the run is given a new one and loses what was on its disk",
+		"run", r.id, "stuck", stuck, "sandbox", name, "error", err)
+
+	return name
+}
+
+// exists is whether a run's sandbox, named name, is there.
+func (s *Supervisor) exists(ctx context.Context, id string, name string) (bool, error) {
 	infos, err := s.sandboxes.List(ctx, map[string]string{LabelRun: id})
 	if err != nil {
 		return false, err
 	}
 
 	for _, info := range infos {
-		if info.Name == SandboxName(id) {
+		if info.Name == name {
 			return true, nil
 		}
 	}
 
 	return false, nil
+}
+
+// sandboxOf is the name of a run's sandbox as it is now.
+func (s *Supervisor) sandboxOf(r *run) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return r.record.sandboxName()
 }
 
 // endpointsOf is where a run's published ports are reached: the host ports it
@@ -563,8 +610,8 @@ func (s *Supervisor) endpointsOf(r *run, spec api.RunSpec) ([]api.Endpoint, erro
 	return slices.Clone(endpoints), nil
 }
 
-// sandboxSpec is what a run's sandbox is made with.
-func (s *Supervisor) sandboxSpec(id string, spec api.RunSpec, endpoints []api.Endpoint) SandboxSpec {
+// sandboxSpec is what a run's sandbox, named name, is made with.
+func (s *Supervisor) sandboxSpec(name string, id string, spec api.RunSpec, endpoints []api.Endpoint) SandboxSpec {
 	ports := make([]PortBinding, 0, len(endpoints))
 	for _, endpoint := range endpoints {
 		ports = append(ports, PortBinding{
@@ -583,7 +630,7 @@ func (s *Supervisor) sandboxSpec(id string, spec api.RunSpec, endpoints []api.En
 	}
 
 	return SandboxSpec{
-		Name:   SandboxName(id),
+		Name:   name,
 		Image:  spec.Image,
 		CPUs:   spec.CPU,
 		Memory: max(spec.Memory, s.config.MemoryFloor),
@@ -688,7 +735,7 @@ func (s *Supervisor) end(r *run, l *live, grace time.Duration, kill bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), s.config.VMStopTimeout+s.config.CallTimeout)
 	defer cancel()
 
-	if err := s.sandboxes.Stop(ctx, SandboxName(r.id), s.config.VMStopTimeout); err != nil {
+	if err := s.sandboxes.Stop(ctx, s.sandboxOf(r), s.config.VMStopTimeout); err != nil {
 		s.logger.Warn("a run's VM could not be stopped", "run", r.id, "error", err)
 	}
 
@@ -732,12 +779,12 @@ func (s *Supervisor) signal(l *live, signal syscall.Signal) {
 // running, sessions and all, and closing a process's handle while the process
 // ran would end it, which is what stopping the VM does anyway: by the time the
 // handles are closed, there is nothing left for closing them to end.
-func (s *Supervisor) halt(id string, sandbox Sandbox, process Process) {
+func (s *Supervisor) halt(r *run, sandbox Sandbox, process Process) {
 	ctx, cancel := context.WithTimeout(context.Background(), s.config.VMStopTimeout+s.config.CallTimeout)
 	defer cancel()
 
-	if err := s.sandboxes.Stop(ctx, SandboxName(id), s.config.VMStopTimeout); err != nil {
-		s.logger.Warn("a run's VM could not be stopped", "run", id, "error", err)
+	if err := s.sandboxes.Stop(ctx, s.sandboxOf(r), s.config.VMStopTimeout); err != nil {
+		s.logger.Warn("a run's VM could not be stopped", "run", r.id, "error", err)
 	}
 
 	if process != nil {

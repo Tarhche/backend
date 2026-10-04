@@ -68,9 +68,20 @@ const (
 // ID.
 const sandboxPrefix = "wk-"
 
-// SandboxName is the name of a run's sandbox.
+// SandboxName is the name of a run's first sandbox.
 func SandboxName(id string) string {
 	return sandboxPrefix + id
+}
+
+// sandboxName is the name of the run's sandbox: its first, or, once
+// microsandbox would not start that one again (ErrStuck), wk-<id>-<n> for the
+// nth it was given in its place.
+func (r Record) sandboxName() string {
+	if r.Generation == 0 {
+		return SandboxName(r.ID)
+	}
+
+	return fmt.Sprintf("%s-%d", SandboxName(r.ID), r.Generation)
 }
 
 // Supervisor holds every run the service holds.

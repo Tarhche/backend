@@ -32,6 +32,7 @@ func (s *Supervisor) Stats(ctx context.Context, id string) (api.Stats, error) {
 	}
 
 	memory := max(r.record.Spec.Memory, s.config.MemoryFloor)
+	name := r.record.sandboxName()
 
 	s.mu.Unlock()
 
@@ -40,7 +41,7 @@ func (s *Supervisor) Stats(ctx context.Context, id string) (api.Stats, error) {
 		return api.Stats{}, err
 	}
 
-	return statsOf(metrics[SandboxName(id)], memory), nil
+	return statsOf(metrics[name], memory), nil
 }
 
 // NodeStats is what a node's running runs are using between them, so that a
@@ -61,7 +62,7 @@ func (s *Supervisor) NodeStats(ctx context.Context, node string) (api.Stats, err
 	memories := make(map[string]uint64)
 	for _, r := range s.runs {
 		if r.live != nil && r.record.Spec.Node == node {
-			memories[SandboxName(r.id)] = max(r.record.Spec.Memory, s.config.MemoryFloor)
+			memories[r.record.sandboxName()] = max(r.record.Spec.Memory, s.config.MemoryFloor)
 		}
 	}
 

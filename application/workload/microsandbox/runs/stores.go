@@ -37,6 +37,10 @@ type Record struct {
 	// the same host ports.
 	Sandbox bool `json:"sandbox,omitempty"`
 
+	// Generation counts the sandboxes the run was given in place of one that
+	// microsandbox would not start again (ErrStuck), and names its sandbox.
+	Generation uint `json:"generation,omitempty"`
+
 	// StoppedByRequest is a run that somebody stopped, killed or restarted
 	// rather than one whose main process ended by itself. Its restart policy
 	// does not bring it back, and neither does this service starting again.

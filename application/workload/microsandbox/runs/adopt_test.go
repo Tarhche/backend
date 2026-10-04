@@ -514,3 +514,103 @@ func TestShutdown(t *testing.T) {
 		assert.Equal(t, "after", lines[1].Content)
 	})
 }
+
+// TestStuckSandbox is what a restart of the service's container can leave a
+// sandbox as (microsandbox issue #1642): taken for running though no VM runs
+// it, so that microsandbox will neither start it, nor stop it, nor destroy it.
+func TestStuckSandbox(t *testing.T) {
+	t.Parallel()
+
+	stuck := func(h *harness, id string) {
+		h.seed(id, false)
+		h.fake.Stick(runs.SandboxName(id))
+	}
+
+	t.Run("a run whose sandbox will not start again is given a new one, under a name of its own and on the same ports", func(t *testing.T) {
+		t.Parallel()
+
+		h := unopened(t, withRecords(record("a1", api.StateRunning, withRecordPolicy("always"), func(r *runs.Record) {
+			r.Spec.Ports = []uint16{80}
+			r.HostPorts = []api.Endpoint{{Port: 80, HostPort: 20500}}
+		})))
+		stuck(h, "a1")
+		h.open()
+
+		replacement := runs.SandboxName("a1") + "-1"
+
+		run := h.get("a1")
+
+		assert.Equal(t, api.StateRunning, run.State, "it is running again once the service is ready")
+		assert.Equal(t, []api.Endpoint{{Port: 80, HostPort: 20500}}, run.Endpoints)
+		assert.Equal(t, []string{"start " + runs.SandboxName("a1"), "create " + replacement}, startsAndCreates(h.fake.Calls()))
+
+		sandbox, found := h.fake.Spec(replacement)
+		require.True(t, found)
+		assert.Equal(t, []runs.PortBinding{{Bind: "10.89.0.10", HostPort: 20500, GuestPort: 80}}, sandbox.Ports)
+		assert.Equal(t, "a1", sandbox.Labels[runs.LabelRun], "it is still the run's, by its label")
+
+		assert.Equal(t, uint(1), h.saved("a1", api.StateRunning).Generation)
+		assert.True(t, h.fake.Exists(runs.SandboxName("a1")), "microsandbox would not destroy the stuck one")
+
+		// from now on the run's VM is the new sandbox's
+		_, err := h.supervisor.Stop(context.Background(), "a1", 0)
+		require.NoError(t, err)
+
+		assert.Equal(t, 1, h.fake.Stops(replacement))
+		assert.False(t, h.fake.Running(replacement))
+	})
+
+	t.Run("a run asked to start is given a new one as well", func(t *testing.T) {
+		t.Parallel()
+
+		h := unopened(t, withRecords(record("a1", api.StateExited)))
+		stuck(h, "a1")
+		h.open()
+
+		run, err := h.supervisor.Start(context.Background(), "a1")
+		require.NoError(t, err)
+
+		assert.Equal(t, api.StateRunning, run.State)
+		assert.True(t, h.fake.Running(runs.SandboxName("a1")+"-1"))
+	})
+
+	t.Run("the stuck sandbox is destroyed when the service next starts, once microsandbox lets it be", func(t *testing.T) {
+		t.Parallel()
+
+		h := unopened(t, withRecords(record("a1", api.StateRunning, withRecordPolicy("always"))))
+		stuck(h, "a1")
+		h.open()
+		require.Equal(t, api.StateRunning, h.get("a1").State)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		require.NoError(t, h.supervisor.Shutdown(ctx))
+
+		h.fake.Unstick(runs.SandboxName("a1"))
+
+		next := unopened(t, withFake(h.fake), withRecords(h.saved("a1", api.StateExited)))
+		next.open()
+
+		assert.False(t, h.fake.Exists(runs.SandboxName("a1")), "it belongs to no run any more")
+		assert.Equal(t, api.StateRunning, next.get("a1").State)
+		assert.Equal(t, 2, h.fake.Boots(runs.SandboxName("a1")+"-1"), "the run boots the sandbox it was given")
+	})
+
+	t.Run("a run whose sandbox is stuck can still be deleted, and its sandbox is left to be destroyed later", func(t *testing.T) {
+		t.Parallel()
+
+		h := unopened(t, withRecords(record("a1", api.StateExited)))
+		stuck(h, "a1")
+		h.open()
+
+		require.NoError(t, h.supervisor.Delete(context.Background(), "a1"))
+
+		_, err := h.supervisor.Get("a1")
+		assert.Equal(t, api.CodeNotFound, runs.Code(err))
+
+		_, kept := h.records.Get("a1")
+		assert.False(t, kept)
+
+		assert.True(t, h.fake.Exists(runs.SandboxName("a1")), "microsandbox would not destroy it")
+	})
+}

@@ -155,11 +155,16 @@ func (s *Sandboxes) Create(ctx context.Context, spec runs.SandboxSpec) (runs.San
 // and this process's own threads take the ones the first VMs of the last had,
 // so after a restart the oldest sandboxes are the likeliest to be refused.
 // clearStale gets past a PID that a short-lived process holds, not one a
-// thread does.
+// thread does: such a sandbox fails with runs.ErrStuck.
 func (s *Sandboxes) Start(ctx context.Context, name string) (runs.Sandbox, error) {
 	handle, err := msb.StartSandboxDetached(ctx, name)
-	if msb.IsKind(err, msb.ErrSandboxStillRunning) && s.clearStale(ctx, name) {
-		handle, err = msb.StartSandboxDetached(ctx, name)
+	if msb.IsKind(err, msb.ErrSandboxStillRunning) {
+		switch s.clearStale(ctx, name) {
+		case staleCleared:
+			handle, err = msb.StartSandboxDetached(ctx, name)
+		case staleStuck:
+			return nil, fmt.Errorf("microsandbox: start %s: %w: %w", name, runs.ErrStuck, err)
+		}
 	}
 
 	if err != nil {
@@ -221,7 +226,8 @@ func (s *Sandboxes) Stop(ctx context.Context, name string, timeout time.Duration
 	return nil
 }
 
-// Remove destroys a sandbox, killing its VM if it is running.
+// Remove destroys a sandbox, killing its VM if it is running. One microsandbox
+// takes for running though no VM runs it (see Start) fails with runs.ErrStuck.
 func (s *Sandboxes) Remove(ctx context.Context, name string) error {
 	found, err := msb.GetSandbox(ctx, name)
 	if msb.IsKind(err, msb.ErrSandboxNotFound) {
@@ -234,6 +240,10 @@ func (s *Sandboxes) Remove(ctx context.Context, name string) error {
 
 	err = found.Destroy(ctx, msb.WithDestroyForce(), msb.WithDestroyTimeout(destroyWait))
 	if err != nil && !msb.IsKind(err, msb.ErrSandboxNotFound) {
+		if s.stuck(ctx, name) {
+			return fmt.Errorf("microsandbox: remove %s: %w: %w", name, runs.ErrStuck, err)
+		}
+
 		return fmt.Errorf("microsandbox: remove %s: %w", name, err)
 	}
 
@@ -309,20 +319,42 @@ func (s *Sandboxes) msbPath() (string, error) {
 	return resolved.MSBPath, nil
 }
 
+// staleness is what clearStale made of a sandbox microsandbox says is
+// running.
+type staleness int
+
+const (
+	// staleUnknown is a sandbox that could not be looked up. Nothing was
+	// done to it.
+	staleUnknown staleness = iota
+
+	// staleAlive is a sandbox whose guest agent answers: a VM does run it,
+	// and it is left alone.
+	staleAlive
+
+	// staleCleared is a sandbox no VM ran, whose record is stopped now.
+	staleCleared
+
+	// staleStuck is a sandbox no VM runs, which microsandbox would not stop
+	// either.
+	staleStuck
+)
+
 // clearStale sets right the record of a sandbox that microsandbox says is
-// running when no VM runs it, and is whether it did.
+// running when no VM runs it, and says what it found.
 //
 // Microsandbox judges whether a sandbox it recorded as running still is by
 // the PID its VM had, and nothing else. After a restart of the container,
 // that PID can be another process's, or a thread's of this one, and the
 // sandbox then looks running, and cannot be started. Its stop judges by the
 // lifecycle lock a VM holds instead, and signals nothing that does not hold
-// it: stopping a sandbox no VM runs only brings its record to stopped. A
-// sandbox whose guest agent answers is running, and is left alone.
-func (s *Sandboxes) clearStale(ctx context.Context, name string) bool {
+// it: stopping a sandbox no VM runs only brings its record to stopped. That
+// works while a process holds the PID, and not while a thread does. A sandbox
+// whose guest agent answers is running, and is left alone.
+func (s *Sandboxes) clearStale(ctx context.Context, name string) staleness {
 	found, err := msb.GetSandbox(ctx, name)
 	if err != nil {
-		return false
+		return staleUnknown
 	}
 
 	probeCtx, cancel := context.WithTimeout(ctx, staleProbeWait)
@@ -330,11 +362,32 @@ func (s *Sandboxes) clearStale(ctx context.Context, name string) bool {
 
 	if live, err := found.Connect(probeCtx); err == nil {
 		_ = live.Close()
-		return false
+		return staleAlive
 	}
 
 	if err := found.Stop(ctx, msb.WithStopTimeout(staleProbeWait)); err != nil {
 		s.logger.Warn("could not set right a sandbox recorded as running that no VM runs", "sandbox", name, "error", err)
+		return staleStuck
+	}
+
+	return staleCleared
+}
+
+// stuck is whether microsandbox takes a sandbox for running though no VM runs
+// it: it says the sandbox is running, and no guest agent answers. It is asked
+// with a deadline of its own, since ctx may have run out on what failed.
+func (s *Sandboxes) stuck(ctx context.Context, name string) bool {
+	probeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), staleProbeWait)
+	defer cancel()
+
+	found, err := msb.GetSandbox(probeCtx, name)
+	if err != nil || !running(string(found.Status())) {
+		return false
+	}
+
+	live, err := found.Connect(probeCtx)
+	if err == nil {
+		_ = live.Close()
 		return false
 	}
 
