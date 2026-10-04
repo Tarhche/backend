@@ -189,13 +189,13 @@ jobs:
         run: docker build --target production-workload-microsandbox --tag workload-microsandbox:ci .
 
       # what a deploy checks on the host: KVM read and write, as the service's
-      # user, and the msb the image carries
+      # user, and the msb the image carries. msb doctor reports on stderr.
       - name: Preflight
         run: |
           kvm=$(stat -c %g /dev/kvm)
           docker run --rm --device /dev/kvm --user 10001:10001 --group-add "$kvm" \
             --cap-drop ALL --security-opt no-new-privileges:true \
-            --entrypoint msb workload-microsandbox:ci doctor | tee "$RUNNER_TEMP/doctor.log"
+            --entrypoint msb workload-microsandbox:ci doctor 2>&1 | tee "$RUNNER_TEMP/doctor.log"
           grep -q 'read/write' "$RUNNER_TEMP/doctor.log"
 
           version=$(sed -n 's/^ARG MICROSANDBOX_VERSION=//p' Dockerfile)
