@@ -94,7 +94,7 @@ func (c *ServeCommand) Providers() []provider.Provider {
 		providers.NewOpenTelemetryProvider("workload-orchestrator", c.configs.Name),
 		providers.NewProfilerProvider("workload-orchestrator"),
 		providers.NewNatsProvider(),
-		providers.NewDockerProvider(),
+		providers.NewWorkloadRuntimeProvider(),
 		providers.NewTranslationProvider(),
 		providers.NewValidationProvider(),
 		providers.NewContainerProvider(),

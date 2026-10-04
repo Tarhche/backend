@@ -1,10 +1,24 @@
 package configs
 
 import (
+	"net/url"
 	"strings"
 	"time"
 
 	"github.com/khanzadimahdi/testproject/infrastructure/tunnel"
+)
+
+// The runtimes an orchestrator can run its tasks on, as
+// WORKLOAD_ORCHESTRATOR_RUNTIME names them.
+const (
+	// RuntimeSysbox is containers on the docker daemon at DOCKER_HOST, which
+	// is what every orchestrator ran before there was a choice, and still the
+	// default.
+	RuntimeSysbox = "sysbox"
+
+	// RuntimeMicrosandbox is microVMs, run by the workload-microsandbox
+	// service at WORKLOAD_MICROSANDBOX_URL.
+	RuntimeMicrosandbox = "microsandbox"
 )
 
 const (
@@ -25,6 +39,11 @@ const (
 
 	defaultTunnelMaxStreamsPerSession       = 256
 	defaultTunnelMaxSessionsPerOrchestrator = 8
+
+	// defaultWorkloadMicrosandboxURL is where the workload-microsandbox
+	// service answers: its compose service, hostname and container are all
+	// called that, and it listens on 8443.
+	defaultWorkloadMicrosandboxURL = "https://workload-microsandbox:8443"
 )
 
 // WorkloadControlPlane holds the configuration of the serve-workload-controlplane command.
@@ -94,7 +113,19 @@ type WorkloadOrchestrator struct {
 	Port int    `usage:"specifies which port server should listen to." env:"SERVER_PORT" long:"port" short:"p"`
 	Name string `usage:"specifies the unique name of the orchestrator." env:"WORKLOAD_ORCHESTRATOR_NAME" long:"name" short:"n"`
 
+	// Runtime is what runs this orchestrator's tasks. Every orchestrator runs
+	// all of its tasks on the one runtime, and the control plane cannot tell
+	// which that is, so a fleet is best switched one orchestrator after
+	// another until all of them run the same.
+	Runtime string `usage:"What runs this orchestrator's tasks: sysbox, containers on the docker daemon at DOCKER_HOST, or microsandbox, microVMs run by the workload-microsandbox service at WORKLOAD_MICROSANDBOX_URL." env:"WORKLOAD_ORCHESTRATOR_RUNTIME" long:"runtime"`
+
 	DockerHost string `usage:"Docker daemon the tasks are run on. Empty uses the Docker client's own default." env:"DOCKER_HOST" long:"docker-host"`
+
+	// MicrosandboxURL is where the microsandbox runtime asks for its tasks to
+	// be run. It is reached with this orchestrator's tunnel certificates, and
+	// its host is where the tasks' published ports are reached too: they are
+	// the service's ports, not this orchestrator's.
+	MicrosandboxURL string `usage:"Where the workload-microsandbox service answers, as https://host:port. Only the microsandbox runtime reaches it, with the tunnel's certificates, and the ports its tasks publish are reached at the same host." env:"WORKLOAD_MICROSANDBOX_URL" long:"microsandbox-url"`
 
 	// PublicKey verifies the tokens the blog signs. An orchestrator never mints one,
 	// so it is given the public half and nothing else.
@@ -127,6 +158,8 @@ type WorkloadOrchestrator struct {
 func NewWorkloadOrchestrator() *WorkloadOrchestrator {
 	return &WorkloadOrchestrator{
 		Port:                       defaultWorkloadOrchestratorPort,
+		Runtime:                    RuntimeSysbox,
+		MicrosandboxURL:            defaultWorkloadMicrosandboxURL,
 		TunnelMinConnections:       defaultWorkloadTunnelMinConnections,
 		TunnelMaxConnections:       defaultWorkloadTunnelMaxConnections,
 		TunnelMaxIdleTime:          defaultWorkloadTunnelMaxIdleTime,
@@ -140,6 +173,26 @@ func NewWorkloadOrchestrator() *WorkloadOrchestrator {
 // and is taken apart here — the same way the profiler's headers do.
 func (c *WorkloadOrchestrator) IngressAddresses() []string {
 	return commaSeparated(c.TunnelAddresses)
+}
+
+// PortsHost is where this orchestrator reaches the ports its tasks publish.
+//
+// A container's ports are published by the docker daemon, on the daemon's own
+// host, which is AdvertiseHost. A microVM's are published by the
+// workload-microsandbox service, on the service's address, so they are reached
+// at the host of MicrosandboxURL; one that cannot be read has none, and the
+// microsandbox runtime refuses to start with it anyway.
+func (c *WorkloadOrchestrator) PortsHost() string {
+	if c.Runtime != RuntimeMicrosandbox {
+		return c.AdvertiseHost
+	}
+
+	parsed, err := url.Parse(c.MicrosandboxURL)
+	if err != nil {
+		return ""
+	}
+
+	return parsed.Hostname()
 }
 
 func commaSeparated(value string) []string {
