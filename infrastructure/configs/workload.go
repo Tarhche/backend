@@ -1,9 +1,12 @@
 package configs
 
 import (
+	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/khanzadimahdi/testproject/domain/workload/port"
 	"github.com/khanzadimahdi/testproject/infrastructure/tunnel"
 )
 
@@ -25,10 +28,57 @@ const (
 )
 
 // WorkloadControlPlane holds the configuration of the serve-workload-controlplane command.
+//
+// Sizes are bytes, like every size in the workload, and CPUs are whole vCPUs.
 type WorkloadControlPlane struct {
 	Port int `usage:"specifies which port server should listen to." env:"SERVER_PORT" long:"port" short:"p"`
 
 	MaxLogBytes int64 `usage:"How much log one task may keep. Past it, further lines are dropped rather than stored." env:"WORKLOAD_MAX_LOG_BYTES" long:"max-log-bytes"`
+
+	VMDefaultImage string `usage:"Image a machine VM boots from when it names none." env:"WORKLOAD_VM_DEFAULT_IMAGE" long:"vm-default-image"`
+	VMDockerImage  string `usage:"Image every Docker VM boots from: a docker-in-docker image, the same one the vmhosts are given." env:"WORKLOAD_VM_DOCKER_IMAGE" long:"vm-docker-image"`
+
+	// the least a VM may be given, which is more for a Docker VM: dockerd and
+	// the images it pulls need room before anything runs in it.
+	VMMinMemory       uint64 `usage:"Least memory, in bytes, a machine VM may be given." env:"WORKLOAD_VM_MIN_MEMORY" long:"vm-min-memory"`
+	VMMinDisk         uint64 `usage:"Least disk, in bytes, a machine VM may be given." env:"WORKLOAD_VM_MIN_DISK" long:"vm-min-disk"`
+	VMDockerMinMemory uint64 `usage:"Least memory, in bytes, a Docker VM may be given." env:"WORKLOAD_VM_DOCKER_MIN_MEMORY" long:"vm-docker-min-memory"`
+	VMDockerMinDisk   uint64 `usage:"Least disk, in bytes, a Docker VM may be given." env:"WORKLOAD_VM_DOCKER_MIN_DISK" long:"vm-docker-min-disk"`
+
+	// the most one VM may be given.
+	VMMaxCPUs   uint   `usage:"Most vCPUs one VM may be given." env:"WORKLOAD_VM_MAX_CPUS" long:"vm-max-cpus"`
+	VMMaxMemory uint64 `usage:"Most memory, in bytes, one VM may be given." env:"WORKLOAD_VM_MAX_MEMORY" long:"vm-max-memory"`
+	VMMaxDisk   uint64 `usage:"Most disk, in bytes, one VM may be given." env:"WORKLOAD_VM_MAX_DISK" long:"vm-max-disk"`
+
+	// the most one person may have, across all of their VMs.
+	VMUserMaxVMs uint   `usage:"Most VMs one person may have." env:"WORKLOAD_VM_USER_MAX_VMS" long:"vm-user-max-vms"`
+	VMUserCPUs   uint   `usage:"Most vCPUs one person's VMs may be given between them." env:"WORKLOAD_VM_USER_CPUS" long:"vm-user-cpus"`
+	VMUserMemory uint64 `usage:"Most memory, in bytes, one person's VMs may be given between them." env:"WORKLOAD_VM_USER_MEMORY" long:"vm-user-memory"`
+	VMUserDisk   uint64 `usage:"Most disk, in bytes, one person's VMs may be given between them." env:"WORKLOAD_VM_USER_DISK" long:"vm-user-disk"`
+
+	VMMaxLifetime time.Duration `usage:"Longest lifetime a VM may ask for. A VM kept until it is deleted asks for none." env:"WORKLOAD_VM_MAX_LIFETIME" long:"vm-max-lifetime"`
+
+	VMCPUOvercommit float64 `usage:"How many times over a node's vCPUs may be given to VMs. Memory and disk are never given twice." env:"WORKLOAD_VM_CPU_OVERCOMMIT" long:"vm-cpu-overcommit"`
+
+	// the Docker VM made for somebody who adds a container or a stack and has
+	// none to put it in.
+	VMDockerDefaultCPUs           uint          `usage:"vCPUs a Docker VM made for a container or a stack is given." env:"WORKLOAD_VM_DOCKER_DEFAULT_CPUS" long:"vm-docker-default-cpus"`
+	VMDockerDefaultMemory         uint64        `usage:"Memory, in bytes, a Docker VM made for a container or a stack is given." env:"WORKLOAD_VM_DOCKER_DEFAULT_MEMORY" long:"vm-docker-default-memory"`
+	VMDockerDefaultDisk           uint64        `usage:"Disk, in bytes, a Docker VM made for a container or a stack is given." env:"WORKLOAD_VM_DOCKER_DEFAULT_DISK" long:"vm-docker-default-disk"`
+	VMDockerDefaultPorts          string        `usage:"Ports a Docker VM made for a container or a stack exposes through the ingress, separated by commas." env:"WORKLOAD_VM_DOCKER_DEFAULT_PORTS" long:"vm-docker-default-ports"`
+	VMDockerDefaultIngress        string        `usage:"Whether a Docker VM made for a container or a stack is reachable through the ingress: allow or deny." env:"WORKLOAD_VM_DOCKER_DEFAULT_INGRESS" long:"vm-docker-default-ingress"`
+	VMDockerDefaultEgress         string        `usage:"Whether a Docker VM made for a container or a stack reaches the internet: allow or deny." env:"WORKLOAD_VM_DOCKER_DEFAULT_EGRESS" long:"vm-docker-default-egress"`
+	VMDockerDefaultPersistentDisk bool          `usage:"Whether a Docker VM made for a container or a stack keeps its disk across a stop and a start." env:"WORKLOAD_VM_DOCKER_DEFAULT_PERSISTENT_DISK" long:"vm-docker-default-persistent-disk"`
+	VMDockerDefaultLifetime       time.Duration `usage:"Lifetime of a Docker VM made for a container or a stack. Zero keeps it until it is deleted." env:"WORKLOAD_VM_DOCKER_DEFAULT_LIFETIME" long:"vm-docker-default-lifetime"`
+
+	SnapshotUserMax uint `usage:"Most snapshots one person may keep." env:"WORKLOAD_SNAPSHOT_USER_MAX" long:"snapshot-user-max"`
+
+	// the control plane deletes a snapshot's archive itself, so it reaches the
+	// bucket the nodes write them to.
+	SnapshotStorage WorkloadSnapshotStorage
+
+	NodeRequestTimeout time.Duration `usage:"How long a node is given to answer a request about a VM, unless it may have to pull an image." env:"WORKLOAD_NODE_REQUEST_TIMEOUT" long:"node-request-timeout"`
+	DockerPullTimeout  time.Duration `usage:"How long a node is given to answer a request that may have to pull an image: creating a container, or pulling one." env:"WORKLOAD_DOCKER_PULL_TIMEOUT" long:"docker-pull-timeout"`
 }
 
 // NewWorkloadControlPlane returns the configuration of the serve-workload-controlplane
@@ -37,7 +87,59 @@ func NewWorkloadControlPlane() *WorkloadControlPlane {
 	return &WorkloadControlPlane{
 		Port:        defaultWorkloadControlPlanePort,
 		MaxLogBytes: defaultWorkloadMaxLogBytes,
+
+		VMDefaultImage: defaultWorkloadVMDefaultImage,
+		VMDockerImage:  defaultWorkloadVMDockerImage,
+
+		VMMinMemory:       defaultWorkloadVMMinMemory,
+		VMMinDisk:         defaultWorkloadVMMinDisk,
+		VMDockerMinMemory: defaultWorkloadVMDockerMinMemory,
+		VMDockerMinDisk:   defaultWorkloadVMDockerMinDisk,
+
+		VMMaxCPUs:   defaultWorkloadVMMaxCPUs,
+		VMMaxMemory: defaultWorkloadVMMaxMemory,
+		VMMaxDisk:   defaultWorkloadVMMaxDisk,
+
+		VMUserMaxVMs: defaultWorkloadVMUserMaxVMs,
+		VMUserCPUs:   defaultWorkloadVMUserCPUs,
+		VMUserMemory: defaultWorkloadVMUserMemory,
+		VMUserDisk:   defaultWorkloadVMUserDisk,
+
+		VMMaxLifetime:   defaultWorkloadVMMaxLifetime,
+		VMCPUOvercommit: defaultWorkloadVMCPUOvercommit,
+
+		VMDockerDefaultCPUs:           defaultWorkloadVMDockerDefaultCPUs,
+		VMDockerDefaultMemory:         defaultWorkloadVMDockerDefaultMemory,
+		VMDockerDefaultDisk:           defaultWorkloadVMDockerDefaultDisk,
+		VMDockerDefaultPorts:          defaultWorkloadVMDockerDefaultPorts,
+		VMDockerDefaultIngress:        defaultWorkloadVMDockerDefaultIngress,
+		VMDockerDefaultEgress:         defaultWorkloadVMDockerDefaultEgress,
+		VMDockerDefaultPersistentDisk: defaultWorkloadVMDockerDefaultPersistentDisk,
+
+		SnapshotUserMax: defaultWorkloadSnapshotUserMax,
+		SnapshotStorage: newWorkloadSnapshotStorage(),
+
+		NodeRequestTimeout: defaultWorkloadNodeRequestTimeout,
+		DockerPullTimeout:  defaultWorkloadDockerPullTimeout,
 	}
+}
+
+// DockerDefaultPorts is the ports a Docker VM made for a container or a stack
+// exposes, taken apart the way every list setting is.
+func (c *WorkloadControlPlane) DockerDefaultPorts() ([]port.Port, error) {
+	items := commaSeparated(c.VMDockerDefaultPorts)
+
+	ports := make([]port.Port, len(items))
+	for i, item := range items {
+		number, err := strconv.ParseUint(item, 10, 16)
+		if err != nil || number == 0 {
+			return nil, fmt.Errorf("the docker default ports are numbers from 1 to 65535, got %q", item)
+		}
+
+		ports[i] = port.Port(number)
+	}
+
+	return ports, nil
 }
 
 // WorkloadIngress holds the configuration of the serve-workload-ingress command.
@@ -110,6 +212,20 @@ type WorkloadOrchestrator struct {
 	TunnelMaxIdleTime    time.Duration `usage:"How long a connection beyond the fewest may carry nothing before it is let go." env:"WORKLOAD_TUNNEL_MAX_IDLE_TIME" long:"tunnel-max-idle-time"`
 
 	TunnelMaxStreamsPerSession int `usage:"How many client connections one connection to an ingress will carry before the next is used." env:"WORKLOAD_TUNNEL_MAX_STREAMS_PER_SESSION" long:"tunnel-max-streams-per-session"`
+
+	// VMHostSocket is where this orchestrator reaches its own vmhost, the
+	// engine its VMs run on. The two are a pair and share nothing with any
+	// other node.
+	VMHostSocket string `usage:"Unix socket this orchestrator's vmhost serves its engine on." env:"WORKLOAD_VMHOST_SOCKET" long:"vmhost-socket"`
+
+	DockerReadyTimeout time.Duration `usage:"How long a Docker VM's dockerd is waited for, while the VM comes up, before a request to it is refused as docker_unavailable." env:"WORKLOAD_DOCKER_READY_TIMEOUT" long:"docker-ready-timeout"`
+	DockerPullTimeout  time.Duration `usage:"How long creating a container, or pulling an image, may take inside a Docker VM." env:"WORKLOAD_DOCKER_PULL_TIMEOUT" long:"docker-pull-timeout"`
+
+	// the bucket this node writes its VMs' snapshots to and restores them
+	// from.
+	SnapshotStorage WorkloadSnapshotStorage
+
+	NodeRequestConcurrency int `usage:"How many of the control plane's requests this node answers at once." env:"WORKLOAD_NODE_REQUEST_CONCURRENCY" long:"node-request-concurrency"`
 }
 
 // NewWorkloadOrchestrator returns the configuration of the serve-workload-orchestrator
@@ -121,6 +237,12 @@ func NewWorkloadOrchestrator() *WorkloadOrchestrator {
 		TunnelMaxConnections:       defaultWorkloadTunnelMaxConnections,
 		TunnelMaxIdleTime:          defaultWorkloadTunnelMaxIdleTime,
 		TunnelMaxStreamsPerSession: defaultTunnelMaxStreamsPerSession,
+
+		VMHostSocket:           defaultWorkloadVMHostSocket,
+		DockerReadyTimeout:     defaultWorkloadDockerReadyTimeout,
+		DockerPullTimeout:      defaultWorkloadDockerPullTimeout,
+		SnapshotStorage:        newWorkloadSnapshotStorage(),
+		NodeRequestConcurrency: defaultWorkloadNodeRequestConcurrency,
 	}
 }
 

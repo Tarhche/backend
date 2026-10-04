@@ -3,13 +3,21 @@ package node
 import (
 	"context"
 	"time"
+
+	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
 
 // Node represents a node in the cluster
 type Node struct {
-	Name            string
-	Role            Role
-	Stats           Stats
+	Name  string
+	Role  Role
+	Stats Stats
+
+	// Capacity is what the node's engine offers to VMs and how much of it the
+	// VMs it holds have been given, as its last heartbeat said. It is what a
+	// VM is placed by.
+	Capacity vm.Info
+
 	LastHeartbeatAt time.Time
 	CreatedAt       time.Time
 	UpdatedAt       time.Time

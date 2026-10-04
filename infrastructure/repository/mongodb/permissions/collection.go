@@ -86,16 +86,63 @@ var collection []permission.Permission = []permission.Permission{
 	{Name: "list of self files", Value: permission.SelfFilesIndex},
 	{Name: "delete a self file", Value: permission.SelfFilesDelete},
 
+	// self vms
+	{Name: "list of self vms", Value: permission.SelfWorkloadVMsIndex},
+	{Name: "show a self vm", Value: permission.SelfWorkloadVMsShow},
+	{Name: "update a self vm", Value: permission.SelfWorkloadVMsUpdate},
+	{Name: "delete a self vm", Value: permission.SelfWorkloadVMsDelete},
+	{Name: "start, stop, restart or restore a self vm", Value: permission.SelfWorkloadVMsManage},
+	{Name: "read a self vm's logs", Value: permission.SelfWorkloadVMsLogs},
+	{Name: "open a terminal in a self vm", Value: permission.SelfWorkloadVMsAttach},
+
+	// self snapshots
+	{Name: "list of self snapshots", Value: permission.SelfWorkloadSnapshotsIndex},
+	{Name: "show a self snapshot", Value: permission.SelfWorkloadSnapshotsShow},
+	{Name: "rename a self snapshot", Value: permission.SelfWorkloadSnapshotsUpdate},
+	{Name: "delete a self snapshot", Value: permission.SelfWorkloadSnapshotsDelete},
+
+	// self containers, and the images, networks and volumes of self docker vms
+	{Name: "list of self containers", Value: permission.SelfWorkloadContainersIndex},
+	{Name: "show a self container", Value: permission.SelfWorkloadContainersShow},
+	{Name: "delete a self container", Value: permission.SelfWorkloadContainersDelete},
+	{Name: "start, stop, restart or connect a self container", Value: permission.SelfWorkloadContainersManage},
+	{Name: "read a self container's logs", Value: permission.SelfWorkloadContainersLogs},
+
 	// self stacks
 	{Name: "list of self stacks", Value: permission.SelfWorkloadStacksIndex},
 	{Name: "show a self stack", Value: permission.SelfWorkloadStacksShow},
-	{Name: "stop, kill or restart a self stack", Value: permission.SelfWorkloadStacksManage},
+	{Name: "start, stop or restart a self stack", Value: permission.SelfWorkloadStacksManage},
 	{Name: "delete a self stack", Value: permission.SelfWorkloadStacksDelete},
+
+	// workload vms
+	{Name: "list of vms", Value: permission.WorkloadVMsIndex},
+	{Name: "create a vm", Value: permission.WorkloadVMsCreate},
+	{Name: "show a vm", Value: permission.WorkloadVMsShow},
+	{Name: "update a vm", Value: permission.WorkloadVMsUpdate},
+	{Name: "delete a vm", Value: permission.WorkloadVMsDelete},
+	{Name: "start, stop, restart or restore a vm", Value: permission.WorkloadVMsManage},
+	{Name: "read a vm's logs", Value: permission.WorkloadVMsLogs},
+	{Name: "open a terminal in a vm", Value: permission.WorkloadVMsAttach},
+
+	// workload snapshots
+	{Name: "list of snapshots", Value: permission.WorkloadSnapshotsIndex},
+	{Name: "take a snapshot", Value: permission.WorkloadSnapshotsCreate},
+	{Name: "show a snapshot", Value: permission.WorkloadSnapshotsShow},
+	{Name: "rename a snapshot", Value: permission.WorkloadSnapshotsUpdate},
+	{Name: "delete a snapshot", Value: permission.WorkloadSnapshotsDelete},
+
+	// workload containers, and the images, networks and volumes of docker vms
+	{Name: "list of containers", Value: permission.WorkloadContainersIndex},
+	{Name: "create a container", Value: permission.WorkloadContainersCreate},
+	{Name: "show a container", Value: permission.WorkloadContainersShow},
+	{Name: "delete a container", Value: permission.WorkloadContainersDelete},
+	{Name: "start, stop, restart or connect a container", Value: permission.WorkloadContainersManage},
+	{Name: "read a container's logs", Value: permission.WorkloadContainersLogs},
 
 	// workload stacks
 	{Name: "list of stacks", Value: permission.WorkloadStacksIndex},
-	{Name: "run a stack", Value: permission.WorkloadStacksCreate},
+	{Name: "deploy a stack", Value: permission.WorkloadStacksCreate},
 	{Name: "show a stack", Value: permission.WorkloadStacksShow},
 	{Name: "delete a stack", Value: permission.WorkloadStacksDelete},
-	{Name: "stop, kill or restart a stack", Value: permission.WorkloadStacksManage},
+	{Name: "start, stop or restart a stack", Value: permission.WorkloadStacksManage},
 }

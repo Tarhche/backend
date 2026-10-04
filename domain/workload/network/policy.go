@@ -1,5 +1,7 @@
 package network
 
+import "github.com/khanzadimahdi/testproject/domain/workload/vm"
+
 // Policy describes how much of the network a task is allowed to reach.
 type Policy string
 
@@ -83,4 +85,28 @@ func (p Policy) ReachesInternet() bool {
 
 func (p Policy) String() string {
 	return string(p)
+}
+
+// VMNetwork is the network a task under this policy is given once it runs in a
+// VM.
+//
+// No network is nothing either way. An isolated task still serves its ports,
+// so the ingress reaches it, but it calls nothing; a public one calls out as
+// well. A policy that names nothing is the default one, and one nobody knows
+// is given nothing at all, which is the safe answer to a question nobody
+// asked.
+func (p Policy) VMNetwork() vm.Network {
+	policy := p
+	if len(policy) == 0 {
+		policy = DefaultPolicy
+	}
+
+	switch policy {
+	case PolicyIsolated:
+		return vm.Network{Ingress: vm.AccessAllow, Egress: vm.AccessDeny}
+	case PolicyPublic:
+		return vm.Network{Ingress: vm.AccessAllow, Egress: vm.AccessAllow}
+	default:
+		return vm.Network{Ingress: vm.AccessDeny, Egress: vm.AccessDeny}
+	}
 }

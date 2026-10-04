@@ -6,5 +6,6 @@ func All() []Migration {
 	return []Migration{
 		renameRunnerToWorkload,
 		removeTaskStacks,
+		replaceTaskPermissions,
 	}
 }
