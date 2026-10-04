@@ -1,0 +1,34 @@
+# What the workload-microsandbox service is made of. A push to main that changes
+# any of it rebuilds the service's image and redeploys it, and nothing else does,
+# because every redeploy restarts every microVM task the service runs.
+#
+# Code the service shares with everything else (the domain, configuration,
+# telemetry, certificates) is not listed: it reaches the service with the next
+# change that is. That is safe because the API is versioned, so orchestrators and
+# the service need not be built from one commit. The orchestrator's client
+# (infrastructure/workload/microsandbox/client) ships in the orchestrator's
+# image, so it is excluded too.
+#
+# One entry per line, read by .github/workflows/workload-microsandbox.yaml:
+#   - a git pathspec: a file, a directory ending in /, or :(exclude) one;
+#   - or a file and a text after it, which counts only when a changed line of
+#     that file contains the text.
+
+# the contract, the service, its SDK adapter, configuration and command
+infrastructure/workload/microsandbox/
+:(exclude)infrastructure/workload/microsandbox/client/
+application/workload/microsandbox/
+presentation/http/workload/microsandbox/
+presentation/commands/workload/microsandbox/
+infrastructure/configs/microsandbox.go
+infrastructure/ioc/providers/workload/microsandbox.go
+infrastructure/ioc/providers/workload/microsandbox_sdk.go
+commands_microsandbox.go
+
+# its image and its deployment. The Dockerfile holds every image, so a change to
+# any of them redeploys this one as well.
+Dockerfile
+compose.workload-microsandbox.yaml
+
+# the SDK's version, which the image's microsandbox has to equal
+go.mod github.com/superradcompany/microsandbox/

@@ -133,6 +133,10 @@ services:
       WORKLOAD_TUNNEL_ALLOWED_TARGETS: ${WORKLOAD_TUNNEL_ALLOWED_TARGETS}
       NATS_URL: ${NATS_URL}
       DOCKER_HOST: ${BACKEND_DOCKER_HOST}
+      # sysbox runs the tasks on the docker service above. make up-microsandbox
+      # says microsandbox, which runs them as microVMs in workload-microsandbox.
+      WORKLOAD_ORCHESTRATOR_RUNTIME: ${WORKLOAD_ORCHESTRATOR_RUNTIME:-sysbox}
+      WORKLOAD_MICROSANDBOX_URL: ${WORKLOAD_MICROSANDBOX_URL:-https://workload-microsandbox:8443}
       OTEL_EXPORTER_OTLP_INSECURE: ${OTEL_EXPORTER_OTLP_INSECURE}
       OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL}
       OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES}
@@ -160,6 +164,10 @@ services:
       WORKLOAD_TUNNEL_ALLOWED_TARGETS: ${WORKLOAD_TUNNEL_ALLOWED_TARGETS}
       NATS_URL: ${NATS_URL}
       DOCKER_HOST: ${BACKEND_DOCKER_HOST}
+      # sysbox runs the tasks on the docker service above. make up-microsandbox
+      # says microsandbox, which runs them as microVMs in workload-microsandbox.
+      WORKLOAD_ORCHESTRATOR_RUNTIME: ${WORKLOAD_ORCHESTRATOR_RUNTIME:-sysbox}
+      WORKLOAD_MICROSANDBOX_URL: ${WORKLOAD_MICROSANDBOX_URL:-https://workload-microsandbox:8443}
       OTEL_EXPORTER_OTLP_INSECURE: ${OTEL_EXPORTER_OTLP_INSECURE}
       OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL}
       OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES}
@@ -187,6 +195,72 @@ services:
       WORKLOAD_TUNNEL_ALLOWED_TARGETS: ${WORKLOAD_TUNNEL_ALLOWED_TARGETS}
       NATS_URL: ${NATS_URL}
       DOCKER_HOST: ${BACKEND_DOCKER_HOST}
+      # sysbox runs the tasks on the docker service above. make up-microsandbox
+      # says microsandbox, which runs them as microVMs in workload-microsandbox.
+      WORKLOAD_ORCHESTRATOR_RUNTIME: ${WORKLOAD_ORCHESTRATOR_RUNTIME:-sysbox}
+      WORKLOAD_MICROSANDBOX_URL: ${WORKLOAD_MICROSANDBOX_URL:-https://workload-microsandbox:8443}
+      OTEL_EXPORTER_OTLP_INSECURE: ${OTEL_EXPORTER_OTLP_INSECURE}
+      OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL}
+      OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
+      OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT: ${OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT:-}
+      OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
+      PROFILING_ENABLED: ${PROFILING_ENABLED:-true}
+
+  # the microsandbox runtime, which runs tasks as microVMs and so needs /dev/kvm:
+  # a Linux host, or the VM make lima-create makes on a Mac. Only make
+  # up-microsandbox starts it, and its .env.microsandbox is what points the
+  # orchestrators at it.
+  workload-microsandbox:
+    profiles: ["microsandbox"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: develop-workload-microsandbox
+    # the name it has in production, which the e2e drills address it by
+    container_name: workload-microsandbox
+    restart: unless-stopped
+    # reaps the msb processes the service leaves behind, as tini does in
+    # production
+    init: true
+    devices:
+      - /dev/kvm:/dev/kvm
+    security_opt:
+      - no-new-privileges:true
+    stop_signal: SIGINT
+    stop_grace_period: 60s
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8081/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      # the first build compiles microsandbox's SDK with cgo
+      start_period: 300s
+    # the service admits VMs against 80% of this, less 512 MiB, and refuses to
+    # start without a limit
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+    depends_on:
+      - grafana
+    ports:
+      # the API, which the orchestrators reach on the compose network; published
+      # for the e2e suite, which checks runs against it
+      - "8443:8443"
+    volumes:
+      - ./:/opt/app
+      # microsandbox's home and the service's records. A volume, not ./tmp: a
+      # directory shared from a Mac gives microsandbox's sockets, sparse disks
+      # and database locks no guarantees.
+      - workload_microsandbox_data:/data
+    environment:
+      # the tunnel's authority, which issued the orchestrators' certificates,
+      # and this service's own, which make certs issues and make certs-env
+      # prints for .env
+      WORKLOAD_MICROSANDBOX_CA_CERT: ${WORKLOAD_TUNNEL_CA_CERT}
+      WORKLOAD_MICROSANDBOX_CERT: ${WORKLOAD_MICROSANDBOX_CERT:-}
+      WORKLOAD_MICROSANDBOX_KEY: ${WORKLOAD_MICROSANDBOX_KEY:-}
       OTEL_EXPORTER_OTLP_INSECURE: ${OTEL_EXPORTER_OTLP_INSECURE}
       OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL}
       OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES}
@@ -360,3 +434,6 @@ services:
     environment:
       MONGODB_URI: ${MONGO_SCHEME}://${MONGO_USERNAME}:${MONGO_PASSWORD}@${MONGO_HOST}:${MONGO_PORT}/admin
     command: ["--collector.diagnosticdata", "--collector.dbstats"]
+
+volumes:
+  workload_microsandbox_data:
