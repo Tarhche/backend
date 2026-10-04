@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"reflect"
+	"slices"
 	"testing"
 	"time"
 
@@ -18,6 +20,8 @@ import (
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/node"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
+	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers"
+	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers/workload"
 	messaging "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/runtime"
 	"github.com/khanzadimahdi/testproject/infrastructure/tunnel"
@@ -181,6 +185,33 @@ func TestServe(t *testing.T) {
 				}
 			})
 		}
+	})
+
+	t.Run("its tasks run on what WORKLOAD_ORCHESTRATOR_RUNTIME chooses, never on docker directly", func(t *testing.T) {
+		command := NewServeCommand()
+
+		list := command.Providers()
+
+		types := make([]reflect.Type, len(list))
+		for i, p := range list {
+			types[i] = reflect.TypeOf(p)
+		}
+
+		position := func(p any) int {
+			return slices.Index(types, reflect.TypeOf(p))
+		}
+
+		runtime := position(providers.NewWorkloadRuntimeProvider())
+		if !assert.NotEqual(t, -1, runtime, "the runtime provider binds what runs the tasks") {
+			return
+		}
+
+		assert.Equal(t, -1, slices.Index(types[runtime+1:], types[runtime]), "and only one does")
+		assert.Equal(t, 0, position(providers.NewConfigsProvider()), "the configuration comes first: the runtime is chosen from it")
+		assert.Equal(t, -1, position(providers.NewDockerProvider()), "docker is bound by the runtime provider, when sysbox is chosen")
+		assert.Greater(t, runtime, position(providers.NewOpenTelemetryProvider("", "")), "after the logger it resolves")
+		assert.Less(t, runtime, position(workload.NewOrchestratorProvider()), "before the use cases that run tasks with it")
+		assert.Same(t, command, list[len(list)-1])
 	})
 
 	t.Run("run", func(t *testing.T) {
