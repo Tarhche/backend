@@ -225,6 +225,20 @@ func TestReadoption(t *testing.T) {
 		assert.Equal(t, []runs.PortBinding{{Bind: "10.89.0.10", HostPort: 20500, GuestPort: 80}}, sandbox.Ports)
 	})
 
+	t.Run("a sandbox made before the service could record it is booted rather than made again", func(t *testing.T) {
+		t.Parallel()
+
+		h := unopened(t, withRecords(record("a1", api.StateStarting, func(r *runs.Record) { r.Sandbox = false })))
+		h.seed("a1", true)
+		h.open()
+
+		run, err := h.supervisor.Start(context.Background(), "a1")
+		require.NoError(t, err)
+
+		assert.Equal(t, api.StateRunning, run.State)
+		assert.Equal(t, []string{"start " + runs.SandboxName("a1")}, startsAndCreates(h.fake.Calls()))
+	})
+
 	t.Run("a sandbox that belongs to no run is destroyed", func(t *testing.T) {
 		t.Parallel()
 

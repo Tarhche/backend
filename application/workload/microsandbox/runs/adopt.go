@@ -248,9 +248,10 @@ func (s *Supervisor) reconcile(ctx context.Context) ([]*run, error) {
 			r.record.State = api.StateExited
 		}
 
-		if !there {
-			r.record.Sandbox = false
-		}
+		// what is there decides whether the next start boots the sandbox or
+		// makes it: a service that went away right after making one never
+		// recorded that it had.
+		r.record.Sandbox = there
 
 		policy, _ := parsePolicy(r.record.Spec.RestartPolicy)
 
