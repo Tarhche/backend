@@ -18,7 +18,6 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/task/events"
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
 	logsMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/logs"
-	stacksMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/stacks"
 	tasksMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/tasks"
 	"github.com/khanzadimahdi/testproject/infrastructure/translator"
 )
@@ -44,7 +43,6 @@ func TestTaskFailed_Handle(t *testing.T) {
 
 		var (
 			tasks      tasksMock.MockTasksRepository
-			stacks     stacksMock.MockStacksRepository
 			producer   messagingMock.MockProduceConsumer
 			translator translator.TranslatorMock
 			logs       = logsMock.NewInMemoryRepository()
@@ -82,7 +80,7 @@ func TestTaskFailed_Handle(t *testing.T) {
 		handler := NewTaskFailed(
 			&tasks,
 			logs,
-			schedule.New(&stacks, &producer),
+			schedule.New(&producer),
 			deletetask.NewUseCase(&tasks, logs, &producer, &translator),
 			discardLogger(),
 		)
@@ -111,7 +109,6 @@ func TestTaskFailed_Handle(t *testing.T) {
 
 		var (
 			tasks      tasksMock.MockTasksRepository
-			stacks     stacksMock.MockStacksRepository
 			producer   messagingMock.MockProduceConsumer
 			translator translator.TranslatorMock
 			logs       = logsMock.NewInMemoryRepository()
@@ -132,7 +129,7 @@ func TestTaskFailed_Handle(t *testing.T) {
 		handler := NewTaskFailed(
 			&tasks,
 			logs,
-			schedule.New(&stacks, &producer),
+			schedule.New(&producer),
 			deletetask.NewUseCase(&tasks, logs, &producer, &translator),
 			discardLogger(),
 		)
@@ -159,7 +156,6 @@ func TestTaskFailed_Handle(t *testing.T) {
 
 		var (
 			tasks      tasksMock.MockTasksRepository
-			stacks     stacksMock.MockStacksRepository
 			producer   messagingMock.MockProduceConsumer
 			translator translator.TranslatorMock
 			logs       = logsMock.NewInMemoryRepository()
@@ -189,7 +185,7 @@ func TestTaskFailed_Handle(t *testing.T) {
 		handler := NewTaskFailed(
 			&tasks,
 			logs,
-			schedule.New(&stacks, &producer),
+			schedule.New(&producer),
 			deletetask.NewUseCase(&tasks, logs, &producer, &translator),
 			discardLogger(),
 		)
@@ -210,7 +206,6 @@ func TestTaskFailed_Handle(t *testing.T) {
 
 		var (
 			tasks      tasksMock.MockTasksRepository
-			stacks     stacksMock.MockStacksRepository
 			producer   messagingMock.MockProduceConsumer
 			translator translator.TranslatorMock
 			logs       = logsMock.NewInMemoryRepository()
@@ -238,7 +233,7 @@ func TestTaskFailed_Handle(t *testing.T) {
 		handler := NewTaskFailed(
 			&tasks,
 			logs,
-			schedule.New(&stacks, &producer),
+			schedule.New(&producer),
 			deletetask.NewUseCase(&tasks, logs, &producer, &translator),
 			discardLogger(),
 		)
@@ -259,7 +254,6 @@ func TestTaskFailed_Handle(t *testing.T) {
 
 		var (
 			tasks      tasksMock.MockTasksRepository
-			stacks     stacksMock.MockStacksRepository
 			producer   messagingMock.MockProduceConsumer
 			translator translator.TranslatorMock
 			logs       = logsMock.NewInMemoryRepository()
@@ -286,7 +280,7 @@ func TestTaskFailed_Handle(t *testing.T) {
 		handler := NewTaskFailed(
 			&tasks,
 			logs,
-			schedule.New(&stacks, &producer),
+			schedule.New(&producer),
 			deletetask.NewUseCase(&tasks, logs, &producer, &translator),
 			discardLogger(),
 		)

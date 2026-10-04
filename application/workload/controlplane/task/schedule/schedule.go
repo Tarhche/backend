@@ -9,65 +9,29 @@ package schedule
 import (
 	"context"
 	"encoding/json"
-	"errors"
 
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/workload/stack"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 	"github.com/khanzadimahdi/testproject/domain/workload/task/events"
 )
 
 // Scheduler asks nodes for tasks.
 type Scheduler struct {
-	stackRepository stack.Repository
-	producer        domain.Producer
+	producer domain.Producer
 }
 
-func New(stackRepository stack.Repository, producer domain.Producer) *Scheduler {
+func New(producer domain.Producer) *Scheduler {
 	return &Scheduler{
-		stackRepository: stackRepository,
-		producer:        producer,
+		producer: producer,
 	}
 }
 
 // On asks the named node for this task, as the attempt-th try at it.
-//
-// The node is a nomination rather than a decision: a service of a stack goes
-// where its stack is, whoever nominated what. Everything in a stack shares one
-// private network, and a bridge is local to the node that created it, so a
-// stack runs on one node or it does not run.
 func (s *Scheduler) On(ctx context.Context, t *task.Task, nodeName string, attempt int) error {
-	holder, err := s.stackOf(ctx, t)
-	if err != nil {
-		return err
-	}
-
-	if len(holder.NodeName) > 0 {
-		nodeName = holder.NodeName
-	}
-
-	payload, err := json.Marshal(events.NewTaskScheduled(t, holder.Slug, nodeName, attempt))
+	payload, err := json.Marshal(events.NewTaskScheduled(t, nodeName, attempt))
 	if err != nil {
 		return err
 	}
 
 	return s.producer.Produce(ctx, events.TaskScheduledName, payload)
-}
-
-// stackOf is the stack a task is a service of, if it is one: where it
-// runs, and what its network is called there — the slug, not the uuid, is what
-// names the docker network its services share.
-func (s *Scheduler) stackOf(ctx context.Context, t *task.Task) (stack.Stack, error) {
-	if len(t.StackUUID) == 0 {
-		return stack.Stack{}, nil
-	}
-
-	holder, err := s.stackRepository.GetOne(ctx, t.StackUUID)
-	if errors.Is(err, domain.ErrNotExists) {
-		// a service whose stack is gone is on its own, and where it is is
-		// where it stays.
-		return stack.Stack{}, nil
-	}
-
-	return holder, err
 }

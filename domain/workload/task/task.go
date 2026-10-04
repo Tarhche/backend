@@ -16,12 +16,6 @@ type Task struct {
 	Slug string
 	Kind Kind
 
-	// StackUUID is the stack this task is a service of, empty for one
-	// that stands on its own. ServiceName is what its neighbours in that stack
-	// reach it by.
-	StackUUID   string
-	ServiceName string
-
 	// CurrentState is what the task is doing, as the node holding it last
 	// reported. ExpectedState is what it was asked to be doing. The two drift
 	// apart when a task stops, fails or is taken away behind the workload's
@@ -143,7 +137,6 @@ type Repository interface {
 	GetAllByOwner(ctx context.Context, ownerUUID string, offset uint, limit uint) ([]Task, error)
 	CountByOwner(ctx context.Context, ownerUUID string) (uint, error)
 
-	GetAllByStack(ctx context.Context, stackUUID string) ([]Task, error)
 	GetOne(ctx context.Context, UUID string) (Task, error)
 
 	// GetOneByOwner is the same, of one person's own. A task that is not

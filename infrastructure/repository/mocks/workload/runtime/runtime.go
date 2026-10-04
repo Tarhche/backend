@@ -106,14 +106,6 @@ func (m *MockNetworkManager) EnsureIsolatedNetwork(ctx context.Context) error {
 	return m.Called(ctx).Error(0)
 }
 
-func (m *MockNetworkManager) EnsureStackNetwork(ctx context.Context, stackSlug string) error {
-	return m.Called(ctx, stackSlug).Error(0)
-}
-
-func (m *MockNetworkManager) RemoveStackNetwork(ctx context.Context, stackSlug string) error {
-	return m.Called(ctx, stackSlug).Error(0)
-}
-
 // MockNodeManager stands in for what a node reports about itself.
 type MockNodeManager struct {
 	mock.Mock

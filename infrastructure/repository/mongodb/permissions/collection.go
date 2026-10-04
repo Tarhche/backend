@@ -86,28 +86,11 @@ var collection []permission.Permission = []permission.Permission{
 	{Name: "list of self files", Value: permission.SelfFilesIndex},
 	{Name: "delete a self file", Value: permission.SelfFilesDelete},
 
-	// self tasks
-	{Name: "list of self tasks", Value: permission.SelfWorkloadTasksIndex},
-	{Name: "show a self task", Value: permission.SelfWorkloadTasksShow},
-	{Name: "read a self task's logs", Value: permission.SelfWorkloadTasksLogs},
-	{Name: "stop, kill or restart a self task", Value: permission.SelfWorkloadTasksManage},
-	{Name: "open a terminal in a self task", Value: permission.SelfWorkloadTasksAttach},
-	{Name: "delete a self task", Value: permission.SelfWorkloadTasksDelete},
-
 	// self stacks
 	{Name: "list of self stacks", Value: permission.SelfWorkloadStacksIndex},
 	{Name: "show a self stack", Value: permission.SelfWorkloadStacksShow},
 	{Name: "stop, kill or restart a self stack", Value: permission.SelfWorkloadStacksManage},
 	{Name: "delete a self stack", Value: permission.SelfWorkloadStacksDelete},
-
-	// workload tasks
-	{Name: "list of tasks", Value: permission.WorkloadTasksIndex},
-	{Name: "run a task", Value: permission.WorkloadTasksCreate},
-	{Name: "show a task", Value: permission.WorkloadTasksShow},
-	{Name: "delete a task", Value: permission.WorkloadTasksDelete},
-	{Name: "read a task's logs", Value: permission.WorkloadTasksLogs},
-	{Name: "stop, kill or restart a task", Value: permission.WorkloadTasksManage},
-	{Name: "open a terminal in a task", Value: permission.WorkloadTasksAttach},
 
 	// workload stacks
 	{Name: "list of stacks", Value: permission.WorkloadStacksIndex},

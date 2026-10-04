@@ -15,7 +15,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
@@ -23,10 +22,6 @@ import (
 	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 )
-
-// controlPlaneStack is the client's own name for what the contract calls a Stack,
-// so the wire mapping can build one without importing its own package.
-type controlPlaneStack = workloadControlPlane.Stack
 
 // requestTimeout bounds a call to the control plane.
 const requestTimeout = 15 * time.Second
@@ -39,9 +34,9 @@ type Client struct {
 
 var _ workloadControlPlane.Client = &Client{}
 
-// New builds a client for the control plane at baseURL, e.g. "http://workload-controlplane:80".
-// New builds a client for the control plane. It answers about tasks; reaching
-// one is the ingress's business and no longer passes through here.
+// New builds a client for the control plane at baseURL, e.g.
+// "http://workload-controlplane:80". It answers about tasks; reaching one is
+// the ingress's business and does not pass through here.
 func New(baseURL string) (*Client, error) {
 	parsed, err := usable(baseURL, "workload control plane")
 	if err != nil {
@@ -67,24 +62,6 @@ func usable(raw string, what string) (*url.URL, error) {
 	return parsed, nil
 }
 
-func (c *Client) Tasks(ctx context.Context, ownerUUID string, page uint) (workloadControlPlane.Page[task.Task], error) {
-	var payload tasksPayload
-	if err := c.call(ctx, http.MethodGet, c.path("/api/tasks", listing(ownerUUID, page)), nil, &payload); err != nil {
-		return workloadControlPlane.Page[task.Task]{}, err
-	}
-
-	items := make([]task.Task, len(payload.Items))
-	for i := range payload.Items {
-		items[i] = payload.Items[i].toTask()
-	}
-
-	return workloadControlPlane.Page[task.Task]{
-		Items:       items,
-		TotalPages:  payload.Pagination.TotalPages,
-		CurrentPage: payload.Pagination.CurrentPage,
-	}, nil
-}
-
 func (c *Client) Task(ctx context.Context, uuid string) (task.Task, error) {
 	var payload taskPayload
 	if err := c.call(ctx, http.MethodGet, c.path("/api/tasks/"+url.PathEscape(uuid), nil), nil, &payload); err != nil {
@@ -94,133 +71,10 @@ func (c *Client) Task(ctx context.Context, uuid string) (task.Task, error) {
 	return payload.toTask(), nil
 }
 
-func (c *Client) TaskOf(ctx context.Context, ownerUUID string, uuid string) (task.Task, error) {
-	query := url.Values{}
-	query.Set("owner", ownerUUID)
-
-	var payload taskPayload
-	if err := c.call(ctx, http.MethodGet, c.path("/api/tasks/"+url.PathEscape(uuid), query), nil, &payload); err != nil {
-		return task.Task{}, err
-	}
-
-	return payload.toTask(), nil
-}
-
-func (c *Client) RunTask(ctx context.Context, spec workloadControlPlane.TaskSpec, ownerUUID string) (task.Task, error) {
-	body := map[string]any{"name": spec.Name, "owner_uuid": ownerUUID, "service": spec.Service}
-
-	var payload taskPayload
-	if err := c.call(ctx, http.MethodPost, c.path("/api/tasks/run", nil), body, &payload); err != nil {
-		return task.Task{}, err
-	}
-
-	return payload.toTask(), nil
-}
-
-func (c *Client) StopTask(ctx context.Context, uuid string) error {
-	return c.call(ctx, http.MethodPost, c.path("/api/tasks/"+url.PathEscape(uuid)+"/stop", nil), nil, nil)
-}
-
-func (c *Client) KillTask(ctx context.Context, uuid string) error {
-	return c.call(ctx, http.MethodPost, c.path("/api/tasks/"+url.PathEscape(uuid)+"/kill", nil), nil, nil)
-}
-
-func (c *Client) RestartTask(ctx context.Context, uuid string) error {
-	return c.call(ctx, http.MethodPost, c.path("/api/tasks/"+url.PathEscape(uuid)+"/restart", nil), nil, nil)
-}
-
-// DeleteTask removes a task whether or not it is still running: the
-// dashboard's delete is a request to have it gone.
+// DeleteTask removes a task whether or not it is still running: a delete is
+// a request to have it gone.
 func (c *Client) DeleteTask(ctx context.Context, uuid string) error {
 	return c.call(ctx, http.MethodDelete, c.path("/api/tasks/"+url.PathEscape(uuid), url.Values{"force": {"true"}}), nil, nil)
-}
-
-func (c *Client) TaskLogs(ctx context.Context, uuid string, after time.Time, limit uint) ([]task.Log, error) {
-	query := url.Values{}
-	if !after.IsZero() {
-		query.Set("after", after.UTC().Format(time.RFC3339Nano))
-	}
-	if limit > 0 {
-		query.Set("limit", strconv.FormatUint(uint64(limit), 10))
-	}
-
-	var payload logsPayload
-	if err := c.call(ctx, http.MethodGet, c.path("/api/tasks/"+url.PathEscape(uuid)+"/logs", query), nil, &payload); err != nil {
-		return nil, err
-	}
-
-	logs := make([]task.Log, len(payload.Items))
-	for i := range payload.Items {
-		logs[i] = payload.Items[i].toLog(uuid)
-	}
-
-	return logs, nil
-}
-
-func (c *Client) Stacks(ctx context.Context, ownerUUID string, page uint) (workloadControlPlane.Page[workloadControlPlane.Stack], error) {
-	var payload stacksPayload
-	if err := c.call(ctx, http.MethodGet, c.path("/api/stacks", listing(ownerUUID, page)), nil, &payload); err != nil {
-		return workloadControlPlane.Page[workloadControlPlane.Stack]{}, err
-	}
-
-	items := make([]workloadControlPlane.Stack, len(payload.Items))
-	for i := range payload.Items {
-		items[i] = payload.Items[i].toStack()
-	}
-
-	return workloadControlPlane.Page[workloadControlPlane.Stack]{
-		Items:       items,
-		TotalPages:  payload.Pagination.TotalPages,
-		CurrentPage: payload.Pagination.CurrentPage,
-	}, nil
-}
-
-func (c *Client) Stack(ctx context.Context, uuid string) (workloadControlPlane.Stack, error) {
-	var payload stackPayload
-	if err := c.call(ctx, http.MethodGet, c.path("/api/stacks/"+url.PathEscape(uuid), nil), nil, &payload); err != nil {
-		return workloadControlPlane.Stack{}, err
-	}
-
-	return payload.toStack(), nil
-}
-
-func (c *Client) StackOf(ctx context.Context, ownerUUID string, uuid string) (workloadControlPlane.Stack, error) {
-	query := url.Values{}
-	query.Set("owner", ownerUUID)
-
-	var payload stackPayload
-	if err := c.call(ctx, http.MethodGet, c.path("/api/stacks/"+url.PathEscape(uuid), query), nil, &payload); err != nil {
-		return workloadControlPlane.Stack{}, err
-	}
-
-	return payload.toStack(), nil
-}
-
-func (c *Client) RunStack(ctx context.Context, spec workloadControlPlane.StackSpec, ownerUUID string) (workloadControlPlane.Stack, error) {
-	body := map[string]any{"name": spec.Name, "owner_uuid": ownerUUID, "services": spec.Services}
-
-	var payload stackPayload
-	if err := c.call(ctx, http.MethodPost, c.path("/api/stacks/run", nil), body, &payload); err != nil {
-		return workloadControlPlane.Stack{}, err
-	}
-
-	return payload.toStack(), nil
-}
-
-func (c *Client) StopStack(ctx context.Context, uuid string) error {
-	return c.call(ctx, http.MethodPost, c.path("/api/stacks/"+url.PathEscape(uuid)+"/stop", nil), nil, nil)
-}
-
-func (c *Client) KillStack(ctx context.Context, uuid string) error {
-	return c.call(ctx, http.MethodPost, c.path("/api/stacks/"+url.PathEscape(uuid)+"/kill", nil), nil, nil)
-}
-
-func (c *Client) RestartStack(ctx context.Context, uuid string) error {
-	return c.call(ctx, http.MethodPost, c.path("/api/stacks/"+url.PathEscape(uuid)+"/restart", nil), nil, nil)
-}
-
-func (c *Client) DeleteStack(ctx context.Context, uuid string) error {
-	return c.call(ctx, http.MethodDelete, c.path("/api/stacks/"+url.PathEscape(uuid), nil), nil, nil)
 }
 
 // ValidationError carries what the control plane refused, so the dashboard can show
@@ -231,17 +85,6 @@ type ValidationError struct {
 
 func (e *ValidationError) Error() string {
 	return fmt.Sprintf("the workload refused the request: %v", e.ValidationErrors)
-}
-
-// listing is what a page of somebody's tasks or stacks is asked for by.
-func listing(ownerUUID string, page uint) url.Values {
-	query := url.Values{"page": {strconv.FormatUint(uint64(page), 10)}}
-
-	if len(ownerUUID) > 0 {
-		query.Set("owner", ownerUUID)
-	}
-
-	return query
 }
 
 func (c *Client) path(path string, query url.Values) string {

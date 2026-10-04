@@ -70,16 +70,6 @@ const (
 	LanguagesUpdate = "languages.update"
 	LanguagesDelete = "languages.delete"
 
-	WorkloadTasksIndex  = "workload.tasks.index"
-	WorkloadTasksCreate = "workload.tasks.create"
-	WorkloadTasksShow   = "workload.tasks.show"
-	WorkloadTasksDelete = "workload.tasks.delete"
-	WorkloadTasksLogs   = "workload.tasks.logs"
-	WorkloadTasksAttach = "workload.tasks.attach"
-
-	// WorkloadTasksManage covers stopping, killing and restarting.
-	WorkloadTasksManage = "workload.tasks.manage"
-
 	WorkloadStacksIndex  = "workload.stacks.index"
 	WorkloadStacksCreate = "workload.stacks.create"
 	WorkloadStacksShow   = "workload.stacks.show"
@@ -104,13 +94,6 @@ const (
 
 	SelfFilesIndex  = "self.files.index"
 	SelfFilesDelete = "self.files.delete"
-
-	SelfWorkloadTasksIndex  = "self.workload.tasks.index"
-	SelfWorkloadTasksShow   = "self.workload.tasks.show"
-	SelfWorkloadTasksLogs   = "self.workload.tasks.logs"
-	SelfWorkloadTasksManage = "self.workload.tasks.manage"
-	SelfWorkloadTasksAttach = "self.workload.tasks.attach"
-	SelfWorkloadTasksDelete = "self.workload.tasks.delete"
 
 	SelfWorkloadStacksIndex  = "self.workload.stacks.index"
 	SelfWorkloadStacksShow   = "self.workload.stacks.show"

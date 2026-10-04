@@ -20,13 +20,6 @@ type Request struct {
 	// asking anything that keeps records.
 	OwnerUUID string `json:"owner_uuid,omitempty"`
 
-	// StackSlug and ServiceName place this task in a stack: the slug
-	// names the private network its services share, and the service name is
-	// what its neighbours reach it by on that network.
-	StackUUID   string `json:"stack_uuid,omitempty"`
-	StackSlug   string `json:"stack_slug,omitempty"`
-	ServiceName string `json:"service_name,omitempty"`
-
 	Image          string                 `json:"image"`
 	AutoRemove     bool                   `json:"auto_remove"`
 	PortBindings   map[uint][]PortBinding `json:"port_bindings"`

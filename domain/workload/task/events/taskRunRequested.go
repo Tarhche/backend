@@ -12,9 +12,6 @@ const TaskRunRequestedName = "workloadTaskRunRequested"
 type TaskRunRequested struct {
 	Name          string                 `json:"name"`
 	Kind          string                 `json:"kind"`
-	StackUUID     string                 `json:"stack_uuid,omitempty"`
-	StackSlug     string                 `json:"stack_slug,omitempty"`
-	ServiceName   string                 `json:"service_name,omitempty"`
 	NominatedNode string                 `json:"nominated_node,omitempty"`
 	Image         string                 `json:"image"`
 	AutoRemove    bool                   `json:"auto_remove"`

@@ -12,12 +12,10 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/task/schedule"
 	"github.com/khanzadimahdi/testproject/domain/workload/node"
-	"github.com/khanzadimahdi/testproject/domain/workload/stack"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 	"github.com/khanzadimahdi/testproject/domain/workload/task/events"
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
 	nodesMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/nodes"
-	stacksMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/stacks"
 	tasksMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/tasks"
 	"github.com/khanzadimahdi/testproject/infrastructure/workload/scheduler/roundrobin"
 )
@@ -34,36 +32,26 @@ func created(t *testing.T, uuid string) []byte {
 func TestTaskCreated_Handle(t *testing.T) {
 	t.Parallel()
 
-	t.Run("a stack's services all go on the stack's node", func(t *testing.T) {
+	t.Run("a task nominated nowhere goes wherever there is room", func(t *testing.T) {
 		t.Parallel()
 
 		var (
 			tasks    tasksMock.MockTasksRepository
 			nodes    nodesMock.MockNodesRepository
-			stacks   stacksMock.MockStacksRepository
 			producer messagingMock.MockProduceConsumer
 		)
 
-		// asked for with another node in mind: the stack's is what counts,
-		// because a stack's services share a network local to one node.
-		service := task.Task{
-			UUID:         "task-uuid",
-			Name:         "shop-api",
-			StackUUID:    "stack-uuid",
-			ServiceName:  "api",
-			CurrentState: task.Created,
-			NodeName:     "workload-orchestrator-03",
-		}
+		unplaced := task.Task{UUID: "task-uuid", CurrentState: task.Created}
 
-		tasks.On("GetOne", mock.Anything, service.UUID).Return(service, nil).Once()
+		tasks.On("GetOne", mock.Anything, unplaced.UUID).Return(unplaced, nil).Once()
 		tasks.On("Save", mock.Anything, mock.MatchedBy(func(t *task.Task) bool {
-			return t.NodeName == "workload-orchestrator-01" && t.CurrentState == task.Scheduled
-		})).Return(service.UUID, nil).Once()
+			return t.NodeName == "workload-orchestrator-02" && t.CurrentState == task.Scheduled
+		})).Return(unplaced.UUID, nil).Once()
 		defer tasks.AssertExpectations(t)
 
-		stacks.On("GetOne", mock.Anything, service.StackUUID).
-			Return(stack.Stack{UUID: "stack-uuid", Slug: "shop-abcde", NodeName: "workload-orchestrator-01"}, nil)
-		defer stacks.AssertExpectations(t)
+		nodes.On("GetAll", mock.Anything, uint(0), uint(nominatedNodesLimit)).
+			Return([]node.Node{{Name: "workload-orchestrator-02", LastHeartbeatAt: time.Now()}}, nil).Once()
+		defer nodes.AssertExpectations(t)
 
 		var scheduled events.TaskScheduled
 		producer.On("Produce", mock.Anything, events.TaskScheduledName, mock.MatchedBy(func(payload []byte) bool {
@@ -71,59 +59,19 @@ func TestTaskCreated_Handle(t *testing.T) {
 		})).Return(nil).Once()
 		defer producer.AssertExpectations(t)
 
-		handler := NewTaskCreated(&tasks, &nodes, &stacks, roundrobin.New(), schedule.New(&stacks, &producer), discardLogger())
+		handler := NewTaskCreated(&tasks, &nodes, roundrobin.New(), schedule.New(&producer), discardLogger())
 
-		require.NoError(t, handler.Handle(context.Background(), created(t, service.UUID)))
+		require.NoError(t, handler.Handle(context.Background(), created(t, unplaced.UUID)))
 
-		assert.Equal(t, "workload-orchestrator-01", scheduled.NominatedNode)
-		assert.Equal(t, "shop-abcde", scheduled.StackSlug, "and with the slug of the network they share")
-
-		// nothing was chosen: the stack had already been placed.
-		nodes.AssertNotCalled(t, "GetAll", mock.Anything, mock.Anything, mock.Anything)
-		stacks.AssertNotCalled(t, "Save", mock.Anything, mock.Anything)
+		assert.Equal(t, "workload-orchestrator-02", scheduled.NominatedNode)
 	})
 
-	t.Run("the first service of an unplaced stack decides for the rest", func(t *testing.T) {
+	t.Run("a task goes where it was nominated", func(t *testing.T) {
 		t.Parallel()
 
 		var (
 			tasks    tasksMock.MockTasksRepository
 			nodes    nodesMock.MockNodesRepository
-			stacks   stacksMock.MockStacksRepository
-			producer messagingMock.MockProduceConsumer
-		)
-
-		service := task.Task{UUID: "task-uuid", StackUUID: "stack-uuid", CurrentState: task.Created}
-
-		tasks.On("GetOne", mock.Anything, service.UUID).Return(service, nil).Once()
-		tasks.On("Save", mock.Anything, mock.Anything).Return(service.UUID, nil).Once()
-
-		stacks.On("GetOne", mock.Anything, service.StackUUID).Return(stack.Stack{UUID: "stack-uuid"}, nil)
-		nodes.On("GetAll", mock.Anything, uint(0), uint(nominatedNodesLimit)).
-			Return([]node.Node{{Name: "workload-orchestrator-02", LastHeartbeatAt: time.Now()}}, nil).Once()
-
-		// written down on the stack, so the services asked for after this one
-		// find the same place.
-		stacks.On("Save", mock.Anything, mock.MatchedBy(func(s *stack.Stack) bool {
-			return s.NodeName == "workload-orchestrator-02"
-		})).Return("stack-uuid", nil).Once()
-		defer stacks.AssertExpectations(t)
-
-		producer.On("Produce", mock.Anything, events.TaskScheduledName, mock.Anything).Return(nil).Once()
-		defer producer.AssertExpectations(t)
-
-		handler := NewTaskCreated(&tasks, &nodes, &stacks, roundrobin.New(), schedule.New(&stacks, &producer), discardLogger())
-
-		require.NoError(t, handler.Handle(context.Background(), created(t, service.UUID)))
-	})
-
-	t.Run("a task of its own goes where it was nominated", func(t *testing.T) {
-		t.Parallel()
-
-		var (
-			tasks    tasksMock.MockTasksRepository
-			nodes    nodesMock.MockNodesRepository
-			stacks   stacksMock.MockStacksRepository
 			producer messagingMock.MockProduceConsumer
 		)
 
@@ -138,11 +86,13 @@ func TestTaskCreated_Handle(t *testing.T) {
 		})).Return(nil).Once()
 		defer producer.AssertExpectations(t)
 
-		handler := NewTaskCreated(&tasks, &nodes, &stacks, roundrobin.New(), schedule.New(&stacks, &producer), discardLogger())
+		handler := NewTaskCreated(&tasks, &nodes, roundrobin.New(), schedule.New(&producer), discardLogger())
 
 		require.NoError(t, handler.Handle(context.Background(), created(t, standalone.UUID)))
 
 		assert.Equal(t, "workload-orchestrator-03", scheduled.NominatedNode)
-		stacks.AssertNotCalled(t, "GetOne", mock.Anything, mock.Anything)
+
+		// nothing was chosen: it had already been placed.
+		nodes.AssertNotCalled(t, "GetAll", mock.Anything, mock.Anything, mock.Anything)
 	})
 }

@@ -15,8 +15,6 @@ type Response struct {
 	CurrentState  string             `json:"current_state"`
 	ExpectedState string             `json:"expected_state,omitempty"`
 	Image         string             `json:"image"`
-	StackUUID     string             `json:"stack_uuid,omitempty"`
-	ServiceName   string             `json:"service_name,omitempty"`
 	NetworkPolicy string             `json:"network_policy"`
 	Endpoints     []EndpointResponse `json:"endpoints"`
 	AutoRemove    bool               `json:"auto_remove"`
@@ -83,8 +81,6 @@ func NewResponse(t task.Task) *Response {
 		CurrentState:  t.CurrentState.String(),
 		ExpectedState: t.ExpectedState.String(),
 		Image:         t.Image,
-		StackUUID:     t.StackUUID,
-		ServiceName:   t.ServiceName,
 		NetworkPolicy: string(t.NetworkPolicy),
 		Endpoints:     NewEndpoints(t),
 		AutoRemove:    t.AutoRemove,

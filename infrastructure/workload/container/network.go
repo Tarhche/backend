@@ -21,8 +21,8 @@ func networkMode(attachments []network.Attachment) containerTypes.NetworkMode {
 	return containerTypes.NetworkMode(attachments[0].Name)
 }
 
-// endpointsConfig carries the names a container answers to on the network it is
-// created on, so its neighbours reach it by service name.
+// endpointsConfig carries what there is to say about the network a container is
+// created on, which is whether its default route goes through it.
 func endpointsConfig(attachments []network.Attachment) *networkTypes.NetworkingConfig {
 	if len(attachments) == 0 {
 		return nil
@@ -48,16 +48,11 @@ const gatewayPriority = 100
 // endpointSettings is what a container is joined to one network with, or nil
 // when there is nothing to say about it.
 func endpointSettings(attachment network.Attachment) *networkTypes.EndpointSettings {
-	if len(attachment.Aliases) == 0 && !attachment.Gateway {
+	if !attachment.Gateway {
 		return nil
 	}
 
-	settings := &networkTypes.EndpointSettings{Aliases: attachment.Aliases}
-	if attachment.Gateway {
-		settings.GwPriority = gatewayPriority
-	}
-
-	return settings
+	return &networkTypes.EndpointSettings{GwPriority: gatewayPriority}
 }
 
 // connectRemainingNetworks joins the container to everything beyond the network
@@ -85,13 +80,8 @@ func inspectedNetworks(settings *containerTypes.NetworkSettings) []network.Attac
 	}
 
 	attachments := make([]network.Attachment, 0, len(settings.Networks))
-	for name, endpoint := range settings.Networks {
-		attachment := network.Attachment{Name: name}
-		if endpoint != nil {
-			attachment.Aliases = endpoint.Aliases
-		}
-
-		attachments = append(attachments, attachment)
+	for name := range settings.Networks {
+		attachments = append(attachments, network.Attachment{Name: name})
 	}
 
 	slices.SortFunc(attachments, func(a network.Attachment, b network.Attachment) int {

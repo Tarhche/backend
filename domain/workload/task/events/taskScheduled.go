@@ -16,9 +16,6 @@ type TaskScheduled struct {
 	Slug          string         `json:"slug"`
 	Kind          string         `json:"kind"`
 	OwnerUUID     string         `json:"owner_uuid,omitempty"`
-	StackUUID     string         `json:"stack_uuid,omitempty"`
-	StackSlug     string         `json:"stack_slug,omitempty"`
-	ServiceName   string         `json:"service_name,omitempty"`
 	Image         string         `json:"image"`
 	AutoRemove    bool           `json:"auto_remove"`
 	PortBindings  []PortMap      `json:"port_bindings"`
@@ -83,16 +80,13 @@ type Endpoint struct {
 // It is built in one place because it is asked for in two: when a task is first
 // scheduled, and again whenever the workload finds a task that is not what it
 // was asked to be.
-func NewTaskScheduled(t *task.Task, stackSlug string, nominatedNode string, attempt int) TaskScheduled {
+func NewTaskScheduled(t *task.Task, nominatedNode string, attempt int) TaskScheduled {
 	return TaskScheduled{
 		UUID:          t.UUID,
 		Name:          t.Name,
 		Slug:          t.Slug,
 		Kind:          string(t.Kind),
 		OwnerUUID:     t.OwnerUUID,
-		StackUUID:     t.StackUUID,
-		StackSlug:     stackSlug,
-		ServiceName:   t.ServiceName,
 		Image:         t.Image,
 		AutoRemove:    t.AutoRemove,
 		PortBindings:  portBindingsOf(t),

@@ -64,7 +64,6 @@ func (uc *UseCase) Execute(ctx context.Context) error {
 			Slug:        c.Slug,
 			Kind:        string(c.Kind),
 			OwnerUUID:   c.OwnerUUID,
-			StackUUID:   c.StackUUID,
 			Image:       c.Image,
 			ExecutionID: c.ID,
 			State:       int(task.EvaluateState(c.Status, c.Kind, uc.exitCode(ctx, &c))),

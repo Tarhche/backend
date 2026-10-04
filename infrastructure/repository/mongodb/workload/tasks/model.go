@@ -13,8 +13,6 @@ type TaskBson struct {
 	Name          string `bson:"name"`
 	Slug          string `bson:"slug,omitempty"`
 	Kind          string `bson:"kind,omitempty"`
-	StackUUID     string `bson:"stack_uuid,omitempty"`
-	ServiceName   string `bson:"service_name,omitempty"`
 	CurrentState  uint   `bson:"current_state"`
 	ExpectedState uint   `bson:"expected_state,omitempty"`
 
@@ -89,8 +87,6 @@ func toTask(t *TaskBson) task.Task {
 		Name:            t.Name,
 		Slug:            t.Slug,
 		Kind:            kind(t.Kind),
-		StackUUID:       t.StackUUID,
-		ServiceName:     t.ServiceName,
 		CurrentState:    task.State(t.CurrentState),
 		ExpectedState:   task.State(t.ExpectedState),
 		LastHeartbeatAt: t.LastHeartbeatAt,
@@ -151,8 +147,6 @@ func toBson(t *task.Task) TaskBson {
 		Name:            t.Name,
 		Slug:            t.Slug,
 		Kind:            string(t.Kind),
-		StackUUID:       t.StackUUID,
-		ServiceName:     t.ServiceName,
 		CurrentState:    uint(t.CurrentState),
 		ExpectedState:   uint(t.ExpectedState),
 		LastHeartbeatAt: t.LastHeartbeatAt,

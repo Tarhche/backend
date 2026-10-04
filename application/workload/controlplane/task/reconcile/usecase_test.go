@@ -14,11 +14,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/task/schedule"
-	"github.com/khanzadimahdi/testproject/domain/workload/stack"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 	"github.com/khanzadimahdi/testproject/domain/workload/task/events"
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
-	stacksMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/stacks"
 	tasksMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/tasks"
 )
 
@@ -34,7 +32,6 @@ func TestUseCase_Execute(t *testing.T) {
 
 		var (
 			tasks    tasksMock.MockTasksRepository
-			stacks   stacksMock.MockStacksRepository
 			producer messagingMock.MockProduceConsumer
 		)
 
@@ -53,7 +50,7 @@ func TestUseCase_Execute(t *testing.T) {
 		producer.On("Produce", mock.Anything, events.TaskScheduledName, mock.Anything).Return(nil).Once()
 		defer producer.AssertExpectations(t)
 
-		require.NoError(t, NewUseCase(&tasks, schedule.New(&stacks, &producer), &producer, discardLogger()).Execute(context.Background()))
+		require.NoError(t, NewUseCase(&tasks, schedule.New(&producer), &producer, discardLogger()).Execute(context.Background()))
 
 		var scheduled events.TaskScheduled
 		require.NoError(t, json.Unmarshal(producer.Calls[0].Arguments.Get(2).([]byte), &scheduled))
@@ -68,7 +65,6 @@ func TestUseCase_Execute(t *testing.T) {
 
 		var (
 			tasks    tasksMock.MockTasksRepository
-			stacks   stacksMock.MockStacksRepository
 			producer messagingMock.MockProduceConsumer
 		)
 
@@ -86,7 +82,7 @@ func TestUseCase_Execute(t *testing.T) {
 		tasks.On("Count", mock.Anything).Return(uint(1), nil).Once()
 		tasks.On("GetAll", mock.Anything, uint(0), batch).Return([]task.Task{crashed}, nil).Once()
 
-		require.NoError(t, NewUseCase(&tasks, schedule.New(&stacks, &producer), &producer, discardLogger()).Execute(context.Background()))
+		require.NoError(t, NewUseCase(&tasks, schedule.New(&producer), &producer, discardLogger()).Execute(context.Background()))
 
 		producer.AssertNotCalled(t, "Produce", mock.Anything, mock.Anything, mock.Anything)
 		tasks.AssertNotCalled(t, "Save", mock.Anything, mock.Anything)
@@ -97,7 +93,6 @@ func TestUseCase_Execute(t *testing.T) {
 
 		var (
 			tasks    tasksMock.MockTasksRepository
-			stacks   stacksMock.MockStacksRepository
 			producer messagingMock.MockProduceConsumer
 		)
 
@@ -105,7 +100,6 @@ func TestUseCase_Execute(t *testing.T) {
 		// removed the task.
 		vanished := task.Task{
 			UUID:            "task-uuid",
-			StackUUID:       "stack-uuid",
 			NodeName:        "workload-orchestrator-01",
 			ExpectedState:   task.Running,
 			CurrentState:    task.Running,
@@ -114,16 +108,16 @@ func TestUseCase_Execute(t *testing.T) {
 
 		tasks.On("Count", mock.Anything).Return(uint(1), nil).Once()
 		tasks.On("GetAll", mock.Anything, uint(0), batch).Return([]task.Task{vanished}, nil).Once()
-		stacks.On("GetOne", mock.Anything, "stack-uuid").Return(stack.Stack{UUID: "stack-uuid", Slug: "myapp-abcde"}, nil).Once()
 		producer.On("Produce", mock.Anything, events.TaskScheduledName, mock.Anything).Return(nil).Once()
 		defer producer.AssertExpectations(t)
 
-		require.NoError(t, NewUseCase(&tasks, schedule.New(&stacks, &producer), &producer, discardLogger()).Execute(context.Background()))
+		require.NoError(t, NewUseCase(&tasks, schedule.New(&producer), &producer, discardLogger()).Execute(context.Background()))
 
 		var scheduled events.TaskScheduled
 		require.NoError(t, json.Unmarshal(producer.Calls[0].Arguments.Get(2).([]byte), &scheduled))
 
-		assert.Equal(t, "myapp-abcde", scheduled.StackSlug, "a service comes back onto its stack's own network")
+		assert.Equal(t, "task-uuid", scheduled.UUID)
+		assert.Equal(t, "workload-orchestrator-01", scheduled.NominatedNode, "it is asked of the node it was on")
 	})
 
 	t.Run("a task that came back up after it was stopped is stopped again", func(t *testing.T) {
@@ -131,7 +125,6 @@ func TestUseCase_Execute(t *testing.T) {
 
 		var (
 			tasks    tasksMock.MockTasksRepository
-			stacks   stacksMock.MockStacksRepository
 			producer messagingMock.MockProduceConsumer
 		)
 
@@ -147,7 +140,7 @@ func TestUseCase_Execute(t *testing.T) {
 		producer.On("Produce", mock.Anything, events.TaskStoppageRequestedName, mock.Anything).Return(nil).Once()
 		defer producer.AssertExpectations(t)
 
-		require.NoError(t, NewUseCase(&tasks, schedule.New(&stacks, &producer), &producer, discardLogger()).Execute(context.Background()))
+		require.NoError(t, NewUseCase(&tasks, schedule.New(&producer), &producer, discardLogger()).Execute(context.Background()))
 	})
 
 	t.Run("tasks that are what they were asked to be are left alone", func(t *testing.T) {
@@ -155,7 +148,6 @@ func TestUseCase_Execute(t *testing.T) {
 
 		var (
 			tasks    tasksMock.MockTasksRepository
-			stacks   stacksMock.MockStacksRepository
 			producer messagingMock.MockProduceConsumer
 		)
 
@@ -168,7 +160,7 @@ func TestUseCase_Execute(t *testing.T) {
 			{UUID: "a finished job", Kind: task.KindJob, ExpectedState: task.Completed, CurrentState: task.Completed, LastHeartbeatAt: now},
 		}, nil).Once()
 
-		require.NoError(t, NewUseCase(&tasks, schedule.New(&stacks, &producer), &producer, discardLogger()).Execute(context.Background()))
+		require.NoError(t, NewUseCase(&tasks, schedule.New(&producer), &producer, discardLogger()).Execute(context.Background()))
 
 		producer.AssertNotCalled(t, "Produce", mock.Anything, mock.Anything, mock.Anything)
 	})
@@ -182,7 +174,6 @@ func TestUseCase_Execute_settling(t *testing.T) {
 
 		var (
 			tasks    tasksMock.MockTasksRepository
-			stacks   stacksMock.MockStacksRepository
 			producer messagingMock.MockProduceConsumer
 		)
 
@@ -202,7 +193,7 @@ func TestUseCase_Execute_settling(t *testing.T) {
 		})).Return("task-uuid", nil).Once()
 		defer tasks.AssertExpectations(t)
 
-		require.NoError(t, NewUseCase(&tasks, schedule.New(&stacks, &producer), &producer, discardLogger()).Execute(context.Background()))
+		require.NoError(t, NewUseCase(&tasks, schedule.New(&producer), &producer, discardLogger()).Execute(context.Background()))
 
 		producer.AssertNotCalled(t, "Produce", mock.Anything, mock.Anything, mock.Anything)
 	})
@@ -212,7 +203,6 @@ func TestUseCase_Execute_settling(t *testing.T) {
 
 		var (
 			tasks    tasksMock.MockTasksRepository
-			stacks   stacksMock.MockStacksRepository
 			producer messagingMock.MockProduceConsumer
 		)
 
@@ -229,7 +219,7 @@ func TestUseCase_Execute_settling(t *testing.T) {
 		tasks.On("Count", mock.Anything).Return(uint(1), nil).Once()
 		tasks.On("GetAll", mock.Anything, uint(0), batch).Return([]task.Task{finished}, nil).Once()
 
-		require.NoError(t, NewUseCase(&tasks, schedule.New(&stacks, &producer), &producer, discardLogger()).Execute(context.Background()))
+		require.NoError(t, NewUseCase(&tasks, schedule.New(&producer), &producer, discardLogger()).Execute(context.Background()))
 
 		producer.AssertNotCalled(t, "Produce", mock.Anything, mock.Anything, mock.Anything)
 		tasks.AssertNotCalled(t, "Save", mock.Anything, mock.Anything)
@@ -244,7 +234,6 @@ func TestUseCase_Execute_placing(t *testing.T) {
 
 		var (
 			tasks    tasksMock.MockTasksRepository
-			stacks   stacksMock.MockStacksRepository
 			producer messagingMock.MockProduceConsumer
 		)
 
@@ -263,7 +252,7 @@ func TestUseCase_Execute_placing(t *testing.T) {
 		producer.On("Produce", mock.Anything, events.TaskCreatedName, mock.Anything).Return(nil).Once()
 		defer producer.AssertExpectations(t)
 
-		require.NoError(t, NewUseCase(&tasks, schedule.New(&stacks, &producer), &producer, discardLogger()).Execute(context.Background()))
+		require.NoError(t, NewUseCase(&tasks, schedule.New(&producer), &producer, discardLogger()).Execute(context.Background()))
 
 		producer.AssertNotCalled(t, "Produce", mock.Anything, events.TaskScheduledName, mock.Anything)
 	})
@@ -280,7 +269,6 @@ func TestUseCase_Execute_readsEveryTask(t *testing.T) {
 
 		var (
 			tasks    tasksMock.MockTasksRepository
-			stacks   stacksMock.MockStacksRepository
 			producer messagingMock.MockProduceConsumer
 		)
 
@@ -314,7 +302,7 @@ func TestUseCase_Execute_readsEveryTask(t *testing.T) {
 
 		producer.On("Produce", mock.Anything, events.TaskScheduledName, mock.Anything).Return(nil)
 
-		require.NoError(t, NewUseCase(&tasks, schedule.New(&stacks, &producer), &producer, discardLogger()).Execute(context.Background()))
+		require.NoError(t, NewUseCase(&tasks, schedule.New(&producer), &producer, discardLogger()).Execute(context.Background()))
 
 		tasks.AssertExpectations(t)
 		assert.Len(t, producer.Calls, int(held), "every one of them is asked for")
@@ -325,7 +313,6 @@ func TestUseCase_Execute_readsEveryTask(t *testing.T) {
 
 		var (
 			tasks    tasksMock.MockTasksRepository
-			stacks   stacksMock.MockStacksRepository
 			producer messagingMock.MockProduceConsumer
 		)
 
@@ -333,7 +320,7 @@ func TestUseCase_Execute_readsEveryTask(t *testing.T) {
 		tasks.On("Count", mock.Anything).Return(uint(100), nil).Once()
 		tasks.On("GetAll", mock.Anything, uint(0), batch).Return([]task.Task{}, nil).Once()
 
-		require.NoError(t, NewUseCase(&tasks, schedule.New(&stacks, &producer), &producer, discardLogger()).Execute(context.Background()))
+		require.NoError(t, NewUseCase(&tasks, schedule.New(&producer), &producer, discardLogger()).Execute(context.Background()))
 
 		tasks.AssertExpectations(t)
 		tasks.AssertNumberOfCalls(t, "GetAll", 1)

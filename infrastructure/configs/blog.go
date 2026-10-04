@@ -35,7 +35,7 @@ type Blog struct {
 	MailUsername string `usage:"SMTP user, when the relay authenticates." env:"MAIL_SMTP_USERNAME" long:"mail-smtp-username"`
 	MailPassword string `usage:"SMTP password, when the relay authenticates." env:"MAIL_SMTP_PASSWORD" long:"mail-smtp-password"`
 
-	WorkloadControlPlaneURL string `usage:"Base URL of the workload control plane's API, which the dashboard passes task and stack commands to." env:"WORKLOAD_CONTROLPLANE_URL" long:"workload-controlplane-url"`
+	WorkloadControlPlaneURL string `usage:"Base URL of the workload control plane's API, which the blog reaches the workload through." env:"WORKLOAD_CONTROLPLANE_URL" long:"workload-controlplane-url"`
 	WorkloadIngressDomain   string `usage:"Domain a workload task's exposed ports are served on, used to build the addresses the dashboard shows." env:"WORKLOAD_INGRESS_DOMAIN" long:"workload-ingress-domain"`
 }
 

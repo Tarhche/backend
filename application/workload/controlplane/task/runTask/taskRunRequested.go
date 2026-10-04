@@ -64,9 +64,6 @@ func (uc *TaskRunRequested) Handle(ctx context.Context, data []byte) error {
 	request := &Request{
 		Name:           event.Name,
 		Image:          event.Image,
-		StackUUID:      event.StackUUID,
-		StackSlug:      event.StackSlug,
-		ServiceName:    event.ServiceName,
 		NominatedNode:  event.NominatedNode,
 		AutoRemove:     event.AutoRemove,
 		PortBindings:   portBindings,

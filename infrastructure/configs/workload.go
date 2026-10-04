@@ -8,14 +8,11 @@ import (
 )
 
 const (
-	defaultWorkloadControlPlanePort   = 80
-	defaultWorkloadOrchestratorPort   = 80
-	defaultWorkloadIngressPort        = 80
-	defaultWorkloadIngressDomain      = "workload.localhost"
-	defaultWorkloadMaxLogBytes        = 32 << 20 // 32 MB per task
-	defaultWorkloadOrchestratorCpu    = 0.5
-	defaultWorkloadOrchestratorMemory = 256 << 20 // 256 MB
-	defaultWorkloadOrchestratorDisk   = 256 << 20 // 256 MB
+	defaultWorkloadControlPlanePort = 80
+	defaultWorkloadOrchestratorPort = 80
+	defaultWorkloadIngressPort      = 80
+	defaultWorkloadIngressDomain    = "workload.localhost"
+	defaultWorkloadMaxLogBytes      = 32 << 20 // 32 MB per task
 
 	defaultWorkloadTunnelPort = 81
 
@@ -32,21 +29,14 @@ type WorkloadControlPlane struct {
 	Port int `usage:"specifies which port server should listen to." env:"SERVER_PORT" long:"port" short:"p"`
 
 	MaxLogBytes int64 `usage:"How much log one task may keep. Past it, further lines are dropped rather than stored." env:"WORKLOAD_MAX_LOG_BYTES" long:"max-log-bytes"`
-
-	DefaultCpu    float64 `usage:"CPUs a task is limited to when its specification names no limit." env:"WORKLOAD_DEFAULT_CPU" long:"default-cpu"`
-	DefaultMemory uint64  `usage:"Memory, in bytes, a task is limited to when its specification names no limit." env:"WORKLOAD_DEFAULT_MEMORY" long:"default-memory"`
-	DefaultDisk   uint64  `usage:"Disk, in bytes, a task is limited to when its specification names no limit." env:"WORKLOAD_DEFAULT_DISK" long:"default-disk"`
 }
 
 // NewWorkloadControlPlane returns the configuration of the serve-workload-controlplane
 // command, holding the defaults it runs with until the console overrides them.
 func NewWorkloadControlPlane() *WorkloadControlPlane {
 	return &WorkloadControlPlane{
-		Port:          defaultWorkloadControlPlanePort,
-		MaxLogBytes:   defaultWorkloadMaxLogBytes,
-		DefaultCpu:    defaultWorkloadOrchestratorCpu,
-		DefaultMemory: defaultWorkloadOrchestratorMemory,
-		DefaultDisk:   defaultWorkloadOrchestratorDisk,
+		Port:        defaultWorkloadControlPlanePort,
+		MaxLogBytes: defaultWorkloadMaxLogBytes,
 	}
 }
 

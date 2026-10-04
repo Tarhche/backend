@@ -14,7 +14,6 @@ import (
 
 	checkhealth "github.com/khanzadimahdi/testproject/application/app/checkHealth"
 	orchestratorHeartbeat "github.com/khanzadimahdi/testproject/application/workload/orchestrator/beatHeart"
-	orchestratorDeleteStack "github.com/khanzadimahdi/testproject/application/workload/orchestrator/stack/deleteStack"
 	orchestratorAttachTask "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/attachTask"
 	orchestratorTaskHeartbeat "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/beatHeart"
 	orchestratorDeleteTask "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/deleteTask"
@@ -27,7 +26,6 @@ import (
 	"github.com/khanzadimahdi/testproject/domain"
 	networkContract "github.com/khanzadimahdi/testproject/domain/workload/network"
 	nodeContract "github.com/khanzadimahdi/testproject/domain/workload/node"
-	stackEvents "github.com/khanzadimahdi/testproject/domain/workload/stack/events"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 	taskEvents "github.com/khanzadimahdi/testproject/domain/workload/task/events"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
@@ -289,7 +287,6 @@ func orchestratorConsoleCommand(
 		taskEvents.TaskKillRequestedName:     orchestratorkilltask.NewKillTaskHandler(killTaskUseCase),
 		taskEvents.TaskRestartRequestedName:  orchestratorrestarttask.NewRestartTaskHandler(restartTaskUseCase),
 		taskEvents.TaskDeletedName:           orchestratorDeleteTask.NewDeleteTaskHandler(deleteTaskUseCase),
-		stackEvents.StackDeletedName:         orchestratorDeleteStack.NewStackDeletedHandler(networkManager, nodeName, logger),
 	}
 
 	// orchestrator subscribers

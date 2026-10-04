@@ -94,16 +94,12 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		RestartPolicy: request.RestartPolicy,
 		ExposedPorts:  request.ExposedPortSet(),
 		PortBindings:  request.PublishedPorts(),
-		Networks:      network.Attachments(request.Policy(), request.StackSlug, request.ServiceName),
+		Networks:      network.Attachments(request.Policy()),
 		ResourceLimits: task.ResourceLimits{
 			Cpu:    request.ResourceLimits.Cpu,
 			Memory: request.ResourceLimits.Memory,
 			Disk:   request.ResourceLimits.Disk,
 		},
-	}
-
-	if len(request.StackUUID) > 0 {
-		c.StackUUID = request.StackUUID
 	}
 
 	if err := uc.clearEarlierAttempts(ctx, request); err != nil {
@@ -159,15 +155,10 @@ func (uc *UseCase) clearEarlierAttempts(ctx context.Context, request *Request) e
 }
 
 // ensureNetwork makes the network this task joins exist before it tries to
-// join it. A stack's services all run on this node, so the network they share
-// is created here too.
+// join it.
 func (uc *UseCase) ensureNetwork(ctx context.Context, request *Request) error {
 	if request.Policy() == network.PolicyNone {
 		return nil
-	}
-
-	if len(request.StackSlug) > 0 {
-		return uc.networkManager.EnsureStackNetwork(ctx, request.StackSlug)
 	}
 
 	return uc.networkManager.EnsureIsolatedNetwork(ctx)

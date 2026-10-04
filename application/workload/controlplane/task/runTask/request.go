@@ -4,7 +4,6 @@ import (
 	"slices"
 	"time"
 
-	"github.com/khanzadimahdi/testproject/application/workload/spec"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/network"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
@@ -16,12 +15,8 @@ type Request struct {
 	Name string    `json:"name"`
 	Kind task.Kind `json:"kind"`
 
-	// StackUUID, StackSlug and ServiceName are set when this task is one
-	// service of a stack. NominatedNode is the node the rest of that stack was
-	// scheduled onto, because services that share a network share a node.
-	StackUUID     string `json:"stack_uuid,omitempty"`
-	StackSlug     string `json:"stack_slug,omitempty"`
-	ServiceName   string `json:"service_name,omitempty"`
+	// NominatedNode is the node this task is to run on, when whoever asked
+	// for it already knows; empty leaves the choice to the workload.
 	NominatedNode string `json:"nominated_node,omitempty"`
 
 	Image         string                 `json:"image"`
@@ -77,32 +72,6 @@ type ResourceLimits struct {
 	Disk   uint64  `json:"disk"`
 }
 
-// FromSpec turns a compose service into a request to run it, filling in the
-// limits it did not name from the given defaults.
-func FromSpec(name string, service *spec.Service, defaults task.ResourceLimits) *Request {
-	limits := service.ResourceLimits(defaults)
-
-	return &Request{
-		Name:          name,
-		Kind:          task.KindService,
-		Image:         service.Image,
-		Command:       service.Command,
-		Entrypoint:    service.Entrypoint,
-		WorkingDir:    service.WorkingDir,
-		ReadOnly:      service.ReadOnly,
-		MaxRetries:    service.Deploy.RestartPolicy.MaxAttempts,
-		Environment:   service.Environment,
-		ExposedPorts:  service.ExposedPorts(),
-		NetworkPolicy: service.NetworkPolicy(),
-		RestartPolicy: service.Restart,
-		ResourceLimits: ResourceLimits{
-			Cpu:    limits.Cpu,
-			Memory: limits.Memory,
-			Disk:   limits.Disk,
-		},
-	}
-}
-
 var _ domain.Validatable = &Request{}
 
 // Validate validates the request
@@ -126,9 +95,8 @@ func (r *Request) Validate() domain.ValidationErrors {
 		validationErrors["resource_limits.memory"] = "required_field"
 
 	// docker will not create a container with less. Every task is asked for
-	// through here — the code runner, a configured default and this API as
-	// well as a compose service — so this is where it is told so, rather than
-	// on whichever node it would have been given to.
+	// through here, so this is where it is told so, rather than on whichever
+	// node it would have been given to.
 	case r.ResourceLimits.Memory < task.MinMemory:
 		validationErrors["resource_limits.memory"] = "memory_below_minimum"
 	}

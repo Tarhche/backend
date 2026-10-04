@@ -24,16 +24,6 @@ func (r *MockTasksRepository) GetAll(ctx context.Context, offset uint, limit uin
 	return nil, args.Error(1)
 }
 
-func (r *MockTasksRepository) GetAllByStack(ctx context.Context, stackUUID string) ([]task.Task, error) {
-	args := r.Mock.Called(ctx, stackUUID)
-
-	if t, ok := args.Get(0).([]task.Task); ok {
-		return t, args.Error(1)
-	}
-
-	return nil, args.Error(1)
-}
-
 func (r *MockTasksRepository) GetAllByOwner(ctx context.Context, ownerUUID string, offset uint, limit uint) ([]task.Task, error) {
 	args := r.Mock.Called(ctx, ownerUUID, offset, limit)
 

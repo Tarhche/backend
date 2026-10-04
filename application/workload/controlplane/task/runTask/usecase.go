@@ -47,8 +47,6 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		Name:          request.Name,
 		Slug:          taskSlug,
 		Kind:          request.TaskKind(),
-		StackUUID:     request.StackUUID,
-		ServiceName:   request.ServiceName,
 		CurrentState:  task.Created,
 		ExpectedState: task.Running,
 		Image:         request.Image,

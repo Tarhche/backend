@@ -115,39 +115,6 @@ func TestUseCase_Execute(t *testing.T) {
 		assert.False(t, created.AutoRemove)
 	})
 
-	t.Run("a service joins its stack's network under its service name", func(t *testing.T) {
-		t.Parallel()
-
-		var (
-			taskManager    runtime.MockRuntime
-			networkManager runtime.MockNetworkManager
-		)
-
-		networkManager.On("EnsureStackNetwork", mock.Anything, "myapp-abcde").Return(nil).Once()
-		defer networkManager.AssertExpectations(t)
-
-		var created *task.Execution
-		taskManager.On("Of", mock.Anything, mock.Anything).Return([]task.Execution{}, nil).Maybe()
-		taskManager.On("EnsureImage", mock.Anything, mock.Anything).Once().Return(nil)
-		taskManager.On("Create", mock.Anything, mock.Anything).
-			Run(func(args mock.Arguments) { created = args.Get(1).(*task.Execution) }).
-			Return("task-id", nil).Once()
-		taskManager.On("Start", mock.Anything, "task-id").Return(nil).Once()
-
-		_, err := NewUseCase(&taskManager, &networkManager, accepts(), nodeName).
-			Execute(context.Background(), validRequest(func(r *Request) {
-				r.StackUUID = "stack-uuid"
-				r.StackSlug = "myapp-abcde"
-				r.ServiceName = "api"
-			}))
-
-		require.NoError(t, err)
-
-		assert.Equal(t, []network.Attachment{
-			{Name: "workload-stack-myapp-abcde", Aliases: []string{"api"}},
-		}, created.Networks)
-	})
-
 	t.Run("a public task also joins the bridge, which is what routes out", func(t *testing.T) {
 		t.Parallel()
 

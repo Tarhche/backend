@@ -3,14 +3,12 @@ package runTask
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"log/slog"
 	"time"
 
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/task/schedule"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/node"
-	"github.com/khanzadimahdi/testproject/domain/workload/stack"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 	"github.com/khanzadimahdi/testproject/domain/workload/task/events"
 )
@@ -20,29 +18,26 @@ const (
 )
 
 type TaskCreated struct {
-	taskRepository  task.Repository
-	nodeRepository  node.Repository
-	stackRepository stack.Repository
-	placement       task.Scheduler
-	scheduler       *schedule.Scheduler
-	logger          *slog.Logger
+	taskRepository task.Repository
+	nodeRepository node.Repository
+	placement      task.Scheduler
+	scheduler      *schedule.Scheduler
+	logger         *slog.Logger
 }
 
 func NewTaskCreated(
 	taskRepository task.Repository,
 	nodeRepository node.Repository,
-	stackRepository stack.Repository,
 	placement task.Scheduler,
 	scheduler *schedule.Scheduler,
 	logger *slog.Logger,
 ) *TaskCreated {
 	return &TaskCreated{
-		taskRepository:  taskRepository,
-		nodeRepository:  nodeRepository,
-		stackRepository: stackRepository,
-		placement:       placement,
-		scheduler:       scheduler,
-		logger:          logger,
+		taskRepository: taskRepository,
+		nodeRepository: nodeRepository,
+		placement:      placement,
+		scheduler:      scheduler,
+		logger:         logger,
 	}
 }
 
@@ -79,56 +74,14 @@ func (uc *TaskCreated) Handle(ctx context.Context, data []byte) error {
 	return uc.scheduler.On(ctx, &t, selectedNode.Name, 0)
 }
 
-// pickNode chooses where a task runs.
-//
-// A service of a stack has that choice made for it: everything in a stack
-// shares one private network, and a bridge is local to the node that created
-// it, so a stack runs on one node or it does not run. Anything else goes where
-// it was nominated, or wherever there is room.
+// pickNode chooses where a task runs: where it was nominated, or wherever
+// there is room.
 func (uc *TaskCreated) pickNode(ctx context.Context, t *task.Task) (node.Node, error) {
-	if len(t.StackUUID) > 0 {
-		return uc.stackNode(ctx, t)
-	}
-
 	if len(t.NodeName) > 0 {
 		return node.Node{Name: t.NodeName}, nil
 	}
 
 	return uc.anyNode(ctx, t)
-}
-
-// stackNode is the one node a stack's services all run on.
-//
-// It is read from the stack rather than from the service, so that services
-// asked for at different moments, by different paths, all end up in the same
-// place — and written back to the stack when it does not have one yet, so that
-// the first service to be placed decides for the rest.
-func (uc *TaskCreated) stackNode(ctx context.Context, t *task.Task) (node.Node, error) {
-	s, err := uc.stackRepository.GetOne(ctx, t.StackUUID)
-	if errors.Is(err, domain.ErrNotExists) {
-		// there is no stack to keep it with any more.
-		return uc.anyNode(ctx, t)
-	} else if err != nil {
-		return node.Node{}, err
-	}
-
-	if len(s.NodeName) > 0 {
-		return node.Node{Name: s.NodeName}, nil
-	}
-
-	selected, err := uc.anyNode(ctx, t)
-	if err != nil {
-		return node.Node{}, err
-	}
-
-	s.NodeName = selected.Name
-	if _, err := uc.stackRepository.Save(ctx, &s); err != nil {
-		return node.Node{}, err
-	}
-
-	uc.logger.InfoContext(ctx, "a stack was placed", "stack", s.UUID, "node", selected.Name)
-
-	return selected, nil
 }
 
 // anyNode is wherever there is room for a task that is not held to a

@@ -18,12 +18,10 @@ type Heartbeat struct {
 	// tell a job it asked for from a service somebody else's dashboard did.
 	Kind string
 
-	// OwnerUUID is whose task this is, and StackUUID the stack it is a
-	// service of, both read off the task itself. They travel with every
-	// beat so that whoever is following the tasks can tell whose news
-	// this is, and what else it changes, without asking anything.
+	// OwnerUUID is whose task this is, read off the task itself. It
+	// travels with every beat so that whoever is following the tasks can
+	// tell whose news this is without asking anything.
 	OwnerUUID string
-	StackUUID string
 
 	Image       string
 	ExecutionID string

@@ -21,7 +21,6 @@ const (
 	taskKindLabel    = "task.kind"
 	NodeNameLabel    = "node.name"
 	taskOwnerLabel   = "task.owner"
-	taskStackLabel   = "task.stack"
 	taskInteractive  = "task.interactive"
 	taskTTLLabel     = "task.ttl"
 	taskAttemptLabel = "task.attempt"
@@ -39,10 +38,6 @@ func labelsOf(execution *task.Execution) map[string]string {
 		taskOwnerLabel:   execution.OwnerUUID,
 		taskAttemptLabel: strconv.Itoa(execution.Attempt),
 		taskInteractive:  strconv.FormatBool(execution.Interactive),
-	}
-
-	if len(execution.StackUUID) > 0 {
-		labels[taskStackLabel] = execution.StackUUID
 	}
 
 	// how long it may run for once it is up. What that is counted from is not
@@ -63,7 +58,6 @@ func identify(execution *task.Execution, labels map[string]string) {
 	execution.Slug = labels[taskSlugLabel]
 	execution.NodeName = labels[NodeNameLabel]
 	execution.OwnerUUID = labels[taskOwnerLabel]
-	execution.StackUUID = labels[taskStackLabel]
 	execution.Interactive = labels[taskInteractive] == "true"
 
 	if kind := task.Kind(labels[taskKindLabel]); kind.IsValid() {

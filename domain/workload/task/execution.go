@@ -27,7 +27,6 @@ type Execution struct {
 	Kind        Kind
 	NodeName    string
 	OwnerUUID   string
-	StackUUID   string
 	Attempt     int
 	Interactive bool
 

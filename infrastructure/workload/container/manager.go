@@ -206,8 +206,9 @@ func (m *DockerManager) Create(ctx context.Context, c *task.Execution) (string, 
 		m.logger.Warn("container created with warnings", "name", c.Name, "containerID", resp.ID, "warnings", resp.Warnings)
 	}
 
-	// a container that reaches both its own stack and the internet sits on two
-	// networks, and docker only takes one of them at create time.
+	// a container that reaches the internet sits on two networks, the
+	// isolated one and the bridge, and docker only takes one of them at
+	// create time.
 	if err := m.connectRemainingNetworks(ctx, resp.ID, c.Networks); err != nil {
 		return "", trace.RecordError(span, err)
 	}

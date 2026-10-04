@@ -67,8 +67,6 @@ func (r *TasksRepository) GetAll(ctx context.Context, offset uint, limit uint) (
 	return items, nil
 }
 
-// GetAllByStack returns the services of one stack, so a stack can be stopped,
-// restarted or deleted as the single thing it is.
 // GetAllByOwner is GetAll of what one person asked for.
 func (r *TasksRepository) GetAllByOwner(ctx context.Context, ownerUUID string, offset uint, limit uint) ([]task.Task, error) {
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
@@ -113,34 +111,6 @@ func (r *TasksRepository) CountByOwner(ctx context.Context, ownerUUID string) (u
 	}
 
 	return uint(count), nil
-}
-
-func (r *TasksRepository) GetAllByStack(ctx context.Context, stackUUID string) ([]task.Task, error) {
-	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
-	defer cancel()
-
-	cur, err := r.collection.Find(
-		ctx,
-		bson.D{{Key: "stack_uuid", Value: stackUUID}},
-		options.Find().SetSort(bson.D{{Key: "service_name", Value: 1}}),
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer cur.Close(ctx)
-
-	items := make([]task.Task, 0, 8)
-	for cur.Next(ctx) {
-		var t TaskBson
-
-		if err := cur.Decode(&t); err != nil {
-			return nil, err
-		}
-
-		items = append(items, toTask(&t))
-	}
-
-	return items, cur.Err()
 }
 
 func (r *TasksRepository) GetOne(ctx context.Context, UUID string) (task.Task, error) {

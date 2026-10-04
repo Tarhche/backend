@@ -34,8 +34,6 @@ import (
 	createuser "github.com/khanzadimahdi/testproject/application/dashboard/user/createUser"
 	updateuser "github.com/khanzadimahdi/testproject/application/dashboard/user/updateUser"
 	"github.com/khanzadimahdi/testproject/application/dashboard/user/userchangepassword"
-	dashboardRunStack "github.com/khanzadimahdi/testproject/application/dashboard/workload/stack/runStack"
-	dashboardRunTask "github.com/khanzadimahdi/testproject/application/dashboard/workload/task/runTask"
 )
 
 // tool is one thing an MCP client can do, and the route it is done through.
@@ -123,22 +121,6 @@ func languageCode() Parameter {
 	return text("language_code", "which language version, as its code, such as en or fa")
 }
 
-func taskUUID() Parameter {
-	return uuidOf("task")
-}
-
-func stackUUID() Parameter {
-	return uuidOf("stack")
-}
-
-func logParams(what string) []Parameter {
-	return []Parameter{
-		uuidOf(what),
-		text("after", "only lines written after this moment, as an RFC 3339 timestamp"),
-		integer("limit", "how many lines to return"),
-	}
-}
-
 // tools is everything this API can do, as things an MCP client can do.
 //
 // There is one for every route the blog registers, which is checked when the
@@ -159,8 +141,6 @@ func tools() []tool {
 		fileTools(),
 		elementTools(),
 		contactTools(),
-		taskTools(),
-		stackTools(),
 		configTools(),
 	)
 }
@@ -857,219 +837,6 @@ func configTools() []tool {
 			description: "Change the site's settings.",
 			route:       "PUT /api/dashboard/config",
 			body:        body[dashboardUpdateConfig.Request](),
-			idempotent:  true,
-		},
-	}
-}
-
-// taskTools are the workload's: a task is one long-running container, described
-// the way a compose service is.
-func taskTools() []tool {
-	return []tool{
-		{
-			name:        "dashboard_tasks_list",
-			description: "A page of the tasks the workload is holding, whoever owns them.",
-			route:       "GET /api/dashboard/workload/tasks",
-			params:      []Parameter{page()},
-			readOnly:    true,
-		},
-		{
-			name:        "dashboard_task_show",
-			description: "One task, with the addresses its exposed ports are served at.",
-			route:       "GET /api/dashboard/workload/tasks/{uuid}",
-			params:      []Parameter{taskUUID()},
-			readOnly:    true,
-		},
-		{
-			name:        "dashboard_task_run",
-			description: "Run a container from a compose service specification. It keeps running until it is stopped, and the ports it exposes are served under a name of its own.",
-			route:       "POST /api/dashboard/workload/tasks",
-			body:        body[dashboardRunTask.Request](),
-		},
-		{
-			name:        "dashboard_task_logs",
-			description: "What a task has written so far, from its first line onward. Following it as it writes is a websocket rather than a tool.",
-			route:       "GET /api/dashboard/workload/tasks/{uuid}/logs",
-			params:      logParams("task"),
-			readOnly:    true,
-		},
-		{
-			name:        "dashboard_task_stop",
-			description: "Stop a task, giving it a moment to shut down on its own.",
-			route:       "POST /api/dashboard/workload/tasks/{uuid}/stop",
-			params:      []Parameter{taskUUID()},
-			idempotent:  true,
-		},
-		{
-			name:        "dashboard_task_kill",
-			description: "Stop a task at once, without a grace period.",
-			route:       "POST /api/dashboard/workload/tasks/{uuid}/kill",
-			params:      []Parameter{taskUUID()},
-			destructive: true,
-			idempotent:  true,
-		},
-		{
-			name:        "dashboard_task_restart",
-			description: "Stop a task and start it again in place.",
-			route:       "POST /api/dashboard/workload/tasks/{uuid}/restart",
-			params:      []Parameter{taskUUID()},
-		},
-		{
-			name:        "dashboard_task_delete",
-			description: "Remove a task and everything it holds: its ports, its log and the container itself.",
-			route:       "DELETE /api/dashboard/workload/tasks/{uuid}",
-			params:      []Parameter{taskUUID()},
-			destructive: true,
-			idempotent:  true,
-		},
-		{
-			name:        "my_tasks_list",
-			description: "A page of the tasks this session's owner started.",
-			route:       "GET /api/dashboard/my/workload/tasks",
-			params:      []Parameter{page()},
-			readOnly:    true,
-		},
-		{
-			name:        "my_task_show",
-			description: "One task this session's owner started.",
-			route:       "GET /api/dashboard/my/workload/tasks/{uuid}",
-			params:      []Parameter{taskUUID()},
-			readOnly:    true,
-		},
-		{
-			name:        "my_task_logs",
-			description: "What one of this session owner's own tasks has written.",
-			route:       "GET /api/dashboard/my/workload/tasks/{uuid}/logs",
-			params:      logParams("task"),
-			readOnly:    true,
-		},
-		{
-			name:        "my_task_stop",
-			description: "Stop one of this session owner's own tasks.",
-			route:       "POST /api/dashboard/my/workload/tasks/{uuid}/stop",
-			params:      []Parameter{taskUUID()},
-			idempotent:  true,
-		},
-		{
-			name:        "my_task_kill",
-			description: "Stop one of this session owner's own tasks at once.",
-			route:       "POST /api/dashboard/my/workload/tasks/{uuid}/kill",
-			params:      []Parameter{taskUUID()},
-			destructive: true,
-			idempotent:  true,
-		},
-		{
-			name:        "my_task_restart",
-			description: "Restart one of this session owner's own tasks.",
-			route:       "POST /api/dashboard/my/workload/tasks/{uuid}/restart",
-			params:      []Parameter{taskUUID()},
-		},
-		{
-			name:        "my_task_delete",
-			description: "Remove one of this session owner's own tasks.",
-			route:       "DELETE /api/dashboard/my/workload/tasks/{uuid}",
-			params:      []Parameter{taskUUID()},
-			destructive: true,
-			idempotent:  true,
-		},
-	}
-}
-
-// stackTools are for several services run together, the way a compose file
-// describes them: they share a private network and reach each other by the
-// names they are keyed under.
-func stackTools() []tool {
-	return []tool{
-		{
-			name:        "dashboard_stacks_list",
-			description: "A page of the stacks the workload is holding, whoever owns them.",
-			route:       "GET /api/dashboard/workload/stacks",
-			params:      []Parameter{page()},
-			readOnly:    true,
-		},
-		{
-			name:        "dashboard_stack_show",
-			description: "One stack and the services in it.",
-			route:       "GET /api/dashboard/workload/stacks/{uuid}",
-			params:      []Parameter{stackUUID()},
-			readOnly:    true,
-		},
-		{
-			name:        "dashboard_stack_run",
-			description: "Run a set of connected services from a compose specification. Each service needs at least an image, and they reach each other by the names they are keyed under.",
-			route:       "POST /api/dashboard/workload/stacks",
-			body:        body[dashboardRunStack.Request](),
-		},
-		{
-			name:        "dashboard_stack_stop",
-			description: "Stop every service of a stack, giving each a moment to shut down on its own.",
-			route:       "POST /api/dashboard/workload/stacks/{uuid}/stop",
-			params:      []Parameter{stackUUID()},
-			idempotent:  true,
-		},
-		{
-			name:        "dashboard_stack_kill",
-			description: "Stop every service of a stack at once.",
-			route:       "POST /api/dashboard/workload/stacks/{uuid}/kill",
-			params:      []Parameter{stackUUID()},
-			destructive: true,
-			idempotent:  true,
-		},
-		{
-			name:        "dashboard_stack_restart",
-			description: "Restart every service of a stack.",
-			route:       "POST /api/dashboard/workload/stacks/{uuid}/restart",
-			params:      []Parameter{stackUUID()},
-		},
-		{
-			name:        "dashboard_stack_delete",
-			description: "Remove a stack and everything it holds: its services, their ports, their logs and the network they shared.",
-			route:       "DELETE /api/dashboard/workload/stacks/{uuid}",
-			params:      []Parameter{stackUUID()},
-			destructive: true,
-			idempotent:  true,
-		},
-		{
-			name:        "my_stacks_list",
-			description: "A page of the stacks this session's owner started.",
-			route:       "GET /api/dashboard/my/workload/stacks",
-			params:      []Parameter{page()},
-			readOnly:    true,
-		},
-		{
-			name:        "my_stack_show",
-			description: "One stack this session's owner started.",
-			route:       "GET /api/dashboard/my/workload/stacks/{uuid}",
-			params:      []Parameter{stackUUID()},
-			readOnly:    true,
-		},
-		{
-			name:        "my_stack_stop",
-			description: "Stop every service of one of this session owner's own stacks.",
-			route:       "POST /api/dashboard/my/workload/stacks/{uuid}/stop",
-			params:      []Parameter{stackUUID()},
-			idempotent:  true,
-		},
-		{
-			name:        "my_stack_kill",
-			description: "Stop every service of one of this session owner's own stacks at once.",
-			route:       "POST /api/dashboard/my/workload/stacks/{uuid}/kill",
-			params:      []Parameter{stackUUID()},
-			destructive: true,
-			idempotent:  true,
-		},
-		{
-			name:        "my_stack_restart",
-			description: "Restart every service of one of this session owner's own stacks.",
-			route:       "POST /api/dashboard/my/workload/stacks/{uuid}/restart",
-			params:      []Parameter{stackUUID()},
-		},
-		{
-			name:        "my_stack_delete",
-			description: "Remove one of this session owner's own stacks and everything it holds.",
-			route:       "DELETE /api/dashboard/my/workload/stacks/{uuid}",
-			params:      []Parameter{stackUUID()},
-			destructive: true,
 			idempotent:  true,
 		},
 	}

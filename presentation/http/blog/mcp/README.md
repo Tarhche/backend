@@ -80,10 +80,8 @@ missing — `Validate()` already answers that, so the schema and the use case
 cannot disagree. Fields a handler fills in itself carry `json:"-"` and are
 never in the schema, so nothing asks a caller for who they are.
 
-Two kinds of request are not the shape of the struct they are read into, and
-are written by hand: an element's component, which its type decides the shape
-of, and the compose fields that may be written several ways (a command as a
-string or a list, a port as a number or `"8080:80"`, a memory limit as `256M`).
+One kind of request is not the shape of the struct it is read into, and is
+written by hand: an element's component, which its type decides the shape of.
 
 ## What a tool answers
 
@@ -95,9 +93,6 @@ capped at 1 MiB.
 
 ## What is not here
 
-Streams. Following a task's output as it is written, watching tasks and stacks
-change, opening a terminal inside a container, running a snippet from the
-public playground — these are answered over the websocket at `/api/ws`, and a
-stream is not a tool call. The request/response half of each of them is here:
-`dashboard_task_logs` reads what a task has written, and the listing tools say
-what is running.
+Streams. Running a snippet from the public playground, and opening a terminal
+inside what it runs, are answered over the websocket and the workload's
+ingress, and a stream is not a tool call.
