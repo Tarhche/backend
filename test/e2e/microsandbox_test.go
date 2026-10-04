@@ -79,8 +79,15 @@ var (
 		"the workload-microsandbox service's API")
 	containerName = flag.String("container", "workload-microsandbox",
 		"the service's container, which the drills restart, and kill things inside")
+	// compose prefers the environment to its env files, and make
+	// e2e-microsandbox exports all of .env with its certificates' line
+	// breaks still escaped, which compose would then hand the service as
+	// they are. So the container is recreated with nothing in the
+	// environment but what reaches docker, from the files make
+	// up-microsandbox reads.
 	recreateCommand = flag.String("recreate",
-		"docker compose --profile microsandbox --env-file .env --env-file .env.microsandbox up --detach --no-deps --force-recreate workload-microsandbox",
+		`env -i PATH="$PATH" HOME="$HOME" ${DOCKER_HOST:+DOCKER_HOST="$DOCKER_HOST"} ${DOCKER_CONTEXT:+DOCKER_CONTEXT="$DOCKER_CONTEXT"} `+
+			"docker compose --profile microsandbox --env-file .env --env-file .env.microsandbox up --detach --no-deps --force-recreate workload-microsandbox",
 		"how drill 2 recreates the service's container, run from the repository's root")
 )
 
