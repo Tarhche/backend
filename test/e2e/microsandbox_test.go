@@ -487,14 +487,16 @@ func (s *stack) drillCapacity(t *testing.T) {
 // drillGuestOutOfMemory is drill 5: a guest touches more memory than it has.
 // Its kernel kills the process, the run says so, and nothing around it notices.
 //
-// It reads 96 MiB into one buffer in a guest of 128 MiB, which keeps about 24
-// MiB for its own kernel. Asking for twice its memory at once would not do: the
-// guest refuses an allocation bigger than all of its RAM before anything is
-// touched, and the process merely exits 1.
+// It reads into one buffer, at once, all of the guest's memory but 4 MiB, as the
+// guest's own MemTotal says, so that it is more than the guest has free however
+// much its architecture's kernel keeps: an amd64 guest of 128 MiB has room for
+// 96 MiB, where an arm64 one has not. Asking for more than all of its memory
+// would not do: the guest refuses that before anything is touched, and the
+// process merely exits 1.
 func (s *stack) drillGuestOutOfMemory(t *testing.T) {
 	neighbour := s.service.startRun(t, s.runSpec(t, "neighbour", "busybox:latest", []string{"sleep", "3600"}, 64<<20, "no"))
 	hog := s.service.startRun(t, s.runSpec(t, "hog", "busybox:latest",
-		[]string{"dd", "if=/dev/zero", "of=/dev/null", "bs=96M", "count=1"}, 128<<20, "no"))
+		[]string{"sh", "-c", allButFourMiB}, 128<<20, "no"))
 
 	killed := s.service.waitForRun(t, hog.ID, changeTimeout, "the hog killed", exited)
 	require.Equal(t, 137, killed.ExitCode)
@@ -546,6 +548,10 @@ func (s *stack) drillRestartOrchestrator(t *testing.T) {
 	require.True(t, before.StartedAt.Equal(after.StartedAt), "and was never restarted")
 	require.Equal(t, before.RestartCount, after.RestartCount)
 }
+
+// allButFourMiB fills one buffer, at once, with all of the guest's memory but 4
+// MiB, with dd as the main process, so that the guest's kernel kills the run.
+const allButFourMiB = `exec dd if=/dev/zero of=/dev/null bs=$(( $(awk '/MemTotal/ {print int($2 / 1024)}' /proc/meminfo) - 4 ))M count=1`
 
 // taskRequest is POST /api/tasks/run's body: a task in a compose service's
 // shape, and whose it is.

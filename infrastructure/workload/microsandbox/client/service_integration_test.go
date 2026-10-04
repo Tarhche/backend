@@ -425,13 +425,15 @@ func TestService_Limits(t *testing.T) {
 	ctx := t.Context()
 
 	t.Run("memory past the limit is a kill", func(t *testing.T) {
-		// one buffer of 96 MiB, filled at once, in a guest of 128 MiB whose
-		// kernel keeps about 24 of them; dd is the main process, so what the
-		// guest kills is the run. Memory taken a little at a time can leave a
-		// guest reclaiming for minutes before anything is killed, and a buffer
-		// larger than all of the guest's memory is refused before anything is
-		// touched, so the process merely exits 1.
-		hungry := job(node, "hungry", `exec dd if=/dev/zero of=/dev/null bs=96M count=1`)
+		// one buffer, filled at once, of all of the guest's memory but 4 MiB,
+		// as the guest's own MemTotal says: more than it has free however much
+		// its architecture's kernel keeps (an amd64 guest of 128 MiB has room
+		// for 96 MiB, where an arm64 one has not), and never more than all of
+		// it, which the guest would refuse before anything is touched, so that
+		// the process merely exits 1. dd is the main process, so what the guest
+		// kills is the run. Memory taken a little at a time instead can leave
+		// a guest reclaiming for minutes before anything is killed.
+		hungry := job(node, "hungry", `exec dd if=/dev/zero of=/dev/null bs=$(( $(awk '/MemTotal/ {print int($2 / 1024)}' /proc/meminfo) - 4 ))M count=1`)
 
 		id, err := runtime.Create(ctx, hungry)
 		require.NoError(t, err)
