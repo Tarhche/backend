@@ -34,7 +34,10 @@ type Choice struct {
 }
 
 // New is what a Docker VM made for a container or a stack is given beyond the
-// defaults.
+// defaults. Whatever it leaves out is the default, field by field: a size of
+// zero, as a form leaves one somebody did not touch, is the default size, and
+// ports or a network way that are not there are the default ones. Ports that
+// are there and empty are none.
 type New struct {
 	Name      string              `json:"name,omitempty"`
 	Resources *createVM.Resources `json:"resources,omitempty"`
@@ -148,7 +151,7 @@ func (c *Chooser) made(ctx context.Context, ownerUUID string, asked *New) (Chose
 	}
 
 	if asked.Resources != nil {
-		request.Resources = *asked.Resources
+		request.Resources = sized(request.Resources, *asked.Resources)
 	}
 
 	if asked.Ports != nil {
@@ -193,4 +196,22 @@ func (c *Chooser) made(ctx context.Context, ownerUUID string, asked *New) (Chose
 	}
 
 	return Chosen{VM: v, Created: true}, nil, nil
+}
+
+// sized is the defaults with what was asked for in place of each, where it
+// asked for anything: a size of zero is one nobody chose.
+func sized(defaults createVM.Resources, asked createVM.Resources) createVM.Resources {
+	if asked.CPUs > 0 {
+		defaults.CPUs = asked.CPUs
+	}
+
+	if asked.Memory > 0 {
+		defaults.Memory = asked.Memory
+	}
+
+	if asked.Disk > 0 {
+		defaults.Disk = asked.Disk
+	}
+
+	return defaults
 }

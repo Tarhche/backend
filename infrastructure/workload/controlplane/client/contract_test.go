@@ -349,3 +349,44 @@ func TestContract_Stacks(t *testing.T) {
 
 	assert.False(t, errors.Is(err, domain.ErrNotExists))
 }
+
+// TestContract_NewDockerVM holds a Docker VM made for a stack or a container to
+// what the dashboard asked for and nothing else: a form leaves a size it was
+// not given at zero and ports nobody added as an empty list, and the VM is
+// made with the default for each size it was not given, and no ports at all.
+func TestContract_NewDockerVM(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	w := vmtest.New()
+	c := controlPlane(t, w)
+
+	created, err := c.CreateStack(ctx, "owner", workloadControlPlane.StackRequest{
+		Name:    "web",
+		Compose: "services:\n  web:\n    image: nginx:1.27\n",
+		VM: workloadControlPlane.DockerVMChoice{New: &workloadControlPlane.NewDockerVM{
+			Resources: &vm.Resources{Memory: 4 * vmtest.GiB},
+			Ports:     []port.Port{},
+		}},
+	})
+	require.NoError(t, err)
+	require.True(t, created.VM.Created)
+
+	made, err := c.VM(ctx, "owner", created.VM.UUID)
+	require.NoError(t, err)
+
+	assert.Equal(t, vm.Resources{CPUs: 2, Memory: 4 * vmtest.GiB, Disk: 20 * vmtest.GiB}, made.Resources, "the sizes it was not given are the defaults")
+	assert.Empty(t, made.Ports, "ports given empty are none, not the defaults")
+
+	created, err = c.CreateStack(ctx, "owner", workloadControlPlane.StackRequest{
+		Name:    "api",
+		Compose: "services:\n  api:\n    image: nginx:1.27\n",
+		VM:      workloadControlPlane.DockerVMChoice{New: &workloadControlPlane.NewDockerVM{Name: "api"}},
+	})
+	require.NoError(t, err)
+
+	made, err = c.VM(ctx, "owner", created.VM.UUID)
+	require.NoError(t, err)
+
+	assert.Equal(t, []port.Port{80}, made.Ports, "ports left out are the defaults")
+}

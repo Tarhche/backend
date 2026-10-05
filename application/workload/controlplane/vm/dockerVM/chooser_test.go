@@ -149,6 +149,60 @@ func TestChooser_Choose(t *testing.T) {
 		assert.Equal(t, defaults.Resources, chosen.VM.Resources)
 	})
 
+	t.Run("a size left at zero is the default size, each on its own", func(t *testing.T) {
+		t.Parallel()
+
+		for name, tt := range map[string]struct {
+			asked createVM.Resources
+			want  vm.Resources
+		}{
+			"memory asked for, the rest left": {
+				asked: createVM.Resources{Memory: 4 * vmtest.GiB},
+				want:  vm.Resources{CPUs: defaults.Resources.CPUs, Memory: 4 * vmtest.GiB, Disk: defaults.Resources.Disk},
+			},
+			"cpus and disk asked for, memory left": {
+				asked: createVM.Resources{CPUs: 3, Disk: 30 * vmtest.GiB},
+				want:  vm.Resources{CPUs: 3, Memory: defaults.Resources.Memory, Disk: 30 * vmtest.GiB},
+			},
+			"nothing asked for at all": {
+				want: defaults.Resources,
+			},
+		} {
+			t.Run(name, func(t *testing.T) {
+				t.Parallel()
+
+				w := vmtest.New()
+
+				chosen, refused, err := chooserOf(w).Choose(ctx, "owner", Choice{New: &New{Resources: &tt.asked}})
+				require.NoError(t, err)
+				require.Empty(t, refused)
+
+				assert.True(t, chosen.Created)
+				assert.Equal(t, tt.want, chosen.VM.Resources)
+			})
+		}
+	})
+
+	t.Run("ports and a network not given are the defaults, and ports given empty are none", func(t *testing.T) {
+		t.Parallel()
+
+		w := vmtest.New()
+		chooser := chooserOf(w)
+
+		left, refused, err := chooser.Choose(ctx, "owner", Choice{New: &New{Name: "left"}})
+		require.NoError(t, err)
+		require.Empty(t, refused)
+
+		assert.Equal(t, defaults.Ports, left.VM.Ports)
+		assert.Equal(t, defaults.Network, left.VM.Network)
+
+		none, refused, err := chooser.Choose(ctx, "owner", Choice{New: &New{Name: "none", Ports: []port.Port{}}})
+		require.NoError(t, err)
+		require.Empty(t, refused)
+
+		assert.Empty(t, none.VM.Ports)
+	})
+
 	t.Run("what one made for it is refused for is reported where it was asked", func(t *testing.T) {
 		t.Parallel()
 

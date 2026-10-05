@@ -329,10 +329,14 @@ type choicePayload struct {
 	New  *newVMPayload `json:"new,omitempty"`
 }
 
+// newVMPayload is a Docker VM to make. Ports left out are the default ones and
+// ports given empty are none, so an empty list travels as one: omitempty would
+// leave it out, and a VM asked for with no ports would be made with the
+// defaults.
 type newVMPayload struct {
 	Name      string            `json:"name,omitempty"`
 	Resources *resourcesPayload `json:"resources,omitempty"`
-	Ports     []port.Port       `json:"ports,omitempty"`
+	Ports     []port.Port       `json:"ports,omitzero"`
 	Network   *networkPayload   `json:"network,omitempty"`
 }
 
