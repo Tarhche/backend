@@ -25,8 +25,11 @@ import (
 // annotations of their own and are served elsewhere, so scanning them here
 // only puts routes in this spec that this service does not answer — and makes
 // the control plane and the orchestrator collide over the paths they share.
+// Their use cases are left out for the same reason: the control plane has a
+// presenter package of its own, and an annotation naming presenter.Container
+// would be read as the control plane's rather than the dashboard's.
 //
-//go:generate go tool swag init --generalInfo ./presentation/commands/blog/serve.go --dir ./ --exclude ./presentation/http/workload --output ./resources/docs/blog/openapi
+//go:generate go tool swag init --generalInfo ./presentation/commands/blog/serve.go --dir ./ --exclude ./presentation/http/workload,./application/workload --output ./resources/docs/blog/openapi
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, os.Kill)
 	defer cancel()
