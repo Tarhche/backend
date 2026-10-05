@@ -43,12 +43,10 @@ func TestTaskScheduled_Handle(t *testing.T) {
 		t.Parallel()
 
 		var (
-			taskManager    runtime.MockRuntime
-			networkManager runtime.MockNetworkManager
-			producer       messagingMock.MockProduceConsumer
+			taskManager runtime.MockRuntime
+			producer    messagingMock.MockProduceConsumer
 		)
 
-		networkManager.On("EnsureIsolatedNetwork", mock.Anything).Return(nil)
 		taskManager.On("EnsureImage", mock.Anything, mock.Anything).Return(nil)
 		taskManager.On("Create", mock.Anything, mock.Anything).
 			Return("", errors.New("no such image: ghcr.io/example/workload:latest")).Once()
@@ -60,7 +58,7 @@ func TestTaskScheduled_Handle(t *testing.T) {
 		producer.On("Produce", mock.Anything, events.TaskFailedName, mock.Anything).Return(nil).Once()
 		defer producer.AssertExpectations(t)
 
-		useCase := NewUseCase(&taskManager, &networkManager, accepts(), nodeName)
+		useCase := NewUseCase(&taskManager, accepts(), nodeName)
 
 		// no error: the failure is announced rather than handed back, which is
 		// what would have the message delivered again.
@@ -80,12 +78,11 @@ func TestTaskScheduled_Handle(t *testing.T) {
 		t.Parallel()
 
 		var (
-			taskManager    runtime.MockRuntime
-			networkManager runtime.MockNetworkManager
-			producer       messagingMock.MockProduceConsumer
+			taskManager runtime.MockRuntime
+			producer    messagingMock.MockProduceConsumer
 		)
 
-		useCase := NewUseCase(&taskManager, &networkManager, accepts(), nodeName)
+		useCase := NewUseCase(&taskManager, accepts(), nodeName)
 
 		require.NoError(t, NewTaskScheduled(useCase, &producer, "workload-orchestrator-99", discardLogger()).
 			Handle(context.Background(), scheduled(t)))

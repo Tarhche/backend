@@ -25,7 +25,6 @@ import (
 	orchestratorstoptask "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/stopTask"
 	orchestratorAttachVM "github.com/khanzadimahdi/testproject/application/workload/orchestrator/vm/attachVM"
 	"github.com/khanzadimahdi/testproject/domain"
-	networkContract "github.com/khanzadimahdi/testproject/domain/workload/network"
 	nodeContract "github.com/khanzadimahdi/testproject/domain/workload/node"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 	taskEvents "github.com/khanzadimahdi/testproject/domain/workload/task/events"
@@ -38,6 +37,8 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/jetstream/produceConsumer"
 	"github.com/khanzadimahdi/testproject/infrastructure/telemetry/profiler"
 	"github.com/khanzadimahdi/testproject/infrastructure/tunnel"
+	infraNode "github.com/khanzadimahdi/testproject/infrastructure/workload/node"
+	"github.com/khanzadimahdi/testproject/infrastructure/workload/task/vmruntime"
 	healthAPI "github.com/khanzadimahdi/testproject/presentation/http/health"
 	"github.com/khanzadimahdi/testproject/presentation/http/middleware"
 	orchestratorPortsAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/orchestrator/api/ports"
@@ -102,6 +103,17 @@ func (p *orchestratorProvider) Boot(ctx context.Context, c provider.Container) e
 		return err
 	}
 
+	if err := p.bindEngine(c, logger); err != nil {
+		return err
+	}
+
+	return c.Bind(orchestratorConsoleCommand, provider.Singleton())
+}
+
+// bindEngine binds what this node runs VMs on, and what it runs the code
+// runner's tasks and reports itself through, which is the same engine: a task
+// is an ephemeral VM of its own.
+func (p *orchestratorProvider) bindEngine(c provider.Container, logger *slog.Logger) error {
 	var orchestratorConfigs *configs.WorkloadOrchestrator
 	if err := c.Resolve(&orchestratorConfigs); err != nil {
 		return err
@@ -112,11 +124,18 @@ func (p *orchestratorProvider) Boot(ctx context.Context, c provider.Container) e
 		return err
 	}
 
+	runtime := vmruntime.New(engine, logger)
+	nodeManager := infraNode.NewManager(engine)
+
 	if err := c.Bind(func() vm.Engine { return engine }, provider.Singleton()); err != nil {
 		return err
 	}
 
-	return c.Bind(orchestratorConsoleCommand, provider.Singleton())
+	if err := c.Bind(func() task.Runtime { return runtime }, provider.Singleton()); err != nil {
+		return err
+	}
+
+	return c.Bind(func() nodeContract.Manager { return nodeManager }, provider.Singleton())
 }
 
 // bindTunnel builds this orchestrator's connections to the ingresses.
@@ -191,7 +210,6 @@ func orchestratorConsoleCommand(
 	natsConnection *nats.Conn,
 	engine vm.Engine,
 	taskManager task.Runtime,
-	networkManager networkContract.Manager,
 	nodeManager nodeContract.Manager,
 	asyncProduceConsumer domain.ProduceConsumer,
 	validator domain.Validator,
@@ -212,13 +230,8 @@ func orchestratorConsoleCommand(
 		return nil, err
 	}
 
-	// the network standalone isolated tasks share is made when the first
-	// task joins it rather than here. A node whose docker daemon is away
-	// for a moment — it restarts, or it comes up after the node does — would
-	// otherwise fail to start at all, and stay down until somebody noticed.
-
 	// tasks
-	runTaskUseCase := orchestratorruntask.NewUseCase(taskManager, networkManager, validator, nodeName)
+	runTaskUseCase := orchestratorruntask.NewUseCase(taskManager, validator, nodeName)
 	stopTaskUseCase := orchestratorstoptask.NewUseCase(taskManager, validator)
 	killTaskUseCase := orchestratorkilltask.NewUseCase(taskManager, validator)
 	restartTaskUseCase := orchestratorrestarttask.NewUseCase(taskManager, validator)
@@ -242,14 +255,14 @@ func orchestratorConsoleCommand(
 
 	verifier := jwt.NewJWT(nil, publicKey)
 
-	// what a task is told to do -- run, stop, kill, restart, be deleted -- reaches
-	// this node as the control plane's messages, below, and in no other way, and
-	// what the node is holding goes back the same way, in its heartbeats. So
-	// there is no route for either. Everything under /api is reachable from
-	// outside, through the ingress, and a token proves only that the estate
-	// signed it for somebody: a route that ran or stopped a task would do it for
-	// anybody signed in, to anybody's task, with whatever image and resources
-	// they named, and the control plane would never hear of it.
+	// what a task or a VM is told to do -- run, stop, restart, snapshot, be
+	// deleted -- reaches this node as the control plane's messages, below, and
+	// in no other way, and what the node is holding goes back the same way, in
+	// its heartbeats. So there is no route for either. Everything under /api is
+	// reachable from outside, through the ingress, and a token proves only that
+	// the estate signed it for somebody: a route that ran or stopped something
+	// would do it for anybody signed in, to anybody's, and the control plane
+	// would never hear of it.
 	api := http.NewServeMux()
 
 	// the task healthcheck probes this, from inside the task, and it

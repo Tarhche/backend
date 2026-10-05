@@ -43,13 +43,7 @@ func TestUseCase_Execute(t *testing.T) {
 	t.Run("publishes every exposed port on a host port docker picks", func(t *testing.T) {
 		t.Parallel()
 
-		var (
-			taskManager    runtime.MockRuntime
-			networkManager runtime.MockNetworkManager
-		)
-
-		networkManager.On("EnsureIsolatedNetwork", mock.Anything).Return(nil).Once()
-		defer networkManager.AssertExpectations(t)
+		var taskManager runtime.MockRuntime
 
 		var created *task.Execution
 		taskManager.On("Of", mock.Anything, mock.Anything).Return([]task.Execution{}, nil).Maybe()
@@ -60,7 +54,7 @@ func TestUseCase_Execute(t *testing.T) {
 		taskManager.On("Start", mock.Anything, "task-id").Return(nil).Once()
 		defer taskManager.AssertExpectations(t)
 
-		response, err := NewUseCase(&taskManager, &networkManager, accepts(), nodeName).
+		response, err := NewUseCase(&taskManager, accepts(), nodeName).
 			Execute(context.Background(), validRequest(func(r *Request) {
 				r.ExposedPorts = []port.Port{80, 443}
 			}))
@@ -85,12 +79,7 @@ func TestUseCase_Execute(t *testing.T) {
 	t.Run("names the task by its slug, so it is called the same thing everywhere", func(t *testing.T) {
 		t.Parallel()
 
-		var (
-			taskManager    runtime.MockRuntime
-			networkManager runtime.MockNetworkManager
-		)
-
-		networkManager.On("EnsureIsolatedNetwork", mock.Anything).Return(nil).Once()
+		var taskManager runtime.MockRuntime
 
 		var created *task.Execution
 		taskManager.On("Of", mock.Anything, mock.Anything).Return([]task.Execution{}, nil).Maybe()
@@ -100,7 +89,7 @@ func TestUseCase_Execute(t *testing.T) {
 			Return("task-id", nil).Once()
 		taskManager.On("Start", mock.Anything, "task-id").Return(nil).Once()
 
-		_, err := NewUseCase(&taskManager, &networkManager, accepts(), nodeName).
+		_, err := NewUseCase(&taskManager, accepts(), nodeName).
 			Execute(context.Background(), validRequest(nil))
 
 		require.NoError(t, err)
@@ -115,15 +104,10 @@ func TestUseCase_Execute(t *testing.T) {
 		assert.False(t, created.AutoRemove)
 	})
 
-	t.Run("a public task also joins the bridge, which is what routes out", func(t *testing.T) {
+	t.Run("a public task is run under its policy, which reaches the internet", func(t *testing.T) {
 		t.Parallel()
 
-		var (
-			taskManager    runtime.MockRuntime
-			networkManager runtime.MockNetworkManager
-		)
-
-		networkManager.On("EnsureIsolatedNetwork", mock.Anything).Return(nil).Once()
+		var taskManager runtime.MockRuntime
 
 		var created *task.Execution
 		taskManager.On("Of", mock.Anything, mock.Anything).Return([]task.Execution{}, nil).Maybe()
@@ -133,26 +117,20 @@ func TestUseCase_Execute(t *testing.T) {
 			Return("task-id", nil).Once()
 		taskManager.On("Start", mock.Anything, "task-id").Return(nil).Once()
 
-		_, err := NewUseCase(&taskManager, &networkManager, accepts(), nodeName).
+		_, err := NewUseCase(&taskManager, accepts(), nodeName).
 			Execute(context.Background(), validRequest(func(r *Request) {
 				r.NetworkPolicy = network.PolicyPublic
 			}))
 
 		require.NoError(t, err)
 
-		assert.Equal(t, []network.Attachment{
-			{Name: network.IsolatedNetworkName},
-			{Name: network.PublicNetworkName, Gateway: true},
-		}, created.Networks)
+		assert.Equal(t, network.PolicyPublic, created.NetworkPolicy)
 	})
 
-	t.Run("a task with no network needs none made for it", func(t *testing.T) {
+	t.Run("a task with no network is run with none", func(t *testing.T) {
 		t.Parallel()
 
-		var (
-			taskManager    runtime.MockRuntime
-			networkManager runtime.MockNetworkManager
-		)
+		var taskManager runtime.MockRuntime
 
 		var created *task.Execution
 		taskManager.On("Of", mock.Anything, mock.Anything).Return([]task.Execution{}, nil).Maybe()
@@ -162,7 +140,7 @@ func TestUseCase_Execute(t *testing.T) {
 			Return("task-id", nil).Once()
 		taskManager.On("Start", mock.Anything, "task-id").Return(nil).Once()
 
-		_, err := NewUseCase(&taskManager, &networkManager, accepts(), nodeName).
+		_, err := NewUseCase(&taskManager, accepts(), nodeName).
 			Execute(context.Background(), validRequest(func(r *Request) {
 				r.NetworkPolicy = network.PolicyNone
 				r.ExposedPorts = nil
@@ -170,21 +148,17 @@ func TestUseCase_Execute(t *testing.T) {
 
 		require.NoError(t, err)
 
-		assert.Equal(t, []network.Attachment{{Name: network.NoNetworkName}}, created.Networks)
-		networkManager.AssertNotCalled(t, "EnsureIsolatedNetwork", mock.Anything)
+		assert.Equal(t, network.PolicyNone, created.NetworkPolicy)
 	})
 
 	t.Run("a request the rules refuse never reaches the daemon", func(t *testing.T) {
 		t.Parallel()
 
-		var (
-			taskManager    runtime.MockRuntime
-			networkManager runtime.MockNetworkManager
-		)
+		var taskManager runtime.MockRuntime
 
 		refusal := domain.ValidationErrors{"exposed_ports": "ports_require_network"}
 
-		response, err := NewUseCase(&taskManager, &networkManager, refuses(refusal), nodeName).
+		response, err := NewUseCase(&taskManager, refuses(refusal), nodeName).
 			Execute(context.Background(), validRequest(nil))
 
 		require.NoError(t, err)
@@ -196,14 +170,10 @@ func TestUseCase_Execute(t *testing.T) {
 	t.Run("a task that cannot be created is not started", func(t *testing.T) {
 		t.Parallel()
 
-		var (
-			taskManager    runtime.MockRuntime
-			networkManager runtime.MockNetworkManager
-		)
+		var taskManager runtime.MockRuntime
 
 		expected := errors.New("the daemon is unreachable")
 
-		networkManager.On("EnsureIsolatedNetwork", mock.Anything).Return(nil).Once()
 		taskManager.On("Of", mock.Anything, mock.Anything).Return([]task.Execution{}, nil).Maybe()
 		taskManager.On("EnsureImage", mock.Anything, mock.Anything).Once().Return(nil)
 		taskManager.On("Create", mock.Anything, mock.Anything).Return("", expected).Once()
@@ -212,7 +182,7 @@ func TestUseCase_Execute(t *testing.T) {
 		taskManager.On("Of", mock.Anything, mock.Anything).
 			Return([]task.Execution{}, nil).Once()
 
-		_, err := NewUseCase(&taskManager, &networkManager, accepts(), nodeName).
+		_, err := NewUseCase(&taskManager, accepts(), nodeName).
 			Execute(context.Background(), validRequest(nil))
 
 		assert.ErrorIs(t, err, expected)
@@ -222,16 +192,12 @@ func TestUseCase_Execute(t *testing.T) {
 	t.Run("a task this task already has is taken rather than made twice", func(t *testing.T) {
 		t.Parallel()
 
-		var (
-			taskManager    runtime.MockRuntime
-			networkManager runtime.MockNetworkManager
-		)
+		var taskManager runtime.MockRuntime
 
 		// what docker says when the same run is asked for twice, which is what
 		// a message handed over again looks like from here.
 		conflict := errors.New(`Conflict. The task name "/a-name" is already in use`)
 
-		networkManager.On("EnsureIsolatedNetwork", mock.Anything).Return(nil).Once()
 		// looked at twice: once before anything is made, and once when making
 		// it turns out to be unnecessary.
 		taskManager.On("Of", mock.Anything, mock.Anything).
@@ -241,29 +207,11 @@ func TestUseCase_Execute(t *testing.T) {
 		taskManager.On("Start", mock.Anything, "task-id").Return(nil).Once()
 		defer taskManager.AssertExpectations(t)
 
-		response, err := NewUseCase(&taskManager, &networkManager, accepts(), nodeName).
+		response, err := NewUseCase(&taskManager, accepts(), nodeName).
 			Execute(context.Background(), validRequest(nil))
 
 		require.NoError(t, err)
 		assert.Equal(t, "task-id", response.UUID)
-	})
-
-	t.Run("a network that cannot be made stops the task being created", func(t *testing.T) {
-		t.Parallel()
-
-		var (
-			taskManager    runtime.MockRuntime
-			networkManager runtime.MockNetworkManager
-		)
-
-		expected := errors.New("the network cannot be created")
-		networkManager.On("EnsureIsolatedNetwork", mock.Anything).Return(expected).Once()
-
-		_, err := NewUseCase(&taskManager, &networkManager, accepts(), nodeName).
-			Execute(context.Background(), validRequest(nil))
-
-		assert.ErrorIs(t, err, expected)
-		taskManager.AssertNotCalled(t, "Create", mock.Anything, mock.Anything)
 	})
 }
 
@@ -322,13 +270,7 @@ func TestUseCase_Execute_retrying(t *testing.T) {
 	t.Run("an attempt after a failure replaces what is left of the last one", func(t *testing.T) {
 		t.Parallel()
 
-		var (
-			taskManager    runtime.MockRuntime
-			networkManager runtime.MockNetworkManager
-		)
-
-		networkManager.On("EnsureIsolatedNetwork", mock.Anything).Return(nil).Once()
-		defer networkManager.AssertExpectations(t)
+		var taskManager runtime.MockRuntime
 
 		// the task that failed is still there, holding the name and the
 		// ports the next attempt needs.
@@ -345,7 +287,7 @@ func TestUseCase_Execute_retrying(t *testing.T) {
 		taskManager.On("Start", mock.Anything, "task-id").Return(nil).Once()
 		defer taskManager.AssertExpectations(t)
 
-		useCase := NewUseCase(&taskManager, &networkManager, accepts(), nodeName)
+		useCase := NewUseCase(&taskManager, accepts(), nodeName)
 
 		response, err := useCase.Execute(context.Background(), &Request{
 			UUID:       "task-uuid",
@@ -368,13 +310,7 @@ func TestUseCase_Execute_retrying(t *testing.T) {
 	t.Run("a first attempt takes the task that is already there", func(t *testing.T) {
 		t.Parallel()
 
-		var (
-			taskManager    runtime.MockRuntime
-			networkManager runtime.MockNetworkManager
-		)
-
-		networkManager.On("EnsureIsolatedNetwork", mock.Anything).Return(nil).Once()
-		defer networkManager.AssertExpectations(t)
+		var taskManager runtime.MockRuntime
 
 		// asked for twice, and the first attempt got as far as making one: it is
 		// the attempt that was asked for, so it is started rather than replaced.
@@ -385,7 +321,7 @@ func TestUseCase_Execute_retrying(t *testing.T) {
 		taskManager.On("Start", mock.Anything, "existing-task-id").Return(nil).Once()
 		defer taskManager.AssertExpectations(t)
 
-		useCase := NewUseCase(&taskManager, &networkManager, accepts(), nodeName)
+		useCase := NewUseCase(&taskManager, accepts(), nodeName)
 
 		response, err := useCase.Execute(context.Background(), &Request{
 			UUID:  "task-uuid",
@@ -408,13 +344,7 @@ func TestUseCase_Execute_adopting(t *testing.T) {
 	t.Run("a task that is still standing is taken, whatever attempt it is", func(t *testing.T) {
 		t.Parallel()
 
-		var (
-			taskManager    runtime.MockRuntime
-			networkManager runtime.MockNetworkManager
-		)
-
-		networkManager.On("EnsureIsolatedNetwork", mock.Anything).Return(nil).Once()
-		defer networkManager.AssertExpectations(t)
+		var taskManager runtime.MockRuntime
 
 		// a node that was away for a while is asked for its tasks again,
 		// from the beginning, and they are still running.
@@ -425,7 +355,7 @@ func TestUseCase_Execute_adopting(t *testing.T) {
 		taskManager.On("Start", mock.Anything, "running-task-id").Return(nil).Once()
 		defer taskManager.AssertExpectations(t)
 
-		_, err := NewUseCase(&taskManager, &networkManager, accepts(), nodeName).
+		_, err := NewUseCase(&taskManager, accepts(), nodeName).
 			Execute(context.Background(), &Request{
 				UUID:  "task-uuid",
 				Name:  "api",

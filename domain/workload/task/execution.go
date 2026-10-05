@@ -10,7 +10,7 @@ import (
 )
 
 // Execution is one run of a task, as whatever runs it holds one: what it was
-// asked to be, and what it has become. Docker calls this a container; nothing
+// asked to be, and what it has become. It is a VM of its own today; nothing
 // above this line needs to know that.
 type Execution struct {
 	// ID is what the runtime calls this run, and Name what it answers to
@@ -19,8 +19,9 @@ type Execution struct {
 	Name string
 
 	// What this is running, as the runtime was told when the run was made. A
-	// runtime keeps it alongside the run -- docker as labels -- so that a node
-	// can say what it is holding without asking anything that keeps records.
+	// runtime keeps it alongside the run -- as the labels of its VM -- so that
+	// a node can say what it is holding without asking anything that keeps
+	// records.
 	TaskUUID    string
 	TaskName    string
 	Slug        string
@@ -41,15 +42,19 @@ type Execution struct {
 	WorkingDirectory string
 	ExposedPorts     port.PortSet
 	PortBindings     port.PortMap
-	Networks         []network.Attachment
-	HealthCheck      string
-	AutoRemove       bool
-	Environment      []string
-	Entrypoint       []string
-	Command          []string
-	CreatedAt        time.Time
-	StartedAt        time.Time
-	ExitCode         int
+
+	// NetworkPolicy is how much of the network the run may reach, which the
+	// runtime gives its VM as the network the policy maps to.
+	NetworkPolicy network.Policy
+
+	HealthCheck string
+	AutoRemove  bool
+	Environment []string
+	Entrypoint  []string
+	Command     []string
+	CreatedAt   time.Time
+	StartedAt   time.Time
+	ExitCode    int
 
 	// ReadOnly makes the task's root filesystem immutable, so nothing it
 	// runs can change the image it was started from.

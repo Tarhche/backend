@@ -5,30 +5,26 @@ import (
 	"errors"
 
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/workload/network"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 )
 
 // UseCase runs a task on this node.
 type UseCase struct {
-	taskManager    task.Runtime
-	networkManager network.Manager
-	validator      domain.Validator
-	nodeName       string
+	taskManager task.Runtime
+	validator   domain.Validator
+	nodeName    string
 }
 
 // NewUseCase creates a new UseCase
 func NewUseCase(
 	taskManager task.Runtime,
-	networkManager network.Manager,
 	validator domain.Validator,
 	nodeName string,
 ) *UseCase {
 	return &UseCase{
-		taskManager:    taskManager,
-		networkManager: networkManager,
-		validator:      validator,
-		nodeName:       nodeName,
+		taskManager: taskManager,
+		validator:   validator,
+		nodeName:    nodeName,
 	}
 }
 
@@ -38,10 +34,6 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		return &Response{
 			ValidationErrors: validationErrors,
 		}, nil
-	}
-
-	if err := uc.ensureNetwork(ctx, request); err != nil {
-		return nil, err
 	}
 
 	// the image is made sure of first, so that what a task is allowed to
@@ -94,7 +86,11 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		RestartPolicy: request.RestartPolicy,
 		ExposedPorts:  request.ExposedPortSet(),
 		PortBindings:  request.PublishedPorts(),
-		Networks:      network.Attachments(request.Policy()),
+
+		// how much of the network it may reach, which the runtime gives its
+		// VM: nothing, its ports served and nothing reached, or the internet
+		// as well.
+		NetworkPolicy: request.Policy(),
 		ResourceLimits: task.ResourceLimits{
 			Cpu:    request.ResourceLimits.Cpu,
 			Memory: request.ResourceLimits.Memory,
@@ -152,14 +148,4 @@ func (uc *UseCase) clearEarlierAttempts(ctx context.Context, request *Request) e
 	}
 
 	return nil
-}
-
-// ensureNetwork makes the network this task joins exist before it tries to
-// join it.
-func (uc *UseCase) ensureNetwork(ctx context.Context, request *Request) error {
-	if request.Policy() == network.PolicyNone {
-		return nil
-	}
-
-	return uc.networkManager.EnsureIsolatedNetwork(ctx)
 }
