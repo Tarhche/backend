@@ -20,6 +20,12 @@ type Stack struct {
 	// VMUUID is the Docker VM the stack is deployed into.
 	VMUUID string
 
+	// VMName is what that VM is called now. It is not kept with the stack:
+	// it is read with it, from the VM, so a VM that is renamed is named anew
+	// wherever its stacks are shown, and a stack that is saved does not keep
+	// it.
+	VMName string
+
 	// Slug is the compose project's name: unique, lowercase letters, digits
 	// and dashes. What the compose file calls its project is ignored.
 	Slug string

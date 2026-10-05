@@ -64,6 +64,7 @@ func TestUseCase_Execute(t *testing.T) {
 				"owner_uuid": "owner-uuid",
 				"owner": {"uuid": "owner-uuid", "name": "Mahdi", "username": "mahdi", "avatar": "avatar-uuid"},
 				"vm_uuid": "vm-uuid",
+				"vm_name": "docker-1",
 				"compose": "services:\n  web:\n    image: nginx:1.27\n",
 				"state": "deploying",
 				"expected_state": "running",

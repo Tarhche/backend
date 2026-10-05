@@ -24,8 +24,10 @@ type Stack struct {
 	OwnerUUID string `json:"owner_uuid"`
 	Owner     *Owner `json:"owner,omitempty"`
 
-	// VMUUID is the Docker VM it is deployed into.
+	// VMUUID is the Docker VM it is deployed into, and VMName what that VM is
+	// called now.
 	VMUUID string `json:"vm_uuid"`
+	VMName string `json:"vm_name"`
 
 	// Compose is the YAML as it was given. A listing leaves it out: it is
 	// as long as somebody wrote it, and a listing is read to choose one.
@@ -66,6 +68,7 @@ func NewStack(s stack.Stack, owners Owners) Stack {
 		OwnerUUID:     s.OwnerUUID,
 		Owner:         owners.Of(s.OwnerUUID),
 		VMUUID:        s.VMUUID,
+		VMName:        s.VMName,
 		Compose:       s.Compose,
 		State:         stackState(s.State),
 		ExpectedState: stackState(s.ExpectedState),

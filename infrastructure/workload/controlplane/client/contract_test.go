@@ -129,7 +129,7 @@ func controlPlane(t *testing.T, w *vmtest.Workload) *client.Client {
 	mux.Handle("POST /api/vms/{uuid}/docker/{op}", dockerAPI.NewRequestHandler(requestdocker.NewUseCase(w.VMs, requester, codes)))
 	mux.Handle("GET /api/containers", containerAPI.NewIndexHandler(getcontainers.NewUseCase(w.VMs, requester, logger)))
 	mux.Handle("POST /api/containers", containerAPI.NewCreateHandler(createcontainer.NewUseCase(w.VMs, chooser, requester, codes)))
-	mux.Handle("GET /api/stacks", stackAPI.NewIndexHandler(getstacks.NewUseCase(w.Stacks)))
+	mux.Handle("GET /api/stacks", stackAPI.NewIndexHandler(getstacks.NewUseCase(w.Stacks, w.VMs)))
 	mux.Handle("POST /api/stacks", stackAPI.NewCreateHandler(createstack.NewUseCase(w.Stacks, chooser, dispatcher, codes)))
 	mux.Handle("GET /api/stacks/{uuid}", stackAPI.NewShowHandler(getstack.NewUseCase(w.Stacks, w.VMs, requester, logger)))
 	mux.Handle("DELETE /api/stacks/{uuid}", stackAPI.NewDeleteHandler(deletestack.NewUseCase(w.Stacks, w.VMs, dispatcher, codes)))
@@ -324,16 +324,19 @@ func TestContract_Stacks(t *testing.T) {
 	assert.Equal(t, "d1", created.VM.UUID)
 	assert.Equal(t, stack.Deploying, created.Stack.State)
 	assert.Equal(t, stack.Running, created.Stack.ExpectedState)
+	assert.Equal(t, "box", created.Stack.VMName, "a stack names its vm")
 
 	detail, err := c.Stack(ctx, "owner", created.Stack.UUID)
 	require.NoError(t, err)
 	assert.False(t, detail.VMNotRunning)
+	assert.Equal(t, "box", detail.VMName)
 	require.Len(t, detail.Containers, 1)
 	assert.Equal(t, "web", detail.Containers[0].Service)
 
 	page, err := c.Stacks(ctx, "owner", "d1", 1)
 	require.NoError(t, err)
-	assert.Len(t, page.Items, 1)
+	require.Len(t, page.Items, 1)
+	assert.Equal(t, "box", page.Items[0].VMName)
 
 	err = c.StopStack(ctx, "owner", created.Stack.UUID)
 

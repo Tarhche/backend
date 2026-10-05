@@ -49,6 +49,7 @@ func TestUseCase_Execute(t *testing.T) {
 					"owner_uuid": "owner-uuid",
 					"owner": {"uuid": "owner-uuid", "name": "Mahdi", "username": "mahdi", "avatar": "avatar-uuid"},
 					"vm_uuid": "vm-uuid",
+					"vm_name": "docker-1",
 					"state": "running",
 					"expected_state": "running",
 					"output": "Container shop-abcde-web-1  Started",

@@ -49,6 +49,9 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		return nil, err
 	}
 
+	// what its VM is called now, which a rename changes.
+	response.VMName = v.Name
+
 	if ask.DockerRefusal(&v) != nil || v.CurrentState != vm.Running {
 		response.VMNotRunning = true
 

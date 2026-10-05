@@ -40,6 +40,7 @@ func TestUseCase_Execute(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, "s1", response.UUID)
+		assert.Equal(t, "box", response.VMName, "what its vm is called now")
 		assert.False(t, response.VMNotRunning)
 		require.Len(t, response.Containers, 1)
 		assert.Equal(t, "web", response.Containers[0].Service)

@@ -263,6 +263,7 @@ type stackPayload struct {
 	Name          string    `json:"name"`
 	OwnerUUID     string    `json:"owner_uuid"`
 	VMUUID        string    `json:"vm_uuid"`
+	VMName        string    `json:"vm_name"`
 	Slug          string    `json:"slug"`
 	Compose       string    `json:"compose"`
 	ExpectedState string    `json:"expected_state"`
@@ -291,6 +292,7 @@ func (p *stackPayload) toStack() stack.Stack {
 		Name:          p.Name,
 		OwnerUUID:     p.OwnerUUID,
 		VMUUID:        p.VMUUID,
+		VMName:        p.VMName,
 		Slug:          p.Slug,
 		Compose:       p.Compose,
 		ExpectedState: stackStates[p.ExpectedState],

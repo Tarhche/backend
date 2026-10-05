@@ -197,12 +197,14 @@ func NewSnapshots(snapshots []snapshot.Snapshot) []Snapshot {
 	return items
 }
 
-// Stack is a stack as the API shows it.
+// Stack is a stack as the API shows it. VMName is what its VM is called when
+// it is read, so a VM that is renamed is named anew.
 type Stack struct {
 	UUID          string    `json:"uuid"`
 	Name          string    `json:"name"`
 	OwnerUUID     string    `json:"owner_uuid"`
 	VMUUID        string    `json:"vm_uuid"`
+	VMName        string    `json:"vm_name"`
 	Slug          string    `json:"slug"`
 	Compose       string    `json:"compose"`
 	ExpectedState string    `json:"expected_state"`
@@ -219,6 +221,7 @@ func NewStack(s *stack.Stack) Stack {
 		Name:          s.Name,
 		OwnerUUID:     s.OwnerUUID,
 		VMUUID:        s.VMUUID,
+		VMName:        s.VMName,
 		Slug:          s.Slug,
 		Compose:       s.Compose,
 		ExpectedState: s.ExpectedState.String(),

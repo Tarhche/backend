@@ -108,7 +108,12 @@ func (r *Repository) Save(_ context.Context, s *stack.Stack) (string, error) {
 		}
 	}
 
-	r.stacks[s.UUID] = *s
+	// what its VM is called is read with a stack, never kept with it, as the
+	// MongoDB repository keeps it.
+	stored := *s
+	stored.VMName = ""
+
+	r.stacks[s.UUID] = stored
 
 	return s.UUID, nil
 }

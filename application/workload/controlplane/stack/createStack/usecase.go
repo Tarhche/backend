@@ -87,6 +87,7 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		}
 	}
 
+	s.VMName = v.Name
 	shown := presenter.NewStack(&s)
 
 	return &Response{

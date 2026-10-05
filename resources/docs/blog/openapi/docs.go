@@ -9154,8 +9154,11 @@ const docTemplate = `{
                 "uuid": {
                     "type": "string"
                 },
+                "vm_name": {
+                    "type": "string"
+                },
                 "vm_uuid": {
-                    "description": "VMUUID is the Docker VM it is deployed into.",
+                    "description": "VMUUID is the Docker VM it is deployed into, and VMName what that VM is\ncalled now.",
                     "type": "string"
                 }
             }
@@ -11131,8 +11134,11 @@ const docTemplate = `{
                 "uuid": {
                     "type": "string"
                 },
+                "vm_name": {
+                    "type": "string"
+                },
                 "vm_uuid": {
-                    "description": "VMUUID is the Docker VM it is deployed into.",
+                    "description": "VMUUID is the Docker VM it is deployed into, and VMName what that VM is\ncalled now.",
                     "type": "string"
                 }
             }

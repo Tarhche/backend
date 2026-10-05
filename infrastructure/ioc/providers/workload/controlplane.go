@@ -406,7 +406,7 @@ func NewControlPlaneVMs(
 		mux.Handle("GET /api/containers", controlPlaneContainerAPI.NewIndexHandler(controlPlaneGetContainers.NewUseCase(vmRepository, requester, logger)))
 		mux.Handle("POST /api/containers", controlPlaneContainerAPI.NewCreateHandler(controlPlaneCreateContainer.NewUseCase(vmRepository, chooser, requester, codes)))
 
-		mux.Handle("GET /api/stacks", controlPlaneStackAPI.NewIndexHandler(controlPlaneGetStacks.NewUseCase(stackRepository)))
+		mux.Handle("GET /api/stacks", controlPlaneStackAPI.NewIndexHandler(controlPlaneGetStacks.NewUseCase(stackRepository, vmRepository)))
 		mux.Handle("POST /api/stacks", controlPlaneStackAPI.NewCreateHandler(controlPlaneCreateStack.NewUseCase(stackRepository, chooser, dispatcher, codes)))
 		mux.Handle("GET /api/stacks/{uuid}", controlPlaneStackAPI.NewShowHandler(controlPlaneGetStack.NewUseCase(stackRepository, vmRepository, requester, logger)))
 		mux.Handle("DELETE /api/stacks/{uuid}", controlPlaneStackAPI.NewDeleteHandler(controlPlaneDeleteStack.NewUseCase(stackRepository, vmRepository, dispatcher, codes)))
