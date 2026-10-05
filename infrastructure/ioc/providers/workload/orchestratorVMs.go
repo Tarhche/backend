@@ -56,10 +56,10 @@ type vmDependencies struct {
 	logger         *slog.Logger
 }
 
-// bindVMs adds to subscribers what carries out the control plane's commands
-// about this node's VMs, their snapshots and their stacks, and binds the VM
-// heartbeat and what answers the control plane's requests.
-func bindVMs(c provider.Container, d vmDependencies, subscribers map[string]domain.MessageHandler) error {
+// bindOrchestratorVMs adds to subscribers what carries out the control plane's
+// commands about this node's VMs, their snapshots and their stacks, and binds
+// the VM heartbeat and what answers the control plane's requests.
+func bindOrchestratorVMs(c provider.Container, d vmDependencies, subscribers map[string]domain.MessageHandler) error {
 	recorder, err := workloadMetrics.New(otel.GetMeterProvider())
 	if err != nil {
 		return err

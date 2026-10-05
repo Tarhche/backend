@@ -17,6 +17,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
+	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
 
 const testDomain = "workload.localhost"
@@ -51,6 +52,9 @@ func (r *fakeResolver) GetOne(_ context.Context, uuid string) (task.Task, error)
 type node struct {
 	server *httptest.Server
 
+	// route is which of the node's routes for ports was asked.
+	route string
+
 	slug string
 	port string
 	path string
@@ -62,15 +66,21 @@ func newNode(t *testing.T, handler http.Handler) *node {
 
 	n := &node{}
 
-	mux := http.NewServeMux()
-	mux.Handle("/tasks/{slug}/{port}/{path...}", http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		n.slug = r.PathValue("slug")
-		n.port = r.PathValue("port")
-		n.path = "/" + r.PathValue("path")
-		n.host = r.Host
+	ports := func(route string) http.Handler {
+		return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+			n.route = route
+			n.slug = r.PathValue("slug")
+			n.port = r.PathValue("port")
+			n.path = "/" + r.PathValue("path")
+			n.host = r.Host
 
-		handler.ServeHTTP(rw, r)
-	}))
+			handler.ServeHTTP(rw, r)
+		})
+	}
+
+	mux := http.NewServeMux()
+	mux.Handle("/tasks/{slug}/{port}/{path...}", ports("tasks"))
+	mux.Handle("/vms/{slug}/{port}/{path...}", ports("vms"))
 
 	n.server = httptest.NewServer(mux)
 	t.Cleanup(n.server.Close)
@@ -78,10 +88,42 @@ func newNode(t *testing.T, handler http.Handler) *node {
 	return n
 }
 
+// fakeVMResolver stands in for the VM repository: which node is holding which
+// VM.
+type fakeVMResolver struct {
+	vms map[string]vm.VM
+}
+
+func (r *fakeVMResolver) GetOneBySlug(_ context.Context, slug string) (vm.VM, error) {
+	v, ok := r.vms[slug]
+	if !ok {
+		return vm.VM{}, domain.ErrNotExists
+	}
+
+	return v, nil
+}
+
+func (r *fakeVMResolver) GetOne(_ context.Context, uuid string) (vm.VM, error) {
+	for _, v := range r.vms {
+		if v.UUID == uuid {
+			return v, nil
+		}
+	}
+
+	return vm.VM{}, domain.ErrNotExists
+}
+
 // ingressFor builds the handler the way the provider does, with a transport
 // that stands for the tunnel: the address names a node, and what comes back is
 // a connection to the one standing in for it.
 func ingressFor(t *testing.T, resolver Resolver, nodes map[string]*node) *taskHandler {
+	t.Helper()
+
+	return ingressWithVMs(t, resolver, &fakeVMResolver{}, nodes)
+}
+
+// ingressWithVMs is ingressFor with VMs to find as well as tasks.
+func ingressWithVMs(t *testing.T, resolver Resolver, vms VMResolver, nodes map[string]*node) *taskHandler {
 	t.Helper()
 
 	connected := make(connectedWorkloads, len(nodes))
@@ -102,7 +144,7 @@ func ingressFor(t *testing.T, resolver Resolver, nodes map[string]*node) *taskHa
 		},
 	}
 
-	return NewTaskHandler(resolver, connected, transport, testDomain, slog.New(slog.DiscardHandler))
+	return NewTaskHandler(resolver, vms, connected, transport, testDomain, slog.New(slog.DiscardHandler))
 }
 
 func held(slug string, nodeName string) task.Task {
@@ -171,6 +213,7 @@ func TestTaskHandler(t *testing.T) {
 
 		assert.Equal(t, http.StatusOK, rw.Code)
 		assert.Equal(t, "answered by the task", rw.Body.String())
+		assert.Equal(t, "tasks", n.route)
 		assert.Equal(t, "nginx-xkfqz", n.slug)
 		assert.Equal(t, "/some/path", n.path)
 		assert.Equal(t, "nginx-xkfqz."+testDomain, n.host, "the task is addressed by the name the client used")
@@ -380,4 +423,118 @@ func TestWaitingPage(t *testing.T) {
 		assert.Equal(t, "2", rw.Header().Get("Retry-After"))
 		assert.NotContains(t, rw.Body.String(), "<html", "a client that did not ask for a page is not given one")
 	})
+}
+
+// exposing is a running VM whose ports are reached through the ingress.
+func exposing(slug string, nodeName string, ports ...port.Port) vm.VM {
+	return vm.VM{
+		UUID:         "vm-" + slug,
+		Slug:         slug,
+		Ports:        ports,
+		Network:      vm.Network{Ingress: vm.AccessAllow, Egress: vm.AccessAllow},
+		CurrentState: vm.Running,
+		NodeName:     nodeName,
+	}
+}
+
+func TestTaskHandler_VMs(t *testing.T) {
+	t.Run("a vm's port is reached through the node holding it", func(t *testing.T) {
+		n := newNode(t, http.HandlerFunc(func(rw http.ResponseWriter, _ *http.Request) {
+			io.WriteString(rw, "answered by the vm")
+		}))
+
+		vms := &fakeVMResolver{vms: map[string]vm.VM{"box-xkfqz": exposing("box-xkfqz", "workload-orchestrator-02", 80, 8080)}}
+
+		rw := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, "/index.html?a=1", nil)
+		request.Host = "box-xkfqz-8080." + testDomain
+
+		ingressWithVMs(t, &fakeResolver{}, vms, map[string]*node{"workload-orchestrator-02": n}).ServeHTTP(rw, request)
+
+		assert.Equal(t, http.StatusOK, rw.Code)
+		assert.Equal(t, "answered by the vm", rw.Body.String())
+		assert.Equal(t, "vms", n.route, "a vm's ports are asked of the node's route for them")
+		assert.Equal(t, "box-xkfqz", n.slug)
+		assert.Equal(t, "8080", n.port)
+		assert.Equal(t, "/index.html", n.path)
+		assert.Equal(t, "box-xkfqz-8080."+testDomain, n.host)
+	})
+
+	t.Run("a vm is found before a task", func(t *testing.T) {
+		n := newNode(t, http.NotFoundHandler())
+
+		resolver := &fakeResolver{tasks: map[string]task.Task{"same-xkfqz": held("same-xkfqz", "workload-orchestrator-09")}}
+		vms := &fakeVMResolver{vms: map[string]vm.VM{"same-xkfqz": exposing("same-xkfqz", "workload-orchestrator-01", 80)}}
+
+		rw := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, "/", nil)
+		request.Host = "same-xkfqz." + testDomain
+
+		ingressWithVMs(t, resolver, vms, map[string]*node{"workload-orchestrator-01": n}).ServeHTTP(rw, request)
+
+		assert.Equal(t, "same-xkfqz", n.slug, "the vm's node was asked")
+		assert.Equal(t, "0", n.port, "the node picks the lowest port the vm exposes")
+	})
+
+	for name, tt := range map[string]struct {
+		vm     vm.VM
+		host   string
+		status int
+		says   string
+	}{
+		"a vm that lets nothing in is not there": {
+			vm: func() vm.VM {
+				v := exposing("box-xkfqz", "workload-orchestrator-01", 80)
+				v.Network.Ingress = vm.AccessDeny
+				return v
+			}(),
+			host:   "box-xkfqz",
+			status: http.StatusNotFound,
+		},
+		"a port a vm does not expose is not there": {
+			vm:     exposing("box-xkfqz", "workload-orchestrator-01", 80),
+			host:   "box-xkfqz-22",
+			status: http.StatusNotFound,
+		},
+		"a vm that exposes nothing is not there": {
+			vm:     exposing("box-xkfqz", "workload-orchestrator-01"),
+			host:   "box-xkfqz",
+			status: http.StatusNotFound,
+		},
+		"a vm that is not running is unavailable": {
+			vm: func() vm.VM {
+				v := exposing("box-xkfqz", "workload-orchestrator-01", 80)
+				v.CurrentState = vm.Stopped
+				return v
+			}(),
+			host:   "box-xkfqz",
+			status: http.StatusServiceUnavailable,
+			says:   "not running",
+		},
+		"a vm on no node is unavailable": {
+			vm:     exposing("box-xkfqz", "", 80),
+			host:   "box-xkfqz",
+			status: http.StatusServiceUnavailable,
+			says:   "not been scheduled",
+		},
+		"a vm whose node is not connected cannot be asked": {
+			vm:     exposing("box-xkfqz", "workload-orchestrator-09", 80),
+			host:   "box-xkfqz",
+			status: http.StatusServiceUnavailable,
+			says:   "not connected",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			vms := &fakeVMResolver{vms: map[string]vm.VM{"box-xkfqz": tt.vm}}
+
+			rw := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodGet, "/", nil)
+			request.Host = tt.host + "." + testDomain
+
+			ingressWithVMs(t, &fakeResolver{}, vms, map[string]*node{"workload-orchestrator-01": newNode(t, http.NotFoundHandler())}).ServeHTTP(rw, request)
+
+			assert.Equal(t, tt.status, rw.Code)
+			assert.Contains(t, rw.Body.String(), tt.says)
+		})
+	}
 }

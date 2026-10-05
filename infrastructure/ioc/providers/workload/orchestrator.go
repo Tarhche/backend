@@ -351,7 +351,7 @@ func orchestratorConsoleCommand(
 	// what is asked of the VMs on this node, of their snapshots and of the
 	// stacks in them, and the answers to what the control plane asks and
 	// waits for.
-	if err := bindVMs(iocContainer, vmDependencies{
+	if err := bindOrchestratorVMs(iocContainer, vmDependencies{
 		natsConnection: natsConnection,
 		engine:         engine,
 		producer:       asyncProduceConsumer,

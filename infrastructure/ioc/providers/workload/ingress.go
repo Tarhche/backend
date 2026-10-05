@@ -16,6 +16,7 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/certificate"
 	infraHealth "github.com/khanzadimahdi/testproject/infrastructure/health"
 	taskrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/workload/tasks"
+	vmrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/workload/vms"
 	"github.com/khanzadimahdi/testproject/infrastructure/telemetry/profiler"
 	"github.com/khanzadimahdi/testproject/infrastructure/tunnel"
 	infraIngress "github.com/khanzadimahdi/testproject/infrastructure/workload/ingress"
@@ -153,9 +154,10 @@ func ingressConsoleCommand(
 
 	checkOrchestratorExistsUseCase := ingressCheckOrchestratorExists.NewUseCase(registry)
 
-	// which node is holding a task is the control plane's record of it, and the
-	// only thing here that outlives a connection.
+	// which node is holding a VM or a task is the control plane's record of it,
+	// and the only thing here that outlives a connection.
 	taskRepository := taskrepository.NewRepository(database)
+	vmRepository := vmrepository.NewRepository(database)
 
 	checkHealthUseCase := checkhealth.NewUseCase(
 		checkhealth.Dependency{Name: "database", Pinger: infraHealth.NewMongodbPinger(database)},
@@ -183,11 +185,14 @@ func ingressConsoleCommand(
 	// owner on the task and the token on this request.
 	mux.Handle("GET /tasks/{uuid}/attach", ingressAPI.NewTerminalHandler(taskRepository, registry, transport, logger))
 
-	// a request to a hostname under the tasks' domain is a task's own
-	// traffic and goes to the node holding it; everything else is one of the
-	// ingress's own routes.
+	// a terminal inside a VM, carried the same way to the node holding it.
+	mux.Handle("GET /vms/{uuid}/attach", ingressAPI.NewVMTerminalHandler(vmRepository, registry, transport, logger))
+
+	// a request to a hostname under the workload's domain is a VM's or a
+	// task's own traffic and goes to the node holding it; everything else is
+	// one of the ingress's own routes.
 	router := ingressAPI.NewRouter(
-		ingressAPI.NewTaskHandler(taskRepository, registry, transport, ingressConfigs.Domain, logger),
+		ingressAPI.NewTaskHandler(taskRepository, vmRepository, registry, transport, ingressConfigs.Domain, logger),
 		mux,
 		ingressConfigs.Domain,
 	)

@@ -57,6 +57,28 @@ func (r *Recorder) Subjects() []string {
 	return subjects
 }
 
+// Last decodes the last message produced on subject into out, and reports
+// whether there was one.
+func (r *Recorder) Last(subject string, out any) bool {
+	messages := r.Messages()
+
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].Subject == subject {
+			return json.Unmarshal(messages[i].Payload, out) == nil
+		}
+	}
+
+	return false
+}
+
+// Reset forgets what was produced so far.
+func (r *Recorder) Reset() {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	r.messages = nil
+}
+
 // Produced is every message produced on subject, decoded as T.
 func Produced[T any](r *Recorder, subject string) ([]T, error) {
 	var decoded []T

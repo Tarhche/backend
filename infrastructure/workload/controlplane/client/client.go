@@ -20,11 +20,26 @@ import (
 
 	"github.com/khanzadimahdi/testproject/domain"
 	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
+	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 )
 
-// requestTimeout bounds a call to the control plane.
-const requestTimeout = 15 * time.Second
+const (
+	// requestTimeout bounds a call that reads or writes the control plane's
+	// records and nothing else.
+	requestTimeout = 15 * time.Second
+
+	// nodeRequestTimeout bounds a call the control plane answers by asking a
+	// node — a log, what a Docker VM holds — which it gives up on after its own
+	// request timeout, 30 seconds unless it is configured otherwise.
+	nodeRequestTimeout = 45 * time.Second
+
+	// pullRequestTimeout bounds a call that may have to wait for a Docker VM
+	// to come up and pull an image: creating a container, pulling an image.
+	// The control plane gives the first five minutes and the second ten
+	// unless it is configured otherwise, and is let finish first.
+	pullRequestTimeout = 16 * time.Minute
+)
 
 // Client is the workload control plane, reached over its HTTP API.
 type Client struct {
@@ -35,17 +50,20 @@ type Client struct {
 var _ workloadControlPlane.Client = &Client{}
 
 // New builds a client for the control plane at baseURL, e.g.
-// "http://workload-controlplane:80". It answers about tasks; reaching one is
-// the ingress's business and does not pass through here.
+// "http://workload-controlplane:80". It answers about tasks, VMs, snapshots,
+// containers and stacks; reaching one is the ingress's business and does not
+// pass through here.
 func New(baseURL string) (*Client, error) {
 	parsed, err := usable(baseURL, "workload control plane")
 	if err != nil {
 		return nil, err
 	}
 
+	// each call is bounded by its own timeout, since the slowest of them takes
+	// minutes and the fastest should not.
 	return &Client{
 		baseURL:    parsed,
-		httpClient: &http.Client{Timeout: requestTimeout},
+		httpClient: &http.Client{},
 	}, nil
 }
 
@@ -79,12 +97,41 @@ func (c *Client) DeleteTask(ctx context.Context, uuid string) error {
 
 // ValidationError carries what the control plane refused, so the dashboard can show
 // the caller which field it was rather than a bare failure.
+//
+// Each value is a code, which the blog puts into the words of whoever asked.
+// A refusal that came from a node — a VM that is not running, one that is not
+// a Docker VM, a dockerd that did not come up — is one too, under the vm
+// field, and also unwraps to the node's own error, so errors.Is still reads it
+// as the domain's error it stands for.
 type ValidationError struct {
 	ValidationErrors domain.ValidationErrors
+
+	cause error
 }
 
 func (e *ValidationError) Error() string {
 	return fmt.Sprintf("the workload refused the request: %v", e.ValidationErrors)
+}
+
+// Unwrap is the node's error a refusal stands for, when it stands for one.
+func (e *ValidationError) Unwrap() error {
+	return e.cause
+}
+
+// refusedByNode is what a node's refusal is to whoever called. A VM that cannot
+// be asked is something the person asking can do something about, so it is a
+// refusal under the vm field; anything else is the node's error as it said it,
+// which errors.Is reads as the domain's own: a not_found is domain.ErrNotExists.
+func refusedByNode(refused *noderequest.Error) error {
+	switch refused.Code {
+	case noderequest.CodeNotRunning, noderequest.CodeNotDocker, noderequest.CodeDockerUnavailable:
+		return &ValidationError{
+			ValidationErrors: domain.ValidationErrors{"vm": string(refused.Code)},
+			cause:            refused,
+		}
+	default:
+		return refused
+	}
 }
 
 func (c *Client) path(path string, query url.Values) string {
@@ -98,10 +145,38 @@ func (c *Client) path(path string, query url.Values) string {
 	return u.String()
 }
 
-// call makes one request and decodes its answer. A 404 becomes
-// domain.ErrNotExists and a 400 becomes a ValidationError, so the layers above
-// deal in the errors they already know.
+// owned is the query of a call narrowed to ownerUUID's own, with what else it
+// asks; anything empty is left out.
+func owned(ownerUUID string, rest url.Values) url.Values {
+	query := url.Values{}
+	for key, values := range rest {
+		for _, value := range values {
+			if len(value) > 0 {
+				query.Add(key, value)
+			}
+		}
+	}
+
+	if len(ownerUUID) > 0 {
+		query.Set("owner", ownerUUID)
+	}
+
+	return query
+}
+
+// call makes one request about the control plane's records.
 func (c *Client) call(ctx context.Context, method string, endpoint string, body any, out any) error {
+	return c.callWithin(ctx, requestTimeout, method, endpoint, body, out)
+}
+
+// callWithin makes one request and decodes its answer, giving up after
+// timeout. A 404 becomes domain.ErrNotExists, a 400 a ValidationError, and
+// what a node refused the error it stands for, so the layers above deal in the
+// errors they already know.
+func (c *Client) callWithin(ctx context.Context, timeout time.Duration, method string, endpoint string, body any, out any) error {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
 	var payload io.Reader
 
 	if body != nil {
@@ -128,23 +203,8 @@ func (c *Client) call(ctx context.Context, method string, endpoint string, body 
 	}
 	defer response.Body.Close()
 
-	switch {
-	case response.StatusCode == http.StatusNotFound:
-		return domain.ErrNotExists
-
-	case response.StatusCode == http.StatusBadRequest:
-		var refusal struct {
-			Errors domain.ValidationErrors `json:"errors"`
-		}
-
-		if err := json.NewDecoder(response.Body).Decode(&refusal); err != nil {
-			return fmt.Errorf("the workload refused the request")
-		}
-
-		return &ValidationError{ValidationErrors: refusal.Errors}
-
-	case response.StatusCode >= http.StatusBadRequest:
-		return fmt.Errorf("the workload answered %s", response.Status)
+	if response.StatusCode >= http.StatusBadRequest {
+		return refusal(response)
 	}
 
 	if out == nil || response.StatusCode == http.StatusNoContent {
@@ -158,4 +218,33 @@ func (c *Client) call(ctx context.Context, method string, endpoint string, body 
 	}
 
 	return nil
+}
+
+// refusal is the error an answer of 400 or more stands for.
+func refusal(response *http.Response) error {
+	answer, _ := io.ReadAll(io.LimitReader(response.Body, 1<<20))
+
+	var refused struct {
+		Errors domain.ValidationErrors `json:"errors"`
+		Error  *noderequest.Error      `json:"error"`
+	}
+
+	decoded := json.Unmarshal(answer, &refused) == nil
+
+	switch {
+	case decoded && refused.Error != nil && len(refused.Error.Code) > 0:
+		return refusedByNode(refused.Error)
+
+	case response.StatusCode == http.StatusNotFound:
+		return domain.ErrNotExists
+
+	case response.StatusCode == http.StatusBadRequest:
+		if !decoded {
+			return fmt.Errorf("the workload refused the request")
+		}
+
+		return &ValidationError{ValidationErrors: refused.Errors}
+	}
+
+	return fmt.Errorf("the workload answered %s", response.Status)
 }

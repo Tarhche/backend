@@ -14,15 +14,22 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// terminalHandler carries a terminal to the node holding the task.
+// terminalHandler carries a terminal to the node holding a task or a VM.
 //
 // It works out which node that is and proxies the connection there, and that is
 // all it does. Who may open a terminal is the node's to answer: it reads the
-// owner off the task and compares it with the token carried in this
+// owner off the task or the VM and compares it with the token carried in this
 // request, neither of which the ingress looks at. So this is a pipe that knows
 // an address, and nothing here has to be trusted for the answer to be right.
 type terminalHandler struct {
-	resolver Resolver
+	// what the terminal is opened in, as the answers name it.
+	what string
+
+	// locate is the node holding what uuid names, and route the node's own
+	// route for its terminal.
+	locate func(ctx context.Context, uuid string) (string, error)
+	route  func(uuid string) string
+
 	registry ingress.Registry
 
 	proxy  *httputil.ReverseProxy
@@ -31,13 +38,57 @@ type terminalHandler struct {
 
 var _ http.Handler = &terminalHandler{}
 
+// NewTerminalHandler carries a terminal inside a task to the node holding the
+// task, on the node's /api/tasks/{uuid}/attach.
 func NewTerminalHandler(
 	resolver Resolver,
 	registry ingress.Registry,
 	transport http.RoundTripper,
 	logger *slog.Logger,
 ) *terminalHandler {
-	h := &terminalHandler{resolver: resolver, registry: registry, logger: logger}
+	locate := func(ctx context.Context, uuid string) (string, error) {
+		t, err := resolver.GetOne(ctx, uuid)
+
+		return t.NodeName, err
+	}
+
+	route := func(uuid string) string {
+		return "/api/tasks/" + url.PathEscape(uuid) + "/attach"
+	}
+
+	return newTerminalHandler("task", locate, route, registry, transport, logger)
+}
+
+// NewVMTerminalHandler carries a terminal inside a VM to the node holding the
+// VM, on the node's /api/vms/{uuid}/attach, exactly as a task's is carried.
+func NewVMTerminalHandler(
+	vms VMResolver,
+	registry ingress.Registry,
+	transport http.RoundTripper,
+	logger *slog.Logger,
+) *terminalHandler {
+	locate := func(ctx context.Context, uuid string) (string, error) {
+		v, err := vms.GetOne(ctx, uuid)
+
+		return v.NodeName, err
+	}
+
+	route := func(uuid string) string {
+		return "/api/vms/" + url.PathEscape(uuid) + "/attach"
+	}
+
+	return newTerminalHandler("vm", locate, route, registry, transport, logger)
+}
+
+func newTerminalHandler(
+	what string,
+	locate func(ctx context.Context, uuid string) (string, error),
+	route func(uuid string) string,
+	registry ingress.Registry,
+	transport http.RoundTripper,
+	logger *slog.Logger,
+) *terminalHandler {
+	h := &terminalHandler{what: what, locate: locate, route: route, registry: registry, logger: logger}
 
 	h.proxy = &httputil.ReverseProxy{
 		Transport: transport,
@@ -62,21 +113,22 @@ func NewTerminalHandler(
 	return h
 }
 
-// @Summary		Open a terminal in a task
-// @Description	carries a websocket to the node holding the task, which decides who may open one
+// @Summary		Open a terminal in a task or a vm
+// @Description	carries a websocket to the node holding the task or the vm, which decides who may open one
 // @Tags			workload ingress
-// @Param			uuid	path	string	true	"Task UUID"
+// @Param			uuid	path	string	true	"Task or VM UUID"
 // @Success		101		{string}	string	"switching protocols"
 // @Failure		404		{object}	map[string]interface{}
 // @Failure		503		{object}	map[string]interface{}
 // @Router			/tasks/{uuid}/attach [get]
+// @Router			/vms/{uuid}/attach [get]
 func (h *terminalHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	uuid := r.PathValue("uuid")
 
-	t, err := h.resolver.GetOne(r.Context(), uuid)
+	nodeName, err := h.locate(r.Context(), uuid)
 	switch {
 	case errors.Is(err, domain.ErrNotExists):
-		http.Error(rw, "no such task", http.StatusNotFound)
+		http.Error(rw, "no such "+h.what, http.StatusNotFound)
 
 		return
 	case err != nil:
@@ -86,15 +138,15 @@ func (h *terminalHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if len(t.NodeName) == 0 {
-		http.Error(rw, "the task has not been scheduled yet", http.StatusServiceUnavailable)
+	if len(nodeName) == 0 {
+		http.Error(rw, "the "+h.what+" has not been scheduled yet", http.StatusServiceUnavailable)
 
 		return
 	}
 
 	// only the node holding it can open one, and only a node that is connected
 	// can be asked to
-	connected, err := h.registry.Exists(r.Context(), t.NodeName)
+	connected, err := h.registry.Exists(r.Context(), nodeName)
 	if err != nil {
 		infraTrace.RecordError(trace.SpanFromContext(r.Context()), err)
 		rw.WriteHeader(http.StatusInternalServerError)
@@ -103,15 +155,15 @@ func (h *terminalHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	}
 
 	if !connected {
-		http.Error(rw, "the node holding this task is not connected", http.StatusServiceUnavailable)
+		http.Error(rw, "the node holding this "+h.what+" is not connected", http.StatusServiceUnavailable)
 
 		return
 	}
 
 	target := &url.URL{
 		Scheme: "http",
-		Host:   t.NodeName,
-		Path:   "/api/tasks/" + url.PathEscape(uuid) + "/attach",
+		Host:   nodeName,
+		Path:   h.route(uuid),
 	}
 
 	h.proxy.ServeHTTP(rw, r.WithContext(context.WithValue(r.Context(), targetKey{}, target)))
