@@ -20,6 +20,22 @@ const (
 	DefaultMaxMemorySize = 200 << 20 // 200 MB
 	DefaultMaxCpu        = 2
 
+	// GoMaxMemorySize and GoMaxDiskSize are what a Go snippet is given
+	// instead, because it is built before it runs, and its image keeps no
+	// build of the standard library: every run compiles from source whatever
+	// of it the snippet imports, two packages at a time on its two CPUs.
+	//
+	// Compiling the runtime package takes more memory than the default: a
+	// snippet that prints hello peaks at about 250 MiB in a container, and its
+	// compiler is killed in one of 200 MiB, and in a VM of 256 MiB, whose
+	// kernel has its share too. A build writes each package twice, where it
+	// is built and in the build cache, and the binary besides: one that
+	// imports net/http writes 175 MiB at its peak, and fails in the default's
+	// 100 MiB. The whole standard library peaks at about 470 MiB of memory
+	// and 320 MiB of disk, so a snippet given these may import any of it.
+	GoMaxMemorySize = 512 << 20 // 512 MiB
+	GoMaxDiskSize   = 512 << 20 // 512 MiB
+
 	// CodeTimeout is how long the code itself is given. The runner image
 	// enforces it and says so in the output, which is what somebody running
 	// code wants to be told.
@@ -121,18 +137,14 @@ func (h *runCode) Handle(ctx context.Context, data []byte) error {
 
 	// a job: it runs once, and what is left of it goes when it ends.
 	event := &events.TaskRunRequested{
-		Name:       request.ID,
-		Kind:       string(task.KindJob),
-		Image:      request.Image(),
-		TTL:        ttl,
-		MaxRetries: &codeRetries,
-		Command:    []string{"--timeout", strconv.Itoa(int(timeout.Seconds())), request.Code},
-		ResourceLimits: events.ResourceLimits{
-			Cpu:    DefaultMaxCpu,
-			Memory: DefaultMaxMemorySize,
-			Disk:   DefaultMaxDiskSize,
-		},
-		OwnerUUID: CodeRunnerOwnerUUID,
+		Name:           request.ID,
+		Kind:           string(task.KindJob),
+		Image:          request.Image(),
+		TTL:            ttl,
+		MaxRetries:     &codeRetries,
+		Command:        []string{"--timeout", strconv.Itoa(int(timeout.Seconds())), request.Code},
+		ResourceLimits: request.ResourceLimits(),
+		OwnerUUID:      CodeRunnerOwnerUUID,
 
 		// a snippet that serves something is reached by name: the workload
 		// publishes these on the node and answers for them at the ingress.
