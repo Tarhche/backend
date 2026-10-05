@@ -74,6 +74,8 @@ type Network struct {
 // Stats is one sample of what a VM uses. Memory and disk are bytes, and the
 // network counters are bytes since the VM started.
 type Stats struct {
+	// CPUPercent is 0 to 100 of all of the VM's vCPUs together: 100 is every
+	// one of them busy, however many it has.
 	CPUPercent  float64   `json:"cpu_percent"`
 	MemoryUsed  uint64    `json:"memory_used"`
 	MemoryLimit uint64    `json:"memory_limit"`

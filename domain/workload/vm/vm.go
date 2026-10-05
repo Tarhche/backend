@@ -206,6 +206,12 @@ func (v *VM) Drifted(now time.Time, silentAfter time.Duration) bool {
 
 // Stats is one sample of what a VM is using.
 type Stats struct {
+	// CPUPercent is how busy the VM kept the vCPUs it was given, as a share of
+	// all of them together: 0 is idle and 100 is every one of them busy,
+	// however many it has. It is never counted per vCPU, so a VM with two
+	// vCPUs both busy is 100, not 200; an engine that counts per vCPU divides
+	// by the VM's vCPUs before it says so. It means the same from the engine
+	// to the dashboard, and nothing on the way converts it.
 	CPUPercent float64
 
 	// Memory and disk are bytes; the network counters are bytes received and

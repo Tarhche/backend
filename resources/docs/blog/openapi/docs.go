@@ -10853,6 +10853,7 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "cpu_percent": {
+                    "description": "CPUPercent is 0 to 100 of all of the CPUs the container can see, which\nare its VM's vCPUs: 100 is every one of them busy.",
                     "type": "number"
                 },
                 "memory_limit": {
@@ -11140,6 +11141,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "cpu_percent": {
+                    "description": "CPUPercent is 0 to 100 of all of the VM's vCPUs together: 100 is every\none of them busy, however many it has.",
                     "type": "number"
                 },
                 "disk_total": {

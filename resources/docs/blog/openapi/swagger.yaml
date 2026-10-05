@@ -1931,6 +1931,9 @@ definitions:
       block_write:
         type: integer
       cpu_percent:
+        description: |-
+          CPUPercent is 0 to 100 of all of the CPUs the container can see, which
+          are its VM's vCPUs: 100 is every one of them busy.
         type: number
       memory_limit:
         type: integer
@@ -2130,6 +2133,9 @@ definitions:
   presenter.Stats:
     properties:
       cpu_percent:
+        description: |-
+          CPUPercent is 0 to 100 of all of the VM's vCPUs together: 100 is every
+          one of them busy, however many it has.
         type: number
       disk_total:
         type: integer

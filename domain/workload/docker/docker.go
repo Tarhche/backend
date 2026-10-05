@@ -170,6 +170,10 @@ type VolumeSpec struct {
 // Stats is one sample of what a container is using. Memory, network and block
 // counters are bytes.
 type Stats struct {
+	// CPUPercent is how busy the container kept the CPUs it can see, which are
+	// its VM's vCPUs, as a share of all of them together: 0 to 100, where
+	// docker's own figure goes up to 100 for each CPU. It means what a VM's
+	// does, so the two can be read side by side.
 	CPUPercent  float64
 	MemoryUsed  uint64
 	MemoryLimit uint64

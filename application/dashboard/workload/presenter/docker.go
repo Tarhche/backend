@@ -64,6 +64,8 @@ type Mount struct {
 // ContainerStats is one sample of what a container uses. Memory, network and
 // block counters are bytes.
 type ContainerStats struct {
+	// CPUPercent is 0 to 100 of all of the CPUs the container can see, which
+	// are its VM's vCPUs: 100 is every one of them busy.
 	CPUPercent  float64   `json:"cpu_percent"`
 	MemoryUsed  uint64    `json:"memory_used"`
 	MemoryLimit uint64    `json:"memory_limit"`
