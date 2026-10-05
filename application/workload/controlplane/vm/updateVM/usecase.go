@@ -168,7 +168,7 @@ func (uc *UseCase) resources(ctx context.Context, v *vm.VM, resources vm.Resourc
 	refused := uc.quota.Limits().Bounds("", v.Kind, resources)
 
 	if resources.Disk < v.Resources.Disk {
-		refused["resources.disk"] = quota.CodeTooSmall
+		refused["resources.disk"] = "disk_cannot_shrink"
 	}
 
 	if len(refused) > 0 {

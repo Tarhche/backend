@@ -45,12 +45,12 @@ func (r *Request) Validate() domain.ValidationErrors {
 		case len(name) == 0:
 			validationErrors["name"] = "required_field"
 		case len(name) > maxNameLength:
-			validationErrors["name"] = "invalid_value"
+			validationErrors["name"] = "invalid_name"
 		}
 	}
 
 	if r.LifetimeSeconds != nil && *r.LifetimeSeconds < 0 {
-		validationErrors["lifetime_seconds"] = "invalid_value"
+		validationErrors["lifetime_seconds"] = "invalid_lifetime"
 	}
 
 	if r.Ports != nil {
@@ -61,11 +61,11 @@ func (r *Request) Validate() domain.ValidationErrors {
 
 	if r.Network != nil {
 		if len(r.Network.Ingress) > 0 && !r.Network.Ingress.IsValid() {
-			validationErrors["network.ingress"] = "invalid_value"
+			validationErrors["network.ingress"] = "invalid_access"
 		}
 
 		if len(r.Network.Egress) > 0 && !r.Network.Egress.IsValid() {
-			validationErrors["network.egress"] = "invalid_value"
+			validationErrors["network.egress"] = "invalid_access"
 		}
 	}
 

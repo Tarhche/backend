@@ -115,7 +115,7 @@ func TestLimits_Lifetime(t *testing.T) {
 	assert.Empty(t, limits.Lifetime("", 0), "kept until it is deleted")
 	assert.Empty(t, limits.Lifetime("", 720*time.Hour))
 	assert.Equal(t, domain.ValidationErrors{"lifetime_seconds": CodeTooLarge}, limits.Lifetime("", 721*time.Hour))
-	assert.Equal(t, domain.ValidationErrors{"lifetime_seconds": "invalid_value"}, limits.Lifetime("", -time.Second))
+	assert.Equal(t, domain.ValidationErrors{"lifetime_seconds": "invalid_lifetime"}, limits.Lifetime("", -time.Second))
 }
 
 func TestQuota_Check(t *testing.T) {

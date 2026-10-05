@@ -170,7 +170,7 @@ func TestUseCase_Execute(t *testing.T) {
 		request.Image = "alpine:3"
 		response, err = f.useCase.Execute(ctx, request)
 		require.NoError(t, err)
-		assert.Equal(t, domain.ValidationErrors{"image": "not_supported"}, response.ValidationErrors)
+		assert.Equal(t, domain.ValidationErrors{"image": "invalid_image"}, response.ValidationErrors)
 	})
 
 	t.Run("a network left out is open both ways", func(t *testing.T) {
@@ -222,10 +222,10 @@ func TestUseCase_Execute(t *testing.T) {
 			want: domain.ValidationErrors{
 				"owner_uuid":       "required_field",
 				"name":             "required_field",
-				"kind":             "invalid_value",
-				"ports":            "invalid_value",
-				"network.ingress":  "invalid_value",
-				"lifetime_seconds": "invalid_value",
+				"kind":             "invalid_kind",
+				"ports":            "invalid_port",
+				"network.ingress":  "invalid_access",
+				"lifetime_seconds": "invalid_lifetime",
 			},
 		},
 		"more ports than a vm may expose": {
@@ -235,11 +235,11 @@ func TestUseCase_Execute(t *testing.T) {
 					r.Ports[i] = port.Port(1000 + i)
 				}
 			},
-			want: domain.ValidationErrors{"ports": "too_large"},
+			want: domain.ValidationErrors{"ports": "too_many_ports"},
 		},
 		"a port there is not": {
 			change: func(r *Request) { r.Ports = []port.Port{65536} },
-			want:   domain.ValidationErrors{"ports": "invalid_value"},
+			want:   domain.ValidationErrors{"ports": "invalid_port"},
 		},
 		"more than one vm may be given": {
 			change: func(r *Request) { r.Resources = Resources{CPUs: 5, Memory: 9 * gib, Disk: 51 * gib} },
@@ -367,7 +367,7 @@ func TestUseCase_Execute(t *testing.T) {
 	}{
 		"one that is not stored yet": {
 			snapshot: snapshot.Snapshot{UUID: "snapshot-uuid", OwnerUUID: "owner-uuid", Kind: vm.KindMachine, State: snapshot.Creating},
-			want:     domain.ValidationErrors{"snapshot_uuid": "not_ready"},
+			want:     domain.ValidationErrors{"snapshot_uuid": "snapshot_not_ready"},
 		},
 		"somebody else's": {
 			snapshot: snapshot.Snapshot{UUID: "snapshot-uuid", OwnerUUID: "other", Kind: vm.KindMachine, State: snapshot.Ready},

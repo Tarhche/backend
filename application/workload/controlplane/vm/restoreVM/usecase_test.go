@@ -73,7 +73,7 @@ func TestUseCase_Execute(t *testing.T) {
 		"one not stored yet": {
 			vm:       vmtest.Running("01", "owner"),
 			snapshot: func() snapshot.Snapshot { s := ready("owner"); s.State = snapshot.Creating; return s }(),
-			want:     domain.ValidationErrors{"snapshot_uuid": "not_ready"},
+			want:     domain.ValidationErrors{"snapshot_uuid": "snapshot_not_ready"},
 		},
 		"one of another kind": {
 			vm:       vmtest.Running("01", "owner"),
@@ -83,7 +83,7 @@ func TestUseCase_Execute(t *testing.T) {
 		"one with a larger disk than the vm's": {
 			vm:       vmtest.Running("01", "owner"),
 			snapshot: func() snapshot.Snapshot { s := ready("owner"); s.Disk = 20 * vmtest.GiB; return s }(),
-			want:     domain.ValidationErrors{"snapshot_uuid": "too_large"},
+			want:     domain.ValidationErrors{"snapshot_uuid": "disk_too_small"},
 		},
 		"one another engine wrote": {
 			vm:       vmtest.Running("01", "owner"),

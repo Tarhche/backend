@@ -111,7 +111,7 @@ func TestUseCase_Execute(t *testing.T) {
 		"a disk does not shrink": {
 			vm:        vmtest.Running("01", "owner"),
 			resources: createVM.Resources{CPUs: 1, Memory: vmtest.GiB, Disk: 5 * vmtest.GiB},
-			want:      domain.ValidationErrors{"resources.disk": "too_small"},
+			want:      domain.ValidationErrors{"resources.disk": "disk_cannot_shrink"},
 		},
 		"more than one vm may be given": {
 			vm:        vmtest.Running("01", "owner"),

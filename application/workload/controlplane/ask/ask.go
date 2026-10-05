@@ -52,3 +52,23 @@ func NotRunning() *noderequest.Error {
 func NotDocker() *noderequest.Error {
 	return noderequest.ErrorOf(vm.ErrNotDocker)
 }
+
+// DockerRefusal is why a VM's dockerd cannot be asked anything, or nil when it
+// can: a Docker VM, placed on a node, running or on its way up. One still
+// booting is waited for by its node, which gives dockerd time to come up.
+func DockerRefusal(v *vm.VM) *noderequest.Error {
+	if v.Kind != vm.KindDocker {
+		return NotDocker()
+	}
+
+	if len(v.NodeName) == 0 {
+		return NotRunning()
+	}
+
+	switch v.CurrentState {
+	case vm.Scheduled, vm.Starting, vm.Restarting, vm.Running:
+		return nil
+	}
+
+	return NotRunning()
+}

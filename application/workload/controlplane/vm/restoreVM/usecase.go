@@ -113,11 +113,11 @@ func (uc *UseCase) snapshot(ctx context.Context, v *vm.VM, uuid string) (snapsho
 
 	switch {
 	case s.State != snapshot.Ready:
-		return s, domain.ValidationErrors{"snapshot_uuid": "not_ready"}, nil
+		return s, domain.ValidationErrors{"snapshot_uuid": "snapshot_not_ready"}, nil
 	case s.Kind != v.Kind:
 		return s, domain.ValidationErrors{"snapshot_uuid": "kind_mismatch"}, nil
 	case s.Disk > v.Resources.Disk:
-		return s, domain.ValidationErrors{"snapshot_uuid": "too_large"}, nil
+		return s, domain.ValidationErrors{"snapshot_uuid": "disk_too_small"}, nil
 	}
 
 	return s, nil, nil

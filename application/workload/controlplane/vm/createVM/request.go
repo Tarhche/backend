@@ -93,7 +93,7 @@ func (r *Request) Validate() domain.ValidationErrors {
 	case len(name) == 0:
 		validationErrors["name"] = "required_field"
 	case len(name) > maxNameLength:
-		validationErrors["name"] = "invalid_value"
+		validationErrors["name"] = "invalid_name"
 	}
 
 	// a VM made from a snapshot is of the snapshot's kind, so it need not say.
@@ -101,7 +101,7 @@ func (r *Request) Validate() domain.ValidationErrors {
 	case len(r.Kind) == 0 && len(r.SnapshotUUID) == 0:
 		validationErrors["kind"] = "required_field"
 	case len(r.Kind) > 0 && !r.Kind.IsValid():
-		validationErrors["kind"] = "invalid_value"
+		validationErrors["kind"] = "invalid_kind"
 	}
 
 	if code, ok := ValidatePorts(r.Ports); !ok {
@@ -109,15 +109,15 @@ func (r *Request) Validate() domain.ValidationErrors {
 	}
 
 	if len(r.Network.Ingress) > 0 && !r.Network.Ingress.IsValid() {
-		validationErrors["network.ingress"] = "invalid_value"
+		validationErrors["network.ingress"] = "invalid_access"
 	}
 
 	if len(r.Network.Egress) > 0 && !r.Network.Egress.IsValid() {
-		validationErrors["network.egress"] = "invalid_value"
+		validationErrors["network.egress"] = "invalid_access"
 	}
 
 	if r.LifetimeSeconds < 0 {
-		validationErrors["lifetime_seconds"] = "invalid_value"
+		validationErrors["lifetime_seconds"] = "invalid_lifetime"
 	}
 
 	return validationErrors
@@ -128,12 +128,12 @@ func (r *Request) Validate() domain.ValidationErrors {
 // refused for it.
 func ValidatePorts(ports []port.Port) (string, bool) {
 	if len(ports) > MaxPorts {
-		return "too_large", false
+		return "too_many_ports", false
 	}
 
 	for _, p := range ports {
 		if p == 0 || p > maxPort {
-			return "invalid_value", false
+			return "invalid_port", false
 		}
 	}
 

@@ -98,3 +98,18 @@ func (d *Dispatcher) deploy(ctx context.Context, s *stack.Stack, v *vm.VM) error
 
 	return d.Ask(ctx, s, v, stack.ActionUp, false)
 }
+
+// Move writes down that a stack is on its way to next, wanted as expected, and
+// asks its VM's node to run the compose command that takes it there.
+func (d *Dispatcher) Move(ctx context.Context, s *stack.Stack, v *vm.VM, next stack.State, expected stack.State, action stack.Action) error {
+	s.State = next
+	s.ExpectedState = expected
+	s.Reason = ""
+	s.UpdatedAt = d.now()
+
+	if _, err := d.stacks.Save(ctx, s); err != nil {
+		return err
+	}
+
+	return d.Ask(ctx, s, v, action, false)
+}

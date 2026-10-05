@@ -97,7 +97,7 @@ func (l Limits) Lifetime(prefix string, lifetime time.Duration) domain.Validatio
 
 	switch {
 	case lifetime < 0:
-		validationErrors[prefix+"lifetime_seconds"] = "invalid_value"
+		validationErrors[prefix+"lifetime_seconds"] = "invalid_lifetime"
 	case l.MaxLifetime > 0 && lifetime > l.MaxLifetime:
 		validationErrors[prefix+"lifetime_seconds"] = CodeTooLarge
 	}

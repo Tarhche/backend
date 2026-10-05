@@ -52,7 +52,7 @@ const (
 	deletePatience = 2 * time.Minute
 
 	// ReasonNotRunning is why a stack whose VM is not coming up failed.
-	ReasonNotRunning = "not_running"
+	ReasonNotRunning = "vm_not_running"
 )
 
 // patience is how long a VM may be on its way somewhere before it is asked

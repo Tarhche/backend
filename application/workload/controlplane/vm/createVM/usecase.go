@@ -145,7 +145,7 @@ func (uc *UseCase) vm(ctx context.Context, request *Request) (vm.VM, domain.Vali
 		// what the snapshot holds.
 		if len(request.SnapshotUUID) == 0 {
 			if len(v.Image) > 0 && v.Image != uc.images.Docker {
-				validationErrors["image"] = "not_supported"
+				validationErrors["image"] = "invalid_image"
 			}
 
 			v.Image = uc.images.Docker
@@ -178,7 +178,7 @@ func (uc *UseCase) fromSnapshot(ctx context.Context, v *vm.VM, snapshotUUID stri
 	}
 
 	if s.State != snapshot.Ready {
-		return domain.ValidationErrors{"snapshot_uuid": "not_ready"}, nil
+		return domain.ValidationErrors{"snapshot_uuid": "snapshot_not_ready"}, nil
 	}
 
 	if len(v.Kind) > 0 && v.Kind != s.Kind {
