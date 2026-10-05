@@ -19,6 +19,7 @@ import (
 	"github.com/khanzadimahdi/testproject/presentation/commands/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/presentation/commands/workload/ingress"
 	"github.com/khanzadimahdi/testproject/presentation/commands/workload/orchestrator"
+	"github.com/khanzadimahdi/testproject/presentation/commands/workload/vmhost"
 )
 
 // the blog's specification documents the blog. The workload services carry
@@ -56,6 +57,11 @@ func main() {
 	c.Register(controlplane.NewServeCommand())
 	c.Register(orchestrator.NewServeCommand())
 	c.Register(ingress.NewServeCommand())
+
+	// a node's engine, served to its orchestrator from the microsandbox
+	// container, and the question its healthcheck asks it
+	c.Register(vmhost.NewServeCommand())
+	c.Register(vmhost.NewCheckCommand())
 
 	// brings what is stored up to what this version reads
 	c.Register(database.NewMigrateCommand())
