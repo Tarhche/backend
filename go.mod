@@ -22,6 +22,7 @@ require (
 	github.com/nats-io/nats.go v1.54.0
 	github.com/sethvargo/go-limiter v1.2.0
 	github.com/stretchr/testify v1.12.1
+	github.com/superradcompany/microsandbox/sdk/go v0.7.6
 	github.com/swaggo/http-swagger/v2 v2.0.2
 	github.com/swaggo/swag v1.16.6
 	github.com/xtaci/smux v1.5.57
