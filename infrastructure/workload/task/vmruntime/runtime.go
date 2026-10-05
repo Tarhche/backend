@@ -127,7 +127,8 @@ func (r *Runtime) Create(ctx context.Context, execution *task.Execution) (string
 		Ports:      portsOf(execution),
 		Network:    execution.NetworkPolicy.VMNetwork(),
 		Labels:     labelsOf(execution),
-		Command:    append(slices.Clone(execution.Entrypoint), execution.Command...),
+		Entrypoint: slices.Clone(execution.Entrypoint),
+		Command:    slices.Clone(execution.Command),
 		Env:        slices.Clone(execution.Environment),
 		WorkingDir: execution.WorkingDirectory,
 	}

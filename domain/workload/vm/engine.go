@@ -75,12 +75,23 @@ type Spec struct {
 	// listing an engine's instances says what each of them is for and whose.
 	Labels map[string]string
 
-	// Command, when set, is the instance's main process: it runs once the
-	// instance boots, its output goes to the logs, and the instance stops when
-	// it exits, keeping its exit code. Only code-runner tasks set it.
+	// Entrypoint and Command, when either is set, make up the instance's main
+	// process, the way a container's are: it runs once the instance boots, its
+	// output goes to the logs, and the instance stops when it exits, keeping its
+	// exit code. A nil Entrypoint keeps the image's own, so a Command alone is
+	// handed to it as arguments, which is what a code runner's image expects;
+	// a nil Command keeps the image's CMD. Only code-runner tasks set either, so
+	// a VM somebody asked for has no main process at all.
+	Entrypoint []string
 	Command    []string
 	Env        []string
 	WorkingDir string
+}
+
+// HasMainProcess reports whether the instance runs a main process of its own,
+// rather than staying up until it is stopped.
+func (s Spec) HasMainProcess() bool {
+	return len(s.Entrypoint) > 0 || len(s.Command) > 0
 }
 
 // InstanceState is what an engine says one of its instances is doing.

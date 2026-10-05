@@ -677,7 +677,7 @@ func (e *Engine) boot(id string, i *instance) {
 	i.reason = ""
 	i.startedAt = e.now()
 
-	if len(i.spec.Command) == 0 || e.main == nil {
+	if !i.spec.HasMainProcess() || e.main == nil {
 		return
 	}
 
@@ -758,6 +758,7 @@ func (e *Engine) view(id string, i *instance) vm.Instance {
 func cloneSpec(spec vm.Spec) vm.Spec {
 	spec.Ports = slices.Clone(spec.Ports)
 	spec.Labels = maps.Clone(spec.Labels)
+	spec.Entrypoint = slices.Clone(spec.Entrypoint)
 	spec.Command = slices.Clone(spec.Command)
 	spec.Env = slices.Clone(spec.Env)
 

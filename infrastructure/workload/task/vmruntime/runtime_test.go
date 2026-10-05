@@ -98,8 +98,10 @@ func TestRuntime_Create(t *testing.T) {
 				"workload.task.image":       "ghcr.io/tarhche/code-runner:go-1.24",
 			},
 
-			// the entrypoint and the command are the process.
-			Command:    []string{"/runner", "--timeout", "30", "fmt.Println(1)"},
+			// the entrypoint and the command stay apart, so an engine can
+			// keep the image's own entrypoint when a task names none.
+			Entrypoint: []string{"/runner"},
+			Command:    []string{"--timeout", "30", "fmt.Println(1)"},
 			Env:        []string{"A=1"},
 			WorkingDir: "/code",
 		}, spec)
