@@ -10,6 +10,12 @@ const (
 	defaultWorkloadVMHostPortRange = "20000-29999"
 	defaultWorkloadVMHostDisk      = 200 << 30 // 200 GiB
 
+	// defaultWorkloadVMHostHome is the volume the vmhost image keeps its
+	// engine's state on.
+	defaultWorkloadVMHostHome = "/data/msb"
+
+	defaultWorkloadVMHostMaxConcurrentBoots = 4
+
 	// defaultWorkloadVMDockerImage is what a Docker VM boots from. The control
 	// plane names it in the specs it sends and a vmhost is given it too, so the
 	// two say the same thing unless somebody makes them differ.
@@ -62,23 +68,38 @@ type WorkloadVMHost struct {
 	Socket string `usage:"Unix socket the engine is served on, which this vmhost's orchestrator shares." env:"WORKLOAD_VMHOST_SOCKET" long:"socket"`
 
 	PortRange     string `usage:"Host ports a VM's published ports are given from, as first-last. What is given is kept across restarts, so a VM keeps its ports." env:"WORKLOAD_VMHOST_PORT_RANGE" long:"port-range"`
-	AdvertiseHost string `usage:"Host this vmhost is reached at on its pair network, which is where its orchestrator dials a VM's published ports." env:"WORKLOAD_VMHOST_ADVERTISE_HOST" long:"advertise-host"`
+	AdvertiseHost string `usage:"This vmhost's own IP on its pair network. A VM's published ports are bound to it, and it is where its orchestrator dials them." env:"WORKLOAD_VMHOST_ADVERTISE_HOST" long:"advertise-host"`
+
+	// OrchestratorAddress is the only address a VM's published ports take a
+	// connection from. Whether anybody outside may reach a VM is decided by the
+	// orchestrator's proxy, which can change its mind at once; the engine fixes
+	// a VM's network when it boots it, so it is told only who the proxy is.
+	OrchestratorAddress string `usage:"IP of this vmhost's orchestrator on their pair network: the only address a VM's published ports accept connections from." env:"WORKLOAD_VMHOST_ORCHESTRATOR_IP" long:"orchestrator-ip"`
+
+	Home string `usage:"Directory the engine keeps its VMs, images and records in. It has to outlive the container." env:"MSB_HOME" long:"home"`
 
 	DockerImage string `usage:"Image a Docker VM boots from: a docker-in-docker image whose dockerd comes up with the VM." env:"WORKLOAD_VMHOST_DOCKER_IMAGE" long:"docker-image"`
 
 	CPUs   uint   `usage:"vCPUs this node offers to VMs. Zero offers every CPU the host has." env:"WORKLOAD_VMHOST_CPUS" long:"cpus"`
 	Memory uint64 `usage:"Memory, in bytes, this node offers to VMs. Zero offers 80% of this container's memory limit, less 512 MiB." env:"WORKLOAD_VMHOST_MEMORY" long:"memory"`
 	Disk   uint64 `usage:"Disk, in bytes, this node offers to VMs." env:"WORKLOAD_VMHOST_DISK" long:"disk"`
+
+	// MaxConcurrentBoots bounds how many VMs boot at once. The engine admits
+	// whatever it is asked for, and a storm of boots starves every one of them
+	// of CPU until creates time out halfway.
+	MaxConcurrentBoots uint `usage:"How many VMs may be booting at once; the rest wait their turn." env:"WORKLOAD_VMHOST_MAX_CONCURRENT_BOOTS" long:"max-concurrent-boots"`
 }
 
 // NewWorkloadVMHost returns the configuration of the vmhost, holding the
 // defaults it runs with until the console overrides them.
 func NewWorkloadVMHost() *WorkloadVMHost {
 	return &WorkloadVMHost{
-		Socket:      defaultWorkloadVMHostSocket,
-		PortRange:   defaultWorkloadVMHostPortRange,
-		DockerImage: defaultWorkloadVMDockerImage,
-		Disk:        defaultWorkloadVMHostDisk,
+		Socket:             defaultWorkloadVMHostSocket,
+		PortRange:          defaultWorkloadVMHostPortRange,
+		Home:               defaultWorkloadVMHostHome,
+		DockerImage:        defaultWorkloadVMDockerImage,
+		Disk:               defaultWorkloadVMHostDisk,
+		MaxConcurrentBoots: defaultWorkloadVMHostMaxConcurrentBoots,
 	}
 }
 
