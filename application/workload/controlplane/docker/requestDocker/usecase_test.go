@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -63,6 +64,28 @@ func TestUseCase_Execute(t *testing.T) {
 		require.NoError(t, err)
 		assert.Nil(t, response.NodeError)
 		assert.Len(t, requester.Asked(), 1)
+	})
+
+	t.Run("a vm its node has not made yet is not running, rather than not there", func(t *testing.T) {
+		t.Parallel()
+
+		// scheduled a moment ago: its node has not listed it, so the node
+		// holds nothing of it to wait for, and would answer that there is no
+		// such vm, which the blog would take for the vm being gone.
+		scheduled := vmtest.Docker("01", "owner")
+		scheduled.CurrentState = vm.Scheduled
+		scheduled.LastHeartbeatAt = time.Time{}
+
+		w := vmtest.New(vmtest.WithVMs(scheduled))
+		requester := &messagingMock.Requester{Answer: func(context.Context, string, noderequest.Request) (noderequest.Reply, error) {
+			return noderequest.Failed(domain.ErrNotExists), nil
+		}}
+
+		response, err := NewUseCase(w.VMs, requester, validator.New(translator.Codes{})).Execute(ctx, &Request{VMUUID: "01", Op: noderequest.OpContainersList})
+		require.NoError(t, err)
+		require.NotNil(t, response.NodeError)
+		assert.Equal(t, noderequest.CodeNotRunning, response.NodeError.Code)
+		assert.Empty(t, requester.Asked(), "its node holds nothing to ask about")
 	})
 
 	for name, tt := range map[string]struct {

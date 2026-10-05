@@ -10,6 +10,7 @@ package requestDocker
 
 import (
 	"context"
+	"time"
 
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/ask"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/owner"
@@ -22,15 +23,18 @@ type UseCase struct {
 	vmRepository vm.Repository
 	requester    noderequest.Requester
 	validator    domain.Validator
+
+	now func() time.Time
 }
 
 func NewUseCase(vmRepository vm.Repository, requester noderequest.Requester, validator domain.Validator) *UseCase {
-	return &UseCase{vmRepository: vmRepository, requester: requester, validator: validator}
+	return &UseCase{vmRepository: vmRepository, requester: requester, validator: validator, now: time.Now}
 }
 
 // Execute asks the VM's dockerd, through the node holding it. A VM that is
-// still coming up is waited for by its node. A VM that is not there, or not the
-// owner's, is domain.ErrNotExists.
+// still coming up is waited for by its node, once its node holds it: one its
+// node has not made yet is not running, rather than not there. A VM that is
+// not there, or not the owner's, is domain.ErrNotExists.
 func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
 	if validationErrors := uc.validator.Validate(request); len(validationErrors) > 0 {
 		return &Response{ValidationErrors: validationErrors}, nil
@@ -42,6 +46,10 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 	}
 
 	if refused := ask.DockerRefusal(&v); refused != nil {
+		return &Response{NodeError: refused}, nil
+	}
+
+	if refused := ask.NotHeld(&v, uc.now()); refused != nil {
 		return &Response{NodeError: refused}, nil
 	}
 

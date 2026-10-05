@@ -204,6 +204,20 @@ func TestContract_VMs(t *testing.T) {
 	require.NoError(t, c.StartVM(ctx, "owner", created.UUID))
 	require.NoError(t, c.RestartVM(ctx, "owner", created.UUID))
 
+	// its node has not made it yet, so there is no log to read: it is not
+	// running, rather than not there.
+	_, err = c.VMLogs(ctx, "owner", created.UUID, vm.LogOptions{Tail: 10})
+	require.ErrorAs(t, err, &refused)
+	assert.Equal(t, domain.ValidationErrors{"vm": "not_running"}, refused.ValidationErrors)
+
+	// its node lists it, and has a log of it from then on.
+	listed, err := w.VMs.GetOne(ctx, created.UUID)
+	require.NoError(t, err)
+
+	listed.LastHeartbeatAt = time.Now()
+	_, err = w.VMs.Save(ctx, &listed)
+	require.NoError(t, err)
+
 	lines, err := c.VMLogs(ctx, "owner", created.UUID, vm.LogOptions{Tail: 10})
 	require.NoError(t, err)
 	require.Len(t, lines, 1)

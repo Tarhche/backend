@@ -6,7 +6,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"time"
 
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/lifecycle"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
@@ -51,6 +53,19 @@ func NotRunning() *noderequest.Error {
 // NotDocker is the answer about a VM that has no dockerd to ask.
 func NotDocker() *noderequest.Error {
 	return noderequest.ErrorOf(vm.ErrNotDocker)
+}
+
+// NotHeld is the answer about a VM its node has not listed lately, or nil when
+// it has. A node answers only for the instances it holds, and one scheduled a
+// moment ago is not made yet: asked about it, the node would say there is no
+// such VM, which whoever asked would take for the VM not being there at all.
+// So it is not asked, and the VM is not running yet, which is so.
+func NotHeld(v *vm.VM, now time.Time) *noderequest.Error {
+	if lifecycle.Listed(v, now) {
+		return nil
+	}
+
+	return NotRunning()
 }
 
 // DockerRefusal is why a VM's dockerd cannot be asked anything, or nil when it

@@ -106,4 +106,25 @@ func TestUseCase_Execute(t *testing.T) {
 		_, err := NewUseCase(w.VMs, &messagingMock.Requester{}, validator.New(translator.Codes{})).Execute(ctx, &Request{OwnerUUID: "other", UUID: "01"})
 		assert.ErrorIs(t, err, domain.ErrNotExists)
 	})
+
+	t.Run("a vm its node has not made yet is not running, rather than not there", func(t *testing.T) {
+		t.Parallel()
+
+		// scheduled a moment ago: its node has not listed it, so the node
+		// holds nothing of it and would answer that there is no such vm.
+		scheduled := vmtest.Running("01", "owner")
+		scheduled.CurrentState = vm.Scheduled
+		scheduled.LastHeartbeatAt = time.Time{}
+
+		w := vmtest.New(vmtest.WithVMs(scheduled))
+		requester := &messagingMock.Requester{Answer: func(context.Context, string, noderequest.Request) (noderequest.Reply, error) {
+			return noderequest.Failed(domain.ErrNotExists), nil
+		}}
+
+		response, err := NewUseCase(w.VMs, requester, validator.New(translator.Codes{})).Execute(ctx, &Request{OwnerUUID: "owner", UUID: "01"})
+		require.NoError(t, err)
+		require.NotNil(t, response.NodeError)
+		assert.Equal(t, noderequest.CodeNotRunning, response.NodeError.Code)
+		assert.Empty(t, requester.Asked(), "its node holds nothing to ask about")
+	})
 }
