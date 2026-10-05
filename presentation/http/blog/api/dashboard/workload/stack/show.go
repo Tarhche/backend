@@ -22,8 +22,8 @@ func NewShowHandler(useCase *getStack.UseCase, owner workload.Owner) *showHandle
 // @Produce		json
 // @Param			uuid	path		string	true	"Stack UUID"
 // @Success		200		{object}	getStack.Response
-// @Failure		404		{object}	map[string]interface{}
-// @Failure		500		{object}	map[string]interface{}
+// @Failure		404		{object}	workload.Failure
+// @Failure		500		{object}	workload.Failure
 // @Router			/dashboard/workload/stacks/{uuid} [get]
 // @Router			/dashboard/my/workload/stacks/{uuid} [get]
 func (h *showHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {

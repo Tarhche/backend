@@ -23,9 +23,9 @@ func NewCreateHandler(useCase *createContainer.UseCase) *createHandler {
 // @Param			body	body		createContainer.Request	true	"Container"
 // @Success		201		{object}	createContainer.Response
 // @Failure		400		{object}	workload.Refusal
-// @Failure		404		{object}	map[string]interface{}
-// @Failure		500		{object}	map[string]interface{}
-// @Failure		504		{object}	map[string]interface{}
+// @Failure		404		{object}	workload.Failure
+// @Failure		500		{object}	workload.Failure
+// @Failure		504		{object}	workload.Failure
 // @Router			/dashboard/workload/containers [post]
 func (h *createHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	var request createContainer.Request

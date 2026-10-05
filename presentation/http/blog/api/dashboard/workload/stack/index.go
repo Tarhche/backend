@@ -23,7 +23,7 @@ func NewIndexHandler(useCase *getStacks.UseCase, owner workload.Owner) *indexHan
 // @Param			page	query		int		false	"Page"	default(1)
 // @Param			vm		query		string	false	"Only the stacks deployed into this VM"
 // @Success		200		{object}	getStacks.Response
-// @Failure		500		{object}	map[string]interface{}
+// @Failure		500		{object}	workload.Failure
 // @Router			/dashboard/workload/stacks [get]
 // @Router			/dashboard/my/workload/stacks [get]
 func (h *indexHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {

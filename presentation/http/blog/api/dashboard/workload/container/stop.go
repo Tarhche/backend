@@ -23,8 +23,8 @@ func NewStopHandler(useCase *stopContainer.UseCase, owner workload.Owner) *stopH
 // @Param			id		path		string	true	"Container id or name"
 // @Success		204		{object}	map[string]interface{}
 // @Failure		400		{object}	workload.Refusal
-// @Failure		404		{object}	map[string]interface{}
-// @Failure		500		{object}	map[string]interface{}
+// @Failure		404		{object}	workload.Failure
+// @Failure		500		{object}	workload.Failure
 // @Router			/dashboard/workload/vms/{uuid}/containers/{id}/stop [post]
 // @Router			/dashboard/my/workload/vms/{uuid}/containers/{id}/stop [post]
 func (h *stopHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {

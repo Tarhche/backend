@@ -23,7 +23,7 @@ func NewIndexHandler(useCase *getContainers.UseCase, owner workload.Owner) *inde
 // @Param			vm	query		string	false	"Only the containers of this Docker VM"
 // @Success		200	{object}	getContainers.Response
 // @Failure		400	{object}	workload.Refusal
-// @Failure		500	{object}	map[string]interface{}
+// @Failure		500	{object}	workload.Failure
 // @Router			/dashboard/workload/containers [get]
 // @Router			/dashboard/my/workload/containers [get]
 func (h *indexHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {

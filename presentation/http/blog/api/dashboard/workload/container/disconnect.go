@@ -24,8 +24,8 @@ func NewDisconnectHandler(useCase *disconnectNetwork.UseCase, owner workload.Own
 // @Param			network	path		string	true	"Network id or name"
 // @Success		204		{object}	map[string]interface{}
 // @Failure		400		{object}	workload.Refusal
-// @Failure		404		{object}	map[string]interface{}
-// @Failure		500		{object}	map[string]interface{}
+// @Failure		404		{object}	workload.Failure
+// @Failure		500		{object}	workload.Failure
 // @Router			/dashboard/workload/vms/{uuid}/containers/{id}/networks/{network} [delete]
 // @Router			/dashboard/my/workload/vms/{uuid}/containers/{id}/networks/{network} [delete]
 func (h *disconnectHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {

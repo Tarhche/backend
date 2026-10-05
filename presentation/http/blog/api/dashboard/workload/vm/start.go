@@ -22,8 +22,8 @@ func NewStartHandler(useCase *startVM.UseCase, owner workload.Owner) *startHandl
 // @Param			uuid	path		string	true	"VM UUID"
 // @Success		202		{object}	map[string]interface{}
 // @Failure		400		{object}	workload.Refusal
-// @Failure		404		{object}	map[string]interface{}
-// @Failure		500		{object}	map[string]interface{}
+// @Failure		404		{object}	workload.Failure
+// @Failure		500		{object}	workload.Failure
 // @Router			/dashboard/workload/vms/{uuid}/start [post]
 // @Router			/dashboard/my/workload/vms/{uuid}/start [post]
 func (h *startHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {

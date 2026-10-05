@@ -20,6 +20,7 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/auth"
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 	infraTrace "github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
 )
 
@@ -44,27 +45,47 @@ type Refusal struct {
 	Errors domain.ValidationErrors `json:"errors"`
 }
 
+// Failure is what a request that could not be answered is answered with: the
+// workload's word for why, which a client says in its reader's language, and
+// what the node said about it when that says more.
+type Failure struct {
+	Code    string `json:"code"`
+	Message string `json:"message,omitempty"`
+}
+
 // Failed answers a request that could not be answered, and reports whether
 // there was one: nothing is written for a nil error.
 //
-// Something that is not there is not found. A request the workload took too
-// long over is a gateway timeout rather than a failure, since what was asked
-// for may still be under way: a pull carries on after whoever asked has
-// stopped waiting. Anything else failed.
+// Something that is not there, or not the caller's, is not found. A request
+// the workload took too long over is a gateway timeout rather than a failure,
+// since what was asked for may still be under way: a pull carries on after
+// whoever asked has stopped waiting. Anything else failed, and what it failed
+// with stays in the trace: it is ours to read, not the caller's.
 func Failed(rw http.ResponseWriter, r *http.Request, err error) bool {
 	switch {
 	case err == nil:
 		return false
 	case errors.Is(err, domain.ErrNotExists):
-		rw.WriteHeader(http.StatusNotFound)
+		JSON(rw, http.StatusNotFound, Failure{Code: string(noderequest.CodeNotFound), Message: said(err)})
 	case errors.Is(err, context.DeadlineExceeded):
-		rw.WriteHeader(http.StatusGatewayTimeout)
+		JSON(rw, http.StatusGatewayTimeout, Failure{Code: string(noderequest.CodeTimeout), Message: said(err)})
 	default:
 		infraTrace.RecordError(trace.SpanFromContext(r.Context()), err)
-		rw.WriteHeader(http.StatusInternalServerError)
+		JSON(rw, http.StatusInternalServerError, Failure{Code: string(noderequest.CodeInternal)})
 	}
 
 	return true
+}
+
+// said is what a node said about what it could not do, which is docker's or
+// the engine's own words about the VM: what was not there, or what took too
+// long. Nothing else that fails is put in words for the caller.
+func said(err error) string {
+	if node, ok := errors.AsType[*noderequest.Error](err); ok {
+		return node.Message
+	}
+
+	return ""
 }
 
 // Refused answers a request that was refused, and reports whether it was.

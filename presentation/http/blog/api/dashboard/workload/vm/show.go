@@ -22,8 +22,8 @@ func NewShowHandler(useCase *getVM.UseCase, owner workload.Owner) *showHandler {
 // @Produce		json
 // @Param			uuid	path		string	true	"VM UUID"
 // @Success		200		{object}	getVM.Response
-// @Failure		404		{object}	map[string]interface{}
-// @Failure		500		{object}	map[string]interface{}
+// @Failure		404		{object}	workload.Failure
+// @Failure		500		{object}	workload.Failure
 // @Router			/dashboard/workload/vms/{uuid} [get]
 // @Router			/dashboard/my/workload/vms/{uuid} [get]
 func (h *showHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {

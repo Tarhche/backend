@@ -25,9 +25,9 @@ func NewPullHandler(useCase *pullImage.UseCase, owner workload.Owner) *pullHandl
 // @Param			body	body		pullImage.Request	true	"The image"
 // @Success		201		{object}	presenter.Image
 // @Failure		400		{object}	workload.Refusal
-// @Failure		404		{object}	map[string]interface{}
-// @Failure		500		{object}	map[string]interface{}
-// @Failure		504		{object}	map[string]interface{}
+// @Failure		404		{object}	workload.Failure
+// @Failure		500		{object}	workload.Failure
+// @Failure		504		{object}	workload.Failure
 // @Router			/dashboard/workload/vms/{uuid}/images [post]
 // @Router			/dashboard/my/workload/vms/{uuid}/images [post]
 func (h *pullHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {

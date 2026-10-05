@@ -23,7 +23,7 @@ func NewIndexHandler(useCase *getSnapshots.UseCase, owner workload.Owner) *index
 // @Param			page	query		int		false	"Page"	default(1)
 // @Param			vm		query		string	false	"Only the snapshots of this VM"
 // @Success		200		{object}	getSnapshots.Response
-// @Failure		500		{object}	map[string]interface{}
+// @Failure		500		{object}	workload.Failure
 // @Router			/dashboard/workload/snapshots [get]
 // @Router			/dashboard/my/workload/snapshots [get]
 func (h *indexHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {

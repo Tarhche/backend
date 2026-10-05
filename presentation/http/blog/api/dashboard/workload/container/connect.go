@@ -25,8 +25,8 @@ func NewConnectHandler(useCase *connectNetwork.UseCase, owner workload.Owner) *c
 // @Param			body	body		connectNetwork.Request	true	"The network"
 // @Success		204		{object}	map[string]interface{}
 // @Failure		400		{object}	workload.Refusal
-// @Failure		404		{object}	map[string]interface{}
-// @Failure		500		{object}	map[string]interface{}
+// @Failure		404		{object}	workload.Failure
+// @Failure		500		{object}	workload.Failure
 // @Router			/dashboard/workload/vms/{uuid}/containers/{id}/networks [post]
 // @Router			/dashboard/my/workload/vms/{uuid}/containers/{id}/networks [post]
 func (h *connectHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {

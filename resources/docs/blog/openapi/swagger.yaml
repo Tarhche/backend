@@ -1911,7 +1911,10 @@ definitions:
       stack:
         description: |-
           Stack and Service are the compose project and service it belongs to,
-          when a stack deployed it. The project is the stack's slug.
+          when a stack deployed it. The project is the stack's slug, and
+          StackUUID is the stack's uuid when the request could see that stack.
+        type: string
+      stack_uuid:
         type: string
       state:
         description: |-
@@ -2252,7 +2255,10 @@ definitions:
       stack:
         description: |-
           Stack and Service are the compose project and service it belongs to,
-          when a stack deployed it. The project is the stack's slug.
+          when a stack deployed it. The project is the stack's slug, and
+          StackUUID is the stack's uuid when the request could see that stack.
+        type: string
+      stack_uuid:
         type: string
       state:
         description: |-
@@ -2587,6 +2593,13 @@ definitions:
       token:
         type: string
       username:
+        type: string
+    type: object
+  workload.Failure:
+    properties:
+      code:
+        type: string
+      message:
         type: string
     type: object
   workload.Refusal:
@@ -4381,8 +4394,7 @@ paths:
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: List containers across Docker VMs
       tags:
       - dashboard workload containers
@@ -4410,8 +4422,7 @@ paths:
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: List snapshots
       tags:
       - dashboard workload snapshots
@@ -4437,13 +4448,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Delete a snapshot
       tags:
       - dashboard workload snapshots
@@ -4465,13 +4474,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Show a snapshot
       tags:
       - dashboard workload snapshots
@@ -4506,13 +4513,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Rename a snapshot
       tags:
       - dashboard workload snapshots
@@ -4540,8 +4545,7 @@ paths:
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: List stacks
       tags:
       - dashboard workload stacks
@@ -4572,13 +4576,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Delete a stack
       tags:
       - dashboard workload stacks
@@ -4602,13 +4604,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Show a stack
       tags:
       - dashboard workload stacks
@@ -4634,13 +4634,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Restart a stack
       tags:
       - dashboard workload stacks
@@ -4667,13 +4665,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Start a stack
       tags:
       - dashboard workload stacks
@@ -4699,13 +4695,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Stop a stack
       tags:
       - dashboard workload stacks
@@ -4740,8 +4734,7 @@ paths:
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: List VMs
       tags:
       - dashboard workload vms
@@ -4768,13 +4761,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Delete a VM
       tags:
       - dashboard workload vms
@@ -4797,13 +4788,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Show a VM
       tags:
       - dashboard workload vms
@@ -4839,13 +4828,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Change a VM
       tags:
       - dashboard workload vms
@@ -4873,13 +4860,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: List a Docker VM's containers
       tags:
       - dashboard workload containers
@@ -4915,13 +4900,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Remove a container
       tags:
       - dashboard workload containers
@@ -4952,13 +4935,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Show a container
       tags:
       - dashboard workload containers
@@ -4999,13 +4980,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Container logs
       tags:
       - dashboard workload containers
@@ -5045,13 +5024,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Connect a container to a network
       tags:
       - dashboard workload containers
@@ -5087,13 +5064,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Disconnect a container from a network
       tags:
       - dashboard workload containers
@@ -5124,13 +5099,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Restart a container
       tags:
       - dashboard workload containers
@@ -5162,13 +5135,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Start a container
       tags:
       - dashboard workload containers
@@ -5201,13 +5172,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Container stats
       tags:
       - dashboard workload containers
@@ -5239,13 +5208,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Stop a container
       tags:
       - dashboard workload containers
@@ -5272,13 +5239,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: List a Docker VM's images
       tags:
       - dashboard workload images
@@ -5313,18 +5278,15 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "504":
           description: Gateway Timeout
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Pull an image
       tags:
       - dashboard workload images
@@ -5360,13 +5322,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Remove an image
       tags:
       - dashboard workload images
@@ -5402,13 +5362,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: VM logs
       tags:
       - dashboard workload vms
@@ -5436,13 +5394,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: List a Docker VM's networks
       tags:
       - dashboard workload networks
@@ -5477,13 +5433,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Create a network
       tags:
       - dashboard workload networks
@@ -5515,13 +5469,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Remove a network
       tags:
       - dashboard workload networks
@@ -5547,13 +5499,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Restart a VM
       tags:
       - dashboard workload vms
@@ -5589,13 +5539,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Restore a VM from a snapshot
       tags:
       - dashboard workload vms
@@ -5621,13 +5569,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Start a VM
       tags:
       - dashboard workload vms
@@ -5653,13 +5599,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Stop a VM
       tags:
       - dashboard workload vms
@@ -5686,13 +5630,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: List a Docker VM's volumes
       tags:
       - dashboard workload volumes
@@ -5727,13 +5669,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Create a volume
       tags:
       - dashboard workload volumes
@@ -5769,13 +5709,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Remove a volume
       tags:
       - dashboard workload volumes
@@ -6314,8 +6252,7 @@ paths:
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: List containers across Docker VMs
       tags:
       - dashboard workload containers
@@ -6348,18 +6285,15 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "504":
           description: Gateway Timeout
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Create a container
       tags:
       - dashboard workload containers
@@ -6387,8 +6321,7 @@ paths:
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: List snapshots
       tags:
       - dashboard workload snapshots
@@ -6414,13 +6347,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Delete a snapshot
       tags:
       - dashboard workload snapshots
@@ -6442,13 +6373,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Show a snapshot
       tags:
       - dashboard workload snapshots
@@ -6483,13 +6412,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Rename a snapshot
       tags:
       - dashboard workload snapshots
@@ -6517,8 +6444,7 @@ paths:
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: List stacks
       tags:
       - dashboard workload stacks
@@ -6550,13 +6476,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Deploy a stack
       tags:
       - dashboard workload stacks
@@ -6587,13 +6511,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Delete a stack
       tags:
       - dashboard workload stacks
@@ -6617,13 +6539,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Show a stack
       tags:
       - dashboard workload stacks
@@ -6649,13 +6569,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Restart a stack
       tags:
       - dashboard workload stacks
@@ -6682,13 +6600,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Start a stack
       tags:
       - dashboard workload stacks
@@ -6714,13 +6630,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Stop a stack
       tags:
       - dashboard workload stacks
@@ -6755,8 +6669,7 @@ paths:
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: List VMs
       tags:
       - dashboard workload vms
@@ -6786,8 +6699,7 @@ paths:
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Create a VM
       tags:
       - dashboard workload vms
@@ -6814,13 +6726,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Delete a VM
       tags:
       - dashboard workload vms
@@ -6843,13 +6753,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Show a VM
       tags:
       - dashboard workload vms
@@ -6885,13 +6793,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Change a VM
       tags:
       - dashboard workload vms
@@ -6919,13 +6825,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: List a Docker VM's containers
       tags:
       - dashboard workload containers
@@ -6961,13 +6865,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Remove a container
       tags:
       - dashboard workload containers
@@ -6998,13 +6900,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Show a container
       tags:
       - dashboard workload containers
@@ -7045,13 +6945,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Container logs
       tags:
       - dashboard workload containers
@@ -7091,13 +6989,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Connect a container to a network
       tags:
       - dashboard workload containers
@@ -7133,13 +7029,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Disconnect a container from a network
       tags:
       - dashboard workload containers
@@ -7170,13 +7064,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Restart a container
       tags:
       - dashboard workload containers
@@ -7208,13 +7100,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Start a container
       tags:
       - dashboard workload containers
@@ -7247,13 +7137,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Container stats
       tags:
       - dashboard workload containers
@@ -7285,13 +7173,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Stop a container
       tags:
       - dashboard workload containers
@@ -7318,13 +7204,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: List a Docker VM's images
       tags:
       - dashboard workload images
@@ -7359,18 +7243,15 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "504":
           description: Gateway Timeout
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Pull an image
       tags:
       - dashboard workload images
@@ -7406,13 +7287,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Remove an image
       tags:
       - dashboard workload images
@@ -7448,13 +7327,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: VM logs
       tags:
       - dashboard workload vms
@@ -7482,13 +7359,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: List a Docker VM's networks
       tags:
       - dashboard workload networks
@@ -7523,13 +7398,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Create a network
       tags:
       - dashboard workload networks
@@ -7561,13 +7434,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Remove a network
       tags:
       - dashboard workload networks
@@ -7593,13 +7464,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Restart a VM
       tags:
       - dashboard workload vms
@@ -7635,13 +7504,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Restore a VM from a snapshot
       tags:
       - dashboard workload vms
@@ -7677,13 +7544,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Take a snapshot
       tags:
       - dashboard workload snapshots
@@ -7709,13 +7574,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Start a VM
       tags:
       - dashboard workload vms
@@ -7741,13 +7604,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Stop a VM
       tags:
       - dashboard workload vms
@@ -7774,13 +7635,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: List a Docker VM's volumes
       tags:
       - dashboard workload volumes
@@ -7815,13 +7674,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Create a volume
       tags:
       - dashboard workload volumes
@@ -7857,13 +7714,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
       summary: Remove a volume
       tags:
       - dashboard workload volumes

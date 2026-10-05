@@ -23,8 +23,8 @@ func NewRestartHandler(useCase *restartContainer.UseCase, owner workload.Owner) 
 // @Param			id		path		string	true	"Container id or name"
 // @Success		204		{object}	map[string]interface{}
 // @Failure		400		{object}	workload.Refusal
-// @Failure		404		{object}	map[string]interface{}
-// @Failure		500		{object}	map[string]interface{}
+// @Failure		404		{object}	workload.Failure
+// @Failure		500		{object}	workload.Failure
 // @Router			/dashboard/workload/vms/{uuid}/containers/{id}/restart [post]
 // @Router			/dashboard/my/workload/vms/{uuid}/containers/{id}/restart [post]
 func (h *restartHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {

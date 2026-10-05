@@ -23,7 +23,7 @@ func NewCreateHandler(useCase *createVM.UseCase) *createHandler {
 // @Param			body	body		createVM.Request	true	"VM"
 // @Success		201		{object}	presenter.VM
 // @Failure		400		{object}	workload.Refusal
-// @Failure		500		{object}	map[string]interface{}
+// @Failure		500		{object}	workload.Failure
 // @Router			/dashboard/workload/vms [post]
 func (h *createHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	var request createVM.Request

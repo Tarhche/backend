@@ -23,8 +23,8 @@ func NewVMIndexHandler(useCase *getVMContainers.UseCase, owner workload.Owner) *
 // @Param			uuid	path		string	true	"VM UUID"
 // @Success		200		{object}	getVMContainers.Response
 // @Failure		400		{object}	workload.Refusal
-// @Failure		404		{object}	map[string]interface{}
-// @Failure		500		{object}	map[string]interface{}
+// @Failure		404		{object}	workload.Failure
+// @Failure		500		{object}	workload.Failure
 // @Router			/dashboard/workload/vms/{uuid}/containers [get]
 // @Router			/dashboard/my/workload/vms/{uuid}/containers [get]
 func (h *vmIndexHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {

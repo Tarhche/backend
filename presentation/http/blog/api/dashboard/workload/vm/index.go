@@ -24,7 +24,7 @@ func NewIndexHandler(useCase *getVMs.UseCase, owner workload.Owner) *indexHandle
 // @Param			kind	query		string	false	"Only VMs of this kind"	Enums(machine, docker)
 // @Success		200		{object}	getVMs.Response
 // @Failure		400		{object}	workload.Refusal
-// @Failure		500		{object}	map[string]interface{}
+// @Failure		500		{object}	workload.Failure
 // @Router			/dashboard/workload/vms [get]
 // @Router			/dashboard/my/workload/vms [get]
 func (h *indexHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {

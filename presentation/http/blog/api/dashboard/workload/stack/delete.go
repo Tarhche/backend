@@ -23,8 +23,8 @@ func NewDeleteHandler(useCase *deleteStack.UseCase, owner workload.Owner) *delet
 // @Param			volumes	query		bool	false	"Remove its volumes too"
 // @Success		202		{object}	map[string]interface{}
 // @Failure		400		{object}	workload.Refusal
-// @Failure		404		{object}	map[string]interface{}
-// @Failure		500		{object}	map[string]interface{}
+// @Failure		404		{object}	workload.Failure
+// @Failure		500		{object}	workload.Failure
 // @Router			/dashboard/workload/stacks/{uuid} [delete]
 // @Router			/dashboard/my/workload/stacks/{uuid} [delete]
 func (h *deleteHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {

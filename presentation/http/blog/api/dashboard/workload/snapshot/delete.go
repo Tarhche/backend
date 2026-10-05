@@ -22,8 +22,8 @@ func NewDeleteHandler(useCase *deleteSnapshot.UseCase, owner workload.Owner) *de
 // @Param			uuid	path		string	true	"Snapshot UUID"
 // @Success		204		{object}	map[string]interface{}
 // @Failure		400		{object}	workload.Refusal
-// @Failure		404		{object}	map[string]interface{}
-// @Failure		500		{object}	map[string]interface{}
+// @Failure		404		{object}	workload.Failure
+// @Failure		500		{object}	workload.Failure
 // @Router			/dashboard/workload/snapshots/{uuid} [delete]
 // @Router			/dashboard/my/workload/snapshots/{uuid} [delete]
 func (h *deleteHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {

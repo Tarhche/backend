@@ -24,8 +24,8 @@ func NewRestoreHandler(useCase *restoreVM.UseCase, owner workload.Owner) *restor
 // @Param			body	body		restoreVM.Request	true	"The snapshot"
 // @Success		202		{object}	map[string]interface{}
 // @Failure		400		{object}	workload.Refusal
-// @Failure		404		{object}	map[string]interface{}
-// @Failure		500		{object}	map[string]interface{}
+// @Failure		404		{object}	workload.Failure
+// @Failure		500		{object}	workload.Failure
 // @Router			/dashboard/workload/vms/{uuid}/restore [post]
 // @Router			/dashboard/my/workload/vms/{uuid}/restore [post]
 func (h *restoreHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {

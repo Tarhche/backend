@@ -25,8 +25,8 @@ func NewUpdateHandler(useCase *updateVM.UseCase, owner workload.Owner) *updateHa
 // @Param			body	body		updateVM.Request	true	"What changes"
 // @Success		200		{object}	presenter.VM
 // @Failure		400		{object}	workload.Refusal
-// @Failure		404		{object}	map[string]interface{}
-// @Failure		500		{object}	map[string]interface{}
+// @Failure		404		{object}	workload.Failure
+// @Failure		500		{object}	workload.Failure
 // @Router			/dashboard/workload/vms/{uuid} [patch]
 // @Router			/dashboard/my/workload/vms/{uuid} [patch]
 func (h *updateHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {

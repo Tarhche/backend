@@ -24,8 +24,8 @@ func NewCreateHandler(useCase *createSnapshot.UseCase) *createHandler {
 // @Param			body	body		createSnapshot.Request	true	"Snapshot"
 // @Success		201		{object}	presenter.Snapshot
 // @Failure		400		{object}	workload.Refusal
-// @Failure		404		{object}	map[string]interface{}
-// @Failure		500		{object}	map[string]interface{}
+// @Failure		404		{object}	workload.Failure
+// @Failure		500		{object}	workload.Failure
 // @Router			/dashboard/workload/vms/{uuid}/snapshots [post]
 func (h *createHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	var request createSnapshot.Request

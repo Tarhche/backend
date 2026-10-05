@@ -22,8 +22,8 @@ func NewShowHandler(useCase *getSnapshot.UseCase, owner workload.Owner) *showHan
 // @Produce		json
 // @Param			uuid	path		string	true	"Snapshot UUID"
 // @Success		200		{object}	getSnapshot.Response
-// @Failure		404		{object}	map[string]interface{}
-// @Failure		500		{object}	map[string]interface{}
+// @Failure		404		{object}	workload.Failure
+// @Failure		500		{object}	workload.Failure
 // @Router			/dashboard/workload/snapshots/{uuid} [get]
 // @Router			/dashboard/my/workload/snapshots/{uuid} [get]
 func (h *showHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {

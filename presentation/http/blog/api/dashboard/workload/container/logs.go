@@ -26,8 +26,8 @@ func NewLogsHandler(useCase *getContainerLogs.UseCase, owner workload.Owner) *lo
 // @Param			tail	query		int		false	"Only the last this many lines"
 // @Success		200		{object}	getContainerLogs.Response
 // @Failure		400		{object}	workload.Refusal
-// @Failure		404		{object}	map[string]interface{}
-// @Failure		500		{object}	map[string]interface{}
+// @Failure		404		{object}	workload.Failure
+// @Failure		500		{object}	workload.Failure
 // @Router			/dashboard/workload/vms/{uuid}/containers/{id}/logs [get]
 // @Router			/dashboard/my/workload/vms/{uuid}/containers/{id}/logs [get]
 func (h *logsHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {

@@ -25,8 +25,8 @@ func NewCreateHandler(useCase *createNetwork.UseCase, owner workload.Owner) *cre
 // @Param			body	body		createNetwork.Request	true	"Network"
 // @Success		201		{object}	presenter.DockerNetwork
 // @Failure		400		{object}	workload.Refusal
-// @Failure		404		{object}	map[string]interface{}
-// @Failure		500		{object}	map[string]interface{}
+// @Failure		404		{object}	workload.Failure
+// @Failure		500		{object}	workload.Failure
 // @Router			/dashboard/workload/vms/{uuid}/networks [post]
 // @Router			/dashboard/my/workload/vms/{uuid}/networks [post]
 func (h *createHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {

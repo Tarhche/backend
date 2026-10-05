@@ -24,8 +24,8 @@ func NewDeleteHandler(useCase *deleteContainer.UseCase, owner workload.Owner) *d
 // @Param			force	query		bool	false	"Remove it even while it runs"
 // @Success		204		{object}	map[string]interface{}
 // @Failure		400		{object}	workload.Refusal
-// @Failure		404		{object}	map[string]interface{}
-// @Failure		500		{object}	map[string]interface{}
+// @Failure		404		{object}	workload.Failure
+// @Failure		500		{object}	workload.Failure
 // @Router			/dashboard/workload/vms/{uuid}/containers/{id} [delete]
 // @Router			/dashboard/my/workload/vms/{uuid}/containers/{id} [delete]
 func (h *deleteHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {

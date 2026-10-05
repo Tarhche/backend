@@ -23,8 +23,8 @@ func NewDeleteHandler(useCase *deleteNetwork.UseCase, owner workload.Owner) *del
 // @Param			id	path		string	true	"Network id or name"
 // @Success		204		{object}	map[string]interface{}
 // @Failure		400		{object}	workload.Refusal
-// @Failure		404		{object}	map[string]interface{}
-// @Failure		500		{object}	map[string]interface{}
+// @Failure		404		{object}	workload.Failure
+// @Failure		500		{object}	workload.Failure
 // @Router			/dashboard/workload/vms/{uuid}/networks/{id} [delete]
 // @Router			/dashboard/my/workload/vms/{uuid}/networks/{id} [delete]
 func (h *deleteHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {

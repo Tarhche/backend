@@ -24,8 +24,8 @@ func NewShowHandler(useCase *getContainer.UseCase, owner workload.Owner) *showHa
 // @Param			id		path		string	true	"Container id or name"
 // @Success		200		{object}	presenter.Container
 // @Failure		400		{object}	workload.Refusal
-// @Failure		404		{object}	map[string]interface{}
-// @Failure		500		{object}	map[string]interface{}
+// @Failure		404		{object}	workload.Failure
+// @Failure		500		{object}	workload.Failure
 // @Router			/dashboard/workload/vms/{uuid}/containers/{id} [get]
 // @Router			/dashboard/my/workload/vms/{uuid}/containers/{id} [get]
 func (h *showHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
