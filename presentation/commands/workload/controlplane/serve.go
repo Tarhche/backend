@@ -15,6 +15,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers"
+	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers/core"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers/workload"
 )
 
@@ -83,14 +84,14 @@ func (c *ServeCommand) Configure(flagSet *console.FlagSet) {
 // Providers returns the service providers required to serve the workload control plane.
 func (c *ServeCommand) Providers() []provider.Provider {
 	return []provider.Provider{
-		providers.NewConfigsProvider(c.configs),
-		providers.NewOpenTelemetryProvider("workload-controlplane", "workload-controlplane"),
-		providers.NewProfilerProvider("workload-controlplane"),
+		core.NewConfigsProvider(c.configs),
+		core.NewOpenTelemetryProvider("workload-controlplane", "workload-controlplane"),
+		core.NewProfilerProvider("workload-controlplane"),
 		providers.NewMongodbProvider(),
 		providers.NewNatsProvider(),
 		providers.NewTranslationProvider(),
 		providers.NewValidationProvider(),
-		providers.NewContainerProvider(),
+		core.NewContainerProvider(),
 		workload.NewManagerProvider(),
 		c,
 	}
