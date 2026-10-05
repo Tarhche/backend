@@ -37,13 +37,21 @@ func (uc *TaskRan) Handle(ctx context.Context, data []byte) error {
 
 	endpoints := toEndpoints(taskRan.Endpoints)
 
+	// when its run started, which only the node holding it can say. It is
+	// taken whenever the node says one it did not say before, rather than only
+	// as the task comes up: by the time this is heard, the heartbeat it came
+	// from has already said the task is running, and a run that starts again
+	// is counted from then. A node that does not say leaves what was known.
+	started := !taskRan.StartedAt.IsZero() && !taskRan.StartedAt.Equal(t.StartedAt)
+
 	// a running task heartbeats several times a second, and each beat
 	// reaches here. Only what has actually changed is worth a write: the
 	// endpoints, because a restarted task comes back on new host ports,
-	// and the state, the first time it comes up.
+	// when it started, and the state, the first time it comes up.
 	changed := t.NodeName != taskRan.NodeName ||
 		t.ExecutionID != taskRan.ExecutionID ||
 		!t.Deadline.Equal(taskRan.Deadline) ||
+		started ||
 		!slices.Equal(t.Endpoints, endpoints)
 
 	t.NodeName = taskRan.NodeName
@@ -54,9 +62,12 @@ func (uc *TaskRan) Handle(ctx context.Context, data []byte) error {
 	// knows: a task that came back is running against a new one.
 	t.Deadline = taskRan.Deadline
 
+	if started {
+		t.StartedAt = taskRan.StartedAt
+	}
+
 	if t.CurrentState != task.Running {
 		t.CurrentState = task.Running
-		t.StartedAt = taskRan.StartedAt
 		changed = true
 	}
 

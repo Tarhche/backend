@@ -6,15 +6,18 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	deletetask "github.com/khanzadimahdi/testproject/application/workload/controlplane/task/deleteTask"
 	killtask "github.com/khanzadimahdi/testproject/application/workload/controlplane/task/killTask"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/task/runTask"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 	"github.com/khanzadimahdi/testproject/domain/workload/task/events"
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
+	tasksMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/tasks"
 	logsMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/logs"
 	tasksMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/tasks"
 	"github.com/khanzadimahdi/testproject/infrastructure/translator"
@@ -400,5 +403,117 @@ func TestHeartbeat_Handle_comingBack(t *testing.T) {
 
 		require.NoError(t, handler(&tasks, &producer, logsMock.NewInMemoryRepository()).
 			Handle(context.Background(), payload))
+	})
+}
+
+// delivering is the control plane's messages as it hears them: each one a
+// heartbeat produces is kept, and handed there and then to the handler
+// subscribed to it, when there is one here.
+type delivering struct {
+	messagingMock.Recorder
+
+	handlers map[string]domain.MessageHandler
+}
+
+func (d *delivering) Produce(ctx context.Context, subject string, payload []byte) error {
+	if err := d.Recorder.Produce(ctx, subject, payload); err != nil {
+		return err
+	}
+
+	if handler, ok := d.handlers[subject]; ok {
+		return handler.Handle(ctx, payload)
+	}
+
+	return nil
+}
+
+func TestHeartbeat_Handle_started(t *testing.T) {
+	t.Parallel()
+
+	started := time.Now().Add(-time.Minute)
+
+	// running is what a node says at the moment at of a job whose run started
+	// at started, with 30 s to run.
+	running := func(t *testing.T, at time.Time) []byte {
+		t.Helper()
+
+		payload, err := json.Marshal(events.Heartbeat{
+			UUID:        taskUUID,
+			Name:        "a-name",
+			Kind:        string(task.KindJob),
+			State:       int(task.Running),
+			NodeName:    "workload-orchestrator-01",
+			ExecutionID: "execution-id",
+			StartedAt:   started,
+			Deadline:    started.Add(30 * time.Second),
+			At:          at,
+		})
+		require.NoError(t, err)
+
+		return payload
+	}
+
+	t.Run("a running task is said to have started when its node says, rather than when it was heard", func(t *testing.T) {
+		t.Parallel()
+
+		tasks := tasksMemory.NewRepository(task.Task{UUID: taskUUID, Kind: task.KindJob, CurrentState: task.Scheduled, ExpectedState: task.Running})
+		producer := &messagingMock.Recorder{}
+
+		require.NoError(t, handler(tasks, producer, logsMock.NewInMemoryRepository()).Handle(t.Context(), running(t, started.Add(10*time.Second))))
+
+		ran, err := messagingMock.Produced[events.TaskRan](producer, events.TaskRanName)
+		require.NoError(t, err)
+		require.Len(t, ran, 1)
+		assert.True(t, started.Equal(ran[0].StartedAt), "want %s, got %s", started, ran[0].StartedAt)
+		assert.True(t, started.Add(30*time.Second).Equal(ran[0].Deadline), "want %s, got %s", started.Add(30*time.Second), ran[0].Deadline)
+	})
+
+	// what a job's beats say reaches the rest of the control plane, which
+	// writes down when its run started; a beat once its time is up stops it.
+	t.Run("a job that outlives its ttl is stopped, counted from when its node says it started", func(t *testing.T) {
+		t.Parallel()
+
+		tasks := tasksMemory.NewRepository(task.Task{
+			UUID:          taskUUID,
+			Kind:          task.KindJob,
+			TTL:           30 * time.Second,
+			CurrentState:  task.Scheduled,
+			ExpectedState: task.Running,
+			CreatedAt:     started.Add(-time.Second),
+		})
+
+		producer := &delivering{handlers: map[string]domain.MessageHandler{
+			events.TaskRanName: runTask.NewTaskRan(tasks),
+		}}
+
+		heartbeat := handler(tasks, producer, logsMock.NewInMemoryRepository())
+
+		killed := func() []events.TaskKillRequested {
+			kills, err := messagingMock.Produced[events.TaskKillRequested](&producer.Recorder, events.TaskKillRequestedName)
+			require.NoError(t, err)
+
+			return kills
+		}
+
+		// it comes up, and is written down as having started when its node
+		// says it did.
+		require.NoError(t, heartbeat.Handle(t.Context(), running(t, started.Add(time.Second))))
+
+		stored, ok := tasks.Stored(taskUUID)
+		require.True(t, ok)
+		assert.Equal(t, task.Running, stored.CurrentState)
+		assert.True(t, started.Equal(stored.StartedAt), "want %s, got %s", started, stored.StartedAt)
+
+		// inside its time, it is left to run.
+		require.NoError(t, heartbeat.Handle(t.Context(), running(t, started.Add(29*time.Second))))
+		assert.Empty(t, killed())
+
+		// past it, it is stopped.
+		require.NoError(t, heartbeat.Handle(t.Context(), running(t, started.Add(31*time.Second))))
+		assert.Equal(t, []events.TaskKillRequested{{UUID: taskUUID}}, killed())
+
+		stored, _ = tasks.Stored(taskUUID)
+		assert.Equal(t, task.Stopping, stored.CurrentState)
+		assert.Equal(t, task.Stopped, stored.ExpectedState)
 	})
 }

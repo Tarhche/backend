@@ -189,13 +189,16 @@ func (h *Heartbeat) remove(ctx context.Context, uuid string) error {
 	return err
 }
 
+// publishTaskRan says a task is running, where and since when: the moment its
+// run started as its node says, which is what its ttl is counted from, rather
+// than the moment this beat was heard.
 func (uc *Heartbeat) publishTaskRan(ctx context.Context, heartbeat *events.Heartbeat) error {
 	event := events.TaskRan{
 		UUID:        heartbeat.UUID,
 		NodeName:    heartbeat.NodeName,
 		ExecutionID: heartbeat.ExecutionID,
 		Endpoints:   heartbeat.Endpoints,
-		StartedAt:   heartbeat.At,
+		StartedAt:   heartbeat.StartedAt,
 		Deadline:    heartbeat.Deadline,
 	}
 

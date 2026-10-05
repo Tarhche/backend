@@ -54,24 +54,40 @@ func asJob() func(*task.Execution) {
 	return func(held *task.Execution) { held.Kind = task.KindJob }
 }
 
-// beaten is the deadline the node reported for the only task it holds.
-func beaten(t *testing.T, producer *messagingMock.MockProduceConsumer) time.Time {
-	t.Helper()
-
-	require.NotEmpty(t, producer.Calls)
-
-	var heartbeat events.Heartbeat
-	require.NoError(t, json.Unmarshal(producer.Calls[0].Arguments[2].([]byte), &heartbeat))
-
-	return heartbeat.Deadline
+// since makes it one whose run started at started, as the runtime lists it.
+func since(started time.Time) func(*task.Execution) {
+	return func(held *task.Execution) { held.StartedAt = started }
 }
 
-func TestUseCase_Execute_deadline(t *testing.T) {
+// beaten is what the node said the nth time it beat for the only task it
+// holds.
+func beaten(t *testing.T, producer *messagingMock.MockProduceConsumer, n int) events.Heartbeat {
+	t.Helper()
+
+	require.Greater(t, len(producer.Calls), n)
+
+	var heartbeat events.Heartbeat
+	require.NoError(t, json.Unmarshal(producer.Calls[n].Arguments[2].([]byte), &heartbeat))
+
+	return heartbeat
+}
+
+// sameInstant asserts two times are the same moment. They are compared as
+// instants rather than as values: a moment read back through json carries
+// UTC and no monotonic reading, and a machine whose clock is set to anything
+// else would otherwise disagree with itself.
+func sameInstant(t *testing.T, want time.Time, got time.Time, what string) {
+	t.Helper()
+
+	assert.True(t, want.Equal(got), "%s: want %s, got %s", what, want, got)
+}
+
+func TestUseCase_Execute_started(t *testing.T) {
 	t.Parallel()
 
-	started := time.Now().Add(-30 * time.Second).Truncate(time.Millisecond)
+	started := time.Now().Add(-30 * time.Second)
 
-	t.Run("counts a task's time from when it started running", func(t *testing.T) {
+	t.Run("a task says when its run started, and counts its time from then", func(t *testing.T) {
 		t.Parallel()
 
 		var (
@@ -79,30 +95,49 @@ func TestUseCase_Execute_deadline(t *testing.T) {
 			producer messagingMock.MockProduceConsumer
 		)
 
-		held := heldTask(allowed(2 * time.Minute))
-
 		manager.On("OnNode", mock.Anything, nodeName).
-			Return([]task.Execution{held}, nil)
-		manager.On("Inspect", mock.Anything, held.ID).Once().
-			Return(task.Execution{ID: held.ID, StartedAt: started}, nil)
+			Return([]task.Execution{heldTask(asJob(), allowed(2*time.Minute), since(started))}, nil)
+		manager.On("Logs", mock.Anything, "task-id", mock.Anything).Return(nil)
 		producer.On("Produce", mock.Anything, events.HeartbeatName, mock.Anything).Return(nil)
 
-		useCase := NewUseCase(&manager, &producer, nodeName, discardLogger())
+		require.NoError(t, NewUseCase(&manager, &producer, nodeName, discardLogger()).Execute(context.Background()))
 
-		require.NoError(t, useCase.Execute(context.Background()))
+		beat := beaten(t, &producer, 0)
+		sameInstant(t, started, beat.StartedAt, "started")
+		sameInstant(t, started.Add(2*time.Minute), beat.Deadline, "deadline")
 
-		// compared as an instant rather than as a value: the same moment read
-		// back through json carries UTC, and a machine whose clock is set to
-		// anything else would otherwise disagree with itself.
-		assert.True(t, started.Add(2*time.Minute).Equal(beaten(t, &producer)),
-			"want %s, got %s", started.Add(2*time.Minute), beaten(t, &producer))
-
-		// a second beat asks docker nothing: when it started does not change.
-		require.NoError(t, useCase.Execute(context.Background()))
-		manager.AssertNumberOfCalls(t, "Inspect", 1)
+		// the runtime says it of every run it lists: nothing more is asked.
+		manager.AssertNotCalled(t, "Inspect", mock.Anything, mock.Anything)
 	})
 
-	t.Run("a task that may run as long as it likes has no deadline", func(t *testing.T) {
+	t.Run("a run that started again is counted from then", func(t *testing.T) {
+		t.Parallel()
+
+		var (
+			manager  runtimeMock.MockRuntime
+			producer messagingMock.MockProduceConsumer
+		)
+
+		again := started.Add(20 * time.Second)
+
+		manager.On("OnNode", mock.Anything, nodeName).Once().
+			Return([]task.Execution{heldTask(asJob(), allowed(2*time.Minute), since(started))}, nil)
+		manager.On("OnNode", mock.Anything, nodeName).Once().
+			Return([]task.Execution{heldTask(asJob(), allowed(2*time.Minute), since(again))}, nil)
+		manager.On("Logs", mock.Anything, "task-id", mock.Anything).Return(nil)
+		producer.On("Produce", mock.Anything, events.HeartbeatName, mock.Anything).Return(nil)
+
+		useCase := NewUseCase(&manager, &producer, nodeName, discardLogger())
+
+		require.NoError(t, useCase.Execute(context.Background()))
+		require.NoError(t, useCase.Execute(context.Background()))
+
+		beat := beaten(t, &producer, 1)
+		sameInstant(t, again, beat.StartedAt, "started")
+		sameInstant(t, again.Add(2*time.Minute), beat.Deadline, "deadline")
+	})
+
+	t.Run("a task that may run as long as it likes says when it started, and has no deadline", func(t *testing.T) {
 		t.Parallel()
 
 		var (
@@ -111,14 +146,14 @@ func TestUseCase_Execute_deadline(t *testing.T) {
 		)
 
 		manager.On("OnNode", mock.Anything, nodeName).
-			Return([]task.Execution{heldTask()}, nil)
+			Return([]task.Execution{heldTask(since(started))}, nil)
 		producer.On("Produce", mock.Anything, events.HeartbeatName, mock.Anything).Return(nil)
 
-		useCase := NewUseCase(&manager, &producer, nodeName, discardLogger())
+		require.NoError(t, NewUseCase(&manager, &producer, nodeName, discardLogger()).Execute(context.Background()))
 
-		require.NoError(t, useCase.Execute(context.Background()))
-		assert.True(t, beaten(t, &producer).IsZero())
-		manager.AssertNotCalled(t, "Inspect", mock.Anything, mock.Anything)
+		beat := beaten(t, &producer, 0)
+		sameInstant(t, started, beat.StartedAt, "started")
+		assert.True(t, beat.Deadline.IsZero())
 	})
 
 	t.Run("a task that has not started yet counts down to nothing", func(t *testing.T) {
@@ -129,18 +164,16 @@ func TestUseCase_Execute_deadline(t *testing.T) {
 			producer messagingMock.MockProduceConsumer
 		)
 
-		held := heldTask(allowed(2 * time.Minute))
-
 		manager.On("OnNode", mock.Anything, nodeName).
-			Return([]task.Execution{held}, nil)
-		manager.On("Inspect", mock.Anything, held.ID).
-			Return(task.Execution{ID: held.ID}, nil)
+			Return([]task.Execution{heldTask(asJob(), allowed(2*time.Minute))}, nil)
+		manager.On("Logs", mock.Anything, "task-id", mock.Anything).Return(nil)
 		producer.On("Produce", mock.Anything, events.HeartbeatName, mock.Anything).Return(nil)
 
-		useCase := NewUseCase(&manager, &producer, nodeName, discardLogger())
+		require.NoError(t, NewUseCase(&manager, &producer, nodeName, discardLogger()).Execute(context.Background()))
 
-		require.NoError(t, useCase.Execute(context.Background()))
-		assert.True(t, beaten(t, &producer).IsZero())
+		beat := beaten(t, &producer, 0)
+		assert.True(t, beat.StartedAt.IsZero())
+		assert.True(t, beat.Deadline.IsZero())
 	})
 }
 

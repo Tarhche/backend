@@ -20,14 +20,10 @@ type UseCase struct {
 	messageProducer domain.Producer
 	nodeName        string
 
-	// startedAt is when each task this node holds began running, which is
-	// what a task's allowed time is counted from. The runtime only tells it on
-	// inspection, so it is asked for once per task and remembered.
-	startedAt map[string]time.Time
-
 	// exitCodes is what the program in each ended task returned, which is
-	// what tells a job that finished from one that fell over. It is asked for
-	// the same way, and forgotten as soon as the task runs again.
+	// what tells a job that finished from one that fell over. The runtime
+	// only tells it on inspection, so it is asked for once per task and
+	// remembered, and forgotten as soon as the task runs again.
 	exitCodes map[string]int
 
 	logger *slog.Logger
@@ -43,7 +39,6 @@ func NewUseCase(
 		taskManager:     taskManager,
 		messageProducer: messageProducer,
 		nodeName:        nodeName,
-		startedAt:       make(map[string]time.Time),
 		exitCodes:       make(map[string]int),
 		logger:          logger,
 	}
@@ -70,10 +65,16 @@ func (uc *UseCase) Execute(ctx context.Context) error {
 			NodeName:    uc.nodeName,
 			Attempt:     c.Attempt,
 			Interactive: c.Interactive,
-			Deadline:    uc.deadline(ctx, &c),
-			Endpoints:   uc.endpoints(&c),
-			Logs:        uc.logs(ctx, &c),
-			At:          time.Now(),
+
+			// when its run started, which is what the time it is allowed is
+			// counted from: the runtime says it of every run it lists, and
+			// says it again of one that started again.
+			StartedAt: c.StartedAt,
+			Deadline:  c.Deadline(),
+
+			Endpoints: uc.endpoints(&c),
+			Logs:      uc.logs(ctx, &c),
+			At:        time.Now(),
 		}
 
 		payload, err := json.Marshal(event)
@@ -87,44 +88,6 @@ func (uc *UseCase) Execute(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-// deadline is when a task that may only run for so long will have run
-// long enough. It is counted from when the task actually started, which
-// the runtime reports on inspection alone, so a task is inspected once and
-// what it says is kept for as long as this node holds it.
-func (uc *UseCase) deadline(ctx context.Context, c *task.Execution) time.Time {
-	ttl := c.TTL
-
-	if ttl <= 0 {
-		return time.Time{}
-	}
-
-	if started, ok := uc.startedAt[c.ID]; ok {
-		if started.IsZero() {
-			return time.Time{}
-		}
-
-		return started.Add(ttl)
-	}
-
-	inspected, err := uc.taskManager.Inspect(ctx, c.ID)
-	if err != nil {
-		// it will be asked again on the next beat; until then it has no
-		// deadline to report rather than a made-up one.
-		uc.logger.WarnContext(ctx, "failed to inspect a task for when it started", "error", err)
-
-		return time.Time{}
-	}
-
-	if inspected.StartedAt.IsZero() {
-		// not running yet: nothing is counting down.
-		return time.Time{}
-	}
-
-	uc.startedAt[c.ID] = inspected.StartedAt
-
-	return inspected.StartedAt.Add(ttl)
 }
 
 // exitCode is what the program in a task returned, for one that has
@@ -160,19 +123,13 @@ func (uc *UseCase) exitCode(ctx context.Context, c *task.Execution) int {
 // forgetGone lets go of what was remembered about tasks this node no
 // longer holds.
 func (uc *UseCase) forgetGone(held []task.Execution) {
-	if len(uc.startedAt) == 0 && len(uc.exitCodes) == 0 {
+	if len(uc.exitCodes) == 0 {
 		return
 	}
 
 	ids := make(map[string]struct{}, len(held))
 	for i := range held {
 		ids[held[i].ID] = struct{}{}
-	}
-
-	for id := range uc.startedAt {
-		if _, ok := ids[id]; !ok {
-			delete(uc.startedAt, id)
-		}
 	}
 
 	for id := range uc.exitCodes {

@@ -197,8 +197,6 @@ func Logs(t *task.Task, options vm.LogOptions) ([]noderequest.VMLogLine, bool) {
 // state is its task's, in a VM's words. Its node reports no stats for a run, so
 // it has none to show.
 func VM(t *task.Task) vm.VM {
-	started := startedAt(t)
-
 	return vm.VM{
 		UUID:            t.UUID,
 		Name:            t.Name,
@@ -211,15 +209,15 @@ func VM(t *task.Task) vm.VM {
 		Network:         t.NetworkPolicy.VMNetwork(),
 		PersistentDisk:  false,
 		Lifetime:        t.TTL,
-		ExpiresAt:       expiresAt(t, started),
+		ExpiresAt:       expiresAt(t),
 		CurrentState:    stateOf(t.CurrentState),
 		ExpectedState:   stateOf(t.ExpectedState),
 		Reason:          t.Reason,
 		NodeName:        t.NodeName,
 		LastHeartbeatAt: t.LastHeartbeatAt,
 		CreatedAt:       t.CreatedAt,
-		StartedAt:       started,
-		UpdatedAt:       latest(t.CreatedAt, started, t.FinishedAt),
+		StartedAt:       t.StartedAt,
+		UpdatedAt:       latest(t.CreatedAt, t.StartedAt, t.FinishedAt),
 		ManagedBy:       vm.ManagedByCodeRunner,
 	}
 }
@@ -277,31 +275,17 @@ func stateOf(state task.State) vm.State {
 	}
 }
 
-// startedAt is when a run came up: its task's own when it says, and otherwise
-// its deadline less its ttl, which is what its node counted the deadline from.
-// One that has not come up has not started.
-func startedAt(t *task.Task) time.Time {
-	if !t.StartedAt.IsZero() {
-		return t.StartedAt
-	}
-
-	if !t.Deadline.IsZero() && t.TTL > 0 {
-		return t.Deadline.Add(-t.TTL)
-	}
-
-	return time.Time{}
-}
-
 // expiresAt is when a run is stopped for having run long enough: the deadline
-// its node set as it came up. One that has not come up yet has none, and
-// neither has one that may run for as long as it likes.
-func expiresAt(t *task.Task, started time.Time) time.Time {
+// its node set as it came up, which is its ttl counted from when it started.
+// One that has not come up yet has none, and neither has one that may run for
+// as long as it likes.
+func expiresAt(t *task.Task) time.Time {
 	if !t.Deadline.IsZero() {
 		return t.Deadline
 	}
 
-	if t.TTL > 0 && !started.IsZero() {
-		return started.Add(t.TTL)
+	if t.TTL > 0 && !t.StartedAt.IsZero() {
+		return t.StartedAt.Add(t.TTL)
 	}
 
 	return time.Time{}

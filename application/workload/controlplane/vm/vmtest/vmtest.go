@@ -199,6 +199,7 @@ func Run(uuid string) task.Task {
 		LastHeartbeatAt: time.Now(),
 		Deadline:        created.Add(time.Second + time.Minute),
 		CreatedAt:       created,
+		StartedAt:       created.Add(time.Second),
 	}
 }
 

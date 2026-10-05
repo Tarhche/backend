@@ -45,6 +45,7 @@ func run(uuid string) task.Task {
 		LastHeartbeatAt: made.Add(5 * time.Second),
 		Deadline:        made.Add(time.Second + time.Minute),
 		CreatedAt:       made,
+		StartedAt:       made.Add(time.Second),
 	}
 }
 
@@ -96,7 +97,7 @@ func TestVM(t *testing.T) {
 		}, VM(&r))
 	})
 
-	t.Run("one that says when it started says so", func(t *testing.T) {
+	t.Run("it started when its task says, rather than when its deadline would have it", func(t *testing.T) {
 		t.Parallel()
 
 		r := run("run-uuid")
@@ -105,7 +106,28 @@ func TestVM(t *testing.T) {
 
 		shown := VM(&r)
 		assert.Equal(t, made.Add(2*time.Second), shown.StartedAt)
+		assert.Equal(t, made.Add(time.Second+time.Minute), shown.ExpiresAt)
 		assert.Equal(t, made.Add(9*time.Second), shown.UpdatedAt)
+	})
+
+	t.Run("one whose node has not said when it started has no start made up for it", func(t *testing.T) {
+		t.Parallel()
+
+		r := run("run-uuid")
+		r.StartedAt = time.Time{}
+
+		shown := VM(&r)
+		assert.True(t, shown.StartedAt.IsZero())
+		assert.Equal(t, made.Add(time.Second+time.Minute), shown.ExpiresAt)
+	})
+
+	t.Run("one with no deadline expires its ttl after it started", func(t *testing.T) {
+		t.Parallel()
+
+		r := run("run-uuid")
+		r.Deadline = time.Time{}
+
+		assert.Equal(t, made.Add(time.Second+time.Minute), VM(&r).ExpiresAt)
 	})
 
 	t.Run("one that has not come up has no start, and no expiry yet", func(t *testing.T) {
@@ -114,6 +136,7 @@ func TestVM(t *testing.T) {
 		r := run("run-uuid")
 		r.CurrentState = task.Scheduled
 		r.Deadline = time.Time{}
+		r.StartedAt = time.Time{}
 
 		shown := VM(&r)
 		assert.Equal(t, vm.Scheduled, shown.CurrentState)

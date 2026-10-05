@@ -53,8 +53,12 @@ type Execution struct {
 	Entrypoint  []string
 	Command     []string
 	CreatedAt   time.Time
-	StartedAt   time.Time
-	ExitCode    int
+
+	// StartedAt is when this run last started: the moment its main process
+	// did. A runtime says it of every run it lists, as of one it inspects,
+	// and it is zero for a run that has not started.
+	StartedAt time.Time
+	ExitCode  int
 
 	// ReadOnly makes the task's root filesystem immutable, so nothing it
 	// runs can change the image it was started from.

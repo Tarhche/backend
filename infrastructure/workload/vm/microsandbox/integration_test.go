@@ -870,6 +870,12 @@ func TestCodeRunner(t *testing.T) {
 		run, err := runtime.Inspect(ctx, id)
 		require.NoError(t, err)
 
+		// when its main process started, which is what the time a task is
+		// allowed is counted from: after it was asked for, before it ended.
+		require.False(t, run.StartedAt.IsZero(), "%s says when it started", id)
+		assert.False(t, run.StartedAt.Before(started), "%s started at %s, before it was asked for at %s", id, run.StartedAt, started)
+		assert.True(t, run.StartedAt.Before(time.Now()), "%s started at %s, after it ended", id, run.StartedAt)
+
 		var logs bytes.Buffer
 		require.NoError(t, runtime.Logs(ctx, id, &logs))
 

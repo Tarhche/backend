@@ -36,9 +36,15 @@ type Heartbeat struct {
 	// runs, rather than waiting on for what it prints.
 	Interactive bool
 
+	// StartedAt is when the task's run started: the moment its main process
+	// did, as the runtime holding it says. The time the task is allowed is
+	// counted from it, and it is zero for a run that has not started.
+	StartedAt time.Time
+
 	// Deadline is when the task will be stopped for having run long
-	// enough, as it was labelled when it was made. A task that may run
-	// for as long as it likes has none.
+	// enough: StartedAt and the ttl it was labelled with when it was made. A
+	// task that may run for as long as it likes, or has not started, has
+	// none.
 	Deadline time.Time
 
 	Endpoints []Endpoint

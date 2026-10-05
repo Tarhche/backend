@@ -109,7 +109,15 @@ func TestUseCase_Execute_onVMs(t *testing.T) {
 	assert.Equal(t, "task-uuid", running.UUID)
 	assert.Equal(t, int(task.Running), running.State)
 	assert.Equal(t, []events.Endpoint{{TaskPort: 3000, HostPort: 20000}}, running.Endpoints)
-	assert.False(t, running.Deadline.IsZero(), "a snippet being watched is told when it will be stopped")
+
+	// it started when its VM says its main process did, and its time is
+	// counted from then: what the control plane stops it by.
+	instance, err := e.Inspect(t.Context(), ran.UUID)
+	require.NoError(t, err)
+	require.False(t, instance.StartedAt.IsZero(), "the engine says when the snippet's VM started")
+	assert.True(t, instance.StartedAt.Equal(running.StartedAt), "want %s, got %s", instance.StartedAt, running.StartedAt)
+	assert.True(t, instance.StartedAt.Add(2*time.Minute).Equal(running.Deadline),
+		"a snippet being watched is told when it will be stopped: want %s, got %s", instance.StartedAt.Add(2*time.Minute), running.Deadline)
 
 	// its port, reached by the slug the ingress asks for.
 	endpoint, err := getEndpoint.NewUseCase(e).Execute(t.Context(), &getEndpoint.Request{Slug: "snippet-abcde"})
