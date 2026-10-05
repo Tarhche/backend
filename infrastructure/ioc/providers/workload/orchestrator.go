@@ -50,6 +50,16 @@ const (
 	OrchestratorSubscribers = "workload:orchestrator:subscribers"
 
 	consumerNamePrefix string = "workload-orchestrator-%s"
+
+	// commandConcurrency is how many of the control plane's commands of one
+	// kind an orchestrator carries out at once. Restoring a VM or pulling a
+	// stack's images takes minutes, and should not hold up every other VM's
+	// commands meanwhile.
+	commandConcurrency = 4
+
+	// commandProgress is how often JetStream is told that a command still
+	// being carried out is, which is well within its ack wait.
+	commandProgress = 10 * time.Second
 )
 
 // orchestratorProvider builds the workload orchestrator's messaging singleton, HTTP handler,
@@ -86,7 +96,10 @@ func (p *orchestratorProvider) Boot(ctx context.Context, c provider.Container) e
 
 	consumerName := fmt.Sprintf(consumerNamePrefix, nodeName)
 
-	pc, err := produceConsumer.NewProduceConsumer(natsConnection, consumerName, logger)
+	pc, err := produceConsumer.NewProduceConsumer(natsConnection, consumerName, logger,
+		produceConsumer.WithConcurrency(commandConcurrency),
+		produceConsumer.WithProgress(commandProgress),
+	)
 	if err != nil {
 		return err
 	}
@@ -333,6 +346,21 @@ func orchestratorConsoleCommand(
 		taskEvents.TaskKillRequestedName:     orchestratorkilltask.NewKillTaskHandler(killTaskUseCase),
 		taskEvents.TaskRestartRequestedName:  orchestratorrestarttask.NewRestartTaskHandler(restartTaskUseCase),
 		taskEvents.TaskDeletedName:           orchestratorDeleteTask.NewDeleteTaskHandler(deleteTaskUseCase),
+	}
+
+	// what is asked of the VMs on this node, of their snapshots and of the
+	// stacks in them, and the answers to what the control plane asks and
+	// waits for.
+	if err := bindVMs(iocContainer, vmDependencies{
+		natsConnection: natsConnection,
+		engine:         engine,
+		producer:       asyncProduceConsumer,
+		validator:      validator,
+		configs:        orchestratorConfigs,
+		nodeName:       nodeName,
+		logger:         logger,
+	}, subscribers); err != nil {
+		return nil, err
 	}
 
 	// orchestrator subscribers
