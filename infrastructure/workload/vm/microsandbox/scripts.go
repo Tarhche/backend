@@ -170,7 +170,16 @@ fi
 sync`
 
 // dockerReadyScript succeeds once dockerd answers.
-const dockerReadyScript = `docker info >/dev/null 2>&1`
+//
+// It is asked every half second while a Docker VM boots, on the vCPUs dockerd
+// and its containerd are starting on, so it has to cost next to nothing. Until
+// dockerd's socket is there it is a shell test and no more. After that it asks
+// for the server's version, which is dockerd answering and nothing else: docker
+// info runs every CLI plugin's metadata command each time it is asked, two
+// more Go binaries per probe, and polled like this they starved dockerd's
+// start past the 15 s it gives its containerd, so dockerd exited, was started
+// again, and was starved again for as long as it was waited for.
+const dockerReadyScript = `[ -S /var/run/docker.sock ] && docker version --format '{{.Server.Version}}' >/dev/null 2>&1`
 
 // syncForSnapshotScript flushes the guest's disk ahead of a live snapshot, and
 // succeeds when the guest's init is vminit: the agent refuses to freeze
