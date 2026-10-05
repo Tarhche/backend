@@ -221,11 +221,13 @@ type ran struct {
 	code   int
 }
 
-// run runs a shell script in an instance, with nothing on its input.
+// run runs a shell script in an instance, with nothing on its input. It is
+// not cut short with the test, whose context ends before its cleanups run,
+// and some of them run scripts too.
 func run(t *testing.T, e Engine, id string, script string) ran {
 	t.Helper()
 
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Minute)
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(t.Context()), 5*time.Minute)
 	defer cancel()
 
 	session, err := e.Exec(ctx, id, vm.ExecOptions{Command: []string{"/bin/sh", "-c", script}})

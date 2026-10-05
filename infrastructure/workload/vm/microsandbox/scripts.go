@@ -21,8 +21,20 @@ package microsandbox
 //	            running. On SIGTERM it stops dockerd and exits. A restored VM
 //	            runs this way, because a restore drops the init (#1676).
 //
+// A supervisor claims /run/vminit.pid for as long as it looks after dockerd,
+// so only one does at a time: the claim is a file made only where there is
+// none, naming it, and a supervisor is told by its command line, so a claim
+// whose holder is gone, or whose number another process has now, is taken
+// over. It gives the claim up as soon as it starts to stop, since one that is
+// stopping is no longer looking after dockerd, and whoever starts another
+// meanwhile has it take over: a dockerd it finds running, it looks after
+// rather than starting a second.
+//
 // In both modes it starts dockerd again, backing off up to 30 s, whenever it
-// exits, and its wait reaps whatever is left to it. dockerd listens on its
+// exits, and its wait reaps whatever is left to it. Before it starts one, it
+// clears what a dockerd that did not stop left behind, and only the VM's own:
+// what runs in a container's mount namespace, a docker-in-docker container's
+// dockerd and containerd included, is never touched. dockerd listens on its
 // unix socket only: the Docker API is reached through `docker system
 // dial-stdio` exec'd into the VM, never over a network.
 const vminitScript = `#!/bin/sh
@@ -31,7 +43,10 @@ MODE=${1:---supervise}
 mkdir -p /var/log
 LOG=/var/log/vminit.log
 DLOG=/var/log/dockerd.log
+CLAIM=/run/vminit.pid
+SUPERVISOR="/bin/sh /usr/local/sbin/vminit --supervise "
 STOP_TIMEOUT=${VMINIT_STOP_TIMEOUT:-30}
+MNTNS=$(readlink /proc/$$/ns/mnt)
 DPID=
 STOPPING=
 
@@ -46,10 +61,56 @@ alive() {
   [ -n "$s" ] && [ "$s" != Z ]
 }
 
+# rest waits a while, cut short by a signal.
+rest() {
+  sleep "$1" &
+  wait $!
+}
+
+# ours says whether a process is the VM's own rather than a container's, which
+# runs in a mount namespace of its own.
+ours() {
+  [ "$(readlink /proc/$1/ns/mnt 2>/dev/null)" = "$MNTNS" ]
+}
+
+# supervisor says whether a process is a supervisor: ensure starts one with
+# this command line, and nothing else has it.
+supervisor() {
+  [ "$(tr '\0' ' ' < /proc/$1/cmdline 2>/dev/null)" = "$SUPERVISOR" ]
+}
+
+# claim takes the claim unless another supervisor holds it. One naming this
+# very process was left by the boot a disk was captured in, whose process
+# numbers this boot hands out again.
+claim() {
+  (set -C; echo $$ > "$CLAIM") 2>/dev/null && return 0
+  holder=$(cat "$CLAIM" 2>/dev/null)
+  [ "$holder" = "$$" ] && return 0
+  if [ -n "$holder" ] && supervisor "$holder"; then return 1; fi
+  rm -f "$CLAIM"
+  (set -C; echo $$ > "$CLAIM") 2>/dev/null && return 0
+  holder=$(cat "$CLAIM" 2>/dev/null)
+  return 1
+}
+
+release() {
+  if [ "$MODE" = --supervise ] && [ "$(cat "$CLAIM" 2>/dev/null)" = "$$" ]; then rm -f "$CLAIM"; fi
+}
+
+# our_dockerd is the VM's own dockerd, when one runs.
+our_dockerd() {
+  for p in $(pidof dockerd 2>/dev/null); do
+    if alive "$p" && ours "$p"; then
+      echo "$p"
+      return
+    fi
+  done
+}
+
 start_dockerd() {
-  # a dockerd left running by a supervisor that went is looked after, not
-  # run twice.
-  running=$(pidof dockerd 2>/dev/null | cut -d' ' -f1)
+  # one that runs already, left by a supervisor that went or still stopping
+  # under one that is going, is looked after rather than run twice.
+  running=$(our_dockerd)
   if [ -n "$running" ]; then
     DPID=$running
     log "dockerd is running already (pid $DPID)"
@@ -59,7 +120,14 @@ start_dockerd() {
   # and pid files naming processes that are gone, whose numbers this boot
   # may have handed to others. dockerd would take such a process for its
   # containerd, and wait on it until it gave up.
-  pkill -KILL -f /var/run/docker/containerd/containerd.toml 2>/dev/null
+  for p in $(pidof containerd 2>/dev/null); do
+    if ours "$p" && tr '\0' ' ' < /proc/$p/cmdline 2>/dev/null | grep -q /var/run/docker/containerd/containerd.toml; then
+      log "stopping containerd (pid $p), which a dockerd that is gone left"
+      kill -TERM "$p" 2>/dev/null
+      i=0; while alive "$p" && [ "$i" -lt 50 ]; do sleep 0.1; i=$((i+1)); done
+      kill -KILL "$p" 2>/dev/null
+    fi
+  done
   find /run /var/run -maxdepth 3 -iname 'docker*.pid' -delete 2>/dev/null
   rm -f /run/docker/containerd/containerd.pid /var/run/docker/containerd/containerd.pid
   if [ -f "$DLOG" ] && [ "$(wc -c < "$DLOG")" -gt 10485760 ]; then mv -f "$DLOG" "$DLOG.1"; fi
@@ -72,6 +140,8 @@ start_dockerd() {
 shutdown() {
   [ -n "$STOPPING" ] && return
   STOPPING=1
+  # one that is stopping looks after nothing: another may take over now.
+  release
   log "signal $1: stopping dockerd (pid $DPID)"
   i=0
   if [ -n "$DPID" ] && alive "$DPID"; then
@@ -94,7 +164,6 @@ shutdown() {
     fi
     poweroff -f
   fi
-  rm -f /run/vminit.pid
   exit 0
 }
 
@@ -104,7 +173,10 @@ if [ "$MODE" = --pid1 ]; then
   done
 else
   for sig in TERM INT HUP; do trap "shutdown $sig" "$sig"; done
-  echo $$ > /run/vminit.pid
+  if ! claim; then
+    log "dockerd is looked after by another supervisor (pid $holder)"
+    exit 0
+  fi
 fi
 
 log "start: pid $$ ppid $PPID kernel $(uname -r)"
@@ -115,7 +187,7 @@ while :; do
   if [ -z "$DPID" ] || ! alive "$DPID"; then
     if [ -n "$DPID" ]; then
       log "dockerd (pid $DPID) exited; restarting in ${backoff}s"
-      sleep "$backoff"
+      rest "$backoff"
       if [ "$backoff" -lt 16 ]; then backoff=$((backoff*2)); else backoff=30; fi
     fi
     start_dockerd
@@ -123,7 +195,7 @@ while :; do
   fi
   wait "$DPID" 2>/dev/null
   # one it did not start is no child of it, and is not waited for.
-  alive "$DPID" && sleep 1
+  alive "$DPID" && rest 1
   [ $(( $(date +%s) - started )) -ge 60 ] && backoff=1
 done
 `
@@ -137,35 +209,65 @@ const vminitInit = "/.msb/scripts/vminit"
 // written over, only renamed away from.
 const vminitStaged = "/usr/local/sbin/vminit.new"
 
-// ensureStarted is what ensure exits with when it started the supervisor,
-// rather than finding dockerd looked after already.
-const ensureStarted = 3
+// What ensure exits with when it started a supervisor, rather than finding
+// dockerd looked after already, and when the one it started did not take the
+// claim.
+const (
+	ensureStarted      = 3
+	ensureUnsupervised = 4
+)
 
-// ensureScript starts the supervisor unless dockerd is looked after already:
-// by vminit as the guest's init, or by a supervisor that is still running. It
-// is run after every boot of a Docker VM, which covers one whose init a
-// restore dropped (#1676) and costs nothing for one that has it. setsid puts
-// the supervisor in a session of its own, so the agent ending the exec
-// session's process group leaves it running.
+// ensureScript starts a supervisor unless dockerd is looked after already: by
+// vminit as the guest's init, or by a supervisor holding the claim. Whether
+// dockerd answers yet says nothing about that, since one may be on its way up.
+// It is run after every boot of a Docker VM, which covers one whose init a
+// restore dropped (#1676) and costs nothing for one that has it, and when a
+// vmhost takes back the VMs of the one before it.
+//
+// setsid puts the supervisor in a session of its own, and it holds nothing of
+// the exec session's, so the agent ending that session, or the vmhost that
+// asked for it going, leaves it running. ensure waits for it to take the claim,
+// so whatever looks next finds it.
 const ensureScript = `mkdir -p /usr/local/sbin
 if [ -f /usr/local/sbin/vminit.new ]; then mv -f /usr/local/sbin/vminit.new /usr/local/sbin/vminit; fi
 chmod 755 /usr/local/sbin/vminit 2>/dev/null
 c=$(cat /proc/1/comm)
 if [ "$c" = vminit ] || [ "$c" = docker-init ]; then exit 0; fi
-pid=$(cat /run/vminit.pid 2>/dev/null)
-if [ -n "$pid" ] && grep -q vminit /proc/$pid/cmdline 2>/dev/null; then exit 0; fi
+supervised() {
+  p=$(cat /run/vminit.pid 2>/dev/null)
+  [ -n "$p" ] && [ "$(tr '\0' ' ' < /proc/$p/cmdline 2>/dev/null)" = "/bin/sh /usr/local/sbin/vminit --supervise " ]
+}
+if supervised; then exit 0; fi
 setsid /bin/sh /usr/local/sbin/vminit --supervise </dev/null >/dev/null 2>&1 &
-sleep 0.2
-exit 3`
+i=0
+while [ "$i" -lt 50 ]; do
+  if supervised; then exit 3; fi
+  sleep 0.1
+  i=$((i+1))
+done
+exit 4`
 
-// preStopScript stops a supervisor, and dockerd with it, before the VM is
-// stopped. With the agent as PID 1 a stop kills every guest process at once,
-// so without it dockerd would get no chance to stop its containers. With
-// vminit as PID 1 there is no supervisor, and it only flushes the disk.
-const preStopScript = `pid=$(cat /run/vminit.pid 2>/dev/null)
-if [ -n "$pid" ] && grep -q vminit /proc/$pid/cmdline 2>/dev/null; then
-  kill -TERM "$pid"
-  i=0; while grep -q vminit /proc/$pid/cmdline 2>/dev/null && [ $i -lt 450 ]; do sleep 0.1; i=$((i+1)); done
+// preStopScript stops dockerd before the VM is stopped. With the agent as PID
+// 1 a stop kills every guest process at once, so without it dockerd would get
+// no chance to stop its containers: the supervisor is told to stop, which
+// stops dockerd, and a dockerd no supervisor looks after is stopped by itself.
+// With vminit as PID 1, vminit does all of it as the VM stops, and this only
+// flushes the disk.
+const preStopScript = `c=$(cat /proc/1/comm)
+if [ "$c" != vminit ] && [ "$c" != docker-init ]; then
+  supervisor() { [ "$(tr '\0' ' ' < /proc/$1/cmdline 2>/dev/null)" = "/bin/sh /usr/local/sbin/vminit --supervise " ]; }
+  alive() { s=$(cut -d' ' -f3 /proc/$1/stat 2>/dev/null); [ -n "$s" ] && [ "$s" != Z ]; }
+  p=$(cat /run/vminit.pid 2>/dev/null)
+  if [ -n "$p" ] && supervisor "$p"; then
+    kill -TERM "$p"
+    i=0; while supervisor "$p" && [ "$i" -lt 450 ]; do sleep 0.1; i=$((i+1)); done
+  fi
+  mnt=$(readlink /proc/$$/ns/mnt)
+  for d in $(pidof dockerd 2>/dev/null); do
+    [ "$(readlink /proc/$d/ns/mnt 2>/dev/null)" = "$mnt" ] || continue
+    kill -TERM "$d" 2>/dev/null
+    i=0; while alive "$d" && [ "$i" -lt 450 ]; do sleep 0.1; i=$((i+1)); done
+  done
 fi
 sync`
 

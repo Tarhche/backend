@@ -480,9 +480,13 @@ func (e *engine) shutdownSandbox(ctx context.Context, i *instance, h *msb.Sandbo
 }
 
 // ensure makes sure a Docker VM's dockerd is looked after: by vminit as the
-// guest's init, or else by the supervisor it starts, which a restored VM
-// needs since a restore drops the init (#1676). It is run after every boot of
-// a Docker VM, and costs nothing for one whose init is in place.
+// guest's init, or else by a supervisor, which a restored VM needs since a
+// restore drops the init (#1676). Which of them looks after it is decided by
+// the claim a running supervisor holds, never by whether dockerd answers yet,
+// so one on its way up is left to the supervisor bringing it up, and one whose
+// supervisor is stopping is taken over. It is run after every boot of a Docker
+// VM and when a vmhost takes back the VMs of the one before it, and costs
+// nothing for one whose init is in place.
 func (e *engine) ensure(ctx context.Context, i *instance, sb *msb.Sandbox) error {
 	ctx, cancel := context.WithTimeout(ctx, commandTimeout)
 	defer cancel()
@@ -507,6 +511,8 @@ func (e *engine) ensure(ctx context.Context, i *instance, sb *msb.Sandbox) error
 		e.logger.Info("dockerd's supervisor was started", "vm", i.id)
 
 		return nil
+	case ensureUnsupervised:
+		return errors.New("the supervisor started for dockerd did not take over looking after it")
 	default:
 		return fmt.Errorf("ensure exited with %d", out.ExitCode())
 	}

@@ -10,7 +10,12 @@
 #
 # The engine's home is a volume of its own, removed afterwards unless
 # VMHOST_IT_KEEP_HOME is set, which keeps the images it pulled for the next
-# run.
+# run. VMHOST_IT_CPUS gives the tests that many CPUs and no more, which is how
+# a smaller host than this one is tried. VMHOST_IT_DOCKER_IMAGE and
+# VMHOST_IT_MACHINE_IMAGE name the images the VMs boot from instead of the
+# tests' own, and VMHOST_IT_RUN_FLAGS are more flags for the container: a host
+# behind a TLS-inspecting proxy gives it the proxy's CA, and a Docker VM image
+# that trusts it, this way.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -21,6 +26,8 @@ network=${VMHOST_IT_NETWORK:-workload-vmhost-integration}
 subnet=${VMHOST_IT_SUBNET:-10.89.42.0/24}
 address=${VMHOST_IT_ADDRESS:-10.89.42.10}
 home=${VMHOST_IT_HOME_VOLUME:-workload-vmhost-integration-home}
+cpus=${VMHOST_IT_CPUS:-}
+read -r -a run_flags <<< "${VMHOST_IT_RUN_FLAGS:-}"
 
 if [ ! -c /dev/kvm ]; then
 	echo "vmhost-integration: there is no /dev/kvm here, and the engine runs VMs" >&2
@@ -58,8 +65,12 @@ docker run --rm --name "$container" \
 	--cap-drop ALL \
 	--security-opt no-new-privileges:true \
 	--pids-limit 16384 \
+	${cpus:+--cpus "$cpus"} \
 	--network "$network" \
 	--ip "$address" \
 	--env VMHOST_IT_BIND="$address" \
+	${VMHOST_IT_DOCKER_IMAGE:+--env VMHOST_IT_DOCKER_IMAGE="$VMHOST_IT_DOCKER_IMAGE"} \
+	${VMHOST_IT_MACHINE_IMAGE:+--env VMHOST_IT_MACHINE_IMAGE="$VMHOST_IT_MACHINE_IMAGE"} \
 	--volume "$home":/data \
+	${run_flags[@]+"${run_flags[@]}"} \
 	"$image" -test.v -test.timeout=90m "$@"

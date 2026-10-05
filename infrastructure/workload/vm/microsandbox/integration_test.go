@@ -330,7 +330,10 @@ func TestNetworkModes(t *testing.T) {
 			spec := machine(fmt.Sprintf("it-net-%s-%s", mode.ingress, mode.egress), withPorts(8000), withNetwork(mode.ingress, mode.egress))
 			instance := created(t, e, spec)
 
-			out := run(t, e, spec.ID, "nslookup example.com >/dev/null 2>&1 && wget -q -T 10 -O /dev/null https://example.com/")
+			// a name resolved and a connection made out are what the policy
+			// decides; plain HTTP says so as well as TLS would, and does not
+			// care whose CA a proxy in front of the host signs with.
+			out := run(t, e, spec.ID, "nslookup example.com >/dev/null 2>&1 && wget -q -T 10 -O /dev/null http://example.com/")
 			if mode.egress == vm.AccessAllow {
 				assert.Equal(t, 0, out.code, "the public internet is reached: %+v", out)
 			} else {
@@ -588,7 +591,7 @@ func TestDockerVM(t *testing.T) {
 			// One that crashed, or a disk captured while it ran, leaves them
 			// naming processes whose numbers this boot may have handed to
 			// others: here, to one that sleeps.
-			runOK(t, e, copied.ID, `kill $(cat /run/vminit.pid); while [ -e /run/vminit.pid ]; do sleep 0.2; done
+			runOK(t, e, copied.ID, `p=$(cat /run/vminit.pid); kill "$p"; while [ -e /proc/$p ]; do sleep 0.2; done
 mkdir -p /var/run/docker/containerd
 (setsid sleep 3600 </dev/null >/dev/null 2>&1 & echo $! > /var/run/docker/containerd/containerd.pid)
 sleep 0.2; kill -0 "$(cat /var/run/docker/containerd/containerd.pid)"`)
@@ -612,6 +615,25 @@ sleep 0.2; kill -0 "$(cat /var/run/docker/containerd/containerd.pid)"`)
 			dockerUp(t, e, daemons, copied.ID)
 			assert.Equal(t, running, runOK(t, e, copied.ID, "sleep 2; pidof dockerd"), "the dockerd that ran is looked after, and no other started")
 			assert.Contains(t, runOK(t, e, copied.ID, "tail -3 /var/log/vminit.log"), "dockerd is running already")
+		})
+
+		t.Run("whose dockerd, started again, leaves alone what is not the VM's own", func(t *testing.T) {
+			// a containerd that is not the VM's, named and started as the VM's
+			// is, in a mount namespace of its own as a container's is: one of
+			// a docker-in-docker container's, say.
+			runOK(t, e, copied.ID, `mkdir -p /tmp/decoy && printf '#!/bin/sh\necho $$ > /tmp/decoy/pid\nsleep 3600\n' > /tmp/decoy/containerd && chmod 755 /tmp/decoy/containerd
+(setsid unshare -m /tmp/decoy/containerd --config /var/run/docker/containerd/containerd.toml </dev/null >/dev/null 2>&1 &)
+i=0; while [ ! -s /tmp/decoy/pid ] && [ $i -lt 50 ]; do sleep 0.1; i=$((i+1)); done
+[ "$(cat /proc/$(cat /tmp/decoy/pid)/comm)" = containerd ]`)
+			t.Cleanup(func() { run(t, e, copied.ID, "kill $(cat /tmp/decoy/pid); rm -rf /tmp/decoy") })
+
+			// dockerd dies, and its supervisor clears what it left before
+			// starting it again.
+			runOK(t, e, copied.ID, "kill -KILL $(pidof dockerd)")
+			daemons.Forget(copied.ID)
+			dockerUp(t, e, daemons, copied.ID)
+
+			assert.Equal(t, "alive", runOK(t, e, copied.ID, "kill -0 $(cat /tmp/decoy/pid) && echo alive"))
 		})
 	})
 
@@ -951,9 +973,9 @@ func TestReadoptionChild(t *testing.T) {
 	daemons := docker.NewDaemons(e, 3*time.Minute, slog.New(slog.NewTextHandler(os.Stderr, nil)))
 	dockerUp(t, e, daemons, dockerSpec.ID)
 
-	// the supervisor and dockerd go behind the engine's back.
-	runOK(t, e, dockerSpec.ID, "kill $(cat /run/vminit.pid); while docker info >/dev/null 2>&1; do sleep 0.2; done")
-
+	// the restored VM's dockerd is looked after by a supervisor an exec of
+	// this vmhost started, which has to outlive the vmhost.
+	fmt.Printf("CHILD-SUPERVISOR=%s\n", runOK(t, e, dockerSpec.ID, "cat /run/vminit.pid"))
 	fmt.Printf("CHILD-ENDPOINT=%s\n", endpoint(t, machineVM, 8000))
 	fmt.Println("CHILD-DONE")
 
@@ -973,11 +995,15 @@ func TestReadoption(t *testing.T) {
 	require.NoError(t, err, "%s", output)
 	require.Contains(t, string(output), "CHILD-DONE", "%s", output)
 
-	var address string
+	var address, supervisor string
 	scanner := bufio.NewScanner(bytes.NewReader(output))
 	for scanner.Scan() {
 		if value, ok := strings.CutPrefix(scanner.Text(), "CHILD-ENDPOINT="); ok {
 			address = value
+		}
+
+		if value, ok := strings.CutPrefix(scanner.Text(), "CHILD-SUPERVISOR="); ok {
+			supervisor = value
 		}
 	}
 
@@ -1015,11 +1041,87 @@ func TestReadoption(t *testing.T) {
 		assert.False(t, up(h.Status()), "its sandbox is %s", h.Status())
 	})
 
-	t.Run("a running docker vm gets its dockerd back", func(t *testing.T) {
-		daemons := docker.NewDaemons(adopted, 3*time.Minute, slog.New(slog.NewTextHandler(os.Stderr, nil)))
+	const restoredDocker = "it-adopt-docker"
 
-		dockerUp(t, adopted, daemons, "it-adopt-docker")
+	daemons := docker.NewDaemons(adopted, 3*time.Minute, slog.New(slog.NewTextHandler(os.Stderr, nil)))
+
+	t.Run("a docker vm's supervisor outlives the vmhost that started it, and is not started twice", func(t *testing.T) {
+		dockerUp(t, adopted, daemons, restoredDocker)
+
+		assert.Equal(t, supervisor, runOK(t, adopted, restoredDocker, "cat /run/vminit.pid"), "the supervisor the last vmhost started looks after dockerd still")
+		assert.Equal(t, "1 1", runOK(t, adopted, restoredDocker, supervisionScript), "one supervisor, and one dockerd")
 	})
+
+	t.Run("a vmhost that starts while dockerd is coming up leaves it to its supervisor", func(t *testing.T) {
+		dockerUp(t, adopted, daemons, restoredDocker)
+		looking := runOK(t, adopted, restoredDocker, "cat /run/vminit.pid")
+
+		// dockerd is slow to come up: what its supervisor starts in its place
+		// says so, and sleeps a while before it becomes dockerd.
+		runOK(t, adopted, restoredDocker, `printf '#!/bin/sh\ntouch /tmp/slow-dockerd\nsleep 20\nexec /usr/local/bin/dockerd "$@"\n' > /usr/local/sbin/dockerd && chmod 755 /usr/local/sbin/dockerd
+rm -f /tmp/slow-dockerd
+kill -TERM $(pidof dockerd)
+i=0; while [ ! -e /tmp/slow-dockerd ] && [ $i -lt 300 ]; do sleep 0.1; i=$((i+1)); done
+[ -e /tmp/slow-dockerd ]`)
+		t.Cleanup(func() { run(t, adopted, restoredDocker, "rm -f /usr/local/sbin/dockerd /tmp/slow-dockerd") })
+		daemons.Forget(restoredDocker)
+
+		require.NotEqual(t, 0, run(t, adopted, restoredDocker, dockerReadyScript).code, "dockerd is not answering yet")
+		logged := runOK(t, adopted, restoredDocker, "wc -l < /var/log/vminit.log")
+
+		next := nextVMHost(t)
+		dockerUp(t, next, docker.NewDaemons(next, 3*time.Minute, slog.New(slog.NewTextHandler(os.Stderr, nil))), restoredDocker)
+
+		assert.Equal(t, looking, runOK(t, next, restoredDocker, "cat /run/vminit.pid"), "the supervisor that was starting dockerd is the one looking after it")
+		assert.Equal(t, "1 1", runOK(t, next, restoredDocker, supervisionScript), "one supervisor, and one dockerd")
+		assert.Empty(t, runOK(t, next, restoredDocker, fmt.Sprintf("tail -n +$((%s+1)) /var/log/vminit.log | grep -e 'start: pid' -e 'another supervisor' || true", logged)), "the next vmhost started no supervisor at all")
+	})
+
+	t.Run("a vmhost that starts while dockerd's supervisor is stopping starts another, which brings dockerd back", func(t *testing.T) {
+		dockerUp(t, adopted, daemons, restoredDocker)
+		stopping := runOK(t, adopted, restoredDocker, "cat /run/vminit.pid")
+
+		// a container that ignores being asked to stop keeps dockerd
+		// stopping, and its supervisor with it, for as long as docker gives
+		// it: dockerd would be gone, with nothing looking after it, a moment
+		// after the next vmhost came up.
+		runOK(t, adopted, restoredDocker, `docker run -d --name slow-to-stop --stop-timeout 20 busybox:latest sh -c 'trap "" TERM; while :; do sleep 1; done' >/dev/null`)
+		runOK(t, adopted, restoredDocker, fmt.Sprintf(`kill -TERM %[1]s
+i=0; while ! grep -q 'vminit\[%[1]s --supervise\]: signal TERM: stopping dockerd' /var/log/vminit.log && [ $i -lt 100 ]; do sleep 0.1; i=$((i+1)); done
+grep -q 'vminit\[%[1]s --supervise\]: signal TERM: stopping dockerd' /var/log/vminit.log && [ -e /proc/%[1]s ]`, stopping))
+		daemons.Forget(restoredDocker)
+
+		next := nextVMHost(t)
+		dockerUp(t, next, docker.NewDaemons(next, 3*time.Minute, slog.New(slog.NewTextHandler(os.Stderr, nil))), restoredDocker)
+
+		assert.NotEqual(t, stopping, runOK(t, next, restoredDocker, "cat /run/vminit.pid"), "another supervisor took over")
+
+		eventually(t, 30*time.Second, func() bool {
+			return runOK(t, next, restoredDocker, supervisionScript) == "1 1"
+		}, "the supervisor that was stopping is gone, and one dockerd runs")
+	})
+}
+
+// supervisionScript says how many supervisors and how many dockerds run in a
+// Docker VM. A supervisor's forks have its command line until they exec, and
+// are not counted; nor is a dockerd that has exited and is not reaped yet.
+const supervisionScript = `s="/bin/sh /usr/local/sbin/vminit --supervise "
+n=0; for p in /proc/[0-9]*; do
+  [ "$(tr '\0' ' ' < $p/cmdline 2>/dev/null)" = "$s" ] || continue
+  [ "$(tr '\0' ' ' < /proc/$(cut -d' ' -f4 $p/stat 2>/dev/null)/cmdline 2>/dev/null)" = "$s" ] || n=$((n+1))
+done
+d=0; for p in $(pidof dockerd); do [ "$(cut -d' ' -f3 /proc/$p/stat 2>/dev/null)" = Z ] || d=$((d+1)); done
+echo "$n $d"`
+
+// nextVMHost is the engine of a vmhost that starts while the VMs of the last
+// run on: what it does on its way up is take them back.
+func nextVMHost(t *testing.T) Engine {
+	t.Helper()
+
+	next, err := New(t.Context(), itOptions(t))
+	require.NoError(t, err)
+
+	return next
 }
 
 // TestNothingLeftBehind checks that the tests before it, which snapshotted,
