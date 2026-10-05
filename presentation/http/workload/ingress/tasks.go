@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/ingress"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
+	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	infraTrace "github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -29,7 +31,15 @@ type Resolver interface {
 	GetOne(ctx context.Context, uuid string) (task.Task, error)
 }
 
-// taskHandler serves the ports tasks expose. A task's slug is
+// VMResolver finds which node is holding a VM, by the slug a hostname carries
+// or by the uuid a terminal asks for. It is the VM repository in production.
+type VMResolver interface {
+	GetOneBySlug(ctx context.Context, slug string) (vm.VM, error)
+	GetOne(ctx context.Context, uuid string) (vm.VM, error)
+}
+
+// taskHandler serves the ports VMs and tasks expose. A slug is unique across
+// both, so it is looked up among the VMs first and the tasks second. A task's slug is
 // the left-most label of the hostname it answers on, so "nginx-xkfqz" reaches
 // the task's lowest exposed port and "nginx-xkfqz-8080" reaches port 8080
 // of the same task.
@@ -39,6 +49,7 @@ type Resolver interface {
 // connection. What the node finds there is the node's to report.
 type taskHandler struct {
 	resolver Resolver
+	vms      VMResolver
 	registry ingress.Registry
 
 	// domain is the suffix every task hostname carries, without a leading
@@ -53,6 +64,7 @@ var _ http.Handler = &taskHandler{}
 
 func NewTaskHandler(
 	resolver Resolver,
+	vms VMResolver,
 	registry ingress.Registry,
 	transport http.RoundTripper,
 	domain string,
@@ -60,6 +72,7 @@ func NewTaskHandler(
 ) *taskHandler {
 	h := &taskHandler{
 		resolver: resolver,
+		vms:      vms,
 		registry: registry,
 		domain:   strings.ToLower(strings.Trim(domain, ".")),
 		logger:   logger,
@@ -109,34 +122,22 @@ func (h *taskHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	t, err := h.resolver.GetOneBySlug(r.Context(), slug)
+	nodeName, refused, err := h.locate(r.Context(), slug, taskPort)
 	switch {
-	case errors.Is(err, domain.ErrNotExists):
-		http.Error(rw, "unknown task", http.StatusNotFound)
-
-		return
 	case err != nil:
 		infraTrace.RecordError(trace.SpanFromContext(r.Context()), err)
 		rw.WriteHeader(http.StatusInternalServerError)
 
 		return
-	}
-
-	if t.CurrentState != task.Running {
-		http.Error(rw, "the task is not running", http.StatusServiceUnavailable)
+	case refused != nil:
+		http.Error(rw, refused.message, refused.status)
 
 		return
 	}
 
-	if len(t.NodeName) == 0 {
-		http.Error(rw, "the task has not been scheduled yet", http.StatusServiceUnavailable)
-
-		return
-	}
-
-	// only the node holding it can reach a task, and only a node that is
-	// connected can be asked to.
-	connected, err := h.registry.Exists(r.Context(), t.NodeName)
+	// only the node holding it can reach a VM or a task, and only a node that
+	// is connected can be asked to.
+	connected, err := h.registry.Exists(r.Context(), nodeName)
 	if err != nil {
 		infraTrace.RecordError(trace.SpanFromContext(r.Context()), err)
 		rw.WriteHeader(http.StatusInternalServerError)
@@ -152,7 +153,7 @@ func (h *taskHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 	target := &url.URL{
 		Scheme: "http",
-		Host:   t.NodeName,
+		Host:   nodeName,
 		Path: strings.Join([]string{
 			"/tasks",
 			url.PathEscape(slug),
@@ -162,6 +163,75 @@ func (h *taskHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	}
 
 	h.proxy.ServeHTTP(rw, r.WithContext(context.WithValue(r.Context(), targetKey{}, target)))
+}
+
+// unavailable is why what a slug names cannot be reached, and the status that
+// says so.
+type unavailable struct {
+	status  int
+	message string
+}
+
+// unknown is a slug that names nothing the ingress serves. A VM that lets
+// nothing in, and a port a VM does not expose, are answered the same way:
+// what is not served is not there, as far as anybody asking is concerned.
+var unknown = &unavailable{status: http.StatusNotFound, message: "unknown task"}
+
+// locate is the node holding what a slug names: a VM, looked for first, or a
+// task. Every node serves both down one route, finding what the slug names
+// among the instances it holds.
+func (h *taskHandler) locate(ctx context.Context, slug string, requested port.Port) (string, *unavailable, error) {
+	if h.vms != nil {
+		v, err := h.vms.GetOneBySlug(ctx, slug)
+
+		switch {
+		case err == nil:
+			return vmNode(&v, requested)
+		case !errors.Is(err, domain.ErrNotExists):
+			return "", nil, err
+		}
+	}
+
+	t, err := h.resolver.GetOneBySlug(ctx, slug)
+	switch {
+	case errors.Is(err, domain.ErrNotExists):
+		return "", unknown, nil
+	case err != nil:
+		return "", nil, err
+	}
+
+	if t.CurrentState != task.Running {
+		return "", &unavailable{status: http.StatusServiceUnavailable, message: "the task is not running"}, nil
+	}
+
+	if len(t.NodeName) == 0 {
+		return "", &unavailable{status: http.StatusServiceUnavailable, message: "the task has not been scheduled yet"}, nil
+	}
+
+	return t.NodeName, nil, nil
+}
+
+// vmNode is the node holding a VM whose port is asked for, when the VM lets the
+// ingress in to that port and is running somewhere to be reached. With no port
+// named, its node answers on the lowest one it exposes.
+func vmNode(v *vm.VM, requested port.Port) (string, *unavailable, error) {
+	if v.Network.Ingress != vm.AccessAllow || len(v.Ports) == 0 {
+		return "", unknown, nil
+	}
+
+	if requested != 0 && !slices.Contains(v.Ports, requested) {
+		return "", unknown, nil
+	}
+
+	if v.CurrentState != vm.Running {
+		return "", &unavailable{status: http.StatusServiceUnavailable, message: "the vm is not running"}, nil
+	}
+
+	if len(v.NodeName) == 0 {
+		return "", &unavailable{status: http.StatusServiceUnavailable, message: "the vm has not been scheduled yet"}, nil
+	}
+
+	return v.NodeName, nil, nil
 }
 
 // parseHost takes the task's slug, and optionally the port it names, out
