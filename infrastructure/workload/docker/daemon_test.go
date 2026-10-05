@@ -49,10 +49,11 @@ type fakeDocker struct {
 	names      map[string]string
 	running    map[string]bool
 
-	pulled     []string
-	pullError  string
-	listFilter string
-	requests   atomic.Int32
+	pulled      []string
+	pullError   string
+	pullRefusal string
+	listFilter  string
+	requests    atomic.Int32
 }
 
 func newFakeDocker() *fakeDocker {
@@ -137,6 +138,13 @@ func (f *fakeDocker) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		reference := r.URL.Query().Get("fromImage") + ":" + r.URL.Query().Get("tag")
 		f.pulled = append(f.pulled, reference)
 		reference = strings.TrimPrefix(reference, "docker.io/library/")
+
+		// an image no registry has is refused before the pull starts.
+		if len(f.pullRefusal) > 0 {
+			writeJSON(rw, http.StatusNotFound, map[string]string{"message": f.pullRefusal})
+
+			return
+		}
 
 		// a pull answers 200 whatever happens, and says how it went as it goes.
 		rw.Header().Set("Content-Type", "application/json")
@@ -432,6 +440,56 @@ func TestDaemon_CreateContainer(t *testing.T) {
 		assert.ErrorIs(t, err, docker.ErrInvalid)
 		assert.Contains(t, err.Error(), "manifest unknown")
 		assert.Empty(t, fake.containers)
+	})
+
+	t.Run("an image no registry has is a request docker refused, not something that is gone", func(t *testing.T) {
+		t.Parallel()
+
+		fake := newFakeDocker()
+		fake.pullRefusal = "pull access denied for redis, repository does not exist or may require 'docker login'"
+
+		daemons, _ := dockerVM(t, fake, nil, time.Minute)
+
+		_, err := daemons.Daemon("vm-1").CreateContainer(t.Context(), spec)
+		assert.ErrorIs(t, err, docker.ErrInvalid)
+		assert.NotErrorIs(t, err, domain.ErrNotExists)
+		assert.Contains(t, err.Error(), "repository does not exist")
+		assert.Empty(t, fake.containers)
+	})
+}
+
+func TestDaemon_PullImage(t *testing.T) {
+	t.Parallel()
+
+	t.Run("an image is pulled, and what the VM now holds is said", func(t *testing.T) {
+		t.Parallel()
+
+		fake := newFakeDocker()
+		daemons, _ := dockerVM(t, fake, nil, time.Minute)
+
+		pulled, err := daemons.Daemon("vm-1").PullImage(t.Context(), "redis:7")
+		require.NoError(t, err)
+
+		assert.Equal(t, []string{"docker.io/library/redis:7"}, fake.pulled)
+		assert.Equal(t, []string{"redis:7"}, pulled.Tags)
+	})
+
+	t.Run("an image no registry has is a request docker refused, not something that is gone", func(t *testing.T) {
+		t.Parallel()
+
+		fake := newFakeDocker()
+		fake.pullRefusal = "pull access denied for nope, repository does not exist or may require 'docker login'"
+
+		daemons, _ := dockerVM(t, fake, nil, time.Minute)
+
+		_, err := daemons.Daemon("vm-1").PullImage(t.Context(), "nope:1")
+		assert.ErrorIs(t, err, docker.ErrInvalid)
+		assert.NotErrorIs(t, err, domain.ErrNotExists)
+		assert.Contains(t, err.Error(), "repository does not exist")
+
+		// dockerd answered, so the connection it answered on is kept.
+		_, err = daemons.Daemon("vm-1").Containers(t.Context(), docker.ContainerFilter{})
+		require.NoError(t, err)
 	})
 }
 

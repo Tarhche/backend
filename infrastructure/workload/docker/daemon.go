@@ -571,8 +571,17 @@ func ensureImage(ctx context.Context, cli *client.Client, reference string) erro
 //
 // A pull that fails part way still answers 200: the failure is a message in
 // the stream, so the stream is read for one rather than drained blind.
+//
+// A pull of an image no registry has fails before it starts, as not found.
+// That is about the reference asked for, not about anything in the VM, so it
+// is a request docker refused, as a pull that fails part way is: read as not
+// found, it would say that the VM, or the container being made, is gone.
 func pull(ctx context.Context, cli *client.Client, reference string) error {
 	stream, err := cli.ImagePull(ctx, reference, image.PullOptions{})
+	if cerrdefs.IsNotFound(err) {
+		return &refusal{meaning: docker.ErrInvalid, err: fmt.Errorf("pulling %s: %s", reference, err.Error())}
+	}
+
 	if err != nil {
 		return err
 	}
