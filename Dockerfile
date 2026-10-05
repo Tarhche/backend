@@ -122,3 +122,15 @@ ENV HOME=/data \
     MSB_LIBKRUNFW_PATH=/usr/local/lib/${MICROSANDBOX_LIBKRUNFW}
 ENTRYPOINT ["/usr/local/bin/burn-pids.sh", "app"]
 CMD ["serve-workload-vmhost"]
+
+# the vmhost's engine tested where it runs: its integration tests, built the
+# way the vmhost is and run in the vmhost's image (scripts/vmhost-integration.sh).
+FROM build-workload-vmhost AS build-workload-vmhost-integration
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=1 go test -c -tags 'microsandbox integration' -trimpath -buildvcs=false \
+    -o /opt/dist/vmhost-integration.test ./infrastructure/workload/vm/microsandbox/
+
+FROM production-workload-vmhost AS integration-workload-vmhost
+COPY --from=build-workload-vmhost-integration /opt/dist/vmhost-integration.test /usr/bin/vmhost-integration.test
+ENTRYPOINT ["/usr/local/bin/burn-pids.sh", "vmhost-integration.test"]
+CMD ["-test.v", "-test.timeout=90m"]
