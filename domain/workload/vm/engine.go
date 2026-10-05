@@ -79,9 +79,11 @@ type Spec struct {
 	// process, the way a container's are: it runs once the instance boots, its
 	// output goes to the logs, and the instance stops when it exits, keeping its
 	// exit code. A nil Entrypoint keeps the image's own, so a Command alone is
-	// handed to it as arguments, which is what a code runner's image expects;
-	// a nil Command keeps the image's CMD. Only code-runner tasks set either, so
-	// a VM somebody asked for has no main process at all.
+	// handed to it as arguments, which is what a code runner's image expects.
+	// Naming an Entrypoint drops the image's CMD along with its ENTRYPOINT, as
+	// docker does, so the image's CMD is kept only when neither is replaced.
+	// Only code-runner tasks set either, so a VM somebody asked for has no main
+	// process at all.
 	Entrypoint []string
 	Command    []string
 	Env        []string
