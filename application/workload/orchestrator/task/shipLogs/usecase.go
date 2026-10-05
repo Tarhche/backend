@@ -1,7 +1,7 @@
 // Package shipLogs follows the tasks running on this node and sends what
 // they write to the control plane, which keeps it. A task's log therefore
 // outlives the task: it is held against the task until the task is
-// deleted, rather than only until docker drops the task.
+// deleted, rather than only until its runtime drops the task.
 package shipLogs
 
 import (

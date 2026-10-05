@@ -84,7 +84,7 @@ type ExecOptions struct {
 
 // ExecSession is a command running inside a task. Reading takes its
 // output, writing feeds its input, and closing tears it down. It is the only
-// thing the domain knows about attaching, so no docker type leaks past here.
+// thing the domain knows about attaching, so no engine type leaks past here.
 type ExecSession interface {
 	io.ReadWriteCloser
 
@@ -94,17 +94,19 @@ type ExecSession interface {
 	// End stops the command, and everything it started, once nobody is
 	// attached to it any more.
 	//
-	// Closing a session only releases the stream it ran on: what was running
-	// inside the task carries on, with nothing to show it to and no way
-	// back to it. Ending gives it a moment to finish on its own, asks it to
-	// stop, and stops it for good if it will not. A command that has already
+	// Closing a session releases the stream it ran on, and a runtime whose
+	// commands outlive their streams leaves what was running inside the task
+	// carrying on, with nothing to show it to and no way back to it. Ending is
+	// what is sure to stop it: given a moment to finish on its own, asked to
+	// stop, and stopped for good if it will not. A command that has already
 	// finished is left alone.
 	End(ctx context.Context) error
 }
 
-// Runtime is whatever runs the tasks. Docker does today, behind
-// infrastructure/workload/container; a microvm could tomorrow, and nothing that
-// asks for a task to be run would have to say anything different.
+// Runtime is whatever runs the tasks. A node's VM engine does today, each run
+// a VM of its own, behind infrastructure/workload/task/vmruntime; whatever
+// runs them tomorrow, nothing that asks for a task to be run would have to say
+// anything different.
 type Runtime interface {
 	// OnNode is every run the named node is holding, whatever state it is in.
 	OnNode(ctx context.Context, nodeName string) ([]Execution, error)
