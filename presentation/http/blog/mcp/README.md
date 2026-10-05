@@ -93,6 +93,8 @@ capped at 1 MiB.
 
 ## What is not here
 
-Streams. Running a snippet from the public playground, and opening a terminal
-inside what it runs, are answered over the websocket and the workload's
-ingress, and a stream is not a tool call.
+Streams. Running a snippet from the public playground, opening a terminal
+inside what it runs, and opening one inside a VM are answered over the
+websocket and the workload's ingress, and a stream is not a tool call. The
+request/response half of a VM is here: its logs, its containers' logs and
+stats, and everything that changes it.

@@ -19,7 +19,7 @@ func NewCORSMiddleware(next http.Handler) *CORS {
 func (a *CORS) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	rw.Header().Set("Access-Control-Allow-Origin", "*")
 	rw.Header().Set("Access-Control-Allow-Credentials", "true")
-	rw.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
+	rw.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, PATCH, DELETE")
 	rw.Header().Set("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization, X-Language-Code, Mcp-Session-Id, Mcp-Protocol-Version, Mcp-Method, Mcp-Name, Last-Event-ID")
 
 	// the session id is a response header an MCP client has to be able to read

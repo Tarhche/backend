@@ -122,7 +122,7 @@ func TestTheTableIsOneToolPerRoute(t *testing.T) {
 
 		method, path, found := strings.Cut(tool.route, " ")
 		require.True(t, found, "%q is not a \"METHOD /path\" pattern", tool.route)
-		assert.Contains(t, []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete}, method)
+		assert.Contains(t, []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete}, method)
 		assert.True(t, strings.HasPrefix(path, "/"), tool.route)
 
 		if previous, taken := names[tool.name]; taken {
