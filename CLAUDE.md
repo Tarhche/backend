@@ -28,6 +28,9 @@ make migrate
 # The vmhost: its image's tag, and the engine's KVM tests (Linux with /dev/kvm)
 make vmhost-fingerprint
 make test-vmhost-integration
+
+# The whole stack end to end, VMs included, as the dashboard drives it (make up-vms first; see "VMs locally")
+E2E_IDENTITY=<user> E2E_PASSWORD=<password> go test -tags e2e -v -timeout 60m ./tests/e2e/
 ```
 
 Go 1.27. Local dev containers run under `go tool air` (hot reload with build polling), so code changes are picked up without restarting. The blog API is on http://localhost:8000, workload-controlplane on :8020, workload-ingress on :8030, orchestrators on :8040–8042. `.env` holds local config (compose interpolates it).
@@ -131,6 +134,8 @@ limactl shell --workdir "$PWD" workload make test-vmhost-integration
 ```
 
 Lima forwards every port the stack publishes to the Mac's localhost, so it is reached as `make up` is: the blog on http://localhost:8000, Grafana on :3001, the ingress on :8030. Its Docker can be driven from the Mac too: `docker context create lima-workload --docker "host=unix://$HOME/.lima/workload/sock/docker.sock"`, then `docker --context lima-workload compose --profile vms ...`.
+
+`tests/e2e` (build tag `e2e`) drives that stack from the Mac the way the dashboard does: the blog's API, the ingress for a VM's terminal and its ports (sending the `<slug>-<port>.<domain>` name as a Host header), and the blog's websocket for the code runner. It walks a machine VM through its life, a container in a Docker VM made for it, a compose stack, code-runner snippets and a VM refused past its owner's quota, as an account it makes for the run, with every workload permission, and removes afterwards with everything that account made; the account it is signed in as only has to be able to make users and roles. A VM nested in Lima is slow: a Docker VM's dockerd takes a minute or two to come up, and a Go snippet outruns the code runner's 30 s, which is why the test runs Node.
 
 **Resource limits are bytes, end to end.** Memory and disk are bytes from the moment a task or a VM is asked for to the moment the engine is handed them (a VM's `vm.Spec`, which the code runner's runtime writes in `infrastructure/workload/task/vmruntime`): nothing in between converts, and a conversion added anywhere is a bug. CPUs are the one rounding: a task's cores become whole vCPUs, rounded up. `task.MinMemory` is checked where a task is asked for (the control plane's `runTask` request) rather than left to fail on a node. **`mounts` and `health_check`** are refused as `not_supported`, because no runtime applies either yet.
 
