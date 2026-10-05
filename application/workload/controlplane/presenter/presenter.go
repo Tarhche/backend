@@ -99,6 +99,10 @@ type VM struct {
 	CreatedAt       time.Time   `json:"created_at"`
 	StartedAt       time.Time   `json:"started_at"`
 	UpdatedAt       time.Time   `json:"updated_at"`
+
+	// ManagedBy names what keeps a VM that is not a record of its own: the
+	// code runner, for one of its runs. It is left out for every other VM.
+	ManagedBy string `json:"managed_by,omitempty"`
 }
 
 func NewVM(v *vm.VM) VM {
@@ -139,6 +143,7 @@ func NewVM(v *vm.VM) VM {
 		CreatedAt:       v.CreatedAt,
 		StartedAt:       v.StartedAt,
 		UpdatedAt:       v.UpdatedAt,
+		ManagedBy:       v.ManagedBy,
 	}
 }
 

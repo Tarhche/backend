@@ -146,7 +146,20 @@ type VM struct {
 	CreatedAt time.Time
 	StartedAt time.Time
 	UpdatedAt time.Time
+
+	// ManagedBy names what keeps a VM that is not a record of its own, such as
+	// ManagedByCodeRunner. It is empty for every VM somebody asked for, which
+	// is every VM that is stored: it is only ever read, never kept.
+	ManagedBy string
 }
+
+// ManagedByCodeRunner is what keeps a VM the code runner runs a snippet in.
+//
+// Each snippet runs in a VM of its own for as long as it runs, as a task of
+// the guest's, and the task is the one record of it: the VM is that task, read
+// as one. It can be stopped, deleted and read, and nothing else: it is gone
+// once the snippet has ended anyway.
+const ManagedByCodeRunner = "code-runner"
 
 // Expired reports whether a VM has outlived the lifetime it was given. One
 // kept until it is deleted never expires.

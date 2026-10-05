@@ -10,6 +10,7 @@ import (
 
 	"github.com/khanzadimahdi/testproject/domain/user"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
+	"github.com/khanzadimahdi/testproject/domain/workload/task"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
 
@@ -137,6 +138,60 @@ func TestNewVM(t *testing.T) {
 			"created_at": "2026-10-04T12:00:00Z"
 		}`, string(presented))
 	})
+}
+
+func TestNewVM_run(t *testing.T) {
+	t.Parallel()
+
+	// a snippet the code runner is running, as the VM it runs in: the guest's,
+	// and kept by the code runner.
+	run := vm.VM{
+		UUID:          "run-uuid",
+		Name:          "01a10cd4-dae7-77d9-b400-7430fde9e001",
+		Slug:          "01a10cd4-dae7-77d9-b400-7430fde9e001-nhxyb",
+		OwnerUUID:     task.GuestOwnerUUID,
+		Kind:          vm.KindMachine,
+		Image:         "ghcr.io/tarhche/code-runner:nodejs-22.14-latest",
+		Resources:     vm.Resources{CPUs: 2, Memory: 200 << 20, Disk: 100 << 20},
+		Ports:         []port.Port{},
+		Network:       vm.Network{Ingress: vm.AccessAllow, Egress: vm.AccessDeny},
+		Lifetime:      time.Minute,
+		ExpiresAt:     at.Add(time.Second + time.Minute),
+		CurrentState:  vm.Running,
+		ExpectedState: vm.Running,
+		NodeName:      "orchestrator-01",
+		CreatedAt:     at,
+		StartedAt:     at.Add(time.Second),
+		UpdatedAt:     at.Add(time.Second),
+		ManagedBy:     vm.ManagedByCodeRunner,
+	}
+
+	presented, err := json.Marshal(NewVM(run, ingressDomain, NewOwners(nil)))
+	require.NoError(t, err)
+
+	assert.JSONEq(t, `{
+		"uuid": "run-uuid",
+		"name": "01a10cd4-dae7-77d9-b400-7430fde9e001",
+		"slug": "01a10cd4-dae7-77d9-b400-7430fde9e001-nhxyb",
+		"owner_uuid": "guest",
+		"owner": {"uuid": "guest"},
+		"kind": "machine",
+		"image": "ghcr.io/tarhche/code-runner:nodejs-22.14-latest",
+		"resources": {"cpus": 2, "memory": 209715200, "disk": 104857600},
+		"ports": [],
+		"network": {"ingress": "allow", "egress": "deny"},
+		"persistent_disk": false,
+		"lifetime_seconds": 60,
+		"expires_at": "2026-10-04T12:01:01Z",
+		"state": "running",
+		"expected_state": "running",
+		"node_name": "orchestrator-01",
+		"urls": [],
+		"created_at": "2026-10-04T12:00:00Z",
+		"started_at": "2026-10-04T12:00:01Z",
+		"updated_at": "2026-10-04T12:00:01Z",
+		"managed_by": "code-runner"
+	}`, string(presented))
 }
 
 func TestNewURLs(t *testing.T) {

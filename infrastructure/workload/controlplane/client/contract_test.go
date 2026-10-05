@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	createcontainer "github.com/khanzadimahdi/testproject/application/workload/controlplane/container/createContainer"
@@ -31,6 +30,7 @@ import (
 	restartstack "github.com/khanzadimahdi/testproject/application/workload/controlplane/stack/restartStack"
 	startstack "github.com/khanzadimahdi/testproject/application/workload/controlplane/stack/startStack"
 	stopstack "github.com/khanzadimahdi/testproject/application/workload/controlplane/stack/stopStack"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/coderunner"
 	createvm "github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/createVM"
 	deletevm "github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/deleteVM"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/dockerVM"
@@ -53,7 +53,6 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
-	tasksMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/tasks"
 	"github.com/khanzadimahdi/testproject/infrastructure/translator"
 	"github.com/khanzadimahdi/testproject/infrastructure/validator"
 	"github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane/client"
@@ -98,10 +97,7 @@ func controlPlane(t *testing.T, w *vmtest.Workload) *client.Client {
 	codes := validator.New(translator.Codes{})
 	requester := node()
 
-	tasks := &tasksMock.MockTasksRepository{}
-	tasks.On("GetOneBySlug", mock.Anything, mock.Anything).Return(task.Task{}, domain.ErrNotExists)
-
-	createVM := createvm.NewUseCase(w.VMs, tasks, w.Snapshots, w.Quota, w.Lifecycle, codes, createvm.Images{Machine: "ubuntu:24.04", Docker: "docker:29-dind"})
+	createVM := createvm.NewUseCase(w.VMs, w.Tasks, w.Snapshots, w.Quota, w.Lifecycle, codes, createvm.Images{Machine: "ubuntu:24.04", Docker: "docker:29-dind"})
 	chooser := dockerVM.NewChooser(w.VMs, createVM, w.Lifecycle, dockerVM.Defaults{
 		Resources: vm.Resources{CPUs: 2, Memory: 2 * vmtest.GiB, Disk: 20 * vmtest.GiB},
 		Ports:     []port.Port{80},
@@ -111,18 +107,18 @@ func controlPlane(t *testing.T, w *vmtest.Workload) *client.Client {
 	remover := archive.NewRemover(nil, logger)
 
 	mux := http.NewServeMux()
-	mux.Handle("GET /api/vms", vmAPI.NewIndexHandler(getvms.NewUseCase(w.VMs)))
+	mux.Handle("GET /api/vms", vmAPI.NewIndexHandler(getvms.NewUseCase(w.VMs, w.Runs)))
 	mux.Handle("POST /api/vms", vmAPI.NewCreateHandler(createVM))
-	mux.Handle("GET /api/vms/{uuid}", vmAPI.NewShowHandler(getvm.NewUseCase(w.VMs)))
-	mux.Handle("PATCH /api/vms/{uuid}", vmAPI.NewUpdateHandler(updatevm.NewUseCase(w.VMs, w.Quota, w.Placement, w.Lifecycle, codes)))
-	mux.Handle("DELETE /api/vms/{uuid}", vmAPI.NewDeleteHandler(deletevm.NewUseCase(w.VMs, w.Lifecycle, codes)))
-	mux.Handle("POST /api/vms/{uuid}/start", vmAPI.NewStartHandler(startvm.NewUseCase(w.VMs, w.Lifecycle, codes)))
-	mux.Handle("POST /api/vms/{uuid}/stop", vmAPI.NewStopHandler(stopvm.NewUseCase(w.VMs, w.Lifecycle, codes)))
-	mux.Handle("POST /api/vms/{uuid}/restart", vmAPI.NewRestartHandler(restartvm.NewUseCase(w.VMs, w.Lifecycle, codes)))
-	mux.Handle("POST /api/vms/{uuid}/restore", vmAPI.NewRestoreHandler(restorevm.NewUseCase(w.VMs, w.Snapshots, w.Nodes, w.Lifecycle, w.Commander, codes)))
-	mux.Handle("GET /api/vms/{uuid}/logs", vmAPI.NewLogsHandler(getvmlogs.NewUseCase(w.VMs, requester, codes)))
+	mux.Handle("GET /api/vms/{uuid}", vmAPI.NewShowHandler(getvm.NewUseCase(w.VMs, w.Runs)))
+	mux.Handle("PATCH /api/vms/{uuid}", vmAPI.NewUpdateHandler(updatevm.NewUseCase(w.VMs, w.Runs, w.Quota, w.Placement, w.Lifecycle, codes)))
+	mux.Handle("DELETE /api/vms/{uuid}", vmAPI.NewDeleteHandler(deletevm.NewUseCase(w.VMs, w.Runs, w.Lifecycle, codes)))
+	mux.Handle("POST /api/vms/{uuid}/start", vmAPI.NewStartHandler(startvm.NewUseCase(w.VMs, w.Runs, w.Lifecycle, codes)))
+	mux.Handle("POST /api/vms/{uuid}/stop", vmAPI.NewStopHandler(stopvm.NewUseCase(w.VMs, w.Runs, w.Lifecycle, codes)))
+	mux.Handle("POST /api/vms/{uuid}/restart", vmAPI.NewRestartHandler(restartvm.NewUseCase(w.VMs, w.Runs, w.Lifecycle, codes)))
+	mux.Handle("POST /api/vms/{uuid}/restore", vmAPI.NewRestoreHandler(restorevm.NewUseCase(w.VMs, w.Runs, w.Snapshots, w.Nodes, w.Lifecycle, w.Commander, codes)))
+	mux.Handle("GET /api/vms/{uuid}/logs", vmAPI.NewLogsHandler(getvmlogs.NewUseCase(w.VMs, w.Runs, requester, codes)))
 	mux.Handle("GET /api/snapshots", snapshotAPI.NewIndexHandler(getsnapshots.NewUseCase(w.Snapshots)))
-	mux.Handle("POST /api/vms/{uuid}/snapshots", snapshotAPI.NewCreateHandler(createsnapshot.NewUseCase(w.VMs, w.Snapshots, w.Lifecycle, w.Producer, codes, 10)))
+	mux.Handle("POST /api/vms/{uuid}/snapshots", snapshotAPI.NewCreateHandler(createsnapshot.NewUseCase(w.VMs, w.Runs, w.Snapshots, w.Lifecycle, w.Producer, codes, 10)))
 	mux.Handle("GET /api/snapshots/{uuid}", snapshotAPI.NewShowHandler(getsnapshot.NewUseCase(w.Snapshots)))
 	mux.Handle("PATCH /api/snapshots/{uuid}", snapshotAPI.NewRenameHandler(renamesnapshot.NewUseCase(w.Snapshots, codes)))
 	mux.Handle("DELETE /api/snapshots/{uuid}", snapshotAPI.NewDeleteHandler(deletesnapshot.NewUseCase(w.Snapshots, w.VMs, w.Lifecycle, remover, codes)))
@@ -228,6 +224,73 @@ func TestContract_VMs(t *testing.T) {
 	deleting, err := c.VM(ctx, "", created.UUID)
 	require.NoError(t, err)
 	assert.Equal(t, vm.Deleting, deleting.CurrentState)
+}
+
+// TestContract_Runs reads the code runner's runs back as the VMs they run in,
+// among anybody's: what manages them travels with them, and so does what a run
+// can be asked and what it is refused.
+func TestContract_Runs(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	run := vmtest.Run("run")
+	run.ExecutionLogs = []byte("hello\nbye\n")
+
+	w := vmtest.New(vmtest.WithVMs(vmtest.Running("theirs", "other")), vmtest.WithTasks(run))
+	c := controlPlane(t, w)
+
+	page, err := c.VMs(ctx, "", "", 1)
+	require.NoError(t, err)
+	require.Len(t, page.Items, 2)
+	assert.Equal(t, "run", page.Items[0].UUID, "the newest first")
+	assert.Equal(t, vm.ManagedByCodeRunner, page.Items[0].ManagedBy)
+	assert.Equal(t, task.GuestOwnerUUID, page.Items[0].OwnerUUID)
+	assert.Equal(t, vm.Running, page.Items[0].CurrentState)
+	assert.Empty(t, page.Items[1].ManagedBy)
+
+	docker, err := c.VMs(ctx, "", vm.KindDocker, 1)
+	require.NoError(t, err)
+	assert.Empty(t, docker.Items, "a run is a machine")
+
+	theirs, err := c.VMs(ctx, "other", "", 1)
+	require.NoError(t, err)
+	require.Len(t, theirs.Items, 1, "and nobody's own")
+
+	read, err := c.VM(ctx, "", "run")
+	require.NoError(t, err)
+	assert.Equal(t, vm.ManagedByCodeRunner, read.ManagedBy)
+	assert.Equal(t, vm.Resources{CPUs: 2, Memory: 200 * vmtest.MiB, Disk: 100 * vmtest.MiB}, read.Resources)
+
+	_, err = c.VM(ctx, "other", "run")
+	assert.ErrorIs(t, err, domain.ErrNotExists)
+
+	lines, err := c.VMLogs(ctx, "", "run", vm.LogOptions{})
+	require.NoError(t, err)
+	require.Len(t, lines, 2)
+	assert.Equal(t, "bye", lines[1].Line)
+
+	var refused *client.ValidationError
+
+	err = c.StartVM(ctx, "", "run")
+	require.ErrorAs(t, err, &refused)
+	assert.Equal(t, domain.ValidationErrors{"vm": coderunner.CodeRefused}, refused.ValidationErrors)
+
+	_, err = c.UpdateVM(ctx, "", "run", workloadControlPlane.VMUpdate{Name: new("renamed")})
+	require.ErrorAs(t, err, &refused)
+	assert.Equal(t, domain.ValidationErrors{"vm": coderunner.CodeRefused}, refused.ValidationErrors)
+
+	require.NoError(t, c.StopVM(ctx, "", "run"))
+
+	stopping, err := c.VM(ctx, "", "run")
+	require.NoError(t, err)
+	assert.Equal(t, vm.Stopping, stopping.CurrentState)
+	assert.Equal(t, vm.Stopped, stopping.ExpectedState)
+
+	require.NoError(t, c.DeleteVM(ctx, "", "run"))
+
+	_, err = c.VM(ctx, "", "run")
+	assert.ErrorIs(t, err, domain.ErrNotExists, "a run taken away is gone")
 }
 
 func TestContract_Snapshots(t *testing.T) {

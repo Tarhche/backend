@@ -2,11 +2,13 @@ package task
 
 import (
 	"context"
+	"math"
 	"time"
 
 	"github.com/khanzadimahdi/testproject/domain/workload/network"
 	"github.com/khanzadimahdi/testproject/domain/workload/node"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
+	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
 
 // Task represents a task specification
@@ -119,6 +121,22 @@ type ResourceLimits struct {
 	Disk   uint64
 }
 
+// VMResources is what the VM a task runs in is given for these limits: its
+// cores as whole vCPUs, rounded up and never to none, and its memory and disk
+// as they are, in bytes.
+func (l ResourceLimits) VMResources() vm.Resources {
+	return vm.Resources{
+		CPUs:   uint(max(math.Ceil(l.Cpu), 1)),
+		Memory: l.Memory,
+		Disk:   l.Disk,
+	}
+}
+
+// GuestOwnerUUID is whose a task the code runner starts is: whoever is reading
+// the page it was run from, signed in or not, which is nobody the users know.
+// No user's uuid is ever the guest's, so nobody's own listing has one.
+const GuestOwnerUUID = "guest"
+
 // MinMemory is the least memory, in bytes, a task may be limited to.
 //
 // It is docker's floor rather than one the workload chose: the engine refuses
@@ -131,9 +149,8 @@ const MinMemory = 6 << 20
 type Repository interface {
 	GetAll(ctx context.Context, offset uint, limit uint) ([]Task, error)
 
-	// GetAllByOwner is the same listing, of what one person asked for. A
-	// task nobody owns — one the code runner started, say — belongs to no
-	// such listing.
+	// GetAllByOwner is the same listing, of what one person asked for. The
+	// tasks the code runner started are the guest's (GuestOwnerUUID).
 	GetAllByOwner(ctx context.Context, ownerUUID string, offset uint, limit uint) ([]Task, error)
 	CountByOwner(ctx context.Context, ownerUUID string) (uint, error)
 

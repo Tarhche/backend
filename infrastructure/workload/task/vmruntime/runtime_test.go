@@ -146,15 +146,6 @@ func TestRuntime_Create(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotEqual(t, first, retried, "another attempt is another run")
 	})
-
-	t.Run("cores are rounded up to whole vCPUs, and never to none", func(t *testing.T) {
-		t.Parallel()
-
-		assert.Equal(t, uint(1), cpus(0))
-		assert.Equal(t, uint(1), cpus(0.25))
-		assert.Equal(t, uint(2), cpus(1.2))
-		assert.Equal(t, uint(2), cpus(2))
-	})
 }
 
 func TestRuntime_Lookups(t *testing.T) {

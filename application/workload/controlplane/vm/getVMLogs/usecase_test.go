@@ -36,7 +36,7 @@ func TestUseCase_Execute(t *testing.T) {
 			return noderequest.Reply{OK: true, Result: result, Truncated: true}, nil
 		}}
 
-		response, err := NewUseCase(w.VMs, requester, validator.New(translator.Codes{})).Execute(ctx, &Request{OwnerUUID: "owner", UUID: "01", Since: since, Tail: 5000})
+		response, err := NewUseCase(w.VMs, w.Runs, requester, validator.New(translator.Codes{})).Execute(ctx, &Request{OwnerUUID: "owner", UUID: "01", Since: since, Tail: 5000})
 		require.NoError(t, err)
 		require.Nil(t, response.NodeError)
 
@@ -91,7 +91,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 			w := vmtest.New(vmtest.WithVMs(tt.vm))
 
-			response, err := NewUseCase(w.VMs, &messagingMock.Requester{Answer: tt.answer}, validator.New(translator.Codes{})).Execute(ctx, &Request{UUID: "01"})
+			response, err := NewUseCase(w.VMs, w.Runs, &messagingMock.Requester{Answer: tt.answer}, validator.New(translator.Codes{})).Execute(ctx, &Request{UUID: "01"})
 			require.NoError(t, err)
 			require.NotNil(t, response.NodeError)
 			assert.Equal(t, tt.want, response.NodeError.Code)
@@ -103,7 +103,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		w := vmtest.New(vmtest.WithVMs(vmtest.Running("01", "owner")))
 
-		_, err := NewUseCase(w.VMs, &messagingMock.Requester{}, validator.New(translator.Codes{})).Execute(ctx, &Request{OwnerUUID: "other", UUID: "01"})
+		_, err := NewUseCase(w.VMs, w.Runs, &messagingMock.Requester{}, validator.New(translator.Codes{})).Execute(ctx, &Request{OwnerUUID: "other", UUID: "01"})
 		assert.ErrorIs(t, err, domain.ErrNotExists)
 	})
 
@@ -121,10 +121,56 @@ func TestUseCase_Execute(t *testing.T) {
 			return noderequest.Failed(domain.ErrNotExists), nil
 		}}
 
-		response, err := NewUseCase(w.VMs, requester, validator.New(translator.Codes{})).Execute(ctx, &Request{OwnerUUID: "owner", UUID: "01"})
+		response, err := NewUseCase(w.VMs, w.Runs, requester, validator.New(translator.Codes{})).Execute(ctx, &Request{OwnerUUID: "owner", UUID: "01"})
 		require.NoError(t, err)
 		require.NotNil(t, response.NodeError)
 		assert.Equal(t, noderequest.CodeNotRunning, response.NodeError.Code)
 		assert.Empty(t, requester.Asked(), "its node holds nothing to ask about")
+	})
+
+	t.Run("a run of the code runner's is read from what its task keeps", func(t *testing.T) {
+		t.Parallel()
+
+		run := vmtest.Run("run")
+		run.ExecutionLogs = []byte("start\ntick\ntick\ndone\n")
+
+		w := vmtest.New(vmtest.WithTasks(run))
+		requester := &messagingMock.Requester{}
+		useCase := NewUseCase(w.VMs, w.Runs, requester, validator.New(translator.Codes{}))
+
+		response, err := useCase.Execute(ctx, &Request{UUID: "run"})
+		require.NoError(t, err)
+		require.Nil(t, response.NodeError)
+		assert.Empty(t, requester.Asked(), "its node is not asked: its output is kept")
+
+		lines := make([]string, len(response.Lines))
+		for i := range response.Lines {
+			lines[i] = response.Lines[i].Line
+			assert.Equal(t, vm.LogSourceMain, response.Lines[i].Source)
+		}
+
+		assert.Equal(t, []string{"start", "tick", "tick", "done"}, lines)
+		assert.False(t, response.Truncated)
+
+		// what came after a line read is what comes since it, as for a VM:
+		// the line read and those after it.
+		since, err := useCase.Execute(ctx, &Request{UUID: "run", Since: response.Lines[2].At})
+		require.NoError(t, err)
+		require.Len(t, since.Lines, 2)
+		assert.Equal(t, "done", since.Lines[1].Line)
+
+		tail, err := useCase.Execute(ctx, &Request{UUID: "run", Tail: 1})
+		require.NoError(t, err)
+		require.Len(t, tail.Lines, 1)
+		assert.Equal(t, "done", tail.Lines[0].Line)
+	})
+
+	t.Run("a run is nobody's own to read", func(t *testing.T) {
+		t.Parallel()
+
+		w := vmtest.New(vmtest.WithTasks(vmtest.Run("run")))
+
+		_, err := NewUseCase(w.VMs, w.Runs, &messagingMock.Requester{}, validator.New(translator.Codes{})).Execute(ctx, &Request{OwnerUUID: "owner", UUID: "run"})
+		assert.ErrorIs(t, err, domain.ErrNotExists)
 	})
 }

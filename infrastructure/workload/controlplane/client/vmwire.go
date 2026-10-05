@@ -70,6 +70,7 @@ type vmPayload struct {
 	CreatedAt       time.Time        `json:"created_at"`
 	StartedAt       time.Time        `json:"started_at"`
 	UpdatedAt       time.Time        `json:"updated_at"`
+	ManagedBy       string           `json:"managed_by"`
 }
 
 // vmStates maps the words the API uses back onto the VM's own states.
@@ -123,6 +124,7 @@ func (p *vmPayload) toVM() vm.VM {
 		CreatedAt:       p.CreatedAt,
 		StartedAt:       p.StartedAt,
 		UpdatedAt:       p.UpdatedAt,
+		ManagedBy:       p.ManagedBy,
 	}
 }
 

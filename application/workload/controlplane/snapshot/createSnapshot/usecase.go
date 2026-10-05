@@ -9,6 +9,7 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/owner"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/presenter"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/coderunner"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/lifecycle"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/snapshot"
@@ -18,6 +19,7 @@ import (
 
 type UseCase struct {
 	vmRepository       vm.Repository
+	runs               *coderunner.Runs
 	snapshotRepository snapshot.Repository
 	lifecycle          *lifecycle.Lifecycle
 	producer           domain.Producer
@@ -29,6 +31,7 @@ type UseCase struct {
 
 func NewUseCase(
 	vmRepository vm.Repository,
+	runs *coderunner.Runs,
 	snapshotRepository snapshot.Repository,
 	lifecycle *lifecycle.Lifecycle,
 	producer domain.Producer,
@@ -37,6 +40,7 @@ func NewUseCase(
 ) *UseCase {
 	return &UseCase{
 		vmRepository:       vmRepository,
+		runs:               runs,
 		snapshotRepository: snapshotRepository,
 		lifecycle:          lifecycle,
 		producer:           producer,
@@ -54,7 +58,14 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 
 	v, err := owner.One(ctx, uc.vmRepository, request.OwnerUUID, request.VMUUID)
 	if err != nil {
-		return nil, err
+		// a uuid that names no VM may name a run, whose disk is thrown away
+		// with it.
+		refused, err := uc.runs.Refused(ctx, request.OwnerUUID, request.VMUUID, err)
+		if err != nil {
+			return nil, err
+		}
+
+		return &Response{ValidationErrors: refused}, nil
 	}
 
 	alive, err := uc.lifecycle.NodeAlive(ctx, v.NodeName)

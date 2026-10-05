@@ -76,4 +76,5 @@ var english = map[string]string{
 	"immutable":              "this cannot be changed once it is set",
 	"node_lost":              "the node holding it went away",
 	"waiting_for_vm":         "waiting for its VM to come up",
+	"managed_by_code_runner": "the code runner runs this VM for as long as its snippet runs: it can only be stopped or deleted",
 }

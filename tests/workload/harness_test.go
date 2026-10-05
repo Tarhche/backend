@@ -14,7 +14,6 @@ import (
 
 	"github.com/nats-io/nats-server/v2/server"
 	"github.com/nats-io/nats.go"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/presenter"
@@ -23,7 +22,6 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/user"
 	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
-	"github.com/khanzadimahdi/testproject/domain/workload/task"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	providers "github.com/khanzadimahdi/testproject/infrastructure/ioc/providers/workload"
@@ -31,8 +29,9 @@ import (
 	nodesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/nodes"
 	snapshotsMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/snapshots"
 	stacksMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/stacks"
+	tasksMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/tasks"
 	vmsMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/vms"
-	tasksMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/tasks"
+	logsMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/logs"
 	storageMemory "github.com/khanzadimahdi/testproject/infrastructure/storage/memory"
 	"github.com/khanzadimahdi/testproject/infrastructure/translator"
 	"github.com/khanzadimahdi/testproject/infrastructure/validator"
@@ -155,15 +154,13 @@ func start(t *testing.T) *workload {
 	controlPlaneMessages, err := produceConsumer.NewProduceConsumer(controlPlaneConnection, "workload-controlplane", logger)
 	require.NoError(t, err)
 
-	tasks := &tasksMock.MockTasksRepository{}
-	tasks.On("GetOneBySlug", mock.Anything, mock.Anything).Return(task.Task{}, domain.ErrNotExists)
-
 	controlPlane, err := providers.NewControlPlaneVMs(configs.NewWorkloadControlPlane(), providers.ControlPlaneVMStores{
 		VMs:       w.vms,
 		Snapshots: w.snapshots,
 		Stacks:    w.stacks,
 		Nodes:     w.nodes,
-		Tasks:     tasks,
+		Tasks:     tasksMemory.NewRepository(),
+		TaskLogs:  logsMock.NewInMemoryRepository(),
 		Archives:  w.archives,
 	}, controlPlaneConnection, controlPlaneMessages, logger)
 	require.NoError(t, err)

@@ -1,14 +1,17 @@
 // Package getVMLogs reads the tail of a VM's log from the node holding it, as
-// it is now: nothing keeps it anywhere else.
+// it is now: nothing keeps it anywhere else. One of the code runner's runs is
+// read from what its task keeps of its output instead.
 package getVMLogs
 
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"time"
 
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/ask"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/owner"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/coderunner"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
@@ -16,14 +19,15 @@ import (
 
 type UseCase struct {
 	vmRepository vm.Repository
+	runs         *coderunner.Runs
 	requester    noderequest.Requester
 	validator    domain.Validator
 
 	now func() time.Time
 }
 
-func NewUseCase(vmRepository vm.Repository, requester noderequest.Requester, validator domain.Validator) *UseCase {
-	return &UseCase{vmRepository: vmRepository, requester: requester, validator: validator, now: time.Now}
+func NewUseCase(vmRepository vm.Repository, runs *coderunner.Runs, requester noderequest.Requester, validator domain.Validator) *UseCase {
+	return &UseCase{vmRepository: vmRepository, runs: runs, requester: requester, validator: validator, now: time.Now}
 }
 
 // Execute is the tail of the VM's log, or why there is none: a VM on no node,
@@ -35,7 +39,9 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 	}
 
 	v, err := owner.One(ctx, uc.vmRepository, request.OwnerUUID, request.UUID)
-	if err != nil {
+	if errors.Is(err, domain.ErrNotExists) {
+		return uc.runLogs(ctx, request, err)
+	} else if err != nil {
 		return nil, err
 	}
 
@@ -69,4 +75,20 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 	}
 
 	return &Response{Lines: lines, Truncated: reply.Truncated}, nil
+}
+
+// runLogs is what the run a uuid that names no VM may name has written.
+// notThere is what looking for a VM came to, which is the answer when it names
+// no run either.
+func (uc *UseCase) runLogs(ctx context.Context, request *Request, notThere error) (*Response, error) {
+	run, err := uc.runs.One(ctx, request.OwnerUUID, request.UUID)
+	if errors.Is(err, domain.ErrNotExists) {
+		return nil, notThere
+	} else if err != nil {
+		return nil, err
+	}
+
+	lines, truncated := coderunner.Logs(&run, vm.LogOptions{Since: request.Since, Tail: request.Tail})
+
+	return &Response{Lines: lines, Truncated: truncated}, nil
 }

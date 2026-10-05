@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/coderunner"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/vmtest"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/node"
@@ -31,7 +32,7 @@ func ready(owner string) snapshot.Snapshot {
 }
 
 func useCaseOf(w *vmtest.Workload) *UseCase {
-	return NewUseCase(w.VMs, w.Snapshots, w.Nodes, w.Lifecycle, w.Commander, validator.New(translator.Codes{}))
+	return NewUseCase(w.VMs, w.Runs, w.Snapshots, w.Nodes, w.Lifecycle, w.Commander, validator.New(translator.Codes{}))
 }
 
 func TestUseCase_Execute(t *testing.T) {
@@ -201,5 +202,38 @@ func TestVMRestored_Handle(t *testing.T) {
 		w := vmtest.New()
 
 		assert.NoError(t, NewVMRestored(w.VMs, w.Lifecycle, w.Commander, slog.New(slog.DiscardHandler)).Handle(ctx, []byte("nope")))
+	})
+}
+
+// TestUseCase_Execute_run holds a run of the code runner's to being refused
+// what only a VM somebody asked for can be asked, by whoever may see it, and to
+// being nobody's own.
+func TestUseCase_Execute_run(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	t.Run("anybody's is refused", func(t *testing.T) {
+		t.Parallel()
+
+		w := vmtest.New(vmtest.WithTasks(vmtest.Run("run")))
+
+		response, err := useCaseOf(w).Execute(ctx, &Request{UUID: "run", SnapshotUUID: "snapshot-uuid"})
+		require.NoError(t, err)
+		assert.Equal(t, domain.ValidationErrors{"vm": coderunner.CodeRefused}, response.ValidationErrors)
+		assert.Empty(t, w.Producer.Messages())
+
+		stored, _ := w.Tasks.Stored("run")
+		assert.Equal(t, vmtest.Run("run").CurrentState, stored.CurrentState)
+	})
+
+	t.Run("one's own is not there", func(t *testing.T) {
+		t.Parallel()
+
+		w := vmtest.New(vmtest.WithTasks(vmtest.Run("run")))
+
+		_, err := useCaseOf(w).Execute(ctx, &Request{OwnerUUID: "owner", UUID: "run", SnapshotUUID: "snapshot-uuid"})
+		assert.ErrorIs(t, err, domain.ErrNotExists)
+		assert.Empty(t, w.Producer.Messages())
 	})
 }

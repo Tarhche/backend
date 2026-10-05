@@ -8,11 +8,17 @@ import (
 	"context"
 
 	"github.com/khanzadimahdi/testproject/domain/user"
+	"github.com/khanzadimahdi/testproject/domain/workload/task"
 )
 
 // Owner is who a VM, a snapshot or a stack belongs to, as the dashboard shows
 // them beside it. Its uuid is the owner_uuid the record carries anyway; the
 // rest is what puts a face to it.
+//
+// The code runner's runs are the guest's, whoever was reading the page they
+// were run from, signed in or not: their owner is the guest's uuid and nothing
+// more, since there is nobody to put a face to, as it was when the dashboard
+// listed them as tasks.
 type Owner struct {
 	UUID     string `json:"uuid"`
 	Name     string `json:"name,omitempty"`
@@ -33,10 +39,15 @@ func NewOwners(users []user.User) Owners {
 	return owners
 }
 
-// Of is who that id belongs to, and nobody at all when it names no one the
-// dashboard has: somebody who has since gone still leaves their records, and
-// the owner_uuid beside them is all there is to say.
+// Of is who that id belongs to: the guest for the guest's, and nobody at all
+// when it names no one the dashboard has, since somebody who has since gone
+// still leaves their records, and the owner_uuid beside them is all there is
+// to say.
 func (o Owners) Of(uuid string) *Owner {
+	if uuid == task.GuestOwnerUUID {
+		return &Owner{UUID: uuid}
+	}
+
 	u, ok := o[uuid]
 	if !ok {
 		return nil
@@ -70,7 +81,8 @@ func (d *Directory) Of(ctx context.Context, uuids ...string) (Owners, error) {
 	seen := make(map[string]struct{}, len(uuids))
 
 	for _, uuid := range uuids {
-		if len(uuid) == 0 {
+		// the guest is nobody the users know, so there is no one to look up.
+		if len(uuid) == 0 || uuid == task.GuestOwnerUUID {
 			continue
 		}
 

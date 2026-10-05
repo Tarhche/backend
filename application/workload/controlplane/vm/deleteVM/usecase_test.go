@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -12,6 +13,8 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/vmtest"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/stack"
+	"github.com/khanzadimahdi/testproject/domain/workload/task"
+	taskEvents "github.com/khanzadimahdi/testproject/domain/workload/task/events"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm/events"
 	"github.com/khanzadimahdi/testproject/infrastructure/translator"
@@ -28,7 +31,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		w := vmtest.New(vmtest.WithVMs(vmtest.Running("01", "owner")))
 
-		response, err := NewUseCase(w.VMs, w.Lifecycle, validator.New(translator.Codes{})).Execute(ctx, &Request{OwnerUUID: "owner", UUID: "01"})
+		response, err := NewUseCase(w.VMs, w.Runs, w.Lifecycle, validator.New(translator.Codes{})).Execute(ctx, &Request{OwnerUUID: "owner", UUID: "01"})
 		require.NoError(t, err)
 		assert.Empty(t, response.ValidationErrors)
 
@@ -46,8 +49,42 @@ func TestUseCase_Execute(t *testing.T) {
 
 		w := vmtest.New(vmtest.WithVMs(vmtest.Running("01", "owner")))
 
-		_, err := NewUseCase(w.VMs, w.Lifecycle, validator.New(translator.Codes{})).Execute(ctx, &Request{OwnerUUID: "other", UUID: "01"})
+		_, err := NewUseCase(w.VMs, w.Runs, w.Lifecycle, validator.New(translator.Codes{})).Execute(ctx, &Request{OwnerUUID: "other", UUID: "01"})
 		assert.ErrorIs(t, err, domain.ErrNotExists)
+	})
+
+	t.Run("a run of the code runner's is taken away as its task is, running or not", func(t *testing.T) {
+		t.Parallel()
+
+		w := vmtest.New(vmtest.WithTasks(vmtest.Run("run")))
+		require.NoError(t, w.TaskLogs.Append(ctx, []task.Log{{TaskUUID: "run", LogLine: task.LogLine{Content: "hello"}}}))
+
+		response, err := NewUseCase(w.VMs, w.Runs, w.Lifecycle, validator.New(translator.Codes{})).Execute(ctx, &Request{UUID: "run"})
+		require.NoError(t, err)
+		assert.Empty(t, response.ValidationErrors)
+
+		_, kept := w.Tasks.Stored("run")
+		assert.False(t, kept)
+
+		logs, err := w.TaskLogs.Get(ctx, "run", time.Time{}, 10)
+		require.NoError(t, err)
+		assert.Empty(t, logs)
+
+		var asked taskEvents.TaskDeleted
+		require.True(t, w.Producer.Last(taskEvents.TaskDeletedName, &asked))
+		assert.Equal(t, "run", asked.UUID)
+	})
+
+	t.Run("a run is nobody's own to delete", func(t *testing.T) {
+		t.Parallel()
+
+		w := vmtest.New(vmtest.WithTasks(vmtest.Run("run")))
+
+		_, err := NewUseCase(w.VMs, w.Runs, w.Lifecycle, validator.New(translator.Codes{})).Execute(ctx, &Request{OwnerUUID: "owner", UUID: "run"})
+		assert.ErrorIs(t, err, domain.ErrNotExists)
+
+		_, kept := w.Tasks.Stored("run")
+		assert.True(t, kept)
 	})
 }
 

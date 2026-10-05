@@ -50,7 +50,7 @@ func TestTheWorkloadsCodesAreSaid(t *testing.T) {
 		// the control plane's
 		"vm_required", "too_large", "too_small", "quota_exceeded", "no_capacity",
 		"engine_mismatch", "kind_mismatch", "snapshot_not_ready", "disk_too_small",
-		"disk_cannot_shrink", "immutable", "vm_not_running", "node_lost",
+		"disk_cannot_shrink", "immutable", "vm_not_running", "node_lost", "managed_by_code_runner",
 
 		// a node's
 		"not_found", "not_running", "not_docker", "docker_unavailable", "invalid", "timeout", "internal",

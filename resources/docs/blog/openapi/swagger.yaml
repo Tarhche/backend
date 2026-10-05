@@ -951,6 +951,16 @@ definitions:
           LifetimeSeconds is how long the VM is kept, and zero is until it is
           deleted. ExpiresAt is when one with a lifetime goes.
         type: integer
+      managed_by:
+        description: |-
+          ManagedBy is code-runner for a snippet the code runner is running, in a
+          VM of its own for as long as it runs: the guest's, listed only among
+          everybody's VMs, and gone once the snippet has ended. Such a VM can be
+          stopped, deleted and read, and nothing else. It is left out for every
+          other VM.
+        enum:
+        - code-runner
+        type: string
       name:
         type: string
       network:
@@ -2184,6 +2194,16 @@ definitions:
           LifetimeSeconds is how long the VM is kept, and zero is until it is
           deleted. ExpiresAt is when one with a lifetime goes.
         type: integer
+      managed_by:
+        description: |-
+          ManagedBy is code-runner for a snippet the code runner is running, in a
+          VM of its own for as long as it runs: the guest's, listed only among
+          everybody's VMs, and gone once the snippet has ended. Such a VM can be
+          stopped, deleted and read, and nothing else. It is left out for every
+          other VM.
+        enum:
+        - code-runner
+        type: string
       name:
         type: string
       network:

@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"math"
 	"net"
 	"slices"
 	"strconv"
@@ -116,14 +115,10 @@ func (r *Runtime) EnsureImage(context.Context, string) error {
 // when that lets anything reach it. Its disk is thrown away with it.
 func (r *Runtime) Create(ctx context.Context, execution *task.Execution) (string, error) {
 	spec := vm.Spec{
-		ID:    executionID(execution),
-		Kind:  vm.KindMachine,
-		Image: execution.Image,
-		Resources: vm.Resources{
-			CPUs:   cpus(execution.ResourceLimits.Cpu),
-			Memory: execution.ResourceLimits.Memory,
-			Disk:   execution.ResourceLimits.Disk,
-		},
+		ID:         executionID(execution),
+		Kind:       vm.KindMachine,
+		Image:      execution.Image,
+		Resources:  execution.ResourceLimits.VMResources(),
 		Ports:      portsOf(execution),
 		Network:    execution.NetworkPolicy.VMNetwork(),
 		Labels:     labelsOf(execution),
@@ -326,12 +321,6 @@ func executionID(execution *task.Execution) string {
 	}
 
 	return uuid.NewV5(executions, execution.TaskUUID+"/"+strconv.Itoa(execution.Attempt)).String()
-}
-
-// cpus is the whole vCPUs a run is given for the cores it asked for, which is
-// never fewer than one.
-func cpus(cores float64) uint {
-	return uint(max(math.Ceil(cores), 1))
 }
 
 // portsOf is the ports a run exposes, once each and lowest first.

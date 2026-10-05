@@ -6,6 +6,8 @@ package vmtest
 import (
 	"time"
 
+	deletetask "github.com/khanzadimahdi/testproject/application/workload/controlplane/task/deleteTask"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/coderunner"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/command"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/lifecycle"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/placement"
@@ -13,12 +15,16 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/node"
 	"github.com/khanzadimahdi/testproject/domain/workload/snapshot"
 	"github.com/khanzadimahdi/testproject/domain/workload/stack"
+	"github.com/khanzadimahdi/testproject/domain/workload/task"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
 	nodesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/nodes"
 	snapshotsMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/snapshots"
 	stacksMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/stacks"
+	tasksMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/tasks"
 	vmsMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/vms"
+	logsMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/logs"
+	"github.com/khanzadimahdi/testproject/infrastructure/translator"
 )
 
 const (
@@ -45,18 +51,22 @@ var Limits = quota.Limits{
 	MaxLifetime:     720 * time.Hour,
 }
 
-// Workload is a control plane's VMs and what they are kept in.
+// Workload is a control plane's VMs and what they are kept in, and the code
+// runner's runs among them, which are tasks.
 type Workload struct {
 	VMs       *vmsMemory.Repository
 	Snapshots *snapshotsMemory.Repository
 	Stacks    *stacksMemory.Repository
 	Nodes     *nodesMemory.Repository
+	Tasks     *tasksMemory.Repository
+	TaskLogs  *logsMock.InMemoryLogRepository
 	Producer  *messagingMock.Recorder
 
 	Placement *placement.Placement
 	Quota     *quota.Quota
 	Commander *command.Commander
 	Lifecycle *lifecycle.Lifecycle
+	Runs      *coderunner.Runs
 }
 
 // Option sets up what a Workload starts with.
@@ -67,6 +77,7 @@ type options struct {
 	vms       []vm.VM
 	snapshots []snapshot.Snapshot
 	stacks    []stack.Stack
+	tasks     []task.Task
 }
 
 // WithNodes replaces the one node a Workload has with these.
@@ -86,6 +97,12 @@ func WithStacks(stacks ...stack.Stack) Option {
 	return func(o *options) { o.stacks = append(o.stacks, stacks...) }
 }
 
+// WithTasks are tasks the workload holds: those of the guest's are the code
+// runner's runs (Run).
+func WithTasks(tasks ...task.Task) Option {
+	return func(o *options) { o.tasks = append(o.tasks, tasks...) }
+}
+
 // New is a workload with one node, alive and roomy, unless it is told
 // otherwise.
 func New(opts ...Option) *Workload {
@@ -99,6 +116,8 @@ func New(opts ...Option) *Workload {
 		Snapshots: snapshotsMemory.NewRepository(o.snapshots...),
 		Stacks:    stacksMemory.NewRepository(o.stacks...),
 		Nodes:     nodesMemory.NewRepository(o.nodes...),
+		Tasks:     tasksMemory.NewRepository(o.tasks...),
+		TaskLogs:  logsMock.NewInMemoryRepository(),
 		Producer:  &messagingMock.Recorder{},
 	}
 
@@ -106,6 +125,7 @@ func New(opts ...Option) *Workload {
 	w.Quota = quota.New(w.VMs, Limits)
 	w.Commander = command.New(w.Producer)
 	w.Lifecycle = lifecycle.New(w.VMs, w.Stacks, w.Nodes, w.Placement, w.Commander)
+	w.Runs = coderunner.New(w.Tasks, w.Producer, deletetask.NewUseCase(w.Tasks, w.TaskLogs, w.Producer, translator.Codes{}))
 
 	return w
 }
@@ -156,6 +176,30 @@ func Stopped(uuid string, ownerUUID string) vm.VM {
 	v.ExpectedState = vm.Stopped
 
 	return v
+}
+
+// Run is a snippet the code runner is running on Node: a job of the guest's,
+// in a VM of its own, which came up a moment ago.
+func Run(uuid string) task.Task {
+	created := time.Now().Add(-10 * time.Second)
+
+	return task.Task{
+		UUID:            uuid,
+		Name:            "request-" + uuid,
+		Slug:            "request-" + uuid + "-abcde",
+		Kind:            task.KindJob,
+		OwnerUUID:       task.GuestOwnerUUID,
+		Image:           "ghcr.io/tarhche/code-runner:nodejs-22.14-latest",
+		Command:         []string{"--timeout", "30", "console.log(1)"},
+		ResourceLimits:  task.ResourceLimits{Cpu: 2, Memory: 200 * MiB, Disk: 100 * MiB},
+		TTL:             time.Minute,
+		CurrentState:    task.Running,
+		ExpectedState:   task.Running,
+		NodeName:        Node,
+		LastHeartbeatAt: time.Now(),
+		Deadline:        created.Add(time.Second + time.Minute),
+		CreatedAt:       created,
+	}
 }
 
 // Docker is a running Docker VM on Node.

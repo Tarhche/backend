@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/coderunner"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/vmtest"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
@@ -25,7 +26,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		w := vmtest.New(vmtest.WithVMs(vmtest.Running("01", "owner")))
 
-		response, err := NewUseCase(w.VMs, w.Lifecycle, validator.New(translator.Codes{})).Execute(ctx, &Request{OwnerUUID: "owner", UUID: "01"})
+		response, err := NewUseCase(w.VMs, w.Runs, w.Lifecycle, validator.New(translator.Codes{})).Execute(ctx, &Request{OwnerUUID: "owner", UUID: "01"})
 		require.NoError(t, err)
 		assert.Empty(t, response.ValidationErrors)
 
@@ -39,7 +40,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		w := vmtest.New(vmtest.WithVMs(vmtest.Running("01", "owner")))
 
-		_, err := NewUseCase(w.VMs, w.Lifecycle, validator.New(translator.Codes{})).Execute(ctx, &Request{OwnerUUID: "other", UUID: "01"})
+		_, err := NewUseCase(w.VMs, w.Runs, w.Lifecycle, validator.New(translator.Codes{})).Execute(ctx, &Request{OwnerUUID: "other", UUID: "01"})
 		assert.ErrorIs(t, err, domain.ErrNotExists)
 		assert.Empty(t, w.Producer.Messages())
 	})
@@ -52,7 +53,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		w := vmtest.New(vmtest.WithVMs(deleting))
 
-		response, err := NewUseCase(w.VMs, w.Lifecycle, validator.New(translator.Codes{})).Execute(ctx, &Request{UUID: "01"})
+		response, err := NewUseCase(w.VMs, w.Runs, w.Lifecycle, validator.New(translator.Codes{})).Execute(ctx, &Request{UUID: "01"})
 		require.NoError(t, err)
 		assert.Equal(t, domain.ValidationErrors{"vm": "invalid_state_transition"}, response.ValidationErrors)
 	})
@@ -62,8 +63,41 @@ func TestUseCase_Execute(t *testing.T) {
 
 		w := vmtest.New()
 
-		response, err := NewUseCase(w.VMs, w.Lifecycle, validator.New(translator.Codes{})).Execute(ctx, &Request{})
+		response, err := NewUseCase(w.VMs, w.Runs, w.Lifecycle, validator.New(translator.Codes{})).Execute(ctx, &Request{})
 		require.NoError(t, err)
 		assert.Equal(t, domain.ValidationErrors{"uuid": "required_field"}, response.ValidationErrors)
+	})
+}
+
+// TestUseCase_Execute_run holds a run of the code runner's to being refused
+// what only a VM somebody asked for can be asked, by whoever may see it, and to
+// being nobody's own.
+func TestUseCase_Execute_run(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	t.Run("anybody's is refused", func(t *testing.T) {
+		t.Parallel()
+
+		w := vmtest.New(vmtest.WithTasks(vmtest.Run("run")))
+
+		response, err := NewUseCase(w.VMs, w.Runs, w.Lifecycle, validator.New(translator.Codes{})).Execute(ctx, &Request{UUID: "run"})
+		require.NoError(t, err)
+		assert.Equal(t, domain.ValidationErrors{"vm": coderunner.CodeRefused}, response.ValidationErrors)
+		assert.Empty(t, w.Producer.Messages())
+
+		stored, _ := w.Tasks.Stored("run")
+		assert.Equal(t, vmtest.Run("run").CurrentState, stored.CurrentState)
+	})
+
+	t.Run("one's own is not there", func(t *testing.T) {
+		t.Parallel()
+
+		w := vmtest.New(vmtest.WithTasks(vmtest.Run("run")))
+
+		_, err := NewUseCase(w.VMs, w.Runs, w.Lifecycle, validator.New(translator.Codes{})).Execute(ctx, &Request{OwnerUUID: "owner", UUID: "run"})
+		assert.ErrorIs(t, err, domain.ErrNotExists)
+		assert.Empty(t, w.Producer.Messages())
 	})
 }

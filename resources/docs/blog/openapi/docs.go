@@ -9370,6 +9370,13 @@ const docTemplate = `{
                     "description": "LifetimeSeconds is how long the VM is kept, and zero is until it is\ndeleted. ExpiresAt is when one with a lifetime goes.",
                     "type": "integer"
                 },
+                "managed_by": {
+                    "description": "ManagedBy is code-runner for a snippet the code runner is running, in a\nVM of its own for as long as it runs: the guest's, listed only among\neverybody's VMs, and gone once the snippet has ended. Such a VM can be\nstopped, deleted and read, and nothing else. It is left out for every\nother VM.",
+                    "type": "string",
+                    "enum": [
+                        "code-runner"
+                    ]
+                },
                 "name": {
                     "type": "string"
                 },
@@ -11205,6 +11212,13 @@ const docTemplate = `{
                 "lifetime_seconds": {
                     "description": "LifetimeSeconds is how long the VM is kept, and zero is until it is\ndeleted. ExpiresAt is when one with a lifetime goes.",
                     "type": "integer"
+                },
+                "managed_by": {
+                    "description": "ManagedBy is code-runner for a snippet the code runner is running, in a\nVM of its own for as long as it runs: the guest's, listed only among\neverybody's VMs, and gone once the snippet has ended. Such a VM can be\nstopped, deleted and read, and nothing else. It is left out for every\nother VM.",
+                    "type": "string",
+                    "enum": [
+                        "code-runner"
+                    ]
                 },
                 "name": {
                     "type": "string"

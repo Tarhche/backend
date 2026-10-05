@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/coderunner"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/createVM"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/vmtest"
 	"github.com/khanzadimahdi/testproject/domain"
@@ -20,7 +21,7 @@ import (
 )
 
 func useCaseOf(w *vmtest.Workload) *UseCase {
-	return NewUseCase(w.VMs, w.Quota, w.Placement, w.Lifecycle, validator.New(translator.Codes{}))
+	return NewUseCase(w.VMs, w.Runs, w.Quota, w.Placement, w.Lifecycle, validator.New(translator.Codes{}))
 }
 
 func TestUseCase_Execute(t *testing.T) {
@@ -188,5 +189,38 @@ func TestUseCase_Execute(t *testing.T) {
 		name := "mine"
 		_, err := useCaseOf(w).Execute(ctx, &Request{OwnerUUID: "other", UUID: "01", Name: &name})
 		assert.ErrorIs(t, err, domain.ErrNotExists)
+	})
+}
+
+// TestUseCase_Execute_run holds a run of the code runner's to being refused
+// what only a VM somebody asked for can be asked, by whoever may see it, and to
+// being nobody's own.
+func TestUseCase_Execute_run(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	t.Run("anybody's is refused", func(t *testing.T) {
+		t.Parallel()
+
+		w := vmtest.New(vmtest.WithTasks(vmtest.Run("run")))
+
+		response, err := useCaseOf(w).Execute(ctx, &Request{UUID: "run", Name: new("renamed")})
+		require.NoError(t, err)
+		assert.Equal(t, domain.ValidationErrors{"vm": coderunner.CodeRefused}, response.ValidationErrors)
+		assert.Empty(t, w.Producer.Messages())
+
+		stored, _ := w.Tasks.Stored("run")
+		assert.Equal(t, vmtest.Run("run").CurrentState, stored.CurrentState)
+	})
+
+	t.Run("one's own is not there", func(t *testing.T) {
+		t.Parallel()
+
+		w := vmtest.New(vmtest.WithTasks(vmtest.Run("run")))
+
+		_, err := useCaseOf(w).Execute(ctx, &Request{OwnerUUID: "owner", UUID: "run", Name: new("renamed")})
+		assert.ErrorIs(t, err, domain.ErrNotExists)
+		assert.Empty(t, w.Producer.Messages())
 	})
 }

@@ -13,8 +13,11 @@ import (
 )
 
 const (
-	RunCodeRequest      = "runCode"
-	CodeRunnerOwnerUUID = "guest"
+	RunCodeRequest = "runCode"
+
+	// CodeRunnerOwnerUUID is whose the tasks the code runner starts are: the
+	// guest's, which is whoever is reading the page.
+	CodeRunnerOwnerUUID = task.GuestOwnerUUID
 
 	DefaultMaxDiskSize   = 100 << 20 // 100 MB
 	DefaultMaxMemorySize = 200 << 20 // 200 MB

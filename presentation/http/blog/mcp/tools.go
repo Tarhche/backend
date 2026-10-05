@@ -904,7 +904,7 @@ func vmTools() []tool {
 	return slices.Concat(
 		both(tool{
 			name:        "dashboard_vms_list",
-			description: "A page of the VMs the workload holds, whoever owns them, narrowed to one kind with kind.",
+			description: "A page of the VMs the workload holds, whoever owns them, narrowed to one kind with kind. The code runner's snippets are among them while they run, as the guest's machines with managed_by code-runner.",
 			route:       "GET /api/dashboard/workload/vms",
 			params:      []Parameter{page(), choice("kind", "only VMs of this kind: docker lists the ones containers and stacks can go in", "machine", "docker")},
 			readOnly:    true,
@@ -917,7 +917,7 @@ func vmTools() []tool {
 		}},
 		both(tool{
 			name:        "dashboard_vm_show",
-			description: "One VM, whoever owns it, with the addresses its ports are served on while its ingress allows it.",
+			description: "One VM, whoever owns it, with the addresses its ports are served on while its ingress allows it; a code runner's snippet, while it runs, is one too, with managed_by code-runner.",
 			route:       "GET /api/dashboard/workload/vms/{uuid}",
 			params:      []Parameter{vmUUID()},
 			readOnly:    true,
@@ -932,7 +932,7 @@ func vmTools() []tool {
 		}, "Change one of this session owner's own VMs: only what is sent changes, and changing its ports, network or resources restarts it unless it is stopped."),
 		both(tool{
 			name:        "dashboard_vm_delete",
-			description: "Delete a VM and its disk, whoever owns it. Its snapshots stay.",
+			description: "Delete a VM and its disk, whoever owns it. Its snapshots stay. A code runner's snippet is taken away at once, running or not.",
 			route:       "DELETE /api/dashboard/workload/vms/{uuid}",
 			params:      []Parameter{vmUUID()},
 			destructive: true,
@@ -947,7 +947,7 @@ func vmTools() []tool {
 		}, "Start one of this session owner's own VMs."),
 		both(tool{
 			name:        "dashboard_vm_stop",
-			description: "Stop a VM, whoever owns it. Its disk is kept, and is as it was left when it starts again only if the disk is persistent.",
+			description: "Stop a VM, whoever owns it. Its disk is kept, and is as it was left when it starts again only if the disk is persistent. A code runner's snippet stopped is gone once it has; it can only be stopped, deleted and read.",
 			route:       "POST /api/dashboard/workload/vms/{uuid}/stop",
 			params:      []Parameter{vmUUID()},
 			idempotent:  true,
@@ -968,7 +968,7 @@ func vmTools() []tool {
 		}, "Replace the disk of one of this session owner's own VMs with one of their snapshots'. What was on the disk is gone."),
 		both(tool{
 			name:        "dashboard_vm_logs",
-			description: "The tail of what a VM has written, whoever owns it, read from its node as it is now. Opening a terminal in a VM is a stream on the workload's ingress rather than a tool.",
+			description: "The tail of what a VM has written, whoever owns it, read from its node as it is now, or what a code runner's snippet has printed so far. Opening a terminal in a VM is a stream on the workload's ingress rather than a tool.",
 			route:       "GET /api/dashboard/workload/vms/{uuid}/logs",
 			params:      append([]Parameter{vmUUID()}, logParams()...),
 			readOnly:    true,

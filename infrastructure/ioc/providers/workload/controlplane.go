@@ -42,6 +42,7 @@ import (
 	controlPlaneRunTask "github.com/khanzadimahdi/testproject/application/workload/controlplane/task/runTask"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/task/schedule"
 	controlPlaneStopTask "github.com/khanzadimahdi/testproject/application/workload/controlplane/task/stopTask"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/coderunner"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/command"
 	controlPlaneCreateVM "github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/createVM"
 	controlPlaneDeleteVM "github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/deleteVM"
@@ -211,6 +212,7 @@ func controlPlaneConsoleCommand(
 		Stacks:    stackrepository.NewRepository(database),
 		Nodes:     nodeRepository,
 		Tasks:     taskRepository,
+		TaskLogs:  logRepository,
 		Archives:  snapshotStore(controlPlaneConfigs.SnapshotStorage),
 	}, natsConnection, jetStreamProduceConsumer, logger)
 	if err != nil {
@@ -302,15 +304,18 @@ func controlPlaneConsoleCommand(
 }
 
 // ControlPlaneVMStores are what the control plane keeps VMs, snapshots and
-// stacks in, the nodes and tasks it weighs them against, and the bucket a
-// snapshot's archive is taken out of when the snapshot goes. Archives may be
-// nil: with no bucket configured, an archive is left where it is.
+// stacks in, the nodes and tasks it weighs them against, the tasks' logs, which
+// go with a run of the code runner's when one is taken away from among the
+// VMs, and the bucket a snapshot's archive is taken out of when the snapshot
+// goes. Archives may be nil: with no bucket configured, an archive is left
+// where it is.
 type ControlPlaneVMStores struct {
 	VMs       vmContract.Repository
 	Snapshots snapshotContract.Repository
 	Stacks    stackContract.Repository
 	Nodes     nodeContract.Repository
 	Tasks     taskContract.Repository
+	TaskLogs  taskContract.LogRepository
 	Archives  snapshotContract.Store
 }
 
@@ -377,6 +382,10 @@ func NewControlPlaneVMs(
 	dispatcher := dispatch.New(stackRepository, producer, logger)
 	remover := archive.NewRemover(stores.Archives, logger)
 
+	// the code runner's runs, shown among anybody's VMs: read from their tasks,
+	// and stopped and taken away as their tasks are.
+	runs := coderunner.New(taskRepository, producer, controlPlaneDeleteTask.NewUseCase(taskRepository, stores.TaskLogs, producer, infraTranslator.Codes{}))
+
 	createVM := controlPlaneCreateVM.NewUseCase(vmRepository, taskRepository, snapshotRepository, vmQuota, vmLifecycle, codes, controlPlaneCreateVM.Images{
 		Machine: controlPlaneConfigs.VMDefaultImage,
 		Docker:  controlPlaneConfigs.VMDockerImage,
@@ -386,19 +395,19 @@ func NewControlPlaneVMs(
 	reconcile := controlPlaneVMReconcile.NewUseCase(vmRepository, nodeRepository, stackRepository, vmLifecycle, commander, dispatcher, logger)
 
 	route := func(mux *http.ServeMux) {
-		mux.Handle("GET /api/vms", controlPlaneVMAPI.NewIndexHandler(controlPlaneGetVMs.NewUseCase(vmRepository)))
+		mux.Handle("GET /api/vms", controlPlaneVMAPI.NewIndexHandler(controlPlaneGetVMs.NewUseCase(vmRepository, runs)))
 		mux.Handle("POST /api/vms", controlPlaneVMAPI.NewCreateHandler(createVM))
-		mux.Handle("GET /api/vms/{uuid}", controlPlaneVMAPI.NewShowHandler(controlPlaneGetVM.NewUseCase(vmRepository)))
-		mux.Handle("PATCH /api/vms/{uuid}", controlPlaneVMAPI.NewUpdateHandler(controlPlaneUpdateVM.NewUseCase(vmRepository, vmQuota, vmPlacement, vmLifecycle, codes)))
-		mux.Handle("DELETE /api/vms/{uuid}", controlPlaneVMAPI.NewDeleteHandler(controlPlaneDeleteVM.NewUseCase(vmRepository, vmLifecycle, codes)))
-		mux.Handle("POST /api/vms/{uuid}/start", controlPlaneVMAPI.NewStartHandler(controlPlaneStartVM.NewUseCase(vmRepository, vmLifecycle, codes)))
-		mux.Handle("POST /api/vms/{uuid}/stop", controlPlaneVMAPI.NewStopHandler(controlPlaneStopVM.NewUseCase(vmRepository, vmLifecycle, codes)))
-		mux.Handle("POST /api/vms/{uuid}/restart", controlPlaneVMAPI.NewRestartHandler(controlPlaneRestartVM.NewUseCase(vmRepository, vmLifecycle, codes)))
-		mux.Handle("POST /api/vms/{uuid}/restore", controlPlaneVMAPI.NewRestoreHandler(controlPlaneRestoreVM.NewUseCase(vmRepository, snapshotRepository, nodeRepository, vmLifecycle, commander, codes)))
-		mux.Handle("GET /api/vms/{uuid}/logs", controlPlaneVMAPI.NewLogsHandler(controlPlaneGetVMLogs.NewUseCase(vmRepository, requester, codes)))
+		mux.Handle("GET /api/vms/{uuid}", controlPlaneVMAPI.NewShowHandler(controlPlaneGetVM.NewUseCase(vmRepository, runs)))
+		mux.Handle("PATCH /api/vms/{uuid}", controlPlaneVMAPI.NewUpdateHandler(controlPlaneUpdateVM.NewUseCase(vmRepository, runs, vmQuota, vmPlacement, vmLifecycle, codes)))
+		mux.Handle("DELETE /api/vms/{uuid}", controlPlaneVMAPI.NewDeleteHandler(controlPlaneDeleteVM.NewUseCase(vmRepository, runs, vmLifecycle, codes)))
+		mux.Handle("POST /api/vms/{uuid}/start", controlPlaneVMAPI.NewStartHandler(controlPlaneStartVM.NewUseCase(vmRepository, runs, vmLifecycle, codes)))
+		mux.Handle("POST /api/vms/{uuid}/stop", controlPlaneVMAPI.NewStopHandler(controlPlaneStopVM.NewUseCase(vmRepository, runs, vmLifecycle, codes)))
+		mux.Handle("POST /api/vms/{uuid}/restart", controlPlaneVMAPI.NewRestartHandler(controlPlaneRestartVM.NewUseCase(vmRepository, runs, vmLifecycle, codes)))
+		mux.Handle("POST /api/vms/{uuid}/restore", controlPlaneVMAPI.NewRestoreHandler(controlPlaneRestoreVM.NewUseCase(vmRepository, runs, snapshotRepository, nodeRepository, vmLifecycle, commander, codes)))
+		mux.Handle("GET /api/vms/{uuid}/logs", controlPlaneVMAPI.NewLogsHandler(controlPlaneGetVMLogs.NewUseCase(vmRepository, runs, requester, codes)))
 
 		mux.Handle("GET /api/snapshots", controlPlaneSnapshotAPI.NewIndexHandler(controlPlaneGetSnapshots.NewUseCase(snapshotRepository)))
-		mux.Handle("POST /api/vms/{uuid}/snapshots", controlPlaneSnapshotAPI.NewCreateHandler(controlPlaneCreateSnapshot.NewUseCase(vmRepository, snapshotRepository, vmLifecycle, producer, codes, controlPlaneConfigs.SnapshotUserMax)))
+		mux.Handle("POST /api/vms/{uuid}/snapshots", controlPlaneSnapshotAPI.NewCreateHandler(controlPlaneCreateSnapshot.NewUseCase(vmRepository, runs, snapshotRepository, vmLifecycle, producer, codes, controlPlaneConfigs.SnapshotUserMax)))
 		mux.Handle("GET /api/snapshots/{uuid}", controlPlaneSnapshotAPI.NewShowHandler(controlPlaneGetSnapshot.NewUseCase(snapshotRepository)))
 		mux.Handle("PATCH /api/snapshots/{uuid}", controlPlaneSnapshotAPI.NewRenameHandler(controlPlaneRenameSnapshot.NewUseCase(snapshotRepository, codes)))
 		mux.Handle("DELETE /api/snapshots/{uuid}", controlPlaneSnapshotAPI.NewDeleteHandler(controlPlaneDeleteSnapshot.NewUseCase(snapshotRepository, vmRepository, vmLifecycle, remover, codes)))

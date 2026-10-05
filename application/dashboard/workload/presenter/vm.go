@@ -55,6 +55,13 @@ type VM struct {
 	CreatedAt time.Time  `json:"created_at"`
 	StartedAt *time.Time `json:"started_at,omitempty"`
 	UpdatedAt *time.Time `json:"updated_at,omitempty"`
+
+	// ManagedBy is code-runner for a snippet the code runner is running, in a
+	// VM of its own for as long as it runs: the guest's, listed only among
+	// everybody's VMs, and gone once the snippet has ended. Such a VM can be
+	// stopped, deleted and read, and nothing else. It is left out for every
+	// other VM.
+	ManagedBy string `json:"managed_by,omitempty" enums:"code-runner"`
 }
 
 // Resources are whole vCPUs, and bytes of memory and disk.
@@ -130,6 +137,7 @@ func NewVM(v vm.VM, ingressDomain string, owners Owners) VM {
 		CreatedAt:       v.CreatedAt,
 		StartedAt:       when(v.StartedAt),
 		UpdatedAt:       when(v.UpdatedAt),
+		ManagedBy:       v.ManagedBy,
 	}
 }
 

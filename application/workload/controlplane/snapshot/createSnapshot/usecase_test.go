@@ -12,6 +12,7 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/snapshot/archive"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/snapshot/snapshottest"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/coderunner"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/vmtest"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/node"
@@ -23,7 +24,7 @@ import (
 )
 
 func useCaseOf(w *vmtest.Workload, userMax uint) *UseCase {
-	return NewUseCase(w.VMs, w.Snapshots, w.Lifecycle, w.Producer, validator.New(translator.Codes{}), userMax)
+	return NewUseCase(w.VMs, w.Runs, w.Snapshots, w.Lifecycle, w.Producer, validator.New(translator.Codes{}), userMax)
 }
 
 func TestUseCase_Execute(t *testing.T) {
@@ -211,5 +212,38 @@ func TestSnapshotFailed_Handle(t *testing.T) {
 		_, kept := w.Snapshots.Stored("s1")
 		assert.False(t, kept)
 		assert.Equal(t, []string{snapshot.ObjectKey("s1")}, bucket.Deleted(), "whatever is left of it goes with it")
+	})
+}
+
+// TestUseCase_Execute_run holds a run of the code runner's to being refused
+// what only a VM somebody asked for can be asked, by whoever may see it, and to
+// being nobody's own.
+func TestUseCase_Execute_run(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	t.Run("anybody's is refused", func(t *testing.T) {
+		t.Parallel()
+
+		w := vmtest.New(vmtest.WithTasks(vmtest.Run("run")))
+
+		response, err := useCaseOf(w, 10).Execute(ctx, &Request{VMUUID: "run", Name: "a run"})
+		require.NoError(t, err)
+		assert.Equal(t, domain.ValidationErrors{"vm": coderunner.CodeRefused}, response.ValidationErrors)
+		assert.Empty(t, w.Producer.Messages())
+
+		stored, _ := w.Tasks.Stored("run")
+		assert.Equal(t, vmtest.Run("run").CurrentState, stored.CurrentState)
+	})
+
+	t.Run("one's own is not there", func(t *testing.T) {
+		t.Parallel()
+
+		w := vmtest.New(vmtest.WithTasks(vmtest.Run("run")))
+
+		_, err := useCaseOf(w, 10).Execute(ctx, &Request{OwnerUUID: "owner", VMUUID: "run", Name: "a run"})
+		assert.ErrorIs(t, err, domain.ErrNotExists)
+		assert.Empty(t, w.Producer.Messages())
 	})
 }
