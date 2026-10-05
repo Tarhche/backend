@@ -135,6 +135,7 @@ func TestWorkloadConfigsBind(t *testing.T) {
 			"WORKLOAD_SNAPSHOT_S3_USE_SSL":               "false",
 			"WORKLOAD_NODE_REQUEST_TIMEOUT":              "30s",
 			"WORKLOAD_DOCKER_PULL_TIMEOUT":               "10m0s",
+			"WORKLOAD_DOCKER_READY_TIMEOUT":              "3m0s",
 		})
 	})
 
@@ -149,6 +150,35 @@ func TestWorkloadConfigsBind(t *testing.T) {
 			"WORKLOAD_NODE_REQUEST_CONCURRENCY": "16",
 		})
 	})
+}
+
+// TestWorkloadPullRequestTimeout holds the control plane to waiting for a
+// request that may pull an image as long as a node may take to answer it. A
+// node waits for the VM's dockerd and then pulls; a control plane that gave up
+// sooner would answer timeout for a container that was still being created.
+func TestWorkloadPullRequestTimeout(t *testing.T) {
+	controlPlane, orchestrator := NewWorkloadControlPlane(), NewWorkloadOrchestrator()
+
+	assert.Equal(t, 13*time.Minute, controlPlane.PullRequestTimeout(), "three minutes for dockerd and ten for the pull")
+	assert.Equal(t, orchestrator.PullRequestTimeout(), controlPlane.PullRequestTimeout())
+
+	// they are read from the same settings, so configuring the workload
+	// configures both.
+	for _, field := range []string{"DockerReadyTimeout", "DockerPullTimeout"} {
+		controlPlaneField, found := reflect.TypeFor[WorkloadControlPlane]().FieldByName(field)
+		require.True(t, found, field)
+
+		orchestratorField, found := reflect.TypeFor[WorkloadOrchestrator]().FieldByName(field)
+		require.True(t, found, field)
+
+		assert.Equal(t, orchestratorField.Tag.Get("env"), controlPlaneField.Tag.Get("env"), field)
+	}
+
+	controlPlane.DockerReadyTimeout, orchestrator.DockerReadyTimeout = time.Minute, time.Minute
+	controlPlane.DockerPullTimeout, orchestrator.DockerPullTimeout = 30*time.Minute, 30*time.Minute
+
+	assert.Equal(t, 31*time.Minute, controlPlane.PullRequestTimeout())
+	assert.Equal(t, orchestrator.PullRequestTimeout(), controlPlane.PullRequestTimeout())
 }
 
 // flagNames is the long name of every field of a configuration struct,

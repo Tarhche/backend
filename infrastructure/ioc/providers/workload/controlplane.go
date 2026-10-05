@@ -345,8 +345,10 @@ func NewControlPlaneVMs(
 	// for, and the blog puts them into the words of whoever asked.
 	codes := infraValidator.New(infraTranslator.Codes{})
 
-	// a node is asked over core NATS and given as long as the operation needs.
-	requester := request.NewRequester(natsConnection, controlPlaneConfigs.NodeRequestTimeout, controlPlaneConfigs.DockerPullTimeout)
+	// a node is asked over core NATS and given as long as the operation needs:
+	// one that may pull an image as long as the node may take over it, which
+	// is the wait for the VM's dockerd and then the pull.
+	requester := request.NewRequester(natsConnection, controlPlaneConfigs.NodeRequestTimeout, controlPlaneConfigs.PullRequestTimeout())
 
 	dockerDefaults, err := dockerVMDefaults(controlPlaneConfigs)
 	if err != nil {

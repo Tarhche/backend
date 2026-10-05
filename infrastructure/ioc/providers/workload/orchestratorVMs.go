@@ -96,7 +96,7 @@ func NewOrchestratorVMs(d OrchestratorVMDependencies) (*OrchestratorVMs, error) 
 
 	// a stack action waits for dockerd, and may then pull images.
 	runStackAction := orchestratorRunStackAction.NewUseCase(daemons, d.Producer, d.Validator, d.NodeName,
-		d.Configs.DockerReadyTimeout+d.Configs.DockerPullTimeout)
+		d.Configs.PullRequestTimeout())
 
 	subscribers := map[string]domain.MessageHandler{
 		vmEvents.VMScheduledName:             orchestratorCreateVM.NewVMScheduledHandler(createVM, d.Producer, d.NodeName, d.Logger),
@@ -118,7 +118,7 @@ func NewOrchestratorVMs(d OrchestratorVMDependencies) (*OrchestratorVMs, error) 
 	responder := request.NewResponder(d.NATS, answerRequest, request.ResponderOptions{
 		Concurrency: d.Configs.NodeRequestConcurrency,
 		Timeout:     d.Configs.DockerReadyTimeout + nodeRequestTimeout,
-		PullTimeout: d.Configs.DockerReadyTimeout + d.Configs.DockerPullTimeout,
+		PullTimeout: d.Configs.PullRequestTimeout(),
 	}, d.Logger)
 
 	// the VM heartbeat, which also says whether the vmhost is answering.

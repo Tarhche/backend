@@ -36,9 +36,12 @@ const (
 
 	// pullRequestTimeout bounds a call that may have to wait for a Docker VM
 	// to come up and pull an image: creating a container, pulling an image.
-	// The control plane gives the first five minutes and the second ten
-	// unless it is configured otherwise, and is let finish first.
-	pullRequestTimeout = 16 * time.Minute
+	// Unless it is configured otherwise, the control plane gives a Docker VM
+	// made for a container five minutes to come up, and then waits for its
+	// node as long as the node may take, which is three minutes for dockerd
+	// and ten for the pull; the blog waits a little longer than all of that,
+	// so the control plane's answer is the one that comes back.
+	pullRequestTimeout = 20 * time.Minute
 )
 
 // Client is the workload control plane, reached over its HTTP API.
