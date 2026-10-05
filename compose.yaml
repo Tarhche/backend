@@ -46,7 +46,10 @@ x-vmhost: &vmhost
   security_opt:
     - no-new-privileges:true
   cpus: ${WORKLOAD_VMHOST_CPUS_LIMIT:-2}
-  mem_limit: ${WORKLOAD_VMHOST_MEMORY_LIMIT:-3g}
+  # every VM on the node lives inside this. It offers 80% of it less 512 MiB,
+  # which at 4g holds the 2 GiB Docker VM made for somebody's first container
+  # or stack, as in production; at less, that VM fits on no node.
+  mem_limit: ${WORKLOAD_VMHOST_MEMORY_LIMIT:-4g}
   pids_limit: 16384
   stop_grace_period: 120s
   healthcheck:
