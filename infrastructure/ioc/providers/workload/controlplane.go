@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/http"
 	"time"
 
@@ -61,10 +62,13 @@ import (
 	controlPlaneUpdateVM "github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/updateVM"
 	"github.com/khanzadimahdi/testproject/domain"
 	translatorContract "github.com/khanzadimahdi/testproject/domain/translator"
+	nodeContract "github.com/khanzadimahdi/testproject/domain/workload/node"
 	nodeEvents "github.com/khanzadimahdi/testproject/domain/workload/node/events"
 	snapshotContract "github.com/khanzadimahdi/testproject/domain/workload/snapshot"
 	snapshotEvents "github.com/khanzadimahdi/testproject/domain/workload/snapshot/events"
+	stackContract "github.com/khanzadimahdi/testproject/domain/workload/stack"
 	stackEvents "github.com/khanzadimahdi/testproject/domain/workload/stack/events"
+	taskContract "github.com/khanzadimahdi/testproject/domain/workload/task"
 	taskEvents "github.com/khanzadimahdi/testproject/domain/workload/task/events"
 	vmContract "github.com/khanzadimahdi/testproject/domain/workload/vm"
 	vmEvents "github.com/khanzadimahdi/testproject/domain/workload/vm/events"
@@ -201,8 +205,22 @@ func controlPlaneConsoleCommand(
 	controlPlaneGetNodeUseCase := controlPlaneGetNode.NewUseCase(nodeRepository)
 	controlPlaneGetNodesUseCase := controlPlaneGetNodes.NewUseCase(nodeRepository)
 
-	vms, err := bindControlPlaneVMs(controlPlaneConfigs, database, natsConnection, jetStreamProduceConsumer, taskRepository, nodeRepository, logger, iocContainer)
+	vms, err := NewControlPlaneVMs(controlPlaneConfigs, ControlPlaneVMStores{
+		VMs:       vmrepository.NewRepository(database),
+		Snapshots: snapshotrepository.NewRepository(database),
+		Stacks:    stackrepository.NewRepository(database),
+		Nodes:     nodeRepository,
+		Tasks:     taskRepository,
+		Archives:  snapshotStore(controlPlaneConfigs.SnapshotStorage),
+	}, natsConnection, jetStreamProduceConsumer, logger)
 	if err != nil {
+		return nil, err
+	}
+
+	// the VMs' own heartbeat, which the serve command runs beside the tasks'.
+	if err := iocContainer.Bind(func() *controlPlaneVMReconcile.UseCase {
+		return vms.Reconcile
+	}, provider.Singleton()); err != nil {
 		return nil, err
 	}
 
@@ -227,7 +245,7 @@ func controlPlaneConsoleCommand(
 	// VMs, their snapshots, the containers in Docker VMs and the stacks
 	// deployed into them, which the blog reaches on its users' behalf. Every
 	// route takes an owner, which narrows it to that person's own.
-	vms.route(mux)
+	vms.Route(mux)
 
 	rateLimited, err := middleware.NewRateLimitMiddleware(mux, 600, 1*time.Minute)
 	if err != nil {
@@ -271,9 +289,7 @@ func controlPlaneConsoleCommand(
 		taskEvents.TaskLoggedName:       controlPlaneLogTask.NewTaskLogged(taskRepository, logRepository, controlPlaneConfigs.MaxLogBytes, logger),
 	}
 
-	for subject, handler := range vms.subscribers {
-		subscribers[subject] = handler
-	}
+	maps.Copy(subscribers, vms.Subscribers)
 
 	// control plane subscribers
 	if err := iocContainer.Bind(func() map[string]domain.MessageHandler {
@@ -285,29 +301,45 @@ func controlPlaneConsoleCommand(
 	return handler, nil
 }
 
-// controlPlaneVMs is the control plane's VMs, snapshots, containers and
-// stacks: the routes the blog reaches them on and what it hears from the nodes
-// about them.
-type controlPlaneVMs struct {
-	route       func(mux *http.ServeMux)
-	subscribers map[string]domain.MessageHandler
+// ControlPlaneVMStores are what the control plane keeps VMs, snapshots and
+// stacks in, the nodes and tasks it weighs them against, and the bucket a
+// snapshot's archive is taken out of when the snapshot goes. Archives may be
+// nil: with no bucket configured, an archive is left where it is.
+type ControlPlaneVMStores struct {
+	VMs       vmContract.Repository
+	Snapshots snapshotContract.Repository
+	Stacks    stackContract.Repository
+	Nodes     nodeContract.Repository
+	Tasks     taskContract.Repository
+	Archives  snapshotContract.Store
 }
 
-// bindControlPlaneVMs builds what the control plane keeps and asks about VMs,
-// and binds their heartbeat, which the serve command runs beside the tasks'.
-func bindControlPlaneVMs(
+// ControlPlaneVMs is the control plane's VMs, snapshots, containers and
+// stacks: the routes the blog reaches them on, what it hears from the nodes
+// about them, and the heartbeat that keeps them as they were asked to be.
+type ControlPlaneVMs struct {
+	Route       func(mux *http.ServeMux)
+	Subscribers map[string]domain.MessageHandler
+	Reconcile   *controlPlaneVMReconcile.UseCase
+}
+
+// NewControlPlaneVMs builds what the control plane keeps and asks about VMs.
+//
+// It is the serve command's wiring, and it is what the workload's end-to-end
+// test builds a control plane from, over stores kept in memory: what is tested
+// is what is served.
+func NewControlPlaneVMs(
 	controlPlaneConfigs *configs.WorkloadControlPlane,
-	database *mongo.Database,
+	stores ControlPlaneVMStores,
 	natsConnection *nats.Conn,
 	producer domain.Producer,
-	taskRepository *taskrepository.TasksRepository,
-	nodeRepository *noderepository.NodesRepository,
 	logger *slog.Logger,
-	iocContainer provider.Container,
-) (*controlPlaneVMs, error) {
-	vmRepository := vmrepository.NewRepository(database)
-	snapshotRepository := snapshotrepository.NewRepository(database)
-	stackRepository := stackrepository.NewRepository(database)
+) (*ControlPlaneVMs, error) {
+	vmRepository := stores.VMs
+	snapshotRepository := stores.Snapshots
+	stackRepository := stores.Stacks
+	nodeRepository := stores.Nodes
+	taskRepository := stores.Tasks
 
 	// the control plane answers the blog with the codes it refused a request
 	// for, and the blog puts them into the words of whoever asked.
@@ -341,7 +373,7 @@ func bindControlPlaneVMs(
 	commander := command.New(producer)
 	vmLifecycle := lifecycle.New(vmRepository, stackRepository, nodeRepository, vmPlacement, commander)
 	dispatcher := dispatch.New(stackRepository, producer, logger)
-	remover := archive.NewRemover(snapshotStore(controlPlaneConfigs.SnapshotStorage), logger)
+	remover := archive.NewRemover(stores.Archives, logger)
 
 	createVM := controlPlaneCreateVM.NewUseCase(vmRepository, taskRepository, snapshotRepository, vmQuota, vmLifecycle, codes, controlPlaneCreateVM.Images{
 		Machine: controlPlaneConfigs.VMDefaultImage,
@@ -349,12 +381,7 @@ func bindControlPlaneVMs(
 	})
 	chooser := dockerVM.NewChooser(vmRepository, createVM, vmLifecycle, dockerDefaults)
 
-	// the VMs' own heartbeat, which the serve command runs beside the tasks'.
-	if err := iocContainer.Bind(func() *controlPlaneVMReconcile.UseCase {
-		return controlPlaneVMReconcile.NewUseCase(vmRepository, nodeRepository, stackRepository, vmLifecycle, commander, dispatcher, logger)
-	}, provider.Singleton()); err != nil {
-		return nil, err
-	}
+	reconcile := controlPlaneVMReconcile.NewUseCase(vmRepository, nodeRepository, stackRepository, vmLifecycle, commander, dispatcher, logger)
 
 	route := func(mux *http.ServeMux) {
 		mux.Handle("GET /api/vms", controlPlaneVMAPI.NewIndexHandler(controlPlaneGetVMs.NewUseCase(vmRepository)))
@@ -399,7 +426,7 @@ func bindControlPlaneVMs(
 		stackEvents.StackFailedName:          controlPlaneStackResult.NewStackFailed(stackRepository, logger),
 	}
 
-	return &controlPlaneVMs{route: route, subscribers: subscribers}, nil
+	return &ControlPlaneVMs{Route: route, Subscribers: subscribers, Reconcile: reconcile}, nil
 }
 
 // dockerVMDefaults is what a Docker VM made for a container or a stack is

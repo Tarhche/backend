@@ -351,14 +351,15 @@ func orchestratorConsoleCommand(
 	// what is asked of the VMs on this node, of their snapshots and of the
 	// stacks in them, and the answers to what the control plane asks and
 	// waits for.
-	if err := bindOrchestratorVMs(iocContainer, vmDependencies{
-		natsConnection: natsConnection,
-		engine:         engine,
-		producer:       asyncProduceConsumer,
-		validator:      validator,
-		configs:        orchestratorConfigs,
-		nodeName:       nodeName,
-		logger:         logger,
+	if err := bindOrchestratorVMs(iocContainer, OrchestratorVMDependencies{
+		NATS:      natsConnection,
+		Engine:    engine,
+		Archives:  snapshotArchives(orchestratorConfigs.SnapshotStorage),
+		Producer:  asyncProduceConsumer,
+		Validator: validator,
+		Configs:   orchestratorConfigs,
+		NodeName:  nodeName,
+		Logger:    logger,
 	}, subscribers); err != nil {
 		return nil, err
 	}
