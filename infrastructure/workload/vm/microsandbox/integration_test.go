@@ -24,6 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 	msb "github.com/superradcompany/microsandbox/sdk/go"
 
+	"github.com/khanzadimahdi/testproject/application/code/runCode"
 	"github.com/khanzadimahdi/testproject/domain"
 	dockerdomain "github.com/khanzadimahdi/testproject/domain/workload/docker"
 	"github.com/khanzadimahdi/testproject/domain/workload/network"
@@ -940,6 +941,88 @@ func TestCodeRunner(t *testing.T) {
 		require.NoError(t, runtime.Stop(ctx, id))
 		assert.Equal(t, vm.InstanceStopped, inspected(t, e, id).State, "stopped, rather than exited")
 	})
+
+	// a Go snippet is the one the code runner gives the most to: its image
+	// builds it before it runs it, with nothing of the standard library built
+	// beforehand, and gives up on it once the code runner's time is out,
+	// saying so in place of what it would have printed. Each is run here as
+	// the code runner asks for it, in its image, with its limits and its
+	// network, so one that runs out of memory, disk or time does so here.
+	snippets := []struct {
+		name   string
+		code   string
+		prints string
+	}{
+		{
+			name: "printing hello",
+			code: `package main
+
+import "fmt"
+
+func main() { fmt.Println("hello from a code runner's vm") }
+`,
+			prints: "hello from a code runner's vm\n",
+		},
+		{
+			// one that imports net/http builds more than half of the
+			// standard library, and writes more than the default disk holds.
+			name: "serving itself over net/http",
+			code: `package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+)
+
+func main() {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]string{"greeting": "hello over http"})
+	}))
+	defer server.Close()
+
+	response, err := http.Get(server.URL)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	defer response.Body.Close()
+
+	var body map[string]string
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	fmt.Println(body["greeting"])
+}
+`,
+			prints: "hello over http\n",
+		},
+	}
+
+	for i, snippet := range snippets {
+		t.Run("a Go snippet "+snippet.name+" is built and run inside the code runner's time, with what it gives one", func(t *testing.T) {
+			request := runCode.Request{Runner: "go-1.24", Code: snippet.code}
+			limits := request.ResourceLimits()
+
+			goes := execution(fmt.Sprintf("it-task-go-%d", i), request.Image(), nil, []string{"--timeout", strconv.Itoa(int(runCode.CodeTimeout.Seconds())), request.Code})
+			goes.ResourceLimits = task.ResourceLimits{Cpu: limits.Cpu, Memory: limits.Memory, Disk: limits.Disk}
+			goes.NetworkPolicy = network.DefaultPolicy
+
+			_, run, logs := ran(t, goes)
+
+			// from when its VM was up, its image pulled, to its end: what its
+			// time is counted against.
+			took := time.Since(run.StartedAt)
+			t.Logf("%s: built and ran in %s", goes.TaskUUID, took.Round(time.Millisecond))
+
+			assert.Equal(t, 0, run.ExitCode)
+			assert.Equal(t, snippet.prints, logs, "what it printed, rather than why it was not built or ran out of time")
+			assert.Less(t, took, runCode.CodeTimeout)
+		})
+	}
 }
 
 // TestReadoptionChild is the vmhost that goes away in TestReadoption: it makes

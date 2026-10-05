@@ -80,15 +80,13 @@ func runSnippet(t testing.TB, runner, code string) runAnswer {
 }
 
 // TestCodeRunner runs snippets through the public code runner, each in an
-// ephemeral VM of its own: one that prints and ends, one that prints and runs
-// past its time, whose runner exits with 124 and is a snippet that failed,
-// and two that serve a port through the ingress, one until it is stopped and
-// one until it ends.
+// ephemeral VM of its own: one that prints and ends, a Go one that is built
+// before it does, one that prints and runs past its time, whose runner exits
+// with 124 and is a snippet that failed, and two that serve a port through the
+// ingress, one until it is stopped and one until it ends.
 func TestCodeRunner(t *testing.T) {
 	// the code runner keeps the answers of snippets it has run, so each run
-	// asks for code it has not seen. Node rather than Go: a snippet is given
-	// 30 s, and Go compiling one in a VM nested in another is slower than
-	// that.
+	// asks for code it has not seen.
 	token := random(6)
 	runner := "nodejs-22.14"
 
@@ -98,6 +96,41 @@ func TestCodeRunner(t *testing.T) {
 
 		output := string(answer.Logs)
 		if len(answer.Error) > 0 || answer.State != "completed" || !strings.Contains(output, "hello from e2e "+token) {
+			t.Fatalf("the snippet is %s (%s), printing %q", answer.State, answer.Error, output)
+		}
+	})
+
+	// a Go snippet is built before it runs, from a standard library its image
+	// keeps no build of, so it is the one that needs the most of its VM, and of
+	// its 30 s. The runner's script exits with 0 when the build fails, so only
+	// what the snippet printed says it was built: a build killed for want of
+	// memory or disk prints what killed it instead.
+	timings.step(t, "a Go snippet, built and run", func(t *testing.T) {
+		answer := runSnippet(t, "go-1.24", fmt.Sprintf(`package main
+
+import (
+	"fmt"
+	"strings"
+	"sync"
+)
+
+func main() {
+	var wg sync.WaitGroup
+	words := make([]string, 3)
+	for i := range words {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			words[i] = strings.Repeat("go", i+1)
+		}(i)
+	}
+	wg.Wait()
+	fmt.Println("hello from e2e %s", strings.Join(words, " "))
+}
+`, token))
+
+		output := string(answer.Logs)
+		if len(answer.Error) > 0 || answer.State != "completed" || !strings.Contains(output, "hello from e2e "+token+" go gogo gogogo") {
 			t.Fatalf("the snippet is %s (%s), printing %q", answer.State, answer.Error, output)
 		}
 	})
