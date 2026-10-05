@@ -5,13 +5,15 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/presenter"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/refusal"
+	"github.com/khanzadimahdi/testproject/application/dashboard/workload/stackindex"
 	"github.com/khanzadimahdi/testproject/domain/translator"
 	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/domain/workload/docker"
 )
 
 // UseCase lists one Docker VM's containers, stopped ones too: a container that
-// exited is one somebody may want to start again, or remove.
+// exited is one somebody may want to start again, or remove. One a stack
+// deployed names the stack.
 type UseCase struct {
 	workload   workloadControlPlane.Client
 	translator translator.Translator
@@ -32,5 +34,8 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		return &Response{ValidationErrors: refused}, nil
 	}
 
-	return &Response{Items: presenter.NewContainers(containers)}, nil
+	items := presenter.NewContainers(containers)
+	stackindex.Of(ctx, uc.workload, request.OwnerUUID, request.VMUUID).Link(items)
+
+	return &Response{Items: items}, nil
 }

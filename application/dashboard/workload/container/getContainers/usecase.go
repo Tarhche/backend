@@ -5,13 +5,15 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/presenter"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/refusal"
+	"github.com/khanzadimahdi/testproject/application/dashboard/workload/stackindex"
 	"github.com/khanzadimahdi/testproject/domain/translator"
 	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 )
 
 // UseCase lists the containers across every running Docker VM, each with the
-// VM it was found in. They are read from each VM's dockerd as they are now:
-// nothing keeps a list of them anywhere else.
+// VM it was found in and the stack that deployed it, when one did. They are
+// read from each VM's dockerd as they are now: nothing keeps a list of them
+// anywhere else.
 type UseCase struct {
 	workload   workloadControlPlane.Client
 	translator translator.Translator
@@ -32,5 +34,12 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		return &Response{ValidationErrors: refused}, nil
 	}
 
-	return &Response{Items: presenter.NewVMContainers(containers)}, nil
+	items := presenter.NewVMContainers(containers)
+
+	index := stackindex.Of(ctx, uc.workload, request.OwnerUUID, request.VMUUID)
+	for i := range items {
+		items[i].StackUUID = index.Of(items[i].Stack)
+	}
+
+	return &Response{Items: items}, nil
 }

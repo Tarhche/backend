@@ -80,6 +80,7 @@ func TestNewStackDetail(t *testing.T) {
 
 		require.Len(t, presented.Containers, 1)
 		assert.Equal(t, "web", presented.Containers[0].Service)
+		assert.Equal(t, "stack-uuid", presented.Containers[0].StackUUID, "a stack's containers are its own")
 		assert.Empty(t, presented.Note)
 		assert.Equal(t, shop().Compose, presented.Compose)
 	})

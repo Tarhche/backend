@@ -93,6 +93,11 @@ func NewStackDetail(detail workloadControlPlane.StackDetail, owners Owners) Stac
 		Containers: NewContainers(detail.Containers),
 	}
 
+	// they are this stack's, which is the one stack nobody has to look up.
+	for i := range presented.Containers {
+		presented.Containers[i].StackUUID = detail.UUID
+	}
+
 	if detail.VMNotRunning {
 		presented.Note = NoteVMNotRunning
 	}

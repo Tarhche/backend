@@ -26,9 +26,11 @@ type Container struct {
 	Labels   map[string]string `json:"labels,omitempty"`
 
 	// Stack and Service are the compose project and service it belongs to,
-	// when a stack deployed it. The project is the stack's slug.
-	Stack   string `json:"stack,omitempty"`
-	Service string `json:"service,omitempty"`
+	// when a stack deployed it. The project is the stack's slug, and
+	// StackUUID is the stack's uuid when the request could see that stack.
+	Stack     string `json:"stack,omitempty"`
+	StackUUID string `json:"stack_uuid,omitempty"`
+	Service   string `json:"service,omitempty"`
 
 	RestartPolicy string    `json:"restart_policy,omitempty"`
 	CreatedAt     time.Time `json:"created_at"`
