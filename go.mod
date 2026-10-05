@@ -3,6 +3,7 @@ module github.com/khanzadimahdi/testproject
 go 1.27.0
 
 require (
+	github.com/containerd/errdefs v1.0.0
 	github.com/danceable/console v1.4.0
 	github.com/danceable/container v1.3.0
 	github.com/danceable/provider v1.3.2
@@ -17,6 +18,7 @@ require (
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/minio/minio-go/v7 v7.3.0
 	github.com/modelcontextprotocol/go-sdk v1.8.0
+	github.com/nats-io/nats-server/v2 v2.15.0
 	github.com/nats-io/nats.go v1.54.0
 	github.com/sethvargo/go-limiter v1.2.0
 	github.com/stretchr/testify v1.12.1
@@ -43,6 +45,7 @@ require (
 require (
 	dario.cat/mergo v1.0.2 // indirect
 	github.com/AlecAivazis/survey/v2 v2.3.7 // indirect
+	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
 	github.com/CloudyKit/fastprinter v0.0.0-20251202014920-1725d2651bd4 // indirect
 	github.com/CloudyKit/jet/v6 v6.3.3 // indirect
 	github.com/HdrHistogram/hdrhistogram-go v1.3.0 // indirect
@@ -64,7 +67,6 @@ require (
 	github.com/choria-io/fisk v0.9.1 // indirect
 	github.com/choria-io/scaffold v0.0.11 // indirect
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
-	github.com/containerd/errdefs v1.0.0 // indirect
 	github.com/containerd/errdefs/pkg v0.3.0 // indirect
 	github.com/containerd/log v0.1.0 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect
@@ -126,7 +128,6 @@ require (
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/nats-io/jsm.go v0.5.0 // indirect
 	github.com/nats-io/jwt/v2 v2.8.2 // indirect
-	github.com/nats-io/nats-server/v2 v2.15.0 // indirect
 	github.com/nats-io/natscli v0.5.0 // indirect
 	github.com/nats-io/nkeys v0.4.16 // indirect
 	github.com/nats-io/nsc/v2 v2.15.0 // indirect
