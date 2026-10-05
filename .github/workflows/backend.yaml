@@ -166,6 +166,13 @@ jobs:
           sudo udevadm trigger --name-match=kvm
           ls -l /dev/kvm
 
+      # the runner is a VM itself, so the engine's VMs are nested in it, and
+      # each 4 KiB page of their memory is a fault both hypervisors take:
+      # backed by huge pages instead, a VM's Go snippet is built in seconds
+      # rather than minutes, as on a vmhost's host.
+      - name: Back VMs' memory with huge pages
+        run: echo always | sudo tee /sys/kernel/mm/transparent_hugepage/enabled
+
       - name: Setup Go
         uses: actions/setup-go@v6
         with:

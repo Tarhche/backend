@@ -36,6 +36,16 @@ provision:
   path: /etc/systemd/system/docker.socket.d/override.conf
   format: ini
   expression: .Socket.SocketUser="{{.User}}"
+# a VM's memory is backed by huge pages only where transparent huge pages are
+# always on: microsandbox does not ask for them. Otherwise each 4 KiB page a VM
+# nested in this one touches is a fault both hypervisors take, about 50 ms for
+# every MiB, which makes a Go snippet's build minutes long rather than seconds.
+# Provisioning runs at every boot, which is what the setting needs.
+- mode: system
+  script: |
+    #!/bin/bash
+    set -eux -o pipefail
+    echo always > /sys/kernel/mm/transparent_hugepage/enabled
 
 probes:
 - script: |

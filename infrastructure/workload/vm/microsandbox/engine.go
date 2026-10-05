@@ -237,6 +237,16 @@ func New(ctx context.Context, options Options) (Engine, error) {
 		"disk", e.budget.Disk,
 	)
 
+	// nothing the engine asks of microsandbox changes how a VM's memory is
+	// backed: the host decides, and a host that leaves it to 4 KiB pages
+	// says so where whoever runs it looks.
+	if mode := hostHugePages(); mode != hugePagesAlways {
+		e.logger.Warn("transparent huge pages are not always on: a vm's memory is faulted in 4 KiB at a time, which nested virtualization makes slow enough for a code runner's Go snippet to run out of time",
+			"transparent_hugepage", mode,
+			"path", hugePagesPath,
+		)
+	}
+
 	return e, nil
 }
 
