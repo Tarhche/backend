@@ -48,9 +48,13 @@ func (p *RecordingProducer) Produced() []Produced {
 	return append([]Produced(nil), p.produced...)
 }
 
-// Subjects is the subject of every message given so far, in order.
+// Subjects is the subject of every message given so far, in order, or nil
+// when none was.
 func (p *RecordingProducer) Subjects() []string {
 	produced := p.Produced()
+	if len(produced) == 0 {
+		return nil
+	}
 
 	subjects := make([]string, len(produced))
 	for i := range produced {
