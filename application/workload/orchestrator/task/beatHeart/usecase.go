@@ -21,7 +21,7 @@ type UseCase struct {
 	nodeName        string
 
 	// startedAt is when each task this node holds began running, which is
-	// what a task's allowed time is counted from. Docker only tells it on
+	// what a task's allowed time is counted from. The runtime only tells it on
 	// inspection, so it is asked for once per task and remembered.
 	startedAt map[string]time.Time
 
@@ -91,7 +91,7 @@ func (uc *UseCase) Execute(ctx context.Context) error {
 
 // deadline is when a task that may only run for so long will have run
 // long enough. It is counted from when the task actually started, which
-// docker reports on inspection alone, so a task is inspected once and
+// the runtime reports on inspection alone, so a task is inspected once and
 // what it says is kept for as long as this node holds it.
 func (uc *UseCase) deadline(ctx context.Context, c *task.Execution) time.Time {
 	ttl := c.TTL
@@ -128,7 +128,7 @@ func (uc *UseCase) deadline(ctx context.Context, c *task.Execution) time.Time {
 }
 
 // exitCode is what the program in a task returned, for one that has
-// ended. Docker only tells it on inspection, so it is asked for once and kept
+// ended. The runtime only tells it on inspection, so it is asked for once and kept
 // until the task runs again or goes away.
 func (uc *UseCase) exitCode(ctx context.Context, c *task.Execution) int {
 	if !c.Status.Ended() {
@@ -210,9 +210,9 @@ func (uc *UseCase) logs(ctx context.Context, c *task.Execution) []byte {
 	return buffer.Bytes()
 }
 
-// endpoints reports which of a task's exposed ports docker actually
-// published. They are read from docker every heartbeat because a restarted
-// task comes back on different host ports.
+// endpoints reports which of a task's exposed ports its runtime actually
+// published. They are read from it every heartbeat because a restarted
+// task may come back on different host ports, and a stopped one serves none.
 func (uc *UseCase) endpoints(c *task.Execution) []events.Endpoint {
 	endpoints := make([]events.Endpoint, 0, len(c.PortBindings))
 
@@ -231,7 +231,7 @@ func (uc *UseCase) endpoints(c *task.Execution) []events.Endpoint {
 		}
 	}
 
-	// docker hands back the bindings in no particular order, and the lowest
+	// the runtime hands back the bindings in no particular order, and the lowest
 	// exposed port is the one a bare hostname reaches.
 	slices.SortFunc(endpoints, func(a events.Endpoint, b events.Endpoint) int {
 		return int(a.TaskPort) - int(b.TaskPort)

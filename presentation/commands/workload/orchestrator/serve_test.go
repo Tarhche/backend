@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"sync"
 	"testing"
 	"time"
 
@@ -15,12 +16,16 @@ import (
 	orchestratorHeartbeat "github.com/khanzadimahdi/testproject/application/workload/orchestrator/beatHeart"
 	taskHeartbeat "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/beatHeart"
 	shipLogs "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/shipLogs"
+	vmHeartbeat "github.com/khanzadimahdi/testproject/application/workload/orchestrator/vm/beatHeart"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/node"
+	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
+	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	messaging "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/runtime"
 	"github.com/khanzadimahdi/testproject/infrastructure/tunnel"
+	memory "github.com/khanzadimahdi/testproject/infrastructure/workload/vm/memory"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -225,6 +230,10 @@ func TestServe(t *testing.T) {
 		command.logShipper = shipLogs.NewUseCase(&taskManager, &consumer, consumerName, command.logger)
 		command.taskHeartBeat = taskHeartbeat.NewUseCase(&taskManager, &consumer, consumerName, command.logger)
 		command.orchestratorHeartBeat = orchestratorHeartbeat.NewUseCase(&consumer, &nodeManager, consumerName)
+		command.vmHeartBeat = vmHeartbeat.NewUseCase(memory.New(), &consumer, gauges{}, consumerName, command.logger)
+
+		requests := &answering{}
+		command.requests = requests
 
 		// nothing is listening for it, so the pool spends the test trying to
 		// connect and the orchestrator serves its own port regardless — which is the
@@ -264,7 +273,39 @@ func TestServe(t *testing.T) {
 		defer resp.Body.Close()
 
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		// the control plane's requests are answered on the node's own subject.
+		assert.Equal(t, noderequest.Subject(consumerName), requests.subject())
 	})
+}
+
+// gauges publishes nothing anywhere.
+type gauges struct{}
+
+func (gauges) Node(context.Context, string, vm.Info, map[vm.State]int) {}
+
+func (gauges) VMHost(context.Context, string, bool) {}
+
+// answering keeps the subject it was asked to answer requests on.
+type answering struct {
+	lock    sync.Mutex
+	serving string
+}
+
+func (a *answering) Serve(_ context.Context, subject string) error {
+	a.lock.Lock()
+	defer a.lock.Unlock()
+
+	a.serving = subject
+
+	return nil
+}
+
+func (a *answering) subject() string {
+	a.lock.Lock()
+	defer a.lock.Unlock()
+
+	return a.serving
 }
 
 // findAvailablePort finds an available port to use for testing

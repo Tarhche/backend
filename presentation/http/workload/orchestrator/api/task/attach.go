@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"log/slog"
 	"net/http"
 	"time"
@@ -15,25 +14,15 @@ import (
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 	"github.com/khanzadimahdi/testproject/presentation/http/middleware"
+	"github.com/khanzadimahdi/testproject/presentation/http/workload/orchestrator/api/terminal"
 )
 
-const (
-	// writeWait bounds one write to the client, so a stalled peer cannot hold
-	// the writer forever.
-	writeWait = 10 * time.Second
+// endWait bounds ending a command the client walked away from, which is two
+// signals with a grace period after each.
+const endWait = 30 * time.Second
 
-	// readChunk is how much of a command's output is carried in one frame.
-	readChunk = 4 << 10
-
-	// endWait bounds ending a command the client walked away from, which is
-	// two signals with a grace period after each.
-	endWait = 30 * time.Second
-)
-
-// attachHandler carries a command running inside a task over a websocket.
-//
-// Binary frames are the command's own bytes, in both directions. A text frame
-// is a control message, which today means a terminal that has been resized.
+// attachHandler carries a command running inside a task over a websocket, as
+// the terminal package speaks it.
 //
 // Who is asking comes from the token the middleware verified, and whose
 // task it is comes off the task itself. Nothing in between is trusted
@@ -49,27 +38,10 @@ var _ http.Handler = &attachHandler{}
 
 func NewAttachHandler(useCase *attachtask.UseCase, logger *slog.Logger) *attachHandler {
 	return &attachHandler{
-		useCase: useCase,
-		// the origin is not what says who this is -- the token is -- and the
-		// peer may be a browser or anything else.
-		//
-		// Subprotocols is what accepts a browser's token: it offers "bearer"
-		// and the token itself, and a websocket is only opened if the server
-		// echoes one of them back. Echoing the marker rather than the token
-		// keeps the token out of the response.
-		upgrader: websocket.Upgrader{
-			CheckOrigin:  func(*http.Request) bool { return true },
-			Subprotocols: []string{middleware.WebSocketBearerProtocol},
-		},
-		logger: logger,
+		useCase:  useCase,
+		upgrader: terminal.Upgrader(),
+		logger:   logger,
 	}
-}
-
-// control is what a client sends to change something about a running command.
-type control struct {
-	Type string `json:"type"`
-	Rows uint   `json:"rows"`
-	Cols uint   `json:"cols"`
 }
 
 // @Summary		Attach to an orchestrator task
@@ -119,7 +91,7 @@ func (h *attachHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.pump(conn, session)
+	terminal.Pump(conn, session, h.logger)
 
 	// the client is gone. What it left running has nothing to show its output
 	// to and no way back to it, so it is ended rather than left in the
@@ -135,70 +107,5 @@ func (h *attachHandler) end(session task.ExecSession) {
 
 	if err := session.End(ctx); err != nil {
 		h.logger.Warn("could not end a command left running in a task", "error", err)
-	}
-}
-
-// pump carries bytes between the client and the command until either end stops.
-func (h *attachHandler) pump(conn *websocket.Conn, session task.ExecSession) {
-	defer conn.Close()
-	defer session.Close()
-
-	done := make(chan struct{})
-
-	// the command's output, on to the client.
-	go func() {
-		defer close(done)
-
-		buffer := make([]byte, readChunk)
-
-		for {
-			n, err := session.Read(buffer)
-
-			if n > 0 {
-				_ = conn.SetWriteDeadline(time.Now().Add(writeWait))
-
-				if writeErr := conn.WriteMessage(websocket.BinaryMessage, buffer[:n]); writeErr != nil {
-					return
-				}
-			}
-
-			if err != nil {
-				if !errors.Is(err, io.EOF) {
-					h.logger.Warn("a task's command ended", "error", err)
-				}
-
-				return
-			}
-		}
-	}()
-
-	// the client's input, on to the command. Closing the session is what
-	// releases the reader above, so this loop ending ends both.
-	for {
-		messageType, payload, err := conn.ReadMessage()
-		if err != nil {
-			return
-		}
-
-		switch messageType {
-		case websocket.BinaryMessage:
-			if _, err := session.Write(payload); err != nil {
-				return
-			}
-
-		case websocket.TextMessage:
-			var message control
-			if err := json.Unmarshal(payload, &message); err != nil {
-				continue
-			}
-
-			if message.Type != "resize" || message.Rows == 0 || message.Cols == 0 {
-				continue
-			}
-
-			if err := session.Resize(context.Background(), message.Rows, message.Cols); err != nil {
-				h.logger.Warn("could not resize a terminal", "error", err)
-			}
-		}
 	}
 }

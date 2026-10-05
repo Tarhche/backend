@@ -146,8 +146,8 @@ func (r *Request) TaskName() string {
 }
 
 // PublishedPorts are the bindings the task is created with. Every exposed
-// port is published on a host port docker picks, so the workload never has to
-// keep track of what is already taken on the node.
+// port is published on a host port the node picks, so the workload never has
+// to keep track of what is already taken on it.
 func (r *Request) PublishedPorts() port.PortMap {
 	bindings := make(port.PortMap, len(r.ExposedPorts))
 	for _, p := range r.ExposedPorts {

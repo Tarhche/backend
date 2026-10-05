@@ -186,16 +186,9 @@ type WorkloadOrchestrator struct {
 	Port int    `usage:"specifies which port server should listen to." env:"SERVER_PORT" long:"port" short:"p"`
 	Name string `usage:"specifies the unique name of the orchestrator." env:"WORKLOAD_ORCHESTRATOR_NAME" long:"name" short:"n"`
 
-	DockerHost string `usage:"Docker daemon the tasks are run on. Empty uses the Docker client's own default." env:"DOCKER_HOST" long:"docker-host"`
-
 	// PublicKey verifies the tokens the blog signs. An orchestrator never mints one,
 	// so it is given the public half and nothing else.
 	PublicKey string `usage:"ECDSA public key, in PEM form, the access tokens are verified against. It is the public half of the key the blog signs them with." env:"PUBLIC_KEY" long:"public-key"`
-
-	// AdvertiseHost is where this orchestrator reaches the ports its own tasks
-	// publish. It is the docker daemon's host rather than this service's, which
-	// are not the same machine when the daemon is a service of its own.
-	AdvertiseHost string `usage:"Host this orchestrator reaches its tasks' published ports at, which is the docker daemon's own rather than this one." env:"WORKLOAD_ORCHESTRATOR_ADVERTISE_HOST" long:"advertise-host"`
 
 	TunnelAddresses string `usage:"host:port of every ingress this orchestrator opens connections to, separated by commas. It keeps a pool at each, so it is reachable through all of them." env:"WORKLOAD_TUNNEL_ADDRESSES" long:"tunnel-addresses"`
 
