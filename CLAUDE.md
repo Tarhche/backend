@@ -7,6 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```sh
 # Run the full local stack (app + mongodb + rustfs (S3 file storage) + nats + grafana + workload services)
 make up            # docker compose up --build -d
+make up-vms        # the same, plus a vmhost beside each orchestrator: needs /dev/kvm (see "VMs locally")
 make down          # tears down containers AND volumes
 make logs-app      # follow logs of a service (logs-<service>)
 make sh-app        # shell into a service (sh-<service>)
@@ -23,13 +24,17 @@ make generate      # runs `go generate` inside the app container
 
 # Apply the database migrations this version needs (app migrate)
 make migrate
+
+# The vmhost: its image's tag, and the engine's KVM tests (Linux with /dev/kvm)
+make vmhost-fingerprint
+make test-vmhost-integration
 ```
 
 Go 1.27. Local dev containers run under `go tool air` (hot reload with build polling), so code changes are picked up without restarting. The blog API is on http://localhost:8000, workload-controlplane on :8020, workload-ingress on :8030, orchestrators on :8040–8042. `.env` holds local config (compose interpolates it).
 
 ## Architecture
 
-One Go module producing a single binary (`main.go`) that registers four serve commands — `serve-blog`, `serve-workload-controlplane`, `serve-workload-ingress`, `serve-workload-orchestrator` — each built into its own Docker image via Dockerfile targets (`production-blog`, `production-workload-controlplane`, `production-workload-ingress`, `production-workload-orchestrator`), plus a `certificate` command group (`authority`/`ingress`/`orchestrator` `generate`) for the certificates the workload's tunnel authenticates with. CI (`.github/workflows/backend.yaml`) tests, builds all four images, and deploys via the `compose.*.yaml` files.
+One Go module producing a single binary (`main.go`) that registers five serve commands — `serve-blog`, `serve-workload-controlplane`, `serve-workload-ingress`, `serve-workload-orchestrator`, `serve-workload-vmhost` — each built into its own Docker image via Dockerfile targets (`production-blog`, `production-workload-controlplane`, `production-workload-ingress`, `production-workload-orchestrator`, `production-workload-vmhost`), plus `check-workload-vmhost` (the vmhost's healthcheck) and a `certificate` command group (`authority`/`ingress`/`orchestrator` `generate`) for the certificates the workload's tunnel authenticates with. CI (`.github/workflows/backend.yaml`) tests, builds the images, and deploys via the `compose.*.yaml` files; the vmhost's image is built, pushed and deployed only when its fingerprint changes (see "The vmhost").
 
 Layers (clean architecture, dependencies point inward):
 
@@ -104,7 +109,28 @@ The workload control plane schedules code-execution tasks (from `application/cod
 
 Users' VMs are `domain/workload/vm` (a VM, and the `Engine` that runs it on one node), `snapshot` (a VM's disk, kept as an archive), `docker` (a Docker VM's containers, images, networks and volumes, read from its dockerd and never stored), `stack` (a compose project in a Docker VM) and `noderequest` (what the control plane asks a node and waits for, over core NATS request/reply, with the payload of every operation). What the control plane and the nodes tell each other about them is in each one's `events` package. The control plane keeps them (`application/workload/controlplane/{vm,snapshot,stack,container,docker}`, served on its `/api/vms`, `/api/snapshots`, `/api/containers` and `/api/stacks`), the dashboard reaches them through the blog's client (`infrastructure/workload/controlplane/client`, from `application/dashboard/workload`), and each service's VM wiring is one function, `NewControlPlaneVMs` and `NewOrchestratorVMs` in `infrastructure/ioc/providers/workload`. `tests/workload` runs both of those end to end in one process, over a NATS server of its own and memory for everything else, from the dashboard's use cases: a change that leaves one side disagreeing with another fails there, in plain `go test`.
 
-An orchestrator's side of them goes through `vm.Engine` alone (bound in `infrastructure/ioc/providers/workload/engine.go`): one use case per command under `application/workload/orchestrator/vm/`, which say what failed as events rather than errors, since a redelivery fails the same way; `answerRequest` for the node requests, served by the NATS responder in `infrastructure/messaging/nats/core/request`; and `stack/runStackAction` for compose. A Docker VM's dockerd is reached by `docker system dial-stdio` exec'd into the VM (`infrastructure/workload/docker`), never over a network. Tests run against `infrastructure/workload/vm/memory`, an engine whose VMs live in a map and whose exec runs what the test says.
+An orchestrator's side of them goes through `vm.Engine` alone (bound in `infrastructure/ioc/providers/workload/engine.go`, which is its vmhost's client — see "The vmhost"): one use case per command under `application/workload/orchestrator/vm/`, which say what failed as events rather than errors, since a redelivery fails the same way; `answerRequest` for the node requests, served by the NATS responder in `infrastructure/messaging/nats/core/request`; and `stack/runStackAction` for compose. A Docker VM's dockerd is reached by `docker system dial-stdio` exec'd into the VM (`infrastructure/workload/docker`), never over a network. Tests run against `infrastructure/workload/vm/memory`, an engine whose VMs live in a map and whose exec runs what the test says.
+
+### The vmhost
+
+microsandbox has no server of its own, and its cgo SDK may be held by one process only, so each node's engine lives in a **vmhost**: `serve-workload-vmhost`, in the microsandbox container beside its orchestrator, built with the `microsandbox` tag (`infrastructure/workload/vm/microsandbox`; every other build gets a stub that says it has no engine). It serves the engine on a **unix socket** the two share (`WORKLOAD_VMHOST_SOCKET`, mode 0660, group 10001) and nothing else: `presentation/http/workload/vmhost` is the API over any `vm.Engine`, `infrastructure/workload/vm/vmhost` the client the orchestrator's `vm.Engine` is, and `infrastructure/workload/vm/vmhost/wire` what both say — JSON for every call, errors as `{code, message}` that are the domain's errors again on the other side, a snapshot's archive streamed as a response body with what was written in a trailer, a restore's streamed as a request body with its spec in `X-Workload-VM-Spec`, and an exec session carried in frames (type byte, four bytes of length, payload; every stream flow controlled a window at a time) over the connection its request upgraded. Nothing large is held anywhere: the orchestrator has 256 MiB. Trace context crosses the socket in headers.
+
+- **A vmhost restart stops every VM on its node.** It stops them gracefully on SIGTERM (up to 110 s of the container's 120 s), but it is still recreated only when its image or configuration changes: its image is tagged with `scripts/vmhost-fingerprint.sh` (the source of every package its command imports, the versions of the modules they come from, the Dockerfile and what its vmhost stages copy), CI builds it only when no image has that tag, and the deploy recreates a vmhost only when compose's config hash for it changed, never as its orchestrator's dependency. So **keep the vmhost command's imports small**: its DI is `providers/workload/vmhost` and `providers/core`, never `providers` or `providers/workload`, which wire the other services and would make every push restart every VM.
+- **Each node is a pair on its own network**, `workload_vmhost_0N` (10.89.N.0/24): the orchestrator at .2, the only address a VM takes connections from, and the vmhost at .10, which VMs' published ports are bound to. The orchestrator left the `docker` network: there is no dind any more.
+- The vmhost needs `/dev/kvm` and its group (`BACKEND_WORKLOAD_KVM_GID`, which the infrastructure repository's `scripts/kvm-check.sh` prints). Without one, the orchestrator still starts, and every VM fails saying its vmhost is not answering.
+
+### VMs locally
+
+VMs run on KVM, which a Mac does not have, so on a Mac `make up` runs everything but the vmhosts (they are behind the compose profile `vms`): the orchestrators start, and every VM fails saying its vmhost is not answering. For the whole stack, VMs included, run it inside Lima, a Linux VM with nested virtualization (Apple M3 or newer, macOS 15 or newer):
+
+```sh
+limactl start --name=workload scripts/lima/workload.yaml   # Ubuntu 24.04, Docker, /dev/kvm; the home directory mounted at the same path
+limactl shell workload -- stat -c %g /dev/kvm              # what .env's WORKLOAD_KVM_GID has to be
+limactl shell --workdir "$PWD" workload make up-vms        # the stack, a vmhost beside each orchestrator
+limactl shell --workdir "$PWD" workload make test-vmhost-integration
+```
+
+Lima forwards every port the stack publishes to the Mac's localhost, so it is reached as `make up` is: the blog on http://localhost:8000, Grafana on :3001, the ingress on :8030. Its Docker can be driven from the Mac too: `docker context create lima-workload --docker "host=unix://$HOME/.lima/workload/sock/docker.sock"`, then `docker --context lima-workload compose --profile vms ...`.
 
 **Resource limits are bytes, end to end.** Memory and disk are bytes from the moment a task or a VM is asked for to the moment the engine is handed them (a VM's `vm.Spec`, which the code runner's runtime writes in `infrastructure/workload/task/vmruntime`): nothing in between converts, and a conversion added anywhere is a bug. CPUs are the one rounding: a task's cores become whole vCPUs, rounded up. `task.MinMemory` is checked where a task is asked for (the control plane's `runTask` request) rather than left to fail on a node. **`mounts` and `health_check`** are refused as `not_supported`, because no runtime applies either yet.
 
