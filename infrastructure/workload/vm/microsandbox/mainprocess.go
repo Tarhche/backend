@@ -26,10 +26,18 @@ type mainProcess struct {
 	// ended.
 	ended atomic.Bool
 
+	// done is closed once its session has ended.
 	done chan struct{}
 }
 
 // end ends the process, as the engine's own doing.
+//
+// It is killed, and its session is not waited for: a kill reaches the
+// process alone, and what it started may run on and keep the session open
+// for as long as the VM runs. The code runner's script does: it runs a
+// snippet under timeout, which puts itself and the snippet in a process group
+// of their own. Stopping, restarting or removing an instance takes its VM
+// down next, which ends what is left, and the session with it.
 func (m *mainProcess) end() {
 	m.ended.Store(true)
 
@@ -43,11 +51,6 @@ func (m *mainProcess) end() {
 	defer cancel()
 
 	_ = m.handle.Kill(ctx)
-
-	select {
-	case <-m.done:
-	case <-ctx.Done():
-	}
 }
 
 // startMain starts an instance's main process, which is the first thing exec'd

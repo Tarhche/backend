@@ -948,6 +948,35 @@ func TestCodeRunner(t *testing.T) {
 		assert.Equal(t, vm.InstanceStopped, inspected(t, e, id).State, "stopped, rather than exited")
 	})
 
+	// a snippet that runs on, as the code runner runs it: in its image, under
+	// its script, which runs the snippet under timeout. One is killed when its
+	// reader stops it or once it outlives its ttl, and is not held up.
+	t.Run("a snippet that runs on is killed at once", func(t *testing.T) {
+		request := runCode.Request{Runner: "nodejs-22.14", Code: `setInterval(() => console.log("still here"), 1000);`}
+
+		id, err := runtime.Create(ctx, execution("it-task-runs-on", request.Image(), nil, []string{"--timeout", strconv.Itoa(int(runCode.CodeTimeout.Seconds())), request.Code}))
+		require.NoError(t, err)
+		t.Cleanup(func() { removed(t, e, id) })
+
+		assert.Equal(t, vm.InstanceRunning, inspected(t, e, id).State)
+
+		eventually(t, 30*time.Second, func() bool {
+			lines, err := e.Logs(ctx, id, vm.LogOptions{})
+			require.NoError(t, err)
+
+			return hasLine(lines, vm.LogSourceMain, "still here")
+		}, "%s runs", id)
+
+		killing := time.Now()
+		require.NoError(t, runtime.Kill(ctx, id))
+		took := time.Since(killing)
+
+		t.Logf("%s: killed in %s", id, took.Round(time.Millisecond))
+
+		assert.Equal(t, vm.InstanceStopped, inspected(t, e, id).State)
+		assert.Less(t, took, killTimeout, "what its main process left running held the kill up")
+	})
+
 	// a Go snippet is the one the code runner gives the most to: its image
 	// builds it before it runs it, with nothing of the standard library built
 	// beforehand, and gives up on it once the code runner's time is out,
