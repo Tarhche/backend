@@ -41,7 +41,7 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 	case err != nil:
 		return nil, err
 	case len(refused) > 0:
-		return &Response{ValidationErrors: refused}, nil
+		return &Response{ValidationErrors: input.DockerVMRefused(refused)}, nil
 	}
 
 	chosen := presenter.NewChosenVM(created.VM)

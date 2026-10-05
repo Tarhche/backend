@@ -219,15 +219,50 @@ func TestUseCase_Execute(t *testing.T) {
 		var workload controlplane.MockClient
 		workload.On("CreateContainer", mock.Anything, workloadtest.OwnerUUID, mock.Anything).Once().Return(
 			workloadControlPlane.CreatedContainer{},
-			&client.ValidationError{ValidationErrors: domain.ValidationErrors{"vm_uuid": "vm_required"}},
+			&client.ValidationError{ValidationErrors: domain.ValidationErrors{"vm": "vm_required"}},
 		)
 		defer workload.AssertExpectations(t)
 
 		response, err := useCase(&workload).Execute(context.Background(), read(t, `{"image": "nginx"}`))
 		require.NoError(t, err)
 
-		assert.Equal(t, domain.ValidationErrors{"vm_uuid": "you have more than one Docker VM, so say which one to use"}, response.ValidationErrors)
+		assert.Equal(t, domain.ValidationErrors{"vm": "you have more than one Docker VM, so say which one to use"}, response.ValidationErrors)
 	})
+
+	// the control plane names the VM to use vm.uuid and the VM to make
+	// vm.new; this request names them vm_uuid and vm.
+	for name, tt := range map[string]struct {
+		body    string
+		refused domain.ValidationErrors
+		want    domain.ValidationErrors
+	}{
+		"the vm it names is refused where it named it": {
+			body:    `{"image": "nginx", "vm_uuid": "machine-uuid"}`,
+			refused: domain.ValidationErrors{"vm.uuid": "not_docker"},
+			want:    domain.ValidationErrors{"vm_uuid": "this VM is not a Docker VM"},
+		},
+		"the vm it describes is refused where it described it": {
+			body:    `{"image": "nginx", "vm": {"resources": {"memory": 1048576}}}`,
+			refused: domain.ValidationErrors{"vm.new.resources.memory": "too_small"},
+			want:    domain.ValidationErrors{"vm.resources.memory": "this is smaller than allowed"},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			var workload controlplane.MockClient
+			workload.On("CreateContainer", mock.Anything, workloadtest.OwnerUUID, mock.Anything).Once().Return(
+				workloadControlPlane.CreatedContainer{},
+				&client.ValidationError{ValidationErrors: tt.refused},
+			)
+			defer workload.AssertExpectations(t)
+
+			response, err := useCase(&workload).Execute(context.Background(), read(t, tt.body))
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.want, response.ValidationErrors)
+		})
+	}
 }
 
 func TestRequest_Validate(t *testing.T) {

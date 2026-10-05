@@ -269,3 +269,33 @@ func DockerVMChoice(vmUUID string, described *NewDockerVM) workloadControlPlane.
 
 	return choice
 }
+
+// DockerVMRefused is what the workload refused about the Docker VM a container
+// or a stack was to go into, under the fields this request asked for it with.
+//
+// The control plane is asked for a VM to use as vm.uuid and for one to make as
+// vm.new, and says so when it refuses either; the dashboard asks for them as
+// vm_uuid and vm. So a VM that is not a Docker VM is refused under vm_uuid,
+// and a new VM's memory under vm.resources.memory, where the form asked for
+// it. Anything else is left where it was said.
+func DockerVMRefused(refused domain.ValidationErrors) domain.ValidationErrors {
+	if len(refused) == 0 {
+		return refused
+	}
+
+	named := make(domain.ValidationErrors, len(refused))
+	for field, reason := range refused {
+		switch {
+		case field == "vm.uuid":
+			field = "vm_uuid"
+		case field == "vm.new":
+			field = "vm"
+		case strings.HasPrefix(field, "vm.new."):
+			field = "vm." + strings.TrimPrefix(field, "vm.new.")
+		}
+
+		named[field] = reason
+	}
+
+	return named
+}

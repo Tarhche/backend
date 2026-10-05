@@ -16,6 +16,7 @@ import (
 	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/domain/workload/stack"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/controlplane"
+	"github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane/client"
 )
 
 const compose = "services:\n  web:\n    image: nginx:1.27\n"
@@ -148,6 +149,32 @@ func TestUseCase_Execute(t *testing.T) {
 			assert.Nil(t, response.Stack)
 		})
 	}
+
+	t.Run("what the control plane refuses about the vm is said where this request asked for it", func(t *testing.T) {
+		t.Parallel()
+
+		// the control plane names the VM to make vm.new; this request names
+		// it vm.
+		var workload controlplane.MockClient
+		workload.On("CreateStack", mock.Anything, workloadtest.OwnerUUID, mock.Anything).Once().Return(
+			workloadControlPlane.CreatedStack{},
+			&client.ValidationError{ValidationErrors: domain.ValidationErrors{"vm.new.resources.cpus": "too_large", "vm.uuid": "not_found"}},
+		)
+		defer workload.AssertExpectations(t)
+
+		response, err := useCase(&workload).Execute(context.Background(), &Request{
+			Name:      "shop",
+			Compose:   compose,
+			VM:        &input.NewDockerVM{Resources: &input.Resources{CPUs: 64}},
+			OwnerUUID: workloadtest.OwnerUUID,
+		})
+		require.NoError(t, err)
+
+		assert.Equal(t, domain.ValidationErrors{
+			"vm.resources.cpus": "this is larger than allowed",
+			"vm_uuid":           "it is not there",
+		}, response.ValidationErrors)
+	})
 }
 
 func TestRequest_Validate(t *testing.T) {
