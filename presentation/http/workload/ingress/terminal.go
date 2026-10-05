@@ -60,7 +60,7 @@ func NewTerminalHandler(
 }
 
 // NewVMTerminalHandler carries a terminal inside a VM to the node holding the
-// VM, on the node's /vms/{uuid}/attach, exactly as a task's is carried.
+// VM, on the node's /api/vms/{uuid}/attach, exactly as a task's is carried.
 func NewVMTerminalHandler(
 	vms VMResolver,
 	registry ingress.Registry,
@@ -74,7 +74,7 @@ func NewVMTerminalHandler(
 	}
 
 	route := func(uuid string) string {
-		return "/vms/" + url.PathEscape(uuid) + "/attach"
+		return "/api/vms/" + url.PathEscape(uuid) + "/attach"
 	}
 
 	return newTerminalHandler("vm", locate, route, registry, transport, logger)

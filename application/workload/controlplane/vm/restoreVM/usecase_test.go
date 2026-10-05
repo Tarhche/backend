@@ -179,6 +179,22 @@ func TestVMRestored_Handle(t *testing.T) {
 		assert.Equal(t, vm.Restoring, stored.CurrentState)
 	})
 
+	t.Run("a vm made from a snapshot is made from it no longer, once it has been", func(t *testing.T) {
+		t.Parallel()
+
+		made := restoring(vm.Running)
+		made.CurrentState = vm.Scheduled
+
+		w := vmtest.New(vmtest.WithVMs(made))
+
+		require.NoError(t, NewVMRestored(w.VMs, w.Lifecycle, w.Commander, slog.New(slog.DiscardHandler)).Handle(ctx, restoredEvent(t, "snapshot-uuid")))
+
+		stored, _ := w.VMs.Stored("01")
+		assert.Equal(t, vm.Scheduled, stored.CurrentState, "its node reports when it is up")
+		assert.Empty(t, stored.RestoreFrom)
+		assert.Empty(t, w.Producer.Produced())
+	})
+
 	t.Run("what will never be handled is not handed back", func(t *testing.T) {
 		t.Parallel()
 

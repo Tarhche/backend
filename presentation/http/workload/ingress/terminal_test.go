@@ -51,7 +51,7 @@ func newTerminalNode(t *testing.T) *terminalNode {
 
 	mux := http.NewServeMux()
 	mux.Handle("GET /api/tasks/{uuid}/attach", echo)
-	mux.Handle("GET /vms/{uuid}/attach", echo)
+	mux.Handle("GET /api/vms/{uuid}/attach", echo)
 
 	n.server = httptest.NewServer(mux)
 	t.Cleanup(n.server.Close)
@@ -113,7 +113,7 @@ func TestTerminalHandler(t *testing.T) {
 		defer front.Close()
 
 		assert.Equal(t, "echo: ls", talk(t, front, "/vms/vm-uuid/attach?token=abc"))
-		assert.Equal(t, "/vms/vm-uuid/attach", n.path)
+		assert.Equal(t, "/api/vms/vm-uuid/attach", n.path)
 	})
 
 	t.Run("a terminal in a task is carried as it always was", func(t *testing.T) {

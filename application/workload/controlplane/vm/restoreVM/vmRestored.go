@@ -50,8 +50,18 @@ func (h *VMRestored) Handle(ctx context.Context, data []byte) error {
 
 	// a restore this VM is no longer waiting on: it was asked for something
 	// else since, or this one was reported already.
-	if v.CurrentState != vm.Restoring || v.RestoreFrom != restored.SnapshotUUID {
+	if v.RestoreFrom != restored.SnapshotUUID {
 		return nil
+	}
+
+	// a VM made from a snapshot is made with its disk, which is said the same
+	// way; it is on its way up as it was, and its node reports when it is.
+	// Making it again is no longer making it from the snapshot.
+	if v.CurrentState != vm.Restoring {
+		v.RestoreFrom = ""
+		_, err := h.vmRepository.Save(ctx, &v)
+
+		return err
 	}
 
 	v.RestoreFrom = ""

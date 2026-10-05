@@ -122,7 +122,7 @@ func (h *taskHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	nodeName, refused, err := h.locate(r.Context(), slug, taskPort)
+	nodeName, route, refused, err := h.locate(r.Context(), slug, taskPort)
 	switch {
 	case err != nil:
 		infraTrace.RecordError(trace.SpanFromContext(r.Context()), err)
@@ -155,7 +155,7 @@ func (h *taskHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		Scheme: "http",
 		Host:   nodeName,
 		Path: strings.Join([]string{
-			"/tasks",
+			route,
 			url.PathEscape(slug),
 			strconv.FormatUint(uint64(taskPort), 10),
 			strings.TrimPrefix(r.URL.Path, "/"),
@@ -177,61 +177,69 @@ type unavailable struct {
 // what is not served is not there, as far as anybody asking is concerned.
 var unknown = &unavailable{status: http.StatusNotFound, message: "unknown task"}
 
-// locate is the node holding what a slug names: a VM, looked for first, or a
-// task. Every node serves both down one route, finding what the slug names
-// among the instances it holds.
-func (h *taskHandler) locate(ctx context.Context, slug string, requested port.Port) (string, *unavailable, error) {
+// The routes a node serves a VM's ports and a task's on. A node finds what a
+// slug names among every instance it holds, whichever route it came down.
+const (
+	vmPortsRoute   = "/vms"
+	taskPortsRoute = "/tasks"
+)
+
+// locate is the node holding what a slug names, a VM, looked for first, or a
+// task, and the route the node serves its ports on.
+func (h *taskHandler) locate(ctx context.Context, slug string, requested port.Port) (string, string, *unavailable, error) {
 	if h.vms != nil {
 		v, err := h.vms.GetOneBySlug(ctx, slug)
 
 		switch {
 		case err == nil:
-			return vmNode(&v, requested)
+			nodeName, refused := vmNode(&v, requested)
+
+			return nodeName, vmPortsRoute, refused, nil
 		case !errors.Is(err, domain.ErrNotExists):
-			return "", nil, err
+			return "", "", nil, err
 		}
 	}
 
 	t, err := h.resolver.GetOneBySlug(ctx, slug)
 	switch {
 	case errors.Is(err, domain.ErrNotExists):
-		return "", unknown, nil
+		return "", "", unknown, nil
 	case err != nil:
-		return "", nil, err
+		return "", "", nil, err
 	}
 
 	if t.CurrentState != task.Running {
-		return "", &unavailable{status: http.StatusServiceUnavailable, message: "the task is not running"}, nil
+		return "", "", &unavailable{status: http.StatusServiceUnavailable, message: "the task is not running"}, nil
 	}
 
 	if len(t.NodeName) == 0 {
-		return "", &unavailable{status: http.StatusServiceUnavailable, message: "the task has not been scheduled yet"}, nil
+		return "", "", &unavailable{status: http.StatusServiceUnavailable, message: "the task has not been scheduled yet"}, nil
 	}
 
-	return t.NodeName, nil, nil
+	return t.NodeName, taskPortsRoute, nil, nil
 }
 
 // vmNode is the node holding a VM whose port is asked for, when the VM lets the
 // ingress in to that port and is running somewhere to be reached. With no port
 // named, its node answers on the lowest one it exposes.
-func vmNode(v *vm.VM, requested port.Port) (string, *unavailable, error) {
+func vmNode(v *vm.VM, requested port.Port) (string, *unavailable) {
 	if v.Network.Ingress != vm.AccessAllow || len(v.Ports) == 0 {
-		return "", unknown, nil
+		return "", unknown
 	}
 
 	if requested != 0 && !slices.Contains(v.Ports, requested) {
-		return "", unknown, nil
+		return "", unknown
 	}
 
 	if v.CurrentState != vm.Running {
-		return "", &unavailable{status: http.StatusServiceUnavailable, message: "the vm is not running"}, nil
+		return "", &unavailable{status: http.StatusServiceUnavailable, message: "the vm is not running"}
 	}
 
 	if len(v.NodeName) == 0 {
-		return "", &unavailable{status: http.StatusServiceUnavailable, message: "the vm has not been scheduled yet"}, nil
+		return "", &unavailable{status: http.StatusServiceUnavailable, message: "the vm has not been scheduled yet"}
 	}
 
-	return v.NodeName, nil, nil
+	return v.NodeName, nil
 }
 
 // parseHost takes the task's slug, and optionally the port it names, out

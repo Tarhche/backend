@@ -52,6 +52,9 @@ func (r *fakeResolver) GetOne(_ context.Context, uuid string) (task.Task, error)
 type node struct {
 	server *httptest.Server
 
+	// route is which of the node's routes for ports was asked.
+	route string
+
 	slug string
 	port string
 	path string
@@ -63,15 +66,21 @@ func newNode(t *testing.T, handler http.Handler) *node {
 
 	n := &node{}
 
-	mux := http.NewServeMux()
-	mux.Handle("/tasks/{slug}/{port}/{path...}", http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		n.slug = r.PathValue("slug")
-		n.port = r.PathValue("port")
-		n.path = "/" + r.PathValue("path")
-		n.host = r.Host
+	ports := func(route string) http.Handler {
+		return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+			n.route = route
+			n.slug = r.PathValue("slug")
+			n.port = r.PathValue("port")
+			n.path = "/" + r.PathValue("path")
+			n.host = r.Host
 
-		handler.ServeHTTP(rw, r)
-	}))
+			handler.ServeHTTP(rw, r)
+		})
+	}
+
+	mux := http.NewServeMux()
+	mux.Handle("/tasks/{slug}/{port}/{path...}", ports("tasks"))
+	mux.Handle("/vms/{slug}/{port}/{path...}", ports("vms"))
 
 	n.server = httptest.NewServer(mux)
 	t.Cleanup(n.server.Close)
@@ -204,6 +213,7 @@ func TestTaskHandler(t *testing.T) {
 
 		assert.Equal(t, http.StatusOK, rw.Code)
 		assert.Equal(t, "answered by the task", rw.Body.String())
+		assert.Equal(t, "tasks", n.route)
 		assert.Equal(t, "nginx-xkfqz", n.slug)
 		assert.Equal(t, "/some/path", n.path)
 		assert.Equal(t, "nginx-xkfqz."+testDomain, n.host, "the task is addressed by the name the client used")
@@ -443,6 +453,7 @@ func TestTaskHandler_VMs(t *testing.T) {
 
 		assert.Equal(t, http.StatusOK, rw.Code)
 		assert.Equal(t, "answered by the vm", rw.Body.String())
+		assert.Equal(t, "vms", n.route, "a vm's ports are asked of the node's route for them")
 		assert.Equal(t, "box-xkfqz", n.slug)
 		assert.Equal(t, "8080", n.port)
 		assert.Equal(t, "/index.html", n.path)
