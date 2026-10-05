@@ -75,3 +75,23 @@ func tail(said string) string {
 
 	return strings.Join(lines[max(len(lines)-5, 0):], "\n")
 }
+
+// TestTheBuildContextLeavesOutTheLocalStacksData holds every image's build to
+// sending none of what the local stack keeps under ./tmp: its databases' files,
+// owned by the containers that write them, are unreadable to whoever builds on
+// Linux, and a build that has to read them fails.
+func TestTheBuildContextLeavesOutTheLocalStacksData(t *testing.T) {
+	t.Parallel()
+
+	ignore, err := os.ReadFile(".dockerignore")
+	require.NoError(t, err, "the build context is narrowed by .dockerignore")
+
+	var patterns []string
+	for line := range strings.Lines(string(ignore)) {
+		if pattern := strings.TrimSpace(line); len(pattern) > 0 && !strings.HasPrefix(pattern, "#") {
+			patterns = append(patterns, strings.TrimPrefix(pattern, "/"))
+		}
+	}
+
+	assert.Contains(t, patterns, "tmp")
+}
