@@ -4,8 +4,11 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -35,6 +38,8 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/validator"
 	"github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane/client"
 	"github.com/khanzadimahdi/testproject/infrastructure/workload/vm/memory"
+	"github.com/khanzadimahdi/testproject/infrastructure/workload/vm/vmhost"
+	vmhostAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/vmhost"
 	"github.com/khanzadimahdi/testproject/resources/translation"
 )
 
@@ -133,7 +138,7 @@ func start(t *testing.T) *workload {
 
 	node, err := providers.NewOrchestratorVMs(providers.OrchestratorVMDependencies{
 		NATS:      nodeConnection,
-		Engine:    w.engine,
+		Engine:    throughVMHost(t, w.engine, logger),
 		Archives:  w.archives,
 		Producer:  nodeMessages,
 		Validator: validator.New(english),
@@ -206,6 +211,38 @@ func start(t *testing.T) *workload {
 	}, settle, beat, "the node never said what it offers")
 
 	return w
+}
+
+// throughVMHost is engine as a node reaches its own: served by a vmhost on a
+// unix socket, and asked through the vmhost's client, so every call, archive
+// and exec session crosses the socket as it does when served.
+func throughVMHost(t *testing.T, engine vm.Engine, logger *slog.Logger) vm.Engine {
+	t.Helper()
+
+	// not the test's own directory, which is named after the test: a unix
+	// socket's path is about a hundred bytes at most.
+	dir, err := os.MkdirTemp("", "vmhost")
+	require.NoError(t, err)
+
+	socket := filepath.Join(dir, "vmhost.sock")
+
+	listener, err := net.Listen("unix", socket)
+	require.NoError(t, err)
+
+	server := vmhostAPI.NewServer(engine, logger)
+	httpServer := &http.Server{Handler: server, ReadHeaderTimeout: settle}
+
+	go func() {
+		_ = httpServer.Serve(listener)
+	}()
+
+	t.Cleanup(func() {
+		_ = server.Close()
+		_ = httpServer.Close()
+		_ = os.RemoveAll(dir)
+	})
+
+	return vmhost.NewClient(socket)
 }
 
 // natsServer is a NATS server with JetStream, of the test's own.

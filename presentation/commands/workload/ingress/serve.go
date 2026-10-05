@@ -13,6 +13,7 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/certificate"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers"
+	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers/core"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers/workload"
 	"github.com/khanzadimahdi/testproject/infrastructure/tunnel"
 )
@@ -79,11 +80,11 @@ func (c *ServeCommand) Configure(flagSet *console.FlagSet) {
 // looking up which node is holding a task.
 func (c *ServeCommand) Providers() []provider.Provider {
 	return []provider.Provider{
-		providers.NewConfigsProvider(c.configs),
-		providers.NewOpenTelemetryProvider("workload-ingress", "workload-ingress"),
-		providers.NewProfilerProvider("workload-ingress"),
+		core.NewConfigsProvider(c.configs),
+		core.NewOpenTelemetryProvider("workload-ingress", "workload-ingress"),
+		core.NewProfilerProvider("workload-ingress"),
 		providers.NewMongodbProvider(),
-		providers.NewContainerProvider(),
+		core.NewContainerProvider(),
 		workload.NewIngressProvider(),
 		c,
 	}

@@ -18,6 +18,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers"
+	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers/core"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers/workload"
 	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/core/request"
 	"github.com/khanzadimahdi/testproject/infrastructure/tunnel"
@@ -106,14 +107,14 @@ func (c *ServeCommand) Configure(flagSet *console.FlagSet) {
 // task so the orchestrator providers can resolve it.
 func (c *ServeCommand) Providers() []provider.Provider {
 	return []provider.Provider{
-		providers.NewConfigsProvider(c.configs),
+		core.NewConfigsProvider(c.configs),
 		workload.NewOrchestratorNameProvider(),
-		providers.NewOpenTelemetryProvider("workload-orchestrator", c.configs.Name),
-		providers.NewProfilerProvider("workload-orchestrator"),
+		core.NewOpenTelemetryProvider("workload-orchestrator", c.configs.Name),
+		core.NewProfilerProvider("workload-orchestrator"),
 		providers.NewNatsProvider(),
 		providers.NewTranslationProvider(),
 		providers.NewValidationProvider(),
-		providers.NewContainerProvider(),
+		core.NewContainerProvider(),
 		workload.NewOrchestratorProvider(),
 		c,
 	}

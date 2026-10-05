@@ -80,7 +80,7 @@ type WorkloadVMHost struct {
 
 	DockerImage string `usage:"Image a Docker VM boots from: a docker-in-docker image whose dockerd comes up with the VM." env:"WORKLOAD_VMHOST_DOCKER_IMAGE" long:"docker-image"`
 
-	CPUs   uint   `usage:"vCPUs this node offers to VMs. Zero offers every CPU the host has." env:"WORKLOAD_VMHOST_CPUS" long:"cpus"`
+	CPUs   uint   `usage:"vCPUs this node offers to VMs. Zero offers every CPU this container may use: its CPU limit, or the host's CPUs when it has none." env:"WORKLOAD_VMHOST_CPUS" long:"cpus"`
 	Memory uint64 `usage:"Memory, in bytes, this node offers to VMs. Zero offers 80% of this container's memory limit, less 512 MiB." env:"WORKLOAD_VMHOST_MEMORY" long:"memory"`
 	Disk   uint64 `usage:"Disk, in bytes, this node offers to VMs." env:"WORKLOAD_VMHOST_DISK" long:"disk"`
 
