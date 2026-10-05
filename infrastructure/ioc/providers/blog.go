@@ -89,6 +89,50 @@ import (
 	impersonateuser "github.com/khanzadimahdi/testproject/application/dashboard/user/impersonateUser"
 	updateuser "github.com/khanzadimahdi/testproject/application/dashboard/user/updateUser"
 	"github.com/khanzadimahdi/testproject/application/dashboard/user/userchangepassword"
+	dashboardConnectNetwork "github.com/khanzadimahdi/testproject/application/dashboard/workload/container/connectNetwork"
+	dashboardCreateContainer "github.com/khanzadimahdi/testproject/application/dashboard/workload/container/createContainer"
+	dashboardDeleteContainer "github.com/khanzadimahdi/testproject/application/dashboard/workload/container/deleteContainer"
+	dashboardDisconnectNetwork "github.com/khanzadimahdi/testproject/application/dashboard/workload/container/disconnectNetwork"
+	dashboardGetContainer "github.com/khanzadimahdi/testproject/application/dashboard/workload/container/getContainer"
+	dashboardGetContainerLogs "github.com/khanzadimahdi/testproject/application/dashboard/workload/container/getContainerLogs"
+	dashboardGetContainerStats "github.com/khanzadimahdi/testproject/application/dashboard/workload/container/getContainerStats"
+	dashboardGetContainers "github.com/khanzadimahdi/testproject/application/dashboard/workload/container/getContainers"
+	dashboardGetVMContainers "github.com/khanzadimahdi/testproject/application/dashboard/workload/container/getVMContainers"
+	dashboardRestartContainer "github.com/khanzadimahdi/testproject/application/dashboard/workload/container/restartContainer"
+	dashboardStartContainer "github.com/khanzadimahdi/testproject/application/dashboard/workload/container/startContainer"
+	dashboardStopContainer "github.com/khanzadimahdi/testproject/application/dashboard/workload/container/stopContainer"
+	dashboardDeleteImage "github.com/khanzadimahdi/testproject/application/dashboard/workload/image/deleteImage"
+	dashboardGetImages "github.com/khanzadimahdi/testproject/application/dashboard/workload/image/getImages"
+	dashboardPullImage "github.com/khanzadimahdi/testproject/application/dashboard/workload/image/pullImage"
+	dashboardCreateNetwork "github.com/khanzadimahdi/testproject/application/dashboard/workload/network/createNetwork"
+	dashboardDeleteNetwork "github.com/khanzadimahdi/testproject/application/dashboard/workload/network/deleteNetwork"
+	dashboardGetNetworks "github.com/khanzadimahdi/testproject/application/dashboard/workload/network/getNetworks"
+	dashboardWorkloadPresenter "github.com/khanzadimahdi/testproject/application/dashboard/workload/presenter"
+	dashboardCreateSnapshot "github.com/khanzadimahdi/testproject/application/dashboard/workload/snapshot/createSnapshot"
+	dashboardDeleteSnapshot "github.com/khanzadimahdi/testproject/application/dashboard/workload/snapshot/deleteSnapshot"
+	dashboardGetSnapshot "github.com/khanzadimahdi/testproject/application/dashboard/workload/snapshot/getSnapshot"
+	dashboardGetSnapshots "github.com/khanzadimahdi/testproject/application/dashboard/workload/snapshot/getSnapshots"
+	dashboardRenameSnapshot "github.com/khanzadimahdi/testproject/application/dashboard/workload/snapshot/renameSnapshot"
+	dashboardCreateStack "github.com/khanzadimahdi/testproject/application/dashboard/workload/stack/createStack"
+	dashboardDeleteStack "github.com/khanzadimahdi/testproject/application/dashboard/workload/stack/deleteStack"
+	dashboardGetStack "github.com/khanzadimahdi/testproject/application/dashboard/workload/stack/getStack"
+	dashboardGetStacks "github.com/khanzadimahdi/testproject/application/dashboard/workload/stack/getStacks"
+	dashboardRestartStack "github.com/khanzadimahdi/testproject/application/dashboard/workload/stack/restartStack"
+	dashboardStartStack "github.com/khanzadimahdi/testproject/application/dashboard/workload/stack/startStack"
+	dashboardStopStack "github.com/khanzadimahdi/testproject/application/dashboard/workload/stack/stopStack"
+	dashboardCreateVM "github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/createVM"
+	dashboardDeleteVM "github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/deleteVM"
+	dashboardGetVM "github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/getVM"
+	dashboardGetVMLogs "github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/getVMLogs"
+	dashboardGetVMs "github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/getVMs"
+	dashboardRestartVM "github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/restartVM"
+	dashboardRestoreVM "github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/restoreVM"
+	dashboardStartVM "github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/startVM"
+	dashboardStopVM "github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/stopVM"
+	dashboardUpdateVM "github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/updateVM"
+	dashboardCreateVolume "github.com/khanzadimahdi/testproject/application/dashboard/workload/volume/createVolume"
+	dashboardDeleteVolume "github.com/khanzadimahdi/testproject/application/dashboard/workload/volume/deleteVolume"
+	dashboardGetVolumes "github.com/khanzadimahdi/testproject/application/dashboard/workload/volume/getVolumes"
 	"github.com/khanzadimahdi/testproject/application/element"
 	getFile "github.com/khanzadimahdi/testproject/application/file/getFile"
 	"github.com/khanzadimahdi/testproject/application/home"
@@ -150,6 +194,14 @@ import (
 	"github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/profile"
 	dashboardRoleAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/role"
 	dashboardUserAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/user"
+	dashboardWorkloadAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/workload"
+	dashboardContainerAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/workload/container"
+	dashboardImageAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/workload/image"
+	dashboardNetworkAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/workload/network"
+	dashboardSnapshotAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/workload/snapshot"
+	dashboardStackAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/workload/stack"
+	dashboardVMAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/workload/vm"
+	dashboardVolumeAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/workload/volume"
 	fileAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/file"
 	hashtagAPI "github.com/khanzadimahdi/testproject/presentation/http/blog/api/hashtag"
 	homeapi "github.com/khanzadimahdi/testproject/presentation/http/blog/api/home"
@@ -398,6 +450,25 @@ func blog(
 	); err != nil {
 		return nil, err
 	}
+
+	// ---- dashboard: the workload ----
+	//
+	// the dashboard runs no VM, container or stack itself. It establishes who
+	// is asking and whether they may, then passes the request to the workload,
+	// which owns their lives: a route of the my set asks for the caller's own,
+	// one of the workload set for anybody's, and a create is always the
+	// caller's. What the workload refuses is said in the reader's language,
+	// which is why most of these are built per request.
+	//
+	// the workload keeps the id of whoever owns a VM, a snapshot or a stack;
+	// this is what puts a name to it when the dashboard shows one.
+	workloadOwners := dashboardWorkloadPresenter.NewDirectory(userRepository)
+
+	dashboardGetVMUseCase := dashboardGetVM.NewUseCase(workload, workloadOwners, ingressDomain)
+	dashboardGetSnapshotsUseCase := dashboardGetSnapshots.NewUseCase(workload, workloadOwners)
+	dashboardGetSnapshotUseCase := dashboardGetSnapshot.NewUseCase(workload, workloadOwners)
+	dashboardGetStacksUseCase := dashboardGetStacks.NewUseCase(workload, workloadOwners)
+	dashboardGetStackUseCase := dashboardGetStack.NewUseCase(workload, workloadOwners)
 
 	// ---- dashboard ----
 	getProfileUseCase := getprofile.NewUseCase(userRepository)
@@ -708,6 +779,260 @@ func blog(
 	mux.Handle("PUT /api/dashboard/config", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
 		return dashboardConfigAPI.NewUpdateHandler(dashboardUpdateConfig.NewUseCase(configRepository, languageRepository, va(c), tr(c)))
 	}), authorizer, permission.ConfigUpdate), jwt, userRepository))
+
+	// workload vms
+	mux.Handle("GET /api/dashboard/workload/vms", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardVMAPI.NewIndexHandler(dashboardGetVMs.NewUseCase(workload, va(c), workloadOwners, ingressDomain), dashboardWorkloadAPI.Anybody)
+	}), authorizer, permission.WorkloadVMsIndex), jwt, userRepository))
+	mux.Handle("POST /api/dashboard/workload/vms", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardVMAPI.NewCreateHandler(dashboardCreateVM.NewUseCase(workload, va(c), tr(c), workloadOwners, ingressDomain))
+	}), authorizer, permission.WorkloadVMsCreate), jwt, userRepository))
+	mux.Handle("GET /api/dashboard/workload/vms/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardVMAPI.NewShowHandler(dashboardGetVMUseCase, dashboardWorkloadAPI.Anybody), authorizer, permission.WorkloadVMsShow), jwt, userRepository))
+	mux.Handle("PATCH /api/dashboard/workload/vms/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardVMAPI.NewUpdateHandler(dashboardUpdateVM.NewUseCase(workload, va(c), tr(c), workloadOwners, ingressDomain), dashboardWorkloadAPI.Anybody)
+	}), authorizer, permission.WorkloadVMsUpdate), jwt, userRepository))
+	mux.Handle("DELETE /api/dashboard/workload/vms/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardVMAPI.NewDeleteHandler(dashboardDeleteVM.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Anybody)
+	}), authorizer, permission.WorkloadVMsDelete), jwt, userRepository))
+	mux.Handle("POST /api/dashboard/workload/vms/{uuid}/start", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardVMAPI.NewStartHandler(dashboardStartVM.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Anybody)
+	}), authorizer, permission.WorkloadVMsManage), jwt, userRepository))
+	mux.Handle("POST /api/dashboard/workload/vms/{uuid}/stop", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardVMAPI.NewStopHandler(dashboardStopVM.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Anybody)
+	}), authorizer, permission.WorkloadVMsManage), jwt, userRepository))
+	mux.Handle("POST /api/dashboard/workload/vms/{uuid}/restart", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardVMAPI.NewRestartHandler(dashboardRestartVM.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Anybody)
+	}), authorizer, permission.WorkloadVMsManage), jwt, userRepository))
+	mux.Handle("POST /api/dashboard/workload/vms/{uuid}/restore", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardVMAPI.NewRestoreHandler(dashboardRestoreVM.NewUseCase(workload, va(c), tr(c)), dashboardWorkloadAPI.Anybody)
+	}), authorizer, permission.WorkloadVMsManage), jwt, userRepository))
+	mux.Handle("GET /api/dashboard/workload/vms/{uuid}/logs", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardVMAPI.NewLogsHandler(dashboardGetVMLogs.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Anybody)
+	}), authorizer, permission.WorkloadVMsLogs), jwt, userRepository))
+
+	// one's own vms
+	mux.Handle("GET /api/dashboard/my/workload/vms", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardVMAPI.NewIndexHandler(dashboardGetVMs.NewUseCase(workload, va(c), workloadOwners, ingressDomain), dashboardWorkloadAPI.Caller)
+	}), authorizer, permission.SelfWorkloadVMsIndex), jwt, userRepository))
+	mux.Handle("GET /api/dashboard/my/workload/vms/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardVMAPI.NewShowHandler(dashboardGetVMUseCase, dashboardWorkloadAPI.Caller), authorizer, permission.SelfWorkloadVMsShow), jwt, userRepository))
+	mux.Handle("PATCH /api/dashboard/my/workload/vms/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardVMAPI.NewUpdateHandler(dashboardUpdateVM.NewUseCase(workload, va(c), tr(c), workloadOwners, ingressDomain), dashboardWorkloadAPI.Caller)
+	}), authorizer, permission.SelfWorkloadVMsUpdate), jwt, userRepository))
+	mux.Handle("DELETE /api/dashboard/my/workload/vms/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardVMAPI.NewDeleteHandler(dashboardDeleteVM.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Caller)
+	}), authorizer, permission.SelfWorkloadVMsDelete), jwt, userRepository))
+	mux.Handle("POST /api/dashboard/my/workload/vms/{uuid}/start", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardVMAPI.NewStartHandler(dashboardStartVM.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Caller)
+	}), authorizer, permission.SelfWorkloadVMsManage), jwt, userRepository))
+	mux.Handle("POST /api/dashboard/my/workload/vms/{uuid}/stop", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardVMAPI.NewStopHandler(dashboardStopVM.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Caller)
+	}), authorizer, permission.SelfWorkloadVMsManage), jwt, userRepository))
+	mux.Handle("POST /api/dashboard/my/workload/vms/{uuid}/restart", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardVMAPI.NewRestartHandler(dashboardRestartVM.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Caller)
+	}), authorizer, permission.SelfWorkloadVMsManage), jwt, userRepository))
+	mux.Handle("POST /api/dashboard/my/workload/vms/{uuid}/restore", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardVMAPI.NewRestoreHandler(dashboardRestoreVM.NewUseCase(workload, va(c), tr(c)), dashboardWorkloadAPI.Caller)
+	}), authorizer, permission.SelfWorkloadVMsManage), jwt, userRepository))
+	mux.Handle("GET /api/dashboard/my/workload/vms/{uuid}/logs", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardVMAPI.NewLogsHandler(dashboardGetVMLogs.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Caller)
+	}), authorizer, permission.SelfWorkloadVMsLogs), jwt, userRepository))
+
+	// workload snapshots
+	mux.Handle("GET /api/dashboard/workload/snapshots", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardSnapshotAPI.NewIndexHandler(dashboardGetSnapshotsUseCase, dashboardWorkloadAPI.Anybody), authorizer, permission.WorkloadSnapshotsIndex), jwt, userRepository))
+	mux.Handle("POST /api/dashboard/workload/vms/{uuid}/snapshots", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardSnapshotAPI.NewCreateHandler(dashboardCreateSnapshot.NewUseCase(workload, va(c), tr(c), workloadOwners))
+	}), authorizer, permission.WorkloadSnapshotsCreate), jwt, userRepository))
+	mux.Handle("GET /api/dashboard/workload/snapshots/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardSnapshotAPI.NewShowHandler(dashboardGetSnapshotUseCase, dashboardWorkloadAPI.Anybody), authorizer, permission.WorkloadSnapshotsShow), jwt, userRepository))
+	mux.Handle("PATCH /api/dashboard/workload/snapshots/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardSnapshotAPI.NewUpdateHandler(dashboardRenameSnapshot.NewUseCase(workload, va(c), tr(c), workloadOwners), dashboardWorkloadAPI.Anybody)
+	}), authorizer, permission.WorkloadSnapshotsUpdate), jwt, userRepository))
+	mux.Handle("DELETE /api/dashboard/workload/snapshots/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardSnapshotAPI.NewDeleteHandler(dashboardDeleteSnapshot.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Anybody)
+	}), authorizer, permission.WorkloadSnapshotsDelete), jwt, userRepository))
+
+	// one's own snapshots
+	mux.Handle("GET /api/dashboard/my/workload/snapshots", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardSnapshotAPI.NewIndexHandler(dashboardGetSnapshotsUseCase, dashboardWorkloadAPI.Caller), authorizer, permission.SelfWorkloadSnapshotsIndex), jwt, userRepository))
+	mux.Handle("GET /api/dashboard/my/workload/snapshots/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardSnapshotAPI.NewShowHandler(dashboardGetSnapshotUseCase, dashboardWorkloadAPI.Caller), authorizer, permission.SelfWorkloadSnapshotsShow), jwt, userRepository))
+	mux.Handle("PATCH /api/dashboard/my/workload/snapshots/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardSnapshotAPI.NewUpdateHandler(dashboardRenameSnapshot.NewUseCase(workload, va(c), tr(c), workloadOwners), dashboardWorkloadAPI.Caller)
+	}), authorizer, permission.SelfWorkloadSnapshotsUpdate), jwt, userRepository))
+	mux.Handle("DELETE /api/dashboard/my/workload/snapshots/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardSnapshotAPI.NewDeleteHandler(dashboardDeleteSnapshot.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Caller)
+	}), authorizer, permission.SelfWorkloadSnapshotsDelete), jwt, userRepository))
+
+	// workload containers in docker vms
+	mux.Handle("GET /api/dashboard/workload/containers", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardContainerAPI.NewIndexHandler(dashboardGetContainers.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Anybody)
+	}), authorizer, permission.WorkloadContainersIndex), jwt, userRepository))
+	mux.Handle("POST /api/dashboard/workload/containers", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardContainerAPI.NewCreateHandler(dashboardCreateContainer.NewUseCase(workload, va(c), tr(c)))
+	}), authorizer, permission.WorkloadContainersCreate), jwt, userRepository))
+	mux.Handle("GET /api/dashboard/workload/vms/{uuid}/containers", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardContainerAPI.NewVMIndexHandler(dashboardGetVMContainers.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Anybody)
+	}), authorizer, permission.WorkloadContainersIndex), jwt, userRepository))
+	mux.Handle("GET /api/dashboard/workload/vms/{uuid}/containers/{id}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardContainerAPI.NewShowHandler(dashboardGetContainer.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Anybody)
+	}), authorizer, permission.WorkloadContainersShow), jwt, userRepository))
+	mux.Handle("DELETE /api/dashboard/workload/vms/{uuid}/containers/{id}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardContainerAPI.NewDeleteHandler(dashboardDeleteContainer.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Anybody)
+	}), authorizer, permission.WorkloadContainersDelete), jwt, userRepository))
+	mux.Handle("POST /api/dashboard/workload/vms/{uuid}/containers/{id}/start", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardContainerAPI.NewStartHandler(dashboardStartContainer.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Anybody)
+	}), authorizer, permission.WorkloadContainersManage), jwt, userRepository))
+	mux.Handle("POST /api/dashboard/workload/vms/{uuid}/containers/{id}/stop", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardContainerAPI.NewStopHandler(dashboardStopContainer.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Anybody)
+	}), authorizer, permission.WorkloadContainersManage), jwt, userRepository))
+	mux.Handle("POST /api/dashboard/workload/vms/{uuid}/containers/{id}/restart", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardContainerAPI.NewRestartHandler(dashboardRestartContainer.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Anybody)
+	}), authorizer, permission.WorkloadContainersManage), jwt, userRepository))
+	mux.Handle("GET /api/dashboard/workload/vms/{uuid}/containers/{id}/logs", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardContainerAPI.NewLogsHandler(dashboardGetContainerLogs.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Anybody)
+	}), authorizer, permission.WorkloadContainersLogs), jwt, userRepository))
+	mux.Handle("GET /api/dashboard/workload/vms/{uuid}/containers/{id}/stats", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardContainerAPI.NewStatsHandler(dashboardGetContainerStats.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Anybody)
+	}), authorizer, permission.WorkloadContainersShow), jwt, userRepository))
+	mux.Handle("POST /api/dashboard/workload/vms/{uuid}/containers/{id}/networks", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardContainerAPI.NewConnectHandler(dashboardConnectNetwork.NewUseCase(workload, va(c), tr(c)), dashboardWorkloadAPI.Anybody)
+	}), authorizer, permission.WorkloadContainersManage), jwt, userRepository))
+	mux.Handle("DELETE /api/dashboard/workload/vms/{uuid}/containers/{id}/networks/{network}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardContainerAPI.NewDisconnectHandler(dashboardDisconnectNetwork.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Anybody)
+	}), authorizer, permission.WorkloadContainersManage), jwt, userRepository))
+
+	// one's own containers in docker vms
+	mux.Handle("GET /api/dashboard/my/workload/containers", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardContainerAPI.NewIndexHandler(dashboardGetContainers.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Caller)
+	}), authorizer, permission.SelfWorkloadContainersIndex), jwt, userRepository))
+	mux.Handle("GET /api/dashboard/my/workload/vms/{uuid}/containers", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardContainerAPI.NewVMIndexHandler(dashboardGetVMContainers.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Caller)
+	}), authorizer, permission.SelfWorkloadContainersIndex), jwt, userRepository))
+	mux.Handle("GET /api/dashboard/my/workload/vms/{uuid}/containers/{id}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardContainerAPI.NewShowHandler(dashboardGetContainer.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Caller)
+	}), authorizer, permission.SelfWorkloadContainersShow), jwt, userRepository))
+	mux.Handle("DELETE /api/dashboard/my/workload/vms/{uuid}/containers/{id}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardContainerAPI.NewDeleteHandler(dashboardDeleteContainer.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Caller)
+	}), authorizer, permission.SelfWorkloadContainersDelete), jwt, userRepository))
+	mux.Handle("POST /api/dashboard/my/workload/vms/{uuid}/containers/{id}/start", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardContainerAPI.NewStartHandler(dashboardStartContainer.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Caller)
+	}), authorizer, permission.SelfWorkloadContainersManage), jwt, userRepository))
+	mux.Handle("POST /api/dashboard/my/workload/vms/{uuid}/containers/{id}/stop", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardContainerAPI.NewStopHandler(dashboardStopContainer.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Caller)
+	}), authorizer, permission.SelfWorkloadContainersManage), jwt, userRepository))
+	mux.Handle("POST /api/dashboard/my/workload/vms/{uuid}/containers/{id}/restart", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardContainerAPI.NewRestartHandler(dashboardRestartContainer.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Caller)
+	}), authorizer, permission.SelfWorkloadContainersManage), jwt, userRepository))
+	mux.Handle("GET /api/dashboard/my/workload/vms/{uuid}/containers/{id}/logs", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardContainerAPI.NewLogsHandler(dashboardGetContainerLogs.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Caller)
+	}), authorizer, permission.SelfWorkloadContainersLogs), jwt, userRepository))
+	mux.Handle("GET /api/dashboard/my/workload/vms/{uuid}/containers/{id}/stats", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardContainerAPI.NewStatsHandler(dashboardGetContainerStats.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Caller)
+	}), authorizer, permission.SelfWorkloadContainersShow), jwt, userRepository))
+	mux.Handle("POST /api/dashboard/my/workload/vms/{uuid}/containers/{id}/networks", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardContainerAPI.NewConnectHandler(dashboardConnectNetwork.NewUseCase(workload, va(c), tr(c)), dashboardWorkloadAPI.Caller)
+	}), authorizer, permission.SelfWorkloadContainersManage), jwt, userRepository))
+	mux.Handle("DELETE /api/dashboard/my/workload/vms/{uuid}/containers/{id}/networks/{network}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardContainerAPI.NewDisconnectHandler(dashboardDisconnectNetwork.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Caller)
+	}), authorizer, permission.SelfWorkloadContainersManage), jwt, userRepository))
+
+	// workload images in docker vms
+	mux.Handle("GET /api/dashboard/workload/vms/{uuid}/images", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardImageAPI.NewIndexHandler(dashboardGetImages.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Anybody)
+	}), authorizer, permission.WorkloadContainersIndex), jwt, userRepository))
+	mux.Handle("POST /api/dashboard/workload/vms/{uuid}/images", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardImageAPI.NewPullHandler(dashboardPullImage.NewUseCase(workload, va(c), tr(c)), dashboardWorkloadAPI.Anybody)
+	}), authorizer, permission.WorkloadContainersManage), jwt, userRepository))
+	mux.Handle("DELETE /api/dashboard/workload/vms/{uuid}/images/{id}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardImageAPI.NewDeleteHandler(dashboardDeleteImage.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Anybody)
+	}), authorizer, permission.WorkloadContainersDelete), jwt, userRepository))
+
+	// one's own images in docker vms
+	mux.Handle("GET /api/dashboard/my/workload/vms/{uuid}/images", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardImageAPI.NewIndexHandler(dashboardGetImages.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Caller)
+	}), authorizer, permission.SelfWorkloadContainersIndex), jwt, userRepository))
+	mux.Handle("POST /api/dashboard/my/workload/vms/{uuid}/images", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardImageAPI.NewPullHandler(dashboardPullImage.NewUseCase(workload, va(c), tr(c)), dashboardWorkloadAPI.Caller)
+	}), authorizer, permission.SelfWorkloadContainersManage), jwt, userRepository))
+	mux.Handle("DELETE /api/dashboard/my/workload/vms/{uuid}/images/{id}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardImageAPI.NewDeleteHandler(dashboardDeleteImage.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Caller)
+	}), authorizer, permission.SelfWorkloadContainersDelete), jwt, userRepository))
+
+	// workload networks in docker vms
+	mux.Handle("GET /api/dashboard/workload/vms/{uuid}/networks", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardNetworkAPI.NewIndexHandler(dashboardGetNetworks.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Anybody)
+	}), authorizer, permission.WorkloadContainersIndex), jwt, userRepository))
+	mux.Handle("POST /api/dashboard/workload/vms/{uuid}/networks", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardNetworkAPI.NewCreateHandler(dashboardCreateNetwork.NewUseCase(workload, va(c), tr(c)), dashboardWorkloadAPI.Anybody)
+	}), authorizer, permission.WorkloadContainersManage), jwt, userRepository))
+	mux.Handle("DELETE /api/dashboard/workload/vms/{uuid}/networks/{id}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardNetworkAPI.NewDeleteHandler(dashboardDeleteNetwork.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Anybody)
+	}), authorizer, permission.WorkloadContainersDelete), jwt, userRepository))
+
+	// one's own networks in docker vms
+	mux.Handle("GET /api/dashboard/my/workload/vms/{uuid}/networks", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardNetworkAPI.NewIndexHandler(dashboardGetNetworks.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Caller)
+	}), authorizer, permission.SelfWorkloadContainersIndex), jwt, userRepository))
+	mux.Handle("POST /api/dashboard/my/workload/vms/{uuid}/networks", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardNetworkAPI.NewCreateHandler(dashboardCreateNetwork.NewUseCase(workload, va(c), tr(c)), dashboardWorkloadAPI.Caller)
+	}), authorizer, permission.SelfWorkloadContainersManage), jwt, userRepository))
+	mux.Handle("DELETE /api/dashboard/my/workload/vms/{uuid}/networks/{id}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardNetworkAPI.NewDeleteHandler(dashboardDeleteNetwork.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Caller)
+	}), authorizer, permission.SelfWorkloadContainersDelete), jwt, userRepository))
+
+	// workload volumes in docker vms
+	mux.Handle("GET /api/dashboard/workload/vms/{uuid}/volumes", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardVolumeAPI.NewIndexHandler(dashboardGetVolumes.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Anybody)
+	}), authorizer, permission.WorkloadContainersIndex), jwt, userRepository))
+	mux.Handle("POST /api/dashboard/workload/vms/{uuid}/volumes", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardVolumeAPI.NewCreateHandler(dashboardCreateVolume.NewUseCase(workload, va(c), tr(c)), dashboardWorkloadAPI.Anybody)
+	}), authorizer, permission.WorkloadContainersManage), jwt, userRepository))
+	mux.Handle("DELETE /api/dashboard/workload/vms/{uuid}/volumes/{name}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardVolumeAPI.NewDeleteHandler(dashboardDeleteVolume.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Anybody)
+	}), authorizer, permission.WorkloadContainersDelete), jwt, userRepository))
+
+	// one's own volumes in docker vms
+	mux.Handle("GET /api/dashboard/my/workload/vms/{uuid}/volumes", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardVolumeAPI.NewIndexHandler(dashboardGetVolumes.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Caller)
+	}), authorizer, permission.SelfWorkloadContainersIndex), jwt, userRepository))
+	mux.Handle("POST /api/dashboard/my/workload/vms/{uuid}/volumes", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardVolumeAPI.NewCreateHandler(dashboardCreateVolume.NewUseCase(workload, va(c), tr(c)), dashboardWorkloadAPI.Caller)
+	}), authorizer, permission.SelfWorkloadContainersManage), jwt, userRepository))
+	mux.Handle("DELETE /api/dashboard/my/workload/vms/{uuid}/volumes/{name}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardVolumeAPI.NewDeleteHandler(dashboardDeleteVolume.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Caller)
+	}), authorizer, permission.SelfWorkloadContainersDelete), jwt, userRepository))
+
+	// workload stacks
+	mux.Handle("GET /api/dashboard/workload/stacks", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardStackAPI.NewIndexHandler(dashboardGetStacksUseCase, dashboardWorkloadAPI.Anybody), authorizer, permission.WorkloadStacksIndex), jwt, userRepository))
+	mux.Handle("POST /api/dashboard/workload/stacks", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardStackAPI.NewCreateHandler(dashboardCreateStack.NewUseCase(workload, va(c), tr(c), workloadOwners))
+	}), authorizer, permission.WorkloadStacksCreate), jwt, userRepository))
+	mux.Handle("GET /api/dashboard/workload/stacks/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardStackAPI.NewShowHandler(dashboardGetStackUseCase, dashboardWorkloadAPI.Anybody), authorizer, permission.WorkloadStacksShow), jwt, userRepository))
+	mux.Handle("DELETE /api/dashboard/workload/stacks/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardStackAPI.NewDeleteHandler(dashboardDeleteStack.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Anybody)
+	}), authorizer, permission.WorkloadStacksDelete), jwt, userRepository))
+	mux.Handle("POST /api/dashboard/workload/stacks/{uuid}/start", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardStackAPI.NewStartHandler(dashboardStartStack.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Anybody)
+	}), authorizer, permission.WorkloadStacksManage), jwt, userRepository))
+	mux.Handle("POST /api/dashboard/workload/stacks/{uuid}/stop", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardStackAPI.NewStopHandler(dashboardStopStack.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Anybody)
+	}), authorizer, permission.WorkloadStacksManage), jwt, userRepository))
+	mux.Handle("POST /api/dashboard/workload/stacks/{uuid}/restart", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardStackAPI.NewRestartHandler(dashboardRestartStack.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Anybody)
+	}), authorizer, permission.WorkloadStacksManage), jwt, userRepository))
+
+	// one's own stacks
+	mux.Handle("GET /api/dashboard/my/workload/stacks", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardStackAPI.NewIndexHandler(dashboardGetStacksUseCase, dashboardWorkloadAPI.Caller), authorizer, permission.SelfWorkloadStacksIndex), jwt, userRepository))
+	mux.Handle("GET /api/dashboard/my/workload/stacks/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(dashboardStackAPI.NewShowHandler(dashboardGetStackUseCase, dashboardWorkloadAPI.Caller), authorizer, permission.SelfWorkloadStacksShow), jwt, userRepository))
+	mux.Handle("DELETE /api/dashboard/my/workload/stacks/{uuid}", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardStackAPI.NewDeleteHandler(dashboardDeleteStack.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Caller)
+	}), authorizer, permission.SelfWorkloadStacksDelete), jwt, userRepository))
+	mux.Handle("POST /api/dashboard/my/workload/stacks/{uuid}/start", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardStackAPI.NewStartHandler(dashboardStartStack.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Caller)
+	}), authorizer, permission.SelfWorkloadStacksManage), jwt, userRepository))
+	mux.Handle("POST /api/dashboard/my/workload/stacks/{uuid}/stop", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardStackAPI.NewStopHandler(dashboardStopStack.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Caller)
+	}), authorizer, permission.SelfWorkloadStacksManage), jwt, userRepository))
+	mux.Handle("POST /api/dashboard/my/workload/stacks/{uuid}/restart", middleware.NewAuthenticateMiddleware(middleware.NewAuthorizeMiddleware(scoped(func(c provider.Container) http.Handler {
+		return dashboardStackAPI.NewRestartHandler(dashboardRestartStack.NewUseCase(workload, tr(c)), dashboardWorkloadAPI.Caller)
+	}), authorizer, permission.SelfWorkloadStacksManage), jwt, userRepository))
 
 	// ---- oauth ----
 	//

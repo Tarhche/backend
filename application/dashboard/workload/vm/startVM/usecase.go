@@ -1,0 +1,30 @@
+package startVM
+
+import (
+	"context"
+
+	"github.com/khanzadimahdi/testproject/application/dashboard/workload/refusal"
+	"github.com/khanzadimahdi/testproject/domain/translator"
+	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
+)
+
+// UseCase asks for a stopped VM to be started. The workload owns a VM's
+// life, so this passes the command on rather than deciding anything about it:
+// the VM's state says how it is going.
+type UseCase struct {
+	workload   workloadControlPlane.Client
+	translator translator.Translator
+}
+
+func NewUseCase(workload workloadControlPlane.Client, translator translator.Translator) *UseCase {
+	return &UseCase{workload: workload, translator: translator}
+}
+
+func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
+	refused, err := refusal.Of(uc.workload.StartVM(ctx, request.OwnerUUID, request.UUID), uc.translator)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Response{ValidationErrors: refused}, nil
+}
