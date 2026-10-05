@@ -14,20 +14,22 @@ import (
 
 	checkhealth "github.com/khanzadimahdi/testproject/application/app/checkHealth"
 	orchestratorHeartbeat "github.com/khanzadimahdi/testproject/application/workload/orchestrator/beatHeart"
+	orchestratorGetEndpoint "github.com/khanzadimahdi/testproject/application/workload/orchestrator/getEndpoint"
 	orchestratorAttachTask "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/attachTask"
 	orchestratorTaskHeartbeat "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/beatHeart"
 	orchestratorDeleteTask "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/deleteTask"
-	orchestratorGetEndpoint "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/getEndpoint"
 	orchestratorkilltask "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/killTask"
 	orchestratorrestarttask "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/restartTask"
 	orchestratorruntask "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/runTask"
 	orchestratorShipLogs "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/shipLogs"
 	orchestratorstoptask "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/stopTask"
+	orchestratorAttachVM "github.com/khanzadimahdi/testproject/application/workload/orchestrator/vm/attachVM"
 	"github.com/khanzadimahdi/testproject/domain"
 	networkContract "github.com/khanzadimahdi/testproject/domain/workload/network"
 	nodeContract "github.com/khanzadimahdi/testproject/domain/workload/node"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 	taskEvents "github.com/khanzadimahdi/testproject/domain/workload/task/events"
+	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/certificate"
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/ecdsa"
@@ -38,7 +40,9 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/tunnel"
 	healthAPI "github.com/khanzadimahdi/testproject/presentation/http/health"
 	"github.com/khanzadimahdi/testproject/presentation/http/middleware"
+	orchestratorPortsAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/orchestrator/api/ports"
 	orchestratorTaskAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/orchestrator/api/task"
+	orchestratorVMAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/orchestrator/api/vm"
 )
 
 const (
@@ -95,6 +99,20 @@ func (p *orchestratorProvider) Boot(ctx context.Context, c provider.Container) e
 	}
 
 	if err := p.bindTunnel(c, nodeName, logger); err != nil {
+		return err
+	}
+
+	var orchestratorConfigs *configs.WorkloadOrchestrator
+	if err := c.Resolve(&orchestratorConfigs); err != nil {
+		return err
+	}
+
+	engine, err := vmhostEngine(orchestratorConfigs.VMHostSocket)
+	if err != nil {
+		return err
+	}
+
+	if err := c.Bind(func() vm.Engine { return engine }, provider.Singleton()); err != nil {
 		return err
 	}
 
@@ -171,6 +189,7 @@ func (p *orchestratorProvider) Terminate(ctx context.Context) error {
 
 func orchestratorConsoleCommand(
 	natsConnection *nats.Conn,
+	engine vm.Engine,
 	taskManager task.Runtime,
 	networkManager networkContract.Manager,
 	nodeManager nodeContract.Manager,
@@ -205,6 +224,9 @@ func orchestratorConsoleCommand(
 	restartTaskUseCase := orchestratorrestarttask.NewUseCase(taskManager, validator)
 	deleteTaskUseCase := orchestratorDeleteTask.NewUseCase(taskManager, validator, logger)
 	attachTaskUseCase := orchestratorAttachTask.NewUseCase(taskManager, validator)
+
+	// vms
+	attachVMUseCase := orchestratorAttachVM.NewUseCase(engine, validator)
 
 	// the orchestrator talks to no database, so messaging is its only dependency
 	checkHealthUseCase := checkhealth.NewUseCase(
@@ -242,6 +264,14 @@ func orchestratorConsoleCommand(
 		verifier,
 	))
 
+	// a terminal in a VM, which the ingress carries here as it does a
+	// task's. A VM always has an owner, so a token is insisted on, and the
+	// terminal is opened for the owner alone.
+	api.Handle("GET /api/vms/{uuid}/attach", middleware.NewTokenMiddleware(
+		orchestratorVMAPI.NewAttachHandler(attachVMUseCase, logger),
+		verifier,
+	))
+
 	rateLimited, err := middleware.NewRateLimitMiddleware(api, 600, 1*time.Minute)
 	if err != nil {
 		return nil, err
@@ -252,12 +282,15 @@ func orchestratorConsoleCommand(
 	// the node's own answers, which are capped and carry its own headers
 	mux.Handle("/", middleware.NewCORSMiddleware(rateLimited))
 
-	// a task this node is holding, which only this node can reach: the
-	// ingress works out whose it is and sends the request here. Neither the cap
-	// nor the headers belong on it — what comes through is the task's own
-	// traffic, and answering for it is the task's, a preflight included.
-	getEndpointUseCase := orchestratorGetEndpoint.NewUseCase(taskManager, orchestratorConfigs.AdvertiseHost)
-	mux.Handle("/tasks/{slug}/{port}/{path...}", orchestratorTaskAPI.NewProxyHandler(getEndpointUseCase, logger))
+	// a VM or a task this node is holding, which only this node can reach:
+	// the ingress works out whose it is and sends the request here. Neither
+	// the cap nor the headers belong on it — what comes through is the VM's or
+	// the task's own traffic, and answering for it is theirs, a preflight
+	// included. Slugs are one namespace across the two, so either route
+	// reaches either.
+	proxy := orchestratorPortsAPI.NewProxyHandler(orchestratorGetEndpoint.NewUseCase(engine), logger)
+	mux.Handle("/tasks/{slug}/{port}/{path...}", proxy)
+	mux.Handle("/vms/{slug}/{port}/{path...}", proxy)
 
 	var tracedProfiler *profiler.TracedProfiler
 	if err := iocContainer.Resolve(&tracedProfiler); err != nil {
