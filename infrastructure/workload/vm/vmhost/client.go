@@ -354,11 +354,19 @@ func decodeAnswer(response *http.Response, out any) error {
 }
 
 // do sends a request with the trace it is part of.
+//
+// A caller that gave up is told so, whatever the transport tripped over first:
+// a request streaming a body fails on the closed pipe as often as on the
+// context, depending on which of the two noticed first.
 func (c *Client) do(ctx context.Context, request *http.Request) (*http.Response, error) {
 	c.propagation().Inject(ctx, propagation.HeaderCarrier(request.Header))
 
 	response, err := c.http.Do(request)
 	if err != nil {
+		if cause := ctx.Err(); cause != nil && !errors.Is(err, cause) {
+			return nil, fmt.Errorf("%w: %w", cause, unwrap(err))
+		}
+
 		return nil, unwrap(err)
 	}
 
