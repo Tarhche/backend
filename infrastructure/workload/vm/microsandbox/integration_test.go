@@ -462,10 +462,7 @@ func TestDockerVM(t *testing.T) {
 	spec := dockerVM("it-docker", withPorts(8080))
 	instance := created(t, e, spec)
 	daemon := daemons.Daemon(spec.ID)
-
-	pinged := time.Now()
-	require.NoError(t, daemon.Ping(ctx))
-	t.Logf("dockerd answered %s after the create", time.Since(pinged).Round(time.Millisecond))
+	dockerUp(t, e, daemons, spec.ID)
 
 	assert.Equal(t, "vminit", runOK(t, e, spec.ID, "cat /proc/1/comm"), "dockerd is looked after by vminit as the guest's init")
 
@@ -548,7 +545,7 @@ func TestDockerVM(t *testing.T) {
 		assert.Equal(t, vm.InstanceStopped, inspected(t, e, spec.ID).State)
 
 		require.NoError(t, e.Start(ctx, spec.ID))
-		require.NoError(t, daemon.Ping(ctx))
+		dockerUp(t, e, daemons, spec.ID)
 
 		eventually(t, 60*time.Second, page(endpoint(t, instance, 8080)), "the unless-stopped container is back")
 
@@ -569,7 +566,7 @@ func TestDockerVM(t *testing.T) {
 
 		assert.Equal(t, vm.InstanceRunning, instance.State)
 		assert.Equal(t, copied.Labels, instance.Labels, "its labels are the spec's, which a restore drops")
-		require.NoError(t, daemons.Daemon(copied.ID).Ping(ctx))
+		dockerUp(t, e, daemons, copied.ID)
 
 		assert.Equal(t, "docker-data", runOK(t, e, copied.ID, "cat /root/data.txt"))
 		assert.NotEqual(t, "vminit", runOK(t, e, copied.ID, "cat /proc/1/comm"), "a restore drops the init")
@@ -581,9 +578,40 @@ func TestDockerVM(t *testing.T) {
 			require.NoError(t, e.Stop(ctx, copied.ID))
 			daemons.Forget(copied.ID)
 			require.NoError(t, e.Start(ctx, copied.ID))
-			require.NoError(t, daemons.Daemon(copied.ID).Ping(ctx))
+			dockerUp(t, e, daemons, copied.ID)
 
 			assert.Contains(t, runOK(t, e, copied.ID, "cat /var/log/vminit.log"), "signal TERM: stopping dockerd")
+		})
+
+		t.Run("whose dockerd comes up past the pid files of one that did not stop", func(t *testing.T) {
+			// stopped by its supervisor, dockerd takes its pid files with it.
+			// One that crashed, or a disk captured while it ran, leaves them
+			// naming processes whose numbers this boot may have handed to
+			// others: here, to one that sleeps.
+			runOK(t, e, copied.ID, `kill $(cat /run/vminit.pid); while [ -e /run/vminit.pid ]; do sleep 0.2; done
+mkdir -p /var/run/docker/containerd
+(setsid sleep 3600 </dev/null >/dev/null 2>&1 & echo $! > /var/run/docker/containerd/containerd.pid)
+sleep 0.2; kill -0 "$(cat /var/run/docker/containerd/containerd.pid)"`)
+			daemons.Forget(copied.ID)
+
+			ensured := run(t, e, copied.ID, ensureScript)
+			require.Equal(t, ensureStarted, ensured.code, "the supervisor is started again: %+v", ensured)
+
+			dockerUp(t, e, daemons, copied.ID)
+		})
+
+		t.Run("whose supervisor, killed, is started again without a second dockerd", func(t *testing.T) {
+			running := runOK(t, e, copied.ID, "pidof dockerd")
+
+			// dockerd outlives a supervisor killed outright.
+			runOK(t, e, copied.ID, "kill -KILL $(cat /run/vminit.pid)")
+
+			ensured := run(t, e, copied.ID, ensureScript)
+			require.Equal(t, ensureStarted, ensured.code, "the supervisor is started again: %+v", ensured)
+
+			dockerUp(t, e, daemons, copied.ID)
+			assert.Equal(t, running, runOK(t, e, copied.ID, "sleep 2; pidof dockerd"), "the dockerd that ran is looked after, and no other started")
+			assert.Contains(t, runOK(t, e, copied.ID, "tail -3 /var/log/vminit.log"), "dockerd is running already")
 		})
 	})
 
@@ -595,7 +623,7 @@ func TestDockerVM(t *testing.T) {
 		daemons.Forget(spec.ID)
 
 		assert.Equal(t, before.Endpoints, after.Endpoints)
-		require.NoError(t, daemon.Ping(ctx))
+		dockerUp(t, e, daemons, spec.ID)
 		assert.Equal(t, "docker-data", runOK(t, e, spec.ID, "cat /root/data.txt"))
 	})
 
@@ -613,7 +641,7 @@ func TestDockerVM(t *testing.T) {
 		assert.Equal(t, endpoint(t, before, 8080), endpoint(t, after, 8080))
 		assert.NotEmpty(t, endpoint(t, after, 9090))
 
-		require.NoError(t, daemon.Ping(ctx))
+		dockerUp(t, e, daemons, spec.ID)
 		assert.Equal(t, "docker-data", runOK(t, e, spec.ID, "cat /root/data.txt"))
 		eventually(t, 60*time.Second, page(endpoint(t, after, 8080)), "its unless-stopped container is back")
 	})
@@ -921,7 +949,7 @@ func TestReadoptionChild(t *testing.T) {
 	restoredOnto(t, e, dockerSpec, archive)
 
 	daemons := docker.NewDaemons(e, 3*time.Minute, slog.New(slog.NewTextHandler(os.Stderr, nil)))
-	require.NoError(t, daemons.Daemon(dockerSpec.ID).Ping(ctx))
+	dockerUp(t, e, daemons, dockerSpec.ID)
 
 	// the supervisor and dockerd go behind the engine's back.
 	runOK(t, e, dockerSpec.ID, "kill $(cat /run/vminit.pid); while docker info >/dev/null 2>&1; do sleep 0.2; done")
@@ -990,7 +1018,7 @@ func TestReadoption(t *testing.T) {
 	t.Run("a running docker vm gets its dockerd back", func(t *testing.T) {
 		daemons := docker.NewDaemons(adopted, 3*time.Minute, slog.New(slog.NewTextHandler(os.Stderr, nil)))
 
-		require.NoError(t, daemons.Daemon("it-adopt-docker").Ping(ctx))
+		dockerUp(t, adopted, daemons, "it-adopt-docker")
 	})
 }
 
@@ -1026,7 +1054,7 @@ func TestShutdown(t *testing.T) {
 	created(t, e, dockerSpec)
 
 	daemons := docker.NewDaemons(e, 3*time.Minute, slog.New(slog.NewTextHandler(os.Stderr, nil)))
-	require.NoError(t, daemons.Daemon(dockerSpec.ID).Ping(ctx))
+	dockerUp(t, e, daemons, dockerSpec.ID)
 
 	// written, and not flushed: only a VM that stops gracefully keeps it.
 	runOK(t, e, machineSpec.ID, "echo unflushed > /root/unflushed")

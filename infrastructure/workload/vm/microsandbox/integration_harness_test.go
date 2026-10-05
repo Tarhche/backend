@@ -21,6 +21,7 @@ import (
 
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
+	"github.com/khanzadimahdi/testproject/infrastructure/workload/docker"
 )
 
 // The integration tests run the engine for real, where it runs: in the
@@ -269,6 +270,29 @@ EOF
 chmod +x /srv/respond.sh
 (setsid nc -lk -p %d -e /srv/respond.sh </dev/null >/dev/null 2>&1 &)
 sleep 0.3`, body, guest))
+}
+
+// dockerUp waits for a Docker VM's dockerd through the workload's own client,
+// and says what the guest's vminit and dockerd logged when it does not
+// answer.
+func dockerUp(t *testing.T, e Engine, daemons *docker.Daemons, id string) {
+	t.Helper()
+
+	started := time.Now()
+
+	err := daemons.Daemon(id).Ping(t.Context())
+	if err == nil {
+		t.Logf("%s: dockerd answered in %s", id, time.Since(started).Round(time.Millisecond))
+
+		return
+	}
+
+	state := run(t, e, id, `echo "pid 1: $(cat /proc/1/comm)"; echo "supervisor: $(cat /run/vminit.pid 2>/dev/null)"
+ps -o pid,ppid,stat,args | head -40
+echo "--- vminit.log"; tail -20 /var/log/vminit.log
+echo "--- dockerd.log"; tail -40 /var/log/dockerd.log`)
+
+	t.Fatalf("%s: dockerd did not answer: %v\n%s%s", id, err, state.stdout, state.stderr)
 }
 
 // endpoint is where an instance's guest port is reached.

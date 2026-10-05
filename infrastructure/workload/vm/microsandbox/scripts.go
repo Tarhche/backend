@@ -47,7 +47,21 @@ alive() {
 }
 
 start_dockerd() {
+  # a dockerd left running by a supervisor that went is looked after, not
+  # run twice.
+  running=$(pidof dockerd 2>/dev/null | cut -d' ' -f1)
+  if [ -n "$running" ]; then
+    DPID=$running
+    log "dockerd is running already (pid $DPID)"
+    return
+  fi
+  # what a dockerd that did not stop left of itself: the containerd it ran,
+  # and pid files naming processes that are gone, whose numbers this boot
+  # may have handed to others. dockerd would take such a process for its
+  # containerd, and wait on it until it gave up.
+  pkill -KILL -f /var/run/docker/containerd/containerd.toml 2>/dev/null
   find /run /var/run -maxdepth 3 -iname 'docker*.pid' -delete 2>/dev/null
+  rm -f /run/docker/containerd/containerd.pid /var/run/docker/containerd/containerd.pid
   if [ -f "$DLOG" ] && [ "$(wc -c < "$DLOG")" -gt 10485760 ]; then mv -f "$DLOG" "$DLOG.1"; fi
   dockerd --host=unix:///var/run/docker.sock >>"$DLOG" 2>&1 &
   DPID=$!
@@ -108,6 +122,8 @@ while :; do
     started=$(date +%s)
   fi
   wait "$DPID" 2>/dev/null
+  # one it did not start is no child of it, and is not waited for.
+  alive "$DPID" && sleep 1
   [ $(( $(date +%s) - started )) -ge 60 ] && backoff=1
 done
 `
