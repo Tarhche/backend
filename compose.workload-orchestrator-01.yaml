@@ -1,15 +1,29 @@
+# One node of the workload: an orchestrator and the vmhost beside it, on a
+# network of their own that nothing else joins.
+#
+# The two are deployed apart. The orchestrator is redeployed on every push; the
+# vmhost holds the node's VMs, which stop when it does, so it is recreated only
+# when its image (tagged with its fingerprint) or its configuration changes,
+# and never as a dependency of the orchestrator: deploys name one service at a
+# time, with --no-deps.
 services:
   workload-orchestrator-01:
     image: ${WORKLOAD_ORCHESTRATOR_IMAGE}
     security_opt:
       - no-new-privileges:true
     networks:
-      - nats
-      - docker
+      nats: {}
       # for dialling the ingress, which is the whole of what this is for. An
       # orchestrator has no business reaching the control plane or another orchestrator.
-      - workload_ingress
-      - monitoring
+      workload_ingress: {}
+      monitoring: {}
+      # its vmhost's, which it reaches VMs' published ports on. A VM takes
+      # connections from this address alone, so it is fixed.
+      workload_vmhost_01:
+        ipv4_address: 10.89.1.2
+    volumes:
+      # the directory its vmhost's socket is in: the engine's only way in.
+      - workload_vmhost_01_run:/run/vmhost
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:80/health"]
       interval: 10s
@@ -39,8 +53,10 @@ services:
         max_attempts: 3
       resources:
         limits:
-          cpus: '0.10'
-          memory: 50M
+          # it carries every Docker request into its VMs and streams their
+          # snapshots, a part at a time.
+          cpus: '0.50'
+          memory: 256M
     logging:
       driver: json-file
       options:
@@ -48,10 +64,8 @@ services:
         max-file: "3"
     environment:
       WORKLOAD_ORCHESTRATOR_NAME: workload-orchestrator-01
-      # the host the containers' published ports land on, which is the docker
-      # daemon's own rather than this service's. Where this orchestrator's API
-      # answers needs no saying: it is this service's name and port.
-      WORKLOAD_ORCHESTRATOR_ADVERTISE_HOST: ${BACKEND_WORKLOAD_ORCHESTRATOR_ADVERTISE_HOST}
+      # where its vmhost serves the node's engine
+      WORKLOAD_VMHOST_SOCKET: /run/vmhost/vmhost.sock
       # every ingress this orchestrator opens connections to, separated by commas
       WORKLOAD_TUNNEL_ADDRESSES: ${BACKEND_WORKLOAD_TUNNEL_ADDRESSES:-workload-ingress:81}
       # this orchestrator's own certificate, as the PEM itself, and the authority to
@@ -63,7 +77,18 @@ services:
       # the public half of the key the blog signs access tokens with
       PUBLIC_KEY: ${BACKEND_PUBLIC_KEY}
       NATS_URL: ${BACKEND_NATS_URL}
-      DOCKER_HOST: ${BACKEND_DOCKER_HOST}
+      # the bucket its VMs' snapshots are written to and restored from: the
+      # blog's S3, in a bucket of its own, unless said otherwise.
+      WORKLOAD_SNAPSHOT_S3_ENDPOINT: ${BACKEND_WORKLOAD_SNAPSHOT_S3_ENDPOINT:-${BACKEND_S3_ENDPOINT}}
+      WORKLOAD_SNAPSHOT_S3_ACCESS_KEY: ${BACKEND_WORKLOAD_SNAPSHOT_S3_ACCESS_KEY:-${BACKEND_S3_ACCESS_KEY}}
+      WORKLOAD_SNAPSHOT_S3_SECRET_KEY: ${BACKEND_WORKLOAD_SNAPSHOT_S3_SECRET_KEY:-${BACKEND_S3_SECRET_KEY}}
+      WORKLOAD_SNAPSHOT_S3_BUCKET: ${BACKEND_WORKLOAD_SNAPSHOT_S3_BUCKET:-workload-snapshots}
+      WORKLOAD_SNAPSHOT_S3_USE_SSL: ${BACKEND_WORKLOAD_SNAPSHOT_S3_USE_SSL:-${BACKEND_S3_USE_SSL}}
+      # how long a Docker VM's dockerd is waited for, and a pull in one. The
+      # control plane reads the same two, and waits as long.
+      WORKLOAD_DOCKER_READY_TIMEOUT: ${BACKEND_WORKLOAD_DOCKER_READY_TIMEOUT:-3m}
+      WORKLOAD_DOCKER_PULL_TIMEOUT: ${BACKEND_WORKLOAD_DOCKER_PULL_TIMEOUT:-10m}
+      WORKLOAD_NODE_REQUEST_CONCURRENCY: ${BACKEND_WORKLOAD_NODE_REQUEST_CONCURRENCY:-16}
       OTEL_EXPORTER_OTLP_INSECURE: ${OTEL_EXPORTER_OTLP_INSECURE}
       OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL}
       OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES}
@@ -75,6 +100,80 @@ services:
       # offers by name. Empty allows none.
       WORKLOAD_TUNNEL_ALLOWED_TARGETS: ${BACKEND_WORKLOAD_TUNNEL_ALLOWED_TARGETS:-}
 
+  # the node's engine: microsandbox, which runs each VM as a microVM on KVM,
+  # served to the orchestrator on the socket the two share.
+  workload-vmhost-01:
+    image: ${WORKLOAD_VMHOST_IMAGE}
+    hostname: workload-vmhost-01
+    # tini as PID 1 reaps the engine's processes once their parent is gone.
+    init: true
+    user: "10001:10001"
+    devices:
+      - /dev/kvm
+    # /dev/kvm's group on this host, which only the host knows (the
+    # infrastructure repository's scripts/kvm-check.sh prints it).
+    group_add:
+      - "${BACKEND_WORKLOAD_KVM_GID:?BACKEND_WORKLOAD_KVM_GID is /dev/kvm's group id on the host, which scripts/kvm-check.sh in the infrastructure repository prints}"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    # every VM on the node lives inside these.
+    cpus: ${BACKEND_WORKLOAD_VMHOST_CPUS_LIMIT:-2}
+    mem_limit: ${BACKEND_WORKLOAD_VMHOST_MEMORY_LIMIT:-4g}
+    pids_limit: 16384
+    # on SIGTERM it stops every VM gracefully, which it is given 110 s for, so
+    # no guest loses what it had not yet written.
+    stop_grace_period: 120s
+    restart: unless-stopped
+    networks:
+      # published ports are bound to this address, and the orchestrator dials
+      # them here.
+      workload_vmhost_01:
+        ipv4_address: 10.89.1.10
+      monitoring: {}
+    volumes:
+      # MSB_HOME: the VMs, their disks and the image cache. Never removed by a
+      # deploy.
+      - workload_vmhost_01_home:/data
+      - workload_vmhost_01_run:/run/vmhost
+    healthcheck:
+      test: ["CMD", "app", "check-workload-vmhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      # before it serves, it advances the PID counter past every PID its
+      # engine recorded (microsandbox #1642) and takes its VMs over.
+      start_period: 5m
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+    environment:
+      MSB_HOME: /data/msb
+      WORKLOAD_VMHOST_SOCKET: /run/vmhost/vmhost.sock
+      WORKLOAD_VMHOST_ADVERTISE_HOST: 10.89.1.10
+      # the only address its VMs take connections from
+      WORKLOAD_VMHOST_ORCHESTRATOR_IP: 10.89.1.2
+      WORKLOAD_VMHOST_PORT_RANGE: ${BACKEND_WORKLOAD_VMHOST_PORT_RANGE:-20000-29999}
+      # the same image the control plane names for Docker VMs
+      WORKLOAD_VMHOST_DOCKER_IMAGE: ${BACKEND_WORKLOAD_VM_DOCKER_IMAGE:-docker:29-dind}
+      # the budget this node offers to VMs. Unset leaves it to the vmhost: the
+      # CPUs it may use, 80% of its memory limit less 512 MiB, and 200 GiB of
+      # disk.
+      WORKLOAD_VMHOST_CPUS: ${BACKEND_WORKLOAD_VMHOST_CPUS:-}
+      WORKLOAD_VMHOST_MEMORY: ${BACKEND_WORKLOAD_VMHOST_MEMORY:-}
+      WORKLOAD_VMHOST_DISK: ${BACKEND_WORKLOAD_VMHOST_DISK:-}
+      WORKLOAD_VMHOST_MAX_CONCURRENT_BOOTS: ${BACKEND_WORKLOAD_VMHOST_MAX_CONCURRENT_BOOTS:-}
+      OTEL_EXPORTER_OTLP_INSECURE: ${OTEL_EXPORTER_OTLP_INSECURE}
+      OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL}
+      OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
+      OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT: ${OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT:-}
+      OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
+      PROFILING_ENABLED: ${PROFILING_ENABLED:-true}
+
 networks:
   nats:
     name: nats
@@ -82,9 +181,31 @@ networks:
   workload_ingress:
     name: workload_ingress
     external: true
-  docker:
-    name: docker
-    external: true
   monitoring:
     name: monitoring
     external: true
+  # the node's own: its orchestrator at .2 and its vmhost at .10. It is not
+  # internal, since the vmhost pulls VMs' images and VMs whose egress is
+  # allowed reach the internet through it. Addresses handed out to anything
+  # else come from the upper half, away from the two fixed ones.
+  workload_vmhost_01:
+    name: workload_vmhost_01
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.89.1.0/24
+          ip_range: 10.89.1.128/25
+          gateway: 10.89.1.1
+
+volumes:
+  workload_vmhost_01_home:
+    name: workload_vmhost_01_home
+  # a socket needs no disk, and a tmpfs takes its owner and mode as it is
+  # mounted, whichever of the two containers mounts it first.
+  workload_vmhost_01_run:
+    name: workload_vmhost_01_run
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: uid=10001,gid=10001,mode=0770,size=1m

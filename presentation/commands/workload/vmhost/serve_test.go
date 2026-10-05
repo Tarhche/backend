@@ -132,6 +132,8 @@ func TestServeCommand_Configure(t *testing.T) {
 	t.Setenv("WORKLOAD_VMHOST_ORCHESTRATOR_IP", "10.89.1.2")
 	t.Setenv("MSB_HOME", "/data/msb")
 	t.Setenv("WORKLOAD_VMHOST_MEMORY", "")
+	t.Setenv("WORKLOAD_VMHOST_DISK", "")
+	t.Setenv("WORKLOAD_VMHOST_MAX_CONCURRENT_BOOTS", "")
 
 	c := NewServeCommand()
 
@@ -146,6 +148,8 @@ func TestServeCommand_Configure(t *testing.T) {
 	assert.Equal(t, "21000-21999", c.configs.PortRange)
 	assert.Equal(t, uint(6), c.configs.CPUs)
 	assert.Zero(t, c.configs.Memory, "an empty setting keeps the default, which leaves it to the vmhost")
+	assert.Equal(t, uint64(200<<30), c.configs.Disk, "as the compose files leave every setting they do not say")
+	assert.Equal(t, uint(4), c.configs.MaxConcurrentBoots)
 }
 
 func TestServeCommand_Run(t *testing.T) {
