@@ -12,6 +12,7 @@ import (
 	checkhealth "github.com/khanzadimahdi/testproject/application/app/checkHealth"
 	ingressCheckOrchestratorExists "github.com/khanzadimahdi/testproject/application/workload/ingress/checkOrchestratorExists"
 	ingressContract "github.com/khanzadimahdi/testproject/domain/workload/ingress"
+	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/certificate"
 	infraHealth "github.com/khanzadimahdi/testproject/infrastructure/health"
@@ -188,11 +189,29 @@ func ingressConsoleCommand(
 	// a terminal inside a VM, carried the same way to the node holding it.
 	mux.Handle("GET /vms/{uuid}/attach", ingressAPI.NewVMTerminalHandler(vmRepository, registry, transport, logger))
 
-	// a request to a hostname under the workload's domain is a VM's or a
-	// task's own traffic and goes to the node holding it; everything else is
-	// one of the ingress's own routes.
+	// the kinds whose resources the ingress finds, by their ingress
+	// strategies: each stream of theirs, a terminal say, is carried the same
+	// way to the node holding the resource, under the kind's own plural, and
+	// a slug that is neither a VM's nor a task's is asked of those with
+	// endpoints.
+	kinds, err := ingressKinds()
+	if err != nil {
+		return nil, err
+	}
+
+	if err := iocContainer.Bind(func() *kind.Registry[kind.IngressBinding] { return kinds }, provider.Singleton()); err != nil {
+		return nil, err
+	}
+
+	if err := ingressAPI.RouteKinds(mux, kinds, registry, transport, logger); err != nil {
+		return nil, err
+	}
+
+	// a request to a hostname under the workload's domain is a VM's, a
+	// task's or a resource's own traffic and goes to the node holding it;
+	// everything else is one of the ingress's own routes.
 	router := ingressAPI.NewRouter(
-		ingressAPI.NewTaskHandler(taskRepository, vmRepository, registry, transport, ingressConfigs.Domain, logger),
+		ingressAPI.NewTaskHandler(taskRepository, vmRepository, kinds, registry, transport, ingressConfigs.Domain, logger),
 		mux,
 		ingressConfigs.Domain,
 	)

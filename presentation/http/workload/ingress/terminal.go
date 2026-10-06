@@ -10,11 +10,13 @@ import (
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/ingress"
+	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	infraTrace "github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
 	"go.opentelemetry.io/otel/trace"
 )
 
-// terminalHandler carries a terminal to the node holding a task or a VM.
+// terminalHandler carries a terminal to the node holding a task, a VM, or a
+// resource of a kind with streams.
 //
 // It works out which node that is and proxies the connection there, and that is
 // all it does. Who may open a terminal is the node's to answer: it reads the
@@ -80,6 +82,32 @@ func NewVMTerminalHandler(
 	return newTerminalHandler("vm", locate, route, registry, transport, logger)
 }
 
+// NewKindTerminalHandler carries a stream action of a kind, its terminal say,
+// to the node holding the resource, on the node's
+// /api/{plural}/{uuid}/{action}, exactly as a VM's terminal is carried. Which
+// node that is, the kind's ingress strategy says.
+func NewKindTerminalHandler(
+	binding kind.IngressBinding,
+	action string,
+	registry ingress.Registry,
+	transport http.RoundTripper,
+	logger *slog.Logger,
+) *terminalHandler {
+	d := binding.Descriptor()
+
+	locate := func(ctx context.Context, uuid string) (string, error) {
+		location, err := binding.ByUUID(ctx, uuid)
+
+		return location.Node, err
+	}
+
+	route := func(uuid string) string {
+		return "/api/" + d.Plural + "/" + url.PathEscape(uuid) + "/" + action
+	}
+
+	return newTerminalHandler(d.Name, locate, route, registry, transport, logger)
+}
+
 func newTerminalHandler(
 	what string,
 	locate func(ctx context.Context, uuid string) (string, error),
@@ -113,15 +141,16 @@ func newTerminalHandler(
 	return h
 }
 
-// @Summary		Open a terminal in a task or a vm
-// @Description	carries a websocket to the node holding the task or the vm, which decides who may open one
+// @Summary		Open a terminal in a task, a vm, or a resource of a kind with streams
+// @Description	carries a websocket to the node holding it, which decides who may open one
 // @Tags			workload ingress
-// @Param			uuid	path	string	true	"Task or VM UUID"
+// @Param			uuid	path	string	true	"Task, VM or resource UUID"
 // @Success		101		{string}	string	"switching protocols"
 // @Failure		404		{object}	map[string]interface{}
 // @Failure		503		{object}	map[string]interface{}
 // @Router			/tasks/{uuid}/attach [get]
 // @Router			/vms/{uuid}/attach [get]
+// @Router			/{plural}/{uuid}/{action} [get]
 func (h *terminalHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	uuid := r.PathValue("uuid")
 
@@ -129,6 +158,11 @@ func (h *terminalHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	switch {
 	case errors.Is(err, domain.ErrNotExists):
 		http.Error(rw, "no such "+h.what, http.StatusNotFound)
+
+		return
+	case errors.Is(err, kind.ErrUnreachable):
+		// there, and not to be reached now: not running, or on no node yet.
+		http.Error(rw, err.Error(), http.StatusServiceUnavailable)
 
 		return
 	case err != nil:

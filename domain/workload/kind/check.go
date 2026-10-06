@@ -343,6 +343,7 @@ func (s Services) Descriptors() []Descriptor {
 //   - a kind registered in several services is described the same in each;
 //   - every action that runs on a node has a node strategy to run it, and a
 //     stream one that attaches;
+//   - a kind with endpoints has a node strategy that serves its ports;
 //   - a kind reached through the ingress, by its endpoints or its streams,
 //     has an ingress strategy to find its instances.
 func (s Services) Check() []error {
@@ -397,6 +398,10 @@ func (s Services) Check() []error {
 			case a.Mode == ModeStream && !node.Attaches():
 				add("kind %q: action %q is a stream, and its node strategy serves none", d.Name, a.Name)
 			}
+		}
+
+		if d.Endpoints && (!onNodes || !node.Exposes()) {
+			add("kind %q has endpoints, and no node strategy serves its ports", d.Name)
 		}
 
 		if reached && !inIngress {

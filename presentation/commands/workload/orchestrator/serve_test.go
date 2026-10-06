@@ -229,7 +229,7 @@ func TestServe(t *testing.T) {
 		// completely.
 		command.logShipper = shipLogs.NewUseCase(&taskManager, &consumer, consumerName, command.logger)
 		command.taskHeartBeat = taskHeartbeat.NewUseCase(&taskManager, &consumer, consumerName, command.logger)
-		command.orchestratorHeartBeat = orchestratorHeartbeat.NewUseCase(&consumer, &nodeManager, consumerName)
+		command.orchestratorHeartBeat = orchestratorHeartbeat.NewUseCase(&consumer, &nodeManager, nil, time.Second, consumerName, command.logger)
 		command.vmHeartBeat = vmHeartbeat.NewUseCase(memory.New(), &consumer, gauges{}, consumerName, command.logger)
 
 		requests := &answering{}

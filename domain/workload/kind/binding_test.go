@@ -565,6 +565,36 @@ func TestNodeBinding_Attach(t *testing.T) {
 	})
 }
 
+func TestNodeBinding_Endpoint(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a strategy that serves ports says where one is", func(t *testing.T) {
+		t.Parallel()
+
+		bound := BindNode[boxSpec, boxStatus](box(), &attachingBoxNode{})
+
+		assert.True(t, bound.Exposes())
+
+		endpoint, err := bound.Endpoint(context.Background(), "shop-abcde", 0)
+		require.NoError(t, err)
+		assert.Equal(t, Endpoint{Port: 8080, Address: "vmhost-01:20000"}, endpoint, "no port named is the lowest it exposes")
+
+		_, err = bound.Endpoint(context.Background(), "shop-abcde", 22)
+		assert.ErrorIs(t, err, domain.ErrNotExists, "a port it does not expose is not there")
+	})
+
+	t.Run("a strategy that serves none has nothing there", func(t *testing.T) {
+		t.Parallel()
+
+		bound := BindNode[boxSpec, boxStatus](box(), &boxNode{})
+
+		assert.False(t, bound.Exposes())
+
+		_, err := bound.Endpoint(context.Background(), "shop-abcde", 8080)
+		assert.ErrorIs(t, err, domain.ErrNotExists)
+	})
+}
+
 func TestIngressBinding(t *testing.T) {
 	t.Parallel()
 

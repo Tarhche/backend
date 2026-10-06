@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
@@ -81,6 +82,8 @@ func newNode(t *testing.T, handler http.Handler) *node {
 	mux := http.NewServeMux()
 	mux.Handle("/tasks/{slug}/{port}/{path...}", ports("tasks"))
 	mux.Handle("/vms/{slug}/{port}/{path...}", ports("vms"))
+	mux.Handle("/lamps/{slug}/{port}/{path...}", ports("lamps"))
+	mux.Handle("/kettles/{slug}/{port}/{path...}", ports("kettles"))
 
 	n.server = httptest.NewServer(mux)
 	t.Cleanup(n.server.Close)
@@ -126,6 +129,14 @@ func ingressFor(t *testing.T, resolver Resolver, nodes map[string]*node) *taskHa
 func ingressWithVMs(t *testing.T, resolver Resolver, vms VMResolver, nodes map[string]*node) *taskHandler {
 	t.Helper()
 
+	return ingressWithKinds(t, resolver, vms, nil, nodes)
+}
+
+// ingressWithKinds is ingressWithVMs with the resources of kinds to find as
+// well.
+func ingressWithKinds(t *testing.T, resolver Resolver, vms VMResolver, kinds *kind.Registry[kind.IngressBinding], nodes map[string]*node) *taskHandler {
+	t.Helper()
+
 	connected := make(connectedWorkloads, len(nodes))
 	for name := range nodes {
 		connected[name] = name
@@ -144,7 +155,7 @@ func ingressWithVMs(t *testing.T, resolver Resolver, vms VMResolver, nodes map[s
 		},
 	}
 
-	return NewTaskHandler(resolver, vms, connected, transport, testDomain, slog.New(slog.DiscardHandler))
+	return NewTaskHandler(resolver, vms, kinds, connected, transport, testDomain, slog.New(slog.DiscardHandler))
 }
 
 func held(slug string, nodeName string) task.Task {

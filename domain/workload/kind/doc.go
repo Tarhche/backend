@@ -27,7 +27,8 @@
 // admission, for deciding what to ask for when what a resource was asked to
 // be and what it is differ, and for the actions run on its record; Node, for
 // carrying out commands, answering queries, and its state, which is
-// everything of the kind a node holds; and Ingress, for where an instance is
+// everything of the kind a node holds, and, as an Attacher and an Exposer,
+// for its streams and its ports; and Ingress, for where an instance is
 // reached. The vmhost runs none: it stays the engine, and knows nothing of
 // kinds.
 //

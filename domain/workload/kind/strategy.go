@@ -97,6 +97,31 @@ type Attacher interface {
 	Attach(ctx context.Context, action string, uuid string, owner string) (Session, error)
 }
 
+// Exposer is a node strategy that also serves its kind's ports: where, on
+// this node, a port of the instance a slug names is reached, which the
+// ingress carries the instance's own traffic to. A kind with Endpoints has
+// one, since nothing but the node holding an instance can see where its
+// ports are.
+type Exposer interface {
+	// Endpoint is where port p of the instance slug names is reached from
+	// this node, or the lowest port it exposes when p is zero. A slug the
+	// node holds nothing by, and a port the instance does not expose, are
+	// domain.ErrNotExists; an instance that is here and cannot be reached
+	// now, one that is not running, is ErrUnreachable, with why.
+	Endpoint(ctx context.Context, slug string, p port.Port) (Endpoint, error)
+}
+
+// Endpoint is where one port of an instance is reached on the node holding
+// it.
+type Endpoint struct {
+	// Port is the instance's own port that answers: the one asked for, or
+	// the lowest it exposes when none was.
+	Port port.Port
+
+	// Address is the host:port a request to it is sent to.
+	Address string
+}
+
 // Session is a stream opened in an instance: a terminal's input and output,
 // its size and its end. An engine's vm.ExecSession is one.
 type Session interface {

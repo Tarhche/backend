@@ -15,6 +15,7 @@ import (
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/ingress"
+	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
@@ -38,11 +39,12 @@ type VMResolver interface {
 	GetOne(ctx context.Context, uuid string) (vm.VM, error)
 }
 
-// taskHandler serves the ports VMs and tasks expose. A slug is unique across
-// both, so it is looked up among the VMs first and the tasks second. A task's slug is
-// the left-most label of the hostname it answers on, so "nginx-xkfqz" reaches
-// the task's lowest exposed port and "nginx-xkfqz-8080" reaches port 8080
-// of the same task.
+// taskHandler serves the ports VMs, tasks and the resources of kinds with
+// endpoints expose. A slug is unique across them, so it is looked up among the
+// VMs first, the tasks second, and then among the kinds with endpoints, in the
+// order they were registered. A task's slug is the left-most label of the
+// hostname it answers on, so "nginx-xkfqz" reaches the task's lowest exposed
+// port and "nginx-xkfqz-8080" reaches port 8080 of the same task.
 //
 // The ingress cannot see a task — only the node holding one can — so it
 // works out which node that is and sends the request down that node's own
@@ -51,6 +53,11 @@ type taskHandler struct {
 	resolver Resolver
 	vms      VMResolver
 	registry ingress.Registry
+
+	// kinds are the kinds whose resources the ingress finds, of which those
+	// with endpoints are asked for a slug that is neither a VM's nor a
+	// task's.
+	kinds *kind.Registry[kind.IngressBinding]
 
 	// domain is the suffix every task hostname carries, without a leading
 	// dot: "workload.tarhche.com", or "workload.localhost" while developing.
@@ -65,6 +72,7 @@ var _ http.Handler = &taskHandler{}
 func NewTaskHandler(
 	resolver Resolver,
 	vms VMResolver,
+	kinds *kind.Registry[kind.IngressBinding],
 	registry ingress.Registry,
 	transport http.RoundTripper,
 	domain string,
@@ -73,6 +81,7 @@ func NewTaskHandler(
 	h := &taskHandler{
 		resolver: resolver,
 		vms:      vms,
+		kinds:    kinds,
 		registry: registry,
 		domain:   strings.ToLower(strings.Trim(domain, ".")),
 		logger:   logger,
@@ -184,8 +193,9 @@ const (
 	taskPortsRoute = "/tasks"
 )
 
-// locate is the node holding what a slug names, a VM, looked for first, or a
-// task, and the route the node serves its ports on.
+// locate is the node holding what a slug names, a VM, looked for first, a
+// task, or a resource of a kind with endpoints, and the route the node serves
+// its ports on.
 func (h *taskHandler) locate(ctx context.Context, slug string, requested port.Port) (string, string, *unavailable, error) {
 	if h.vms != nil {
 		v, err := h.vms.GetOneBySlug(ctx, slug)
@@ -203,7 +213,7 @@ func (h *taskHandler) locate(ctx context.Context, slug string, requested port.Po
 	t, err := h.resolver.GetOneBySlug(ctx, slug)
 	switch {
 	case errors.Is(err, domain.ErrNotExists):
-		return "", "", unknown, nil
+		return h.locateKind(ctx, slug, requested)
 	case err != nil:
 		return "", "", nil, err
 	}
@@ -217,6 +227,55 @@ func (h *taskHandler) locate(ctx context.Context, slug string, requested port.Po
 	}
 
 	return t.NodeName, taskPortsRoute, nil, nil
+}
+
+// locateKind is the node holding the resource a slug names among the kinds
+// with endpoints, asked in the order they were registered, and the route the
+// node serves the kind's ports on: under the kind's plural. A kind that has
+// nothing by the slug passes it to the next.
+func (h *taskHandler) locateKind(ctx context.Context, slug string, requested port.Port) (string, string, *unavailable, error) {
+	for _, binding := range h.kinds.All() {
+		d := binding.Descriptor()
+		if !d.Endpoints {
+			continue
+		}
+
+		location, err := binding.BySlug(ctx, slug)
+
+		switch {
+		case errors.Is(err, domain.ErrNotExists):
+			continue
+		case errors.Is(err, kind.ErrUnreachable):
+			return "", "", &unavailable{status: http.StatusServiceUnavailable, message: err.Error()}, nil
+		case err != nil:
+			return "", "", nil, err
+		}
+
+		nodeName, refused := locatedNode(d.Name, location, requested)
+
+		return nodeName, "/" + d.Plural, refused, nil
+	}
+
+	return "", "", unknown, nil
+}
+
+// locatedNode is the node holding a resource whose port is asked for, when
+// the resource lets the ingress in to that port and is on a node to be
+// reached. With no port named, its node answers on the lowest one it exposes.
+func locatedNode(kindName string, location kind.Location, requested port.Port) (string, *unavailable) {
+	if len(location.Ports) == 0 {
+		return "", unknown
+	}
+
+	if requested != 0 && !slices.Contains(location.Ports, requested) {
+		return "", unknown
+	}
+
+	if len(location.Node) == 0 {
+		return "", &unavailable{status: http.StatusServiceUnavailable, message: "the " + kindName + " has not been scheduled yet"}
+	}
+
+	return location.Node, nil
 }
 
 // vmNode is the node holding a VM whose port is asked for, when the VM lets the
