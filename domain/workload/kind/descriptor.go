@@ -114,6 +114,14 @@ type Action struct {
 	// as the kinds that live in it say (ParentRules.Restore).
 	Restores bool `json:"restores,omitempty"`
 
+	// Public says that a stream is opened for anybody who asks, signed in or
+	// not. Whom it is opened for is still its node strategy's to say, from
+	// the resource itself: a code-runner snippet's terminal is everybody's, as
+	// the page it runs on is, while a task of somebody's would be theirs
+	// alone. Only a stream is public; every other action is asked by
+	// somebody.
+	Public bool `json:"public,omitempty"`
+
 	// Payload reads and checks what the action is asked with. NoPayload is
 	// the codec of one asked with nothing.
 	Payload Codec `json:"-"`
@@ -147,6 +155,12 @@ type Descriptor struct {
 	// under their slugs, as a VM's and a code-runner task's are.
 	Endpoints bool `json:"endpoints,omitempty"`
 
+	// PermissionsOf is the plural of the kind whose permissions its actions
+	// are asked under, when they are another kind's rather than its own: the
+	// code runner's tasks are shown, stopped and deleted among anybody's VMs,
+	// under the VMs' permissions. Nothing is its own plural.
+	PermissionsOf string `json:"permissions_of,omitempty"`
+
 	Machine Machine  `json:"machine"`
 	Actions []Action `json:"actions"`
 }
@@ -176,14 +190,25 @@ func (d Descriptor) Allows(action string, s State) bool {
 
 // Permissions are the two permissions verb is granted under for the kind's
 // resources, as domain/permission names them: over anybody's,
-// workload.<plural>.<verb>, and over one's own, self.workload.<plural>.<verb>.
-// An action's are its Permission's; an internal one has none.
+// workload.<plural>.<verb>, and over one's own, self.workload.<plural>.<verb>,
+// the plural being the one its permissions are of (PermissionsOf). An
+// action's are its Permission's; an internal one has none.
 func (d Descriptor) Permissions(verb string) (admin string, self string) {
 	if len(verb) == 0 {
 		return "", ""
 	}
 
-	admin = "workload." + d.Plural + "." + verb
+	admin = "workload." + d.permissionsPlural() + "." + verb
 
 	return admin, "self." + admin
+}
+
+// permissionsPlural is the plural the kind's permissions are named by: its
+// own, unless they are another kind's.
+func (d Descriptor) permissionsPlural() string {
+	if len(d.PermissionsOf) > 0 {
+		return d.PermissionsOf
+	}
+
+	return d.Plural
 }

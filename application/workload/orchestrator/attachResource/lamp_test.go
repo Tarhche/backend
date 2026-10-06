@@ -50,6 +50,10 @@ func lamp() kind.Descriptor {
 			{Name: "delete", Runs: kind.OnNode, Mode: kind.ModeCommand, Desires: kind.Deleted, Permission: "delete", Payload: kind.NoPayload},
 			{Name: "state", Runs: kind.OnNode, Mode: kind.ModeQuery, Permission: "show", Payload: kind.NoPayload},
 			{Name: "attach", Runs: kind.OnNode, Mode: kind.ModeStream, AllowedIn: []kind.State{lit}, Permission: "attach", Payload: kind.NoPayload},
+
+			// watching is anybody's to ask for: whose lamp is watched by
+			// whom is the lamp's to say.
+			{Name: "watch", Runs: kind.OnNode, Mode: kind.ModeStream, AllowedIn: []kind.State{lit}, Permission: "attach", Public: true, Payload: kind.NoPayload},
 		},
 	}
 }
@@ -93,8 +97,9 @@ var _ kind.Attacher = &attachingLamps{}
 func (l *attachingLamps) Attach(_ context.Context, action string, uuid string, owner string) (kind.Session, error) {
 	l.opened = append(l.opened, fmt.Sprintf("%s %s %s", action, uuid, owner))
 
+	// a lamp of nobody's is everybody's.
 	lamp, found := l.held[uuid]
-	if !found || lamp.owner != owner {
+	if !found || (len(lamp.owner) > 0 && lamp.owner != owner) {
 		return nil, fmt.Errorf("%w: no lamp %q of theirs", domain.ErrNotExists, uuid)
 	}
 

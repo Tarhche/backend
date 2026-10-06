@@ -42,7 +42,9 @@ func NewRoutes(
 //   - on api, each stream action of a kind whose node strategy serves
 //     streams, GET /api/{plural}/{uuid}/{action}, which insists on a token
 //     and opens the stream for the resource's owner alone, as a VM's terminal
-//     is;
+//     is; a public one takes a token when there is one and opens the stream
+//     for whomever its kind says, as a code-runner snippet's terminal is
+//     opened for anybody;
 //   - on ports, the ports of a kind with endpoints whose node strategy
 //     serves them, /{plural}/{slug}/{port}/{path...}, which, like a VM's, are
 //     the resource's own traffic and answer for themselves. A kind that
@@ -64,7 +66,10 @@ func (r *Routes) Register(api *http.ServeMux, ports *http.ServeMux) error {
 					continue
 				}
 
-				attach := middleware.NewTokenMiddleware(NewAttachHandler(r.attach, d.Name, action.Name, r.logger), r.verifier)
+				var attach http.Handler = middleware.NewTokenMiddleware(NewAttachHandler(r.attach, d.Name, action.Name, r.logger), r.verifier)
+				if action.Public {
+					attach = middleware.NewOptionalTokenMiddleware(NewAttachHandler(r.attach, d.Name, action.Name, r.logger), r.verifier)
+				}
 
 				if err := handle(api, "GET /api/"+d.Plural+"/{uuid}/"+action.Name, attach); err != nil {
 					return err

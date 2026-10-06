@@ -41,7 +41,9 @@ var (
 //     command, since nothing else moves a resource. Only a command that
 //     desires a state waits in flight, and only a command restores.
 //   - Every action has a permission, but an internal one, which only a
-//     command can be.
+//     command can be; and only a stream is public. A kind whose actions are
+//     asked under another kind's permissions names that kind's plural, a
+//     word.
 //   - Every action has a codec, which decodes the zero value of its own
 //     type.
 //   - There is a state action, a query answered where the kind's state is
@@ -63,6 +65,10 @@ func Check(d Descriptor) []error {
 
 	if !word.MatchString(d.Plural) {
 		add("its plural %q is not a lowercase word", d.Plural)
+	}
+
+	if len(d.PermissionsOf) > 0 && !word.MatchString(d.PermissionsOf) {
+		add("its actions are asked under the permissions of %q, which is not a lowercase word", d.PermissionsOf)
 	}
 
 	if !d.StateBy.IsValid() {
@@ -200,13 +206,17 @@ func checkAction(d Descriptor, a Action, add func(format string, args ...any)) {
 		add("action %q restores, and only a command changes what a resource holds", a.Name)
 	}
 
+	if a.Public && a.Mode != ModeStream {
+		add("action %q is public, and only a stream is opened for whoever asks", a.Name)
+	}
+
 	switch {
 	case a.Internal && len(a.Permission) > 0:
 		add("action %q is internal, which nobody asks for, and has a permission", a.Name)
 	case a.Internal && a.Mode != ModeCommand:
 		add("action %q is internal, and only commands are the workload's own to ask for", a.Name)
 	case !a.Internal && len(a.Permission) == 0:
-		add("action %q has no permission: the verb of workload.%s.<verb> it is asked under", a.Name, d.Plural)
+		add("action %q has no permission: the verb of workload.%s.<verb> it is asked under", a.Name, d.permissionsPlural())
 	case !a.Internal && !verb.MatchString(a.Permission):
 		add("action %q is asked under %q, which is not a verb", a.Name, a.Permission)
 	}
