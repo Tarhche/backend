@@ -25,13 +25,13 @@ func TestParseOp(t *testing.T) {
 		action string
 		ok     bool
 	}{
-		"stack.state":                {kind: "stack", action: "state", ok: true},
-		"vm.logs":                    {kind: "vm", action: "logs", ok: true},
-		noderequest.OpContainersList: {},
-		"stack":                      {},
-		"stack.":                     {},
-		".state":                     {},
-		"":                           {},
+		"stack.state":            {kind: "stack", action: "state", ok: true},
+		"vm.logs":                {kind: "vm", action: "logs", ok: true},
+		"docker.containers.list": {},
+		"stack":                  {},
+		"stack.":                 {},
+		".state":                 {},
+		"":                       {},
 	} {
 		t.Run(string(op), func(t *testing.T) {
 			t.Parallel()
@@ -100,7 +100,7 @@ func TestQuery(t *testing.T) {
 	t.Run("a request that is not a kind's is not a query", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := QueryOf(noderequest.Request{Op: noderequest.OpContainersList, VMUUID: "vm-uuid"})
+		_, err := QueryOf(noderequest.Request{Op: "docker.containers.list", VMUUID: "vm-uuid"})
 
 		assert.ErrorIs(t, err, ErrUnknownAction)
 	})

@@ -90,7 +90,6 @@ type Workload struct {
 	Resources *cascade.Repository
 	Registry  *kind.Registry[kind.ControlPlaneBinding]
 	Records   *records.Records
-	Entities  *records.Entities
 	Snapshots *controlPlaneSnapshots.Snapshots
 	Nodes     *nodesMemory.Repository
 	Producer  *messagingMock.Recorder
@@ -177,7 +176,6 @@ func New(opts ...Option) *Workload {
 
 	w.Resources = cascade.NewRepository(w.Registry, w.Memory)
 	w.Records = records.New(w.Resources)
-	w.Entities = records.NewEntities(w.Records)
 	w.Dispatcher = dispatch.New(w.Resources, w.Producer, waiters.New(), o.now)
 
 	w.Placement = placement.New(w.Nodes, w.Records, 4)

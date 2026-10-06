@@ -100,12 +100,8 @@ services:
       WORKLOAD_SNAPSHOT_S3_SECRET_KEY: ${BACKEND_WORKLOAD_SNAPSHOT_S3_SECRET_KEY:-${BACKEND_S3_SECRET_KEY}}
       WORKLOAD_SNAPSHOT_S3_BUCKET: ${BACKEND_WORKLOAD_SNAPSHOT_S3_BUCKET:-workload-snapshots}
       WORKLOAD_SNAPSHOT_S3_USE_SSL: ${BACKEND_WORKLOAD_SNAPSHOT_S3_USE_SSL:-${BACKEND_S3_USE_SSL}}
-      # how long a node is given to answer, which for a request that may pull
-      # an image is the wait for its dockerd and then the pull: the same two
-      # the nodes read.
+      # how long a node is given to answer a request.
       WORKLOAD_NODE_REQUEST_TIMEOUT: ${BACKEND_WORKLOAD_NODE_REQUEST_TIMEOUT:-30s}
-      WORKLOAD_DOCKER_READY_TIMEOUT: ${BACKEND_WORKLOAD_DOCKER_READY_TIMEOUT:-3m}
-      WORKLOAD_DOCKER_PULL_TIMEOUT: ${BACKEND_WORKLOAD_DOCKER_PULL_TIMEOUT:-10m}
 
 networks:
   workload_controlplane:

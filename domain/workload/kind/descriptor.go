@@ -158,7 +158,9 @@ type Descriptor struct {
 	// PermissionsOf is the plural of the kind whose permissions its actions
 	// are asked under, when they are another kind's rather than its own: the
 	// code runner's tasks are shown, stopped and deleted among anybody's VMs,
-	// under the VMs' permissions. Nothing is its own plural.
+	// under the VMs' permissions, and an image, a network and a volume are
+	// asked under the containers', workload.containers.<verb>, as they always
+	// were. Nothing is its own plural.
 	PermissionsOf string `json:"permissions_of,omitempty"`
 
 	Machine Machine  `json:"machine"`

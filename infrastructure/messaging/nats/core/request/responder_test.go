@@ -89,13 +89,13 @@ func TestResponder(t *testing.T) {
 			result, _ := json.Marshal(map[string]string{"asked": string(request.Op), "of": request.VMUUID})
 
 			return noderequest.Reply{OK: true, Result: result}
-		}), ResponderOptions{Concurrency: 2, Timeout: time.Second, PullTimeout: time.Minute})
+		}), ResponderOptions{Concurrency: 2, Timeout: time.Second})
 
-		reply, err := ask(t, connection, noderequest.Request{Op: noderequest.OpContainersList, VMUUID: "vm-1"}, 5*time.Second)
+		reply, err := ask(t, connection, noderequest.Request{Op: "container.logs", VMUUID: "c-1"}, 5*time.Second)
 		require.NoError(t, err)
 
 		assert.True(t, reply.OK)
-		assert.JSONEq(t, `{"asked":"docker.containers.list","of":"vm-1"}`, string(reply.Result))
+		assert.JSONEq(t, `{"asked":"container.logs","of":"c-1"}`, string(reply.Result))
 	})
 
 	t.Run("a request that cannot be read is refused", func(t *testing.T) {
@@ -107,7 +107,7 @@ func TestResponder(t *testing.T) {
 			t.Error("nothing unreadable is handled")
 
 			return noderequest.Reply{}
-		}), ResponderOptions{Concurrency: 1, Timeout: time.Second, PullTimeout: time.Second})
+		}), ResponderOptions{Concurrency: 1, Timeout: time.Second})
 
 		message, err := connection.Request(noderequest.Subject("workload-orchestrator-01"), []byte("{"), 5*time.Second)
 		require.NoError(t, err)
@@ -119,33 +119,26 @@ func TestResponder(t *testing.T) {
 		assert.Equal(t, noderequest.CodeInvalid, reply.Error.Code)
 	})
 
-	t.Run("an operation that may pull is given the pull's time, every other one its own", func(t *testing.T) {
+	t.Run("a request is given the timeout to be answered in", func(t *testing.T) {
 		t.Parallel()
 
 		connection := responderNATS(t)
 
-		var lock sync.Mutex
-		given := make(map[noderequest.Op]time.Duration)
+		given := make(chan time.Duration, 1)
 
 		serve(t, connection, handlerFunc(func(ctx context.Context, request noderequest.Request) noderequest.Reply {
 			deadline, ok := ctx.Deadline()
 			require.True(t, ok)
 
-			lock.Lock()
-			given[request.Op] = time.Until(deadline)
-			lock.Unlock()
+			given <- time.Until(deadline)
 
 			return noderequest.Reply{OK: true}
-		}), ResponderOptions{Concurrency: 2, Timeout: 30 * time.Second, PullTimeout: 10 * time.Minute})
+		}), ResponderOptions{Concurrency: 2, Timeout: 30 * time.Second})
 
-		for _, op := range []noderequest.Op{noderequest.OpImagesPull, noderequest.OpContainersCreate, noderequest.OpContainersList} {
-			_, err := ask(t, connection, noderequest.Request{Op: op, VMUUID: "vm-1"}, 5*time.Second)
-			require.NoError(t, err)
-		}
+		_, err := ask(t, connection, noderequest.Request{Op: "container.stop", VMUUID: "c-1"}, 5*time.Second)
+		require.NoError(t, err)
 
-		assert.InDelta(t, 10*time.Minute, given[noderequest.OpImagesPull], float64(5*time.Second))
-		assert.InDelta(t, 10*time.Minute, given[noderequest.OpContainersCreate], float64(5*time.Second))
-		assert.InDelta(t, 30*time.Second, given[noderequest.OpContainersList], float64(5*time.Second))
+		assert.InDelta(t, 30*time.Second, <-given, float64(5*time.Second))
 	})
 
 	t.Run("a caller giving up does not cut short what it asked for", func(t *testing.T) {
@@ -164,16 +157,16 @@ func TestResponder(t *testing.T) {
 			}
 
 			return noderequest.Reply{OK: true}
-		}), ResponderOptions{Concurrency: 1, Timeout: time.Minute, PullTimeout: time.Minute})
+		}), ResponderOptions{Concurrency: 1, Timeout: time.Minute})
 
-		_, err := ask(t, connection, noderequest.Request{Op: noderequest.OpImagesPull, VMUUID: "vm-1"}, 50*time.Millisecond)
+		_, err := ask(t, connection, noderequest.Request{Op: "container.stop", VMUUID: "c-1"}, 50*time.Millisecond)
 		require.ErrorIs(t, err, nats.ErrTimeout, "the caller gave up")
 
 		select {
 		case err := <-finished:
-			assert.NoError(t, err, "the pull went on to the end")
+			assert.NoError(t, err, "the stop went on to the end")
 		case <-time.After(5 * time.Second):
-			t.Fatal("the pull never finished")
+			t.Fatal("the stop never finished")
 		}
 	})
 
@@ -197,12 +190,12 @@ func TestResponder(t *testing.T) {
 			inside.Add(-1)
 
 			return noderequest.Reply{OK: true}
-		}), ResponderOptions{Concurrency: 3, Timeout: time.Minute, PullTimeout: time.Minute})
+		}), ResponderOptions{Concurrency: 3, Timeout: time.Minute})
 
 		var wg sync.WaitGroup
 		for range 12 {
 			wg.Go(func() {
-				reply, err := ask(t, connection, noderequest.Request{Op: noderequest.OpContainersList, VMUUID: "vm-1"}, 10*time.Second)
+				reply, err := ask(t, connection, noderequest.Request{Op: "container.logs", VMUUID: "c-1"}, 10*time.Second)
 				assert.NoError(t, err)
 				assert.True(t, reply.OK)
 			})
@@ -222,9 +215,9 @@ func TestResponder(t *testing.T) {
 			huge, _ := json.Marshal(make([]byte, noderequest.MaxReplyBytes))
 
 			return noderequest.Reply{OK: true, Result: huge}
-		}), ResponderOptions{Concurrency: 1, Timeout: time.Minute, PullTimeout: time.Minute})
+		}), ResponderOptions{Concurrency: 1, Timeout: time.Minute})
 
-		reply, err := ask(t, connection, noderequest.Request{Op: noderequest.OpContainersList, VMUUID: "vm-1"}, 5*time.Second)
+		reply, err := ask(t, connection, noderequest.Request{Op: "container.logs", VMUUID: "c-1"}, 5*time.Second)
 		require.NoError(t, err)
 
 		assert.False(t, reply.OK)

@@ -400,6 +400,7 @@ type answer struct {
 	Node    string    `bson:"node,omitempty"`
 	Attempt int       `bson:"attempt,omitempty"`
 	OK      bool      `bson:"ok"`
+	Refused bool      `bson:"refused,omitempty"`
 	Reason  string    `bson:"reason,omitempty"`
 	Output  string    `bson:"output,omitempty"`
 	At      time.Time `bson:"at"`
@@ -464,6 +465,7 @@ func toDocument(record resource.Record) (document, error) {
 			Node:    a.Node,
 			Attempt: a.Attempt,
 			OK:      a.OK,
+			Refused: a.Refused,
 			Reason:  a.Reason,
 			Output:  a.Output,
 			At:      millisecond(a.At),
@@ -532,6 +534,7 @@ func toRecord(stored document) (resource.Record, error) {
 			Node:    a.Node,
 			Attempt: a.Attempt,
 			OK:      a.OK,
+			Refused: a.Refused,
 			Reason:  a.Reason,
 			Output:  a.Output,
 			At:      inUTC(a.At),

@@ -190,8 +190,8 @@ func (r *Recorder) Snapshot(ctx context.Context, took time.Duration, size int64)
 	r.snapshotSize.Record(ctx, size)
 }
 
-// DockerRequest records how long answering one request to a Docker VM's
-// dockerd took.
+// DockerRequest records how long one request to a Docker VM's dockerd took,
+// asked for one of its building blocks.
 func (r *Recorder) DockerRequest(ctx context.Context, op string, took time.Duration) {
 	r.dockerRequestDuration.Record(ctx, took.Seconds(), metric.WithAttributes(attribute.String(opKey, op)))
 }

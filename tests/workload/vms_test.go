@@ -260,14 +260,21 @@ func TestADockerVM(t *testing.T) {
 	t.Run("its dockerd answers, through the control plane and its node", func(t *testing.T) {
 		require.NoError(t, w.client.Docker(ownerUUID, uuid).Ping(ctx))
 
-		listed, err := getVMContainers.NewUseCase(w.client, w.translator).Execute(ctx, &getVMContainers.Request{VMUUID: uuid, OwnerUUID: ownerUUID})
-		require.NoError(t, err)
-		require.Empty(t, listed.ValidationErrors)
+		// what its dockerd holds is what its node reports of it.
+		listed := eventually(t, "its container listed", func(ctx context.Context) ([]presenter.Container, error) {
+			listed, err := getVMContainers.NewUseCase(w.client, w.translator).Execute(ctx, &getVMContainers.Request{VMUUID: uuid, OwnerUUID: ownerUUID})
+			if err != nil {
+				return nil, err
+			}
 
-		require.Len(t, listed.Items, 1)
-		assert.Equal(t, "c0ffee", listed.Items[0].ID)
-		assert.Equal(t, "db", listed.Items[0].Name)
-		assert.Equal(t, "running", listed.Items[0].State)
+			return listed.Items, nil
+		}, func(items []presenter.Container) bool { return len(items) > 0 })
+
+		require.Len(t, listed, 1)
+		assert.Equal(t, "c0ffee", listed[0].ID)
+		assert.Equal(t, "db", listed[0].Name)
+		assert.Equal(t, "running", listed[0].State)
+		assert.True(t, listed[0].Unmanaged, "nothing the platform made")
 	})
 
 	const compose = "services:\n  web:\n    image: nginx:1.27\n"
@@ -296,7 +303,7 @@ func TestADockerVM(t *testing.T) {
 			}
 
 			return read.StackDetail, nil
-		}, func(s presenter.StackDetail) bool { return s.State == "running" })
+		}, func(s presenter.StackDetail) bool { return s.State == "running" && len(s.Containers) > 0 })
 
 		labelled, err := infraDocker.Labelled(compose, stackUUID)
 		require.NoError(t, err)

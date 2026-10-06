@@ -79,14 +79,23 @@ type lamps struct {
 	report kind.Report[lampStatus]
 	blind  error
 
-	// asked is every query it answered.
-	asked []string
+	// asked is every query it answered, and executed every command it
+	// carried out.
+	asked    []string
+	executed []string
 }
 
 var _ kind.Node[lampSpec, lampStatus] = &lamps{}
 
-func (l *lamps) Execute(context.Context, kind.Resource[lampSpec, lampStatus], string, any) (kind.Outcome[lampStatus], error) {
-	return kind.Outcome[lampStatus]{}, nil
+// Execute carries a command out, as failure says: a light leaves a lamp lit.
+func (l *lamps) Execute(_ context.Context, r kind.Resource[lampSpec, lampStatus], action string, _ any) (kind.Outcome[lampStatus], error) {
+	l.executed = append(l.executed, fmt.Sprintf("%s %s %d watts", action, r.Metadata.UUID, r.Spec.Watts))
+
+	if l.failure != nil {
+		return kind.Outcome[lampStatus]{}, l.failure
+	}
+
+	return kind.Outcome[lampStatus]{Status: lampStatus{Status: kind.Status{State: lit}, Brightness: 60}}, nil
 }
 
 func (l *lamps) Query(_ context.Context, r kind.Resource[lampSpec, lampStatus], action string, payload any) (any, error) {

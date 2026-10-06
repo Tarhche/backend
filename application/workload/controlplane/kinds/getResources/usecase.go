@@ -1,9 +1,11 @@
 // Package getResources lists the resources of any kind, a page at a time.
 //
-// A listing of anybody's has the kind's extras among its records, such as
-// the code runner's runs among anybody's VMs, newest first like the rest: a
-// listing narrowed to somebody's own, or to what lives in a resource, has
-// none, since an extra is nobody's own and lives in nothing.
+// A listing has the kind's extras among its records, newest first like the
+// rest, as far as it lets them through as it lets records through: whose they
+// are, what they live in and how they are labelled. The code runner's runs
+// are the guest's and live in nothing, so only a listing of anybody's VMs has
+// them; what a Docker VM's dockerd holds that a stack or its terminal made is
+// its VM's owner's, and lives in the VM.
 package getResources
 
 import (
@@ -83,10 +85,10 @@ func (uc *UseCase) records(ctx context.Context, kindName string, filter resource
 }
 
 // extras are the kind's extras a listing has: every one its filter lets
-// through, in a listing of anybody's that lives in nothing.
+// through.
 func (uc *UseCase) extras(ctx context.Context, binding kind.ControlPlaneBinding, filter resource.Filter) ([]kind.Raw, error) {
 	extras, extended := binding.Extras()
-	if !extended || len(filter.OwnerUUID) > 0 || len(filter.Parent.UUID) > 0 {
+	if !extended {
 		return nil, nil
 	}
 

@@ -212,12 +212,24 @@ func TestUseCase_Execute_extras(t *testing.T) {
 		assert.ErrorIs(t, err, domain.ErrNotExists)
 	})
 
-	t.Run("which is nobody's own", func(t *testing.T) {
+	t.Run("which is whose it says: somebody else asking for their own does not take it away", func(t *testing.T) {
 		t.Parallel()
 
 		useCase, shelf := shelved(t, kindstest.AShelvedFan("shelved"))
 
-		_, err := useCase.Execute(ctx, &deleteResource.Request{Kind: kindstest.Kind, OwnerUUID: "guest", UUID: "shelved"})
+		_, err := useCase.Execute(ctx, &deleteResource.Request{Kind: kindstest.Kind, OwnerUUID: kindstest.OwnerUUID, UUID: "shelved"})
+		assert.ErrorIs(t, err, domain.ErrNotExists)
+
+		_, err = shelf.One(ctx, "shelved")
+		assert.NoError(t, err)
+	})
+
+	t.Run("nor does a request about a parent it does not live in", func(t *testing.T) {
+		t.Parallel()
+
+		useCase, shelf := shelved(t, kindstest.AShelvedFan("shelved"))
+
+		_, err := useCase.Execute(ctx, &deleteResource.Request{Kind: kindstest.Kind, UUID: "shelved", Parent: kindstest.House})
 		assert.ErrorIs(t, err, domain.ErrNotExists)
 
 		_, err = shelf.One(ctx, "shelved")

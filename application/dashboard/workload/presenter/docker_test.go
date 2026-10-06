@@ -57,6 +57,20 @@ func TestNewContainer(t *testing.T) {
 		}`, string(presented))
 	})
 
+	t.Run("one nobody keeps says so", func(t *testing.T) {
+		t.Parallel()
+
+		unmanaged := web()
+		unmanaged.Unmanaged = true
+
+		presented, err := json.Marshal(NewContainer(unmanaged))
+		require.NoError(t, err)
+
+		var fields map[string]json.RawMessage
+		require.NoError(t, json.Unmarshal(presented, &fields))
+		assert.JSONEq(t, `true`, string(fields["unmanaged"]))
+	})
+
 	t.Run("what a container has none of is an empty list, not null", func(t *testing.T) {
 		t.Parallel()
 
@@ -114,13 +128,13 @@ func TestDockerObjects(t *testing.T) {
 
 		presented, err := json.Marshal(NewImages([]docker.Image{
 			{ID: "sha256:1", Tags: []string{"nginx:1.27"}, Size: 192 << 20, CreatedAt: at, InUse: true},
-			{ID: "sha256:2", CreatedAt: at},
+			{ID: "sha256:2", CreatedAt: at, Unmanaged: true},
 		}))
 		require.NoError(t, err)
 
 		assert.JSONEq(t, `[
 			{"id": "sha256:1", "tags": ["nginx:1.27"], "size": 201326592, "created_at": "2026-10-04T12:00:00Z", "in_use": true},
-			{"id": "sha256:2", "tags": [], "size": 0, "created_at": "2026-10-04T12:00:00Z", "in_use": false}
+			{"id": "sha256:2", "tags": [], "size": 0, "created_at": "2026-10-04T12:00:00Z", "in_use": false, "unmanaged": true}
 		]`, string(presented))
 	})
 
@@ -128,13 +142,13 @@ func TestDockerObjects(t *testing.T) {
 		t.Parallel()
 
 		presented, err := json.Marshal(NewDockerNetworks([]docker.Network{
-			{ID: "n1", Name: "backend", Driver: "bridge", Scope: "local", Internal: true, Containers: []string{"web"}, Labels: map[string]string{"a": "b"}, CreatedAt: at},
+			{ID: "n1", Name: "backend", Driver: "bridge", Scope: "local", Internal: true, Containers: []string{"web"}, Labels: map[string]string{"a": "b"}, CreatedAt: at, Unmanaged: true},
 		}))
 		require.NoError(t, err)
 
 		assert.JSONEq(t, `[{
 			"id": "n1", "name": "backend", "driver": "bridge", "scope": "local", "internal": true,
-			"containers": ["web"], "labels": {"a": "b"}, "created_at": "2026-10-04T12:00:00Z"
+			"containers": ["web"], "labels": {"a": "b"}, "created_at": "2026-10-04T12:00:00Z", "unmanaged": true
 		}]`, string(presented))
 	})
 
@@ -143,12 +157,16 @@ func TestDockerObjects(t *testing.T) {
 
 		presented, err := json.Marshal(NewVolumes([]docker.Volume{
 			{Name: "data", Driver: "local", Mountpoint: "/var/lib/docker/volumes/data/_data", InUse: true, CreatedAt: at},
+			{Name: "scratch", Driver: "local", CreatedAt: at, Unmanaged: true},
 		}))
 		require.NoError(t, err)
 
 		assert.JSONEq(t, `[{
 			"name": "data", "driver": "local", "mountpoint": "/var/lib/docker/volumes/data/_data",
 			"in_use": true, "created_at": "2026-10-04T12:00:00Z"
+		}, {
+			"name": "scratch", "driver": "local", "mountpoint": "",
+			"in_use": false, "created_at": "2026-10-04T12:00:00Z", "unmanaged": true
 		}]`, string(presented))
 	})
 

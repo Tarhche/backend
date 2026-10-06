@@ -20,6 +20,10 @@ type Shelf struct {
 
 	// fans are what is on it, newest first.
 	fans []Fan
+
+	// QueryFailure, when set, is what asking a fan on it anything fails
+	// with: what its node would refuse it with, say.
+	QueryFailure error
 }
 
 var _ kind.Extras = &Shelf{}
@@ -94,6 +98,10 @@ func (s *Shelf) Act(_ context.Context, r kind.Raw, action string, _ []byte) (kin
 }
 
 func (s *Shelf) Query(_ context.Context, r kind.Raw, action string, _ []byte) ([]byte, domain.ValidationErrors, error) {
+	if s.QueryFailure != nil {
+		return nil, nil, s.QueryFailure
+	}
+
 	if action != "logs" {
 		return nil, domain.ValidationErrors{"fan": "immutable"}, nil
 	}

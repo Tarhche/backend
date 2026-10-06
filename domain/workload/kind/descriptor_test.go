@@ -54,35 +54,29 @@ func TestDescriptor_Permissions(t *testing.T) {
 	t.Parallel()
 
 	for name, tt := range map[string]struct {
-		verb  string
-		admin string
-		self  string
+		verb          string
+		permissionsOf string
+		admin         string
+		self          string
 	}{
-		"over anybody's, and over one's own": {verb: "manage", admin: "workload.boxes.manage", self: "self.workload.boxes.manage"},
-		"a verb in two parts":                {verb: "password.update", admin: "workload.boxes.password.update", self: "self.workload.boxes.password.update"},
-		"none for an internal action":        {verb: ""},
+		"over anybody's, and over one's own":   {verb: "manage", admin: "workload.boxes.manage", self: "self.workload.boxes.manage"},
+		"a verb in two parts":                  {verb: "password.update", admin: "workload.boxes.password.update", self: "self.workload.boxes.password.update"},
+		"none for an internal action":          {verb: ""},
+		"under another kind's, when they are":  {verb: "manage", permissionsOf: "crates", admin: "workload.crates.manage", self: "self.workload.crates.manage"},
+		"and none for an internal action then": {verb: "", permissionsOf: "crates"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			admin, self := box().Permissions(tt.verb)
+			d := box()
+			d.PermissionsOf = tt.permissionsOf
+
+			admin, self := d.Permissions(tt.verb)
 
 			assert.Equal(t, tt.admin, admin, "admin")
 			assert.Equal(t, tt.self, self, "self")
 		})
 	}
-
-	t.Run("a kind asked under another kind's permissions is asked under that kind's plural", func(t *testing.T) {
-		t.Parallel()
-
-		d := box()
-		d.PermissionsOf = "vms"
-
-		admin, self := d.Permissions("manage")
-
-		assert.Equal(t, "workload.vms.manage", admin)
-		assert.Equal(t, "self.workload.vms.manage", self)
-	})
 }
 
 func TestExecutor_IsValid(t *testing.T) {

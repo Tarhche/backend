@@ -310,13 +310,35 @@ func TestUseCase_Execute_extras(t *testing.T) {
 		assert.Equal(t, kindstest.Running, common.State)
 	})
 
-	t.Run("an extra is nobody's own", func(t *testing.T) {
+	t.Run("an extra is whose it says: to somebody else asking for their own, it is not there", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := useCase.Execute(ctx, &queryResource.Request{Kind: kindstest.Kind, OwnerUUID: "guest", UUID: "shelved", Action: "logs"})
+		_, err := useCase.Execute(ctx, &queryResource.Request{Kind: kindstest.Kind, OwnerUUID: kindstest.OwnerUUID, UUID: "shelved", Action: "logs"})
 
 		assert.ErrorIs(t, err, domain.ErrNotExists)
 	})
 
 	assert.Empty(t, requester.Asked(), "no node is asked about an extra")
+}
+
+// An extra's query its node refused is answered with the node's refusal, as
+// a record's is.
+func TestUseCase_Execute_extraRefused(t *testing.T) {
+	t.Parallel()
+
+	refused := &noderequest.Error{Code: noderequest.CodeNotFound, Message: "no such fan"}
+
+	shelf := kindstest.NewShelf(kindstest.AShelvedFan("shelved"))
+	shelf.QueryFailure = refused
+
+	registry := kind.NewRegistry[kind.ControlPlaneBinding]()
+	require.NoError(t, registry.Register(kind.BindControlPlane[kindstest.Spec, kindstest.Status](kindstest.Descriptor(), &kindstest.Shelved{Fans: &kindstest.Fans{}, Shelf: shelf})))
+
+	useCase := queryResource.NewUseCase(registry, resourcesMemory.NewRepository(), &messagingMock.Requester{}, nil, nil)
+
+	response, err := useCase.Execute(context.Background(), &queryResource.Request{Kind: kindstest.Kind, UUID: "shelved", Action: "logs"})
+	require.NoError(t, err)
+
+	assert.Equal(t, refused, response.NodeError)
+	assert.Empty(t, response.Result)
 }

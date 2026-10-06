@@ -13,7 +13,9 @@
 //
 // A uuid that names none of the kind's records may name one of its extras,
 // such as one of the code runner's runs among anybody's VMs, which answers
-// for itself.
+// for itself, and what its node refused it is said as that node's refusal.
+// Inside a parent the request names, a kind may name what it is asked of by
+// more than its uuid (kind.Resolver).
 package queryResource
 
 import (
@@ -24,8 +26,8 @@ import (
 	"time"
 
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/dispatch"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/named"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/observe"
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/owner"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
@@ -70,9 +72,9 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		return nil, fmt.Errorf("%w: a %s has no query %q", kind.ErrUnknownAction, d.Name, request.Action)
 	}
 
-	r, err := owner.Resource(ctx, uc.resources, d.Name, request.OwnerUUID, request.UUID)
+	r, uuid, err := named.Resource(ctx, uc.resources, binding, request.OwnerUUID, request.Parent, request.UUID)
 	if errors.Is(err, domain.ErrNotExists) {
-		return uc.extra(ctx, binding, request, err)
+		return uc.extra(ctx, binding, request, uuid, err)
 	} else if err != nil {
 		return nil, err
 	}
@@ -134,21 +136,13 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 	return &Response{Result: reply.Result, Truncated: reply.Truncated}, nil
 }
 
-// extra asks one of the kind's extras the query, when the uuid names one and
-// whoever asks may see anybody's: its state is what it says it is doing, in
-// the shape a node answers one in, and anything else is its own to answer.
-// notThere is what looking for a record came to, which is the answer
-// otherwise.
-func (uc *UseCase) extra(ctx context.Context, binding kind.ControlPlaneBinding, request *Request, notThere error) (*Response, error) {
-	extras, extended := binding.Extras()
-	if !extended || len(request.OwnerUUID) > 0 {
-		return nil, notThere
-	}
-
-	r, err := extras.One(ctx, request.UUID)
-	if errors.Is(err, domain.ErrNotExists) {
-		return nil, notThere
-	} else if err != nil {
+// extra asks one of the kind's extras the query, when the uuid names one
+// whoever asks may see: its state is what it says it is doing, in the shape a
+// node answers one in, and anything else is its own to answer. notThere is
+// what looking for a record came to, which is the answer otherwise.
+func (uc *UseCase) extra(ctx context.Context, binding kind.ControlPlaneBinding, request *Request, uuid string, notThere error) (*Response, error) {
+	extras, r, err := named.Extra(ctx, binding, request.OwnerUUID, request.Parent, uuid, notThere)
+	if err != nil {
 		return nil, err
 	}
 
@@ -156,8 +150,12 @@ func (uc *UseCase) extra(ctx context.Context, binding kind.ControlPlaneBinding, 
 		return uc.fromRecord(binding.Descriptor(), resource.Record{Raw: r})
 	}
 
+	var nodeRefused *noderequest.Error
+
 	answer, refused, err := extras.Query(ctx, r, request.Action, request.Payload)
 	switch {
+	case errors.As(err, &nodeRefused):
+		return &Response{NodeError: nodeRefused}, nil
 	case err != nil:
 		return nil, err
 	case len(refused) > 0:

@@ -166,6 +166,9 @@ func start(t *testing.T, options ...option) *workload {
 		}),
 	)
 
+	// what a Docker VM's dockerd holds is on the VM's disk.
+	w.dockerd.disks = w.engine
+
 	// the node: its commands come over JetStream as the control plane's
 	// messages, and its requests over core NATS, on its own subject.
 	nodeConfigs := configs.NewWorkloadOrchestrator()

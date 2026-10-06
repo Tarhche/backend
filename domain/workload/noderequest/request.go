@@ -3,23 +3,20 @@
 // once.
 //
 // Commands are messages, because what they start takes a while and is
-// reported as it happens. Docker's objects are not records anybody keeps, so
-// asking about one is a request with an answer, and so is a kind's query, a
-// VM's log say (kind.Query): nothing is stored to read it from.
+// reported as it happens. A kind's query, a VM's log say, is a request with an
+// answer (kind.Query): nothing is stored to read it from. So is a command for
+// what nobody keeps a record of, a container made from its VM's terminal say:
+// with no record for what came of it to be taken onto, it is answered.
 //
-// A request names a VM, or a kind's resource, and an operation, and carries
-// that operation's own payload; the reply carries its result or why there is
-// none. The payloads and results of the Docker passthrough are the types in
-// payloads.go, which is all the blog, the control plane and the nodes have to
-// agree on: the control plane passes the payload through as it came.
+// A request names a kind's action and the resource it is about, and carries
+// that action's own payload; the reply carries its result or why there is
+// none.
 package noderequest
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
-	"slices"
-	"strings"
 )
 
 // SubjectPrefix is what every node's requests are asked on, followed by the
@@ -41,126 +38,15 @@ const (
 	MaxLogLines = 1000
 )
 
-// Op is what a request asks for.
+// Op is what a request asks for: a kind's action, as kind.Op names it.
 type Op string
-
-const (
-	// OpPing asks whether a Docker VM's dockerd answers: no payload, no
-	// result. It is what docker.Daemon's Ping is through the control plane, so
-	// that every method of the Daemon is one operation here.
-	OpPing Op = "docker.ping"
-
-	// OpContainersList lists a Docker VM's containers: ContainersRequest in,
-	// []Container out.
-	OpContainersList Op = "docker.containers.list"
-
-	// OpContainersInspect is one container: ContainerRequest in, Container out.
-	OpContainersInspect Op = "docker.containers.inspect"
-
-	// OpContainersCreate creates a container and starts it, pulling its image
-	// first when the VM does not hold it: ContainerSpec in, Container out.
-	OpContainersCreate Op = "docker.containers.create"
-
-	// OpContainersStart, OpContainersStop and OpContainersRestart take a
-	// ContainerRequest and answer with nothing.
-	OpContainersStart   Op = "docker.containers.start"
-	OpContainersStop    Op = "docker.containers.stop"
-	OpContainersRestart Op = "docker.containers.restart"
-
-	// OpContainersRemove takes a RemoveRequest and answers with nothing.
-	OpContainersRemove Op = "docker.containers.remove"
-
-	// OpContainersLogs reads a container's log: ContainerLogsRequest in,
-	// []LogLine out.
-	OpContainersLogs Op = "docker.containers.logs"
-
-	// OpContainersStats samples what a container uses: ContainerRequest in,
-	// Stats out.
-	OpContainersStats Op = "docker.containers.stats"
-
-	// OpContainersConnect takes a ConnectRequest, and OpContainersDisconnect a
-	// DisconnectRequest; both answer with nothing.
-	OpContainersConnect    Op = "docker.containers.connect"
-	OpContainersDisconnect Op = "docker.containers.disconnect"
-
-	// OpImagesList lists a Docker VM's images: no payload, []Image out.
-	OpImagesList Op = "docker.images.list"
-
-	// OpImagesPull pulls an image: PullRequest in, Image out.
-	OpImagesPull Op = "docker.images.pull"
-
-	// OpImagesRemove takes a RemoveRequest and answers with nothing.
-	OpImagesRemove Op = "docker.images.remove"
-
-	// OpNetworksList lists a Docker VM's networks: no payload, []Network out.
-	OpNetworksList Op = "docker.networks.list"
-
-	// OpNetworksCreate creates a network: NetworkSpec in, Network out.
-	OpNetworksCreate Op = "docker.networks.create"
-
-	// OpNetworksRemove takes a RemoveRequest, whose Force means nothing to a
-	// network, and answers with nothing.
-	OpNetworksRemove Op = "docker.networks.remove"
-
-	// OpVolumesList lists a Docker VM's volumes: no payload, []Volume out.
-	OpVolumesList Op = "docker.volumes.list"
-
-	// OpVolumesCreate creates a volume: VolumeSpec in, Volume out.
-	OpVolumesCreate Op = "docker.volumes.create"
-
-	// OpVolumesRemove takes a RemoveRequest naming the volume as its ID, and
-	// answers with nothing.
-	OpVolumesRemove Op = "docker.volumes.remove"
-)
-
-// ops is every operation a node answers.
-var ops = []Op{
-	OpPing,
-	OpContainersList,
-	OpContainersInspect,
-	OpContainersCreate,
-	OpContainersStart,
-	OpContainersStop,
-	OpContainersRestart,
-	OpContainersRemove,
-	OpContainersLogs,
-	OpContainersStats,
-	OpContainersConnect,
-	OpContainersDisconnect,
-	OpImagesList,
-	OpImagesPull,
-	OpImagesRemove,
-	OpNetworksList,
-	OpNetworksCreate,
-	OpNetworksRemove,
-	OpVolumesList,
-	OpVolumesCreate,
-	OpVolumesRemove,
-}
-
-// IsValid reports whether o is an operation a node answers.
-func (o Op) IsValid() bool {
-	return slices.Contains(ops, o)
-}
-
-// IsDocker reports whether o is asked of a Docker VM's dockerd, which only a
-// Docker VM has, and which is waited for while the VM is still coming up.
-func (o Op) IsDocker() bool {
-	return o.IsValid() && strings.HasPrefix(string(o), "docker.")
-}
-
-// MayPull reports whether o may have to pull an image before it can answer,
-// which is what makes it slow: it is given the pull timeout rather than the
-// one every other request has.
-func (o Op) MayPull() bool {
-	return o == OpContainersCreate || o == OpImagesPull
-}
 
 // Request is one question for a node.
 type Request struct {
 	Op Op `json:"op"`
 
-	// VMUUID is the VM the question is about.
+	// VMUUID is the resource the question is about, whatever its kind: the
+	// field is older than kinds, when every question was about a VM.
 	VMUUID string `json:"vm_uuid"`
 
 	// Payload is the operation's own request, as it was given.

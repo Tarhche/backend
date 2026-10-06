@@ -160,14 +160,20 @@ func NewShowHandler(useCase *getResource.UseCase, kindName string) *showHandler 
 // @Tags			workload resources
 // @Produce		json
 // @Param			plural	path		string	true	"The kind's plural"
-// @Param			uuid	path		string	true	"Resource UUID"
+// @Param			uuid	path		string	true	"Resource UUID, or what else names it inside its parent"
 // @Param			owner	query		string	false	"Only this owner's"
+// @Param			parent	query		string	false	"The resource it lives in: inside it, a kind may name it by more than its uuid"
 // @Success		200		{object}	kind.Raw
 // @Failure		404		{object}	map[string]interface{}
 // @Failure		500		{object}	map[string]interface{}
 // @Router			/{plural}/{uuid} [get]
 func (h *showHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
-	response, err := h.useCase.Execute(r.Context(), &getResource.Request{Kind: h.kindName, OwnerUUID: respond.Owner(r), UUID: r.PathValue("uuid")})
+	response, err := h.useCase.Execute(r.Context(), &getResource.Request{
+		Kind:      h.kindName,
+		OwnerUUID: respond.Owner(r),
+		UUID:      r.PathValue("uuid"),
+		Parent:    r.URL.Query().Get("parent"),
+	})
 	if err != nil {
 		failed(rw, r, err)
 
@@ -191,8 +197,9 @@ func NewDeleteHandler(useCase *deleteResource.UseCase, kindName string) *deleteH
 // @Tags			workload resources
 // @Produce		json
 // @Param			plural	path		string	true	"The kind's plural"
-// @Param			uuid	path		string	true	"Resource UUID"
+// @Param			uuid	path		string	true	"Resource UUID, or what else names it inside its parent"
 // @Param			owner	query		string	false	"Only this owner's"
+// @Param			parent	query		string	false	"The resource it lives in: inside it, a kind may name it by more than its uuid"
 // @Param			wait	query		string	false	"How long to wait for its node to say it is gone"
 // @Success		200		{object}	commanded
 // @Success		202		{object}	commanded
@@ -211,6 +218,7 @@ func (h *deleteHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		Kind:      h.kindName,
 		OwnerUUID: respond.Owner(r),
 		UUID:      r.PathValue("uuid"),
+		Parent:    r.URL.Query().Get("parent"),
 		Wait:      duration,
 	})
 	if err != nil {
@@ -250,9 +258,10 @@ func NewActionHandler(useCase *actOnResource.UseCase, kindName string) *actionHa
 // @Accept			json
 // @Produce		json
 // @Param			plural	path		string	true	"The kind's plural"
-// @Param			uuid	path		string	true	"Resource UUID"
+// @Param			uuid	path		string	true	"Resource UUID, or what else names it inside its parent"
 // @Param			action	path		string	true	"The command, such as start or stop"
 // @Param			owner	query		string	false	"Only this owner's"
+// @Param			parent	query		string	false	"The resource it lives in: inside it, a kind may name it by more than its uuid"
 // @Param			wait	query		string	false	"How long to wait for what came of it"
 // @Success		200		{object}	commanded
 // @Success		202		{object}	commanded
@@ -277,6 +286,7 @@ func (h *actionHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		Kind:      h.kindName,
 		OwnerUUID: respond.Owner(r),
 		UUID:      r.PathValue("uuid"),
+		Parent:    r.URL.Query().Get("parent"),
 		Action:    r.PathValue("action"),
 		Payload:   payload,
 		Wait:      duration,
@@ -314,9 +324,10 @@ type answer struct {
 // @Tags			workload resources
 // @Produce		json
 // @Param			plural	path		string	true	"The kind's plural"
-// @Param			uuid	path		string	true	"Resource UUID"
+// @Param			uuid	path		string	true	"Resource UUID, or what else names it inside its parent"
 // @Param			query	path		string	true	"The query, such as state or logs"
 // @Param			owner	query		string	false	"Only this owner's"
+// @Param			parent	query		string	false	"The resource it lives in: inside it, a kind may name it by more than its uuid"
 // @Success		200		{object}	answer
 // @Failure		400		{object}	map[string]interface{}
 // @Failure		404		{object}	map[string]interface{}
@@ -345,6 +356,7 @@ func (h *queryHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		Kind:      h.descriptor.Name,
 		OwnerUUID: respond.Owner(r),
 		UUID:      r.PathValue("uuid"),
+		Parent:    r.URL.Query().Get("parent"),
 		Action:    name,
 		Payload:   payload,
 	})

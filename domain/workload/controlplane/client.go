@@ -78,11 +78,17 @@ type Client interface {
 	// DeleteSnapshot removes a snapshot and its archive.
 	DeleteSnapshot(ctx context.Context, ownerUUID string, uuid string) error
 
-	// Docker is the dockerd of a Docker VM, reached through the control plane:
-	// every call is one request to the node holding the VM, and the answer is
-	// read from dockerd as it is now. A VM that is not a Docker VM is refused
-	// by every call, and so is one that is neither running nor on its way up:
-	// one that is still booting is waited for.
+	// Docker is the building blocks of a Docker VM, its containers, images,
+	// networks and volumes, as the control plane keeps them: what was made
+	// through it is a resource of its kind, stored and brought back to what
+	// was asked of it, and is shown as its node last reported it; what the
+	// VM's dockerd holds besides, a stack's or what was made from the VM's
+	// terminal, is shown beside it as its node reported it, and marked
+	// unmanaged when it is nobody's. Whatever is made is waited for, for as
+	// long as dockerd may take, and a log or a sample of what a container
+	// uses is read from dockerd as it is now. A VM that is not a Docker VM is
+	// refused by every call, and so is one that is neither running nor on its
+	// way up.
 	//
 	// It is the domain's own Daemon rather than a method per operation here,
 	// so that what is asked of a Docker VM through the control plane and what
@@ -228,8 +234,8 @@ type CreatedStack struct {
 	Stack stack.Stack
 }
 
-// StackDetail is a stack and the containers compose made for it, read from its
-// VM as they are now.
+// StackDetail is a stack and the containers compose made for it, as its
+// node last reported them.
 type StackDetail struct {
 	stack.Stack
 

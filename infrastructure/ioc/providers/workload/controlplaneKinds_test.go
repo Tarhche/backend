@@ -17,10 +17,14 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/kindstest"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind/kindtest"
+	containerKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/container"
+	imageKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/image"
+	networkKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/network"
 	snapshotKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/snapshot"
 	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
 	taskKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/task"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
+	volumeKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/volume"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
 	nodesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/nodes"
@@ -77,14 +81,14 @@ func get(t *testing.T, handler http.Handler, target string) (int, string) {
 func TestNewControlPlaneKinds(t *testing.T) {
 	t.Parallel()
 
-	t.Run("vms, snapshots, stacks and tasks are served under their plurals beside what is not a kind yet", func(t *testing.T) {
+	t.Run("every kind is served under its plural", func(t *testing.T) {
 		t.Parallel()
 
 		plane := served(t)
-		assert.Equal(t, []string{vmKind.Name, snapshotKind.Name, stackKind.Name, taskKind.Name}, kindNames(plane.workload.Registry.Descriptors()))
+		assert.Equal(t, allKinds, kindNames(plane.workload.Registry.Descriptors()))
 
 		mux := http.NewServeMux()
-		require.NoError(t, plane.workload.Route(mux), "no kind takes a route of what is not a kind yet")
+		require.NoError(t, plane.workload.Route(mux), "no kind takes another's routes")
 
 		status, body := get(t, mux, "/api/kinds")
 		require.Equal(t, http.StatusOK, status)
@@ -93,23 +97,22 @@ func TestNewControlPlaneKinds(t *testing.T) {
 			Items []kind.Descriptor `json:"items"`
 		}
 		require.NoError(t, json.Unmarshal([]byte(body), &described))
-		require.Len(t, described.Items, 4)
-		assert.Equal(t, "vms", described.Items[0].Plural)
-		assert.Equal(t, "snapshots", described.Items[1].Plural)
-		assert.Equal(t, "stacks", described.Items[2].Plural)
-		assert.Equal(t, "tasks", described.Items[3].Plural)
 
-		for _, plural := range []string{"vms", "snapshots", "stacks", "tasks"} {
+		plurals := make([]string, len(described.Items))
+		for i, d := range described.Items {
+			plurals[i] = d.Plural
+		}
+
+		assert.Equal(t, []string{"vms", "snapshots", "stacks", "tasks", "containers", "images", "networks", "volumes"}, plurals)
+
+		for _, plural := range plurals {
 			status, body = get(t, mux, "/api/"+plural)
 			require.Equal(t, http.StatusOK, status)
 			assert.JSONEq(t, `{"items":[],"pagination":{"total_pages":0,"current_page":1}}`, body)
 		}
 
-		status, _ = get(t, mux, "/api/containers")
-		assert.Equal(t, http.StatusOK, status, "the containers in docker vms are served as they were")
-
 		subjects := slices.Collect(maps.Keys(plane.workload.Subscribers))
-		assert.ElementsMatch(t, []string{kind.ResultName}, subjects, "a vm's and a snapshot's results are every kind's results")
+		assert.ElementsMatch(t, []string{kind.ResultName}, subjects, "every kind's results are heard on one subject")
 
 		assert.NoError(t, plane.workload.Reconcile.Execute(context.Background()), "a pass over nothing does nothing")
 	})
@@ -177,8 +180,11 @@ func TestConformance(t *testing.T) {
 
 	kindtest.Conformance(t, services, permissions.NewRepository())
 
-	assert.Equal(t, []string{vmKind.Name, snapshotKind.Name, stackKind.Name, taskKind.Name}, kindNames(services.Descriptors()), "every kind the services run")
+	assert.Equal(t, allKinds, kindNames(services.Descriptors()), "every kind the services run")
 }
+
+// allKinds are the kinds the services run, in the order they are registered.
+var allKinds = []string{vmKind.Name, snapshotKind.Name, stackKind.Name, taskKind.Name, containerKind.Name, imageKind.Name, networkKind.Name, volumeKind.Name}
 
 func kindNames(descriptors []kind.Descriptor) []string {
 	names := make([]string, len(descriptors))

@@ -300,6 +300,51 @@ func TestAnswer(t *testing.T) {
 		assert.Equal(t, "no duster", r.Answer.Reason)
 	})
 
+	t.Run("one its node refused as asked did nothing: it is what its node says, and expected to stay so", func(t *testing.T) {
+		t.Parallel()
+
+		r := kindstest.AFan("fan-uuid", kindstest.Deleting, kind.Deleted)
+		r.Pending = &resource.Pending{Action: "delete", IDs: []string{"command-1"}}
+
+		change, err := observe.Answer(kindstest.Descriptor(), &r, kind.Result{
+			ID:      "command-1",
+			Action:  "delete",
+			OK:      false,
+			Refused: true,
+			Reason:  "refused: it is still plugged in",
+			Status:  json.RawMessage(`{"state":"running","speed":2}`),
+		}, later)
+		require.NoError(t, err)
+
+		fan := kindstest.Typed(r)
+
+		assert.False(t, change.Gone)
+		assert.True(t, change.Changed)
+		assert.Equal(t, kindstest.Running, fan.Status.State)
+		assert.Equal(t, kindstest.Running, fan.Status.Expected, "not to be deleted once it can be, behind the back of whoever was refused")
+		assert.Empty(t, fan.Status.Reason, "it did not fail")
+		assert.Equal(t, later, fan.Status.Since)
+		assert.Equal(t, 2, fan.Status.Speed)
+		assert.Nil(t, r.Pending)
+		assert.Equal(t, "refused: it is still plugged in", r.Answer.Reason, "why is the answer's to say")
+	})
+
+	t.Run("and one whose node said nothing of it is left as it was, until its node does", func(t *testing.T) {
+		t.Parallel()
+
+		r := kindstest.AFan("fan-uuid", kindstest.Starting, kindstest.Running)
+		r.Pending = &resource.Pending{Action: "start", IDs: []string{"command-1"}}
+
+		_, err := observe.Answer(kindstest.Descriptor(), &r, kind.Result{ID: "command-1", Action: "start", Refused: true, Reason: "refused"}, later)
+		require.NoError(t, err)
+
+		fan := kindstest.Typed(r)
+
+		assert.Equal(t, kindstest.Starting, fan.Status.State)
+		assert.Equal(t, kindstest.Running, fan.Status.Expected)
+		assert.Nil(t, r.Pending)
+	})
+
 	for name, pending := range map[string]*resource.Pending{
 		"a result for a command sent before something else was asked is too late": {Action: "stop", IDs: []string{"command-2"}},
 		"and so is one heard already": nil,

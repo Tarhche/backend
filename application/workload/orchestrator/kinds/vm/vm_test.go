@@ -381,6 +381,7 @@ func TestNode_Execute(t *testing.T) {
 		assert.Equal(t, vmKind.Running, status.State)
 		assert.NotNil(t, status.Applied)
 		assert.Contains(t, f.connections.forgotten(), "01")
+		assert.Equal(t, f.now(), status.RestoredAt, "it says when its disk was replaced, which what lives in it is reset to")
 
 		disk, err := f.engine.Disk("01")
 		require.NoError(t, err)

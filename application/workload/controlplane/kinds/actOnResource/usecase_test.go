@@ -499,7 +499,7 @@ func TestUseCase_Execute_extras(t *testing.T) {
 		assert.Equal(t, domain.ValidationErrors{"fan": "immutable"}, response.ValidationErrors)
 	})
 
-	t.Run("an extra is nobody's own", func(t *testing.T) {
+	t.Run("an extra is whose it says: somebody else asking for their own does not reach it", func(t *testing.T) {
 		t.Parallel()
 
 		useCase, s := shelved(t)
@@ -520,5 +520,85 @@ func TestUseCase_Execute_extras(t *testing.T) {
 		_, err := useCase.Execute(ctx, &actOnResource.Request{Kind: kindstest.Kind, UUID: "nowhere", Action: "stop"})
 
 		assert.ErrorIs(t, err, domain.ErrNotExists)
+	})
+}
+
+// TestUseCase_Execute_named holds a command to being asked of a resource by
+// what names it inside the parent the request names, and to being refused as
+// its node would refuse it when that is how the kind refuses it.
+func TestUseCase_Execute_named(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	newNamed := func(t *testing.T, refuse func(action string) error) (*actOnResource.UseCase, *resourcesMemory.Repository, *messagingMock.Recorder) {
+		t.Helper()
+
+		memory := resourcesMemory.NewRepository()
+		_, err := memory.Create(ctx, kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running))
+		require.NoError(t, err)
+
+		producer := &messagingMock.Recorder{}
+		strategy := &kindstest.Witnessing{Fans: &kindstest.Fans{Node: kindstest.NodeName}, Records: memory, Refuse: refuse}
+
+		registry := kind.NewRegistry[kind.ControlPlaneBinding]()
+		require.NoError(t, registry.Register(kind.BindControlPlane[kindstest.Spec, kindstest.Status](kindstest.Descriptor(), strategy)))
+
+		dispatcher := dispatch.New(memory, producer, waiters.New(), kindstest.NewClock().Now)
+
+		return actOnResource.NewUseCase(registry, memory, dispatcher, slog.New(slog.DiscardHandler)), memory, producer
+	}
+
+	t.Run("a resource named by its name inside its parent is asked for the command", func(t *testing.T) {
+		t.Parallel()
+
+		useCase, memory, producer := newNamed(t, nil)
+
+		response, err := useCase.Execute(ctx, &actOnResource.Request{Kind: kindstest.Kind, Parent: kindstest.House, UUID: "kitchen", Action: "stop"})
+		require.NoError(t, err)
+		require.NotNil(t, response.Command)
+
+		assert.Equal(t, "fan-uuid", response.Command.UUID)
+		assert.Len(t, producer.Messages(), 1)
+
+		stored, err := memory.GetOne(ctx, kindstest.Kind, "fan-uuid")
+		require.NoError(t, err)
+		assert.Equal(t, kindstest.Stopping, kindstest.Typed(stored).Status.State)
+	})
+
+	t.Run("one inside another parent is not there", func(t *testing.T) {
+		t.Parallel()
+
+		useCase, _, producer := newNamed(t, nil)
+
+		_, err := useCase.Execute(ctx, &actOnResource.Request{Kind: kindstest.Kind, Parent: "house-2", UUID: "fan-uuid", Action: "stop"})
+		assert.ErrorIs(t, err, domain.ErrNotExists)
+		assert.Empty(t, producer.Messages())
+	})
+
+	t.Run("a command the kind refuses as its node would is refused in the node's words, and nothing is asked", func(t *testing.T) {
+		t.Parallel()
+
+		refused := &noderequest.Error{Code: noderequest.CodeInvalid, Message: "it is turning: stop it first"}
+
+		useCase, memory, producer := newNamed(t, func(action string) error {
+			if action == "delete" {
+				return refused
+			}
+
+			return nil
+		})
+
+		response, err := useCase.Execute(ctx, &actOnResource.Request{Kind: kindstest.Kind, Parent: kindstest.House, UUID: "kitchen", Action: "delete"})
+		require.NoError(t, err)
+
+		assert.Equal(t, refused, response.NodeError)
+		assert.Nil(t, response.Command)
+		assert.Empty(t, producer.Messages())
+
+		stored, err := memory.GetOne(ctx, kindstest.Kind, "fan-uuid")
+		require.NoError(t, err)
+		assert.Equal(t, kindstest.Running, kindstest.Typed(stored).Status.State, "left as it was")
+		assert.Equal(t, kindstest.Running, kindstest.Typed(stored).Status.Expected)
 	})
 }

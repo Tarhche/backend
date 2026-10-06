@@ -7,8 +7,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/docker"
 )
 
-// Container is one container in a Docker VM, as its dockerd reports it now.
-// Nothing about it is stored anywhere: every one of these was read live.
+// Container is one container in a Docker VM, as its node last reported it.
 type Container struct {
 	ID    string `json:"id"`
 	Name  string `json:"name"`
@@ -34,6 +33,10 @@ type Container struct {
 
 	RestartPolicy string    `json:"restart_policy,omitempty"`
 	CreatedAt     time.Time `json:"created_at"`
+
+	// Unmanaged says nobody keeps it: it was made from its VM's terminal, so
+	// nothing brings it back when it stops or goes.
+	Unmanaged bool `json:"unmanaged,omitempty"`
 }
 
 // VMContainer is a container together with the Docker VM it was found in,
@@ -94,6 +97,10 @@ type Image struct {
 
 	// InUse says a container was created from it.
 	InUse bool `json:"in_use"`
+
+	// Unmanaged says nobody keeps it: it was pulled from its VM's terminal,
+	// or for a stack.
+	Unmanaged bool `json:"unmanaged,omitempty"`
 }
 
 // DockerNetwork is one docker network inside a Docker VM. It never reaches
@@ -110,6 +117,9 @@ type DockerNetwork struct {
 
 	Labels    map[string]string `json:"labels,omitempty"`
 	CreatedAt time.Time         `json:"created_at"`
+
+	// Unmanaged says nobody keeps it: it was made from its VM's terminal.
+	Unmanaged bool `json:"unmanaged,omitempty"`
 }
 
 // Volume is one docker volume inside a Docker VM.
@@ -123,6 +133,9 @@ type Volume struct {
 	InUse bool `json:"in_use"`
 
 	CreatedAt time.Time `json:"created_at"`
+
+	// Unmanaged says nobody keeps it: it was made from its VM's terminal.
+	Unmanaged bool `json:"unmanaged,omitempty"`
 }
 
 func NewContainer(c docker.Container) Container {
@@ -160,6 +173,7 @@ func NewContainer(c docker.Container) Container {
 		Service:       c.Service,
 		RestartPolicy: c.RestartPolicy,
 		CreatedAt:     c.CreatedAt,
+		Unmanaged:     c.Unmanaged,
 	}
 }
 
@@ -215,6 +229,7 @@ func NewImage(i docker.Image) Image {
 		Size:      i.Size,
 		CreatedAt: i.CreatedAt,
 		InUse:     i.InUse,
+		Unmanaged: i.Unmanaged,
 	}
 }
 
@@ -237,6 +252,7 @@ func NewDockerNetwork(n docker.Network) DockerNetwork {
 		Containers: list(n.Containers),
 		Labels:     n.Labels,
 		CreatedAt:  n.CreatedAt,
+		Unmanaged:  n.Unmanaged,
 	}
 }
 
@@ -257,6 +273,7 @@ func NewVolume(v docker.Volume) Volume {
 		Labels:     v.Labels,
 		InUse:      v.InUse,
 		CreatedAt:  v.CreatedAt,
+		Unmanaged:  v.Unmanaged,
 	}
 }
 

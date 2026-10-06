@@ -111,7 +111,12 @@ func observe(d kind.Descriptor, r *resource.Record, status json.RawMessage, at t
 // strategy said; one that deleted it leaves it gone, whatever it said. A
 // command that failed for good fails the resource, with its reason, when the
 // command was to make it something: one that was not, a query's or a
-// snapshot's say, fails only itself.
+// snapshot's say, fails only itself. One its node refused as it was asked
+// (kind.Result.Refused) did nothing: the resource is what its node says it
+// is, and when the command was to make it something, it is expected to stay
+// what it is rather than to be asked the same again, which would be refused
+// the same way. A volume a container mounts is not removed, and is not
+// removed later either, once nobody remembers it was asked.
 func Answer(d kind.Descriptor, r *resource.Record, result kind.Result, at time.Time) (Change, error) {
 	if !r.Pending.Answers(result.ID) {
 		return Change{}, ErrNotWaitedOn
@@ -167,6 +172,10 @@ func Answer(d kind.Descriptor, r *resource.Record, result kind.Result, at time.T
 
 	r.Pending = nil
 
+	if result.Refused {
+		return refused(d, r, recorded, action, result, at)
+	}
+
 	if action.Desires == "" && !d.Machine.IsInFlight(recorded.State) {
 		return Change{Changed: true}, nil
 	}
@@ -184,6 +193,39 @@ func Answer(d kind.Descriptor, r *resource.Record, result kind.Result, at time.T
 	common, err := r.Common()
 	if err != nil {
 		return Change{}, err
+	}
+
+	common.ObservedAt = at
+
+	if err := r.SetCommon(common); err != nil {
+		return Change{}, err
+	}
+
+	return Change{Changed: true}, nil
+}
+
+// refused takes onto a record a command its node refused as it was asked:
+// what the resource is doing is what its node says, when it says it is at
+// rest, and what it is expected to be is that, when the command was to make
+// it something else. What its node did not say leaves it as it was recorded,
+// in flight as the command left it, until its node reports it.
+func refused(d kind.Descriptor, r *resource.Record, recorded kind.Status, action kind.Action, result kind.Result, at time.Time) (Change, error) {
+	common := recorded
+
+	observed, err := resource.Common(result.Status)
+	if err != nil {
+		return Change{}, err
+	}
+
+	if state := observed.State; len(state) > 0 && !d.Machine.IsInFlight(state) && state != kind.Failed {
+		if state != common.State {
+			common.State = state
+			common.Since = at
+		}
+
+		if len(action.Desires) > 0 {
+			common.Expected = state
+		}
 	}
 
 	common.ObservedAt = at

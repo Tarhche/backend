@@ -1,10 +1,11 @@
 // Package docker is what runs inside one Docker VM: its containers, images,
 // networks and volumes, and the compose projects deployed into it.
 //
-// None of it is stored by the workload. dockerd is the truth about its own
-// objects, so they are read from it live and never kept anywhere else. These
+// They are the building blocks of a Docker VM. The workload keeps the ones it
+// was asked for as resources of their own kinds (domain/workload/kinds), and
+// a node reads what each VM's dockerd holds every heartbeat (Inventory). These
 // are value types with no wire shape of their own: what travels between the
-// workload's services has its own types, next to the messages that carry it.
+// workload's services is the kinds' manifests.
 package docker
 
 import (
@@ -57,6 +58,10 @@ type Container struct {
 
 	RestartPolicy string
 	CreatedAt     time.Time
+
+	// Unmanaged says nobody keeps it: it was made from its VM's terminal, so
+	// it is shown as it is and never reconciled.
+	Unmanaged bool
 }
 
 // PortBinding is a container port published on the Docker VM.
@@ -91,6 +96,10 @@ type ContainerSpec struct {
 	Mounts   []Mount
 	Networks []string
 
+	// Aliases are the names its neighbours on each of its networks reach it
+	// by, beside its own, by network.
+	Aliases map[string][]string
+
 	// RestartPolicy is no, always, unless-stopped or on-failure.
 	RestartPolicy string
 
@@ -119,6 +128,9 @@ type Image struct {
 	ID   string
 	Tags []string
 
+	// Digests are the references it was pulled by, name@digest.
+	Digests []string
+
 	// Size is in bytes.
 	Size int64
 
@@ -126,6 +138,10 @@ type Image struct {
 
 	// InUse says a container was created from it.
 	InUse bool
+
+	// Unmanaged says nobody keeps it: it was pulled from its VM's terminal,
+	// or by a stack, and nothing would pull it again.
+	Unmanaged bool
 }
 
 // Network is one docker network in a Docker VM. It never reaches past the VM.
@@ -141,6 +157,9 @@ type Network struct {
 
 	Labels    map[string]string
 	CreatedAt time.Time
+
+	// Unmanaged says nobody keeps it: it was made from its VM's terminal.
+	Unmanaged bool
 }
 
 // NetworkSpec is a network to create.
@@ -162,6 +181,19 @@ type Volume struct {
 	InUse bool
 
 	CreatedAt time.Time
+
+	// Unmanaged says nobody keeps it: it was made from its VM's terminal.
+	Unmanaged bool
+}
+
+// Inventory is everything one Docker VM's dockerd holds: its containers,
+// stopped ones too, its images, its networks and its volumes, each image,
+// network and volume saying which of the containers use it.
+type Inventory struct {
+	Containers []Container
+	Images     []Image
+	Networks   []Network
+	Volumes    []Volume
 }
 
 // VolumeSpec is a volume to create.
@@ -212,6 +244,11 @@ type LogLine struct {
 type Daemon interface {
 	// Ping answers once dockerd does.
 	Ping(ctx context.Context) error
+
+	// Inventory is everything the VM's dockerd holds, read in one listing of
+	// each sort of object: four requests, however much there is, which is
+	// what a node's every heartbeat asks of every Docker VM it runs.
+	Inventory(ctx context.Context) (Inventory, error)
 
 	Containers(ctx context.Context, filter ContainerFilter) ([]Container, error)
 	Container(ctx context.Context, id string) (Container, error)

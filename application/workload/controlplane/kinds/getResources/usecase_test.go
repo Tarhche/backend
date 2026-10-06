@@ -163,12 +163,12 @@ func TestUseCase_Execute_extras(t *testing.T) {
 			want:       []string{"fan-24", "shelf-b", "fan-22", "fan-20", "fan-18", "fan-16", "fan-14", "fan-12", "fan-10", "fan-08", "fan-06", "fan-04", "fan-02", "fan-00"},
 			pagination: presenter.Pagination{TotalPages: 1, CurrentPage: 1},
 		},
-		"somebody's own has none, since an extra is nobody's own": {
+		"somebody's own has none of the guest's": {
 			request:    getResources.Request{Kind: kindstest.Kind, OwnerUUID: kindstest.OwnerUUID, Page: 2},
 			want:       []string{"fan-04", "fan-03", "fan-02", "fan-01", "fan-00"},
 			pagination: presenter.Pagination{TotalPages: 2, CurrentPage: 2},
 		},
-		"nor has what lives in a resource": {
+		"nor has what lives in a resource, which they do not": {
 			request:    getResources.Request{Kind: kindstest.Kind, Parent: kindstest.House, Page: 2},
 			want:       []string{"fan-04", "fan-03", "fan-02", "fan-01", "fan-00"},
 			pagination: presenter.Pagination{TotalPages: 2, CurrentPage: 2},
@@ -187,6 +187,79 @@ func TestUseCase_Execute_extras(t *testing.T) {
 
 			assert.Equal(t, tt.want, uuids)
 			assert.Equal(t, tt.pagination, response.Pagination)
+		})
+	}
+}
+
+// TestUseCase_Execute_ownedExtras holds extras that are somebody's own, and
+// live in a resource, to being listed as records are: in their owner's
+// listing and in their parent's, among the records, newest first, and in
+// nobody else's.
+func TestUseCase_Execute_ownedExtras(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	resources := resourcesMemory.NewRepository()
+
+	for i := range 3 {
+		_, err := resources.Create(ctx, kindstest.AFan(fmt.Sprintf("fan-%02d", i), kindstest.Running, kindstest.Running, func(f *kindstest.Fan) {
+			f.Metadata.CreatedAt = kindstest.Moment.Add(time.Duration(i) * time.Minute)
+		}))
+		require.NoError(t, err)
+	}
+
+	owned := func(uuid string, minute int, owner string, house string) kindstest.Fan {
+		return kindstest.AShelvedFan(uuid, func(f *kindstest.Fan) {
+			f.Metadata.CreatedAt = kindstest.Moment.Add(time.Duration(minute)*time.Minute + 30*time.Second)
+			f.Metadata.OwnerUUID = owner
+			f.Metadata.Owners = []kind.Reference{{Kind: kindstest.Parent, UUID: house}}
+		})
+	}
+
+	shelf := kindstest.NewShelf(
+		owned("theirs", 2, "somebody-else", "house-2"),
+		owned("mine", 1, kindstest.OwnerUUID, kindstest.House),
+	)
+
+	registry := kind.NewRegistry[kind.ControlPlaneBinding]()
+	require.NoError(t, registry.Register(kind.BindControlPlane[kindstest.Spec, kindstest.Status](kindstest.Descriptor(), &kindstest.Shelved{Fans: &kindstest.Fans{}, Shelf: shelf})))
+
+	useCase := getResources.NewUseCase(registry, resources)
+
+	for name, tt := range map[string]struct {
+		request getResources.Request
+		want    []string
+	}{
+		"its owner's own has it among their records": {
+			request: getResources.Request{Kind: kindstest.Kind, OwnerUUID: kindstest.OwnerUUID},
+			want:    []string{"fan-02", "mine", "fan-01", "fan-00"},
+		},
+		"and so has what lives where it lives": {
+			request: getResources.Request{Kind: kindstest.Kind, Parent: kindstest.House},
+			want:    []string{"fan-02", "mine", "fan-01", "fan-00"},
+		},
+		"somebody else's own has only theirs": {
+			request: getResources.Request{Kind: kindstest.Kind, OwnerUUID: "somebody-else"},
+			want:    []string{"theirs"},
+		},
+		"and anybody's has every one": {
+			request: getResources.Request{Kind: kindstest.Kind},
+			want:    []string{"theirs", "fan-02", "mine", "fan-01", "fan-00"},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			response, err := useCase.Execute(ctx, &tt.request)
+			require.NoError(t, err)
+
+			uuids := make([]string, len(response.Items))
+			for i, item := range response.Items {
+				uuids[i] = item.Metadata.UUID
+			}
+
+			assert.Equal(t, tt.want, uuids)
 		})
 	}
 }

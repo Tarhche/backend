@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -13,20 +14,6 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 )
-
-// before is what answered node requests before there were kinds: it answers
-// everything it is handed, and remembers what that was.
-type before struct {
-	handed []noderequest.Op
-}
-
-var _ noderequest.Handler = &before{}
-
-func (b *before) Handle(_ context.Context, request noderequest.Request) noderequest.Reply {
-	b.handed = append(b.handed, request.Op)
-
-	return noderequest.Reply{OK: true, Result: json.RawMessage(`"answered as it always was"`)}
-}
 
 // asking is a lamp's query, as the node request it travels as.
 func asking(t *testing.T, action string, payload string) noderequest.Request {
@@ -103,12 +90,6 @@ func TestUseCase_Handle(t *testing.T) {
 			code:     noderequest.CodeInvalid,
 			says:     "unknown action",
 		},
-		"and so is a command asked as a query": {
-			strategy: &lamps{},
-			request:  func(t *testing.T) noderequest.Request { return asking(t, "light", ``) },
-			code:     noderequest.CodeInvalid,
-			says:     "unknown action",
-		},
 		"a query that cannot be read is refused": {
 			strategy: &lamps{},
 			request: func(*testing.T) noderequest.Request {
@@ -143,11 +124,8 @@ func TestUseCase_Handle(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			next := &before{}
+			answered := NewUseCase(running(t, tt.strategy)).Handle(t.Context(), tt.request(t))
 
-			answered := NewUseCase(running(t, tt.strategy), next).Handle(t.Context(), tt.request(t))
-
-			assert.Empty(t, next.handed, "a kind's query is the kind's")
 			assert.Equal(t, tt.asked, tt.strategy.asked, "asked")
 
 			if len(tt.code) > 0 {
@@ -167,28 +145,28 @@ func TestUseCase_Handle(t *testing.T) {
 	t.Run("an error that crossed into the domain is the domain's again on the other side", func(t *testing.T) {
 		t.Parallel()
 
-		answered := NewUseCase(running(t, &lamps{failure: domain.ErrNotExists}), &before{}).Handle(t.Context(), asking(t, "readings", `{"last": 1}`))
+		answered := NewUseCase(running(t, &lamps{failure: domain.ErrNotExists})).Handle(t.Context(), asking(t, "readings", `{"last": 1}`))
 
 		assert.ErrorIs(t, answered.Err(), domain.ErrNotExists)
 	})
 }
 
-func TestUseCase_Handle_TheNodesOwn(t *testing.T) {
+func TestUseCase_Handle_noKinds(t *testing.T) {
 	t.Parallel()
 
 	for name, tt := range map[string]struct {
 		kinds func(t *testing.T) *kind.Registry[kind.NodeBinding]
 		op    noderequest.Op
 	}{
-		"an op named after a kind that is not registered here is the node's, as it always was": {
+		"an op named after a kind that is not registered here is not one a node answers": {
 			kinds: func(t *testing.T) *kind.Registry[kind.NodeBinding] { return running(t, &lamps{}) },
 			op:    "vm.logs",
 		},
-		"and so is one that names no kind's action": {
+		"nor is one that names no kind's action": {
 			kinds: func(t *testing.T) *kind.Registry[kind.NodeBinding] { return running(t, &lamps{}) },
-			op:    noderequest.OpContainersList,
+			op:    "docker.containers.list",
 		},
-		"and with no kinds at all, every request is": {
+		"nor, with no kinds at all, any": {
 			kinds: func(*testing.T) *kind.Registry[kind.NodeBinding] { return kind.NewRegistry[kind.NodeBinding]() },
 			op:    "lamp.state",
 		},
@@ -200,13 +178,80 @@ func TestUseCase_Handle_TheNodesOwn(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			next := &before{}
+			answered := NewUseCase(tt.kinds(t)).Handle(t.Context(), noderequest.Request{Op: tt.op, VMUUID: "vm-1"})
 
-			answered := NewUseCase(tt.kinds(t), next).Handle(t.Context(), noderequest.Request{Op: tt.op, VMUUID: "vm-1"})
-
-			assert.Equal(t, []noderequest.Op{tt.op}, next.handed)
-			assert.True(t, answered.OK)
-			assert.JSONEq(t, `"answered as it always was"`, string(answered.Result))
+			require.False(t, answered.OK)
+			assert.Equal(t, noderequest.CodeInvalid, answered.Error.Code)
+			assert.Contains(t, answered.Error.Message, string(tt.op))
 		})
 	}
+}
+
+// locks are the locks of the resources a test's commands are carried out on,
+// remembering whose were taken and that each was let go of.
+type locks struct {
+	mutex sync.Mutex
+
+	taken    []string
+	released int
+}
+
+func (l *locks) Lock(_ context.Context, uuid string) (func(), error) {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	l.taken = append(l.taken, uuid)
+
+	return func() {
+		l.mutex.Lock()
+		defer l.mutex.Unlock()
+
+		l.released++
+	}, nil
+}
+
+// TestUseCase_Handle_command holds a command asked as a request, which is
+// how something nobody keeps a record of is asked for one, to being carried
+// out under its resource's lock and answered with its Result, whatever came
+// of it.
+func TestUseCase_Handle_command(t *testing.T) {
+	t.Parallel()
+
+	t.Run("carried out, it is answered with its result", func(t *testing.T) {
+		t.Parallel()
+
+		strategy := &lamps{}
+		held := &locks{}
+
+		answered := NewUseCase(running(t, strategy), WithLocks(held)).Handle(t.Context(), asking(t, "light", ""))
+		require.True(t, answered.OK, "%v", answered.Error)
+
+		var result kind.Result
+		require.NoError(t, json.Unmarshal(answered.Result, &result))
+
+		assert.True(t, result.OK)
+		assert.Equal(t, "lamp", result.Kind)
+		assert.Equal(t, "lamp-1", result.UUID)
+		assert.Equal(t, "light", result.Action)
+		assert.Equal(t, "node-1", result.Node)
+		assert.False(t, result.At.IsZero())
+		assert.JSONEq(t, `{"state": "lit", "brightness": 60}`, string(result.Status))
+
+		assert.Equal(t, []string{"light lamp-1 40 watts"}, strategy.executed)
+		assert.Equal(t, []string{"lamp-1"}, held.taken, "under its resource's lock")
+		assert.Equal(t, 1, held.released)
+	})
+
+	t.Run("one that failed is answered as well, its result saying why", func(t *testing.T) {
+		t.Parallel()
+
+		answered := NewUseCase(running(t, &lamps{failure: errors.New("the bulb is gone")})).Handle(t.Context(), asking(t, "delete", ""))
+		require.True(t, answered.OK, "%v", answered.Error)
+
+		var result kind.Result
+		require.NoError(t, json.Unmarshal(answered.Result, &result))
+
+		assert.False(t, result.OK)
+		assert.Equal(t, "the bulb is gone", result.Reason)
+	})
 }

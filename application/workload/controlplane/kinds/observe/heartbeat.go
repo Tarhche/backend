@@ -108,6 +108,10 @@ func NewObserver(registry *kind.Registry[kind.ControlPlaneBinding], resources re
 // was given them. What lives in a parent is its parent's: it goes with it, or
 // is reset to what it holds, and is never an orphan of its own.
 //
+// A kind whose strategy is a kind.Witness is then told the whole report, what
+// nobody keeps a record of among it: a container a VM's terminal made is the
+// kind's to show, never the framework's to keep.
+//
 // A kind that sent no report could not look at all this beat, and nothing is
 // concluded from its silence. A kind the control plane does not run, or
 // whose state is not its nodes' to say, is not listened to.
@@ -145,6 +149,12 @@ func (o *Observer) Heartbeat(ctx context.Context, nodeName string, at time.Time,
 
 		if err := o.orphaned(ctx, d, nodeName, held, report); err != nil {
 			o.logger.WarnContext(ctx, "could not tell what a node holds that nobody keeps a record of", "error", err, "node", nodeName, "kind", d.Name)
+		}
+
+		if witness, witnesses := binding.Witness(); witnesses {
+			if err := witness.Witnessed(ctx, nodeName, report, at); err != nil {
+				o.logger.WarnContext(ctx, "a kind could not take in what a node reported of it", "error", err, "node", nodeName, "kind", d.Name)
+			}
 		}
 	}
 }
@@ -196,6 +206,12 @@ func (o *Observer) observe(ctx context.Context, d kind.Descriptor, nodeName stri
 
 	switch {
 	case report.Missing(r.Metadata.UUID, parent.UUID) && r.Reset:
+		// a look taken before its parent was restored says nothing of what
+		// the restored parent holds.
+		if recorded, err := r.Common(); err != nil || at.Before(recorded.ObservedAt) {
+			return err
+		}
+
 		o.logger.InfoContext(ctx, "forgetting a resource its restored parent does not have", "kind", d.Name, "uuid", r.Metadata.UUID, "parent", parent.UUID)
 
 		return o.resources.Delete(ctx, d.Name, r.Metadata.UUID)

@@ -277,7 +277,7 @@ type restorer struct {
 	failure  error
 }
 
-func (r *restorer) Restored(_ context.Context, parent kind.Reference) error {
+func (r *restorer) Restored(_ context.Context, parent kind.Reference, _ time.Time) error {
 	if r.failure != nil {
 		return r.failure
 	}

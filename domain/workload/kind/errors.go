@@ -33,6 +33,12 @@ var (
 	// because the parent it lives in did not answer, so whether it is there is
 	// not known.
 	ErrUnseen = errors.New("could not be seen")
+
+	// ErrRefused is a command a node did not carry out because it could not
+	// be done as it was asked, a network removed while a container is on it
+	// say: nothing was done, and asked again it would be refused again. What
+	// wraps it says why.
+	ErrRefused = errors.New("refused")
 )
 
 // InvalidError is a payload that was read and refused, with what is wrong

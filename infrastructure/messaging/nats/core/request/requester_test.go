@@ -72,23 +72,23 @@ func TestRequester_Request(t *testing.T) {
 		answer(t, connection, "workload-orchestrator-01", func(request noderequest.Request) noderequest.Reply {
 			asked = request
 
-			return noderequest.Reply{OK: true, Result: json.RawMessage(`[{"id":"c1"}]`), Truncated: true}
+			return noderequest.Reply{OK: true, Result: json.RawMessage(`{"lines":[]}`), Truncated: true}
 		})
 
-		reply, err := NewRequester(connection, time.Second, time.Minute).Request(context.Background(), "workload-orchestrator-01", noderequest.Request{
-			Op:      noderequest.OpContainersList,
-			VMUUID:  "vm-uuid",
-			Payload: json.RawMessage(`{"all":true}`),
+		reply, err := NewRequester(connection, time.Second).Request(context.Background(), "workload-orchestrator-01", noderequest.Request{
+			Op:      "container.logs",
+			VMUUID:  "container-uuid",
+			Payload: json.RawMessage(`{"tail":20}`),
 		})
 		require.NoError(t, err)
 
 		assert.True(t, reply.OK)
-		assert.JSONEq(t, `[{"id":"c1"}]`, string(reply.Result))
+		assert.JSONEq(t, `{"lines":[]}`, string(reply.Result))
 		assert.True(t, reply.Truncated)
 
-		assert.Equal(t, noderequest.OpContainersList, asked.Op)
-		assert.Equal(t, "vm-uuid", asked.VMUUID)
-		assert.JSONEq(t, `{"all":true}`, string(asked.Payload))
+		assert.Equal(t, noderequest.Op("container.logs"), asked.Op)
+		assert.Equal(t, "container-uuid", asked.VMUUID)
+		assert.JSONEq(t, `{"tail":20}`, string(asked.Payload))
 	})
 
 	t.Run("a node's refusal is in the reply, not an error", func(t *testing.T) {
@@ -100,7 +100,7 @@ func TestRequester_Request(t *testing.T) {
 			return noderequest.Failed(vm.ErrNotRunning)
 		})
 
-		reply, err := NewRequester(connection, time.Second, time.Minute).Request(context.Background(), "workload-orchestrator-01", noderequest.Request{Op: noderequest.OpPing, VMUUID: "vm-uuid"})
+		reply, err := NewRequester(connection, time.Second).Request(context.Background(), "workload-orchestrator-01", noderequest.Request{Op: "vm.logs", VMUUID: "vm-uuid"})
 		require.NoError(t, err)
 
 		assert.False(t, reply.OK)
@@ -112,7 +112,7 @@ func TestRequester_Request(t *testing.T) {
 
 		connection := connect(t)
 
-		_, err := NewRequester(connection, time.Second, time.Minute).Request(context.Background(), "workload-orchestrator-09", noderequest.Request{Op: noderequest.OpPing})
+		_, err := NewRequester(connection, time.Second).Request(context.Background(), "workload-orchestrator-09", noderequest.Request{Op: "vm.logs"})
 
 		assert.ErrorIs(t, err, ErrNoNode)
 		assert.False(t, errors.Is(err, domain.ErrNotExists))
@@ -130,26 +130,10 @@ func TestRequester_Request(t *testing.T) {
 		})
 
 		started := time.Now()
-		_, err := NewRequester(connection, 50*time.Millisecond, time.Minute).Request(context.Background(), "workload-orchestrator-01", noderequest.Request{Op: noderequest.OpImagesList})
+		_, err := NewRequester(connection, 50*time.Millisecond).Request(context.Background(), "workload-orchestrator-01", noderequest.Request{Op: "container.stats"})
 
 		assert.ErrorIs(t, err, context.DeadlineExceeded)
 		assert.Less(t, time.Since(started), 400*time.Millisecond, "it is given the request timeout")
-	})
-
-	t.Run("one that may pull is given the pull timeout", func(t *testing.T) {
-		t.Parallel()
-
-		connection := connect(t)
-
-		answer(t, connection, "workload-orchestrator-01", func(noderequest.Request) noderequest.Reply {
-			time.Sleep(200 * time.Millisecond)
-
-			return noderequest.Reply{OK: true, Result: json.RawMessage(`{"id":"sha256:abc"}`)}
-		})
-
-		reply, err := NewRequester(connection, 50*time.Millisecond, 5*time.Second).Request(context.Background(), "workload-orchestrator-01", noderequest.Request{Op: noderequest.OpImagesPull})
-		require.NoError(t, err)
-		assert.True(t, reply.OK)
 	})
 
 	t.Run("a caller may give up sooner", func(t *testing.T) {
@@ -166,7 +150,7 @@ func TestRequester_Request(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 		defer cancel()
 
-		_, err := NewRequester(connection, time.Minute, time.Minute).Request(ctx, "workload-orchestrator-01", noderequest.Request{Op: noderequest.OpImagesPull})
+		_, err := NewRequester(connection, time.Minute).Request(ctx, "workload-orchestrator-01", noderequest.Request{Op: "container.logs"})
 		assert.ErrorIs(t, err, context.DeadlineExceeded)
 	})
 }

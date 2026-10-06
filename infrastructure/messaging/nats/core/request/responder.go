@@ -26,20 +26,18 @@ type ResponderOptions struct {
 	// from taking every connection into the node's VMs at once.
 	Concurrency int
 
-	// Timeout is how long answering a request may take, and PullTimeout how
-	// long one that may have to pull an image may: creating a container, or
-	// pulling one.
-	Timeout     time.Duration
-	PullTimeout time.Duration
+	// Timeout is how long answering a request may take.
+	Timeout time.Duration
 }
 
 // Responder answers the requests asked of one node.
 //
 // What a request asks is done on a context of its own rather than the
-// caller's: the caller waits only so long, and a pull it gave up on halfway is
-// still worth finishing, since the listing it asks for next shows the image.
-// So the work is bounded by its own timeout, never cut short by the caller
-// leaving, and the reply goes to nobody when nobody is waiting any more.
+// caller's: the caller waits only so long, and a command it gave up on
+// halfway, a container stopped say, is still worth finishing, since what it
+// reads next shows what came of it. So the work is bounded by its own
+// timeout, never cut short by the caller leaving, and the reply goes to
+// nobody when nobody is waiting any more.
 type Responder struct {
 	connection *nats.Conn
 	handler    noderequest.Handler
@@ -126,7 +124,7 @@ func (r *Responder) answer(message *nats.Msg) {
 			attribute.String("workload.vm", request.VMUUID),
 		)
 
-		work, cancel := context.WithTimeout(context.WithoutCancel(ctx), r.timeout(request.Op))
+		work, cancel := context.WithTimeout(context.WithoutCancel(ctx), r.options.Timeout)
 		defer cancel()
 
 		return r.handler.Handle(work, request)
@@ -150,13 +148,4 @@ func (r *Responder) answer(message *nats.Msg) {
 	if err := message.Respond(payload); err != nil {
 		r.logger.WarnContext(ctx, "a node request could not be replied to", "error", err, "op", request.Op)
 	}
-}
-
-// timeout is how long answering one operation may take.
-func (r *Responder) timeout(op noderequest.Op) time.Duration {
-	if op.MayPull() {
-		return r.options.PullTimeout
-	}
-
-	return r.options.Timeout
 }

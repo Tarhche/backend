@@ -15,7 +15,6 @@ import (
 	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
-	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	resourcesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/resources"
 )
 
@@ -159,50 +158,4 @@ func TestDecode(t *testing.T) {
 
 	_, err := records.Decode(resource.Record{Raw: kind.Raw{Kind: stackKind.Name}})
 	assert.ErrorIs(t, err, kind.ErrUnknownKind, "a stack is no vm")
-}
-
-func TestEntities(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-
-	e := records.NewEntities(recordsOf(t, vmtest.Running("01", "owner"), vmtest.Docker("02", "owner"), vmtest.Docker("03", "other")))
-
-	t.Run("a vm is read as the vm package's entity, as the parts not on the framework yet read one", func(t *testing.T) {
-		t.Parallel()
-
-		v, err := e.GetOne(ctx, "02")
-		require.NoError(t, err)
-		assert.Equal(t, "02", v.UUID)
-		assert.Equal(t, "owner", v.OwnerUUID)
-		assert.Equal(t, vm.KindDocker, v.Kind)
-		assert.Equal(t, vm.Running, v.CurrentState)
-		assert.Equal(t, vm.Resources{CPUs: 2, Memory: 2 * vmtest.GiB, Disk: 20 * vmtest.GiB}, v.Resources)
-		assert.Equal(t, vmtest.Node, v.NodeName)
-		assert.False(t, v.LastHeartbeatAt.IsZero(), "when its node last observed it")
-
-		_, err = e.GetOneByOwner(ctx, "other", "02")
-		assert.ErrorIs(t, err, domain.ErrNotExists)
-	})
-
-	t.Run("a person's of one flavor", func(t *testing.T) {
-		t.Parallel()
-
-		docker, err := e.GetAllByOwnerAndKind(ctx, "owner", vm.KindDocker)
-		require.NoError(t, err)
-		require.Len(t, docker, 1)
-		assert.Equal(t, "02", docker[0].UUID)
-	})
-
-	t.Run("anybody's, a page at a time", func(t *testing.T) {
-		t.Parallel()
-
-		first, err := e.GetAll(ctx, 0, 2)
-		require.NoError(t, err)
-		assert.Len(t, first, 2)
-
-		rest, err := e.GetAll(ctx, 2, 2)
-		require.NoError(t, err)
-		assert.Len(t, rest, 1)
-	})
 }

@@ -21,6 +21,7 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/network"
+	"github.com/docker/docker/api/types/volume"
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/docker/go-connections/nat"
 	"github.com/stretchr/testify/assert"
@@ -107,6 +108,23 @@ func (f *fakeDocker) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 				NetworkSettings: &container.NetworkSettingsSummary{Networks: map[string]*network.EndpointSettings{"shop_default": {}, "bridge": {}}},
 			},
 		})
+
+	case path == "/images/json":
+		writeJSON(rw, http.StatusOK, []image.Summary{
+			{ID: "sha256:nginx", RepoTags: []string{"nginx:alpine"}, RepoDigests: []string{"nginx@sha256:0123"}, Size: 42 << 20, Created: 1791115749},
+			{ID: "sha256:redis", RepoTags: []string{"<none>:<none>"}, RepoDigests: []string{"<none>@<none>"}, Size: 7 << 20, Created: 1791115749},
+		})
+
+	case path == "/networks" && r.Method == http.MethodGet:
+		writeJSON(rw, http.StatusOK, []network.Summary{
+			{ID: "n1", Name: "shop_default", Driver: "bridge", Scope: "local", Labels: map[string]string{docker.LabelComposeProject: "shop-abcde"}},
+			{ID: "n2", Name: "spare", Driver: "bridge", Scope: "local", Internal: true},
+		})
+
+	case path == "/volumes" && r.Method == http.MethodGet:
+		writeJSON(rw, http.StatusOK, volume.ListResponse{Volumes: []*volume.Volume{
+			{Name: "data", Driver: "local", Mountpoint: "/var/lib/docker/volumes/data/_data", CreatedAt: "2026-10-04T12:00:00Z"},
+		}})
 
 	case path == "/containers/create":
 		var request container.CreateRequest
@@ -633,4 +651,65 @@ func TestDaemons_Connections(t *testing.T) {
 		_, err = daemon.Containers(t.Context(), docker.ContainerFilter{})
 		assert.NoError(t, err)
 	})
+}
+
+// TestDaemon_Inventory holds what a heartbeat asks of a Docker VM to one
+// listing of each sort of object, and to saying which of the containers uses
+// each image, network and volume.
+func TestDaemon_Inventory(t *testing.T) {
+	t.Parallel()
+
+	fake := newFakeDocker()
+	daemons, _ := dockerVM(t, fake, nil, time.Minute)
+
+	before := fake.requests.Load()
+
+	inventory, err := daemons.Daemon("vm-1").Inventory(t.Context())
+	require.NoError(t, err)
+
+	// the client negotiates its API version once, with a ping.
+	assert.LessOrEqual(t, fake.requests.Load()-before, int32(5), "a listing of each sort of object, and no more")
+	assert.Empty(t, fake.listFilter, "every container, stopped ones too")
+
+	require.Len(t, inventory.Containers, 1)
+	assert.Equal(t, "web-1", inventory.Containers[0].Name)
+
+	assert.Equal(t, []docker.Image{
+		{ID: "sha256:nginx", Tags: []string{"nginx:alpine"}, Digests: []string{"nginx@sha256:0123"}, Size: 42 << 20, CreatedAt: time.Unix(1791115749, 0).UTC(), InUse: true},
+		{ID: "sha256:redis", Tags: []string{}, Digests: []string{}, Size: 7 << 20, CreatedAt: time.Unix(1791115749, 0).UTC()},
+	}, inventory.Images)
+
+	require.Len(t, inventory.Networks, 2)
+	assert.Equal(t, []string{"web-1"}, inventory.Networks[0].Containers)
+	assert.Empty(t, inventory.Networks[1].Containers)
+	assert.True(t, inventory.Networks[1].Internal)
+
+	require.Len(t, inventory.Volumes, 1)
+	assert.Equal(t, "data", inventory.Volumes[0].Name)
+	assert.Equal(t, time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC), inventory.Volumes[0].CreatedAt)
+}
+
+func TestInventoryOf(t *testing.T) {
+	t.Parallel()
+
+	inventory := inventoryOf(
+		[]container.Summary{
+			{ID: "c1", Names: []string{"/web"}, ImageID: "sha256:nginx", NetworkSettings: &container.NetworkSettingsSummary{Networks: map[string]*network.EndpointSettings{"backend": {}}}, Mounts: []container.MountPoint{{Type: "volume", Name: "data", Destination: "/data"}}},
+			{ID: "c2", Names: []string{"/api"}, ImageID: "sha256:api", NetworkSettings: &container.NetworkSettingsSummary{Networks: map[string]*network.EndpointSettings{"backend": {}}}},
+		},
+		[]image.Summary{{ID: "sha256:nginx"}, {ID: "sha256:unused"}, {ID: "sha256:counted", Containers: 1}},
+		[]network.Summary{{Name: "backend"}, {Name: "frontend"}},
+		[]*volume.Volume{{Name: "data"}, nil, {Name: "spare"}},
+	)
+
+	assert.True(t, inventory.Images[0].InUse, "a container was made from it")
+	assert.False(t, inventory.Images[1].InUse)
+	assert.True(t, inventory.Images[2].InUse, "docker said so itself")
+
+	assert.Equal(t, []string{"api", "web"}, inventory.Networks[0].Containers, "by their names, in order")
+	assert.Empty(t, inventory.Networks[1].Containers)
+
+	require.Len(t, inventory.Volumes, 2, "and nothing for nothing")
+	assert.True(t, inventory.Volumes[0].InUse, "a container mounts it")
+	assert.False(t, inventory.Volumes[1].InUse)
 }

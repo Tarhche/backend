@@ -2,11 +2,8 @@
 // manifests: by uuid, by slug, a person's own, and what one node holds.
 //
 // It is what the vm kind's control-plane strategy, its quota and its
-// placement read VMs with; what the kinds that live in VMs, or are taken of
-// them, read their parent with (Records.Down, as the observer's Parents); and,
-// as Entities, what the parts of the control plane not on the framework yet
-// read a VM with, as the vm package's entity: the containers and the Docker
-// passthrough.
+// placement read VMs with, and what the kinds that live in VMs, or are taken
+// of them, read their parent with (Records.Down, as the observer's Parents).
 package records
 
 import (
@@ -19,7 +16,6 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
-	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
 
 // Records reads VMs.
@@ -129,76 +125,4 @@ func (r *Records) decoded(record resource.Record, err error) (vmKind.VM, error) 
 	}
 
 	return Decode(record)
-}
-
-// Entities are the VMs the control plane keeps as the vm package's entity,
-// for the parts of the control plane not on the framework yet: the
-// containers in Docker VMs and the Docker passthrough. What a VM's node last
-// said of it is when it was last observed.
-type Entities struct {
-	records *Records
-}
-
-func NewEntities(records *Records) *Entities {
-	return &Entities{records: records}
-}
-
-// GetOne is the VM uuid names, or domain.ErrNotExists.
-func (e *Entities) GetOne(ctx context.Context, uuid string) (vm.VM, error) {
-	v, err := e.records.GetOne(ctx, uuid)
-	if err != nil {
-		return vm.VM{}, err
-	}
-
-	return vmKind.Entity(v), nil
-}
-
-// GetOneByOwner is the VM uuid names, as one of ownerUUID's own.
-func (e *Entities) GetOneByOwner(ctx context.Context, ownerUUID string, uuid string) (vm.VM, error) {
-	v, err := e.records.GetOneByOwner(ctx, ownerUUID, uuid)
-	if err != nil {
-		return vm.VM{}, err
-	}
-
-	return vmKind.Entity(v), nil
-}
-
-// GetAllByOwnerAndKind is every VM of one flavor ownerUUID has, newest
-// first: the Docker VMs a container can be put in.
-func (e *Entities) GetAllByOwnerAndKind(ctx context.Context, ownerUUID string, flavor vm.Kind) ([]vm.VM, error) {
-	vms, err := e.records.All(ctx, resource.Filter{OwnerUUID: ownerUUID, Labels: map[string]string{vmKind.LabelFlavor: string(flavor)}})
-	if err != nil {
-		return nil, err
-	}
-
-	return entities(vms), nil
-}
-
-// GetAll is a page of anybody's VMs, newest first.
-func (e *Entities) GetAll(ctx context.Context, offset uint, limit uint) ([]vm.VM, error) {
-	records, _, err := e.records.resources.GetAll(ctx, vmKind.Name, resource.Filter{}, offset, limit)
-	if err != nil {
-		return nil, err
-	}
-
-	vms := make([]vmKind.VM, 0, len(records))
-	for i := range records {
-		v, err := Decode(records[i])
-		if err != nil {
-			return nil, err
-		}
-
-		vms = append(vms, v)
-	}
-
-	return entities(vms), nil
-}
-
-func entities(vms []vmKind.VM) []vm.VM {
-	of := make([]vm.VM, len(vms))
-	for i := range vms {
-		of[i] = vmKind.Entity(vms[i])
-	}
-
-	return of
 }
