@@ -171,7 +171,7 @@ func (n *Node) Execute(_ context.Context, r Fan, action string, payload any) (ki
 	case "delete":
 		delete(n.fans, r.Metadata.UUID)
 
-		return kind.Outcome[Status]{Status: Status{Status: kind.Status{State: kind.Deleted}}, Output: "deleted"}, nil
+		return kind.Outcome[Status]{Status: Status{Status: kind.Status{State: kind.Deleted}}, Output: "delete done"}, nil
 	default:
 		return kind.Outcome[Status]{}, fmt.Errorf("a fan cannot be %s on its node", action)
 	}
@@ -179,7 +179,7 @@ func (n *Node) Execute(_ context.Context, r Fan, action string, payload any) (ki
 	r.Status.Renames = 0
 	n.fans[r.Metadata.UUID] = r
 
-	return kind.Outcome[Status]{Status: Status{Status: kind.Status{State: r.Status.State}, Speed: r.Status.Speed}, Output: action + "ed"}, nil
+	return kind.Outcome[Status]{Status: Status{Status: kind.Status{State: r.Status.State}, Speed: r.Status.Speed}, Output: action + " done"}, nil
 }
 
 func (n *Node) Query(_ context.Context, r Fan, action string, payload any) (any, error) {

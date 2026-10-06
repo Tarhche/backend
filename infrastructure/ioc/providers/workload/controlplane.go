@@ -15,6 +15,7 @@ import (
 	controlPlaneCreateContainer "github.com/khanzadimahdi/testproject/application/workload/controlplane/container/createContainer"
 	controlPlaneGetContainers "github.com/khanzadimahdi/testproject/application/workload/controlplane/container/getContainers"
 	controlPlaneRequestDocker "github.com/khanzadimahdi/testproject/application/workload/controlplane/docker/requestDocker"
+	kindsReconcile "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/reconcile"
 	controlPlaneGetNode "github.com/khanzadimahdi/testproject/application/workload/controlplane/node/getNode"
 	controlPlaneGetNodes "github.com/khanzadimahdi/testproject/application/workload/controlplane/node/getNodes"
 	controlPlaneHeartbeatNode "github.com/khanzadimahdi/testproject/application/workload/controlplane/node/heartbeatNode"
@@ -63,6 +64,7 @@ import (
 	controlPlaneUpdateVM "github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/updateVM"
 	"github.com/khanzadimahdi/testproject/domain"
 	translatorContract "github.com/khanzadimahdi/testproject/domain/translator"
+	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	nodeContract "github.com/khanzadimahdi/testproject/domain/workload/node"
 	nodeEvents "github.com/khanzadimahdi/testproject/domain/workload/node/events"
 	snapshotContract "github.com/khanzadimahdi/testproject/domain/workload/snapshot"
@@ -79,6 +81,7 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/jetstream/produceConsumer"
 	logrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/workload/logs"
 	noderepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/workload/nodes"
+	resourcerepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/workload/resources"
 	snapshotrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/workload/snapshots"
 	stackrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/workload/stacks"
 	taskrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/workload/tasks"
@@ -226,6 +229,45 @@ func controlPlaneConsoleCommand(
 		return nil, err
 	}
 
+	// every kind the control plane runs, and the generic plumbing they all
+	// run on: none is registered yet, so it serves only GET /api/kinds and
+	// changes nothing anybody does today.
+	registry, err := NewControlPlaneRegistry()
+	if err != nil {
+		return nil, err
+	}
+
+	if err := iocContainer.Bind(func() *kind.Registry[kind.ControlPlaneBinding] {
+		return registry
+	}, provider.Singleton()); err != nil {
+		return nil, err
+	}
+
+	// a kind's collection is indexed here rather than by a migration, which
+	// runs without the registry and cannot know the kinds there are.
+	resourceRepository := resourcerepository.NewRepository(database)
+	for _, d := range registry.Descriptors() {
+		if err := resourceRepository.EnsureKind(ctx, d); err != nil {
+			return nil, err
+		}
+	}
+
+	kinds := NewControlPlaneKinds(
+		registry,
+		ControlPlaneKindStores{Resources: resourceRepository, Nodes: nodeRepository},
+		request.NewRequester(natsConnection, controlPlaneConfigs.NodeRequestTimeout, controlPlaneConfigs.PullRequestTimeout()),
+		jetStreamProduceConsumer,
+		logger,
+	)
+
+	// every kind's own heartbeat, which the serve command runs beside the
+	// tasks' and the VMs'.
+	if err := iocContainer.Bind(func() *kindsReconcile.UseCase {
+		return kinds.Reconcile
+	}, provider.Singleton()); err != nil {
+		return nil, err
+	}
+
 	checkHealthUseCase := checkhealth.NewUseCase(
 		checkhealth.Dependency{Name: "database", Pinger: infraHealth.NewMongodbPinger(database)},
 		checkhealth.Dependency{Name: "messaging", Pinger: infraHealth.NewNatsPinger(natsConnection)},
@@ -248,6 +290,12 @@ func controlPlaneConsoleCommand(
 	// deployed into them, which the blog reaches on its users' behalf. Every
 	// route takes an owner, which narrows it to that person's own.
 	vms.Route(mux)
+
+	// the resource API of every kind registered, each under its own plural,
+	// and the kinds themselves.
+	if err := kinds.Route(mux); err != nil {
+		return nil, err
+	}
 
 	rateLimited, err := middleware.NewRateLimitMiddleware(mux, 600, 1*time.Minute)
 	if err != nil {
@@ -279,7 +327,7 @@ func controlPlaneConsoleCommand(
 	)
 
 	subscribers := map[string]domain.MessageHandler{
-		nodeEvents.HeartbeatName:        controlPlaneHeartbeatNode.NewHeartbeatHandler(nodeRepository, nil),
+		nodeEvents.HeartbeatName:        controlPlaneHeartbeatNode.NewHeartbeatHandler(nodeRepository, kinds.Observer),
 		taskEvents.HeartbeatName:        controlPlaneHeartbeatTask.NewHeartbeatHandler(taskRepository, jetStreamProduceConsumer, controlPlaneDeleteTaskUseCase, controlPlaneKillTaskUseCase),
 		taskEvents.TaskRunRequestedName: controlPlaneRunTask.NewTaskRunRequested(controlPlaneRunTaskUseCase, logger),
 		taskEvents.TaskCreatedName:      controlPlaneRunTask.NewTaskCreated(taskRepository, nodeRepository, taskScheduler, taskSchedule, logger),
@@ -292,6 +340,7 @@ func controlPlaneConsoleCommand(
 	}
 
 	maps.Copy(subscribers, vms.Subscribers)
+	maps.Copy(subscribers, kinds.Subscribers)
 
 	// control plane subscribers
 	if err := iocContainer.Bind(func() map[string]domain.MessageHandler {
