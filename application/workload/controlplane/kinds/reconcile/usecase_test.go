@@ -445,6 +445,75 @@ func TestUseCase_Execute(t *testing.T) {
 	})
 }
 
+// TestUseCase_Execute_stateKeptInTheControlPlane holds a kind whose state
+// the control plane keeps, as a snapshot's, to its node speaking only for the
+// command it was sent: a resource waiting on that command is lost with the
+// node, and one at rest is not, however long its node has been silent.
+func TestUseCase_Execute_stateKeptInTheControlPlane(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	// a fan whose state is its record's, as a snapshot's is.
+	ledger := kindstest.Descriptor()
+	ledger.StateBy = kind.OnControlPlane
+
+	for i := range ledger.Actions {
+		if ledger.Actions[i].Name == "state" {
+			ledger.Actions[i].Runs = kind.OnControlPlane
+		}
+	}
+
+	for name, tt := range map[string]struct {
+		record resource.Record
+		state  kind.State
+		reason string
+	}{
+		"one waiting on a command its silent node will not answer is lost with it": {
+			record: fan(kindstest.Starting, kindstest.Running, "node-2", pending("start", time.Minute, 1)),
+			state:  kind.Failed, reason: reconcile.ReasonNodeLost,
+		},
+		"and one at rest is not: the node does not speak for it": {
+			record: fan(kindstest.Running, kindstest.Running, "node-2"),
+			state:  kindstest.Running,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			resources := resourcesMemory.NewRepository()
+
+			_, err := resources.Create(ctx, tt.record)
+			require.NoError(t, err)
+
+			registry := kind.NewRegistry[kind.ControlPlaneBinding]()
+			require.NoError(t, registry.Register(kind.BindControlPlane[kindstest.Spec, kindstest.Status](ledger, &kindstest.Fans{Node: kindstest.NodeName})))
+
+			nodes := nodesMemory.NewRepository(
+				node.Node{Name: kindstest.NodeName, LastHeartbeatAt: now.Add(-time.Second)},
+				node.Node{Name: "node-2", LastHeartbeatAt: now.Add(-time.Hour)},
+			)
+
+			clock := kindstest.NewClock()
+			clock.Advance(time.Hour)
+
+			producer := &messagingMock.Recorder{}
+			dispatcher := dispatch.New(resources, producer, waiters.New(), clock.Now)
+
+			require.NoError(t, reconcile.NewUseCase(registry, resources, nodes, dispatcher, slog.New(slog.DiscardHandler), config()).Execute(ctx))
+
+			stored, err := resources.GetOne(ctx, kindstest.Kind, "fan-uuid")
+			require.NoError(t, err)
+
+			fan := kindstest.Typed(stored)
+			assert.Equal(t, tt.state, fan.Status.State, "state")
+			assert.Equal(t, tt.reason, fan.Status.Reason, "reason")
+			assert.Equal(t, kindstest.Running, fan.Status.Expected, "it is still to be what it was")
+			assert.Empty(t, producer.Messages(), "nothing is asked of a silent node")
+		})
+	}
+}
+
 func TestDefaultConfig(t *testing.T) {
 	t.Parallel()
 

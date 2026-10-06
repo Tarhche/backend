@@ -2,11 +2,11 @@
 // manifests: by uuid, by slug, a person's own, and what one node holds.
 //
 // It is what the vm kind's control-plane strategy, its quota and its
-// placement read VMs with; what the kinds that live in VMs read their parent
-// with (Records.Down, as the observer's Parents); and, as Entities, what the
-// parts of the control plane not on the framework yet read a VM with, as the
-// vm package's entity: the containers, the Docker passthrough and the
-// snapshots.
+// placement read VMs with; what the kinds that live in VMs, or are taken of
+// them, read their parent with (Records.Down, as the observer's Parents); and,
+// as Entities, what the parts of the control plane not on the framework yet
+// read a VM with, as the vm package's entity: the containers and the Docker
+// passthrough.
 package records
 
 import (
@@ -133,8 +133,8 @@ func (r *Records) decoded(record resource.Record, err error) (vmKind.VM, error) 
 
 // Entities are the VMs the control plane keeps as the vm package's entity,
 // for the parts of the control plane not on the framework yet: the
-// containers in Docker VMs, the Docker passthrough and the snapshots. What a
-// VM's node last said of it is when it was last observed.
+// containers in Docker VMs and the Docker passthrough. What a VM's node last
+// said of it is when it was last observed.
 type Entities struct {
 	records *Records
 }

@@ -14,10 +14,10 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/slugs"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
+	snapshotKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/snapshot"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/node"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
-	"github.com/khanzadimahdi/testproject/domain/workload/snapshot"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
 
@@ -279,14 +279,11 @@ func TestVMs_Admit(t *testing.T) {
 	t.Run("a vm made from a snapshot is the snapshot's flavor and image, with room for its disk", func(t *testing.T) {
 		t.Parallel()
 
-		w := vmtest.New(vmtest.WithSnapshots(snapshot.Snapshot{
-			UUID:      "snapshot-uuid",
-			OwnerUUID: "owner-uuid",
-			Kind:      vm.KindDocker,
-			Image:     "docker:28-dind",
-			Disk:      30 * vmtest.GiB,
-			State:     snapshot.Ready,
-		}))
+		w := vmtest.New(vmtest.WithSnapshots(vmtest.Snapshot("snapshot-uuid", "owner-uuid", func(s *snapshotKind.Snapshot) {
+			s.Status.Flavor = vm.KindDocker
+			s.Status.Image = "docker:28-dind"
+			s.Status.Disk = 30 * vmtest.GiB
+		})))
 
 		admitted, invalid, err := w.VMs.Admit(ctx, asked(func(v *vmKind.VM) {
 			v.Spec.Flavor = ""
@@ -303,20 +300,20 @@ func TestVMs_Admit(t *testing.T) {
 	})
 
 	for name, tt := range map[string]struct {
-		snapshot snapshot.Snapshot
+		snapshot snapshotKind.Snapshot
 		flavor   vmKind.Flavor
 		want     domain.ValidationErrors
 	}{
 		"one that is not stored yet": {
-			snapshot: snapshot.Snapshot{UUID: "snapshot-uuid", OwnerUUID: "owner-uuid", Kind: vm.KindMachine, State: snapshot.Creating},
+			snapshot: vmtest.Snapshot("snapshot-uuid", "owner-uuid", func(s *snapshotKind.Snapshot) { s.Status.State = snapshotKind.Creating }),
 			want:     domain.ValidationErrors{"snapshot_uuid": "snapshot_not_ready"},
 		},
 		"somebody else's": {
-			snapshot: snapshot.Snapshot{UUID: "snapshot-uuid", OwnerUUID: "other", Kind: vm.KindMachine, State: snapshot.Ready},
+			snapshot: vmtest.Snapshot("snapshot-uuid", "other"),
 			want:     domain.ValidationErrors{"snapshot_uuid": "not_found"},
 		},
 		"one of another flavor": {
-			snapshot: snapshot.Snapshot{UUID: "snapshot-uuid", OwnerUUID: "owner-uuid", Kind: vm.KindDocker, State: snapshot.Ready},
+			snapshot: vmtest.Snapshot("snapshot-uuid", "owner-uuid", func(s *snapshotKind.Snapshot) { s.Status.Flavor = vm.KindDocker }),
 			flavor:   vmKind.FlavorMachine,
 			want:     domain.ValidationErrors{"kind": "kind_mismatch"},
 		},
@@ -601,13 +598,11 @@ func TestVMs_Prepare(t *testing.T) {
 
 	ctx := context.Background()
 
-	ready := snapshot.Snapshot{
-		UUID:      "snapshot-uuid",
-		OwnerUUID: "owner",
-		Kind:      vm.KindMachine,
-		Disk:      5 * vmtest.GiB,
-		Engine:    "microsandbox/0.7.5",
-		State:     snapshot.Ready,
+	ready := vmtest.Snapshot("snapshot-uuid", "owner")
+
+	// changed is ready, as change leaves it.
+	changed := func(change func(s *snapshotKind.Snapshot)) snapshotKind.Snapshot {
+		return vmtest.Snapshot("snapshot-uuid", "owner", change)
 	}
 
 	t.Run("a restore from a snapshot of the vm's owner, flavor and engine, that its disk has room for, is sent as it is", func(t *testing.T) {
@@ -622,32 +617,32 @@ func TestVMs_Prepare(t *testing.T) {
 	})
 
 	for name, tt := range map[string]struct {
-		snapshot snapshot.Snapshot
+		snapshot snapshotKind.Snapshot
 		nodes    []node.Node
 		want     domain.ValidationErrors
 	}{
 		"one nobody has": {
-			snapshot: snapshot.Snapshot{UUID: "another"},
+			snapshot: vmtest.Snapshot("another", "owner"),
 			want:     domain.ValidationErrors{"snapshot_uuid": "not_found"},
 		},
 		"somebody else's": {
-			snapshot: func() snapshot.Snapshot { s := ready; s.OwnerUUID = "other"; return s }(),
+			snapshot: changed(func(s *snapshotKind.Snapshot) { s.Metadata.OwnerUUID = "other" }),
 			want:     domain.ValidationErrors{"snapshot_uuid": "not_found"},
 		},
 		"one still being taken": {
-			snapshot: func() snapshot.Snapshot { s := ready; s.State = snapshot.Creating; return s }(),
+			snapshot: changed(func(s *snapshotKind.Snapshot) { s.Status.State = snapshotKind.Creating }),
 			want:     domain.ValidationErrors{"snapshot_uuid": "snapshot_not_ready"},
 		},
 		"one of another flavor": {
-			snapshot: func() snapshot.Snapshot { s := ready; s.Kind = vm.KindDocker; return s }(),
+			snapshot: changed(func(s *snapshotKind.Snapshot) { s.Status.Flavor = vm.KindDocker }),
 			want:     domain.ValidationErrors{"snapshot_uuid": "kind_mismatch"},
 		},
 		"one larger than its disk": {
-			snapshot: func() snapshot.Snapshot { s := ready; s.Disk = 11 * vmtest.GiB; return s }(),
+			snapshot: changed(func(s *snapshotKind.Snapshot) { s.Status.Disk = 11 * vmtest.GiB }),
 			want:     domain.ValidationErrors{"snapshot_uuid": "disk_too_small"},
 		},
 		"one written by another engine": {
-			snapshot: func() snapshot.Snapshot { s := ready; s.Engine = "firecracker/1.9"; return s }(),
+			snapshot: changed(func(s *snapshotKind.Snapshot) { s.Status.Engine = "firecracker/1.9" }),
 			want:     domain.ValidationErrors{"snapshot_uuid": "engine_mismatch"},
 		},
 		"any, onto a vm whose node has gone quiet": {
@@ -679,8 +674,7 @@ func TestVMs_Prepare(t *testing.T) {
 		quiet.Capacity.Engine = ""
 
 		v := vmtest.Stopped("01", "owner")
-		taken := ready
-		taken.Engine = "firecracker/1.9"
+		taken := changed(func(s *snapshotKind.Snapshot) { s.Status.Engine = "firecracker/1.9" })
 
 		_, refused, err := vmtest.New(vmtest.WithNodes(quiet), vmtest.WithVMs(v), vmtest.WithSnapshots(taken)).VMs.Prepare(ctx, v, vmKind.ActionRestore, vmKind.RestorePayload{SnapshotUUID: "snapshot-uuid"})
 		require.NoError(t, err)

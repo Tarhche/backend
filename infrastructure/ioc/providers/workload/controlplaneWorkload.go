@@ -14,6 +14,7 @@ import (
 	controlPlaneRequestDocker "github.com/khanzadimahdi/testproject/application/workload/controlplane/docker/requestDocker"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/observe"
 	kindsReconcile "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/reconcile"
+	controlPlaneSnapshots "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/snapshot"
 	controlPlaneStacks "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/stack"
 	controlPlaneVMs "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/dockervm"
@@ -22,21 +23,14 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/records"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/runs"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/slugs"
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/snapshot/archive"
-	controlPlaneCreateSnapshot "github.com/khanzadimahdi/testproject/application/workload/controlplane/snapshot/createSnapshot"
-	controlPlaneDeleteSnapshot "github.com/khanzadimahdi/testproject/application/workload/controlplane/snapshot/deleteSnapshot"
-	controlPlaneGetSnapshot "github.com/khanzadimahdi/testproject/application/workload/controlplane/snapshot/getSnapshot"
-	controlPlaneGetSnapshots "github.com/khanzadimahdi/testproject/application/workload/controlplane/snapshot/getSnapshots"
-	controlPlaneRenameSnapshot "github.com/khanzadimahdi/testproject/application/workload/controlplane/snapshot/renameSnapshot"
 	controlPlaneDeleteTask "github.com/khanzadimahdi/testproject/application/workload/controlplane/task/deleteTask"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
+	snapshotKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/snapshot"
 	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	nodeContract "github.com/khanzadimahdi/testproject/domain/workload/node"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
-	snapshotContract "github.com/khanzadimahdi/testproject/domain/workload/snapshot"
-	snapshotEvents "github.com/khanzadimahdi/testproject/domain/workload/snapshot/events"
 	taskContract "github.com/khanzadimahdi/testproject/domain/workload/task"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/core/request"
@@ -44,28 +38,26 @@ import (
 	infraValidator "github.com/khanzadimahdi/testproject/infrastructure/validator"
 	controlPlaneContainerAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/controlplane/api/container"
 	controlPlaneDockerAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/controlplane/api/docker"
-	controlPlaneSnapshotAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/controlplane/api/snapshot"
 )
 
 // ControlPlaneStores are what the control plane keeps everything it runs
-// in: the resources of every kind, VMs and stacks among them, the snapshots,
-// the nodes it places them on, and the tasks, which share the ingress's
+// in: the resources of every kind, VMs, snapshots and stacks among them, the
+// nodes it places them on, and the tasks, which share the ingress's
 // hostnames with VMs and are among anybody's VMs as the code runner's runs,
 // and whose logs go with a run taken away from among them. Archives is the
 // bucket a snapshot's archive is taken out of when the snapshot goes, and may
 // be nil: with no bucket configured, an archive is left where it is.
 type ControlPlaneStores struct {
 	Resources resource.Repository
-	Snapshots snapshotContract.Repository
 	Nodes     nodeContract.Repository
 	Tasks     taskContract.Repository
 	TaskLogs  taskContract.LogRepository
-	Archives  snapshotContract.Store
+	Archives  snapshotKind.Store
 }
 
 // ControlPlaneWorkload is what the control plane runs of the workload but
-// the code runner's tasks: every kind it runs, VMs and stacks, on the
-// framework, and beside them what is not a kind yet, a VM's snapshots, the
+// the code runner's tasks: every kind it runs, VMs, their snapshots and
+// stacks, on the framework, and beside them what is not a kind yet, the
 // containers in Docker VMs and the Docker passthrough.
 type ControlPlaneWorkload struct {
 	// Registry is every kind the control plane runs.
@@ -76,8 +68,7 @@ type ControlPlaneWorkload struct {
 	// routes are taken already.
 	Route func(mux *http.ServeMux) error
 
-	// Subscribers hear the results of every kind's commands, and what nodes
-	// say of the snapshots they take.
+	// Subscribers hear the results of every kind's commands.
 	Subscribers map[string]domain.MessageHandler
 
 	// Observer is what the node heartbeat consumer hands what it heard to,
@@ -141,9 +132,20 @@ func NewControlPlaneWorkload(
 	// a Docker VM made for a container or a stack is admitted as any VM is.
 	chooser := dockervm.NewChooser(vms, kinds.Resources, kinds.Admit, dockerDefaults)
 
+	// a snapshot is taken of one of its owner's VMs, by the node holding it,
+	// and is the kind's own to say a VM can be restored or made from.
+	snapshots := controlPlaneSnapshots.New(controlPlaneSnapshots.Dependencies{
+		VMs:       vms,
+		Nodes:     vmPlacement,
+		Resources: kinds.Resources,
+		Archives:  stores.Archives,
+		UserMax:   controlPlaneConfigs.SnapshotUserMax,
+		Logger:    logger,
+	})
+
 	if err := registerControlPlaneKinds(registry, controlPlaneVMs.Dependencies{
 		Records:   vms,
-		Snapshots: stores.Snapshots,
+		Snapshots: snapshots,
 		Nodes:     stores.Nodes,
 		Quota:     quota.New(vms, vmLimits(controlPlaneConfigs)),
 		Placement: vmPlacement,
@@ -153,7 +155,7 @@ func NewControlPlaneWorkload(
 		},
 		Images: controlPlaneVMs.Images{Machine: controlPlaneConfigs.VMDefaultImage, Docker: controlPlaneConfigs.VMDockerImage},
 		Extras: codeRunner,
-	}, controlPlaneStacks.New(vms, chooser, slugs.By(func(ctx context.Context, slug string) (resource.Record, error) {
+	}, snapshots, controlPlaneStacks.New(vms, chooser, slugs.By(func(ctx context.Context, slug string) (resource.Record, error) {
 		return stores.Resources.GetOneBySlug(ctx, stackKind.Name, slug)
 	}))); err != nil {
 		return nil, err
@@ -161,36 +163,23 @@ func NewControlPlaneWorkload(
 
 	// what is not a kind yet reads VMs as the vm package has them.
 	entities := records.NewEntities(vms)
-	remover := archive.NewRemover(stores.Archives, logger)
 
 	route := func(mux *http.ServeMux) error {
-		mux.Handle("GET /api/snapshots", controlPlaneSnapshotAPI.NewIndexHandler(controlPlaneGetSnapshots.NewUseCase(stores.Snapshots)))
-		mux.Handle("POST /api/vms/{uuid}/snapshots", controlPlaneSnapshotAPI.NewCreateHandler(controlPlaneCreateSnapshot.NewUseCase(entities, codeRunner, stores.Snapshots, vmPlacement, producer, codes, controlPlaneConfigs.SnapshotUserMax)))
-		mux.Handle("GET /api/snapshots/{uuid}", controlPlaneSnapshotAPI.NewShowHandler(controlPlaneGetSnapshot.NewUseCase(stores.Snapshots)))
-		mux.Handle("PATCH /api/snapshots/{uuid}", controlPlaneSnapshotAPI.NewRenameHandler(controlPlaneRenameSnapshot.NewUseCase(stores.Snapshots, codes)))
-		mux.Handle("DELETE /api/snapshots/{uuid}", controlPlaneSnapshotAPI.NewDeleteHandler(controlPlaneDeleteSnapshot.NewUseCase(stores.Snapshots, entities, vmPlacement, remover, codes)))
-
 		mux.Handle("POST /api/vms/{uuid}/docker/{op}", controlPlaneDockerAPI.NewRequestHandler(controlPlaneRequestDocker.NewUseCase(entities, requester, codes)))
 
 		mux.Handle("GET /api/containers", controlPlaneContainerAPI.NewIndexHandler(controlPlaneGetContainers.NewUseCase(entities, requester, logger)))
 		mux.Handle("POST /api/containers", controlPlaneContainerAPI.NewCreateHandler(controlPlaneCreateContainer.NewUseCase(entities, chooser, requester, codes)))
 
 		// the resource API of every kind registered, each under its own
-		// plural, VMs and stacks among them, and the kinds themselves.
+		// plural, VMs, snapshots and stacks among them, and the kinds
+		// themselves.
 		return kinds.Route(mux)
 	}
-
-	subscribers := map[string]domain.MessageHandler{
-		snapshotEvents.SnapshotCompletedName: controlPlaneCreateSnapshot.NewSnapshotCompleted(stores.Snapshots, remover, logger),
-		snapshotEvents.SnapshotFailedName:    controlPlaneCreateSnapshot.NewSnapshotFailed(stores.Snapshots, remover, logger),
-	}
-
-	maps.Copy(subscribers, kinds.Subscribers)
 
 	return &ControlPlaneWorkload{
 		Registry:    registry,
 		Route:       route,
-		Subscribers: subscribers,
+		Subscribers: maps.Clone(kinds.Subscribers),
 		Observer:    kinds.Observer,
 		Reconcile:   kinds.Reconcile,
 	}, nil
@@ -200,11 +189,13 @@ func NewControlPlaneWorkload(
 // each through its control-plane strategy: the one place a kind is added to
 // the control plane, and what its resource API, its consumers and its
 // reconcile loop all run over. A VM is admitted, placed and held to its
-// owner's quota as vms says; a stack is admitted into the Docker VM stacks
-// chooses, or makes, which it lives in.
-func registerControlPlaneKinds(registry *kind.Registry[kind.ControlPlaneBinding], vms controlPlaneVMs.Dependencies, stacks *controlPlaneStacks.Stacks) error {
+// owner's quota as vms says; a snapshot is taken of one of its owner's VMs
+// and held to their quota of snapshots, as snapshots says; a stack is
+// admitted into the Docker VM stacks chooses, or makes, which it lives in.
+func registerControlPlaneKinds(registry *kind.Registry[kind.ControlPlaneBinding], vms controlPlaneVMs.Dependencies, snapshots *controlPlaneSnapshots.Snapshots, stacks *controlPlaneStacks.Stacks) error {
 	for _, binding := range []kind.ControlPlaneBinding{
 		kind.BindControlPlane[vmKind.Spec, vmKind.Status](vmKind.Descriptor(), controlPlaneVMs.New(vms)),
+		kind.BindControlPlane[snapshotKind.Spec, snapshotKind.Status](snapshotKind.Descriptor(), snapshots),
 		kind.BindControlPlane[stackKind.Spec, stackKind.Status](stackKind.Descriptor(), stacks),
 	} {
 		if err := registry.Register(binding); err != nil {

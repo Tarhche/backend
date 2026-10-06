@@ -16,7 +16,9 @@
 //   - one whose node fell silent is failed as node_lost, unless it ended
 //     already: a stopped one stays stopped. Nothing is asked of it, since
 //     nothing can be, and what it is expected to be stays as it was, so it is
-//     brought back once its node is;
+//     brought back once its node is. Of a kind whose state the control plane
+//     keeps, such as a snapshot, the node is only what a command was sent to:
+//     its silence fails one waiting on that command, and nothing else;
 //   - one in flight is waited on, until its command has been unanswered for
 //     longer than it takes, and then the command is sent again, as another
 //     try. One in flight with no command to wait on, which nothing will move
@@ -222,7 +224,9 @@ func (uc *UseCase) look(ctx context.Context, binding kind.ControlPlaneBinding, r
 		return err
 	}
 
-	silent := len(r.Metadata.Node) > 0 && d.StateBy == kind.OnNode && !alive[r.Metadata.Node]
+	// a node speaks for what it holds, and, of a kind whose state is the
+	// control plane's, only for the command it was sent and has not answered.
+	silent := len(r.Metadata.Node) > 0 && !alive[r.Metadata.Node] && (d.StateBy == kind.OnNode || r.Pending != nil)
 
 	switch {
 	case common.State == kind.Deleted:

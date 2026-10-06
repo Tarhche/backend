@@ -21,11 +21,8 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/core/request"
 	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/jetstream/produceConsumer"
 	storageMemory "github.com/khanzadimahdi/testproject/infrastructure/storage/memory"
-	"github.com/khanzadimahdi/testproject/infrastructure/translator"
-	"github.com/khanzadimahdi/testproject/infrastructure/validator"
 	infraNode "github.com/khanzadimahdi/testproject/infrastructure/workload/node"
 	"github.com/khanzadimahdi/testproject/infrastructure/workload/vm/memory"
-	"github.com/khanzadimahdi/testproject/resources/translation"
 )
 
 // A node runs every kind registered on it with the same code, whatever the
@@ -191,7 +188,6 @@ type produceConsumerOf = interface {
 func TestKinds(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	logger := slog.New(slog.DiscardHandler)
-	english := translator.New(translation.Translations, translation.EN)
 
 	natsURL := natsServer(t)
 
@@ -211,14 +207,13 @@ func TestKinds(t *testing.T) {
 	engine := memory.New()
 
 	node, err := providers.NewOrchestratorWorkload(providers.OrchestratorDependencies{
-		NATS:      nodeConnection,
-		Engine:    engine,
-		Archives:  storageMemory.New(),
-		Producer:  nodeMessages,
-		Validator: validator.New(english),
-		Configs:   nodeConfigs,
-		NodeName:  nodeName,
-		Logger:    logger,
+		NATS:     nodeConnection,
+		Engine:   engine,
+		Archives: storageMemory.New(),
+		Producer: nodeMessages,
+		Configs:  nodeConfigs,
+		NodeName: nodeName,
+		Logger:   logger,
 	})
 	require.NoError(t, err)
 

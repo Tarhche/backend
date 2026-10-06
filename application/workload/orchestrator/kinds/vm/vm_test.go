@@ -16,10 +16,10 @@ import (
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
+	snapshotKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/snapshot"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
-	"github.com/khanzadimahdi/testproject/domain/workload/snapshot"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	storageMemory "github.com/khanzadimahdi/testproject/infrastructure/storage/memory"
 	"github.com/khanzadimahdi/testproject/infrastructure/workload/vm/memory"
@@ -178,7 +178,7 @@ func (f *fixture) snapshotOf(t *testing.T, snapshotUUID string, disk string) {
 	_, err := f.engine.Snapshot(context.Background(), source.Metadata.UUID, &archive)
 	require.NoError(t, err)
 
-	require.NoError(t, f.archives.Store(context.Background(), snapshot.ObjectKey(snapshotUUID), &archive, int64(archive.Len())))
+	require.NoError(t, f.archives.Store(context.Background(), snapshotKind.ObjectKey(snapshotUUID), &archive, int64(archive.Len())))
 	require.NoError(t, f.engine.Delete(context.Background(), source.Metadata.UUID))
 }
 

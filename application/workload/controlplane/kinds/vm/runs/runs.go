@@ -35,8 +35,8 @@ import (
 
 const (
 	// CodeRefused is what a run is refused with when it is asked to be
-	// started, restarted, changed, restored or snapshotted, which only a VM
-	// somebody asked for can be.
+	// started, restarted, changed or restored, which only a VM somebody asked
+	// for can be.
 	CodeRefused = "managed_by_code_runner"
 
 	// batch is how many runs are read at a time.
@@ -147,26 +147,6 @@ func (r *Runs) Query(ctx context.Context, run kind.Raw, action string, payload [
 	answer, err := json.Marshal(Logs(&t, options))
 
 	return answer, nil, err
-}
-
-// Refused is what a VM's use case not on the framework yet answers with when
-// the VM it was asked about could not be read, err being what reading it came
-// to: a uuid that names a run, asked of by whoever may see anybody's, is
-// refused as CodeRefused, and anything else is handed back as the error it
-// was. A run is nobody's own, so it is not there for somebody asking after
-// their own.
-func (r *Runs) Refused(ctx context.Context, ownerUUID string, uuid string, err error) (domain.ValidationErrors, error) {
-	if !errors.Is(err, domain.ErrNotExists) || len(ownerUUID) > 0 {
-		return nil, err
-	}
-
-	if _, runErr := r.task(ctx, uuid); errors.Is(runErr, domain.ErrNotExists) {
-		return nil, err
-	} else if runErr != nil {
-		return nil, runErr
-	}
-
-	return refusal(), nil
 }
 
 // task is the run uuid names, as its task.

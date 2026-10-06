@@ -46,10 +46,10 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/orchestrator/internal/reply"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
+	snapshotKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/snapshot"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
-	"github.com/khanzadimahdi/testproject/domain/workload/snapshot"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
 
@@ -91,7 +91,7 @@ type Gauges interface {
 // Node is the vm kind's node strategy.
 type Node struct {
 	engine      vm.Engine
-	archives    snapshot.Store
+	archives    snapshotKind.Store
 	connections Forgetter
 	gauges      Gauges
 	nodeName    string
@@ -116,7 +116,7 @@ var (
 // New is the strategy that runs VMs on engine, restores them from what
 // archives keeps, lets go of what connections keeps open into them, and
 // publishes what nodeName holds to gauges.
-func New(engine vm.Engine, archives snapshot.Store, connections Forgetter, gauges Gauges, nodeName string) *Node {
+func New(engine vm.Engine, archives snapshotKind.Store, connections Forgetter, gauges Gauges, nodeName string) *Node {
 	return &Node{
 		engine:      engine,
 		archives:    archives,
@@ -297,7 +297,7 @@ func (n *Node) delete(ctx context.Context, v vmKind.VM) error {
 // archive is read from where snapshots are stored and streamed into the
 // engine as it arrives, so it is never held whole.
 func (n *Node) restored(ctx context.Context, spec vm.Spec, snapshotUUID string) error {
-	archive, err := n.archives.Read(ctx, snapshot.ObjectKey(snapshotUUID))
+	archive, err := n.archives.Read(ctx, snapshotKind.ObjectKey(snapshotUUID))
 	if err != nil {
 		return fmt.Errorf("the snapshot cannot be read: %w", err)
 	}
