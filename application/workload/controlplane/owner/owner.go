@@ -6,7 +6,11 @@
 // concerned, so it reads exactly as something that is not there at all.
 package owner
 
-import "context"
+import (
+	"context"
+
+	"github.com/khanzadimahdi/testproject/domain/workload/resource"
+)
 
 // Repository is what keeps records that belong to somebody.
 type Repository[T any] interface {
@@ -22,4 +26,20 @@ func One[T any](ctx context.Context, repository Repository[T], ownerUUID string,
 	}
 
 	return repository.GetOne(ctx, uuid)
+}
+
+// Resources are what keeps the resources of every kind.
+type Resources interface {
+	GetOne(ctx context.Context, kindName string, uuid string) (resource.Record, error)
+	GetOneByOwner(ctx context.Context, kindName string, ownerUUID string, uuid string) (resource.Record, error)
+}
+
+// Resource is the resource of the kind uuid names, as ownerUUID's own, or as
+// anybody's when ownerUUID is empty.
+func Resource(ctx context.Context, resources Resources, kindName string, ownerUUID string, uuid string) (resource.Record, error) {
+	if len(ownerUUID) > 0 {
+		return resources.GetOneByOwner(ctx, kindName, ownerUUID, uuid)
+	}
+
+	return resources.GetOne(ctx, kindName, uuid)
 }

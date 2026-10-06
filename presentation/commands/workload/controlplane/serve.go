@@ -10,6 +10,7 @@ import (
 	"github.com/danceable/console"
 	"github.com/danceable/provider"
 
+	kindsReconcile "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/reconcile"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/task/reconcile"
 	vmReconcile "github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/reconcile"
 	"github.com/khanzadimahdi/testproject/domain"
@@ -38,9 +39,10 @@ type ServeCommand struct {
 	// reconcile is the control plane's own heartbeat: one pass over the tasks,
 	// asking the nodes for whatever would make each of them what it is meant
 	// to be. reconcileVMs is the same for the VMs, and the stacks waiting on
-	// them.
-	reconcile    *reconcile.UseCase
-	reconcileVMs *vmReconcile.UseCase
+	// them, and reconcileKinds for the resources of every kind registered.
+	reconcile      *reconcile.UseCase
+	reconcileVMs   *vmReconcile.UseCase
+	reconcileKinds *kindsReconcile.UseCase
 
 	logger *slog.Logger
 }
@@ -124,6 +126,10 @@ func (c *ServeCommand) Boot(ctx context.Context, task provider.Container) error 
 		return err
 	}
 
+	if err := task.Resolve(&c.reconcileKinds); err != nil {
+		return err
+	}
+
 	return task.Resolve(&c.consumers, provider.ResolveName(workload.ControlPlaneSubscribers))
 }
 
@@ -177,8 +183,9 @@ func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 	return console.ExitSuccess
 }
 
-// heartbeat keeps the tasks and the VMs as they were asked to be, for as long
-// as the control plane is up. One failing is no reason to skip the other.
+// heartbeat keeps the tasks, the VMs and the resources of every kind as they
+// were asked to be, for as long as the control plane is up. One failing is no
+// reason to skip the others.
 func (c *ServeCommand) heartbeat(ctx context.Context) {
 	ticker := time.NewTicker(heartbeatInterval)
 	defer ticker.Stop()
@@ -195,6 +202,12 @@ func (c *ServeCommand) heartbeat(ctx context.Context) {
 			if c.reconcileVMs != nil {
 				if err := c.reconcileVMs.Execute(ctx); err != nil {
 					c.logger.ErrorContext(ctx, "the vms' heartbeat failed", "error", err)
+				}
+			}
+
+			if c.reconcileKinds != nil {
+				if err := c.reconcileKinds.Execute(ctx); err != nil {
+					c.logger.ErrorContext(ctx, "the kinds' heartbeat failed", "error", err)
 				}
 			}
 
