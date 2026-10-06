@@ -52,6 +52,7 @@ func newTerminalNode(t *testing.T) *terminalNode {
 	mux := http.NewServeMux()
 	mux.Handle("GET /api/tasks/{uuid}/attach", echo)
 	mux.Handle("GET /api/vms/{uuid}/attach", echo)
+	mux.Handle("GET /api/lamps/{uuid}/attach", echo)
 
 	n.server = httptest.NewServer(mux)
 	t.Cleanup(n.server.Close)
