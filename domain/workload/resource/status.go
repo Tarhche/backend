@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"reflect"
 	"time"
 
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
@@ -33,6 +34,75 @@ var commonFields = func() map[string]bool {
 
 	return names
 }()
+
+// observedAtField is the name of the field that says when a status was
+// observed.
+var observedAtField = func() string {
+	moment := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	without, err := json.Marshal(kind.Status{})
+	if err != nil {
+		panic(err)
+	}
+
+	with, err := json.Marshal(kind.Status{ObservedAt: moment})
+	if err != nil {
+		panic(err)
+	}
+
+	var before, after map[string]json.RawMessage
+	if err := json.Unmarshal(without, &before); err != nil {
+		panic(err)
+	}
+
+	if err := json.Unmarshal(with, &after); err != nil {
+		panic(err)
+	}
+
+	for name := range after {
+		if _, there := before[name]; !there {
+			return name
+		}
+	}
+
+	panic("a status does not say when it was observed")
+}()
+
+// Differs reports whether two statuses say different things, leaving aside
+// when each was observed: a node that says again what it said before changes
+// nothing worth writing down.
+func Differs(a json.RawMessage, b json.RawMessage) bool {
+	read := func(status json.RawMessage) (map[string]any, bool) {
+		fields := make(map[string]any)
+
+		if absent(status) {
+			return fields, true
+		}
+
+		decoder := json.NewDecoder(bytes.NewReader(status))
+		decoder.UseNumber()
+
+		if err := decoder.Decode(&fields); err != nil {
+			return nil, false
+		}
+
+		delete(fields, observedAtField)
+
+		return fields, true
+	}
+
+	first, readable := read(a)
+	if !readable {
+		return true
+	}
+
+	second, readable := read(b)
+	if !readable {
+		return true
+	}
+
+	return !reflect.DeepEqual(first, second)
+}
 
 // Common reads the part of a kind's status every kind shares, which is the
 // same whatever the kind: its own fields are left unread. No status at all is

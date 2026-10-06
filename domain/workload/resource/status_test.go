@@ -199,3 +199,27 @@ func TestRecord(t *testing.T) {
 		assert.False(t, (*Pending)(nil).Answers("first"))
 	})
 }
+
+func TestDiffers(t *testing.T) {
+	t.Parallel()
+
+	for name, tt := range map[string]struct {
+		a, b string
+		want bool
+	}{
+		"a status said again is no change":                  {a: `{"state":"running","speed":1}`, b: `{"speed":1,"state":"running"}`, want: false},
+		"nor is it when only when it was observed moved on": {a: `{"state":"running","observed_at":"2026-10-06T12:00:00Z"}`, b: `{"state":"running","observed_at":"2026-10-06T12:00:01Z"}`, want: false},
+		"a state that moved is a change":                    {a: `{"state":"running"}`, b: `{"state":"stopped"}`, want: true},
+		"and so is a kind's own field":                      {a: `{"state":"running","speed":1}`, b: `{"state":"running","speed":2}`, want: true},
+		"and one that is new":                               {a: `{"state":"running"}`, b: `{"state":"running","reason":"why"}`, want: true},
+		"nothing at all is no status":                       {a: ``, b: `null`, want: false},
+		"and what cannot be read is a change":               {a: `{"state":"running"}`, b: `[1]`, want: true},
+		"numbers are numbers, however large":                {a: `{"bytes":9007199254740993}`, b: `{"bytes":9007199254740992}`, want: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, tt.want, Differs(json.RawMessage(tt.a), json.RawMessage(tt.b)))
+		})
+	}
+}
