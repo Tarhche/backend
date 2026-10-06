@@ -33,10 +33,12 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/docker"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	containerKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/container"
+	networkKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/network"
 	snapshotKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/snapshot"
 	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
 	taskKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/task"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
+	volumeKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/volume"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
@@ -68,9 +70,10 @@ func node() *messagingMock.Requester {
 	}}
 }
 
-// containersNode is the node holding the containers: what it is sent of a
-// container it carries out at once, and says so, as a node does. Anything
-// else it is sent goes to others, which keeps it, unanswered.
+// containersNode is the node holding the building blocks: what it is sent
+// of a container, a network or a volume it carries out at once, and says so,
+// as a node does. Anything else it is sent goes to others, which keeps it,
+// unanswered.
 type containersNode struct {
 	results domain.MessageHandler
 	others  domain.Producer
@@ -78,23 +81,47 @@ type containersNode struct {
 
 func (n *containersNode) Produce(ctx context.Context, subject string, payload []byte) error {
 	var command kind.Command
-	if subject != kind.CommandName || json.Unmarshal(payload, &command) != nil || command.Kind != containerKind.Name {
+	if subject != kind.CommandName || json.Unmarshal(payload, &command) != nil {
 		return n.others.Produce(ctx, subject, payload)
-	}
-
-	c, err := kind.Decode[containerKind.Spec, containerKind.Status](command.Resource)
-	if err != nil {
-		return err
 	}
 
 	result := kind.Result{ID: command.ID, Kind: command.Kind, UUID: command.UUID, Action: command.Action, Node: command.Node, OK: true, At: time.Now()}
 
-	if command.Action != containerKind.ActionDelete {
-		result.Status, _ = json.Marshal(containerKind.Status{
+	var (
+		status any
+		err    error
+	)
+
+	switch command.Kind {
+	case containerKind.Name:
+		c, decoded := kind.Decode[containerKind.Spec, containerKind.Status](command.Resource)
+		status, err = containerKind.Status{
 			Status:  kind.Status{State: containerKind.Running},
 			Docker:  &containerKind.Docker{ID: "c-" + c.Spec.Name, Name: c.Spec.Name, Image: c.Spec.Image, State: "running", Status: "Up Less than a second"},
 			Failure: &noderequest.Error{},
-		})
+		}, decoded
+	case networkKind.Name:
+		n, decoded := kind.Decode[networkKind.Spec, networkKind.Status](command.Resource)
+		status, err = networkKind.Status{
+			Status: kind.Status{State: networkKind.Present},
+			Docker: &networkKind.Docker{ID: "n-" + n.Spec.Name, Name: n.Spec.Name, Driver: "bridge", Scope: "local", Containers: []string{}},
+		}, decoded
+	case volumeKind.Name:
+		v, decoded := kind.Decode[volumeKind.Spec, volumeKind.Status](command.Resource)
+		status, err = volumeKind.Status{
+			Status: kind.Status{State: volumeKind.Present},
+			Docker: &volumeKind.Docker{Name: v.Spec.Name, Driver: "local"},
+		}, decoded
+	default:
+		return n.others.Produce(ctx, subject, payload)
+	}
+
+	if err != nil {
+		return err
+	}
+
+	if command.Action != "delete" {
+		result.Status, _ = json.Marshal(status)
 	}
 
 	answer, _ := json.Marshal(result)
@@ -524,6 +551,33 @@ func TestContract_BuildingBlocks(t *testing.T) {
 
 	_, err = c.Docker("owner", "d1").Container(ctx, "api")
 	assert.ErrorIs(t, err, domain.ErrNotExists, "removed, it is gone")
+
+	t.Run("what somebody who may ask anybody's asks for in a docker vm is its owner's", func(t *testing.T) {
+		network, err := c.Docker("", "d1").CreateNetwork(ctx, docker.NetworkSpec{Name: "backend"})
+		require.NoError(t, err)
+		assert.Equal(t, "n-backend", network.ID, "as its node made it")
+
+		volume, err := c.Docker("", "d1").CreateVolume(ctx, docker.VolumeSpec{Name: "data"})
+		require.NoError(t, err)
+		assert.Equal(t, "data", volume.Name)
+
+		for _, plural := range []string{networkKind.Name, volumeKind.Name} {
+			kept, _, err := w.Memory.GetAll(ctx, plural, resource.Filter{OwnerUUID: "owner"}, 0, 0)
+			require.NoError(t, err)
+			assert.Len(t, kept, 1, "a %s kept as the vm's owner's", plural)
+		}
+
+		networks, err := c.Docker("owner", "d1").Networks(ctx)
+		require.NoError(t, err)
+		require.Len(t, networks, 1, "listed at once among its owner's, from its record")
+		assert.Equal(t, "backend", networks[0].Name)
+		assert.False(t, networks[0].Unmanaged)
+
+		volumes, err := c.Docker("owner", "d1").Volumes(ctx)
+		require.NoError(t, err)
+		require.Len(t, volumes, 1)
+		assert.False(t, volumes[0].Unmanaged)
+	})
 }
 
 func TestContract_Stacks(t *testing.T) {

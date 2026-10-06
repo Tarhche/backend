@@ -124,19 +124,40 @@ var _ docker.Daemon = &blocks{}
 // when they can: a Docker VM of the owner's, placed on a node, running or on
 // its way up. One that is not there, or not theirs, is domain.ErrNotExists.
 func (b *blocks) up(ctx context.Context) error {
+	_, err := b.reached(ctx)
+
+	return err
+}
+
+// reached is the VM, when its building blocks can be asked anything, or why
+// they cannot be, as up says.
+func (b *blocks) reached(ctx context.Context) (vm.VM, error) {
 	v, err := b.client.VM(ctx, b.ownerUUID, b.vmUUID)
 	if err != nil {
-		return err
+		return vm.VM{}, err
 	}
 
 	switch {
 	case v.Kind != vm.KindDocker:
-		return refusedByNode(noderequest.ErrorOf(fmt.Errorf("%w: the vm has no dockerd", vm.ErrNotDocker)))
+		return vm.VM{}, refusedByNode(noderequest.ErrorOf(fmt.Errorf("%w: the vm has no dockerd", vm.ErrNotDocker)))
 	case !up(&v):
-		return refusedByNode(noderequest.ErrorOf(fmt.Errorf("%w: the vm is %s", vm.ErrNotRunning, v.CurrentState)))
+		return vm.VM{}, refusedByNode(noderequest.ErrorOf(fmt.Errorf("%w: the vm is %s", vm.ErrNotRunning, v.CurrentState)))
 	}
 
-	return nil
+	return v, nil
+}
+
+// keeper is whose a building block asked for in the VM is kept as: the VM's
+// owner's, whoever asks for it, as everything in a VM is. Somebody who may
+// ask anybody's VMs asks for it as nobody in particular, and it is still the
+// VM's owner's.
+func (b *blocks) keeper(ctx context.Context) (string, error) {
+	v, err := b.reached(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	return v.OwnerUUID, nil
 }
 
 // query is a request's query inside the VM, as the owner's own or anybody's,
@@ -348,13 +369,14 @@ func (b *blocks) Images(ctx context.Context) ([]docker.Image, error) {
 // is pulled. One the VM keeps already is pulled again; one it holds that
 // nobody keeps a record of is kept from now on.
 func (b *blocks) PullImage(ctx context.Context, reference string) (docker.Image, error) {
-	if err := b.up(ctx); err != nil {
+	keeper, err := b.keeper(ctx)
+	if err != nil {
 		return docker.Image{}, err
 	}
 
 	var kept imageManifest
 
-	err := b.client.call(ctx, http.MethodGet, b.client.path(imagesPath+"/"+url.PathEscape(reference), b.query(nil)), nil, &kept)
+	err = b.client.call(ctx, http.MethodGet, b.client.path(imagesPath+"/"+url.PathEscape(reference), b.query(nil)), nil, &kept)
 
 	switch {
 	case err == nil && len(kept.Metadata.Labels[blockKinds.LabelManagedBy]) == 0:
@@ -373,7 +395,7 @@ func (b *blocks) PullImage(ctx context.Context, reference string) (docker.Image,
 		return docker.Image{}, err
 	}
 
-	made, err := admit[imageKind.Spec, imageKind.Status](ctx, b.client, imagesPath, b.ownerUUID, b.vmUUID, pullWait, asked[imageKind.Spec]{Kind: imageKind.Name, Spec: imageKind.Spec{Reference: reference}})
+	made, err := admit[imageKind.Spec, imageKind.Status](ctx, b.client, imagesPath, keeper, b.vmUUID, pullWait, asked[imageKind.Spec]{Kind: imageKind.Name, Spec: imageKind.Spec{Reference: reference}})
 	if err != nil {
 		return docker.Image{}, err
 	}
@@ -442,11 +464,12 @@ func (b *blocks) Networks(ctx context.Context) ([]docker.Network, error) {
 
 // CreateNetwork keeps a network in the VM, and is it once it is made.
 func (b *blocks) CreateNetwork(ctx context.Context, spec docker.NetworkSpec) (docker.Network, error) {
-	if err := b.up(ctx); err != nil {
+	keeper, err := b.keeper(ctx)
+	if err != nil {
 		return docker.Network{}, err
 	}
 
-	made, err := admit[networkKind.Spec, networkKind.Status](ctx, b.client, networksPath, b.ownerUUID, b.vmUUID, commandWait, asked[networkKind.Spec]{
+	made, err := admit[networkKind.Spec, networkKind.Status](ctx, b.client, networksPath, keeper, b.vmUUID, commandWait, asked[networkKind.Spec]{
 		Kind: networkKind.Name,
 		Spec: networkKind.Spec{Name: spec.Name, Driver: spec.Driver, Internal: spec.Internal, Labels: spec.Labels},
 	})
@@ -497,11 +520,12 @@ func (b *blocks) Volumes(ctx context.Context) ([]docker.Volume, error) {
 
 // CreateVolume keeps a volume in the VM, and is it once it is made.
 func (b *blocks) CreateVolume(ctx context.Context, spec docker.VolumeSpec) (docker.Volume, error) {
-	if err := b.up(ctx); err != nil {
+	keeper, err := b.keeper(ctx)
+	if err != nil {
 		return docker.Volume{}, err
 	}
 
-	made, err := admit[volumeKind.Spec, volumeKind.Status](ctx, b.client, volumesPath, b.ownerUUID, b.vmUUID, commandWait, asked[volumeKind.Spec]{
+	made, err := admit[volumeKind.Spec, volumeKind.Status](ctx, b.client, volumesPath, keeper, b.vmUUID, commandWait, asked[volumeKind.Spec]{
 		Kind: volumeKind.Name,
 		Spec: volumeKind.Spec{Name: spec.Name, Driver: spec.Driver, Labels: spec.Labels},
 	})

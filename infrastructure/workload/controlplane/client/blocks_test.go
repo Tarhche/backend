@@ -71,7 +71,7 @@ func newBlocksPlane(t *testing.T) (*Client, *blocksPlane) {
 		case r.Method == http.MethodGet && r.URL.Path == "/api/vms/vm-uuid":
 			write(http.StatusOK, vmKind.VM{
 				Kind:     vmKind.Name,
-				Metadata: kind.Metadata{UUID: "vm-uuid", Name: "docker-1", Node: "node-1"},
+				Metadata: kind.Metadata{UUID: "vm-uuid", Name: "docker-1", OwnerUUID: "owner-uuid", Node: "node-1"},
 				Spec:     vmKind.Spec{Flavor: vmKind.FlavorDocker},
 				Status:   vmKind.Status{Status: kind.Status{State: vmKind.Running}},
 			})
