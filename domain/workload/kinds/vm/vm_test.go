@@ -198,7 +198,7 @@ func TestMachine(t *testing.T) {
 
 	assert.Empty(t, m.Validate())
 	assert.Equal(t, vmKind.Created, m.Initial, "a vm is admitted asked of nobody yet")
-	assert.ElementsMatch(t, []kind.State{vmKind.Restarting, vmKind.Restoring}, m.Answered, "a vm runs before a restart or a restore as it does after it, so only their answers say they were carried out")
+	assert.ElementsMatch(t, []kind.State{vmKind.Scheduled, vmKind.Restarting, vmKind.Restoring}, m.Answered, "a vm runs before a restart or a restore as it does after it, so only their answers say they were carried out; and only a create's says what it gave the vm")
 
 	for name, tt := range map[string]struct {
 		from  kind.State

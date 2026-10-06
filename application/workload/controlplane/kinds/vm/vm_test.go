@@ -2,6 +2,7 @@ package vm_test
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -9,7 +10,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/observe"
 	controlPlaneVMs "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/records"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/vmtest"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/slugs"
 	"github.com/khanzadimahdi/testproject/domain"
@@ -18,6 +21,7 @@ import (
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/node"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
+	"github.com/khanzadimahdi/testproject/domain/workload/resource"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
 
@@ -732,4 +736,48 @@ func TestVMs_Extras(t *testing.T) {
 	w := vmtest.New()
 
 	assert.Same(t, w.Runs, w.VMs.Extras(), "the code runner's runs are among anybody's vms")
+}
+
+// TestVM_createAnswered holds a VM being made to the answer of its create,
+// which alone says what its node gave it: its node seen running it first,
+// in a heartbeat taken between the VM coming up and the create being
+// answered, leaves it scheduled and its create waited for, so that the
+// config its create gave it is had, and a change of ports later is applied.
+func TestVM_createAnswered(t *testing.T) {
+	t.Parallel()
+
+	d := vmKind.Descriptor()
+	at := time.Now()
+
+	v := vmtest.Running("01", "owner")
+	v.Status.State = vmKind.Scheduled
+	v.Status.Applied = nil
+
+	r := vmtest.Record(v)
+	r.Pending = &resource.Pending{Action: vmKind.ActionCreate, IDs: []string{"create-1"}, SentAt: at}
+
+	running, err := json.Marshal(vmKind.Status{Status: kind.Status{State: vmKind.Running}})
+	require.NoError(t, err)
+
+	_, err = observe.Observe(d, &r, running, at)
+	require.NoError(t, err)
+
+	seen, err := records.Decode(r)
+	require.NoError(t, err)
+	assert.Equal(t, vmKind.Scheduled, seen.Status.State, "only the answer of its create says it was carried out")
+	require.NotNil(t, r.Pending, "and it is still waited for")
+
+	config := v.Spec.Config()
+	made, err := json.Marshal(vmKind.Status{Status: kind.Status{State: vmKind.Running}, Applied: &config})
+	require.NoError(t, err)
+
+	_, err = observe.Answer(d, &r, kind.Result{ID: "create-1", Kind: vmKind.Name, UUID: "01", Action: vmKind.ActionCreate, OK: true, Status: made}, at)
+	require.NoError(t, err)
+
+	answered, err := records.Decode(r)
+	require.NoError(t, err)
+	assert.Equal(t, vmKind.Running, answered.Status.State)
+	require.NotNil(t, answered.Status.Applied, "what its create gave it is had")
+	assert.True(t, answered.Status.Applied.Equal(v.Spec.Config()))
+	assert.Nil(t, r.Pending)
 }

@@ -566,9 +566,12 @@ func Descriptor() kind.Descriptor {
 // in stopped, restoring in running or stopped, and deleting in the VM being
 // gone. While a node carries a command out on a VM, it says the VM is still
 // in flight, so that what the VM is doing halfway through is not taken for
-// what the command came to. A restart and a restore are over only once they
-// are answered: a VM runs before either as it does after it, so its node
-// seeing it run says nothing of whether the command was carried out yet.
+// what the command came to. A create, a restart and a restore are over only
+// once they are answered: a VM runs before a restart or a restore as it does
+// after it, so its node seeing it run says nothing of whether the command was
+// carried out yet; and what a create gave the VM, its ports, network and
+// resources (Status.Applied), is in its answer alone, which a heartbeat
+// seeing the VM run first would leave nobody waiting for.
 //
 // At rest, a VM is what its node says: running, stopped or failed. One its
 // node holds nothing of is not running: a running VM its node lost is
@@ -615,7 +618,7 @@ func Machine() kind.Machine {
 		Transitions: transitions,
 		Terminal:    []kind.State{Stopped, Failed, Deleted},
 		InFlight:    []kind.State{Scheduled, Starting, Stopping, Restarting, Restoring, Deleting},
-		Answered:    []kind.State{Restarting, Restoring},
+		Answered:    []kind.State{Scheduled, Restarting, Restoring},
 	}
 }
 
