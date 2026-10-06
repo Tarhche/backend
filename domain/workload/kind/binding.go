@@ -8,6 +8,7 @@ import (
 	"slices"
 
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/workload/port"
 )
 
 // Binding is a kind's strategy in one service, together with the descriptor
@@ -80,6 +81,14 @@ type NodeBinding interface {
 
 	// Attach opens a stream action through the strategy's Attacher.
 	Attach(ctx context.Context, action string, uuid string, owner string) (Session, error)
+
+	// Exposes reports whether the strategy serves its kind's ports, which is
+	// whether it is an Exposer.
+	Exposes() bool
+
+	// Endpoint is where a port of the instance slug names is reached,
+	// through the strategy's Exposer.
+	Endpoint(ctx context.Context, slug string, p port.Port) (Endpoint, error)
 }
 
 // IngressBinding is a kind's ingress strategy, held with its descriptor. It
@@ -361,6 +370,21 @@ func (b *nodeBinding[Spec, Status, S]) Attach(ctx context.Context, action string
 	}
 
 	return attacher.Attach(ctx, action, uuid, owner)
+}
+
+func (b *nodeBinding[Spec, Status, S]) Exposes() bool {
+	_, exposes := b.strategy.(Exposer)
+
+	return exposes
+}
+
+func (b *nodeBinding[Spec, Status, S]) Endpoint(ctx context.Context, slug string, p port.Port) (Endpoint, error) {
+	exposer, exposes := b.strategy.(Exposer)
+	if !exposes {
+		return Endpoint{}, fmt.Errorf("%w: the %s's node strategy serves no ports", domain.ErrNotExists, b.descriptor.Name)
+	}
+
+	return exposer.Endpoint(ctx, slug, p)
 }
 
 // resource is the resource a command or a query carries, read as the kind's

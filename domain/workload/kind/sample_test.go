@@ -221,14 +221,17 @@ func (n *boxNode) State(context.Context) (Report[boxStatus], error) {
 }
 
 // attachingBoxNode is a box's node strategy that serves streams too, to
-// the box's owner alone.
+// the box's owner alone, and its port.
 type attachingBoxNode struct {
 	boxNode
 
 	session Session
 }
 
-var _ Attacher = &attachingBoxNode{}
+var (
+	_ Attacher = &attachingBoxNode{}
+	_ Exposer  = &attachingBoxNode{}
+)
 
 func (n *attachingBoxNode) Attach(_ context.Context, action string, uuid string, owner string) (Session, error) {
 	if uuid != "box-uuid" || owner != "owner-uuid" {
@@ -236,6 +239,14 @@ func (n *attachingBoxNode) Attach(_ context.Context, action string, uuid string,
 	}
 
 	return n.session, nil
+}
+
+func (n *attachingBoxNode) Endpoint(_ context.Context, slug string, p port.Port) (Endpoint, error) {
+	if slug != "shop-abcde" || (p != 0 && p != 8080) {
+		return Endpoint{}, fmt.Errorf("%w: no port %d of %q", domain.ErrNotExists, p, slug)
+	}
+
+	return Endpoint{Port: 8080, Address: "vmhost-01:20000"}, nil
 }
 
 // boxIngress finds the one box there is.

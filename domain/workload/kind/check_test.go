@@ -393,6 +393,19 @@ func TestServices(t *testing.T) {
 			services: func() Services { return boxServices(BindNode[boxSpec, boxStatus](box(), &boxNode{})) },
 			want:     `kind "box": action "attach" is a stream, and its node strategy serves none`,
 		},
+		"endpoints on a node strategy that serves no ports": {
+			services: func() Services { return boxServices(BindNode[boxSpec, boxStatus](box(), &boxNode{})) },
+			want:     `kind "box" has endpoints, and no node strategy serves its ports`,
+		},
+		"endpoints that no node serves at all": {
+			services: func() Services {
+				services := boxServices(attaching)
+				services.Node = nil
+
+				return services
+			},
+			want: `kind "box" has endpoints, and no node strategy serves its ports`,
+		},
 		"a kind reached through the ingress that the ingress cannot find": {
 			services: func() Services {
 				services := boxServices(attaching)
