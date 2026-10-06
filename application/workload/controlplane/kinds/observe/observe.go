@@ -83,11 +83,12 @@ func Observe(d kind.Descriptor, r *resource.Record, status json.RawMessage, at t
 	r.Status = merged
 
 	// it got where it was going: there is no command to wait on any more.
+	// The tries it took are forgotten only once it stays there for a while,
+	// which is the reconcile loop's to see: one that falls over again as soon
+	// as it is brought back is brought back less and less often.
 	if d.Machine.IsInFlight(recorded.State) && !d.Machine.IsInFlight(common.State) {
 		r.Pending = nil
 	}
-
-	arrived(r, common)
 
 	return change, nil
 }
@@ -208,12 +209,4 @@ func Fail(r *resource.Record, reason string, at time.Time) error {
 	r.Pending = nil
 
 	return nil
-}
-
-// arrived starts the tries at making a resource what it is expected to be
-// over again, once it is.
-func arrived(r *resource.Record, common kind.Status) {
-	if len(common.Expected) > 0 && common.State == common.Expected {
-		r.Attempts = 0
-	}
 }

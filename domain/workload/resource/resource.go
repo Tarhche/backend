@@ -41,9 +41,11 @@ type Record struct {
 	Pending *Pending
 
 	// Attempts is how many commands were sent to make the resource what it is
-	// expected to be, since it last was or since it was last asked for
-	// something new. It is what the next try's Attempt is, and what the wait
-	// before it grows with.
+	// expected to be, since it last stayed so for as long as its backoff, or
+	// since it was last asked for something new. It is what the next try's
+	// Attempt is, and what the wait before it grows with: one that keeps
+	// falling over as soon as it is brought back is brought back less and
+	// less often.
 	Attempts int
 
 	// TriedAt is when the last of those commands was sent.

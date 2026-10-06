@@ -333,6 +333,54 @@ func TestUseCase_Execute(t *testing.T) {
 		assert.Equal(t, 2, stored.Attempts)
 	})
 
+	t.Run("the tries it took are forgotten once it has stayed what it is expected to be for as long as the last wait", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t,
+			kindstest.AFan("settled", kindstest.Running, kindstest.Running),
+			kindstest.AFan("just-back", kindstest.Running, kindstest.Running),
+		)
+
+		settled, _ := f.stored(t, "settled")
+		tried(3, time.Hour)(&settled)
+		since(time.Minute)(&settled)
+		_, err := f.resources.Update(ctx, settled)
+		require.NoError(t, err)
+
+		justBack, _ := f.stored(t, "just-back")
+		tried(3, time.Hour)(&justBack)
+		since(30 * time.Second)(&justBack)
+		_, err = f.resources.Update(ctx, justBack)
+		require.NoError(t, err)
+
+		require.NoError(t, f.useCase.Execute(ctx))
+
+		settled, _ = f.stored(t, "settled")
+		assert.Equal(t, 0, settled.Attempts, "a minute is as long as the third wait")
+
+		justBack, _ = f.stored(t, "just-back")
+		assert.Equal(t, 3, justBack.Attempts, "half a minute is not")
+		assert.Empty(t, f.sent(t), "neither is asked anything")
+	})
+
+	t.Run("so one that falls over as soon as it is brought back is brought back less and less often", func(t *testing.T) {
+		t.Parallel()
+
+		// brought back by its third try half a minute ago, and stopped again
+		// since: the fourth waits a minute after the third, as long again as
+		// the third waited after the second.
+		f := newFixture(t, fan(kindstest.Stopped, kindstest.Running, kindstest.NodeName, tried(3, 30*time.Second), since(10*time.Second)))
+
+		require.NoError(t, f.useCase.Execute(ctx))
+		assert.Empty(t, f.sent(t))
+
+		g := newFixture(t, fan(kindstest.Stopped, kindstest.Running, kindstest.NodeName, tried(3, time.Minute), since(10*time.Second)))
+
+		require.NoError(t, g.useCase.Execute(ctx))
+		require.Len(t, g.sent(t), 1)
+		assert.Equal(t, 3, g.sent(t)[0].Attempt)
+	})
+
 	t.Run("a pass covers every resource, a batch at a time", func(t *testing.T) {
 		t.Parallel()
 

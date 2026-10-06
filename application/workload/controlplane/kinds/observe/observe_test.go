@@ -56,11 +56,11 @@ func TestObserve(t *testing.T) {
 		},
 		"one in flight takes the arrival its machine declares": {
 			recorded: kindstest.Starting, expected: kindstest.Running, pending: starting, attempts: 1, observed: observed(kindstest.Running, 2),
-			state: kindstest.Running, since: later, speed: 2, changed: true,
+			state: kindstest.Running, since: later, speed: 2, attemptsN: 1, changed: true,
 		},
-		"and the command it waited on is answered by its arrival, as are the tries at it": {
+		"and the command it waited on is answered by its arrival, while the tries it took are kept until it stays there": {
 			recorded: kindstest.Stopping, expected: kindstest.Stopped, pending: &resource.Pending{Action: "stop", IDs: []string{"command-1"}}, attempts: 2, observed: observed(kindstest.Stopped, 0),
-			state: kindstest.Stopped, since: later, speed: 0, changed: true,
+			state: kindstest.Stopped, since: later, speed: 0, attemptsN: 2, changed: true,
 		},
 		"a report sent before a stop does not undo it": {
 			recorded: kindstest.Stopping, expected: kindstest.Stopped, pending: &resource.Pending{Action: "stop", IDs: []string{"command-1"}}, attempts: 1, observed: observed(kindstest.Running, 3),
@@ -76,7 +76,7 @@ func TestObserve(t *testing.T) {
 		},
 		"and one on its way out that is gone is deleted": {
 			recorded: kindstest.Deleting, expected: kind.Deleted, pending: &resource.Pending{Action: "delete", IDs: []string{"command-1"}}, attempts: 1, observed: observed(kind.Missing, 0),
-			state: kind.Deleted, since: later, gone: true, changed: true,
+			state: kind.Deleted, since: later, attemptsN: 1, gone: true, changed: true,
 		},
 		"a node that says again what it said changes nothing worth writing": {
 			recorded: kindstest.Running, expected: kindstest.Running, observed: observed(kindstest.Running, 1),

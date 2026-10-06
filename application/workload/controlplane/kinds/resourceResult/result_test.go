@@ -97,7 +97,7 @@ func TestResult_Handle(t *testing.T) {
 		assert.Equal(t, 2, fan.Status.Speed)
 		assert.Equal(t, at, fan.Status.ObservedAt, "when the node said so")
 		assert.Nil(t, stored.Pending, "it waits on nothing any more")
-		assert.Equal(t, 0, stored.Attempts, "it is what it is expected to be")
+		assert.Equal(t, 2, stored.Attempts, "the tries it took count until it has stayed what it is expected to be")
 		require.NotNil(t, stored.Answer)
 		assert.Equal(t, "started", stored.Answer.Output, "the answer is kept, for whoever waits for it elsewhere")
 		assert.Equal(t, f.clock.Now(), stored.Metadata.UpdatedAt)

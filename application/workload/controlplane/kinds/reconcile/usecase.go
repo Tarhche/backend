@@ -22,7 +22,10 @@
 //     try. One in flight with no command to wait on, which nothing will move
 //     on, is failed;
 //   - one that has been tried for already, and is not yet what it is
-//     expected to be, is left alone for longer each time: its backoff;
+//     expected to be, is left alone for longer each time: its backoff. The
+//     tries are forgotten once it has been what it is expected to be for as
+//     long as the last wait, so one that falls over again as soon as it is
+//     brought back is brought back less and less often;
 //   - one expected deleted is asked for its delete;
 //   - and for everything else, the kind decides what to ask for (its
 //     Reconcile), and what it asks for is asked.
@@ -246,7 +249,13 @@ func (uc *UseCase) look(ctx context.Context, binding kind.ControlPlaneBinding, r
 	case d.Machine.IsInFlight(common.State):
 		return uc.inFlight(ctx, d, r, common, now)
 
-	// tried for already, and not there yet: given time before the next try.
+	// what it is expected to be, for as long as it was last made to wait:
+	// it stayed there, and the tries it took start over.
+	case r.Attempts > 0 && len(common.Expected) > 0 && common.State == common.Expected && now.Sub(common.Since) >= uc.config.backoff(r.Attempts):
+		return uc.settled(ctx, r)
+
+	// tried for already, and not there yet, or not for long: given time
+	// before the next try.
 	case r.Attempts > 0 && now.Sub(r.TriedAt) < uc.config.backoff(r.Attempts):
 		return nil
 
@@ -260,6 +269,17 @@ func (uc *UseCase) look(ctx context.Context, binding kind.ControlPlaneBinding, r
 	}
 
 	return uc.ask(ctx, binding, r, common, intents, false)
+}
+
+// settled forgets the tries it took to make a resource what it is expected
+// to be, once it has stayed so: the next time it falls over is a first time
+// again.
+func (uc *UseCase) settled(ctx context.Context, r resource.Record) error {
+	r.Attempts = 0
+
+	_, err := uc.resources.Update(ctx, r)
+
+	return err
 }
 
 // lost writes down that a resource's node has gone quiet. One that ended
