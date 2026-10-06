@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -25,6 +26,7 @@ import (
 	translatorContract "github.com/khanzadimahdi/testproject/domain/translator"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
+	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	nodeEvents "github.com/khanzadimahdi/testproject/domain/workload/node/events"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
@@ -34,7 +36,6 @@ import (
 	nodesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/nodes"
 	resourcesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/resources"
 	snapshotsMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/snapshots"
-	tasksMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/tasks"
 	logsMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/logs"
 	storageMemory "github.com/khanzadimahdi/testproject/infrastructure/storage/memory"
 	"github.com/khanzadimahdi/testproject/infrastructure/translator"
@@ -86,12 +87,19 @@ type workload struct {
 	dockerd  *dockerd
 	archives *storageMemory.Storage
 
-	// what the control plane keeps: the resources of every kind, VMs and
-	// stacks among them, the snapshots of VMs, the nodes, and the tasks.
+	// what the control plane keeps: the resources of every kind, VMs, stacks
+	// and the code runner's tasks among them, the snapshots of VMs, and the
+	// nodes.
 	resources *resourcesMemory.Repository
 	snapshots *snapshotsMemory.Repository
 	nodes     *nodesMemory.Repository
-	tasks     *tasksMemory.Repository
+
+	// programs are what a task's program does once its VM boots, as a test
+	// says; kinds are the kinds the node runs; and natsURL is where the
+	// workload's messages travel, which the blog listens to as well.
+	programs programs
+	kinds    *kind.Registry[kind.NodeBinding]
+	natsURL  string
 
 	// beating says whether the node says what it holds: a node that stops
 	// is one the control plane hears nothing more from.
@@ -137,7 +145,7 @@ func start(t *testing.T, options ...option) *workload {
 		resources:  resourcesMemory.NewRepository(),
 		snapshots:  snapshotsMemory.NewRepository(),
 		nodes:      nodesMemory.NewRepository(),
-		tasks:      tasksMemory.NewRepository(),
+		natsURL:    natsURL,
 		translator: english,
 		validator:  validator.New(english),
 		owners:     presenter.NewDirectory(people{}),
@@ -146,9 +154,11 @@ func start(t *testing.T, options ...option) *workload {
 	w.beating.Store(true)
 
 	// docker is there only in a Docker VM, as it is on a node: a machine VM
-	// has no such command.
+	// has no such command. A VM that runs a program of its own, a task's, runs
+	// what the test says it does.
 	w.engine = memory.New(
 		memory.WithCapacity(16, 64<<30, 1000<<30),
+		memory.WithMain(w.programs.main),
 		memory.WithExec(func(ctx context.Context, id string, options vm.ExecOptions, stdin io.Reader, stdout io.Writer, stderr io.Writer) int {
 			if spec, err := w.engine.Spec(id); err != nil || spec.Kind != vm.KindDocker {
 				_, _ = io.WriteString(stderr, "sh: docker: not found\n")
@@ -188,6 +198,8 @@ func start(t *testing.T, options ...option) *workload {
 	})
 	require.NoError(t, err)
 
+	w.kinds = node.Kinds
+
 	// the node's heartbeat, which says what it offers and what every kind it
 	// runs holds on it, VMs among them, as its serve command beats it.
 	nodeHeartbeat := orchestratorHeartbeat.NewUseCase(nodeMessages, infraNode.NewManager(nodeEngine), node.Kinds, time.Second, nodeName, logger)
@@ -203,7 +215,6 @@ func start(t *testing.T, options ...option) *workload {
 		Resources: w.resources,
 		Snapshots: w.snapshots,
 		Nodes:     w.nodes,
-		Tasks:     w.tasks,
 		TaskLogs:  logsMock.NewInMemoryRepository(),
 		Archives:  w.archives,
 	}, controlPlaneConnection, controlPlaneMessages, logger, providers.WithReconcileConfig(reconcileConfig))
@@ -258,6 +269,36 @@ func start(t *testing.T, options ...option) *workload {
 	}, settle, beat, "the node never said what it offers")
 
 	return w
+}
+
+// programs are what the programs VMs run as their main process do, a
+// code-runner task's: what each writes, and what it exits with. Until a test
+// says, one runs until it is stopped.
+type programs struct {
+	lock sync.Mutex
+	run  memory.MainFunc
+}
+
+// are has every program from now on do what run does.
+func (p *programs) are(run memory.MainFunc) {
+	p.lock.Lock()
+	defer p.lock.Unlock()
+
+	p.run = run
+}
+
+func (p *programs) main(ctx context.Context, spec vm.Spec, log func(line string)) int {
+	p.lock.Lock()
+	run := p.run
+	p.lock.Unlock()
+
+	if run == nil {
+		<-ctx.Done()
+
+		return 0
+	}
+
+	return run(ctx, spec, log)
 }
 
 // throughVMHost is engine as a node reaches its own: served by a vmhost on a

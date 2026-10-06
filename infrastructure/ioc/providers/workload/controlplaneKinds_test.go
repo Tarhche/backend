@@ -18,6 +18,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind/kindtest"
 	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
+	taskKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/task"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	snapshotEvents "github.com/khanzadimahdi/testproject/domain/workload/snapshot/events"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
@@ -25,10 +26,10 @@ import (
 	nodesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/nodes"
 	resourcesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/resources"
 	snapshotsMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/snapshots"
-	tasksMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/tasks"
 	logsMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/logs"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/permissions"
 	infraDocker "github.com/khanzadimahdi/testproject/infrastructure/workload/docker"
+	"github.com/khanzadimahdi/testproject/infrastructure/workload/task/vmruntime"
 	"github.com/khanzadimahdi/testproject/infrastructure/workload/vm/memory"
 )
 
@@ -49,7 +50,6 @@ func served(t *testing.T) *controlPlane {
 		Resources: resources,
 		Snapshots: snapshotsMemory.NewRepository(),
 		Nodes:     nodesMemory.NewRepository(),
-		Tasks:     tasksMemory.NewRepository(),
 		TaskLogs:  logsMock.NewInMemoryRepository(),
 	}, nil, &messagingMock.Recorder{}, slog.New(slog.DiscardHandler))
 	require.NoError(t, err)
@@ -79,11 +79,11 @@ func get(t *testing.T, handler http.Handler, target string) (int, string) {
 func TestNewControlPlaneKinds(t *testing.T) {
 	t.Parallel()
 
-	t.Run("vms and stacks are served under their plurals beside what is not a kind yet", func(t *testing.T) {
+	t.Run("vms, stacks and tasks are served under their plurals beside what is not a kind yet", func(t *testing.T) {
 		t.Parallel()
 
 		plane := served(t)
-		assert.Equal(t, []string{vmKind.Name, stackKind.Name}, kindNames(plane.workload.Registry.Descriptors()))
+		assert.Equal(t, []string{vmKind.Name, stackKind.Name, taskKind.Name}, kindNames(plane.workload.Registry.Descriptors()))
 
 		mux := http.NewServeMux()
 		require.NoError(t, plane.workload.Route(mux), "no kind takes a route of what is not a kind yet")
@@ -95,11 +95,12 @@ func TestNewControlPlaneKinds(t *testing.T) {
 			Items []kind.Descriptor `json:"items"`
 		}
 		require.NoError(t, json.Unmarshal([]byte(body), &described))
-		require.Len(t, described.Items, 2)
+		require.Len(t, described.Items, 3)
 		assert.Equal(t, "vms", described.Items[0].Plural)
 		assert.Equal(t, "stacks", described.Items[1].Plural)
+		assert.Equal(t, "tasks", described.Items[2].Plural)
 
-		for _, plural := range []string{"vms", "stacks"} {
+		for _, plural := range []string{"vms", "stacks", "tasks"} {
 			status, body = get(t, mux, "/api/"+plural)
 			require.Equal(t, http.StatusOK, status)
 			assert.JSONEq(t, `{"items":[],"pagination":{"total_pages":0,"current_page":1}}`, body)
@@ -160,6 +161,7 @@ func TestConformance(t *testing.T) {
 
 	nodes, err := nodeKinds(NodeKindDependencies{
 		Engine:         engine,
+		Tasks:          vmruntime.New(engine, slog.New(slog.DiscardHandler)),
 		Daemons:        infraDocker.NewDaemons(engine, time.Second, slog.New(slog.DiscardHandler)),
 		NodeName:       "workload-orchestrator-01",
 		CommandTimeout: time.Minute,
@@ -179,7 +181,7 @@ func TestConformance(t *testing.T) {
 
 	kindtest.Conformance(t, services, permissions.NewRepository())
 
-	assert.Equal(t, []string{vmKind.Name, stackKind.Name}, kindNames(services.Descriptors()), "every kind the services run")
+	assert.Equal(t, []string{vmKind.Name, stackKind.Name, taskKind.Name}, kindNames(services.Descriptors()), "every kind the services run")
 }
 
 func kindNames(descriptors []kind.Descriptor) []string {

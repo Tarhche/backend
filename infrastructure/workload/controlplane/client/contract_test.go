@@ -37,6 +37,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/docker"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
+	taskKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/task"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
@@ -221,7 +222,7 @@ func TestContract_Runs(t *testing.T) {
 	ctx := context.Background()
 
 	run := vmtest.Run("run")
-	run.ExecutionLogs = []byte("hello\nbye\n")
+	run.Status.Run.Output = "hello\nbye\n"
 
 	w := vmtest.New(vmtest.WithVMs(vmtest.Running("theirs", "other")), vmtest.WithTasks(run))
 	c := controlPlane(t, w)
@@ -275,8 +276,68 @@ func TestContract_Runs(t *testing.T) {
 
 	require.NoError(t, c.DeleteVM(ctx, "", "run"))
 
-	_, err = c.VM(ctx, "", "run")
-	assert.ErrorIs(t, err, domain.ErrNotExists, "a run taken away is gone")
+	deleting, err := c.VM(ctx, "", "run")
+	require.NoError(t, err)
+	assert.Equal(t, vm.Deleting, deleting.CurrentState, "a run taken away goes once its node has taken it away")
+}
+
+// TestContract_Tasks runs a snippet's task as the code runner does, reads it
+// back and takes it away, through the resource API every kind is served by.
+func TestContract_Tasks(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	w := vmtest.New()
+	c := controlPlane(t, w)
+
+	none := 0
+
+	run, err := c.RunTask(ctx, task.GuestOwnerUUID, workloadControlPlane.TaskRequest{
+		Name: "0199b3c2-request",
+		Spec: taskKind.Spec{
+			Kind:        task.KindJob,
+			Image:       "ghcr.io/tarhche/code-runner:nodejs-22.14-latest",
+			Command:     []string{"--timeout", "120", "serve"},
+			Ports:       []port.Port{3000},
+			Interactive: true,
+			TTL:         2 * time.Minute,
+			Limits:      taskKind.Limits{CPU: 2, Memory: 200 * vmtest.MiB, Disk: 100 * vmtest.MiB},
+			MaxRetries:  &none,
+		},
+	})
+	require.NoError(t, err)
+
+	assert.NotEmpty(t, run.Metadata.UUID)
+	assert.Equal(t, "0199b3c2-request", run.Metadata.Name)
+	assert.Equal(t, task.GuestOwnerUUID, run.Metadata.OwnerUUID)
+	assert.Equal(t, vmtest.Node, run.Metadata.Node)
+	assert.Equal(t, taskKind.Scheduled, run.Status.State, "asked of its node at once")
+
+	sent, err := messagingMock.Produced[kind.Command](w.Producer, kind.CommandName)
+	require.NoError(t, err)
+	require.Len(t, sent, 1)
+	assert.Equal(t, taskKind.ActionCreate, sent[0].Action)
+
+	read, err := c.Task(ctx, run.Metadata.UUID)
+	require.NoError(t, err)
+	assert.Equal(t, run.Metadata.Slug, read.Metadata.Slug)
+	assert.Equal(t, []port.Port{3000}, read.Spec.Ports)
+
+	require.NoError(t, c.DeleteTask(ctx, run.Metadata.UUID))
+
+	deleting, err := c.Task(ctx, run.Metadata.UUID)
+	require.NoError(t, err)
+	assert.Equal(t, taskKind.Deleting, deleting.Status.State)
+
+	_, err = c.Task(ctx, "missing")
+	assert.ErrorIs(t, err, domain.ErrNotExists)
+
+	_, err = c.RunTask(ctx, task.GuestOwnerUUID, workloadControlPlane.TaskRequest{Name: "nothing to run"})
+
+	var refused *client.ValidationError
+	require.ErrorAs(t, err, &refused)
+	assert.Equal(t, "required_field", refused.Refused()["image"])
 }
 
 func TestContract_Snapshots(t *testing.T) {

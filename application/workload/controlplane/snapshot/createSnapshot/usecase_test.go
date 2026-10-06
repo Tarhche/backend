@@ -234,8 +234,8 @@ func TestUseCase_Execute_run(t *testing.T) {
 		assert.Equal(t, domain.ValidationErrors{"vm": runs.CodeRefused}, response.ValidationErrors)
 		assert.Empty(t, w.Producer.Messages())
 
-		stored, _ := w.Tasks.Stored("run")
-		assert.Equal(t, vmtest.Run("run").CurrentState, stored.CurrentState)
+		stored, _, _ := w.StoredTask("run")
+		assert.Equal(t, vmtest.Run("run").Status.State, stored.Status.State)
 	})
 
 	t.Run("one's own is not there", func(t *testing.T) {

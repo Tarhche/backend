@@ -17,7 +17,6 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/certificate"
 	infraHealth "github.com/khanzadimahdi/testproject/infrastructure/health"
 	resourcerepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/workload/resources"
-	taskrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/workload/tasks"
 	"github.com/khanzadimahdi/testproject/infrastructure/telemetry/profiler"
 	"github.com/khanzadimahdi/testproject/infrastructure/tunnel"
 	infraIngress "github.com/khanzadimahdi/testproject/infrastructure/workload/ingress"
@@ -157,7 +156,6 @@ func ingressConsoleCommand(
 
 	// which node is holding a VM or a task is the control plane's record of it,
 	// and the only thing here that outlives a connection.
-	taskRepository := taskrepository.NewRepository(database)
 	resourceRepository := resourcerepository.NewRepository(database)
 
 	checkHealthUseCase := checkhealth.NewUseCase(
@@ -180,18 +178,15 @@ func ingressConsoleCommand(
 	mux.Handle("GET /health", middleware.NewCORSMiddleware(healthAPI.NewHealthHandler(checkHealthUseCase)))
 	mux.Handle("/orchestrators/{name}/{path...}", ingressAPI.NewProxyHandler(checkOrchestratorExistsUseCase, transport, logger))
 
-	// a terminal, which the browser opens here rather than anywhere else: the
-	// ingress works out which node is holding the task and carries the
-	// connection there. Who may open one is the node's to decide, from the
-	// owner on the task and the token on this request.
-	mux.Handle("GET /tasks/{uuid}/attach", ingressAPI.NewTerminalHandler(taskRepository, registry, transport, logger))
-
 	// the kinds whose resources the ingress finds, by their ingress
-	// strategies: each stream of theirs, a VM's terminal, is carried the same
-	// way to the node holding the resource, under the kind's own plural, and
-	// a slug that is not a task's is asked of those with endpoints, a VM's
-	// among them. What the ingress reads of them are the control plane's
-	// records, kept by kind.
+	// strategies: each stream of theirs, a terminal, which the browser opens
+	// here rather than anywhere else, is carried to the node holding the
+	// resource, under the kind's own plural, a task's at /tasks/{uuid}/attach
+	// and a VM's at /vms/{uuid}/attach; and a slug is asked of those with
+	// endpoints, a task's first. Who may open a terminal is the node's to
+	// decide, from the owner on the resource and the token on the request.
+	// What the ingress reads of them are the control plane's records, kept by
+	// kind.
 	kinds, err := ingressKinds(resourceRepository)
 	if err != nil {
 		return nil, err
@@ -211,11 +206,11 @@ func ingressConsoleCommand(
 		return nil, err
 	}
 
-	// a request to a hostname under the workload's domain is a task's or a
-	// resource's own traffic, a VM's, and goes to the node holding it;
+	// a request to a hostname under the workload's domain is a resource's own
+	// traffic, a task's or a VM's, and goes to the node holding it;
 	// everything else is one of the ingress's own routes.
 	router := ingressAPI.NewRouter(
-		ingressAPI.NewTaskHandler(taskRepository, kinds, registry, transport, ingressConfigs.Domain, logger),
+		ingressAPI.NewTaskHandler(kinds, registry, transport, ingressConfigs.Domain, logger),
 		mux,
 		ingressConfigs.Domain,
 	)

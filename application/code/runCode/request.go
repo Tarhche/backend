@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"github.com/khanzadimahdi/testproject/domain"
+	taskKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/task"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
-	"github.com/khanzadimahdi/testproject/domain/workload/task/events"
 )
 
 const (
@@ -94,9 +94,9 @@ func (r *Request) Image() string {
 // ResourceLimits is what a snippet's task is given: the defaults, but for a
 // Go snippet, which is built before it runs and needs more memory and disk
 // for that than any other snippet does to run.
-func (r *Request) ResourceLimits() events.ResourceLimits {
-	limits := events.ResourceLimits{
-		Cpu:    DefaultMaxCpu,
+func (r *Request) ResourceLimits() taskKind.Limits {
+	limits := taskKind.Limits{
+		CPU:    DefaultMaxCpu,
 		Memory: DefaultMaxMemorySize,
 		Disk:   DefaultMaxDiskSize,
 	}

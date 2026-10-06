@@ -14,8 +14,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/khanzadimahdi/testproject/domain"
+	taskKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/task"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
-	"github.com/khanzadimahdi/testproject/domain/workload/task"
 )
 
 // terminalNode is a node standing in for the far end of a tunnel: it answers
@@ -119,10 +119,10 @@ func TestTerminalHandler(t *testing.T) {
 		n := newTerminalNode(t)
 		connected, transport := tunnelTo(map[string]*terminalNode{"workload-orchestrator-01": n})
 
-		resolver := &fakeResolver{tasks: map[string]task.Task{"web": {UUID: "task-uuid", NodeName: "workload-orchestrator-01"}}}
+		snippet := in(held("web-abcde", "workload-orchestrator-01"), func(t *taskKind.Task) { t.Metadata.UUID = "task-uuid" })
 
 		mux := http.NewServeMux()
-		mux.Handle("GET /tasks/{uuid}/attach", NewTerminalHandler(resolver, connected, transport, logger))
+		require.NoError(t, RouteKinds(mux, finding(t, tasksIn(t, snippet)), connected, transport, logger))
 
 		front := httptest.NewServer(mux)
 		defer front.Close()

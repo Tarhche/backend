@@ -15,14 +15,15 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// terminalHandler carries a terminal to the node holding a task, or a
-// resource of a kind with streams, a VM's.
+// terminalHandler carries a terminal to the node holding a resource of a
+// kind with streams, a task's or a VM's.
 //
 // It works out which node that is and proxies the connection there, and that is
 // all it does. Who may open a terminal is the node's to answer: it reads the
 // owner off the task or the VM and compares it with the token carried in this
-// request, neither of which the ingress looks at. So this is a pipe that knows
-// an address, and nothing here has to be trusted for the answer to be right.
+// request, if there is one, neither of which the ingress looks at. So this is
+// a pipe that knows an address, and nothing here has to be trusted for the
+// answer to be right.
 type terminalHandler struct {
 	// what the terminal is opened in, as the answers name it.
 	what string
@@ -40,31 +41,10 @@ type terminalHandler struct {
 
 var _ http.Handler = &terminalHandler{}
 
-// NewTerminalHandler carries a terminal inside a task to the node holding the
-// task, on the node's /api/tasks/{uuid}/attach.
-func NewTerminalHandler(
-	resolver Resolver,
-	registry ingress.Registry,
-	transport http.RoundTripper,
-	logger *slog.Logger,
-) *terminalHandler {
-	locate := func(ctx context.Context, uuid string) (string, error) {
-		t, err := resolver.GetOne(ctx, uuid)
-
-		return t.NodeName, err
-	}
-
-	route := func(uuid string) string {
-		return "/api/tasks/" + url.PathEscape(uuid) + "/attach"
-	}
-
-	return newTerminalHandler("task", locate, route, registry, transport, logger)
-}
-
 // NewKindTerminalHandler carries a stream action of a kind, its terminal say,
 // to the node holding the resource, on the node's
-// /api/{plural}/{uuid}/{action}, exactly as a task's terminal is carried: a
-// VM's on /vms/{uuid}/attach. Which node that is, the kind's ingress strategy
+// /api/{plural}/{uuid}/{action}: a task's on /tasks/{uuid}/attach and a VM's
+// on /vms/{uuid}/attach. Which node that is, the kind's ingress strategy
 // says.
 func NewKindTerminalHandler(
 	binding kind.IngressBinding,
@@ -121,7 +101,7 @@ func newTerminalHandler(
 	return h
 }
 
-// @Summary		Open a terminal in a task, or a resource of a kind with streams, a vm's
+// @Summary		Open a terminal in a resource of a kind with streams, a task's or a vm's
 // @Description	carries a websocket to the node holding it, which decides who may open one
 // @Tags			workload ingress
 // @Param			uuid	path	string	true	"Task, VM or resource UUID"

@@ -14,42 +14,19 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	ingressTasks "github.com/khanzadimahdi/testproject/application/workload/ingress/kinds/task"
 	ingressVMs "github.com/khanzadimahdi/testproject/application/workload/ingress/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
+	taskKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/task"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
-	"github.com/khanzadimahdi/testproject/domain/workload/task"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	resourcesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/resources"
 )
 
 const testDomain = "workload.localhost"
-
-// fakeResolver stands in for the task repository: which node is holding what.
-type fakeResolver struct {
-	tasks map[string]task.Task
-}
-
-func (r *fakeResolver) GetOneBySlug(_ context.Context, slug string) (task.Task, error) {
-	t, ok := r.tasks[slug]
-	if !ok {
-		return task.Task{}, domain.ErrNotExists
-	}
-
-	return t, nil
-}
-
-func (r *fakeResolver) GetOne(_ context.Context, uuid string) (task.Task, error) {
-	for _, t := range r.tasks {
-		if t.UUID == uuid {
-			return t, nil
-		}
-	}
-
-	return task.Task{}, domain.ErrNotExists
-}
 
 // node is an orchestrator standing in for the far end of a tunnel: it answers the
 // route the ingress sends a task's traffic down, and records what it was
@@ -95,25 +72,27 @@ func newNode(t *testing.T, handler http.Handler) *node {
 	return n
 }
 
-// ingressFor builds the handler the way the provider does, with a transport
-// that stands for the tunnel: the address names a node, and what comes back is
-// a connection to the one standing in for it.
-func ingressFor(t *testing.T, resolver Resolver, nodes map[string]*node) *taskHandler {
+// ingressFor builds the handler the way the provider does, finding tasks, the
+// first kind it asks, as the task kind's ingress strategy finds them in the
+// records kept of them, with a transport that stands for the tunnel: the
+// address names a node, and what comes back is a connection to the one
+// standing in for it.
+func ingressFor(t *testing.T, tasks []taskKind.Task, nodes map[string]*node) *taskHandler {
 	t.Helper()
 
-	return ingressWithKinds(t, resolver, nil, nodes)
+	return ingressWithKinds(t, finding(t, tasksIn(t, tasks...)), nodes)
 }
 
-// ingressWithVMs is ingressFor with VMs to find as well as tasks, as the vm
+// ingressWithVMs is ingressFor with VMs to find after the tasks, as the vm
 // kind's ingress strategy finds them in the records kept of them.
-func ingressWithVMs(t *testing.T, resolver Resolver, vms []vmKind.VM, nodes map[string]*node) *taskHandler {
+func ingressWithVMs(t *testing.T, vms []vmKind.VM, nodes map[string]*node) *taskHandler {
 	t.Helper()
 
-	return ingressWithKinds(t, resolver, vmsIn(t, vms...), nodes)
+	return ingressWithKinds(t, finding(t, tasksIn(t), vmsBy(t, vms...)), nodes)
 }
 
-// ingressWithKinds is ingressFor with the resources of kinds to find as well.
-func ingressWithKinds(t *testing.T, resolver Resolver, kinds *kind.Registry[kind.IngressBinding], nodes map[string]*node) *taskHandler {
+// ingressWithKinds builds the handler finding the resources of kinds.
+func ingressWithKinds(t *testing.T, kinds *kind.Registry[kind.IngressBinding], nodes map[string]*node) *taskHandler {
 	t.Helper()
 
 	connected := make(connectedWorkloads, len(nodes))
@@ -134,12 +113,20 @@ func ingressWithKinds(t *testing.T, resolver Resolver, kinds *kind.Registry[kind
 		},
 	}
 
-	return NewTaskHandler(resolver, kinds, connected, transport, testDomain, slog.New(slog.DiscardHandler))
+	return NewTaskHandler(kinds, connected, transport, testDomain, slog.New(slog.DiscardHandler))
 }
 
 // vmsIn is the vm kind registered as the ingress registers it, finding vms
 // in the records the control plane keeps of them.
 func vmsIn(t *testing.T, vms ...vmKind.VM) *kind.Registry[kind.IngressBinding] {
+	t.Helper()
+
+	return finding(t, vmsBy(t, vms...))
+}
+
+// vmsBy is the vm kind as the ingress binds it, finding vms in the records
+// the control plane keeps of them.
+func vmsBy(t *testing.T, vms ...vmKind.VM) kind.IngressBinding {
 	t.Helper()
 
 	records := make([]resource.Record, len(vms))
@@ -150,17 +137,46 @@ func vmsIn(t *testing.T, vms ...vmKind.VM) *kind.Registry[kind.IngressBinding] {
 		records[i] = resource.Record{Raw: raw}
 	}
 
-	return finding(t, kind.BindIngress(vmKind.Descriptor(), ingressVMs.New(resourcesMemory.NewRepository(records...))))
+	return kind.BindIngress(vmKind.Descriptor(), ingressVMs.New(resourcesMemory.NewRepository(records...)))
 }
 
-func held(slug string, nodeName string) task.Task {
-	return task.Task{Slug: slug, CurrentState: task.Running, NodeName: nodeName}
+// tasksIn is the task kind as the ingress binds it, finding tasks in the
+// records the control plane keeps of them.
+func tasksIn(t *testing.T, tasks ...taskKind.Task) kind.IngressBinding {
+	t.Helper()
+
+	records := make([]resource.Record, len(tasks))
+	for i := range tasks {
+		raw, err := kind.Encode(tasks[i])
+		require.NoError(t, err)
+
+		records[i] = resource.Record{Raw: raw}
+	}
+
+	return kind.BindIngress(taskKind.Descriptor(), ingressTasks.New(resourcesMemory.NewRepository(records...)))
+}
+
+// held is a running task serving ports 80 and 8080, under a slug, on a node.
+func held(slug string, nodeName string) taskKind.Task {
+	return taskKind.Task{
+		Kind:     taskKind.Name,
+		Metadata: kind.Metadata{UUID: "task-" + slug, Slug: slug, Node: nodeName},
+		Spec:     taskKind.Spec{Image: "busybox", Ports: []port.Port{80, 8080}},
+		Status:   taskKind.Status{Status: kind.Status{State: taskKind.Running, Expected: taskKind.Running}},
+	}
+}
+
+// in is t as change leaves it.
+func in(t taskKind.Task, change func(t *taskKind.Task)) taskKind.Task {
+	change(&t)
+
+	return t
 }
 
 func TestParseHost(t *testing.T) {
 	t.Parallel()
 
-	h := ingressFor(t, &fakeResolver{}, nil)
+	h := ingressFor(t, nil, nil)
 
 	testcases := []struct {
 		name string
@@ -207,15 +223,13 @@ func TestTaskHandler(t *testing.T) {
 			io.WriteString(rw, "answered by the task")
 		}))
 
-		resolver := &fakeResolver{tasks: map[string]task.Task{
-			"nginx-xkfqz": held("nginx-xkfqz", "workload-orchestrator-02"),
-		}}
+		tasks := []taskKind.Task{held("nginx-xkfqz", "workload-orchestrator-02")}
 
 		rw := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "/some/path?a=1", nil)
 		request.Host = "nginx-xkfqz." + testDomain
 
-		ingressFor(t, resolver, map[string]*node{"workload-orchestrator-02": n}).ServeHTTP(rw, request)
+		ingressFor(t, tasks, map[string]*node{"workload-orchestrator-02": n}).ServeHTTP(rw, request)
 
 		assert.Equal(t, http.StatusOK, rw.Code)
 		assert.Equal(t, "answered by the task", rw.Body.String())
@@ -228,15 +242,13 @@ func TestTaskHandler(t *testing.T) {
 	t.Run("a bare hostname asks the node for no port in particular", func(t *testing.T) {
 		n := newNode(t, http.NotFoundHandler())
 
-		resolver := &fakeResolver{tasks: map[string]task.Task{
-			"nginx-xkfqz": held("nginx-xkfqz", "workload-orchestrator-01"),
-		}}
+		tasks := []taskKind.Task{held("nginx-xkfqz", "workload-orchestrator-01")}
 
 		rw := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
 		request.Host = "nginx-xkfqz." + testDomain
 
-		ingressFor(t, resolver, map[string]*node{"workload-orchestrator-01": n}).ServeHTTP(rw, request)
+		ingressFor(t, tasks, map[string]*node{"workload-orchestrator-01": n}).ServeHTTP(rw, request)
 
 		assert.Equal(t, "0", n.port, "the node picks the lowest one it finds")
 	})
@@ -244,15 +256,13 @@ func TestTaskHandler(t *testing.T) {
 	t.Run("a named port is passed on to the node", func(t *testing.T) {
 		n := newNode(t, http.NotFoundHandler())
 
-		resolver := &fakeResolver{tasks: map[string]task.Task{
-			"nginx-xkfqz": held("nginx-xkfqz", "workload-orchestrator-01"),
-		}}
+		tasks := []taskKind.Task{held("nginx-xkfqz", "workload-orchestrator-01")}
 
 		rw := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
 		request.Host = "nginx-xkfqz-8080." + testDomain
 
-		ingressFor(t, resolver, map[string]*node{"workload-orchestrator-01": n}).ServeHTTP(rw, request)
+		ingressFor(t, tasks, map[string]*node{"workload-orchestrator-01": n}).ServeHTTP(rw, request)
 
 		assert.Equal(t, "8080", n.port)
 	})
@@ -274,11 +284,9 @@ func TestTaskHandler(t *testing.T) {
 			_ = conn.WriteMessage(websocket.TextMessage, append([]byte("echo: "), message...))
 		}))
 
-		resolver := &fakeResolver{tasks: map[string]task.Task{
-			"app-xkfqz": held("app-xkfqz", "workload-orchestrator-01"),
-		}}
+		tasks := []taskKind.Task{held("app-xkfqz", "workload-orchestrator-01")}
 
-		front := httptest.NewServer(ingressFor(t, resolver, map[string]*node{"workload-orchestrator-01": n}))
+		front := httptest.NewServer(ingressFor(t, tasks, map[string]*node{"workload-orchestrator-01": n}))
 		defer front.Close()
 
 		endpoint := "ws://" + strings.TrimPrefix(front.URL, "http://") + "/ws"
@@ -300,7 +308,17 @@ func TestTaskHandler(t *testing.T) {
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
 		request.Host = "nobody-xkfqz." + testDomain
 
-		ingressFor(t, &fakeResolver{}, nil).ServeHTTP(rw, request)
+		ingressFor(t, nil, nil).ServeHTTP(rw, request)
+
+		assert.Equal(t, http.StatusNotFound, rw.Code)
+	})
+
+	t.Run("a port a task does not expose is not there", func(t *testing.T) {
+		rw := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, "/", nil)
+		request.Host = "nginx-xkfqz-22." + testDomain
+
+		ingressFor(t, []taskKind.Task{held("nginx-xkfqz", "workload-orchestrator-01")}, nil).ServeHTTP(rw, request)
 
 		assert.Equal(t, http.StatusNotFound, rw.Code)
 	})
@@ -310,52 +328,46 @@ func TestTaskHandler(t *testing.T) {
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
 		request.Host = "nginx-xkfqz.example.com"
 
-		ingressFor(t, &fakeResolver{}, nil).ServeHTTP(rw, request)
+		ingressFor(t, nil, nil).ServeHTTP(rw, request)
 
 		assert.Equal(t, http.StatusNotFound, rw.Code)
 	})
 
 	t.Run("a task that is not running is unavailable", func(t *testing.T) {
-		resolver := &fakeResolver{tasks: map[string]task.Task{
-			"nginx-xkfqz": {Slug: "nginx-xkfqz", CurrentState: task.Stopped, NodeName: "workload-orchestrator-01"},
-		}}
+		tasks := []taskKind.Task{in(held("nginx-xkfqz", "workload-orchestrator-01"), func(t *taskKind.Task) { t.Status.State = taskKind.Completed })}
 
 		rw := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
 		request.Host = "nginx-xkfqz." + testDomain
 
-		ingressFor(t, resolver, nil).ServeHTTP(rw, request)
+		ingressFor(t, tasks, nil).ServeHTTP(rw, request)
 
 		assert.Equal(t, http.StatusServiceUnavailable, rw.Code)
 		assert.Contains(t, rw.Body.String(), "not running")
 	})
 
 	t.Run("a task that has not been scheduled is unavailable", func(t *testing.T) {
-		resolver := &fakeResolver{tasks: map[string]task.Task{
-			"nginx-xkfqz": {Slug: "nginx-xkfqz", CurrentState: task.Running},
-		}}
+		tasks := []taskKind.Task{held("nginx-xkfqz", "")}
 
 		rw := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
 		request.Host = "nginx-xkfqz." + testDomain
 
-		ingressFor(t, resolver, nil).ServeHTTP(rw, request)
+		ingressFor(t, tasks, nil).ServeHTTP(rw, request)
 
 		assert.Equal(t, http.StatusServiceUnavailable, rw.Code)
 		assert.Contains(t, rw.Body.String(), "not been scheduled")
 	})
 
 	t.Run("a node that is not connected cannot be asked", func(t *testing.T) {
-		resolver := &fakeResolver{tasks: map[string]task.Task{
-			"nginx-xkfqz": held("nginx-xkfqz", "workload-orchestrator-09"),
-		}}
+		tasks := []taskKind.Task{held("nginx-xkfqz", "workload-orchestrator-09")}
 
 		rw := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
 		request.Host = "nginx-xkfqz." + testDomain
 
 		// the node holding it is not one of the connected ones
-		ingressFor(t, resolver, map[string]*node{"workload-orchestrator-01": newNode(t, http.NotFoundHandler())}).ServeHTTP(rw, request)
+		ingressFor(t, tasks, map[string]*node{"workload-orchestrator-01": newNode(t, http.NotFoundHandler())}).ServeHTTP(rw, request)
 
 		assert.Equal(t, http.StatusServiceUnavailable, rw.Code)
 		assert.Contains(t, rw.Body.String(), "not connected")
@@ -380,9 +392,7 @@ func TestWaitingPage(t *testing.T) {
 		}))
 	}
 
-	resolver := &fakeResolver{tasks: map[string]task.Task{
-		"nginx-xkfqz": held("nginx-xkfqz", "workload-orchestrator-01"),
-	}}
+	tasks := []taskKind.Task{held("nginx-xkfqz", "workload-orchestrator-01")}
 
 	t.Run("a browser gets a page that comes back on its own", func(t *testing.T) {
 		n := unreachable(t)
@@ -392,7 +402,7 @@ func TestWaitingPage(t *testing.T) {
 		request.Host = "nginx-xkfqz." + testDomain
 		request.Header.Set("Accept", "text/html,application/xhtml+xml,*/*;q=0.8")
 
-		ingressFor(t, resolver, map[string]*node{"workload-orchestrator-01": n}).ServeHTTP(rw, request)
+		ingressFor(t, tasks, map[string]*node{"workload-orchestrator-01": n}).ServeHTTP(rw, request)
 
 		assert.Equal(t, http.StatusBadGateway, rw.Code)
 		assert.Equal(t, "2", rw.Header().Get("Retry-After"))
@@ -410,7 +420,7 @@ func TestWaitingPage(t *testing.T) {
 		request.Header.Set("Accept", "text/html")
 		request.Header.Set("Accept-Language", "fa-IR,fa;q=0.9,en;q=0.8")
 
-		ingressFor(t, resolver, map[string]*node{"workload-orchestrator-01": n}).ServeHTTP(rw, request)
+		ingressFor(t, tasks, map[string]*node{"workload-orchestrator-01": n}).ServeHTTP(rw, request)
 
 		assert.Contains(t, rw.Body.String(), `lang="fa" dir="rtl"`)
 		assert.Contains(t, rw.Body.String(), "آماده‌سازی")
@@ -423,7 +433,7 @@ func TestWaitingPage(t *testing.T) {
 		request := httptest.NewRequest(http.MethodGet, "/api/health", nil)
 		request.Host = "nginx-xkfqz." + testDomain
 
-		ingressFor(t, resolver, map[string]*node{"workload-orchestrator-01": n}).ServeHTTP(rw, request)
+		ingressFor(t, tasks, map[string]*node{"workload-orchestrator-01": n}).ServeHTTP(rw, request)
 
 		assert.Equal(t, http.StatusBadGateway, rw.Code)
 		assert.Equal(t, "2", rw.Header().Get("Retry-After"))
@@ -462,7 +472,7 @@ func TestTaskHandler_VMs(t *testing.T) {
 		request := httptest.NewRequest(http.MethodGet, "/index.html?a=1", nil)
 		request.Host = "box-xkfqz-8080." + testDomain
 
-		ingressWithVMs(t, &fakeResolver{}, []vmKind.VM{exposing("box-xkfqz", "workload-orchestrator-02", 80, 8080)}, map[string]*node{"workload-orchestrator-02": n}).ServeHTTP(rw, request)
+		ingressWithVMs(t, []vmKind.VM{exposing("box-xkfqz", "workload-orchestrator-02", 80, 8080)}, map[string]*node{"workload-orchestrator-02": n}).ServeHTTP(rw, request)
 
 		assert.Equal(t, http.StatusOK, rw.Code)
 		assert.Equal(t, "answered by the vm", rw.Body.String())
@@ -480,7 +490,7 @@ func TestTaskHandler_VMs(t *testing.T) {
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
 		request.Host = "box-xkfqz." + testDomain
 
-		ingressWithVMs(t, &fakeResolver{}, []vmKind.VM{exposing("box-xkfqz", "workload-orchestrator-01", 80)}, map[string]*node{"workload-orchestrator-01": n}).ServeHTTP(rw, request)
+		ingressWithVMs(t, []vmKind.VM{exposing("box-xkfqz", "workload-orchestrator-01", 80)}, map[string]*node{"workload-orchestrator-01": n}).ServeHTTP(rw, request)
 
 		assert.Equal(t, "box-xkfqz", n.slug, "the vm's node was asked")
 		assert.Equal(t, "0", n.port, "the node picks the lowest port the vm exposes")
@@ -544,7 +554,7 @@ func TestTaskHandler_VMs(t *testing.T) {
 			request := httptest.NewRequest(http.MethodGet, "/", nil)
 			request.Host = tt.host + "." + testDomain
 
-			ingressWithVMs(t, &fakeResolver{}, []vmKind.VM{tt.vm}, map[string]*node{"workload-orchestrator-01": newNode(t, http.NotFoundHandler())}).ServeHTTP(rw, request)
+			ingressWithVMs(t, []vmKind.VM{tt.vm}, map[string]*node{"workload-orchestrator-01": newNode(t, http.NotFoundHandler())}).ServeHTTP(rw, request)
 
 			assert.Equal(t, tt.status, rw.Code)
 			assert.Contains(t, rw.Body.String(), tt.says)

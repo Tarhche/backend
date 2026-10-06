@@ -62,6 +62,11 @@ type ControlPlaneKinds struct {
 	// stores' resources, deleting what lives in a resource with it, as the
 	// kinds that live in it say, wherever it is deleted from.
 	Resources *cascade.Repository
+
+	// Dispatcher asks resources of any kind for their kinds' commands: the
+	// code runner's runs, shown among anybody's VMs, are asked their tasks'
+	// through it.
+	Dispatcher *dispatch.Dispatcher
 }
 
 // controlPlaneKindsOptions are how the plumbing goes about its work.
@@ -148,9 +153,10 @@ func NewControlPlaneKinds(
 		Subscribers: map[string]domain.MessageHandler{
 			kind.ResultName: resourceResult.NewResult(registry, resources, waiting, logger, nil, resourceResult.WithRestorer(resources.Cascade())),
 		},
-		Observer:  observer,
-		Reconcile: kindsReconcile.NewUseCase(registry, resources, stores.Nodes, dispatcher, logger, settings.reconcile),
-		Admit:     useCases.Admit,
-		Resources: resources,
+		Observer:   observer,
+		Reconcile:  kindsReconcile.NewUseCase(registry, resources, stores.Nodes, dispatcher, logger, settings.reconcile),
+		Admit:      useCases.Admit,
+		Resources:  resources,
+		Dispatcher: dispatcher,
 	}
 }

@@ -58,7 +58,10 @@ type Execution struct {
 	// did. A runtime says it of every run it lists, as of one it inspects,
 	// and it is zero for a run that has not started.
 	StartedAt time.Time
-	ExitCode  int
+
+	// ExitCode is what its main process exited with, for a run that has
+	// ended. A runtime says it of every run it lists, as of one it inspects.
+	ExitCode int
 
 	// ReadOnly makes the task's root filesystem immutable, so nothing it
 	// runs can change the image it was started from.

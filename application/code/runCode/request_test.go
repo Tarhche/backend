@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/khanzadimahdi/testproject/domain"
+	taskKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/task"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
-	"github.com/khanzadimahdi/testproject/domain/workload/task/events"
 )
 
 func TestRequest_Validate(t *testing.T) {
@@ -186,16 +186,16 @@ func TestRequest_Image(t *testing.T) {
 func TestRequest_ResourceLimits(t *testing.T) {
 	t.Parallel()
 
-	defaults := events.ResourceLimits{Cpu: 2, Memory: 200 << 20, Disk: 100 << 20}
+	defaults := taskKind.Limits{CPU: 2, Memory: 200 << 20, Disk: 100 << 20}
 
 	// a Go snippet is built from source before it runs, standard library
 	// and all: its compiler is killed in the default's memory, and a build of
 	// one that imports net/http does not fit in the default's disk.
-	goes := events.ResourceLimits{Cpu: 2, Memory: 512 << 20, Disk: 512 << 20}
+	goes := taskKind.Limits{CPU: 2, Memory: 512 << 20, Disk: 512 << 20}
 
 	// every runner there is, so that one added is one somebody has decided
 	// what to give.
-	want := map[string]events.ResourceLimits{
+	want := map[string]taskKind.Limits{
 		"go-1.24":      goes,
 		"go-1.23":      goes,
 		"nodejs-23.11": defaults,

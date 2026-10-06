@@ -1,15 +1,32 @@
+// Package heartbeat answers the code runner's readers with what became of
+// their snippets, from what the nodes running them say.
+//
+// A snippet runs as a task of the guest's, named after the request that asked
+// for it. Every node's heartbeat says what each task it runs is doing, its
+// run's output and the ports that came up (taskKind.Run), and every command a
+// node carries out is answered with what came of it: so whichever of the
+// blog's replicas hears either answers the request a task is named after,
+// without asking anything that keeps records.
+//
+// A snippet nobody is watching is answered once, when it has ended, with
+// what it printed. One that is watched is told what it is doing at every
+// heartbeat, where its ports are and when it will be stopped, and its last
+// answer is the one that says it ended. One that could not be run at all is
+// answered with why.
 package heartbeat
 
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
 
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/workload/task"
-	"github.com/khanzadimahdi/testproject/domain/workload/task/events"
+	"github.com/khanzadimahdi/testproject/domain/workload/kind"
+	taskKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/task"
+	nodeEvents "github.com/khanzadimahdi/testproject/domain/workload/node/events"
 )
 
 type heartbeat struct {
@@ -24,6 +41,7 @@ type heartbeat struct {
 
 var _ domain.MessageHandler = &heartbeat{}
 
+// NewHeartbeatHandler answers readers from the nodes' heartbeats.
 func NewHeartbeatHandler(replyer domain.Replyer, ingressDomain string, logger *slog.Logger) *heartbeat {
 	return &heartbeat{
 		replyer:       replyer,
@@ -32,54 +50,66 @@ func NewHeartbeatHandler(replyer domain.Replyer, ingressDomain string, logger *s
 	}
 }
 
-// kindOf reads what a heartbeat is reporting on. One from before there were
-// kinds is a job, which is what every task here was.
-func kindOf(h *events.Heartbeat) task.Kind {
-	if kind := task.Kind(h.Kind); kind.IsValid() {
-		return kind
-	}
+func (h *heartbeat) Handle(ctx context.Context, data []byte) error {
+	var beat nodeEvents.Heartbeat
+	if err := json.Unmarshal(data, &beat); err != nil {
+		// read again, it is as unreadable; the next beat says it all again.
+		h.logger.WarnContext(ctx, "a heartbeat that cannot be read", "error", err)
 
-	return task.DefaultKind
-}
-
-// deadline is when a snippet being watched will be stopped. The workload sets it
-// as the task is made and reports it with every beat; a snippet that is
-// not running any more has none left to report.
-func deadline(h *events.Heartbeat, state task.State) *time.Time {
-	if !h.Interactive || state != task.Running || h.Deadline.IsZero() {
 		return nil
 	}
 
-	at := h.Deadline
+	report, reported := beat.Observations[taskKind.Name]
+	if !reported {
+		return nil
+	}
 
-	return &at
+	var failed error
+
+	for _, observed := range report.Instances {
+		var status taskKind.Status
+		if err := json.Unmarshal(observed.Status, &status); err != nil {
+			h.logger.WarnContext(ctx, "a task's status that cannot be read", "error", err, "task", observed.UUID)
+
+			continue
+		}
+
+		failed = errors.Join(failed, h.answer(ctx, observed.UUID, status))
+	}
+
+	return failed
 }
 
-func (h *heartbeat) Handle(ctx context.Context, data []byte) error {
-	var heartbeat events.Heartbeat
-	if err := json.Unmarshal(data, &heartbeat); err != nil {
-		return err
-	}
+// answer tells whoever ran a snippet what its task is doing, when there is
+// something to tell them.
+func (h *heartbeat) answer(ctx context.Context, uuid string, status taskKind.Status) error {
+	run := status.Run
 
 	// a job is a piece of code somebody ran here, and its name is the request
-	// that asked for it. A service is a task from the dashboard, whose
-	// name is a name: answering it would be answering a request nobody made.
-	if kindOf(&heartbeat) != task.KindJob {
+	// that asked for it. A service is a task of somebody's, whose name is a
+	// name: answering it would be answering a request nobody made.
+	if !run.Job() || len(run.Name) == 0 || len(status.State) == 0 {
 		return nil
 	}
 
-	taskState := task.State(heartbeat.State)
-	requestID := heartbeat.Name
+	ended := taskKind.Ended(status.State)
 
-	h.logger.Info("heartbeat received", "heartbeat", heartbeat)
+	// a snippet nobody is watching is answered once, with what it printed:
+	// that is the whole of what somebody who ran it is waiting for.
+	if !run.Interactive && !ended {
+		return nil
+	}
 
 	response := &Response{
-		Name:      heartbeat.Name,
-		Logs:      heartbeat.Logs,
-		State:     taskState.String(),
-		TaskUUID:  heartbeat.UUID,
-		Endpoints: h.endpoints(&heartbeat, taskState),
-		Deadline:  deadline(&heartbeat, taskState),
+		Name:      run.Name,
+		State:     string(status.State),
+		TaskUUID:  uuid,
+		Endpoints: h.endpoints(run, status.State),
+		Deadline:  deadline(run, status.State),
+	}
+
+	if len(run.Output) > 0 {
+		response.Logs = []byte(run.Output)
 	}
 
 	payload, err := json.Marshal(response)
@@ -87,15 +117,9 @@ func (h *heartbeat) Handle(ctx context.Context, data []byte) error {
 		return err
 	}
 
-	// a snippet nobody is watching is answered once, with what it printed:
-	// that is the whole of what somebody who ran it is waiting for.
-	if !heartbeat.Interactive {
-		if !task.IsTerminalState(taskState) {
-			return nil
-		}
-
+	if !run.Interactive {
 		return h.replyer.Reply(ctx, &domain.Reply{
-			RequestID: requestID,
+			RequestID: run.Name,
 			Payload:   payload,
 		})
 	}
@@ -103,28 +127,43 @@ func (h *heartbeat) Handle(ctx context.Context, data []byte) error {
 	// one that is watched is told what it is doing as it does it, and where it
 	// can be reached while it can be, until it ends.
 	kind := domain.ReplyChunk
-	if task.IsTerminalState(taskState) {
+	if ended {
 		kind = domain.ReplyEOF
 	}
 
 	return h.replyer.Reply(ctx, &domain.Reply{
-		RequestID: requestID,
+		RequestID: run.Name,
 		Kind:      kind,
 		Payload:   payload,
 	})
 }
 
-func (h *heartbeat) endpoints(beat *events.Heartbeat, state task.State) []Endpoint {
-	if state != task.Running || len(beat.Slug) == 0 {
+// deadline is when a snippet being watched will be stopped. Its node sets it
+// as the snippet's run comes up and reports it with every beat; a snippet that
+// is not running any more has none left to report.
+func deadline(run *taskKind.Run, state kind.State) *time.Time {
+	if !run.Interactive || state != taskKind.Running || run.Deadline.IsZero() {
 		return nil
 	}
 
-	endpoints := make([]Endpoint, 0, len(beat.Endpoints))
-	for _, e := range beat.Endpoints {
-		host := fmt.Sprintf("%s-%d.%s", beat.Slug, e.TaskPort, h.ingressDomain)
+	at := run.Deadline
+
+	return &at
+}
+
+// endpoints are where a running snippet answers: each of its ports that came
+// up, under its slug and the workload's domain.
+func (h *heartbeat) endpoints(run *taskKind.Run, state kind.State) []Endpoint {
+	if state != taskKind.Running || len(run.Slug) == 0 {
+		return nil
+	}
+
+	endpoints := make([]Endpoint, 0, len(run.Endpoints))
+	for _, e := range run.Endpoints {
+		host := fmt.Sprintf("%s-%d.%s", run.Slug, e.Port, h.ingressDomain)
 
 		endpoints = append(endpoints, Endpoint{
-			TaskPort: uint(e.TaskPort),
+			TaskPort: uint(e.Port),
 			URL:      "http://" + host,
 		})
 	}

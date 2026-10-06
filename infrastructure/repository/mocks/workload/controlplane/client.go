@@ -9,9 +9,9 @@ import (
 
 	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/domain/workload/docker"
+	taskKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/task"
 	"github.com/khanzadimahdi/testproject/domain/workload/snapshot"
 	"github.com/khanzadimahdi/testproject/domain/workload/stack"
-	"github.com/khanzadimahdi/testproject/domain/workload/task"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
 
@@ -21,10 +21,16 @@ type MockClient struct {
 
 var _ workloadControlPlane.Client = &MockClient{}
 
-func (m *MockClient) Task(ctx context.Context, uuid string) (task.Task, error) {
+func (m *MockClient) RunTask(ctx context.Context, ownerUUID string, request workloadControlPlane.TaskRequest) (taskKind.Task, error) {
+	args := m.Called(ctx, ownerUUID, request)
+
+	return args.Get(0).(taskKind.Task), args.Error(1)
+}
+
+func (m *MockClient) Task(ctx context.Context, uuid string) (taskKind.Task, error) {
 	args := m.Called(ctx, uuid)
 
-	return args.Get(0).(task.Task), args.Error(1)
+	return args.Get(0).(taskKind.Task), args.Error(1)
 }
 
 func (m *MockClient) DeleteTask(ctx context.Context, uuid string) error {

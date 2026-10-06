@@ -367,7 +367,7 @@ func TestVMs_Admit(t *testing.T) {
 		run := vmtest.Run("run")
 		w := vmtest.New(vmtest.WithTasks(run))
 
-		held, err := w.VMs.Slugs[1](ctx, run.Slug)
+		held, err := w.VMs.Slugs[1](ctx, run.Metadata.Slug)
 		require.NoError(t, err)
 		assert.True(t, held, "a task's slug is a hostname the ingress serves")
 	})

@@ -1,7 +1,5 @@
 package task
 
-import "time"
-
 const (
 	// RetryForever asks the workload never to give up on a task: however
 	// many times it fails, it is asked for again.
@@ -16,37 +14,7 @@ const (
 	// is asked for once, by somebody waiting for its output, and running it
 	// twice would give them the wrong one.
 	jobRetries = 0
-
-	// RetryWindow is how long a task has to stand up before the failures
-	// behind it stop counting. A task that ran for an afternoon and then
-	// died is not the task that could not start this morning.
-	RetryWindow = 5 * time.Minute
-
-	// retryDelayStep is how long the workload leaves a task that has failed
-	// once, and how much longer for each failure behind that one;
-	// retryDelayCeiling is as long as it ever leaves one.
-	retryDelayStep    = 2 * time.Second
-	retryDelayCeiling = 30 * time.Second
 )
-
-// RetryDelay is how long to leave a task that has failed its attempt-th
-// attempt before making the next one.
-//
-// Even the first wait is a wait: a task that fails the moment it starts
-// would otherwise go through everything it is worth faster than anybody
-// watching could see what was happening to it.
-func RetryDelay(attempt int) time.Duration {
-	if attempt < 0 {
-		attempt = 0
-	}
-
-	delay := time.Duration(attempt+1) * retryDelayStep
-	if delay > retryDelayCeiling {
-		return retryDelayCeiling
-	}
-
-	return delay
-}
 
 // DefaultMaxRetries is what a task gets when it did not say how many
 // times it is worth trying.
@@ -56,47 +24,4 @@ func DefaultMaxRetries(kind Kind) int {
 	}
 
 	return serviceRetries
-}
-
-// MayRetry reports whether a task that has just failed its attempt-th
-// attempt is worth another one.
-//
-// Attempts are counted in the messages that carry them rather than written
-// down: a count belongs to one run of failures, and there is nothing left of it
-// once the task is what it was asked to be.
-func (t *Task) MayRetry(attempt int) bool {
-	if t.MaxRetries == RetryForever {
-		return true
-	}
-
-	return attempt < t.MaxRetries
-}
-
-// RetryDue reports whether a task that has failed has been left long
-// enough to be worth another attempt.
-//
-// The wait grows with the attempts behind it, so a task that fails the
-// moment it starts is not started over and over as fast as it can fail. It is
-// measured from the failure itself, which is written down, so the wait survives
-// a control plane that is restarted in the middle of it.
-func (t *Task) RetryDue(now time.Time, attempt int) bool {
-	if t.ExpectedState != Running || t.FinishedAt.IsZero() {
-		return false
-	}
-
-	return now.Sub(t.FinishedAt) >= RetryDelay(attempt)
-}
-
-// Attempt is which attempt a failure belongs to, given the number the node
-// reported with it.
-//
-// A task that had been standing for a while before it failed starts the
-// count again: what it failed at is staying up, not coming up, and the attempts
-// it took to come up were another story.
-func (t *Task) Attempt(reported int, failedAt time.Time) int {
-	if t.StartedAt.IsZero() || failedAt.IsZero() || failedAt.Sub(t.StartedAt) < RetryWindow {
-		return reported
-	}
-
-	return 0
 }

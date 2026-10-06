@@ -12,9 +12,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	getendpoint "github.com/khanzadimahdi/testproject/application/workload/orchestrator/getEndpoint"
+	getresourceendpoint "github.com/khanzadimahdi/testproject/application/workload/orchestrator/getResourceEndpoint"
+	orchestratorTasks "github.com/khanzadimahdi/testproject/application/workload/orchestrator/kinds/task"
+	"github.com/khanzadimahdi/testproject/domain/workload/kind"
+	taskKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/task"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
+	"github.com/khanzadimahdi/testproject/infrastructure/workload/task/vmruntime"
 	memory "github.com/khanzadimahdi/testproject/infrastructure/workload/vm/memory"
 )
 
@@ -47,12 +51,18 @@ func TestProxyHandler(t *testing.T) {
 			Image:   "ubuntu:24.04",
 			Ports:   []port.Port{80},
 			Network: vm.Network{Ingress: vm.AccessAllow, Egress: vm.AccessDeny},
-			Labels:  map[string]string{vm.LabelPurpose: held.purpose, vm.LabelSlug: held.slug},
+			Labels:  map[string]string{vm.LabelPurpose: held.purpose, vm.LabelSlug: held.slug, vm.LabelTask: id},
 		})
 		require.NoError(t, err)
 	}
 
-	handler := NewProxyHandler(getendpoint.NewUseCase(redirected{Engine: e, to: net.JoinHostPort(host, published)}), slog.New(slog.DiscardHandler))
+	// the code runner's tasks, whose ports are served as any kind's are.
+	runtime := vmruntime.New(redirected{Engine: e, to: net.JoinHostPort(host, published)}, slog.New(slog.DiscardHandler))
+
+	kinds := kind.NewRegistry[kind.NodeBinding]()
+	require.NoError(t, kinds.Register(kind.BindNode[taskKind.Spec, taskKind.Status](taskKind.Descriptor(), orchestratorTasks.New(runtime, "workload-orchestrator-01"))))
+
+	handler := NewResourceProxyHandler(getresourceendpoint.NewUseCase(kinds), taskKind.Name, slog.New(slog.DiscardHandler))
 
 	mux := http.NewServeMux()
 	mux.Handle("/tasks/{slug}/{port}/{path...}", handler)
