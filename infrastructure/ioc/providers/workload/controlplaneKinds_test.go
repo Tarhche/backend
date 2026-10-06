@@ -17,14 +17,13 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/kindstest"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind/kindtest"
+	snapshotKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/snapshot"
 	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
-	snapshotEvents "github.com/khanzadimahdi/testproject/domain/workload/snapshot/events"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
 	nodesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/nodes"
 	resourcesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/resources"
-	snapshotsMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/snapshots"
 	tasksMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/tasks"
 	logsMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/logs"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/permissions"
@@ -47,7 +46,6 @@ func served(t *testing.T) *controlPlane {
 
 	workload, err := NewControlPlaneWorkload(configs.NewWorkloadControlPlane(), ControlPlaneStores{
 		Resources: resources,
-		Snapshots: snapshotsMemory.NewRepository(),
 		Nodes:     nodesMemory.NewRepository(),
 		Tasks:     tasksMemory.NewRepository(),
 		TaskLogs:  logsMock.NewInMemoryRepository(),
@@ -79,11 +77,11 @@ func get(t *testing.T, handler http.Handler, target string) (int, string) {
 func TestNewControlPlaneKinds(t *testing.T) {
 	t.Parallel()
 
-	t.Run("vms and stacks are served under their plurals beside what is not a kind yet", func(t *testing.T) {
+	t.Run("vms, snapshots and stacks are served under their plurals beside what is not a kind yet", func(t *testing.T) {
 		t.Parallel()
 
 		plane := served(t)
-		assert.Equal(t, []string{vmKind.Name, stackKind.Name}, kindNames(plane.workload.Registry.Descriptors()))
+		assert.Equal(t, []string{vmKind.Name, snapshotKind.Name, stackKind.Name}, kindNames(plane.workload.Registry.Descriptors()))
 
 		mux := http.NewServeMux()
 		require.NoError(t, plane.workload.Route(mux), "no kind takes a route of what is not a kind yet")
@@ -95,24 +93,22 @@ func TestNewControlPlaneKinds(t *testing.T) {
 			Items []kind.Descriptor `json:"items"`
 		}
 		require.NoError(t, json.Unmarshal([]byte(body), &described))
-		require.Len(t, described.Items, 2)
+		require.Len(t, described.Items, 3)
 		assert.Equal(t, "vms", described.Items[0].Plural)
-		assert.Equal(t, "stacks", described.Items[1].Plural)
+		assert.Equal(t, "snapshots", described.Items[1].Plural)
+		assert.Equal(t, "stacks", described.Items[2].Plural)
 
-		for _, plural := range []string{"vms", "stacks"} {
+		for _, plural := range []string{"vms", "snapshots", "stacks"} {
 			status, body = get(t, mux, "/api/"+plural)
 			require.Equal(t, http.StatusOK, status)
 			assert.JSONEq(t, `{"items":[],"pagination":{"total_pages":0,"current_page":1}}`, body)
 		}
 
-		status, _ = get(t, mux, "/api/snapshots")
-		assert.Equal(t, http.StatusOK, status, "a vm's snapshots are served as they were")
-
 		status, _ = get(t, mux, "/api/containers")
-		assert.Equal(t, http.StatusOK, status, "and so are the containers in docker vms")
+		assert.Equal(t, http.StatusOK, status, "the containers in docker vms are served as they were")
 
 		subjects := slices.Collect(maps.Keys(plane.workload.Subscribers))
-		assert.ElementsMatch(t, []string{kind.ResultName, snapshotEvents.SnapshotCompletedName, snapshotEvents.SnapshotFailedName}, subjects, "a vm's results are every kind's results")
+		assert.ElementsMatch(t, []string{kind.ResultName}, subjects, "a vm's and a snapshot's results are every kind's results")
 
 		assert.NoError(t, plane.workload.Reconcile.Execute(context.Background()), "a pass over nothing does nothing")
 	})
@@ -179,7 +175,7 @@ func TestConformance(t *testing.T) {
 
 	kindtest.Conformance(t, services, permissions.NewRepository())
 
-	assert.Equal(t, []string{vmKind.Name, stackKind.Name}, kindNames(services.Descriptors()), "every kind the services run")
+	assert.Equal(t, []string{vmKind.Name, snapshotKind.Name, stackKind.Name}, kindNames(services.Descriptors()), "every kind the services run")
 }
 
 func kindNames(descriptors []kind.Descriptor) []string {

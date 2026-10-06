@@ -26,16 +26,11 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/runs"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/vmtest"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/slugs"
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/snapshot/archive"
-	createsnapshot "github.com/khanzadimahdi/testproject/application/workload/controlplane/snapshot/createSnapshot"
-	deletesnapshot "github.com/khanzadimahdi/testproject/application/workload/controlplane/snapshot/deleteSnapshot"
-	getsnapshot "github.com/khanzadimahdi/testproject/application/workload/controlplane/snapshot/getSnapshot"
-	getsnapshots "github.com/khanzadimahdi/testproject/application/workload/controlplane/snapshot/getSnapshots"
-	renamesnapshot "github.com/khanzadimahdi/testproject/application/workload/controlplane/snapshot/renameSnapshot"
 	"github.com/khanzadimahdi/testproject/domain"
 	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/domain/workload/docker"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
+	snapshotKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/snapshot"
 	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
@@ -52,7 +47,6 @@ import (
 	containerAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/controlplane/api/container"
 	dockerAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/controlplane/api/docker"
 	kindsAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/controlplane/api/kinds"
-	snapshotAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/controlplane/api/snapshot"
 )
 
 // node answers what the control plane asks of it the way a node does: every
@@ -81,19 +75,19 @@ func node() *messagingMock.Requester {
 }
 
 // controlPlane is the control plane's API, wired the way its provider wires
-// it, over memory repositories and a node that answers: VMs and stacks are
-// kinds, served by the resource API every kind is, and a VM's snapshots and
-// the containers in Docker VMs are served as they were.
+// it, over memory repositories and a node that answers: VMs, their snapshots
+// and stacks are kinds, served by the resource API every kind is, and the
+// containers in Docker VMs are served as they were.
 func controlPlane(t *testing.T, w *vmtest.Workload) *client.Client {
 	t.Helper()
 
 	logger := slog.New(slog.DiscardHandler)
 	codes := validator.New(translator.Codes{})
 	requester := node()
-	remover := archive.NewRemover(nil, logger)
 
-	// stacks live in Docker VMs, registered after them as the control plane
-	// registers them.
+	// snapshots are taken of VMs, and stacks live in Docker VMs, registered
+	// after them as the control plane registers them.
+	require.NoError(t, w.Registry.Register(kind.BindControlPlane[snapshotKind.Spec, snapshotKind.Status](snapshotKind.Descriptor(), w.Snapshots)))
 	require.NoError(t, w.Registry.Register(kind.BindControlPlane[stackKind.Spec, stackKind.Status](
 		stackKind.Descriptor(),
 		controlplanestacks.New(w.Records, w.Chooser, slugs.By(func(ctx context.Context, slug string) (resource.Record, error) {
@@ -102,11 +96,6 @@ func controlPlane(t *testing.T, w *vmtest.Workload) *client.Client {
 	)))
 
 	mux := http.NewServeMux()
-	mux.Handle("GET /api/snapshots", snapshotAPI.NewIndexHandler(getsnapshots.NewUseCase(w.Snapshots)))
-	mux.Handle("POST /api/vms/{uuid}/snapshots", snapshotAPI.NewCreateHandler(createsnapshot.NewUseCase(w.Entities, w.Runs, w.Snapshots, w.Placement, w.Producer, codes, 10)))
-	mux.Handle("GET /api/snapshots/{uuid}", snapshotAPI.NewShowHandler(getsnapshot.NewUseCase(w.Snapshots)))
-	mux.Handle("PATCH /api/snapshots/{uuid}", snapshotAPI.NewRenameHandler(renamesnapshot.NewUseCase(w.Snapshots, codes)))
-	mux.Handle("DELETE /api/snapshots/{uuid}", snapshotAPI.NewDeleteHandler(deletesnapshot.NewUseCase(w.Snapshots, w.Entities, w.Placement, remover, codes)))
 	mux.Handle("POST /api/vms/{uuid}/docker/{op}", dockerAPI.NewRequestHandler(requestdocker.NewUseCase(w.Entities, requester, codes)))
 	mux.Handle("GET /api/containers", containerAPI.NewIndexHandler(getcontainers.NewUseCase(w.Entities, requester, logger)))
 	mux.Handle("POST /api/containers", containerAPI.NewCreateHandler(createcontainer.NewUseCase(w.Entities, w.Chooser, requester, codes)))
@@ -283,13 +272,22 @@ func TestContract_Snapshots(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	w := vmtest.New(vmtest.WithVMs(vmtest.Stopped("01", "owner")))
+	w := vmtest.New(
+		vmtest.WithVMs(vmtest.Stopped("01", "owner"), vmtest.Running("02", "owner")),
+		vmtest.WithSnapshots(vmtest.Snapshot("stored", "owner", func(s *snapshotKind.Snapshot) {
+			s.Metadata.Owners = []kind.Reference{{Kind: "vm", UUID: "02"}}
+			s.Spec.VM = snapshotKind.VMRef{UUID: "02", Name: "box"}
+		})),
+	)
 	c := controlPlane(t, w)
 
 	taken, err := c.CreateSnapshot(ctx, "owner", "01", "before")
 	require.NoError(t, err)
 	assert.Equal(t, snapshot.Creating, taken.State)
 	assert.Equal(t, "01", taken.VMUUID)
+	assert.Equal(t, "box", taken.VMName)
+	assert.Equal(t, vm.KindMachine, taken.Kind)
+	assert.Equal(t, uint64(10*vmtest.GiB), taken.Disk)
 
 	read, err := c.Snapshot(ctx, "owner", taken.UUID)
 	require.NoError(t, err)
@@ -297,7 +295,15 @@ func TestContract_Snapshots(t *testing.T) {
 
 	page, err := c.Snapshots(ctx, "owner", "01", 0)
 	require.NoError(t, err)
-	require.Len(t, page.Items, 1)
+	require.Len(t, page.Items, 1, "those taken of one vm")
+	assert.Equal(t, taken.UUID, page.Items[0].UUID)
+
+	everybody, err := c.Snapshots(ctx, "", "", 1)
+	require.NoError(t, err)
+	assert.Len(t, everybody.Items, 2, "and anybody's")
+
+	_, err = c.CreateSnapshot(ctx, "other", "01", "theirs")
+	assert.ErrorIs(t, err, domain.ErrNotExists, "somebody else's vm is not there")
 
 	_, err = c.RenameSnapshot(ctx, "owner", taken.UUID, "after")
 
@@ -315,6 +321,16 @@ func TestContract_Snapshots(t *testing.T) {
 	err = c.RestoreVM(ctx, "owner", "01", taken.UUID)
 	require.ErrorAs(t, err, &refused)
 	assert.Equal(t, domain.ValidationErrors{"snapshot_uuid": "snapshot_not_ready"}, refused.ValidationErrors)
+
+	renamed, err := c.RenameSnapshot(ctx, "owner", "stored", "after")
+	require.NoError(t, err)
+	assert.Equal(t, "after", renamed.Name)
+	assert.Equal(t, snapshot.Ready, renamed.State)
+
+	require.NoError(t, c.DeleteSnapshot(ctx, "owner", "stored"))
+
+	_, err = c.Snapshot(ctx, "owner", "stored")
+	assert.ErrorIs(t, err, domain.ErrNotExists, "a stored snapshot goes at once")
 }
 
 func TestContract_Docker(t *testing.T) {

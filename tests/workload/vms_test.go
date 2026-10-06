@@ -28,10 +28,10 @@ import (
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/updateVM"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
+	snapshotKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/snapshot"
 	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
-	"github.com/khanzadimahdi/testproject/domain/workload/snapshot"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	infraDocker "github.com/khanzadimahdi/testproject/infrastructure/workload/docker"
 )
@@ -138,7 +138,7 @@ func TestAMachineVM(t *testing.T) {
 			return read.Snapshot, nil
 		}, func(s presenter.Snapshot) bool { return s.State == "ready" })
 
-		archive, stored := w.archives.Object(snapshot.ObjectKey(snapshotUUID))
+		archive, stored := w.archives.Object(snapshotKind.ObjectKey(snapshotUUID))
 		require.True(t, stored, "the node stored the archive where the snapshot says")
 		assert.Equal(t, int64(len(archive)), ready.Size)
 		assert.Equal(t, "memory/1", ready.Engine)
@@ -221,7 +221,7 @@ func TestAMachineVM(t *testing.T) {
 		_, err = getVM.NewUseCase(w.client, w.owners, ingressDomain).Execute(ctx, &getVM.Request{UUID: uuid, OwnerUUID: ownerUUID})
 		assert.ErrorIs(t, err, domain.ErrNotExists, "the dashboard finds it gone")
 
-		_, err = w.snapshots.GetOne(ctx, snapshotUUID)
+		_, err = w.resources.GetOne(ctx, snapshotKind.Name, snapshotUUID)
 		assert.NoError(t, err)
 	})
 }

@@ -13,11 +13,9 @@ import (
 	orchestratorAnswerRequest "github.com/khanzadimahdi/testproject/application/workload/orchestrator/answerRequest"
 	"github.com/khanzadimahdi/testproject/application/workload/orchestrator/lock"
 	orchestratorRunCommand "github.com/khanzadimahdi/testproject/application/workload/orchestrator/runCommand"
-	orchestratorTakeSnapshot "github.com/khanzadimahdi/testproject/application/workload/orchestrator/snapshot/takeSnapshot"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
-	snapshotContract "github.com/khanzadimahdi/testproject/domain/workload/snapshot"
-	snapshotEvents "github.com/khanzadimahdi/testproject/domain/workload/snapshot/events"
+	snapshotKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/snapshot"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/core/request"
@@ -42,22 +40,21 @@ const (
 // from: its own connections and settings, the engine its VMs run on, and the
 // bucket their snapshots are kept in.
 type OrchestratorDependencies struct {
-	NATS      *nats.Conn
-	Engine    vm.Engine
-	Archives  snapshotContract.Store
-	Producer  domain.Producer
-	Validator domain.Validator
-	Configs   *configs.WorkloadOrchestrator
-	NodeName  string
-	Logger    *slog.Logger
+	NATS     *nats.Conn
+	Engine   vm.Engine
+	Archives snapshotKind.Store
+	Producer domain.Producer
+	Configs  *configs.WorkloadOrchestrator
+	NodeName string
+	Logger   *slog.Logger
 }
 
 // OrchestratorWorkload is what an orchestrator does for what it holds: the
-// handlers that carry out the control plane's commands of every kind it
-// runs, VMs and stacks among them, and its snapshots of VMs, which are not a
-// kind yet; the responder that answers the control plane's requests, every
-// kind's queries among them; and the kinds it runs, which its heartbeat asks
-// what they hold and its API routes the streams and the ports of.
+// handler that carries out the control plane's commands of every kind it
+// runs, VMs, their snapshots and stacks among them; the responder that
+// answers the control plane's requests, every kind's queries among them; and
+// the kinds it runs, which its heartbeat asks what they hold and its API
+// routes the streams and the ports of.
 type OrchestratorWorkload struct {
 	Subscribers map[string]domain.MessageHandler
 	Responder   *request.Responder
@@ -81,12 +78,15 @@ func NewOrchestratorWorkload(d OrchestratorDependencies) (*OrchestratorWorkload,
 	// a VM, waits for whatever else is being done to it.
 	locks := lock.New()
 
-	// a stack's command waits for its VM's dockerd, and may then pull images.
+	// a stack's command waits for its VM's dockerd, and may then pull images;
+	// a snapshot is taken under its VM's lock.
 	kinds, err := nodeKinds(NodeKindDependencies{
 		Engine:         d.Engine,
 		Daemons:        daemons,
 		Archives:       d.Archives,
+		Locks:          locks,
 		Gauges:         recorder,
+		Snapshots:      recorder,
 		NodeName:       d.NodeName,
 		CommandTimeout: d.Configs.PullRequestTimeout(),
 	})
@@ -94,11 +94,7 @@ func NewOrchestratorWorkload(d OrchestratorDependencies) (*OrchestratorWorkload,
 		return nil, err
 	}
 
-	takeSnapshot := orchestratorTakeSnapshot.NewUseCase(d.Engine, d.Archives, locks, d.Producer, d.Validator, recorder, d.NodeName)
-
 	subscribers := map[string]domain.MessageHandler{
-		snapshotEvents.SnapshotRequestedName: orchestratorTakeSnapshot.NewSnapshotRequestedHandler(takeSnapshot, d.NodeName, d.Logger),
-
 		// every kind's commands, carried out one at a time per resource.
 		kind.CommandName: orchestratorRunCommand.NewCommandHandler(orchestratorRunCommand.NewUseCase(kinds, locks, d.Producer), d.NodeName, d.Logger),
 	}
@@ -117,8 +113,8 @@ func NewOrchestratorWorkload(d OrchestratorDependencies) (*OrchestratorWorkload,
 }
 
 // bindOrchestratorWorkload adds to subscribers what carries out the control
-// plane's commands of every kind this node runs and its snapshots, and binds
-// what answers the control plane's requests and the kinds this node runs.
+// plane's commands of every kind this node runs, and binds what answers the
+// control plane's requests and the kinds this node runs.
 func bindOrchestratorWorkload(c provider.Container, d OrchestratorDependencies, subscribers map[string]domain.MessageHandler) (*OrchestratorWorkload, error) {
 	workload, err := NewOrchestratorWorkload(d)
 	if err != nil {
@@ -141,7 +137,7 @@ func bindOrchestratorWorkload(c provider.Container, d OrchestratorDependencies, 
 // snapshotArchives is the bucket this node keeps snapshots in. It is reached
 // when a snapshot is first taken or restored, so S3 being away fails that
 // rather than this node.
-func snapshotArchives(storage configs.WorkloadSnapshotStorage) snapshotContract.Store {
+func snapshotArchives(storage configs.WorkloadSnapshotStorage) snapshotKind.Store {
 	return minio.NewLazy(minio.Options{
 		Endpoint:   storage.S3Endpoint,
 		AccessKey:  storage.S3AccessKey,

@@ -1,8 +1,7 @@
 package snapshot
 
-import "slices"
-
-// State is where a snapshot is in its life.
+// State is where a snapshot is in its life, as the dashboard has always
+// named it: one of the snapshot kind's states.
 type State int
 
 const (
@@ -16,7 +15,8 @@ const (
 	// says why.
 	Failed State = 3
 
-	// Deleting is a snapshot whose archive is being taken away.
+	// Deleting is a snapshot on its way out: its archive is being taken
+	// away, or is to be once its node has finished taking it.
 	Deleting State = 4
 )
 
@@ -33,17 +33,4 @@ func (s State) String() string {
 	}
 
 	return "unknown"
-}
-
-// stateTransitionMap is where a snapshot may go from where it is. A snapshot is
-// never taken again: one that failed is deleted, and another is asked for.
-var stateTransitionMap = map[State][]State{
-	Creating: {Ready, Failed, Deleting},
-	Ready:    {Deleting},
-	Failed:   {Deleting},
-}
-
-// ValidStateTransition reports whether a snapshot in src may go to dst.
-func ValidStateTransition(src State, dst State) bool {
-	return slices.Contains(stateTransitionMap[src], dst)
 }

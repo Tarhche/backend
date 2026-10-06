@@ -33,7 +33,6 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/jetstream/produceConsumer"
 	nodesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/nodes"
 	resourcesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/resources"
-	snapshotsMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/snapshots"
 	tasksMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/tasks"
 	logsMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/logs"
 	storageMemory "github.com/khanzadimahdi/testproject/infrastructure/storage/memory"
@@ -86,10 +85,9 @@ type workload struct {
 	dockerd  *dockerd
 	archives *storageMemory.Storage
 
-	// what the control plane keeps: the resources of every kind, VMs and
-	// stacks among them, the snapshots of VMs, the nodes, and the tasks.
+	// what the control plane keeps: the resources of every kind, VMs, their
+	// snapshots and stacks among them, the nodes, and the tasks.
 	resources *resourcesMemory.Repository
-	snapshots *snapshotsMemory.Repository
 	nodes     *nodesMemory.Repository
 	tasks     *tasksMemory.Repository
 
@@ -135,7 +133,6 @@ func start(t *testing.T, options ...option) *workload {
 		dockerd:    newDockerd(t),
 		archives:   storageMemory.New(),
 		resources:  resourcesMemory.NewRepository(),
-		snapshots:  snapshotsMemory.NewRepository(),
 		nodes:      nodesMemory.NewRepository(),
 		tasks:      tasksMemory.NewRepository(),
 		translator: english,
@@ -177,14 +174,13 @@ func start(t *testing.T, options ...option) *workload {
 	nodeEngine := throughVMHost(t, w.engine, logger)
 
 	node, err := providers.NewOrchestratorWorkload(providers.OrchestratorDependencies{
-		NATS:      nodeConnection,
-		Engine:    nodeEngine,
-		Archives:  w.archives,
-		Producer:  nodeMessages,
-		Validator: validator.New(english),
-		Configs:   nodeConfigs,
-		NodeName:  nodeName,
-		Logger:    logger,
+		NATS:     nodeConnection,
+		Engine:   nodeEngine,
+		Archives: w.archives,
+		Producer: nodeMessages,
+		Configs:  nodeConfigs,
+		NodeName: nodeName,
+		Logger:   logger,
 	})
 	require.NoError(t, err)
 
@@ -201,7 +197,6 @@ func start(t *testing.T, options ...option) *workload {
 
 	controlPlane, err := providers.NewControlPlaneWorkload(configs.NewWorkloadControlPlane(), providers.ControlPlaneStores{
 		Resources: w.resources,
-		Snapshots: w.snapshots,
 		Nodes:     w.nodes,
 		Tasks:     w.tasks,
 		TaskLogs:  logsMock.NewInMemoryRepository(),

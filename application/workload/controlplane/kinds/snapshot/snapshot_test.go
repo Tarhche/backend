@@ -2,6 +2,7 @@ package snapshot_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -16,6 +17,8 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/actOnResource"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/admitResource"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/deleteResource"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/reconcile"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/resourceResult"
 	controlPlaneSnapshots "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/snapshot"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/vmtest"
 	"github.com/khanzadimahdi/testproject/domain"
@@ -81,6 +84,14 @@ func (b *bucket) has(objectName string) bool {
 	defer b.lock.Unlock()
 
 	return b.objects[objectName]
+}
+
+// put stores an archive, as a node does once it has taken a snapshot.
+func (b *bucket) put(objectName string) {
+	b.lock.Lock()
+	defer b.lock.Unlock()
+
+	b.objects[objectName] = true
 }
 
 // strategyOf is the snapshot kind's control-plane strategy over w's VMs and
@@ -526,5 +537,44 @@ func TestSnapshots_bound(t *testing.T) {
 
 		_, err = w.Resources.GetOne(ctx, snapshotKind.Name, "s1")
 		assert.ErrorIs(t, err, domain.ErrNotExists)
+	})
+
+	t.Run("one deleted while it is taken goes once its node has taken it, archive and all", func(t *testing.T) {
+		admitted, err := w.Admit.Execute(ctx, admitRequest("doomed", "01"))
+		require.NoError(t, err)
+		require.NotNil(t, admitted.Command)
+
+		uuid := admitted.Resource.Metadata.UUID
+
+		deleting, err := deleteResource.NewUseCase(w.Registry, w.Resources, w.Dispatcher).Execute(ctx, &deleteResource.Request{Kind: snapshotKind.Name, OwnerUUID: "owner", UUID: uuid})
+		require.NoError(t, err)
+		assert.False(t, deleting.Gone, "not from under the node taking it")
+
+		waiting, err := w.Resources.GetOne(ctx, snapshotKind.Name, uuid)
+		require.NoError(t, err)
+
+		common, err := waiting.Common()
+		require.NoError(t, err)
+		assert.Equal(t, snapshotKind.Creating, common.State)
+		assert.Equal(t, kind.Deleted, common.Expected, "it is to go once it can")
+		require.NotNil(t, waiting.Pending)
+		assert.Equal(t, snapshotKind.ActionCreate, waiting.Pending.Action)
+
+		// its node takes it, stores its archive, and says so.
+		archives.put(snapshotKind.ObjectKey(uuid))
+
+		status, err := json.Marshal(snapshotKind.Status{Status: kind.Status{State: snapshotKind.Ready}, Engine: "memory/1", Size: 7})
+		require.NoError(t, err)
+
+		answer, err := json.Marshal(kind.Result{ID: admitted.Command.ID, Kind: snapshotKind.Name, UUID: uuid, Action: snapshotKind.ActionCreate, Node: vmtest.Node, OK: true, Status: status})
+		require.NoError(t, err)
+
+		require.NoError(t, resourceResult.NewResult(w.Registry, w.Resources, nil, logger, nil).Handle(ctx, answer))
+
+		require.NoError(t, reconcile.NewUseCase(w.Registry, w.Resources, w.Nodes, w.Dispatcher, logger, reconcile.DefaultConfig()).Execute(ctx))
+
+		_, err = w.Resources.GetOne(ctx, snapshotKind.Name, uuid)
+		assert.ErrorIs(t, err, domain.ErrNotExists)
+		assert.False(t, archives.has(snapshotKind.ObjectKey(uuid)), "nothing its node stored is left behind")
 	})
 }

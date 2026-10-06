@@ -4,7 +4,8 @@
 //
 // A VM is admitted with what it asked for checked and what it left out filled
 // in: its flavor's image, a network open both ways, and, when it is made from
-// a snapshot of its owner's, that snapshot's flavor, image and disk. It is
+// a snapshot of its owner's that the snapshot kind says it can be made from,
+// that snapshot's flavor, image and disk. It is
 // held to what one VM may be given and to what its owner's VMs may be given
 // between them, given a slug no VM and no task holds, and placed on the node
 // with the most room for it. One no node has room for is kept failed, as
@@ -29,9 +30,10 @@
 // Its name and its lifetime are changed in the control plane (ActionUpdate),
 // and so are its ports, network and resources, held to its bounds, its
 // owner's quota and its node's room: that its node has not applied them is
-// what has it reconfigured, at once. A restore is held to a snapshot of its
-// owner's that is ready, of its flavor, no larger than its disk and from its
-// node's engine, before it is sent.
+// what has it reconfigured, at once. A restore is held, before it is sent, to
+// what the snapshot kind says of its snapshot (snapshotKind.Restores): of its
+// owner's, ready, of its flavor, no larger than its disk and from its node's
+// engine; and the VM to being on a node that can be asked.
 //
 // Beside its records, a listing of anybody's VMs has the code runner's runs,
 // its extras.
@@ -51,9 +53,9 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/slugs"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
+	snapshotKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/snapshot"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/node"
-	"github.com/khanzadimahdi/testproject/domain/workload/snapshot"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
 
@@ -72,8 +74,12 @@ type Images struct {
 
 // Dependencies are what the strategy reads and holds VMs to.
 type Dependencies struct {
-	Records   *records.Records
-	Snapshots snapshot.Repository
+	Records *records.Records
+
+	// Snapshots say whether a snapshot can be restored onto a VM, or a VM
+	// made from one, which is the snapshot kind's to say.
+	Snapshots snapshotKind.Restores
+
 	Nodes     node.Repository
 	Quota     *quota.Quota
 	Placement *placement.Placement
@@ -380,24 +386,23 @@ func (s *VMs) Prepare(ctx context.Context, v vmKind.VM, action string, payload a
 }
 
 // restorable is why a VM cannot be restored from a snapshot, or nothing when
-// it can: the snapshot has to be its owner's, ready, of its flavor and no
-// larger than its disk, written by its node's engine when its node has said
-// which engine it runs, and the VM on a node that can be asked.
+// it can: the snapshot kind has to say the snapshot can be restored onto the
+// VM, held to the engine its node runs when its node has said which, and the
+// VM has to be on a node that can be asked.
 func (s *VMs) restorable(ctx context.Context, v vmKind.VM, snapshotUUID string) (domain.ValidationErrors, error) {
-	taken, err := s.Snapshots.GetOneByOwner(ctx, v.Metadata.OwnerUUID, snapshotUUID)
-	if errors.Is(err, domain.ErrNotExists) {
-		return domain.ValidationErrors{"snapshot_uuid": "not_found"}, nil
-	} else if err != nil {
+	engine, err := s.engineOf(ctx, v.Metadata.Node)
+	if err != nil {
 		return nil, err
 	}
 
-	switch {
-	case taken.State != snapshot.Ready:
-		return domain.ValidationErrors{"snapshot_uuid": "snapshot_not_ready"}, nil
-	case taken.Kind != v.Spec.Flavor:
-		return domain.ValidationErrors{"snapshot_uuid": "kind_mismatch"}, nil
-	case taken.Disk > v.Spec.Resources.Disk:
-		return domain.ValidationErrors{"snapshot_uuid": "disk_too_small"}, nil
+	_, refused, err := s.Snapshots.Restorable(ctx, snapshotUUID, snapshotKind.Target{
+		OwnerUUID: v.Metadata.OwnerUUID,
+		Flavor:    v.Spec.Flavor,
+		Disk:      v.Spec.Resources.Disk,
+		Engine:    engine,
+	})
+	if err != nil || len(refused) > 0 {
+		return refusedFrom(refused, "snapshot_uuid"), err
 	}
 
 	alive, err := s.Placement.Alive(ctx, v.Metadata.Node)
@@ -411,18 +416,33 @@ func (s *VMs) restorable(ctx context.Context, v vmKind.VM, snapshotUUID string) 
 		return domain.ValidationErrors{"vm": "invalid_state_transition"}, nil
 	}
 
-	n, err := s.Nodes.GetOne(ctx, v.Metadata.Node)
-	if err != nil || len(n.Capacity.Engine) == 0 || len(taken.Engine) == 0 {
-		return nil, nil
-	}
-
-	// whether a version of the same engine can read it is the engine's to
-	// say, which it does by failing the restore.
-	if written, _, _ := strings.Cut(taken.Engine, "/"); written != n.Capacity.Engine {
-		return domain.ValidationErrors{"snapshot_uuid": "engine_mismatch"}, nil
-	}
-
 	return nil, nil
+}
+
+// engineOf is the engine a node runs, as its heartbeat last said, without
+// its version: nothing for a node that has not said, or is not known.
+func (s *VMs) engineOf(ctx context.Context, nodeName string) (string, error) {
+	if len(nodeName) == 0 {
+		return "", nil
+	}
+
+	n, err := s.Nodes.GetOne(ctx, nodeName)
+	if errors.Is(err, domain.ErrNotExists) {
+		return "", nil
+	} else if err != nil {
+		return "", err
+	}
+
+	return n.Capacity.Engine, nil
+}
+
+// refusedFrom is a snapshot kind's refusal under field, or nothing for none.
+func refusedFrom(refused string, field string) domain.ValidationErrors {
+	if len(refused) == 0 {
+		return nil
+	}
+
+	return domain.ValidationErrors{field: refused}
 }
 
 // Extras are the code runner's runs, which a listing of anybody's VMs has
@@ -431,25 +451,23 @@ func (s *VMs) Extras() kind.Extras {
 	return s.Dependencies.Extras
 }
 
-// fromSnapshot makes spec from a snapshot of ownerUUID's: its flavor and
-// image are the snapshot's, and its disk is at least the snapshot's.
+// fromSnapshot makes spec from a snapshot of ownerUUID's that the snapshot
+// kind says a VM can be made from: its flavor and image are the snapshot's,
+// and its disk is at least the snapshot's. A flavor the VM asked for and the
+// snapshot is not of is refused under the flavor it was asked under.
 func (s *VMs) fromSnapshot(ctx context.Context, ownerUUID string, spec *vmKind.Spec) (domain.ValidationErrors, error) {
-	taken, err := s.Snapshots.GetOneByOwner(ctx, ownerUUID, spec.Source.Snapshot)
-	if errors.Is(err, domain.ErrNotExists) {
-		return domain.ValidationErrors{"snapshot_uuid": "not_found"}, nil
-	} else if err != nil {
+	taken, refused, err := s.Snapshots.Restorable(ctx, spec.Source.Snapshot, snapshotKind.Target{OwnerUUID: ownerUUID, Flavor: spec.Flavor})
+
+	switch {
+	case err != nil:
 		return nil, err
+	case refused == snapshotKind.RefusedFlavor:
+		return refusedFrom(refused, "kind"), nil
+	case len(refused) > 0:
+		return refusedFrom(refused, "snapshot_uuid"), nil
 	}
 
-	if taken.State != snapshot.Ready {
-		return domain.ValidationErrors{"snapshot_uuid": "snapshot_not_ready"}, nil
-	}
-
-	if len(spec.Flavor) > 0 && spec.Flavor != taken.Kind {
-		return domain.ValidationErrors{"kind": "kind_mismatch"}, nil
-	}
-
-	spec.Flavor = taken.Kind
+	spec.Flavor = taken.Flavor
 	spec.Image = taken.Image
 	spec.Resources.Disk = max(spec.Resources.Disk, taken.Disk)
 

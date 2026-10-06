@@ -272,18 +272,17 @@ func orchestratorConsoleCommand(
 		taskEvents.TaskDeletedName:           orchestratorDeleteTask.NewDeleteTaskHandler(deleteTaskUseCase),
 	}
 
-	// what is asked of every kind this node runs, VMs and the stacks in
-	// them, and of the VMs' snapshots, and the answers to what the control
-	// plane asks and waits for.
+	// what is asked of every kind this node runs, VMs, their snapshots and
+	// the stacks in them, and the answers to what the control plane asks and
+	// waits for.
 	workload, err := bindOrchestratorWorkload(iocContainer, OrchestratorDependencies{
-		NATS:      natsConnection,
-		Engine:    engine,
-		Archives:  snapshotArchives(orchestratorConfigs.SnapshotStorage),
-		Producer:  asyncProduceConsumer,
-		Validator: validator,
-		Configs:   orchestratorConfigs,
-		NodeName:  nodeName,
-		Logger:    logger,
+		NATS:     natsConnection,
+		Engine:   engine,
+		Archives: snapshotArchives(orchestratorConfigs.SnapshotStorage),
+		Producer: asyncProduceConsumer,
+		Configs:  orchestratorConfigs,
+		NodeName: nodeName,
+		Logger:   logger,
 	}, subscribers)
 	if err != nil {
 		return nil, err

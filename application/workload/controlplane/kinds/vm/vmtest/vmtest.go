@@ -1,7 +1,8 @@
 // Package vmtest is the control plane's VMs, wired the way the provider wires
 // them, over memory repositories and a producer that keeps what it was given:
 // what the tests of the vm kind's control-plane strategy, and of what reads
-// VMs beside it, are written against.
+// VMs beside it, are written against. Their snapshots are the snapshot kind's,
+// which says what a VM is restored and made from.
 package vmtest
 
 import (
@@ -13,6 +14,7 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/admitResource"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/cascade"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/dispatch"
+	controlPlaneSnapshots "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/snapshot"
 	controlPlaneVMs "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/dockervm"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/placement"
@@ -23,17 +25,16 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/slugs"
 	deletetask "github.com/khanzadimahdi/testproject/application/workload/controlplane/task/deleteTask"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
+	snapshotKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/snapshot"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/node"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
-	"github.com/khanzadimahdi/testproject/domain/workload/snapshot"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
 	nodesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/nodes"
 	resourcesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/resources"
-	snapshotsMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/snapshots"
 	tasksMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/tasks"
 	logsMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/logs"
 	"github.com/khanzadimahdi/testproject/infrastructure/translator"
@@ -45,6 +46,9 @@ const (
 
 	// Node is the name of the node Workload has, unless it is given others.
 	Node = "workload-orchestrator-01"
+
+	// SnapshotUserMax is how many snapshots one person may keep.
+	SnapshotUserMax = 10
 )
 
 // Images are what VMs boot from in the tests.
@@ -77,14 +81,16 @@ var DockerDefaults = dockervm.Defaults{
 // Workload is a control plane's VMs and what they are kept in, the code
 // runner's runs among them, which are tasks, and the vm kind registered as
 // the control plane registers it, admitted through the control plane's
-// admission.
+// admission. Snapshots is the snapshot kind's control-plane strategy, over the
+// same resources, which says what a VM can be restored and made from: it is
+// not registered, so that a test registers the kinds it needs beside VMs.
 type Workload struct {
 	Memory    *resourcesMemory.Repository
 	Resources *cascade.Repository
 	Registry  *kind.Registry[kind.ControlPlaneBinding]
 	Records   *records.Records
 	Entities  *records.Entities
-	Snapshots *snapshotsMemory.Repository
+	Snapshots *controlPlaneSnapshots.Snapshots
 	Nodes     *nodesMemory.Repository
 	Tasks     *tasksMemory.Repository
 	TaskLogs  *logsMock.InMemoryLogRepository
@@ -106,7 +112,7 @@ type Option func(*options)
 type options struct {
 	nodes     []node.Node
 	vms       []vmKind.VM
-	snapshots []snapshot.Snapshot
+	snapshots []snapshotKind.Snapshot
 	tasks     []task.Task
 	now       func() time.Time
 }
@@ -121,7 +127,8 @@ func WithVMs(vms ...vmKind.VM) Option {
 	return func(o *options) { o.vms = append(o.vms, vms...) }
 }
 
-func WithSnapshots(snapshots ...snapshot.Snapshot) Option {
+// WithSnapshots are snapshots the control plane keeps, as their records.
+func WithSnapshots(snapshots ...snapshotKind.Snapshot) Option {
 	return func(o *options) { o.snapshots = append(o.snapshots, snapshots...) }
 }
 
@@ -145,17 +152,22 @@ func New(opts ...Option) *Workload {
 	}
 
 	w := &Workload{
-		Memory:    resourcesMemory.NewRepository(),
-		Registry:  kind.NewRegistry[kind.ControlPlaneBinding](),
-		Snapshots: snapshotsMemory.NewRepository(o.snapshots...),
-		Nodes:     nodesMemory.NewRepository(o.nodes...),
-		Tasks:     tasksMemory.NewRepository(o.tasks...),
-		TaskLogs:  logsMock.NewInMemoryRepository(),
-		Producer:  &messagingMock.Recorder{},
+		Memory:   resourcesMemory.NewRepository(),
+		Registry: kind.NewRegistry[kind.ControlPlaneBinding](),
+		Nodes:    nodesMemory.NewRepository(o.nodes...),
+		Tasks:    tasksMemory.NewRepository(o.tasks...),
+		TaskLogs: logsMock.NewInMemoryRepository(),
+		Producer: &messagingMock.Recorder{},
 	}
 
 	for _, v := range o.vms {
 		if _, err := w.Memory.Create(context.Background(), Record(v)); err != nil {
+			panic(err)
+		}
+	}
+
+	for _, s := range o.snapshots {
+		if _, err := w.Memory.Create(context.Background(), Record(s)); err != nil {
 			panic(err)
 		}
 	}
@@ -167,6 +179,13 @@ func New(opts ...Option) *Workload {
 	w.Placement = placement.New(w.Nodes, w.Records, 4)
 	w.Quota = quota.New(w.Records, Limits)
 	w.Runs = runs.New(w.Tasks, w.Producer, deletetask.NewUseCase(w.Tasks, w.TaskLogs, w.Producer, translator.Codes{}))
+
+	w.Snapshots = controlPlaneSnapshots.New(controlPlaneSnapshots.Dependencies{
+		VMs:       w.Records,
+		Nodes:     w.Placement,
+		Resources: w.Resources,
+		UserMax:   SnapshotUserMax,
+	})
 
 	w.VMs = controlPlaneVMs.New(controlPlaneVMs.Dependencies{
 		Records:   w.Records,
@@ -243,9 +262,9 @@ func (w *Workload) Change(uuid string, change func(v *vmKind.VM)) {
 	}
 }
 
-// Record is a VM as the control plane keeps it.
-func Record(v vmKind.VM) resource.Record {
-	raw, err := kind.Encode(v)
+// Record is a resource as the control plane keeps it: a VM, or a snapshot.
+func Record[Spec, Status any](r kind.Resource[Spec, Status]) resource.Record {
+	raw, err := kind.Encode(r)
 	if err != nil {
 		panic(err)
 	}
@@ -335,6 +354,41 @@ func In(v vmKind.VM, change func(v *vmKind.VM)) vmKind.VM {
 	change(&v)
 
 	return v
+}
+
+// Snapshot is a snapshot of ownerUUID's machine 01, ready: taken an hour ago
+// of a 5 GiB disk, written by microsandbox 0.7.5, as changes say otherwise.
+func Snapshot(uuid string, ownerUUID string, changes ...func(s *snapshotKind.Snapshot)) snapshotKind.Snapshot {
+	taken := time.Now().Add(-time.Hour)
+
+	s := snapshotKind.Snapshot{
+		Kind: snapshotKind.Name,
+		Metadata: kind.Metadata{
+			UUID:      uuid,
+			Name:      "before",
+			OwnerUUID: ownerUUID,
+			Owners:    []kind.Reference{{Kind: snapshotKind.Parent, UUID: "01"}},
+			Node:      Node,
+			CreatedAt: taken,
+			UpdatedAt: taken,
+		},
+		Spec: snapshotKind.Spec{VM: snapshotKind.VMRef{UUID: "01", Name: "box"}},
+		Status: snapshotKind.Status{
+			Status:      kind.Status{State: snapshotKind.Ready, Expected: snapshotKind.Ready, Since: taken},
+			Flavor:      vm.KindMachine,
+			Image:       "ubuntu:24.04",
+			Disk:        5 * GiB,
+			Engine:      "microsandbox/0.7.5",
+			Size:        GiB,
+			CompletedAt: taken,
+		},
+	}
+
+	for _, change := range changes {
+		change(&s)
+	}
+
+	return s
 }
 
 // Run is a snippet the code runner is running on Node: a job of the guest's,

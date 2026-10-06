@@ -27,8 +27,8 @@ import (
 	"github.com/khanzadimahdi/testproject/domain"
 	translatorContract "github.com/khanzadimahdi/testproject/domain/translator"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
+	snapshotKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/snapshot"
 	nodeEvents "github.com/khanzadimahdi/testproject/domain/workload/node/events"
-	snapshotContract "github.com/khanzadimahdi/testproject/domain/workload/snapshot"
 	taskEvents "github.com/khanzadimahdi/testproject/domain/workload/task/events"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	infraHealth "github.com/khanzadimahdi/testproject/infrastructure/health"
@@ -36,7 +36,6 @@ import (
 	logrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/workload/logs"
 	noderepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/workload/nodes"
 	resourcerepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/workload/resources"
-	snapshotrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/workload/snapshots"
 	taskrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/workload/tasks"
 	"github.com/khanzadimahdi/testproject/infrastructure/storage/minio"
 	"github.com/khanzadimahdi/testproject/infrastructure/telemetry/profiler"
@@ -154,15 +153,14 @@ func controlPlaneConsoleCommand(
 	controlPlaneGetNodeUseCase := controlPlaneGetNode.NewUseCase(nodeRepository)
 	controlPlaneGetNodesUseCase := controlPlaneGetNodes.NewUseCase(nodeRepository)
 
-	// every kind the control plane runs, VMs and stacks, what is not a kind
-	// yet beside them, and what they are kept in. What lives in a VM, its
-	// stacks, goes with it, and is reset with its disk, as each kind's rules
-	// say.
+	// every kind the control plane runs, VMs, snapshots and stacks, what is
+	// not a kind yet beside them, and what they are kept in. What lives in a
+	// VM, its stacks, goes with it, and is reset with its disk, as each kind's
+	// rules say; its snapshots outlive it.
 	resourceRepository := resourcerepository.NewRepository(database)
 
 	workload, err := NewControlPlaneWorkload(controlPlaneConfigs, ControlPlaneStores{
 		Resources: resourceRepository,
-		Snapshots: snapshotrepository.NewRepository(database),
 		Nodes:     nodeRepository,
 		Tasks:     taskRepository,
 		TaskLogs:  logRepository,
@@ -212,10 +210,10 @@ func controlPlaneConsoleCommand(
 	mux.Handle("GET /api/nodes", controlPlaneNodeAPI.NewIndexHandler(controlPlaneGetNodesUseCase))
 	mux.Handle("GET /api/nodes/{name}", controlPlaneNodeAPI.NewShowHandler(controlPlaneGetNodeUseCase))
 
-	// every kind, VMs and stacks, under its own plural, and what is not a
-	// kind yet, the snapshots and the containers in Docker VMs, which the blog
-	// reaches on its users' behalf. Every route takes an owner, which narrows
-	// it to that person's own.
+	// every kind, VMs, snapshots and stacks, under its own plural, and what
+	// is not a kind yet, the containers in Docker VMs, which the blog reaches
+	// on its users' behalf. Every route takes an owner, which narrows it to
+	// that person's own.
 	if err := workload.Route(mux); err != nil {
 		return nil, err
 	}
@@ -278,7 +276,7 @@ func controlPlaneConsoleCommand(
 // first time one is taken away so that the control plane starts whether or not
 // the bucket can be reached. With no endpoint configured there is none, and an
 // archive is left where it is when its snapshot goes.
-func snapshotStore(storage configs.WorkloadSnapshotStorage) snapshotContract.Store {
+func snapshotStore(storage configs.WorkloadSnapshotStorage) snapshotKind.Store {
 	if len(storage.S3Endpoint) == 0 {
 		return nil
 	}

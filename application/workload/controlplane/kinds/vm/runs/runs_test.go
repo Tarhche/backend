@@ -3,7 +3,6 @@ package runs
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -424,31 +423,6 @@ func TestRuns_Query(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, domain.ValidationErrors{"vm": CodeRefused}, refused)
 	})
-}
-
-func TestRuns_Refused(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-
-	f := runsOf(run("run"))
-	failed := errors.New("the store is down")
-
-	refused, err := f.runs.Refused(ctx, "", "run", domain.ErrNotExists)
-	require.NoError(t, err)
-	assert.Equal(t, domain.ValidationErrors{"vm": CodeRefused}, refused)
-
-	refused, err = f.runs.Refused(ctx, "owner", "run", domain.ErrNotExists)
-	assert.ErrorIs(t, err, domain.ErrNotExists, "nobody's own")
-	assert.Nil(t, refused)
-
-	refused, err = f.runs.Refused(ctx, "", "missing", domain.ErrNotExists)
-	assert.ErrorIs(t, err, domain.ErrNotExists)
-	assert.Nil(t, refused)
-
-	refused, err = f.runs.Refused(ctx, "", "run", failed)
-	assert.ErrorIs(t, err, failed, "a failure is not a refusal")
-	assert.Nil(t, refused)
 }
 
 func TestLogs(t *testing.T) {
