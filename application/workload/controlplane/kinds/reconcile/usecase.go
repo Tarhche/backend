@@ -8,9 +8,10 @@
 // for whatever closes it. Most of that is the same for every kind, and is
 // done here, in this order:
 //
-//   - a resource expected deleted, on a node that fell silent, is forgotten:
-//     its delete was sent already, and waits in the node's stream for it to
-//     come back, and nothing is left to wait for here;
+//   - a resource expected deleted, on a node that fell silent, is forgotten
+//     once its delete was sent: the delete waits in the node's stream for it
+//     to come back, and nothing is left to wait for here. One whose delete
+//     was not sent yet is sent it, the one thing a silent node can be sent;
 //   - one whose lifetime is over is deleted;
 //   - one whose node fell silent is failed as node_lost, unless it ended
 //     already: a stopped one stays stopped. Nothing is asked of it, since
@@ -225,7 +226,9 @@ func (uc *UseCase) look(ctx context.Context, binding kind.ControlPlaneBinding, r
 	case common.State == kind.Deleted:
 		return uc.dispatcher.Forget(ctx, r)
 
-	case common.Expected == kind.Deleted && silent:
+	// its delete was sent, and waits in the node's stream for the node to
+	// come back: there is nothing left to wait for here.
+	case silent && common.Expected == kind.Deleted && r.Pending != nil && r.Pending.Action == deleteAction:
 		uc.logger.InfoContext(ctx, "forgetting a resource deleted on a node that has gone quiet", "kind", d.Name, "uuid", r.Metadata.UUID, "node", r.Metadata.Node)
 
 		return uc.dispatcher.Forget(ctx, r)
@@ -235,7 +238,9 @@ func (uc *UseCase) look(ctx context.Context, binding kind.ControlPlaneBinding, r
 
 		return uc.remove(ctx, binding, r, common, true)
 
-	case silent:
+	// nothing can be asked of a silent node but a delete, which waits in its
+	// stream; one on its way somewhere is not getting there.
+	case silent && (common.Expected != kind.Deleted || d.Machine.IsInFlight(common.State)):
 		return uc.lost(ctx, d, r, common, now)
 
 	case d.Machine.IsInFlight(common.State):

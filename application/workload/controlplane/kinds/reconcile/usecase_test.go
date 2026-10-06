@@ -172,6 +172,14 @@ func TestUseCase_Execute(t *testing.T) {
 			record: fan(kindstest.Deleting, kind.Deleted, "node-2", pending("delete", time.Hour, 1)),
 			gone:   true,
 		},
+		"once its delete was sent, which a silent node can be sent": {
+			record: fan(kind.Failed, kind.Deleted, "node-2"),
+			state:  kindstest.Deleting, expected: kind.Deleted, sent: []string{"delete"},
+		},
+		"and one expected deleted on its way somewhere else is not getting there": {
+			record: fan(kindstest.Starting, kind.Deleted, "node-2", pending("start", time.Minute, 1)),
+			state:  kind.Failed, expected: kind.Deleted, reason: reconcile.ReasonNodeLost,
+		},
 
 		// lifetimes
 		"one whose lifetime is over is deleted": {
