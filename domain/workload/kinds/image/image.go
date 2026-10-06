@@ -266,15 +266,3 @@ func Machine() kind.Machine {
 		InFlight:    []kind.State{Pulling, Removing},
 	}
 }
-
-// InFlightOf is the state an image is in while action is carried out on it.
-func InFlightOf(action string) kind.State {
-	switch action {
-	case ActionCreate, ActionPull:
-		return Pulling
-	case ActionDelete:
-		return Removing
-	}
-
-	return ""
-}

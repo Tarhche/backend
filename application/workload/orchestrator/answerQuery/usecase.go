@@ -1,6 +1,5 @@
 // Package answerQuery answers what the control plane asks a node about a
-// resource of a kind the node runs, and hands every other request on to what
-// answered them before there were kinds.
+// resource of a kind the node runs.
 package answerQuery
 
 import (
@@ -24,13 +23,12 @@ type Locks interface {
 }
 
 // UseCase answers node requests whose op is a kind's query, "stack.state",
-// with that kind's node strategy, and hands every other request on to next.
+// with that kind's node strategy.
 //
-// A kind takes over the ops named after it once it is registered on this
-// node, and not before: "vm.logs" is the vm kind's, which every node runs.
-// An op that names no kind's action, or one of a kind not run here, is
-// next's to answer, and with no next it is not an operation this node
-// answers.
+// A kind answers the ops named after it once it is registered on this node,
+// and not before: "vm.logs" is the vm kind's, which every node runs. An op
+// that names no kind's action, or one of a kind not run here, is not an
+// operation this node answers.
 //
 // A command asked as a request is carried out, under its resource's lock as
 // one sent on workloadCommand is, and answered with its Result: it is how the
@@ -45,7 +43,6 @@ type Locks interface {
 // words are the message.
 type UseCase struct {
 	kinds *kind.Registry[kind.NodeBinding]
-	next  noderequest.Handler
 	locks Locks
 }
 
@@ -62,8 +59,8 @@ func WithLocks(locks Locks) Option {
 	}
 }
 
-func NewUseCase(kinds *kind.Registry[kind.NodeBinding], next noderequest.Handler, options ...Option) *UseCase {
-	uc := &UseCase{kinds: kinds, next: next}
+func NewUseCase(kinds *kind.Registry[kind.NodeBinding], options ...Option) *UseCase {
+	uc := &UseCase{kinds: kinds}
 
 	for _, option := range options {
 		option(uc)
@@ -75,11 +72,7 @@ func NewUseCase(kinds *kind.Registry[kind.NodeBinding], next noderequest.Handler
 func (uc *UseCase) Handle(ctx context.Context, request noderequest.Request) noderequest.Reply {
 	binding, ok := uc.binding(request.Op)
 	if !ok {
-		if uc.next == nil {
-			return noderequest.Failed(reply.Invalid("%q is not an operation a node answers", request.Op))
-		}
-
-		return uc.next.Handle(ctx, request)
+		return noderequest.Failed(reply.Invalid("%q is not an operation a node answers", request.Op))
 	}
 
 	// the field is older than kinds, and is the resource's uuid whatever its

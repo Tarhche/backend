@@ -77,20 +77,7 @@ type WorkloadControlPlane struct {
 	// bucket the nodes write them to.
 	SnapshotStorage WorkloadSnapshotStorage
 
-	NodeRequestTimeout time.Duration `usage:"How long a node is given to answer a request about a VM, unless it may have to pull an image." env:"WORKLOAD_NODE_REQUEST_TIMEOUT" long:"node-request-timeout"`
-	DockerPullTimeout  time.Duration `usage:"How long a node is given to answer a request that may have to pull an image: creating a container, or pulling one." env:"WORKLOAD_DOCKER_PULL_TIMEOUT" long:"docker-pull-timeout"`
-
-	// what the nodes are given to wait for a Docker VM's dockerd, read from
-	// the same setting as theirs: a request that may pull an image waits for
-	// that first, and the control plane waits as long as they do.
-	DockerReadyTimeout time.Duration `usage:"How long a node waits for a Docker VM's dockerd before it refuses a request as docker_unavailable. A request that may pull an image is waited for this long on top of the pull timeout, as the node gives it." env:"WORKLOAD_DOCKER_READY_TIMEOUT" long:"docker-ready-timeout"`
-}
-
-// PullRequestTimeout is how long the control plane waits for a node to answer
-// a request that may pull an image: as long as the node may take, which is the
-// wait for the VM's dockerd and then the pull.
-func (c *WorkloadControlPlane) PullRequestTimeout() time.Duration {
-	return c.DockerReadyTimeout + c.DockerPullTimeout
+	NodeRequestTimeout time.Duration `usage:"How long a node is given to answer a request: a kind's query, a VM's log say, or a command for what nobody keeps a record of." env:"WORKLOAD_NODE_REQUEST_TIMEOUT" long:"node-request-timeout"`
 }
 
 // NewWorkloadControlPlane returns the configuration of the serve-workload-controlplane
@@ -132,8 +119,6 @@ func NewWorkloadControlPlane() *WorkloadControlPlane {
 		SnapshotStorage: newWorkloadSnapshotStorage(),
 
 		NodeRequestTimeout: defaultWorkloadNodeRequestTimeout,
-		DockerPullTimeout:  defaultWorkloadDockerPullTimeout,
-		DockerReadyTimeout: defaultWorkloadDockerReadyTimeout,
 	}
 }
 
@@ -252,9 +237,9 @@ func NewWorkloadOrchestrator() *WorkloadOrchestrator {
 	}
 }
 
-// PullRequestTimeout is how long answering a request that may pull an image
-// may take: the wait for the VM's dockerd, and then the pull. The control
-// plane waits as long, from the same settings.
+// PullRequestTimeout is how long a command that may pull an image may take,
+// a container made or an image pulled: the wait for the VM's dockerd, and
+// then the pull.
 func (c *WorkloadOrchestrator) PullRequestTimeout() time.Duration {
 	return c.DockerReadyTimeout + c.DockerPullTimeout
 }

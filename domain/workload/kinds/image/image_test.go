@@ -65,8 +65,6 @@ func TestMachine(t *testing.T) {
 		})
 	}
 
-	assert.Equal(t, image.Pulling, image.InFlightOf(image.ActionPull))
-	assert.Equal(t, image.Removing, image.InFlightOf(image.ActionDelete))
 }
 
 func TestNormalized(t *testing.T) {

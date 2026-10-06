@@ -24,27 +24,22 @@ import (
 // node it was asked of, which is a node that is down or was never there.
 var ErrNoNode = errors.New("no node is answering")
 
-// Requester asks nodes questions and waits for their answers.
-//
-// How long it waits is the operation's: one that may have to pull an image is
-// given the pull timeout and everything else the request timeout, so no caller
-// has to know which is which. A caller can still give up sooner, through its
+// Requester asks nodes questions and waits for their answers, for as long
+// as the request timeout at most. A caller can give up sooner, through its
 // context.
 type Requester struct {
-	connection  *nats.Conn
-	timeout     time.Duration
-	pullTimeout time.Duration
-	tracer      oteltrace.Tracer
+	connection *nats.Conn
+	timeout    time.Duration
+	tracer     oteltrace.Tracer
 }
 
 var _ noderequest.Requester = &Requester{}
 
-func NewRequester(connection *nats.Conn, timeout time.Duration, pullTimeout time.Duration) *Requester {
+func NewRequester(connection *nats.Conn, timeout time.Duration) *Requester {
 	return &Requester{
-		connection:  connection,
-		timeout:     timeout,
-		pullTimeout: pullTimeout,
-		tracer:      otel.Tracer("nats"),
+		connection: connection,
+		timeout:    timeout,
+		tracer:     otel.Tracer("nats"),
 	}
 }
 
@@ -65,7 +60,7 @@ func (r *Requester) Request(ctx context.Context, nodeName string, request nodere
 	)
 	defer span.End()
 
-	ctx, cancel := context.WithTimeout(ctx, r.timeoutOf(request.Op))
+	ctx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 
 	payload, err := json.Marshal(request)
@@ -99,13 +94,4 @@ func (r *Requester) Request(ctx context.Context, nodeName string, request nodere
 	}
 
 	return reply, nil
-}
-
-// timeoutOf is how long an operation is given.
-func (r *Requester) timeoutOf(op noderequest.Op) time.Duration {
-	if op.MayPull() {
-		return r.pullTimeout
-	}
-
-	return r.timeout
 }

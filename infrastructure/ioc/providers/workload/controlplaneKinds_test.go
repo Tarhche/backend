@@ -17,8 +17,12 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/kindstest"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind/kindtest"
+	containerKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/container"
+	imageKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/image"
+	networkKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/network"
 	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
+	volumeKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/volume"
 	snapshotEvents "github.com/khanzadimahdi/testproject/domain/workload/snapshot/events"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
@@ -79,11 +83,11 @@ func get(t *testing.T, handler http.Handler, target string) (int, string) {
 func TestNewControlPlaneKinds(t *testing.T) {
 	t.Parallel()
 
-	t.Run("vms and stacks are served under their plurals beside what is not a kind yet", func(t *testing.T) {
+	t.Run("vms, stacks and the building blocks of docker vms are served under their plurals beside what is not a kind yet", func(t *testing.T) {
 		t.Parallel()
 
 		plane := served(t)
-		assert.Equal(t, []string{vmKind.Name, stackKind.Name}, kindNames(plane.workload.Registry.Descriptors()))
+		assert.Equal(t, allKinds, kindNames(plane.workload.Registry.Descriptors()))
 
 		mux := http.NewServeMux()
 		require.NoError(t, plane.workload.Route(mux), "no kind takes a route of what is not a kind yet")
@@ -95,11 +99,15 @@ func TestNewControlPlaneKinds(t *testing.T) {
 			Items []kind.Descriptor `json:"items"`
 		}
 		require.NoError(t, json.Unmarshal([]byte(body), &described))
-		require.Len(t, described.Items, 2)
-		assert.Equal(t, "vms", described.Items[0].Plural)
-		assert.Equal(t, "stacks", described.Items[1].Plural)
 
-		for _, plural := range []string{"vms", "stacks"} {
+		plurals := make([]string, len(described.Items))
+		for i, d := range described.Items {
+			plurals[i] = d.Plural
+		}
+
+		assert.Equal(t, []string{"vms", "stacks", "containers", "images", "networks", "volumes"}, plurals)
+
+		for _, plural := range plurals {
 			status, body = get(t, mux, "/api/"+plural)
 			require.Equal(t, http.StatusOK, status)
 			assert.JSONEq(t, `{"items":[],"pagination":{"total_pages":0,"current_page":1}}`, body)
@@ -107,9 +115,6 @@ func TestNewControlPlaneKinds(t *testing.T) {
 
 		status, _ = get(t, mux, "/api/snapshots")
 		assert.Equal(t, http.StatusOK, status, "a vm's snapshots are served as they were")
-
-		status, _ = get(t, mux, "/api/containers")
-		assert.Equal(t, http.StatusOK, status, "and so are the containers in docker vms")
 
 		subjects := slices.Collect(maps.Keys(plane.workload.Subscribers))
 		assert.ElementsMatch(t, []string{kind.ResultName, snapshotEvents.SnapshotCompletedName, snapshotEvents.SnapshotFailedName}, subjects, "a vm's results are every kind's results")
@@ -179,8 +184,11 @@ func TestConformance(t *testing.T) {
 
 	kindtest.Conformance(t, services, permissions.NewRepository())
 
-	assert.Equal(t, []string{vmKind.Name, stackKind.Name}, kindNames(services.Descriptors()), "every kind the services run")
+	assert.Equal(t, allKinds, kindNames(services.Descriptors()), "every kind the services run")
 }
+
+// allKinds are the kinds the services run, in the order they are registered.
+var allKinds = []string{vmKind.Name, stackKind.Name, containerKind.Name, imageKind.Name, networkKind.Name, volumeKind.Name}
 
 func kindNames(descriptors []kind.Descriptor) []string {
 	names := make([]string, len(descriptors))

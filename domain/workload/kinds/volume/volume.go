@@ -201,8 +201,3 @@ func Descriptor() kind.Descriptor {
 func Machine() kind.Machine {
 	return blocks.Presence()
 }
-
-// InFlightOf is the state a volume is in while action is carried out on it.
-func InFlightOf(action string) kind.State {
-	return blocks.PresenceInFlightOf(action)
-}

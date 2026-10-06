@@ -111,7 +111,4 @@ func TestPresence(t *testing.T) {
 		})
 	}
 
-	assert.Equal(t, blocks.Creating, blocks.PresenceInFlightOf(blocks.ActionCreate))
-	assert.Equal(t, blocks.Removing, blocks.PresenceInFlightOf(blocks.ActionDelete))
-	assert.Empty(t, blocks.PresenceInFlightOf(blocks.ActionState))
 }

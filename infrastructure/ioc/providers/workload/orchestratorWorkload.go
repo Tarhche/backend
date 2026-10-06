@@ -10,7 +10,6 @@ import (
 	"go.opentelemetry.io/otel"
 
 	orchestratorAnswerQuery "github.com/khanzadimahdi/testproject/application/workload/orchestrator/answerQuery"
-	orchestratorAnswerRequest "github.com/khanzadimahdi/testproject/application/workload/orchestrator/answerRequest"
 	"github.com/khanzadimahdi/testproject/application/workload/orchestrator/lock"
 	orchestratorRunCommand "github.com/khanzadimahdi/testproject/application/workload/orchestrator/runCommand"
 	orchestratorTakeSnapshot "github.com/khanzadimahdi/testproject/application/workload/orchestrator/snapshot/takeSnapshot"
@@ -32,9 +31,9 @@ const (
 	// the disk.
 	snapshotPartSize = 16 << 20
 
-	// nodeRequestTimeout is how long a request to a node is given when it has
-	// no image to pull, which is also how long the control plane waits for
-	// one.
+	// nodeRequestTimeout is how long a request to a node is given once its
+	// VM's dockerd answers, when it asks one, which is also how long the
+	// control plane waits for one.
 	nodeRequestTimeout = 30 * time.Second
 )
 
@@ -87,6 +86,7 @@ func NewOrchestratorWorkload(d OrchestratorDependencies) (*OrchestratorWorkload,
 		Daemons:        daemons,
 		Archives:       d.Archives,
 		Gauges:         recorder,
+		Timings:        recorder,
 		NodeName:       d.NodeName,
 		CommandTimeout: d.Configs.PullRequestTimeout(),
 	})
@@ -103,14 +103,14 @@ func NewOrchestratorWorkload(d OrchestratorDependencies) (*OrchestratorWorkload,
 		kind.CommandName: orchestratorRunCommand.NewCommandHandler(orchestratorRunCommand.NewUseCase(kinds, locks, d.Producer), d.NodeName, d.Logger),
 	}
 
-	// the control plane's requests to this node, answered a bounded number at
-	// once. A docker request waits for its VM's dockerd first, so it is given
-	// that wait on top of its own time. A kind's query is its kind's to
-	// answer, and the Docker passthrough's operations are the node's own.
-	responder := request.NewResponder(d.NATS, orchestratorAnswerQuery.NewUseCase(kinds, orchestratorAnswerRequest.NewUseCase(daemons, recorder), orchestratorAnswerQuery.WithLocks(locks)), request.ResponderOptions{
+	// the control plane's requests to this node, every kind's queries, and
+	// the commands for what nobody keeps a record of, which take their
+	// resources' locks as every command does: answered a bounded number at
+	// once. What asks a Docker VM's dockerd waits for it first, so it is
+	// given that wait on top of its own time.
+	responder := request.NewResponder(d.NATS, orchestratorAnswerQuery.NewUseCase(kinds, orchestratorAnswerQuery.WithLocks(locks)), request.ResponderOptions{
 		Concurrency: d.Configs.NodeRequestConcurrency,
 		Timeout:     d.Configs.DockerReadyTimeout + nodeRequestTimeout,
-		PullTimeout: d.Configs.PullRequestTimeout(),
 	}, d.Logger)
 
 	return &OrchestratorWorkload{Subscribers: subscribers, Responder: responder, Kinds: kinds}, nil

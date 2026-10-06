@@ -13,18 +13,20 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	createcontainer "github.com/khanzadimahdi/testproject/application/workload/controlplane/container/createContainer"
-	getcontainers "github.com/khanzadimahdi/testproject/application/workload/controlplane/container/getContainers"
-	requestdocker "github.com/khanzadimahdi/testproject/application/workload/controlplane/docker/requestDocker"
 	actonresource "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/actOnResource"
+	admitresource "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/admitResource"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/blocks/blockstest"
 	deleteresource "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/deleteResource"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/dispatch"
 	getkinds "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/getKinds"
 	getresource "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/getResource"
 	getresources "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/getResources"
 	queryresource "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/queryResource"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/resourceResult"
 	controlplanestacks "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/stack"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/runs"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/vmtest"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/waiters"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/slugs"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/snapshot/archive"
 	createsnapshot "github.com/khanzadimahdi/testproject/application/workload/controlplane/snapshot/createSnapshot"
@@ -36,6 +38,7 @@ import (
 	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/domain/workload/docker"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
+	containerKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/container"
 	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
@@ -49,27 +52,19 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/translator"
 	"github.com/khanzadimahdi/testproject/infrastructure/validator"
 	"github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane/client"
-	containerAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/controlplane/api/container"
-	dockerAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/controlplane/api/docker"
 	kindsAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/controlplane/api/kinds"
 	snapshotAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/controlplane/api/snapshot"
 )
 
 // node answers what the control plane asks of it the way a node does: every
-// Docker VM holds one container, and every VM's log one line.
+// VM's log is one line.
 func node() *messagingMock.Requester {
 	return &messagingMock.Requester{Answer: func(_ context.Context, _ string, request noderequest.Request) (noderequest.Reply, error) {
 		var result any
 
 		switch request.Op {
-		case noderequest.OpContainersList:
-			result = []noderequest.Container{{ID: "c1", Name: "web", Image: "nginx:1.27", State: "running", Stack: "web-abcde", Service: "web"}}
-		case noderequest.OpContainersCreate:
-			result = noderequest.Container{ID: "c2", Name: "api", Image: "nginx:1.27", State: "running"}
 		case kind.Op(vmKind.Name, vmKind.ActionLogs):
 			result = vmKind.Logs{Lines: []vmKind.LogLine{{At: time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC), Source: vm.LogSourceKernel, Line: "booted"}}}
-		case noderequest.OpContainersInspect:
-			return noderequest.Failed(domain.ErrNotExists), nil
 		default:
 			return noderequest.Reply{OK: true}, nil
 		}
@@ -80,11 +75,46 @@ func node() *messagingMock.Requester {
 	}}
 }
 
+// containersNode is the node holding the containers: what it is sent of a
+// container it carries out at once, and says so, as a node does. It is sent
+// nothing else here that it answers.
+type containersNode struct {
+	results domain.MessageHandler
+}
+
+func (n *containersNode) Produce(_ context.Context, subject string, payload []byte) error {
+	var command kind.Command
+	if subject != kind.CommandName || json.Unmarshal(payload, &command) != nil || command.Kind != containerKind.Name {
+		return nil
+	}
+
+	c, err := kind.Decode[containerKind.Spec, containerKind.Status](command.Resource)
+	if err != nil {
+		return err
+	}
+
+	result := kind.Result{ID: command.ID, Kind: command.Kind, UUID: command.UUID, Action: command.Action, Node: command.Node, OK: true, At: time.Now()}
+
+	if command.Action != containerKind.ActionDelete {
+		result.Status, _ = json.Marshal(containerKind.Status{
+			Status:  kind.Status{State: containerKind.Running},
+			Docker:  &containerKind.Docker{ID: "c-" + c.Spec.Name, Name: c.Spec.Name, Image: c.Spec.Image, State: "running", Status: "Up Less than a second"},
+			Failure: &noderequest.Error{},
+		})
+	}
+
+	answer, _ := json.Marshal(result)
+
+	go func() { _ = n.results.Handle(context.Background(), answer) }()
+
+	return nil
+}
+
 // controlPlane is the control plane's API, wired the way its provider wires
-// it, over memory repositories and a node that answers: VMs and stacks are
-// kinds, served by the resource API every kind is, and a VM's snapshots and
-// the containers in Docker VMs are served as they were.
-func controlPlane(t *testing.T, w *vmtest.Workload) *client.Client {
+// it, over memory repositories and a node that answers: VMs, stacks and the
+// building blocks of Docker VMs are kinds, served by the resource API every
+// kind is, and a VM's snapshots are served as they were.
+func controlPlane(t *testing.T, w *blockstest.Workload) *client.Client {
 	t.Helper()
 
 	logger := slog.New(slog.DiscardHandler)
@@ -101,20 +131,22 @@ func controlPlane(t *testing.T, w *vmtest.Workload) *client.Client {
 		})),
 	)))
 
+	// what is sent to a container's node comes back from it.
+	waiting := waiters.New()
+	containers := &containersNode{results: resourceResult.NewResult(w.Registry, w.Resources, waiting, logger, nil)}
+	dispatcher := dispatch.New(w.Resources, containers, waiting, nil, dispatch.PollEvery(10*time.Millisecond))
+
 	mux := http.NewServeMux()
 	mux.Handle("GET /api/snapshots", snapshotAPI.NewIndexHandler(getsnapshots.NewUseCase(w.Snapshots)))
 	mux.Handle("POST /api/vms/{uuid}/snapshots", snapshotAPI.NewCreateHandler(createsnapshot.NewUseCase(w.Entities, w.Runs, w.Snapshots, w.Placement, w.Producer, codes, 10)))
 	mux.Handle("GET /api/snapshots/{uuid}", snapshotAPI.NewShowHandler(getsnapshot.NewUseCase(w.Snapshots)))
 	mux.Handle("PATCH /api/snapshots/{uuid}", snapshotAPI.NewRenameHandler(renamesnapshot.NewUseCase(w.Snapshots, codes)))
 	mux.Handle("DELETE /api/snapshots/{uuid}", snapshotAPI.NewDeleteHandler(deletesnapshot.NewUseCase(w.Snapshots, w.Entities, w.Placement, remover, codes)))
-	mux.Handle("POST /api/vms/{uuid}/docker/{op}", dockerAPI.NewRequestHandler(requestdocker.NewUseCase(w.Entities, requester, codes)))
-	mux.Handle("GET /api/containers", containerAPI.NewIndexHandler(getcontainers.NewUseCase(w.Entities, requester, logger)))
-	mux.Handle("POST /api/containers", containerAPI.NewCreateHandler(createcontainer.NewUseCase(w.Entities, w.Chooser, requester, codes)))
 
 	require.NoError(t, kindsAPI.Route(mux, w.Registry.Descriptors(), kindsAPI.UseCases{
-		Admit:  w.Admit,
-		Act:    actonresource.NewUseCase(w.Registry, w.Resources, w.Dispatcher, logger),
-		Delete: deleteresource.NewUseCase(w.Registry, w.Resources, w.Dispatcher),
+		Admit:  admitresource.NewUseCase(w.Registry, w.Resources, dispatcher, logger),
+		Act:    actonresource.NewUseCase(w.Registry, w.Resources, dispatcher, logger),
+		Delete: deleteresource.NewUseCase(w.Registry, w.Resources, dispatcher),
 		Get:    getresource.NewUseCase(w.Registry, w.Resources),
 		List:   getresources.NewUseCase(w.Registry, w.Resources),
 		Query:  queryresource.NewUseCase(w.Registry, w.Resources, requester, nil, nil),
@@ -130,11 +162,33 @@ func controlPlane(t *testing.T, w *vmtest.Workload) *client.Client {
 	return c
 }
 
+// witnessed has the containers' strategy hear that the node holds, in the
+// Docker VM vmUUID names, what docker says of each container.
+func witnessed(t *testing.T, w *blockstest.Workload, vmUUID string, containers ...containerKind.Docker) {
+	t.Helper()
+
+	report := kind.Report[json.RawMessage]{Read: []string{vmUUID}}
+
+	for _, c := range containers {
+		owners := []kind.Reference{{Kind: "vm", UUID: vmUUID}}
+		if stack := c.Labels[stackKind.LabelStack]; len(stack) > 0 {
+			owners = append(owners, kind.Reference{Kind: stackKind.Name, UUID: stack})
+		}
+
+		status, err := json.Marshal(containerKind.Status{Status: kind.Status{State: containerKind.StateOf(c.State, "")}, Docker: &c})
+		require.NoError(t, err)
+
+		report.Instances = append(report.Instances, kind.Observation{Kind: containerKind.Name, Owners: owners, Status: status})
+	}
+
+	require.NoError(t, w.Containers.Witnessed(t.Context(), vmtest.Node, report, time.Now()))
+}
+
 func TestContract_VMs(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	w := vmtest.New(vmtest.WithVMs(vmtest.Running("theirs", "other")))
+	w := blockstest.New(vmtest.WithVMs(vmtest.Running("theirs", "other")))
 	c := controlPlane(t, w)
 
 	created, err := c.CreateVM(ctx, "owner", workloadControlPlane.VMRequest{
@@ -223,7 +277,7 @@ func TestContract_Runs(t *testing.T) {
 	run := vmtest.Run("run")
 	run.ExecutionLogs = []byte("hello\nbye\n")
 
-	w := vmtest.New(vmtest.WithVMs(vmtest.Running("theirs", "other")), vmtest.WithTasks(run))
+	w := blockstest.New(vmtest.WithVMs(vmtest.Running("theirs", "other")), vmtest.WithTasks(run))
 	c := controlPlane(t, w)
 
 	page, err := c.VMs(ctx, "", "", 1)
@@ -283,7 +337,7 @@ func TestContract_Snapshots(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	w := vmtest.New(vmtest.WithVMs(vmtest.Stopped("01", "owner")))
+	w := blockstest.New(vmtest.WithVMs(vmtest.Stopped("01", "owner")))
 	c := controlPlane(t, w)
 
 	taken, err := c.CreateSnapshot(ctx, "owner", "01", "before")
@@ -317,18 +371,53 @@ func TestContract_Snapshots(t *testing.T) {
 	assert.Equal(t, domain.ValidationErrors{"snapshot_uuid": "snapshot_not_ready"}, refused.ValidationErrors)
 }
 
-func TestContract_Docker(t *testing.T) {
+// TestContract_BuildingBlocks holds the blog's client to the containers of
+// Docker VMs as the control plane keeps them, as the container kind: those
+// kept, and what a VM's dockerd holds that a stack or its terminal made.
+func TestContract_BuildingBlocks(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	w := vmtest.New(vmtest.WithVMs(vmtest.Docker("d1", "owner"), vmtest.Running("m1", "owner")))
+	w := blockstest.New(vmtest.WithVMs(vmtest.Docker("d1", "owner"), vmtest.Running("m1", "owner")))
 	c := controlPlane(t, w)
+
+	witnessed(t, w, "d1",
+		containerKind.Docker{ID: "s1", Name: "web-abcde-web-1", Image: "nginx:1.27", State: "running", Labels: map[string]string{docker.LabelComposeProject: "web-abcde", docker.LabelComposeService: "web"}},
+		containerKind.Docker{ID: "u1", Name: "db", Image: "postgres:17", State: "exited", Status: "Exited (0) 2 minutes ago"},
+	)
 
 	containers, err := c.Docker("owner", "d1").Containers(ctx, docker.ContainerFilter{All: true})
 	require.NoError(t, err)
-	require.Len(t, containers, 1)
-	assert.Equal(t, "web", containers[0].Name)
-	assert.Equal(t, "web-abcde", containers[0].Stack)
+	require.Len(t, containers, 2)
+
+	byName := map[string]docker.Container{}
+	for _, container := range containers {
+		byName[container.Name] = container
+	}
+
+	assert.Equal(t, "web-abcde", byName["web-abcde-web-1"].Stack, "a stack's, as it is")
+	assert.False(t, byName["web-abcde-web-1"].Unmanaged)
+	assert.True(t, byName["db"].Unmanaged, "and one made from its vm's terminal, marked so")
+
+	running, err := c.Docker("owner", "d1").Containers(ctx, docker.ContainerFilter{})
+	require.NoError(t, err)
+	assert.Len(t, running, 1, "only those that run, unless all are asked for")
+
+	created, err := c.CreateContainer(ctx, "owner", workloadControlPlane.ContainerRequest{
+		Container: docker.ContainerSpec{Name: "api", Image: "nginx:1.27"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, workloadControlPlane.ChosenVM{UUID: "d1", Name: "box", Created: false}, created.VM, "its owner's only docker vm")
+	assert.Equal(t, "c-api", created.Container.ID, "as its node made it")
+	assert.Equal(t, "running", created.Container.State)
+
+	read, err := c.Docker("owner", "d1").Container(ctx, "api")
+	require.NoError(t, err, "named by its name in its vm")
+	assert.Equal(t, "c-api", read.ID)
+
+	read, err = c.Docker("owner", "d1").Container(ctx, "u1")
+	require.NoError(t, err, "and what nobody keeps, by its docker id")
+	assert.Equal(t, "db", read.Name)
 
 	_, err = c.Docker("owner", "d1").Container(ctx, "missing")
 	assert.ErrorIs(t, err, domain.ErrNotExists, "a container that is not there")
@@ -343,25 +432,29 @@ func TestContract_Docker(t *testing.T) {
 	err = c.Docker("other", "d1").Ping(ctx)
 	assert.ErrorIs(t, err, domain.ErrNotExists, "somebody else's vm is not there")
 
-	created, err := c.CreateContainer(ctx, "owner", workloadControlPlane.ContainerRequest{
-		Container: docker.ContainerSpec{Name: "api", Image: "nginx:1.27"},
-	})
-	require.NoError(t, err)
-	assert.Equal(t, workloadControlPlane.ChosenVM{UUID: "d1", Name: "box", Created: false}, created.VM)
-	assert.Equal(t, "c2", created.Container.ID)
-
 	everywhere, err := c.Containers(ctx, "owner", "")
 	require.NoError(t, err)
-	require.Len(t, everywhere, 1)
-	assert.Equal(t, "d1", everywhere[0].VMUUID)
-	assert.Equal(t, "web", everywhere[0].Name)
+	require.Len(t, everywhere, 3)
+
+	for _, container := range everywhere {
+		assert.Equal(t, "d1", container.VMUUID)
+		assert.Equal(t, "box", container.VMName)
+	}
+
+	err = c.Docker("owner", "d1").RemoveContainer(ctx, "api", false)
+	assert.ErrorIs(t, err, docker.ErrInvalid, "one that runs is not removed but by force, as docker says")
+
+	require.NoError(t, c.Docker("owner", "d1").RemoveContainer(ctx, "api", true))
+
+	_, err = c.Docker("owner", "d1").Container(ctx, "api")
+	assert.ErrorIs(t, err, domain.ErrNotExists, "removed, it is gone")
 }
 
 func TestContract_Stacks(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	w := vmtest.New(vmtest.WithVMs(vmtest.Docker("d1", "owner")))
+	w := blockstest.New(vmtest.WithVMs(vmtest.Docker("d1", "owner")))
 	c := controlPlane(t, w)
 
 	created, err := c.CreateStack(ctx, "owner", workloadControlPlane.StackRequest{
@@ -374,6 +467,12 @@ func TestContract_Stacks(t *testing.T) {
 	assert.Equal(t, stack.Deploying, created.Stack.State, "its vm runs, so it is deployed at once")
 	assert.Equal(t, stack.Running, created.Stack.ExpectedState)
 	assert.Equal(t, "box", created.Stack.VMName, "a stack names its vm")
+
+	// what compose made for it, and a container of another project.
+	witnessed(t, w, "d1",
+		containerKind.Docker{ID: "s1", Name: created.Stack.Slug + "-web-1", State: "running", Labels: map[string]string{docker.LabelComposeProject: created.Stack.Slug, docker.LabelComposeService: "web", stackKind.LabelStack: created.Stack.UUID}},
+		containerKind.Docker{ID: "o1", Name: "other-web-1", State: "running", Labels: map[string]string{docker.LabelComposeProject: "other", docker.LabelComposeService: "web"}},
+	)
 
 	detail, err := c.Stack(ctx, "owner", created.Stack.UUID)
 	require.NoError(t, err)
@@ -410,7 +509,7 @@ func TestContract_NewDockerVM(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	w := vmtest.New()
+	w := blockstest.New()
 	c := controlPlane(t, w)
 
 	created, err := c.CreateStack(ctx, "owner", workloadControlPlane.StackRequest{

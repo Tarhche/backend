@@ -15,20 +15,6 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 )
 
-// before is what answered node requests before there were kinds: it answers
-// everything it is handed, and remembers what that was.
-type before struct {
-	handed []noderequest.Op
-}
-
-var _ noderequest.Handler = &before{}
-
-func (b *before) Handle(_ context.Context, request noderequest.Request) noderequest.Reply {
-	b.handed = append(b.handed, request.Op)
-
-	return noderequest.Reply{OK: true, Result: json.RawMessage(`"answered as it always was"`)}
-}
-
 // asking is a lamp's query, as the node request it travels as.
 func asking(t *testing.T, action string, payload string) noderequest.Request {
 	t.Helper()
@@ -138,11 +124,8 @@ func TestUseCase_Handle(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			next := &before{}
+			answered := NewUseCase(running(t, tt.strategy)).Handle(t.Context(), tt.request(t))
 
-			answered := NewUseCase(running(t, tt.strategy), next).Handle(t.Context(), tt.request(t))
-
-			assert.Empty(t, next.handed, "a kind's query is the kind's")
 			assert.Equal(t, tt.asked, tt.strategy.asked, "asked")
 
 			if len(tt.code) > 0 {
@@ -162,28 +145,28 @@ func TestUseCase_Handle(t *testing.T) {
 	t.Run("an error that crossed into the domain is the domain's again on the other side", func(t *testing.T) {
 		t.Parallel()
 
-		answered := NewUseCase(running(t, &lamps{failure: domain.ErrNotExists}), &before{}).Handle(t.Context(), asking(t, "readings", `{"last": 1}`))
+		answered := NewUseCase(running(t, &lamps{failure: domain.ErrNotExists})).Handle(t.Context(), asking(t, "readings", `{"last": 1}`))
 
 		assert.ErrorIs(t, answered.Err(), domain.ErrNotExists)
 	})
 }
 
-func TestUseCase_Handle_TheNodesOwn(t *testing.T) {
+func TestUseCase_Handle_noKinds(t *testing.T) {
 	t.Parallel()
 
 	for name, tt := range map[string]struct {
 		kinds func(t *testing.T) *kind.Registry[kind.NodeBinding]
 		op    noderequest.Op
 	}{
-		"an op named after a kind that is not registered here is the node's, as it always was": {
+		"an op named after a kind that is not registered here is not one a node answers": {
 			kinds: func(t *testing.T) *kind.Registry[kind.NodeBinding] { return running(t, &lamps{}) },
 			op:    "vm.logs",
 		},
-		"and so is one that names no kind's action": {
+		"nor is one that names no kind's action": {
 			kinds: func(t *testing.T) *kind.Registry[kind.NodeBinding] { return running(t, &lamps{}) },
 			op:    "docker.containers.list",
 		},
-		"and with no kinds at all, every request is": {
+		"nor, with no kinds at all, any": {
 			kinds: func(*testing.T) *kind.Registry[kind.NodeBinding] { return kind.NewRegistry[kind.NodeBinding]() },
 			op:    "lamp.state",
 		},
@@ -195,13 +178,11 @@ func TestUseCase_Handle_TheNodesOwn(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			next := &before{}
+			answered := NewUseCase(tt.kinds(t)).Handle(t.Context(), noderequest.Request{Op: tt.op, VMUUID: "vm-1"})
 
-			answered := NewUseCase(tt.kinds(t), next).Handle(t.Context(), noderequest.Request{Op: tt.op, VMUUID: "vm-1"})
-
-			assert.Equal(t, []noderequest.Op{tt.op}, next.handed)
-			assert.True(t, answered.OK)
-			assert.JSONEq(t, `"answered as it always was"`, string(answered.Result))
+			require.False(t, answered.OK)
+			assert.Equal(t, noderequest.CodeInvalid, answered.Error.Code)
+			assert.Contains(t, answered.Error.Message, string(tt.op))
 		})
 	}
 }
@@ -242,7 +223,7 @@ func TestUseCase_Handle_command(t *testing.T) {
 		strategy := &lamps{}
 		held := &locks{}
 
-		answered := NewUseCase(running(t, strategy), &before{}, WithLocks(held)).Handle(t.Context(), asking(t, "light", ""))
+		answered := NewUseCase(running(t, strategy), WithLocks(held)).Handle(t.Context(), asking(t, "light", ""))
 		require.True(t, answered.OK, "%v", answered.Error)
 
 		var result kind.Result
@@ -264,7 +245,7 @@ func TestUseCase_Handle_command(t *testing.T) {
 	t.Run("one that failed is answered as well, its result saying why", func(t *testing.T) {
 		t.Parallel()
 
-		answered := NewUseCase(running(t, &lamps{failure: errors.New("the bulb is gone")}), &before{}).Handle(t.Context(), asking(t, "delete", ""))
+		answered := NewUseCase(running(t, &lamps{failure: errors.New("the bulb is gone")})).Handle(t.Context(), asking(t, "delete", ""))
 		require.True(t, answered.OK, "%v", answered.Error)
 
 		var result kind.Result
@@ -272,14 +253,5 @@ func TestUseCase_Handle_command(t *testing.T) {
 
 		assert.False(t, result.OK)
 		assert.Equal(t, "the bulb is gone", result.Reason)
-	})
-
-	t.Run("with nothing to hand it to, an op that is no kind's is not one a node answers", func(t *testing.T) {
-		t.Parallel()
-
-		answered := NewUseCase(running(t, &lamps{}), nil).Handle(t.Context(), noderequest.Request{Op: "docker.containers.list", VMUUID: "vm-1"})
-
-		require.False(t, answered.OK)
-		assert.Equal(t, noderequest.CodeInvalid, answered.Error.Code)
 	})
 }

@@ -635,25 +635,6 @@ func Machine() kind.Machine {
 	}
 }
 
-// InFlightOf is the state a container is in while action is carried out on
-// it, and nothing for one that leaves it where it is.
-func InFlightOf(action string) kind.State {
-	switch action {
-	case ActionCreate:
-		return Creating
-	case ActionStart:
-		return Starting
-	case ActionStop:
-		return Stopping
-	case ActionRestart:
-		return Restarting
-	case ActionDelete:
-		return Removing
-	}
-
-	return ""
-}
-
 func clone(values []string) []string {
 	if values == nil {
 		return nil

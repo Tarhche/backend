@@ -232,7 +232,10 @@ func TestContainers_Prepare(t *testing.T) {
 	ctx := context.Background()
 
 	w := blockstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
-	w.Keep(blockstest.A[networkKind.Spec, networkKind.Status](networkKind.Name, "n-uuid", "vm-1", networkKind.Spec{Name: "backend"}, networkKind.Status{Status: kind.Status{State: networkKind.Present}}))
+	w.Keep(blockstest.A[networkKind.Spec, networkKind.Status](networkKind.Name, "n-uuid", "vm-1", networkKind.Spec{Name: "backend"}, networkKind.Status{
+		Status: kind.Status{State: networkKind.Present},
+		Docker: &networkKind.Docker{ID: "0a1b2c3d", Name: "backend"},
+	}))
 
 	running := typed(t, blockstest.AContainer("c", "vm-1", containerKind.Running, containerKind.Running))
 
@@ -275,7 +278,11 @@ func TestContainers_Prepare(t *testing.T) {
 		require.ErrorAs(t, err, new(*noderequest.Error), "what docker has not done, it is not undone")
 		assert.Empty(t, taken.Spec.Networks)
 
-		prepared.Status.Docker.Networks = []string{"backend", "bridge"}
+		// what its node saw since, on a copy of its own: the one before is
+		// every other test's.
+		seen := *prepared.Status.Docker
+		seen.Networks = []string{"backend", "bridge"}
+		prepared.Status.Docker = &seen
 
 		taken, _, err = w.Containers.Prepare(ctx, prepared, containerKind.ActionDisconnect, containerKind.DisconnectPayload{Network: "backend"})
 		require.NoError(t, err)
@@ -288,6 +295,35 @@ func TestContainers_Prepare(t *testing.T) {
 		t.Parallel()
 
 		_, _, err := w.Containers.Prepare(ctx, running, containerKind.ActionConnect, containerKind.ConnectPayload{Network: "nowhere"})
+
+		var refused *noderequest.Error
+		require.ErrorAs(t, err, &refused)
+		assert.Equal(t, noderequest.CodeNotFound, refused.Code)
+	})
+
+	t.Run("a network named by its docker id is named by its name in its spec, and taken off by it as well", func(t *testing.T) {
+		t.Parallel()
+
+		prepared, _, err := w.Containers.Prepare(ctx, running, containerKind.ActionConnect, containerKind.ConnectPayload{Network: "0a1b2c3d", Aliases: []string{"api"}})
+		require.NoError(t, err)
+
+		assert.Equal(t, []string{"backend"}, prepared.Spec.Networks)
+		assert.Equal(t, map[string][]string{"backend": {"api"}}, prepared.Spec.Aliases)
+
+		seen := *prepared.Status.Docker
+		seen.Networks = []string{"backend", "bridge"}
+		prepared.Status.Docker = &seen
+
+		taken, _, err := w.Containers.Prepare(ctx, prepared, containerKind.ActionDisconnect, containerKind.DisconnectPayload{Network: "0a1b2c3d"})
+		require.NoError(t, err)
+		assert.Empty(t, taken.Spec.Networks)
+		assert.Nil(t, taken.Spec.Aliases)
+	})
+
+	t.Run("one is not taken off a network its vm has not", func(t *testing.T) {
+		t.Parallel()
+
+		_, _, err := w.Containers.Prepare(ctx, running, containerKind.ActionDisconnect, containerKind.DisconnectPayload{Network: "nowhere"})
 
 		var refused *noderequest.Error
 		require.ErrorAs(t, err, &refused)

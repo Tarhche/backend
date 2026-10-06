@@ -24,8 +24,7 @@ import (
 //     plane recorded it, so a node answers without a database, as it carries
 //     out a Command.
 //
-// The reply is a noderequest.Reply as it always was. Until a kind is
-// registered on a node, its ops are the node's to answer as they were.
+// The reply is a noderequest.Reply as it always was.
 //
 // A command for an instance nobody keeps a record of, one of a kind's extras
 // such as a container made from its VM's terminal, travels the same way, and

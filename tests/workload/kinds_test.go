@@ -251,7 +251,7 @@ func TestKinds(t *testing.T) {
 		node.Responder.Wait()
 	})
 
-	requester := request.NewRequester(controlPlaneConnection, settle, settle)
+	requester := request.NewRequester(controlPlaneConnection, settle)
 
 	command := func(id string, kindName string, uuid string, action string, node string) {
 		t.Helper()
@@ -326,11 +326,13 @@ func TestKinds(t *testing.T) {
 		assert.JSONEq(t, `{"kind":"lamp","uuid":"lamp-1","status":{"state":"lit"}}`, string(reply.Result))
 	})
 
-	t.Run("and the node's own requests are answered as they always were", func(t *testing.T) {
-		reply, err := requester.Request(ctx, nodeName, noderequest.Request{Op: noderequest.OpPing, VMUUID: "no-such-vm"})
+	t.Run("and what is no kind's is not asked of a node at all", func(t *testing.T) {
+		reply, err := requester.Request(ctx, nodeName, noderequest.Request{Op: "docker.ping", VMUUID: "no-such-vm"})
 		require.NoError(t, err)
 
-		assert.ErrorIs(t, reply.Err(), domain.ErrNotExists)
+		var refused *noderequest.Error
+		require.ErrorAs(t, reply.Err(), &refused)
+		assert.Equal(t, noderequest.CodeInvalid, refused.Code)
 	})
 
 	t.Run("every heartbeat says what the lamps on the node are doing", func(t *testing.T) {

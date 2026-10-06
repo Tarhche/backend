@@ -184,25 +184,4 @@ func TestEntities(t *testing.T) {
 		_, err = e.GetOneByOwner(ctx, "other", "02")
 		assert.ErrorIs(t, err, domain.ErrNotExists)
 	})
-
-	t.Run("a person's of one flavor", func(t *testing.T) {
-		t.Parallel()
-
-		docker, err := e.GetAllByOwnerAndKind(ctx, "owner", vm.KindDocker)
-		require.NoError(t, err)
-		require.Len(t, docker, 1)
-		assert.Equal(t, "02", docker[0].UUID)
-	})
-
-	t.Run("anybody's, a page at a time", func(t *testing.T) {
-		t.Parallel()
-
-		first, err := e.GetAll(ctx, 0, 2)
-		require.NoError(t, err)
-		assert.Len(t, first, 2)
-
-		rest, err := e.GetAll(ctx, 2, 2)
-		require.NoError(t, err)
-		assert.Len(t, rest, 1)
-	})
 }

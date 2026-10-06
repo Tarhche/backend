@@ -206,16 +206,3 @@ func Presence() kind.Machine {
 		InFlight:    []kind.State{Creating, Removing},
 	}
 }
-
-// PresenceInFlightOf is the state a building block that is either there or
-// not is in while action is carried out on it.
-func PresenceInFlightOf(action string) kind.State {
-	switch action {
-	case ActionCreate:
-		return Creating
-	case ActionDelete:
-		return Removing
-	}
-
-	return ""
-}

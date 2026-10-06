@@ -14,10 +14,11 @@ import (
 
 	"github.com/khanzadimahdi/testproject/domain"
 	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
+	"github.com/khanzadimahdi/testproject/domain/workload/docker"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
+	containerKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/container"
 	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
-	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
 	"github.com/khanzadimahdi/testproject/domain/workload/stack"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
@@ -132,14 +133,33 @@ func newStacksPlane(t *testing.T) (*Client, *stacksPlane) {
 		answer(rw, http.StatusOK, v)
 	})
 
-	mux.HandleFunc("POST /api/vms/{uuid}/docker/containers.list", func(rw http.ResponseWriter, r *http.Request) {
+	// what the vm holds: one container compose made for the stack, and one
+	// of another project.
+	mux.HandleFunc("GET /api/containers", func(rw http.ResponseWriter, r *http.Request) {
 		p.record(r)
 
-		var filter noderequest.ContainersRequest
-		require.NoError(t, json.NewDecoder(r.Body).Decode(&filter))
+		of := func(id string, project string) containerManifest {
+			return containerManifest{
+				Kind: "container",
+				Metadata: kind.Metadata{
+					UUID:   "uuid-" + id,
+					Labels: map[string]string{"workload.managed-by": "stack"},
+					Owners: []kind.Reference{{Kind: "vm", UUID: r.URL.Query().Get("parent")}},
+				},
+				Status: containerKind.Status{
+					Status: kind.Status{State: containerKind.Running},
+					Docker: &containerKind.Docker{ID: id, Name: project + "-web-1", State: "running", Labels: map[string]string{
+						docker.LabelComposeProject: project,
+						docker.LabelComposeService: "web",
+					}},
+				},
+			}
+		}
 
-		result, _ := json.Marshal([]noderequest.Container{{ID: "c1", Name: "shop-abcde-web-1", State: "running", Stack: filter.Stack, Service: "web"}})
-		answer(rw, http.StatusOK, map[string]any{"result": json.RawMessage(result)})
+		answer(rw, http.StatusOK, map[string]any{
+			"items":      []containerManifest{of("c1", "shop-abcde"), of("c2", "elsewhere")},
+			"pagination": map[string]any{"total_pages": 1, "current_page": 1},
+		})
 	})
 
 	server := httptest.NewServer(mux)
@@ -336,7 +356,7 @@ func TestClient_Stack(t *testing.T) {
 			assert.True(t, detail.VMNotRunning)
 			assert.NotNil(t, detail.Containers)
 			assert.Empty(t, detail.Containers)
-			assert.NotContains(t, p.requests(), "POST /api/vms/vm-uuid/docker/containers.list?owner=owner-uuid", "its dockerd is not asked")
+			assert.NotContains(t, p.requests(), "GET /api/containers?owner=owner-uuid&page=1&parent=vm-uuid", "its containers are not asked for")
 		})
 	}
 

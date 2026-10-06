@@ -243,17 +243,6 @@ func TestVMOf(t *testing.T) {
 	assert.Equal(t, "named", container.VMOf(asked), "one not kept yet goes where it asks")
 }
 
-func TestInFlightOf(t *testing.T) {
-	t.Parallel()
-
-	assert.Equal(t, container.Creating, container.InFlightOf(container.ActionCreate))
-	assert.Equal(t, container.Starting, container.InFlightOf(container.ActionStart))
-	assert.Equal(t, container.Stopping, container.InFlightOf(container.ActionStop))
-	assert.Equal(t, container.Restarting, container.InFlightOf(container.ActionRestart))
-	assert.Equal(t, container.Removing, container.InFlightOf(container.ActionDelete))
-	assert.Empty(t, container.InFlightOf(container.ActionConnect), "it stays where it is")
-}
-
 func TestSpecLabel(t *testing.T) {
 	t.Parallel()
 

@@ -1,6 +1,7 @@
-// Package presenter is how the control plane's API shows a snapshot and a
-// container: snake_case JSON, states as words and sizes as bytes. A kind on
-// the framework, a VM or a stack, is shown as its manifest instead.
+// Package presenter is how the control plane's API shows a snapshot:
+// snake_case JSON, states as words and sizes as bytes. A kind on the
+// framework, a VM, a stack or a building block of a Docker VM, is shown as
+// its manifest instead.
 //
 // The blog's control plane client reads exactly these shapes back, so a field
 // renamed here is renamed there too.
@@ -9,8 +10,6 @@ package presenter
 import (
 	"time"
 
-	"github.com/khanzadimahdi/testproject/domain/workload/docker"
-	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 	"github.com/khanzadimahdi/testproject/domain/workload/snapshot"
 )
 
@@ -85,33 +84,4 @@ func NewSnapshots(snapshots []snapshot.Snapshot) []Snapshot {
 	}
 
 	return items
-}
-
-// Container is a container as a node reports it, in the shape node requests
-// carry it.
-type Container = noderequest.Container
-
-func NewContainers(containers []docker.Container) []Container {
-	items := make([]Container, len(containers))
-	for i := range containers {
-		items[i] = noderequest.NewContainer(containers[i])
-	}
-
-	return items
-}
-
-// ChosenVM is the Docker VM a container went into, and whether it was made
-// for it.
-type ChosenVM struct {
-	UUID    string `json:"uuid"`
-	Name    string `json:"name"`
-	Created bool   `json:"created"`
-}
-
-// VMContainer is a container and the Docker VM it is in.
-type VMContainer struct {
-	Container
-
-	VMUUID string `json:"vm_uuid"`
-	VMName string `json:"vm_name"`
 }

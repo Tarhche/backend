@@ -28,6 +28,7 @@
 package container
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -198,9 +199,12 @@ func (s *Containers) Prepare(ctx context.Context, c containerKind.Container, act
 	case containerKind.ActionConnect:
 		connect, _ := payload.(containerKind.ConnectPayload)
 
-		if err := s.connectable(ctx, c, connect.Network); err != nil {
+		network, err := s.connectable(ctx, c, connect.Network)
+		if err != nil {
 			return containerKind.Container{}, nil, err
 		}
+
+		connect.Network = network
 
 		if !slices.Contains(c.Spec.Networks, connect.Network) {
 			c.Spec.Networks = append(slices.Clone(c.Spec.Networks), connect.Network)
@@ -225,9 +229,19 @@ func (s *Containers) Prepare(ctx context.Context, c containerKind.Container, act
 	case containerKind.ActionDisconnect:
 		disconnect, _ := payload.(containerKind.DisconnectPayload)
 
-		if seen := c.Status.Docker; seen != nil && !slices.Contains(seen.Networks, disconnect.Network) {
+		network, found, err := s.networkNamed(ctx, containerKind.VMOf(c), disconnect.Network)
+		switch {
+		case err != nil:
+			return containerKind.Container{}, nil, err
+		case !found:
+			return containerKind.Container{}, nil, &noderequest.Error{Code: noderequest.CodeNotFound, Message: fmt.Sprintf("network %s not found", disconnect.Network)}
+		}
+
+		if seen := c.Status.Docker; seen != nil && !slices.Contains(seen.Networks, network) {
 			return containerKind.Container{}, nil, blocks.Refused("container %s is not connected to network %s", seen.Name, disconnect.Network)
 		}
+
+		disconnect.Network = network
 
 		c.Spec.Networks = slices.DeleteFunc(slices.Clone(c.Spec.Networks), func(network string) bool { return network == disconnect.Network })
 
@@ -249,23 +263,38 @@ func (s *Containers) Prepare(ctx context.Context, c containerKind.Container, act
 	return c, nil, nil
 }
 
-// connectable is why a kept container is not put on a network, as docker
-// would refuse it, before its spec names the network: a network its VM does
-// not have is not found, and one it is on already has it.
-func (s *Containers) connectable(ctx context.Context, c containerKind.Container, network string) error {
-	if seen := c.Status.Docker; seen != nil && slices.Contains(seen.Networks, network) {
-		return blocks.Refused("endpoint with name %s already exists in network %s", seen.Name, network)
+// connectable is the name of the network a kept container is put on, by
+// its name or its Docker id, or why it is not put on it, as docker would
+// refuse it, before its spec names it: a network its VM does not have is not
+// found, and one it is on already has it.
+func (s *Containers) connectable(ctx context.Context, c containerKind.Container, network string) (string, error) {
+	name, found, err := s.networkNamed(ctx, containerKind.VMOf(c), network)
+
+	switch {
+	case err != nil:
+		return "", err
+	case !found:
+		return "", &noderequest.Error{Code: noderequest.CodeNotFound, Message: fmt.Sprintf("network %s not found", network)}
 	}
 
+	if seen := c.Status.Docker; seen != nil && slices.Contains(seen.Networks, name) {
+		return "", blocks.Refused("endpoint with name %s already exists in network %s", seen.Name, name)
+	}
+
+	return name, nil
+}
+
+// networkNamed is the name a Docker VM has the network network names, by
+// its name or its Docker id, and whether it has one: what a container's
+// spec, and docker's listing of a container, name a network by.
+func (s *Containers) networkNamed(ctx context.Context, vmUUID string, network string) (string, bool, error) {
 	if networkKind.Default(network) {
-		return nil
+		return network, true, nil
 	}
-
-	vmUUID := containerKind.VMOf(c)
 
 	kept, _, err := s.Resources.GetAll(ctx, networkKind.Name, resource.Filter{Parent: kind.Reference{Kind: networkKind.Parent, UUID: vmUUID}}, 0, 0)
 	if err != nil {
-		return err
+		return "", false, err
 	}
 
 	networks := make([]kind.Raw, 0, len(kept))
@@ -281,12 +310,17 @@ func (s *Containers) connectable(ctx context.Context, c containerKind.Container,
 			_ = json.Unmarshal(n.Spec, &spec)
 		}
 
-		if seen := blocks.ObservedOf(n.Status).Docker; spec.Name == network || seen.Name == network || (len(seen.ID) > 0 && seen.ID == network) {
-			return nil
+		seen := blocks.ObservedOf(n.Status).Docker
+
+		switch {
+		case spec.Name == network, seen.Name == network:
+			return network, true, nil
+		case len(seen.ID) > 0 && seen.ID == network:
+			return cmp.Or(seen.Name, spec.Name), true, nil
 		}
 	}
 
-	return &noderequest.Error{Code: noderequest.CodeNotFound, Message: fmt.Sprintf("network %s not found", network)}
+	return "", false, nil
 }
 
 // Refuse is why a container, kept or not, is not asked for action as it is:
