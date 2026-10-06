@@ -165,8 +165,9 @@ type Repository interface {
 	Count(ctx context.Context) (uint, error)
 }
 
+// Scheduler picks the node a task goes to, among those that can take one.
 type Scheduler interface {
-	Pick(t *Task, candidates []node.Node) node.Node
+	Pick(candidates []node.Node) node.Node
 }
 
 // Removable reports whether nothing should be left of this task once it has

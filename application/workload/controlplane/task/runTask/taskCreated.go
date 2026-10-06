@@ -96,7 +96,7 @@ func (uc *TaskCreated) anyNode(ctx context.Context, t *task.Task) (node.Node, er
 		return node.Node{}, node.ErrNoNodesAvailable
 	}
 
-	return uc.placement.Pick(t, nodes), nil
+	return uc.placement.Pick(nodes), nil
 }
 
 func (uc *TaskCreated) getHealthyNodes(ctx context.Context) ([]node.Node, error) {

@@ -16,7 +16,7 @@ func New() *Greedy {
 	return &Greedy{}
 }
 
-func (g *Greedy) Pick(_ *task.Task, candidates []node.Node) node.Node {
+func (g *Greedy) Pick(candidates []node.Node) node.Node {
 	if len(candidates) == 0 {
 		return node.Node{}
 	}
