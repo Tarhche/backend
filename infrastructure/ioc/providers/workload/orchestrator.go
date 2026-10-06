@@ -13,8 +13,10 @@ import (
 	"github.com/nats-io/nats.go"
 
 	checkhealth "github.com/khanzadimahdi/testproject/application/app/checkHealth"
+	orchestratorAttachResource "github.com/khanzadimahdi/testproject/application/workload/orchestrator/attachResource"
 	orchestratorHeartbeat "github.com/khanzadimahdi/testproject/application/workload/orchestrator/beatHeart"
 	orchestratorGetEndpoint "github.com/khanzadimahdi/testproject/application/workload/orchestrator/getEndpoint"
+	orchestratorGetResourceEndpoint "github.com/khanzadimahdi/testproject/application/workload/orchestrator/getResourceEndpoint"
 	orchestratorAttachTask "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/attachTask"
 	orchestratorTaskHeartbeat "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/beatHeart"
 	orchestratorDeleteTask "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/deleteTask"
@@ -41,6 +43,7 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/workload/task/vmruntime"
 	healthAPI "github.com/khanzadimahdi/testproject/presentation/http/health"
 	"github.com/khanzadimahdi/testproject/presentation/http/middleware"
+	orchestratorKindsAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/orchestrator/api/kinds"
 	orchestratorPortsAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/orchestrator/api/ports"
 	orchestratorTaskAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/orchestrator/api/task"
 	orchestratorVMAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/orchestrator/api/vm"
@@ -266,6 +269,31 @@ func orchestratorConsoleCommand(
 		checkhealth.Dependency{Name: "messaging", Pinger: infraHealth.NewNatsPinger(natsConnection)},
 	)
 
+	subscribers := map[string]domain.MessageHandler{
+		taskEvents.TaskScheduledName:         orchestratorruntask.NewTaskScheduled(runTaskUseCase, asyncProduceConsumer, nodeName, logger),
+		taskEvents.TaskStoppageRequestedName: orchestratorstoptask.NewStoppageTaskHandler(stopTaskUseCase),
+		taskEvents.TaskKillRequestedName:     orchestratorkilltask.NewKillTaskHandler(killTaskUseCase),
+		taskEvents.TaskRestartRequestedName:  orchestratorrestarttask.NewRestartTaskHandler(restartTaskUseCase),
+		taskEvents.TaskDeletedName:           orchestratorDeleteTask.NewDeleteTaskHandler(deleteTaskUseCase),
+	}
+
+	// what is asked of the VMs on this node, of their snapshots and of the
+	// stacks in them, and of every kind it runs, and the answers to what the
+	// control plane asks and waits for.
+	vms, err := bindOrchestratorVMs(iocContainer, OrchestratorVMDependencies{
+		NATS:      natsConnection,
+		Engine:    engine,
+		Archives:  snapshotArchives(orchestratorConfigs.SnapshotStorage),
+		Producer:  asyncProduceConsumer,
+		Validator: validator,
+		Configs:   orchestratorConfigs,
+		NodeName:  nodeName,
+		Logger:    logger,
+	}, subscribers)
+	if err != nil {
+		return nil, err
+	}
+
 	// what the tokens the blog signs are verified against. An orchestrator never mints
 	// one, so it holds the public half and could not sign a token if it tried.
 	publicKey, err := ecdsa.ParsePublicKey([]byte(orchestratorConfigs.PublicKey))
@@ -325,6 +353,22 @@ func orchestratorConsoleCommand(
 	mux.Handle("/tasks/{slug}/{port}/{path...}", proxy)
 	mux.Handle("/vms/{slug}/{port}/{path...}", proxy)
 
+	// what the kinds this node runs serve, each under its own plural: the
+	// streams of those that serve them, a terminal for the resource's owner
+	// alone as a VM's is, among the node's own answers, and the ports of
+	// those that serve them beside the VMs' and the tasks'. A kind takes no
+	// route until it is registered.
+	kindRoutes := orchestratorKindsAPI.NewRoutes(
+		vms.Kinds,
+		orchestratorAttachResource.NewUseCase(vms.Kinds, validator),
+		orchestratorGetResourceEndpoint.NewUseCase(vms.Kinds),
+		verifier,
+		logger,
+	)
+	if err := kindRoutes.Register(api, mux); err != nil {
+		return nil, err
+	}
+
 	var tracedProfiler *profiler.TracedProfiler
 	if err := iocContainer.Resolve(&tracedProfiler); err != nil {
 		return nil, err
@@ -346,31 +390,6 @@ func orchestratorConsoleCommand(
 		),
 		logger,
 	)
-
-	subscribers := map[string]domain.MessageHandler{
-		taskEvents.TaskScheduledName:         orchestratorruntask.NewTaskScheduled(runTaskUseCase, asyncProduceConsumer, nodeName, logger),
-		taskEvents.TaskStoppageRequestedName: orchestratorstoptask.NewStoppageTaskHandler(stopTaskUseCase),
-		taskEvents.TaskKillRequestedName:     orchestratorkilltask.NewKillTaskHandler(killTaskUseCase),
-		taskEvents.TaskRestartRequestedName:  orchestratorrestarttask.NewRestartTaskHandler(restartTaskUseCase),
-		taskEvents.TaskDeletedName:           orchestratorDeleteTask.NewDeleteTaskHandler(deleteTaskUseCase),
-	}
-
-	// what is asked of the VMs on this node, of their snapshots and of the
-	// stacks in them, and of every kind it runs, and the answers to what the
-	// control plane asks and waits for.
-	vms, err := bindOrchestratorVMs(iocContainer, OrchestratorVMDependencies{
-		NATS:      natsConnection,
-		Engine:    engine,
-		Archives:  snapshotArchives(orchestratorConfigs.SnapshotStorage),
-		Producer:  asyncProduceConsumer,
-		Validator: validator,
-		Configs:   orchestratorConfigs,
-		NodeName:  nodeName,
-		Logger:    logger,
-	}, subscribers)
-	if err != nil {
-		return nil, err
-	}
 
 	// orchestrator subscribers
 	if err := iocContainer.Bind(func() map[string]domain.MessageHandler {

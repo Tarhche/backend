@@ -1,9 +1,9 @@
-// Package ports serves the ports of the VMs and the code-runner tasks this
-// node holds.
+// Package ports serves the ports of the VMs, the code-runner tasks and the
+// resources of every kind with endpoints this node holds.
 //
-// The ingress cannot see a VM or a task: it works out which node holds one and
+// The ingress cannot see any of them: it works out which node holds one and
 // sends the request here. So this is the far end of that — the node reaching a
-// port where its engine published it, and saying so itself when it cannot.
+// port where it was published, and saying so itself when it cannot.
 package ports
 
 import (
@@ -18,6 +18,9 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	getendpoint "github.com/khanzadimahdi/testproject/application/workload/orchestrator/getEndpoint"
+	getresourceendpoint "github.com/khanzadimahdi/testproject/application/workload/orchestrator/getResourceEndpoint"
+	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
 	infraTrace "github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
 )
@@ -29,16 +32,46 @@ import (
 // one for each request.
 const idleConnectionsPerPort = 64
 
+// resolver is the address a request for port p of what slug names is sent
+// to.
+type resolver func(ctx context.Context, slug string, p port.Port) (address string, err error)
+
 type proxyHandler struct {
-	useCase *getendpoint.UseCase
+	resolve resolver
 	proxy   *httputil.ReverseProxy
 	logger  *slog.Logger
 }
 
 var _ http.Handler = &proxyHandler{}
 
+// NewProxyHandler serves the ports of the VMs and the tasks this node holds,
+// wherever its engine published them.
 func NewProxyHandler(useCase *getendpoint.UseCase, logger *slog.Logger) *proxyHandler {
-	h := &proxyHandler{useCase: useCase, logger: logger}
+	return newProxyHandler(func(ctx context.Context, slug string, p port.Port) (string, error) {
+		response, err := useCase.Execute(ctx, &getendpoint.Request{Slug: slug, Port: p})
+		if err != nil {
+			return "", err
+		}
+
+		return response.Address, nil
+	}, logger)
+}
+
+// NewResourceProxyHandler serves the ports of the resources of one kind this
+// node holds, wherever the kind's node strategy says they are.
+func NewResourceProxyHandler(useCase *getresourceendpoint.UseCase, kindName string, logger *slog.Logger) *proxyHandler {
+	return newProxyHandler(func(ctx context.Context, slug string, p port.Port) (string, error) {
+		response, err := useCase.Execute(ctx, &getresourceendpoint.Request{Kind: kindName, Slug: slug, Port: p})
+		if err != nil {
+			return "", err
+		}
+
+		return response.Address, nil
+	}, logger)
+}
+
+func newProxyHandler(resolve resolver, logger *slog.Logger) *proxyHandler {
+	h := &proxyHandler{resolve: resolve, logger: logger}
 
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.MaxIdleConnsPerHost = idleConnectionsPerPort
@@ -74,10 +107,10 @@ func NewProxyHandler(useCase *getendpoint.UseCase, logger *slog.Logger) *proxyHa
 // is the only hook a ReverseProxy gives for a per-request target.
 type targetKey struct{}
 
-// @Summary		Serve a VM's or a task's port
-// @Description	carries the request to a port of a VM or a task this node is holding, where its engine published it
+// @Summary		Serve a VM's, a task's or a resource's port
+// @Description	carries the request to a port of a VM, a task or a resource of a kind with endpoints this node is holding, where it was published
 // @Tags			workload
-// @Param			slug	path		string	true	"VM or task slug"
+// @Param			slug	path		string	true	"VM, task or resource slug"
 // @Param			port	path		int		true	"Its port, or 0 for the lowest it exposes"
 // @Param			path	path		string	true	"Path on it"
 // @Success		200		{string}	string	"whatever it answered"
@@ -86,6 +119,7 @@ type targetKey struct{}
 // @Failure		503		{object}	map[string]interface{}
 // @Router			/tasks/{slug}/{port}/{path} [get]
 // @Router			/vms/{slug}/{port}/{path} [get]
+// @Router			/{plural}/{slug}/{port}/{path} [get]
 func (h *proxyHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	requested, err := strconv.ParseUint(r.PathValue("port"), 10, 16)
 	if err != nil {
@@ -94,19 +128,14 @@ func (h *proxyHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	request := getendpoint.Request{
-		Slug: r.PathValue("slug"),
-		Port: port.Port(requested),
-	}
-
-	response, err := h.useCase.Execute(r.Context(), &request)
+	address, err := h.resolve(r.Context(), r.PathValue("slug"), port.Port(requested))
 
 	switch {
-	case errors.Is(err, getendpoint.ErrNotHeld), errors.Is(err, getendpoint.ErrNotExposed):
+	case errors.Is(err, getendpoint.ErrNotHeld), errors.Is(err, getendpoint.ErrNotExposed), errors.Is(err, domain.ErrNotExists):
 		http.Error(rw, err.Error(), http.StatusNotFound)
 
 		return
-	case errors.Is(err, getendpoint.ErrNotRunning):
+	case errors.Is(err, getendpoint.ErrNotRunning), errors.Is(err, kind.ErrUnreachable):
 		http.Error(rw, err.Error(), http.StatusServiceUnavailable)
 
 		return
@@ -119,7 +148,7 @@ func (h *proxyHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 	target := &url.URL{
 		Scheme: "http",
-		Host:   response.Address,
+		Host:   address,
 		Path:   "/" + r.PathValue("path"),
 	}
 
