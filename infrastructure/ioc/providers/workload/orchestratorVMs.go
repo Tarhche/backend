@@ -9,6 +9,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"go.opentelemetry.io/otel"
 
+	orchestratorAnswerQuery "github.com/khanzadimahdi/testproject/application/workload/orchestrator/answerQuery"
 	orchestratorAnswerRequest "github.com/khanzadimahdi/testproject/application/workload/orchestrator/answerRequest"
 	orchestratorRunCommand "github.com/khanzadimahdi/testproject/application/workload/orchestrator/runCommand"
 	orchestratorRunStackAction "github.com/khanzadimahdi/testproject/application/workload/orchestrator/stack/runStackAction"
@@ -69,7 +70,8 @@ type OrchestratorVMDependencies struct {
 // requests, and the heartbeat that reports them.
 //
 // It is also what the orchestrator does for every kind it runs, alike: the
-// kinds' commands, on workloadCommand, are among the subscribers.
+// kinds' commands, on workloadCommand, are among the subscribers, and their
+// queries among what the responder answers.
 type OrchestratorVMs struct {
 	Subscribers map[string]domain.MessageHandler
 	Responder   *request.Responder
@@ -131,10 +133,11 @@ func NewOrchestratorVMs(d OrchestratorVMDependencies) (*OrchestratorVMs, error) 
 
 	// the control plane's requests to this node, answered a bounded number at
 	// once. A docker request waits for its VM's dockerd first, so it is given
-	// that wait on top of its own time.
+	// that wait on top of its own time. A kind's query is its kind's to
+	// answer, and the node's own operations are answered as they always were.
 	answerRequest := orchestratorAnswerRequest.NewUseCase(daemons, orchestratorGetVMLogs.NewUseCase(d.Engine, d.Validator), recorder)
 
-	responder := request.NewResponder(d.NATS, answerRequest, request.ResponderOptions{
+	responder := request.NewResponder(d.NATS, orchestratorAnswerQuery.NewUseCase(kinds, answerRequest), request.ResponderOptions{
 		Concurrency: d.Configs.NodeRequestConcurrency,
 		Timeout:     d.Configs.DockerReadyTimeout + nodeRequestTimeout,
 		PullTimeout: d.Configs.PullRequestTimeout(),
