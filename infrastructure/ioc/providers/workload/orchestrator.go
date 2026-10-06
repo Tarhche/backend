@@ -351,7 +351,7 @@ func orchestratorConsoleCommand(
 	// what is asked of the VMs on this node, of their snapshots and of the
 	// stacks in them, and the answers to what the control plane asks and
 	// waits for.
-	if err := bindOrchestratorVMs(iocContainer, OrchestratorVMDependencies{
+	if _, err := bindOrchestratorVMs(iocContainer, OrchestratorVMDependencies{
 		NATS:      natsConnection,
 		Engine:    engine,
 		Archives:  snapshotArchives(orchestratorConfigs.SnapshotStorage),
