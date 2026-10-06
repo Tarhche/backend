@@ -12,12 +12,26 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/khanzadimahdi/testproject/domain/workload/stack"
+	"github.com/khanzadimahdi/testproject/domain/workload/kind"
+	"github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	memory "github.com/khanzadimahdi/testproject/infrastructure/workload/vm/memory"
 )
 
 const composeYAML = "services:\n  web:\n    image: nginx:alpine\n"
+
+// shop is the stack these tests run compose on, in vm-1.
+func shop(compose string) stack.Stack {
+	return stack.Stack{
+		Kind: stack.Name,
+		Metadata: kind.Metadata{
+			UUID:   "stack-uuid",
+			Slug:   "shop-abcde",
+			Owners: []kind.Reference{{Kind: stack.Parent, UUID: "vm-1"}},
+		},
+		Spec: stack.Spec{VM: stack.VMChoice{UUID: "vm-1"}, Compose: compose},
+	}
+}
 
 // composeRun is what one compose command inside the VM was given.
 type composeRun struct {
@@ -57,7 +71,7 @@ func composeIn(t *testing.T, fake *fakeCompose) *Compose {
 	_, err := e.Create(t.Context(), vm.Spec{ID: "vm-1", Kind: vm.KindDocker, Image: "docker:29-dind"})
 	require.NoError(t, err)
 
-	return NewCompose(e, "vm-1")
+	return NewCompose(e)
 }
 
 func TestCompose(t *testing.T) {
@@ -71,42 +85,42 @@ func TestCompose(t *testing.T) {
 		{
 			name: "up brings the project up in the background and removes what it no longer has",
 			run: func(t *testing.T, c *Compose) (string, error) {
-				return c.Up(t.Context(), "shop-abcde", composeYAML)
+				return c.Up(t.Context(), shop(composeYAML))
 			},
 			want: []string{"docker", "compose", "-p", "shop-abcde", "-f", "-", "up", "-d", "--remove-orphans"},
 		},
 		{
 			name: "start",
 			run: func(t *testing.T, c *Compose) (string, error) {
-				return c.Start(t.Context(), "shop-abcde", composeYAML)
+				return c.Start(t.Context(), shop(composeYAML))
 			},
 			want: []string{"docker", "compose", "-p", "shop-abcde", "-f", "-", "start"},
 		},
 		{
 			name: "stop",
 			run: func(t *testing.T, c *Compose) (string, error) {
-				return c.Stop(t.Context(), "shop-abcde", composeYAML)
+				return c.Stop(t.Context(), shop(composeYAML))
 			},
 			want: []string{"docker", "compose", "-p", "shop-abcde", "-f", "-", "stop"},
 		},
 		{
 			name: "restart",
 			run: func(t *testing.T, c *Compose) (string, error) {
-				return c.Restart(t.Context(), "shop-abcde", composeYAML)
+				return c.Restart(t.Context(), shop(composeYAML))
 			},
 			want: []string{"docker", "compose", "-p", "shop-abcde", "-f", "-", "restart"},
 		},
 		{
 			name: "down keeps the project's volumes unless asked not to",
 			run: func(t *testing.T, c *Compose) (string, error) {
-				return c.Down(t.Context(), "shop-abcde", composeYAML, false)
+				return c.Down(t.Context(), shop(composeYAML), false)
 			},
 			want: []string{"docker", "compose", "-p", "shop-abcde", "-f", "-", "down", "--remove-orphans"},
 		},
 		{
 			name: "down takes the volumes with it when asked to",
 			run: func(t *testing.T, c *Compose) (string, error) {
-				return c.Down(t.Context(), "shop-abcde", composeYAML, true)
+				return c.Down(t.Context(), shop(composeYAML), true)
 			},
 			want: []string{"docker", "compose", "-p", "shop-abcde", "-f", "-", "down", "--remove-orphans", "--volumes"},
 		},
@@ -123,9 +137,12 @@ func TestCompose(t *testing.T) {
 
 			assert.Equal(t, "Container shop-abcde-web-1  Started\n", output)
 
+			labelled, err := Labelled(composeYAML, "stack-uuid")
+			require.NoError(t, err)
+
 			require.Len(t, fake.runs, 1)
 			assert.Equal(t, tt.want, fake.runs[0].command)
-			assert.Equal(t, composeYAML, fake.runs[0].stdin, "the YAML is the file compose reads, on its input")
+			assert.Equal(t, labelled, fake.runs[0].stdin, "the YAML, labelled as the stack's, is the file compose reads, on its input")
 		})
 	}
 
@@ -134,7 +151,7 @@ func TestCompose(t *testing.T) {
 
 		fake := &fakeCompose{stderr: " Network shop-abcde_default  Created\n"}
 
-		output, err := composeIn(t, fake).Up(t.Context(), "shop-abcde", composeYAML)
+		output, err := composeIn(t, fake).Up(t.Context(), shop(composeYAML))
 		require.NoError(t, err)
 		assert.Equal(t, " Network shop-abcde_default  Created\n", output)
 	})
@@ -149,10 +166,10 @@ func TestCompose(t *testing.T) {
 
 		fake := &fakeCompose{stderr: said.String()}
 
-		output, err := composeIn(t, fake).Up(t.Context(), "shop-abcde", composeYAML)
+		output, err := composeIn(t, fake).Up(t.Context(), shop(composeYAML))
 		require.NoError(t, err)
 
-		assert.Len(t, output, stack.MaxOutput)
+		assert.Len(t, output, kind.MaxOutput)
 		assert.True(t, strings.HasSuffix(output, "line 01999 of what compose said\n"), "the end is what says how it went")
 	})
 
@@ -161,9 +178,19 @@ func TestCompose(t *testing.T) {
 
 		fake := &fakeCompose{stderr: "service \"web\" refers to undefined network backend: invalid compose project\n", exitCode: 15}
 
-		output, err := composeIn(t, fake).Up(t.Context(), "shop-abcde", composeYAML)
+		output, err := composeIn(t, fake).Up(t.Context(), shop(composeYAML))
 		assert.ErrorContains(t, err, "docker compose up exited with 15")
 		assert.Contains(t, output, "undefined network backend")
+	})
+
+	t.Run("a file that is not a compose file is not handed to compose", func(t *testing.T) {
+		t.Parallel()
+
+		fake := &fakeCompose{}
+
+		_, err := composeIn(t, fake).Up(t.Context(), shop("services: ["))
+		assert.ErrorContains(t, err, "its compose file cannot be read")
+		assert.Empty(t, fake.runs)
 	})
 
 	t.Run("a VM that is not running runs no compose", func(t *testing.T) {
@@ -175,7 +202,7 @@ func TestCompose(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, e.Stop(t.Context(), "vm-1"))
 
-		_, err = NewCompose(e, "vm-1").Up(t.Context(), "shop-abcde", composeYAML)
+		_, err = NewCompose(e).Up(t.Context(), shop(composeYAML))
 		assert.ErrorIs(t, err, vm.ErrNotRunning)
 	})
 
@@ -197,7 +224,7 @@ func TestCompose(t *testing.T) {
 		ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
 		defer cancel()
 
-		_, err = NewCompose(e, "vm-1").Up(ctx, "shop-abcde", composeYAML)
+		_, err = NewCompose(e).Up(ctx, shop(composeYAML))
 		assert.Error(t, err)
 
 		select {

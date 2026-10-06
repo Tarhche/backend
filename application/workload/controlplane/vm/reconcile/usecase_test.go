@@ -9,12 +9,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/stack/dispatch"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/lifecycle"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/vmtest"
 	"github.com/khanzadimahdi/testproject/domain/workload/node"
-	"github.com/khanzadimahdi/testproject/domain/workload/stack"
-	stackEvents "github.com/khanzadimahdi/testproject/domain/workload/stack/events"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm/events"
 )
@@ -22,7 +19,7 @@ import (
 func useCaseOf(w *vmtest.Workload) *UseCase {
 	logger := slog.New(slog.DiscardHandler)
 
-	return NewUseCase(w.VMs, w.Nodes, w.Stacks, w.Lifecycle, w.Commander, dispatch.New(w.Stacks, w.Producer, logger), logger)
+	return NewUseCase(w.VMs, w.Nodes, w.Lifecycle, w.Commander, logger)
 }
 
 func TestUseCase_Execute(t *testing.T) {
@@ -189,41 +186,6 @@ func TestUseCase_Execute(t *testing.T) {
 			assert.Equal(t, tt.asked, w.Producer.Subjects(), "what its node was asked")
 		})
 	}
-
-	t.Run("a stack waiting for a vm that came up is sent", func(t *testing.T) {
-		t.Parallel()
-
-		w := vmtest.New(
-			vmtest.WithVMs(vmtest.Docker("01", "owner")),
-			vmtest.WithStacks(stack.Stack{UUID: "s1", VMUUID: "01", Slug: "web-abcde", State: stack.Deploying, ExpectedState: stack.Running, Reason: dispatch.ReasonWaitingForVM}),
-		)
-
-		require.NoError(t, useCaseOf(w).Execute(ctx))
-
-		var asked stackEvents.StackRequested
-		require.True(t, w.Producer.Last(stackEvents.StackRequestedName, &asked))
-		assert.Equal(t, "s1", asked.StackUUID)
-		assert.Equal(t, stack.ActionUp, asked.Action)
-	})
-
-	t.Run("one waiting for a vm that is not coming up fails", func(t *testing.T) {
-		t.Parallel()
-
-		givenUp := vmtest.Docker("01", "owner")
-		givenUp.CurrentState = vm.Failed
-		givenUp.ExpectedState = vm.Failed
-
-		w := vmtest.New(
-			vmtest.WithVMs(givenUp),
-			vmtest.WithStacks(stack.Stack{UUID: "s1", VMUUID: "01", Slug: "web-abcde", State: stack.Deploying, ExpectedState: stack.Running, Reason: dispatch.ReasonWaitingForVM}),
-		)
-
-		require.NoError(t, useCaseOf(w).Execute(ctx))
-
-		stored, _ := w.Stacks.Stored("s1")
-		assert.Equal(t, stack.Failed, stored.State)
-		assert.Equal(t, ReasonNotRunning, stored.Reason)
-	})
 
 	t.Run("every vm is looked at, a batch at a time", func(t *testing.T) {
 		t.Parallel()

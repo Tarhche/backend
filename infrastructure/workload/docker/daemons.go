@@ -1,5 +1,5 @@
 // Package docker reaches the dockerd of each of a node's Docker VMs, and runs
-// docker compose in them, through the VMs' engine.
+// docker compose in them for the stacks they hold, through the VMs' engine.
 //
 // dockerd is never exposed on a network: the Docker client's connections are
 // `docker system dial-stdio` commands exec'd into the VM, and compose is a
@@ -65,11 +65,6 @@ func NewDaemons(engine vm.Engine, readyTimeout time.Duration, logger *slog.Logge
 // Daemon is the dockerd of one Docker VM.
 func (d *Daemons) Daemon(vmUUID string) docker.Daemon {
 	return &Daemon{daemons: d, vmUUID: vmUUID}
-}
-
-// Compose is docker compose in one Docker VM.
-func (d *Daemons) Compose(vmUUID string) docker.Compose {
-	return NewCompose(d.engine, vmUUID)
 }
 
 // Forget lets go of the client of one VM's dockerd, and closes the

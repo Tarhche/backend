@@ -17,18 +17,24 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/presenter"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/cascade"
+	kindsReconcile "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/reconcile"
+	controlPlaneHeartbeatNode "github.com/khanzadimahdi/testproject/application/workload/controlplane/node/heartbeatNode"
+	orchestratorHeartbeat "github.com/khanzadimahdi/testproject/application/workload/orchestrator/beatHeart"
 	"github.com/khanzadimahdi/testproject/domain"
 	translatorContract "github.com/khanzadimahdi/testproject/domain/translator"
 	"github.com/khanzadimahdi/testproject/domain/user"
 	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
+	nodeEvents "github.com/khanzadimahdi/testproject/domain/workload/node/events"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	providers "github.com/khanzadimahdi/testproject/infrastructure/ioc/providers/workload"
+	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/core/request"
 	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/jetstream/produceConsumer"
 	nodesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/nodes"
+	resourcesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/resources"
 	snapshotsMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/snapshots"
-	stacksMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/stacks"
 	tasksMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/tasks"
 	vmsMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/vms"
 	logsMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/logs"
@@ -36,6 +42,7 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/translator"
 	"github.com/khanzadimahdi/testproject/infrastructure/validator"
 	"github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane/client"
+	infraNode "github.com/khanzadimahdi/testproject/infrastructure/workload/node"
 	"github.com/khanzadimahdi/testproject/infrastructure/workload/vm/memory"
 	"github.com/khanzadimahdi/testproject/infrastructure/workload/vm/vmhost"
 	vmhostAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/vmhost"
@@ -61,6 +68,17 @@ const (
 	settle = 15 * time.Second
 )
 
+// patience is how patient the control plane's reconcile loop is with the
+// resources of every kind: far less than when it is served, so a test does
+// not wait on its backoff.
+var patience = kindsReconcile.Config{
+	Batch:           20,
+	NodeSilentAfter: 30 * time.Second,
+	Patience:        10 * time.Second,
+	Backoff:         500 * time.Millisecond,
+	MaxBackoff:      2 * time.Second,
+}
+
 // workload is a control plane and one node, as their serve commands wire them,
 // with the blog's client in front of the control plane and what the dashboard
 // needs to put the answers into words.
@@ -70,10 +88,11 @@ type workload struct {
 	dockerd  *dockerd
 	archives *storageMemory.Storage
 
-	// what the control plane keeps.
+	// what the control plane keeps: the resources of every kind, stacks
+	// among them, beside what it keeps of VMs.
 	vms       *vmsMemory.Repository
 	snapshots *snapshotsMemory.Repository
-	stacks    *stacksMemory.Repository
+	resources *resourcesMemory.Repository
 	nodes     *nodesMemory.Repository
 
 	// the blog's side of it.
@@ -99,7 +118,7 @@ func start(t *testing.T) *workload {
 		archives:   storageMemory.New(),
 		vms:        vmsMemory.NewRepository(),
 		snapshots:  snapshotsMemory.NewRepository(),
-		stacks:     stacksMemory.NewRepository(),
+		resources:  resourcesMemory.NewRepository(),
 		nodes:      nodesMemory.NewRepository(),
 		translator: english,
 		validator:  validator.New(english),
@@ -135,9 +154,11 @@ func start(t *testing.T) *workload {
 	)
 	require.NoError(t, err)
 
+	nodeEngine := throughVMHost(t, w.engine, logger)
+
 	node, err := providers.NewOrchestratorVMs(providers.OrchestratorVMDependencies{
 		NATS:      nodeConnection,
-		Engine:    throughVMHost(t, w.engine, logger),
+		Engine:    nodeEngine,
 		Archives:  w.archives,
 		Producer:  nodeMessages,
 		Validator: validator.New(english),
@@ -147,6 +168,10 @@ func start(t *testing.T) *workload {
 	})
 	require.NoError(t, err)
 
+	// the node's heartbeat, which says what every kind it runs holds on it,
+	// as its serve command beats it.
+	nodeHeartbeat := orchestratorHeartbeat.NewUseCase(nodeMessages, infraNode.NewManager(nodeEngine), node.Kinds, time.Second, nodeName, logger)
+
 	// the control plane: its API is what the blog's client calls, and what
 	// the nodes report comes over JetStream.
 	controlPlaneConnection := connect(t, natsURL)
@@ -154,10 +179,13 @@ func start(t *testing.T) *workload {
 	controlPlaneMessages, err := produceConsumer.NewProduceConsumer(controlPlaneConnection, "workload-controlplane", logger)
 	require.NoError(t, err)
 
+	registry, err := providers.NewControlPlaneRegistry()
+	require.NoError(t, err)
+
 	controlPlane, err := providers.NewControlPlaneVMs(configs.NewWorkloadControlPlane(), providers.ControlPlaneVMStores{
 		VMs:       w.vms,
 		Snapshots: w.snapshots,
-		Stacks:    w.stacks,
+		Children:  cascade.New(registry, w.resources),
 		Nodes:     w.nodes,
 		Tasks:     tasksMemory.NewRepository(),
 		TaskLogs:  logsMock.NewInMemoryRepository(),
@@ -165,8 +193,21 @@ func start(t *testing.T) *workload {
 	}, controlPlaneConnection, controlPlaneMessages, logger)
 	require.NoError(t, err)
 
+	require.NoError(t, providers.RegisterControlPlaneKinds(registry, controlPlane, w.resources))
+
+	kinds := providers.NewControlPlaneKinds(
+		registry,
+		providers.ControlPlaneKindStores{Resources: w.resources, Nodes: w.nodes},
+		request.NewRequester(controlPlaneConnection, settle, settle),
+		controlPlaneMessages,
+		logger,
+		providers.WithParents(controlPlane.Parents),
+		providers.WithReconcileConfig(patience),
+	)
+
 	mux := http.NewServeMux()
 	controlPlane.Route(mux)
+	require.NoError(t, kinds.Route(mux))
 
 	api := httptest.NewServer(mux)
 
@@ -179,6 +220,12 @@ func start(t *testing.T) *workload {
 		require.NoError(t, controlPlaneMessages.Consume(ctx, subject, handler))
 	}
 
+	for subject, handler := range kinds.Subscribers {
+		require.NoError(t, controlPlaneMessages.Consume(ctx, subject, handler))
+	}
+
+	require.NoError(t, controlPlaneMessages.Consume(ctx, nodeEvents.HeartbeatName, controlPlaneHeartbeatNode.NewHeartbeatHandler(w.nodes, kinds.Observer)))
+
 	for subject, handler := range node.Subscribers {
 		require.NoError(t, nodeMessages.Consume(ctx, subject, handler))
 	}
@@ -186,11 +233,16 @@ func start(t *testing.T) *workload {
 	require.NoError(t, node.Responder.Serve(ctx, noderequest.Subject(nodeName)))
 
 	beats := every(ctx, beat, func() { _ = node.Heartbeat.Execute(ctx) })
-	reconciles := every(ctx, 4*beat, func() { _ = controlPlane.Reconcile.Execute(ctx) })
+	nodeBeats := every(ctx, beat, func() { _ = nodeHeartbeat.Execute(ctx) })
+	reconciles := every(ctx, 4*beat, func() {
+		_ = controlPlane.Reconcile.Execute(ctx)
+		_ = kinds.Reconcile.Execute(ctx)
+	})
 
 	t.Cleanup(func() {
 		cancel()
 		<-beats
+		<-nodeBeats
 		<-reconciles
 
 		controlPlaneMessages.Wait()

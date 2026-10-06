@@ -12,7 +12,6 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/vmtest"
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/workload/stack"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 	taskEvents "github.com/khanzadimahdi/testproject/domain/workload/task/events"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
@@ -108,15 +107,14 @@ func TestVMDeleted_Handle(t *testing.T) {
 		deleting := vmtest.Running("01", "owner")
 		deleting.CurrentState = vm.Deleting
 
-		w := vmtest.New(vmtest.WithVMs(deleting), vmtest.WithStacks(stack.Stack{UUID: "s1", VMUUID: "01", Slug: "web-a"}))
+		w := vmtest.New(vmtest.WithVMs(deleting))
 
 		require.NoError(t, NewVMDeleted(w.VMs, w.Lifecycle, slog.New(slog.DiscardHandler)).Handle(ctx, deletedEvent(t, "01")))
 
 		_, kept := w.VMs.Stored("01")
 		assert.False(t, kept)
 
-		_, kept = w.Stacks.Stored("s1")
-		assert.False(t, kept)
+		assert.Equal(t, []string{"vm/01"}, w.Children.DeletedParents())
 	})
 
 	t.Run("one that was not asked to go is not forgotten", func(t *testing.T) {

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/workload/docker"
 	"github.com/khanzadimahdi/testproject/domain/workload/snapshot"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm/events"
@@ -32,8 +33,10 @@ type Forgetter interface {
 //
 // It is named by the VM's uuid, which is what the engine calls the VM from
 // then on, and it is labelled as a VM, which is what puts it in the node's
-// heartbeats. Whose it is and the slug its ports are served under are the
-// control plane's to say, and come with the labels it sent.
+// heartbeats, and as a Docker VM when it is one, which is how the node tells
+// the VMs whose dockerds it reads from the rest. Whose it is and the slug its
+// ports are served under are the control plane's to say, and come with the
+// labels it sent.
 func Spec(vmUUID string, sent vm.Spec) vm.Spec {
 	spec := sent
 	spec.ID = vmUUID
@@ -48,6 +51,10 @@ func Spec(vmUUID string, sent vm.Spec) vm.Spec {
 
 	spec.Labels[vm.LabelVM] = vmUUID
 	spec.Labels[vm.LabelPurpose] = vm.PurposeVM
+
+	if spec.Kind == vm.KindDocker {
+		spec.Labels[docker.LabelVM] = "true"
+	}
 
 	return spec
 }

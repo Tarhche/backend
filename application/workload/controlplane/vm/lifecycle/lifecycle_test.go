@@ -12,7 +12,6 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/vmtest"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/node"
-	"github.com/khanzadimahdi/testproject/domain/workload/stack"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm/events"
 )
@@ -250,24 +249,14 @@ func TestLifecycle_Remove(t *testing.T) {
 
 			v := with(vmtest.Running("01", "owner"), change)
 
-			w := vmtest.New(
-				vmtest.WithVMs(v),
-				vmtest.WithStacks(
-					stack.Stack{UUID: "s1", VMUUID: "01", Slug: "web-a"},
-					stack.Stack{UUID: "s2", VMUUID: "02", Slug: "web-b"},
-				),
-			)
+			w := vmtest.New(vmtest.WithVMs(v))
 
 			require.NoError(t, w.Lifecycle.Remove(ctx, &v))
 
 			_, err := w.VMs.GetOne(ctx, "01")
 			assert.ErrorIs(t, err, domain.ErrNotExists)
 
-			_, kept := w.Stacks.Stored("s1")
-			assert.False(t, kept, "its stacks went with its disk")
-
-			_, kept = w.Stacks.Stored("s2")
-			assert.True(t, kept, "another vm's did not")
+			assert.Equal(t, []string{"vm/01"}, w.Children.DeletedParents(), "what lives in it, its stacks, went with its disk")
 
 			assert.Empty(t, w.Producer.Messages())
 		})
@@ -287,4 +276,15 @@ func TestRefused(t *testing.T) {
 
 	_, err = lifecycle.Refused(domain.ErrNotExists)
 	assert.ErrorIs(t, err, domain.ErrNotExists, "what is not a refusal is an error")
+}
+
+func TestLifecycle_DiskRestored(t *testing.T) {
+	t.Parallel()
+
+	w := vmtest.New(vmtest.WithVMs(vmtest.Docker("01", "owner")))
+
+	require.NoError(t, w.Lifecycle.DiskRestored(context.Background(), "01"))
+
+	assert.Equal(t, []string{"vm/01"}, w.Children.RestoredParents(), "what lives on its disk is told it was replaced")
+	assert.Empty(t, w.Children.DeletedParents())
 }

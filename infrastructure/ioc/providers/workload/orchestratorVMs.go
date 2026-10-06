@@ -12,7 +12,6 @@ import (
 	orchestratorAnswerQuery "github.com/khanzadimahdi/testproject/application/workload/orchestrator/answerQuery"
 	orchestratorAnswerRequest "github.com/khanzadimahdi/testproject/application/workload/orchestrator/answerRequest"
 	orchestratorRunCommand "github.com/khanzadimahdi/testproject/application/workload/orchestrator/runCommand"
-	orchestratorRunStackAction "github.com/khanzadimahdi/testproject/application/workload/orchestrator/stack/runStackAction"
 	orchestratorVMHeartbeat "github.com/khanzadimahdi/testproject/application/workload/orchestrator/vm/beatHeart"
 	orchestratorCreateVM "github.com/khanzadimahdi/testproject/application/workload/orchestrator/vm/createVM"
 	orchestratorDeleteVM "github.com/khanzadimahdi/testproject/application/workload/orchestrator/vm/deleteVM"
@@ -28,7 +27,6 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	snapshotContract "github.com/khanzadimahdi/testproject/domain/workload/snapshot"
 	snapshotEvents "github.com/khanzadimahdi/testproject/domain/workload/snapshot/events"
-	stackEvents "github.com/khanzadimahdi/testproject/domain/workload/stack/events"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	vmEvents "github.com/khanzadimahdi/testproject/domain/workload/vm/events"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
@@ -65,13 +63,14 @@ type OrchestratorVMDependencies struct {
 }
 
 // OrchestratorVMs is what an orchestrator does for the VMs it holds: the
-// handlers that carry out the control plane's commands about them, their
-// snapshots and their stacks, the responder that answers the control plane's
-// requests, and the heartbeat that reports them.
+// handlers that carry out the control plane's commands about them and their
+// snapshots, the responder that answers the control plane's requests, and the
+// heartbeat that reports them.
 //
-// It is also what the orchestrator does for every kind it runs, alike: the
-// kinds' commands, on workloadCommand, are among the subscribers, and their
-// queries among what the responder answers.
+// It is also what the orchestrator does for every kind it runs, alike, the
+// stacks in its Docker VMs among them: the kinds' commands, on
+// workloadCommand, are among the subscribers, and their queries among what
+// the responder answers.
 type OrchestratorVMs struct {
 	Subscribers map[string]domain.MessageHandler
 	Responder   *request.Responder
@@ -97,7 +96,12 @@ func NewOrchestratorVMs(d OrchestratorVMDependencies) (*OrchestratorVMs, error) 
 	daemons := infraDocker.NewDaemons(d.Engine, d.Configs.DockerReadyTimeout, d.Logger)
 	locks := lock.New()
 
-	kinds, err := nodeKinds()
+	// a stack's command waits for its VM's dockerd, and may then pull images.
+	kinds, err := nodeKinds(NodeKindDependencies{
+		Engine:         d.Engine,
+		Daemons:        daemons,
+		CommandTimeout: d.Configs.PullRequestTimeout(),
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -111,10 +115,6 @@ func NewOrchestratorVMs(d OrchestratorVMDependencies) (*OrchestratorVMs, error) 
 	restoreVM := orchestratorRestoreVM.NewUseCase(d.Engine, d.Archives, daemons, locks, d.Producer, d.Validator, d.NodeName)
 	snapshotVM := orchestratorSnapshotVM.NewUseCase(d.Engine, d.Archives, locks, d.Producer, d.Validator, recorder, d.NodeName)
 
-	// a stack action waits for dockerd, and may then pull images.
-	runStackAction := orchestratorRunStackAction.NewUseCase(daemons, d.Producer, d.Validator, d.NodeName,
-		d.Configs.PullRequestTimeout())
-
 	subscribers := map[string]domain.MessageHandler{
 		vmEvents.VMScheduledName:             orchestratorCreateVM.NewVMScheduledHandler(createVM, d.Producer, d.NodeName, d.Logger),
 		vmEvents.VMStartRequestedName:        orchestratorStartVM.NewVMStartRequestedHandler(startVM, d.Producer, d.NodeName, d.Logger),
@@ -124,7 +124,6 @@ func NewOrchestratorVMs(d OrchestratorVMDependencies) (*OrchestratorVMs, error) 
 		vmEvents.VMReconfigureRequestedName:  orchestratorReconfigureVM.NewVMReconfigureRequestedHandler(reconfigureVM, d.Producer, d.NodeName, d.Logger),
 		vmEvents.VMRestoreRequestedName:      orchestratorRestoreVM.NewVMRestoreRequestedHandler(restoreVM, d.Producer, d.NodeName, d.Logger),
 		snapshotEvents.SnapshotRequestedName: orchestratorSnapshotVM.NewSnapshotRequestedHandler(snapshotVM, d.NodeName, d.Logger),
-		stackEvents.StackRequestedName:       orchestratorRunStackAction.NewStackRequestedHandler(runStackAction, d.NodeName, d.Logger),
 
 		// every kind's commands, carried out under the same locks as the
 		// VMs' own, so what is done to a VM by either waits for the other.
@@ -150,8 +149,8 @@ func NewOrchestratorVMs(d OrchestratorVMDependencies) (*OrchestratorVMs, error) 
 }
 
 // bindOrchestratorVMs adds to subscribers what carries out the control plane's
-// commands about this node's VMs, their snapshots and their stacks, and those
-// of every kind it runs, and binds the VM heartbeat, what answers the control
+// commands about this node's VMs and their snapshots, and those of every kind
+// it runs, and binds the VM heartbeat, what answers the control
 // plane's requests, and the kinds this node runs.
 func bindOrchestratorVMs(c provider.Container, d OrchestratorVMDependencies, subscribers map[string]domain.MessageHandler) (*OrchestratorVMs, error) {
 	vms, err := NewOrchestratorVMs(d)

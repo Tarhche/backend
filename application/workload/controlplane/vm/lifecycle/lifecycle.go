@@ -22,8 +22,8 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/command"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/placement"
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/node"
-	"github.com/khanzadimahdi/testproject/domain/workload/stack"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
 
@@ -49,10 +49,23 @@ const (
 // ErrBusy is a VM on its way out, which nothing can be asked of any more.
 var ErrBusy = errors.New("the vm is being deleted")
 
+// ParentKind is the name VMs go by as the parent of what lives in them: a
+// stack's parent is a "vm".
+const ParentKind = "vm"
+
+// Children are what lives inside VMs, kept by the kinds that do, such as
+// stacks. They are told when a VM is deleted, or has its disk restored, and
+// what lives in it goes with it, or is reset to what the restored disk holds,
+// as each kind's rules say.
+type Children interface {
+	Deleted(ctx context.Context, parent kind.Reference) error
+	Restored(ctx context.Context, parent kind.Reference) error
+}
+
 // Lifecycle moves VMs between states.
 type Lifecycle struct {
 	vms       vm.Repository
-	stacks    stack.Repository
+	children  Children
 	nodes     node.Repository
 	placement *placement.Placement
 	commander *command.Commander
@@ -62,14 +75,14 @@ type Lifecycle struct {
 
 func New(
 	vms vm.Repository,
-	stacks stack.Repository,
+	children Children,
 	nodes node.Repository,
 	placement *placement.Placement,
 	commander *command.Commander,
 ) *Lifecycle {
 	return &Lifecycle{
 		vms:       vms,
-		stacks:    stacks,
+		children:  children,
 		nodes:     nodes,
 		placement: placement,
 		commander: commander,
@@ -324,25 +337,24 @@ func (l *Lifecycle) Remove(ctx context.Context, v *vm.VM) error {
 	return l.commander.Delete(ctx, v.UUID, v.NodeName)
 }
 
-// Forget takes away the record of a VM its node no longer holds, and the
-// stacks that were deployed into it, which went with its disk. Its snapshots
-// stay: they outlive it.
+// Forget takes away the record of a VM its node no longer holds, and what
+// lives in it goes as its kind says: the stacks that were deployed into it
+// went with its disk. Its snapshots stay: they outlive it.
 //
-// The stacks go first, so that one cut short leaves a VM with fewer stacks
-// rather than stacks in a VM that is not there.
+// What lives in it goes first, so that one cut short leaves a VM with fewer
+// stacks rather than stacks in a VM that is not there.
 func (l *Lifecycle) Forget(ctx context.Context, uuid string) error {
-	stacks, err := l.stacks.GetAllByVM(ctx, uuid)
-	if err != nil {
+	if err := l.children.Deleted(ctx, kind.Reference{Kind: ParentKind, UUID: uuid}); err != nil {
 		return err
 	}
 
-	for i := range stacks {
-		if err := l.stacks.Delete(ctx, stacks[i].UUID); err != nil {
-			return err
-		}
-	}
-
 	return l.vms.Delete(ctx, uuid)
+}
+
+// DiskRestored tells what lives in a VM that its disk was replaced from a
+// snapshot: what the restored disk does not have is not made again.
+func (l *Lifecycle) DiskRestored(ctx context.Context, uuid string) error {
+	return l.children.Restored(ctx, kind.Reference{Kind: ParentKind, UUID: uuid})
 }
 
 func (l *Lifecycle) save(ctx context.Context, v *vm.VM) error {

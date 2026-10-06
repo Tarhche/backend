@@ -1,6 +1,7 @@
 package workload
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 
@@ -15,25 +16,43 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/queryResource"
 	kindsReconcile "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/reconcile"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/resourceResult"
+	controlPlaneStacks "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/stack"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/waiters"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/slugs"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
+	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
 	"github.com/khanzadimahdi/testproject/domain/workload/node"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
 	controlPlaneKindsAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/controlplane/api/kinds"
 )
 
-// NewControlPlaneRegistry is every kind the control plane runs, each
-// registered through its control-plane binding: the one place a kind is
-// added to the control plane, and what its resource API, its consumers and
-// its reconcile loop all run over.
-//
-// None is registered yet. Each kind moves onto the framework in a step of
-// its own, and is registered here when it does, taking its routes over from
-// the ones it has today.
+// NewControlPlaneRegistry is a registry for every kind the control plane
+// runs, with none in it yet: a kind is registered by RegisterControlPlaneKinds,
+// once what its strategy is built from is.
 func NewControlPlaneRegistry() (*kind.Registry[kind.ControlPlaneBinding], error) {
 	return kind.NewRegistry[kind.ControlPlaneBinding](), nil
+}
+
+// RegisterControlPlaneKinds registers every kind the control plane runs,
+// each through its control-plane strategy: the one place a kind is added to
+// the control plane, and what its resource API, its consumers and its
+// reconcile loop all run over. A stack is admitted into the Docker VMs vms
+// keeps, and given a slug no stack in resources holds.
+//
+// VMs, snapshots and the code runner's tasks are not kinds yet. Each moves
+// onto the framework in a step of its own, and is registered here when it
+// does, taking its routes over from the ones it has today.
+func RegisterControlPlaneKinds(registry *kind.Registry[kind.ControlPlaneBinding], vms *ControlPlaneVMs, resources resource.Repository) error {
+	stackSlugs := slugs.By(func(ctx context.Context, slug string) (resource.Record, error) {
+		return resources.GetOneBySlug(ctx, stackKind.Name, slug)
+	})
+
+	return registry.Register(kind.BindControlPlane[stackKind.Spec, stackKind.Status](
+		stackKind.Descriptor(),
+		controlPlaneStacks.New(vms.VMs, vms.Chooser, stackSlugs),
+	))
 }
 
 // ControlPlaneKindStores are what the control plane keeps the resources of
@@ -59,6 +78,32 @@ type ControlPlaneKinds struct {
 	Reconcile *kindsReconcile.UseCase
 }
 
+// controlPlaneKindsOptions are how the plumbing goes about its work.
+type controlPlaneKindsOptions struct {
+	parents   observe.Parents
+	reconcile kindsReconcile.Config
+}
+
+// ControlPlaneKindsOption changes how the plumbing goes about its work.
+type ControlPlaneKindsOption func(*controlPlaneKindsOptions)
+
+// WithParents has what lives in a parent that its node did not look into
+// observed waiting on it, as parents say the parent is: a stack in a VM that
+// is stopped.
+func WithParents(parents observe.Parents) ControlPlaneKindsOption {
+	return func(o *controlPlaneKindsOptions) {
+		o.parents = parents
+	}
+}
+
+// WithReconcileConfig is how patient the reconcile loop is, in place of the
+// control plane's own: a test's is far less.
+func WithReconcileConfig(config kindsReconcile.Config) ControlPlaneKindsOption {
+	return func(o *controlPlaneKindsOptions) {
+		o.reconcile = config
+	}
+}
+
 // NewControlPlaneKinds builds the control plane's plumbing for the kinds in
 // registry, asking the nodes queries through requester and sending them
 // commands with producer.
@@ -71,13 +116,25 @@ func NewControlPlaneKinds(
 	requester noderequest.Requester,
 	producer domain.Producer,
 	logger *slog.Logger,
+	options ...ControlPlaneKindsOption,
 ) *ControlPlaneKinds {
+	settings := controlPlaneKindsOptions{reconcile: kindsReconcile.DefaultConfig()}
+	for _, option := range options {
+		option(&settings)
+	}
+
 	// a request that waits for what came of its command is told by whichever
 	// result handler hears it in this process.
 	waiting := waiters.New()
 
 	dispatcher := dispatch.New(stores.Resources, producer, waiting, nil)
-	observer := observe.NewObserver(registry, stores.Resources, logger)
+
+	var observing []observe.Option
+	if settings.parents != nil {
+		observing = append(observing, observe.WithParents(settings.parents))
+	}
+
+	observer := observe.NewObserver(registry, stores.Resources, logger, observing...)
 
 	useCases := controlPlaneKindsAPI.UseCases{
 		Admit:  admitResource.NewUseCase(registry, stores.Resources, dispatcher, logger),
@@ -97,6 +154,6 @@ func NewControlPlaneKinds(
 			kind.ResultName: resourceResult.NewResult(registry, stores.Resources, waiting, logger, nil),
 		},
 		Observer:  observer,
-		Reconcile: kindsReconcile.NewUseCase(registry, stores.Resources, stores.Nodes, dispatcher, logger, kindsReconcile.DefaultConfig()),
+		Reconcile: kindsReconcile.NewUseCase(registry, stores.Resources, stores.Nodes, dispatcher, logger, settings.reconcile),
 	}
 }

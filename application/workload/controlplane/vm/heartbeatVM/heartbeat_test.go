@@ -10,11 +10,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/stack/dispatch"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/vmtest"
 	"github.com/khanzadimahdi/testproject/domain/workload/node"
-	"github.com/khanzadimahdi/testproject/domain/workload/stack"
-	stackEvents "github.com/khanzadimahdi/testproject/domain/workload/stack/events"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm/events"
 )
@@ -31,7 +28,7 @@ var capacity = events.Info{
 func handlerOf(w *vmtest.Workload) *Heartbeat {
 	logger := slog.New(slog.DiscardHandler)
 
-	return NewHeartbeat(w.VMs, w.Nodes, w.Lifecycle, w.Commander, dispatch.New(w.Stacks, w.Producer, logger), logger)
+	return NewHeartbeat(w.VMs, w.Nodes, w.Lifecycle, w.Commander, logger)
 }
 
 func heartbeat(t *testing.T, at time.Time, beats ...events.VMBeat) []byte {
@@ -212,35 +209,6 @@ func TestHeartbeat_Handle(t *testing.T) {
 
 		_, kept = w.VMs.Stored("02")
 		assert.True(t, kept, "one that is not on its way out is not forgotten for being listed")
-	})
-
-	t.Run("a docker vm coming up sends the stacks waiting for it", func(t *testing.T) {
-		t.Parallel()
-
-		docker := vmtest.Docker("01", "owner")
-		docker.CurrentState = vm.Scheduled
-		docker.LastHeartbeatAt = time.Time{}
-
-		w := vmtest.New(
-			vmtest.WithVMs(docker),
-			vmtest.WithStacks(
-				stack.Stack{UUID: "s1", VMUUID: "01", Slug: "web-abcde", Compose: "services: {}", State: stack.Deploying, ExpectedState: stack.Running, Reason: dispatch.ReasonWaitingForVM},
-				stack.Stack{UUID: "s2", VMUUID: "01", Slug: "db-abcde", State: stack.Running, ExpectedState: stack.Running},
-			),
-		)
-
-		require.NoError(t, handlerOf(w).Handle(ctx, heartbeat(t, now, events.VMBeat{UUID: "01", State: vm.InstanceRunning})))
-
-		var asked stackEvents.StackRequested
-		require.True(t, w.Producer.Last(stackEvents.StackRequestedName, &asked))
-		assert.Equal(t, "s1", asked.StackUUID)
-		assert.Equal(t, stack.ActionUp, asked.Action)
-		assert.Equal(t, "web-abcde", asked.Project)
-		assert.Equal(t, vmtest.Node, asked.NodeName)
-
-		sent, _ := w.Stacks.Stored("s1")
-		assert.Empty(t, sent.Reason, "it waits no longer")
-		assert.Len(t, w.Producer.Messages(), 1, "a stack that was not waiting is not deployed again")
 	})
 
 	t.Run("what will never be handled is not handed back", func(t *testing.T) {

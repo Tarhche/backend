@@ -14,6 +14,7 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/lifecycle"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/placement"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/quota"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/vmtest"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/node"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
@@ -24,7 +25,6 @@ import (
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
 	nodesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/nodes"
 	snapshotsMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/snapshots"
-	stacksMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/stacks"
 	vmsMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/vms"
 	tasksMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/tasks"
 	"github.com/khanzadimahdi/testproject/infrastructure/translator"
@@ -90,7 +90,7 @@ func newFixture(t *testing.T, nodes []node.Node, vms []vm.VM, snapshots []snapsh
 		f.tasks,
 		f.snapshots,
 		quota.New(f.vms, limits),
-		lifecycle.New(f.vms, stacksMemory.NewRepository(), nodesRepository, placement.New(nodesRepository, f.vms, 4), command.New(f.producer)),
+		lifecycle.New(f.vms, &vmtest.Children{}, nodesRepository, placement.New(nodesRepository, f.vms, 4), command.New(f.producer)),
 		validator.New(translator.Codes{}),
 		images,
 	)

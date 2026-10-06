@@ -14,22 +14,18 @@
 // is over is deleted, and one whose deletion its node never confirmed is asked
 // for again.
 //
-// Stacks waiting for their Docker VM to come up are sent here too, when the
-// report that the VM came up was missed, and failed when it is not coming.
+// What lives in a VM, its stacks, is brought back by its own kind's
+// reconcile, once its VM runs.
 package reconcile
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"time"
 
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/stack/dispatch"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/command"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/lifecycle"
-	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/node"
-	"github.com/khanzadimahdi/testproject/domain/workload/stack"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
 
@@ -50,9 +46,6 @@ const (
 	// deletePatience is how long a VM's node is given to confirm it removed
 	// it before it is asked again.
 	deletePatience = 2 * time.Minute
-
-	// ReasonNotRunning is why a stack whose VM is not coming up failed.
-	ReasonNotRunning = "vm_not_running"
 )
 
 // patience is how long a VM may be on its way somewhere before it is asked
@@ -71,39 +64,32 @@ func patience(state vm.State) time.Duration {
 	}
 }
 
-// UseCase is one pass over the VMs and the stacks waiting on them.
+// UseCase is one pass over the VMs.
 type UseCase struct {
-	vms        vm.Repository
-	nodes      node.Repository
-	stacks     stack.Repository
-	lifecycle  *lifecycle.Lifecycle
-	commander  *command.Commander
-	dispatcher *dispatch.Dispatcher
-	logger     *slog.Logger
+	vms       vm.Repository
+	nodes     node.Repository
+	lifecycle *lifecycle.Lifecycle
+	commander *command.Commander
+	logger    *slog.Logger
 }
 
 func NewUseCase(
 	vms vm.Repository,
 	nodes node.Repository,
-	stacks stack.Repository,
 	lifecycle *lifecycle.Lifecycle,
 	commander *command.Commander,
-	dispatcher *dispatch.Dispatcher,
 	logger *slog.Logger,
 ) *UseCase {
 	return &UseCase{
-		vms:        vms,
-		nodes:      nodes,
-		stacks:     stacks,
-		lifecycle:  lifecycle,
-		commander:  commander,
-		dispatcher: dispatcher,
-		logger:     logger,
+		vms:       vms,
+		nodes:     nodes,
+		lifecycle: lifecycle,
+		commander: commander,
+		logger:    logger,
 	}
 }
 
-// Execute looks at every VM and every waiting stack, and asks for what is
-// missing. One that cannot be dealt with is not a reason to leave the rest as
+// Execute looks at every VM, and asks for what is missing. One that cannot be dealt with is not a reason to leave the rest as
 // they are: it is reported, and the next pass tries it again.
 //
 // What is read moves while it is read — a VM deleted during a pass shifts the
@@ -142,7 +128,7 @@ func (uc *UseCase) Execute(ctx context.Context) error {
 		}
 	}
 
-	return uc.waitingStacks(ctx, now)
+	return nil
 }
 
 // aliveNodes is which nodes have spoken lately.
@@ -298,64 +284,6 @@ func (uc *UseCase) again(ctx context.Context, v *vm.VM, now time.Time) error {
 		return uc.commander.Restart(ctx, v)
 	case vm.Restoring:
 		return uc.commander.Restore(ctx, v, v.RestoreFrom)
-	}
-
-	return nil
-}
-
-// waitingStacks sends the deploys of stacks whose VM came up while the report
-// that it had was missed, and fails those whose VM is not coming up.
-func (uc *UseCase) waitingStacks(ctx context.Context, now time.Time) error {
-	count, err := uc.stacks.Count(ctx)
-	if err != nil {
-		return err
-	}
-
-	for offset := uint(0); offset < count; offset += batch {
-		stacks, err := uc.stacks.GetAll(ctx, offset, batch)
-		if err != nil {
-			return err
-		}
-
-		if len(stacks) == 0 {
-			break
-		}
-
-		for i := range stacks {
-			if !dispatch.IsWaiting(&stacks[i]) {
-				continue
-			}
-
-			if err := uc.waiting(ctx, &stacks[i], now); err != nil {
-				uc.logger.ErrorContext(ctx, "could not deploy a stack waiting for its vm", "error", err, "uuid", stacks[i].UUID)
-			}
-		}
-	}
-
-	return nil
-}
-
-func (uc *UseCase) waiting(ctx context.Context, s *stack.Stack, now time.Time) error {
-	v, err := uc.vms.GetOne(ctx, s.VMUUID)
-	if errors.Is(err, domain.ErrNotExists) {
-		return uc.stacks.Delete(ctx, s.UUID)
-	} else if err != nil {
-		return err
-	}
-
-	switch {
-	case v.CurrentState == vm.Running:
-		return uc.dispatcher.Waiting(ctx, &v)
-
-	// one that is not wanted running, or is on its way out, is not coming up.
-	case v.ExpectedState != vm.Running:
-		s.State = stack.Failed
-		s.Reason = ReasonNotRunning
-		s.UpdatedAt = now
-
-		_, err := uc.stacks.Save(ctx, s)
-
-		return err
 	}
 
 	return nil

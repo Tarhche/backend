@@ -1,15 +1,14 @@
-// Package stack is a compose project deployed into a Docker VM.
+// Package stack is a compose project deployed into a Docker VM, as the blog
+// shows one.
 //
-// The workload keeps the record and the YAML; docker compose, inside the VM,
-// does the rest. The containers a stack has are whichever ones compose labelled
-// with its project, read from the VM's dockerd whenever they are asked for and
-// never stored.
+// What a stack is, and everything the workload does with it, is the stack
+// kind's (domain/workload/kinds/stack): the control plane keeps it as a
+// manifest. This is the shape the blog's dashboard reads one in, which the
+// control plane's client reads a manifest back as, so that the dashboard's
+// answers stay what they always were.
 package stack
 
-import (
-	"context"
-	"time"
-)
+import "time"
 
 // Stack is one compose project.
 type Stack struct {
@@ -22,8 +21,7 @@ type Stack struct {
 
 	// VMName is what that VM is called now. It is not kept with the stack:
 	// it is read with it, from the VM, so a VM that is renamed is named anew
-	// wherever its stacks are shown, and a stack that is saved does not keep
-	// it.
+	// wherever its stacks are shown.
 	VMName string
 
 	// Slug is the compose project's name: unique, lowercase letters, digits
@@ -35,77 +33,84 @@ type Stack struct {
 	Compose string
 
 	// ExpectedState is what the stack was asked to be, Running or Stopped.
-	// State is what the last compose command left it as.
+	// State is what it was last seen doing.
 	ExpectedState State
 	State         State
 
 	Reason string
 
-	// Output is the tail of what the last compose command printed, which is
-	// how somebody finds out why a service did not come up.
+	// Output is the tail of what the last command run on it printed, which
+	// is how somebody finds out why a service did not come up.
 	Output string
 
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
 
-// MaxOutput is the most of a compose command's output a stack keeps, in bytes,
-// counted from the end: the last lines are the ones that say what went wrong.
-const MaxOutput = 16 << 10
-
-// Action is a compose command run on a stack.
-type Action string
+// State is where a stack is in its life: one of the stack kind's states.
+type State int
 
 const (
-	// ActionUp deploys the project, creating and starting what it needs and
-	// removing what it no longer has.
-	ActionUp Action = "up"
+	// Deploying is a stack whose project is being brought up.
+	Deploying State = 1
 
-	ActionStart   Action = "start"
-	ActionStop    Action = "stop"
-	ActionRestart Action = "restart"
+	// Running is a stack whose every service runs.
+	Running State = 2
 
-	// ActionDown removes the project's containers and networks, and its
-	// volumes when that is asked for too.
-	ActionDown Action = "down"
+	Starting State = 3
+	Stopping State = 4
+
+	// Stopped is a stack whose containers are stopped and kept.
+	Stopped State = 5
+
+	Restarting State = 6
+
+	// Removing is a stack whose project is being taken down. Its record goes
+	// once that is done.
+	Removing State = 7
+
+	// Failed is a stack whose last command failed. Its Reason and Output say
+	// why.
+	Failed State = 8
+
+	// Degraded is a stack some of whose services are not running. It is
+	// deployed again, to bring them back.
+	Degraded State = 9
+
+	// Waiting is a stack that is not in its VM: one whose VM is not running,
+	// and one not deployed there yet, or any more. Its Reason says which.
+	Waiting State = 10
 )
 
-// IsValid reports whether a is one of the known actions.
-func (a Action) IsValid() bool {
-	switch a {
-	case ActionUp, ActionStart, ActionStop, ActionRestart, ActionDown:
-		return true
-	default:
-		return false
+// words are the states as the workload names them.
+var words = map[State]string{
+	Deploying:  "deploying",
+	Running:    "running",
+	Starting:   "starting",
+	Stopping:   "stopping",
+	Stopped:    "stopped",
+	Restarting: "restarting",
+	Removing:   "removing",
+	Failed:     "failed",
+	Degraded:   "degraded",
+	Waiting:    "waiting",
+}
+
+func (s State) String() string {
+	if word, known := words[s]; known {
+		return word
 	}
+
+	return "unknown"
 }
 
-func (a Action) String() string {
-	return string(a)
-}
+// StateOf is the state a word names, and none for a word that names none.
+func StateOf(word string) State {
+	for state, named := range words {
+		if named == word {
+			return state
+		}
+	}
 
-// Repository stores stacks.
-type Repository interface {
-	GetAll(ctx context.Context, offset uint, limit uint) ([]Stack, error)
-
-	// GetAllByOwner is the same listing, of one person's own.
-	GetAllByOwner(ctx context.Context, ownerUUID string, offset uint, limit uint) ([]Stack, error)
-
-	// GetAllByVM is every stack deployed into one VM.
-	GetAllByVM(ctx context.Context, vmUUID string) ([]Stack, error)
-
-	CountByOwner(ctx context.Context, ownerUUID string) (uint, error)
-	Count(ctx context.Context) (uint, error)
-
-	GetOne(ctx context.Context, uuid string) (Stack, error)
-
-	// GetOneByOwner is one of somebody's own. A stack that is not theirs is
-	// not there as far as they are concerned.
-	GetOneByOwner(ctx context.Context, ownerUUID string, uuid string) (Stack, error)
-
-	// GetOneBySlug finds a stack by its compose project.
-	GetOneBySlug(ctx context.Context, slug string) (Stack, error)
-
-	Save(ctx context.Context, s *Stack) (uuid string, err error)
-	Delete(ctx context.Context, uuid string) error
+	return 0
 }

@@ -1,6 +1,6 @@
-// Package presenter is how the control plane's API shows a VM, a snapshot, a
-// stack and a container: snake_case JSON, states as words, sizes as bytes and
-// durations as seconds.
+// Package presenter is how the control plane's API shows a VM, a snapshot and
+// a container: snake_case JSON, states as words, sizes as bytes and durations
+// as seconds. A kind on the framework is shown as its manifest instead.
 //
 // The blog's control plane client reads exactly these shapes back, so a field
 // renamed here is renamed there too.
@@ -13,7 +13,6 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
 	"github.com/khanzadimahdi/testproject/domain/workload/snapshot"
-	"github.com/khanzadimahdi/testproject/domain/workload/stack"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
 
@@ -202,51 +201,6 @@ func NewSnapshots(snapshots []snapshot.Snapshot) []Snapshot {
 	return items
 }
 
-// Stack is a stack as the API shows it. VMName is what its VM is called when
-// it is read, so a VM that is renamed is named anew.
-type Stack struct {
-	UUID          string    `json:"uuid"`
-	Name          string    `json:"name"`
-	OwnerUUID     string    `json:"owner_uuid"`
-	VMUUID        string    `json:"vm_uuid"`
-	VMName        string    `json:"vm_name"`
-	Slug          string    `json:"slug"`
-	Compose       string    `json:"compose"`
-	ExpectedState string    `json:"expected_state"`
-	State         string    `json:"state"`
-	Reason        string    `json:"reason"`
-	Output        string    `json:"output"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
-}
-
-func NewStack(s *stack.Stack) Stack {
-	return Stack{
-		UUID:          s.UUID,
-		Name:          s.Name,
-		OwnerUUID:     s.OwnerUUID,
-		VMUUID:        s.VMUUID,
-		VMName:        s.VMName,
-		Slug:          s.Slug,
-		Compose:       s.Compose,
-		ExpectedState: s.ExpectedState.String(),
-		State:         s.State.String(),
-		Reason:        s.Reason,
-		Output:        s.Output,
-		CreatedAt:     s.CreatedAt,
-		UpdatedAt:     s.UpdatedAt,
-	}
-}
-
-func NewStacks(stacks []stack.Stack) []Stack {
-	items := make([]Stack, len(stacks))
-	for i := range stacks {
-		items[i] = NewStack(&stacks[i])
-	}
-
-	return items
-}
-
 // Container is a container as a node reports it, in the shape node requests
 // carry it.
 type Container = noderequest.Container
@@ -260,8 +214,8 @@ func NewContainers(containers []docker.Container) []Container {
 	return items
 }
 
-// ChosenVM is the Docker VM a container or a stack went into, and whether it
-// was made for it.
+// ChosenVM is the Docker VM a container went into, and whether it was made
+// for it.
 type ChosenVM struct {
 	UUID    string `json:"uuid"`
 	Name    string `json:"name"`

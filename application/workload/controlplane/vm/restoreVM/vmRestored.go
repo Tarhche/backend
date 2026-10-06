@@ -17,7 +17,8 @@ import (
 //
 // The node made the VM again from the archive, which boots it. One that was
 // wanted stopped is stopped again; one wanted running is starting, and its
-// next heartbeat says when it is up.
+// next heartbeat says when it is up. What lives on its disk, its stacks, is
+// reset to what the restored disk holds.
 type VMRestored struct {
 	vmRepository vm.Repository
 	lifecycle    *lifecycle.Lifecycle
@@ -61,6 +62,12 @@ func (h *VMRestored) Handle(ctx context.Context, data []byte) error {
 		v.RestoreFrom = ""
 		_, err := h.vmRepository.Save(ctx, &v)
 
+		return err
+	}
+
+	// what lives on its disk is what the restored disk holds: told first, so
+	// that a restore heard again tells it again rather than not at all.
+	if err := h.lifecycle.DiskRestored(ctx, v.UUID); err != nil {
 		return err
 	}
 

@@ -16,20 +16,23 @@ import (
 	createcontainer "github.com/khanzadimahdi/testproject/application/workload/controlplane/container/createContainer"
 	getcontainers "github.com/khanzadimahdi/testproject/application/workload/controlplane/container/getContainers"
 	requestdocker "github.com/khanzadimahdi/testproject/application/workload/controlplane/docker/requestDocker"
+	actonresource "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/actOnResource"
+	admitresource "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/admitResource"
+	deleteresource "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/deleteResource"
+	kindsdispatch "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/dispatch"
+	getkinds "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/getKinds"
+	getresource "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/getResource"
+	getresources "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/getResources"
+	queryresource "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/queryResource"
+	controlplanestacks "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/stack"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/waiters"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/slugs"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/snapshot/archive"
 	createsnapshot "github.com/khanzadimahdi/testproject/application/workload/controlplane/snapshot/createSnapshot"
 	deletesnapshot "github.com/khanzadimahdi/testproject/application/workload/controlplane/snapshot/deleteSnapshot"
 	getsnapshot "github.com/khanzadimahdi/testproject/application/workload/controlplane/snapshot/getSnapshot"
 	getsnapshots "github.com/khanzadimahdi/testproject/application/workload/controlplane/snapshot/getSnapshots"
 	renamesnapshot "github.com/khanzadimahdi/testproject/application/workload/controlplane/snapshot/renameSnapshot"
-	createstack "github.com/khanzadimahdi/testproject/application/workload/controlplane/stack/createStack"
-	deletestack "github.com/khanzadimahdi/testproject/application/workload/controlplane/stack/deleteStack"
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/stack/dispatch"
-	getstack "github.com/khanzadimahdi/testproject/application/workload/controlplane/stack/getStack"
-	getstacks "github.com/khanzadimahdi/testproject/application/workload/controlplane/stack/getStacks"
-	restartstack "github.com/khanzadimahdi/testproject/application/workload/controlplane/stack/restartStack"
-	startstack "github.com/khanzadimahdi/testproject/application/workload/controlplane/stack/startStack"
-	stopstack "github.com/khanzadimahdi/testproject/application/workload/controlplane/stack/stopStack"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/coderunner"
 	createvm "github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/createVM"
 	deletevm "github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/deleteVM"
@@ -46,20 +49,24 @@ import (
 	"github.com/khanzadimahdi/testproject/domain"
 	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/domain/workload/docker"
+	"github.com/khanzadimahdi/testproject/domain/workload/kind"
+	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
+	"github.com/khanzadimahdi/testproject/domain/workload/resource"
 	"github.com/khanzadimahdi/testproject/domain/workload/snapshot"
 	"github.com/khanzadimahdi/testproject/domain/workload/stack"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
+	resourcesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/resources"
 	"github.com/khanzadimahdi/testproject/infrastructure/translator"
 	"github.com/khanzadimahdi/testproject/infrastructure/validator"
 	"github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane/client"
 	containerAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/controlplane/api/container"
 	dockerAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/controlplane/api/docker"
+	kindsAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/controlplane/api/kinds"
 	snapshotAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/controlplane/api/snapshot"
-	stackAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/controlplane/api/stack"
 	vmAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/controlplane/api/vm"
 )
 
@@ -103,7 +110,6 @@ func controlPlane(t *testing.T, w *vmtest.Workload) *client.Client {
 		Ports:     []port.Port{80},
 		Network:   vm.Network{Ingress: vm.AccessAllow, Egress: vm.AccessAllow},
 	})
-	dispatcher := dispatch.New(w.Stacks, w.Producer, logger)
 	remover := archive.NewRemover(nil, logger)
 
 	mux := http.NewServeMux()
@@ -125,13 +131,29 @@ func controlPlane(t *testing.T, w *vmtest.Workload) *client.Client {
 	mux.Handle("POST /api/vms/{uuid}/docker/{op}", dockerAPI.NewRequestHandler(requestdocker.NewUseCase(w.VMs, requester, codes)))
 	mux.Handle("GET /api/containers", containerAPI.NewIndexHandler(getcontainers.NewUseCase(w.VMs, requester, logger)))
 	mux.Handle("POST /api/containers", containerAPI.NewCreateHandler(createcontainer.NewUseCase(w.VMs, chooser, requester, codes)))
-	mux.Handle("GET /api/stacks", stackAPI.NewIndexHandler(getstacks.NewUseCase(w.Stacks, w.VMs)))
-	mux.Handle("POST /api/stacks", stackAPI.NewCreateHandler(createstack.NewUseCase(w.Stacks, chooser, dispatcher, codes)))
-	mux.Handle("GET /api/stacks/{uuid}", stackAPI.NewShowHandler(getstack.NewUseCase(w.Stacks, w.VMs, requester, logger)))
-	mux.Handle("DELETE /api/stacks/{uuid}", stackAPI.NewDeleteHandler(deletestack.NewUseCase(w.Stacks, w.VMs, dispatcher, codes)))
-	mux.Handle("POST /api/stacks/{uuid}/start", stackAPI.NewStartHandler(startstack.NewUseCase(w.Stacks, w.VMs, dispatcher, codes)))
-	mux.Handle("POST /api/stacks/{uuid}/stop", stackAPI.NewStopHandler(stopstack.NewUseCase(w.Stacks, w.VMs, dispatcher, codes)))
-	mux.Handle("POST /api/stacks/{uuid}/restart", stackAPI.NewRestartHandler(restartstack.NewUseCase(w.Stacks, w.VMs, dispatcher, codes)))
+
+	// stacks are a kind, served by the resource API every kind is.
+	resources := resourcesMemory.NewRepository()
+
+	registry := kind.NewRegistry[kind.ControlPlaneBinding]()
+	require.NoError(t, registry.Register(kind.BindControlPlane[stackKind.Spec, stackKind.Status](
+		stackKind.Descriptor(),
+		controlplanestacks.New(w.VMs, chooser, slugs.By(func(ctx context.Context, slug string) (resource.Record, error) {
+			return resources.GetOneBySlug(ctx, stackKind.Name, slug)
+		})),
+	)))
+
+	dispatcher := kindsdispatch.New(resources, w.Producer, waiters.New(), nil)
+
+	require.NoError(t, kindsAPI.Route(mux, registry.Descriptors(), kindsAPI.UseCases{
+		Admit:  admitresource.NewUseCase(registry, resources, dispatcher, logger),
+		Act:    actonresource.NewUseCase(registry, resources, dispatcher),
+		Delete: deleteresource.NewUseCase(registry, resources, dispatcher),
+		Get:    getresource.NewUseCase(registry, resources),
+		List:   getresources.NewUseCase(registry, resources),
+		Query:  queryresource.NewUseCase(registry, resources, requester, nil, nil),
+		Kinds:  getkinds.NewUseCase(registry),
+	}))
 
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
@@ -385,7 +407,7 @@ func TestContract_Stacks(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "d1", created.VM.UUID)
-	assert.Equal(t, stack.Deploying, created.Stack.State)
+	assert.Equal(t, stack.Deploying, created.Stack.State, "its vm runs, so it is deployed at once")
 	assert.Equal(t, stack.Running, created.Stack.ExpectedState)
 	assert.Equal(t, "box", created.Stack.VMName, "a stack names its vm")
 

@@ -4,6 +4,9 @@
 package vmtest
 
 import (
+	"context"
+	"slices"
+	"sync"
 	"time"
 
 	deletetask "github.com/khanzadimahdi/testproject/application/workload/controlplane/task/deleteTask"
@@ -12,15 +15,14 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/lifecycle"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/placement"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/quota"
+	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/node"
 	"github.com/khanzadimahdi/testproject/domain/workload/snapshot"
-	"github.com/khanzadimahdi/testproject/domain/workload/stack"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
 	nodesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/nodes"
 	snapshotsMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/snapshots"
-	stacksMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/stacks"
 	tasksMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/tasks"
 	vmsMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/vms"
 	logsMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/logs"
@@ -56,7 +58,7 @@ var Limits = quota.Limits{
 type Workload struct {
 	VMs       *vmsMemory.Repository
 	Snapshots *snapshotsMemory.Repository
-	Stacks    *stacksMemory.Repository
+	Children  *Children
 	Nodes     *nodesMemory.Repository
 	Tasks     *tasksMemory.Repository
 	TaskLogs  *logsMock.InMemoryLogRepository
@@ -76,7 +78,6 @@ type options struct {
 	nodes     []node.Node
 	vms       []vm.VM
 	snapshots []snapshot.Snapshot
-	stacks    []stack.Stack
 	tasks     []task.Task
 }
 
@@ -91,10 +92,6 @@ func WithVMs(vms ...vm.VM) Option {
 
 func WithSnapshots(snapshots ...snapshot.Snapshot) Option {
 	return func(o *options) { o.snapshots = append(o.snapshots, snapshots...) }
-}
-
-func WithStacks(stacks ...stack.Stack) Option {
-	return func(o *options) { o.stacks = append(o.stacks, stacks...) }
 }
 
 // WithTasks are tasks the workload holds: those of the guest's are the code
@@ -114,7 +111,7 @@ func New(opts ...Option) *Workload {
 	w := &Workload{
 		VMs:       vmsMemory.NewRepository(o.vms...),
 		Snapshots: snapshotsMemory.NewRepository(o.snapshots...),
-		Stacks:    stacksMemory.NewRepository(o.stacks...),
+		Children:  &Children{},
 		Nodes:     nodesMemory.NewRepository(o.nodes...),
 		Tasks:     tasksMemory.NewRepository(o.tasks...),
 		TaskLogs:  logsMock.NewInMemoryRepository(),
@@ -124,7 +121,7 @@ func New(opts ...Option) *Workload {
 	w.Placement = placement.New(w.Nodes, w.VMs, 4)
 	w.Quota = quota.New(w.VMs, Limits)
 	w.Commander = command.New(w.Producer)
-	w.Lifecycle = lifecycle.New(w.VMs, w.Stacks, w.Nodes, w.Placement, w.Commander)
+	w.Lifecycle = lifecycle.New(w.VMs, w.Children, w.Nodes, w.Placement, w.Commander)
 	w.Runs = coderunner.New(w.Tasks, w.Producer, deletetask.NewUseCase(w.Tasks, w.TaskLogs, w.Producer, translator.Codes{}))
 
 	return w
@@ -211,4 +208,48 @@ func Docker(uuid string, ownerUUID string) vm.VM {
 	v.Resources = vm.Resources{CPUs: 2, Memory: 2 * GiB, Disk: 20 * GiB}
 
 	return v
+}
+
+// Children are what lives in the VMs, as a test sees it: the VMs it was told
+// were deleted, and those whose disks were restored.
+type Children struct {
+	lock     sync.Mutex
+	deleted  []string
+	restored []string
+}
+
+var _ lifecycle.Children = &Children{}
+
+func (c *Children) Deleted(_ context.Context, parent kind.Reference) error {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	c.deleted = append(c.deleted, parent.Kind+"/"+parent.UUID)
+
+	return nil
+}
+
+func (c *Children) Restored(_ context.Context, parent kind.Reference) error {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	c.restored = append(c.restored, parent.Kind+"/"+parent.UUID)
+
+	return nil
+}
+
+// DeletedParents are the parents it was told were deleted, as kind/uuid.
+func (c *Children) DeletedParents() []string {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	return slices.Clone(c.deleted)
+}
+
+// RestoredParents are the parents it was told were restored, as kind/uuid.
+func (c *Children) RestoredParents() []string {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	return slices.Clone(c.restored)
 }

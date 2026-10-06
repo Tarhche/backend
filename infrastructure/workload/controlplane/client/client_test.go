@@ -237,17 +237,6 @@ func TestClient_requests(t *testing.T) {
 		assert.JSONEq(t, `{"lifetime_seconds":0,"resources":{"cpus":1,"memory":1073741824,"disk":21474836480}}`, string(asked.body))
 	})
 
-	t.Run("a stack is deleted with its volumes when that is asked", func(t *testing.T) {
-		t.Parallel()
-
-		c, asked := controlPlane(t, http.StatusAccepted, "")
-
-		require.NoError(t, c.DeleteStack(ctx, "owner-uuid", "stack-uuid", true))
-		assert.Equal(t, http.MethodDelete, asked.method)
-		assert.Equal(t, "/api/stacks/stack-uuid", asked.path)
-		assert.Equal(t, "owner=owner-uuid&volumes=true", asked.query)
-	})
-
 	t.Run("a log is asked for from a moment, and its last lines", func(t *testing.T) {
 		t.Parallel()
 

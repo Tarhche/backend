@@ -155,6 +155,7 @@ func TestVMRestored_Handle(t *testing.T) {
 		assert.Equal(t, vm.Starting, stored.CurrentState)
 		assert.Empty(t, stored.RestoreFrom)
 		assert.Empty(t, w.Producer.Messages())
+		assert.Equal(t, []string{"vm/01"}, w.Children.RestoredParents(), "what lives on its disk is what the restored disk holds")
 	})
 
 	t.Run("one wanted stopped is stopped again", func(t *testing.T) {
@@ -178,6 +179,7 @@ func TestVMRestored_Handle(t *testing.T) {
 
 		stored, _ := w.VMs.Stored("01")
 		assert.Equal(t, vm.Restoring, stored.CurrentState)
+		assert.Empty(t, w.Children.RestoredParents())
 	})
 
 	t.Run("a vm made from a snapshot is made from it no longer, once it has been", func(t *testing.T) {
@@ -194,6 +196,7 @@ func TestVMRestored_Handle(t *testing.T) {
 		assert.Equal(t, vm.Scheduled, stored.CurrentState, "its node reports when it is up")
 		assert.Empty(t, stored.RestoreFrom)
 		assert.Empty(t, w.Producer.Messages())
+		assert.Empty(t, w.Children.RestoredParents(), "a vm made anew has nothing living in it yet")
 	})
 
 	t.Run("what will never be handled is not handed back", func(t *testing.T) {

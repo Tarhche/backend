@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/workload/docker"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm/events"
@@ -36,12 +37,13 @@ func TestSpec(t *testing.T) {
 		vm.LabelSlug:    "box-abcde",
 		vm.LabelVM:      "vm-1",
 		vm.LabelPurpose: vm.PurposeVM,
-	}, given.Labels)
+		docker.LabelVM:  "true",
+	}, given.Labels, "a Docker VM is labelled as one")
 
 	assert.Equal(t, map[string]string{vm.LabelOwner: "owner-uuid", vm.LabelSlug: "box-abcde"}, sent.Labels, "what was sent is left as it was")
 
-	unlabelled := Spec("vm-2", vm.Spec{})
-	assert.Equal(t, map[string]string{vm.LabelVM: "vm-2", vm.LabelPurpose: vm.PurposeVM}, unlabelled.Labels)
+	unlabelled := Spec("vm-2", vm.Spec{Kind: vm.KindMachine})
+	assert.Equal(t, map[string]string{vm.LabelVM: "vm-2", vm.LabelPurpose: vm.PurposeVM}, unlabelled.Labels, "and a machine is not")
 }
 
 func TestFailedAndRefused(t *testing.T) {

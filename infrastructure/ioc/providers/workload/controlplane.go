@@ -15,6 +15,8 @@ import (
 	controlPlaneCreateContainer "github.com/khanzadimahdi/testproject/application/workload/controlplane/container/createContainer"
 	controlPlaneGetContainers "github.com/khanzadimahdi/testproject/application/workload/controlplane/container/getContainers"
 	controlPlaneRequestDocker "github.com/khanzadimahdi/testproject/application/workload/controlplane/docker/requestDocker"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/cascade"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/observe"
 	kindsReconcile "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/reconcile"
 	controlPlaneGetNode "github.com/khanzadimahdi/testproject/application/workload/controlplane/node/getNode"
 	controlPlaneGetNodes "github.com/khanzadimahdi/testproject/application/workload/controlplane/node/getNodes"
@@ -25,15 +27,6 @@ import (
 	controlPlaneGetSnapshot "github.com/khanzadimahdi/testproject/application/workload/controlplane/snapshot/getSnapshot"
 	controlPlaneGetSnapshots "github.com/khanzadimahdi/testproject/application/workload/controlplane/snapshot/getSnapshots"
 	controlPlaneRenameSnapshot "github.com/khanzadimahdi/testproject/application/workload/controlplane/snapshot/renameSnapshot"
-	controlPlaneCreateStack "github.com/khanzadimahdi/testproject/application/workload/controlplane/stack/createStack"
-	controlPlaneDeleteStack "github.com/khanzadimahdi/testproject/application/workload/controlplane/stack/deleteStack"
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/stack/dispatch"
-	controlPlaneGetStack "github.com/khanzadimahdi/testproject/application/workload/controlplane/stack/getStack"
-	controlPlaneGetStacks "github.com/khanzadimahdi/testproject/application/workload/controlplane/stack/getStacks"
-	controlPlaneRestartStack "github.com/khanzadimahdi/testproject/application/workload/controlplane/stack/restartStack"
-	controlPlaneStackResult "github.com/khanzadimahdi/testproject/application/workload/controlplane/stack/stackResult"
-	controlPlaneStartStack "github.com/khanzadimahdi/testproject/application/workload/controlplane/stack/startStack"
-	controlPlaneStopStack "github.com/khanzadimahdi/testproject/application/workload/controlplane/stack/stopStack"
 	controlPlaneDeleteTask "github.com/khanzadimahdi/testproject/application/workload/controlplane/task/deleteTask"
 	controlPlaneGetTask "github.com/khanzadimahdi/testproject/application/workload/controlplane/task/getTask"
 	controlPlaneHeartbeatTask "github.com/khanzadimahdi/testproject/application/workload/controlplane/task/heartbeatTask"
@@ -54,6 +47,7 @@ import (
 	controlPlaneGetVMs "github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/getVMs"
 	controlPlaneHeartbeatVM "github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/heartbeatVM"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/lifecycle"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/parents"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/placement"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/quota"
 	controlPlaneVMReconcile "github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/reconcile"
@@ -69,8 +63,6 @@ import (
 	nodeEvents "github.com/khanzadimahdi/testproject/domain/workload/node/events"
 	snapshotContract "github.com/khanzadimahdi/testproject/domain/workload/snapshot"
 	snapshotEvents "github.com/khanzadimahdi/testproject/domain/workload/snapshot/events"
-	stackContract "github.com/khanzadimahdi/testproject/domain/workload/stack"
-	stackEvents "github.com/khanzadimahdi/testproject/domain/workload/stack/events"
 	taskContract "github.com/khanzadimahdi/testproject/domain/workload/task"
 	taskEvents "github.com/khanzadimahdi/testproject/domain/workload/task/events"
 	vmContract "github.com/khanzadimahdi/testproject/domain/workload/vm"
@@ -83,7 +75,6 @@ import (
 	noderepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/workload/nodes"
 	resourcerepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/workload/resources"
 	snapshotrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/workload/snapshots"
-	stackrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/workload/stacks"
 	taskrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/workload/tasks"
 	vmrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/workload/vms"
 	"github.com/khanzadimahdi/testproject/infrastructure/storage/minio"
@@ -97,7 +88,6 @@ import (
 	controlPlaneDockerAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/controlplane/api/docker"
 	controlPlaneNodeAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/controlplane/api/node"
 	controlPlaneSnapshotAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/controlplane/api/snapshot"
-	controlPlaneStackAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/controlplane/api/stack"
 	controlPlaneTaskAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/controlplane/api/task"
 	controlPlaneVMAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/controlplane/api/vm"
 	"github.com/nats-io/nats.go"
@@ -209,10 +199,20 @@ func controlPlaneConsoleCommand(
 	controlPlaneGetNodeUseCase := controlPlaneGetNode.NewUseCase(nodeRepository)
 	controlPlaneGetNodesUseCase := controlPlaneGetNodes.NewUseCase(nodeRepository)
 
+	// every kind the control plane runs, and what their resources are kept
+	// in. What lives in a VM, its stacks, goes with the VM, and is reset with
+	// its disk, as each kind's rules say.
+	registry, err := NewControlPlaneRegistry()
+	if err != nil {
+		return nil, err
+	}
+
+	resourceRepository := resourcerepository.NewRepository(database)
+
 	vms, err := NewControlPlaneVMs(controlPlaneConfigs, ControlPlaneVMStores{
 		VMs:       vmrepository.NewRepository(database),
 		Snapshots: snapshotrepository.NewRepository(database),
-		Stacks:    stackrepository.NewRepository(database),
+		Children:  cascade.New(registry, resourceRepository),
 		Nodes:     nodeRepository,
 		Tasks:     taskRepository,
 		TaskLogs:  logRepository,
@@ -229,11 +229,7 @@ func controlPlaneConsoleCommand(
 		return nil, err
 	}
 
-	// every kind the control plane runs, and the generic plumbing they all
-	// run on: none is registered yet, so it serves only GET /api/kinds and
-	// changes nothing anybody does today.
-	registry, err := NewControlPlaneRegistry()
-	if err != nil {
+	if err := RegisterControlPlaneKinds(registry, vms, resourceRepository); err != nil {
 		return nil, err
 	}
 
@@ -245,7 +241,6 @@ func controlPlaneConsoleCommand(
 
 	// a kind's collection is indexed here rather than by a migration, which
 	// runs without the registry and cannot know the kinds there are.
-	resourceRepository := resourcerepository.NewRepository(database)
 	for _, d := range registry.Descriptors() {
 		if err := resourceRepository.EnsureKind(ctx, d); err != nil {
 			return nil, err
@@ -258,6 +253,7 @@ func controlPlaneConsoleCommand(
 		request.NewRequester(natsConnection, controlPlaneConfigs.NodeRequestTimeout, controlPlaneConfigs.PullRequestTimeout()),
 		jetStreamProduceConsumer,
 		logger,
+		WithParents(vms.Parents),
 	)
 
 	// every kind's own heartbeat, which the serve command runs beside the
@@ -286,13 +282,13 @@ func controlPlaneConsoleCommand(
 	mux.Handle("GET /api/nodes", controlPlaneNodeAPI.NewIndexHandler(controlPlaneGetNodesUseCase))
 	mux.Handle("GET /api/nodes/{name}", controlPlaneNodeAPI.NewShowHandler(controlPlaneGetNodeUseCase))
 
-	// VMs, their snapshots, the containers in Docker VMs and the stacks
-	// deployed into them, which the blog reaches on its users' behalf. Every
-	// route takes an owner, which narrows it to that person's own.
+	// VMs, their snapshots and the containers in Docker VMs, which the blog
+	// reaches on its users' behalf. Every route takes an owner, which narrows
+	// it to that person's own.
 	vms.Route(mux)
 
 	// the resource API of every kind registered, each under its own plural,
-	// and the kinds themselves.
+	// stacks among them, and the kinds themselves.
 	if err := kinds.Route(mux); err != nil {
 		return nil, err
 	}
@@ -352,29 +348,38 @@ func controlPlaneConsoleCommand(
 	return handler, nil
 }
 
-// ControlPlaneVMStores are what the control plane keeps VMs, snapshots and
-// stacks in, the nodes and tasks it weighs them against, the tasks' logs, which
-// go with a run of the code runner's when one is taken away from among the
-// VMs, and the bucket a snapshot's archive is taken out of when the snapshot
-// goes. Archives may be nil: with no bucket configured, an archive is left
-// where it is.
+// ControlPlaneVMStores are what the control plane keeps VMs and snapshots in,
+// what lives in VMs, which is told when one goes or has its disk restored,
+// the nodes and tasks it weighs them against, the tasks' logs, which go with
+// a run of the code runner's when one is taken away from among the VMs, and
+// the bucket a snapshot's archive is taken out of when the snapshot goes.
+// Archives may be nil: with no bucket configured, an archive is left where it
+// is.
 type ControlPlaneVMStores struct {
 	VMs       vmContract.Repository
 	Snapshots snapshotContract.Repository
-	Stacks    stackContract.Repository
+	Children  lifecycle.Children
 	Nodes     nodeContract.Repository
 	Tasks     taskContract.Repository
 	TaskLogs  taskContract.LogRepository
 	Archives  snapshotContract.Store
 }
 
-// ControlPlaneVMs is the control plane's VMs, snapshots, containers and
-// stacks: the routes the blog reaches them on, what it hears from the nodes
-// about them, and the heartbeat that keeps them as they were asked to be.
+// ControlPlaneVMs is the control plane's VMs, snapshots and containers: the
+// routes the blog reaches them on, what it hears from the nodes about them,
+// and the heartbeat that keeps them as they were asked to be.
+//
+// It is also what the kinds that live in Docker VMs are built from: the VMs,
+// the chooser of the Docker VM a stack goes into, and what a VM is doing to
+// what lives in it.
 type ControlPlaneVMs struct {
 	Route       func(mux *http.ServeMux)
 	Subscribers map[string]domain.MessageHandler
 	Reconcile   *controlPlaneVMReconcile.UseCase
+
+	VMs     vmContract.Repository
+	Chooser *dockerVM.Chooser
+	Parents observe.Parents
 }
 
 // NewControlPlaneVMs builds what the control plane keeps and asks about VMs.
@@ -391,7 +396,6 @@ func NewControlPlaneVMs(
 ) (*ControlPlaneVMs, error) {
 	vmRepository := stores.VMs
 	snapshotRepository := stores.Snapshots
-	stackRepository := stores.Stacks
 	nodeRepository := stores.Nodes
 	taskRepository := stores.Tasks
 
@@ -427,8 +431,7 @@ func NewControlPlaneVMs(
 	vmPlacement := placement.New(nodeRepository, vmRepository, controlPlaneConfigs.VMCPUOvercommit)
 	vmQuota := quota.New(vmRepository, limits)
 	commander := command.New(producer)
-	vmLifecycle := lifecycle.New(vmRepository, stackRepository, nodeRepository, vmPlacement, commander)
-	dispatcher := dispatch.New(stackRepository, producer, logger)
+	vmLifecycle := lifecycle.New(vmRepository, stores.Children, nodeRepository, vmPlacement, commander)
 	remover := archive.NewRemover(stores.Archives, logger)
 
 	// the code runner's runs, shown among anybody's VMs: read from their tasks,
@@ -441,7 +444,7 @@ func NewControlPlaneVMs(
 	})
 	chooser := dockerVM.NewChooser(vmRepository, createVM, vmLifecycle, dockerDefaults)
 
-	reconcile := controlPlaneVMReconcile.NewUseCase(vmRepository, nodeRepository, stackRepository, vmLifecycle, commander, dispatcher, logger)
+	reconcile := controlPlaneVMReconcile.NewUseCase(vmRepository, nodeRepository, vmLifecycle, commander, logger)
 
 	route := func(mux *http.ServeMux) {
 		mux.Handle("GET /api/vms", controlPlaneVMAPI.NewIndexHandler(controlPlaneGetVMs.NewUseCase(vmRepository, runs)))
@@ -465,28 +468,25 @@ func NewControlPlaneVMs(
 
 		mux.Handle("GET /api/containers", controlPlaneContainerAPI.NewIndexHandler(controlPlaneGetContainers.NewUseCase(vmRepository, requester, logger)))
 		mux.Handle("POST /api/containers", controlPlaneContainerAPI.NewCreateHandler(controlPlaneCreateContainer.NewUseCase(vmRepository, chooser, requester, codes)))
-
-		mux.Handle("GET /api/stacks", controlPlaneStackAPI.NewIndexHandler(controlPlaneGetStacks.NewUseCase(stackRepository, vmRepository)))
-		mux.Handle("POST /api/stacks", controlPlaneStackAPI.NewCreateHandler(controlPlaneCreateStack.NewUseCase(stackRepository, chooser, dispatcher, codes)))
-		mux.Handle("GET /api/stacks/{uuid}", controlPlaneStackAPI.NewShowHandler(controlPlaneGetStack.NewUseCase(stackRepository, vmRepository, requester, logger)))
-		mux.Handle("DELETE /api/stacks/{uuid}", controlPlaneStackAPI.NewDeleteHandler(controlPlaneDeleteStack.NewUseCase(stackRepository, vmRepository, dispatcher, codes)))
-		mux.Handle("POST /api/stacks/{uuid}/start", controlPlaneStackAPI.NewStartHandler(controlPlaneStartStack.NewUseCase(stackRepository, vmRepository, dispatcher, codes)))
-		mux.Handle("POST /api/stacks/{uuid}/stop", controlPlaneStackAPI.NewStopHandler(controlPlaneStopStack.NewUseCase(stackRepository, vmRepository, dispatcher, codes)))
-		mux.Handle("POST /api/stacks/{uuid}/restart", controlPlaneStackAPI.NewRestartHandler(controlPlaneRestartStack.NewUseCase(stackRepository, vmRepository, dispatcher, codes)))
 	}
 
 	subscribers := map[string]domain.MessageHandler{
-		vmEvents.VMHeartbeatName:             controlPlaneHeartbeatVM.NewHeartbeat(vmRepository, nodeRepository, vmLifecycle, commander, dispatcher, logger),
+		vmEvents.VMHeartbeatName:             controlPlaneHeartbeatVM.NewHeartbeat(vmRepository, nodeRepository, vmLifecycle, commander, logger),
 		vmEvents.VMFailedName:                controlPlaneFailVM.NewVMFailed(vmRepository, logger),
 		vmEvents.VMRestoredName:              controlPlaneRestoreVM.NewVMRestored(vmRepository, vmLifecycle, commander, logger),
 		vmEvents.VMDeletedName:               controlPlaneDeleteVM.NewVMDeleted(vmRepository, vmLifecycle, logger),
 		snapshotEvents.SnapshotCompletedName: controlPlaneCreateSnapshot.NewSnapshotCompleted(snapshotRepository, remover, logger),
 		snapshotEvents.SnapshotFailedName:    controlPlaneCreateSnapshot.NewSnapshotFailed(snapshotRepository, remover, logger),
-		stackEvents.StackCompletedName:       controlPlaneStackResult.NewStackCompleted(stackRepository, logger),
-		stackEvents.StackFailedName:          controlPlaneStackResult.NewStackFailed(stackRepository, logger),
 	}
 
-	return &ControlPlaneVMs{Route: route, Subscribers: subscribers, Reconcile: reconcile}, nil
+	return &ControlPlaneVMs{
+		Route:       route,
+		Subscribers: subscribers,
+		Reconcile:   reconcile,
+		VMs:         vmRepository,
+		Chooser:     chooser,
+		Parents:     parents.New(vmRepository),
+	}, nil
 }
 
 // dockerVMDefaults is what a Docker VM made for a container or a stack is

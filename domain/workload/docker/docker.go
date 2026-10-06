@@ -249,16 +249,3 @@ type Daemon interface {
 	CreateVolume(ctx context.Context, spec VolumeSpec) (Volume, error)
 	RemoveVolume(ctx context.Context, name string, force bool) error
 }
-
-// Compose runs compose projects inside a Docker VM.
-//
-// A project is named by its stack's slug, and compose is the YAML as it was
-// given. Each call answers with what compose printed, which is all there is to
-// say about a project that did not come up the way it was written.
-type Compose interface {
-	Up(ctx context.Context, project string, compose string) (output string, err error)
-	Start(ctx context.Context, project string, compose string) (output string, err error)
-	Stop(ctx context.Context, project string, compose string) (output string, err error)
-	Restart(ctx context.Context, project string, compose string) (output string, err error)
-	Down(ctx context.Context, project string, compose string, removeVolumes bool) (output string, err error)
-}

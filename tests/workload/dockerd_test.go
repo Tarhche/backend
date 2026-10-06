@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"go.yaml.in/yaml/v3"
 
 	"github.com/docker/docker/api"
 	"github.com/docker/docker/api/types/container"
@@ -45,8 +48,10 @@ type dockerd struct {
 	lock       sync.Mutex
 	containers []container.Summary
 
-	// composed is the compose file each project was last brought up with.
+	// composed is the compose file each project was last brought up with,
+	// and ran every compose command run on each, in order.
 	composed map[string]string
+	ran      map[string][]string
 }
 
 // newDockerd is a dockerd holding one container, which nothing deployed.
@@ -63,6 +68,7 @@ func newDockerd(t *testing.T) *dockerd {
 			Created: time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC).Unix(),
 		}},
 		composed: make(map[string]string),
+		ran:      make(map[string][]string),
 	}
 
 	server := httptest.NewServer(d)
@@ -100,7 +106,8 @@ func (d *dockerd) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// listed is every container carrying each of the labels, as key=value.
+// listed is every container carrying each of the labels, as key=value, or
+// as a key, whatever its value.
 func (d *dockerd) listed(labels []string) []container.Summary {
 	d.lock.Lock()
 	defer d.lock.Unlock()
@@ -111,8 +118,8 @@ func (d *dockerd) listed(labels []string) []container.Summary {
 		matches := true
 
 		for _, label := range labels {
-			key, value, _ := strings.Cut(label, "=")
-			if c.Labels[key] != value {
+			key, value, valued := strings.Cut(label, "=")
+			if has, labelled := c.Labels[key]; !labelled || (valued && has != value) {
 				matches = false
 			}
 		}
@@ -133,6 +140,43 @@ func (d *dockerd) Composed(project string) (string, bool) {
 	compose, ok := d.composed[project]
 
 	return compose, ok
+}
+
+// Ran is every compose command run on a project, in order: its action and
+// its flags.
+func (d *dockerd) Ran(project string) []string {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
+	return slices.Clone(d.ran[project])
+}
+
+// Kill has the container of a project's service exit, as one falls over.
+func (d *dockerd) Kill(project string, service string) {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
+	for i := range d.containers {
+		if c := d.containers[i]; c.Labels[docker.LabelComposeProject] == project && c.Labels[docker.LabelComposeService] == service {
+			d.containers[i].State = container.StateExited
+			d.containers[i].Status = "Exited (137) Less than a second ago"
+		}
+	}
+}
+
+// States are what the containers of a project are doing, by service.
+func (d *dockerd) States(project string) map[string]string {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
+	states := make(map[string]string)
+	for _, c := range d.containers {
+		if c.Labels[docker.LabelComposeProject] == project {
+			states[c.Labels[docker.LabelComposeService]] = string(c.State)
+		}
+	}
+
+	return states
 }
 
 // exec is what runs inside a Docker VM: dial-stdio, which carries a
@@ -185,45 +229,116 @@ func (d *dockerd) dialStdio(ctx context.Context, stdin io.Reader, stdout io.Writ
 	return 0
 }
 
-// compose is docker compose run on a project, with its file on stdin: up
-// makes the project's one service a container compose labels as its own, and
-// down takes it away again.
+// compose is docker compose run on a project, with its file on stdin, as
+// compose does it: up makes a container for every service the file has, but
+// for those behind a profile, labelled as compose labels them and with the
+// labels the file gives them, and takes away the project's others; start,
+// stop and restart do that to the project's containers; and down takes them
+// away, with its volumes when it is asked to.
 func (d *dockerd) compose(project string, action []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int {
-	compose, err := io.ReadAll(stdin)
-	if err != nil || len(compose) == 0 {
+	read, err := io.ReadAll(stdin)
+	if err != nil || len(read) == 0 {
 		_, _ = fmt.Fprintln(stderr, "no configuration file provided")
 
 		return 14
 	}
 
+	var file struct {
+		Services map[string]struct {
+			Image    string    `yaml:"image"`
+			Labels   yaml.Node `yaml:"labels"`
+			Profiles []string  `yaml:"profiles"`
+		} `yaml:"services"`
+	}
+
+	if err := yaml.Unmarshal(read, &file); err != nil {
+		_, _ = fmt.Fprintf(stderr, "yaml: %v\n", err)
+
+		return 15
+	}
+
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
-	name := project + "-web-1"
+	d.ran[project] = append(d.ran[project], strings.Join(action, " "))
 
 	theirs := func(c container.Summary) bool {
 		return c.Labels[docker.LabelComposeProject] == project
 	}
 
+	each := func(do func(c *container.Summary, name string)) {
+		for i := range d.containers {
+			if theirs(d.containers[i]) {
+				do(&d.containers[i], strings.TrimPrefix(d.containers[i].Names[0], "/"))
+			}
+		}
+	}
+
 	switch action[0] {
 	case "up":
-		d.composed[project] = string(compose)
-		d.containers = append(slices.DeleteFunc(d.containers, theirs), container.Summary{
-			ID:      "w3b" + project,
-			Names:   []string{"/" + name},
-			Image:   "nginx:1.27",
-			State:   container.StateRunning,
-			Status:  "Up Less than a second",
-			Created: time.Now().Unix(),
-			Labels:  map[string]string{docker.LabelComposeProject: project, docker.LabelComposeService: "web"},
+		d.composed[project] = string(read)
+		d.containers = slices.DeleteFunc(d.containers, func(c container.Summary) bool {
+			_, kept := file.Services[c.Labels[docker.LabelComposeService]]
+
+			return theirs(c) && !kept
 		})
 
-		_, _ = fmt.Fprintf(stdout, " Container %s  Started\n", name)
+		for _, service := range slices.Sorted(maps.Keys(file.Services)) {
+			if len(file.Services[service].Profiles) > 0 {
+				continue
+			}
+
+			name := project + "-" + service + "-1"
+
+			labels := map[string]string{docker.LabelComposeProject: project, docker.LabelComposeService: service}
+			if node := file.Services[service].Labels; node.Kind == yaml.MappingNode {
+				var given map[string]string
+				_ = node.Decode(&given)
+				maps.Copy(labels, given)
+			}
+
+			i := slices.IndexFunc(d.containers, func(c container.Summary) bool { return theirs(c) && c.Labels[docker.LabelComposeService] == service })
+			if i < 0 {
+				d.containers = append(d.containers, container.Summary{ID: "c-" + name, Names: []string{"/" + name}, Image: file.Services[service].Image, Created: time.Now().Unix()})
+				i = len(d.containers) - 1
+			}
+
+			d.containers[i].Labels = labels
+			d.containers[i].State = container.StateRunning
+			d.containers[i].Status = "Up Less than a second"
+
+			_, _ = fmt.Fprintf(stdout, " Container %s  Started\n", name)
+		}
+
+	case "start", "restart":
+		said := map[string]string{"start": "Started", "restart": "Restarted"}[action[0]]
+
+		each(func(c *container.Summary, name string) {
+			c.State = container.StateRunning
+			c.Status = "Up Less than a second"
+
+			_, _ = fmt.Fprintf(stdout, " Container %s  %s\n", name, said)
+		})
+
+	case "stop":
+		each(func(c *container.Summary, name string) {
+			c.State = container.StateExited
+			c.Status = "Exited (0) Less than a second ago"
+
+			_, _ = fmt.Fprintf(stdout, " Container %s  Stopped\n", name)
+		})
 
 	case "down":
+		each(func(_ *container.Summary, name string) {
+			_, _ = fmt.Fprintf(stdout, " Container %s  Removed\n", name)
+		})
+
 		delete(d.composed, project)
 		d.containers = slices.DeleteFunc(d.containers, theirs)
-		_, _ = fmt.Fprintf(stdout, " Container %s  Removed\n", name)
+
+		if slices.Contains(action, "--volumes") {
+			_, _ = fmt.Fprintf(stdout, " Volume %s_data  Removed\n", project)
+		}
 
 	default:
 		_, _ = fmt.Fprintf(stderr, "unknown docker command: %q\n", action[0])

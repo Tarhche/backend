@@ -24,9 +24,11 @@ import (
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/startVM"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/stopVM"
 	"github.com/khanzadimahdi/testproject/domain"
+	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
 	"github.com/khanzadimahdi/testproject/domain/workload/snapshot"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
+	infraDocker "github.com/khanzadimahdi/testproject/infrastructure/workload/docker"
 )
 
 // TestAMachineVM walks a VM through its life from the dashboard: asked for,
@@ -263,9 +265,12 @@ func TestADockerVM(t *testing.T) {
 			return read.StackDetail, nil
 		}, func(s presenter.StackDetail) bool { return s.State == "running" })
 
+		labelled, err := infraDocker.Labelled(compose, stackUUID)
+		require.NoError(t, err)
+
 		composed, ok := w.dockerd.Composed(slug)
 		require.True(t, ok, "compose was run on the stack's own project")
-		assert.Equal(t, compose, composed)
+		assert.Equal(t, labelled, composed, "with its file, every service of it labelled as the stack's")
 
 		assert.Equal(t, "builds", detail.VMName)
 		assert.Contains(t, detail.Output, "Started")
@@ -295,8 +300,8 @@ func TestADockerVM(t *testing.T) {
 			return errors.Is(err, domain.ErrNotExists)
 		}, settle, beat, "the record was never removed")
 
-		_, err = w.stacks.GetOne(ctx, stackUUID)
-		assert.ErrorIs(t, err, domain.ErrNotExists)
+		_, err = w.resources.GetOne(ctx, stackKind.Name, stackUUID)
+		assert.ErrorIs(t, err, domain.ErrNotExists, "a vm's stacks go with it")
 
 		_, err = w.engine.Inspect(ctx, uuid)
 		assert.ErrorIs(t, err, domain.ErrNotExists)

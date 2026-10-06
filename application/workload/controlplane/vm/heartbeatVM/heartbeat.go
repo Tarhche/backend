@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/stack/dispatch"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/command"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/lifecycle"
 	"github.com/khanzadimahdi/testproject/domain"
@@ -41,12 +40,11 @@ const (
 // on its way out that its node no longer lists is gone. Nothing here fails the
 // message: the next beat says it all again.
 type Heartbeat struct {
-	vms        vm.Repository
-	nodes      node.Repository
-	lifecycle  *lifecycle.Lifecycle
-	commander  *command.Commander
-	dispatcher *dispatch.Dispatcher
-	logger     *slog.Logger
+	vms       vm.Repository
+	nodes     node.Repository
+	lifecycle *lifecycle.Lifecycle
+	commander *command.Commander
+	logger    *slog.Logger
 }
 
 var _ domain.MessageHandler = &Heartbeat{}
@@ -56,16 +54,14 @@ func NewHeartbeat(
 	nodes node.Repository,
 	lifecycle *lifecycle.Lifecycle,
 	commander *command.Commander,
-	dispatcher *dispatch.Dispatcher,
 	logger *slog.Logger,
 ) *Heartbeat {
 	return &Heartbeat{
-		vms:        vms,
-		nodes:      nodes,
-		lifecycle:  lifecycle,
-		commander:  commander,
-		dispatcher: dispatcher,
-		logger:     logger,
+		vms:       vms,
+		nodes:     nodes,
+		lifecycle: lifecycle,
+		commander: commander,
+		logger:    logger,
 	}
 }
 
@@ -155,8 +151,6 @@ func (h *Heartbeat) beat(ctx context.Context, nodeName string, at time.Time, b *
 		return nil
 	}
 
-	previous := v.CurrentState
-
 	v.LastHeartbeatAt = at
 	v.Stats = b.Stats.ToVM()
 
@@ -164,16 +158,10 @@ func (h *Heartbeat) beat(ctx context.Context, nodeName string, at time.Time, b *
 		h.arrive(&v, observed, b)
 	}
 
-	if _, err := h.vms.Save(ctx, &v); err != nil {
-		// asked for something while this was read: the next beat says it again.
-		return err
-	}
+	// asked for something while this was read: the next beat says it again.
+	_, err = h.vms.Save(ctx, &v)
 
-	if previous != vm.Running && v.CurrentState == vm.Running && v.Kind == vm.KindDocker {
-		return h.dispatcher.Waiting(ctx, &v)
-	}
-
-	return nil
+	return err
 }
 
 // arrive writes down that a VM is what its node says it is.

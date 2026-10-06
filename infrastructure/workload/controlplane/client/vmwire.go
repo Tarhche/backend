@@ -8,12 +8,11 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
 	"github.com/khanzadimahdi/testproject/domain/workload/snapshot"
-	"github.com/khanzadimahdi/testproject/domain/workload/stack"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
 
-// the shapes the control plane's API speaks about VMs, snapshots, containers
-// and stacks. What a node reports about dockerd's objects travels in the node
+// the shapes the control plane's API speaks about VMs, snapshots and
+// containers; a stack is a manifest. What a node reports about dockerd's objects travels in the node
 // requests' own shapes, which are the domain's.
 
 type resourcesPayload struct {
@@ -260,74 +259,7 @@ func (p *snapshotPagePayload) toPage() workloadControlPlane.Page[snapshot.Snapsh
 	return workloadControlPlane.Page[snapshot.Snapshot]{Items: items, TotalPages: p.Pagination.TotalPages, CurrentPage: p.Pagination.CurrentPage}
 }
 
-type stackPayload struct {
-	UUID          string    `json:"uuid"`
-	Name          string    `json:"name"`
-	OwnerUUID     string    `json:"owner_uuid"`
-	VMUUID        string    `json:"vm_uuid"`
-	VMName        string    `json:"vm_name"`
-	Slug          string    `json:"slug"`
-	Compose       string    `json:"compose"`
-	ExpectedState string    `json:"expected_state"`
-	State         string    `json:"state"`
-	Reason        string    `json:"reason"`
-	Output        string    `json:"output"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
-}
-
-// stackStates maps the words the API uses back onto a stack's own states.
-var stackStates = map[string]stack.State{
-	stack.Deploying.String():  stack.Deploying,
-	stack.Running.String():    stack.Running,
-	stack.Starting.String():   stack.Starting,
-	stack.Stopping.String():   stack.Stopping,
-	stack.Stopped.String():    stack.Stopped,
-	stack.Restarting.String(): stack.Restarting,
-	stack.Removing.String():   stack.Removing,
-	stack.Failed.String():     stack.Failed,
-}
-
-func (p *stackPayload) toStack() stack.Stack {
-	return stack.Stack{
-		UUID:          p.UUID,
-		Name:          p.Name,
-		OwnerUUID:     p.OwnerUUID,
-		VMUUID:        p.VMUUID,
-		VMName:        p.VMName,
-		Slug:          p.Slug,
-		Compose:       p.Compose,
-		ExpectedState: stackStates[p.ExpectedState],
-		State:         stackStates[p.State],
-		Reason:        p.Reason,
-		Output:        p.Output,
-		CreatedAt:     p.CreatedAt,
-		UpdatedAt:     p.UpdatedAt,
-	}
-}
-
-type stackPagePayload struct {
-	Items      []stackPayload    `json:"items"`
-	Pagination paginationPayload `json:"pagination"`
-}
-
-func (p *stackPagePayload) toPage() workloadControlPlane.Page[stack.Stack] {
-	items := make([]stack.Stack, len(p.Items))
-	for i := range p.Items {
-		items[i] = p.Items[i].toStack()
-	}
-
-	return workloadControlPlane.Page[stack.Stack]{Items: items, TotalPages: p.Pagination.TotalPages, CurrentPage: p.Pagination.CurrentPage}
-}
-
-type stackDetailPayload struct {
-	stackPayload
-
-	Containers   []noderequest.Container `json:"containers"`
-	VMNotRunning bool                    `json:"vm_not_running"`
-}
-
-// choicePayload is which Docker VM a container or a stack goes into.
+// choicePayload is which Docker VM a container goes into.
 type choicePayload struct {
 	UUID string        `json:"uuid,omitempty"`
 	New  *newVMPayload `json:"new,omitempty"`
@@ -392,17 +324,6 @@ type vmContainerPayload struct {
 
 type containersPayload struct {
 	Items []vmContainerPayload `json:"items"`
-}
-
-type createStackPayload struct {
-	Name    string        `json:"name"`
-	Compose string        `json:"compose"`
-	VM      choicePayload `json:"vm"`
-}
-
-type createdStackPayload struct {
-	VM    chosenVMPayload `json:"vm"`
-	Stack stackPayload    `json:"stack"`
 }
 
 // containersOf is what a node reported as the docker package has it.
