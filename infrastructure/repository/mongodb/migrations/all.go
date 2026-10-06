@@ -9,5 +9,6 @@ func All() []Migration {
 		replaceTaskPermissions,
 		indexWorkloadVMs,
 		stacksAsManifests,
+		vmsAsManifests,
 	}
 }
