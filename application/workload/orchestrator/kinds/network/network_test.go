@@ -80,6 +80,26 @@ func TestNode_Execute(t *testing.T) {
 		assert.Equal(t, 1, dockerd.Calls("RemoveNetwork"))
 	})
 
+	t.Run("one with a container on it is refused as asked, and left as it was", func(t *testing.T) {
+		t.Parallel()
+
+		strategy, dockerd := newNode(t)
+
+		_, err := strategy.Execute(t.Context(), aNetwork("n-uuid", "backend"), networkKind.ActionCreate, nil)
+		require.NoError(t, err)
+
+		dockerd.Hold(docker.Container{ID: "c1", Name: "api", State: "running", Networks: []string{"backend"}})
+
+		outcome, err := strategy.Execute(t.Context(), aNetwork("n-uuid", "backend"), networkKind.ActionDelete, nil)
+		assert.ErrorIs(t, err, kind.ErrRefused)
+		assert.ErrorIs(t, err, docker.ErrInvalid)
+
+		assert.Equal(t, networkKind.Present, outcome.Status.State)
+		assert.Equal(t, "backend", outcome.Status.Docker.Name)
+		require.NotNil(t, outcome.Status.Failure)
+		assert.Contains(t, outcome.Status.Failure.Message, "active endpoints", "in docker's words")
+	})
+
 	t.Run("one nobody keeps a record of is found by its docker id", func(t *testing.T) {
 		t.Parallel()
 

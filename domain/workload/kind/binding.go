@@ -301,6 +301,7 @@ func (b *nodeBinding[Spec, Status, S]) Execute(ctx context.Context, command Comm
 
 	failed := func(err error) Result {
 		result.OK = false
+		result.Refused = errors.Is(err, ErrRefused)
 		result.Reason = err.Error()
 
 		return result

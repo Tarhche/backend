@@ -67,6 +67,11 @@ type Result struct {
 
 	OK bool `json:"ok"`
 
+	// Refused says it failed because its node refused it as it was asked
+	// (ErrRefused): nothing was done, and the resource is as its Status says
+	// it is, not as the command would have left it.
+	Refused bool `json:"refused,omitempty"`
+
 	// Status is the kind's status as the action left the resource. A failed
 	// action leaves one only when its strategy said what it left.
 	Status json.RawMessage `json:"status,omitempty"`

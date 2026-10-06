@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -348,6 +349,25 @@ func TestNodeBinding_Execute(t *testing.T) {
 			assert.True(t, result.At.IsZero(), "it is stamped by whoever sends it")
 		})
 	}
+
+	t.Run("one refused as asked says so, and what it is", func(t *testing.T) {
+		t.Parallel()
+
+		strategy := &boxNode{
+			outcome: Outcome[boxStatus]{Status: boxStatus{Status: Status{State: boxStopped}}},
+			failure: fmt.Errorf("%w: it is locked", ErrRefused),
+		}
+
+		result := BindNode[boxSpec, boxStatus](box(), strategy).Execute(context.Background(), aCommand(t, "stop", ""))
+
+		assert.False(t, result.OK)
+		assert.True(t, result.Refused)
+		assert.Equal(t, "refused: it is locked", result.Reason)
+		assert.JSONEq(t, `{"state":"stopped"}`, string(result.Status))
+
+		failed := BindNode[boxSpec, boxStatus](box(), &boxNode{failure: errors.New("the vmhost is not answering")}).Execute(context.Background(), aCommand(t, "stop", ""))
+		assert.False(t, failed.Refused, "what merely failed was not refused")
+	})
 
 	t.Run("the strategy is given the payload as its action's own", func(t *testing.T) {
 		t.Parallel()

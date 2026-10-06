@@ -98,6 +98,29 @@ func TestNode_Execute(t *testing.T) {
 
 		assert.Equal(t, 1, dockerd.Calls("RemoveVolume"))
 	})
+
+	t.Run("one a container mounts is refused as asked, and left as it was", func(t *testing.T) {
+		t.Parallel()
+
+		strategy, dockerd := newNode(t)
+
+		_, err := strategy.Execute(t.Context(), aVolume("v-uuid", "data"), volumeKind.ActionCreate, nil)
+		require.NoError(t, err)
+
+		dockerd.Hold(docker.Container{ID: "c1", Name: "db", State: "running", Mounts: []docker.Mount{{Type: "volume", Source: "data", Target: "/data"}}})
+
+		outcome, err := strategy.Execute(t.Context(), aVolume("v-uuid", "data"), volumeKind.ActionDelete, volumeKind.DeletePayload{})
+		assert.ErrorIs(t, err, kind.ErrRefused)
+
+		assert.Equal(t, volumeKind.Present, outcome.Status.State)
+		assert.Equal(t, "data", outcome.Status.Docker.Name)
+		require.NotNil(t, outcome.Status.Failure)
+		assert.Contains(t, outcome.Status.Failure.Message, "volume is in use")
+
+		held, err := dockerd.Volumes(t.Context())
+		require.NoError(t, err)
+		assert.Len(t, held, 1, "it is there still")
+	})
 }
 
 func TestNode_State(t *testing.T) {

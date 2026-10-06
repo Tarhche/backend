@@ -80,13 +80,28 @@ func (n *Node) Execute(ctx context.Context, v volumeKind.Volume, action string, 
 		}}, nil
 
 	case volumeKind.ActionDelete:
-		if there {
-			if err := daemon.RemoveVolume(ctx, found.Name, true); err != nil && !errors.Is(err, domain.ErrNotExists) {
-				return failed(err)
-			}
+		if !there {
+			return kind.Outcome[volumeKind.Status]{}, nil
 		}
 
-		return kind.Outcome[volumeKind.Status]{}, nil
+		err := daemon.RemoveVolume(ctx, found.Name, true)
+
+		switch {
+		case err == nil, errors.Is(err, domain.ErrNotExists):
+			return kind.Outcome[volumeKind.Status]{}, nil
+
+		// one docker would not remove, which a container mounts, is left as
+		// it was: removed later, once nobody remembered it was asked, it
+		// would take what is in it with it.
+		case errors.Is(err, docker.ErrInvalid):
+			return kind.Outcome[volumeKind.Status]{Status: volumeKind.Status{
+				Status:  kind.Status{State: volumeKind.Present, Reason: volumeKind.ReasonOf(found.Labels)},
+				Docker:  volumeKind.DockerOf(found),
+				Failure: blocks.Failure(err),
+			}}, blocks.Refused(err)
+		}
+
+		return failed(err)
 	}
 
 	return failed(fmt.Errorf("%w: a volume cannot be %s on its node", kind.ErrUnknownAction, action))

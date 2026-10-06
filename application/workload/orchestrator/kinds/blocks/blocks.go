@@ -318,6 +318,18 @@ func Failure(err error) *noderequest.Error {
 	return noderequest.ErrorOf(err)
 }
 
+// Refused is err, a refusal dockerd answered a command with, as the command
+// refused as it was asked (kind.ErrRefused) that it is when it is one: what
+// it was asked of is as the command found it, and asked again, it would be
+// refused again. Anything else is err as it is.
+func Refused(err error) error {
+	if errors.Is(err, docker.ErrInvalid) {
+		return fmt.Errorf("%w: %w", kind.ErrRefused, err)
+	}
+
+	return err
+}
+
 // Cleared is what a command that did not fail says of the failure the one
 // before it may have left: none.
 func Cleared() *noderequest.Error {

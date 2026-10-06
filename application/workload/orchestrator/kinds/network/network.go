@@ -76,13 +76,27 @@ func (n *Node) Execute(ctx context.Context, network networkKind.Network, action 
 		}}, nil
 
 	case networkKind.ActionDelete:
-		if there {
-			if err := daemon.RemoveNetwork(ctx, found.ID); err != nil && !errors.Is(err, domain.ErrNotExists) {
-				return failed(err)
-			}
+		if !there {
+			return kind.Outcome[networkKind.Status]{}, nil
 		}
 
-		return kind.Outcome[networkKind.Status]{}, nil
+		err := daemon.RemoveNetwork(ctx, found.ID)
+
+		switch {
+		case err == nil, errors.Is(err, domain.ErrNotExists):
+			return kind.Outcome[networkKind.Status]{}, nil
+
+		// one docker would not remove, with a container on it say, is left
+		// as it was.
+		case errors.Is(err, docker.ErrInvalid):
+			return kind.Outcome[networkKind.Status]{Status: networkKind.Status{
+				Status:  kind.Status{State: networkKind.Present},
+				Docker:  networkKind.DockerOf(found),
+				Failure: blocks.Failure(err),
+			}}, blocks.Refused(err)
+		}
+
+		return failed(err)
 	}
 
 	return failed(fmt.Errorf("%w: a network cannot be %s on its node", kind.ErrUnknownAction, action))
