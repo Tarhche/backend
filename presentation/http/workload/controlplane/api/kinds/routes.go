@@ -20,8 +20,8 @@
 // the status its code stands for.
 //
 // A kind's routes are registered for the kinds registered, each under its
-// own plural, never as a pattern that would take any plural: the routes of a
-// kind that is not on the framework yet, /api/vms say, stay exactly as they
+// own plural, never as a pattern that would take any plural: the routes the
+// control plane serves beside them, its nodes' say, stay exactly as they
 // are, and a kind registered under a plural whose routes are taken already is
 // refused when the control plane starts, rather than shadowing them.
 package kinds

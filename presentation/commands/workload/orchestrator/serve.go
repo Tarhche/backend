@@ -46,7 +46,8 @@ type ServeCommand struct {
 	logShipper            *shipLogs.UseCase
 
 	// requests answers what the control plane asks this node and waits for:
-	// a VM's log, and whatever is asked of a Docker VM's dockerd.
+	// every kind's queries, a VM's log say, and the commands for what nobody
+	// keeps a record of, a container made from its VM's terminal.
 	requests requestServer
 
 	// tunnel holds this orchestrator's connections to the ingresses. They are how a

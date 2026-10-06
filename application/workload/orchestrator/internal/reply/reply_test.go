@@ -10,7 +10,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 )
 
-func TestFit(t *testing.T) {
+func TestLast(t *testing.T) {
 	t.Parallel()
 
 	// lines of 100 KiB, ten of which are more than a reply carries.
@@ -23,20 +23,9 @@ func TestFit(t *testing.T) {
 	t.Run("what fits is kept whole", func(t *testing.T) {
 		t.Parallel()
 
-		kept, truncated := First(lines[:3])
+		kept, truncated := Last(lines[:3])
 		assert.Equal(t, lines[:3], kept)
 		assert.False(t, truncated)
-	})
-
-	t.Run("a listing keeps its first items", func(t *testing.T) {
-		t.Parallel()
-
-		kept, truncated := First(lines)
-		assert.True(t, truncated)
-		require.NotEmpty(t, kept)
-		assert.Equal(t, lines[0], kept[0])
-		assert.LessOrEqual(t, size(kept), noderequest.MaxReplyBytes)
-		assert.Greater(t, size(lines[:len(kept)+1]), budget, "as many as fit, and no fewer")
 	})
 
 	t.Run("a log keeps its last lines", func(t *testing.T) {
@@ -47,23 +36,17 @@ func TestFit(t *testing.T) {
 		require.NotEmpty(t, kept)
 		assert.Equal(t, lines[len(lines)-1], kept[len(kept)-1])
 		assert.LessOrEqual(t, size(kept), noderequest.MaxReplyBytes)
+		assert.Greater(t, size(lines[len(lines)-len(kept)-1:]), budget, "as many as fit, and no fewer")
 	})
 }
 
-func TestDecode(t *testing.T) {
+func TestRequired(t *testing.T) {
 	t.Parallel()
 
-	var into struct {
-		ID string `json:"id"`
-	}
-
-	require.NoError(t, Decode(nil, &into), "no payload is the zero one")
-	require.NoError(t, Decode([]byte(`{"id":"c1"}`), &into))
-	assert.Equal(t, "c1", into.ID)
-
-	err := Decode([]byte(`{`), &into)
+	require.NoError(t, Required("vm_uuid", "01"))
 
 	var refused *noderequest.Error
-	require.ErrorAs(t, err, &refused)
+	require.ErrorAs(t, Required("vm_uuid", ""), &refused)
 	assert.Equal(t, noderequest.CodeInvalid, refused.Code)
+	assert.Equal(t, "vm_uuid is required", refused.Message)
 }

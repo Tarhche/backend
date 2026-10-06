@@ -123,10 +123,11 @@ func controlPlaneConsoleCommand(
 	controlPlaneGetNodeUseCase := controlPlaneGetNode.NewUseCase(nodeRepository)
 	controlPlaneGetNodesUseCase := controlPlaneGetNodes.NewUseCase(nodeRepository)
 
-	// every kind the control plane runs, VMs, snapshots, stacks and the code
-	// runner's tasks, what is not a kind yet beside them, and what they are
-	// kept in. What lives in a VM, its stacks, goes with it, and is reset with
-	// its disk, as each kind's rules say; its snapshots outlive it.
+	// every kind the control plane runs, VMs, snapshots, stacks, the code
+	// runner's tasks and the building blocks of Docker VMs, and what they are
+	// kept in. What lives in a VM, its stacks and its building blocks, goes
+	// with it, and is reset with its disk, as each kind's rules say; its
+	// snapshots outlive it.
 	resourceRepository := resourcerepository.NewRepository(database)
 
 	workload, err := NewControlPlaneWorkload(controlPlaneConfigs, ControlPlaneStores{
@@ -173,10 +174,9 @@ func controlPlaneConsoleCommand(
 	mux.Handle("GET /api/nodes", controlPlaneNodeAPI.NewIndexHandler(controlPlaneGetNodesUseCase))
 	mux.Handle("GET /api/nodes/{name}", controlPlaneNodeAPI.NewShowHandler(controlPlaneGetNodeUseCase))
 
-	// every kind, VMs, snapshots, stacks and tasks, under its own plural, and
-	// what is not a kind yet, the containers in Docker VMs, which the blog
-	// reaches on its users' behalf and the code runner on the guest's. Every
-	// route takes an owner, which narrows it to that person's own.
+	// every kind under its own plural, which the blog reaches on its users'
+	// behalf and the code runner on the guest's. Every route takes an owner,
+	// which narrows it to that person's own.
 	if err := workload.Route(mux); err != nil {
 		return nil, err
 	}

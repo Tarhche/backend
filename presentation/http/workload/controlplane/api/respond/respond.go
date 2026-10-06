@@ -10,7 +10,6 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
-	"time"
 	"unsafe"
 
 	"go.opentelemetry.io/otel/trace"
@@ -97,26 +96,4 @@ func Page(r *http.Request) uint {
 	}
 
 	return page
-}
-
-// Since is the moment a log is asked for from, as RFC 3339; anything else is
-// from the start.
-func Since(r *http.Request) time.Time {
-	since, err := time.Parse(time.RFC3339Nano, r.URL.Query().Get("since"))
-	if err != nil {
-		return time.Time{}
-	}
-
-	return since
-}
-
-// Tail is how many of the last lines a log is asked for; anything else is all
-// of them.
-func Tail(r *http.Request) uint {
-	tail, err := strconv.ParseUint(r.URL.Query().Get("tail"), 10, 32)
-	if err != nil {
-		return 0
-	}
-
-	return uint(tail)
 }

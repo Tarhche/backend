@@ -1,13 +1,14 @@
-// Package vm is a user's virtual machine, as the workload keeps it.
+// Package vm is a user's virtual machine, as the dashboard shows it, and
+// the Engine that runs one on a node, with its words for one.
 //
-// A VM is a record the control plane owns: what it was asked to be, what its
-// node last said it is, and where it runs. What actually runs it is an Engine
-// on one node, which knows nothing about records and answers only for the
-// instances it holds.
+// The control plane keeps a VM as the vm kind's manifest
+// (domain/workload/kinds/vm): what it was asked to be, what its node last said
+// it is, and where it runs, which reads back as a VM here. What actually runs
+// it is an Engine on one node, which knows nothing about records and answers
+// only for the instances it holds.
 package vm
 
 import (
-	"context"
 	"time"
 
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
@@ -171,52 +172,6 @@ func (v *VM) Expired(now time.Time) bool {
 	return !now.Before(v.ExpiresAt)
 }
 
-// Silent reports whether nobody has spoken for this VM in a while.
-//
-// A VM is spoken for by the node holding it, in every heartbeat; one that has
-// gone quiet was removed behind the workload's back, or its node is gone, and
-// either way what it was last seen doing is no longer what it is doing.
-func (v *VM) Silent(now time.Time, after time.Duration) bool {
-	last := v.LastHeartbeatAt
-
-	// one nobody has ever spoken for has been quiet since it was asked for,
-	// which is what a VM whose node never took it looks like.
-	if last.IsZero() {
-		last = v.CreatedAt
-	}
-
-	if last.IsZero() {
-		return false
-	}
-
-	return now.Sub(last) > after
-}
-
-// Drifted reports whether this VM is not doing what it was asked to do.
-//
-// A VM on its way somewhere — starting, stopping, restarting, being restored —
-// has not drifted: it is on its way. Neither has one whose expectation was
-// never set.
-func (v *VM) Drifted(now time.Time, silentAfter time.Duration) bool {
-	// asking for a VM to be stopped is asking for it not to be running, which
-	// one that failed already is not.
-	if v.ExpectedState == Stopped && IsTerminalState(v.CurrentState) {
-		return false
-	}
-
-	if v.ExpectedState == 0 || v.ExpectedState == v.CurrentState {
-		// unless it has gone quiet while it was supposed to be running, in
-		// which case what it is doing is nothing.
-		return v.ExpectedState == Running && v.Silent(now, silentAfter)
-	}
-
-	if IsInFlightState(v.CurrentState) && !v.Silent(now, silentAfter) {
-		return false
-	}
-
-	return true
-}
-
 // Stats is one sample of what a VM is using.
 type Stats struct {
 	// CPUPercent is how busy the VM kept the vCPUs it was given, as a share of
@@ -237,35 +192,4 @@ type Stats struct {
 	NetworkTx   uint64
 
 	SampledAt time.Time
-}
-
-// Repository stores VMs.
-type Repository interface {
-	GetAll(ctx context.Context, offset uint, limit uint) ([]VM, error)
-
-	// GetAllByOwner is the same listing, of one person's own.
-	GetAllByOwner(ctx context.Context, ownerUUID string, offset uint, limit uint) ([]VM, error)
-
-	// GetAllByOwnerAndKind is every VM of one kind somebody has: the Docker VMs
-	// a container or a stack can be put in.
-	GetAllByOwnerAndKind(ctx context.Context, ownerUUID string, kind Kind) ([]VM, error)
-
-	// GetAllByNode is every VM one node holds, which is what its heartbeats are
-	// read against.
-	GetAllByNode(ctx context.Context, nodeName string) ([]VM, error)
-
-	CountByOwner(ctx context.Context, ownerUUID string) (uint, error)
-	Count(ctx context.Context) (uint, error)
-
-	GetOne(ctx context.Context, uuid string) (VM, error)
-
-	// GetOneByOwner is one of somebody's own. A VM that is not theirs is not
-	// there as far as they are concerned.
-	GetOneByOwner(ctx context.Context, ownerUUID string, uuid string) (VM, error)
-
-	// GetOneBySlug finds a VM by the name its ports are served under.
-	GetOneBySlug(ctx context.Context, slug string) (VM, error)
-
-	Save(ctx context.Context, v *VM) (uuid string, err error)
-	Delete(ctx context.Context, uuid string) error
 }

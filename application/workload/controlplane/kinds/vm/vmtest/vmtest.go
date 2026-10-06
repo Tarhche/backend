@@ -112,7 +112,6 @@ type options struct {
 	vms       []vmKind.VM
 	snapshots []snapshotKind.Snapshot
 	tasks     []taskKind.Task
-	now       func() time.Time
 }
 
 // WithNodes replaces the one node a Workload has with these.
@@ -134,11 +133,6 @@ func WithSnapshots(snapshots ...snapshotKind.Snapshot) Option {
 // guest's are the code runner's runs (Run).
 func WithTasks(tasks ...taskKind.Task) Option {
 	return func(o *options) { o.tasks = append(o.tasks, tasks...) }
-}
-
-// WithClock is the time the strategy goes by.
-func WithClock(now func() time.Time) Option {
-	return func(o *options) { o.now = now }
 }
 
 // New is a workload with one node, alive and roomy, unless it is told
@@ -176,7 +170,7 @@ func New(opts ...Option) *Workload {
 
 	w.Resources = cascade.NewRepository(w.Registry, w.Memory)
 	w.Records = records.New(w.Resources)
-	w.Dispatcher = dispatch.New(w.Resources, w.Producer, waiters.New(), o.now)
+	w.Dispatcher = dispatch.New(w.Resources, w.Producer, waiters.New(), nil)
 
 	w.Placement = placement.New(w.Nodes, w.Records, 4)
 	w.Quota = quota.New(w.Records, Limits)
@@ -205,10 +199,9 @@ func New(opts ...Option) *Workload {
 		Slugs:     held,
 		Images:    Images,
 		Extras:    w.Runs,
-		Now:       o.now,
 	})
 
-	tasks := controlPlaneTasks.New(controlPlaneTasks.Dependencies{Nodes: w.Nodes, Scheduler: roundrobin.New(), Slugs: held, Now: o.now})
+	tasks := controlPlaneTasks.New(controlPlaneTasks.Dependencies{Nodes: w.Nodes, Scheduler: roundrobin.New(), Slugs: held})
 
 	for _, binding := range []kind.ControlPlaneBinding{
 		kind.BindControlPlane[vmKind.Spec, vmKind.Status](vmKind.Descriptor(), w.VMs),
