@@ -10850,6 +10850,10 @@ const docTemplate = `{
                 },
                 "status": {
                     "type": "string"
+                },
+                "unmanaged": {
+                    "description": "Unmanaged says nobody keeps it: it was made from its VM's terminal, so\nnothing brings it back when it stops or goes.",
+                    "type": "boolean"
                 }
             }
         },
@@ -10919,6 +10923,10 @@ const docTemplate = `{
                 },
                 "scope": {
                     "type": "string"
+                },
+                "unmanaged": {
+                    "description": "Unmanaged says nobody keeps it: it was made from its VM's terminal.",
+                    "type": "boolean"
                 }
             }
         },
@@ -10943,6 +10951,10 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                },
+                "unmanaged": {
+                    "description": "Unmanaged says nobody keeps it: it was pulled from its VM's terminal,\nor for a stack.",
+                    "type": "boolean"
                 }
             }
         },
@@ -11348,6 +11360,10 @@ const docTemplate = `{
                 "status": {
                     "type": "string"
                 },
+                "unmanaged": {
+                    "description": "Unmanaged says nobody keeps it: it was made from its VM's terminal, so\nnothing brings it back when it stops or goes.",
+                    "type": "boolean"
+                },
                 "vm_name": {
                     "type": "string"
                 },
@@ -11394,6 +11410,10 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
+                },
+                "unmanaged": {
+                    "description": "Unmanaged says nobody keeps it: it was made from its VM's terminal.",
+                    "type": "boolean"
                 }
             }
         },

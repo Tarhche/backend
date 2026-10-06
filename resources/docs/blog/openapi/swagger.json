@@ -10847,6 +10847,10 @@
                 },
                 "status": {
                     "type": "string"
+                },
+                "unmanaged": {
+                    "description": "Unmanaged says nobody keeps it: it was made from its VM's terminal, so\nnothing brings it back when it stops or goes.",
+                    "type": "boolean"
                 }
             }
         },
@@ -10916,6 +10920,10 @@
                 },
                 "scope": {
                     "type": "string"
+                },
+                "unmanaged": {
+                    "description": "Unmanaged says nobody keeps it: it was made from its VM's terminal.",
+                    "type": "boolean"
                 }
             }
         },
@@ -10940,6 +10948,10 @@
                     "items": {
                         "type": "string"
                     }
+                },
+                "unmanaged": {
+                    "description": "Unmanaged says nobody keeps it: it was pulled from its VM's terminal,\nor for a stack.",
+                    "type": "boolean"
                 }
             }
         },
@@ -11345,6 +11357,10 @@
                 "status": {
                     "type": "string"
                 },
+                "unmanaged": {
+                    "description": "Unmanaged says nobody keeps it: it was made from its VM's terminal, so\nnothing brings it back when it stops or goes.",
+                    "type": "boolean"
+                },
                 "vm_name": {
                     "type": "string"
                 },
@@ -11391,6 +11407,10 @@
                 },
                 "name": {
                     "type": "string"
+                },
+                "unmanaged": {
+                    "description": "Unmanaged says nobody keeps it: it was made from its VM's terminal.",
+                    "type": "boolean"
                 }
             }
         },

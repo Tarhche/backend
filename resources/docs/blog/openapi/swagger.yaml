@@ -1937,6 +1937,11 @@ definitions:
         type: string
       status:
         type: string
+      unmanaged:
+        description: |-
+          Unmanaged says nobody keeps it: it was made from its VM's terminal, so
+          nothing brings it back when it stops or goes.
+        type: boolean
     type: object
   presenter.ContainerStats:
     properties:
@@ -1985,6 +1990,9 @@ definitions:
         type: string
       scope:
         type: string
+      unmanaged:
+        description: 'Unmanaged says nobody keeps it: it was made from its VM''s terminal.'
+        type: boolean
     type: object
   presenter.Image:
     properties:
@@ -2001,6 +2009,11 @@ definitions:
         items:
           type: string
         type: array
+      unmanaged:
+        description: |-
+          Unmanaged says nobody keeps it: it was pulled from its VM's terminal,
+          or for a stack.
+        type: boolean
     type: object
   presenter.LogLine:
     properties:
@@ -2301,6 +2314,11 @@ definitions:
         type: string
       status:
         type: string
+      unmanaged:
+        description: |-
+          Unmanaged says nobody keeps it: it was made from its VM's terminal, so
+          nothing brings it back when it stops or goes.
+        type: boolean
       vm_name:
         type: string
       vm_uuid:
@@ -2332,6 +2350,9 @@ definitions:
         type: string
       name:
         type: string
+      unmanaged:
+        description: 'Unmanaged says nobody keeps it: it was made from its VM''s terminal.'
+        type: boolean
     type: object
   pullImage.Request:
     properties:
