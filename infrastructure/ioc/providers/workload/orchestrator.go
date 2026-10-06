@@ -60,6 +60,13 @@ const (
 	// commandProgress is how often JetStream is told that a command still
 	// being carried out is, which is well within its ack wait.
 	commandProgress = 10 * time.Second
+
+	// kindStateTimeout is how long each kind this node runs is given, every
+	// heartbeat, to say what it holds here. A heartbeat goes every second, and
+	// the control plane schedules only on a node it heard from in the last
+	// three, so a kind slow to answer is left out of a beat rather than
+	// holding the beat up past that.
+	kindStateTimeout = time.Second
 )
 
 // orchestratorProvider builds the workload orchestrator's messaging singleton, HTTP handler,
@@ -349,9 +356,9 @@ func orchestratorConsoleCommand(
 	}
 
 	// what is asked of the VMs on this node, of their snapshots and of the
-	// stacks in them, and the answers to what the control plane asks and
-	// waits for.
-	if _, err := bindOrchestratorVMs(iocContainer, OrchestratorVMDependencies{
+	// stacks in them, and of every kind it runs, and the answers to what the
+	// control plane asks and waits for.
+	vms, err := bindOrchestratorVMs(iocContainer, OrchestratorVMDependencies{
 		NATS:      natsConnection,
 		Engine:    engine,
 		Archives:  snapshotArchives(orchestratorConfigs.SnapshotStorage),
@@ -360,7 +367,8 @@ func orchestratorConsoleCommand(
 		Configs:   orchestratorConfigs,
 		NodeName:  nodeName,
 		Logger:    logger,
-	}, subscribers); err != nil {
+	}, subscribers)
+	if err != nil {
 		return nil, err
 	}
 
@@ -373,7 +381,7 @@ func orchestratorConsoleCommand(
 
 	// orchestrator heartbeat
 	if err := iocContainer.Bind(func() *orchestratorHeartbeat.UseCase {
-		return orchestratorHeartbeat.NewUseCase(asyncProduceConsumer, nodeManager, nodeName)
+		return orchestratorHeartbeat.NewUseCase(asyncProduceConsumer, nodeManager, vms.Kinds, kindStateTimeout, nodeName, logger)
 	}, provider.Singleton()); err != nil {
 		return nil, err
 	}
