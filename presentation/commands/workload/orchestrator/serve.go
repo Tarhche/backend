@@ -202,6 +202,7 @@ func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 	}
 
 	go c.orchestratorHeartbeat(ctx)
+	go c.promptBeats(ctx)
 	go c.shipLogs(ctx)
 	go c.serveTunnel(ctx)
 
@@ -255,6 +256,31 @@ func (c *ServeCommand) shipLogs(ctx context.Context) {
 		case <-ticker.C:
 			if err := c.logShipper.Execute(ctx); err != nil {
 				c.logger.ErrorContext(ctx, "log shipping failed", "error", err)
+			}
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+// promptBeats tells at once what the kinds whose changes somebody waits on as
+// they happen hold, when that changed, between beats: a code-runner snippet
+// that ended is told of as soon as it is seen rather than at the next beat.
+// A node that runs no such kind is never asked.
+func (c *ServeCommand) promptBeats(ctx context.Context) {
+	every := c.orchestratorHeartBeat.Prompt()
+	if every <= 0 {
+		return
+	}
+
+	ticker := time.NewTicker(every)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			if err := c.orchestratorHeartBeat.Hurry(ctx); err != nil {
+				c.logger.ErrorContext(ctx, "orchestrator prompt beat failed", "error", err)
 			}
 		case <-ctx.Done():
 			return

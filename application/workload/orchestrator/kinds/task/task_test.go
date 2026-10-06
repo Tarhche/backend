@@ -277,6 +277,12 @@ func TestNode_State(t *testing.T) {
 
 	ctx := context.Background()
 
+	t.Run("is looked at between beats, as often as a snippet's reader was always told what it did", func(t *testing.T) {
+		t.Parallel()
+
+		assert.Equal(t, 300*time.Millisecond, onNode().node.Prompt())
+	})
+
 	t.Run("every task held, its run with what a job has written", func(t *testing.T) {
 		t.Parallel()
 

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -622,6 +623,21 @@ func TestNodeBinding_Endpoint(t *testing.T) {
 		_, err := bound.Endpoint(context.Background(), "shop-abcde", 8080)
 		assert.ErrorIs(t, err, domain.ErrNotExists)
 	})
+}
+
+// promptBoxNode is a box's node strategy whose boxes somebody waits on as
+// they change.
+type promptBoxNode struct {
+	boxNode
+}
+
+func (*promptBoxNode) Prompt() time.Duration { return 300 * time.Millisecond }
+
+func TestNodeBinding_Prompt(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, 300*time.Millisecond, BindNode[boxSpec, boxStatus](box(), &promptBoxNode{}).Prompt(), "a strategy that is prompt is asked as often as it says between beats")
+	assert.Zero(t, BindNode[boxSpec, boxStatus](box(), &boxNode{}).Prompt(), "and one that is not is asked at beats alone")
 }
 
 func TestIngressBinding(t *testing.T) {

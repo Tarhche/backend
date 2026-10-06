@@ -69,6 +69,12 @@ const (
 
 	// failedRun is why a job whose program failed is failed.
 	failedRun = "the task failed"
+
+	// prompt is how often what the node's tasks are doing is looked at
+	// between beats: a snippet's reader is told it ended, or serves its
+	// ports, as soon as that is seen, as often as the code runner always
+	// looked.
+	prompt = 300 * time.Millisecond
 )
 
 // shell is what a terminal is opened with: a busybox image has sh but not
@@ -91,6 +97,7 @@ var (
 	_ kind.Node[taskKind.Spec, taskKind.Status] = &Node{}
 	_ kind.Attacher                             = &Node{}
 	_ kind.Exposer                              = &Node{}
+	_ kind.Prompt                               = &Node{}
 )
 
 // New is the strategy that runs the tasks nodeName holds on runtime.
@@ -305,6 +312,13 @@ func (n *Node) State(ctx context.Context) (kind.Report[taskKind.Status], error) 
 	}
 
 	return report, nil
+}
+
+// Prompt is how often the node's tasks are looked at between beats: whoever
+// ran a snippet is waiting on its page to be told it ended, which is told
+// as soon as it is seen rather than at the node's next beat.
+func (n *Node) Prompt() time.Duration {
+	return prompt
 }
 
 // Endpoint is where port p of the task a slug names is published on this

@@ -179,6 +179,17 @@ type Attacher interface {
 	Attach(ctx context.Context, action string, uuid string, owner string) (Session, error)
 }
 
+// Prompt is a node strategy some of whose changes somebody waits on as they
+// happen: a code-runner snippet ending, which whoever ran it is watching its
+// page for. Its node asks it what it holds between beats too, as often as
+// Prompt says, and reports at once what it holds when that changed since it
+// last reported, rather than at the next beat. Its State is asked that often,
+// so it is cheap to ask.
+type Prompt interface {
+	// Prompt is how often it is asked what it holds between beats.
+	Prompt() time.Duration
+}
+
 // Exposer is a node strategy that also serves its kind's ports: where, on
 // this node, a port of the instance a slug names is reached, which the
 // ingress carries the instance's own traffic to. A kind with Endpoints has

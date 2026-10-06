@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
@@ -105,6 +106,10 @@ type NodeBinding interface {
 	// Exposes reports whether the strategy serves its kind's ports, which is
 	// whether it is an Exposer.
 	Exposes() bool
+
+	// Prompt is how often the strategy is asked what it holds between beats,
+	// when it is a Prompt, and nothing when it is not.
+	Prompt() time.Duration
 
 	// Endpoint is where a port of the instance slug names is reached,
 	// through the strategy's Exposer.
@@ -456,6 +461,14 @@ func (b *nodeBinding[Spec, Status, S]) Attach(ctx context.Context, action string
 	}
 
 	return attacher.Attach(ctx, action, uuid, owner)
+}
+
+func (b *nodeBinding[Spec, Status, S]) Prompt() time.Duration {
+	if prompt, prompts := b.strategy.(Prompt); prompts {
+		return prompt.Prompt()
+	}
+
+	return 0
 }
 
 func (b *nodeBinding[Spec, Status, S]) Exposes() bool {

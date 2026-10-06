@@ -339,6 +339,92 @@ func TestUseCase_Execute(t *testing.T) {
 	})
 }
 
+// TestUseCase_Hurry holds a node to telling at once what a kind somebody
+// watches as it changes holds, a code-runner snippet that ended say, rather
+// than at its next beat: in a beat of its own, which carries that kind alone
+// and what the node offered at its last beat, and only when it changed.
+func TestUseCase_Hurry(t *testing.T) {
+	t.Parallel()
+
+	lit := kind.Report[lampStatus]{Instances: []kind.Observed[lampStatus]{{UUID: "lamp-1", Status: lampStatus{Status: kind.Status{State: lit}, Brightness: 80}}}}
+	unlit := kind.Report[lampStatus]{Instances: []kind.Observed[lampStatus]{{UUID: "lamp-1", Status: lampStatus{Status: kind.Status{State: unlit}}}}}
+
+	// what the lamps hold, which a test changes as it goes, and how often the
+	// kettles were asked.
+	var (
+		lock    sync.Mutex
+		holds   = lit
+		kettled atomic.Int32
+	)
+
+	watched := &promptLamps{every: 300 * time.Millisecond, lamps: lamps{state: func(context.Context) (kind.Report[lampStatus], error) {
+		lock.Lock()
+		defer lock.Unlock()
+
+		return holds, nil
+	}}}
+
+	kettles := &lamps{state: func(context.Context) (kind.Report[lampStatus], error) {
+		kettled.Add(1)
+
+		return kind.Report[lampStatus]{}, nil
+	}}
+
+	kinds := kind.NewRegistry[kind.NodeBinding]()
+	require.NoError(t, kinds.Register(kind.BindNode[lampSpec, lampStatus](lampNamed("lamp", kind.OnNode), watched)))
+	require.NoError(t, kinds.Register(kind.BindNode[lampSpec, lampStatus](lampNamed("kettle", kind.OnNode), kettles)))
+
+	n := beating(t, kinds, time.Second)
+
+	assert.Equal(t, 300*time.Millisecond, n.heartbeat.Prompt(), "it is hurried as often as its promptest kind asks")
+
+	require.NoError(t, n.heartbeat.Hurry(t.Context()))
+	assert.Empty(t, n.recorder.Messages(), "nothing is told before the node's first beat says what it offers")
+
+	n.beat(t)
+	n.recorder.Reset()
+
+	asked := kettled.Load()
+
+	require.NoError(t, n.heartbeat.Hurry(t.Context()))
+	assert.Empty(t, n.recorder.Messages(), "what was told at the beat is not told again")
+	assert.Equal(t, asked, kettled.Load(), "a kind nobody watches as it changes is asked at beats alone")
+
+	lock.Lock()
+	holds = unlit
+	lock.Unlock()
+
+	require.NoError(t, n.heartbeat.Hurry(t.Context()))
+
+	messages := n.recorder.Messages()
+	require.Len(t, messages, 1, "what changed is told at once")
+	require.Equal(t, events.HeartbeatName, messages[0].Subject)
+
+	var heartbeat events.Heartbeat
+	require.NoError(t, json.Unmarshal(messages[0].Payload, &heartbeat))
+
+	assert.Equal(t, "node-1", heartbeat.Name)
+	assert.Equal(t, node.Stats{PIDs: 7}, heartbeat.Stats, "with what the node offered at its last beat")
+	assert.Equal(t, uint(8), heartbeat.Capacity.CPUs)
+	assert.WithinDuration(t, time.Now(), heartbeat.At, time.Minute)
+	require.Len(t, heartbeat.Observations, 1, "and nothing of the kinds that were not asked")
+
+	report, err := json.Marshal(heartbeat.Observations["lamp"])
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"instances":[{"kind":"lamp","uuid":"lamp-1","status":{"state":"unlit"}}]}`, string(report))
+
+	n.recorder.Reset()
+
+	require.NoError(t, n.heartbeat.Hurry(t.Context()))
+	assert.Empty(t, n.recorder.Messages(), "and it is told once")
+
+	t.Run("a node that runs no prompt kind is never hurried", func(t *testing.T) {
+		t.Parallel()
+
+		assert.Zero(t, beating(t, registered(t, map[string]func(context.Context) (kind.Report[lampStatus], error){"lamp": holding(lit)}), time.Second).heartbeat.Prompt())
+	})
+}
+
 func keys(fields map[string]json.RawMessage) []string {
 	var named []string
 	for name := range fields {

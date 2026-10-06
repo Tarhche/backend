@@ -3,6 +3,7 @@ package beatHeart
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -92,4 +93,16 @@ func registered(t *testing.T, states map[string]func(context.Context) (kind.Repo
 	}
 
 	return kinds
+}
+
+// promptLamps are lamps somebody watches as they change: their node asks
+// what they hold between beats too, every every.
+type promptLamps struct {
+	lamps
+
+	every time.Duration
+}
+
+func (l *promptLamps) Prompt() time.Duration {
+	return l.every
 }
