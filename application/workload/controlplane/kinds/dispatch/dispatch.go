@@ -504,12 +504,41 @@ func (d *Dispatcher) Send(ctx context.Context, command kind.Command, wait time.D
 		return nil, nil
 	}
 
-	result, answered := expected.For(ctx, wait, d.poll, d.answered(command))
+	result, answered := expected.For(ctx, wait, d.poll, d.answered(command, command.ID))
 	if !answered {
 		return nil, nil
 	}
 
 	return &result, nil
+}
+
+// Await waits, for as long as wait, for what came of the command a resource
+// is waiting on, which somebody else sent: the reconcile loop, or another
+// control plane, asking it for the same a moment before. A result for any of
+// the command's tries answers it. It is that, or nil when nothing came in
+// time, or when the resource waits on nothing.
+func (d *Dispatcher) Await(ctx context.Context, r resource.Record, wait time.Duration) *kind.Result {
+	if wait <= 0 || r.Pending == nil || d.waiters == nil {
+		return nil
+	}
+
+	command := kind.Command{Kind: r.Kind, UUID: r.Metadata.UUID, Action: r.Pending.Action, Node: r.Metadata.Node}
+
+	expected := d.waiters.Expect(r.Pending.IDs...)
+	defer expected.Done()
+
+	// one heard before the wait began is written down already.
+	check := d.answered(command, r.Pending.IDs...)
+	if result, answered := check(ctx); answered {
+		return &result
+	}
+
+	result, answered := expected.For(ctx, wait, d.poll, check)
+	if !answered {
+		return nil
+	}
+
+	return &result
 }
 
 // Delivered is what asking for a command came to, once it was sent and,
@@ -560,11 +589,11 @@ func (d *Dispatcher) Deliver(ctx context.Context, asked Asked, wait time.Duratio
 	return delivered, nil
 }
 
-// answered looks for what came of a command on its resource, which keeps
-// its last command's answer: what another control plane heard is found there.
-// A resource that is gone was deleted, which is what came of a delete; any
-// other command is overtaken by it.
-func (d *Dispatcher) answered(command kind.Command) waiters.Check {
+// answered looks for what came of a command, under any of the IDs of its
+// tries, on its resource, which keeps its last command's answer: what another
+// control plane heard is found there. A resource that is gone was deleted,
+// which is what came of a delete; any other command is overtaken by it.
+func (d *Dispatcher) answered(command kind.Command, ids ...string) waiters.Check {
 	return func(ctx context.Context) (kind.Result, bool) {
 		r, err := d.resources.GetOne(ctx, command.Kind, command.UUID)
 
@@ -578,7 +607,7 @@ func (d *Dispatcher) answered(command kind.Command) waiters.Check {
 			return result, true
 		case err != nil:
 			return kind.Result{}, false
-		case r.Answer != nil && r.Answer.ID == command.ID:
+		case r.Answer != nil && slices.Contains(ids, r.Answer.ID):
 			return *r.Answer, true
 		}
 

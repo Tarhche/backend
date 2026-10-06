@@ -59,6 +59,47 @@ func (f *fixture) all(t *testing.T) []resource.Record {
 	return records
 }
 
+// passedOver keeps resources as its repository does, and has a pass of the
+// reconcile loop come upon each one the moment it is kept.
+type passedOver struct {
+	*resourcesMemory.Repository
+
+	pass func(r resource.Record)
+}
+
+func (p *passedOver) Create(ctx context.Context, r resource.Record) (resource.Record, error) {
+	created, err := p.Repository.Create(ctx, r)
+	if err == nil {
+		p.pass(created)
+	}
+
+	return created, err
+}
+
+// answer writes down what came of the command the one resource kept is
+// waiting on, once it waits on one, as another control plane hearing its
+// node would: it runs, said output.
+func answer(f *fixture, output string) {
+	for {
+		records, _, _ := f.resources.GetAll(context.Background(), kindstest.Kind, resource.Filter{}, 0, 0)
+		if len(records) == 1 && records[0].Pending != nil {
+			stored := records[0]
+			stored.Answer = &kind.Result{ID: stored.Pending.IDs[0], Action: stored.Pending.Action, OK: true, Output: output}
+			stored.Pending = nil
+
+			common, _ := stored.Common()
+			common.State = kindstest.Running
+			_ = stored.SetCommon(common)
+
+			if _, err := f.resources.Update(context.Background(), stored); err == nil {
+				return
+			}
+		}
+
+		time.Sleep(time.Millisecond)
+	}
+}
+
 func asked(name string, spec string) admitResource.Request {
 	return admitResource.Request{
 		Kind:      kindstest.Kind,
@@ -352,6 +393,73 @@ func TestUseCase_Execute(t *testing.T) {
 		require.NotNil(t, response.Command)
 		require.Len(t, f.all(t), 1)
 		assert.NotNil(t, f.all(t)[0].Pending, "the reconcile loop sends what it waits on again")
+	})
+
+	t.Run("one the reconcile loop asks for its first command before it is asked is as the loop left it", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(nil)
+		registry := kindstest.Registry(f.fans)
+		binding, _ := registry.Lookup(kindstest.Kind)
+
+		// the loop's pass, which comes upon the resource the moment it is kept
+		// and asks it for what its kind asks, as admitting it is about to.
+		loop := dispatch.New(f.resources, f.producer, f.waiters, f.clock.Now)
+		kept := &passedOver{Repository: f.resources, pass: func(r resource.Record) {
+			asked, err := loop.Follow(ctx, binding, r)
+			require.NoError(t, err)
+			require.NotNil(t, asked.Command)
+
+			_, err = loop.Send(ctx, *asked.Command, 0)
+			require.NoError(t, err)
+		}}
+
+		admitting := admitResource.NewUseCase(registry, kept, dispatch.New(kept, f.producer, f.waiters, f.clock.Now, dispatch.PollEvery(time.Millisecond)), slog.New(slog.DiscardHandler))
+
+		request := asked("kitchen", `{"blades": 3}`)
+		request.Wait = time.Minute
+
+		// the node's answer to what the loop sent, heard and written down by
+		// another control plane.
+		go answer(f, "made for the loop")
+
+		response, err := admitting.Execute(ctx, &request)
+		require.NoError(t, err)
+		require.Empty(t, response.ValidationErrors)
+
+		sent, err := messagingMock.Produced[kind.Command](f.producer, kind.CommandName)
+		require.NoError(t, err)
+		require.Len(t, sent, 1, "what the loop sent is not sent again")
+		assert.Equal(t, "create", sent[0].Action)
+
+		assert.Nil(t, response.Command, "it was the loop's to send")
+		require.NotNil(t, response.Result, "what came of it is what was waited for")
+		assert.Equal(t, "made for the loop", response.Result.Output)
+		assert.Equal(t, kindstest.Running, kindstest.Typed(resource.Record{Raw: response.Resource}).Status.State, "it is as the answer left it, never as it was before the loop came upon it")
+	})
+
+	t.Run("and not waited for, it is as the loop left it all the same", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(nil)
+		registry := kindstest.Registry(f.fans)
+		binding, _ := registry.Lookup(kindstest.Kind)
+
+		loop := dispatch.New(f.resources, f.producer, f.waiters, f.clock.Now)
+		kept := &passedOver{Repository: f.resources, pass: func(r resource.Record) {
+			_, err := loop.Follow(ctx, binding, r)
+			require.NoError(t, err)
+		}}
+
+		admitting := admitResource.NewUseCase(registry, kept, dispatch.New(kept, f.producer, f.waiters, f.clock.Now), slog.New(slog.DiscardHandler))
+
+		request := asked("kitchen", `{"blades": 3}`)
+
+		response, err := admitting.Execute(ctx, &request)
+		require.NoError(t, err)
+
+		assert.Equal(t, kindstest.Starting, kindstest.Typed(resource.Record{Raw: response.Resource}).Status.State, "on its way to what its first command desires")
+		assert.Nil(t, response.Result)
 	})
 
 	t.Run("and one placed on no node is kept waiting for one", func(t *testing.T) {

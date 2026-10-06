@@ -135,6 +135,25 @@ func TestWaiters(t *testing.T) {
 		assert.Equal(t, int64(3), checked.Load())
 	})
 
+	t.Run("a command tried several times is answered by a result for any of its tries, once", func(t *testing.T) {
+		t.Parallel()
+
+		waiters := New()
+
+		wait := waiters.Expect("try-1", "try-2")
+		assert.Equal(t, 1, waiters.Len(), "it is one wait")
+
+		waiters.Answer(kind.Result{ID: "try-1", OK: true, Output: "the first try's"})
+		waiters.Answer(kind.Result{ID: "try-2", OK: true, Output: "the second try's"})
+
+		result, answered := wait.For(context.Background(), time.Second, 0, nil)
+		require.True(t, answered)
+		assert.Equal(t, "the first try's", result.Output)
+
+		wait.Done()
+		assert.Equal(t, 0, waiters.Len(), "and forgotten under every one of them")
+	})
+
 	t.Run("a wait that is done is forgotten", func(t *testing.T) {
 		t.Parallel()
 

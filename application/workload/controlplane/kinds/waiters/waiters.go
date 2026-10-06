@@ -26,20 +26,23 @@ func New() *Waiters {
 	return &Waiters{waiting: make(map[string]map[*Wait]struct{})}
 }
 
-// Expect begins waiting for what comes of the command id. It is begun before
-// the command is sent, so that no answer can come before anybody waits for
-// it, and ended with Done.
-func (w *Waiters) Expect(id string) *Wait {
-	wait := &Wait{waiters: w, id: id, answer: make(chan kind.Result, 1)}
+// Expect begins waiting for what comes of the command ids name: one command,
+// under the ID of each of its tries, any of which answers it. It is begun
+// before the command is sent, so that no answer can come before anybody
+// waits for it, and ended with Done.
+func (w *Waiters) Expect(ids ...string) *Wait {
+	wait := &Wait{waiters: w, ids: ids, answer: make(chan kind.Result, 1)}
 
 	w.lock.Lock()
 	defer w.lock.Unlock()
 
-	if w.waiting[id] == nil {
-		w.waiting[id] = make(map[*Wait]struct{})
-	}
+	for _, id := range ids {
+		if w.waiting[id] == nil {
+			w.waiting[id] = make(map[*Wait]struct{})
+		}
 
-	w.waiting[id][wait] = struct{}{}
+		w.waiting[id][wait] = struct{}{}
+	}
 
 	return wait
 }
@@ -64,22 +67,26 @@ func (w *Waiters) Len() int {
 	w.lock.Lock()
 	defer w.lock.Unlock()
 
-	count := 0
-	for _, waits := range w.waiting {
-		count += len(waits)
+	waits := make(map[*Wait]struct{})
+	for _, waiting := range w.waiting {
+		for wait := range waiting {
+			waits[wait] = struct{}{}
+		}
 	}
 
-	return count
+	return len(waits)
 }
 
 func (w *Waiters) done(wait *Wait) {
 	w.lock.Lock()
 	defer w.lock.Unlock()
 
-	delete(w.waiting[wait.id], wait)
+	for _, id := range wait.ids {
+		delete(w.waiting[id], wait)
 
-	if len(w.waiting[wait.id]) == 0 {
-		delete(w.waiting, wait.id)
+		if len(w.waiting[id]) == 0 {
+			delete(w.waiting, id)
+		}
 	}
 }
 
@@ -87,10 +94,10 @@ func (w *Waiters) done(wait *Wait) {
 // whether it found one.
 type Check func(ctx context.Context) (kind.Result, bool)
 
-// Wait is one wait for what came of one command.
+// Wait is one wait for what came of one command, under any of its IDs.
 type Wait struct {
 	waiters *Waiters
-	id      string
+	ids     []string
 	answer  chan kind.Result
 }
 

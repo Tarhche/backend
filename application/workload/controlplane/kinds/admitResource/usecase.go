@@ -11,7 +11,9 @@
 // Its first command is what the kind's Reconcile asks for of it as it was
 // admitted: a VM to be made, say. It is sent as soon as the resource is
 // kept, rather than on the reconcile loop's next pass, and the reconcile loop
-// sends it again if it is lost.
+// sends it again if it is lost. The loop may also get there first, between
+// the resource being kept and asked: it is then read again, as the loop left
+// it, and what the loop sent is what is waited for.
 package admitResource
 
 import (
@@ -90,7 +92,7 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 
 	// what was asked of it before it fell short is written down, and what is
 	// left is the reconcile loop's to ask for.
-	dispatched, err := uc.dispatcher.Follow(ctx, binding, created)
+	dispatched, err := uc.follow(ctx, binding, created)
 	if err != nil {
 		uc.logger.ErrorContext(ctx, "could not ask a resource just admitted for what its kind asks", "error", err, "kind", d.Name, "uuid", created.Metadata.UUID)
 	}
@@ -102,6 +104,13 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 	response.Resource = dispatched.Record.Raw
 
 	if dispatched.Command == nil {
+		// what it waits on was sent by the reconcile loop, which got to it
+		// first: that is what came of being asked for, and what is waited for.
+		if result := uc.dispatcher.Await(ctx, dispatched.Record, request.Wait); result != nil {
+			response.Result = result
+			response.Resource = uc.latest(ctx, d, dispatched.Record)
+		}
+
 		return response, nil
 	}
 
@@ -121,12 +130,43 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 	}
 
 	response.Result = result
-
-	if latest, err := uc.resources.GetOne(ctx, d.Name, created.Metadata.UUID); err == nil {
-		response.Resource = latest.Raw
-	}
+	response.Resource = uc.latest(ctx, d, dispatched.Record)
 
 	return response, nil
+}
+
+// follow asks a resource just admitted for what its kind asks of it, as
+// Dispatcher.Follow does. What else wrote it in the meantime, the reconcile
+// loop asking it the same, say, is read again, and followed from where it
+// left the resource: a command it is waiting on already is not sent again.
+func (uc *UseCase) follow(ctx context.Context, binding kind.ControlPlaneBinding, r resource.Record) (dispatch.Asked, error) {
+	for try := 1; ; try++ {
+		asked, err := uc.dispatcher.Follow(ctx, binding, r)
+		if !errors.Is(err, resource.ErrConflict) || try >= attempts {
+			return asked, err
+		}
+
+		latest, err := uc.resources.GetOne(ctx, r.Kind, r.Metadata.UUID)
+		switch {
+		case errors.Is(err, domain.ErrNotExists):
+			return dispatch.Asked{Record: r, Gone: true}, nil
+		case err != nil:
+			return asked, err
+		}
+
+		r = latest
+	}
+}
+
+// latest is the resource as it is kept now, after what came of its first
+// command was taken onto it, or as it was when it cannot be read.
+func (uc *UseCase) latest(ctx context.Context, d kind.Descriptor, r resource.Record) kind.Raw {
+	latest, err := uc.resources.GetOne(ctx, d.Name, r.Metadata.UUID)
+	if err != nil {
+		return r.Raw
+	}
+
+	return latest.Raw
 }
 
 // kept is a resource as its kind admitted it, as it is kept: for whom it was
