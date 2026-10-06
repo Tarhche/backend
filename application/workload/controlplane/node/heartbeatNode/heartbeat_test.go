@@ -17,6 +17,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/node"
 	"github.com/khanzadimahdi/testproject/domain/workload/node/events"
+	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	nodesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/nodes"
 	resourcesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/resources"
 )
@@ -65,11 +66,13 @@ func TestHeartbeat_Handle(t *testing.T) {
 
 		nodes := nodesMemory.NewRepository()
 		observer := &recording{}
+		capacity := vm.Info{Engine: "microsandbox", Version: "0.7.6", CPUs: 6, Memory: 7680 << 20, Disk: 100 << 30, Allocated: vm.Resources{CPUs: 2, Memory: 1 << 30, Disk: 10 << 30}}
 
 		require.NoError(t, NewHeartbeatHandler(nodes, observer).Handle(ctx, message(t, events.Heartbeat{
 			Name:         "node-1",
 			Role:         node.OrchestratorRole,
 			Stats:        node.Stats{PIDs: 7},
+			Capacity:     capacity,
 			At:           at,
 			Observations: reports,
 		})))
@@ -78,6 +81,7 @@ func TestHeartbeat_Handle(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, node.OrchestratorRole, n.Role)
 		assert.Equal(t, node.Stats{PIDs: 7}, n.Stats)
+		assert.Equal(t, capacity, n.Capacity, "what it offers to VMs, which they are placed by")
 		assert.Equal(t, at, n.LastHeartbeatAt)
 
 		require.Len(t, observer.heard, 1)

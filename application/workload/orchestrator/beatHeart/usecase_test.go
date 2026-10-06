@@ -19,6 +19,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/node"
 	"github.com/khanzadimahdi/testproject/domain/workload/node/events"
+	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	messaging "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/runtime"
 )
@@ -56,6 +57,7 @@ func beating(t *testing.T, kinds *kind.Registry[kind.NodeBinding], stateTimeout 
 
 	var nodeManager runtime.MockNodeManager
 	nodeManager.On("Stats", mock.Anything, "node-1").Return(node.Stats{PIDs: 7}, nil)
+	nodeManager.On("Capacity", mock.Anything).Return(vm.Info{Engine: "memory", CPUs: 8, Memory: 16 << 30, Disk: 100 << 30, Allocated: vm.Resources{CPUs: 2}}, nil)
 
 	n := &aNode{recorder: &messaging.Recorder{}, logs: &logs{}}
 	n.heartbeat = NewUseCase(n.recorder, &nodeManager, kinds, stateTimeout, "node-1", slog.New(slog.NewTextHandler(n.logs, nil)))
@@ -108,9 +110,10 @@ func TestUseCase_Execute(t *testing.T) {
 				assert.Equal(t, "node-1", heartbeat.Name)
 				assert.Equal(t, node.OrchestratorRole, heartbeat.Role)
 				assert.Equal(t, node.Stats{PIDs: 7}, heartbeat.Stats)
+				assert.Equal(t, vm.Info{Engine: "memory", CPUs: 8, Memory: 16 << 30, Disk: 100 << 30, Allocated: vm.Resources{CPUs: 2}}, heartbeat.Capacity, "what it offers to VMs, which they are placed by")
 				assert.WithinDuration(t, time.Now(), heartbeat.At, time.Minute)
 
-				assert.ElementsMatch(t, []string{"Name", "Role", "Stats", "At"}, keys(fields))
+				assert.ElementsMatch(t, []string{"Name", "Role", "Stats", "Capacity", "At"}, keys(fields))
 			})
 		}
 	})

@@ -17,8 +17,8 @@ import (
 
 // UseCase is this node's heartbeat.
 //
-// What the node offers is what the control plane places work by. What it
-// holds is every kind's state action, asked of all of them at once, each for
+// What the node offers, its stats and its capacity for VMs, is what the
+// control plane places work by. What it holds is every kind's state action, asked of all of them at once, each for
 // at most the state timeout, so a kind slow to answer holds up neither the
 // beat nor the other kinds.
 //
@@ -76,12 +76,18 @@ func (h *UseCase) Execute(ctx context.Context) error {
 		return err
 	}
 
+	capacity, err := h.nodeManager.Capacity(ctx)
+	if err != nil {
+		return err
+	}
+
 	at := time.Now()
 
 	heartbeat := events.Heartbeat{
 		Name:         h.nodeName,
 		Role:         node.OrchestratorRole,
 		Stats:        nodeStats,
+		Capacity:     capacity,
 		At:           at,
 		Observations: h.observe(ctx),
 	}

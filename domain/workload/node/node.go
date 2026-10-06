@@ -26,6 +26,10 @@ type Node struct {
 // Manager represents a manager of nodes
 type Manager interface {
 	Stats(ctx context.Context, nodeName string) (Stats, error)
+
+	// Capacity is what the node's engine offers to VMs and how much of it
+	// the instances it holds have been given: what VMs are placed by.
+	Capacity(ctx context.Context) (vm.Info, error)
 }
 
 // Role represents the role of the node

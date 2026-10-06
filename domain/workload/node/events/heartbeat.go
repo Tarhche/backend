@@ -6,6 +6,7 @@ import (
 
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/node"
+	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
 
 const HeartbeatName = "workloadNodeHeartbeat"
@@ -15,6 +16,11 @@ type Heartbeat struct {
 	Role  node.Role
 	Stats node.Stats
 	At    time.Time
+
+	// Capacity is what the node offers to VMs and how much of it is taken,
+	// which is what VMs are placed by. A node that could not say sends none,
+	// as every heartbeat did before VMs were a kind.
+	Capacity vm.Info `json:",omitzero"`
 
 	// Observations are what the state action of every kind this node runs
 	// found on it this beat, by kind.

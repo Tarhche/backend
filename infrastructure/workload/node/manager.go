@@ -50,3 +50,9 @@ func (m *Manager) Stats(ctx context.Context, nodeName string) (node.Stats, error
 
 	return stats, nil
 }
+
+// Capacity is what the node's engine offers to VMs and how much of it the
+// instances it holds have been given, as the engine says.
+func (m *Manager) Capacity(ctx context.Context) (vm.Info, error) {
+	return m.engine.Info(ctx)
+}

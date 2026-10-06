@@ -48,6 +48,7 @@ func (h *Heartbeat) Handle(ctx context.Context, data []byte) error {
 	n.Name = heartbeat.Name
 	n.Role = heartbeat.Role
 	n.Stats = heartbeat.Stats
+	n.Capacity = heartbeat.Capacity
 	n.LastHeartbeatAt = heartbeat.At
 
 	if _, err := h.nodeRepository.Save(ctx, &n); err != nil {

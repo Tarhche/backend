@@ -10,6 +10,7 @@ import (
 
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/node"
+	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
 
 func TestHeartbeat(t *testing.T) {
@@ -36,6 +37,25 @@ func TestHeartbeat(t *testing.T) {
 		require.NoError(t, json.Unmarshal(payload, &fields))
 
 		assert.ElementsMatch(t, []string{"Name", "Role", "Stats", "At"}, keys(fields))
+	})
+
+	t.Run("what a node offers arrives as it left", func(t *testing.T) {
+		t.Parallel()
+
+		sent := Heartbeat{
+			Name:     "workload-orchestrator-01",
+			Role:     node.OrchestratorRole,
+			At:       at,
+			Capacity: vm.Info{Engine: "microsandbox", Version: "0.7.6", CPUs: 16, Memory: 64 << 30, Disk: 1 << 40, Allocated: vm.Resources{CPUs: 2, Memory: 2 << 30, Disk: 10 << 30}},
+		}
+
+		payload, err := json.Marshal(sent)
+		require.NoError(t, err)
+
+		var arrived Heartbeat
+		require.NoError(t, json.Unmarshal(payload, &arrived))
+
+		assert.Equal(t, sent, arrived)
 	})
 
 	t.Run("what every kind observed arrives as it left, by kind", func(t *testing.T) {

@@ -9,6 +9,7 @@ import (
 
 	"github.com/khanzadimahdi/testproject/domain/workload/node"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
+	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
 
 // MockRuntime stands in for whatever runs the tasks: VMs, here.
@@ -105,4 +106,10 @@ func (m *MockNodeManager) Stats(ctx context.Context, nodeName string) (node.Stat
 	args := m.Called(ctx, nodeName)
 
 	return args.Get(0).(node.Stats), args.Error(1)
+}
+
+func (m *MockNodeManager) Capacity(ctx context.Context) (vm.Info, error) {
+	args := m.Called(ctx)
+
+	return args.Get(0).(vm.Info), args.Error(1)
 }
