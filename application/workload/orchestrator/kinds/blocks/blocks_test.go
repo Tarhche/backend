@@ -31,7 +31,7 @@ func TestReader_Read(t *testing.T) {
 
 		first.Hold(docker.Container{ID: "c1", Name: "web", State: "running"})
 
-		read, err := blocks.NewReader(node.Engine, node, 0).Read(t.Context())
+		read, err := blocks.NewReader(node.Engine, node).Read(t.Context())
 		require.NoError(t, err)
 
 		assert.Equal(t, []string{"vm-1", "vm-2"}, read.VMs())
@@ -49,7 +49,7 @@ func TestReader_Read(t *testing.T) {
 		node.DockerVM(t, "vm-1")
 		node.DockerVM(t, "vm-2").Down = true
 
-		read, err := blocks.NewReader(node.Engine, node, 0).Read(t.Context())
+		read, err := blocks.NewReader(node.Engine, node).Read(t.Context())
 		require.NoError(t, err)
 
 		assert.Equal(t, []string{"vm-1"}, read.VMs())
@@ -68,7 +68,7 @@ func TestReader_Read(t *testing.T) {
 
 		started := time.Now()
 
-		read, err := blocks.NewReader(node.Engine, node, 0).Read(ctx)
+		read, err := blocks.NewReader(node.Engine, node).Read(ctx)
 		require.NoError(t, err)
 
 		assert.Less(t, time.Since(started), 500*time.Millisecond, "given up on a little before the beat is")
@@ -76,43 +76,67 @@ func TestReader_Read(t *testing.T) {
 		assert.Equal(t, []string{"vm-slow"}, read.Unseen)
 	})
 
-	t.Run("the kinds asked in one beat share one read", func(t *testing.T) {
+	t.Run("the kinds asked in one beat share one read, and the next beat makes its own", func(t *testing.T) {
 		t.Parallel()
 
 		node := blockstest.NewNode()
 		dockerd := node.DockerVM(t, "vm-1")
 		dockerd.Delay = 50 * time.Millisecond
 
-		reader := blocks.NewReader(node.Engine, node, blocks.Fresh)
+		reader := blocks.NewReader(node.Engine, node)
+		beat := kind.WithBeat(t.Context(), time.Now())
 
 		var wg sync.WaitGroup
 		for range 4 {
-			wg.Add(1)
-
-			go func() {
-				defer wg.Done()
-
-				read, err := reader.Read(t.Context())
+			wg.Go(func() {
+				read, err := reader.Read(beat)
 				assert.NoError(t, err)
 				assert.Equal(t, []string{"vm-1"}, read.VMs())
-			}()
+			})
 		}
 
 		wg.Wait()
 
-		_, err := reader.Read(t.Context())
+		_, err := reader.Read(beat)
 		require.NoError(t, err)
 
-		assert.Equal(t, 1, dockerd.Calls("Inventory"), "four kinds, and one more asking soon after, and one read")
+		assert.Equal(t, 1, dockerd.Calls("Inventory"), "four kinds, and one more asking in the same beat, and one read")
+
+		_, err = reader.Read(kind.WithBeat(t.Context(), time.Now()))
+		require.NoError(t, err)
+
+		assert.Equal(t, 2, dockerd.Calls("Inventory"), "a beat after it says what is there since")
 	})
 
-	t.Run("and a read that is not fresh any more is made again", func(t *testing.T) {
+	t.Run("a read begun before a beat is not that beat's, which says what is there since", func(t *testing.T) {
+		t.Parallel()
+
+		node := blockstest.NewNode()
+		dockerd := node.DockerVM(t, "vm-1")
+		dockerd.Hold(docker.Container{ID: "c1", Name: "later", State: "running"})
+
+		reader := blocks.NewReader(node.Engine, node)
+
+		before, err := reader.Read(kind.WithBeat(t.Context(), time.Now()))
+		require.NoError(t, err)
+		require.Len(t, before.Inventories["vm-1"].Containers, 1)
+
+		// its disk restored from a snapshot that has none of it.
+		dockerd.Forget("later")
+
+		since, err := reader.Read(kind.WithBeat(t.Context(), time.Now()))
+		require.NoError(t, err)
+		assert.Empty(t, since.Inventories["vm-1"].Containers)
+		assert.False(t, since.At.Before(before.At))
+	})
+
+	t.Run("and anything else asking is given a read begun since it asked", func(t *testing.T) {
 		t.Parallel()
 
 		node := blockstest.NewNode()
 		dockerd := node.DockerVM(t, "vm-1")
 
-		reader := blocks.NewReader(node.Engine, node, 0)
+		reader := blocks.NewReader(node.Engine, node)
 
 		for range 2 {
 			_, err := reader.Read(t.Context())
@@ -145,7 +169,7 @@ func TestReader_Reach(t *testing.T) {
 		node := blockstest.NewNode()
 		dockerd := node.DockerVM(t, "vm-1")
 
-		daemon, err := blocks.NewReader(node.Engine, node, 0).Reach(t.Context(), "vm-1")
+		daemon, err := blocks.NewReader(node.Engine, node).Reach(t.Context(), "vm-1")
 		require.NoError(t, err)
 
 		assert.Same(t, dockerd, daemon)
@@ -155,7 +179,7 @@ func TestReader_Reach(t *testing.T) {
 	t.Run("one that is not here is gone, and not running", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := blocks.NewReader(blockstest.NewNode().Engine, blockstest.NewNode(), 0).Reach(t.Context(), "vm-elsewhere")
+		_, err := blocks.NewReader(blockstest.NewNode().Engine, blockstest.NewNode()).Reach(t.Context(), "vm-elsewhere")
 
 		assert.ErrorIs(t, err, blocks.ErrGone)
 		assert.ErrorIs(t, err, vm.ErrNotRunning)
@@ -168,7 +192,7 @@ func TestReader_Reach(t *testing.T) {
 		node.DockerVM(t, "vm-1")
 		node.Stop(t, "vm-1")
 
-		_, err := blocks.NewReader(node.Engine, node, 0).Reach(t.Context(), "vm-1")
+		_, err := blocks.NewReader(node.Engine, node).Reach(t.Context(), "vm-1")
 
 		assert.ErrorIs(t, err, vm.ErrNotRunning)
 		assert.NotErrorIs(t, err, blocks.ErrGone)
@@ -180,7 +204,7 @@ func TestReader_Reach(t *testing.T) {
 		node := blockstest.NewNode()
 		node.DockerVM(t, "vm-1").Down = true
 
-		_, err := blocks.NewReader(node.Engine, node, 0).Reach(t.Context(), "vm-1")
+		_, err := blocks.NewReader(node.Engine, node).Reach(t.Context(), "vm-1")
 
 		assert.ErrorIs(t, err, docker.ErrUnavailable)
 	})
@@ -191,7 +215,7 @@ func TestReader_Reach(t *testing.T) {
 		node := blockstest.NewNode()
 		node.Machine(t, "vm-old")
 
-		reader := blocks.NewReader(node.Engine, node, 0)
+		reader := blocks.NewReader(node.Engine, node)
 
 		read, err := reader.Read(t.Context())
 		require.NoError(t, err)

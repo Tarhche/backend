@@ -149,10 +149,11 @@ type Node[Spec, Status any] interface {
 	Query(ctx context.Context, r Resource[Spec, Status], action string, payload any) (any, error)
 
 	// State is the kind's state action: every instance of the kind this
-	// node holds, as it is now. It is what every heartbeat reports, and what
-	// a query for one resource's state is answered from. An error is that it
-	// could see nothing; a parent it could not look inside is Unseen, and the
-	// rest is reported.
+	// node holds, as it is now. It is what every heartbeat reports, asked as
+	// of the moment the heartbeat was taken (BeatOf), and what a query for
+	// one resource's state is answered from. An error is that it could see
+	// nothing; a parent it could not look inside is Unseen, and the rest is
+	// reported.
 	State(ctx context.Context) (Report[Status], error)
 }
 

@@ -129,6 +129,12 @@ func since(ago time.Duration) func(*resource.Record) {
 	}
 }
 
+// reset is a record whose parent was restored from a snapshot since its node
+// last saw it there.
+func reset(r *resource.Record) {
+	r.Reset = true
+}
+
 func expiring(at time.Time) func(*resource.Record) {
 	return func(r *resource.Record) {
 		r.Metadata.Lifetime = time.Hour
@@ -215,6 +221,12 @@ func TestUseCase_Execute(t *testing.T) {
 		"and failed when nothing comes of it": {
 			record: fan(kindstest.Pending, kindstest.Running, kindstest.NodeName, since(10*time.Minute)),
 			state:  kind.Failed, expected: kindstest.Running, reason: reconcile.ReasonStuck,
+		},
+
+		// a restored parent
+		"one whose parent was restored waits for the next look inside it, rather than being made again": {
+			record: fan(kindstest.Stopped, kindstest.Running, kindstest.NodeName, reset),
+			state:  kindstest.Stopped, expected: kindstest.Running,
 		},
 
 		// backoff

@@ -225,6 +225,43 @@ func TestObserver_Heartbeat(t *testing.T) {
 		assert.True(t, notSeen.Reset, "a house not read yet says nothing of it")
 	})
 
+	t.Run("and a look taken before its parent was restored says nothing of it either way", func(t *testing.T) {
+		t.Parallel()
+
+		restoredAt := func(r resource.Record) resource.Record {
+			r.Reset = true
+
+			common, err := r.Common()
+			require.NoError(t, err)
+
+			common.ObservedAt = later
+
+			require.NoError(t, r.SetCommon(common))
+
+			return r
+		}
+
+		repository := resourcesMemory.NewRepository()
+		create(t, repository,
+			restoredAt(kindstest.AFan("made-since-the-snapshot", kindstest.Running, kindstest.Running)),
+			restoredAt(kindstest.AFan("deleted-since-the-snapshot", kind.Missing, kindstest.Running)),
+		)
+
+		observer := observe.NewObserver(kindstest.Registry(&kindstest.Fans{}), repository, logger)
+
+		// what the house held just before it was restored.
+		observer.Heartbeat(ctx, kindstest.NodeName, later.Add(-time.Second), report(t, nil, map[string]kindstest.Status{
+			"made-since-the-snapshot": observed(kindstest.Running, 1),
+		}))
+
+		made, _ := stored(t, repository, "made-since-the-snapshot")
+		assert.True(t, made.Reset, "it is not taken to be on the restored disk")
+
+		deleted, kept := stored(t, repository, "deleted-since-the-snapshot")
+		require.True(t, kept, "nor not to be")
+		assert.True(t, deleted.Reset)
+	})
+
 	t.Run("a report made before a resource was asked what it is on its way to says nothing of it", func(t *testing.T) {
 		t.Parallel()
 

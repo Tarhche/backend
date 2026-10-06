@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -18,8 +19,12 @@ import (
 
 // house is the house the fans in these tests are in, and elsewhere another.
 var (
-	house     = kind.Reference{Kind: kindstest.Parent, UUID: kindstest.House}
-	elsewhere = func(f *kindstest.Fan) {
+	house = kind.Reference{Kind: kindstest.Parent, UUID: kindstest.House}
+
+	// restoredAt is when the house was restored: after its fans were last
+	// seen.
+	restoredAt = kindstest.Moment.Add(time.Hour)
+	elsewhere  = func(f *kindstest.Fan) {
 		f.Metadata.Owners = []kind.Reference{{Kind: kindstest.Parent, UUID: "house-2"}}
 	}
 )
@@ -104,7 +109,7 @@ func TestCascade_Deleted(t *testing.T) {
 		)
 
 		require.NoError(t, c.Deleted(ctx, kind.Reference{Kind: "street", UUID: kindstest.House}))
-		require.NoError(t, c.Restored(ctx, kind.Reference{Kind: "street", UUID: kindstest.House}))
+		require.NoError(t, c.Restored(ctx, kind.Reference{Kind: "street", UUID: kindstest.House}, restoredAt))
 
 		_, kept := held(t, resources, "in-it")
 		assert.True(t, kept)
@@ -133,17 +138,18 @@ func TestCascade_Restored(t *testing.T) {
 			kindstest.AFan("in-another", kindstest.Running, kindstest.Running, elsewhere),
 		)
 
-		require.NoError(t, c.Restored(ctx, house))
+		require.NoError(t, c.Restored(ctx, house, restoredAt))
 
 		fan, kept := held(t, resources, "in-it")
 		require.True(t, kept, "it is kept until the parent is looked into")
 		assert.True(t, fan.Reset)
 		assert.Equal(t, kindstest.Running, kindstest.Typed(fan).Status.State, "and is as it was until then")
+		assert.Equal(t, restoredAt, kindstest.Typed(fan).Status.ObservedAt, "what was seen of it before the restore is older than what is known of it")
 
 		other, _ := held(t, resources, "in-another")
 		assert.False(t, other.Reset)
 
-		require.NoError(t, c.Restored(ctx, house))
+		require.NoError(t, c.Restored(ctx, house, restoredAt))
 
 		again, _ := held(t, resources, "in-it")
 		assert.Equal(t, fan.Version, again.Version, "one marked already is not written again")
@@ -155,7 +161,7 @@ func TestCascade_Restored(t *testing.T) {
 		gone, goneResources := fans(t, kind.ParentRules{Delete: kind.CascadeDelete, Restore: kind.CascadeDelete},
 			kindstest.AFan("in-it", kindstest.Running, kindstest.Running),
 		)
-		require.NoError(t, gone.Restored(ctx, house))
+		require.NoError(t, gone.Restored(ctx, house, restoredAt))
 
 		_, kept := held(t, goneResources, "in-it")
 		assert.False(t, kept)
@@ -163,7 +169,7 @@ func TestCascade_Restored(t *testing.T) {
 		stays, staysResources := fans(t, kind.ParentRules{Delete: kind.CascadeDelete, Restore: kind.CascadeKeep},
 			kindstest.AFan("in-it", kindstest.Running, kindstest.Running),
 		)
-		require.NoError(t, stays.Restored(ctx, house))
+		require.NoError(t, stays.Restored(ctx, house, restoredAt))
 
 		fan, kept := held(t, staysResources, "in-it")
 		require.True(t, kept)
@@ -186,7 +192,7 @@ func TestCascade_Restored(t *testing.T) {
 		racing := &kindstest.Racing{Repository: memory}
 		racing.Cross(kindstest.Rewrite(memory, func(r *resource.Record) { r.Attempts = 3 }))
 
-		require.NoError(t, cascade.New(registry, racing).Restored(ctx, house))
+		require.NoError(t, cascade.New(registry, racing).Restored(ctx, house, restoredAt))
 
 		fan, _ := held(t, memory, "in-it")
 		assert.True(t, fan.Reset)
@@ -289,7 +295,7 @@ func TestRepository_Delete(t *testing.T) {
 			kindstest.AFan("in-it", kindstest.Running, kindstest.Running),
 		)
 
-		require.NoError(t, cascading.Cascade().Restored(ctx, house))
+		require.NoError(t, cascading.Cascade().Restored(ctx, house, restoredAt))
 
 		fan, kept := held(t, memory, "in-it")
 		require.True(t, kept)

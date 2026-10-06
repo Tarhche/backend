@@ -206,6 +206,12 @@ func (o *Observer) observe(ctx context.Context, d kind.Descriptor, nodeName stri
 
 	switch {
 	case report.Missing(r.Metadata.UUID, parent.UUID) && r.Reset:
+		// a look taken before its parent was restored says nothing of what
+		// the restored parent holds.
+		if recorded, err := r.Common(); err != nil || at.Before(recorded.ObservedAt) {
+			return err
+		}
+
 		o.logger.InfoContext(ctx, "forgetting a resource its restored parent does not have", "kind", d.Name, "uuid", r.Metadata.UUID, "parent", parent.UUID)
 
 		return o.resources.Delete(ctx, d.Name, r.Metadata.UUID)

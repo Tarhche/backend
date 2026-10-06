@@ -53,7 +53,7 @@ type NodeKindDependencies struct {
 func nodeKinds(d NodeKindDependencies) (*kind.Registry[kind.NodeBinding], error) {
 	kinds := kind.NewRegistry[kind.NodeBinding]()
 
-	dockerVMs := orchestratorBlocks.NewReader(d.Engine, orchestratorBlocks.Timed(d.Daemons, d.Timings), orchestratorBlocks.Fresh)
+	dockerVMs := orchestratorBlocks.NewReader(d.Engine, orchestratorBlocks.Timed(d.Daemons, d.Timings))
 
 	for _, binding := range []kind.NodeBinding{
 		kind.BindNode[vmKind.Spec, vmKind.Status](

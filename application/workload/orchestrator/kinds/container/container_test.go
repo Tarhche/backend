@@ -50,7 +50,7 @@ func newNode(t *testing.T) (*container.Node, *blockstest.Dockerd, *blockstest.No
 	node := blockstest.NewNode()
 	dockerd := node.DockerVM(t, "vm-1")
 
-	return container.New(blocks.NewReader(node.Engine, node, 0), time.Minute), dockerd, node
+	return container.New(blocks.NewReader(node.Engine, node), time.Minute), dockerd, node
 }
 
 func TestNode_Execute(t *testing.T) {
@@ -376,7 +376,7 @@ func TestNode_State(t *testing.T) {
 	t.Run("an engine that cannot say which vms there are is no report at all", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := container.New(blocks.NewReader(blockstest.Failing{}, blockstest.NewNode(), 0), time.Minute).State(t.Context())
+		_, err := container.New(blocks.NewReader(blockstest.Failing{}, blockstest.NewNode()), time.Minute).State(t.Context())
 		assert.Error(t, err)
 	})
 }

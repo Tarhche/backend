@@ -21,6 +21,9 @@
 //     longer than it takes, and then the command is sent again, as another
 //     try. One in flight with no command to wait on, which nothing will move
 //     on, is failed;
+//   - one whose parent was restored from a snapshot waits for the next look
+//     inside the parent, which keeps it as it is found or forgets it
+//     (kind.CascadeReset);
 //   - one that has been tried for already, and is not yet what it is
 //     expected to be, is left alone for longer each time: its backoff. The
 //     tries are forgotten once it has been what it is expected to be for as
@@ -247,6 +250,12 @@ func (uc *UseCase) look(ctx context.Context, binding kind.ControlPlaneBinding, r
 
 	case d.Machine.IsInFlight(common.State):
 		return uc.inFlight(ctx, d, r, common, now)
+
+	// its parent was restored from a snapshot: the next look inside the
+	// parent keeps it as it is found there, or forgets it, and making it
+	// again before that would make what the restored disk does not have.
+	case r.Reset:
+		return nil
 
 	// what it is expected to be, for as long as it was last made to wait:
 	// it stayed there, and the tries it took start over.

@@ -89,7 +89,7 @@ func (h *UseCase) Execute(ctx context.Context) error {
 		Stats:        nodeStats,
 		Capacity:     capacity,
 		At:           at,
-		Observations: h.observe(ctx),
+		Observations: h.observe(kind.WithBeat(ctx, at)),
 	}
 
 	payload, err := json.Marshal(heartbeat)

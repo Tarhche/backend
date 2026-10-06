@@ -15,6 +15,7 @@ package cascade
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
@@ -80,22 +81,24 @@ func (r *Repository) Delete(ctx context.Context, kindName string, uuid string) e
 // the records of a kind that goes with its parent are taken away, and those
 // of a kind that outlives it are kept as they are.
 func (c *Cascade) Deleted(ctx context.Context, parent kind.Reference) error {
-	return c.each(ctx, parent, func(d kind.Descriptor) kind.Cascade { return d.OnParent.Delete })
+	return c.each(ctx, parent, func(d kind.Descriptor) kind.Cascade { return d.OnParent.Delete }, time.Time{})
 }
 
-// Restored is what restoring parent from a snapshot does to what lives in
-// it, kind by kind: the records of a kind that goes with its parent are taken
-// away; those of a kind reset to what the parent holds are marked to be, so
-// that the next look inside the parent keeps each as it is found, or takes
-// its record away when it is not there; and those of a kind that outlives it
-// are kept as they are.
-func (c *Cascade) Restored(ctx context.Context, parent kind.Reference) error {
-	return c.each(ctx, parent, func(d kind.Descriptor) kind.Cascade { return d.OnParent.Restore })
+// Restored is what restoring parent from a snapshot, at a moment, does to
+// what lives in it, kind by kind: the records of a kind that goes with its
+// parent are taken away; those of a kind reset to what the parent holds are
+// marked to be, as of that moment, so that the next look inside the parent
+// taken since keeps each as it is found, or takes its record away when it is
+// not there, and one taken before says nothing of them; and those of a kind
+// that outlives it are kept as they are.
+func (c *Cascade) Restored(ctx context.Context, parent kind.Reference, at time.Time) error {
+	return c.each(ctx, parent, func(d kind.Descriptor) kind.Cascade { return d.OnParent.Restore }, at)
 }
 
-// each applies to what lives in parent the rule rule says each kind keeps.
-// One kind failing is no reason to leave the others as they were.
-func (c *Cascade) each(ctx context.Context, parent kind.Reference, rule func(kind.Descriptor) kind.Cascade) error {
+// each applies to what lives in parent the rule rule says each kind keeps,
+// at a moment. One kind failing is no reason to leave the others as they
+// were.
+func (c *Cascade) each(ctx context.Context, parent kind.Reference, rule func(kind.Descriptor) kind.Cascade, at time.Time) error {
 	var failed error
 
 	for _, binding := range c.registry.All() {
@@ -108,7 +111,9 @@ func (c *Cascade) each(ctx context.Context, parent kind.Reference, rule func(kin
 		case kind.CascadeDelete:
 			failed = errors.Join(failed, c.children(ctx, d, parent, c.forget))
 		case kind.CascadeReset:
-			failed = errors.Join(failed, c.children(ctx, d, parent, c.reset))
+			failed = errors.Join(failed, c.children(ctx, d, parent, func(ctx context.Context, r resource.Record) error {
+				return c.reset(ctx, r, at)
+			}))
 		}
 	}
 
@@ -135,17 +140,32 @@ func (c *Cascade) forget(ctx context.Context, r resource.Record) error {
 	return c.resources.Delete(ctx, r.Kind, r.Metadata.UUID)
 }
 
-// reset marks a resource to be reset to what its parent holds, reading it
-// again when something else wrote it first.
-func (c *Cascade) reset(ctx context.Context, r resource.Record) error {
+// reset marks a resource to be reset to what its parent holds as of a
+// moment, reading it again when something else wrote it first: it is taken to
+// have been observed then, so that what was seen of it before is older than
+// what is known of it.
+func (c *Cascade) reset(ctx context.Context, r resource.Record, at time.Time) error {
 	for try := 1; ; try++ {
-		if r.Reset {
+		common, err := r.Common()
+		if err != nil {
+			return err
+		}
+
+		if r.Reset && !common.ObservedAt.Before(at) {
 			return nil
 		}
 
 		r.Reset = true
 
-		_, err := c.resources.Update(ctx, r)
+		if common.ObservedAt.Before(at) {
+			common.ObservedAt = at
+
+			if err := r.SetCommon(common); err != nil {
+				return err
+			}
+		}
+
+		_, err = c.resources.Update(ctx, r)
 		switch {
 		case err == nil, errors.Is(err, domain.ErrNotExists):
 			return nil

@@ -6,10 +6,12 @@
 // running Docker VMs hold, read whole (Reader): one inventory of each VM, a
 // listing of each sort of object, every VM at once and each for no longer
 // than the beat allows. One read is shared by the kinds asked in the same
-// beat, so a heartbeat costs four requests to each Docker VM however many
-// kinds it reports. A VM whose dockerd did not answer in time is unseen, and
-// says nothing of what is in it; one that is not running is not read at all,
-// and what is in it waits on it.
+// beat (kind.BeatOf), so a heartbeat costs four requests to each Docker VM
+// however many kinds it reports, and none made before the beat is, which
+// would say less than the heartbeat claims to: a VM restored a moment before
+// says what its restored disk holds. A VM whose dockerd did not answer in
+// time is unseen, and says nothing of what is in it; one that is not running
+// is not read at all, and what is in it waits on it.
 //
 // A command reaches the dockerd of the Docker VM its resource lives in
 // (Reader.Reach): the VM has to be here, and running or coming up, and its
@@ -36,10 +38,6 @@ import (
 )
 
 const (
-	// Fresh is how long one read is handed to whatever asks for one, rather
-	// than another made: the kinds asked in the same beat share it.
-	Fresh = 250 * time.Millisecond
-
 	// readMargin is how long before a read's deadline the Docker VMs are
 	// given up on, so that which of them did not answer is said rather than
 	// the read not made at all.
@@ -60,7 +58,7 @@ type Daemons interface {
 
 // Read is what one look into this node's running Docker VMs found.
 type Read struct {
-	// At is when it was taken.
+	// At is when it was begun: what it found is as of then, or later.
 	At time.Time
 
 	// Inventories are what the Docker VMs whose dockerd answered hold, by
@@ -90,12 +88,12 @@ func Report[Status any](r Read) kind.Report[Status] {
 type Reader struct {
 	engine  vm.Engine
 	daemons Daemons
-	fresh   time.Duration
 	now     func() time.Time
 
 	lock sync.Mutex
 
-	// last is the last read made, and reading the one being made.
+	// last is the latest begun of the reads made, and reading the latest
+	// begun of those being made.
 	last    Read
 	reading *reading
 
@@ -105,26 +103,32 @@ type Reader struct {
 }
 
 type reading struct {
-	done chan struct{}
-	read Read
-	err  error
+	begun time.Time
+	done  chan struct{}
+	read  Read
+	err   error
 }
 
 // NewReader is a reader that finds the Docker VMs through engine and reads
-// them through daemons, handing one read to whatever asks for one within
-// fresh of it.
-func NewReader(engine vm.Engine, daemons Daemons, fresh time.Duration) *Reader {
-	return &Reader{engine: engine, daemons: daemons, fresh: fresh, now: time.Now, named: make(map[string]bool)}
+// them through daemons.
+func NewReader(engine vm.Engine, daemons Daemons) *Reader {
+	return &Reader{engine: engine, daemons: daemons, now: time.Now, named: make(map[string]bool)}
 }
 
-// Read is what this node's running Docker VMs hold now: the read made within
-// Fresh of now, or the one being made, or a new one, given until ctx's
-// deadline. An error is that it could see nothing: the engine did not say
-// which VMs there are.
+// Read is what this node's running Docker VMs hold now, given until ctx's
+// deadline: for a heartbeat, a read begun since the beat was, made already,
+// being made, or made now, which the kinds asked in the same beat share; for
+// anything else, a read begun since it was asked. An error is that it could
+// see nothing: the engine did not say which VMs there are.
 func (r *Reader) Read(ctx context.Context) (Read, error) {
+	since, beating := kind.BeatOf(ctx)
+	if !beating {
+		since = r.now()
+	}
+
 	r.lock.Lock()
 
-	if r.reading == nil && !r.last.At.IsZero() && r.now().Sub(r.last.At) < r.fresh {
+	if !r.last.At.IsZero() && !r.last.At.Before(since) {
 		read := r.last
 		r.lock.Unlock()
 
@@ -132,8 +136,8 @@ func (r *Reader) Read(ctx context.Context) (Read, error) {
 	}
 
 	current := r.reading
-	if current == nil {
-		current = &reading{done: make(chan struct{})}
+	if current == nil || current.begun.Before(since) {
+		current = &reading{begun: r.now(), done: make(chan struct{})}
 		r.reading = current
 
 		// made apart from whoever asked first, so that one giving up does
@@ -157,16 +161,19 @@ func (r *Reader) read(ctx context.Context, current *reading) {
 	bounded, cancel := boundedBy(ctx)
 	defer cancel()
 
-	read, err := r.look(bounded)
+	read, err := r.look(bounded, current.begun)
 
 	r.lock.Lock()
 	current.read, current.err = read, err
 
-	if err == nil {
+	if err == nil && !read.At.Before(r.last.At) {
 		r.last = read
 	}
 
-	r.reading = nil
+	if r.reading == current {
+		r.reading = nil
+	}
+
 	r.lock.Unlock()
 
 	close(current.done)
@@ -184,10 +191,9 @@ func boundedBy(ctx context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(detached, readTimeout)
 }
 
-// look reads every running Docker VM of this node at once.
-func (r *Reader) look(ctx context.Context) (Read, error) {
-	at := r.now()
-
+// look reads every running Docker VM of this node at once, as of a moment
+// it was begun at.
+func (r *Reader) look(ctx context.Context, at time.Time) (Read, error) {
 	instances, err := r.engine.List(ctx)
 	if err != nil {
 		return Read{}, err

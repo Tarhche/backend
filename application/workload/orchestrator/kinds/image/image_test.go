@@ -32,7 +32,7 @@ func newNode(t *testing.T) (*image.Node, *blockstest.Dockerd) {
 	node := blockstest.NewNode()
 	dockerd := node.DockerVM(t, "vm-1")
 
-	return image.New(blocks.NewReader(node.Engine, node, 0), time.Minute), dockerd
+	return image.New(blocks.NewReader(node.Engine, node), time.Minute), dockerd
 }
 
 func TestNode_Execute(t *testing.T) {

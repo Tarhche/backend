@@ -38,10 +38,11 @@ import (
 // something else wrote it in the meantime.
 const tries = 5
 
-// Restorer resets what lives in a resource restored from a snapshot to what
-// the resource holds afterwards, as the kinds that live in it say.
+// Restorer resets what lives in a resource restored from a snapshot, at a
+// moment, to what the resource holds afterwards, as the kinds that live in it
+// say.
 type Restorer interface {
-	Restored(ctx context.Context, parent kind.Reference) error
+	Restored(ctx context.Context, parent kind.Reference, at time.Time) error
 }
 
 // Result takes the results of commands onto their resources.
@@ -157,7 +158,7 @@ func (h *Result) take(ctx context.Context, result kind.Result) error {
 		}
 
 		if action, _ := d.Action(result.Action); result.OK && action.Restores && h.restorer != nil {
-			if err := h.restorer.Restored(ctx, kind.Reference{Kind: d.Name, UUID: r.Metadata.UUID}); err != nil {
+			if err := h.restorer.Restored(ctx, kind.Reference{Kind: d.Name, UUID: r.Metadata.UUID}, at); err != nil {
 				return err
 			}
 		}

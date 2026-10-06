@@ -47,7 +47,7 @@ func TestTimed(t *testing.T) {
 		node.DockerVM(t, "vm-1")
 
 		took := &timings{}
-		reader := blocks.NewReader(node.Engine, blocks.Timed(node, took), 0)
+		reader := blocks.NewReader(node.Engine, blocks.Timed(node, took))
 
 		_, err := reader.Read(t.Context())
 		require.NoError(t, err)
