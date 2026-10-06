@@ -10,5 +10,6 @@ func All() []Migration {
 		indexWorkloadVMs,
 		stacksAsManifests,
 		vmsAsManifests,
+		snapshotsAsManifests,
 	}
 }
