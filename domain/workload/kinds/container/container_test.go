@@ -253,3 +253,37 @@ func TestInFlightOf(t *testing.T) {
 	assert.Equal(t, container.Removing, container.InFlightOf(container.ActionDelete))
 	assert.Empty(t, container.InFlightOf(container.ActionConnect), "it stays where it is")
 }
+
+func TestSpecLabel(t *testing.T) {
+	t.Parallel()
+
+	spec := container.Spec{Name: "web", Image: "nginx:1.27", Env: []string{"A=1"}, RestartPolicy: container.RestartOnFailure}
+	spec.VM.UUID = "vm-uuid"
+
+	written, err := container.SpecLabel(spec)
+	require.NoError(t, err)
+	assert.NotContains(t, written, "vm-uuid", "the vm it is in is not written beside it")
+
+	read, labelled := container.SpecFromLabels(map[string]string{container.LabelSpec: written})
+	require.True(t, labelled)
+
+	spec.VM.UUID = ""
+	assert.Equal(t, spec, read)
+
+	policy, known := container.PolicyOf(map[string]string{container.LabelSpec: written})
+	assert.True(t, known)
+	assert.Equal(t, container.RestartOnFailure, policy)
+
+	none, err := container.SpecLabel(container.Spec{Image: "nginx"})
+	require.NoError(t, err)
+
+	policy, known = container.PolicyOf(map[string]string{container.LabelSpec: none})
+	assert.True(t, known)
+	assert.Equal(t, container.RestartNo, policy, "none is docker's no")
+
+	_, known = container.PolicyOf(nil)
+	assert.False(t, known, "and one the platform did not make is not known")
+
+	_, labelled = container.SpecFromLabels(map[string]string{container.LabelSpec: "{"})
+	assert.False(t, labelled)
+}
