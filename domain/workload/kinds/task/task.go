@@ -339,7 +339,7 @@ func Descriptor() kind.Descriptor {
 		PermissionsOf: vmKind.Plural,
 		Machine:       Machine(),
 		Actions: []kind.Action{
-			{Name: ActionCreate, Runs: kind.OnNode, Mode: kind.ModeCommand, AllowedIn: []kind.State{Created, Failed, Stopped}, Desires: Running, Internal: true, Payload: kind.NoPayload},
+			{Name: ActionCreate, Runs: kind.OnNode, Mode: kind.ModeCommand, AllowedIn: []kind.State{Created, Failed, Stopped}, Desires: Running, Internal: true, Timeout: kind.TimeoutPull, Payload: kind.NoPayload},
 			command(ActionStop, stoppable, Stopped, "manage"),
 			command(ActionKill, slices.Clone(stoppable), Stopped, "manage"),
 			command(ActionDelete, nil, Deleted, "delete"),

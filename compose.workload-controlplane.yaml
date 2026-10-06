@@ -102,6 +102,11 @@ services:
       WORKLOAD_SNAPSHOT_S3_USE_SSL: ${BACKEND_WORKLOAD_SNAPSHOT_S3_USE_SSL:-${BACKEND_S3_USE_SSL}}
       # how long a node is given to answer a request.
       WORKLOAD_NODE_REQUEST_TIMEOUT: ${BACKEND_WORKLOAD_NODE_REQUEST_TIMEOUT:-30s}
+      # how long a node gives a command that may pull an image first, the
+      # wait for its VM's dockerd and then the pull, which the control plane
+      # waits for before it asks again: the same two the nodes read.
+      WORKLOAD_DOCKER_READY_TIMEOUT: ${BACKEND_WORKLOAD_DOCKER_READY_TIMEOUT:-3m}
+      WORKLOAD_DOCKER_PULL_TIMEOUT: ${BACKEND_WORKLOAD_DOCKER_PULL_TIMEOUT:-10m}
 
 networks:
   workload_controlplane:

@@ -225,8 +225,8 @@ func Descriptor() kind.Descriptor {
 		OnParent:      blocks.OnParent(),
 		Machine:       Machine(),
 		Actions: []kind.Action{
-			{Name: ActionCreate, Runs: kind.OnNode, Mode: kind.ModeCommand, AllowedIn: []kind.State{Pending, Missing}, Internal: true, Payload: kind.NoPayload},
-			{Name: ActionPull, Runs: kind.OnNode, Mode: kind.ModeCommand, AllowedIn: []kind.State{Present, Missing, Failed}, Desires: Present, Permission: "manage", Payload: kind.NoPayload},
+			{Name: ActionCreate, Runs: kind.OnNode, Mode: kind.ModeCommand, AllowedIn: []kind.State{Pending, Missing}, Internal: true, Timeout: kind.TimeoutPull, Payload: kind.NoPayload},
+			{Name: ActionPull, Runs: kind.OnNode, Mode: kind.ModeCommand, AllowedIn: []kind.State{Present, Missing, Failed}, Desires: Present, Permission: "manage", Timeout: kind.TimeoutPull, Payload: kind.NoPayload},
 			{Name: ActionDelete, Runs: kind.OnNode, Mode: kind.ModeCommand, Desires: Deleted, Permission: "delete", Payload: kind.Payload[DeletePayload]()},
 			{Name: ActionState, Runs: kind.OnNode, Mode: kind.ModeQuery, Permission: "show", Payload: kind.NoPayload},
 		},

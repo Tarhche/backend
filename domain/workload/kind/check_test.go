@@ -88,6 +88,13 @@ func TestCheck(t *testing.T) {
 
 			return d
 		}(),
+		"and one whose commands may take their node longer than the control plane's patience": func() Descriptor {
+			d := box()
+			changing(&d, "create", func(a *Action) { a.Timeout = TimeoutPull })
+			changing(&d, "start", func(a *Action) { a.Timeout = TimeoutTransfer })
+
+			return d
+		}(),
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -245,6 +252,18 @@ func TestCheck(t *testing.T) {
 		"a public command": {
 			breaking: func(d *Descriptor) { changing(d, "stop", func(a *Action) { a.Public = true }) },
 			want:     `action "stop" is public, and only a stream is opened for whoever asks`,
+		},
+		"a timeout no service sizes": {
+			breaking: func(d *Descriptor) { changing(d, "start", func(a *Action) { a.Timeout = "forever" }) },
+			want:     `action "start" is given a timeout "forever", which is none a service sizes`,
+		},
+		"a query given a timeout": {
+			breaking: func(d *Descriptor) { changing(d, "logs", func(a *Action) { a.Timeout = TimeoutPull }) },
+			want:     `action "logs" is given a timeout, and only a command a node carries out is waited on for one`,
+		},
+		"a command the control plane carries out given a timeout": {
+			breaking: func(d *Descriptor) { changing(d, "resize", func(a *Action) { a.Timeout = TimeoutTransfer }) },
+			want:     `action "resize" is given a timeout, and only a command a node carries out is waited on for one`,
 		},
 		"an action asked under what is not a verb": {
 			breaking: func(d *Descriptor) { changing(d, "stop", func(a *Action) { a.Permission = "manage it" }) },

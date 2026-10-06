@@ -36,11 +36,6 @@ import (
 )
 
 const (
-	// timeout bounds one snapshot. A large disk streamed to S3 takes minutes;
-	// one that has taken this long is not going to finish, and the VM whose
-	// lock it holds cannot be stopped, restored or deleted meanwhile.
-	timeout = 2 * time.Hour
-
 	// remembered is how many snapshots taken here are remembered, to answer
 	// a create of one of them that arrives again: far more than are taken
 	// while one create could still be on its way.
@@ -164,7 +159,7 @@ func (n *Node) Execute(ctx context.Context, s snapshotKind.Snapshot, action stri
 // take streams the VM's archive into the bucket, under the snapshot's object
 // key, and says what the engine wrote and how much of it was stored.
 func (n *Node) take(ctx context.Context, snapshotUUID string, vmUUID string) (vm.Archive, int64, error) {
-	ctx, cancel := context.WithTimeout(ctx, timeout)
+	ctx, cancel := context.WithTimeout(ctx, snapshotKind.TransferTimeout)
 	defer cancel()
 
 	key := snapshotKind.ObjectKey(snapshotUUID)

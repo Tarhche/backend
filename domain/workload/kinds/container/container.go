@@ -549,6 +549,14 @@ func Descriptor() kind.Descriptor {
 		return a
 	}
 
+	// what makes a container, which a start or a restart does when its VM
+	// has none of it, pulls its image first when its VM does not hold it.
+	pulling := func(a kind.Action) kind.Action {
+		a.Timeout = kind.TimeoutPull
+
+		return a
+	}
+
 	there := []kind.State{Running, Stopped, Completed}
 
 	return kind.Descriptor{
@@ -560,10 +568,10 @@ func Descriptor() kind.Descriptor {
 		OnParent:      blocks.OnParent(),
 		Machine:       Machine(),
 		Actions: []kind.Action{
-			{Name: ActionCreate, Runs: kind.OnNode, Mode: kind.ModeCommand, AllowedIn: []kind.State{Pending, Missing}, Internal: true, Payload: kind.NoPayload},
-			waiting(command(ActionStart, []kind.State{Stopped, Completed, Missing, Failed}, Running, kind.NoPayload)),
+			{Name: ActionCreate, Runs: kind.OnNode, Mode: kind.ModeCommand, AllowedIn: []kind.State{Pending, Missing}, Internal: true, Timeout: kind.TimeoutPull, Payload: kind.NoPayload},
+			pulling(waiting(command(ActionStart, []kind.State{Stopped, Completed, Missing, Failed}, Running, kind.NoPayload))),
 			waiting(command(ActionStop, []kind.State{Running, Failed}, Stopped, kind.NoPayload)),
-			waiting(command(ActionRestart, []kind.State{Running, Stopped, Completed, Missing, Failed}, Running, kind.NoPayload)),
+			pulling(waiting(command(ActionRestart, []kind.State{Running, Stopped, Completed, Missing, Failed}, Running, kind.NoPayload))),
 			command(ActionConnect, there, "", kind.Payload[ConnectPayload]()),
 			command(ActionDisconnect, there, "", kind.Payload[DisconnectPayload]()),
 			{Name: ActionDelete, Runs: kind.OnNode, Mode: kind.ModeCommand, Desires: Deleted, Permission: "delete", Payload: kind.Payload[DeletePayload]()},

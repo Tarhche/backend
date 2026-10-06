@@ -536,3 +536,70 @@ func TestDefaultConfig(t *testing.T) {
 	assert.Greater(t, c.MaxBackoff, c.Backoff)
 	assert.Greater(t, c.Patience, c.Backoff)
 }
+
+// TestUseCase_Execute_timeouts holds the loop to waiting on a command its
+// node may take long over, an image pulled first or a disk streamed to the
+// bucket, for as long as the node gives it, and then its patience, before it
+// asks for it again: asked again sooner, it would hold another of the node's
+// command slots, waiting behind the first for the resource's lock.
+func TestUseCase_Execute_timeouts(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	// a fan whose start may pull an image first, which its node gives 13
+	// minutes, as nodes give a pull by default.
+	d := kindstest.Descriptor()
+	for i := range d.Actions {
+		if d.Actions[i].Name == "start" {
+			d.Actions[i].Timeout = kind.TimeoutPull
+		}
+	}
+
+	settings := config()
+	settings.Timeouts = map[kind.Timeout]time.Duration{kind.TimeoutPull: 13 * time.Minute}
+
+	for name, tt := range map[string]struct {
+		record resource.Record
+		sent   []string
+	}{
+		"a command given a timeout is waited on past the loop's patience": {
+			record: fan(kindstest.Starting, kindstest.Running, kindstest.NodeName, pending("start", 10*time.Minute, 1)),
+		},
+		"for as long as its node gives it, and then that patience": {
+			record: fan(kindstest.Starting, kindstest.Running, kindstest.NodeName, pending("start", 17*time.Minute, 1)),
+		},
+		"and is asked again once that has passed": {
+			record: fan(kindstest.Starting, kindstest.Running, kindstest.NodeName, pending("start", 19*time.Minute, 1)),
+			sent:   []string{"start"},
+		},
+		"while one given none is asked again after the patience alone": {
+			record: fan(kindstest.Stopping, kindstest.Stopped, kindstest.NodeName, pending("stop", 10*time.Minute, 1)),
+			sent:   []string{"stop"},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			f := newFixture(t, tt.record)
+
+			registry := kind.NewRegistry[kind.ControlPlaneBinding]()
+			require.NoError(t, registry.Register(kind.BindControlPlane[kindstest.Spec, kindstest.Status](d, f.fans)))
+
+			clock := kindstest.NewClock()
+			clock.Advance(time.Hour)
+
+			dispatcher := dispatch.New(f.resources, f.producer, waiters.New(), clock.Now)
+			useCase := reconcile.NewUseCase(registry, f.resources, f.nodes, dispatcher, slog.New(slog.DiscardHandler), settings)
+
+			require.NoError(t, useCase.Execute(ctx))
+
+			var actions []string
+			for _, command := range f.sent(t) {
+				actions = append(actions, command.Action)
+			}
+
+			assert.Equal(t, tt.sent, actions)
+		})
+	}
+}

@@ -267,6 +267,13 @@ func Descriptor() kind.Descriptor {
 		return kind.Action{Name: name, Runs: kind.OnNode, Mode: kind.ModeCommand, AllowedIn: allowedIn, Desires: Running, Internal: true, Payload: kind.NoPayload}
 	}
 
+	// what brings a stack up may pull its images first.
+	pulling := func(a kind.Action) kind.Action {
+		a.Timeout = kind.TimeoutPull
+
+		return a
+	}
+
 	return kind.Descriptor{
 		Name:    Name,
 		Plural:  Plural,
@@ -279,11 +286,11 @@ func Descriptor() kind.Descriptor {
 
 		Machine: Machine(),
 		Actions: []kind.Action{
-			internal(ActionCreate, Waiting),
-			internal(ActionApply, Degraded, Failed),
-			command(ActionStart, []kind.State{Stopped, Degraded, Failed, Waiting}, Running, "manage"),
+			pulling(internal(ActionCreate, Waiting)),
+			pulling(internal(ActionApply, Degraded, Failed)),
+			pulling(command(ActionStart, []kind.State{Stopped, Degraded, Failed, Waiting}, Running, "manage")),
 			command(ActionStop, []kind.State{Running, Degraded, Failed}, Stopped, "manage"),
-			command(ActionRestart, []kind.State{Running, Degraded, Stopped, Failed, Waiting}, Running, "manage"),
+			pulling(command(ActionRestart, []kind.State{Running, Degraded, Stopped, Failed, Waiting}, Running, "manage")),
 			{Name: ActionDelete, Runs: kind.OnNode, Mode: kind.ModeCommand, Desires: Deleted, Permission: "delete", Payload: kind.Payload[DeletePayload]()},
 			{Name: ActionState, Runs: kind.OnNode, Mode: kind.ModeQuery, Permission: "show", Payload: kind.NoPayload},
 		},

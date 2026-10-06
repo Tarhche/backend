@@ -78,6 +78,12 @@ type WorkloadControlPlane struct {
 	SnapshotStorage WorkloadSnapshotStorage
 
 	NodeRequestTimeout time.Duration `usage:"How long a node is given to answer a request: a kind's query, a VM's log say, or a command for what nobody keeps a record of." env:"WORKLOAD_NODE_REQUEST_TIMEOUT" long:"node-request-timeout"`
+
+	// what the nodes give a command that may pull an image first, which the
+	// control plane waits for before it asks for it again: the same two the
+	// nodes read.
+	DockerReadyTimeout time.Duration `usage:"How long a node waits for a Docker VM's dockerd, while the VM comes up, before a command to it fails: what a command that may pull an image is waited on for first." env:"WORKLOAD_DOCKER_READY_TIMEOUT" long:"docker-ready-timeout"`
+	DockerPullTimeout  time.Duration `usage:"How long creating a container, or pulling an image, may take inside a Docker VM: what a command that may pull an image is waited on for, after its dockerd." env:"WORKLOAD_DOCKER_PULL_TIMEOUT" long:"docker-pull-timeout"`
 }
 
 // NewWorkloadControlPlane returns the configuration of the serve-workload-controlplane
@@ -119,7 +125,16 @@ func NewWorkloadControlPlane() *WorkloadControlPlane {
 		SnapshotStorage: newWorkloadSnapshotStorage(),
 
 		NodeRequestTimeout: defaultWorkloadNodeRequestTimeout,
+		DockerReadyTimeout: defaultWorkloadDockerReadyTimeout,
+		DockerPullTimeout:  defaultWorkloadDockerPullTimeout,
 	}
+}
+
+// PullTimeout is how long a node may take over a command that may pull an
+// image first, as the nodes are configured to give it: the wait for the VM's
+// dockerd, and then the pull.
+func (c *WorkloadControlPlane) PullTimeout() time.Duration {
+	return c.DockerReadyTimeout + c.DockerPullTimeout
 }
 
 // DockerDefaultPorts is the ports a Docker VM made for a container or a stack

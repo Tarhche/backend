@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"maps"
 	"net/http"
+	"time"
 
 	"github.com/nats-io/nats.go"
 
@@ -104,13 +105,22 @@ func NewControlPlaneWorkload(
 	// what lives in a VM, its stacks, waits on it while it is not running.
 	vms := records.New(stores.Resources)
 
+	// a command that may take its node longer than the reconcile loop's
+	// patience is not asked again while the node is still at it: a pull is
+	// given what the nodes give one, and a disk streamed to or from the
+	// bucket what a snapshot is.
+	timeouts := map[kind.Timeout]time.Duration{
+		kind.TimeoutPull:     controlPlaneConfigs.PullTimeout(),
+		kind.TimeoutTransfer: snapshotKind.TransferTimeout,
+	}
+
 	kinds := NewControlPlaneKinds(
 		registry,
 		ControlPlaneKindStores{Resources: stores.Resources, Nodes: stores.Nodes},
 		requester,
 		producer,
 		logger,
-		append([]ControlPlaneKindsOption{WithParents(vms)}, options...)...,
+		append([]ControlPlaneKindsOption{WithParents(vms), WithTimeouts(timeouts)}, options...)...,
 	)
 
 	vmPlacement := placement.New(stores.Nodes, vms, controlPlaneConfigs.VMCPUOvercommit)

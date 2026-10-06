@@ -162,6 +162,19 @@ func TestWorkloadPullRequestTimeout(t *testing.T) {
 	assert.Equal(t, 31*time.Minute, orchestrator.PullRequestTimeout())
 }
 
+// TestWorkloadPullTimeout holds the control plane to waiting on a command
+// that may pull an image for as long as its node gives it, which it reads
+// from the same two settings.
+func TestWorkloadPullTimeout(t *testing.T) {
+	controlPlane, orchestrator := NewWorkloadControlPlane(), NewWorkloadOrchestrator()
+
+	assert.Equal(t, orchestrator.PullRequestTimeout(), controlPlane.PullTimeout(), "as the nodes are configured by default")
+
+	controlPlane.DockerReadyTimeout, controlPlane.DockerPullTimeout = time.Minute, 30*time.Minute
+
+	assert.Equal(t, 31*time.Minute, controlPlane.PullTimeout())
+}
+
 // flagNames is the long name of every field of a configuration struct,
 // nested structs included.
 func flagNames(target any) []string {

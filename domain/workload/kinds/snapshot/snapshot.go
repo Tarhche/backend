@@ -87,6 +87,14 @@ const (
 const (
 	// MaxNameLength keeps a name to something a listing can show.
 	MaxNameLength = 100
+
+	// TransferTimeout bounds streaming a VM's disk to the snapshots bucket or
+	// from it: a snapshot taken, and a VM restored or made from one. A large
+	// disk streamed to S3 takes minutes; one that has taken this long is not
+	// going to finish, and the VM whose lock it holds cannot be stopped,
+	// restored or deleted meanwhile. It is what kind.TimeoutTransfer is sized
+	// as, on the nodes and in the control plane.
+	TransferTimeout = 2 * time.Hour
 )
 
 // Spec is what a snapshot is asked for as: the VM it is taken of.
@@ -180,7 +188,7 @@ func Descriptor() kind.Descriptor {
 
 		Machine: Machine(),
 		Actions: []kind.Action{
-			{Name: ActionCreate, Runs: kind.OnNode, Mode: kind.ModeCommand, AllowedIn: []kind.State{Creating}, Desires: Ready, Internal: true, Payload: kind.NoPayload},
+			{Name: ActionCreate, Runs: kind.OnNode, Mode: kind.ModeCommand, AllowedIn: []kind.State{Creating}, Desires: Ready, Internal: true, Timeout: kind.TimeoutTransfer, Payload: kind.NoPayload},
 			{Name: ActionRename, Runs: kind.OnControlPlane, Mode: kind.ModeCommand, AllowedIn: []kind.State{Ready, Failed}, Permission: "update", Payload: kind.Payload[RenamePayload]()},
 			{Name: ActionDelete, Runs: kind.OnControlPlane, Mode: kind.ModeCommand, AllowedIn: []kind.State{Ready, Failed}, Desires: Deleted, Permission: "delete", Payload: kind.NoPayload},
 			{Name: ActionState, Runs: kind.OnControlPlane, Mode: kind.ModeQuery, Permission: "show", Payload: kind.NoPayload},

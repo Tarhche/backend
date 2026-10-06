@@ -42,6 +42,31 @@ func (m Mode) IsValid() bool {
 	return m == ModeCommand || m == ModeQuery || m == ModeStream
 }
 
+// Timeout names how long a node may take over a command, when that may be
+// longer than the control plane's patience with one it has heard nothing of:
+// an image pulled first, or a VM's disk streamed to or from the bucket. Each
+// service sizes the names from its own settings, the same ones: a node gives
+// the command that long, and the control plane waits that long, and then its
+// patience, before it asks again for what may still be being done.
+type Timeout string
+
+const (
+	// TimeoutPull is a command that may pull an image first: the wait for its
+	// Docker VM's dockerd, and the pull (WORKLOAD_DOCKER_READY_TIMEOUT and
+	// WORKLOAD_DOCKER_PULL_TIMEOUT), or a code-runner task's runner image.
+	TimeoutPull Timeout = "pull"
+
+	// TimeoutTransfer is a command that streams a VM's disk to or from the
+	// bucket: a snapshot taken, a VM restored or made from one.
+	TimeoutTransfer Timeout = "transfer"
+)
+
+// IsValid reports whether t names how long a command may take: one of the
+// names, or none, which is the control plane's patience.
+func (t Timeout) IsValid() bool {
+	return len(t) == 0 || t == TimeoutPull || t == TimeoutTransfer
+}
+
 // Cascade is what becomes of a resource when something happens to its
 // parent.
 type Cascade string
@@ -113,6 +138,11 @@ type Action struct {
 	// the resource is then whatever it holds afterwards, and is reset to it,
 	// as the kinds that live in it say (ParentRules.Restore).
 	Restores bool `json:"restores,omitempty"`
+
+	// Timeout names how long its node may take over a command that can take
+	// longer than the control plane's patience. None is that patience, which
+	// is enough for a command that changes nothing slow.
+	Timeout Timeout `json:"timeout,omitempty"`
 
 	// Public says that a stream is opened for anybody who asks, signed in or
 	// not. Whom it is opened for is still its node strategy's to say, from

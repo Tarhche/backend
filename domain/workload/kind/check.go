@@ -39,7 +39,9 @@ var (
 //     in and the one it desires are the machine's, and only a command desires
 //     one. A transition on it is from a state it is allowed in, and is on a
 //     command, since nothing else moves a resource. Only a command that
-//     desires a state waits in flight, and only a command restores.
+//     desires a state waits in flight, and only a command restores. A
+//     command given a timeout runs on a node, and the timeout is one of the
+//     names a service sizes.
 //   - Every action has a permission, but an internal one, which only a
 //     command can be; and only a stream is public. A kind whose actions are
 //     asked under another kind's permissions names that kind's plural, a
@@ -208,6 +210,13 @@ func checkAction(d Descriptor, a Action, add func(format string, args ...any)) {
 
 	if a.Public && a.Mode != ModeStream {
 		add("action %q is public, and only a stream is opened for whoever asks", a.Name)
+	}
+
+	switch {
+	case !a.Timeout.IsValid():
+		add("action %q is given a timeout %q, which is none a service sizes", a.Name, a.Timeout)
+	case len(a.Timeout) > 0 && (a.Mode != ModeCommand || a.Runs != OnNode):
+		add("action %q is given a timeout, and only a command a node carries out is waited on for one", a.Name)
 	}
 
 	switch {

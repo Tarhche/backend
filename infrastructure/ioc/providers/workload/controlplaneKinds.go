@@ -3,6 +3,7 @@ package workload
 import (
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/actOnResource"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/admitResource"
@@ -73,6 +74,7 @@ type ControlPlaneKinds struct {
 type controlPlaneKindsOptions struct {
 	parents   observe.Parents
 	reconcile kindsReconcile.Config
+	timeouts  map[kind.Timeout]time.Duration
 }
 
 // ControlPlaneKindsOption changes how the plumbing goes about its work.
@@ -92,6 +94,16 @@ func WithParents(parents observe.Parents) ControlPlaneKindsOption {
 func WithReconcileConfig(config kindsReconcile.Config) ControlPlaneKindsOption {
 	return func(o *controlPlaneKindsOptions) {
 		o.reconcile = config
+	}
+}
+
+// WithTimeouts is how long a node may take over a command given each
+// timeout, as the nodes are configured to give it: the reconcile loop does
+// not send one again before then. A reconcile config that sizes them itself
+// keeps its own.
+func WithTimeouts(timeouts map[kind.Timeout]time.Duration) ControlPlaneKindsOption {
+	return func(o *controlPlaneKindsOptions) {
+		o.timeouts = timeouts
 	}
 }
 
@@ -119,6 +131,10 @@ func NewControlPlaneKinds(
 	settings := controlPlaneKindsOptions{reconcile: kindsReconcile.DefaultConfig()}
 	for _, option := range options {
 		option(&settings)
+	}
+
+	if settings.reconcile.Timeouts == nil {
+		settings.reconcile.Timeouts = settings.timeouts
 	}
 
 	resources := cascade.NewRepository(registry, stores.Resources)

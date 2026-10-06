@@ -20,9 +20,10 @@
 //     keeps, such as a snapshot, the node is only what a command was sent to:
 //     its silence fails one waiting on that command, and nothing else;
 //   - one in flight is waited on, until its command has been unanswered for
-//     longer than it takes, and then the command is sent again, as another
-//     try. One in flight with no command to wait on, which nothing will move
-//     on, is failed;
+//     longer than it takes, its timeout (kind.Action.Timeout) and then the
+//     loop's patience, and then the command is sent again, as another try.
+//     One in flight with no command to wait on, which nothing will move on,
+//     is failed;
 //   - one whose parent was restored from a snapshot waits for the next look
 //     inside the parent, which keeps it as it is found or forgets it
 //     (kind.CascadeReset);
@@ -81,9 +82,17 @@ type Config struct {
 	NodeSilentAfter time.Duration
 
 	// Patience is how long a command a resource in flight is waiting on goes
-	// unanswered before it is sent again: what the slowest command of any
-	// kind takes, an image pulled first say.
+	// unanswered before it is sent again, beyond what its node may take over
+	// it: a command given a timeout (kind.Action.Timeout) is waited on for
+	// as long as Timeouts sizes it first, and one given none for nothing more.
 	Patience time.Duration
+
+	// Timeouts are how long a node may take over a command given each
+	// timeout: an image pulled first, or a VM's disk streamed to or from the
+	// bucket. They are what the nodes give such a command, so that it is not
+	// sent again while its node is still carrying it out, holding one of the
+	// node's command slots and its resource's lock for a second time.
+	Timeouts map[kind.Timeout]time.Duration
 
 	// Backoff is how long a resource that was tried for once is left before
 	// it is tried for again; it doubles with every try after, up to
@@ -101,6 +110,15 @@ func DefaultConfig() Config {
 		Backoff:         15 * time.Second,
 		MaxBackoff:      15 * time.Minute,
 	}
+}
+
+// waited is how long a command for action, of the kind d describes, goes
+// unanswered before it is sent again: its timeout, and then the patience any
+// command is given.
+func (c Config) waited(d kind.Descriptor, action string) time.Duration {
+	a, _ := d.Action(action)
+
+	return c.Timeouts[a.Timeout] + c.Patience
 }
 
 // backoff is how long a resource tried for attempts times is left before it
@@ -335,7 +353,7 @@ func (uc *UseCase) inFlight(ctx context.Context, d kind.Descriptor, r resource.R
 		return err
 	}
 
-	if now.Sub(r.Pending.SentAt) < max(uc.config.Patience, uc.config.backoff(r.Attempts)) {
+	if now.Sub(r.Pending.SentAt) < max(uc.config.waited(d, r.Pending.Action), uc.config.backoff(r.Attempts)) {
 		return nil
 	}
 

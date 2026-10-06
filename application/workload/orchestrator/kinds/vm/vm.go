@@ -302,8 +302,12 @@ func (n *Node) delete(ctx context.Context, v vmKind.VM) error {
 
 // restored gives the instance spec names the disk a snapshot holds: the
 // archive is read from where snapshots are stored and streamed into the
-// engine as it arrives, so it is never held whole.
+// engine as it arrives, so it is never held whole, for as long as a disk is
+// given to stream (snapshotKind.TransferTimeout), as a snapshot taken is.
 func (n *Node) restored(ctx context.Context, spec vm.Spec, snapshotUUID string) error {
+	ctx, cancel := context.WithTimeout(ctx, snapshotKind.TransferTimeout)
+	defer cancel()
+
 	archive, err := n.archives.Read(ctx, snapshotKind.ObjectKey(snapshotUUID))
 	if err != nil {
 		return fmt.Errorf("the snapshot cannot be read: %w", err)
