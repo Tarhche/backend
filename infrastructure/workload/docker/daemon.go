@@ -141,6 +141,95 @@ func (d *Daemon) coming(ctx context.Context) error {
 	}
 }
 
+// Inventory is everything the VM's dockerd holds, in one listing of each sort
+// of object, one after the other on the connection the VM's client keeps:
+// what a node's every heartbeat asks of every Docker VM it runs, and so as
+// little as it can be. Which containers use an image, a network or a volume is
+// read off the one listing of the containers.
+func (d *Daemon) Inventory(ctx context.Context) (docker.Inventory, error) {
+	var inventory docker.Inventory
+
+	err := d.do(ctx, func(cli *client.Client) error {
+		containers, err := cli.ContainerList(ctx, container.ListOptions{All: true})
+		if err != nil {
+			return err
+		}
+
+		images, err := cli.ImageList(ctx, image.ListOptions{})
+		if err != nil {
+			return err
+		}
+
+		networks, err := cli.NetworkList(ctx, network.ListOptions{})
+		if err != nil {
+			return err
+		}
+
+		volumes, err := cli.VolumeList(ctx, volume.ListOptions{})
+		if err != nil {
+			return err
+		}
+
+		inventory = inventoryOf(containers, images, networks, volumes.Volumes)
+
+		return nil
+	})
+
+	return inventory, err
+}
+
+// inventoryOf is what a dockerd listed of each sort of object, each image,
+// network and volume saying which of the containers use it.
+func inventoryOf(containers []container.Summary, images []image.Summary, networks []network.Summary, volumes []*volume.Volume) docker.Inventory {
+	inventory := docker.Inventory{
+		Containers: make([]docker.Container, 0, len(containers)),
+		Images:     make([]docker.Image, 0, len(images)),
+		Networks:   make([]docker.Network, 0, len(networks)),
+		Volumes:    make([]docker.Volume, 0, len(volumes)),
+	}
+
+	used := make(map[string]bool, len(containers))
+	attached := make(map[string][]string)
+	mounted := make(map[string]bool)
+
+	for _, c := range containers {
+		inventory.Containers = append(inventory.Containers, fromSummary(c))
+
+		used[c.ImageID] = true
+
+		if c.NetworkSettings != nil {
+			for name := range c.NetworkSettings.Networks {
+				attached[name] = append(attached[name], containerName(c.Names))
+			}
+		}
+
+		for _, m := range c.Mounts {
+			if len(m.Name) > 0 {
+				mounted[m.Name] = true
+			}
+		}
+	}
+
+	for _, summary := range images {
+		inventory.Images = append(inventory.Images, fromImageSummary(summary, used[summary.ID] || summary.Containers > 0))
+	}
+
+	for _, summary := range networks {
+		members := attached[summary.Name]
+		slices.Sort(members)
+
+		inventory.Networks = append(inventory.Networks, fromNetwork(summary, members))
+	}
+
+	for _, v := range volumes {
+		if v != nil {
+			inventory.Volumes = append(inventory.Volumes, fromVolume(*v, mounted[v.Name]))
+		}
+	}
+
+	return inventory
+}
+
 func (d *Daemon) Containers(ctx context.Context, filter docker.ContainerFilter) ([]docker.Container, error) {
 	options := container.ListOptions{All: filter.All, Filters: filters.NewArgs()}
 	if len(filter.Stack) > 0 {

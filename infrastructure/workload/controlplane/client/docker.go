@@ -59,6 +59,33 @@ func (d *daemon) Ping(ctx context.Context) error {
 	return d.ask(ctx, noderequest.OpPing, nil, nil)
 }
 
+// Inventory is everything the VM's dockerd holds, a listing of each sort of
+// object.
+func (d *daemon) Inventory(ctx context.Context) (docker.Inventory, error) {
+	var (
+		inventory docker.Inventory
+		err       error
+	)
+
+	if inventory.Containers, err = d.Containers(ctx, docker.ContainerFilter{All: true}); err != nil {
+		return docker.Inventory{}, err
+	}
+
+	if inventory.Images, err = d.Images(ctx); err != nil {
+		return docker.Inventory{}, err
+	}
+
+	if inventory.Networks, err = d.Networks(ctx); err != nil {
+		return docker.Inventory{}, err
+	}
+
+	if inventory.Volumes, err = d.Volumes(ctx); err != nil {
+		return docker.Inventory{}, err
+	}
+
+	return inventory, nil
+}
+
 func (d *daemon) Containers(ctx context.Context, filter docker.ContainerFilter) ([]docker.Container, error) {
 	var listed []noderequest.Container
 	if err := d.ask(ctx, noderequest.OpContainersList, noderequest.NewContainersRequest(filter), &listed); err != nil {

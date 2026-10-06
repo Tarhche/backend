@@ -21,6 +21,14 @@ func (m *MockDaemon) Ping(ctx context.Context) error {
 	return m.Called(ctx).Error(0)
 }
 
+func (m *MockDaemon) Inventory(ctx context.Context) (docker.Inventory, error) {
+	args := m.Called(ctx)
+
+	inventory, _ := args.Get(0).(docker.Inventory)
+
+	return inventory, args.Error(1)
+}
+
 func (m *MockDaemon) Containers(ctx context.Context, filter docker.ContainerFilter) ([]docker.Container, error) {
 	args := m.Called(ctx, filter)
 

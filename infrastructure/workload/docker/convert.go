@@ -286,6 +286,7 @@ func fromImageSummary(summary image.Summary, inUse bool) docker.Image {
 	return docker.Image{
 		ID:        summary.ID,
 		Tags:      tagsOf(summary.RepoTags),
+		Digests:   digestsOf(summary.RepoDigests),
 		Size:      summary.Size,
 		CreatedAt: time.Unix(summary.Created, 0).UTC(),
 		InUse:     inUse,
@@ -294,9 +295,10 @@ func fromImageSummary(summary image.Summary, inUse bool) docker.Image {
 
 func fromImageInspect(inspected image.InspectResponse) docker.Image {
 	pulled := docker.Image{
-		ID:   inspected.ID,
-		Tags: tagsOf(inspected.RepoTags),
-		Size: inspected.Size,
+		ID:      inspected.ID,
+		Tags:    tagsOf(inspected.RepoTags),
+		Digests: digestsOf(inspected.RepoDigests),
+		Size:    inspected.Size,
 	}
 
 	if created, err := time.Parse(time.RFC3339Nano, inspected.Created); err == nil {
@@ -317,6 +319,19 @@ func tagsOf(repoTags []string) []string {
 	}
 
 	return tags
+}
+
+// digestsOf is the references an image was pulled by, without the
+// placeholder docker gives one that has none.
+func digestsOf(repoDigests []string) []string {
+	digests := make([]string, 0, len(repoDigests))
+	for _, digest := range repoDigests {
+		if digest != "<none>@<none>" {
+			digests = append(digests, digest)
+		}
+	}
+
+	return digests
 }
 
 func fromNetwork(n network.Inspect, containers []string) docker.Network {
