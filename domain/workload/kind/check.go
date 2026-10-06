@@ -65,6 +65,10 @@ func Check(d Descriptor) []error {
 		add("its plural %q is not a lowercase word", d.Plural)
 	}
 
+	if len(d.PermittedAs) > 0 && !word.MatchString(d.PermittedAs) {
+		add("the plural its permissions are named by, %q, is not a lowercase word", d.PermittedAs)
+	}
+
 	if !d.StateBy.IsValid() {
 		add("its state is known neither on a node nor in the control plane (%q)", d.StateBy)
 	}

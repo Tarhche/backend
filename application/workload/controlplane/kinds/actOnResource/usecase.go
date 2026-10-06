@@ -17,7 +17,13 @@
 //
 // A uuid that names none of the kind's records may name one of its extras,
 // such as one of the code runner's runs among anybody's VMs, which says for
-// itself what it can be asked.
+// itself what it can be asked. Inside a parent the request names, a kind may
+// name what it is asked of by more than its uuid (kind.Resolver).
+//
+// What is refused is said field by field, or, when what refused it is what a
+// node would have refused it with, as the node's own refusal: a container that
+// runs is not removed but by force, in Docker's words, before anything is asked
+// of its node.
 package actOnResource
 
 import (
@@ -27,7 +33,7 @@ import (
 	"log/slog"
 
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/dispatch"
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/owner"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/named"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
@@ -69,9 +75,9 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 	var asked dispatch.Asked
 
 	for try := 1; ; try++ {
-		r, err := owner.Resource(ctx, uc.resources, d.Name, request.OwnerUUID, request.UUID)
+		r, uuid, err := named.Resource(ctx, uc.resources, binding, request.OwnerUUID, request.Parent, request.UUID)
 		if errors.Is(err, domain.ErrNotExists) {
-			return uc.extra(ctx, binding, request, err)
+			return uc.extra(ctx, binding, request, uuid, err)
 		} else if err != nil {
 			return nil, err
 		}
@@ -153,18 +159,11 @@ func (uc *UseCase) follow(ctx context.Context, binding kind.ControlPlaneBinding,
 }
 
 // extra asks one of the kind's extras for the command, when the uuid names
-// one and whoever asks may see anybody's. notThere is what looking for a
-// record came to, which is the answer otherwise.
-func (uc *UseCase) extra(ctx context.Context, binding kind.ControlPlaneBinding, request *Request, notThere error) (*Response, error) {
-	extras, extended := binding.Extras()
-	if !extended || len(request.OwnerUUID) > 0 {
-		return nil, notThere
-	}
-
-	r, err := extras.One(ctx, request.UUID)
-	if errors.Is(err, domain.ErrNotExists) {
-		return nil, notThere
-	} else if err != nil {
+// one whoever asks may see. notThere is what looking for a record came to,
+// which is the answer otherwise.
+func (uc *UseCase) extra(ctx context.Context, binding kind.ControlPlaneBinding, request *Request, uuid string, notThere error) (*Response, error) {
+	extras, r, err := named.Extra(ctx, binding, request.OwnerUUID, request.Parent, uuid, notThere)
+	if err != nil {
 		return nil, err
 	}
 
@@ -182,14 +181,19 @@ func (uc *UseCase) extra(ctx context.Context, binding kind.ControlPlaneBinding, 
 
 // Refused is the response to asking that was refused, or the error it
 // failed with, or neither when it was neither: what cannot be read or is not
-// valid is said field by field, and a command for a node, asked of a
-// resource on none, as the node error of one that cannot be reached.
+// valid is said field by field; a command for a node, asked of a resource on
+// none, as the node error of one that cannot be reached; and what was refused
+// as its node would have refused it, as that node error.
 func Refused(invalid domain.ValidationErrors, err error) (*Response, error) {
+	var refused *noderequest.Error
+
 	switch {
 	case errors.Is(err, kind.ErrInvalidPayload):
 		return &Response{ValidationErrors: domain.ValidationErrors{"payload": "invalid_value"}}, nil
 	case errors.Is(err, kind.ErrUnreachable):
 		return &Response{NodeError: &noderequest.Error{Code: noderequest.CodeNotRunning, Message: err.Error()}}, nil
+	case errors.As(err, &refused):
+		return &Response{NodeError: refused}, nil
 	case err != nil:
 		return nil, err
 	case len(invalid) > 0:

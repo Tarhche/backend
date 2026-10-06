@@ -13,7 +13,7 @@ import (
 	"fmt"
 
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/dispatch"
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/owner"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/named"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
@@ -50,9 +50,9 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 	d := binding.Descriptor()
 
 	for try := 1; ; try++ {
-		r, err := owner.Resource(ctx, uc.resources, d.Name, request.OwnerUUID, request.UUID)
+		r, uuid, err := named.Resource(ctx, uc.resources, binding, request.OwnerUUID, request.Parent, request.UUID)
 		if errors.Is(err, domain.ErrNotExists) {
-			return extra(ctx, binding, request, err)
+			return extra(ctx, binding, request, uuid, err)
 		} else if err != nil {
 			return nil, err
 		}
@@ -96,18 +96,11 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 }
 
 // extra deletes the kind's extra the uuid names, when whoever asks may see
-// anybody's, which takes it away as only it knows how. notThere is what
-// looking for a record came to, which is the answer otherwise.
-func extra(ctx context.Context, binding kind.ControlPlaneBinding, request *Request, notThere error) (*Response, error) {
-	extras, extended := binding.Extras()
-	if !extended || len(request.OwnerUUID) > 0 {
-		return nil, notThere
-	}
-
-	r, err := extras.One(ctx, request.UUID)
-	if errors.Is(err, domain.ErrNotExists) {
-		return nil, notThere
-	} else if err != nil {
+// it, which takes it away as only it knows how. notThere is what looking for
+// a record came to, which is the answer otherwise.
+func extra(ctx context.Context, binding kind.ControlPlaneBinding, request *Request, uuid string, notThere error) (*Response, error) {
+	extras, r, err := named.Extra(ctx, binding, request.OwnerUUID, request.Parent, uuid, notThere)
+	if err != nil {
 		return nil, err
 	}
 

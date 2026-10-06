@@ -1,5 +1,5 @@
 // Package getResource reads one resource of any kind, as its manifest: one
-// of the kind's records, or, to whoever may see anybody's, one of its extras.
+// of the kind's records, or one of its extras, each to whoever may see it.
 package getResource
 
 import (
@@ -7,7 +7,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/owner"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/named"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
@@ -22,18 +22,19 @@ func NewUseCase(registry *kind.Registry[kind.ControlPlaneBinding], resources res
 	return &UseCase{registry: registry, resources: resources}
 }
 
-// Execute is the resource, or domain.ErrNotExists for one that is not there
-// or not the owner's, and kind.ErrUnknownKind for a kind not run here. An
-// extra is nobody's own, and is there only to whoever may see anybody's.
+// Execute is the resource, or domain.ErrNotExists for one that is not there,
+// not the owner's or not in the parent named, and kind.ErrUnknownKind for a
+// kind not run here. An extra is whose its metadata says, as a record is: the
+// code runner's runs are the guest's, there only to whoever may see anybody's.
 func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
 	binding, registered := uc.registry.Lookup(request.Kind)
 	if !registered {
 		return nil, fmt.Errorf("%w: %q", kind.ErrUnknownKind, request.Kind)
 	}
 
-	r, err := owner.Resource(ctx, uc.resources, binding.Descriptor().Name, request.OwnerUUID, request.UUID)
+	r, uuid, err := named.Resource(ctx, uc.resources, binding, request.OwnerUUID, request.Parent, request.UUID)
 	if errors.Is(err, domain.ErrNotExists) {
-		return extra(ctx, binding, request, err)
+		return extra(ctx, binding, request, uuid, err)
 	} else if err != nil {
 		return nil, err
 	}
@@ -41,16 +42,11 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 	return &Response{Resource: r.Raw}, nil
 }
 
-// extra is the kind's extra the uuid names, when whoever asks may see
-// anybody's. notThere is what looking for a record came to, which is the
-// answer otherwise.
-func extra(ctx context.Context, binding kind.ControlPlaneBinding, request *Request, notThere error) (*Response, error) {
-	extras, extended := binding.Extras()
-	if !extended || len(request.OwnerUUID) > 0 {
-		return nil, notThere
-	}
-
-	r, err := extras.One(ctx, request.UUID)
+// extra is the kind's extra the uuid names, when whoever asks may see it.
+// notThere is what looking for a record came to, which is the answer
+// otherwise.
+func extra(ctx context.Context, binding kind.ControlPlaneBinding, request *Request, uuid string, notThere error) (*Response, error) {
+	_, r, err := named.Extra(ctx, binding, request.OwnerUUID, request.Parent, uuid, notThere)
 	if err != nil {
 		return nil, err
 	}

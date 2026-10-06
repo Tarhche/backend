@@ -107,7 +107,7 @@ func NewOrchestratorWorkload(d OrchestratorDependencies) (*OrchestratorWorkload,
 	// once. A docker request waits for its VM's dockerd first, so it is given
 	// that wait on top of its own time. A kind's query is its kind's to
 	// answer, and the Docker passthrough's operations are the node's own.
-	responder := request.NewResponder(d.NATS, orchestratorAnswerQuery.NewUseCase(kinds, orchestratorAnswerRequest.NewUseCase(daemons, recorder)), request.ResponderOptions{
+	responder := request.NewResponder(d.NATS, orchestratorAnswerQuery.NewUseCase(kinds, orchestratorAnswerRequest.NewUseCase(daemons, recorder), orchestratorAnswerQuery.WithLocks(locks)), request.ResponderOptions{
 		Concurrency: d.Configs.NodeRequestConcurrency,
 		Timeout:     d.Configs.DockerReadyTimeout + nodeRequestTimeout,
 		PullTimeout: d.Configs.PullRequestTimeout(),

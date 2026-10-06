@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -103,12 +104,6 @@ func TestUseCase_Handle(t *testing.T) {
 			code:     noderequest.CodeInvalid,
 			says:     "unknown action",
 		},
-		"and so is a command asked as a query": {
-			strategy: &lamps{},
-			request:  func(t *testing.T) noderequest.Request { return asking(t, "light", ``) },
-			code:     noderequest.CodeInvalid,
-			says:     "unknown action",
-		},
 		"a query that cannot be read is refused": {
 			strategy: &lamps{},
 			request: func(*testing.T) noderequest.Request {
@@ -186,7 +181,7 @@ func TestUseCase_Handle_TheNodesOwn(t *testing.T) {
 		},
 		"and so is one that names no kind's action": {
 			kinds: func(t *testing.T) *kind.Registry[kind.NodeBinding] { return running(t, &lamps{}) },
-			op:    noderequest.OpContainersList,
+			op:    "docker.containers.list",
 		},
 		"and with no kinds at all, every request is": {
 			kinds: func(*testing.T) *kind.Registry[kind.NodeBinding] { return kind.NewRegistry[kind.NodeBinding]() },
@@ -209,4 +204,82 @@ func TestUseCase_Handle_TheNodesOwn(t *testing.T) {
 			assert.JSONEq(t, `"answered as it always was"`, string(answered.Result))
 		})
 	}
+}
+
+// locks are the locks of the resources a test's commands are carried out on,
+// remembering whose were taken and that each was let go of.
+type locks struct {
+	mutex sync.Mutex
+
+	taken    []string
+	released int
+}
+
+func (l *locks) Lock(_ context.Context, uuid string) (func(), error) {
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
+	l.taken = append(l.taken, uuid)
+
+	return func() {
+		l.mutex.Lock()
+		defer l.mutex.Unlock()
+
+		l.released++
+	}, nil
+}
+
+// TestUseCase_Handle_command holds a command asked as a request, which is
+// how something nobody keeps a record of is asked for one, to being carried
+// out under its resource's lock and answered with its Result, whatever came
+// of it.
+func TestUseCase_Handle_command(t *testing.T) {
+	t.Parallel()
+
+	t.Run("carried out, it is answered with its result", func(t *testing.T) {
+		t.Parallel()
+
+		strategy := &lamps{}
+		held := &locks{}
+
+		answered := NewUseCase(running(t, strategy), &before{}, WithLocks(held)).Handle(t.Context(), asking(t, "light", ""))
+		require.True(t, answered.OK, "%v", answered.Error)
+
+		var result kind.Result
+		require.NoError(t, json.Unmarshal(answered.Result, &result))
+
+		assert.True(t, result.OK)
+		assert.Equal(t, "lamp", result.Kind)
+		assert.Equal(t, "lamp-1", result.UUID)
+		assert.Equal(t, "light", result.Action)
+		assert.Equal(t, "node-1", result.Node)
+		assert.False(t, result.At.IsZero())
+		assert.JSONEq(t, `{"state": "lit", "brightness": 60}`, string(result.Status))
+
+		assert.Equal(t, []string{"light lamp-1 40 watts"}, strategy.executed)
+		assert.Equal(t, []string{"lamp-1"}, held.taken, "under its resource's lock")
+		assert.Equal(t, 1, held.released)
+	})
+
+	t.Run("one that failed is answered as well, its result saying why", func(t *testing.T) {
+		t.Parallel()
+
+		answered := NewUseCase(running(t, &lamps{failure: errors.New("the bulb is gone")}), &before{}).Handle(t.Context(), asking(t, "delete", ""))
+		require.True(t, answered.OK, "%v", answered.Error)
+
+		var result kind.Result
+		require.NoError(t, json.Unmarshal(answered.Result, &result))
+
+		assert.False(t, result.OK)
+		assert.Equal(t, "the bulb is gone", result.Reason)
+	})
+
+	t.Run("with nothing to hand it to, an op that is no kind's is not one a node answers", func(t *testing.T) {
+		t.Parallel()
+
+		answered := NewUseCase(running(t, &lamps{}), nil).Handle(t.Context(), noderequest.Request{Op: "docker.containers.list", VMUUID: "vm-1"})
+
+		require.False(t, answered.OK)
+		assert.Equal(t, noderequest.CodeInvalid, answered.Error.Code)
+	})
 }

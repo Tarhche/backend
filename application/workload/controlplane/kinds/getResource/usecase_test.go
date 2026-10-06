@@ -74,10 +74,27 @@ func TestUseCase_Execute_extras(t *testing.T) {
 		assert.Equal(t, "guest", response.Resource.Metadata.OwnerUUID)
 	})
 
-	t.Run("which is nobody's own", func(t *testing.T) {
+	t.Run("which is whose it says: to somebody else asking for their own, it is not there", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := useCase.Execute(ctx, &getResource.Request{Kind: kindstest.Kind, OwnerUUID: "guest", UUID: "shelved"})
+		_, err := useCase.Execute(ctx, &getResource.Request{Kind: kindstest.Kind, OwnerUUID: kindstest.OwnerUUID, UUID: "shelved"})
+
+		assert.ErrorIs(t, err, domain.ErrNotExists)
+	})
+
+	t.Run("while to its owner it is", func(t *testing.T) {
+		t.Parallel()
+
+		response, err := useCase.Execute(ctx, &getResource.Request{Kind: kindstest.Kind, OwnerUUID: "guest", UUID: "shelved"})
+		require.NoError(t, err)
+
+		assert.Equal(t, "shelved", response.Resource.Metadata.UUID)
+	})
+
+	t.Run("and inside a parent it does not live in, it is not there", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := useCase.Execute(ctx, &getResource.Request{Kind: kindstest.Kind, UUID: "shelved", Parent: kindstest.House})
 
 		assert.ErrorIs(t, err, domain.ErrNotExists)
 	})
@@ -89,4 +106,60 @@ func TestUseCase_Execute_extras(t *testing.T) {
 
 		assert.ErrorIs(t, err, domain.ErrNotExists)
 	})
+}
+
+// TestUseCase_Execute_named holds a kind that names its resources by more
+// than their uuids inside their parents to being read by those names, inside
+// the parent the request names and nowhere else, a record and an extra alike.
+func TestUseCase_Execute_named(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	resources := resourcesMemory.NewRepository()
+	_, err := resources.Create(ctx, kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running))
+	require.NoError(t, err)
+
+	attic := kindstest.AShelvedFan("shelved", func(f *kindstest.Fan) {
+		f.Metadata.Name = "attic"
+		f.Metadata.OwnerUUID = kindstest.OwnerUUID
+		f.Metadata.Owners = []kind.Reference{{Kind: kindstest.Parent, UUID: kindstest.House}}
+	})
+
+	strategy := &kindstest.Witnessing{Fans: &kindstest.Fans{}, Records: resources, Shelf: kindstest.NewShelf(attic)}
+
+	registry := kind.NewRegistry[kind.ControlPlaneBinding]()
+	require.NoError(t, registry.Register(kind.BindControlPlane[kindstest.Spec, kindstest.Status](kindstest.Descriptor(), strategy)))
+
+	useCase := getResource.NewUseCase(registry, resources)
+
+	for name, tt := range map[string]struct {
+		request getResource.Request
+		want    string
+	}{
+		"a record by its name, inside its parent":      {request: getResource.Request{Kind: kindstest.Kind, Parent: kindstest.House, UUID: "kitchen"}, want: "fan-uuid"},
+		"and by its uuid there":                        {request: getResource.Request{Kind: kindstest.Kind, Parent: kindstest.House, UUID: "fan-uuid"}, want: "fan-uuid"},
+		"and as its owner's own":                       {request: getResource.Request{Kind: kindstest.Kind, OwnerUUID: kindstest.OwnerUUID, Parent: kindstest.House, UUID: "kitchen"}, want: "fan-uuid"},
+		"an extra by its name, inside its parent":      {request: getResource.Request{Kind: kindstest.Kind, Parent: kindstest.House, UUID: "attic"}, want: "shelved"},
+		"and as its owner's own, an extra too":         {request: getResource.Request{Kind: kindstest.Kind, OwnerUUID: kindstest.OwnerUUID, Parent: kindstest.House, UUID: "attic"}, want: "shelved"},
+		"but a name means nothing without its parent":  {request: getResource.Request{Kind: kindstest.Kind, UUID: "kitchen"}},
+		"nor inside another parent":                    {request: getResource.Request{Kind: kindstest.Kind, Parent: "house-2", UUID: "kitchen"}},
+		"nor is a uuid there inside another parent":    {request: getResource.Request{Kind: kindstest.Kind, Parent: "house-2", UUID: "fan-uuid"}},
+		"nor an extra to somebody else, asking theirs": {request: getResource.Request{Kind: kindstest.Kind, OwnerUUID: "somebody-else", Parent: kindstest.House, UUID: "attic"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			response, err := useCase.Execute(ctx, &tt.request)
+
+			if len(tt.want) == 0 {
+				assert.ErrorIs(t, err, domain.ErrNotExists)
+
+				return
+			}
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, response.Resource.Metadata.UUID)
+		})
+	}
 }

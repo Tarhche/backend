@@ -131,6 +131,12 @@ type Descriptor struct {
 	// Plural names its routes and its permissions: "vms", "stacks".
 	Plural string `json:"plural"`
 
+	// PermittedAs is the plural its permissions are named by when they are
+	// another kind's, and nothing when they are its own: an image, a network
+	// and a volume are asked under the containers' permissions,
+	// workload.containers.<verb>, which they have always been asked under.
+	PermittedAs string `json:"permitted_as,omitempty"`
+
 	// StateBy is where what a resource of the kind is doing is known: on the
 	// node holding it, which reports it in every heartbeat, or in the control
 	// plane, on its record, for a kind that is a series of operations rather
@@ -176,14 +182,20 @@ func (d Descriptor) Allows(action string, s State) bool {
 
 // Permissions are the two permissions verb is granted under for the kind's
 // resources, as domain/permission names them: over anybody's,
-// workload.<plural>.<verb>, and over one's own, self.workload.<plural>.<verb>.
-// An action's are its Permission's; an internal one has none.
+// workload.<plural>.<verb>, and over one's own, self.workload.<plural>.<verb>,
+// the plural being the one its permissions are named by (PermittedAs). An
+// action's are its Permission's; an internal one has none.
 func (d Descriptor) Permissions(verb string) (admin string, self string) {
 	if len(verb) == 0 {
 		return "", ""
 	}
 
-	admin = "workload." + d.Plural + "." + verb
+	plural := d.Plural
+	if len(d.PermittedAs) > 0 {
+		plural = d.PermittedAs
+	}
+
+	admin = "workload." + plural + "." + verb
 
 	return admin, "self." + admin
 }

@@ -2,7 +2,9 @@ package kind
 
 import (
 	"context"
+	"encoding/json"
 	"io"
+	"time"
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
@@ -53,9 +55,13 @@ type Preparer[Spec, Status any] interface {
 
 // Extras are resources a kind's listings show beside its own records, which
 // nothing keeps as its records: the code runner's runs, which are its tasks,
-// shown among anybody's VMs. None of them is anybody's own, so only a listing
-// of anybody's has them; and what they can be asked is theirs to say,
-// whatever they cannot be asked being refused field by field.
+// shown among anybody's VMs, and what a Docker VM's dockerd holds that a stack
+// or its terminal made, shown among its containers. An extra is whose its
+// metadata says and lives in what its owners say, as a record does, so a
+// listing narrowed to somebody's own, or to what lives in one resource, has
+// the extras it lets through: the runs are the guest's, and nobody's own
+// listing ever has them. What they can be asked is theirs to say, whatever
+// they cannot be asked being refused field by field.
 //
 // The control plane's generic API asks them for what a uuid names when none
 // of the kind's records is it.
@@ -81,6 +87,34 @@ type Extras interface {
 // beside its records.
 type Extender interface {
 	Extras() Extras
+}
+
+// Witness is a control-plane strategy that hears everything its kind's
+// reports say, what nobody keeps a record of among it: the containers a stack
+// or a VM's terminal made, which its extras show, and those labelled as the
+// platform's whose record a restored disk has outlived, which it adopts.
+//
+// The framework writes down what a report says of the kind's records; the
+// rest is the kind's to make of, and only a kind whose instances are made
+// behind its back has any of it.
+type Witness interface {
+	// Witnessed is told what a node's report at a moment said of the kind,
+	// once what it says of the records the node holds is written down. What
+	// fails is reported and changes nothing else about the heartbeat.
+	Witnessed(ctx context.Context, nodeName string, report Report[json.RawMessage], at time.Time) error
+}
+
+// Resolver is a control-plane strategy whose resources are named by more than
+// their uuids inside the parent they live in: a container by its Docker id or
+// its name, as the dashboard has always named one in its Docker VM.
+//
+// The control plane's generic API asks it for what a request names whenever
+// the request names the parent as well.
+type Resolver interface {
+	// Resolve is the uuid of what name names inside parent, one of the
+	// kind's records or one of its extras, or domain.ErrNotExists. A uuid
+	// names itself.
+	Resolve(ctx context.Context, parent Reference, name string) (string, error)
 }
 
 // Intent is what a kind's reconcile asks for: one of its actions, which the

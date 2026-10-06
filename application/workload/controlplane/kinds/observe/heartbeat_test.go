@@ -444,3 +444,49 @@ func TestObserver_Heartbeat_orphans(t *testing.T) {
 		})
 	})
 }
+
+// TestObserver_Heartbeat_witness holds a kind that hears its reports to being
+// told the whole of each, once what it says of the records is written down:
+// what nobody keeps a record of is there for it, and is not the framework's
+// to make anything of.
+func TestObserver_Heartbeat_witness(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	repository := resourcesMemory.NewRepository()
+	create(t, repository, kindstest.AFan("running", kindstest.Running, kindstest.Running))
+
+	witness := &kindstest.Witnessing{Fans: &kindstest.Fans{}, Records: repository}
+
+	registry := kind.NewRegistry[kind.ControlPlaneBinding]()
+	require.NoError(t, registry.Register(kind.BindControlPlane[kindstest.Spec, kindstest.Status](kindstest.Descriptor(), witness)))
+
+	observer := observe.NewObserver(registry, repository, slog.New(slog.DiscardHandler))
+
+	reports := report(t, nil, map[string]kindstest.Status{"running": observed(kindstest.Running, 2)})
+
+	unrecorded := reports[kindstest.Kind]
+	unrecorded.Instances = append(unrecorded.Instances, kind.Observation{
+		Kind:   kindstest.Kind,
+		Owners: []kind.Reference{{Kind: kindstest.Parent, UUID: kindstest.House}},
+		Status: status(t, observed(kindstest.Running, 1)),
+	})
+	reports[kindstest.Kind] = unrecorded
+
+	observer.Heartbeat(ctx, kindstest.NodeName, later, reports)
+
+	heard := witness.Heard()
+	require.Len(t, heard, 1)
+
+	assert.Equal(t, kindstest.NodeName, heard[0].Node)
+	assert.Equal(t, later, heard[0].At)
+	assert.Equal(t, unrecorded, heard[0].Report, "all of it, what has no record among it")
+
+	running, _ := stored(t, repository, "running")
+	assert.Equal(t, 2, kindstest.Typed(running).Status.Speed, "what it says of a record is written down as ever")
+
+	all, _, err := repository.GetAll(ctx, kindstest.Kind, resource.Filter{}, 0, 0)
+	require.NoError(t, err)
+	assert.Len(t, all, 1, "and nothing is kept of what has none")
+}

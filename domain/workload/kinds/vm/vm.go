@@ -271,6 +271,13 @@ type Status struct {
 	// does: a VM whose spec says otherwise is to be reconfigured. Nothing is a
 	// VM that was never made, whose instance has its spec once it is.
 	Applied *Config `json:"applied,omitempty"`
+
+	// RestoredAt is when its disk was last replaced from a snapshot, which
+	// its node says when it restores it and nothing else does: what lives in
+	// it is what that disk holds from then on, and what is first found there
+	// labelled as the platform's is taken in again rather than taken for
+	// somebody's own.
+	RestoredAt time.Time `json:"restored_at,omitzero"`
 }
 
 // Stats is one sample of what a VM uses.

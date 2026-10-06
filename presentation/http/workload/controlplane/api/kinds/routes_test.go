@@ -369,6 +369,32 @@ func TestRoutes(t *testing.T) {
 		assert.Equal(t, http.StatusNotFound, status)
 	})
 
+	t.Run("inside a parent, one is read, asked and queried as its parent's, and nowhere else", func(t *testing.T) {
+		t.Parallel()
+
+		a := newAPI(t)
+		a.keep(t, kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running))
+
+		status, _ := a.do(t, http.MethodGet, "/api/fans/fan-uuid?parent="+kindstest.House, "")
+		assert.Equal(t, http.StatusOK, status)
+
+		status, _ = a.do(t, http.MethodGet, "/api/fans/fan-uuid?parent=house-2", "")
+		assert.Equal(t, http.StatusNotFound, status, "it does not live in that house")
+
+		status, _ = a.do(t, http.MethodPost, "/api/fans/fan-uuid/actions/stop?parent=house-2", "")
+		assert.Equal(t, http.StatusNotFound, status)
+
+		status, _ = a.do(t, http.MethodGet, "/api/fans/fan-uuid/state?parent=house-2", "")
+		assert.Equal(t, http.StatusNotFound, status)
+
+		status, _ = a.do(t, http.MethodDelete, "/api/fans/fan-uuid?parent=house-2", "")
+		assert.Equal(t, http.StatusNotFound, status)
+
+		_, kept := a.stored(t, "fan-uuid")
+		assert.True(t, kept)
+		assert.Empty(t, a.node.commands(), "nothing was asked of it")
+	})
+
 	t.Run("a command is sent to its node and, when asked to be, waited for", func(t *testing.T) {
 		t.Parallel()
 

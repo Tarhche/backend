@@ -282,7 +282,14 @@ func (n *Node) restore(ctx context.Context, v vmKind.VM, snapshotUUID string) (v
 		return vmKind.Status{}, err
 	}
 
-	return n.inspected(ctx, v, true)
+	status, err := n.inspected(ctx, v, true)
+	if err != nil {
+		return vmKind.Status{}, err
+	}
+
+	status.RestoredAt = n.now()
+
+	return status, nil
 }
 
 // delete removes a VM, disk and all. One that was not here is gone already.

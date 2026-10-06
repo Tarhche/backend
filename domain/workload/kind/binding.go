@@ -63,6 +63,14 @@ type ControlPlaneBinding interface {
 	// Extras are what the kind's listings show beside its records, when its
 	// strategy is an Extender.
 	Extras() (Extras, bool)
+
+	// Witness is what hears everything the kind's reports say, when its
+	// strategy is a Witness.
+	Witness() (Witness, bool)
+
+	// Resolver is what finds the kind's resources by what else names them
+	// inside their parents, when its strategy is a Resolver.
+	Resolver() (Resolver, bool)
 }
 
 // NodeBinding is a kind's node strategy with its types erased: what an
@@ -253,6 +261,18 @@ func (b *controlPlaneBinding[Spec, Status]) Extras() (Extras, bool) {
 	extras := extender.Extras()
 
 	return extras, extras != nil
+}
+
+func (b *controlPlaneBinding[Spec, Status]) Witness() (Witness, bool) {
+	witness, witnesses := b.strategy.(Witness)
+
+	return witness, witnesses
+}
+
+func (b *controlPlaneBinding[Spec, Status]) Resolver() (Resolver, bool) {
+	resolver, resolves := b.strategy.(Resolver)
+
+	return resolver, resolves
 }
 
 type nodeBinding[Spec, Status any, S interface {

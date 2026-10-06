@@ -101,6 +101,10 @@ func TestCheck(t *testing.T) {
 			breaking: func(d *Descriptor) { d.Plural = "box es" },
 			want:     `its plural "box es" is not a lowercase word`,
 		},
+		"permissions named by a plural that is not a word": {
+			breaking: func(d *Descriptor) { d.PermittedAs = "Crates" },
+			want:     `the plural its permissions are named by, "Crates", is not a lowercase word`,
+		},
 		"a state known nowhere": {
 			breaking: func(d *Descriptor) { d.StateBy = "" },
 			want:     `its state is known neither on a node nor in the control plane ("")`,
