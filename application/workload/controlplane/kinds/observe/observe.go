@@ -169,6 +169,18 @@ func Answer(d kind.Descriptor, r *resource.Record, result kind.Result, at time.T
 		return Change{}, err
 	}
 
+	// what a command's result says it is doing is an observation of it too.
+	common, err := r.Common()
+	if err != nil {
+		return Change{}, err
+	}
+
+	common.ObservedAt = at
+
+	if err := r.SetCommon(common); err != nil {
+		return Change{}, err
+	}
+
 	return Change{Changed: true}, nil
 }
 

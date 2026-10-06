@@ -279,7 +279,7 @@ func controlPlaneConsoleCommand(
 	)
 
 	subscribers := map[string]domain.MessageHandler{
-		nodeEvents.HeartbeatName:        controlPlaneHeartbeatNode.NewHeartbeatHandler(nodeRepository),
+		nodeEvents.HeartbeatName:        controlPlaneHeartbeatNode.NewHeartbeatHandler(nodeRepository, nil),
 		taskEvents.HeartbeatName:        controlPlaneHeartbeatTask.NewHeartbeatHandler(taskRepository, jetStreamProduceConsumer, controlPlaneDeleteTaskUseCase, controlPlaneKillTaskUseCase),
 		taskEvents.TaskRunRequestedName: controlPlaneRunTask.NewTaskRunRequested(controlPlaneRunTaskUseCase, logger),
 		taskEvents.TaskCreatedName:      controlPlaneRunTask.NewTaskCreated(taskRepository, nodeRepository, taskScheduler, taskSchedule, logger),
