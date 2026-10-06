@@ -142,9 +142,13 @@ func (d *Daemon) coming(ctx context.Context) error {
 }
 
 func (d *Daemon) Containers(ctx context.Context, filter docker.ContainerFilter) ([]docker.Container, error) {
-	options := container.ListOptions{All: filter.All}
+	options := container.ListOptions{All: filter.All, Filters: filters.NewArgs()}
 	if len(filter.Stack) > 0 {
-		options.Filters = filters.NewArgs(filters.Arg("label", docker.LabelComposeProject+"="+filter.Stack))
+		options.Filters.Add("label", docker.LabelComposeProject+"="+filter.Stack)
+	}
+
+	if len(filter.Label) > 0 {
+		options.Filters.Add("label", filter.Label)
 	}
 
 	var containers []docker.Container
