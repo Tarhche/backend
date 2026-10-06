@@ -1,11 +1,17 @@
 package deleteResource
 
 import (
+	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 )
 
 // Response is what asking for a resource to be deleted came to.
 type Response struct {
+	// ValidationErrors is why an extra would not be deleted: a delete is a
+	// request to have a resource gone and is never refused, but an extra says
+	// for itself what it can be asked.
+	ValidationErrors domain.ValidationErrors
+
 	// Resource is the resource as it was left, unless it is Gone: deleted
 	// already, or with nothing of it anywhere to delete.
 	Resource kind.Raw

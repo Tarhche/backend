@@ -12,5 +12,9 @@ type Request struct {
 	// kind's parent kind: a Docker VM's building blocks.
 	Parent string
 
+	// Labels narrows them to those carrying each label given, with the value
+	// given: the Docker VMs are the VMs labelled workload.flavor=docker.
+	Labels map[string]string
+
 	Page uint
 }

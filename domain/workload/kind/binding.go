@@ -51,6 +51,18 @@ type ControlPlaneBinding interface {
 	// is refused as ErrUnknownAction; a payload that cannot be read is
 	// ErrInvalidPayload, and one that is not valid is what is wrong with it.
 	Apply(ctx context.Context, r Raw, action string, payload []byte) (Raw, domain.ValidationErrors, error)
+
+	// Prepare readies one of the kind's node commands before it is sent,
+	// through the strategy's Preparer, and is the resource the command
+	// carries; a strategy that is not one leaves the resource as it is. An
+	// action that is not a command run on a node is refused as
+	// ErrUnknownAction; a payload that cannot be read is ErrInvalidPayload,
+	// and one that is not valid is what is wrong with it.
+	Prepare(ctx context.Context, r Raw, action string, payload []byte) (Raw, domain.ValidationErrors, error)
+
+	// Extras are what the kind's listings show beside its records, when its
+	// strategy is an Extender.
+	Extras() (Extras, bool)
 }
 
 // NodeBinding is a kind's node strategy with its types erased: what an
@@ -197,6 +209,50 @@ func (b *controlPlaneBinding[Spec, Status]) Apply(ctx context.Context, r Raw, ac
 	raw, err := Encode(applied)
 
 	return raw, nil, err
+}
+
+func (b *controlPlaneBinding[Spec, Status]) Prepare(ctx context.Context, r Raw, action string, payload []byte) (Raw, domain.ValidationErrors, error) {
+	a, err := actionOf(b.descriptor, b.descriptor.Name, action, OnNode, ModeCommand)
+	if err != nil {
+		return Raw{}, nil, err
+	}
+
+	preparer, prepares := b.strategy.(Preparer[Spec, Status])
+	if !prepares {
+		return r, nil, nil
+	}
+
+	value, invalid, err := a.Payload.Decode(payload)
+	if err != nil || len(invalid) > 0 {
+		return Raw{}, invalid, err
+	}
+
+	typed, err := typedAs[Spec, Status](b.descriptor, r)
+	if err != nil {
+		return Raw{}, nil, err
+	}
+
+	prepared, invalid, err := preparer.Prepare(ctx, typed, action, value)
+	if err != nil || len(invalid) > 0 {
+		return Raw{}, invalid, err
+	}
+
+	prepared.Kind = b.descriptor.Name
+
+	raw, err := Encode(prepared)
+
+	return raw, nil, err
+}
+
+func (b *controlPlaneBinding[Spec, Status]) Extras() (Extras, bool) {
+	extender, extends := b.strategy.(Extender)
+	if !extends {
+		return nil, false
+	}
+
+	extras := extender.Extras()
+
+	return extras, extras != nil
 }
 
 type nodeBinding[Spec, Status any, S interface {

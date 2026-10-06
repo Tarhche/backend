@@ -269,3 +269,107 @@ func TestResult_Handle(t *testing.T) {
 		assert.Equal(t, kindstest.Stopping, kindstest.Typed(stored).Status.State)
 	})
 }
+
+// restorer records the parents it was told were restored, and fails as it is
+// told to.
+type restorer struct {
+	restored []kind.Reference
+	failure  error
+}
+
+func (r *restorer) Restored(_ context.Context, parent kind.Reference) error {
+	if r.failure != nil {
+		return r.failure
+	}
+
+	r.restored = append(r.restored, parent)
+
+	return nil
+}
+
+func TestResult_Handle_restores(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	// the fan's start restores it, as a VM's restore does: what lives in it
+	// is what it holds afterwards.
+	restoring := func(t *testing.T, told *restorer, records ...resource.Record) *fixture {
+		t.Helper()
+
+		f := newFixture(t, records...)
+
+		d := kindstest.Descriptor()
+		for i := range d.Actions {
+			if d.Actions[i].Name == "start" {
+				d.Actions[i].Restores = true
+			}
+		}
+
+		registry := kind.NewRegistry[kind.ControlPlaneBinding]()
+		require.NoError(t, registry.Register(kind.BindControlPlane[kindstest.Spec, kindstest.Status](d, &kindstest.Fans{})))
+
+		f.handler = resourceResult.NewResult(registry, f.racing, f.waiters, slog.New(slog.DiscardHandler), f.clock.Now, resourceResult.WithRestorer(told))
+
+		return f
+	}
+
+	restored := kind.Result{ID: "command-1", Kind: kindstest.Kind, UUID: "fan-uuid", Action: "start", OK: true, Status: json.RawMessage(`{"state":"running"}`)}
+
+	t.Run("a restore carried out resets what lives in its resource, and is taken", func(t *testing.T) {
+		t.Parallel()
+
+		told := &restorer{}
+		f := restoring(t, told, waiting(kindstest.Starting, kindstest.Running, "start"))
+
+		require.NoError(t, f.handler.Handle(ctx, message(t, restored)))
+
+		assert.Equal(t, []kind.Reference{{Kind: kindstest.Kind, UUID: "fan-uuid"}}, told.restored)
+
+		r, _ := f.stored(t, "fan-uuid")
+		assert.Equal(t, kindstest.Running, kindstest.Typed(r).Status.State)
+	})
+
+	t.Run("one that failed resets nothing", func(t *testing.T) {
+		t.Parallel()
+
+		told := &restorer{}
+		f := restoring(t, told, waiting(kindstest.Starting, kindstest.Running, "start"))
+
+		failed := restored
+		failed.OK, failed.Status, failed.Reason = false, nil, "the archive is from another engine"
+
+		require.NoError(t, f.handler.Handle(ctx, message(t, failed)))
+
+		assert.Empty(t, told.restored)
+	})
+
+	t.Run("nor does one the resource is not waiting on", func(t *testing.T) {
+		t.Parallel()
+
+		told := &restorer{}
+		f := restoring(t, told, kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running))
+
+		require.NoError(t, f.handler.Handle(ctx, message(t, restored)))
+
+		assert.Empty(t, told.restored)
+	})
+
+	t.Run("what could not be reset is asked for again, and the result is not taken until it is", func(t *testing.T) {
+		t.Parallel()
+
+		told := &restorer{failure: errors.New("the database is gone")}
+		f := restoring(t, told, waiting(kindstest.Starting, kindstest.Running, "start"))
+
+		assert.ErrorIs(t, f.handler.Handle(ctx, message(t, restored)), told.failure)
+
+		r, _ := f.stored(t, "fan-uuid")
+		assert.Equal(t, kindstest.Starting, kindstest.Typed(r).Status.State)
+		assert.NotNil(t, r.Pending, "still waiting on it, so it is taken when it comes again")
+
+		told.failure = nil
+
+		require.NoError(t, f.handler.Handle(ctx, message(t, restored)))
+		assert.Len(t, told.restored, 1)
+	})
+}

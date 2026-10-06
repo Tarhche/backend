@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/gofrs/uuid/v5"
@@ -35,6 +36,11 @@ const (
 	// pollEvery is how often a wait for a command's result looks for it on
 	// the resource, in case another control plane heard it.
 	pollEvery = 500 * time.Millisecond
+
+	// orphanEvery is how often a node is asked again to delete what nobody
+	// keeps a record of, while it still holds it: a delete takes a moment, and
+	// every heartbeat in the meantime says it again.
+	orphanEvery = time.Minute
 
 	// maxTries is how many tries of one command a resource remembers: a
 	// result for one sent before them is too late to be its answer.
@@ -51,6 +57,11 @@ type Dispatcher struct {
 	waiters   *waiters.Waiters
 	now       func() time.Time
 	poll      time.Duration
+
+	// orphans are when each node was last asked to delete what it holds and
+	// nobody keeps a record of, by node and uuid.
+	lock    sync.Mutex
+	orphans map[string]time.Time
 }
 
 // Option changes how a dispatcher goes about it.
@@ -72,7 +83,7 @@ func New(resources resource.Repository, producer domain.Producer, waiting *waite
 		now = time.Now
 	}
 
-	d := &Dispatcher{resources: resources, producer: producer, waiters: waiting, now: now, poll: pollEvery}
+	d := &Dispatcher{resources: resources, producer: producer, waiters: waiting, now: now, poll: pollEvery, orphans: make(map[string]time.Time)}
 
 	for _, option := range options {
 		option(d)
@@ -105,13 +116,19 @@ type Asked struct {
 // was given.
 //
 // The command has to be allowed in the state the resource is in; what is
-// not is refused, as is a payload its codec refuses. What it desires becomes
-// what the resource is expected to be, and the resource moves as its
-// machine says. A command run on a node is then written down and returned to
-// be sent (Send), and one run in the control plane is carried out by the
-// kind's strategy and its outcome written down. A command for a node, asked
-// of a resource on none, is kind.ErrUnreachable, but for a delete, which
-// takes the record away: there is nothing anywhere to delete.
+// not is refused, as is a payload its codec refuses. A command for a node is
+// readied by the kind first (kind.Preparer), which may refuse it, place the
+// resource on a node, or give it what only the control plane knows. What it
+// desires becomes what the resource is expected to be, and the resource moves
+// as its machine says. A command run on a node is then written down and
+// returned to be sent (Send), and one run in the control plane is carried out
+// by the kind's strategy and its outcome written down.
+//
+// A command for a node, asked of a resource on none, has nowhere to go: a
+// delete takes the record away, since there is nothing anywhere to delete;
+// one that desires a state has that written down, as all that can be done
+// for it until the resource is somewhere; and any other is
+// kind.ErrUnreachable.
 //
 // Fresh says it is something new asked of the resource, by a person or by a
 // lifetime ending, rather than the reconcile loop trying again for what is
@@ -134,7 +151,7 @@ func (d *Dispatcher) Ask(ctx context.Context, b kind.ControlPlaneBinding, r reso
 	}
 
 	// a node reads the payload again, but what is wrong with it is said here,
-	// to whoever asked.
+	// to whoever asked, and so is what the kind finds wrong with the command.
 	if a.Runs == kind.OnNode {
 		if _, invalid, err := a.Payload.Decode(payload); err != nil || len(invalid) > 0 {
 			return Asked{}, invalid, err
@@ -143,12 +160,37 @@ func (d *Dispatcher) Ask(ctx context.Context, b kind.ControlPlaneBinding, r reso
 		if payload, err = Compact(payload); err != nil {
 			return Asked{}, nil, err
 		}
+
+		prepared, invalid, err := b.Prepare(ctx, r.Raw, action, payload)
+		if err != nil || len(invalid) > 0 {
+			return Asked{}, invalid, err
+		}
+
+		// what it is, and which, is not the strategy's to change.
+		prepared.Kind = r.Kind
+		prepared.Metadata.UUID = r.Metadata.UUID
+		r.Raw = prepared
+
+		if common, err = r.Common(); err != nil {
+			return Asked{}, nil, err
+		}
 	}
 
 	now := d.now()
 
 	if fresh {
 		r.Attempts = 0
+	}
+
+	if a.Runs == kind.OnNode && len(r.Metadata.Node) == 0 {
+		switch {
+		case a.Desires == kind.Deleted:
+			return d.forget(ctx, r)
+		case len(a.Desires) > 0:
+			return d.desired(ctx, r, common, a.Desires, now)
+		}
+
+		return Asked{}, nil, fmt.Errorf("%w: the %s %q is on no node yet", kind.ErrUnreachable, descriptor.Name, r.Metadata.UUID)
 	}
 
 	if len(a.Desires) > 0 {
@@ -169,14 +211,6 @@ func (d *Dispatcher) Ask(ctx context.Context, b kind.ControlPlaneBinding, r reso
 
 	if a.Runs == kind.OnControlPlane {
 		return d.apply(ctx, b, a, r, payload)
-	}
-
-	if len(r.Metadata.Node) == 0 {
-		if a.Desires == kind.Deleted {
-			return d.forget(ctx, r)
-		}
-
-		return Asked{}, nil, fmt.Errorf("%w: the %s %q is on no node yet", kind.ErrUnreachable, descriptor.Name, r.Metadata.UUID)
 	}
 
 	id, err := newID()
@@ -230,6 +264,87 @@ func (d *Dispatcher) apply(ctx context.Context, b kind.ControlPlaneBinding, a ki
 	}
 
 	return Asked{Record: written}, nil, nil
+}
+
+// desired writes down what a command asked of a resource on no node desires,
+// which is all that can be done for it there: it stays where it is, and is
+// asked for what it is expected to be once it is somewhere.
+func (d *Dispatcher) desired(ctx context.Context, r resource.Record, common kind.Status, state kind.State, now time.Time) (Asked, domain.ValidationErrors, error) {
+	common.Expected = state
+
+	if err := r.SetCommon(common); err != nil {
+		return Asked{}, nil, err
+	}
+
+	r.Metadata.UpdatedAt = now
+
+	written, err := d.resources.Update(ctx, r)
+	if err != nil {
+		return Asked{}, nil, err
+	}
+
+	return Asked{Record: written}, nil, nil
+}
+
+// Follow asks a resource for what its kind asks for of it as it is now: what
+// its Reconcile says, in order, until one of them is a command for its node,
+// which is written down and returned to be sent. One is in flight at a time,
+// so what the kind asks for after it is asked for once it arrives, by the
+// reconcile loop. It is what a resource just admitted, or just changed in the
+// control plane, is asked at once, rather than on the loop's next pass.
+//
+// What the kind asks for and the state does not allow, or refuses, is left
+// for the loop, which asks the kind again; the record is as it was asked so
+// far either way.
+func (d *Dispatcher) Follow(ctx context.Context, b kind.ControlPlaneBinding, r resource.Record) (Asked, error) {
+	asked := Asked{Record: r}
+
+	intents, err := b.Reconcile(ctx, r.Raw)
+	if err != nil {
+		return asked, err
+	}
+
+	for _, intent := range intents {
+		common, err := asked.Record.Common()
+		if err != nil {
+			return asked, err
+		}
+
+		if !b.Descriptor().Allows(intent.Action, common.State) {
+			return asked, nil
+		}
+
+		payload, err := PayloadOf(intent)
+		if err != nil {
+			return asked, err
+		}
+
+		next, invalid, err := d.Ask(ctx, b, asked.Record, intent.Action, payload, false)
+		if err != nil {
+			return asked, err
+		}
+
+		if len(invalid) > 0 {
+			return asked, nil
+		}
+
+		asked = next
+
+		if asked.Gone || asked.Command != nil {
+			return asked, nil
+		}
+	}
+
+	return asked, nil
+}
+
+// PayloadOf is what an intent's action is asked with, as it travels.
+func PayloadOf(intent kind.Intent) (json.RawMessage, error) {
+	if intent.Payload == nil {
+		return nil, nil
+	}
+
+	return json.Marshal(intent.Payload)
 }
 
 // Again writes down that the command a resource is waiting on is sent once
@@ -290,6 +405,62 @@ func (d *Dispatcher) Desire(ctx context.Context, r resource.Record, state kind.S
 	r.Metadata.UpdatedAt = d.now()
 
 	return d.resources.Update(ctx, r)
+}
+
+// Orphaned asks the node holding a resource nobody keeps a record of to
+// delete it, as the delete of a resource of its kind that carries nothing but
+// what it is and where: a VM deleted while its node could not be told, or
+// made again by a command carried out after its delete was. Nobody is going
+// to want it. Its node is asked at most once a minute for one resource,
+// however often it reports it, and what came of it is heard as nobody's.
+func (d *Dispatcher) Orphaned(ctx context.Context, desc kind.Descriptor, nodeName string, uuid string) error {
+	if !d.orphan(nodeName, uuid) {
+		return nil
+	}
+
+	id, err := newID()
+	if err != nil {
+		return err
+	}
+
+	_, err = d.Send(ctx, kind.Command{
+		ID:     id,
+		Kind:   desc.Name,
+		UUID:   uuid,
+		Action: deleteAction,
+		Node:   nodeName,
+		Resource: kind.Raw{
+			Kind:     desc.Name,
+			Metadata: kind.Metadata{UUID: uuid, Node: nodeName},
+		},
+	}, 0)
+
+	return err
+}
+
+// orphan reports whether a node is to be asked to delete an orphan now, and
+// writes down that it is: once a minute at most, for one resource. What was
+// asked longer ago than that is let go of.
+func (d *Dispatcher) orphan(nodeName string, uuid string) bool {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
+	now := d.now()
+
+	for asked, at := range d.orphans {
+		if now.Sub(at) >= orphanEvery {
+			delete(d.orphans, asked)
+		}
+	}
+
+	key := nodeName + "/" + uuid
+	if _, asked := d.orphans[key]; asked {
+		return false
+	}
+
+	d.orphans[key] = now
+
+	return true
 }
 
 // Forget takes a resource's record away, when there is nothing of it left

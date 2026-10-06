@@ -37,7 +37,6 @@ package reconcile
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"log/slog"
 	"time"
@@ -370,7 +369,7 @@ func (uc *UseCase) ask(ctx context.Context, binding kind.ControlPlaneBinding, r 
 			return nil
 		}
 
-		payload, err := payloadOf(intent)
+		payload, err := dispatch.PayloadOf(intent)
 		if err != nil {
 			return err
 		}
@@ -406,13 +405,4 @@ func (uc *UseCase) ask(ctx context.Context, binding kind.ControlPlaneBinding, r 
 	}
 
 	return nil
-}
-
-// payloadOf is what an intent's action is asked with, as it travels.
-func payloadOf(intent kind.Intent) (json.RawMessage, error) {
-	if intent.Payload == nil {
-		return nil, nil
-	}
-
-	return json.Marshal(intent.Payload)
 }

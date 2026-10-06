@@ -269,3 +269,54 @@ func TestUseCase_Execute(t *testing.T) {
 		})
 	}
 }
+
+func TestUseCase_Execute_extras(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	shelf := kindstest.NewShelf(kindstest.AShelvedFan("shelved"))
+	requester := &messagingMock.Requester{}
+
+	registry := kind.NewRegistry[kind.ControlPlaneBinding]()
+	require.NoError(t, registry.Register(kind.BindControlPlane[kindstest.Spec, kindstest.Status](kindstest.Descriptor(), &kindstest.Shelved{Fans: &kindstest.Fans{}, Shelf: shelf})))
+
+	useCase := queryResource.NewUseCase(registry, resourcesMemory.NewRepository(), requester, nil, nil)
+
+	t.Run("a uuid that names none of the kind's records may name one of its extras, which answers for itself", func(t *testing.T) {
+		t.Parallel()
+
+		response, err := useCase.Execute(ctx, &queryResource.Request{Kind: kindstest.Kind, UUID: "shelved", Action: "logs"})
+		require.NoError(t, err)
+
+		assert.Empty(t, response.ValidationErrors)
+		assert.Nil(t, response.NodeError)
+		assert.JSONEq(t, `["the shelf's log of shelved"]`, string(response.Result))
+	})
+
+	t.Run("its state is what it says it is doing", func(t *testing.T) {
+		t.Parallel()
+
+		response, err := useCase.Execute(ctx, &queryResource.Request{Kind: kindstest.Kind, UUID: "shelved", Action: "state"})
+		require.NoError(t, err)
+
+		var observed kind.Observation
+		require.NoError(t, json.Unmarshal(response.Result, &observed))
+
+		assert.Equal(t, "shelved", observed.UUID)
+
+		common, err := resource.Common(observed.Status)
+		require.NoError(t, err)
+		assert.Equal(t, kindstest.Running, common.State)
+	})
+
+	t.Run("an extra is nobody's own", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := useCase.Execute(ctx, &queryResource.Request{Kind: kindstest.Kind, OwnerUUID: "guest", UUID: "shelved", Action: "logs"})
+
+		assert.ErrorIs(t, err, domain.ErrNotExists)
+	})
+
+	assert.Empty(t, requester.Asked(), "no node is asked about an extra")
+}

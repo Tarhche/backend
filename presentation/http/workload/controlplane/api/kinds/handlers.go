@@ -65,15 +65,25 @@ func NewIndexHandler(useCase *getResources.UseCase, kindName string) *indexHandl
 // @Param			plural	path		string	true	"The kind's plural"
 // @Param			owner	query		string	false	"Only this person's own"
 // @Param			parent	query		string	false	"Only those living in this resource"
+// @Param			label	query		[]string	false	"Only those labelled so, as key=value; given more than once, every one of them"	collectionFormat(multi)
 // @Param			page	query		int		false	"Page number"	default(1)
 // @Success		200		{object}	getResources.Response
+// @Failure		400		{object}	map[string]interface{}
 // @Failure		500		{object}	map[string]interface{}
 // @Router			/{plural} [get]
 func (h *indexHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
+	labels, ok := labelsOf(r.URL.Query()["label"])
+	if !ok {
+		respond.Refused(rw, domain.ValidationErrors{"label": "invalid_value"})
+
+		return
+	}
+
 	response, err := h.useCase.Execute(r.Context(), &getResources.Request{
 		Kind:      h.kindName,
 		OwnerUUID: respond.Owner(r),
 		Parent:    r.URL.Query().Get("parent"),
+		Labels:    labels,
 		Page:      respond.Page(r),
 	})
 	if err != nil {
@@ -187,6 +197,7 @@ func NewDeleteHandler(useCase *deleteResource.UseCase, kindName string) *deleteH
 // @Success		200		{object}	commanded
 // @Success		202		{object}	commanded
 // @Success		204
+// @Failure		400		{object}	map[string]interface{}
 // @Failure		404		{object}	map[string]interface{}
 // @Failure		500		{object}	map[string]interface{}
 // @Router			/{plural}/{uuid} [delete]
@@ -204,6 +215,12 @@ func (h *deleteHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		failed(rw, r, err)
+
+		return
+	}
+
+	if len(response.ValidationErrors) > 0 {
+		respond.Refused(rw, response.ValidationErrors)
 
 		return
 	}

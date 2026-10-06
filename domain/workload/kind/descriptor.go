@@ -99,6 +99,21 @@ type Action struct {
 	// permission for it, and no route serves it.
 	Internal bool `json:"internal,omitempty"`
 
+	// Waits says that, asked of a resource in flight, it is not refused but
+	// waits its turn: what it desires is written down as what the resource is
+	// expected to be, and the reconcile loop asks for it once the resource
+	// has got where it was going. A VM asked to stop while it starts stops
+	// once it runs, and one asked to start while it stops starts once it has
+	// stopped. Only a command that desires a state has anything to wait for,
+	// and nothing waits on a resource on its way to being deleted.
+	Waits bool `json:"waits,omitempty"`
+
+	// Restores says that, carried out, it gives the resource what a snapshot
+	// held, as a VM's restore gives the VM a snapshot's disk: what lives in
+	// the resource is then whatever it holds afterwards, and is reset to it,
+	// as the kinds that live in it say (ParentRules.Restore).
+	Restores bool `json:"restores,omitempty"`
+
 	// Payload reads and checks what the action is asked with. NoPayload is
 	// the codec of one asked with nothing.
 	Payload Codec `json:"-"`

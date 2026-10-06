@@ -7,6 +7,11 @@
 // better. Whoever waits for the command is told either way, since it is what
 // came of their command.
 //
+// A command that restores a resource from a snapshot (kind.Action.Restores),
+// carried out, resets what lives in the resource to what it now holds, as the
+// kinds that live in it say, before the result is taken: told first, so that
+// a result heard again tells it again rather than not at all.
+//
 // A result that will never be taken, one that cannot be read, of a kind not
 // run here, for a resource that is gone, is not failed: redelivered, it would
 // be refused the same way, at once and for ever. Only what may go another way
@@ -33,25 +38,49 @@ import (
 // something else wrote it in the meantime.
 const tries = 5
 
+// Restorer resets what lives in a resource restored from a snapshot to what
+// the resource holds afterwards, as the kinds that live in it say.
+type Restorer interface {
+	Restored(ctx context.Context, parent kind.Reference) error
+}
+
 // Result takes the results of commands onto their resources.
 type Result struct {
 	registry  *kind.Registry[kind.ControlPlaneBinding]
 	resources resource.Repository
 	waiters   *waiters.Waiters
+	restorer  Restorer
 	logger    *slog.Logger
 	now       func() time.Time
 }
 
 var _ domain.MessageHandler = &Result{}
 
+// Option changes how results are taken.
+type Option func(*Result)
+
+// WithRestorer has what lives in a resource restored from a snapshot reset
+// by restorer once the restore is carried out.
+func WithRestorer(restorer Restorer) Option {
+	return func(r *Result) {
+		r.restorer = restorer
+	}
+}
+
 // NewResult is a handler that keeps resources in resources and tells
 // waiters what came of their commands. A clock of nil is the time now.
-func NewResult(registry *kind.Registry[kind.ControlPlaneBinding], resources resource.Repository, waiting *waiters.Waiters, logger *slog.Logger, now func() time.Time) *Result {
+func NewResult(registry *kind.Registry[kind.ControlPlaneBinding], resources resource.Repository, waiting *waiters.Waiters, logger *slog.Logger, now func() time.Time, options ...Option) *Result {
 	if now == nil {
 		now = time.Now
 	}
 
-	return &Result{registry: registry, resources: resources, waiters: waiting, logger: logger, now: now}
+	r := &Result{registry: registry, resources: resources, waiters: waiting, logger: logger, now: now}
+
+	for _, option := range options {
+		option(r)
+	}
+
+	return r
 }
 
 func (h *Result) Handle(ctx context.Context, data []byte) error {
@@ -125,6 +154,12 @@ func (h *Result) take(ctx context.Context, result kind.Result) error {
 			return nil
 		case err != nil:
 			return fmt.Errorf("%w: %w", errNotTaken, err)
+		}
+
+		if action, _ := d.Action(result.Action); result.OK && action.Restores && h.restorer != nil {
+			if err := h.restorer.Restored(ctx, kind.Reference{Kind: d.Name, UUID: r.Metadata.UUID}); err != nil {
+				return err
+			}
 		}
 
 		if change.Gone {

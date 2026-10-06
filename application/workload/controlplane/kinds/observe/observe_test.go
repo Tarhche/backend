@@ -133,6 +133,74 @@ func TestObserve(t *testing.T) {
 	})
 }
 
+// TestObserve_answered holds a resource waiting for the answer to its command
+// (kind.Machine.Answered) to that answer: what its node is seen doing in the
+// meantime may be from before the command reached it, when the resource does
+// the same before the command and after it.
+func TestObserve_answered(t *testing.T) {
+	t.Parallel()
+
+	d := kindstest.Descriptor()
+	d.Machine.Answered = []kind.State{kindstest.Starting}
+
+	starting := func() resource.Record {
+		r := kindstest.AFan("fan-uuid", kindstest.Starting, kindstest.Running)
+		r.Pending = &resource.Pending{Action: "start", IDs: []string{"command-1"}, SentAt: kindstest.Moment}
+
+		return r
+	}
+
+	for name, seen := range map[string]kindstest.Status{
+		"seen where its command takes it, it stays where it is": observed(kindstest.Running, 2),
+		"and so it does seen failed":                            {Status: kind.Status{State: kind.Failed, Reason: "it overheated"}, Speed: 2},
+		"or gone":                                               observed(kind.Missing, 2),
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			r := starting()
+
+			change, err := observe.Observe(d, &r, status(t, seen), later)
+			require.NoError(t, err)
+
+			fan := kindstest.Typed(r)
+
+			assert.Equal(t, kindstest.Starting, fan.Status.State)
+			assert.Equal(t, kindstest.Moment, fan.Status.Since)
+			assert.Empty(t, fan.Status.Reason)
+			assert.NotNil(t, r.Pending, "it waits for its answer still")
+			assert.Equal(t, 2, fan.Status.Speed, "what else its node says is taken")
+			assert.Equal(t, later, fan.Status.ObservedAt)
+			assert.True(t, change.Changed)
+		})
+	}
+
+	t.Run("the answer to its command takes it where it says", func(t *testing.T) {
+		t.Parallel()
+
+		r := starting()
+
+		_, err := observe.Answer(d, &r, kind.Result{ID: "command-1", Action: "start", OK: true, Status: status(t, observed(kindstest.Running, 2))}, later)
+		require.NoError(t, err)
+
+		assert.Equal(t, kindstest.Running, kindstest.Typed(r).Status.State)
+		assert.Nil(t, r.Pending)
+	})
+
+	t.Run("and one that failed fails it", func(t *testing.T) {
+		t.Parallel()
+
+		r := starting()
+
+		_, err := observe.Answer(d, &r, kind.Result{ID: "command-1", Action: "start", Reason: "the blades are stuck"}, later)
+		require.NoError(t, err)
+
+		fan := kindstest.Typed(r)
+		assert.Equal(t, kind.Failed, fan.Status.State)
+		assert.Equal(t, "the blades are stuck", fan.Status.Reason)
+	})
+}
+
 func TestAnswer(t *testing.T) {
 	t.Parallel()
 

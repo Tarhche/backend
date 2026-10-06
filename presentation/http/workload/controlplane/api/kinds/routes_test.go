@@ -133,7 +133,7 @@ func newAPI(t *testing.T) *api {
 	mux := http.NewServeMux()
 	require.NoError(t, Route(mux, registry.Descriptors(), UseCases{
 		Admit:  admitResource.NewUseCase(registry, a.resources, dispatcher, logger),
-		Act:    actOnResource.NewUseCase(registry, a.resources, dispatcher),
+		Act:    actOnResource.NewUseCase(registry, a.resources, dispatcher, slog.New(slog.DiscardHandler)),
 		Delete: deleteResource.NewUseCase(registry, a.resources, dispatcher),
 		Get:    getResource.NewUseCase(registry, a.resources),
 		List:   getResources.NewUseCase(registry, a.resources),
@@ -294,22 +294,28 @@ func TestRoutes(t *testing.T) {
 		})
 	}
 
-	t.Run("a kind's resources are listed, narrowed to an owner's and to a parent's", func(t *testing.T) {
+	t.Run("a kind's resources are listed, narrowed to an owner's, to a parent's and to those labelled so", func(t *testing.T) {
 		t.Parallel()
 
 		a := newAPI(t)
-		a.keep(t, kindstest.AFan("fan-1", kindstest.Running, kindstest.Running))
+		a.keep(t, kindstest.AFan("fan-1", kindstest.Running, kindstest.Running, func(f *kindstest.Fan) {
+			f.Metadata.Labels = map[string]string{"made.by": "hand", "room": "kitchen"}
+		}))
 		a.keep(t, kindstest.AFan("fan-2", kindstest.Running, kindstest.Running, func(f *kindstest.Fan) {
 			f.Metadata.OwnerUUID = "somebody-else"
 			f.Metadata.Owners = []kind.Reference{{Kind: "house", UUID: "house-2"}}
+			f.Metadata.Labels = map[string]string{"made.by": "hand"}
 		}))
 
 		for target, want := range map[string][]string{
-			"/api/fans":                         {"fan-2", "fan-1"},
-			"/api/fans?owner=owner-uuid":        {"fan-1"},
-			"/api/fans?parent=house-2":          {"fan-2"},
-			"/api/fans?owner=nobody":            {},
-			"/api/fans?owner=owner-uuid&page=2": {},
+			"/api/fans":                                       {"fan-2", "fan-1"},
+			"/api/fans?owner=owner-uuid":                      {"fan-1"},
+			"/api/fans?parent=house-2":                        {"fan-2"},
+			"/api/fans?owner=nobody":                          {},
+			"/api/fans?owner=owner-uuid&page=2":               {},
+			"/api/fans?label=made.by%3Dhand":                  {"fan-2", "fan-1"},
+			"/api/fans?label=made.by%3Dhand&label=room%3D":    {},
+			"/api/fans?label=made.by=hand&label=room=kitchen": {"fan-1"},
 		} {
 			status, body := a.do(t, http.MethodGet, target, "")
 			require.Equal(t, http.StatusOK, status, target)
@@ -329,6 +335,15 @@ func TestRoutes(t *testing.T) {
 
 			assert.Equal(t, want, uuids, target)
 		}
+	})
+
+	t.Run("a label that is no key and value is refused", func(t *testing.T) {
+		t.Parallel()
+
+		status, body := newAPI(t).do(t, http.MethodGet, "/api/fans?label=made.by", "")
+
+		assert.Equal(t, http.StatusBadRequest, status)
+		assert.JSONEq(t, `{"errors":{"label":"invalid_value"}}`, body)
 	})
 
 	t.Run("one is read by its uuid, as its owner's or anybody's", func(t *testing.T) {
@@ -409,12 +424,31 @@ func TestRoutes(t *testing.T) {
 		assert.Empty(t, a.node.commands())
 	})
 
+	t.Run("a command for a node, of one on none, has what it desires written down, and is sent nowhere", func(t *testing.T) {
+		t.Parallel()
+
+		a := newAPI(t)
+		a.keep(t, kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running, func(f *kindstest.Fan) {
+			f.Metadata.Node = ""
+		}))
+
+		status, body := a.do(t, http.MethodPost, "/api/fans/fan-uuid/actions/stop", "")
+		require.Equal(t, http.StatusOK, status, body)
+
+		stopped := decode[commandedBody](t, body)
+		assert.Nil(t, stopped.Command)
+
+		fan, _ := a.stored(t, "fan-uuid")
+		assert.Equal(t, kindstest.Running, fan.Status.State)
+		assert.Equal(t, kindstest.Stopped, fan.Status.Expected)
+		assert.Empty(t, a.node.commands())
+	})
+
 	for name, tt := range map[string]struct {
-		target   string
-		body     string
-		unplaced bool
-		status   int
-		want     string
+		target string
+		body   string
+		status int
+		want   string
 	}{
 		"a command its state does not allow is refused": {
 			target: "/api/fans/fan-uuid/actions/start",
@@ -427,10 +461,6 @@ func TestRoutes(t *testing.T) {
 		"or with what cannot be read": {
 			target: "/api/fans/fan-uuid/actions/rename", body: `{"name":`,
 			status: http.StatusBadRequest, want: `{"errors":{"payload":"invalid_value"}}`,
-		},
-		"a command for a node, of one on none, cannot be sent": {
-			target: "/api/fans/fan-uuid/actions/stop", unplaced: true,
-			status: http.StatusConflict,
 		},
 		"an internal command is nobody's to ask for": {
 			target: "/api/fans/fan-uuid/actions/create",
@@ -449,24 +479,13 @@ func TestRoutes(t *testing.T) {
 			t.Parallel()
 
 			a := newAPI(t)
-			a.keep(t, kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running, func(f *kindstest.Fan) {
-				if tt.unplaced {
-					f.Metadata.Node = ""
-				}
-			}))
+			a.keep(t, kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running))
 
 			status, body := a.do(t, http.MethodPost, tt.target, tt.body)
 
 			assert.Equal(t, tt.status, status, body)
 			if len(tt.want) > 0 {
 				assert.JSONEq(t, tt.want, body)
-			}
-
-			if tt.unplaced {
-				refused := decode[struct {
-					Error noderequest.Error `json:"error"`
-				}](t, body)
-				assert.Equal(t, noderequest.CodeNotRunning, refused.Error.Code)
 			}
 
 			fan, _ := a.stored(t, "fan-uuid")

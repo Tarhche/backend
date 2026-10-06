@@ -53,6 +53,18 @@ func TestMachine_Next(t *testing.T) {
 		})
 	}
 
+	t.Run("an answered state is one in flight that waits for its command's answer", func(t *testing.T) {
+		t.Parallel()
+
+		m := boxMachine()
+		m.Answered = []State{boxStarting}
+
+		assert.True(t, m.IsAnswered(boxStarting))
+		assert.False(t, m.IsAnswered(boxStopping), "in flight, and taking its arrivals from anybody")
+		assert.False(t, m.IsAnswered(boxRunning))
+		assert.Empty(t, m.Validate())
+	})
+
 	t.Run("a transition from the state itself goes before one from any", func(t *testing.T) {
 		t.Parallel()
 
@@ -161,6 +173,18 @@ func TestMachine_Validate(t *testing.T) {
 		"a state of both sorts": {
 			breaking: func(m *Machine) { m.Terminal = append(m.Terminal, boxStarting) },
 			want:     `state "starting" is both terminal and in flight`,
+		},
+		"an answered state it does not have": {
+			breaking: func(m *Machine) { m.Answered = append(m.Answered, "exploded") },
+			want:     `answered state "exploded" is not one of its states`,
+		},
+		"an answered state listed twice": {
+			breaking: func(m *Machine) { m.Answered = append(m.Answered, boxStarting, boxStarting) },
+			want:     `answered state "starting" is listed twice`,
+		},
+		"an answered state at rest": {
+			breaking: func(m *Machine) { m.Answered = append(m.Answered, boxRunning) },
+			want:     `answered state "running" is not in flight`,
 		},
 		"a transition from nowhere": {
 			breaking: func(m *Machine) {

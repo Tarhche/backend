@@ -210,21 +210,26 @@ func Repository(t *testing.T, make Maker) {
 		repository := make(t, fans, lights)
 
 		for _, each := range []struct {
-			uuid, owner, node, house string
+			uuid, owner, node, house, room string
 		}{
-			{uuid: "fan-1", owner: "alice", node: "node-1", house: "house-1"},
-			{uuid: "fan-2", owner: "bob", node: "node-1", house: "house-2"},
-			{uuid: "fan-3", owner: "alice", node: "node-2", house: "house-1"},
-			{uuid: "fan-4", owner: "alice", node: "", house: ""},
-			{uuid: "fan-5", owner: "bob", node: "node-2", house: "house-1"},
+			{uuid: "fan-1", owner: "alice", node: "node-1", house: "house-1", room: "kitchen"},
+			{uuid: "fan-2", owner: "bob", node: "node-1", house: "house-2", room: "hall"},
+			{uuid: "fan-3", owner: "alice", node: "node-2", house: "house-1", room: "kitchen"},
+			{uuid: "fan-4", owner: "alice", node: "", house: "", room: ""},
+			{uuid: "fan-5", owner: "bob", node: "node-2", house: "house-1", room: "hall"},
 		} {
 			r := aFan(each.uuid, "")
 			r.Metadata.OwnerUUID = each.owner
 			r.Metadata.Node = each.node
 			r.Metadata.Owners = nil
+			r.Metadata.Labels = nil
 
 			if len(each.house) > 0 {
 				r.Metadata.Owners = []kind.Reference{{Kind: "house", UUID: each.house}}
+			}
+
+			if len(each.room) > 0 {
+				r.Metadata.Labels = map[string]string{"room": each.room, "com.example.made-by": "a test"}
 			}
 
 			_, err := repository.Create(ctx, r)
@@ -256,6 +261,11 @@ func Repository(t *testing.T, make Maker) {
 			"narrowed every way at once":      {filter: resource.Filter{OwnerUUID: "alice", Node: "node-2", Parent: kind.Reference{Kind: "house", UUID: "house-1"}}, limit: 10, want: []string{"fan-3"}, total: 1},
 			"and narrowed to nothing at all":  {filter: resource.Filter{OwnerUUID: "carol"}, limit: 10, want: []string{}, total: 0},
 			"a page of one person's, and how": {filter: resource.Filter{OwnerUUID: "alice"}, offset: 2, limit: 1, want: []string{"fan-1"}, total: 3},
+			"labelled so":                     {filter: resource.Filter{Labels: map[string]string{"room": "kitchen"}}, limit: 10, want: []string{"fan-3", "fan-1"}, total: 2},
+			"labelled under a key with dots":  {filter: resource.Filter{Labels: map[string]string{"com.example.made-by": "a test"}}, limit: 10, want: []string{"fan-5", "fan-3", "fan-2", "fan-1"}, total: 4},
+			"labelled every way it says":      {filter: resource.Filter{Labels: map[string]string{"room": "hall", "com.example.made-by": "a test"}}, limit: 10, want: []string{"fan-5", "fan-2"}, total: 2},
+			"and labelled, and someone's":     {filter: resource.Filter{OwnerUUID: "alice", Labels: map[string]string{"room": "kitchen"}}, offset: 1, limit: 1, want: []string{"fan-1"}, total: 2},
+			"labelled as none is":             {filter: resource.Filter{Labels: map[string]string{"room": "attic"}}, limit: 10, want: []string{}, total: 0},
 		} {
 			t.Run(name, func(t *testing.T) {
 				page, total, err := repository.GetAll(ctx, fans, tt.filter, tt.offset, tt.limit)

@@ -38,12 +38,22 @@ type Parents interface {
 	Down(ctx context.Context, parent kind.Reference) (kind.State, error)
 }
 
+// Orphans are told of what a node holds that nobody keeps a record of: a VM
+// deleted while its node could not be told, or made again by a command
+// carried out after its delete was. Nobody is going to want it.
+type Orphans interface {
+	// Orphaned is told that nodeName holds a resource of d's kind, by uuid,
+	// that has no record.
+	Orphaned(ctx context.Context, d kind.Descriptor, nodeName string, uuid string) error
+}
+
 // Observer writes down what the nodes' heartbeats say of the resources of
 // every kind the control plane runs.
 type Observer struct {
 	registry  *kind.Registry[kind.ControlPlaneBinding]
 	resources resource.Repository
 	parents   Parents
+	orphans   Orphans
 	logger    *slog.Logger
 }
 
@@ -55,6 +65,14 @@ type Option func(*Observer)
 func WithParents(parents Parents) Option {
 	return func(o *Observer) {
 		o.parents = parents
+	}
+}
+
+// WithOrphans has orphans told of what a node holds that nobody keeps a
+// record of.
+func WithOrphans(orphans Orphans) Option {
+	return func(o *Observer) {
+		o.orphans = orphans
 	}
 }
 
@@ -84,6 +102,11 @@ func NewObserver(registry *kind.Registry[kind.ControlPlaneBinding], resources re
 //     either way;
 //   - and inside a parent the node did not look into at all, it waits on the
 //     parent, as what the parent is doing says.
+//
+// What the node holds of a kind that lives in nothing, and that nobody keeps
+// a record of, is an orphan, which orphans are told of, when the observer
+// was given them. What lives in a parent is its parent's: it goes with it, or
+// is reset to what it holds, and is never an orphan of its own.
 //
 // A kind that sent no report could not look at all this beat, and nothing is
 // concluded from its silence. A kind the control plane does not run, or
@@ -119,7 +142,44 @@ func (o *Observer) Heartbeat(ctx context.Context, nodeName string, at time.Time,
 				o.logger.WarnContext(ctx, "could not write down what a node said of a resource", "error", err, "node", nodeName, "kind", d.Name, "uuid", held[i].Metadata.UUID)
 			}
 		}
+
+		if err := o.orphaned(ctx, d, nodeName, held, report); err != nil {
+			o.logger.WarnContext(ctx, "could not tell what a node holds that nobody keeps a record of", "error", err, "node", nodeName, "kind", d.Name)
+		}
 	}
+}
+
+// orphaned tells orphans of the resources a report lists that have no
+// record, of a kind that lives in nothing. One held by the node is not; nor
+// is one whose record says it is elsewhere, which is its own node's to speak
+// for.
+func (o *Observer) orphaned(ctx context.Context, d kind.Descriptor, nodeName string, held []resource.Record, report kind.Report[json.RawMessage]) error {
+	if o.orphans == nil || len(d.Parent) > 0 {
+		return nil
+	}
+
+	kept := make(map[string]bool, len(held))
+	for i := range held {
+		kept[held[i].Metadata.UUID] = true
+	}
+
+	for _, instance := range report.Instances {
+		if len(instance.UUID) == 0 || kept[instance.UUID] {
+			continue
+		}
+
+		_, err := o.resources.GetOne(ctx, d.Name, instance.UUID)
+		switch {
+		case errors.Is(err, domain.ErrNotExists):
+			if err := o.orphans.Orphaned(ctx, d, nodeName, instance.UUID); err != nil {
+				return err
+			}
+		case err != nil:
+			return err
+		}
+	}
+
+	return nil
 }
 
 // observe writes down what a report says of one resource its node holds, if

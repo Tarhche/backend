@@ -140,6 +140,37 @@ type Filter struct {
 	// Its kind may be left out, and then a resource of any kind with that
 	// uuid is.
 	Parent kind.Reference
+
+	// Labels are labels they carry, each with the value given: the Docker
+	// VMs are the VMs labelled workload.flavor=docker.
+	Labels map[string]string
+}
+
+// Passes reports whether a resource's metadata is what filter lets through,
+// for whoever narrows resources that are not in a repository, such as a
+// kind's extras.
+func (f Filter) Passes(m kind.Metadata) bool {
+	if len(f.OwnerUUID) > 0 && m.OwnerUUID != f.OwnerUUID {
+		return false
+	}
+
+	if len(f.Node) > 0 && m.Node != f.Node {
+		return false
+	}
+
+	if len(f.Parent.UUID) > 0 && !slices.ContainsFunc(m.Owners, func(owner kind.Reference) bool {
+		return owner.UUID == f.Parent.UUID && (len(f.Parent.Kind) == 0 || owner.Kind == f.Parent.Kind)
+	}) {
+		return false
+	}
+
+	for key, value := range f.Labels {
+		if carried, ok := m.Labels[key]; !ok || carried != value {
+			return false
+		}
+	}
+
+	return true
 }
 
 // Repository keeps the resources of every kind, each kind apart from the

@@ -36,6 +36,53 @@ type ControlPlane[Spec, Status any] interface {
 	Apply(ctx context.Context, r Resource[Spec, Status], action string, payload any) (Resource[Spec, Status], domain.ValidationErrors, error)
 }
 
+// Preparer is a control-plane strategy that readies its kind's node commands
+// before they are sent, with what only the control plane knows: a VM's restore
+// is held to a snapshot of its owner's that is ready and fits, and a VM no
+// node had room for is placed on one before it is started.
+//
+// It is handed the resource as it is recorded and the command's payload, as
+// the action's codec decoded it, and is the resource the command carries and
+// is written down as: unchanged, placed on a node, or given what only the
+// control plane could give it. What is wrong with the command comes back
+// field by field, and nothing is asked then. A strategy that has nothing to
+// ready for an action hands the resource back as it was.
+type Preparer[Spec, Status any] interface {
+	Prepare(ctx context.Context, r Resource[Spec, Status], action string, payload any) (Resource[Spec, Status], domain.ValidationErrors, error)
+}
+
+// Extras are resources a kind's listings show beside its own records, which
+// nothing keeps as its records: the code runner's runs, which are its tasks,
+// shown among anybody's VMs. None of them is anybody's own, so only a listing
+// of anybody's has them; and what they can be asked is theirs to say,
+// whatever they cannot be asked being refused field by field.
+//
+// The control plane's generic API asks them for what a uuid names when none
+// of the kind's records is it.
+type Extras interface {
+	// All is every extra there is now, as manifests of the kind, newest
+	// first.
+	All(ctx context.Context) ([]Raw, error)
+
+	// One is the extra uuid names, or domain.ErrNotExists.
+	One(ctx context.Context, uuid string) (Raw, error)
+
+	// Act asks an extra for one of its kind's commands, with its payload as
+	// it was given, and is the extra as the command left it, or gone when the
+	// command took it away.
+	Act(ctx context.Context, r Raw, action string, payload []byte) (after Raw, gone bool, refused domain.ValidationErrors, err error)
+
+	// Query asks an extra one of its kind's queries, and is the answer as
+	// its node strategy would give it.
+	Query(ctx context.Context, r Raw, action string, payload []byte) (answer []byte, refused domain.ValidationErrors, err error)
+}
+
+// Extender is a control-plane strategy whose kind's listings show Extras
+// beside its records.
+type Extender interface {
+	Extras() Extras
+}
+
 // Intent is what a kind's reconcile asks for: one of its actions, which the
 // loop sends as a Command when it runs on a node and applies in place when it
 // runs in the control plane.

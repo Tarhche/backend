@@ -16,7 +16,6 @@ package admitResource
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -89,14 +88,20 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 
 	response := &Response{Resource: created.Raw}
 
-	dispatched, sent := uc.first(ctx, binding, created)
+	// what was asked of it before it fell short is written down, and what is
+	// left is the reconcile loop's to ask for.
+	dispatched, err := uc.dispatcher.Follow(ctx, binding, created)
+	if err != nil {
+		uc.logger.ErrorContext(ctx, "could not ask a resource just admitted for what its kind asks", "error", err, "kind", d.Name, "uuid", created.Metadata.UUID)
+	}
+
 	if dispatched.Gone {
 		return response, nil
 	}
 
 	response.Resource = dispatched.Record.Raw
 
-	if !sent {
+	if dispatched.Command == nil {
 		return response, nil
 	}
 
@@ -122,50 +127,6 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 	}
 
 	return response, nil
-}
-
-// first asks a resource just admitted for the commands its kind asks for of
-// it, and reports whether one of them is for its node, to be sent: one is in
-// flight at a time, so what the kind asks for after it is asked for once it
-// arrives. What cannot be asked is left for the reconcile loop.
-func (uc *UseCase) first(ctx context.Context, binding kind.ControlPlaneBinding, created resource.Record) (dispatch.Asked, bool) {
-	d := binding.Descriptor()
-	asked := dispatch.Asked{Record: created}
-
-	intents, err := binding.Reconcile(ctx, created.Raw)
-	if err != nil {
-		uc.logger.ErrorContext(ctx, "could not tell what a resource just admitted is to be asked for", "error", err, "kind", d.Name, "uuid", created.Metadata.UUID)
-
-		return asked, false
-	}
-
-	for _, intent := range intents {
-		payload, err := payloadOf(intent)
-		if err != nil {
-			uc.logger.ErrorContext(ctx, "could not write what a resource just admitted is asked with", "error", err, "kind", d.Name, "uuid", created.Metadata.UUID, "action", intent.Action)
-
-			return asked, false
-		}
-
-		next, invalid, err := uc.dispatcher.Ask(ctx, binding, asked.Record, intent.Action, payload, true)
-		if err != nil || len(invalid) > 0 {
-			uc.logger.ErrorContext(ctx, "could not ask a resource just admitted for what its kind asks", "error", err, "invalid", invalid, "kind", d.Name, "uuid", created.Metadata.UUID, "action", intent.Action)
-
-			return asked, false
-		}
-
-		asked = next
-
-		if asked.Gone {
-			return asked, false
-		}
-
-		if asked.Command != nil {
-			return asked, true
-		}
-	}
-
-	return asked, false
 }
 
 // kept is a resource as its kind admitted it, as it is kept: for whom it was
@@ -256,13 +217,4 @@ func askedFor(d kind.Descriptor, request *Request) kind.Raw {
 	}
 
 	return asked
-}
-
-// payloadOf is what an intent's action is asked with, as it travels.
-func payloadOf(intent kind.Intent) (json.RawMessage, error) {
-	if intent.Payload == nil {
-		return nil, nil
-	}
-
-	return json.Marshal(intent.Payload)
 }

@@ -232,16 +232,52 @@ func TestDispatcher_Ask(t *testing.T) {
 		assert.Equal(t, int64(1), f.stored(t, "fan-uuid").Version)
 	})
 
-	t.Run("a command for a node cannot be sent to a resource on none", func(t *testing.T) {
+	t.Run("a command for a node, asked of a resource on none, has what it desires written down, and moves nothing", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t, kindstest.AFan("fan-uuid", kindstest.Stopped, kindstest.Stopped, func(fan *kindstest.Fan) {
+			fan.Metadata.Node = ""
+		}))
+		f.clock.Advance(time.Minute)
+
+		asked, invalid, err := f.dispatch.Ask(ctx, f.binding, f.stored(t, "fan-uuid"), "start", nil, true)
+		require.NoError(t, err)
+		require.Empty(t, invalid)
+
+		assert.Nil(t, asked.Command, "there is nowhere to send it")
+		assert.False(t, asked.Gone)
+
+		stored := f.stored(t, "fan-uuid")
+		fan := kindstest.Typed(stored)
+
+		assert.Equal(t, kindstest.Stopped, fan.Status.State, "it stays where it is")
+		assert.Equal(t, kindstest.Running, fan.Status.Expected, "and is to be running once it is somewhere")
+		assert.Nil(t, stored.Pending, "waiting on nothing")
+		assert.Equal(t, f.clock.Now(), stored.Metadata.UpdatedAt)
+		assert.Equal(t, stored, asked.Record)
+		assert.Empty(t, f.producer.Messages())
+	})
+
+	t.Run("and one that desires nothing cannot be sent to it at all", func(t *testing.T) {
 		t.Parallel()
 
 		f := newFixture(t, kindstest.AFan("fan-uuid", kindstest.Stopped, kindstest.Stopped, func(fan *kindstest.Fan) {
 			fan.Metadata.Node = ""
 		}))
 
-		_, _, err := f.dispatch.Ask(ctx, f.binding, f.stored(t, "fan-uuid"), "start", nil, true)
+		d := kindstest.Descriptor()
+		for i := range d.Actions {
+			if d.Actions[i].Name == "start" {
+				d.Actions[i].Desires = ""
+			}
+		}
+
+		desiring := kind.BindControlPlane[kindstest.Spec, kindstest.Status](d, f.fans)
+
+		_, _, err := f.dispatch.Ask(ctx, desiring, f.stored(t, "fan-uuid"), "start", nil, true)
 
 		assert.ErrorIs(t, err, kind.ErrUnreachable)
+		assert.Equal(t, int64(1), f.stored(t, "fan-uuid").Version)
 	})
 
 	t.Run("but one deleted there has nothing anywhere to delete, and goes", func(t *testing.T) {
@@ -287,6 +323,189 @@ func TestDispatcher_Ask(t *testing.T) {
 
 		assert.ErrorIs(t, err, resource.ErrConflict)
 		assert.Equal(t, kindstest.Stopping, kindstest.Typed(f.stored(t, "fan-uuid")).Status.State)
+	})
+}
+
+// preparingFans are fans whose starts are readied before they are sent: one
+// on no node is placed on node-2, one with a blade too many is refused, and
+// every one is given the speed it was asked for as its renames, which only
+// the control plane writes.
+type preparingFans struct {
+	*kindstest.Fans
+
+	failure error
+}
+
+var _ kind.Preparer[kindstest.Spec, kindstest.Status] = &preparingFans{}
+
+func (p *preparingFans) Prepare(_ context.Context, r kindstest.Fan, action string, payload any) (kindstest.Fan, domain.ValidationErrors, error) {
+	if p.failure != nil {
+		return kindstest.Fan{}, nil, p.failure
+	}
+
+	if action != "start" {
+		return r, nil, nil
+	}
+
+	if r.Spec.Blades > 5 {
+		return kindstest.Fan{}, domain.ValidationErrors{"blades": "too_many"}, nil
+	}
+
+	if len(r.Metadata.Node) == 0 {
+		r.Metadata.Node = "node-2"
+	}
+
+	r.Status.Renames = payload.(kindstest.StartPayload).Speed
+
+	return r, nil, nil
+}
+
+func TestDispatcher_Ask_prepared(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	prepared := func(f *fixture, failure error) kind.ControlPlaneBinding {
+		return kind.BindControlPlane[kindstest.Spec, kindstest.Status](kindstest.Descriptor(), &preparingFans{Fans: f.fans, failure: failure})
+	}
+
+	t.Run("a command for a node is readied by its kind, and carries the resource as it was readied", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t, kindstest.AFan("fan-uuid", kindstest.Stopped, kindstest.Stopped, func(fan *kindstest.Fan) {
+			fan.Metadata.Node = ""
+		}))
+
+		asked, invalid, err := f.dispatch.Ask(ctx, prepared(f, nil), f.stored(t, "fan-uuid"), "start", json.RawMessage(`{"speed":3}`), true)
+		require.NoError(t, err)
+		require.Empty(t, invalid)
+
+		require.NotNil(t, asked.Command, "placed, it has somewhere to be sent")
+		assert.Equal(t, "node-2", asked.Command.Node)
+
+		stored := f.stored(t, "fan-uuid")
+		fan := kindstest.Typed(stored)
+
+		assert.Equal(t, "node-2", stored.Metadata.Node, "written down where it was placed")
+		assert.Equal(t, 3, fan.Status.Renames, "with what the kind gave it")
+		assert.Equal(t, kindstest.Starting, fan.Status.State, "and moved as its machine says")
+		assert.Equal(t, stored.Raw, asked.Command.Resource)
+	})
+
+	t.Run("what the kind refuses is said, and nothing is written or sent", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t, kindstest.AFan("fan-uuid", kindstest.Stopped, kindstest.Stopped, func(fan *kindstest.Fan) {
+			fan.Spec.Blades = 6
+		}))
+
+		asked, invalid, err := f.dispatch.Ask(ctx, prepared(f, nil), f.stored(t, "fan-uuid"), "start", nil, true)
+		require.NoError(t, err)
+
+		assert.Equal(t, domain.ValidationErrors{"blades": "too_many"}, invalid)
+		assert.Nil(t, asked.Command)
+		assert.Equal(t, int64(1), f.stored(t, "fan-uuid").Version)
+	})
+
+	t.Run("and what kept it from looking is an error", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t, kindstest.AFan("fan-uuid", kindstest.Stopped, kindstest.Stopped))
+		failure := errors.New("the snapshots cannot be read")
+
+		_, _, err := f.dispatch.Ask(ctx, prepared(f, failure), f.stored(t, "fan-uuid"), "start", nil, true)
+
+		assert.ErrorIs(t, err, failure)
+		assert.Equal(t, int64(1), f.stored(t, "fan-uuid").Version)
+	})
+
+	t.Run("its uuid and its kind are not the kind's to change", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t, kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running))
+
+		asked, _, err := f.dispatch.Ask(ctx, prepared(f, nil), f.stored(t, "fan-uuid"), "stop", nil, true)
+		require.NoError(t, err)
+
+		assert.Equal(t, "fan-uuid", asked.Command.UUID)
+		assert.Equal(t, kindstest.Kind, asked.Command.Resource.Kind)
+	})
+}
+
+func TestDispatcher_Follow(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	t.Run("what a kind asks for of a resource is asked, until a command for its node, which is returned to be sent", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t, kindstest.AFan("fan-uuid", kindstest.Stopped, kindstest.Running))
+		f.fans.Intents = func(kindstest.Fan) []kind.Intent {
+			return []kind.Intent{
+				{Action: "rename", Payload: kindstest.RenamePayload{Name: "hall"}},
+				{Action: "start", Payload: kindstest.StartPayload{Speed: 2}},
+				{Action: "stop"},
+			}
+		}
+
+		asked, err := f.dispatch.Follow(ctx, f.binding, f.stored(t, "fan-uuid"))
+		require.NoError(t, err)
+
+		require.NotNil(t, asked.Command)
+		assert.Equal(t, "start", asked.Command.Action, "the first command for its node, and nothing after it")
+		assert.JSONEq(t, `{"speed":2}`, string(asked.Command.Payload))
+
+		stored := f.stored(t, "fan-uuid")
+		assert.Equal(t, "hall", stored.Metadata.Name, "what ran in the control plane before it was carried out")
+		assert.Equal(t, kindstest.Starting, kindstest.Typed(stored).Status.State)
+		assert.Equal(t, stored, asked.Record)
+		assert.Empty(t, f.producer.Messages(), "it is the caller's to send")
+	})
+
+	t.Run("nothing to ask for leaves the resource as it is", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t, kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running))
+
+		asked, err := f.dispatch.Follow(ctx, f.binding, f.stored(t, "fan-uuid"))
+		require.NoError(t, err)
+
+		assert.Nil(t, asked.Command)
+		assert.Equal(t, f.stored(t, "fan-uuid"), asked.Record)
+	})
+
+	t.Run("what its state does not allow, or is refused, is left for the reconcile loop", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t, kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running))
+		f.fans.Intents = func(kindstest.Fan) []kind.Intent {
+			return []kind.Intent{{Action: "start"}}
+		}
+
+		asked, err := f.dispatch.Follow(ctx, f.binding, f.stored(t, "fan-uuid"))
+		require.NoError(t, err)
+		assert.Nil(t, asked.Command)
+
+		f.fans.Intents = func(kindstest.Fan) []kind.Intent {
+			return []kind.Intent{{Action: "rename", Payload: kindstest.RenamePayload{}}}
+		}
+
+		asked, err = f.dispatch.Follow(ctx, f.binding, f.stored(t, "fan-uuid"))
+		require.NoError(t, err)
+		assert.Nil(t, asked.Command)
+		assert.Equal(t, int64(1), f.stored(t, "fan-uuid").Version, "nothing was written")
+	})
+
+	t.Run("what the kind could not decide is an error", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t, kindstest.AFan("fan-uuid", kindstest.Stopped, kindstest.Running))
+		f.fans.Failure = errors.New("the database is gone")
+
+		_, err := f.dispatch.Follow(ctx, f.binding, f.stored(t, "fan-uuid"))
+
+		assert.ErrorIs(t, err, f.fans.Failure)
 	})
 }
 
@@ -553,5 +772,42 @@ func TestDispatcher_Deliver(t *testing.T) {
 		assert.True(t, delivered.Result.OK)
 		assert.Equal(t, asked.Command, delivered.Command)
 		assert.Equal(t, kindstest.Running, kindstest.Typed(resource.Record{Raw: delivered.Resource}).Status.State)
+	})
+}
+
+func TestDispatcher_Orphaned(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	t.Run("a node is asked to delete what it holds that nobody keeps a record of, once a minute at most", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t)
+
+		require.NoError(t, f.dispatch.Orphaned(ctx, kindstest.Descriptor(), kindstest.NodeName, "orphan"))
+		require.NoError(t, f.dispatch.Orphaned(ctx, kindstest.Descriptor(), kindstest.NodeName, "orphan"))
+
+		sent, err := messagingMock.Produced[kind.Command](f.producer, kind.CommandName)
+		require.NoError(t, err)
+		require.Len(t, sent, 1, "asked once, however often it is reported")
+
+		assert.NotEmpty(t, sent[0].ID)
+		assert.Equal(t, kindstest.Kind, sent[0].Kind)
+		assert.Equal(t, "orphan", sent[0].UUID)
+		assert.Equal(t, "delete", sent[0].Action)
+		assert.Equal(t, kindstest.NodeName, sent[0].Node)
+		assert.Equal(t, kindstest.Kind, sent[0].Resource.Kind)
+		assert.Equal(t, kind.Metadata{UUID: "orphan", Node: kindstest.NodeName}, sent[0].Resource.Metadata, "carrying nothing but what it is and where")
+
+		require.NoError(t, f.dispatch.Orphaned(ctx, kindstest.Descriptor(), "node-2", "orphan"))
+
+		f.clock.Advance(time.Minute)
+		require.NoError(t, f.dispatch.Orphaned(ctx, kindstest.Descriptor(), kindstest.NodeName, "orphan"))
+
+		sent, err = messagingMock.Produced[kind.Command](f.producer, kind.CommandName)
+		require.NoError(t, err)
+		assert.Len(t, sent, 3, "another node holding it is asked too, and the first again a minute on")
+		assert.Equal(t, 0, f.resources.Len(kindstest.Kind), "and nothing is written down")
 	})
 }

@@ -365,3 +365,82 @@ func (p parents) Down(_ context.Context, parent kind.Reference) (kind.State, err
 
 	return p[parent.UUID], nil
 }
+
+// orphans are told of what a node holds that nobody keeps a record of.
+type orphans struct {
+	told []string
+}
+
+func (o *orphans) Orphaned(_ context.Context, d kind.Descriptor, nodeName string, uuid string) error {
+	o.told = append(o.told, d.Name+" "+uuid+" on "+nodeName)
+
+	return nil
+}
+
+func TestObserver_Heartbeat_orphans(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	logger := slog.New(slog.DiscardHandler)
+
+	// homeless are fans that live in no house, as a VM lives in nothing.
+	homeless := func() *kind.Registry[kind.ControlPlaneBinding] {
+		d := kindstest.Descriptor()
+		d.Parent, d.OnParent = "", kind.ParentRules{}
+
+		registry := kind.NewRegistry[kind.ControlPlaneBinding]()
+		if err := registry.Register(kind.BindControlPlane[kindstest.Spec, kindstest.Status](d, &kindstest.Fans{})); err != nil {
+			panic(err)
+		}
+
+		return registry
+	}
+
+	unhoused := func(f *kindstest.Fan) { f.Metadata.Owners = nil }
+
+	t.Run("what a node holds that nobody keeps a record of is an orphan", func(t *testing.T) {
+		t.Parallel()
+
+		repository := resourcesMemory.NewRepository()
+		create(t, repository,
+			kindstest.AFan("kept", kindstest.Running, kindstest.Running, unhoused),
+			kindstest.AFan("kept-elsewhere", kindstest.Running, kindstest.Running, unhoused, func(f *kindstest.Fan) { f.Metadata.Node = "node-2" }),
+		)
+
+		told := &orphans{}
+		observer := observe.NewObserver(homeless(), repository, logger, observe.WithOrphans(told))
+
+		observer.Heartbeat(ctx, kindstest.NodeName, kindstest.Moment, report(t, nil, map[string]kindstest.Status{
+			"kept":           {Status: kind.Status{State: kindstest.Running}},
+			"kept-elsewhere": {Status: kind.Status{State: kindstest.Running}},
+			"orphan":         {Status: kind.Status{State: kindstest.Running}},
+		}))
+
+		assert.Equal(t, []string{"fan orphan on " + kindstest.NodeName}, told.told, "one kept elsewhere is its own node's to speak for")
+	})
+
+	t.Run("what lives in a parent is never an orphan of its own", func(t *testing.T) {
+		t.Parallel()
+
+		told := &orphans{}
+		observer := observe.NewObserver(kindstest.Registry(&kindstest.Fans{}), resourcesMemory.NewRepository(), logger, observe.WithOrphans(told))
+
+		observer.Heartbeat(ctx, kindstest.NodeName, kindstest.Moment, report(t, nil, map[string]kindstest.Status{
+			"orphan": {Status: kind.Status{State: kindstest.Running}},
+		}))
+
+		assert.Empty(t, told.told)
+	})
+
+	t.Run("and an observer given no orphans tells nobody", func(t *testing.T) {
+		t.Parallel()
+
+		observer := observe.NewObserver(homeless(), resourcesMemory.NewRepository(), logger)
+
+		assert.NotPanics(t, func() {
+			observer.Heartbeat(ctx, kindstest.NodeName, kindstest.Moment, report(t, nil, map[string]kindstest.Status{
+				"orphan": {Status: kind.Status{State: kindstest.Running}},
+			}))
+		})
+	})
+}

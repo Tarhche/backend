@@ -323,6 +323,24 @@ func filterOf(filter resource.Filter) bson.D {
 		}}}})
 	}
 
+	// a label's key has dots in it, workload.flavor, which a path would take
+	// for fields within fields, so each is read as the one field it is.
+	if len(filter.Labels) > 0 {
+		carried := make(bson.A, 0, len(filter.Labels))
+
+		for _, key := range slices.Sorted(maps.Keys(filter.Labels)) {
+			carried = append(carried, bson.D{{Key: "$eq", Value: bson.A{
+				bson.D{{Key: "$getField", Value: bson.D{
+					{Key: "field", Value: bson.D{{Key: "$literal", Value: key}}},
+					{Key: "input", Value: "$metadata.labels"},
+				}}},
+				filter.Labels[key],
+			}}})
+		}
+
+		query = append(query, bson.E{Key: "$expr", Value: bson.D{{Key: "$and", Value: carried}}})
+	}
+
 	return query
 }
 

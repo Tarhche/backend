@@ -138,7 +138,7 @@ func NewControlPlaneKinds(
 
 	useCases := controlPlaneKindsAPI.UseCases{
 		Admit:  admitResource.NewUseCase(registry, stores.Resources, dispatcher, logger),
-		Act:    actOnResource.NewUseCase(registry, stores.Resources, dispatcher),
+		Act:    actOnResource.NewUseCase(registry, stores.Resources, dispatcher, logger),
 		Delete: deleteResource.NewUseCase(registry, stores.Resources, dispatcher),
 		Get:    getResource.NewUseCase(registry, stores.Resources),
 		List:   getResources.NewUseCase(registry, stores.Resources),

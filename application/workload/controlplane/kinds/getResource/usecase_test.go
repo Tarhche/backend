@@ -51,3 +51,42 @@ func TestUseCase_Execute(t *testing.T) {
 		})
 	}
 }
+
+func TestUseCase_Execute_extras(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	shelf := kindstest.NewShelf(kindstest.AShelvedFan("shelved"))
+
+	registry := kind.NewRegistry[kind.ControlPlaneBinding]()
+	require.NoError(t, registry.Register(kind.BindControlPlane[kindstest.Spec, kindstest.Status](kindstest.Descriptor(), &kindstest.Shelved{Fans: &kindstest.Fans{}, Shelf: shelf})))
+
+	useCase := getResource.NewUseCase(registry, resourcesMemory.NewRepository())
+
+	t.Run("a uuid that names none of the kind's records may name one of its extras", func(t *testing.T) {
+		t.Parallel()
+
+		response, err := useCase.Execute(ctx, &getResource.Request{Kind: kindstest.Kind, UUID: "shelved"})
+		require.NoError(t, err)
+
+		assert.Equal(t, "shelved", response.Resource.Metadata.UUID)
+		assert.Equal(t, "guest", response.Resource.Metadata.OwnerUUID)
+	})
+
+	t.Run("which is nobody's own", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := useCase.Execute(ctx, &getResource.Request{Kind: kindstest.Kind, OwnerUUID: "guest", UUID: "shelved"})
+
+		assert.ErrorIs(t, err, domain.ErrNotExists)
+	})
+
+	t.Run("and one that names neither is not there", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := useCase.Execute(ctx, &getResource.Request{Kind: kindstest.Kind, UUID: "nowhere"})
+
+		assert.ErrorIs(t, err, domain.ErrNotExists)
+	})
+}

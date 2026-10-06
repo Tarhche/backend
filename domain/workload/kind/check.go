@@ -38,7 +38,8 @@ var (
 //     answers no query but state, from the record. The states it is allowed
 //     in and the one it desires are the machine's, and only a command desires
 //     one. A transition on it is from a state it is allowed in, and is on a
-//     command, since nothing else moves a resource.
+//     command, since nothing else moves a resource. Only a command that
+//     desires a state waits in flight, and only a command restores.
 //   - Every action has a permission, but an internal one, which only a
 //     command can be.
 //   - Every action has a codec, which decodes the zero value of its own
@@ -189,6 +190,14 @@ func checkAction(d Descriptor, a Action, add func(format string, args ...any)) {
 		if !d.Machine.Has(a.Desires) {
 			add("action %q desires %q, which is not one of its states", a.Name, a.Desires)
 		}
+	}
+
+	if a.Waits && (a.Mode != ModeCommand || len(a.Desires) == 0) {
+		add("action %q waits in flight, and only a command that desires a state has anything to wait for", a.Name)
+	}
+
+	if a.Restores && a.Mode != ModeCommand {
+		add("action %q restores, and only a command changes what a resource holds", a.Name)
 	}
 
 	switch {

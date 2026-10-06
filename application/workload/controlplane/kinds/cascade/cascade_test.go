@@ -193,3 +193,106 @@ func TestCascade_Restored(t *testing.T) {
 		assert.Equal(t, 3, fan.Attempts, "on what the other wrote")
 	})
 }
+
+func TestRepository_Delete(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	// repository is a cascading repository over fans in their house, the house
+	// kept beside them as a record of its own.
+	repository := func(t *testing.T, rules kind.ParentRules, records ...resource.Record) (*cascade.Repository, *resourcesMemory.Repository) {
+		t.Helper()
+
+		_, memory := fans(t, rules, records...)
+
+		d := kindstest.Descriptor()
+		d.OnParent = rules
+
+		registry := kind.NewRegistry[kind.ControlPlaneBinding]()
+		require.NoError(t, registry.Register(kind.BindControlPlane[kindstest.Spec, kindstest.Status](d, &kindstest.Fans{})))
+
+		_, err := memory.Create(ctx, resource.Record{Raw: kind.Raw{Kind: kindstest.Parent, Metadata: kind.Metadata{UUID: kindstest.House}}})
+		require.NoError(t, err)
+
+		return cascade.NewRepository(registry, memory), memory
+	}
+
+	t.Run("deleting a parent anywhere takes what goes with it first", func(t *testing.T) {
+		t.Parallel()
+
+		cascading, memory := repository(t, kind.ParentRules{Delete: kind.CascadeDelete, Restore: kind.CascadeReset},
+			kindstest.AFan("in-it", kindstest.Running, kindstest.Running),
+			kindstest.AFan("in-another", kindstest.Running, kindstest.Running, elsewhere),
+		)
+
+		require.NoError(t, cascading.Delete(ctx, kindstest.Parent, kindstest.House))
+
+		_, err := memory.GetOne(ctx, kindstest.Parent, kindstest.House)
+		assert.ErrorIs(t, err, domain.ErrNotExists, "the parent is gone")
+
+		_, kept := held(t, memory, "in-it")
+		assert.False(t, kept, "and what lived in it with it")
+
+		_, kept = held(t, memory, "in-another")
+		assert.True(t, kept)
+	})
+
+	t.Run("and leaves what outlives it", func(t *testing.T) {
+		t.Parallel()
+
+		cascading, memory := repository(t, kind.ParentRules{Delete: kind.CascadeKeep, Restore: kind.CascadeKeep},
+			kindstest.AFan("in-it", kindstest.Running, kindstest.Running),
+		)
+
+		require.NoError(t, cascading.Delete(ctx, kindstest.Parent, kindstest.House))
+
+		_, kept := held(t, memory, "in-it")
+		assert.True(t, kept)
+	})
+
+	t.Run("deleting what nothing lives in deletes it alone", func(t *testing.T) {
+		t.Parallel()
+
+		cascading, memory := repository(t, kind.ParentRules{Delete: kind.CascadeDelete, Restore: kind.CascadeReset},
+			kindstest.AFan("in-it", kindstest.Running, kindstest.Running),
+			kindstest.AFan("beside-it", kindstest.Running, kindstest.Running),
+		)
+
+		require.NoError(t, cascading.Delete(ctx, kindstest.Kind, "in-it"))
+
+		_, kept := held(t, memory, "in-it")
+		assert.False(t, kept)
+
+		_, kept = held(t, memory, "beside-it")
+		assert.True(t, kept)
+	})
+
+	t.Run("a parent whose children could not be read is kept, to be deleted again", func(t *testing.T) {
+		t.Parallel()
+
+		cascading, memory := repository(t, kind.ParentRules{Delete: kind.CascadeDelete, Restore: kind.CascadeReset})
+		memory.Fail = errors.New("the database is gone")
+
+		assert.ErrorIs(t, cascading.Delete(ctx, kindstest.Parent, kindstest.House), memory.Fail)
+
+		memory.Fail = nil
+
+		_, err := memory.GetOne(ctx, kindstest.Parent, kindstest.House)
+		assert.NoError(t, err)
+	})
+
+	t.Run("its restores are carried over by the same rules", func(t *testing.T) {
+		t.Parallel()
+
+		cascading, memory := repository(t, kind.ParentRules{Delete: kind.CascadeDelete, Restore: kind.CascadeReset},
+			kindstest.AFan("in-it", kindstest.Running, kindstest.Running),
+		)
+
+		require.NoError(t, cascading.Cascade().Restored(ctx, house))
+
+		fan, kept := held(t, memory, "in-it")
+		require.True(t, kept)
+		assert.True(t, fan.Reset)
+	})
+}

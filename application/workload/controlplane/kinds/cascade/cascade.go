@@ -3,9 +3,13 @@
 // deleting a Docker VM takes its stacks' records with it, and restoring its
 // disk from a snapshot resets them to what the restored disk holds.
 //
-// It is told by whatever deletes or restores the parent, once that is done,
-// and holds every kind registered to its rules alike: a kind added later
-// whose resources live in VMs is carried along with no more than its rules.
+// A delete is carried over wherever a record is deleted from, by the
+// Repository every part of the control plane keeps resources in: a VM's
+// record goes when its node says it is gone, when it was deleted on a node
+// that went quiet, or when it was on none, and what lives in it goes first,
+// each time. A restore is told by whatever hears that it was carried out.
+// Every kind registered is held to its rules alike: a kind added later whose
+// resources live in VMs is carried along with no more than its rules.
 package cascade
 
 import (
@@ -29,6 +33,47 @@ type Cascade struct {
 
 func New(registry *kind.Registry[kind.ControlPlaneBinding], resources resource.Repository) *Cascade {
 	return &Cascade{registry: registry, resources: resources}
+}
+
+// Repository keeps the resources of every kind in the repository it wraps,
+// and deletes what lives in a resource before the resource itself, as each
+// kind that lives in it says: deleting a VM's record takes its stacks'
+// records with it, whichever part of the control plane deletes it. What lives
+// in it goes first, so that a delete cut short leaves a VM with fewer stacks
+// rather than stacks in a VM that is not there.
+type Repository struct {
+	resource.Repository
+
+	cascade *Cascade
+}
+
+var _ resource.Repository = &Repository{}
+
+// NewRepository wraps resources, carrying deletes over to what lives in what
+// is deleted by the rules of the kinds in registry. What lives in what lives
+// in it is carried along too, through the same repository.
+func NewRepository(registry *kind.Registry[kind.ControlPlaneBinding], resources resource.Repository) *Repository {
+	r := &Repository{Repository: resources}
+	r.cascade = New(registry, r)
+
+	return r
+}
+
+// Cascade is what the repository carries a parent's delete over with, which
+// carries its restore over too.
+func (r *Repository) Cascade() *Cascade {
+	return r.cascade
+}
+
+// Delete takes away what lives in a resource, by its kind's rules, and then
+// the resource. One that is not there is gone already, and so is what lived
+// in it.
+func (r *Repository) Delete(ctx context.Context, kindName string, uuid string) error {
+	if err := r.cascade.Deleted(ctx, kind.Reference{Kind: kindName, UUID: uuid}); err != nil {
+		return err
+	}
+
+	return r.Repository.Delete(ctx, kindName, uuid)
 }
 
 // Deleted is what deleting parent does to what lives in it, kind by kind:

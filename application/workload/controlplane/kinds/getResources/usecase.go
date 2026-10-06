@@ -1,9 +1,15 @@
 // Package getResources lists the resources of any kind, a page at a time.
+//
+// A listing of anybody's has the kind's extras among its records, such as
+// the code runner's runs among anybody's VMs, newest first like the rest: a
+// listing narrowed to somebody's own, or to what lives in a resource, has
+// none, since an extra is nobody's own and lives in nothing.
 package getResources
 
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/presenter"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
@@ -33,14 +39,39 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 	d := binding.Descriptor()
 	offset, page := presenter.Offset(request.Page, Limit)
 
-	filter := resource.Filter{OwnerUUID: request.OwnerUUID}
+	filter := resource.Filter{OwnerUUID: request.OwnerUUID, Labels: request.Labels}
 	if len(request.Parent) > 0 {
 		filter.Parent = kind.Reference{Kind: d.Parent, UUID: request.Parent}
 	}
 
-	records, total, err := uc.resources.GetAll(ctx, d.Name, filter, offset, Limit)
+	extras, err := uc.extras(ctx, binding, filter)
 	if err != nil {
 		return nil, err
+	}
+
+	var (
+		items []kind.Raw
+		total uint
+	)
+
+	if len(extras) == 0 {
+		items, total, err = uc.records(ctx, d.Name, filter, offset, Limit)
+	} else {
+		items, total, err = uc.withExtras(ctx, d.Name, filter, extras, offset)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &Response{Items: items, Pagination: presenter.NewPagination(total, Limit, page)}, nil
+}
+
+// records is a page of the kind's records, and how many there are.
+func (uc *UseCase) records(ctx context.Context, kindName string, filter resource.Filter, offset uint, limit uint) ([]kind.Raw, uint, error) {
+	records, total, err := uc.resources.GetAll(ctx, kindName, filter, offset, limit)
+	if err != nil {
+		return nil, 0, err
 	}
 
 	items := make([]kind.Raw, len(records))
@@ -48,5 +79,80 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		items[i] = records[i].Raw
 	}
 
-	return &Response{Items: items, Pagination: presenter.NewPagination(total, Limit, page)}, nil
+	return items, total, nil
+}
+
+// extras are the kind's extras a listing has: every one its filter lets
+// through, in a listing of anybody's that lives in nothing.
+func (uc *UseCase) extras(ctx context.Context, binding kind.ControlPlaneBinding, filter resource.Filter) ([]kind.Raw, error) {
+	extras, extended := binding.Extras()
+	if !extended || len(filter.OwnerUUID) > 0 || len(filter.Parent.UUID) > 0 {
+		return nil, nil
+	}
+
+	all, err := extras.All(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	kept := make([]kind.Raw, 0, len(all))
+	for _, r := range all {
+		if filter.Passes(r.Metadata) {
+			kept = append(kept, r)
+		}
+	}
+
+	return kept, nil
+}
+
+// withExtras is the page of the kind's records that starts at offset, with
+// its extras merged into them, and how many there are of both together.
+//
+// Every extra is in hand, and an extra only ever moves a record further down
+// the listing, never up: the records a page can hold are among the first
+// offset+Limit, so those are read and merged with the extras, and the page
+// cut out of that.
+func (uc *UseCase) withExtras(ctx context.Context, kindName string, filter resource.Filter, extras []kind.Raw, offset uint) ([]kind.Raw, uint, error) {
+	records, total, err := uc.records(ctx, kindName, filter, 0, offset+Limit)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	merged := Merge(records, extras)
+
+	end := min(offset+Limit, uint(len(merged)))
+	if offset >= end {
+		return []kind.Raw{}, total + uint(len(extras)), nil
+	}
+
+	return merged[offset:end], total + uint(len(extras)), nil
+}
+
+// Merge is records and extras in one listing, newest first, as each of them
+// is listed already: by when they were made, and by uuid for those made at
+// the same moment, as a v7 uuid orders by when it was made too.
+func Merge(records []kind.Raw, extras []kind.Raw) []kind.Raw {
+	merged := make([]kind.Raw, 0, len(records)+len(extras))
+
+	for len(records) > 0 && len(extras) > 0 {
+		if newestFirst(extras[0], records[0]) < 0 {
+			merged, extras = append(merged, extras[0]), extras[1:]
+		} else {
+			merged, records = append(merged, records[0]), records[1:]
+		}
+	}
+
+	merged = append(merged, records...)
+
+	return append(merged, extras...)
+}
+
+// newestFirst orders resources by when they were made, the newest first, and
+// of two made at the same moment the one whose uuid sorts last first.
+func newestFirst(a kind.Raw, b kind.Raw) int {
+	if order := b.Metadata.CreatedAt.Compare(a.Metadata.CreatedAt); order != 0 {
+		return order
+	}
+
+	return strings.Compare(b.Metadata.UUID, a.Metadata.UUID)
 }

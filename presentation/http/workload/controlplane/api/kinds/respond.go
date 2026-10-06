@@ -223,3 +223,25 @@ func fieldsOf(t reflect.Type) map[string]reflect.Type {
 
 	return fields
 }
+
+// labelsOf are the labels a listing is narrowed to, each given as key=value,
+// and whether every one of them was: a key is never empty, while a value may
+// be.
+func labelsOf(given []string) (map[string]string, bool) {
+	if len(given) == 0 {
+		return nil, true
+	}
+
+	labels := make(map[string]string, len(given))
+
+	for _, label := range given {
+		key, value, found := strings.Cut(label, "=")
+		if !found || len(key) == 0 {
+			return nil, false
+		}
+
+		labels[key] = value
+	}
+
+	return labels, true
+}

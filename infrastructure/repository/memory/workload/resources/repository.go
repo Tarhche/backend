@@ -14,7 +14,6 @@ import (
 	"github.com/gofrs/uuid/v5"
 
 	"github.com/khanzadimahdi/testproject/domain"
-	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
 )
 
@@ -236,21 +235,7 @@ func (r *Repository) slugTaken(record resource.Record) bool {
 
 // passes reports whether a record is one filter lets through.
 func passes(record resource.Record, filter resource.Filter) bool {
-	if len(filter.OwnerUUID) > 0 && record.Metadata.OwnerUUID != filter.OwnerUUID {
-		return false
-	}
-
-	if len(filter.Node) > 0 && record.Metadata.Node != filter.Node {
-		return false
-	}
-
-	if len(filter.Parent.UUID) > 0 {
-		return slices.ContainsFunc(record.Metadata.Owners, func(owner kind.Reference) bool {
-			return owner.UUID == filter.Parent.UUID && (len(filter.Parent.Kind) == 0 || owner.Kind == filter.Parent.Kind)
-		})
-	}
-
-	return true
+	return filter.Passes(record.Metadata)
 }
 
 // kept is a record as the database keeps it: a copy of its own, its times to

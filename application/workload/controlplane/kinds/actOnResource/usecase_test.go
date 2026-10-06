@@ -3,6 +3,8 @@ package actOnResource_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -26,6 +28,7 @@ type fixture struct {
 	racing   *kindstest.Racing
 	producer *messagingMock.Recorder
 	waiters  *waiters.Waiters
+	fans     *kindstest.Fans
 	useCase  *actOnResource.UseCase
 }
 
@@ -36,6 +39,7 @@ func newFixture(t *testing.T, records ...resource.Record) *fixture {
 		memory:   resourcesMemory.NewRepository(),
 		producer: &messagingMock.Recorder{},
 		waiters:  waiters.New(),
+		fans:     &kindstest.Fans{Node: kindstest.NodeName},
 	}
 
 	f.racing = &kindstest.Racing{Repository: f.memory}
@@ -46,9 +50,43 @@ func newFixture(t *testing.T, records ...resource.Record) *fixture {
 	}
 
 	dispatcher := dispatch.New(f.racing, f.producer, f.waiters, kindstest.NewClock().Now, dispatch.PollEvery(time.Millisecond))
-	f.useCase = actOnResource.NewUseCase(kindstest.Registry(&kindstest.Fans{Node: kindstest.NodeName}), f.racing, dispatcher)
+	f.useCase = actOnResource.NewUseCase(registry(t, f.fans), f.racing, dispatcher, slog.New(slog.DiscardHandler))
 
 	return f
+}
+
+// descriptor is the fan's, with what these tests ask of it beside: a nudge,
+// a command for its node that desires nothing, and a start and a stop that
+// wait for a fan in flight to get where it is going.
+func descriptor() kind.Descriptor {
+	d := kindstest.Descriptor()
+
+	for i := range d.Actions {
+		if d.Actions[i].Name == "start" || d.Actions[i].Name == "stop" {
+			d.Actions[i].Waits = true
+		}
+	}
+
+	d.Actions = append(d.Actions, kind.Action{
+		Name:       "nudge",
+		Runs:       kind.OnNode,
+		Mode:       kind.ModeCommand,
+		AllowedIn:  []kind.State{kindstest.Running},
+		Permission: "manage",
+		Payload:    kind.NoPayload,
+	})
+
+	return d
+}
+
+// registry is the fans as these tests register them, through strategy.
+func registry(t *testing.T, strategy kind.ControlPlane[kindstest.Spec, kindstest.Status]) *kind.Registry[kind.ControlPlaneBinding] {
+	t.Helper()
+
+	registry := kind.NewRegistry[kind.ControlPlaneBinding]()
+	require.NoError(t, registry.Register(kind.BindControlPlane[kindstest.Spec, kindstest.Status](descriptor(), strategy)))
+
+	return registry
 }
 
 func (f *fixture) stored(t *testing.T, uuid string) kindstest.Fan {
@@ -213,8 +251,8 @@ func TestUseCase_Execute(t *testing.T) {
 			request: actOnResource.Request{Action: "rename", Payload: json.RawMessage(`{"name": 7}`)},
 			invalid: domain.ValidationErrors{"payload": "invalid_value"},
 		},
-		"a command for a node, of one on none, cannot be sent": {
-			request:  actOnResource.Request{Action: "stop"},
+		"a command for a node that desires nothing, of one on none, cannot be sent": {
+			request:  actOnResource.Request{Action: "nudge"},
 			unplaced: true,
 			node:     &noderequest.Error{Code: noderequest.CodeNotRunning},
 		},
@@ -281,4 +319,206 @@ func TestUseCase_Execute(t *testing.T) {
 			assert.Equal(t, kindstest.Running, f.stored(t, "fan-uuid").Status.State)
 		})
 	}
+}
+
+func TestUseCase_Execute_waits(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	t.Run("a command that waits, asked of a resource in flight, has what it desires written down, and nothing is sent yet", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t, kindstest.AFan("fan-uuid", kindstest.Starting, kindstest.Running))
+
+		response, err := f.useCase.Execute(ctx, &actOnResource.Request{Kind: kindstest.Kind, UUID: "fan-uuid", Action: "stop"})
+		require.NoError(t, err)
+
+		assert.Empty(t, response.ValidationErrors)
+		assert.Nil(t, response.Command, "it is asked once the fan runs")
+		assert.Empty(t, f.producer.Messages())
+
+		fan := f.stored(t, "fan-uuid")
+		assert.Equal(t, kindstest.Starting, fan.Status.State, "it is left on its way")
+		assert.Equal(t, kindstest.Stopped, fan.Status.Expected, "and is to be stopped once it gets there")
+		assert.Equal(t, fan, kindstest.Typed(resource.Record{Raw: response.Resource}))
+	})
+
+	t.Run("nothing waits on a resource on its way to being deleted", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t, kindstest.AFan("fan-uuid", kindstest.Deleting, kind.Deleted))
+
+		response, err := f.useCase.Execute(ctx, &actOnResource.Request{Kind: kindstest.Kind, UUID: "fan-uuid", Action: "start"})
+		require.NoError(t, err)
+
+		assert.Equal(t, domain.ValidationErrors{"action": "invalid_state_transition"}, response.ValidationErrors)
+		assert.Equal(t, kind.Deleted, f.stored(t, "fan-uuid").Status.Expected)
+	})
+
+	t.Run("and one at rest where it is not allowed is refused all the same", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t, kindstest.AFan("fan-uuid", kindstest.Stopped, kindstest.Stopped))
+
+		response, err := f.useCase.Execute(ctx, &actOnResource.Request{Kind: kindstest.Kind, UUID: "fan-uuid", Action: "stop"})
+		require.NoError(t, err)
+
+		assert.Equal(t, domain.ValidationErrors{"action": "invalid_state_transition"}, response.ValidationErrors)
+	})
+
+	t.Run("a command that does not wait is refused in flight", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t, kindstest.AFan("fan-uuid", kindstest.Starting, kindstest.Running))
+
+		response, err := f.useCase.Execute(ctx, &actOnResource.Request{Kind: kindstest.Kind, UUID: "fan-uuid", Action: "nudge"})
+		require.NoError(t, err)
+
+		assert.Equal(t, domain.ValidationErrors{"action": "invalid_state_transition"}, response.ValidationErrors)
+	})
+}
+
+func TestUseCase_Execute_follows(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	t.Run("a command run in the control plane is followed at once by what the kind asks for of the resource as it now is", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t, kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running))
+		f.fans.Intents = func(fan kindstest.Fan) []kind.Intent {
+			if fan.Metadata.Name == "hall" {
+				return []kind.Intent{{Action: "stop", Reason: "a fan in the hall is too loud"}}
+			}
+
+			return nil
+		}
+
+		response, err := f.useCase.Execute(ctx, &actOnResource.Request{Kind: kindstest.Kind, UUID: "fan-uuid", Action: "rename", Payload: json.RawMessage(`{"name": "hall"}`)})
+		require.NoError(t, err)
+
+		require.NotNil(t, response.Command, "the stop it asked for is sent")
+		assert.Equal(t, "stop", response.Command.Action)
+		assert.Equal(t, "hall", response.Resource.Metadata.Name)
+
+		sent, err := messagingMock.Produced[kind.Command](f.producer, kind.CommandName)
+		require.NoError(t, err)
+		require.Len(t, sent, 1)
+		assert.Equal(t, "hall", sent[0].Resource.Metadata.Name, "carrying the resource as it was changed")
+
+		fan := f.stored(t, "fan-uuid")
+		assert.Equal(t, kindstest.Stopping, fan.Status.State)
+		assert.Equal(t, "hall", fan.Metadata.Name)
+	})
+
+	t.Run("what the kind could not decide is the reconcile loop's to ask again, and the change stands", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t, kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running))
+		f.fans.Intents = func(kindstest.Fan) []kind.Intent {
+			return []kind.Intent{{Action: "start"}}
+		}
+
+		response, err := f.useCase.Execute(ctx, &actOnResource.Request{Kind: kindstest.Kind, UUID: "fan-uuid", Action: "rename", Payload: json.RawMessage(`{"name": "hall"}`)})
+		require.NoError(t, err)
+
+		assert.Nil(t, response.Command, "a running fan cannot be started")
+		assert.Equal(t, "hall", f.stored(t, "fan-uuid").Metadata.Name)
+		assert.Empty(t, f.producer.Messages())
+	})
+}
+
+func TestUseCase_Execute_extras(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	shelved := func(t *testing.T) (*actOnResource.UseCase, *kindstest.Shelf) {
+		t.Helper()
+
+		f := newFixture(t)
+		s := kindstest.NewShelf(kindstest.AShelvedFan("shelved"))
+
+		dispatcher := dispatch.New(f.memory, f.producer, f.waiters, nil)
+
+		return actOnResource.NewUseCase(registry(t, &kindstest.Shelved{Fans: f.fans, Shelf: s}), f.memory, dispatcher, slog.New(slog.DiscardHandler)), s
+	}
+
+	shelvedFan := func(t *testing.T, s *kindstest.Shelf) (kindstest.Fan, bool) {
+		t.Helper()
+
+		r, err := s.One(context.Background(), "shelved")
+		if errors.Is(err, domain.ErrNotExists) {
+			return kindstest.Fan{}, false
+		}
+
+		require.NoError(t, err)
+
+		return kindstest.Typed(resource.Record{Raw: r}), true
+	}
+
+	t.Run("a uuid that names none of the kind's records may name one of its extras, which says what came of it", func(t *testing.T) {
+		t.Parallel()
+
+		useCase, s := shelved(t)
+
+		response, err := useCase.Execute(ctx, &actOnResource.Request{Kind: kindstest.Kind, UUID: "shelved", Action: "stop"})
+		require.NoError(t, err)
+
+		assert.Empty(t, response.ValidationErrors)
+		assert.Equal(t, kindstest.Stopping, kindstest.Typed(resource.Record{Raw: response.Resource}).Status.State)
+
+		fan, _ := shelvedFan(t, s)
+		assert.Equal(t, kindstest.Stopping, fan.Status.State)
+	})
+
+	t.Run("one it takes away is gone", func(t *testing.T) {
+		t.Parallel()
+
+		useCase, s := shelved(t)
+
+		response, err := useCase.Execute(ctx, &actOnResource.Request{Kind: kindstest.Kind, UUID: "shelved", Action: "delete"})
+		require.NoError(t, err)
+
+		assert.True(t, response.Gone)
+
+		_, kept := shelvedFan(t, s)
+		assert.False(t, kept)
+	})
+
+	t.Run("and what it cannot be asked is refused, field by field", func(t *testing.T) {
+		t.Parallel()
+
+		useCase, _ := shelved(t)
+
+		response, err := useCase.Execute(ctx, &actOnResource.Request{Kind: kindstest.Kind, UUID: "shelved", Action: "start"})
+		require.NoError(t, err)
+
+		assert.Equal(t, domain.ValidationErrors{"fan": "immutable"}, response.ValidationErrors)
+	})
+
+	t.Run("an extra is nobody's own", func(t *testing.T) {
+		t.Parallel()
+
+		useCase, s := shelved(t)
+
+		_, err := useCase.Execute(ctx, &actOnResource.Request{Kind: kindstest.Kind, OwnerUUID: kindstest.OwnerUUID, UUID: "shelved", Action: "stop"})
+
+		assert.ErrorIs(t, err, domain.ErrNotExists)
+
+		fan, _ := shelvedFan(t, s)
+		assert.Equal(t, kindstest.Running, fan.Status.State)
+	})
+
+	t.Run("and a uuid that names nothing at all is not there", func(t *testing.T) {
+		t.Parallel()
+
+		useCase, _ := shelved(t)
+
+		_, err := useCase.Execute(ctx, &actOnResource.Request{Kind: kindstest.Kind, UUID: "nowhere", Action: "stop"})
+
+		assert.ErrorIs(t, err, domain.ErrNotExists)
+	})
 }

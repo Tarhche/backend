@@ -10,6 +10,10 @@
 // Asking a node for one resource's state is also an observation of it,
 // outside the heartbeat, so it is written down as one: the dashboard
 // refreshing one resource refreshes its record.
+//
+// A uuid that names none of the kind's records may name one of its extras,
+// such as one of the code runner's runs among anybody's VMs, which answers
+// for itself.
 package queryResource
 
 import (
@@ -67,7 +71,9 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 	}
 
 	r, err := owner.Resource(ctx, uc.resources, d.Name, request.OwnerUUID, request.UUID)
-	if err != nil {
+	if errors.Is(err, domain.ErrNotExists) {
+		return uc.extra(ctx, binding, request, err)
+	} else if err != nil {
 		return nil, err
 	}
 
@@ -126,6 +132,39 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 	}
 
 	return &Response{Result: reply.Result, Truncated: reply.Truncated}, nil
+}
+
+// extra asks one of the kind's extras the query, when the uuid names one and
+// whoever asks may see anybody's: its state is what it says it is doing, in
+// the shape a node answers one in, and anything else is its own to answer.
+// notThere is what looking for a record came to, which is the answer
+// otherwise.
+func (uc *UseCase) extra(ctx context.Context, binding kind.ControlPlaneBinding, request *Request, notThere error) (*Response, error) {
+	extras, extended := binding.Extras()
+	if !extended || len(request.OwnerUUID) > 0 {
+		return nil, notThere
+	}
+
+	r, err := extras.One(ctx, request.UUID)
+	if errors.Is(err, domain.ErrNotExists) {
+		return nil, notThere
+	} else if err != nil {
+		return nil, err
+	}
+
+	if request.Action == stateAction {
+		return uc.fromRecord(binding.Descriptor(), resource.Record{Raw: r})
+	}
+
+	answer, refused, err := extras.Query(ctx, r, request.Action, request.Payload)
+	switch {
+	case err != nil:
+		return nil, err
+	case len(refused) > 0:
+		return &Response{ValidationErrors: refused}, nil
+	}
+
+	return &Response{Result: answer}, nil
 }
 
 // fromRecord answers the state of a kind whose state is known in the

@@ -147,7 +147,7 @@ func controlPlane(t *testing.T, w *vmtest.Workload) *client.Client {
 
 	require.NoError(t, kindsAPI.Route(mux, registry.Descriptors(), kindsAPI.UseCases{
 		Admit:  admitresource.NewUseCase(registry, resources, dispatcher, logger),
-		Act:    actonresource.NewUseCase(registry, resources, dispatcher),
+		Act:    actonresource.NewUseCase(registry, resources, dispatcher, logger),
 		Delete: deleteresource.NewUseCase(registry, resources, dispatcher),
 		Get:    getresource.NewUseCase(registry, resources),
 		List:   getresources.NewUseCase(registry, resources),

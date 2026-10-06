@@ -14,6 +14,7 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/dispatch"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/owner"
+	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
 )
@@ -50,7 +51,9 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 
 	for try := 1; ; try++ {
 		r, err := owner.Resource(ctx, uc.resources, d.Name, request.OwnerUUID, request.UUID)
-		if err != nil {
+		if errors.Is(err, domain.ErrNotExists) {
+			return extra(ctx, binding, request, err)
+		} else if err != nil {
 			return nil, err
 		}
 
@@ -90,4 +93,33 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 			Result:   delivered.Result,
 		}, nil
 	}
+}
+
+// extra deletes the kind's extra the uuid names, when whoever asks may see
+// anybody's, which takes it away as only it knows how. notThere is what
+// looking for a record came to, which is the answer otherwise.
+func extra(ctx context.Context, binding kind.ControlPlaneBinding, request *Request, notThere error) (*Response, error) {
+	extras, extended := binding.Extras()
+	if !extended || len(request.OwnerUUID) > 0 {
+		return nil, notThere
+	}
+
+	r, err := extras.One(ctx, request.UUID)
+	if errors.Is(err, domain.ErrNotExists) {
+		return nil, notThere
+	} else if err != nil {
+		return nil, err
+	}
+
+	after, gone, refused, err := extras.Act(ctx, r, deleteAction, nil)
+	switch {
+	case err != nil:
+		return nil, err
+	case len(refused) > 0:
+		return &Response{ValidationErrors: refused}, nil
+	case gone:
+		return &Response{Gone: true}, nil
+	}
+
+	return &Response{Resource: after}, nil
 }

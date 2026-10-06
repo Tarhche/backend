@@ -6,7 +6,8 @@
 // the resource is the kind's machine's to say, since only the control plane
 // knows what was asked of it. A resource at rest is what its node says it
 // is; one in flight takes only the arrivals its machine declares, so that a
-// report sent before a stop reached the node does not undo the stop. The
+// report sent before a stop reached the node does not undo the stop, and one
+// its machine says is answered takes them only from its command's result. The
 // kind's own fields of what was observed, a VM's usage or a stack's services,
 // are taken whatever becomes of the state.
 //
@@ -38,9 +39,16 @@ type Change struct {
 	Changed bool
 }
 
-// Observe takes onto a record what was observed of its resource at a
-// moment: its status, as its node or a command's result put it.
+// Observe takes onto a record what its resource was observed doing at a
+// moment: its status, as its node put it. One waiting for the answer to its
+// command (kind.Machine.Answered) stays where it is, whatever its node says.
 func Observe(d kind.Descriptor, r *resource.Record, status json.RawMessage, at time.Time) (Change, error) {
+	return observe(d, r, status, at, false)
+}
+
+// observe takes a status onto a record, as its node put it, or as the result
+// of the command it was waiting on did when answered is set.
+func observe(d kind.Descriptor, r *resource.Record, status json.RawMessage, at time.Time, answered bool) (Change, error) {
 	observed, err := resource.Common(status)
 	if err != nil {
 		return Change{}, err
@@ -58,8 +66,10 @@ func Observe(d kind.Descriptor, r *resource.Record, status json.RawMessage, at t
 
 	common := recorded
 
+	// what a node is seen doing says nothing of a command it may not have
+	// carried out yet, when it does the same before and after it.
 	taken := false
-	if len(observed.State) > 0 {
+	if len(observed.State) > 0 && (answered || !d.Machine.IsAnswered(recorded.State)) {
 		common.State, taken = d.Machine.Next(recorded.State, kind.OnObserved(observed.State))
 	}
 
@@ -126,7 +136,7 @@ func Answer(d kind.Descriptor, r *resource.Record, result kind.Result, at time.T
 		}
 
 		if len(result.Status) > 0 {
-			if _, err := Observe(d, r, result.Status, at); err != nil {
+			if _, err := observe(d, r, result.Status, at, true); err != nil {
 				return Change{}, err
 			}
 		}

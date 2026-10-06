@@ -67,7 +67,11 @@ type Transition struct {
 // whatever its node says it is, while an in-flight one believes only the
 // arrivals its transitions declare, since a report sent before the command
 // reached the node still says what it was doing before. A stop is not undone
-// by the heartbeat that was already on its way.
+// by the heartbeat that was already on its way. An in-flight state that is
+// answered is left only on the answer to its command, and what its node is
+// seen doing in the meantime moves nothing: a VM restarting runs before its
+// restart as it does after it, so seeing it run says nothing of whether the
+// restart was carried out.
 type Machine struct {
 	// Initial is the state an admitted resource starts in.
 	Initial State `json:"initial"`
@@ -79,6 +83,10 @@ type Machine struct {
 	// passes through. A state is at most one of the two.
 	Terminal []State `json:"terminal"`
 	InFlight []State `json:"in_flight"`
+
+	// Answered are the in-flight states a resource leaves only when its
+	// command is answered, whatever its node is seen doing before then.
+	Answered []State `json:"answered,omitempty"`
 }
 
 // Has reports whether s is one of the machine's states.
@@ -95,6 +103,12 @@ func (m Machine) IsTerminal(s State) bool {
 // is not the same as being somewhere it should not be.
 func (m Machine) IsInFlight(s State) bool {
 	return slices.Contains(m.InFlight, s)
+}
+
+// IsAnswered reports whether a resource in s is waiting for the answer to its
+// command, and for nothing its node is seen doing.
+func (m Machine) IsAnswered(s State) bool {
+	return slices.Contains(m.Answered, s)
 }
 
 // Next is the state a trigger takes a resource recorded in from to, and
@@ -176,7 +190,8 @@ func (m Machine) leaving(s State) []Transition {
 // Validate is everything about the machine that does not hold together, or
 // nothing when it does: states listed twice or not at all, transitions to or
 // from nowhere, two transitions on one trigger from one state, an in-flight
-// state with no way out, and a state no transition reaches.
+// state with no way out, an answered state that is not in flight, and a state
+// no transition reaches.
 //
 // A state is reached when a path of declared transitions leads to it from
 // the initial one. What a resource at rest takes from its node without a
@@ -221,8 +236,9 @@ func (m Machine) Validate() []error {
 	return problems
 }
 
-// validateSorts holds the terminal and in-flight states to being states, and
-// to being one sort at most.
+// validateSorts holds the terminal, in-flight and answered states to being
+// states, the first two to being one sort at most, and an answered state to
+// being in flight.
 func (m Machine) validateSorts(add func(format string, args ...any)) {
 	for _, sort := range []struct {
 		name   string
@@ -230,6 +246,7 @@ func (m Machine) validateSorts(add func(format string, args ...any)) {
 	}{
 		{name: "terminal", states: m.Terminal},
 		{name: "in-flight", states: m.InFlight},
+		{name: "answered", states: m.Answered},
 	} {
 		seen := make(map[State]bool, len(sort.states))
 
@@ -249,6 +266,12 @@ func (m Machine) validateSorts(add func(format string, args ...any)) {
 	for _, s := range m.Terminal {
 		if m.IsInFlight(s) {
 			add("state %q is both terminal and in flight", s)
+		}
+	}
+
+	for _, s := range m.Answered {
+		if !m.IsInFlight(s) {
+			add("answered state %q is not in flight: only a resource on its way somewhere waits for an answer", s)
 		}
 	}
 }

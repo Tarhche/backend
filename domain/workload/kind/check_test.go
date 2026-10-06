@@ -74,6 +74,13 @@ func TestCheck(t *testing.T) {
 
 			return d
 		}(),
+		"and one whose commands wait in flight, and restore": func() Descriptor {
+			d := box()
+			changing(&d, "start", func(a *Action) { a.Waits = true })
+			changing(&d, "stop", func(a *Action) { a.Waits, a.Restores = true, true })
+
+			return d
+		}(),
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -240,6 +247,18 @@ func TestCheck(t *testing.T) {
 				changing(d, "resize", func(a *Action) { a.Payload = misread{t: reflect.TypeFor[func()]()} })
 			},
 			want: `action "resize": its payload's zero value cannot be written`,
+		},
+		"a command that waits with nothing to wait for": {
+			breaking: func(d *Descriptor) { changing(d, "resize", func(a *Action) { a.Waits = true }) },
+			want:     `action "resize" waits in flight, and only a command that desires a state has anything to wait for`,
+		},
+		"a query that waits": {
+			breaking: func(d *Descriptor) { changing(d, "logs", func(a *Action) { a.Waits = true }) },
+			want:     `action "logs" waits in flight, and only a command that desires a state has anything to wait for`,
+		},
+		"a query that restores": {
+			breaking: func(d *Descriptor) { changing(d, "logs", func(a *Action) { a.Restores = true }) },
+			want:     `action "logs" restores, and only a command changes what a resource holds`,
 		},
 		"a transition on an action it does not have": {
 			breaking: func(d *Descriptor) {
