@@ -344,6 +344,24 @@ func TestRuns_Act(t *testing.T) {
 		assert.Equal(t, taskKind.Stopped, stored.Status.Expected)
 	})
 
+	t.Run("one being deleted is refused a stop, and is still to be deleted", func(t *testing.T) {
+		t.Parallel()
+
+		w := vmtest.New(vmtest.WithTasks(run("run")))
+
+		_, _, refused, err := w.Runs.Act(ctx, raw(t, run("run")), vmKind.ActionDelete, nil)
+		require.NoError(t, err)
+		require.Empty(t, refused)
+
+		_, _, refused, err = w.Runs.Act(ctx, raw(t, run("run")), vmKind.ActionStop, nil)
+		require.NoError(t, err)
+		assert.Equal(t, domain.ValidationErrors{"vm": "invalid_state_transition"}, refused)
+
+		stored, _, _ := w.StoredTask("run")
+		assert.Equal(t, taskKind.Deleting, stored.Status.State)
+		assert.Equal(t, kind.Deleted, stored.Status.Expected)
+	})
+
 	t.Run("a run deleted is its task asked to be taken away, by its node", func(t *testing.T) {
 		t.Parallel()
 

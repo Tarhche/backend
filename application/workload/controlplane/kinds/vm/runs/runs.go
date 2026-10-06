@@ -121,8 +121,8 @@ func (r *Runs) Act(ctx context.Context, run kind.Raw, action string, _ []byte) (
 // of asking, as it is of any task. A stop it cannot get to from where it is,
 // one stopping already or not running yet, is refused as
 // invalid_state_transition, and the task is to stop all the same once it
-// can. A delete is never refused, and one being deleted already is left to
-// it.
+// can, unless it is being deleted. A delete is never refused, and one being
+// deleted already is left to it.
 func (r *Runs) ask(ctx context.Context, uuid string, action string) (kind.Raw, bool, domain.ValidationErrors, error) {
 	binding, registered := r.registry.Lookup(taskKind.Name)
 	if !registered {
@@ -154,11 +154,17 @@ func (r *Runs) ask(ctx context.Context, uuid string, action string) (kind.Raw, b
 			invalid domain.ValidationErrors
 		)
 
-		if d.Allows(action, common.State) {
+		switch {
+		case d.Allows(action, common.State):
 			asked, invalid, err = r.dispatcher.Ask(ctx, binding, record, action, nil, true)
-		} else {
-			// what was asked is what it is expected to be, once it can be.
+
+		// what was asked is what it is expected to be, once it can be, unless
+		// it is on its way to being deleted, which nothing comes back from.
+		case common.Expected != kind.Deleted:
 			_, err = r.dispatcher.Desire(ctx, record, a.Desires, true)
+			invalid = domain.ValidationErrors{"action": "invalid_state_transition"}
+
+		default:
 			invalid = domain.ValidationErrors{"action": "invalid_state_transition"}
 		}
 
