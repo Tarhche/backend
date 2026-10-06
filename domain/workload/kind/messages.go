@@ -124,11 +124,17 @@ type Observation = Observed[json.RawMessage]
 // it.
 //
 // What it does not list is not on the node, which is how a resource its node
-// lost is noticed, except inside the parents it could not look into. A
-// Docker VM whose dockerd does not answer says nothing about the containers
-// in it, either way.
+// lost is noticed. For a kind whose resources live inside a parent, that
+// holds only inside the parents the node read: a Docker VM whose dockerd did
+// not answer is Unseen, and says nothing about the containers in it, either
+// way; and one the node did not look inside at all, because it is not running
+// there, is neither read nor unseen, and what lives in it waits on it.
 type Report[Status any] struct {
 	Instances []Observed[Status] `json:"instances"`
+
+	// Read are the parents, by uuid, the node looked inside this time: what
+	// lives in them and is not listed is not there.
+	Read []string `json:"read,omitempty"`
 
 	// Unseen are the parents, by uuid, the node could not look inside this
 	// time.
@@ -148,13 +154,21 @@ func (r Report[Status]) Find(uuid string) (Observed[Status], bool) {
 
 // Missing reports whether the resource uuid names, living inside the parent
 // of that uuid or inside none, is not on the node: the report could see where
-// it would be, and does not list it.
+// it would be, and does not list it. Inside a parent, that is only so of one
+// the report read.
 func (r Report[Status]) Missing(uuid string, parent string) bool {
-	if len(parent) > 0 && slices.Contains(r.Unseen, parent) {
+	if len(parent) > 0 && !slices.Contains(r.Read, parent) {
 		return false
 	}
 
 	_, listed := r.Find(uuid)
 
 	return !listed
+}
+
+// Unread reports whether the node did not look inside a parent at all: it
+// neither read it nor failed to, because the parent is not running there, or
+// is not there. What lives in it cannot be seen, and waits on it.
+func (r Report[Status]) Unread(parent string) bool {
+	return len(parent) > 0 && !slices.Contains(r.Read, parent) && !slices.Contains(r.Unseen, parent)
 }

@@ -149,6 +149,7 @@ func TestReport(t *testing.T) {
 			{UUID: "box-1", Owners: []Reference{{Kind: "vm", UUID: "vm-1"}}, Status: boxStatus{Status: Status{State: boxRunning}}},
 			{Owners: []Reference{{Kind: "vm", UUID: "vm-1"}}, Status: boxStatus{Status: Status{State: boxRunning}}},
 		},
+		Read:   []string{"vm-1"},
 		Unseen: []string{"vm-2"},
 	}
 
@@ -157,10 +158,12 @@ func TestReport(t *testing.T) {
 		parent  string
 		found   bool
 		missing bool
+		unread  bool
 	}{
 		"one it lists is there":                                    {uuid: "box-1", parent: "vm-1", found: true},
-		"one it does not, where it could see, is missing":          {uuid: "box-3", parent: "vm-1", missing: true},
+		"one it does not, inside a parent it read, is missing":     {uuid: "box-3", parent: "vm-1", missing: true},
 		"one inside a parent it could not see into is neither":     {uuid: "box-2", parent: "vm-2"},
+		"one inside a parent it did not look into waits on it":     {uuid: "box-5", parent: "vm-3", unread: true},
 		"one with no parent it does not list is missing":           {uuid: "box-4", missing: true},
 		"an instance nobody keeps a record of is nobody's to find": {uuid: "", parent: "vm-1", missing: true},
 	} {
@@ -171,6 +174,7 @@ func TestReport(t *testing.T) {
 
 			assert.Equal(t, tt.found, listed, "found")
 			assert.Equal(t, tt.missing, report.Missing(tt.uuid, tt.parent), "missing")
+			assert.Equal(t, tt.unread, report.Unread(tt.parent), "unread")
 
 			if tt.found {
 				assert.Equal(t, tt.uuid, found.UUID)
@@ -183,10 +187,12 @@ func TestReport(t *testing.T) {
 
 		named := fields(t, Report[json.RawMessage]{
 			Instances: []Observation{{Kind: "box", UUID: "box-1", Status: json.RawMessage(`{"state":"running"}`)}},
+			Read:      []string{"vm-1"},
 			Unseen:    []string{"vm-2"},
 		})
 
 		assert.Contains(t, named, "instances")
+		assert.Contains(t, named, "read")
 		assert.Contains(t, named, "unseen")
 
 		var instances []map[string]json.RawMessage

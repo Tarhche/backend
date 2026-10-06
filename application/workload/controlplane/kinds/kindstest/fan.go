@@ -27,7 +27,8 @@ const (
 	Parent = "house"
 )
 
-// The fan's states, beside the framework's own: kind.Failed, kind.Missing and
+// The fan's states, beside the framework's own: kind.Failed, kind.Missing,
+// kind.Waiting, which a fan is in while its house is not looked into, and
 // kind.Deleted.
 const (
 	Pending  kind.State = "pending"
@@ -124,7 +125,7 @@ func Descriptor() kind.Descriptor {
 func Machine() kind.Machine {
 	return kind.Machine{
 		Initial: Pending,
-		States:  []kind.State{Pending, Starting, Running, Stopping, Stopped, kind.Failed, kind.Missing, Deleting, kind.Deleted},
+		States:  []kind.State{Pending, Starting, Running, Stopping, Stopped, kind.Failed, kind.Missing, kind.Waiting, Deleting, kind.Deleted},
 		Transitions: []kind.Transition{
 			{From: Pending, On: kind.OnAction("create"), To: Starting},
 			{From: kind.Missing, On: kind.OnAction("create"), To: Starting},
@@ -134,6 +135,7 @@ func Machine() kind.Machine {
 			{From: Running, On: kind.OnAction("stop"), To: Stopping},
 			{From: Stopping, On: kind.OnObserved(Stopped), To: Stopped},
 			{From: Running, On: kind.OnObserved(kind.Missing), To: kind.Missing},
+			{From: Running, On: kind.OnObserved(kind.Waiting), To: kind.Waiting},
 			{From: kind.Any, On: kind.OnObserved(kind.Failed), To: kind.Failed},
 			{From: kind.Any, On: kind.OnAction("delete"), To: Deleting},
 			{From: Deleting, On: kind.OnObserved(kind.Missing), To: kind.Deleted},

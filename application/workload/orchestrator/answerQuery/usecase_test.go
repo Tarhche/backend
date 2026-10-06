@@ -67,8 +67,8 @@ func TestUseCase_Handle(t *testing.T) {
 			request:  func(t *testing.T) noderequest.Request { return asking(t, "state", ``) },
 			result:   `{"kind":"lamp","uuid":"lamp-1","owners":[{"kind":"room","uuid":"room-1"}],"status":{"state":"lit","brightness":80}}`,
 		},
-		"one the node does not hold is observed missing": {
-			strategy: &lamps{},
+		"one the node does not hold, in a room it looked into, is observed missing": {
+			strategy: &lamps{report: kind.Report[lampStatus]{Read: []string{"room-1"}}},
 			request:  func(t *testing.T) noderequest.Request { return asking(t, "state", ``) },
 			result:   `{"kind":"lamp","uuid":"lamp-1","status":{"state":"missing"}}`,
 		},

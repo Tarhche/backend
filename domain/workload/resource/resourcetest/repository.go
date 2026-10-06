@@ -309,6 +309,7 @@ func Repository(t *testing.T, make Maker) {
 		created.Answer = nil
 		created.Attempts = 0
 		created.TriedAt = time.Time{}
+		created.Reset = false
 		created.Metadata.Slug = ""
 		created.Metadata.Node = ""
 		created.Metadata.Labels = nil
@@ -327,6 +328,7 @@ func Repository(t *testing.T, make Maker) {
 		assert.Nil(t, stored.Answer)
 		assert.Empty(t, stored.Metadata.Slug)
 		assert.True(t, stored.TriedAt.IsZero())
+		assert.False(t, stored.Reset)
 		assert.True(t, stored.Metadata.ExpiresAt.IsZero())
 
 		_, err = repository.Create(ctx, aFan("another-uuid", "kitchen-abcde"))
@@ -368,6 +370,7 @@ func aFan(uuid string, slug string) resource.Record {
 		},
 		Attempts: 1,
 		TriedAt:  moment(12),
+		Reset:    true,
 		Answer: &kind.Result{
 			ID:     "command-0",
 			Kind:   fans,

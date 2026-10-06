@@ -134,7 +134,8 @@ type Node struct {
 	Blind   error
 
 	// Unseen are the houses it cannot look inside: the fans in them are
-	// neither reported nor said to be gone.
+	// neither reported nor said to be gone. It reads every other house its
+	// fans are in, and House.
 	Unseen []string
 
 	executed []string
@@ -204,6 +205,23 @@ func (n *Node) State(context.Context) (kind.Report[Status], error) {
 	}
 
 	report := kind.Report[Status]{Instances: []kind.Observed[Status]{}, Unseen: slices.Clone(n.Unseen)}
+
+	// the houses it looks into: the one fans are in unless a test says
+	// otherwise, and those of the fans it holds, but for the ones it cannot.
+	read := map[string]bool{House: true}
+	for _, fan := range n.fans {
+		if house, in := fan.Metadata.Owner(Parent); in {
+			read[house.UUID] = true
+		}
+	}
+
+	for house := range read {
+		if !slices.Contains(n.Unseen, house) {
+			report.Read = append(report.Read, house)
+		}
+	}
+
+	slices.Sort(report.Read)
 
 	for _, fan := range n.fans {
 		if house, in := fan.Metadata.Owner(Parent); in && slices.Contains(n.Unseen, house.UUID) {

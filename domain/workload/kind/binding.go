@@ -309,8 +309,16 @@ func (b *nodeBinding[Spec, Status, S]) stateOf(ctx context.Context, r *Resource[
 		return json.Marshal(observed)
 	}
 
-	parent, _ := r.Metadata.Owner(b.descriptor.Parent)
-	if !report.Missing(r.Metadata.UUID, parent.UUID) {
+	var parent Reference
+	if len(b.descriptor.Parent) > 0 {
+		parent, _ = r.Metadata.Owner(b.descriptor.Parent)
+	}
+
+	switch {
+	case report.Missing(r.Metadata.UUID, parent.UUID):
+	case report.Unread(parent.UUID):
+		return nil, fmt.Errorf("%w: the %s %q is inside %s %q, which is not running here", ErrUnreachable, b.descriptor.Name, r.Metadata.UUID, parent.Kind, parent.UUID)
+	default:
 		return nil, fmt.Errorf("%w: the %s %q is inside %s %q, which did not answer", ErrUnseen, b.descriptor.Name, r.Metadata.UUID, parent.Kind, parent.UUID)
 	}
 
@@ -333,6 +341,7 @@ func (b *nodeBinding[Spec, Status, S]) State(ctx context.Context) (Report[json.R
 
 	report := Report[json.RawMessage]{
 		Instances: make([]Observation, 0, len(typed.Instances)),
+		Read:      slices.Clone(typed.Read),
 		Unseen:    slices.Clone(typed.Unseen),
 	}
 

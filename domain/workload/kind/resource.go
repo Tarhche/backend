@@ -29,6 +29,13 @@ const (
 	// listed and did not: the node no longer holds it. It is an observation
 	// first, and a state only for a kind whose machine has it.
 	Missing State = "missing"
+
+	// Waiting is what is observed of a resource that lives inside a parent
+	// its node did not look inside, because the parent is not running: none
+	// of it can be seen, and it waits on its parent, whose state its reason
+	// says. It is an observation first, and a state only for a kind whose
+	// machine has it.
+	Waiting State = "waiting"
 )
 
 func (s State) String() string {

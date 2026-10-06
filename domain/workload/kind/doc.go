@@ -14,8 +14,8 @@
 //     asked, and on what its node observes of it. A resource at rest is what
 //     its node says it is; one in flight believes only the arrivals its
 //     machine declares, so a stale report does not undo a command. Failed,
-//     Deleted and Missing are the states the framework itself moves resources
-//     into.
+//     Deleted, Missing and Waiting are the states the framework itself moves
+//     resources into.
 //   - its Actions. What it can be asked; where each runs, on its node or in
 //     the control plane; whether it is a command, answered later as a Result,
 //     a query, answered at once, or a stream such as a terminal; the states it
@@ -47,8 +47,11 @@
 //   - a Query, as a node request whose op is the kind and the action,
 //     "stack.state", on the subject every node already answers on;
 //   - and every kind's Report in the node's heartbeat: everything of the kind
-//     the node holds, and the parents it could not look inside, so that what a
-//     report leaves out is known to be gone rather than merely unseen.
+//     the node holds, the parents it read and those it could not look inside,
+//     so that what a report leaves out of a parent it read is known to be gone,
+//     what lives in a parent it could not read is merely unseen, and what lives
+//     in one it did not look inside at all, because it is not running, waits
+//     on it.
 //
 // Registering a kind holds its descriptor to the rules every kind keeps
 // (Check), so a kind that could not run is found out when its service is put

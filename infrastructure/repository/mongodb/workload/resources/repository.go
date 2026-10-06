@@ -7,7 +7,8 @@
 //
 //	{_id: <uuid>, kind, metadata: {name, slug, owner_uuid, labels, owners,
 //	 node, lifetime, expires_at, created_at, updated_at}, spec: {…},
-//	 status: {…}, version, control: {pending, attempts, tried_at, answer}}
+//	 status: {…}, version, control: {pending, attempts, tried_at, answer,
+//	 reset}}
 //
 // The spec and the status are the kind's own JSON, kept as documents of
 // their own so that they can be read in the database as they are in the API.
@@ -363,6 +364,7 @@ type control struct {
 	Attempts int        `bson:"attempts,omitempty"`
 	TriedAt  *time.Time `bson:"tried_at,omitempty"`
 	Answer   *answer    `bson:"answer,omitempty"`
+	Reset    bool       `bson:"reset,omitempty"`
 }
 
 type pending struct {
@@ -418,6 +420,7 @@ func toDocument(record resource.Record) (document, error) {
 		Control: control{
 			Attempts: record.Attempts,
 			TriedAt:  optional(record.TriedAt),
+			Reset:    record.Reset,
 		},
 	}
 
@@ -486,6 +489,7 @@ func toRecord(stored document) (resource.Record, error) {
 		Version:  stored.Version,
 		Attempts: stored.Control.Attempts,
 		TriedAt:  moment(stored.Control.TriedAt),
+		Reset:    stored.Control.Reset,
 	}
 
 	for _, owner := range m.Owners {

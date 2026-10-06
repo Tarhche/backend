@@ -53,6 +53,13 @@ type Record struct {
 	// it and was not the one that heard it reads it here. Its status is not
 	// kept, since it is the resource's already.
 	Answer *kind.Result
+
+	// Reset says the parent the resource lives in was restored from a
+	// snapshot since its node last saw it there, and its kind resets to what
+	// the restored parent holds (kind.CascadeReset): the next look inside the
+	// parent keeps it as it is found, and takes its record away when it is
+	// not there, rather than making it again.
+	Reset bool
 }
 
 // Pending is a command a resource is waiting on.

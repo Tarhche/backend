@@ -444,8 +444,8 @@ func TestNodeBinding_Query(t *testing.T) {
 			query:    func(t *testing.T) Query { return aQuery(t, "state", ``) },
 			answer:   `{"kind":"box","uuid":"box-uuid","owners":[{"kind":"vm","uuid":"vm-uuid"}],"status":{"state":"running","uptime":42}}`,
 		},
-		"one the node does not hold is observed missing": {
-			strategy: &boxNode{report: Report[boxStatus]{}},
+		"one the node does not hold, inside a parent it read, is observed missing": {
+			strategy: &boxNode{report: Report[boxStatus]{Read: []string{"vm-uuid"}}},
 			query:    func(t *testing.T) Query { return aQuery(t, "state", ``) },
 			answer:   `{"kind":"box","uuid":"box-uuid","status":{"state":"missing"}}`,
 		},
@@ -453,6 +453,11 @@ func TestNodeBinding_Query(t *testing.T) {
 			strategy: &boxNode{report: Report[boxStatus]{Unseen: []string{"vm-uuid"}}},
 			query:    func(t *testing.T) Query { return aQuery(t, "state", ``) },
 			err:      ErrUnseen,
+		},
+		"nor is one inside a parent the node did not look into, which is not running there": {
+			strategy: &boxNode{report: Report[boxStatus]{Read: []string{"vm-2"}}},
+			query:    func(t *testing.T) Query { return aQuery(t, "state", ``) },
+			err:      ErrUnreachable,
 		},
 		"and neither is any, when the node could see nothing": {
 			strategy: &boxNode{blind: errors.New("the vmhost is not answering")},
@@ -496,6 +501,7 @@ func TestNodeBinding_State(t *testing.T) {
 				{UUID: "box-1", Owners: []Reference{{Kind: "vm", UUID: "vm-1"}}, Status: boxStatus{Status: Status{State: boxRunning}, Uptime: 7}},
 				{Owners: []Reference{{Kind: "vm", UUID: "vm-1"}}, Status: boxStatus{Status: Status{State: boxStopped}}},
 			},
+			Read:   []string{"vm-1"},
 			Unseen: []string{"vm-2"},
 		}}
 
@@ -509,9 +515,12 @@ func TestNodeBinding_State(t *testing.T) {
 		assert.JSONEq(t, `{"state":"running","uptime":7}`, string(report.Instances[0].Status))
 		assert.Equal(t, "box", report.Instances[1].Kind)
 		assert.Empty(t, report.Instances[1].UUID, "one nobody keeps a record of is reported all the same")
+		assert.Equal(t, []string{"vm-1"}, report.Read)
 		assert.Equal(t, []string{"vm-2"}, report.Unseen)
 
+		strategy.report.Read[0] = "changed"
 		strategy.report.Unseen[0] = "changed"
+		assert.Equal(t, []string{"vm-1"}, report.Read, "what is reported is not the strategy's to change")
 		assert.Equal(t, []string{"vm-2"}, report.Unseen, "what is reported is not the strategy's to change")
 	})
 
