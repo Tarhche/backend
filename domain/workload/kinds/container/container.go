@@ -29,6 +29,7 @@
 package container
 
 import (
+	"encoding/json"
 	"strings"
 	"time"
 
@@ -210,6 +211,7 @@ func (s Spec) Docker(uuid string, labels map[string]string) docker.ContainerSpec
 		Env:           clone(s.Env),
 		WorkingDir:    s.WorkingDir,
 		Networks:      clone(s.Networks),
+		Aliases:       aliases(s.Aliases),
 		RestartPolicy: s.RestartPolicy,
 		CPUs:          s.CPUs,
 		Memory:        s.Memory,
@@ -241,6 +243,7 @@ func SpecOf(s docker.ContainerSpec) Spec {
 		Env:           clone(s.Env),
 		WorkingDir:    s.WorkingDir,
 		Networks:      clone(s.Networks),
+		Aliases:       aliases(s.Aliases),
 		RestartPolicy: s.RestartPolicy,
 		CPUs:          s.CPUs,
 		Memory:        s.Memory,
@@ -255,6 +258,50 @@ func SpecOf(s docker.ContainerSpec) Spec {
 	}
 
 	return spec
+}
+
+// SpecLabel is a container's spec as the label it is made with carries it
+// (LabelSpec): all of it but the VM it goes into, which it is in.
+func SpecLabel(spec Spec) (string, error) {
+	spec.VM = stackKind.VMChoice{}
+
+	encoded, err := json.Marshal(spec)
+	if err != nil {
+		return "", err
+	}
+
+	return string(encoded), nil
+}
+
+// SpecFromLabels is the spec a container was made with, read off its labels,
+// and whether they say it.
+func SpecFromLabels(labels map[string]string) (Spec, bool) {
+	written, labelled := labels[LabelSpec]
+	if !labelled {
+		return Spec{}, false
+	}
+
+	var spec Spec
+	if err := json.Unmarshal([]byte(written), &spec); err != nil {
+		return Spec{}, false
+	}
+
+	return spec, true
+}
+
+// PolicyOf is the restart policy a container was made with, read off its
+// labels, and whether they say it: no when it was made with none.
+func PolicyOf(labels map[string]string) (string, bool) {
+	spec, labelled := SpecFromLabels(labels)
+	if !labelled {
+		return "", false
+	}
+
+	if len(spec.RestartPolicy) == 0 {
+		return RestartNo, true
+	}
+
+	return spec.RestartPolicy, true
 }
 
 // Status is what a container is doing: its state, and what its VM's dockerd
@@ -532,7 +579,8 @@ func Descriptor() kind.Descriptor {
 // A command is waited on in flight until its own answer, or its node, says
 // where it got: creating, starting and restarting end in running, stopped or
 // completed, stopping in stopped or completed, and removing only in the
-// container being gone.
+// container being gone. A restart is over only once it is answered: a
+// container runs before it as it does after it.
 //
 // At rest, a container is what its node says: running, stopped or completed,
 // missing when its VM's dockerd has none of it, and waiting while its VM is
@@ -583,6 +631,7 @@ func Machine() kind.Machine {
 		Transitions: transitions,
 		Terminal:    []kind.State{Stopped, Completed, Failed, Deleted},
 		InFlight:    []kind.State{Creating, Starting, Stopping, Restarting, Removing},
+		Answered:    []kind.State{Restarting},
 	}
 }
 
@@ -611,4 +660,17 @@ func clone(values []string) []string {
 	}
 
 	return append([]string(nil), values...)
+}
+
+func aliases(of map[string][]string) map[string][]string {
+	if of == nil {
+		return nil
+	}
+
+	copied := make(map[string][]string, len(of))
+	for network, names := range of {
+		copied[network] = clone(names)
+	}
+
+	return copied
 }

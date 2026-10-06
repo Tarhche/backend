@@ -96,6 +96,10 @@ type ContainerSpec struct {
 	Mounts   []Mount
 	Networks []string
 
+	// Aliases are the names its neighbours on each of its networks reach it
+	// by, beside its own, by network.
+	Aliases map[string][]string
+
 	// RestartPolicy is no, always, unless-stopped or on-failure.
 	RestartPolicy string
 

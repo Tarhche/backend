@@ -316,7 +316,7 @@ func (d *Daemon) CreateContainer(ctx context.Context, spec docker.ContainerSpec)
 // was created on, which docker takes only one of at a time, and starts it.
 func (d *Daemon) connectAndStart(ctx context.Context, cli *client.Client, id string, spec docker.ContainerSpec) error {
 	for _, name := range spec.Networks[min(1, len(spec.Networks)):] {
-		if err := cli.NetworkConnect(ctx, name, id, &network.EndpointSettings{}); err != nil {
+		if err := cli.NetworkConnect(ctx, name, id, &network.EndpointSettings{Aliases: slices.Clone(spec.Aliases[name])}); err != nil {
 			return err
 		}
 	}

@@ -231,7 +231,7 @@ func toCreate(spec docker.ContainerSpec) (*container.Config, *container.HostConf
 	hostConfig.NetworkMode = container.NetworkMode(spec.Networks[0])
 
 	return config, hostConfig, &network.NetworkingConfig{
-		EndpointsConfig: map[string]*network.EndpointSettings{spec.Networks[0]: {}},
+		EndpointsConfig: map[string]*network.EndpointSettings{spec.Networks[0]: {Aliases: slices.Clone(spec.Aliases[spec.Networks[0]])}},
 	}
 }
 
