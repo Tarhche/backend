@@ -15,20 +15,11 @@ import (
 	checkhealth "github.com/khanzadimahdi/testproject/application/app/checkHealth"
 	orchestratorAttachResource "github.com/khanzadimahdi/testproject/application/workload/orchestrator/attachResource"
 	orchestratorHeartbeat "github.com/khanzadimahdi/testproject/application/workload/orchestrator/beatHeart"
-	orchestratorGetEndpoint "github.com/khanzadimahdi/testproject/application/workload/orchestrator/getEndpoint"
 	orchestratorGetResourceEndpoint "github.com/khanzadimahdi/testproject/application/workload/orchestrator/getResourceEndpoint"
-	orchestratorAttachTask "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/attachTask"
-	orchestratorTaskHeartbeat "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/beatHeart"
-	orchestratorDeleteTask "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/deleteTask"
-	orchestratorkilltask "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/killTask"
-	orchestratorrestarttask "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/restartTask"
-	orchestratorruntask "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/runTask"
 	orchestratorShipLogs "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/shipLogs"
-	orchestratorstoptask "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/stopTask"
 	"github.com/khanzadimahdi/testproject/domain"
 	nodeContract "github.com/khanzadimahdi/testproject/domain/workload/node"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
-	taskEvents "github.com/khanzadimahdi/testproject/domain/workload/task/events"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/certificate"
@@ -43,8 +34,6 @@ import (
 	healthAPI "github.com/khanzadimahdi/testproject/presentation/http/health"
 	"github.com/khanzadimahdi/testproject/presentation/http/middleware"
 	orchestratorKindsAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/orchestrator/api/kinds"
-	orchestratorPortsAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/orchestrator/api/ports"
-	orchestratorTaskAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/orchestrator/api/task"
 )
 
 const (
@@ -251,33 +240,20 @@ func orchestratorConsoleCommand(
 		return nil, err
 	}
 
-	// tasks
-	runTaskUseCase := orchestratorruntask.NewUseCase(taskManager, validator, nodeName)
-	stopTaskUseCase := orchestratorstoptask.NewUseCase(taskManager, validator)
-	killTaskUseCase := orchestratorkilltask.NewUseCase(taskManager, validator)
-	restartTaskUseCase := orchestratorrestarttask.NewUseCase(taskManager, validator)
-	deleteTaskUseCase := orchestratorDeleteTask.NewUseCase(taskManager, validator, logger)
-	attachTaskUseCase := orchestratorAttachTask.NewUseCase(taskManager, validator)
-
 	// the orchestrator talks to no database, so messaging is its only dependency
 	checkHealthUseCase := checkhealth.NewUseCase(
 		checkhealth.Dependency{Name: "messaging", Pinger: infraHealth.NewNatsPinger(natsConnection)},
 	)
 
-	subscribers := map[string]domain.MessageHandler{
-		taskEvents.TaskScheduledName:         orchestratorruntask.NewTaskScheduled(runTaskUseCase, asyncProduceConsumer, nodeName, logger),
-		taskEvents.TaskStoppageRequestedName: orchestratorstoptask.NewStoppageTaskHandler(stopTaskUseCase),
-		taskEvents.TaskKillRequestedName:     orchestratorkilltask.NewKillTaskHandler(killTaskUseCase),
-		taskEvents.TaskRestartRequestedName:  orchestratorrestarttask.NewRestartTaskHandler(restartTaskUseCase),
-		taskEvents.TaskDeletedName:           orchestratorDeleteTask.NewDeleteTaskHandler(deleteTaskUseCase),
-	}
+	subscribers := map[string]domain.MessageHandler{}
 
-	// what is asked of every kind this node runs, VMs, their snapshots and
-	// the stacks in them, and the answers to what the control plane asks and
-	// waits for.
+	// what is asked of every kind this node runs, VMs, their snapshots, the
+	// stacks in them and the code runner's tasks, and the answers to what the
+	// control plane asks and waits for.
 	workload, err := bindOrchestratorWorkload(iocContainer, OrchestratorDependencies{
 		NATS:     natsConnection,
 		Engine:   engine,
+		Tasks:    taskManager,
 		Archives: snapshotArchives(orchestratorConfigs.SnapshotStorage),
 		Producer: asyncProduceConsumer,
 		Configs:  orchestratorConfigs,
@@ -312,14 +288,6 @@ func orchestratorConsoleCommand(
 	// says nothing a caller could not find out by the service being up
 	api.Handle("GET /health", healthAPI.NewHealthHandler(checkHealthUseCase))
 
-	// a terminal inside a task, which the ingress carries here. It asks for a
-	// token and does not insist on one: a snippet has no owner, so there is
-	// nobody it could be checked against.
-	api.Handle("GET /api/tasks/{uuid}/attach", middleware.NewOptionalTokenMiddleware(
-		orchestratorTaskAPI.NewAttachHandler(attachTaskUseCase, logger),
-		verifier,
-	))
-
 	rateLimited, err := middleware.NewRateLimitMiddleware(api, 600, 1*time.Minute)
 	if err != nil {
 		return nil, err
@@ -330,17 +298,15 @@ func orchestratorConsoleCommand(
 	// the node's own answers, which are capped and carry its own headers
 	mux.Handle("/", middleware.NewCORSMiddleware(rateLimited))
 
-	// a task this node is holding, which only this node can reach: the
-	// ingress works out whose it is and sends the request here. Neither the
-	// cap nor the headers belong on it — what comes through is the task's own
-	// traffic, and answering for it is its own, a preflight included.
-	mux.Handle("/tasks/{slug}/{port}/{path...}", orchestratorPortsAPI.NewProxyHandler(orchestratorGetEndpoint.NewUseCase(engine), logger))
-
 	// what the kinds this node runs serve, each under its own plural: the
-	// streams of those that serve them, a VM's terminal, opened for the
-	// resource's owner alone, among the node's own answers, and the ports of
-	// those that serve them, a VM's, beside the tasks'. A kind takes no
-	// route until it is registered.
+	// streams of those that serve them, among the node's own answers, a VM's
+	// terminal, opened for its owner alone, and a task's, opened for anybody
+	// for a snippet of the guest's; and the ports of those that serve them, a
+	// VM's and a task's, which only this node can reach: the ingress works out
+	// which node holds one and sends the request here. Neither the cap nor
+	// the headers belong on a port: what comes through is the resource's own
+	// traffic, and answering for it is its own, a preflight included. A kind
+	// takes no route until it is registered.
 	kindRoutes := orchestratorKindsAPI.NewRoutes(
 		workload.Kinds,
 		orchestratorAttachResource.NewUseCase(workload.Kinds, validator),
@@ -384,13 +350,6 @@ func orchestratorConsoleCommand(
 	// orchestrator heartbeat
 	if err := iocContainer.Bind(func() *orchestratorHeartbeat.UseCase {
 		return orchestratorHeartbeat.NewUseCase(asyncProduceConsumer, nodeManager, workload.Kinds, kindStateTimeout, nodeName, logger)
-	}, provider.Singleton()); err != nil {
-		return nil, err
-	}
-
-	// task heartbeat
-	if err := iocContainer.Bind(func() *orchestratorTaskHeartbeat.UseCase {
-		return orchestratorTaskHeartbeat.NewUseCase(taskManager, asyncProduceConsumer, nodeName, logger)
 	}, provider.Singleton()); err != nil {
 		return nil, err
 	}

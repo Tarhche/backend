@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 
+	ingressTasks "github.com/khanzadimahdi/testproject/application/workload/ingress/kinds/task"
 	ingressVMs "github.com/khanzadimahdi/testproject/application/workload/ingress/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
+	taskKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/task"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 )
 
@@ -16,14 +18,16 @@ import (
 // served under their slugs, and those with streams, such as a terminal. That
 // is all it takes for the ingress to route them.
 //
-// A VM has both, and is found by its record, which records keeps. A stack has
-// neither: its ports are its Docker VM's, and so is its terminal, so the
-// ingress finds none of it. Tasks are found by their own lookups until their
-// kind takes them over, with one line here.
+// A task and a VM have both, and are found by their records, which records
+// keeps. A slug is asked of the kinds in the order they are registered, so a
+// task's is looked for first, as it always was. A stack has neither: its
+// ports are its Docker VM's, and so is its terminal, so the ingress finds
+// none of it.
 func ingressKinds(records ingressVMs.Records) (*kind.Registry[kind.IngressBinding], error) {
 	kinds := kind.NewRegistry[kind.IngressBinding]()
 
 	for _, binding := range []kind.IngressBinding{
+		kind.BindIngress(taskKind.Descriptor(), ingressTasks.New(records)),
 		kind.BindIngress(vmKind.Descriptor(), ingressVMs.New(records)),
 		kind.BindIngress(stackKind.Descriptor(), unreached{kind: stackKind.Name}),
 	} {

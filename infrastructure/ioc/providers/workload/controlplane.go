@@ -15,15 +15,7 @@ import (
 	controlPlaneGetNode "github.com/khanzadimahdi/testproject/application/workload/controlplane/node/getNode"
 	controlPlaneGetNodes "github.com/khanzadimahdi/testproject/application/workload/controlplane/node/getNodes"
 	controlPlaneHeartbeatNode "github.com/khanzadimahdi/testproject/application/workload/controlplane/node/heartbeatNode"
-	controlPlaneDeleteTask "github.com/khanzadimahdi/testproject/application/workload/controlplane/task/deleteTask"
-	controlPlaneGetTask "github.com/khanzadimahdi/testproject/application/workload/controlplane/task/getTask"
-	controlPlaneHeartbeatTask "github.com/khanzadimahdi/testproject/application/workload/controlplane/task/heartbeatTask"
-	controlPlaneKillTask "github.com/khanzadimahdi/testproject/application/workload/controlplane/task/killTask"
 	controlPlaneLogTask "github.com/khanzadimahdi/testproject/application/workload/controlplane/task/logTask"
-	controlPlaneReconcile "github.com/khanzadimahdi/testproject/application/workload/controlplane/task/reconcile"
-	controlPlaneRunTask "github.com/khanzadimahdi/testproject/application/workload/controlplane/task/runTask"
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/task/schedule"
-	controlPlaneStopTask "github.com/khanzadimahdi/testproject/application/workload/controlplane/task/stopTask"
 	"github.com/khanzadimahdi/testproject/domain"
 	translatorContract "github.com/khanzadimahdi/testproject/domain/translator"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
@@ -36,14 +28,11 @@ import (
 	logrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/workload/logs"
 	noderepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/workload/nodes"
 	resourcerepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/workload/resources"
-	taskrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/workload/tasks"
 	"github.com/khanzadimahdi/testproject/infrastructure/storage/minio"
 	"github.com/khanzadimahdi/testproject/infrastructure/telemetry/profiler"
-	"github.com/khanzadimahdi/testproject/infrastructure/workload/scheduler/roundrobin"
 	healthAPI "github.com/khanzadimahdi/testproject/presentation/http/health"
 	"github.com/khanzadimahdi/testproject/presentation/http/middleware"
 	controlPlaneNodeAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/controlplane/api/node"
-	controlPlaneTaskAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/controlplane/api/task"
 	"github.com/nats-io/nats.go"
 )
 
@@ -122,9 +111,6 @@ func controlPlaneConsoleCommand(
 		return nil, err
 	}
 
-	taskScheduler := roundrobin.New()
-
-	taskRepository := taskrepository.NewRepository(database)
 	nodeRepository := noderepository.NewRepository(database)
 	logRepository := logrepository.NewRepository(database)
 
@@ -134,35 +120,18 @@ func controlPlaneConsoleCommand(
 		return nil, err
 	}
 
-	// the one place a task is handed to a node, whether it is being asked
-	// for the first time, again, or after a failure.
-	taskSchedule := schedule.New(jetStreamProduceConsumer)
-
-	controlPlaneRunTaskUseCase := controlPlaneRunTask.NewUseCase(taskRepository, jetStreamProduceConsumer, validator)
-	controlPlaneDeleteTaskUseCase := controlPlaneDeleteTask.NewUseCase(taskRepository, logRepository, jetStreamProduceConsumer, translator)
-	controlPlaneKillTaskUseCase := controlPlaneKillTask.NewUseCase(taskRepository, jetStreamProduceConsumer, translator)
-	controlPlaneGetTaskUseCase := controlPlaneGetTask.NewUseCase(taskRepository)
-
-	// the control plane's own heartbeat, which the serve command runs on a ticker.
-	if err := iocContainer.Bind(func() *controlPlaneReconcile.UseCase {
-		return controlPlaneReconcile.NewUseCase(taskRepository, taskSchedule, jetStreamProduceConsumer, logger)
-	}, provider.Singleton()); err != nil {
-		return nil, err
-	}
-
 	controlPlaneGetNodeUseCase := controlPlaneGetNode.NewUseCase(nodeRepository)
 	controlPlaneGetNodesUseCase := controlPlaneGetNodes.NewUseCase(nodeRepository)
 
-	// every kind the control plane runs, VMs, snapshots and stacks, what is
-	// not a kind yet beside them, and what they are kept in. What lives in a
-	// VM, its stacks, goes with it, and is reset with its disk, as each kind's
-	// rules say; its snapshots outlive it.
+	// every kind the control plane runs, VMs, snapshots, stacks and the code
+	// runner's tasks, what is not a kind yet beside them, and what they are
+	// kept in. What lives in a VM, its stacks, goes with it, and is reset with
+	// its disk, as each kind's rules say; its snapshots outlive it.
 	resourceRepository := resourcerepository.NewRepository(database)
 
 	workload, err := NewControlPlaneWorkload(controlPlaneConfigs, ControlPlaneStores{
 		Resources: resourceRepository,
 		Nodes:     nodeRepository,
-		Tasks:     taskRepository,
 		TaskLogs:  logRepository,
 		Archives:  snapshotStore(controlPlaneConfigs.SnapshotStorage),
 	}, natsConnection, jetStreamProduceConsumer, logger)
@@ -184,8 +153,7 @@ func controlPlaneConsoleCommand(
 		}
 	}
 
-	// every kind's own heartbeat, which the serve command runs beside the
-	// tasks'.
+	// every kind's own heartbeat, which the serve command runs on a ticker.
 	if err := iocContainer.Bind(func() *kindsReconcile.UseCase {
 		return workload.Reconcile
 	}, provider.Singleton()); err != nil {
@@ -202,18 +170,13 @@ func controlPlaneConsoleCommand(
 	// the task healthcheck probes this
 	mux.Handle("GET /health", healthAPI.NewHealthHandler(checkHealthUseCase))
 
-	// the code runner reads a task back and takes it away; everything else
-	// about a task reaches it as the workload's own messages.
-	mux.Handle("GET /api/tasks/{uuid}", controlPlaneTaskAPI.NewShowHandler(controlPlaneGetTaskUseCase))
-	mux.Handle("DELETE /api/tasks/{uuid}", controlPlaneTaskAPI.NewDeleteHandler(controlPlaneDeleteTaskUseCase))
-
 	mux.Handle("GET /api/nodes", controlPlaneNodeAPI.NewIndexHandler(controlPlaneGetNodesUseCase))
 	mux.Handle("GET /api/nodes/{name}", controlPlaneNodeAPI.NewShowHandler(controlPlaneGetNodeUseCase))
 
-	// every kind, VMs, snapshots and stacks, under its own plural, and what
-	// is not a kind yet, the containers in Docker VMs, which the blog reaches
-	// on its users' behalf. Every route takes an owner, which narrows it to
-	// that person's own.
+	// every kind, VMs, snapshots, stacks and tasks, under its own plural, and
+	// what is not a kind yet, the containers in Docker VMs, which the blog
+	// reaches on its users' behalf and the code runner on the guest's. Every
+	// route takes an owner, which narrows it to that person's own.
 	if err := workload.Route(mux); err != nil {
 		return nil, err
 	}
@@ -248,16 +211,11 @@ func controlPlaneConsoleCommand(
 	)
 
 	subscribers := map[string]domain.MessageHandler{
-		nodeEvents.HeartbeatName:        controlPlaneHeartbeatNode.NewHeartbeatHandler(nodeRepository, workload.Observer),
-		taskEvents.HeartbeatName:        controlPlaneHeartbeatTask.NewHeartbeatHandler(taskRepository, jetStreamProduceConsumer, controlPlaneDeleteTaskUseCase, controlPlaneKillTaskUseCase),
-		taskEvents.TaskRunRequestedName: controlPlaneRunTask.NewTaskRunRequested(controlPlaneRunTaskUseCase, logger),
-		taskEvents.TaskCreatedName:      controlPlaneRunTask.NewTaskCreated(taskRepository, nodeRepository, taskScheduler, taskSchedule, logger),
-		taskEvents.TaskRanName:          controlPlaneRunTask.NewTaskRan(taskRepository),
-		taskEvents.TaskRestartedName:    controlPlaneRunTask.NewTaskRestarted(taskRepository),
-		taskEvents.TaskCompletedName:    controlPlaneRunTask.NewTaskCompleted(taskRepository),
-		taskEvents.TaskFailedName:       controlPlaneRunTask.NewTaskFailed(taskRepository, logRepository, taskSchedule, controlPlaneDeleteTaskUseCase, logger),
-		taskEvents.TaskStoppedName:      controlPlaneStopTask.NewTaskStopped(taskRepository),
-		taskEvents.TaskLoggedName:       controlPlaneLogTask.NewTaskLogged(taskRepository, logRepository, controlPlaneConfigs.MaxLogBytes, logger),
+		nodeEvents.HeartbeatName: controlPlaneHeartbeatNode.NewHeartbeatHandler(nodeRepository, workload.Observer),
+
+		// what services' tasks write, shipped a line at a time, kept for as
+		// long as their tasks are.
+		taskEvents.TaskLoggedName: controlPlaneLogTask.NewTaskLogged(resourceRepository, logRepository, controlPlaneConfigs.MaxLogBytes, logger),
 	}
 
 	maps.Copy(subscribers, workload.Subscribers)

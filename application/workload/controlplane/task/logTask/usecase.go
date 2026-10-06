@@ -7,9 +7,17 @@ import (
 	"log/slog"
 
 	"github.com/khanzadimahdi/testproject/domain"
+	taskKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/task"
+	"github.com/khanzadimahdi/testproject/domain/workload/resource"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 	"github.com/khanzadimahdi/testproject/domain/workload/task/events"
 )
+
+// Tasks are the tasks kept, which a batch of lines is kept for only while its
+// task is: the control plane's records of the task kind.
+type Tasks interface {
+	GetOne(ctx context.Context, kindName string, uuid string) (resource.Record, error)
+}
 
 // TaskLogged stores the lines an orchestrator ships as its tasks write them.
 //
@@ -17,10 +25,10 @@ import (
 // has already shipped, so the same lines arrive twice; the repository
 // recognises them by their own content and stores each one once.
 type TaskLogged struct {
-	// taskRepository is consulted once per batch, not once per line: an orchestrator
-	// has lines in hand when its task's task is deleted, and storing them
-	// would leave rows nothing owns and nothing will ever clear.
-	taskRepository task.Repository
+	// tasks are consulted once per batch, not once per line: an orchestrator
+	// has lines in hand when its task is deleted, and storing them would leave
+	// rows nothing owns and nothing will ever clear.
+	tasks Tasks
 
 	logRepository task.LogRepository
 
@@ -34,16 +42,16 @@ type TaskLogged struct {
 var _ domain.MessageHandler = &TaskLogged{}
 
 func NewTaskLogged(
-	taskRepository task.Repository,
+	tasks Tasks,
 	logRepository task.LogRepository,
 	maxBytes int64,
 	logger *slog.Logger,
 ) *TaskLogged {
 	return &TaskLogged{
-		taskRepository: taskRepository,
-		logRepository:  logRepository,
-		maxBytes:       maxBytes,
-		logger:         logger,
+		tasks:         tasks,
+		logRepository: logRepository,
+		maxBytes:      maxBytes,
+		logger:        logger,
 	}
 }
 
@@ -62,7 +70,7 @@ func (uc *TaskLogged) Handle(ctx context.Context, data []byte) error {
 
 	// a task's log lives exactly as long as the task, so a batch that
 	// arrives after the task went is nothing to keep.
-	if _, err := uc.taskRepository.GetOne(ctx, logged.UUID); errors.Is(err, domain.ErrNotExists) {
+	if _, err := uc.tasks.GetOne(ctx, taskKind.Name, logged.UUID); errors.Is(err, domain.ErrNotExists) {
 		return nil
 	} else if err != nil {
 		return err

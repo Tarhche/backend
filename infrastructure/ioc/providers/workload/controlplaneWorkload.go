@@ -16,6 +16,7 @@ import (
 	kindsReconcile "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/reconcile"
 	controlPlaneSnapshots "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/snapshot"
 	controlPlaneStacks "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/stack"
+	controlPlaneTasks "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/task"
 	controlPlaneVMs "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/dockervm"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/placement"
@@ -23,11 +24,11 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/records"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/runs"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/slugs"
-	controlPlaneDeleteTask "github.com/khanzadimahdi/testproject/application/workload/controlplane/task/deleteTask"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	snapshotKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/snapshot"
 	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
+	taskKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/task"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	nodeContract "github.com/khanzadimahdi/testproject/domain/workload/node"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
@@ -36,29 +37,28 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/core/request"
 	infraTranslator "github.com/khanzadimahdi/testproject/infrastructure/translator"
 	infraValidator "github.com/khanzadimahdi/testproject/infrastructure/validator"
+	"github.com/khanzadimahdi/testproject/infrastructure/workload/scheduler/roundrobin"
 	controlPlaneContainerAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/controlplane/api/container"
 	controlPlaneDockerAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/controlplane/api/docker"
 )
 
 // ControlPlaneStores are what the control plane keeps everything it runs
-// in: the resources of every kind, VMs, snapshots and stacks among them, the
-// nodes it places them on, and the tasks, which share the ingress's
-// hostnames with VMs and are among anybody's VMs as the code runner's runs,
-// and whose logs go with a run taken away from among them. Archives is the
-// bucket a snapshot's archive is taken out of when the snapshot goes, and may
-// be nil: with no bucket configured, an archive is left where it is.
+// in: the resources of every kind, VMs, snapshots, stacks and tasks among
+// them, the nodes it places them on, and the logs services' tasks ship, which
+// go with their tasks. Archives is the bucket a snapshot's archive is taken
+// out of when the snapshot goes, and may be nil: with no bucket configured, an
+// archive is left where it is.
 type ControlPlaneStores struct {
 	Resources resource.Repository
 	Nodes     nodeContract.Repository
-	Tasks     taskContract.Repository
 	TaskLogs  taskContract.LogRepository
 	Archives  snapshotKind.Store
 }
 
-// ControlPlaneWorkload is what the control plane runs of the workload but
-// the code runner's tasks: every kind it runs, VMs, their snapshots and
-// stacks, on the framework, and beside them what is not a kind yet, the
-// containers in Docker VMs and the Docker passthrough.
+// ControlPlaneWorkload is what the control plane runs of the workload: every
+// kind it runs, VMs, their snapshots, stacks and the code runner's tasks, on
+// the framework, and beside them what is not a kind yet, the containers in
+// Docker VMs and the Docker passthrough.
 type ControlPlaneWorkload struct {
 	// Registry is every kind the control plane runs.
 	Registry *kind.Registry[kind.ControlPlaneBinding]
@@ -121,8 +121,18 @@ func NewControlPlaneWorkload(
 	vmPlacement := placement.New(stores.Nodes, vms, controlPlaneConfigs.VMCPUOvercommit)
 
 	// the code runner's runs, shown among anybody's VMs: read from their tasks,
-	// and stopped and taken away as their tasks are.
-	codeRunner := runs.New(stores.Tasks, producer, controlPlaneDeleteTask.NewUseCase(stores.Tasks, stores.TaskLogs, producer, infraTranslator.Codes{}))
+	// and stopped and taken away as their tasks are, as any task's commands
+	// are asked.
+	codeRunner := runs.New(kinds.Resources, registry, kinds.Dispatcher)
+
+	// a slug is unique among VMs and tasks, which share the ingress's
+	// hostnames.
+	slugsHeld := []slugs.Taken{
+		slugs.By(vms.GetOneBySlug),
+		slugs.By(func(ctx context.Context, slug string) (resource.Record, error) {
+			return stores.Resources.GetOneBySlug(ctx, taskKind.Name, slug)
+		}),
+	}
 
 	dockerDefaults, err := dockerVMDefaults(controlPlaneConfigs)
 	if err != nil {
@@ -149,15 +159,17 @@ func NewControlPlaneWorkload(
 		Nodes:     stores.Nodes,
 		Quota:     quota.New(vms, vmLimits(controlPlaneConfigs)),
 		Placement: vmPlacement,
-		Slugs: []slugs.Taken{
-			slugs.By(vms.GetOneBySlug),
-			slugs.By(stores.Tasks.GetOneBySlug),
-		},
-		Images: controlPlaneVMs.Images{Machine: controlPlaneConfigs.VMDefaultImage, Docker: controlPlaneConfigs.VMDockerImage},
-		Extras: codeRunner,
+		Slugs:     slugsHeld,
+		Images:    controlPlaneVMs.Images{Machine: controlPlaneConfigs.VMDefaultImage, Docker: controlPlaneConfigs.VMDockerImage},
+		Extras:    codeRunner,
 	}, snapshots, controlPlaneStacks.New(vms, chooser, slugs.By(func(ctx context.Context, slug string) (resource.Record, error) {
 		return stores.Resources.GetOneBySlug(ctx, stackKind.Name, slug)
-	}))); err != nil {
+	})), controlPlaneTasks.New(controlPlaneTasks.Dependencies{
+		Nodes:     stores.Nodes,
+		Scheduler: roundrobin.New(),
+		Slugs:     slugsHeld,
+		Logs:      stores.TaskLogs,
+	})); err != nil {
 		return nil, err
 	}
 
@@ -171,7 +183,7 @@ func NewControlPlaneWorkload(
 		mux.Handle("POST /api/containers", controlPlaneContainerAPI.NewCreateHandler(controlPlaneCreateContainer.NewUseCase(entities, chooser, requester, codes)))
 
 		// the resource API of every kind registered, each under its own
-		// plural, VMs, snapshots and stacks among them, and the kinds
+		// plural, VMs, snapshots, stacks and tasks among them, and the kinds
 		// themselves.
 		return kinds.Route(mux)
 	}
@@ -191,12 +203,15 @@ func NewControlPlaneWorkload(
 // reconcile loop all run over. A VM is admitted, placed and held to its
 // owner's quota as vms says; a snapshot is taken of one of its owner's VMs
 // and held to their quota of snapshots, as snapshots says; a stack is
-// admitted into the Docker VM stacks chooses, or makes, which it lives in.
-func registerControlPlaneKinds(registry *kind.Registry[kind.ControlPlaneBinding], vms controlPlaneVMs.Dependencies, snapshots *controlPlaneSnapshots.Snapshots, stacks *controlPlaneStacks.Stacks) error {
+// admitted into the Docker VM stacks chooses, or makes, which it lives in; a
+// task, the code runner's runs among them, is admitted and placed as tasks
+// says.
+func registerControlPlaneKinds(registry *kind.Registry[kind.ControlPlaneBinding], vms controlPlaneVMs.Dependencies, snapshots *controlPlaneSnapshots.Snapshots, stacks *controlPlaneStacks.Stacks, tasks *controlPlaneTasks.Tasks) error {
 	for _, binding := range []kind.ControlPlaneBinding{
 		kind.BindControlPlane[vmKind.Spec, vmKind.Status](vmKind.Descriptor(), controlPlaneVMs.New(vms)),
 		kind.BindControlPlane[snapshotKind.Spec, snapshotKind.Status](snapshotKind.Descriptor(), snapshots),
 		kind.BindControlPlane[stackKind.Spec, stackKind.Status](stackKind.Descriptor(), stacks),
+		kind.BindControlPlane[taskKind.Spec, taskKind.Status](taskKind.Descriptor(), tasks),
 	} {
 		if err := registry.Register(binding); err != nil {
 			return err

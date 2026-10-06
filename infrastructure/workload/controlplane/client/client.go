@@ -21,7 +21,6 @@ import (
 	"github.com/khanzadimahdi/testproject/domain"
 	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
-	"github.com/khanzadimahdi/testproject/domain/workload/task"
 )
 
 const (
@@ -83,21 +82,6 @@ func usable(raw string, what string) (*url.URL, error) {
 	return parsed, nil
 }
 
-func (c *Client) Task(ctx context.Context, uuid string) (task.Task, error) {
-	var payload taskPayload
-	if err := c.call(ctx, http.MethodGet, c.path("/api/tasks/"+url.PathEscape(uuid), nil), nil, &payload); err != nil {
-		return task.Task{}, err
-	}
-
-	return payload.toTask(), nil
-}
-
-// DeleteTask removes a task whether or not it is still running: a delete is
-// a request to have it gone.
-func (c *Client) DeleteTask(ctx context.Context, uuid string) error {
-	return c.call(ctx, http.MethodDelete, c.path("/api/tasks/"+url.PathEscape(uuid), url.Values{"force": {"true"}}), nil, nil)
-}
-
 // ValidationError carries what the control plane refused, so the dashboard can show
 // the caller which field it was rather than a bare failure.
 //
@@ -119,6 +103,11 @@ func (e *ValidationError) Error() string {
 // Unwrap is the node's error a refusal stands for, when it stands for one.
 func (e *ValidationError) Unwrap() error {
 	return e.cause
+}
+
+// Refused is what was refused, field by field, as codes.
+func (e *ValidationError) Refused() domain.ValidationErrors {
+	return e.ValidationErrors
 }
 
 // refusedByNode is what a node's refusal is to whoever called. A VM that cannot

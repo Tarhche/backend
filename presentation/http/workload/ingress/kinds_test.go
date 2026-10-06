@@ -18,7 +18,6 @@ import (
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
-	"github.com/khanzadimahdi/testproject/domain/workload/task"
 )
 
 // Lamps and kettles are the kinds these tests find: a lamp has a terminal
@@ -140,7 +139,7 @@ func TestTaskHandler_Kinds(t *testing.T) {
 		request := httptest.NewRequest(http.MethodGet, "/index.html?a=1", nil)
 		request.Host = "desk-xkfqz-8080." + testDomain
 
-		ingressWithKinds(t, &fakeResolver{}, finding(t, kind.BindIngress(kindNamed("lamp", true, true), lamps)), map[string]*node{"workload-orchestrator-02": n}).ServeHTTP(rw, request)
+		ingressWithKinds(t, finding(t, kind.BindIngress(kindNamed("lamp", true, true), lamps)), map[string]*node{"workload-orchestrator-02": n}).ServeHTTP(rw, request)
 
 		assert.Equal(t, http.StatusOK, rw.Code)
 		assert.Equal(t, "answered by the lamp", rw.Body.String())
@@ -160,7 +159,7 @@ func TestTaskHandler_Kinds(t *testing.T) {
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
 		request.Host = "desk-xkfqz." + testDomain
 
-		ingressWithKinds(t, &fakeResolver{}, finding(t, kind.BindIngress(kindNamed("lamp", true, true), lamps)), map[string]*node{"workload-orchestrator-01": n}).ServeHTTP(rw, request)
+		ingressWithKinds(t, finding(t, kind.BindIngress(kindNamed("lamp", true, true), lamps)), map[string]*node{"workload-orchestrator-01": n}).ServeHTTP(rw, request)
 
 		assert.Equal(t, "lamps", n.route)
 		assert.Equal(t, "0", n.port, "the node picks the lowest one the lamp exposes")
@@ -175,9 +174,9 @@ func TestTaskHandler_Kinds(t *testing.T) {
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
 		request.Host = "same-xkfqz." + testDomain
 
-		resolver := &fakeResolver{tasks: map[string]task.Task{"same-xkfqz": held("same-xkfqz", "workload-orchestrator-01")}}
+		kinds := finding(t, tasksIn(t, held("same-xkfqz", "workload-orchestrator-01")), kind.BindIngress(kindNamed("lamp", true, true), lamps))
 
-		ingressWithKinds(t, resolver, finding(t, kind.BindIngress(kindNamed("lamp", true, true), lamps)), map[string]*node{"workload-orchestrator-01": n}).ServeHTTP(rw, request)
+		ingressWithKinds(t, kinds, map[string]*node{"workload-orchestrator-01": n}).ServeHTTP(rw, request)
 
 		assert.Equal(t, "tasks", n.route)
 		assert.Empty(t, lamps.wasAsked())
@@ -195,7 +194,7 @@ func TestTaskHandler_Kinds(t *testing.T) {
 
 		kinds := finding(t, kind.BindIngress(kindNamed("kettle", true, false), kettles), kind.BindIngress(kindNamed("lamp", true, true), lamps))
 
-		ingressWithKinds(t, &fakeResolver{}, kinds, map[string]*node{"workload-orchestrator-01": n}).ServeHTTP(rw, request)
+		ingressWithKinds(t, kinds, map[string]*node{"workload-orchestrator-01": n}).ServeHTTP(rw, request)
 
 		assert.Equal(t, "lamps", n.route)
 		assert.Equal(t, []string{"desk-xkfqz"}, kettles.wasAsked(), "the kettles were asked first")
@@ -209,7 +208,7 @@ func TestTaskHandler_Kinds(t *testing.T) {
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
 		request.Host = "desk-xkfqz." + testDomain
 
-		ingressWithKinds(t, &fakeResolver{}, finding(t, kind.BindIngress(kindNamed("bulb", false, true), bulbs)), nil).ServeHTTP(rw, request)
+		ingressWithKinds(t, finding(t, kind.BindIngress(kindNamed("bulb", false, true), bulbs)), nil).ServeHTTP(rw, request)
 
 		assert.Equal(t, http.StatusNotFound, rw.Code)
 		assert.Empty(t, bulbs.wasAsked())
@@ -262,7 +261,7 @@ func TestTaskHandler_Kinds(t *testing.T) {
 			request := httptest.NewRequest(http.MethodGet, "/", nil)
 			request.Host = tt.host + "." + testDomain
 
-			ingressWithKinds(t, &fakeResolver{}, finding(t, kind.BindIngress(kindNamed("lamp", true, true), lamps)), map[string]*node{"workload-orchestrator-01": newNode(t, http.NotFoundHandler())}).ServeHTTP(rw, request)
+			ingressWithKinds(t, finding(t, kind.BindIngress(kindNamed("lamp", true, true), lamps)), map[string]*node{"workload-orchestrator-01": newNode(t, http.NotFoundHandler())}).ServeHTTP(rw, request)
 
 			assert.Equal(t, tt.status, rw.Code)
 			assert.Contains(t, rw.Body.String(), tt.says)

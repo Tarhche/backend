@@ -5,10 +5,10 @@ import (
 	"time"
 
 	"github.com/khanzadimahdi/testproject/domain/workload/docker"
+	taskKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/task"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
 	"github.com/khanzadimahdi/testproject/domain/workload/snapshot"
 	"github.com/khanzadimahdi/testproject/domain/workload/stack"
-	"github.com/khanzadimahdi/testproject/domain/workload/task"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
 
@@ -32,9 +32,15 @@ type Page[T any] struct {
 // a request it would not take, and a *noderequest.Error for what a node
 // refused, which errors.Is matches against the domain's own errors.
 type Client interface {
+	// RunTask asks for a task to be run, for ownerUUID, admitted as the
+	// control plane admits any resource: checked, given its defaults and a
+	// slug, placed on a node and asked of it. The code runner runs every
+	// snippet as a task of the guest's.
+	RunTask(ctx context.Context, ownerUUID string, request TaskRequest) (taskKind.Task, error)
+
 	// Task is one task the workload holds, whoever owns it. The code runner
 	// reads one back to make sure it is its own before it takes it away.
-	Task(ctx context.Context, uuid string) (task.Task, error)
+	Task(ctx context.Context, uuid string) (taskKind.Task, error)
 
 	// DeleteTask removes a task whether or not it is still running: a delete
 	// is a request to have it gone.
@@ -111,6 +117,12 @@ type Client interface {
 	StartStack(ctx context.Context, ownerUUID string, uuid string) error
 	StopStack(ctx context.Context, ownerUUID string, uuid string) error
 	RestartStack(ctx context.Context, ownerUUID string, uuid string) error
+}
+
+// TaskRequest is a task to run: what it is called, and what it runs.
+type TaskRequest struct {
+	Name string
+	Spec taskKind.Spec
 }
 
 // VMRequest is a VM to create.

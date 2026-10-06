@@ -201,6 +201,108 @@ func TestRoutes_Attach(t *testing.T) {
 	}
 }
 
+func TestRoutes_PublicAttach(t *testing.T) {
+	t.Parallel()
+
+	signer, verifier := keys(t)
+
+	// a lamp whose terminal anybody may ask for, holding one lamp of
+	// everybody's and one of somebody's: which of them is opened for nobody
+	// is the lamp's to say.
+	public := func(t *testing.T) (*lampNode, *httptest.Server) {
+		t.Helper()
+
+		d := lamp()
+		for i := range d.Actions {
+			if d.Actions[i].Name == "attach" {
+				d.Actions[i].Public = true
+			}
+		}
+
+		node := &lampNode{held: []held{
+			{uuid: "lamp-1", slug: "desk-abcde", owner: "owner-uuid", lit: true},
+			{uuid: "lamp-3", slug: "street-klmno", owner: "", lit: true},
+		}}
+
+		kinds := kind.NewRegistry[kind.NodeBinding]()
+		require.NoError(t, kinds.Register(kind.BindNode[lampSpec, lampStatus](d, lamps{node})))
+
+		return node, aNode(t, kinds, verifier)
+	}
+
+	t.Run("one of everybody's is opened for nobody", func(t *testing.T) {
+		t.Parallel()
+
+		node, server := public(t)
+
+		conn, response, err := websocket.DefaultDialer.Dial(websocketURL(server, "/api/lamps/lamp-3/attach"), nil)
+		require.NoError(t, err)
+		defer conn.Close()
+		defer response.Body.Close()
+
+		require.NoError(t, conn.WriteMessage(websocket.BinaryMessage, []byte("hi\n")))
+		require.NoError(t, conn.SetReadDeadline(time.Now().Add(5*time.Second)))
+
+		_, payload, err := conn.ReadMessage()
+		require.NoError(t, err)
+		assert.Equal(t, "HI\n", string(payload))
+		assert.Len(t, node.opened(), 1)
+	})
+
+	for name, tt := range map[string]struct {
+		path          string
+		authorization func() string
+		status        int
+	}{
+		"one of somebody's is not there for nobody": {
+			path:          "/api/lamps/lamp-1/attach",
+			authorization: func() string { return "" },
+			status:        http.StatusNotFound,
+		},
+		"and a token that is there is still verified": {
+			path: "/api/lamps/lamp-3/attach",
+			authorization: func() string {
+				other, _ := keys(t)
+
+				return "Bearer " + token(t, other, "owner-uuid")
+			},
+			status: http.StatusUnauthorized,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			node, server := public(t)
+
+			header := http.Header{}
+			if authorization := tt.authorization(); len(authorization) > 0 {
+				header.Set("Authorization", authorization)
+			}
+
+			_, response, err := websocket.DefaultDialer.Dial(websocketURL(server, tt.path), header)
+			require.Error(t, err)
+			require.NotNil(t, response)
+			defer response.Body.Close()
+
+			assert.Equal(t, tt.status, response.StatusCode)
+			assert.Empty(t, node.opened(), "nothing was opened")
+		})
+	}
+
+	t.Run("and its owner's is opened for its owner, as any terminal is", func(t *testing.T) {
+		t.Parallel()
+
+		_, server := public(t)
+
+		conn, response, err := websocket.DefaultDialer.Dial(websocketURL(server, "/api/lamps/lamp-1/attach"), http.Header{
+			"Authorization": []string{"Bearer " + token(t, signer, "owner-uuid")},
+		})
+		require.NoError(t, err)
+		defer conn.Close()
+		defer response.Body.Close()
+	})
+}
+
 func TestRoutes_Ports(t *testing.T) {
 	t.Parallel()
 

@@ -8,28 +8,30 @@
 // code runner. Only a listing of anybody's VMs has them, since no user's uuid
 // is the guest's, and nobody's own listing ever does.
 //
-// A run can be stopped, deleted and read, which is stopping its task,
-// deleting it and reading what it wrote. Everything else a VM can be asked
-// to do is refused as CodeRefused, under vm: a run is the code runner's to
-// start, and it is gone once it has ended.
+// A run can be stopped, deleted and read, which is asking its task for its
+// stop and its delete, as the task kind is asked anything, and reading what
+// it wrote. Everything else a VM can be asked to do is refused as
+// CodeRefused, under vm: a run is the code runner's to start, and it is gone
+// once it has ended.
 package runs
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"time"
 
-	deletetask "github.com/khanzadimahdi/testproject/application/workload/controlplane/task/deleteTask"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/dispatch"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
+	taskKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/task"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
-	"github.com/khanzadimahdi/testproject/domain/workload/port"
+	"github.com/khanzadimahdi/testproject/domain/workload/resource"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
-	"github.com/khanzadimahdi/testproject/domain/workload/task/events"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
 
@@ -39,49 +41,45 @@ const (
 	// for can be.
 	CodeRefused = "managed_by_code_runner"
 
-	// batch is how many runs are read at a time.
-	batch uint = 100
+	// tries is how many times a run is read and asked again when something
+	// else wrote its task in the meantime.
+	tries = 3
 )
 
 // Runs are the code runner's runs, read from its tasks.
 type Runs struct {
-	tasks    task.Repository
-	producer domain.Producer
+	resources resource.Repository
 
-	// remove takes a task away the one way a task is taken away, with its
-	// log, which is how the code runner takes a run away when its reader
-	// stops it.
-	remove *deletetask.UseCase
+	// registry is where the task kind is, whose commands a run is asked as
+	// any task is, through dispatcher.
+	registry   *kind.Registry[kind.ControlPlaneBinding]
+	dispatcher *dispatch.Dispatcher
 }
 
 var _ kind.Extras = &Runs{}
 
-func New(tasks task.Repository, producer domain.Producer, remove *deletetask.UseCase) *Runs {
-	return &Runs{tasks: tasks, producer: producer, remove: remove}
+// New is the code runner's runs, read from the tasks resources keeps and
+// asked for their commands through dispatcher, as the task kind in registry
+// says.
+func New(resources resource.Repository, registry *kind.Registry[kind.ControlPlaneBinding], dispatcher *dispatch.Dispatcher) *Runs {
+	return &Runs{resources: resources, registry: registry, dispatcher: dispatcher}
 }
 
 // All is every run there is now, as VMs, newest first.
 func (r *Runs) All(ctx context.Context) ([]kind.Raw, error) {
-	var runs []kind.Raw
+	records, _, err := r.resources.GetAll(ctx, taskKind.Name, resource.Filter{OwnerUUID: task.GuestOwnerUUID}, 0, 0)
+	if err != nil {
+		return nil, err
+	}
 
-	for offset := uint(0); ; offset += batch {
-		read, err := r.tasks.GetAllByOwner(ctx, task.GuestOwnerUUID, offset, batch)
+	runs := make([]kind.Raw, 0, len(records))
+	for _, record := range records {
+		run, err := manifest(record)
 		if err != nil {
 			return nil, err
 		}
 
-		for i := range read {
-			run, err := manifest(&read[i])
-			if err != nil {
-				return nil, err
-			}
-
-			runs = append(runs, run)
-		}
-
-		if uint(len(read)) < batch {
-			break
-		}
+		runs = append(runs, run)
 	}
 
 	slices.SortStableFunc(runs, newestFirst)
@@ -91,38 +89,108 @@ func (r *Runs) All(ctx context.Context) ([]kind.Raw, error) {
 
 // One is the run uuid names, as the VM it runs in, or domain.ErrNotExists.
 func (r *Runs) One(ctx context.Context, uuid string) (kind.Raw, error) {
-	t, err := r.task(ctx, uuid)
+	record, err := r.record(ctx, uuid)
 	if err != nil {
 		return kind.Raw{}, err
 	}
 
-	return manifest(&t)
+	return manifest(record)
 }
 
-// Act asks a run for what a VM is asked: a stop stops its task, a delete
-// takes its task away, and anything else is refused as CodeRefused.
+// Act asks a run for what a VM is asked: a stop is its task's stop, a delete
+// its task's delete, and anything else is refused as CodeRefused.
 func (r *Runs) Act(ctx context.Context, run kind.Raw, action string, _ []byte) (kind.Raw, bool, domain.ValidationErrors, error) {
-	t, err := r.task(ctx, run.Metadata.UUID)
-	if err != nil {
+	switch action {
+	case vmKind.ActionStop:
+		return r.ask(ctx, run.Metadata.UUID, taskKind.ActionStop)
+	case vmKind.ActionDelete:
+		return r.ask(ctx, run.Metadata.UUID, taskKind.ActionDelete)
+	}
+
+	if _, err := r.record(ctx, run.Metadata.UUID); err != nil {
 		return kind.Raw{}, false, nil, err
 	}
 
-	switch action {
-	case vmKind.ActionStop:
-		refused, err := r.stop(ctx, &t)
-		if err != nil || len(refused) > 0 {
-			return kind.Raw{}, false, refused, err
-		}
+	return kind.Raw{}, false, refusal(), nil
+}
 
-		after, err := manifest(&t)
-
-		return after, false, nil, err
-
-	case vmKind.ActionDelete:
-		return kind.Raw{}, true, nil, r.delete(ctx, &t)
+// ask asks a run's task for one of its commands, and is the run as it left
+// it, or gone when there was nothing anywhere to delete.
+//
+// What it is asked is written down before its node is asked, whatever comes
+// of asking, as it is of any task. A stop it cannot get to from where it is,
+// one stopping already or not running yet, is refused as
+// invalid_state_transition, and the task is to stop all the same once it
+// can, unless it is being deleted. A delete is never refused, and one being
+// deleted already is left to it.
+func (r *Runs) ask(ctx context.Context, uuid string, action string) (kind.Raw, bool, domain.ValidationErrors, error) {
+	binding, registered := r.registry.Lookup(taskKind.Name)
+	if !registered {
+		return kind.Raw{}, false, nil, fmt.Errorf("%w: %q", kind.ErrUnknownKind, taskKind.Name)
 	}
 
-	return kind.Raw{}, false, refusal(), nil
+	d := binding.Descriptor()
+	a, _ := d.Action(action)
+
+	for try := 1; ; try++ {
+		record, err := r.record(ctx, uuid)
+		if err != nil {
+			return kind.Raw{}, false, nil, err
+		}
+
+		common, err := record.Common()
+		if err != nil {
+			return kind.Raw{}, false, nil, err
+		}
+
+		if action == taskKind.ActionDelete && common.Expected == kind.Deleted && record.Pending != nil && record.Pending.Action == taskKind.ActionDelete {
+			after, err := manifest(record)
+
+			return after, false, nil, err
+		}
+
+		var (
+			asked   dispatch.Asked
+			invalid domain.ValidationErrors
+		)
+
+		switch {
+		case d.Allows(action, common.State):
+			asked, invalid, err = r.dispatcher.Ask(ctx, binding, record, action, nil, true)
+
+		// what was asked is what it is expected to be, once it can be, unless
+		// it is on its way to being deleted, which nothing comes back from.
+		case common.Expected != kind.Deleted:
+			_, err = r.dispatcher.Desire(ctx, record, a.Desires, true)
+			invalid = domain.ValidationErrors{"action": "invalid_state_transition"}
+
+		default:
+			invalid = domain.ValidationErrors{"action": "invalid_state_transition"}
+		}
+
+		if errors.Is(err, resource.ErrConflict) && try < tries {
+			continue
+		} else if err != nil {
+			return kind.Raw{}, false, nil, err
+		}
+
+		if len(invalid) > 0 {
+			return kind.Raw{}, false, domain.ValidationErrors{"vm": "invalid_state_transition"}, nil
+		}
+
+		delivered, err := r.dispatcher.Deliver(ctx, asked, 0)
+		if err != nil {
+			return kind.Raw{}, false, nil, err
+		}
+
+		if delivered.Gone {
+			return kind.Raw{}, true, nil, nil
+		}
+
+		after, err := manifest(resource.Record{Raw: delivered.Resource})
+
+		return after, false, nil, err
+	}
 }
 
 // Query reads what a run has written, as a VM's log, and refuses anything
@@ -139,66 +207,28 @@ func (r *Runs) Query(ctx context.Context, run kind.Raw, action string, payload [
 		}
 	}
 
-	t, err := r.task(ctx, run.Metadata.UUID)
+	record, err := r.record(ctx, run.Metadata.UUID)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	answer, err := json.Marshal(Logs(&t, options))
+	t, err := kind.Decode[taskKind.Spec, taskKind.Status](record.Raw)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	answer, err := json.Marshal(Logs(t, options))
 
 	return answer, nil, err
 }
 
-// task is the run uuid names, as its task.
-func (r *Runs) task(ctx context.Context, uuid string) (task.Task, error) {
+// record is the task of the run uuid names.
+func (r *Runs) record(ctx context.Context, uuid string) (resource.Record, error) {
 	if len(uuid) == 0 {
-		return task.Task{}, domain.ErrNotExists
+		return resource.Record{}, domain.ErrNotExists
 	}
 
-	return r.tasks.GetOneByOwner(ctx, task.GuestOwnerUUID, uuid)
-}
-
-// stop asks for a run to be stopped, which is asking its task to stop.
-//
-// What is wanted of it is written down before its node is asked, whatever
-// comes of asking, as it is for any task; one that cannot get there from
-// where it is, such as one stopping already, is refused as
-// invalid_state_transition. Its node stops its VM, and a run that has ended
-// is taken away with it.
-func (r *Runs) stop(ctx context.Context, t *task.Task) (domain.ValidationErrors, error) {
-	t.ExpectedState = task.Stopped
-
-	if !task.ValidStateTransition(t.CurrentState, task.Stopping) {
-		if _, err := r.tasks.Save(ctx, t); err != nil {
-			return nil, err
-		}
-
-		return domain.ValidationErrors{"vm": "invalid_state_transition"}, nil
-	}
-
-	t.CurrentState = task.Stopping
-	if _, err := r.tasks.Save(ctx, t); err != nil {
-		return nil, err
-	}
-
-	payload, err := json.Marshal(events.TaskStoppageRequested{UUID: t.UUID})
-	if err != nil {
-		return nil, err
-	}
-
-	return nil, r.producer.Produce(context.WithoutCancel(ctx), events.TaskStoppageRequestedName, payload)
-}
-
-// delete takes a run away, running or not: its task and its log go, and its
-// node removes its VM. One that went in the meantime is gone already, which
-// is what was asked for.
-func (r *Runs) delete(ctx context.Context, t *task.Task) error {
-	_, err := r.remove.Execute(ctx, &deletetask.Request{UUID: t.UUID, Force: true})
-	if errors.Is(err, domain.ErrNotExists) {
-		return nil
-	}
-
-	return err
+	return r.resources.GetOneByOwner(ctx, taskKind.Name, task.GuestOwnerUUID, uuid)
 }
 
 // refusal is what a run is refused anything but a stop, a delete and a read
@@ -210,24 +240,27 @@ func refusal() domain.ValidationErrors {
 // Logs is what a run has written, as the lines of a VM's log, and whether
 // there were more of them than an answer carries.
 //
-// A run is a job, and a job's whole output rides every heartbeat its node
-// sends and is kept on its task. Its lines have no time to them, so each is
-// given the moment the run was made, a nanosecond after the line before it:
-// that keeps them in the order they were written, keeps two that say the same
-// thing apart, and lets whoever is following the log ask for what came after
-// the last line they read, as they would of a VM's. Since leaves out the
-// lines before it, and the last Tail are kept, or as many as an answer
-// carries.
-func Logs(t *task.Task, options vmKind.LogsPayload) vmKind.Logs {
+// A run is a job, and a job's output rides every heartbeat its node sends and
+// is kept on its task. Its lines have no time to them, so each is given the
+// moment the run was made, a nanosecond after the line before it: that keeps
+// them in the order they were written, keeps two that say the same thing
+// apart, and lets whoever is following the log ask for what came after the
+// last line they read, as they would of a VM's. Since leaves out the lines
+// before it, and the last Tail are kept, or as many as an answer carries.
+func Logs(t taskKind.Task, options vmKind.LogsPayload) vmKind.Logs {
 	lines := make([]vmKind.LogLine, 0)
 
-	output := strings.TrimSuffix(string(t.ExecutionLogs), "\n")
+	var output string
+	if t.Status.Run != nil {
+		output = strings.TrimSuffix(t.Status.Run.Output, "\n")
+	}
+
 	if len(output) == 0 {
 		return vmKind.Logs{Lines: lines}
 	}
 
 	for i, line := range strings.Split(output, "\n") {
-		at := t.CreatedAt.Add(time.Duration(i))
+		at := t.Metadata.CreatedAt.Add(time.Duration(i))
 		if at.Before(options.Since) {
 			continue
 		}
@@ -249,50 +282,67 @@ func Logs(t *task.Task, options vmKind.LogsPayload) vmKind.Logs {
 
 // Manifest is a run as the VM it runs in.
 //
-// It is its task's uuid, name and slug, and the guest's: a machine booted
-// from the runner's image, given what its task was limited to the way a node
-// gives it, with the network its task's policy maps to and a disk thrown away
-// with it. Its lifetime is its task's ttl, counted from when it came up, and
+// It is its task's uuid, name and slug, and the guest's: a machine booted from
+// the runner's image, given what its task was limited to the way a node gives
+// it, with the network its task's policy maps to and a disk thrown away with
+// it. Its lifetime is its task's ttl, counted from when its run started, and
 // its state is its task's, in a VM's words. Its node reports no stats for a
 // run, so it has none to show.
-func Manifest(t *task.Task) vmKind.VM {
+func Manifest(t taskKind.Task) vmKind.VM {
+	var startedAt time.Time
+	if t.Status.Run != nil {
+		startedAt = t.Status.Run.StartedAt
+	}
+
+	// when it ended, for one that has: when it came to rest where it is.
+	var endedAt time.Time
+	if taskKind.Ended(t.Status.State) {
+		endedAt = t.Status.Since
+	}
+
 	return vmKind.VM{
 		Kind: vmKind.Name,
 		Metadata: kind.Metadata{
-			UUID:      t.UUID,
-			Name:      t.Name,
-			Slug:      t.Slug,
-			OwnerUUID: t.OwnerUUID,
+			UUID:      t.Metadata.UUID,
+			Name:      t.Metadata.Name,
+			Slug:      t.Metadata.Slug,
+			OwnerUUID: t.Metadata.OwnerUUID,
 			Labels: map[string]string{
 				vmKind.LabelFlavor:    string(vmKind.FlavorMachine),
 				vmKind.LabelManagedBy: vmKind.ManagedByCodeRunner,
 			},
-			Node:      t.NodeName,
-			Lifetime:  t.TTL,
+			Node:      t.Metadata.Node,
+			Lifetime:  t.Spec.TTL,
 			ExpiresAt: expiresAt(t),
-			CreatedAt: t.CreatedAt,
-			UpdatedAt: latest(t.CreatedAt, t.StartedAt, t.FinishedAt),
+			CreatedAt: t.Metadata.CreatedAt,
+			UpdatedAt: latest(t.Metadata.CreatedAt, startedAt, endedAt),
 		},
 		Spec: vmKind.Spec{
 			Flavor:    vmKind.FlavorMachine,
-			Image:     t.Image,
-			Resources: vmKind.ResourcesOf(t.ResourceLimits.VMResources()),
-			Ports:     portsOf(t),
-			Network:   networkOf(t.NetworkPolicy.VMNetwork()),
+			Image:     t.Spec.Image,
+			Resources: vmKind.ResourcesOf(t.Spec.Limits.ResourceLimits().VMResources()),
+			Ports:     vmKind.Normalized(t.Spec.Ports),
+			Network:   networkOf(t.Spec.Policy().VMNetwork()),
 		},
 		Status: vmKind.Status{
 			Status: kind.Status{
-				State:      stateOf(t.CurrentState),
-				Expected:   stateOf(t.ExpectedState),
-				Reason:     t.Reason,
-				ObservedAt: t.LastHeartbeatAt,
+				State:      stateOf(t.Status.State),
+				Expected:   stateOf(t.Status.Expected),
+				Reason:     t.Status.Reason,
+				ObservedAt: t.Status.ObservedAt,
 			},
-			StartedAt: t.StartedAt,
+			StartedAt: startedAt,
 		},
 	}
 }
 
-func manifest(t *task.Task) (kind.Raw, error) {
+// manifest is a task's record as the VM its run is.
+func manifest(record resource.Record) (kind.Raw, error) {
+	t, err := kind.Decode[taskKind.Spec, taskKind.Status](record.Raw)
+	if err != nil {
+		return kind.Raw{}, err
+	}
+
 	return kind.Encode(Manifest(t))
 }
 
@@ -314,22 +364,26 @@ func newestFirst(a kind.Raw, b kind.Raw) int {
 
 // stateOf is a task's state in a VM's words. A job that ran to its end is a
 // VM that has stopped.
-func stateOf(state task.State) kind.State {
+func stateOf(state kind.State) kind.State {
 	switch state {
-	case task.Created:
+	case taskKind.Created:
 		return vmKind.Created
-	case task.Scheduled:
+	case taskKind.Scheduled:
 		return vmKind.Scheduled
-	case task.Running:
+	case taskKind.Running:
 		return vmKind.Running
-	case task.Stopping:
+	case taskKind.Stopping:
 		return vmKind.Stopping
-	case task.Stopped, task.Completed:
+	case taskKind.Stopped, taskKind.Completed:
 		return vmKind.Stopped
-	case task.Failed:
+	case taskKind.Failed:
 		return vmKind.Failed
-	case task.Restarting:
+	case taskKind.Restarting:
 		return vmKind.Restarting
+	case taskKind.Deleting:
+		return vmKind.Deleting
+	case taskKind.Deleted:
+		return vmKind.Deleted
 	default:
 		return ""
 	}
@@ -339,30 +393,21 @@ func stateOf(state task.State) kind.State {
 // deadline its node set as it came up, which is its ttl counted from when it
 // started. One that has not come up yet has none, and neither has one that
 // may run for as long as it likes.
-func expiresAt(t *task.Task) time.Time {
-	if !t.Deadline.IsZero() {
-		return t.Deadline
+func expiresAt(t taskKind.Task) time.Time {
+	run := t.Status.Run
+	if run == nil {
+		return time.Time{}
 	}
 
-	if t.TTL > 0 && !t.StartedAt.IsZero() {
-		return t.StartedAt.Add(t.TTL)
+	if !run.Deadline.IsZero() {
+		return run.Deadline
+	}
+
+	if t.Spec.TTL > 0 && !run.StartedAt.IsZero() {
+		return run.StartedAt.Add(t.Spec.TTL)
 	}
 
 	return time.Time{}
-}
-
-// portsOf is the ports a run serves, once each and lowest first, as its VM
-// is given them.
-func portsOf(t *task.Task) []port.Port {
-	ports := slices.Clone(t.ExposedPorts)
-
-	for _, bindings := range t.PortBindings {
-		for p := range bindings {
-			ports = append(ports, p)
-		}
-	}
-
-	return vmKind.Normalized(ports)
 }
 
 // latest is the last of some moments, leaving out those that have not come.

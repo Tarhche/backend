@@ -3,13 +3,15 @@ package runCode
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"strconv"
 	"time"
 
 	"github.com/khanzadimahdi/testproject/domain"
+	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
+	taskKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/task"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
-	"github.com/khanzadimahdi/testproject/domain/workload/task/events"
 )
 
 const (
@@ -68,11 +70,26 @@ const (
 // again: none. Whatever stopped it — an image that will not pull, a node that
 // will not take it — is not something a second attempt fixes, and somebody is
 // waiting on the page to be told what happened.
-var codeRetries = 0
+const codeRetries = 0
+
+// Workload is what runs a snippet: the control plane, which admits its task as
+// it admits any resource, places it on a node and asks the node to run it.
+// What the task does and how it ends reaches the code runner from the nodes
+// themselves (see heartbeat).
+type Workload interface {
+	RunTask(ctx context.Context, ownerUUID string, request workloadControlPlane.TaskRequest) (taskKind.Task, error)
+}
+
+// refusal is the error the workload refuses a request with, which says
+// field by field what it refused.
+type refusal interface {
+	error
+	Refused() domain.ValidationErrors
+}
 
 type runCode struct {
 	validator domain.Validator
-	producer  domain.Producer
+	workload  Workload
 	response  domain.Replyer
 	logger    *slog.Logger
 }
@@ -81,13 +98,13 @@ var _ domain.MessageHandler = &runCode{}
 
 func NewRunCodeHandler(
 	validator domain.Validator,
-	producer domain.Producer,
+	workload Workload,
 	replyer domain.Replyer,
 	logger *slog.Logger,
 ) *runCode {
 	return &runCode{
 		validator: validator,
-		producer:  producer,
+		workload:  workload,
 		response:  replyer,
 		logger:    logger,
 	}
@@ -96,74 +113,89 @@ func NewRunCodeHandler(
 func (h *runCode) Handle(ctx context.Context, data []byte) error {
 	var request Request
 	if err := json.Unmarshal(data, &request); err != nil {
-		response := &Response{
-			ValidationErrors: domain.ValidationErrors{
-				"runner": "request doesn't have a valid format",
-			},
-		}
-
-		payload, err := json.Marshal(response)
-		if err != nil {
-			return err
-		}
-
-		return h.response.Reply(ctx, &domain.Reply{
-			RequestID: request.ID,
-			Payload:   payload,
+		return h.reply(ctx, request.ID, domain.ValidationErrors{
+			"runner": "request doesn't have a valid format",
 		})
 	}
 
 	h.logger.Info("request received", "request", request)
 
 	if validationErrors := h.validator.Validate(&request); len(validationErrors) > 0 {
-		response := &Response{
-			ValidationErrors: validationErrors,
-		}
-
-		payload, err := json.Marshal(response)
-		if err != nil {
-			return err
-		}
-
 		h.logger.Warn("validation errors", "validationErrors", validationErrors)
 
-		return h.response.Reply(ctx, &domain.Reply{
-			RequestID: request.ID,
-			Payload:   payload,
-		})
+		return h.reply(ctx, request.ID, validationErrors)
 	}
 
+	asked := TaskOf(&request)
+
+	_, err := h.workload.RunTask(ctx, CodeRunnerOwnerUUID, asked)
+
+	// a task the workload would not take is answered, rather than asked for
+	// again and refused again: what it refused is what the reader is told.
+	if refused, ok := errors.AsType[refusal](err); ok && len(refused.Refused()) > 0 {
+		h.logger.Warn("the workload refused a snippet's task", "refused", refused.Refused())
+
+		return h.reply(ctx, request.ID, h.validator.Validate(codes(refused.Refused())))
+	}
+
+	if err != nil {
+		return err
+	}
+
+	h.logger.Info("task asked for", "name", asked.Name, "image", asked.Spec.Image)
+
+	return nil
+}
+
+// TaskOf is the task a snippet is run in: a job of the guest's, named after
+// the request that asked for it, which is what its answers are sent to. It
+// runs once, and what is left of it goes when it ends.
+func TaskOf(request *Request) workloadControlPlane.TaskRequest {
 	timeout, ttl := CodeTimeout, TTL
 	if request.Live() {
 		timeout, ttl = LiveCodeTimeout, LiveTTL
 	}
 
-	// a job: it runs once, and what is left of it goes when it ends.
-	event := &events.TaskRunRequested{
-		Name:           request.ID,
-		Kind:           string(task.KindJob),
-		Image:          request.Image(),
-		TTL:            ttl,
-		MaxRetries:     &codeRetries,
-		Command:        []string{"--timeout", strconv.Itoa(int(timeout.Seconds())), request.Code},
-		ResourceLimits: request.ResourceLimits(),
-		OwnerUUID:      CodeRunnerOwnerUUID,
+	retries := codeRetries
 
-		// a snippet that serves something is reached by name: the workload
-		// publishes these on the node and answers for them at the ingress.
-		ExposedPorts: request.Ports,
+	return workloadControlPlane.TaskRequest{
+		Name: request.ID,
+		Spec: taskKind.Spec{
+			Kind:       task.KindJob,
+			Image:      request.Image(),
+			Command:    []string{"--timeout", strconv.Itoa(int(timeout.Seconds())), request.Code},
+			TTL:        ttl,
+			Limits:     request.ResourceLimits(),
+			MaxRetries: &retries,
 
-		// and one somebody is watching is reported as it runs rather than
-		// answered once at the end.
-		Interactive: request.Live(),
+			// a snippet that serves something is reached by name: the workload
+			// publishes these on the node and answers for them at the ingress.
+			Ports: request.Ports,
+
+			// and one somebody is watching is reported as it runs rather than
+			// answered once at the end.
+			Interactive: request.Live(),
+		},
 	}
+}
 
-	h.logger.Info("event produced", "event", event)
-
-	payload, err := json.Marshal(event)
+func (h *runCode) reply(ctx context.Context, requestID string, validationErrors domain.ValidationErrors) error {
+	payload, err := json.Marshal(&Response{ValidationErrors: validationErrors})
 	if err != nil {
 		return err
 	}
 
-	return h.producer.Produce(ctx, events.TaskRunRequestedName, payload)
+	return h.response.Reply(ctx, &domain.Reply{
+		RequestID: requestID,
+		Payload:   payload,
+	})
+}
+
+// codes are refusals as codes to put into words, as a request's own are.
+type codes domain.ValidationErrors
+
+var _ domain.Validatable = codes{}
+
+func (c codes) Validate() domain.ValidationErrors {
+	return domain.ValidationErrors(c)
 }

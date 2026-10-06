@@ -11,5 +11,6 @@ func All() []Migration {
 		stacksAsManifests,
 		vmsAsManifests,
 		snapshotsAsManifests,
+		tasksAsManifests,
 	}
 }

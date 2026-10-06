@@ -14,7 +14,6 @@ import (
 
 	"github.com/danceable/console"
 	orchestratorHeartbeat "github.com/khanzadimahdi/testproject/application/workload/orchestrator/beatHeart"
-	taskHeartbeat "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/beatHeart"
 	shipLogs "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/shipLogs"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/node"
@@ -227,7 +226,6 @@ func TestServe(t *testing.T) {
 		// Run starts it, and a command assembled by hand has to be assembled
 		// completely.
 		command.logShipper = shipLogs.NewUseCase(&taskManager, &consumer, consumerName, command.logger)
-		command.taskHeartBeat = taskHeartbeat.NewUseCase(&taskManager, &consumer, consumerName, command.logger)
 		command.orchestratorHeartBeat = orchestratorHeartbeat.NewUseCase(&consumer, &nodeManager, nil, time.Second, consumerName, command.logger)
 
 		requests := &answering{}

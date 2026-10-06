@@ -17,10 +17,12 @@ import (
 // itself, as a VM's owner is read off its labels: the node answers without a
 // database and without taking anybody's word for it. So all this does is say
 // who is asking. Nobody is nobody's owner, so a stream is opened for nobody
-// who is not asking as somebody; and somebody who may not open it, because it
-// is not theirs, because its kind serves no streams or not this one, or
-// because this node runs no such kind, is told it is not there, so knowing a
-// uuid says nothing about whether one exists.
+// who is not asking as somebody, unless it is public (kind.Action.Public), as
+// a code-runner snippet's terminal is: then whether it is opened for nobody is
+// its kind's to say. Somebody who may not open it, because it is not theirs,
+// because its kind serves no streams or not this one, or because this node
+// runs no such kind, is told it is not there, so knowing a uuid says nothing
+// about whether one exists.
 type UseCase struct {
 	kinds     *kind.Registry[kind.NodeBinding]
 	validator domain.Validator
@@ -40,7 +42,11 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (kind.Session,
 	notThere := fmt.Errorf("%w: no %s %q of theirs", domain.ErrNotExists, request.Kind, request.UUID)
 
 	binding, runs := uc.kinds.Lookup(request.Kind)
-	if !runs || !binding.Attaches() || len(request.OwnerUUID) == 0 {
+	if !runs || !binding.Attaches() {
+		return nil, nil, notThere
+	}
+
+	if action, found := binding.Descriptor().Action(request.Action); len(request.OwnerUUID) == 0 && (!found || !action.Public) {
 		return nil, nil, notThere
 	}
 

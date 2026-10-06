@@ -11,7 +11,6 @@ import (
 	"github.com/danceable/provider"
 
 	orchestratorHeartbeat "github.com/khanzadimahdi/testproject/application/workload/orchestrator/beatHeart"
-	taskHeartbeat "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/beatHeart"
 	shipLogs "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/shipLogs"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
@@ -26,7 +25,6 @@ import (
 const (
 	serveName                     string = "serve-workload-orchestrator"
 	orchestratorHeartbeatInterval        = 1 * time.Second
-	taskHeartbeatInterval                = 300 * time.Millisecond
 
 	// logShippingInterval is how often the followers are brought in line with
 	// what is running. A task that has just started is followed within
@@ -44,7 +42,6 @@ type ServeCommand struct {
 	handler               http.Handler
 	consumer              domain.Consumer
 	consumers             map[string]domain.MessageHandler
-	taskHeartBeat         *taskHeartbeat.UseCase
 	orchestratorHeartBeat *orchestratorHeartbeat.UseCase
 	logShipper            *shipLogs.UseCase
 
@@ -129,10 +126,6 @@ func (c *ServeCommand) Boot(ctx context.Context, task provider.Container) error 
 		return err
 	}
 
-	if err := task.Resolve(&c.taskHeartBeat); err != nil {
-		return err
-	}
-
 	if err := task.Resolve(&c.orchestratorHeartBeat); err != nil {
 		return err
 	}
@@ -208,7 +201,6 @@ func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 		return console.ExitFailure
 	}
 
-	go c.tasksHeartbeat(ctx)
 	go c.orchestratorHeartbeat(ctx)
 	go c.shipLogs(ctx)
 	go c.serveTunnel(ctx)
@@ -248,23 +240,6 @@ func (c *ServeCommand) consumeTopics(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-func (c *ServeCommand) tasksHeartbeat(ctx context.Context) {
-	ticker := time.NewTicker(taskHeartbeatInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ticker.C:
-			err := c.taskHeartBeat.Execute(ctx)
-			if err != nil {
-				c.logger.ErrorContext(ctx, "task heartbeat failed", "error", err)
-			}
-		case <-ctx.Done():
-			return
-		}
-	}
 }
 
 // shipLogs keeps a follower on every long-running task this node holds, so

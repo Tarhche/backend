@@ -81,6 +81,13 @@ func TestCheck(t *testing.T) {
 
 			return d
 		}(),
+		"and one whose terminal is anybody's, asked under another kind's permissions": func() Descriptor {
+			d := box()
+			d.PermissionsOf = "vms"
+			changing(&d, "attach", func(a *Action) { a.Public = true })
+
+			return d
+		}(),
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -219,6 +226,25 @@ func TestCheck(t *testing.T) {
 		"an action asked under no permission": {
 			breaking: func(d *Descriptor) { changing(d, "stop", func(a *Action) { a.Permission = "" }) },
 			want:     `action "stop" has no permission: the verb of workload.boxes.<verb> it is asked under`,
+		},
+		"permissions of a kind that is not a word": {
+			breaking: func(d *Descriptor) { d.PermissionsOf = "VMs" },
+			want:     `its actions are asked under the permissions of "VMs", which is not a lowercase word`,
+		},
+		"an action asked under no permission of another kind's": {
+			breaking: func(d *Descriptor) {
+				d.PermissionsOf = "vms"
+				changing(d, "stop", func(a *Action) { a.Permission = "" })
+			},
+			want: `action "stop" has no permission: the verb of workload.vms.<verb> it is asked under`,
+		},
+		"a public query": {
+			breaking: func(d *Descriptor) { changing(d, "logs", func(a *Action) { a.Public = true }) },
+			want:     `action "logs" is public, and only a stream is opened for whoever asks`,
+		},
+		"a public command": {
+			breaking: func(d *Descriptor) { changing(d, "stop", func(a *Action) { a.Public = true }) },
+			want:     `action "stop" is public, and only a stream is opened for whoever asks`,
 		},
 		"an action asked under what is not a verb": {
 			breaking: func(d *Descriptor) { changing(d, "stop", func(a *Action) { a.Permission = "manage it" }) },
@@ -491,6 +517,18 @@ func TestCheckPermissions(t *testing.T) {
 		}
 
 		assert.Contains(t, messages(CheckPermissions(box(), unnamed)), `kind "box": action "logs" is asked under "workload.boxes.logs", which is listed without saying what it grants`)
+	})
+
+	t.Run("one asked under another kind's permissions is held to that kind's", func(t *testing.T) {
+		t.Parallel()
+
+		d := box()
+		d.PermissionsOf = "vms"
+
+		problems := messages(CheckPermissions(d, listed()))
+
+		assert.Contains(t, problems, `kind "box": action "start" is asked under "workload.vms.manage", which is not a permission`)
+		assert.NotContains(t, problems, "workload.boxes.")
 	})
 
 	t.Run("an internal action is asked under nothing", func(t *testing.T) {

@@ -16,12 +16,14 @@ import (
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	snapshotKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/snapshot"
+	"github.com/khanzadimahdi/testproject/domain/workload/task"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/core/request"
 	"github.com/khanzadimahdi/testproject/infrastructure/storage/minio"
 	infraDocker "github.com/khanzadimahdi/testproject/infrastructure/workload/docker"
 	workloadMetrics "github.com/khanzadimahdi/testproject/infrastructure/workload/metrics"
+	"github.com/khanzadimahdi/testproject/infrastructure/workload/task/vmruntime"
 )
 
 const (
@@ -37,11 +39,14 @@ const (
 )
 
 // OrchestratorDependencies are what an orchestrator's workload is wired
-// from: its own connections and settings, the engine its VMs run on, and the
-// bucket their snapshots are kept in.
+// from: its own connections and settings, the engine its VMs run on, the
+// runtime the code runner's tasks run on, and the bucket their snapshots are
+// kept in. A runtime of nil runs every task as a VM of its own on the
+// engine, as the node does.
 type OrchestratorDependencies struct {
 	NATS     *nats.Conn
 	Engine   vm.Engine
+	Tasks    task.Runtime
 	Archives snapshotKind.Store
 	Producer domain.Producer
 	Configs  *configs.WorkloadOrchestrator
@@ -51,7 +56,7 @@ type OrchestratorDependencies struct {
 
 // OrchestratorWorkload is what an orchestrator does for what it holds: the
 // handler that carries out the control plane's commands of every kind it
-// runs, VMs, their snapshots and stacks among them; the responder that
+// runs, VMs, their snapshots, stacks and tasks among them; the responder that
 // answers the control plane's requests, every kind's queries among them; and
 // the kinds it runs, which its heartbeat asks what they hold and its API
 // routes the streams and the ports of.
@@ -78,10 +83,16 @@ func NewOrchestratorWorkload(d OrchestratorDependencies) (*OrchestratorWorkload,
 	// a VM, waits for whatever else is being done to it.
 	locks := lock.New()
 
+	tasks := d.Tasks
+	if tasks == nil {
+		tasks = vmruntime.New(d.Engine, d.Logger)
+	}
+
 	// a stack's command waits for its VM's dockerd, and may then pull images;
 	// a snapshot is taken under its VM's lock.
 	kinds, err := nodeKinds(NodeKindDependencies{
 		Engine:         d.Engine,
+		Tasks:          tasks,
 		Daemons:        daemons,
 		Archives:       d.Archives,
 		Locks:          locks,

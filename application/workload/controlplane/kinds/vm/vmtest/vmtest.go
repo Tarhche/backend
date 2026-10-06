@@ -15,6 +15,7 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/cascade"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/dispatch"
 	controlPlaneSnapshots "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/snapshot"
+	controlPlaneTasks "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/task"
 	controlPlaneVMs "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/dockervm"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/placement"
@@ -23,10 +24,11 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/runs"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/waiters"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/slugs"
-	deletetask "github.com/khanzadimahdi/testproject/application/workload/controlplane/task/deleteTask"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	snapshotKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/snapshot"
+	taskKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/task"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
+	"github.com/khanzadimahdi/testproject/domain/workload/network"
 	"github.com/khanzadimahdi/testproject/domain/workload/node"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
@@ -35,9 +37,7 @@ import (
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
 	nodesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/nodes"
 	resourcesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/resources"
-	tasksMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/tasks"
-	logsMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/logs"
-	"github.com/khanzadimahdi/testproject/infrastructure/translator"
+	"github.com/khanzadimahdi/testproject/infrastructure/workload/scheduler/roundrobin"
 )
 
 const (
@@ -80,10 +80,11 @@ var DockerDefaults = dockervm.Defaults{
 
 // Workload is a control plane's VMs and what they are kept in, the code
 // runner's runs among them, which are tasks, and the vm kind registered as
-// the control plane registers it, admitted through the control plane's
-// admission. Snapshots is the snapshot kind's control-plane strategy, over the
-// same resources, which says what a VM can be restored and made from: it is
-// not registered, so that a test registers the kinds it needs beside VMs.
+// the control plane registers it, beside the task kind, admitted through the
+// control plane's admission. Snapshots is the snapshot kind's control-plane
+// strategy, over the same resources, which says what a VM can be restored and
+// made from: it is not registered, so that a test registers the kinds it needs
+// beside VMs.
 type Workload struct {
 	Memory    *resourcesMemory.Repository
 	Resources *cascade.Repository
@@ -92,8 +93,6 @@ type Workload struct {
 	Entities  *records.Entities
 	Snapshots *controlPlaneSnapshots.Snapshots
 	Nodes     *nodesMemory.Repository
-	Tasks     *tasksMemory.Repository
-	TaskLogs  *logsMock.InMemoryLogRepository
 	Producer  *messagingMock.Recorder
 
 	Placement *placement.Placement
@@ -113,7 +112,7 @@ type options struct {
 	nodes     []node.Node
 	vms       []vmKind.VM
 	snapshots []snapshotKind.Snapshot
-	tasks     []task.Task
+	tasks     []taskKind.Task
 	now       func() time.Time
 }
 
@@ -132,9 +131,9 @@ func WithSnapshots(snapshots ...snapshotKind.Snapshot) Option {
 	return func(o *options) { o.snapshots = append(o.snapshots, snapshots...) }
 }
 
-// WithTasks are tasks the workload holds: those of the guest's are the code
-// runner's runs (Run).
-func WithTasks(tasks ...task.Task) Option {
+// WithTasks are tasks the workload holds, as their records: those of the
+// guest's are the code runner's runs (Run).
+func WithTasks(tasks ...taskKind.Task) Option {
 	return func(o *options) { o.tasks = append(o.tasks, tasks...) }
 }
 
@@ -155,8 +154,6 @@ func New(opts ...Option) *Workload {
 		Memory:   resourcesMemory.NewRepository(),
 		Registry: kind.NewRegistry[kind.ControlPlaneBinding](),
 		Nodes:    nodesMemory.NewRepository(o.nodes...),
-		Tasks:    tasksMemory.NewRepository(o.tasks...),
-		TaskLogs: logsMock.NewInMemoryRepository(),
 		Producer: &messagingMock.Recorder{},
 	}
 
@@ -172,13 +169,27 @@ func New(opts ...Option) *Workload {
 		}
 	}
 
+	for _, t := range o.tasks {
+		if _, err := w.Memory.Create(context.Background(), Record(t)); err != nil {
+			panic(err)
+		}
+	}
+
 	w.Resources = cascade.NewRepository(w.Registry, w.Memory)
 	w.Records = records.New(w.Resources)
 	w.Entities = records.NewEntities(w.Records)
+	w.Dispatcher = dispatch.New(w.Resources, w.Producer, waiters.New(), o.now)
 
 	w.Placement = placement.New(w.Nodes, w.Records, 4)
 	w.Quota = quota.New(w.Records, Limits)
-	w.Runs = runs.New(w.Tasks, w.Producer, deletetask.NewUseCase(w.Tasks, w.TaskLogs, w.Producer, translator.Codes{}))
+	w.Runs = runs.New(w.Resources, w.Registry, w.Dispatcher)
+
+	held := []slugs.Taken{
+		slugs.By(w.Records.GetOneBySlug),
+		slugs.By(func(ctx context.Context, slug string) (resource.Record, error) {
+			return w.Resources.GetOneBySlug(ctx, taskKind.Name, slug)
+		}),
+	}
 
 	w.Snapshots = controlPlaneSnapshots.New(controlPlaneSnapshots.Dependencies{
 		VMs:       w.Records,
@@ -193,19 +204,25 @@ func New(opts ...Option) *Workload {
 		Nodes:     w.Nodes,
 		Quota:     w.Quota,
 		Placement: w.Placement,
-		Slugs:     []slugs.Taken{slugs.By(w.Records.GetOneBySlug), slugs.By(w.Tasks.GetOneBySlug)},
+		Slugs:     held,
 		Images:    Images,
 		Extras:    w.Runs,
 		Now:       o.now,
 	})
 
-	if err := w.Registry.Register(kind.BindControlPlane[vmKind.Spec, vmKind.Status](vmKind.Descriptor(), w.VMs)); err != nil {
-		panic(err)
+	tasks := controlPlaneTasks.New(controlPlaneTasks.Dependencies{Nodes: w.Nodes, Scheduler: roundrobin.New(), Slugs: held, Now: o.now})
+
+	for _, binding := range []kind.ControlPlaneBinding{
+		kind.BindControlPlane[vmKind.Spec, vmKind.Status](vmKind.Descriptor(), w.VMs),
+		kind.BindControlPlane[taskKind.Spec, taskKind.Status](taskKind.Descriptor(), tasks),
+	} {
+		if err := w.Registry.Register(binding); err != nil {
+			panic(err)
+		}
 	}
 
 	logger := slog.New(slog.DiscardHandler)
 
-	w.Dispatcher = dispatch.New(w.Resources, w.Producer, waiters.New(), o.now)
 	w.Admit = admitResource.NewUseCase(w.Registry, w.Resources, w.Dispatcher, logger)
 	w.Chooser = dockervm.NewChooser(w.Records, w.Resources, w.Admit, DockerDefaults)
 
@@ -262,7 +279,8 @@ func (w *Workload) Change(uuid string, change func(v *vmKind.VM)) {
 	}
 }
 
-// Record is a resource as the control plane keeps it: a VM, or a snapshot.
+// Record is a resource as the control plane keeps it: a VM, a snapshot or a
+// task.
 func Record[Spec, Status any](r kind.Resource[Spec, Status]) resource.Record {
 	raw, err := kind.Encode(r)
 	if err != nil {
@@ -270,6 +288,22 @@ func Record[Spec, Status any](r kind.Resource[Spec, Status]) resource.Record {
 	}
 
 	return resource.Record{Raw: raw}
+}
+
+// StoredTask is the task kept under uuid, and whether one is, with what the
+// control plane keeps of what it is in the middle of asking of it.
+func (w *Workload) StoredTask(uuid string) (taskKind.Task, resource.Record, bool) {
+	r, kept := w.Memory.Stored(taskKind.Name, uuid)
+	if !kept {
+		return taskKind.Task{}, resource.Record{}, false
+	}
+
+	t, err := kind.Decode[taskKind.Spec, taskKind.Status](r.Raw)
+	if err != nil {
+		panic(err)
+	}
+
+	return t, r, true
 }
 
 // Alive is a node that spoke a moment ago and has room for anything a test
@@ -393,25 +427,41 @@ func Snapshot(uuid string, ownerUUID string, changes ...func(s *snapshotKind.Sna
 
 // Run is a snippet the code runner is running on Node: a job of the guest's,
 // in a VM of its own, which came up a moment ago.
-func Run(uuid string) task.Task {
+func Run(uuid string) taskKind.Task {
 	created := time.Now().Add(-10 * time.Second)
+	started := created.Add(time.Second)
+	none := 0
 
-	return task.Task{
-		UUID:            uuid,
-		Name:            "request-" + uuid,
-		Slug:            "request-" + uuid + "-abcde",
-		Kind:            task.KindJob,
-		OwnerUUID:       task.GuestOwnerUUID,
-		Image:           "ghcr.io/tarhche/code-runner:nodejs-22.14-latest",
-		Command:         []string{"--timeout", "30", "console.log(1)"},
-		ResourceLimits:  task.ResourceLimits{Cpu: 2, Memory: 200 * MiB, Disk: 100 * MiB},
-		TTL:             time.Minute,
-		CurrentState:    task.Running,
-		ExpectedState:   task.Running,
-		NodeName:        Node,
-		LastHeartbeatAt: time.Now(),
-		Deadline:        created.Add(time.Second + time.Minute),
-		CreatedAt:       created,
-		StartedAt:       created.Add(time.Second),
+	return taskKind.Task{
+		Kind: taskKind.Name,
+		Metadata: kind.Metadata{
+			UUID:      uuid,
+			Name:      "request-" + uuid,
+			Slug:      "request-" + uuid + "-abcde",
+			OwnerUUID: task.GuestOwnerUUID,
+			Node:      Node,
+			CreatedAt: created,
+			UpdatedAt: started,
+		},
+		Spec: taskKind.Spec{
+			Kind:          task.KindJob,
+			Image:         "ghcr.io/tarhche/code-runner:nodejs-22.14-latest",
+			Command:       []string{"--timeout", "30", "console.log(1)"},
+			NetworkPolicy: network.PolicyIsolated,
+			TTL:           time.Minute,
+			Limits:        taskKind.Limits{CPU: 2, Memory: 200 * MiB, Disk: 100 * MiB},
+			MaxRetries:    &none,
+		},
+		Status: taskKind.Status{
+			Status: kind.Status{State: taskKind.Running, Expected: taskKind.Running, Since: started, ObservedAt: time.Now()},
+			Run: &taskKind.Run{
+				ID:        "execution-" + uuid,
+				Name:      "request-" + uuid,
+				Slug:      "request-" + uuid + "-abcde",
+				Kind:      task.KindJob,
+				StartedAt: started,
+				Deadline:  started.Add(time.Minute),
+			},
+		},
 	}
 }

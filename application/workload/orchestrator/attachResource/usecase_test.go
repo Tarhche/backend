@@ -23,6 +23,7 @@ func TestUseCase_Execute(t *testing.T) {
 		return map[string]held{
 			"lamp-1": {owner: "owner-uuid", lit: true},
 			"lamp-2": {owner: "owner-uuid", lit: false},
+			"lamp-3": {owner: "", lit: true},
 		}
 	}
 
@@ -45,6 +46,19 @@ func TestUseCase_Execute(t *testing.T) {
 		},
 		"nobody is not its owner, and is not even looked for": {
 			request: Request{Kind: "lamp", Action: "attach", UUID: "lamp-1"},
+			err:     domain.ErrNotExists,
+		},
+		"a public stream is asked of its kind for nobody, which opens one of everybody's": {
+			request: Request{Kind: "lamp", Action: "watch", UUID: "lamp-3"},
+			opened:  []string{"watch lamp-3 "},
+		},
+		"and says one of somebody's is not there for nobody": {
+			request: Request{Kind: "lamp", Action: "watch", UUID: "lamp-1"},
+			err:     domain.ErrNotExists,
+			opened:  []string{"watch lamp-1 "},
+		},
+		"a stream that is not public is not opened in one of everybody's for nobody": {
+			request: Request{Kind: "lamp", Action: "attach", UUID: "lamp-3"},
 			err:     domain.ErrNotExists,
 		},
 		"one that is there and not lit cannot be opened now": {

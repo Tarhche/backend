@@ -151,7 +151,8 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/password"
 	"github.com/khanzadimahdi/testproject/domain/permission"
 	translatorContract "github.com/khanzadimahdi/testproject/domain/translator"
-	taskEvents "github.com/khanzadimahdi/testproject/domain/workload/task/events"
+	"github.com/khanzadimahdi/testproject/domain/workload/kind"
+	nodeEvents "github.com/khanzadimahdi/testproject/domain/workload/node/events"
 	"github.com/khanzadimahdi/testproject/infrastructure/cache"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	infraHealth "github.com/khanzadimahdi/testproject/infrastructure/health"
@@ -422,20 +423,22 @@ func blog(
 	getLanguagesUseCase := getLanguages.NewUseCase(languageRepository, languageResolver)
 	getFileUseCase := getFile.NewUseCase(filesRepository, fileStorage)
 
-	if err := cachedGateway.Consume(
-		context.Background(),
-		runCode.RunCodeRequest,
-		runCode.NewRunCodeHandler(validator, asyncProduceConsumer, cachedGateway, logger),
-	); err != nil {
+	// ---- the code runner ----
+	//
+	// the blog does not schedule tasks itself. It asks the workload for a
+	// snippet's task, which the control plane admits and keeps, so one
+	// service owns a task's lifecycle; and it answers the reader from what
+	// the nodes running it say.
+	workload, err := workloadClient.New(blogConfigs.WorkloadControlPlaneURL)
+	if err != nil {
 		return nil, err
 	}
 
-	// ---- the code runner ----
-	//
-	// the blog does not schedule tasks itself. It passes the request to the
-	// workload, so one service owns a task's lifecycle.
-	workload, err := workloadClient.New(blogConfigs.WorkloadControlPlaneURL)
-	if err != nil {
+	if err := cachedGateway.Consume(
+		context.Background(),
+		runCode.RunCodeRequest,
+		runCode.NewRunCodeHandler(validator, workload, cachedGateway, logger),
+	); err != nil {
 		return nil, err
 	}
 
@@ -1114,8 +1117,8 @@ func blog(
 	subscribers := map[string]domain.MessageHandler{
 		forgetpassword.SendForgetPasswordEmailName: forgetpassword.NewSendForgetPasswordEmailHandler(userRepository, authTokenGenerator, mailer, mailFromAddress, webURL, renderer, translator),
 		register.SendRegisterationEmailName:        register.NewSendRegisterationEmailHandler(authTokenGenerator, mailer, mailFromAddress, webURL, renderer, translator),
-		taskEvents.HeartbeatName:                   heartbeat.NewHeartbeatHandler(cachedGateway, ingressDomain, logger),
-		taskEvents.TaskFailedName:                  heartbeat.NewTaskFailedHandler(cachedGateway, logger),
+		nodeEvents.HeartbeatName:                   heartbeat.NewHeartbeatHandler(cachedGateway, ingressDomain, logger),
+		kind.ResultName:                            heartbeat.NewResultHandler(cachedGateway, logger),
 	}
 
 	if err := iocContainer.Bind(func() map[string]domain.MessageHandler {

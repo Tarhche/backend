@@ -1,4 +1,4 @@
-package runs
+package runs_test
 
 import (
 	"context"
@@ -10,63 +10,74 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	deletetask "github.com/khanzadimahdi/testproject/application/workload/controlplane/task/deleteTask"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/runs"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/vmtest"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
+	taskKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/task"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/network"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
-	"github.com/khanzadimahdi/testproject/domain/workload/task/events"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
-	tasksMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/tasks"
-	logsMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/logs"
-	"github.com/khanzadimahdi/testproject/infrastructure/translator"
 )
 
 var made = time.Date(2026, 10, 5, 12, 0, 0, 0, time.UTC)
 
 // run is a snippet the code runner is running, as its task is kept: a job of
 // the guest's that came up a second after it was made, with a minute to run.
-func run(uuid string) task.Task {
-	return task.Task{
-		UUID:            uuid,
-		Name:            "request-" + uuid,
-		Slug:            "request-" + uuid + "-abcde",
-		Kind:            task.KindJob,
-		OwnerUUID:       task.GuestOwnerUUID,
-		Image:           "ghcr.io/tarhche/code-runner:go-1.24-latest",
-		ResourceLimits:  task.ResourceLimits{Cpu: 1.5, Memory: 512 << 20, Disk: 512 << 20},
-		ExposedPorts:    []port.Port{8080, 3000},
-		NetworkPolicy:   network.PolicyIsolated,
-		TTL:             time.Minute,
-		CurrentState:    task.Running,
-		ExpectedState:   task.Running,
-		NodeName:        "workload-orchestrator-01",
-		LastHeartbeatAt: made.Add(5 * time.Second),
-		Deadline:        made.Add(time.Second + time.Minute),
-		CreatedAt:       made,
-		StartedAt:       made.Add(time.Second),
+func run(uuid string, change ...func(t *taskKind.Task)) taskKind.Task {
+	none := 0
+
+	t := taskKind.Task{
+		Kind: taskKind.Name,
+		Metadata: kind.Metadata{
+			UUID:      uuid,
+			Name:      "request-" + uuid,
+			Slug:      "request-" + uuid + "-abcde",
+			OwnerUUID: task.GuestOwnerUUID,
+			Node:      vmtest.Node,
+			CreatedAt: made,
+			UpdatedAt: made.Add(5 * time.Second),
+		},
+		Spec: taskKind.Spec{
+			Kind:          task.KindJob,
+			Image:         "ghcr.io/tarhche/code-runner:go-1.24-latest",
+			Limits:        taskKind.Limits{CPU: 1.5, Memory: 512 << 20, Disk: 512 << 20},
+			Ports:         []port.Port{8080, 3000},
+			NetworkPolicy: network.PolicyIsolated,
+			TTL:           time.Minute,
+			MaxRetries:    &none,
+		},
+		Status: taskKind.Status{
+			Status: kind.Status{State: taskKind.Running, Expected: taskKind.Running, Since: made.Add(time.Second), ObservedAt: made.Add(5 * time.Second)},
+			Run: &taskKind.Run{
+				ID:        "execution-" + uuid,
+				Name:      "request-" + uuid,
+				Slug:      "request-" + uuid + "-abcde",
+				Kind:      task.KindJob,
+				StartedAt: made.Add(time.Second),
+				Deadline:  made.Add(time.Second + time.Minute),
+			},
+		},
 	}
+
+	for _, c := range change {
+		c(&t)
+	}
+
+	return t
 }
 
-type fixture struct {
-	runs     *Runs
-	tasks    *tasksMemory.Repository
-	producer *messagingMock.Recorder
-}
+func raw(t *testing.T, r taskKind.Task) kind.Raw {
+	t.Helper()
 
-func runsOf(tasks ...task.Task) fixture {
-	repository := tasksMemory.NewRepository(tasks...)
-	producer := &messagingMock.Recorder{}
+	encoded, err := kind.Encode(runs.Manifest(r))
+	require.NoError(t, err)
 
-	return fixture{
-		runs:     New(repository, producer, deletetask.NewUseCase(repository, logsMock.NewInMemoryRepository(), producer, translator.Codes{})),
-		tasks:    repository,
-		producer: producer,
-	}
+	return encoded
 }
 
 func TestManifest(t *testing.T) {
@@ -75,7 +86,6 @@ func TestManifest(t *testing.T) {
 	t.Run("a run is the guest's machine, given what its task was limited to, labelled as the code runner's", func(t *testing.T) {
 		t.Parallel()
 
-		r := run("run-uuid")
 		started := made.Add(time.Second)
 
 		assert.Equal(t, vmKind.VM{
@@ -89,7 +99,7 @@ func TestManifest(t *testing.T) {
 					vmKind.LabelFlavor:    "machine",
 					vmKind.LabelManagedBy: vmKind.ManagedByCodeRunner,
 				},
-				Node: "workload-orchestrator-01",
+				Node: vmtest.Node,
 
 				// a minute from when it came up, which is its deadline.
 				Lifetime:  time.Minute,
@@ -117,40 +127,39 @@ func TestManifest(t *testing.T) {
 				},
 				StartedAt: started,
 			},
-		}, Manifest(&r))
+		}, runs.Manifest(run("run-uuid")))
 	})
 
-	t.Run("it started when its task says, rather than when its deadline would have it", func(t *testing.T) {
+	t.Run("it started when its run says, and ended when it came to rest", func(t *testing.T) {
 		t.Parallel()
 
-		r := run("run-uuid")
-		r.StartedAt = made.Add(2 * time.Second)
-		r.FinishedAt = made.Add(9 * time.Second)
+		shown := runs.Manifest(run("run-uuid", func(t *taskKind.Task) {
+			t.Status.Run.StartedAt = made.Add(2 * time.Second)
+			t.Status.State = taskKind.Completed
+			t.Status.Since = made.Add(9 * time.Second)
+		}))
 
-		shown := Manifest(&r)
 		assert.Equal(t, made.Add(2*time.Second), shown.Status.StartedAt)
-		assert.Equal(t, made.Add(time.Second+time.Minute), shown.Metadata.ExpiresAt)
+		assert.Equal(t, made.Add(time.Second+time.Minute), shown.Metadata.ExpiresAt, "its deadline, as its node set it")
 		assert.Equal(t, made.Add(9*time.Second), shown.Metadata.UpdatedAt)
 	})
 
 	t.Run("one with no deadline expires its ttl after it started", func(t *testing.T) {
 		t.Parallel()
 
-		r := run("run-uuid")
-		r.Deadline = time.Time{}
+		shown := runs.Manifest(run("run-uuid", func(t *taskKind.Task) { t.Status.Run.Deadline = time.Time{} }))
 
-		assert.Equal(t, made.Add(time.Second+time.Minute), Manifest(&r).Metadata.ExpiresAt)
+		assert.Equal(t, made.Add(time.Second+time.Minute), shown.Metadata.ExpiresAt)
 	})
 
 	t.Run("one that has not come up has no start, and no expiry yet", func(t *testing.T) {
 		t.Parallel()
 
-		r := run("run-uuid")
-		r.CurrentState = task.Scheduled
-		r.Deadline = time.Time{}
-		r.StartedAt = time.Time{}
+		shown := runs.Manifest(run("run-uuid", func(t *taskKind.Task) {
+			t.Status.State = taskKind.Scheduled
+			t.Status.Run = nil
+		}))
 
-		shown := Manifest(&r)
 		assert.Equal(t, vmKind.Scheduled, shown.Status.State)
 		assert.True(t, shown.Status.StartedAt.IsZero())
 		assert.True(t, shown.Metadata.ExpiresAt.IsZero())
@@ -161,43 +170,35 @@ func TestManifest(t *testing.T) {
 	t.Run("one that serves nothing has no ports, rather than none to say", func(t *testing.T) {
 		t.Parallel()
 
-		r := run("run-uuid")
-		r.ExposedPorts = nil
-		r.NetworkPolicy = network.PolicyNone
+		shown := runs.Manifest(run("run-uuid", func(t *taskKind.Task) {
+			t.Spec.Ports = nil
+			t.Spec.NetworkPolicy = network.PolicyNone
+		}))
 
-		shown := Manifest(&r)
 		assert.Equal(t, []port.Port{}, shown.Spec.Ports)
 		assert.Equal(t, vmKind.Network{Ingress: vm.AccessDeny, Egress: vm.AccessDeny}, shown.Spec.Network)
-	})
-
-	t.Run("and one bound to ports serves those, once each", func(t *testing.T) {
-		t.Parallel()
-
-		r := run("run-uuid")
-		r.PortBindings = []port.PortMap{{8080: {{HostPort: 1}}}, {9090: {{HostPort: 2}}}}
-
-		assert.Equal(t, []port.Port{3000, 8080, 9090}, Manifest(&r).Spec.Ports)
 	})
 
 	t.Run("its state is its task's, in a vm's words", func(t *testing.T) {
 		t.Parallel()
 
-		for state, want := range map[task.State]kind.State{
-			task.Created:    vmKind.Created,
-			task.Scheduled:  vmKind.Scheduled,
-			task.Running:    vmKind.Running,
-			task.Stopping:   vmKind.Stopping,
-			task.Stopped:    vmKind.Stopped,
-			task.Completed:  vmKind.Stopped,
-			task.Failed:     vmKind.Failed,
-			task.Restarting: vmKind.Restarting,
+		for state, want := range map[kind.State]kind.State{
+			taskKind.Created:    vmKind.Created,
+			taskKind.Scheduled:  vmKind.Scheduled,
+			taskKind.Running:    vmKind.Running,
+			taskKind.Stopping:   vmKind.Stopping,
+			taskKind.Stopped:    vmKind.Stopped,
+			taskKind.Completed:  vmKind.Stopped,
+			taskKind.Failed:     vmKind.Failed,
+			taskKind.Restarting: vmKind.Restarting,
+			taskKind.Deleting:   vmKind.Deleting,
 		} {
-			r := run("run-uuid")
-			r.CurrentState = state
-			r.ExpectedState = state
-			r.Reason = "the task failed"
+			shown := runs.Manifest(run("run-uuid", func(t *taskKind.Task) {
+				t.Status.State = state
+				t.Status.Expected = state
+				t.Status.Reason = "the task failed"
+			}))
 
-			shown := Manifest(&r)
 			assert.Equal(t, want, shown.Status.State, "%s", state)
 			assert.Equal(t, want, shown.Status.Expected, "%s", state)
 			assert.Equal(t, "the task failed", shown.Status.Reason)
@@ -207,9 +208,7 @@ func TestManifest(t *testing.T) {
 	t.Run("and the vm it is shown as is the code runner's, the blog's way", func(t *testing.T) {
 		t.Parallel()
 
-		r := run("run-uuid")
-
-		shown := vmKind.Entity(Manifest(&r))
+		shown := vmKind.Entity(runs.Manifest(run("run-uuid")))
 		assert.Equal(t, vm.ManagedByCodeRunner, shown.ManagedBy)
 		assert.Equal(t, vm.KindMachine, shown.Kind)
 		assert.Equal(t, vm.Running, shown.CurrentState)
@@ -222,26 +221,28 @@ func TestRuns_All(t *testing.T) {
 
 	ctx := context.Background()
 
-	t.Run("every run is read, a batch at a time, newest first, and nobody else's task", func(t *testing.T) {
+	t.Run("every run, newest first, and nobody else's task, nor any vm", func(t *testing.T) {
 		t.Parallel()
 
-		var tasks []task.Task
-		for i := range int(batch) + 5 {
-			r := run(fmt.Sprintf("run-%03d", i))
-			r.CreatedAt = made.Add(time.Duration(i) * time.Second)
-			tasks = append(tasks, r)
+		var tasks []taskKind.Task
+		for i := range 105 {
+			tasks = append(tasks, run(fmt.Sprintf("run-%03d", i), func(t *taskKind.Task) {
+				t.Metadata.CreatedAt = made.Add(time.Duration(i) * time.Second)
+			}))
 		}
 
-		other := run("task-of-somebody")
-		other.OwnerUUID = "owner"
+		tasks = append(tasks, run("task-of-somebody", func(t *taskKind.Task) { t.Metadata.OwnerUUID = "owner" }))
 
-		all, err := runsOf(append(tasks, other)...).runs.All(ctx)
+		w := vmtest.New(vmtest.WithTasks(tasks...), vmtest.WithVMs(vmtest.Running("01", "owner")))
+
+		all, err := w.Runs.All(ctx)
 		require.NoError(t, err)
-		require.Len(t, all, int(batch)+5)
-		assert.Equal(t, fmt.Sprintf("run-%03d", batch+4), all[0].Metadata.UUID)
+		require.Len(t, all, 105)
+		assert.Equal(t, "run-104", all[0].Metadata.UUID)
 		assert.Equal(t, "run-000", all[len(all)-1].Metadata.UUID)
 
 		for _, shown := range all {
+			assert.Equal(t, vmKind.Name, shown.Kind)
 			assert.Equal(t, vmKind.ManagedByCodeRunner, shown.Metadata.Labels[vmKind.LabelManagedBy])
 		}
 	})
@@ -249,7 +250,9 @@ func TestRuns_All(t *testing.T) {
 	t.Run("of two made at once, the uuid that sorts last goes first", func(t *testing.T) {
 		t.Parallel()
 
-		all, err := runsOf(run("a"), run("c"), run("b")).runs.All(ctx)
+		w := vmtest.New(vmtest.WithTasks(run("a"), run("c"), run("b")))
+
+		all, err := w.Runs.All(ctx)
 		require.NoError(t, err)
 
 		uuids := make([]string, len(all))
@@ -266,21 +269,19 @@ func TestRuns_One(t *testing.T) {
 
 	ctx := context.Background()
 
-	other := run("task-of-somebody")
-	other.OwnerUUID = "owner"
+	w := vmtest.New(vmtest.WithTasks(run("run"), run("task-of-somebody", func(t *taskKind.Task) { t.Metadata.OwnerUUID = "owner" })))
 
-	f := runsOf(run("run"), other)
-
-	found, err := f.runs.One(ctx, "run")
+	found, err := w.Runs.One(ctx, "run")
 	require.NoError(t, err)
 	assert.Equal(t, "run", found.Metadata.UUID)
+	assert.Equal(t, vmKind.Name, found.Kind)
 
 	for name, uuid := range map[string]string{
 		"one that is not there":               "missing",
 		"a task that is not the guest's":      "task-of-somebody",
 		"nothing, which names nothing at all": "",
 	} {
-		_, err := f.runs.One(ctx, uuid)
+		_, err := w.Runs.One(ctx, uuid)
 		assert.ErrorIs(t, err, domain.ErrNotExists, name)
 	}
 }
@@ -290,21 +291,21 @@ func TestRuns_Act(t *testing.T) {
 
 	ctx := context.Background()
 
-	raw := func(t *testing.T, r task.Task) kind.Raw {
+	commands := func(t *testing.T, w *vmtest.Workload) []kind.Command {
 		t.Helper()
 
-		encoded, err := kind.Encode(Manifest(&r))
+		sent, err := messagingMock.Produced[kind.Command](w.Producer, kind.CommandName)
 		require.NoError(t, err)
 
-		return encoded
+		return sent
 	}
 
 	t.Run("a run stopped is its task stopped, which its node is asked to do", func(t *testing.T) {
 		t.Parallel()
 
-		f := runsOf(run("run"))
+		w := vmtest.New(vmtest.WithTasks(run("run")))
 
-		after, gone, refused, err := f.runs.Act(ctx, raw(t, run("run")), vmKind.ActionStop, nil)
+		after, gone, refused, err := w.Runs.Act(ctx, raw(t, run("run")), vmKind.ActionStop, nil)
 		require.NoError(t, err)
 		require.Empty(t, refused)
 		assert.False(t, gone)
@@ -314,53 +315,102 @@ func TestRuns_Act(t *testing.T) {
 		assert.Equal(t, vmKind.Stopping, stopping.Status.State)
 		assert.Equal(t, vmKind.Stopped, stopping.Status.Expected)
 
-		stored, _ := f.tasks.Stored("run")
-		assert.Equal(t, task.Stopping, stored.CurrentState)
-		assert.Equal(t, task.Stopped, stored.ExpectedState)
+		stored, record, _ := w.StoredTask("run")
+		assert.Equal(t, taskKind.Stopping, stored.Status.State)
+		assert.Equal(t, taskKind.Stopped, stored.Status.Expected)
+		require.NotNil(t, record.Pending)
+		assert.Equal(t, taskKind.ActionStop, record.Pending.Action)
 
-		var asked events.TaskStoppageRequested
-		require.True(t, f.producer.Last(events.TaskStoppageRequestedName, &asked))
-		assert.Equal(t, "run", asked.UUID)
+		sent := commands(t, w)
+		require.Len(t, sent, 1)
+		assert.Equal(t, taskKind.Name, sent[0].Kind)
+		assert.Equal(t, "run", sent[0].UUID)
+		assert.Equal(t, taskKind.ActionStop, sent[0].Action)
+		assert.Equal(t, vmtest.Node, sent[0].Node)
 	})
 
 	t.Run("one that cannot get there from where it is says so, and is to stop all the same", func(t *testing.T) {
 		t.Parallel()
 
-		stopping := run("run")
-		stopping.CurrentState = task.Stopping
+		stopping := run("run", func(t *taskKind.Task) { t.Status.State = taskKind.Stopping })
+		w := vmtest.New(vmtest.WithTasks(stopping))
 
-		f := runsOf(stopping)
-
-		_, _, refused, err := f.runs.Act(ctx, raw(t, stopping), vmKind.ActionStop, nil)
+		_, _, refused, err := w.Runs.Act(ctx, raw(t, stopping), vmKind.ActionStop, nil)
 		require.NoError(t, err)
 		assert.Equal(t, domain.ValidationErrors{"vm": "invalid_state_transition"}, refused)
-		assert.Empty(t, f.producer.Messages())
+		assert.Empty(t, w.Producer.Messages())
 
-		stored, _ := f.tasks.Stored("run")
-		assert.Equal(t, task.Stopped, stored.ExpectedState)
+		stored, _, _ := w.StoredTask("run")
+		assert.Equal(t, taskKind.Stopped, stored.Status.Expected)
 	})
 
-	t.Run("a run deleted is its task taken away", func(t *testing.T) {
+	t.Run("one being deleted is refused a stop, and is still to be deleted", func(t *testing.T) {
 		t.Parallel()
 
-		f := runsOf(run("run"))
+		w := vmtest.New(vmtest.WithTasks(run("run")))
 
-		_, gone, refused, err := f.runs.Act(ctx, raw(t, run("run")), vmKind.ActionDelete, nil)
+		_, _, refused, err := w.Runs.Act(ctx, raw(t, run("run")), vmKind.ActionDelete, nil)
+		require.NoError(t, err)
+		require.Empty(t, refused)
+
+		_, _, refused, err = w.Runs.Act(ctx, raw(t, run("run")), vmKind.ActionStop, nil)
+		require.NoError(t, err)
+		assert.Equal(t, domain.ValidationErrors{"vm": "invalid_state_transition"}, refused)
+
+		stored, _, _ := w.StoredTask("run")
+		assert.Equal(t, taskKind.Deleting, stored.Status.State)
+		assert.Equal(t, kind.Deleted, stored.Status.Expected)
+	})
+
+	t.Run("a run deleted is its task asked to be taken away, by its node", func(t *testing.T) {
+		t.Parallel()
+
+		w := vmtest.New(vmtest.WithTasks(run("run")))
+
+		after, gone, refused, err := w.Runs.Act(ctx, raw(t, run("run")), vmKind.ActionDelete, nil)
+		require.NoError(t, err)
+		require.Empty(t, refused)
+		assert.False(t, gone, "it goes once its node has taken it away")
+
+		deleting, err := kind.Decode[vmKind.Spec, vmKind.Status](after)
+		require.NoError(t, err)
+		assert.Equal(t, vmKind.Deleting, deleting.Status.State)
+
+		sent := commands(t, w)
+		require.Len(t, sent, 1)
+		assert.Equal(t, taskKind.ActionDelete, sent[0].Action)
+
+		_, _, refused, err = w.Runs.Act(ctx, raw(t, run("run")), vmKind.ActionDelete, nil)
+		require.NoError(t, err)
+		assert.Empty(t, refused)
+		assert.Len(t, commands(t, w), 1, "one being deleted is left to it")
+	})
+
+	t.Run("one on no node is gone at once, there being nothing anywhere to take away", func(t *testing.T) {
+		t.Parallel()
+
+		unplaced := run("run", func(t *taskKind.Task) {
+			t.Metadata.Node = ""
+			t.Status.State = taskKind.Created
+			t.Status.Run = nil
+		})
+		w := vmtest.New(vmtest.WithTasks(unplaced))
+
+		_, gone, refused, err := w.Runs.Act(ctx, raw(t, unplaced), vmKind.ActionDelete, nil)
 		require.NoError(t, err)
 		require.Empty(t, refused)
 		assert.True(t, gone)
 
-		_, kept := f.tasks.Stored("run")
+		_, _, kept := w.StoredTask("run")
 		assert.False(t, kept)
 	})
 
 	t.Run("one that went in the meantime is gone already", func(t *testing.T) {
 		t.Parallel()
 
-		f := runsOf(run("run"))
-		require.NoError(t, f.tasks.Delete(ctx, "run"))
+		w := vmtest.New()
 
-		_, _, _, err := f.runs.Act(ctx, raw(t, run("run")), vmKind.ActionDelete, nil)
+		_, _, _, err := w.Runs.Act(ctx, raw(t, run("run")), vmKind.ActionDelete, nil)
 		assert.ErrorIs(t, err, domain.ErrNotExists, "there is nothing to take away")
 	})
 
@@ -368,16 +418,16 @@ func TestRuns_Act(t *testing.T) {
 		t.Run("a run is refused a "+action, func(t *testing.T) {
 			t.Parallel()
 
-			f := runsOf(run("run"))
+			w := vmtest.New(vmtest.WithTasks(run("run")))
 
-			_, gone, refused, err := f.runs.Act(ctx, raw(t, run("run")), action, nil)
+			_, gone, refused, err := w.Runs.Act(ctx, raw(t, run("run")), action, nil)
 			require.NoError(t, err)
 			assert.False(t, gone)
-			assert.Equal(t, domain.ValidationErrors{"vm": CodeRefused}, refused)
-			assert.Empty(t, f.producer.Messages())
+			assert.Equal(t, domain.ValidationErrors{"vm": runs.CodeRefused}, refused)
+			assert.Empty(t, w.Producer.Messages())
 
-			stored, _ := f.tasks.Stored("run")
-			assert.Equal(t, task.Running, stored.CurrentState)
+			stored, _, _ := w.StoredTask("run")
+			assert.Equal(t, taskKind.Running, stored.Status.State)
 		})
 	}
 }
@@ -387,18 +437,13 @@ func TestRuns_Query(t *testing.T) {
 
 	ctx := context.Background()
 
-	r := run("run")
-	r.ExecutionLogs = []byte("hello\nbye\n")
-
-	encoded, err := kind.Encode(Manifest(&r))
-	require.NoError(t, err)
-
-	f := runsOf(r)
+	r := run("run", func(t *taskKind.Task) { t.Status.Run.Output = "hello\nbye\n" })
+	w := vmtest.New(vmtest.WithTasks(r))
 
 	t.Run("what a run wrote is its log", func(t *testing.T) {
 		t.Parallel()
 
-		answer, refused, err := f.runs.Query(ctx, encoded, vmKind.ActionLogs, []byte(`{"tail":1}`))
+		answer, refused, err := w.Runs.Query(ctx, raw(t, r), vmKind.ActionLogs, []byte(`{"tail":1}`))
 		require.NoError(t, err)
 		require.Empty(t, refused)
 
@@ -411,7 +456,7 @@ func TestRuns_Query(t *testing.T) {
 	t.Run("a payload that is not one is refused", func(t *testing.T) {
 		t.Parallel()
 
-		_, refused, err := f.runs.Query(ctx, encoded, vmKind.ActionLogs, []byte(`{"tail":"many"}`))
+		_, refused, err := w.Runs.Query(ctx, raw(t, r), vmKind.ActionLogs, []byte(`{"tail":"many"}`))
 		require.NoError(t, err)
 		assert.Equal(t, domain.ValidationErrors{"payload": "invalid_value"}, refused)
 	})
@@ -419,19 +464,19 @@ func TestRuns_Query(t *testing.T) {
 	t.Run("and nothing else is asked of one", func(t *testing.T) {
 		t.Parallel()
 
-		_, refused, err := f.runs.Query(ctx, encoded, vmKind.ActionStats, nil)
+		_, refused, err := w.Runs.Query(ctx, raw(t, r), vmKind.ActionStats, nil)
 		require.NoError(t, err)
-		assert.Equal(t, domain.ValidationErrors{"vm": CodeRefused}, refused)
+		assert.Equal(t, domain.ValidationErrors{"vm": runs.CodeRefused}, refused)
 	})
 }
 
 func TestLogs(t *testing.T) {
 	t.Parallel()
 
-	written := func(lines int) []byte {
-		var output []byte
+	written := func(lines int) string {
+		var output string
 		for i := range lines {
-			output = fmt.Appendf(output, "line %d\n", i)
+			output += fmt.Sprintf("line %d\n", i)
 		}
 
 		return output
@@ -440,23 +485,21 @@ func TestLogs(t *testing.T) {
 	t.Run("its output is its log, a line at a time, each a moment after the last", func(t *testing.T) {
 		t.Parallel()
 
-		r := run("run")
-		r.ExecutionLogs = []byte("hello\r\nhello\n\nbye")
+		r := run("run", func(t *taskKind.Task) { t.Status.Run.Output = "hello\r\nhello\n\nbye" })
 
 		assert.Equal(t, vmKind.Logs{Lines: []vmKind.LogLine{
 			{At: made, Source: vm.LogSourceMain, Line: "hello"},
 			{At: made.Add(1), Source: vm.LogSourceMain, Line: "hello"},
 			{At: made.Add(2), Source: vm.LogSourceMain, Line: ""},
 			{At: made.Add(3), Source: vm.LogSourceMain, Line: "bye"},
-		}}, Logs(&r, vmKind.LogsPayload{}))
+		}}, runs.Logs(r, vmKind.LogsPayload{}))
 	})
 
 	t.Run("nothing written is no lines", func(t *testing.T) {
 		t.Parallel()
 
-		r := run("run")
-
-		assert.Equal(t, vmKind.Logs{Lines: []vmKind.LogLine{}}, Logs(&r, vmKind.LogsPayload{}))
+		assert.Equal(t, vmKind.Logs{Lines: []vmKind.LogLine{}}, runs.Logs(run("run"), vmKind.LogsPayload{}))
+		assert.Equal(t, vmKind.Logs{Lines: []vmKind.LogLine{}}, runs.Logs(run("run", func(t *taskKind.Task) { t.Status.Run = nil }), vmKind.LogsPayload{}))
 	})
 
 	for name, tt := range map[string]struct {
@@ -495,10 +538,9 @@ func TestLogs(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			r := run("run")
-			r.ExecutionLogs = written(tt.written)
+			r := run("run", func(t *taskKind.Task) { t.Status.Run.Output = written(tt.written) })
 
-			logs := Logs(&r, tt.options)
+			logs := runs.Logs(r, tt.options)
 			require.Len(t, logs.Lines, tt.count)
 			assert.Equal(t, tt.first, logs.Lines[0].Line)
 			assert.Equal(t, tt.truncated, logs.Truncated)

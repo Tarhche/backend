@@ -1,28 +1,280 @@
 package heartbeat
 
 import (
+	"context"
+	"encoding/json"
+	"errors"
+	"log/slog"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/workload/kind"
+	taskKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/task"
+	nodeEvents "github.com/khanzadimahdi/testproject/domain/workload/node/events"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
-	"github.com/khanzadimahdi/testproject/domain/workload/task/events"
+	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
 )
+
+const ingressDomain = "workload.example.com"
+
+var started = time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC)
+
+// snippet is a run of a job the code runner asked for, as its node reports
+// it, in state, having written output.
+func snippet(state kind.State, output string, change ...func(s *taskKind.Status)) taskKind.Status {
+	s := taskKind.Status{
+		Status: kind.Status{State: state},
+		Run: &taskKind.Run{
+			ID:        "execution-1",
+			Name:      "request-id",
+			Slug:      "request-id-abcde",
+			Kind:      task.KindJob,
+			StartedAt: started,
+			Deadline:  started.Add(time.Minute),
+			Output:    output,
+		},
+	}
+
+	for _, c := range change {
+		c(&s)
+	}
+
+	return s
+}
+
+func watched(s *taskKind.Status) {
+	s.Run.Interactive = true
+	s.Run.Deadline = started.Add(2 * time.Minute)
+	s.Run.Endpoints = []taskKind.Endpoint{{Port: 3000, Address: "vmhost:20000"}, {Port: 8080, Address: "vmhost:20001"}}
+}
+
+// beat is a node's heartbeat saying what its tasks are doing, by uuid.
+func beat(t *testing.T, tasks map[string]taskKind.Status) []byte {
+	t.Helper()
+
+	report := kind.Report[json.RawMessage]{}
+	for uuid, status := range tasks {
+		encoded, err := json.Marshal(status)
+		require.NoError(t, err)
+
+		report.Instances = append(report.Instances, kind.Observation{Kind: taskKind.Name, UUID: uuid, Status: encoded})
+	}
+
+	payload, err := json.Marshal(nodeEvents.Heartbeat{
+		Name: "workload-orchestrator-01",
+		At:   started,
+		Observations: map[string]kind.Report[json.RawMessage]{
+			taskKind.Name: report,
+			"vm":          {Instances: []kind.Observation{{Kind: "vm", UUID: "vm-1", Status: json.RawMessage(`{"state":"running"}`)}}},
+		},
+	})
+	require.NoError(t, err)
+
+	return payload
+}
+
+func heard(t *testing.T, tasks map[string]taskKind.Status) []domain.Reply {
+	t.Helper()
+
+	var replyer messagingMock.RecordingReplyer
+
+	require.NoError(t, NewHeartbeatHandler(&replyer, ingressDomain, slog.New(slog.DiscardHandler)).Handle(context.Background(), beat(t, tasks)))
+
+	return replyer.Replies()
+}
+
+func answer(t *testing.T, reply domain.Reply) map[string]any {
+	t.Helper()
+
+	var fields map[string]any
+	require.NoError(t, json.Unmarshal(reply.Payload, &fields))
+
+	return fields
+}
+
+func TestHeartbeat_Handle(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a snippet nobody is watching is answered once it ends, with what it printed", func(t *testing.T) {
+		t.Parallel()
+
+		replies := heard(t, map[string]taskKind.Status{"task-uuid": snippet(taskKind.Completed, "hello from e2e\n")})
+		require.Len(t, replies, 1)
+
+		assert.Equal(t, "request-id", replies[0].RequestID)
+		assert.Equal(t, domain.ReplyFinal, replies[0].Kind)
+
+		var response Response
+		require.NoError(t, json.Unmarshal(replies[0].Payload, &response))
+		assert.Equal(t, Response{TaskUUID: "task-uuid", Name: "request-id", Logs: []byte("hello from e2e\n"), State: "completed"}, response)
+	})
+
+	t.Run("and what its program exited with says whether it failed", func(t *testing.T) {
+		t.Parallel()
+
+		replies := heard(t, map[string]taskKind.Status{"task-uuid": snippet(taskKind.Failed, "still going\n⏰ Execution timed out after 30 seconds\n", func(s *taskKind.Status) {
+			s.Reason = "the task failed"
+			s.Run.ExitCode = 124
+		})})
+		require.Len(t, replies, 1)
+
+		var response Response
+		require.NoError(t, json.Unmarshal(replies[0].Payload, &response))
+		assert.Equal(t, "failed", response.State)
+		assert.Equal(t, "still going\n⏰ Execution timed out after 30 seconds\n", string(response.Logs))
+		assert.Empty(t, response.Error, "a snippet that ran speaks through its own output")
+	})
+
+	t.Run("one still running is not answered yet", func(t *testing.T) {
+		t.Parallel()
+
+		assert.Empty(t, heard(t, map[string]taskKind.Status{"task-uuid": snippet(taskKind.Running, "hel")}))
+	})
+
+	t.Run("one that printed nothing says so as nothing", func(t *testing.T) {
+		t.Parallel()
+
+		replies := heard(t, map[string]taskKind.Status{"task-uuid": snippet(taskKind.Completed, "")})
+		require.Len(t, replies, 1)
+		assert.Nil(t, answer(t, replies[0])["logs"])
+	})
+
+	t.Run("a snippet somebody is watching is told what it does as it does it, and where it is reached", func(t *testing.T) {
+		t.Parallel()
+
+		replies := heard(t, map[string]taskKind.Status{"task-uuid": snippet(taskKind.Running, "listening\n", watched)})
+		require.Len(t, replies, 1)
+		assert.Equal(t, domain.ReplyChunk, replies[0].Kind)
+
+		var response Response
+		require.NoError(t, json.Unmarshal(replies[0].Payload, &response))
+
+		deadline := started.Add(2 * time.Minute)
+		assert.Equal(t, Response{
+			TaskUUID: "task-uuid",
+			Name:     "request-id",
+			Logs:     []byte("listening\n"),
+			State:    "running",
+			Endpoints: []Endpoint{
+				{TaskPort: 3000, URL: "http://request-id-abcde-3000." + ingressDomain},
+				{TaskPort: 8080, URL: "http://request-id-abcde-8080." + ingressDomain},
+			},
+			Deadline: &deadline,
+		}, response)
+	})
+
+	t.Run("and its last answer says it ended, with nothing left to reach", func(t *testing.T) {
+		t.Parallel()
+
+		replies := heard(t, map[string]taskKind.Status{"task-uuid": snippet(taskKind.Completed, "bye\n", watched)})
+		require.Len(t, replies, 1)
+		assert.Equal(t, domain.ReplyEOF, replies[0].Kind)
+
+		fields := answer(t, replies[0])
+		assert.Equal(t, "completed", fields["state"])
+		assert.NotContains(t, fields, "endpoints")
+		assert.NotContains(t, fields, "deadline")
+	})
+
+	t.Run("a service is somebody's task, not a request anybody made", func(t *testing.T) {
+		t.Parallel()
+
+		assert.Empty(t, heard(t, map[string]taskKind.Status{"task-uuid": snippet(taskKind.Stopped, "", func(s *taskKind.Status) { s.Run.Kind = task.KindService })}))
+	})
+
+	t.Run("nor is one with no run, no name, or nothing to say yet", func(t *testing.T) {
+		t.Parallel()
+
+		assert.Empty(t, heard(t, map[string]taskKind.Status{
+			"no-run":    {Status: kind.Status{State: taskKind.Completed}},
+			"no-name":   snippet(taskKind.Completed, "", func(s *taskKind.Status) { s.Run.Name = "" }),
+			"no-saying": snippet("", "", watched),
+		}))
+	})
+
+	t.Run("an end is answered once, however many beats go on saying it", func(t *testing.T) {
+		t.Parallel()
+
+		var replyer messagingMock.RecordingReplyer
+		handler := NewHeartbeatHandler(&replyer, ingressDomain, slog.New(slog.DiscardHandler))
+
+		ended := beat(t, map[string]taskKind.Status{"task-uuid": snippet(taskKind.Completed, "hello\n")})
+		watchedEnded := beat(t, map[string]taskKind.Status{"live-uuid": snippet(taskKind.Completed, "bye\n", watched, func(s *taskKind.Status) { s.Run.Name = "request-live" })})
+		watchedRunning := beat(t, map[string]taskKind.Status{"live-uuid": snippet(taskKind.Running, "", watched, func(s *taskKind.Status) { s.Run.Name = "request-live" })})
+
+		for _, payload := range [][]byte{watchedRunning, watchedRunning, ended, ended, watchedEnded, ended, watchedEnded} {
+			require.NoError(t, handler.Handle(context.Background(), payload))
+		}
+
+		var kinds []domain.ReplyKind
+		for _, reply := range replyer.Replies() {
+			kinds = append(kinds, reply.Kind)
+		}
+
+		assert.Equal(t, []domain.ReplyKind{domain.ReplyChunk, domain.ReplyChunk, domain.ReplyFinal, domain.ReplyEOF}, kinds, "every beat of one running, and each end once")
+
+		handler.now = func() time.Time { return time.Now().Add(forgetEndedAfter + time.Minute) }
+		handler.answerEnd("another-uuid")
+		assert.False(t, handler.answeredEnd("task-uuid"), "an end answered long ago is let go of")
+	})
+
+	t.Run("one whose answer could not be sent is answered again at the next beat", func(t *testing.T) {
+		t.Parallel()
+
+		replyer := messagingMock.RecordingReplyer{Fail: errors.New("the reply bus is down")}
+		handler := NewHeartbeatHandler(&replyer, ingressDomain, slog.New(slog.DiscardHandler))
+
+		ended := beat(t, map[string]taskKind.Status{"task-uuid": snippet(taskKind.Completed, "hello\n")})
+
+		assert.Error(t, handler.Handle(context.Background(), ended))
+		assert.False(t, handler.answeredEnd("task-uuid"))
+	})
+
+	t.Run("every snippet a beat speaks of is answered", func(t *testing.T) {
+		t.Parallel()
+
+		replies := heard(t, map[string]taskKind.Status{
+			"task-1": snippet(taskKind.Completed, "one\n", func(s *taskKind.Status) { s.Run.Name = "request-1" }),
+			"task-2": snippet(taskKind.Completed, "two\n", func(s *taskKind.Status) { s.Run.Name = "request-2" }),
+		})
+
+		requests := make([]string, len(replies))
+		for i := range replies {
+			requests[i] = replies[i].RequestID
+		}
+
+		assert.ElementsMatch(t, []string{"request-1", "request-2"}, requests)
+	})
+
+	t.Run("a beat that cannot be read is let go of, and one that speaks of no task says nothing", func(t *testing.T) {
+		t.Parallel()
+
+		var replyer messagingMock.RecordingReplyer
+		handler := NewHeartbeatHandler(&replyer, ingressDomain, slog.New(slog.DiscardHandler))
+
+		assert.NoError(t, handler.Handle(context.Background(), []byte("{")))
+
+		payload, err := json.Marshal(nodeEvents.Heartbeat{Name: "workload-orchestrator-01"})
+		require.NoError(t, err)
+		assert.NoError(t, handler.Handle(context.Background(), payload))
+
+		assert.Empty(t, replyer.Replies())
+	})
+}
 
 func TestDeadline(t *testing.T) {
 	t.Parallel()
 
-	ends := time.Now().Add(90 * time.Second)
+	ends := started.Add(90 * time.Second)
 
 	t.Run("a snippet somebody is watching says when it will be stopped", func(t *testing.T) {
 		t.Parallel()
 
-		at := deadline(&events.Heartbeat{
-			Interactive: true,
-			Deadline:    ends,
-		}, task.Running)
+		at := deadline(&taskKind.Run{Interactive: true, Deadline: ends}, taskKind.Running)
 
 		require.NotNil(t, at)
 		assert.Equal(t, ends, *at)
@@ -31,21 +283,18 @@ func TestDeadline(t *testing.T) {
 	t.Run("a snippet nobody is watching is answered once and counts down to nothing", func(t *testing.T) {
 		t.Parallel()
 
-		assert.Nil(t, deadline(&events.Heartbeat{Deadline: ends}, task.Running))
+		assert.Nil(t, deadline(&taskKind.Run{Deadline: ends}, taskKind.Running))
 	})
 
 	t.Run("a snippet that is no longer running has nothing left", func(t *testing.T) {
 		t.Parallel()
 
-		assert.Nil(t, deadline(&events.Heartbeat{
-			Interactive: true,
-			Deadline:    ends,
-		}, task.Completed))
+		assert.Nil(t, deadline(&taskKind.Run{Interactive: true, Deadline: ends}, taskKind.Completed))
 	})
 
 	t.Run("a task that may run for as long as it likes has no deadline", func(t *testing.T) {
 		t.Parallel()
 
-		assert.Nil(t, deadline(&events.Heartbeat{Interactive: true}, task.Running))
+		assert.Nil(t, deadline(&taskKind.Run{Interactive: true}, taskKind.Running))
 	})
 }

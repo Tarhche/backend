@@ -14,6 +14,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/workload/kind"
+	taskKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/task"
 	"github.com/khanzadimahdi/testproject/domain/workload/network"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
@@ -197,45 +199,45 @@ func TestRuntime_Inspect(t *testing.T) {
 
 		wantStatus   task.Status
 		wantExitCode int
-		wantState    task.State
+		wantState    kind.State
 	}{
 		{
 			name:       "a run whose command is running is running",
 			end:        func(*testing.T, *memory.Engine, string) {},
 			wantStatus: task.StatusRunning,
-			wantState:  task.Running,
+			wantState:  taskKind.Running,
 		},
 		{
 			name:       "a job whose command succeeded has completed",
 			end:        func(t *testing.T, e *memory.Engine, id string) { require.NoError(t, e.Exit(id, 0)) },
 			wantStatus: task.StatusExited,
-			wantState:  task.Completed,
+			wantState:  taskKind.Completed,
 		},
 		{
 			name:         "a job whose command failed has failed, with what it returned",
 			end:          func(t *testing.T, e *memory.Engine, id string) { require.NoError(t, e.Exit(id, 3)) },
 			wantStatus:   task.StatusExited,
 			wantExitCode: 3,
-			wantState:    task.Failed,
+			wantState:    taskKind.Failed,
 		},
 		{
 			name:         "a job killed without being told how was cut short rather than failed",
 			end:          func(t *testing.T, e *memory.Engine, id string) { require.NoError(t, e.Exit(id, -1)) },
 			wantStatus:   task.StatusExited,
 			wantExitCode: 137,
-			wantState:    task.Completed,
+			wantState:    taskKind.Completed,
 		},
 		{
 			name:       "a run stopped from outside has ended",
 			end:        func(t *testing.T, e *memory.Engine, id string) { require.NoError(t, e.Stop(t.Context(), id)) },
 			wantStatus: task.StatusExited,
-			wantState:  task.Completed,
+			wantState:  taskKind.Completed,
 		},
 		{
 			name:       "a run whose VM failed has failed",
 			end:        func(t *testing.T, e *memory.Engine, id string) { require.NoError(t, e.Fail(id, "the kernel panicked")) },
 			wantStatus: task.StatusDead,
-			wantState:  task.Failed,
+			wantState:  taskKind.Failed,
 		},
 	}
 
@@ -257,7 +259,7 @@ func TestRuntime_Inspect(t *testing.T) {
 
 			assert.Equal(t, tt.wantStatus, execution.Status)
 			assert.Equal(t, tt.wantExitCode, execution.ExitCode)
-			assert.Equal(t, tt.wantState, task.EvaluateState(execution.Status, execution.Kind, execution.ExitCode))
+			assert.Equal(t, tt.wantState, taskKind.StateOf(execution.Status, execution.Kind, execution.ExitCode))
 
 			// what it is running reads back as it was written.
 			assert.Equal(t, id, execution.ID)

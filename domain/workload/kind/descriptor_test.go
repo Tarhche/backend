@@ -71,6 +71,18 @@ func TestDescriptor_Permissions(t *testing.T) {
 			assert.Equal(t, tt.self, self, "self")
 		})
 	}
+
+	t.Run("a kind asked under another kind's permissions is asked under that kind's plural", func(t *testing.T) {
+		t.Parallel()
+
+		d := box()
+		d.PermissionsOf = "vms"
+
+		admin, self := d.Permissions("manage")
+
+		assert.Equal(t, "workload.vms.manage", admin)
+		assert.Equal(t, "self.workload.vms.manage", self)
+	})
 }
 
 func TestExecutor_IsValid(t *testing.T) {
