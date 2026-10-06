@@ -1,5 +1,6 @@
-// Package getEndpoint says where the port of a VM, or of a code-runner task,
-// this node holds can be reached.
+// Package getEndpoint says where the port of a code-runner task this node
+// holds can be reached. A VM's ports are the vm kind's (its Exposer), served
+// under the kind's plural.
 package getEndpoint
 
 import (
@@ -11,14 +12,12 @@ import (
 
 // UseCase finds an endpoint by the slug a hostname carries.
 //
-// VMs and tasks both run as instances of this node's engine, labelled with
-// their slug, and slugs are unique across the two, so one lookup answers for
-// either. Only the engine knows where a port is published, and it is asked
-// every time, since what it says changes when an instance is reconfigured or
-// restored. A port is reachable only when it is one of the instance's
-// endpoints: the engine publishes the ports a VM was given and nothing else,
-// and nothing at all of one whose ingress is denied, so a port that is not
-// there is not exposed, whatever the request asks for.
+// A task runs as an instance of this node's engine, labelled with its slug.
+// Only the engine knows where a port is published, and it is asked every
+// time. A port is reachable only when it is one of the instance's endpoints:
+// the engine publishes the ports an instance was given and nothing else, and
+// nothing at all of one whose ingress is denied, so a port that is not there
+// is not exposed, whatever the request asks for.
 type UseCase struct {
 	engine vm.Engine
 }
@@ -54,9 +53,10 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 	return &Response{Port: endpoint.Port, Address: endpoint.Address}, nil
 }
 
-// bySlug is the VM or task answering to slug. A task may have more than one
+// bySlug is the task answering to slug. A task may have more than one
 // instance — a retry is a new one beside what is left of the last — and the
-// one running is the one to reach.
+// one running is the one to reach. A VM is not reached here, whatever its
+// slug.
 func bySlug(instances []vm.Instance, slug string) (vm.Instance, bool) {
 	var (
 		held  vm.Instance
@@ -68,9 +68,7 @@ func bySlug(instances []vm.Instance, slug string) (vm.Instance, bool) {
 			continue
 		}
 
-		switch instance.Labels[vm.LabelPurpose] {
-		case vm.PurposeVM, vm.PurposeTask:
-		default:
+		if instance.Labels[vm.LabelPurpose] != vm.PurposeTask {
 			continue
 		}
 
@@ -83,8 +81,8 @@ func bySlug(instances []vm.Instance, slug string) (vm.Instance, bool) {
 }
 
 // pick is the endpoint of the port a hostname asked for, or of the lowest one
-// exposed when it named none, which is what a VM or a task with a single port
-// needs no port in its name for.
+// exposed when it named none, which is what a task with a single port needs
+// no port in its name for.
 func pick(endpoints []vm.Endpoint, requested port.Port) (vm.Endpoint, bool) {
 	var (
 		picked vm.Endpoint

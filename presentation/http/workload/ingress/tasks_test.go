@@ -14,11 +14,15 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	ingressVMs "github.com/khanzadimahdi/testproject/application/workload/ingress/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
+	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
+	"github.com/khanzadimahdi/testproject/domain/workload/resource"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
+	resourcesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/resources"
 )
 
 const testDomain = "workload.localhost"
@@ -91,50 +95,25 @@ func newNode(t *testing.T, handler http.Handler) *node {
 	return n
 }
 
-// fakeVMResolver stands in for the VM repository: which node is holding which
-// VM.
-type fakeVMResolver struct {
-	vms map[string]vm.VM
-}
-
-func (r *fakeVMResolver) GetOneBySlug(_ context.Context, slug string) (vm.VM, error) {
-	v, ok := r.vms[slug]
-	if !ok {
-		return vm.VM{}, domain.ErrNotExists
-	}
-
-	return v, nil
-}
-
-func (r *fakeVMResolver) GetOne(_ context.Context, uuid string) (vm.VM, error) {
-	for _, v := range r.vms {
-		if v.UUID == uuid {
-			return v, nil
-		}
-	}
-
-	return vm.VM{}, domain.ErrNotExists
-}
-
 // ingressFor builds the handler the way the provider does, with a transport
 // that stands for the tunnel: the address names a node, and what comes back is
 // a connection to the one standing in for it.
 func ingressFor(t *testing.T, resolver Resolver, nodes map[string]*node) *taskHandler {
 	t.Helper()
 
-	return ingressWithVMs(t, resolver, &fakeVMResolver{}, nodes)
+	return ingressWithKinds(t, resolver, nil, nodes)
 }
 
-// ingressWithVMs is ingressFor with VMs to find as well as tasks.
-func ingressWithVMs(t *testing.T, resolver Resolver, vms VMResolver, nodes map[string]*node) *taskHandler {
+// ingressWithVMs is ingressFor with VMs to find as well as tasks, as the vm
+// kind's ingress strategy finds them in the records kept of them.
+func ingressWithVMs(t *testing.T, resolver Resolver, vms []vmKind.VM, nodes map[string]*node) *taskHandler {
 	t.Helper()
 
-	return ingressWithKinds(t, resolver, vms, nil, nodes)
+	return ingressWithKinds(t, resolver, vmsIn(t, vms...), nodes)
 }
 
-// ingressWithKinds is ingressWithVMs with the resources of kinds to find as
-// well.
-func ingressWithKinds(t *testing.T, resolver Resolver, vms VMResolver, kinds *kind.Registry[kind.IngressBinding], nodes map[string]*node) *taskHandler {
+// ingressWithKinds is ingressFor with the resources of kinds to find as well.
+func ingressWithKinds(t *testing.T, resolver Resolver, kinds *kind.Registry[kind.IngressBinding], nodes map[string]*node) *taskHandler {
 	t.Helper()
 
 	connected := make(connectedWorkloads, len(nodes))
@@ -155,7 +134,23 @@ func ingressWithKinds(t *testing.T, resolver Resolver, vms VMResolver, kinds *ki
 		},
 	}
 
-	return NewTaskHandler(resolver, vms, kinds, connected, transport, testDomain, slog.New(slog.DiscardHandler))
+	return NewTaskHandler(resolver, kinds, connected, transport, testDomain, slog.New(slog.DiscardHandler))
+}
+
+// vmsIn is the vm kind registered as the ingress registers it, finding vms
+// in the records the control plane keeps of them.
+func vmsIn(t *testing.T, vms ...vmKind.VM) *kind.Registry[kind.IngressBinding] {
+	t.Helper()
+
+	records := make([]resource.Record, len(vms))
+	for i := range vms {
+		raw, err := kind.Encode(vms[i])
+		require.NoError(t, err)
+
+		records[i] = resource.Record{Raw: raw}
+	}
+
+	return finding(t, kind.BindIngress(vmKind.Descriptor(), ingressVMs.New(resourcesMemory.NewRepository(records...))))
 }
 
 func held(slug string, nodeName string) task.Task {
@@ -437,30 +432,37 @@ func TestWaitingPage(t *testing.T) {
 }
 
 // exposing is a running VM whose ports are reached through the ingress.
-func exposing(slug string, nodeName string, ports ...port.Port) vm.VM {
-	return vm.VM{
-		UUID:         "vm-" + slug,
-		Slug:         slug,
-		Ports:        ports,
-		Network:      vm.Network{Ingress: vm.AccessAllow, Egress: vm.AccessAllow},
-		CurrentState: vm.Running,
-		NodeName:     nodeName,
+func exposing(slug string, nodeName string, ports ...port.Port) vmKind.VM {
+	return vmKind.VM{
+		Kind:     vmKind.Name,
+		Metadata: kind.Metadata{UUID: "vm-" + slug, Slug: slug, Node: nodeName},
+		Spec: vmKind.Spec{
+			Flavor:  vmKind.FlavorMachine,
+			Ports:   ports,
+			Network: vmKind.Network{Ingress: vm.AccessAllow, Egress: vm.AccessAllow},
+		},
+		Status: vmKind.Status{Status: kind.Status{State: vmKind.Running, Expected: vmKind.Running}},
 	}
 }
 
+// changed is v as change leaves it.
+func changed(v vmKind.VM, change func(v *vmKind.VM)) vmKind.VM {
+	change(&v)
+
+	return v
+}
+
 func TestTaskHandler_VMs(t *testing.T) {
-	t.Run("a vm's port is reached through the node holding it", func(t *testing.T) {
+	t.Run("a vm's port is reached through the node holding it, on the vms' route", func(t *testing.T) {
 		n := newNode(t, http.HandlerFunc(func(rw http.ResponseWriter, _ *http.Request) {
 			io.WriteString(rw, "answered by the vm")
 		}))
-
-		vms := &fakeVMResolver{vms: map[string]vm.VM{"box-xkfqz": exposing("box-xkfqz", "workload-orchestrator-02", 80, 8080)}}
 
 		rw := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "/index.html?a=1", nil)
 		request.Host = "box-xkfqz-8080." + testDomain
 
-		ingressWithVMs(t, &fakeResolver{}, vms, map[string]*node{"workload-orchestrator-02": n}).ServeHTTP(rw, request)
+		ingressWithVMs(t, &fakeResolver{}, []vmKind.VM{exposing("box-xkfqz", "workload-orchestrator-02", 80, 8080)}, map[string]*node{"workload-orchestrator-02": n}).ServeHTTP(rw, request)
 
 		assert.Equal(t, http.StatusOK, rw.Code)
 		assert.Equal(t, "answered by the vm", rw.Body.String())
@@ -471,39 +473,45 @@ func TestTaskHandler_VMs(t *testing.T) {
 		assert.Equal(t, "box-xkfqz-8080."+testDomain, n.host)
 	})
 
-	t.Run("a vm is found before a task", func(t *testing.T) {
+	t.Run("a bare hostname asks the node for the lowest port the vm exposes", func(t *testing.T) {
 		n := newNode(t, http.NotFoundHandler())
-
-		resolver := &fakeResolver{tasks: map[string]task.Task{"same-xkfqz": held("same-xkfqz", "workload-orchestrator-09")}}
-		vms := &fakeVMResolver{vms: map[string]vm.VM{"same-xkfqz": exposing("same-xkfqz", "workload-orchestrator-01", 80)}}
 
 		rw := httptest.NewRecorder()
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
-		request.Host = "same-xkfqz." + testDomain
+		request.Host = "box-xkfqz." + testDomain
 
-		ingressWithVMs(t, resolver, vms, map[string]*node{"workload-orchestrator-01": n}).ServeHTTP(rw, request)
+		ingressWithVMs(t, &fakeResolver{}, []vmKind.VM{exposing("box-xkfqz", "workload-orchestrator-01", 80)}, map[string]*node{"workload-orchestrator-01": n}).ServeHTTP(rw, request)
 
-		assert.Equal(t, "same-xkfqz", n.slug, "the vm's node was asked")
+		assert.Equal(t, "box-xkfqz", n.slug, "the vm's node was asked")
 		assert.Equal(t, "0", n.port, "the node picks the lowest port the vm exposes")
 	})
 
 	for name, tt := range map[string]struct {
-		vm     vm.VM
+		vm     vmKind.VM
 		host   string
 		status int
 		says   string
 	}{
 		"a vm that lets nothing in is not there": {
-			vm: func() vm.VM {
-				v := exposing("box-xkfqz", "workload-orchestrator-01", 80)
-				v.Network.Ingress = vm.AccessDeny
-				return v
-			}(),
+			vm:     changed(exposing("box-xkfqz", "workload-orchestrator-01", 80), func(v *vmKind.VM) { v.Spec.Network.Ingress = vm.AccessDeny }),
+			host:   "box-xkfqz-80",
+			status: http.StatusNotFound,
+		},
+		"nor is one that lets nothing in and is not running": {
+			vm: changed(exposing("box-xkfqz", "workload-orchestrator-01", 80), func(v *vmKind.VM) {
+				v.Spec.Network.Ingress = vm.AccessDeny
+				v.Status.State = vmKind.Stopped
+			}),
 			host:   "box-xkfqz",
 			status: http.StatusNotFound,
 		},
 		"a port a vm does not expose is not there": {
 			vm:     exposing("box-xkfqz", "workload-orchestrator-01", 80),
+			host:   "box-xkfqz-22",
+			status: http.StatusNotFound,
+		},
+		"nor is one a vm that is not running does not expose": {
+			vm:     changed(exposing("box-xkfqz", "workload-orchestrator-01", 80), func(v *vmKind.VM) { v.Status.State = vmKind.Stopped }),
 			host:   "box-xkfqz-22",
 			status: http.StatusNotFound,
 		},
@@ -513,14 +521,10 @@ func TestTaskHandler_VMs(t *testing.T) {
 			status: http.StatusNotFound,
 		},
 		"a vm that is not running is unavailable": {
-			vm: func() vm.VM {
-				v := exposing("box-xkfqz", "workload-orchestrator-01", 80)
-				v.CurrentState = vm.Stopped
-				return v
-			}(),
-			host:   "box-xkfqz",
+			vm:     changed(exposing("box-xkfqz", "workload-orchestrator-01", 80), func(v *vmKind.VM) { v.Status.State = vmKind.Stopped }),
+			host:   "box-xkfqz-80",
 			status: http.StatusServiceUnavailable,
-			says:   "not running",
+			says:   "the vm is not running",
 		},
 		"a vm on no node is unavailable": {
 			vm:     exposing("box-xkfqz", "", 80),
@@ -536,13 +540,11 @@ func TestTaskHandler_VMs(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			vms := &fakeVMResolver{vms: map[string]vm.VM{"box-xkfqz": tt.vm}}
-
 			rw := httptest.NewRecorder()
 			request := httptest.NewRequest(http.MethodGet, "/", nil)
 			request.Host = tt.host + "." + testDomain
 
-			ingressWithVMs(t, &fakeResolver{}, vms, map[string]*node{"workload-orchestrator-01": newNode(t, http.NotFoundHandler())}).ServeHTTP(rw, request)
+			ingressWithVMs(t, &fakeResolver{}, []vmKind.VM{tt.vm}, map[string]*node{"workload-orchestrator-01": newNode(t, http.NotFoundHandler())}).ServeHTTP(rw, request)
 
 			assert.Equal(t, tt.status, rw.Code)
 			assert.Contains(t, rw.Body.String(), tt.says)

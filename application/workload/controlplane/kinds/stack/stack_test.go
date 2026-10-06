@@ -7,23 +7,17 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/stack"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/records"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/vmtest"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/slugs"
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/createVM"
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/dockerVM"
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/vmtest"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
-	"github.com/khanzadimahdi/testproject/domain/workload/port"
-	"github.com/khanzadimahdi/testproject/domain/workload/task"
-	"github.com/khanzadimahdi/testproject/domain/workload/vm"
-	tasksMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/tasks"
-	"github.com/khanzadimahdi/testproject/infrastructure/translator"
-	"github.com/khanzadimahdi/testproject/infrastructure/validator"
+	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
+	"github.com/khanzadimahdi/testproject/domain/workload/resource"
 )
 
 const compose = `
@@ -37,16 +31,11 @@ services:
 // strategyOf is the stack kind's control-plane strategy over w's VMs, with
 // slugs nobody holds unless taken says.
 func strategyOf(w *vmtest.Workload, taken ...string) *stack.Stacks {
-	tasks := &tasksMock.MockTasksRepository{}
-	tasks.On("GetOneBySlug", mock.Anything, mock.Anything).Return(task.Task{}, domain.ErrNotExists)
+	return strategyOver(w, w.Records, taken...)
+}
 
-	create := createVM.NewUseCase(w.VMs, tasks, w.Snapshots, w.Quota, w.Lifecycle, validator.New(translator.Codes{}), createVM.Images{Machine: "ubuntu:24.04", Docker: "docker:29-dind"})
-	chooser := dockerVM.NewChooser(w.VMs, create, w.Lifecycle, dockerVM.Defaults{
-		Resources: vm.Resources{CPUs: 2, Memory: 2 * vmtest.GiB, Disk: 20 * vmtest.GiB},
-		Ports:     []port.Port{80},
-		Network:   vm.Network{Ingress: vm.AccessAllow, Egress: vm.AccessAllow},
-	})
-
+// strategyOver is strategyOf reading the VMs from vms.
+func strategyOver(w *vmtest.Workload, vms *records.Records, taken ...string) *stack.Stacks {
 	held := func(_ context.Context, slug string) (bool, error) {
 		for _, t := range taken {
 			if strings.HasPrefix(slug, t) {
@@ -57,7 +46,16 @@ func strategyOf(w *vmtest.Workload, taken ...string) *stack.Stacks {
 		return false, nil
 	}
 
-	return stack.New(w.VMs, chooser, slugs.Taken(held))
+	return stack.New(vms, w.Chooser, slugs.Taken(held))
+}
+
+// unreadable is a store of resources that cannot be read.
+type unreadable struct {
+	resource.Repository
+}
+
+func (unreadable) GetOne(context.Context, string, string) (resource.Record, error) {
+	return resource.Record{}, errors.New("the database is gone")
 }
 
 // asked is a stack somebody asks for, as admission is handed one.
@@ -108,11 +106,11 @@ func TestStacks_Admit(t *testing.T) {
 		assert.True(t, admitted.Spec.VM.Created())
 		assert.Equal(t, "builds", admitted.Spec.VM.New.Name)
 
-		made, err := w.VMs.GetOne(ctx, admitted.Spec.VM.UUID)
-		require.NoError(t, err)
-		assert.Equal(t, "builds", made.Name)
-		assert.Equal(t, vm.KindDocker, made.Kind)
-		assert.Equal(t, vm.Resources{CPUs: 2, Memory: 4 * vmtest.GiB, Disk: 20 * vmtest.GiB}, made.Resources)
+		made, kept := w.Stored(admitted.Spec.VM.UUID)
+		require.True(t, kept)
+		assert.Equal(t, "builds", made.Metadata.Name)
+		assert.Equal(t, vmKind.FlavorDocker, made.Spec.Flavor)
+		assert.Equal(t, vmKind.Resources{CPUs: 2, Memory: 4 * vmtest.GiB, Disk: 20 * vmtest.GiB}, made.Spec.Resources)
 
 		assert.Equal(t, stackKind.Waiting, admitted.Status.State)
 		assert.Equal(t, "its vm is scheduled", admitted.Status.Reason)
@@ -156,8 +154,7 @@ func TestStacks_Admit(t *testing.T) {
 	t.Run("one into a docker vm that is not coming up is refused", func(t *testing.T) {
 		t.Parallel()
 
-		stopped := vmtest.Docker("01", "owner")
-		stopped.CurrentState = vm.Stopped
+		stopped := vmtest.In(vmtest.Docker("01", "owner"), func(v *vmKind.VM) { v.Status.State = vmKind.Stopped })
 
 		w := vmtest.New(vmtest.WithVMs(stopped))
 
@@ -210,9 +207,7 @@ func TestStacks_Admit(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, invalid)
 
-			count, err := w.VMs.Count(ctx)
-			require.NoError(t, err)
-			assert.Zero(t, count)
+			assert.Zero(t, w.Memory.Len(vmKind.Name))
 		})
 	}
 
@@ -229,8 +224,7 @@ func TestStacks_Reconcile(t *testing.T) {
 
 	ctx := context.Background()
 
-	stopped := vmtest.Docker("stopped", "owner")
-	stopped.CurrentState = vm.Stopped
+	stopped := vmtest.In(vmtest.Docker("stopped", "owner"), func(v *vmKind.VM) { v.Status.State = vmKind.Stopped })
 
 	w := vmtest.New(vmtest.WithVMs(vmtest.Docker("running", "owner"), stopped))
 	stacks := strategyOf(w)
@@ -283,9 +277,8 @@ func TestStacks_Reconcile(t *testing.T) {
 		t.Parallel()
 
 		w := vmtest.New()
-		w.VMs.Fail = errors.New("the database is gone")
 
-		_, err := strategyOf(w).Reconcile(ctx, in("running", stackKind.Waiting, stackKind.Running))
+		_, err := strategyOver(w, records.New(unreadable{w.Resources})).Reconcile(ctx, in("running", stackKind.Waiting, stackKind.Running))
 		assert.Error(t, err)
 	})
 }

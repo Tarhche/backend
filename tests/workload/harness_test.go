@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -17,7 +18,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/presenter"
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/cascade"
 	kindsReconcile "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/reconcile"
 	controlPlaneHeartbeatNode "github.com/khanzadimahdi/testproject/application/workload/controlplane/node/heartbeatNode"
 	orchestratorHeartbeat "github.com/khanzadimahdi/testproject/application/workload/orchestrator/beatHeart"
@@ -30,13 +30,11 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	providers "github.com/khanzadimahdi/testproject/infrastructure/ioc/providers/workload"
-	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/core/request"
 	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/jetstream/produceConsumer"
 	nodesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/nodes"
 	resourcesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/resources"
 	snapshotsMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/snapshots"
 	tasksMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/tasks"
-	vmsMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/vms"
 	logsMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/logs"
 	storageMemory "github.com/khanzadimahdi/testproject/infrastructure/storage/memory"
 	"github.com/khanzadimahdi/testproject/infrastructure/translator"
@@ -88,12 +86,16 @@ type workload struct {
 	dockerd  *dockerd
 	archives *storageMemory.Storage
 
-	// what the control plane keeps: the resources of every kind, stacks
-	// among them, beside what it keeps of VMs.
-	vms       *vmsMemory.Repository
-	snapshots *snapshotsMemory.Repository
+	// what the control plane keeps: the resources of every kind, VMs and
+	// stacks among them, the snapshots of VMs, the nodes, and the tasks.
 	resources *resourcesMemory.Repository
+	snapshots *snapshotsMemory.Repository
 	nodes     *nodesMemory.Repository
+	tasks     *tasksMemory.Repository
+
+	// beating says whether the node says what it holds: a node that stops
+	// is one the control plane hears nothing more from.
+	beating atomic.Bool
 
 	// the blog's side of it.
 	client     workloadControlPlane.Client
@@ -102,12 +104,28 @@ type workload struct {
 	owners     *presenter.Directory
 }
 
+// option is how a test's workload differs from every other's.
+type option func(*kindsReconcile.Config)
+
+// silentAfter has the control plane give up on a node that has said nothing
+// for this long, rather than for as long as it does when served.
+func silentAfter(d time.Duration) option {
+	return func(config *kindsReconcile.Config) {
+		config.NodeSilentAfter = d
+	}
+}
+
 // start runs a workload until the test ends.
-func start(t *testing.T) *workload {
+func start(t *testing.T, options ...option) *workload {
 	t.Helper()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	logger := slog.New(slog.DiscardHandler)
+
+	reconcileConfig := patience
+	for _, option := range options {
+		option(&reconcileConfig)
+	}
 
 	natsURL := natsServer(t)
 
@@ -116,14 +134,16 @@ func start(t *testing.T) *workload {
 	w := &workload{
 		dockerd:    newDockerd(t),
 		archives:   storageMemory.New(),
-		vms:        vmsMemory.NewRepository(),
-		snapshots:  snapshotsMemory.NewRepository(),
 		resources:  resourcesMemory.NewRepository(),
+		snapshots:  snapshotsMemory.NewRepository(),
 		nodes:      nodesMemory.NewRepository(),
+		tasks:      tasksMemory.NewRepository(),
 		translator: english,
 		validator:  validator.New(english),
 		owners:     presenter.NewDirectory(people{}),
 	}
+
+	w.beating.Store(true)
 
 	// docker is there only in a Docker VM, as it is on a node: a machine VM
 	// has no such command.
@@ -156,7 +176,7 @@ func start(t *testing.T) *workload {
 
 	nodeEngine := throughVMHost(t, w.engine, logger)
 
-	node, err := providers.NewOrchestratorVMs(providers.OrchestratorVMDependencies{
+	node, err := providers.NewOrchestratorWorkload(providers.OrchestratorDependencies{
 		NATS:      nodeConnection,
 		Engine:    nodeEngine,
 		Archives:  w.archives,
@@ -168,8 +188,8 @@ func start(t *testing.T) *workload {
 	})
 	require.NoError(t, err)
 
-	// the node's heartbeat, which says what every kind it runs holds on it,
-	// as its serve command beats it.
+	// the node's heartbeat, which says what it offers and what every kind it
+	// runs holds on it, VMs among them, as its serve command beats it.
 	nodeHeartbeat := orchestratorHeartbeat.NewUseCase(nodeMessages, infraNode.NewManager(nodeEngine), node.Kinds, time.Second, nodeName, logger)
 
 	// the control plane: its API is what the blog's client calls, and what
@@ -179,35 +199,18 @@ func start(t *testing.T) *workload {
 	controlPlaneMessages, err := produceConsumer.NewProduceConsumer(controlPlaneConnection, "workload-controlplane", logger)
 	require.NoError(t, err)
 
-	registry, err := providers.NewControlPlaneRegistry()
-	require.NoError(t, err)
-
-	controlPlane, err := providers.NewControlPlaneVMs(configs.NewWorkloadControlPlane(), providers.ControlPlaneVMStores{
-		VMs:       w.vms,
+	controlPlane, err := providers.NewControlPlaneWorkload(configs.NewWorkloadControlPlane(), providers.ControlPlaneStores{
+		Resources: w.resources,
 		Snapshots: w.snapshots,
-		Children:  cascade.New(registry, w.resources),
 		Nodes:     w.nodes,
-		Tasks:     tasksMemory.NewRepository(),
+		Tasks:     w.tasks,
 		TaskLogs:  logsMock.NewInMemoryRepository(),
 		Archives:  w.archives,
-	}, controlPlaneConnection, controlPlaneMessages, logger)
+	}, controlPlaneConnection, controlPlaneMessages, logger, providers.WithReconcileConfig(reconcileConfig))
 	require.NoError(t, err)
 
-	require.NoError(t, providers.RegisterControlPlaneKinds(registry, controlPlane, w.resources))
-
-	kinds := providers.NewControlPlaneKinds(
-		registry,
-		providers.ControlPlaneKindStores{Resources: w.resources, Nodes: w.nodes},
-		request.NewRequester(controlPlaneConnection, settle, settle),
-		controlPlaneMessages,
-		logger,
-		providers.WithParents(controlPlane.Parents),
-		providers.WithReconcileConfig(patience),
-	)
-
 	mux := http.NewServeMux()
-	controlPlane.Route(mux)
-	require.NoError(t, kinds.Route(mux))
+	require.NoError(t, controlPlane.Route(mux))
 
 	api := httptest.NewServer(mux)
 
@@ -220,11 +223,7 @@ func start(t *testing.T) *workload {
 		require.NoError(t, controlPlaneMessages.Consume(ctx, subject, handler))
 	}
 
-	for subject, handler := range kinds.Subscribers {
-		require.NoError(t, controlPlaneMessages.Consume(ctx, subject, handler))
-	}
-
-	require.NoError(t, controlPlaneMessages.Consume(ctx, nodeEvents.HeartbeatName, controlPlaneHeartbeatNode.NewHeartbeatHandler(w.nodes, kinds.Observer)))
+	require.NoError(t, controlPlaneMessages.Consume(ctx, nodeEvents.HeartbeatName, controlPlaneHeartbeatNode.NewHeartbeatHandler(w.nodes, controlPlane.Observer)))
 
 	for subject, handler := range node.Subscribers {
 		require.NoError(t, nodeMessages.Consume(ctx, subject, handler))
@@ -232,16 +231,15 @@ func start(t *testing.T) *workload {
 
 	require.NoError(t, node.Responder.Serve(ctx, noderequest.Subject(nodeName)))
 
-	beats := every(ctx, beat, func() { _ = node.Heartbeat.Execute(ctx) })
-	nodeBeats := every(ctx, beat, func() { _ = nodeHeartbeat.Execute(ctx) })
-	reconciles := every(ctx, 4*beat, func() {
-		_ = controlPlane.Reconcile.Execute(ctx)
-		_ = kinds.Reconcile.Execute(ctx)
+	nodeBeats := every(ctx, beat, func() {
+		if w.beating.Load() {
+			_ = nodeHeartbeat.Execute(ctx)
+		}
 	})
+	reconciles := every(ctx, 4*beat, func() { _ = controlPlane.Reconcile.Execute(ctx) })
 
 	t.Cleanup(func() {
 		cancel()
-		<-beats
 		<-nodeBeats
 		<-reconciles
 
@@ -254,9 +252,9 @@ func start(t *testing.T) *workload {
 
 	// the control plane places VMs on nodes that have said what they offer.
 	require.Eventually(t, func() bool {
-		_, err := w.nodes.GetOne(ctx, nodeName)
+		n, err := w.nodes.GetOne(ctx, nodeName)
 
-		return err == nil
+		return err == nil && n.Capacity.Memory > 0
 	}, settle, beat, "the node never said what it offers")
 
 	return w

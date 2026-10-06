@@ -10,7 +10,6 @@ import (
 
 	"github.com/khanzadimahdi/testproject/domain/workload/docker"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
-	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
 
 // travel sends a value the way a request or a reply does, and reads it back.
@@ -36,16 +35,6 @@ func dockerFilter() docker.ContainerFilter {
 // value.
 func TestPayloads(t *testing.T) {
 	t.Parallel()
-
-	t.Run("a vm's log", func(t *testing.T) {
-		t.Parallel()
-
-		options := vm.LogOptions{Since: at, Tail: 100}
-		assert.Equal(t, options, travel(t, NewLogsRequest(options)).ToVM())
-
-		line := vm.LogLine{At: at, Source: vm.LogSourceMain, Line: "hello"}
-		assert.Equal(t, line, travel(t, NewVMLogLine(line)).ToVM())
-	})
 
 	t.Run("a listing of containers", func(t *testing.T) {
 		t.Parallel()

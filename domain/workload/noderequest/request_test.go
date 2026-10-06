@@ -26,7 +26,7 @@ func TestOp(t *testing.T) {
 		docker  bool
 		mayPull bool
 	}{
-		OpVMLogs:                     {valid: true},
+		"vm.logs":                    {valid: false},
 		OpPing:                       {valid: true, docker: true},
 		OpContainersList:             {valid: true, docker: true},
 		OpContainersInspect:          {valid: true, docker: true},

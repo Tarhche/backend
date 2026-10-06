@@ -14,7 +14,7 @@ func TestOp(t *testing.T) {
 	t.Parallel()
 
 	assert.Equal(t, noderequest.Op("stack.state"), Op("stack", "state"))
-	assert.Equal(t, noderequest.OpVMLogs, Op("vm", "logs"), "a VM's log is asked as it always was")
+	assert.Equal(t, noderequest.Op("vm.logs"), Op("vm", "logs"), "a VM's log is asked as it always was")
 }
 
 func TestParseOp(t *testing.T) {
@@ -26,7 +26,7 @@ func TestParseOp(t *testing.T) {
 		ok     bool
 	}{
 		"stack.state":                {kind: "stack", action: "state", ok: true},
-		noderequest.OpVMLogs:         {kind: "vm", action: "logs", ok: true},
+		"vm.logs":                    {kind: "vm", action: "logs", ok: true},
 		noderequest.OpContainersList: {},
 		"stack":                      {},
 		"stack.":                     {},

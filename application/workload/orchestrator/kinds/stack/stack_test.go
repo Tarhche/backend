@@ -17,6 +17,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/docker"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
+	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	"github.com/khanzadimahdi/testproject/infrastructure/workload/vm/memory"
 )
@@ -211,7 +212,7 @@ func (f *fixture) vm(t *testing.T, uuid string, isDocker bool) {
 	kindOf := vm.KindMachine
 
 	if isDocker {
-		labels[docker.LabelVM] = "true"
+		labels[vmKind.LabelDocker] = "true"
 		kindOf = vm.KindDocker
 	}
 

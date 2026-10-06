@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 
+	ingressVMs "github.com/khanzadimahdi/testproject/application/workload/ingress/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
+	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 )
 
 // ingressKinds are the kinds the ingress finds the resources of, each
@@ -14,13 +16,15 @@ import (
 // served under their slugs, and those with streams, such as a terminal. That
 // is all it takes for the ingress to route them.
 //
-// A stack has neither: its ports are its Docker VM's, and so is its terminal,
-// so the ingress finds none of it. VMs and tasks are found by their own
-// lookups until their kinds take them over, each with one line here.
-func ingressKinds() (*kind.Registry[kind.IngressBinding], error) {
+// A VM has both, and is found by its record, which records keeps. A stack has
+// neither: its ports are its Docker VM's, and so is its terminal, so the
+// ingress finds none of it. Tasks are found by their own lookups until their
+// kind takes them over, with one line here.
+func ingressKinds(records ingressVMs.Records) (*kind.Registry[kind.IngressBinding], error) {
 	kinds := kind.NewRegistry[kind.IngressBinding]()
 
 	for _, binding := range []kind.IngressBinding{
+		kind.BindIngress(vmKind.Descriptor(), ingressVMs.New(records)),
 		kind.BindIngress(stackKind.Descriptor(), unreached{kind: stackKind.Name}),
 	} {
 		if err := kinds.Register(binding); err != nil {

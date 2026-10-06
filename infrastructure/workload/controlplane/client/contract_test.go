@@ -17,15 +17,14 @@ import (
 	getcontainers "github.com/khanzadimahdi/testproject/application/workload/controlplane/container/getContainers"
 	requestdocker "github.com/khanzadimahdi/testproject/application/workload/controlplane/docker/requestDocker"
 	actonresource "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/actOnResource"
-	admitresource "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/admitResource"
 	deleteresource "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/deleteResource"
-	kindsdispatch "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/dispatch"
 	getkinds "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/getKinds"
 	getresource "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/getResource"
 	getresources "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/getResources"
 	queryresource "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/queryResource"
 	controlplanestacks "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/stack"
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/waiters"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/runs"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/vmtest"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/slugs"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/snapshot/archive"
 	createsnapshot "github.com/khanzadimahdi/testproject/application/workload/controlplane/snapshot/createSnapshot"
@@ -33,24 +32,12 @@ import (
 	getsnapshot "github.com/khanzadimahdi/testproject/application/workload/controlplane/snapshot/getSnapshot"
 	getsnapshots "github.com/khanzadimahdi/testproject/application/workload/controlplane/snapshot/getSnapshots"
 	renamesnapshot "github.com/khanzadimahdi/testproject/application/workload/controlplane/snapshot/renameSnapshot"
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/coderunner"
-	createvm "github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/createVM"
-	deletevm "github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/deleteVM"
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/dockerVM"
-	getvm "github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/getVM"
-	getvmlogs "github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/getVMLogs"
-	getvms "github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/getVMs"
-	restartvm "github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/restartVM"
-	restorevm "github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/restoreVM"
-	startvm "github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/startVM"
-	stopvm "github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/stopVM"
-	updatevm "github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/updateVM"
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/vmtest"
 	"github.com/khanzadimahdi/testproject/domain"
 	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/domain/workload/docker"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
+	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
@@ -59,7 +46,6 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
-	resourcesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/resources"
 	"github.com/khanzadimahdi/testproject/infrastructure/translator"
 	"github.com/khanzadimahdi/testproject/infrastructure/validator"
 	"github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane/client"
@@ -67,7 +53,6 @@ import (
 	dockerAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/controlplane/api/docker"
 	kindsAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/controlplane/api/kinds"
 	snapshotAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/controlplane/api/snapshot"
-	vmAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/controlplane/api/vm"
 )
 
 // node answers what the control plane asks of it the way a node does: every
@@ -81,8 +66,8 @@ func node() *messagingMock.Requester {
 			result = []noderequest.Container{{ID: "c1", Name: "web", Image: "nginx:1.27", State: "running", Stack: "web-abcde", Service: "web"}}
 		case noderequest.OpContainersCreate:
 			result = noderequest.Container{ID: "c2", Name: "api", Image: "nginx:1.27", State: "running"}
-		case noderequest.OpVMLogs:
-			result = []noderequest.VMLogLine{{At: time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC), Source: vm.LogSourceKernel, Line: "booted"}}
+		case kind.Op(vmKind.Name, vmKind.ActionLogs):
+			result = vmKind.Logs{Lines: []vmKind.LogLine{{At: time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC), Source: vm.LogSourceKernel, Line: "booted"}}}
 		case noderequest.OpContainersInspect:
 			return noderequest.Failed(domain.ErrNotExists), nil
 		default:
@@ -96,63 +81,44 @@ func node() *messagingMock.Requester {
 }
 
 // controlPlane is the control plane's API, wired the way its provider wires
-// it, over memory repositories and a node that answers.
+// it, over memory repositories and a node that answers: VMs and stacks are
+// kinds, served by the resource API every kind is, and a VM's snapshots and
+// the containers in Docker VMs are served as they were.
 func controlPlane(t *testing.T, w *vmtest.Workload) *client.Client {
 	t.Helper()
 
 	logger := slog.New(slog.DiscardHandler)
 	codes := validator.New(translator.Codes{})
 	requester := node()
-
-	createVM := createvm.NewUseCase(w.VMs, w.Tasks, w.Snapshots, w.Quota, w.Lifecycle, codes, createvm.Images{Machine: "ubuntu:24.04", Docker: "docker:29-dind"})
-	chooser := dockerVM.NewChooser(w.VMs, createVM, w.Lifecycle, dockerVM.Defaults{
-		Resources: vm.Resources{CPUs: 2, Memory: 2 * vmtest.GiB, Disk: 20 * vmtest.GiB},
-		Ports:     []port.Port{80},
-		Network:   vm.Network{Ingress: vm.AccessAllow, Egress: vm.AccessAllow},
-	})
 	remover := archive.NewRemover(nil, logger)
 
-	mux := http.NewServeMux()
-	mux.Handle("GET /api/vms", vmAPI.NewIndexHandler(getvms.NewUseCase(w.VMs, w.Runs)))
-	mux.Handle("POST /api/vms", vmAPI.NewCreateHandler(createVM))
-	mux.Handle("GET /api/vms/{uuid}", vmAPI.NewShowHandler(getvm.NewUseCase(w.VMs, w.Runs)))
-	mux.Handle("PATCH /api/vms/{uuid}", vmAPI.NewUpdateHandler(updatevm.NewUseCase(w.VMs, w.Runs, w.Quota, w.Placement, w.Lifecycle, codes)))
-	mux.Handle("DELETE /api/vms/{uuid}", vmAPI.NewDeleteHandler(deletevm.NewUseCase(w.VMs, w.Runs, w.Lifecycle, codes)))
-	mux.Handle("POST /api/vms/{uuid}/start", vmAPI.NewStartHandler(startvm.NewUseCase(w.VMs, w.Runs, w.Lifecycle, codes)))
-	mux.Handle("POST /api/vms/{uuid}/stop", vmAPI.NewStopHandler(stopvm.NewUseCase(w.VMs, w.Runs, w.Lifecycle, codes)))
-	mux.Handle("POST /api/vms/{uuid}/restart", vmAPI.NewRestartHandler(restartvm.NewUseCase(w.VMs, w.Runs, w.Lifecycle, codes)))
-	mux.Handle("POST /api/vms/{uuid}/restore", vmAPI.NewRestoreHandler(restorevm.NewUseCase(w.VMs, w.Runs, w.Snapshots, w.Nodes, w.Lifecycle, w.Commander, codes)))
-	mux.Handle("GET /api/vms/{uuid}/logs", vmAPI.NewLogsHandler(getvmlogs.NewUseCase(w.VMs, w.Runs, requester, codes)))
-	mux.Handle("GET /api/snapshots", snapshotAPI.NewIndexHandler(getsnapshots.NewUseCase(w.Snapshots)))
-	mux.Handle("POST /api/vms/{uuid}/snapshots", snapshotAPI.NewCreateHandler(createsnapshot.NewUseCase(w.VMs, w.Runs, w.Snapshots, w.Lifecycle, w.Producer, codes, 10)))
-	mux.Handle("GET /api/snapshots/{uuid}", snapshotAPI.NewShowHandler(getsnapshot.NewUseCase(w.Snapshots)))
-	mux.Handle("PATCH /api/snapshots/{uuid}", snapshotAPI.NewRenameHandler(renamesnapshot.NewUseCase(w.Snapshots, codes)))
-	mux.Handle("DELETE /api/snapshots/{uuid}", snapshotAPI.NewDeleteHandler(deletesnapshot.NewUseCase(w.Snapshots, w.VMs, w.Lifecycle, remover, codes)))
-	mux.Handle("POST /api/vms/{uuid}/docker/{op}", dockerAPI.NewRequestHandler(requestdocker.NewUseCase(w.VMs, requester, codes)))
-	mux.Handle("GET /api/containers", containerAPI.NewIndexHandler(getcontainers.NewUseCase(w.VMs, requester, logger)))
-	mux.Handle("POST /api/containers", containerAPI.NewCreateHandler(createcontainer.NewUseCase(w.VMs, chooser, requester, codes)))
-
-	// stacks are a kind, served by the resource API every kind is.
-	resources := resourcesMemory.NewRepository()
-
-	registry := kind.NewRegistry[kind.ControlPlaneBinding]()
-	require.NoError(t, registry.Register(kind.BindControlPlane[stackKind.Spec, stackKind.Status](
+	// stacks live in Docker VMs, registered after them as the control plane
+	// registers them.
+	require.NoError(t, w.Registry.Register(kind.BindControlPlane[stackKind.Spec, stackKind.Status](
 		stackKind.Descriptor(),
-		controlplanestacks.New(w.VMs, chooser, slugs.By(func(ctx context.Context, slug string) (resource.Record, error) {
-			return resources.GetOneBySlug(ctx, stackKind.Name, slug)
+		controlplanestacks.New(w.Records, w.Chooser, slugs.By(func(ctx context.Context, slug string) (resource.Record, error) {
+			return w.Memory.GetOneBySlug(ctx, stackKind.Name, slug)
 		})),
 	)))
 
-	dispatcher := kindsdispatch.New(resources, w.Producer, waiters.New(), nil)
+	mux := http.NewServeMux()
+	mux.Handle("GET /api/snapshots", snapshotAPI.NewIndexHandler(getsnapshots.NewUseCase(w.Snapshots)))
+	mux.Handle("POST /api/vms/{uuid}/snapshots", snapshotAPI.NewCreateHandler(createsnapshot.NewUseCase(w.Entities, w.Runs, w.Snapshots, w.Placement, w.Producer, codes, 10)))
+	mux.Handle("GET /api/snapshots/{uuid}", snapshotAPI.NewShowHandler(getsnapshot.NewUseCase(w.Snapshots)))
+	mux.Handle("PATCH /api/snapshots/{uuid}", snapshotAPI.NewRenameHandler(renamesnapshot.NewUseCase(w.Snapshots, codes)))
+	mux.Handle("DELETE /api/snapshots/{uuid}", snapshotAPI.NewDeleteHandler(deletesnapshot.NewUseCase(w.Snapshots, w.Entities, w.Placement, remover, codes)))
+	mux.Handle("POST /api/vms/{uuid}/docker/{op}", dockerAPI.NewRequestHandler(requestdocker.NewUseCase(w.Entities, requester, codes)))
+	mux.Handle("GET /api/containers", containerAPI.NewIndexHandler(getcontainers.NewUseCase(w.Entities, requester, logger)))
+	mux.Handle("POST /api/containers", containerAPI.NewCreateHandler(createcontainer.NewUseCase(w.Entities, w.Chooser, requester, codes)))
 
-	require.NoError(t, kindsAPI.Route(mux, registry.Descriptors(), kindsAPI.UseCases{
-		Admit:  admitresource.NewUseCase(registry, resources, dispatcher, logger),
-		Act:    actonresource.NewUseCase(registry, resources, dispatcher, logger),
-		Delete: deleteresource.NewUseCase(registry, resources, dispatcher),
-		Get:    getresource.NewUseCase(registry, resources),
-		List:   getresources.NewUseCase(registry, resources),
-		Query:  queryresource.NewUseCase(registry, resources, requester, nil, nil),
-		Kinds:  getkinds.NewUseCase(registry),
+	require.NoError(t, kindsAPI.Route(mux, w.Registry.Descriptors(), kindsAPI.UseCases{
+		Admit:  w.Admit,
+		Act:    actonresource.NewUseCase(w.Registry, w.Resources, w.Dispatcher, logger),
+		Delete: deleteresource.NewUseCase(w.Registry, w.Resources, w.Dispatcher),
+		Get:    getresource.NewUseCase(w.Registry, w.Resources),
+		List:   getresources.NewUseCase(w.Registry, w.Resources),
+		Query:  queryresource.NewUseCase(w.Registry, w.Resources, requester, nil, nil),
+		Kinds:  getkinds.NewUseCase(w.Registry),
 	}))
 
 	server := httptest.NewServer(mux)
@@ -228,13 +194,11 @@ func TestContract_VMs(t *testing.T) {
 	require.ErrorAs(t, err, &refused)
 	assert.Equal(t, domain.ValidationErrors{"vm": "not_running"}, refused.ValidationErrors)
 
-	// its node lists it, and has a log of it from then on.
-	listed, err := w.VMs.GetOne(ctx, created.UUID)
-	require.NoError(t, err)
-
-	listed.LastHeartbeatAt = time.Now()
-	_, err = w.VMs.Save(ctx, &listed)
-	require.NoError(t, err)
+	// its node made it, and has a log of it from then on.
+	w.Change(created.UUID, func(v *vmKind.VM) {
+		v.Status.State = vmKind.Running
+		v.Status.ObservedAt = time.Now()
+	})
 
 	lines, err := c.VMLogs(ctx, "owner", created.UUID, vm.LogOptions{Tail: 10})
 	require.NoError(t, err)
@@ -296,11 +260,11 @@ func TestContract_Runs(t *testing.T) {
 
 	err = c.StartVM(ctx, "", "run")
 	require.ErrorAs(t, err, &refused)
-	assert.Equal(t, domain.ValidationErrors{"vm": coderunner.CodeRefused}, refused.ValidationErrors)
+	assert.Equal(t, domain.ValidationErrors{"vm": runs.CodeRefused}, refused.ValidationErrors)
 
 	_, err = c.UpdateVM(ctx, "", "run", workloadControlPlane.VMUpdate{Name: new("renamed")})
 	require.ErrorAs(t, err, &refused)
-	assert.Equal(t, domain.ValidationErrors{"vm": coderunner.CodeRefused}, refused.ValidationErrors)
+	assert.Equal(t, domain.ValidationErrors{"vm": runs.CodeRefused}, refused.ValidationErrors)
 
 	require.NoError(t, c.StopVM(ctx, "", "run"))
 

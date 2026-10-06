@@ -19,7 +19,6 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
-	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
 
 // Lamps and kettles are the kinds these tests find: a lamp has a terminal
@@ -141,7 +140,7 @@ func TestTaskHandler_Kinds(t *testing.T) {
 		request := httptest.NewRequest(http.MethodGet, "/index.html?a=1", nil)
 		request.Host = "desk-xkfqz-8080." + testDomain
 
-		ingressWithKinds(t, &fakeResolver{}, &fakeVMResolver{}, finding(t, kind.BindIngress(kindNamed("lamp", true, true), lamps)), map[string]*node{"workload-orchestrator-02": n}).ServeHTTP(rw, request)
+		ingressWithKinds(t, &fakeResolver{}, finding(t, kind.BindIngress(kindNamed("lamp", true, true), lamps)), map[string]*node{"workload-orchestrator-02": n}).ServeHTTP(rw, request)
 
 		assert.Equal(t, http.StatusOK, rw.Code)
 		assert.Equal(t, "answered by the lamp", rw.Body.String())
@@ -161,42 +160,27 @@ func TestTaskHandler_Kinds(t *testing.T) {
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
 		request.Host = "desk-xkfqz." + testDomain
 
-		ingressWithKinds(t, &fakeResolver{}, &fakeVMResolver{}, finding(t, kind.BindIngress(kindNamed("lamp", true, true), lamps)), map[string]*node{"workload-orchestrator-01": n}).ServeHTTP(rw, request)
+		ingressWithKinds(t, &fakeResolver{}, finding(t, kind.BindIngress(kindNamed("lamp", true, true), lamps)), map[string]*node{"workload-orchestrator-01": n}).ServeHTTP(rw, request)
 
 		assert.Equal(t, "lamps", n.route)
 		assert.Equal(t, "0", n.port, "the node picks the lowest one the lamp exposes")
 	})
 
-	t.Run("today's VMs and tasks are looked for first, and a kind is not asked", func(t *testing.T) {
-		for name, tt := range map[string]struct {
-			tasks map[string]task.Task
-			vms   map[string]vm.VM
-			route string
-		}{
-			"a vm": {
-				vms:   map[string]vm.VM{"same-xkfqz": exposing("same-xkfqz", "workload-orchestrator-01", 80)},
-				route: "vms",
-			},
-			"a task": {
-				tasks: map[string]task.Task{"same-xkfqz": held("same-xkfqz", "workload-orchestrator-01")},
-				route: "tasks",
-			},
-		} {
-			t.Run(name, func(t *testing.T) {
-				n := newNode(t, http.NotFoundHandler())
+	t.Run("a task is looked for first, and a kind is not asked", func(t *testing.T) {
+		n := newNode(t, http.NotFoundHandler())
 
-				lamps := &locating{name: "lamp", bySlug: map[string]found{"same-xkfqz": {location: lampAt("workload-orchestrator-01", 80)}}}
+		lamps := &locating{name: "lamp", bySlug: map[string]found{"same-xkfqz": {location: lampAt("workload-orchestrator-01", 80)}}}
 
-				rw := httptest.NewRecorder()
-				request := httptest.NewRequest(http.MethodGet, "/", nil)
-				request.Host = "same-xkfqz." + testDomain
+		rw := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, "/", nil)
+		request.Host = "same-xkfqz." + testDomain
 
-				ingressWithKinds(t, &fakeResolver{tasks: tt.tasks}, &fakeVMResolver{vms: tt.vms}, finding(t, kind.BindIngress(kindNamed("lamp", true, true), lamps)), map[string]*node{"workload-orchestrator-01": n}).ServeHTTP(rw, request)
+		resolver := &fakeResolver{tasks: map[string]task.Task{"same-xkfqz": held("same-xkfqz", "workload-orchestrator-01")}}
 
-				assert.Equal(t, tt.route, n.route)
-				assert.Empty(t, lamps.wasAsked())
-			})
-		}
+		ingressWithKinds(t, resolver, finding(t, kind.BindIngress(kindNamed("lamp", true, true), lamps)), map[string]*node{"workload-orchestrator-01": n}).ServeHTTP(rw, request)
+
+		assert.Equal(t, "tasks", n.route)
+		assert.Empty(t, lamps.wasAsked())
 	})
 
 	t.Run("kinds are asked in the order they were registered, past those with nothing by the slug", func(t *testing.T) {
@@ -211,7 +195,7 @@ func TestTaskHandler_Kinds(t *testing.T) {
 
 		kinds := finding(t, kind.BindIngress(kindNamed("kettle", true, false), kettles), kind.BindIngress(kindNamed("lamp", true, true), lamps))
 
-		ingressWithKinds(t, &fakeResolver{}, &fakeVMResolver{}, kinds, map[string]*node{"workload-orchestrator-01": n}).ServeHTTP(rw, request)
+		ingressWithKinds(t, &fakeResolver{}, kinds, map[string]*node{"workload-orchestrator-01": n}).ServeHTTP(rw, request)
 
 		assert.Equal(t, "lamps", n.route)
 		assert.Equal(t, []string{"desk-xkfqz"}, kettles.wasAsked(), "the kettles were asked first")
@@ -225,7 +209,7 @@ func TestTaskHandler_Kinds(t *testing.T) {
 		request := httptest.NewRequest(http.MethodGet, "/", nil)
 		request.Host = "desk-xkfqz." + testDomain
 
-		ingressWithKinds(t, &fakeResolver{}, &fakeVMResolver{}, finding(t, kind.BindIngress(kindNamed("bulb", false, true), bulbs)), nil).ServeHTTP(rw, request)
+		ingressWithKinds(t, &fakeResolver{}, finding(t, kind.BindIngress(kindNamed("bulb", false, true), bulbs)), nil).ServeHTTP(rw, request)
 
 		assert.Equal(t, http.StatusNotFound, rw.Code)
 		assert.Empty(t, bulbs.wasAsked())
@@ -278,7 +262,7 @@ func TestTaskHandler_Kinds(t *testing.T) {
 			request := httptest.NewRequest(http.MethodGet, "/", nil)
 			request.Host = tt.host + "." + testDomain
 
-			ingressWithKinds(t, &fakeResolver{}, &fakeVMResolver{}, finding(t, kind.BindIngress(kindNamed("lamp", true, true), lamps)), map[string]*node{"workload-orchestrator-01": newNode(t, http.NotFoundHandler())}).ServeHTTP(rw, request)
+			ingressWithKinds(t, &fakeResolver{}, finding(t, kind.BindIngress(kindNamed("lamp", true, true), lamps)), map[string]*node{"workload-orchestrator-01": newNode(t, http.NotFoundHandler())}).ServeHTTP(rw, request)
 
 			assert.Equal(t, tt.status, rw.Code)
 			assert.Contains(t, rw.Body.String(), tt.says)
@@ -369,18 +353,17 @@ func TestRouteKinds(t *testing.T) {
 		}
 	})
 
-	t.Run("the VMs' and the tasks' own routes are left as they are", func(t *testing.T) {
+	t.Run("the tasks' own routes are left as they are", func(t *testing.T) {
 		connected, transport := tunnelTo(nil)
 
 		own := http.HandlerFunc(func(rw http.ResponseWriter, _ *http.Request) { rw.WriteHeader(http.StatusTeapot) })
 
 		mux := http.NewServeMux()
 		mux.Handle("GET /tasks/{uuid}/attach", own)
-		mux.Handle("GET /vms/{uuid}/attach", own)
 
 		require.NoError(t, RouteKinds(mux, finding(t, kind.BindIngress(kindNamed("lamp", true, true), &locating{name: "lamp"})), connected, transport, logger))
 
-		for _, path := range []string{"/tasks/task-uuid/attach", "/vms/vm-uuid/attach"} {
+		for _, path := range []string{"/tasks/task-uuid/attach"} {
 			rw := httptest.NewRecorder()
 			mux.ServeHTTP(rw, httptest.NewRequest(http.MethodGet, path, nil))
 

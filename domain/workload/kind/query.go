@@ -14,10 +14,11 @@ import (
 // It travels as a node request, on the subject every node already answers
 // on (noderequest.Subject), rather than on a subject of its own:
 //
-//   - its Op is the kind and the action, "stack.state", the way "vm.logs"
-//     already is. A kind's name and an action's have no dot in them, so an op
-//     splits back into the two at its one dot, and the Docker passthrough's
-//     "docker.containers.list", which has two, is never mistaken for a kind's;
+//   - its Op is the kind and the action, "stack.state" or "vm.logs", the
+//     way a VM's log was asked before VMs were a kind. A kind's name and an
+//     action's have no dot in them, so an op splits back into the two at its
+//     one dot, and the Docker passthrough's "docker.containers.list", which
+//     has two, is never mistaken for a kind's;
 //   - its VMUUID is the resource's uuid, whatever its kind: the field is older
 //     than kinds, and is what the responder's traces say a request is about;
 //   - its payload is the action's own payload and the resource as the control
@@ -25,8 +26,7 @@ import (
 //     out a Command.
 //
 // The reply is a noderequest.Reply as it always was. Until a kind is
-// registered on a node, its ops are the node's as they were: "vm.logs" is the
-// node's own until the vm kind takes it over.
+// registered on a node, its ops are the node's to answer as they were.
 type Query struct {
 	Kind   string
 	UUID   string

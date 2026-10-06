@@ -181,7 +181,7 @@ func TestClient_requests(t *testing.T) {
 		_, err := c.VMs(ctx, "owner-uuid", vm.KindDocker, 2)
 		require.NoError(t, err)
 		assert.Equal(t, "/api/vms", asked.path)
-		assert.Equal(t, "kind=docker&owner=owner-uuid&page=2", asked.query)
+		assert.Equal(t, "label=workload.flavor%3Ddocker&owner=owner-uuid&page=2", asked.query, "a docker vm is a vm labelled so")
 
 		_, err = c.VMs(ctx, "", "", 0)
 		require.NoError(t, err)
@@ -191,7 +191,12 @@ func TestClient_requests(t *testing.T) {
 	t.Run("a vm is asked for in the shape the control plane reads", func(t *testing.T) {
 		t.Parallel()
 
-		c, asked := controlPlane(t, http.StatusCreated, `{"uuid":"vm-uuid","name":"box","kind":"machine","state":"scheduled","expected_state":"running","lifetime_seconds":3600,"resources":{"cpus":2,"memory":2147483648,"disk":10737418240},"ports":[22,80]}`)
+		c, asked := controlPlane(t, http.StatusCreated, `{"resource":{
+			"kind": "vm",
+			"metadata": {"uuid": "vm-uuid", "name": "box", "lifetime": 3600000000000},
+			"spec": {"flavor": "machine", "resources": {"cpus": 2, "memory": 2147483648, "disk": 10737418240}, "ports": [22, 80], "network": {"ingress": "allow", "egress": "deny"}},
+			"status": {"state": "scheduled", "expected": "running"}
+		}, "command": {"id": "command-1", "action": "create"}}`)
 
 		created, err := c.CreateVM(ctx, "owner-uuid", workloadControlPlane.VMRequest{
 			Name:      "box",
@@ -207,14 +212,15 @@ func TestClient_requests(t *testing.T) {
 		assert.Equal(t, "/api/vms", asked.path)
 		assert.Equal(t, "owner=owner-uuid", asked.query)
 		assert.JSONEq(t, `{
-			"name": "box",
-			"kind": "machine",
-			"resources": {"cpus": 2, "memory": 2147483648, "disk": 10737418240},
-			"ports": [22, 80],
-			"network": {"ingress": "allow", "egress": "deny"},
-			"persistent_disk": false,
-			"lifetime_seconds": 3600
-		}`, string(asked.body))
+			"kind": "vm",
+			"metadata": {"name": "box", "lifetime": 3600000000000},
+			"spec": {
+				"flavor": "machine",
+				"resources": {"cpus": 2, "memory": 2147483648, "disk": 10737418240},
+				"ports": [22, 80],
+				"network": {"ingress": "allow", "egress": "deny"}
+			}
+		}`, string(asked.body), "a vm is asked for as its kind's manifest")
 
 		assert.Equal(t, "vm-uuid", created.UUID)
 		assert.Equal(t, vm.Scheduled, created.CurrentState)
@@ -226,21 +232,21 @@ func TestClient_requests(t *testing.T) {
 	t.Run("an update says only what changes", func(t *testing.T) {
 		t.Parallel()
 
-		c, asked := controlPlane(t, http.StatusOK, `{"uuid":"vm-uuid"}`)
+		c, asked := controlPlane(t, http.StatusOK, `{"resource":{"kind":"vm","metadata":{"uuid":"vm-uuid"}}}`)
 
 		forever := time.Duration(0)
 		_, err := c.UpdateVM(ctx, "", "vm-uuid", workloadControlPlane.VMUpdate{Lifetime: &forever, Resources: &vm.Resources{CPUs: 1, Memory: 1 << 30, Disk: 20 << 30}})
 		require.NoError(t, err)
 
-		assert.Equal(t, http.MethodPatch, asked.method)
-		assert.Equal(t, "/api/vms/vm-uuid", asked.path)
-		assert.JSONEq(t, `{"lifetime_seconds":0,"resources":{"cpus":1,"memory":1073741824,"disk":21474836480}}`, string(asked.body))
+		assert.Equal(t, http.MethodPost, asked.method)
+		assert.Equal(t, "/api/vms/vm-uuid/actions/update", asked.path, "a change is the vm kind's update")
+		assert.JSONEq(t, `{"lifetime":0,"resources":{"cpus":1,"memory":1073741824,"disk":21474836480}}`, string(asked.body))
 	})
 
 	t.Run("a log is asked for from a moment, and its last lines", func(t *testing.T) {
 		t.Parallel()
 
-		c, asked := controlPlane(t, http.StatusOK, `{"lines":[{"at":"2026-10-04T12:00:00Z","source":"kernel","line":"booted"}],"truncated":false}`)
+		c, asked := controlPlane(t, http.StatusOK, `{"result":{"lines":[{"at":"2026-10-04T12:00:00Z","source":"kernel","line":"booted"}]}}`)
 
 		since := time.Date(2026, 10, 4, 11, 0, 0, 0, time.UTC)
 		lines, err := c.VMLogs(ctx, "", "vm-uuid", vm.LogOptions{Since: since, Tail: 50})

@@ -16,6 +16,7 @@ import (
 	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
+	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
 	"github.com/khanzadimahdi/testproject/domain/workload/stack"
@@ -31,7 +32,7 @@ type stacksPlane struct {
 	lock sync.Mutex
 
 	stacks map[string]stackManifest
-	vms    map[string]vmPayload
+	vms    map[string]vmManifest
 
 	// answer is what a stack's command is answered with: its status, and
 	// its body.
@@ -47,7 +48,7 @@ func newStacksPlane(t *testing.T) (*Client, *stacksPlane) {
 
 	p := &stacksPlane{
 		stacks: map[string]stackManifest{},
-		vms:    map[string]vmPayload{},
+		vms:    map[string]vmManifest{},
 		status: http.StatusAccepted,
 		body:   `{"resource":{}}`,
 		sent:   map[string]json.RawMessage{},
@@ -177,13 +178,13 @@ func (p *stacksPlane) stack(uuid string) (stackManifest, bool) {
 	return s, ok
 }
 
-func (p *stacksPlane) holding(s stackManifest, v vmPayload) {
+func (p *stacksPlane) holding(s stackManifest, v vmManifest) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
 	p.stacks[s.Metadata.UUID] = s
-	if len(v.UUID) > 0 {
-		p.vms[v.UUID] = v
+	if len(v.Metadata.UUID) > 0 {
+		p.vms[v.Metadata.UUID] = v
 	}
 }
 
@@ -223,8 +224,13 @@ func shopIn(vmUUID string, state kind.State) stackManifest {
 }
 
 // dockerVM is a Docker VM on node-1, doing state, wanted expected.
-func dockerVM(uuid string, state vm.State, expected vm.State) vmPayload {
-	return vmPayload{UUID: uuid, Name: "docker-1", Kind: string(vm.KindDocker), State: state.String(), ExpectedState: expected.String(), NodeName: "node-1"}
+func dockerVM(uuid string, state kind.State, expected kind.State) vmManifest {
+	return vmManifest{
+		Kind:     vmKind.Name,
+		Metadata: kind.Metadata{UUID: uuid, Name: "docker-1", Labels: map[string]string{vmKind.LabelFlavor: string(vmKind.FlavorDocker)}, Node: "node-1"},
+		Spec:     vmKind.Spec{Flavor: vmKind.FlavorDocker},
+		Status:   vmKind.Status{Status: kind.Status{State: state, Expected: expected}},
+	}
 }
 
 func TestClient_Stacks(t *testing.T) {
@@ -240,8 +246,8 @@ func TestClient_Stacks(t *testing.T) {
 		another := shopIn("vm-uuid", stackKind.Degraded)
 		another.Metadata.UUID = "another-uuid"
 
-		p.holding(shopIn("vm-uuid", stackKind.Running), dockerVM("vm-uuid", vm.Running, vm.Running))
-		p.holding(another, vmPayload{})
+		p.holding(shopIn("vm-uuid", stackKind.Running), dockerVM("vm-uuid", vmKind.Running, vmKind.Running))
+		p.holding(another, vmManifest{})
 
 		listed, err := c.Stacks(ctx, "owner-uuid", "vm-uuid", 2)
 		require.NoError(t, err)
@@ -281,7 +287,7 @@ func TestClient_Stacks(t *testing.T) {
 		t.Parallel()
 
 		c, p := newStacksPlane(t)
-		p.holding(shopIn("gone", stackKind.Waiting), vmPayload{})
+		p.holding(shopIn("gone", stackKind.Waiting), vmManifest{})
 
 		listed, err := c.Stacks(ctx, "", "", 1)
 		require.NoError(t, err)
@@ -300,7 +306,7 @@ func TestClient_Stack(t *testing.T) {
 		t.Parallel()
 
 		c, p := newStacksPlane(t)
-		p.holding(shopIn("vm-uuid", stackKind.Running), dockerVM("vm-uuid", vm.Running, vm.Running))
+		p.holding(shopIn("vm-uuid", stackKind.Running), dockerVM("vm-uuid", vmKind.Running, vmKind.Running))
 
 		detail, err := c.Stack(ctx, "owner-uuid", "stack-uuid")
 		require.NoError(t, err)
@@ -313,9 +319,9 @@ func TestClient_Stack(t *testing.T) {
 	})
 
 	for name, tt := range map[string]struct {
-		vm vmPayload
+		vm vmManifest
 	}{
-		"one whose vm is stopped has none to show, and says why": {vm: dockerVM("vm-uuid", vm.Stopped, vm.Stopped)},
+		"one whose vm is stopped has none to show, and says why": {vm: dockerVM("vm-uuid", vmKind.Stopped, vmKind.Stopped)},
 		"and so does one whose vm is gone":                       {},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -350,7 +356,7 @@ func TestClient_CreateStack(t *testing.T) {
 	ctx := t.Context()
 
 	c, p := newStacksPlane(t)
-	p.holding(stackManifest{Metadata: kind.Metadata{UUID: "unrelated"}}, dockerVM("vm-uuid", vm.Scheduled, vm.Running))
+	p.holding(stackManifest{Metadata: kind.Metadata{UUID: "unrelated"}}, dockerVM("vm-uuid", vmKind.Scheduled, vmKind.Running))
 
 	created, err := c.CreateStack(ctx, "owner-uuid", workloadControlPlane.StackRequest{
 		Name:    "shop",
@@ -421,7 +427,7 @@ func TestClient_StackCommands(t *testing.T) {
 
 	for name, tt := range map[string]struct {
 		state   kind.State
-		vm      vmPayload
+		vm      vmManifest
 		command command
 		action  string
 
@@ -429,17 +435,17 @@ func TestClient_StackCommands(t *testing.T) {
 		asked   bool
 		refused domain.ValidationErrors
 	}{
-		"a stopped stack is started":                                {state: stackKind.Stopped, vm: dockerVM("vm-uuid", vm.Running, vm.Running), command: start, action: "start", asked: true},
-		"a degraded one is started too":                             {state: stackKind.Degraded, vm: dockerVM("vm-uuid", vm.Running, vm.Running), command: start, action: "start", asked: true},
-		"a running one is left as it is":                            {state: stackKind.Running, vm: dockerVM("vm-uuid", vm.Running, vm.Running), command: start, action: "start"},
-		"as is one on its way up":                                   {state: stackKind.Deploying, vm: dockerVM("vm-uuid", vm.Running, vm.Running), command: restart, action: "restart"},
-		"a running one is stopped":                                  {state: stackKind.Running, vm: dockerVM("vm-uuid", vm.Running, vm.Running), command: stop, action: "stop", asked: true},
-		"a stopped one is left stopped":                             {state: stackKind.Stopped, vm: dockerVM("vm-uuid", vm.Running, vm.Running), command: stop, action: "stop"},
-		"a running one is restarted":                                {state: stackKind.Running, vm: dockerVM("vm-uuid", vm.Running, vm.Running), command: restart, action: "restart", asked: true},
-		"one waiting for its vm to come up is deployed then":        {state: stackKind.Waiting, vm: dockerVM("vm-uuid", vm.Starting, vm.Running), command: start, action: "start"},
-		"and cannot be stopped before":                              {state: stackKind.Waiting, vm: dockerVM("vm-uuid", vm.Starting, vm.Running), command: stop, action: "stop", refused: domain.ValidationErrors{"stack": "invalid_state_transition"}},
-		"one not in its vm, which runs, is started, which makes it": {state: stackKind.Waiting, vm: dockerVM("vm-uuid", vm.Running, vm.Running), command: start, action: "start", asked: true},
-		"one in a vm that is stopped is refused":                    {state: stackKind.Waiting, vm: dockerVM("vm-uuid", vm.Stopped, vm.Stopped), command: start, action: "start", refused: domain.ValidationErrors{"vm": "vm_not_running"}},
+		"a stopped stack is started":                                {state: stackKind.Stopped, vm: dockerVM("vm-uuid", vmKind.Running, vmKind.Running), command: start, action: "start", asked: true},
+		"a degraded one is started too":                             {state: stackKind.Degraded, vm: dockerVM("vm-uuid", vmKind.Running, vmKind.Running), command: start, action: "start", asked: true},
+		"a running one is left as it is":                            {state: stackKind.Running, vm: dockerVM("vm-uuid", vmKind.Running, vmKind.Running), command: start, action: "start"},
+		"as is one on its way up":                                   {state: stackKind.Deploying, vm: dockerVM("vm-uuid", vmKind.Running, vmKind.Running), command: restart, action: "restart"},
+		"a running one is stopped":                                  {state: stackKind.Running, vm: dockerVM("vm-uuid", vmKind.Running, vmKind.Running), command: stop, action: "stop", asked: true},
+		"a stopped one is left stopped":                             {state: stackKind.Stopped, vm: dockerVM("vm-uuid", vmKind.Running, vmKind.Running), command: stop, action: "stop"},
+		"a running one is restarted":                                {state: stackKind.Running, vm: dockerVM("vm-uuid", vmKind.Running, vmKind.Running), command: restart, action: "restart", asked: true},
+		"one waiting for its vm to come up is deployed then":        {state: stackKind.Waiting, vm: dockerVM("vm-uuid", vmKind.Starting, vmKind.Running), command: start, action: "start"},
+		"and cannot be stopped before":                              {state: stackKind.Waiting, vm: dockerVM("vm-uuid", vmKind.Starting, vmKind.Running), command: stop, action: "stop", refused: domain.ValidationErrors{"stack": "invalid_state_transition"}},
+		"one not in its vm, which runs, is started, which makes it": {state: stackKind.Waiting, vm: dockerVM("vm-uuid", vmKind.Running, vmKind.Running), command: start, action: "start", asked: true},
+		"one in a vm that is stopped is refused":                    {state: stackKind.Waiting, vm: dockerVM("vm-uuid", vmKind.Stopped, vmKind.Stopped), command: start, action: "start", refused: domain.ValidationErrors{"vm": "vm_not_running"}},
 		"as is one whose vm is gone":                                {state: stackKind.Stopped, command: start, action: "start", refused: domain.ValidationErrors{"vm": "vm_not_running"}},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -467,7 +473,7 @@ func TestClient_StackCommands(t *testing.T) {
 		t.Parallel()
 
 		c, p := newStacksPlane(t)
-		p.holding(shopIn("vm-uuid", stackKind.Removing), dockerVM("vm-uuid", vm.Running, vm.Running))
+		p.holding(shopIn("vm-uuid", stackKind.Removing), dockerVM("vm-uuid", vmKind.Running, vmKind.Running))
 		p.status, p.body = http.StatusBadRequest, `{"errors":{"action":"invalid_state_transition"}}`
 
 		err := c.StopStack(ctx, "owner-uuid", "stack-uuid")
@@ -502,7 +508,7 @@ func TestClient_DeleteStack(t *testing.T) {
 		t.Parallel()
 
 		c, p := newStacksPlane(t)
-		p.holding(shopIn("vm-uuid", stackKind.Running), dockerVM("vm-uuid", vm.Running, vm.Running))
+		p.holding(shopIn("vm-uuid", stackKind.Running), dockerVM("vm-uuid", vmKind.Running, vmKind.Running))
 
 		require.NoError(t, c.DeleteStack(ctx, "owner-uuid", "stack-uuid", true))
 
@@ -516,7 +522,7 @@ func TestClient_DeleteStack(t *testing.T) {
 		t.Parallel()
 
 		c, p := newStacksPlane(t)
-		p.holding(shopIn("vm-uuid", stackKind.Deploying), dockerVM("vm-uuid", vm.Starting, vm.Running))
+		p.holding(shopIn("vm-uuid", stackKind.Deploying), dockerVM("vm-uuid", vmKind.Starting, vmKind.Running))
 
 		require.NoError(t, c.DeleteStack(ctx, "owner-uuid", "stack-uuid", false))
 
@@ -528,7 +534,7 @@ func TestClient_DeleteStack(t *testing.T) {
 		t.Parallel()
 
 		c, p := newStacksPlane(t)
-		p.holding(shopIn("vm-uuid", stackKind.Waiting), dockerVM("vm-uuid", vm.Stopped, vm.Stopped))
+		p.holding(shopIn("vm-uuid", stackKind.Waiting), dockerVM("vm-uuid", vmKind.Stopped, vmKind.Stopped))
 
 		err := c.DeleteStack(ctx, "owner-uuid", "stack-uuid", false)
 
@@ -544,7 +550,7 @@ func TestClient_DeleteStack(t *testing.T) {
 		t.Parallel()
 
 		c, p := newStacksPlane(t)
-		p.holding(shopIn("gone", stackKind.Waiting), vmPayload{})
+		p.holding(shopIn("gone", stackKind.Waiting), vmManifest{})
 		p.status, p.body = http.StatusNoContent, ""
 
 		require.NoError(t, c.DeleteStack(ctx, "owner-uuid", "stack-uuid", false))

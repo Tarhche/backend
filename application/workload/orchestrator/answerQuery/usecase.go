@@ -16,9 +16,9 @@ import (
 // with that kind's node strategy, and hands every other request on to next.
 //
 // A kind takes over the ops named after it once it is registered on this
-// node, and not before: "vm.logs" is the node's own, answered as it always
-// was, until the vm kind is registered here. The Docker passthrough's ops,
-// "docker.containers.list", name no kind's action and are always the node's.
+// node, and not before: "vm.logs" is the vm kind's, which every node runs.
+// The Docker passthrough's ops, "docker.containers.list", name no kind's
+// action and are always the node's.
 //
 // What a kind's query fails with is the reply's error, in the codes every
 // side knows. A query this node cannot ask at all, of an action the kind

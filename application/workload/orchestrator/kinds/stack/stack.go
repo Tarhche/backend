@@ -36,6 +36,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/docker"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
+	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
 
@@ -342,7 +343,7 @@ func (n *Node) dockerVM(instance vm.Instance) (string, bool) {
 		uuid = instance.ID
 	}
 
-	if instance.Labels[docker.LabelVM] == "true" {
+	if instance.Labels[vmKind.LabelDocker] == "true" {
 		return uuid, true
 	}
 

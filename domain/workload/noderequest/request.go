@@ -2,16 +2,16 @@
 // to a node: a question asked over core NATS request/reply and answered at
 // once.
 //
-// Commands about VMs, snapshots and stacks are messages, because what they
-// start takes a while and is reported as it happens. Docker's objects are not
-// records anybody keeps, so asking about one is a request with an answer, and
-// so is reading a VM's log: nothing is stored to read it from.
+// Commands are messages, because what they start takes a while and is
+// reported as it happens. Docker's objects are not records anybody keeps, so
+// asking about one is a request with an answer, and so is a kind's query, a
+// VM's log say (kind.Query): nothing is stored to read it from.
 //
-// A request names a VM and an operation, and carries that operation's own
-// payload; the reply carries its result or why there is none. The payloads
-// and results are the types in payloads.go, which is all the blog, the control
-// plane and the nodes have to agree on: the control plane passes the payload
-// through as it came.
+// A request names a VM, or a kind's resource, and an operation, and carries
+// that operation's own payload; the reply carries its result or why there is
+// none. The payloads and results of the Docker passthrough are the types in
+// payloads.go, which is all the blog, the control plane and the nodes have to
+// agree on: the control plane passes the payload through as it came.
 package noderequest
 
 import (
@@ -45,9 +45,6 @@ const (
 type Op string
 
 const (
-	// OpVMLogs reads a VM's log: LogsRequest in, []VMLogLine out.
-	OpVMLogs Op = "vm.logs"
-
 	// OpPing asks whether a Docker VM's dockerd answers: no payload, no
 	// result. It is what docker.Daemon's Ping is through the control plane, so
 	// that every method of the Daemon is one operation here.
@@ -118,7 +115,6 @@ const (
 
 // ops is every operation a node answers.
 var ops = []Op{
-	OpVMLogs,
 	OpPing,
 	OpContainersList,
 	OpContainersInspect,

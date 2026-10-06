@@ -9,19 +9,28 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/owner"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/presenter"
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/coderunner"
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/lifecycle"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/snapshot"
 	"github.com/khanzadimahdi/testproject/domain/workload/snapshot/events"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
 
+// Runs say whether a uuid that names no VM names one of the code runner's
+// runs, whose disk is thrown away with it, and refuse it if so.
+type Runs interface {
+	Refused(ctx context.Context, ownerUUID string, uuid string, err error) (domain.ValidationErrors, error)
+}
+
+// Nodes say whether a node can be asked anything, having spoken lately.
+type Nodes interface {
+	Alive(ctx context.Context, nodeName string) (bool, error)
+}
+
 type UseCase struct {
-	vmRepository       vm.Repository
-	runs               *coderunner.Runs
+	vmRepository       owner.Repository[vm.VM]
+	runs               Runs
 	snapshotRepository snapshot.Repository
-	lifecycle          *lifecycle.Lifecycle
+	nodes              Nodes
 	producer           domain.Producer
 	validator          domain.Validator
 
@@ -30,10 +39,10 @@ type UseCase struct {
 }
 
 func NewUseCase(
-	vmRepository vm.Repository,
-	runs *coderunner.Runs,
+	vmRepository owner.Repository[vm.VM],
+	runs Runs,
 	snapshotRepository snapshot.Repository,
-	lifecycle *lifecycle.Lifecycle,
+	nodes Nodes,
 	producer domain.Producer,
 	validator domain.Validator,
 	userMax uint,
@@ -42,7 +51,7 @@ func NewUseCase(
 		vmRepository:       vmRepository,
 		runs:               runs,
 		snapshotRepository: snapshotRepository,
-		lifecycle:          lifecycle,
+		nodes:              nodes,
 		producer:           producer,
 		validator:          validator,
 		userMax:            userMax,
@@ -68,7 +77,7 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		return &Response{ValidationErrors: refused}, nil
 	}
 
-	alive, err := uc.lifecycle.NodeAlive(ctx, v.NodeName)
+	alive, err := uc.nodes.Alive(ctx, v.NodeName)
 	if err != nil {
 		return nil, err
 	}

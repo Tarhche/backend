@@ -25,7 +25,6 @@ import (
 	orchestratorruntask "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/runTask"
 	orchestratorShipLogs "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/shipLogs"
 	orchestratorstoptask "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/stopTask"
-	orchestratorAttachVM "github.com/khanzadimahdi/testproject/application/workload/orchestrator/vm/attachVM"
 	"github.com/khanzadimahdi/testproject/domain"
 	nodeContract "github.com/khanzadimahdi/testproject/domain/workload/node"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
@@ -46,7 +45,6 @@ import (
 	orchestratorKindsAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/orchestrator/api/kinds"
 	orchestratorPortsAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/orchestrator/api/ports"
 	orchestratorTaskAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/orchestrator/api/task"
-	orchestratorVMAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/orchestrator/api/vm"
 )
 
 const (
@@ -261,9 +259,6 @@ func orchestratorConsoleCommand(
 	deleteTaskUseCase := orchestratorDeleteTask.NewUseCase(taskManager, validator, logger)
 	attachTaskUseCase := orchestratorAttachTask.NewUseCase(taskManager, validator)
 
-	// vms
-	attachVMUseCase := orchestratorAttachVM.NewUseCase(engine, validator)
-
 	// the orchestrator talks to no database, so messaging is its only dependency
 	checkHealthUseCase := checkhealth.NewUseCase(
 		checkhealth.Dependency{Name: "messaging", Pinger: infraHealth.NewNatsPinger(natsConnection)},
@@ -277,10 +272,10 @@ func orchestratorConsoleCommand(
 		taskEvents.TaskDeletedName:           orchestratorDeleteTask.NewDeleteTaskHandler(deleteTaskUseCase),
 	}
 
-	// what is asked of the VMs on this node, of their snapshots and of the
-	// stacks in them, and of every kind it runs, and the answers to what the
-	// control plane asks and waits for.
-	vms, err := bindOrchestratorVMs(iocContainer, OrchestratorVMDependencies{
+	// what is asked of every kind this node runs, VMs and the stacks in
+	// them, and of the VMs' snapshots, and the answers to what the control
+	// plane asks and waits for.
+	workload, err := bindOrchestratorWorkload(iocContainer, OrchestratorDependencies{
 		NATS:      natsConnection,
 		Engine:    engine,
 		Archives:  snapshotArchives(orchestratorConfigs.SnapshotStorage),
@@ -310,7 +305,8 @@ func orchestratorConsoleCommand(
 	// reachable from outside, through the ingress, and a token proves only that
 	// the estate signed it for somebody: a route that ran or stopped something
 	// would do it for anybody signed in, to anybody's, and the control plane
-	// would never hear of it.
+	// would never hear of it. A VM's terminal is the vm kind's stream, routed
+	// with every kind's below.
 	api := http.NewServeMux()
 
 	// the task healthcheck probes this, from inside the task, and it
@@ -325,14 +321,6 @@ func orchestratorConsoleCommand(
 		verifier,
 	))
 
-	// a terminal in a VM, which the ingress carries here as it does a
-	// task's. A VM always has an owner, so a token is insisted on, and the
-	// terminal is opened for the owner alone.
-	api.Handle("GET /api/vms/{uuid}/attach", middleware.NewTokenMiddleware(
-		orchestratorVMAPI.NewAttachHandler(attachVMUseCase, logger),
-		verifier,
-	))
-
 	rateLimited, err := middleware.NewRateLimitMiddleware(api, 600, 1*time.Minute)
 	if err != nil {
 		return nil, err
@@ -343,25 +331,21 @@ func orchestratorConsoleCommand(
 	// the node's own answers, which are capped and carry its own headers
 	mux.Handle("/", middleware.NewCORSMiddleware(rateLimited))
 
-	// a VM or a task this node is holding, which only this node can reach:
-	// the ingress works out whose it is and sends the request here. Neither
-	// the cap nor the headers belong on it — what comes through is the VM's or
-	// the task's own traffic, and answering for it is theirs, a preflight
-	// included. Slugs are one namespace across the two, so either route
-	// reaches either.
-	proxy := orchestratorPortsAPI.NewProxyHandler(orchestratorGetEndpoint.NewUseCase(engine), logger)
-	mux.Handle("/tasks/{slug}/{port}/{path...}", proxy)
-	mux.Handle("/vms/{slug}/{port}/{path...}", proxy)
+	// a task this node is holding, which only this node can reach: the
+	// ingress works out whose it is and sends the request here. Neither the
+	// cap nor the headers belong on it — what comes through is the task's own
+	// traffic, and answering for it is its own, a preflight included.
+	mux.Handle("/tasks/{slug}/{port}/{path...}", orchestratorPortsAPI.NewProxyHandler(orchestratorGetEndpoint.NewUseCase(engine), logger))
 
 	// what the kinds this node runs serve, each under its own plural: the
-	// streams of those that serve them, a terminal for the resource's owner
-	// alone as a VM's is, among the node's own answers, and the ports of
-	// those that serve them beside the VMs' and the tasks'. A kind takes no
+	// streams of those that serve them, a VM's terminal, opened for the
+	// resource's owner alone, among the node's own answers, and the ports of
+	// those that serve them, a VM's, beside the tasks'. A kind takes no
 	// route until it is registered.
 	kindRoutes := orchestratorKindsAPI.NewRoutes(
-		vms.Kinds,
-		orchestratorAttachResource.NewUseCase(vms.Kinds, validator),
-		orchestratorGetResourceEndpoint.NewUseCase(vms.Kinds),
+		workload.Kinds,
+		orchestratorAttachResource.NewUseCase(workload.Kinds, validator),
+		orchestratorGetResourceEndpoint.NewUseCase(workload.Kinds),
 		verifier,
 		logger,
 	)
@@ -400,7 +384,7 @@ func orchestratorConsoleCommand(
 
 	// orchestrator heartbeat
 	if err := iocContainer.Bind(func() *orchestratorHeartbeat.UseCase {
-		return orchestratorHeartbeat.NewUseCase(asyncProduceConsumer, nodeManager, vms.Kinds, kindStateTimeout, nodeName, logger)
+		return orchestratorHeartbeat.NewUseCase(asyncProduceConsumer, nodeManager, workload.Kinds, kindStateTimeout, nodeName, logger)
 	}, provider.Singleton()); err != nil {
 		return nil, err
 	}

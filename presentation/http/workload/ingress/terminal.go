@@ -15,8 +15,8 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// terminalHandler carries a terminal to the node holding a task, a VM, or a
-// resource of a kind with streams.
+// terminalHandler carries a terminal to the node holding a task, or a
+// resource of a kind with streams, a VM's.
 //
 // It works out which node that is and proxies the connection there, and that is
 // all it does. Who may open a terminal is the node's to answer: it reads the
@@ -61,31 +61,11 @@ func NewTerminalHandler(
 	return newTerminalHandler("task", locate, route, registry, transport, logger)
 }
 
-// NewVMTerminalHandler carries a terminal inside a VM to the node holding the
-// VM, on the node's /api/vms/{uuid}/attach, exactly as a task's is carried.
-func NewVMTerminalHandler(
-	vms VMResolver,
-	registry ingress.Registry,
-	transport http.RoundTripper,
-	logger *slog.Logger,
-) *terminalHandler {
-	locate := func(ctx context.Context, uuid string) (string, error) {
-		v, err := vms.GetOne(ctx, uuid)
-
-		return v.NodeName, err
-	}
-
-	route := func(uuid string) string {
-		return "/api/vms/" + url.PathEscape(uuid) + "/attach"
-	}
-
-	return newTerminalHandler("vm", locate, route, registry, transport, logger)
-}
-
 // NewKindTerminalHandler carries a stream action of a kind, its terminal say,
 // to the node holding the resource, on the node's
-// /api/{plural}/{uuid}/{action}, exactly as a VM's terminal is carried. Which
-// node that is, the kind's ingress strategy says.
+// /api/{plural}/{uuid}/{action}, exactly as a task's terminal is carried: a
+// VM's on /vms/{uuid}/attach. Which node that is, the kind's ingress strategy
+// says.
 func NewKindTerminalHandler(
 	binding kind.IngressBinding,
 	action string,
@@ -141,7 +121,7 @@ func newTerminalHandler(
 	return h
 }
 
-// @Summary		Open a terminal in a task, a vm, or a resource of a kind with streams
+// @Summary		Open a terminal in a task, or a resource of a kind with streams, a vm's
 // @Description	carries a websocket to the node holding it, which decides who may open one
 // @Tags			workload ingress
 // @Param			uuid	path	string	true	"Task, VM or resource UUID"

@@ -16,7 +16,6 @@ import (
 	orchestratorHeartbeat "github.com/khanzadimahdi/testproject/application/workload/orchestrator/beatHeart"
 	taskHeartbeat "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/beatHeart"
 	shipLogs "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/shipLogs"
-	vmHeartbeat "github.com/khanzadimahdi/testproject/application/workload/orchestrator/vm/beatHeart"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/node"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
@@ -25,7 +24,6 @@ import (
 	messaging "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/runtime"
 	"github.com/khanzadimahdi/testproject/infrastructure/tunnel"
-	memory "github.com/khanzadimahdi/testproject/infrastructure/workload/vm/memory"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -211,6 +209,7 @@ func TestServe(t *testing.T) {
 
 		var nodeManager runtime.MockNodeManager
 		nodeManager.On("Stats", mock.Anything, mock.Anything).Return(node.Stats{}, nil).Maybe()
+		nodeManager.On("Capacity", mock.Anything).Return(vm.Info{}, nil).Maybe()
 
 		var taskManager runtime.MockRuntime
 		taskManager.On("Of", mock.Anything, mock.Anything).
@@ -230,7 +229,6 @@ func TestServe(t *testing.T) {
 		command.logShipper = shipLogs.NewUseCase(&taskManager, &consumer, consumerName, command.logger)
 		command.taskHeartBeat = taskHeartbeat.NewUseCase(&taskManager, &consumer, consumerName, command.logger)
 		command.orchestratorHeartBeat = orchestratorHeartbeat.NewUseCase(&consumer, &nodeManager, nil, time.Second, consumerName, command.logger)
-		command.vmHeartBeat = vmHeartbeat.NewUseCase(memory.New(), &consumer, gauges{}, consumerName, command.logger)
 
 		requests := &answering{}
 		command.requests = requests
@@ -278,13 +276,6 @@ func TestServe(t *testing.T) {
 		assert.Equal(t, noderequest.Subject(consumerName), requests.subject())
 	})
 }
-
-// gauges publishes nothing anywhere.
-type gauges struct{}
-
-func (gauges) Node(context.Context, string, vm.Info, map[vm.State]int) {}
-
-func (gauges) VMHost(context.Context, string, bool) {}
 
 // answering keeps the subject it was asked to answer requests on.
 type answering struct {

@@ -14,54 +14,47 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/cascade"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/kindstest"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind/kindtest"
 	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
+	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
+	snapshotEvents "github.com/khanzadimahdi/testproject/domain/workload/snapshot/events"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
 	nodesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/nodes"
 	resourcesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/resources"
 	snapshotsMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/snapshots"
 	tasksMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/tasks"
-	vmsMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/vms"
 	logsMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/logs"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/permissions"
 	infraDocker "github.com/khanzadimahdi/testproject/infrastructure/workload/docker"
 	"github.com/khanzadimahdi/testproject/infrastructure/workload/vm/memory"
 )
 
-// controlPlane is the control plane as it serves VMs, snapshots and
-// containers today, with every kind it runs registered as it registers them,
-// over stores kept in memory.
+// controlPlane is the control plane as the serve command wires it, with
+// every kind it runs registered as it registers them, over stores kept in
+// memory.
 type controlPlane struct {
-	registry  *kind.Registry[kind.ControlPlaneBinding]
+	workload  *ControlPlaneWorkload
 	resources *resourcesMemory.Repository
-	vms       *ControlPlaneVMs
 }
 
 func served(t *testing.T) *controlPlane {
 	t.Helper()
 
-	registry, err := NewControlPlaneRegistry()
-	require.NoError(t, err)
-
 	resources := resourcesMemory.NewRepository()
 
-	vms, err := NewControlPlaneVMs(configs.NewWorkloadControlPlane(), ControlPlaneVMStores{
-		VMs:       vmsMemory.NewRepository(),
+	workload, err := NewControlPlaneWorkload(configs.NewWorkloadControlPlane(), ControlPlaneStores{
+		Resources: resources,
 		Snapshots: snapshotsMemory.NewRepository(),
-		Children:  cascade.New(registry, resources),
 		Nodes:     nodesMemory.NewRepository(),
 		Tasks:     tasksMemory.NewRepository(),
 		TaskLogs:  logsMock.NewInMemoryRepository(),
 	}, nil, &messagingMock.Recorder{}, slog.New(slog.DiscardHandler))
 	require.NoError(t, err)
 
-	require.NoError(t, RegisterControlPlaneKinds(registry, vms, resources))
-
-	return &controlPlane{registry: registry, resources: resources, vms: vms}
+	return &controlPlane{workload: workload, resources: resources}
 }
 
 func kindsOf(registry *kind.Registry[kind.ControlPlaneBinding], resources *resourcesMemory.Repository) *ControlPlaneKinds {
@@ -86,17 +79,14 @@ func get(t *testing.T, handler http.Handler, target string) (int, string) {
 func TestNewControlPlaneKinds(t *testing.T) {
 	t.Parallel()
 
-	t.Run("stacks are served under their plural beside every route served today, and nothing of those changes", func(t *testing.T) {
+	t.Run("vms and stacks are served under their plurals beside what is not a kind yet", func(t *testing.T) {
 		t.Parallel()
 
 		plane := served(t)
-		assert.Equal(t, []string{stackKind.Name}, kindNames(plane.registry.Descriptors()))
-
-		kinds := kindsOf(plane.registry, plane.resources)
+		assert.Equal(t, []string{vmKind.Name, stackKind.Name}, kindNames(plane.workload.Registry.Descriptors()))
 
 		mux := http.NewServeMux()
-		plane.vms.Route(mux)
-		require.NoError(t, kinds.Route(mux), "no route of today's is taken")
+		require.NoError(t, plane.workload.Route(mux), "no kind takes a route of what is not a kind yet")
 
 		status, body := get(t, mux, "/api/kinds")
 		require.Equal(t, http.StatusOK, status)
@@ -105,38 +95,39 @@ func TestNewControlPlaneKinds(t *testing.T) {
 			Items []kind.Descriptor `json:"items"`
 		}
 		require.NoError(t, json.Unmarshal([]byte(body), &described))
-		require.Len(t, described.Items, 1)
-		assert.Equal(t, "stacks", described.Items[0].Plural)
+		require.Len(t, described.Items, 2)
+		assert.Equal(t, "vms", described.Items[0].Plural)
+		assert.Equal(t, "stacks", described.Items[1].Plural)
 
-		status, body = get(t, mux, "/api/stacks")
-		require.Equal(t, http.StatusOK, status)
-		assert.JSONEq(t, `{"items":[],"pagination":{"total_pages":0,"current_page":1}}`, body)
-
-		status, _ = get(t, mux, "/api/vms")
-		assert.Equal(t, http.StatusOK, status, "today's VMs are served as they were")
-
-		assert.Equal(t, []string{kind.ResultName}, slices.Collect(maps.Keys(kinds.Subscribers)))
-		for subject := range kinds.Subscribers {
-			assert.NotContains(t, plane.vms.Subscribers, subject, "no subject of today's is heard twice")
+		for _, plural := range []string{"vms", "stacks"} {
+			status, body = get(t, mux, "/api/"+plural)
+			require.Equal(t, http.StatusOK, status)
+			assert.JSONEq(t, `{"items":[],"pagination":{"total_pages":0,"current_page":1}}`, body)
 		}
 
-		assert.NotContains(t, plane.vms.Subscribers, "workloadStackCompleted", "a stack's results are every kind's results")
-		assert.NotContains(t, plane.vms.Subscribers, "workloadStackFailed")
+		status, _ = get(t, mux, "/api/snapshots")
+		assert.Equal(t, http.StatusOK, status, "a vm's snapshots are served as they were")
 
-		assert.NoError(t, kinds.Reconcile.Execute(context.Background()), "a pass over no stack does nothing")
+		status, _ = get(t, mux, "/api/containers")
+		assert.Equal(t, http.StatusOK, status, "and so are the containers in docker vms")
+
+		subjects := slices.Collect(maps.Keys(plane.workload.Subscribers))
+		assert.ElementsMatch(t, []string{kind.ResultName, snapshotEvents.SnapshotCompletedName, snapshotEvents.SnapshotFailedName}, subjects, "a vm's results are every kind's results")
+
+		assert.NoError(t, plane.workload.Reconcile.Execute(context.Background()), "a pass over nothing does nothing")
 	})
 
-	t.Run("a kind registered over routes served today is refused when the control plane is put together", func(t *testing.T) {
+	t.Run("a kind registered over routes served is refused when the control plane is put together", func(t *testing.T) {
 		t.Parallel()
 
 		d := kindstest.Descriptor()
-		d.Plural = "vms"
+		d.Plural = "snapshots"
 
 		registry := kind.NewRegistry[kind.ControlPlaneBinding]()
 		require.NoError(t, registry.Register(kind.BindControlPlane[kindstest.Spec, kindstest.Status](d, &kindstest.Fans{})))
 
 		mux := http.NewServeMux()
-		served(t).vms.Route(mux)
+		require.NoError(t, served(t).workload.Route(mux))
 
 		assert.Error(t, kindsOf(registry, resourcesMemory.NewRepository()).Route(mux))
 	})
@@ -170,22 +161,25 @@ func TestConformance(t *testing.T) {
 	nodes, err := nodeKinds(NodeKindDependencies{
 		Engine:         engine,
 		Daemons:        infraDocker.NewDaemons(engine, time.Second, slog.New(slog.DiscardHandler)),
+		NodeName:       "workload-orchestrator-01",
 		CommandTimeout: time.Minute,
 	})
 	require.NoError(t, err)
 
-	ingress, err := ingressKinds()
+	plane := served(t)
+
+	ingress, err := ingressKinds(plane.resources)
 	require.NoError(t, err)
 
 	services := kind.Services{
-		ControlPlane: served(t).registry,
+		ControlPlane: plane.workload.Registry,
 		Node:         nodes,
 		Ingress:      ingress,
 	}
 
 	kindtest.Conformance(t, services, permissions.NewRepository())
 
-	assert.Equal(t, []string{stackKind.Name}, kindNames(services.Descriptors()), "every kind the services run")
+	assert.Equal(t, []string{vmKind.Name, stackKind.Name}, kindNames(services.Descriptors()), "every kind the services run")
 }
 
 func kindNames(descriptors []kind.Descriptor) []string {

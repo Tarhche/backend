@@ -9,9 +9,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/vmtest"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/snapshot/archive"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/snapshot/snapshottest"
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/vmtest"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/node"
 	"github.com/khanzadimahdi/testproject/domain/workload/snapshot"
@@ -22,7 +22,7 @@ import (
 func useCaseOf(w *vmtest.Workload, bucket snapshot.Store) *UseCase {
 	logger := slog.New(slog.DiscardHandler)
 
-	return NewUseCase(w.Snapshots, w.VMs, w.Lifecycle, archive.NewRemover(bucket, logger), validator.New(translator.Codes{}))
+	return NewUseCase(w.Snapshots, w.Entities, w.Placement, archive.NewRemover(bucket, logger), validator.New(translator.Codes{}))
 }
 
 func TestUseCase_Execute(t *testing.T) {

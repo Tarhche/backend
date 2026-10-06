@@ -14,8 +14,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/khanzadimahdi/testproject/domain"
+	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
-	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
 
 // terminalNode is a node standing in for the far end of a tunnel: it answers
@@ -101,20 +101,18 @@ func talk(t *testing.T, front *httptest.Server, path string) string {
 func TestTerminalHandler(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 
-	t.Run("a terminal in a vm is carried to its node's own route for it", func(t *testing.T) {
+	t.Run("a terminal in a vm is carried to its node's own route for it, at the url it always had", func(t *testing.T) {
 		n := newTerminalNode(t)
 		connected, transport := tunnelTo(map[string]*terminalNode{"workload-orchestrator-02": n})
 
-		vms := &fakeVMResolver{vms: map[string]vm.VM{"box": {UUID: "vm-uuid", NodeName: "workload-orchestrator-02"}}}
-
 		mux := http.NewServeMux()
-		mux.Handle("GET /vms/{uuid}/attach", NewVMTerminalHandler(vms, connected, transport, logger))
+		require.NoError(t, RouteKinds(mux, vmsIn(t, exposing("box", "workload-orchestrator-02")), connected, transport, logger))
 
 		front := httptest.NewServer(mux)
 		defer front.Close()
 
-		assert.Equal(t, "echo: ls", talk(t, front, "/vms/vm-uuid/attach?token=abc"))
-		assert.Equal(t, "/api/vms/vm-uuid/attach", n.path)
+		assert.Equal(t, "echo: ls", talk(t, front, "/vms/vm-box/attach?token=abc"))
+		assert.Equal(t, "/api/vms/vm-box/attach", n.path)
 	})
 
 	t.Run("a terminal in a task is carried as it always was", func(t *testing.T) {
@@ -134,7 +132,7 @@ func TestTerminalHandler(t *testing.T) {
 	})
 
 	for name, tt := range map[string]struct {
-		vms    map[string]vm.VM
+		vms    []vmKind.VM
 		status int
 		says   string
 	}{
@@ -143,12 +141,12 @@ func TestTerminalHandler(t *testing.T) {
 			says:   "no such vm",
 		},
 		"a vm on no node": {
-			vms:    map[string]vm.VM{"box": {UUID: "vm-uuid"}},
+			vms:    []vmKind.VM{exposing("box", "")},
 			status: http.StatusServiceUnavailable,
 			says:   "not been scheduled",
 		},
 		"a vm whose node is not connected": {
-			vms:    map[string]vm.VM{"box": {UUID: "vm-uuid", NodeName: "workload-orchestrator-09"}},
+			vms:    []vmKind.VM{exposing("box", "workload-orchestrator-09")},
 			status: http.StatusServiceUnavailable,
 			says:   "not connected",
 		},
@@ -157,10 +155,10 @@ func TestTerminalHandler(t *testing.T) {
 			connected, transport := tunnelTo(map[string]*terminalNode{"workload-orchestrator-01": newTerminalNode(t)})
 
 			mux := http.NewServeMux()
-			mux.Handle("GET /vms/{uuid}/attach", NewVMTerminalHandler(&fakeVMResolver{vms: tt.vms}, connected, transport, logger))
+			require.NoError(t, RouteKinds(mux, vmsIn(t, tt.vms...), connected, transport, logger))
 
 			rw := httptest.NewRecorder()
-			mux.ServeHTTP(rw, httptest.NewRequest(http.MethodGet, "/vms/vm-uuid/attach", nil))
+			mux.ServeHTTP(rw, httptest.NewRequest(http.MethodGet, "/vms/vm-box/attach", nil))
 
 			assert.Equal(t, tt.status, rw.Code)
 			assert.Contains(t, rw.Body.String(), tt.says)

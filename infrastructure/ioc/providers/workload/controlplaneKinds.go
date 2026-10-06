@@ -1,12 +1,12 @@
 package workload
 
 import (
-	"context"
 	"log/slog"
 	"net/http"
 
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/actOnResource"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/admitResource"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/cascade"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/deleteResource"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/dispatch"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/getKinds"
@@ -16,12 +16,9 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/queryResource"
 	kindsReconcile "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/reconcile"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/resourceResult"
-	controlPlaneStacks "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/stack"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/waiters"
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/slugs"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
-	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
 	"github.com/khanzadimahdi/testproject/domain/workload/node"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
@@ -29,30 +26,10 @@ import (
 )
 
 // NewControlPlaneRegistry is a registry for every kind the control plane
-// runs, with none in it yet: a kind is registered by RegisterControlPlaneKinds,
-// once what its strategy is built from is.
+// runs, with none in it yet: a kind is registered when what its strategy is
+// built from is (NewControlPlaneWorkload).
 func NewControlPlaneRegistry() (*kind.Registry[kind.ControlPlaneBinding], error) {
 	return kind.NewRegistry[kind.ControlPlaneBinding](), nil
-}
-
-// RegisterControlPlaneKinds registers every kind the control plane runs,
-// each through its control-plane strategy: the one place a kind is added to
-// the control plane, and what its resource API, its consumers and its
-// reconcile loop all run over. A stack is admitted into the Docker VMs vms
-// keeps, and given a slug no stack in resources holds.
-//
-// VMs, snapshots and the code runner's tasks are not kinds yet. Each moves
-// onto the framework in a step of its own, and is registered here when it
-// does, taking its routes over from the ones it has today.
-func RegisterControlPlaneKinds(registry *kind.Registry[kind.ControlPlaneBinding], vms *ControlPlaneVMs, resources resource.Repository) error {
-	stackSlugs := slugs.By(func(ctx context.Context, slug string) (resource.Record, error) {
-		return resources.GetOneBySlug(ctx, stackKind.Name, slug)
-	})
-
-	return registry.Register(kind.BindControlPlane[stackKind.Spec, stackKind.Status](
-		stackKind.Descriptor(),
-		controlPlaneStacks.New(vms.VMs, vms.Chooser, stackSlugs),
-	))
 }
 
 // ControlPlaneKindStores are what the control plane keeps the resources of
@@ -76,6 +53,15 @@ type ControlPlaneKinds struct {
 
 	Observer  *observe.Observer
 	Reconcile *kindsReconcile.UseCase
+
+	// Admit takes in a resource of any kind, as the resource API does: a
+	// Docker VM made for a container or a stack is admitted through it.
+	Admit *admitResource.UseCase
+
+	// Resources are what every part of the plumbing keeps resources in: the
+	// stores' resources, deleting what lives in a resource with it, as the
+	// kinds that live in it say, wherever it is deleted from.
+	Resources *cascade.Repository
 }
 
 // controlPlaneKindsOptions are how the plumbing goes about its work.
@@ -108,8 +94,15 @@ func WithReconcileConfig(config kindsReconcile.Config) ControlPlaneKindsOption {
 // registry, asking the nodes queries through requester and sending them
 // commands with producer.
 //
-// It is the serve command's wiring, and what a test builds a control plane's
-// kinds from, over stores kept in memory: what is tested is what is served.
+// What lives in a resource follows it by its kind's rules: it is deleted with
+// it, wherever the resource is deleted from, and reset to what it holds once
+// it is restored from a snapshot. What a node holds that nobody keeps a
+// record of, a VM deleted while its node could not be told, is deleted on
+// that node.
+//
+// It is what the serve command and a test build a control plane's kinds
+// from, the test over stores kept in memory: what is tested is what is
+// served.
 func NewControlPlaneKinds(
 	registry *kind.Registry[kind.ControlPlaneBinding],
 	stores ControlPlaneKindStores,
@@ -123,26 +116,28 @@ func NewControlPlaneKinds(
 		option(&settings)
 	}
 
+	resources := cascade.NewRepository(registry, stores.Resources)
+
 	// a request that waits for what came of its command is told by whichever
 	// result handler hears it in this process.
 	waiting := waiters.New()
 
-	dispatcher := dispatch.New(stores.Resources, producer, waiting, nil)
+	dispatcher := dispatch.New(resources, producer, waiting, nil)
 
-	var observing []observe.Option
+	observing := []observe.Option{observe.WithOrphans(dispatcher)}
 	if settings.parents != nil {
 		observing = append(observing, observe.WithParents(settings.parents))
 	}
 
-	observer := observe.NewObserver(registry, stores.Resources, logger, observing...)
+	observer := observe.NewObserver(registry, resources, logger, observing...)
 
 	useCases := controlPlaneKindsAPI.UseCases{
-		Admit:  admitResource.NewUseCase(registry, stores.Resources, dispatcher, logger),
-		Act:    actOnResource.NewUseCase(registry, stores.Resources, dispatcher, logger),
-		Delete: deleteResource.NewUseCase(registry, stores.Resources, dispatcher),
-		Get:    getResource.NewUseCase(registry, stores.Resources),
-		List:   getResources.NewUseCase(registry, stores.Resources),
-		Query:  queryResource.NewUseCase(registry, stores.Resources, requester, observer, nil),
+		Admit:  admitResource.NewUseCase(registry, resources, dispatcher, logger),
+		Act:    actOnResource.NewUseCase(registry, resources, dispatcher, logger),
+		Delete: deleteResource.NewUseCase(registry, resources, dispatcher),
+		Get:    getResource.NewUseCase(registry, resources),
+		List:   getResources.NewUseCase(registry, resources),
+		Query:  queryResource.NewUseCase(registry, resources, requester, observer, nil),
 		Kinds:  getKinds.NewUseCase(registry),
 	}
 
@@ -151,9 +146,11 @@ func NewControlPlaneKinds(
 			return controlPlaneKindsAPI.Route(mux, registry.Descriptors(), useCases)
 		},
 		Subscribers: map[string]domain.MessageHandler{
-			kind.ResultName: resourceResult.NewResult(registry, stores.Resources, waiting, logger, nil),
+			kind.ResultName: resourceResult.NewResult(registry, resources, waiting, logger, nil, resourceResult.WithRestorer(resources.Cascade())),
 		},
 		Observer:  observer,
-		Reconcile: kindsReconcile.NewUseCase(registry, stores.Resources, stores.Nodes, dispatcher, logger, settings.reconcile),
+		Reconcile: kindsReconcile.NewUseCase(registry, resources, stores.Nodes, dispatcher, logger, settings.reconcile),
+		Admit:     useCases.Admit,
+		Resources: resources,
 	}
 }

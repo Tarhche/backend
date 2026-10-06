@@ -7,20 +7,17 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/createVM"
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/dockerVM"
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/vmtest"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/dockervm"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/vmtest"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/docker"
+	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
-	"github.com/khanzadimahdi/testproject/domain/workload/port"
-	"github.com/khanzadimahdi/testproject/domain/workload/task"
+	"github.com/khanzadimahdi/testproject/domain/workload/resource"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
-	tasksMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/tasks"
 	"github.com/khanzadimahdi/testproject/infrastructure/translator"
 	"github.com/khanzadimahdi/testproject/infrastructure/validator"
 )
@@ -33,17 +30,7 @@ func created(context.Context, string, noderequest.Request) (noderequest.Reply, e
 }
 
 func useCaseOf(w *vmtest.Workload, requester noderequest.Requester) *UseCase {
-	tasks := &tasksMock.MockTasksRepository{}
-	tasks.On("GetOneBySlug", mock.Anything, mock.Anything).Return(task.Task{}, domain.ErrNotExists)
-
-	create := createVM.NewUseCase(w.VMs, tasks, w.Snapshots, w.Quota, w.Lifecycle, validator.New(translator.Codes{}), createVM.Images{Machine: "ubuntu:24.04", Docker: "docker:29-dind"})
-	chooser := dockerVM.NewChooser(w.VMs, create, w.Lifecycle, dockerVM.Defaults{
-		Resources: vm.Resources{CPUs: 2, Memory: 2 * vmtest.GiB, Disk: 20 * vmtest.GiB},
-		Ports:     []port.Port{80},
-		Network:   vm.Network{Ingress: vm.AccessAllow, Egress: vm.AccessAllow},
-	})
-
-	useCase := NewUseCase(w.VMs, chooser, requester, validator.New(translator.Codes{}))
+	useCase := NewUseCase(w.Entities, w.Chooser, requester, validator.New(translator.Codes{}))
 	useCase.pollInterval = 5 * time.Millisecond
 
 	return useCase
@@ -94,11 +81,12 @@ func TestUseCase_Execute(t *testing.T) {
 			for {
 				time.Sleep(20 * time.Millisecond)
 
-				vms, _ := w.VMs.GetAllByOwnerAndKind(ctx, "owner", vm.KindDocker)
+				vms, _ := w.Records.All(ctx, resource.Filter{OwnerUUID: "owner", Labels: map[string]string{vmKind.LabelFlavor: string(vmKind.FlavorDocker)}})
 				if len(vms) == 1 {
-					vms[0].CurrentState = vm.Running
-					vms[0].LastHeartbeatAt = time.Now()
-					_, _ = w.VMs.Save(ctx, &vms[0])
+					w.Change(vms[0].Metadata.UUID, func(v *vmKind.VM) {
+						v.Status.State = vmKind.Running
+						v.Status.ObservedAt = time.Now()
+					})
 
 					return
 				}
@@ -118,13 +106,12 @@ func TestUseCase_Execute(t *testing.T) {
 	t.Run("one that will not come up is not asked", func(t *testing.T) {
 		t.Parallel()
 
-		failed := vmtest.Docker("01", "owner")
-		failed.CurrentState = vm.Failed
+		failed := vmtest.In(vmtest.Docker("01", "owner"), func(v *vmKind.VM) { v.Status.State = vmKind.Failed })
 
 		w := vmtest.New(vmtest.WithVMs(failed))
 		requester := &messagingMock.Requester{Answer: created}
 
-		response, err := useCaseOf(w, requester).Execute(ctx, &Request{OwnerUUID: "owner", VM: dockerVM.Choice{UUID: "01"}, Container: spec()})
+		response, err := useCaseOf(w, requester).Execute(ctx, &Request{OwnerUUID: "owner", VM: dockervm.Choice{UUID: "01"}, Container: spec()})
 		require.NoError(t, err)
 		require.NotNil(t, response.NodeError)
 		assert.ErrorIs(t, response.NodeError, vm.ErrNotRunning)
@@ -152,7 +139,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		w := vmtest.New()
 
-		response, err := useCaseOf(w, &messagingMock.Requester{}).Execute(ctx, &Request{VM: dockerVM.Choice{UUID: "01", New: &dockerVM.New{}}})
+		response, err := useCaseOf(w, &messagingMock.Requester{}).Execute(ctx, &Request{VM: dockervm.Choice{UUID: "01", New: &dockervm.New{}}})
 		require.NoError(t, err)
 		assert.Equal(t, domain.ValidationErrors{
 			"owner_uuid":      "required_field",
@@ -169,5 +156,16 @@ func TestUseCase_Execute(t *testing.T) {
 		response, err := useCaseOf(w, &messagingMock.Requester{}).Execute(ctx, &Request{OwnerUUID: "owner", Container: spec()})
 		require.NoError(t, err)
 		assert.Equal(t, domain.ValidationErrors{"vm": "vm_required"}, response.ValidationErrors)
+	})
+
+	t.Run("one no node has room for is not made", func(t *testing.T) {
+		t.Parallel()
+
+		w := vmtest.New(vmtest.WithNodes(vmtest.Gone(vmtest.Node)))
+
+		response, err := useCaseOf(w, &messagingMock.Requester{}).Execute(ctx, &Request{OwnerUUID: "owner", Container: spec()})
+		require.NoError(t, err)
+		assert.Equal(t, domain.ValidationErrors{"vm": "no_capacity"}, response.ValidationErrors)
+		assert.Zero(t, w.Memory.Len(vmKind.Name), "nothing is kept of it")
 	})
 }

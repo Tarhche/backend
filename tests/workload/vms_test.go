@@ -3,8 +3,10 @@ package workload_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -23,8 +25,11 @@ import (
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/restoreVM"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/startVM"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/stopVM"
+	"github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/updateVM"
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
+	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
 	"github.com/khanzadimahdi/testproject/domain/workload/snapshot"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
@@ -33,7 +38,8 @@ import (
 
 // TestAMachineVM walks a VM through its life from the dashboard: asked for,
 // made on its node and reported running, stopped, snapshotted into the
-// bucket, started, restored from the snapshot, and deleted.
+// bucket, started, given other ports, restored from the snapshot, and
+// deleted.
 func TestAMachineVM(t *testing.T) {
 	t.Parallel()
 
@@ -149,6 +155,33 @@ func TestAMachineVM(t *testing.T) {
 		w.vmIn(t, uuid, "running")
 	})
 
+	t.Run("given other ports, its node is asked to apply them, and it runs with them", func(t *testing.T) {
+		ports := []uint{8080, 9090}
+
+		updated, err := updateVM.NewUseCase(w.client, w.validator, w.translator, w.owners, ingressDomain).Execute(ctx, &updateVM.Request{
+			UUID:      uuid,
+			OwnerUUID: ownerUUID,
+			Ports:     &ports,
+		})
+		require.NoError(t, err)
+		require.Empty(t, updated.ValidationErrors)
+
+		reconfigured := w.stored(t, uuid, "its node applying its ports", func(v vmKind.VM) bool {
+			return v.Status.State == vmKind.Running && v.Status.Applied != nil && slices.Equal(v.Status.Applied.Ports, []port.Port{8080, 9090})
+		})
+		assert.Equal(t, vmKind.Running, reconfigured.Status.Expected)
+
+		spec, err := w.engine.Spec(uuid)
+		require.NoError(t, err)
+		assert.Equal(t, []port.Port{8080, 9090}, spec.Ports, "its engine has them")
+
+		running := w.vmIn(t, uuid, "running")
+		assert.Equal(t, []presenter.URL{
+			{Port: 8080, URL: "https://" + running.Slug + "-8080." + ingressDomain},
+			{Port: 9090, URL: "https://" + running.Slug + "-9090." + ingressDomain},
+		}, running.URLs)
+	})
+
 	require.NoError(t, w.engine.SetDisk(uuid, []byte("what was written since")))
 
 	t.Run("restored from the snapshot, it has the snapshot's disk and runs again", func(t *testing.T) {
@@ -160,13 +193,17 @@ func TestAMachineVM(t *testing.T) {
 		require.NoError(t, err)
 		require.Empty(t, restored.ValidationErrors)
 
-		eventually(t, "the vm running from the snapshot", func(ctx context.Context) (vm.VM, error) {
-			return w.vms.GetOne(ctx, uuid)
-		}, func(v vm.VM) bool { return v.CurrentState == vm.Running && len(v.RestoreFrom) == 0 })
+		// it is restoring from the moment it is asked, and running again only
+		// once its node says the restore was carried out.
+		w.stored(t, uuid, "running from the snapshot", func(v vmKind.VM) bool { return v.Status.State == vmKind.Running })
 
 		disk, err := w.engine.Disk(uuid)
 		require.NoError(t, err)
 		assert.Equal(t, "what was on it", string(disk))
+
+		spec, err := w.engine.Spec(uuid)
+		require.NoError(t, err)
+		assert.Equal(t, []port.Port{8080, 9090}, spec.Ports, "it keeps its ports")
 
 		assert.Equal(t, "running", w.vmIn(t, uuid, "running").State)
 	})
@@ -176,11 +213,7 @@ func TestAMachineVM(t *testing.T) {
 		require.NoError(t, err)
 		require.Empty(t, deleted.ValidationErrors)
 
-		require.Eventually(t, func() bool {
-			_, err := w.vms.GetOne(ctx, uuid)
-
-			return errors.Is(err, domain.ErrNotExists)
-		}, settle, beat, "the record was never removed")
+		w.gone(t, uuid)
 
 		_, err = w.engine.Inspect(ctx, uuid)
 		assert.ErrorIs(t, err, domain.ErrNotExists)
@@ -289,16 +322,25 @@ func TestADockerVM(t *testing.T) {
 
 	require.NotEmpty(t, stackUUID)
 
+	t.Run("stopped, its stack waits on it", func(t *testing.T) {
+		stopped, err := stopVM.NewUseCase(w.client, w.translator).Execute(ctx, &stopVM.Request{UUID: uuid, OwnerUUID: ownerUUID})
+		require.NoError(t, err)
+		require.Empty(t, stopped.ValidationErrors)
+
+		w.vmIn(t, uuid, "stopped")
+
+		waiting := w.stack(t, stackUUID, "waiting on its vm", func(s presenter.StackDetail) bool {
+			return s.State == "waiting" && s.Reason == "its vm is stopped"
+		})
+		assert.Equal(t, "running", waiting.ExpectedState, "it is still to be running, once it can be")
+	})
+
 	t.Run("deleted, it takes its stack with it", func(t *testing.T) {
 		deleted, err := deleteVM.NewUseCase(w.client, w.translator).Execute(ctx, &deleteVM.Request{UUID: uuid, OwnerUUID: ownerUUID})
 		require.NoError(t, err)
 		require.Empty(t, deleted.ValidationErrors)
 
-		require.Eventually(t, func() bool {
-			_, err := w.vms.GetOne(ctx, uuid)
-
-			return errors.Is(err, domain.ErrNotExists)
-		}, settle, beat, "the record was never removed")
+		w.gone(t, uuid)
 
 		_, err = w.resources.GetOne(ctx, stackKind.Name, stackUUID)
 		assert.ErrorIs(t, err, domain.ErrNotExists, "a vm's stacks go with it")
@@ -306,6 +348,99 @@ func TestADockerVM(t *testing.T) {
 		_, err = w.engine.Inspect(ctx, uuid)
 		assert.ErrorIs(t, err, domain.ErrNotExists)
 	})
+}
+
+// TestAVMThatExpires holds a VM given a lifetime to it: once it is over, the
+// VM is deleted, from its node and then from the control plane.
+func TestAVMThatExpires(t *testing.T) {
+	t.Parallel()
+
+	w := start(t)
+	ctx := t.Context()
+
+	created, err := createVM.NewUseCase(w.client, w.validator, w.translator, w.owners, ingressDomain).Execute(ctx, &createVM.Request{
+		Name:            "brief",
+		Kind:            string(vm.KindMachine),
+		Resources:       input.Resources{CPUs: 1, Memory: 1 << 30, Disk: 10 << 30},
+		Network:         input.Network{Ingress: "allow", Egress: "allow"},
+		LifetimeSeconds: 2,
+		OwnerUUID:       ownerUUID,
+	})
+	require.NoError(t, err)
+	require.Empty(t, created.ValidationErrors)
+	require.NotNil(t, created.VM)
+
+	uuid := created.VM.UUID
+
+	running := w.stored(t, uuid, "running", func(v vmKind.VM) bool { return v.Status.State == vmKind.Running })
+	assert.Equal(t, 2*time.Second, running.Metadata.Lifetime)
+	assert.WithinDuration(t, running.Metadata.CreatedAt.Add(2*time.Second), running.Metadata.ExpiresAt, time.Second)
+
+	w.gone(t, uuid)
+
+	_, err = w.engine.Inspect(ctx, uuid)
+	assert.ErrorIs(t, err, domain.ErrNotExists, "its node removed it")
+}
+
+// TestANodeThatFallsSilent holds the VMs of a node that falls silent to being
+// failed as lost, and to coming back once it speaks again.
+func TestANodeThatFallsSilent(t *testing.T) {
+	t.Parallel()
+
+	w := start(t, silentAfter(2*time.Second))
+	ctx := t.Context()
+
+	created, err := createVM.NewUseCase(w.client, w.validator, w.translator, w.owners, ingressDomain).Execute(ctx, &createVM.Request{
+		Name:      "box",
+		Kind:      string(vm.KindMachine),
+		Resources: input.Resources{CPUs: 1, Memory: 1 << 30, Disk: 10 << 30},
+		Network:   input.Network{Ingress: "allow", Egress: "allow"},
+		OwnerUUID: ownerUUID,
+	})
+	require.NoError(t, err)
+	require.Empty(t, created.ValidationErrors)
+
+	uuid := created.VM.UUID
+
+	w.vmIn(t, uuid, "running")
+
+	w.beating.Store(false)
+
+	lost := w.stored(t, uuid, "failed as lost", func(v vmKind.VM) bool { return v.Status.State == vmKind.Failed })
+	assert.Equal(t, "node_lost", lost.Status.Reason)
+	assert.Equal(t, vmKind.Running, lost.Status.Expected, "it is still to be running, once it can be")
+
+	assert.Equal(t, "failed", w.vmIn(t, uuid, "failed").State, "the dashboard shows it failed")
+
+	w.beating.Store(true)
+
+	back := w.stored(t, uuid, "running again", func(v vmKind.VM) bool { return v.Status.State == vmKind.Running })
+	assert.Empty(t, back.Status.Reason)
+}
+
+// stored is the VM as the control plane keeps it, once condition holds of it.
+func (w *workload) stored(t *testing.T, uuid string, what string, condition func(vmKind.VM) bool) vmKind.VM {
+	t.Helper()
+
+	return eventually(t, "the vm "+what, func(ctx context.Context) (vmKind.VM, error) {
+		r, err := w.resources.GetOne(ctx, vmKind.Name, uuid)
+		if err != nil {
+			return vmKind.VM{}, err
+		}
+
+		return kind.Decode[vmKind.Spec, vmKind.Status](r.Raw)
+	}, condition)
+}
+
+// gone waits for the control plane to have no record of a VM any more.
+func (w *workload) gone(t *testing.T, uuid string) {
+	t.Helper()
+
+	require.Eventually(t, func() bool {
+		_, err := w.resources.GetOne(t.Context(), vmKind.Name, uuid)
+
+		return errors.Is(err, domain.ErrNotExists)
+	}, settle, beat, "the record was never removed")
 }
 
 // vmIn is the VM as the dashboard shows it, once it is in state.

@@ -3,7 +3,7 @@ package createContainer
 import (
 	"strings"
 
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/dockerVM"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/dockervm"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 )
@@ -12,7 +12,7 @@ import (
 type Request struct {
 	OwnerUUID string `json:"-"`
 
-	VM        dockerVM.Choice           `json:"vm"`
+	VM        dockervm.Choice           `json:"vm"`
 	Container noderequest.ContainerSpec `json:"container"`
 }
 

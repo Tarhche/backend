@@ -1,5 +1,5 @@
 // Package answerRequest answers what the control plane asks a node and waits
-// for: a VM's log, and whatever is asked of a Docker VM's dockerd.
+// for that no kind answers: whatever is asked of a Docker VM's dockerd.
 package answerRequest
 
 import (
@@ -13,7 +13,6 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/orchestrator/docker/networks"
 	"github.com/khanzadimahdi/testproject/application/workload/orchestrator/docker/volumes"
 	"github.com/khanzadimahdi/testproject/application/workload/orchestrator/internal/reply"
-	"github.com/khanzadimahdi/testproject/application/workload/orchestrator/vm/getVMLogs"
 	"github.com/khanzadimahdi/testproject/domain/workload/docker"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 )
@@ -47,13 +46,12 @@ type group interface {
 type UseCase struct {
 	daemons  Daemons
 	groups   map[string]group
-	vmLogs   *getVMLogs.UseCase
 	recorder Recorder
 }
 
 var _ noderequest.Handler = &UseCase{}
 
-func NewUseCase(daemons Daemons, vmLogs *getVMLogs.UseCase, recorder Recorder) *UseCase {
+func NewUseCase(daemons Daemons, recorder Recorder) *UseCase {
 	return &UseCase{
 		daemons: daemons,
 		groups: map[string]group{
@@ -62,7 +60,6 @@ func NewUseCase(daemons Daemons, vmLogs *getVMLogs.UseCase, recorder Recorder) *
 			"docker.networks.":   networks.NewUseCase(daemons),
 			"docker.volumes.":    volumes.NewUseCase(daemons),
 		},
-		vmLogs:   vmLogs,
 		recorder: recorder,
 	}
 }
@@ -74,10 +71,6 @@ func (uc *UseCase) Handle(ctx context.Context, request noderequest.Request) node
 
 	if err := reply.Required("vm_uuid", request.VMUUID); err != nil {
 		return noderequest.Failed(err)
-	}
-
-	if request.Op == noderequest.OpVMLogs {
-		return uc.logs(ctx, request)
 	}
 
 	started := time.Now()
@@ -107,32 +100,6 @@ func (uc *UseCase) Handle(ctx context.Context, request noderequest.Request) node
 	}
 
 	return noderequest.Failed(reply.Invalid("%q is not an operation a node answers", request.Op))
-}
-
-// logs reads a VM's log, which needs no dockerd and so waits for none.
-func (uc *UseCase) logs(ctx context.Context, request noderequest.Request) noderequest.Reply {
-	var asked noderequest.LogsRequest
-	if err := reply.Decode(request.Payload, &asked); err != nil {
-		return noderequest.Failed(err)
-	}
-
-	read, err := uc.vmLogs.Execute(ctx, &getVMLogs.Request{VMUUID: request.VMUUID, Since: asked.Since, Tail: asked.Tail})
-	if err != nil {
-		return noderequest.Failed(err)
-	}
-
-	if len(read.ValidationErrors) > 0 {
-		return noderequest.Failed(reply.Invalid("the request was refused: %v", read.ValidationErrors))
-	}
-
-	lines := make([]noderequest.VMLogLine, len(read.Lines))
-	for n, line := range read.Lines {
-		lines[n] = noderequest.NewVMLogLine(line)
-	}
-
-	fitted, cut := reply.Last(lines)
-
-	return succeeded(fitted, read.Truncated || cut)
 }
 
 // succeeded is the reply to a request that was answered, with what it was

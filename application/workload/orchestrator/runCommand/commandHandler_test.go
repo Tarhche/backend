@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/khanzadimahdi/testproject/application/workload/orchestrator/vm/lock"
+	"github.com/khanzadimahdi/testproject/application/workload/orchestrator/lock"
 	messaging "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
 )
 

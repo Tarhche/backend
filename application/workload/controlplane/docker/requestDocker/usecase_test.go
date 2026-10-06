@@ -9,9 +9,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/vmtest"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/vmtest"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/docker"
+	"github.com/khanzadimahdi/testproject/domain/workload/kind"
+	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
@@ -33,7 +35,7 @@ func TestUseCase_Execute(t *testing.T) {
 			return noderequest.Reply{OK: true, Result: json.RawMessage(`[{"id":"c1","name":"web"}]`), Truncated: true}, nil
 		}}
 
-		response, err := NewUseCase(w.VMs, requester, validator.New(translator.Codes{})).Execute(ctx, &Request{
+		response, err := NewUseCase(w.Entities, requester, validator.New(translator.Codes{})).Execute(ctx, &Request{
 			OwnerUUID: "owner",
 			VMUUID:    "01",
 			Op:        noderequest.OpContainersList,
@@ -54,13 +56,12 @@ func TestUseCase_Execute(t *testing.T) {
 	t.Run("a vm still coming up is asked all the same: its node waits for dockerd", func(t *testing.T) {
 		t.Parallel()
 
-		booting := vmtest.Docker("01", "owner")
-		booting.CurrentState = vm.Scheduled
+		booting := vmtest.In(vmtest.Docker("01", "owner"), func(v *vmKind.VM) { v.Status.State = vmKind.Scheduled })
 
 		w := vmtest.New(vmtest.WithVMs(booting))
 		requester := &messagingMock.Requester{}
 
-		response, err := NewUseCase(w.VMs, requester, validator.New(translator.Codes{})).Execute(ctx, &Request{VMUUID: "01", Op: noderequest.OpPing})
+		response, err := NewUseCase(w.Entities, requester, validator.New(translator.Codes{})).Execute(ctx, &Request{VMUUID: "01", Op: noderequest.OpPing})
 		require.NoError(t, err)
 		assert.Nil(t, response.NodeError)
 		assert.Len(t, requester.Asked(), 1)
@@ -72,16 +73,17 @@ func TestUseCase_Execute(t *testing.T) {
 		// scheduled a moment ago: its node has not listed it, so the node
 		// holds nothing of it to wait for, and would answer that there is no
 		// such vm, which the blog would take for the vm being gone.
-		scheduled := vmtest.Docker("01", "owner")
-		scheduled.CurrentState = vm.Scheduled
-		scheduled.LastHeartbeatAt = time.Time{}
+		scheduled := vmtest.In(vmtest.Docker("01", "owner"), func(v *vmKind.VM) {
+			v.Status.State = vmKind.Scheduled
+			v.Status.ObservedAt = time.Time{}
+		})
 
 		w := vmtest.New(vmtest.WithVMs(scheduled))
 		requester := &messagingMock.Requester{Answer: func(context.Context, string, noderequest.Request) (noderequest.Reply, error) {
 			return noderequest.Failed(domain.ErrNotExists), nil
 		}}
 
-		response, err := NewUseCase(w.VMs, requester, validator.New(translator.Codes{})).Execute(ctx, &Request{VMUUID: "01", Op: noderequest.OpContainersList})
+		response, err := NewUseCase(w.Entities, requester, validator.New(translator.Codes{})).Execute(ctx, &Request{VMUUID: "01", Op: noderequest.OpContainersList})
 		require.NoError(t, err)
 		require.NotNil(t, response.NodeError)
 		assert.Equal(t, noderequest.CodeNotRunning, response.NodeError.Code)
@@ -89,7 +91,7 @@ func TestUseCase_Execute(t *testing.T) {
 	})
 
 	for name, tt := range map[string]struct {
-		vm     vm.VM
+		vm     vmKind.VM
 		answer func(context.Context, string, noderequest.Request) (noderequest.Reply, error)
 		want   error
 	}{
@@ -98,15 +100,15 @@ func TestUseCase_Execute(t *testing.T) {
 			want: vm.ErrNotDocker,
 		},
 		"a docker vm that failed": {
-			vm:   func() vm.VM { v := vmtest.Docker("01", "owner"); v.CurrentState = vm.Failed; return v }(),
+			vm:   vmtest.In(vmtest.Docker("01", "owner"), func(v *vmKind.VM) { v.Status.State = vmKind.Failed }),
 			want: vm.ErrNotRunning,
 		},
 		"a docker vm that is stopped": {
-			vm:   func() vm.VM { v := vmtest.Docker("01", "owner"); v.CurrentState = vm.Stopped; return v }(),
+			vm:   vmtest.In(vmtest.Docker("01", "owner"), func(v *vmKind.VM) { v.Status.State = vmKind.Stopped }),
 			want: vm.ErrNotRunning,
 		},
 		"a docker vm on no node": {
-			vm:   func() vm.VM { v := vmtest.Docker("01", "owner"); v.NodeName = ""; return v }(),
+			vm:   vmtest.In(vmtest.Docker("01", "owner"), func(v *vmKind.VM) { v.Metadata.Node = "" }),
 			want: vm.ErrNotRunning,
 		},
 		"a dockerd that did not come up": {
@@ -136,7 +138,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 			w := vmtest.New(vmtest.WithVMs(tt.vm))
 
-			response, err := NewUseCase(w.VMs, &messagingMock.Requester{Answer: tt.answer}, validator.New(translator.Codes{})).Execute(ctx, &Request{
+			response, err := NewUseCase(w.Entities, &messagingMock.Requester{Answer: tt.answer}, validator.New(translator.Codes{})).Execute(ctx, &Request{
 				VMUUID: "01",
 				Op:     noderequest.OpContainersInspect,
 			})
@@ -151,7 +153,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		w := vmtest.New(vmtest.WithVMs(vmtest.Docker("01", "owner")))
 
-		response, err := NewUseCase(w.VMs, &messagingMock.Requester{}, validator.New(translator.Codes{})).Execute(ctx, &Request{VMUUID: "01", Op: noderequest.OpVMLogs})
+		response, err := NewUseCase(w.Entities, &messagingMock.Requester{}, validator.New(translator.Codes{})).Execute(ctx, &Request{VMUUID: "01", Op: kind.Op(vmKind.Name, vmKind.ActionLogs)})
 		require.NoError(t, err)
 		assert.Equal(t, domain.ValidationErrors{"op": "invalid_value"}, response.ValidationErrors)
 	})
@@ -161,7 +163,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 		w := vmtest.New(vmtest.WithVMs(vmtest.Docker("01", "owner")))
 
-		_, err := NewUseCase(w.VMs, &messagingMock.Requester{}, validator.New(translator.Codes{})).Execute(ctx, &Request{OwnerUUID: "other", VMUUID: "01", Op: noderequest.OpPing})
+		_, err := NewUseCase(w.Entities, &messagingMock.Requester{}, validator.New(translator.Codes{})).Execute(ctx, &Request{OwnerUUID: "other", VMUUID: "01", Op: noderequest.OpPing})
 		assert.ErrorIs(t, err, domain.ErrNotExists)
 	})
 }

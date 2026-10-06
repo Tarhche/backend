@@ -11,10 +11,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/vmtest"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/vmtest"
 	"github.com/khanzadimahdi/testproject/domain"
+	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
-	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
 )
 
@@ -43,8 +43,7 @@ func TestUseCase_Execute(t *testing.T) {
 
 	ctx := context.Background()
 
-	stopped := vmtest.Docker("d3", "owner")
-	stopped.CurrentState = vm.Stopped
+	stopped := vmtest.In(vmtest.Docker("d3", "owner"), func(v *vmKind.VM) { v.Status.State = vmKind.Stopped })
 
 	w := vmtest.New(vmtest.WithVMs(
 		vmtest.Docker("d1", "owner"),
@@ -84,7 +83,7 @@ func TestUseCase_Execute(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			response, err := NewUseCase(w.VMs, nodes(tt.broken), slog.New(slog.DiscardHandler)).Execute(ctx, &tt.request)
+			response, err := NewUseCase(w.Entities, nodes(tt.broken), slog.New(slog.DiscardHandler)).Execute(ctx, &tt.request)
 			require.NoError(t, err)
 
 			got := make([]string, len(response.Items))
@@ -101,7 +100,7 @@ func TestUseCase_Execute(t *testing.T) {
 	t.Run("a vm named that is somebody else's is not there", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := NewUseCase(w.VMs, nodes(""), slog.New(slog.DiscardHandler)).Execute(ctx, &Request{OwnerUUID: "owner", VMUUID: "t1"})
+		_, err := NewUseCase(w.Entities, nodes(""), slog.New(slog.DiscardHandler)).Execute(ctx, &Request{OwnerUUID: "owner", VMUUID: "t1"})
 		assert.ErrorIs(t, err, domain.ErrNotExists)
 	})
 }

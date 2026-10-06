@@ -7,44 +7,12 @@ import (
 
 	"github.com/khanzadimahdi/testproject/domain/workload/docker"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
-	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
 
 // The payloads a request carries and the results a reply does, one shape for
 // each operation, as the doc of its Op says. They are the wire's own types: the
 // docker package's are values with no shape on a wire, and are converted to and
 // from these at either end.
-
-// LogsRequest narrows what is read of a VM's log.
-type LogsRequest struct {
-	Since time.Time `json:"since"`
-	Tail  uint      `json:"tail"`
-}
-
-// NewLogsRequest asks for what options describe.
-func NewLogsRequest(options vm.LogOptions) LogsRequest {
-	return LogsRequest{Since: options.Since, Tail: options.Tail}
-}
-
-// ToVM is the request as the vm package has it.
-func (r LogsRequest) ToVM() vm.LogOptions {
-	return vm.LogOptions{Since: r.Since, Tail: r.Tail}
-}
-
-// VMLogLine is one line of a VM's log.
-type VMLogLine struct {
-	At     time.Time `json:"at"`
-	Source string    `json:"source"`
-	Line   string    `json:"line"`
-}
-
-func NewVMLogLine(line vm.LogLine) VMLogLine {
-	return VMLogLine{At: line.At, Source: line.Source, Line: line.Line}
-}
-
-func (l VMLogLine) ToVM() vm.LogLine {
-	return vm.LogLine{At: l.At, Source: l.Source, Line: l.Line}
-}
 
 // ContainersRequest narrows a listing of containers.
 type ContainersRequest struct {

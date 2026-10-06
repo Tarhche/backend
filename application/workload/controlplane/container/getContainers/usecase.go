@@ -24,13 +24,21 @@ const (
 	batch uint = 100
 )
 
+// VMs are where the Docker VMs are read from.
+type VMs interface {
+	GetOne(ctx context.Context, uuid string) (vm.VM, error)
+	GetOneByOwner(ctx context.Context, ownerUUID string, uuid string) (vm.VM, error)
+	GetAllByOwnerAndKind(ctx context.Context, ownerUUID string, kind vm.Kind) ([]vm.VM, error)
+	GetAll(ctx context.Context, offset uint, limit uint) ([]vm.VM, error)
+}
+
 type UseCase struct {
-	vmRepository vm.Repository
+	vmRepository VMs
 	requester    noderequest.Requester
 	logger       *slog.Logger
 }
 
-func NewUseCase(vmRepository vm.Repository, requester noderequest.Requester, logger *slog.Logger) *UseCase {
+func NewUseCase(vmRepository VMs, requester noderequest.Requester, logger *slog.Logger) *UseCase {
 	return &UseCase{vmRepository: vmRepository, requester: requester, logger: logger}
 }
 

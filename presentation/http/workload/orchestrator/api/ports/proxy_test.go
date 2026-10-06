@@ -21,7 +21,7 @@ import (
 func TestProxyHandler(t *testing.T) {
 	t.Parallel()
 
-	// what the VM serves, where its engine published it.
+	// what the task serves, where its engine published it.
 	upstream := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(rw, r.Host+" "+r.URL.Path+"?"+r.URL.RawQuery)
 	}))
@@ -34,25 +34,28 @@ func TestProxyHandler(t *testing.T) {
 	// at the upstream through an engine whose endpoints say where it is.
 	e := memory.New(memory.WithHost(host))
 
-	_, err = e.Create(t.Context(), vm.Spec{
-		ID:      "vm-1",
-		Kind:    vm.KindMachine,
-		Image:   "ubuntu:24.04",
-		Ports:   []port.Port{80},
-		Network: vm.Network{Ingress: vm.AccessAllow, Egress: vm.AccessDeny},
-		Labels:  map[string]string{vm.LabelPurpose: vm.PurposeVM, vm.LabelSlug: "box-abcde"},
-	})
-	require.NoError(t, err)
-
-	instance, err := e.Inspect(t.Context(), "vm-1")
-	require.NoError(t, err)
-	require.Len(t, instance.Endpoints, 1)
+	for id, held := range map[string]struct {
+		purpose string
+		slug    string
+	}{
+		"execution-1": {purpose: vm.PurposeTask, slug: "snippet-abcde"},
+		"vm-1":        {purpose: vm.PurposeVM, slug: "box-abcde"},
+	} {
+		_, err = e.Create(t.Context(), vm.Spec{
+			ID:      id,
+			Kind:    vm.KindMachine,
+			Image:   "ubuntu:24.04",
+			Ports:   []port.Port{80},
+			Network: vm.Network{Ingress: vm.AccessAllow, Egress: vm.AccessDeny},
+			Labels:  map[string]string{vm.LabelPurpose: held.purpose, vm.LabelSlug: held.slug},
+		})
+		require.NoError(t, err)
+	}
 
 	handler := NewProxyHandler(getendpoint.NewUseCase(redirected{Engine: e, to: net.JoinHostPort(host, published)}), slog.New(slog.DiscardHandler))
 
 	mux := http.NewServeMux()
 	mux.Handle("/tasks/{slug}/{port}/{path...}", handler)
-	mux.Handle("/vms/{slug}/{port}/{path...}", handler)
 
 	testcases := []struct {
 		name       string
@@ -60,17 +63,18 @@ func TestProxyHandler(t *testing.T) {
 		wantStatus int
 		wantBody   string
 	}{
-		{name: "a VM's port is reached by its slug", path: "/vms/box-abcde/0/index.html?a=1", wantStatus: http.StatusOK, wantBody: "box-abcde-80.workload.localhost /index.html?a=1"},
-		{name: "the tasks' route reaches it too, since slugs are one namespace", path: "/tasks/box-abcde/80/", wantStatus: http.StatusOK, wantBody: "box-abcde-80.workload.localhost /?"},
-		{name: "a port it does not expose is not found", path: "/vms/box-abcde/9999/", wantStatus: http.StatusNotFound},
-		{name: "a slug this node does not hold is not found", path: "/vms/other-fghij/0/", wantStatus: http.StatusNotFound},
-		{name: "a port that is no port is refused", path: "/vms/box-abcde/http/", wantStatus: http.StatusBadRequest},
+		{name: "a task's port is reached by its slug", path: "/tasks/snippet-abcde/0/index.html?a=1", wantStatus: http.StatusOK, wantBody: "snippet-abcde-80.workload.localhost /index.html?a=1"},
+		{name: "and the port named", path: "/tasks/snippet-abcde/80/", wantStatus: http.StatusOK, wantBody: "snippet-abcde-80.workload.localhost /?"},
+		{name: "a port it does not expose is not found", path: "/tasks/snippet-abcde/9999/", wantStatus: http.StatusNotFound},
+		{name: "a slug this node does not hold is not found", path: "/tasks/other-fghij/0/", wantStatus: http.StatusNotFound},
+		{name: "nor is a vm's, whose ports are its kind's to serve", path: "/tasks/box-abcde/80/", wantStatus: http.StatusNotFound},
+		{name: "a port that is no port is refused", path: "/tasks/snippet-abcde/http/", wantStatus: http.StatusBadRequest},
 	}
 
 	for _, tt := range testcases {
 		t.Run(tt.name, func(t *testing.T) {
 			request := httptest.NewRequest(http.MethodGet, tt.path, nil)
-			request.Host = "box-abcde-80.workload.localhost"
+			request.Host = "snippet-abcde-80.workload.localhost"
 
 			recorder := httptest.NewRecorder()
 			mux.ServeHTTP(recorder, request)

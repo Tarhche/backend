@@ -12,20 +12,11 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/khanzadimahdi/testproject/application/workload/orchestrator/vm/getVMLogs"
-	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/docker"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	mocks "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/docker"
-	memory "github.com/khanzadimahdi/testproject/infrastructure/workload/vm/memory"
 )
-
-type validates struct{}
-
-func (validates) Validate(value any) domain.ValidationErrors {
-	return value.(domain.Validatable).Validate()
-}
 
 type one struct {
 	daemon docker.Daemon
@@ -50,13 +41,6 @@ func (r *timed) DockerRequest(_ context.Context, op string, _ time.Duration) {
 
 func TestUseCase_Handle(t *testing.T) {
 	t.Parallel()
-
-	e := memory.New()
-	_, err := e.Create(t.Context(), vm.Spec{ID: "vm-1", Kind: vm.KindMachine, Image: "ubuntu:24.04"})
-	require.NoError(t, err)
-	require.NoError(t, e.Log("vm-1", vm.LogSourceKernel, "booted"))
-
-	logs := getVMLogs.NewUseCase(e, validates{})
 
 	testcases := []struct {
 		name    string
@@ -113,14 +97,9 @@ func TestUseCase_Handle(t *testing.T) {
 			wantTimed: []string{"docker.volumes.list"},
 		},
 		{
-			name:       "a VM's log is read without asking any dockerd",
-			request:    noderequest.Request{Op: noderequest.OpVMLogs, VMUUID: "vm-1", Payload: json.RawMessage(`{"tail":5}`)},
-			wantResult: `[{"at":"` + mustLogTime(t, e) + `","source":"kernel","line":"booted"}]`,
-		},
-		{
-			name:     "the log of a VM that is not here is not found",
-			request:  noderequest.Request{Op: noderequest.OpVMLogs, VMUUID: "vm-2"},
-			wantCode: noderequest.CodeNotFound,
+			name:     "a VM's log is the vm kind's to answer, and no operation of the node's own",
+			request:  noderequest.Request{Op: "vm.logs", VMUUID: "vm-1", Payload: json.RawMessage(`{"tail":5}`)},
+			wantCode: noderequest.CodeInvalid,
 		},
 		{
 			name:     "an operation nobody knows is refused",
@@ -146,7 +125,7 @@ func TestUseCase_Handle(t *testing.T) {
 
 			recorder := &timed{}
 
-			reply := NewUseCase(one{daemon: &daemon}, logs, recorder).Handle(t.Context(), tt.request)
+			reply := NewUseCase(one{daemon: &daemon}, recorder).Handle(t.Context(), tt.request)
 
 			assert.Equal(t, tt.wantTimed, recorder.ops)
 
@@ -170,21 +149,4 @@ func TestUseCase_Handle(t *testing.T) {
 			assert.JSONEq(t, tt.wantResult, string(reply.Result))
 		})
 	}
-}
-
-// mustLogTime is when the only line of vm-1's log was written, as it travels.
-func mustLogTime(t *testing.T, e *memory.Engine) string {
-	t.Helper()
-
-	lines, err := e.Logs(t.Context(), "vm-1", vm.LogOptions{})
-	require.NoError(t, err)
-	require.Len(t, lines, 1)
-
-	encoded, err := json.Marshal(lines[0].At)
-	require.NoError(t, err)
-
-	var at string
-	require.NoError(t, json.Unmarshal(encoded, &at))
-
-	return at
 }

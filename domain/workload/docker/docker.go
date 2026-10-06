@@ -22,11 +22,6 @@ const (
 	LabelComposeService = "com.docker.compose.service"
 )
 
-// LabelVM marks an instance a node's engine holds as a Docker VM, with
-// "true": it is how a node tells, from its engine alone, which of its VMs
-// have a dockerd it reads, since nothing ever looks inside a VM to find one.
-const LabelVM = "workload.docker"
-
 var (
 	// ErrUnavailable is a dockerd that did not answer, even after it was given
 	// time to come up with its VM.

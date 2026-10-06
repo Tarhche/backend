@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/khanzadimahdi/testproject/application/workload/orchestrator/vm/lock"
+	"github.com/khanzadimahdi/testproject/application/workload/orchestrator/lock"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	messaging "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"

@@ -8,12 +8,19 @@ import (
 	"time"
 
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/ask"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/dockervm"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/presenter"
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/dockerVM"
 	"github.com/khanzadimahdi/testproject/domain"
+	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
+
+// VMs are where the Docker VM a container goes into is read again, while it
+// comes up.
+type VMs interface {
+	GetOne(ctx context.Context, uuid string) (vm.VM, error)
+}
 
 const (
 	// BootTimeout is how long a Docker VM that is still coming up is waited
@@ -27,15 +34,15 @@ const (
 )
 
 type UseCase struct {
-	vmRepository vm.Repository
-	chooser      *dockerVM.Chooser
+	vmRepository VMs
+	chooser      *dockervm.Chooser
 	requester    noderequest.Requester
 	validator    domain.Validator
 
 	pollInterval time.Duration
 }
 
-func NewUseCase(vmRepository vm.Repository, chooser *dockerVM.Chooser, requester noderequest.Requester, validator domain.Validator) *UseCase {
+func NewUseCase(vmRepository VMs, chooser *dockervm.Chooser, requester noderequest.Requester, validator domain.Validator) *UseCase {
 	return &UseCase{
 		vmRepository: vmRepository,
 		chooser:      chooser,
@@ -59,9 +66,9 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		return &Response{ValidationErrors: refused}, nil
 	}
 
-	response := &Response{VM: &presenter.ChosenVM{UUID: chosen.VM.UUID, Name: chosen.VM.Name, Created: chosen.Created}}
+	response := &Response{VM: &presenter.ChosenVM{UUID: chosen.VM.Metadata.UUID, Name: chosen.VM.Metadata.Name, Created: chosen.Created}}
 
-	v, notUp, err := uc.up(ctx, chosen.VM)
+	v, notUp, err := uc.up(ctx, vmKind.Entity(chosen.VM))
 	if err != nil {
 		return nil, err
 	}

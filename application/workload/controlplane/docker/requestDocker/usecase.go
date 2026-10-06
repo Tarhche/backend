@@ -20,14 +20,14 @@ import (
 )
 
 type UseCase struct {
-	vmRepository vm.Repository
+	vmRepository owner.Repository[vm.VM]
 	requester    noderequest.Requester
 	validator    domain.Validator
 
 	now func() time.Time
 }
 
-func NewUseCase(vmRepository vm.Repository, requester noderequest.Requester, validator domain.Validator) *UseCase {
+func NewUseCase(vmRepository owner.Repository[vm.VM], requester noderequest.Requester, validator domain.Validator) *UseCase {
 	return &UseCase{vmRepository: vmRepository, requester: requester, validator: validator, now: time.Now}
 }
 

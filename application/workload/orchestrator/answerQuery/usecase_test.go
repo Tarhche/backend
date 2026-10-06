@@ -182,7 +182,7 @@ func TestUseCase_Handle_TheNodesOwn(t *testing.T) {
 	}{
 		"an op named after a kind that is not registered here is the node's, as it always was": {
 			kinds: func(t *testing.T) *kind.Registry[kind.NodeBinding] { return running(t, &lamps{}) },
-			op:    noderequest.OpVMLogs,
+			op:    "vm.logs",
 		},
 		"and so is one that names no kind's action": {
 			kinds: func(t *testing.T) *kind.Registry[kind.NodeBinding] { return running(t, &lamps{}) },

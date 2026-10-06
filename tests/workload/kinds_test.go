@@ -210,7 +210,7 @@ func TestKinds(t *testing.T) {
 
 	engine := memory.New()
 
-	node, err := providers.NewOrchestratorVMs(providers.OrchestratorVMDependencies{
+	node, err := providers.NewOrchestratorWorkload(providers.OrchestratorDependencies{
 		NATS:      nodeConnection,
 		Engine:    engine,
 		Archives:  storageMemory.New(),
@@ -327,7 +327,7 @@ func TestKinds(t *testing.T) {
 	})
 
 	t.Run("and the node's own requests are answered as they always were", func(t *testing.T) {
-		reply, err := requester.Request(ctx, nodeName, noderequest.Request{Op: noderequest.OpVMLogs, VMUUID: "no-such-vm"})
+		reply, err := requester.Request(ctx, nodeName, noderequest.Request{Op: noderequest.OpPing, VMUUID: "no-such-vm"})
 		require.NoError(t, err)
 
 		assert.ErrorIs(t, reply.Err(), domain.ErrNotExists)

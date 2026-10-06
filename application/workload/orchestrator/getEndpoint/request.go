@@ -6,7 +6,7 @@ import (
 )
 
 type Request struct {
-	// Slug is the name a VM or a task is addressed by from outside.
+	// Slug is the name a task is addressed by from outside.
 	Slug string `json:"slug"`
 
 	// Port is its own port that was asked for. Zero asks for the lowest one

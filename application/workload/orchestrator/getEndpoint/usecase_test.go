@@ -39,32 +39,32 @@ func TestUseCase_Execute(t *testing.T) {
 		wantErr error
 	}{
 		{
-			name:    "a bare request reaches a VM's lowest port",
-			held:    []vm.Spec{instance("vm-1", vm.PurposeVM, "box-abcde", vm.AccessAllow, 8080, 80)},
+			name:    "a bare request reaches a task's lowest port",
+			held:    []vm.Spec{instance("vm-1", vm.PurposeTask, "box-abcde", vm.AccessAllow, 8080, 80)},
 			request: Request{Slug: "box-abcde"},
 			want:    &Response{Port: 80, Address: "vmhost-01:20001"},
 		},
 		{
 			name:    "a named port reaches that port",
-			held:    []vm.Spec{instance("vm-1", vm.PurposeVM, "box-abcde", vm.AccessAllow, 8080, 80)},
+			held:    []vm.Spec{instance("vm-1", vm.PurposeTask, "box-abcde", vm.AccessAllow, 8080, 80)},
 			request: Request{Slug: "box-abcde", Port: 8080},
 			want:    &Response{Port: 8080, Address: "vmhost-01:20000"},
 		},
 		{
-			name:    "a port the VM was not given is not exposed",
-			held:    []vm.Spec{instance("vm-1", vm.PurposeVM, "box-abcde", vm.AccessAllow, 80)},
+			name:    "a port the task was not given is not exposed",
+			held:    []vm.Spec{instance("vm-1", vm.PurposeTask, "box-abcde", vm.AccessAllow, 80)},
 			request: Request{Slug: "box-abcde", Port: 9999},
 			wantErr: ErrNotExposed,
 		},
 		{
-			name:    "nothing of a VM whose ingress is denied is exposed",
-			held:    []vm.Spec{instance("vm-1", vm.PurposeVM, "box-abcde", vm.AccessDeny, 80)},
+			name:    "nothing of a task whose ingress is denied is exposed",
+			held:    []vm.Spec{instance("vm-1", vm.PurposeTask, "box-abcde", vm.AccessDeny, 80)},
 			request: Request{Slug: "box-abcde", Port: 80},
 			wantErr: ErrNotExposed,
 		},
 		{
-			name:    "a stopped VM says so",
-			held:    []vm.Spec{instance("vm-1", vm.PurposeVM, "box-abcde", vm.AccessAllow, 80)},
+			name:    "a stopped task says so",
+			held:    []vm.Spec{instance("vm-1", vm.PurposeTask, "box-abcde", vm.AccessAllow, 80)},
 			stopped: "vm-1",
 			request: Request{Slug: "box-abcde"},
 			wantErr: ErrNotRunning,
@@ -87,13 +87,19 @@ func TestUseCase_Execute(t *testing.T) {
 		},
 		{
 			name:    "a slug this node does not hold says so",
-			held:    []vm.Spec{instance("vm-1", vm.PurposeVM, "box-abcde", vm.AccessAllow, 80)},
+			held:    []vm.Spec{instance("vm-1", vm.PurposeTask, "box-abcde", vm.AccessAllow, 80)},
 			request: Request{Slug: "other-fghij"},
 			wantErr: ErrNotHeld,
 		},
 		{
-			name:    "an instance that is neither a VM nor a task is nothing to reach",
+			name:    "an instance that is not a task is nothing to reach",
 			held:    []vm.Spec{instance("vm-1", "", "box-abcde", vm.AccessAllow, 80)},
+			request: Request{Slug: "box-abcde"},
+			wantErr: ErrNotHeld,
+		},
+		{
+			name:    "and neither is a vm, whose ports are its kind's",
+			held:    []vm.Spec{instance("vm-1", vm.PurposeVM, "box-abcde", vm.AccessAllow, 80)},
 			request: Request{Slug: "box-abcde"},
 			wantErr: ErrNotHeld,
 		},

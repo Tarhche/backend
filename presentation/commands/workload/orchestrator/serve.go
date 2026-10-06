@@ -13,7 +13,6 @@ import (
 	orchestratorHeartbeat "github.com/khanzadimahdi/testproject/application/workload/orchestrator/beatHeart"
 	taskHeartbeat "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/beatHeart"
 	shipLogs "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/shipLogs"
-	vmHeartbeat "github.com/khanzadimahdi/testproject/application/workload/orchestrator/vm/beatHeart"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
@@ -33,10 +32,6 @@ const (
 	// what is running. A task that has just started is followed within
 	// this long, and one that has gone is let go.
 	logShippingInterval = 1 * time.Second
-
-	// vmHeartbeatInterval is how often this node says what its VMs are doing,
-	// with a sample of what each running one uses.
-	vmHeartbeatInterval = 2 * time.Second
 )
 
 // requestServer answers the control plane's requests to this node.
@@ -52,7 +47,6 @@ type ServeCommand struct {
 	taskHeartBeat         *taskHeartbeat.UseCase
 	orchestratorHeartBeat *orchestratorHeartbeat.UseCase
 	logShipper            *shipLogs.UseCase
-	vmHeartBeat           *vmHeartbeat.UseCase
 
 	// requests answers what the control plane asks this node and waits for:
 	// a VM's log, and whatever is asked of a Docker VM's dockerd.
@@ -147,10 +141,6 @@ func (c *ServeCommand) Boot(ctx context.Context, task provider.Container) error 
 		return err
 	}
 
-	if err := task.Resolve(&c.vmHeartBeat); err != nil {
-		return err
-	}
-
 	var responder *request.Responder
 	if err := task.Resolve(&responder); err != nil {
 		return err
@@ -219,7 +209,6 @@ func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 	}
 
 	go c.tasksHeartbeat(ctx)
-	go c.vmsHeartbeat(ctx)
 	go c.orchestratorHeartbeat(ctx)
 	go c.shipLogs(ctx)
 	go c.serveTunnel(ctx)
@@ -291,24 +280,6 @@ func (c *ServeCommand) shipLogs(ctx context.Context) {
 		case <-ticker.C:
 			if err := c.logShipper.Execute(ctx); err != nil {
 				c.logger.ErrorContext(ctx, "log shipping failed", "error", err)
-			}
-		case <-ctx.Done():
-			return
-		}
-	}
-}
-
-// vmsHeartbeat says, every beat, what this node's VMs are doing and what the
-// node offers them.
-func (c *ServeCommand) vmsHeartbeat(ctx context.Context) {
-	ticker := time.NewTicker(vmHeartbeatInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ticker.C:
-			if err := c.vmHeartBeat.Execute(ctx); err != nil {
-				c.logger.ErrorContext(ctx, "vm heartbeat failed", "error", err)
 			}
 		case <-ctx.Done():
 			return

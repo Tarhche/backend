@@ -11,8 +11,9 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
 
-// the shapes the control plane's API speaks about VMs, snapshots and
-// containers; a stack is a manifest. What a node reports about dockerd's objects travels in the node
+// the shapes the control plane's API speaks about snapshots and containers,
+// and about a Docker VM a container is put in; a VM and a stack are
+// manifests. What a node reports about dockerd's objects travels in the node
 // requests' own shapes, which are the domain's.
 
 type resourcesPayload struct {
@@ -30,174 +31,9 @@ type networkPayload struct {
 	Egress  vm.Access `json:"egress"`
 }
 
-type statsPayload struct {
-	CPUPercent  float64   `json:"cpu_percent"`
-	MemoryUsed  uint64    `json:"memory_used"`
-	MemoryLimit uint64    `json:"memory_limit"`
-	DiskUsed    uint64    `json:"disk_used"`
-	DiskTotal   uint64    `json:"disk_total"`
-	NetworkRx   uint64    `json:"network_rx"`
-	NetworkTx   uint64    `json:"network_tx"`
-	SampledAt   time.Time `json:"sampled_at"`
-}
-
 type paginationPayload struct {
 	TotalPages  uint `json:"total_pages"`
 	CurrentPage uint `json:"current_page"`
-}
-
-type vmPayload struct {
-	UUID            string           `json:"uuid"`
-	Name            string           `json:"name"`
-	Slug            string           `json:"slug"`
-	OwnerUUID       string           `json:"owner_uuid"`
-	Kind            string           `json:"kind"`
-	Image           string           `json:"image"`
-	Resources       resourcesPayload `json:"resources"`
-	Ports           []port.Port      `json:"ports"`
-	Network         networkPayload   `json:"network"`
-	PersistentDisk  bool             `json:"persistent_disk"`
-	LifetimeSeconds int64            `json:"lifetime_seconds"`
-	ExpiresAt       time.Time        `json:"expires_at"`
-	State           string           `json:"state"`
-	ExpectedState   string           `json:"expected_state"`
-	Reason          string           `json:"reason"`
-	NodeName        string           `json:"node_name"`
-	Stats           statsPayload     `json:"stats"`
-	RestoreFrom     string           `json:"restore_from"`
-	LastHeartbeatAt time.Time        `json:"last_heartbeat_at"`
-	CreatedAt       time.Time        `json:"created_at"`
-	StartedAt       time.Time        `json:"started_at"`
-	UpdatedAt       time.Time        `json:"updated_at"`
-	ManagedBy       string           `json:"managed_by"`
-}
-
-// vmStates maps the words the API uses back onto the VM's own states.
-var vmStates = map[string]vm.State{
-	vm.Created.String():    vm.Created,
-	vm.Scheduled.String():  vm.Scheduled,
-	vm.Starting.String():   vm.Starting,
-	vm.Running.String():    vm.Running,
-	vm.Stopping.String():   vm.Stopping,
-	vm.Stopped.String():    vm.Stopped,
-	vm.Restarting.String(): vm.Restarting,
-	vm.Restoring.String():  vm.Restoring,
-	vm.Failed.String():     vm.Failed,
-	vm.Deleting.String():   vm.Deleting,
-}
-
-func (p *vmPayload) toVM() vm.VM {
-	return vm.VM{
-		UUID:      p.UUID,
-		Name:      p.Name,
-		Slug:      p.Slug,
-		OwnerUUID: p.OwnerUUID,
-		Kind:      vm.Kind(p.Kind),
-		Image:     p.Image,
-		Resources: vm.Resources{
-			CPUs:   p.Resources.CPUs,
-			Memory: p.Resources.Memory,
-			Disk:   p.Resources.Disk,
-		},
-		Ports:          p.Ports,
-		Network:        vm.Network{Ingress: p.Network.Ingress, Egress: p.Network.Egress},
-		PersistentDisk: p.PersistentDisk,
-		Lifetime:       time.Duration(p.LifetimeSeconds) * time.Second,
-		ExpiresAt:      p.ExpiresAt,
-		CurrentState:   vmStates[p.State],
-		ExpectedState:  vmStates[p.ExpectedState],
-		Reason:         p.Reason,
-		NodeName:       p.NodeName,
-		Stats: vm.Stats{
-			CPUPercent:  p.Stats.CPUPercent,
-			MemoryUsed:  p.Stats.MemoryUsed,
-			MemoryLimit: p.Stats.MemoryLimit,
-			DiskUsed:    p.Stats.DiskUsed,
-			DiskTotal:   p.Stats.DiskTotal,
-			NetworkRx:   p.Stats.NetworkRx,
-			NetworkTx:   p.Stats.NetworkTx,
-			SampledAt:   p.Stats.SampledAt,
-		},
-		RestoreFrom:     p.RestoreFrom,
-		LastHeartbeatAt: p.LastHeartbeatAt,
-		CreatedAt:       p.CreatedAt,
-		StartedAt:       p.StartedAt,
-		UpdatedAt:       p.UpdatedAt,
-		ManagedBy:       p.ManagedBy,
-	}
-}
-
-type vmPagePayload struct {
-	Items      []vmPayload       `json:"items"`
-	Pagination paginationPayload `json:"pagination"`
-}
-
-func (p *vmPagePayload) toPage() workloadControlPlane.Page[vm.VM] {
-	items := make([]vm.VM, len(p.Items))
-	for i := range p.Items {
-		items[i] = p.Items[i].toVM()
-	}
-
-	return workloadControlPlane.Page[vm.VM]{Items: items, TotalPages: p.Pagination.TotalPages, CurrentPage: p.Pagination.CurrentPage}
-}
-
-type createVMPayload struct {
-	Name            string           `json:"name"`
-	Kind            vm.Kind          `json:"kind,omitempty"`
-	Image           string           `json:"image,omitempty"`
-	Resources       resourcesPayload `json:"resources"`
-	Ports           []port.Port      `json:"ports"`
-	Network         networkPayload   `json:"network"`
-	PersistentDisk  bool             `json:"persistent_disk"`
-	LifetimeSeconds int64            `json:"lifetime_seconds"`
-	SnapshotUUID    string           `json:"snapshot_uuid,omitempty"`
-}
-
-func newCreateVMPayload(request workloadControlPlane.VMRequest) createVMPayload {
-	return createVMPayload{
-		Name:            request.Name,
-		Kind:            request.Kind,
-		Image:           request.Image,
-		Resources:       newResourcesPayload(request.Resources),
-		Ports:           request.Ports,
-		Network:         networkPayload{Ingress: request.Network.Ingress, Egress: request.Network.Egress},
-		PersistentDisk:  request.PersistentDisk,
-		LifetimeSeconds: int64(request.Lifetime / time.Second),
-		SnapshotUUID:    request.SnapshotUUID,
-	}
-}
-
-type updateVMPayload struct {
-	Name            *string           `json:"name,omitempty"`
-	LifetimeSeconds *int64            `json:"lifetime_seconds,omitempty"`
-	Ports           *[]port.Port      `json:"ports,omitempty"`
-	Network         *networkPayload   `json:"network,omitempty"`
-	Resources       *resourcesPayload `json:"resources,omitempty"`
-}
-
-func newUpdateVMPayload(update workloadControlPlane.VMUpdate) updateVMPayload {
-	payload := updateVMPayload{Name: update.Name, Ports: update.Ports}
-
-	if update.Lifetime != nil {
-		seconds := int64(*update.Lifetime / time.Second)
-		payload.LifetimeSeconds = &seconds
-	}
-
-	if update.Network != nil {
-		payload.Network = &networkPayload{Ingress: update.Network.Ingress, Egress: update.Network.Egress}
-	}
-
-	if update.Resources != nil {
-		resources := newResourcesPayload(*update.Resources)
-		payload.Resources = &resources
-	}
-
-	return payload
-}
-
-type vmLogsPayload struct {
-	Lines     []noderequest.VMLogLine `json:"lines"`
-	Truncated bool                    `json:"truncated"`
 }
 
 type snapshotPayload struct {

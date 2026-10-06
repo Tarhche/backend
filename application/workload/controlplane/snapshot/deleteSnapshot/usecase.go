@@ -8,31 +8,40 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/owner"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/snapshot/archive"
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/lifecycle"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/snapshot"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
 
+// VMs are where the VM a snapshot is being taken of is read from.
+type VMs interface {
+	GetOne(ctx context.Context, uuid string) (vm.VM, error)
+}
+
+// Nodes say whether a node can be asked anything, having spoken lately.
+type Nodes interface {
+	Alive(ctx context.Context, nodeName string) (bool, error)
+}
+
 type UseCase struct {
 	snapshotRepository snapshot.Repository
-	vmRepository       vm.Repository
-	lifecycle          *lifecycle.Lifecycle
+	vmRepository       VMs
+	nodes              Nodes
 	remover            *archive.Remover
 	validator          domain.Validator
 }
 
 func NewUseCase(
 	snapshotRepository snapshot.Repository,
-	vmRepository vm.Repository,
-	lifecycle *lifecycle.Lifecycle,
+	vmRepository VMs,
+	nodes Nodes,
 	remover *archive.Remover,
 	validator domain.Validator,
 ) *UseCase {
 	return &UseCase{
 		snapshotRepository: snapshotRepository,
 		vmRepository:       vmRepository,
-		lifecycle:          lifecycle,
+		nodes:              nodes,
 		remover:            remover,
 		validator:          validator,
 	}
@@ -94,5 +103,5 @@ func (uc *UseCase) beingTaken(ctx context.Context, s *snapshot.Snapshot) (bool, 
 		return false, err
 	}
 
-	return uc.lifecycle.NodeAlive(ctx, v.NodeName)
+	return uc.nodes.Alive(ctx, v.NodeName)
 }

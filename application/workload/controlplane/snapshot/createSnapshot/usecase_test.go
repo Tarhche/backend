@@ -10,11 +10,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/runs"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/vmtest"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/snapshot/archive"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/snapshot/snapshottest"
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/coderunner"
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/vmtest"
 	"github.com/khanzadimahdi/testproject/domain"
+	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/node"
 	"github.com/khanzadimahdi/testproject/domain/workload/snapshot"
 	"github.com/khanzadimahdi/testproject/domain/workload/snapshot/events"
@@ -24,7 +25,7 @@ import (
 )
 
 func useCaseOf(w *vmtest.Workload, userMax uint) *UseCase {
-	return NewUseCase(w.VMs, w.Runs, w.Snapshots, w.Lifecycle, w.Producer, validator.New(translator.Codes{}), userMax)
+	return NewUseCase(w.Entities, w.Runs, w.Snapshots, w.Placement, w.Producer, validator.New(translator.Codes{}), userMax)
 }
 
 func TestUseCase_Execute(t *testing.T) {
@@ -58,7 +59,7 @@ func TestUseCase_Execute(t *testing.T) {
 	})
 
 	for name, tt := range map[string]struct {
-		vm      vm.VM
+		vm      vmKind.VM
 		nodes   []node.Node
 		kept    []snapshot.Snapshot
 		request Request
@@ -70,7 +71,7 @@ func TestUseCase_Execute(t *testing.T) {
 			want:    domain.ValidationErrors{"name": "required_field"},
 		},
 		"one of a vm on its way somewhere": {
-			vm:      func() vm.VM { v := vmtest.Running("01", "owner"); v.CurrentState = vm.Starting; return v }(),
+			vm:      vmtest.In(vmtest.Running("01", "owner"), func(v *vmKind.VM) { v.Status.State = vmKind.Starting }),
 			request: Request{VMUUID: "01", Name: "now"},
 			want:    domain.ValidationErrors{"vm": "invalid_state_transition"},
 		},
@@ -230,7 +231,7 @@ func TestUseCase_Execute_run(t *testing.T) {
 
 		response, err := useCaseOf(w, 10).Execute(ctx, &Request{VMUUID: "run", Name: "a run"})
 		require.NoError(t, err)
-		assert.Equal(t, domain.ValidationErrors{"vm": coderunner.CodeRefused}, response.ValidationErrors)
+		assert.Equal(t, domain.ValidationErrors{"vm": runs.CodeRefused}, response.ValidationErrors)
 		assert.Empty(t, w.Producer.Messages())
 
 		stored, _ := w.Tasks.Stored("run")

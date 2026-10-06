@@ -1,5 +1,5 @@
-// Package ports serves the ports of the VMs, the code-runner tasks and the
-// resources of every kind with endpoints this node holds.
+// Package ports serves the ports of the code-runner tasks and of the
+// resources of every kind with endpoints this node holds, VMs among them.
 //
 // The ingress cannot see any of them: it works out which node holds one and
 // sends the request here. So this is the far end of that — the node reaching a
@@ -44,8 +44,8 @@ type proxyHandler struct {
 
 var _ http.Handler = &proxyHandler{}
 
-// NewProxyHandler serves the ports of the VMs and the tasks this node holds,
-// wherever its engine published them.
+// NewProxyHandler serves the ports of the tasks this node holds, wherever its
+// engine published them.
 func NewProxyHandler(useCase *getendpoint.UseCase, logger *slog.Logger) *proxyHandler {
 	return newProxyHandler(func(ctx context.Context, slug string, p port.Port) (string, error) {
 		response, err := useCase.Execute(ctx, &getendpoint.Request{Slug: slug, Port: p})
@@ -107,10 +107,10 @@ func newProxyHandler(resolve resolver, logger *slog.Logger) *proxyHandler {
 // is the only hook a ReverseProxy gives for a per-request target.
 type targetKey struct{}
 
-// @Summary		Serve a VM's, a task's or a resource's port
-// @Description	carries the request to a port of a VM, a task or a resource of a kind with endpoints this node is holding, where it was published
+// @Summary		Serve a task's or a resource's port
+// @Description	carries the request to a port of a task, or of a resource of a kind with endpoints such as a VM, this node is holding, where it was published
 // @Tags			workload
-// @Param			slug	path		string	true	"VM, task or resource slug"
+// @Param			slug	path		string	true	"Task or resource slug"
 // @Param			port	path		int		true	"Its port, or 0 for the lowest it exposes"
 // @Param			path	path		string	true	"Path on it"
 // @Success		200		{string}	string	"whatever it answered"
@@ -118,7 +118,6 @@ type targetKey struct{}
 // @Failure		502		{object}	map[string]interface{}
 // @Failure		503		{object}	map[string]interface{}
 // @Router			/tasks/{slug}/{port}/{path} [get]
-// @Router			/vms/{slug}/{port}/{path} [get]
 // @Router			/{plural}/{slug}/{port}/{path} [get]
 func (h *proxyHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	requested, err := strconv.ParseUint(r.PathValue("port"), 10, 16)

@@ -8,10 +8,14 @@ import (
 	"errors"
 	"time"
 
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/lifecycle"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
+
+// listedFor is how long ago a VM's node must have last spoken for it for the
+// node to be holding it: a node says what it holds every second, so this is
+// many heartbeats.
+const listedFor = time.Minute
 
 // Node asks nodeName, and is its reply, or why there is none. A node that
 // refused says why itself; one that did not answer in time is a timeout, and
@@ -61,7 +65,7 @@ func NotDocker() *noderequest.Error {
 // such VM, which whoever asked would take for the VM not being there at all.
 // So it is not asked, and the VM is not running yet, which is so.
 func NotHeld(v *vm.VM, now time.Time) *noderequest.Error {
-	if lifecycle.Listed(v, now) {
+	if !v.LastHeartbeatAt.IsZero() && now.Sub(v.LastHeartbeatAt) <= listedFor {
 		return nil
 	}
 

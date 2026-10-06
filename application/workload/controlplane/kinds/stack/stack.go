@@ -31,13 +31,13 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/ask"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/dockervm"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/records"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/slugs"
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/createVM"
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/vm/dockerVM"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
+	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
 
@@ -51,16 +51,17 @@ const (
 
 // Stacks is the stack kind's control-plane strategy.
 type Stacks struct {
-	vms     vm.Repository
-	chooser *dockerVM.Chooser
+	vms     *records.Records
+	chooser *dockervm.Chooser
 	taken   slugs.Taken
 }
 
 var _ kind.ControlPlane[stackKind.Spec, stackKind.Status] = &Stacks{}
 
-// New is the strategy that chooses Docker VMs with chooser, reads them from
-// vms, and gives stacks slugs taken does not say are held.
-func New(vms vm.Repository, chooser *dockerVM.Chooser, taken slugs.Taken) *Stacks {
+// New is the strategy that chooses Docker VMs with chooser, reads them, the
+// vm kind's resources, from vms, and gives stacks slugs taken does not say
+// are held.
+func New(vms *records.Records, chooser *dockervm.Chooser, taken slugs.Taken) *Stacks {
 	return &Stacks{vms: vms, chooser: chooser, taken: taken}
 }
 
@@ -85,7 +86,7 @@ func (s *Stacks) Admit(ctx context.Context, asked stackKind.Stack) (stackKind.St
 
 	v := chosen.VM
 
-	if ask.DockerRefusal(&v) != nil {
+	if !vmKind.Up(v) {
 		return stackKind.Stack{}, domain.ValidationErrors{"vm": "vm_not_running"}, nil
 	}
 
@@ -103,11 +104,11 @@ func (s *Stacks) Admit(ctx context.Context, asked stackKind.Stack) (stackKind.St
 			Slug:      slug,
 			OwnerUUID: asked.Metadata.OwnerUUID,
 			Labels:    asked.Metadata.Labels,
-			Owners:    []kind.Reference{{Kind: stackKind.Parent, UUID: v.UUID}},
-			Node:      v.NodeName,
+			Owners:    []kind.Reference{{Kind: stackKind.Parent, UUID: v.Metadata.UUID}},
+			Node:      v.Metadata.Node,
 		},
 		Spec: stackKind.Spec{
-			VM:      stackKind.VMChoice{UUID: v.UUID},
+			VM:      stackKind.VMChoice{UUID: v.Metadata.UUID},
 			Compose: asked.Spec.Compose,
 		},
 		Status: stackKind.Status{Status: kind.Status{State: stackKind.Waiting, Expected: stackKind.Running}},
@@ -122,8 +123,8 @@ func (s *Stacks) Admit(ctx context.Context, asked stackKind.Stack) (stackKind.St
 		}
 	}
 
-	if v.CurrentState != vm.Running {
-		admitted.Status.Reason = waitingOn(&v)
+	if v.Status.State != vmKind.Running {
+		admitted.Status.Reason = waitingOn(v)
 	}
 
 	return admitted, nil, nil
@@ -173,12 +174,12 @@ func (s *Stacks) running(ctx context.Context, uuid string) (bool, error) {
 		return false, err
 	}
 
-	return v.CurrentState == vm.Running, nil
+	return v.Status.State == vmKind.Running, nil
 }
 
 // waitingOn is why a stack waits on a VM that is not running yet.
-func waitingOn(v *vm.VM) string {
-	return fmt.Sprintf("its vm is %s", v.CurrentState)
+func waitingOn(v vmKind.VM) string {
+	return fmt.Sprintf("its vm is %s", v.Status.State)
 }
 
 // validate is what is wrong with a stack as it was asked for.
@@ -232,18 +233,18 @@ func ValidateCompose(compose string) (string, bool) {
 }
 
 // choiceOf is a stack's choice of VM as the chooser reads one.
-func choiceOf(choice stackKind.VMChoice) dockerVM.Choice {
-	chosen := dockerVM.Choice{UUID: choice.UUID}
+func choiceOf(choice stackKind.VMChoice) dockervm.Choice {
+	chosen := dockervm.Choice{UUID: choice.UUID}
 
 	if made := choice.New; made != nil {
-		chosen.New = &dockerVM.New{Name: made.Name, Ports: made.Ports}
+		chosen.New = &dockervm.New{Name: made.Name, Ports: made.Ports}
 
 		if made.Resources != nil {
-			chosen.New.Resources = &createVM.Resources{CPUs: made.Resources.CPUs, Memory: made.Resources.Memory, Disk: made.Resources.Disk}
+			chosen.New.Resources = &vmKind.Resources{CPUs: made.Resources.CPUs, Memory: made.Resources.Memory, Disk: made.Resources.Disk}
 		}
 
 		if made.Network != nil {
-			chosen.New.Network = &createVM.Network{Ingress: vm.Access(made.Network.Ingress), Egress: vm.Access(made.Network.Egress)}
+			chosen.New.Network = &vmKind.Network{Ingress: vm.Access(made.Network.Ingress), Egress: vm.Access(made.Network.Egress)}
 		}
 	}
 
