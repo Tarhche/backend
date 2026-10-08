@@ -267,6 +267,44 @@ func TestBlocks_requests(t *testing.T) {
 		assert.ErrorIs(t, c.Docker("owner-uuid", "vm-uuid").RemoveImage(ctx, "redis", false), domain.ErrNotExists)
 	})
 
+	t.Run("an image removed by its id is in one repository however many digests it is also listed under", func(t *testing.T) {
+		t.Parallel()
+
+		c, p := newBlocksPlane(t)
+		p.lists("/api/images", []imageKind.Image{
+			{Metadata: kind.Metadata{UUID: "tag"}, Status: imageKind.Status{Docker: &imageKind.Docker{ID: "sha256:abcdef", Reference: "busybox:1.36"}}},
+			{Metadata: kind.Metadata{UUID: "digest", Labels: map[string]string{"workload.managed-by": "nobody"}}, Status: imageKind.Status{Docker: &imageKind.Docker{ID: "sha256:abcdef", Reference: "busybox@sha256:0123"}}},
+		})
+		p.answers(http.MethodPost, "/api/images/tag/actions/delete", http.StatusNoContent, nil)
+
+		require.NoError(t, c.Docker("owner-uuid", "vm-uuid").RemoveImage(ctx, "sha256:abcdef", false))
+
+		var deleted []string
+
+		p.lock.Lock()
+		for _, r := range p.asked {
+			if r.method == http.MethodPost {
+				deleted = append(deleted, r.path)
+			}
+		}
+		p.lock.Unlock()
+
+		assert.Equal(t, []string{"/api/images/tag/actions/delete"}, deleted, "its digest goes with its last tag")
+	})
+
+	t.Run("an image held by its digests alone is removed under each", func(t *testing.T) {
+		t.Parallel()
+
+		c, p := newBlocksPlane(t)
+		p.lists("/api/images", []imageKind.Image{
+			{Metadata: kind.Metadata{UUID: "digest", Labels: map[string]string{"workload.managed-by": "nobody"}}, Status: imageKind.Status{Docker: &imageKind.Docker{ID: "sha256:abcdef", Reference: "busybox@sha256:0123"}}},
+		})
+		p.answers(http.MethodPost, "/api/images/digest/actions/delete", http.StatusNoContent, nil)
+
+		require.NoError(t, c.Docker("owner-uuid", "vm-uuid").RemoveImage(ctx, "abcdef", false))
+		assert.Equal(t, "/api/images/digest/actions/delete", p.last(http.MethodPost).path)
+	})
+
 	t.Run("a network and a volume are made as their kinds', in the vm", func(t *testing.T) {
 		t.Parallel()
 

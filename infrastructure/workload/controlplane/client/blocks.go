@@ -418,21 +418,46 @@ func (b *blocks) RemoveImage(ctx context.Context, id string, force bool) error {
 	}
 
 	named := imagesNamed(manifests, id)
-
-	switch {
-	case len(named) == 0:
+	if len(named) == 0 {
 		return domain.ErrNotExists
-	case len(named) > 1 && !force:
-		return refusedByNode(&noderequest.Error{Code: noderequest.CodeInvalid, Message: fmt.Sprintf("conflict: unable to delete %s (must be forced) - image is referenced in multiple repositories", id)})
 	}
 
-	for _, m := range named {
-		if _, err := act[imageKind.Spec, imageKind.Status](ctx, b.client, imagesPath, m.Metadata.UUID, b.query(nil), imageKind.ActionDelete, imageKind.DeletePayload{Force: force}, commandWait); err != nil {
+	// an image is in as many repositories as it has tags: a digest it is
+	// also listed under is the same image, and goes with its last tag, as
+	// docker removes it. One held by its digests alone goes under them.
+	removed := tagsOf(named)
+
+	switch {
+	case len(removed) > 1 && !force:
+		return refusedByNode(&noderequest.Error{Code: noderequest.CodeInvalid, Message: fmt.Sprintf("conflict: unable to delete %s (must be forced) - image is referenced in multiple repositories", id)})
+	case len(removed) == 0:
+		removed = named
+	}
+
+	for i, m := range removed {
+		_, err := act[imageKind.Spec, imageKind.Status](ctx, b.client, imagesPath, m.Metadata.UUID, b.query(nil), imageKind.ActionDelete, imageKind.DeletePayload{Force: force}, commandWait)
+
+		// what the first removal took with it is gone already.
+		if err != nil && (i == 0 || !errors.Is(err, domain.ErrNotExists)) {
 			return err
 		}
 	}
 
 	return nil
+}
+
+// tagsOf are the references among an image's that are tags rather than
+// digests.
+func tagsOf(references []imageManifest) []imageManifest {
+	var tags []imageManifest
+
+	for _, m := range references {
+		if seen := m.Status.Docker; seen == nil || !strings.Contains(seen.Reference, "@") {
+			tags = append(tags, m)
+		}
+	}
+
+	return tags
 }
 
 // Networks are the VM's docker networks: those kept, as they were last
