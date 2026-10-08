@@ -2,7 +2,9 @@ package providers
 
 import (
 	"context"
+	"log/slog"
 
+	emailverifier "github.com/AfterShip/email-verifier"
 	"github.com/danceable/provider"
 
 	"github.com/khanzadimahdi/testproject/domain"
@@ -26,8 +28,13 @@ func (p *emailProvider) Register(ctx context.Context, c provider.Container) erro
 		return err
 	}
 
+	var logger *slog.Logger
+	if err := c.Resolve(&logger, provider.WithParams("blog")); err != nil {
+		return err
+	}
+
 	mailFromAddress := blogConfigs.MailFrom
-	mailer := email.NewSMTP(email.Config{
+	smtp := email.NewSMTP(email.Config{
 		Auth: email.Auth{
 			Username: blogConfigs.MailUsername,
 			Password: blogConfigs.MailPassword,
@@ -35,6 +42,8 @@ func (p *emailProvider) Register(ctx context.Context, c provider.Container) erro
 		Host: blogConfigs.MailHost,
 		Port: blogConfigs.MailPort,
 	})
+
+	mailer := email.NewVerified(smtp, emailverifier.NewVerifier(), logger)
 
 	if err := c.Bind(func() domain.Mailer { return mailer }, provider.Singleton()); err != nil {
 		return err
