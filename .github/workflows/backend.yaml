@@ -134,10 +134,7 @@ jobs:
           # Copy files
           scp -q -i ~/hetzner-key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -r ./compose.*.yaml $HETZNER_SSH_ENDPOINT:/tmp/deployment_backend/ 2>/dev/null
 
-          # Connect and deploy services. What the remote shell prints comes back
-          # to the job log: a deploy that fails says why here rather than only in
-          # a container nobody is looking at. The commands themselves are never
-          # echoed -- no set -x -- so the exports below stay out of it.
+          # Deploy services
           ssh -q -i ~/hetzner-key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $HETZNER_SSH_ENDPOINT << 'EOF'
             # a failure surfaces through the exit status, which set -e propagates back through ssh
             set -e
@@ -177,9 +174,6 @@ jobs:
             export BACKEND_WORKLOAD_INGRESS_DOMAIN='${{ secrets.BACKEND_WORKLOAD_INGRESS_DOMAIN }}'
             export BACKEND_WORKLOAD_TUNNEL_ADDRESSES='${{ secrets.BACKEND_WORKLOAD_TUNNEL_ADDRESSES }}'
 
-            # each service's own certificate and the authority to check the
-            # other end against, as the PEM itself. ca.key is deliberately not
-            # here: nothing that runs needs it.
             export BACKEND_WORKLOAD_TUNNEL_CA_CERT='${{ secrets.BACKEND_WORKLOAD_TUNNEL_CA_CERT }}'
             export BACKEND_WORKLOAD_TUNNEL_SERVER_NAME='${{ secrets.BACKEND_WORKLOAD_TUNNEL_SERVER_NAME }}'
             export BACKEND_WORKLOAD_INGRESS_TUNNEL_CERT='${{ secrets.BACKEND_WORKLOAD_INGRESS_TUNNEL_CERT }}'
@@ -191,12 +185,8 @@ jobs:
             export BACKEND_WORKLOAD_ORCHESTRATOR_03_TUNNEL_CERT='${{ secrets.BACKEND_WORKLOAD_ORCHESTRATOR_03_TUNNEL_CERT }}'
             export BACKEND_WORKLOAD_ORCHESTRATOR_03_TUNNEL_KEY='${{ secrets.BACKEND_WORKLOAD_ORCHESTRATOR_03_TUNNEL_KEY }}'
 
-            # the ports arbitrary TCP arrives on, and what an orchestrator will connect
-            # a stream to beyond the services it offers by name.
             export BACKEND_WORKLOAD_INGRESS_FORWARDS='${{ secrets.BACKEND_WORKLOAD_INGRESS_FORWARDS }}'
             export BACKEND_WORKLOAD_TUNNEL_ALLOWED_TARGETS='${{ secrets.BACKEND_WORKLOAD_TUNNEL_ALLOWED_TARGETS }}'
-            # the public half of the key the blog signs access tokens with; the
-            # orchestrators verify against it and never sign anything
             export BACKEND_PUBLIC_KEY='${{ secrets.BACKEND_PUBLIC_KEY }}'
 
             export BACKEND_WORKLOAD_SNAPSHOT_S3_ENDPOINT='${{ secrets.BACKEND_WORKLOAD_SNAPSHOT_S3_ENDPOINT }}'
@@ -259,45 +249,22 @@ jobs:
             # Run Docker Compose
             cd /tmp/deployment_backend/
 
-            # deploy brings a compose file's services up. --wait holds the
-            # deploy until every replica passes the healthcheck defined in the
-            # compose file, for up to the seconds given, so a version that
-            # cannot serve traffic fails the job instead of being reported as
-            # deployed. A service that never gets there says so in its own
-            # words: what it printed before it gave up is the only thing that
-            # explains why.
             deploy() {
-                seconds=$1 file=$2 project=$3
-
-                if docker compose -f "$file" --project-name "$project" up --pull always --detach --wait --wait-timeout "$seconds"; then
+                if docker compose -f "$1" --project-name "$2" up --pull always --detach --wait --wait-timeout 180; then
                     return 0
                 fi
 
-                echo "::error::$project did not come up; what it said follows"
-                docker compose -f "$file" --project-name "$project" ps -a
-                docker compose -f "$file" --project-name "$project" logs --tail 50 --no-color
+                echo "::error::$2 did not come up; what it said follows"
+                docker compose -f "$1" --project-name "$2" ps -a
+                docker compose -f "$1" --project-name "$2" logs --tail 50 --no-color
 
                 return 1
             }
 
-            deploy 180 compose.app.yaml app
-            deploy 180 compose.workload-controlplane.yaml workload-controlplane
-            deploy 180 compose.workload-ingress.yaml workload-ingress
-
-            # a node is its orchestrator and its vmhost. A vmhost recreated
-            # stops its node's VMs gracefully, and the control plane starts
-            # them again once it is back. It is given longer to come up: before
-            # it serves, it advances the PID counter past every PID its engine
-            # recorded and takes its VMs over. A node that does not come up
-            # does not keep the others from being deployed; the job fails once
-            # every node has been.
-            failed=
-            for node in 01 02 03; do
-                deploy 600 compose.workload-orchestrator-$node.yaml workload-orchestrator-$node || failed="$failed workload-orchestrator-$node"
-            done
-
-            if [ -n "$failed" ]; then
-                echo "::error::did not come up:$failed"
-                exit 1
-            fi
+            deploy compose.app.yaml app
+            deploy compose.workload-controlplane.yaml workload-controlplane
+            deploy compose.workload-ingress.yaml workload-ingress
+            deploy compose.workload-orchestrator-01.yaml workload-orchestrator-01
+            deploy compose.workload-orchestrator-02.yaml workload-orchestrator-02
+            deploy compose.workload-orchestrator-03.yaml workload-orchestrator-03
           EOF

@@ -1,5 +1,3 @@
-// Package heartbeatNode hears what a node says, every beat, about itself
-// and, kind by kind, about the resources it holds.
 package heartbeatNode
 
 import (
