@@ -3,6 +3,7 @@ module github.com/khanzadimahdi/testproject
 go 1.27.0
 
 require (
+	github.com/AfterShip/email-verifier v1.5.0
 	github.com/danceable/console v1.4.0
 	github.com/danceable/container v1.3.0
 	github.com/danceable/provider v1.3.2
@@ -99,6 +100,7 @@ require (
 	github.com/gosuri/uiprogress v0.0.1 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.31.0 // indirect
 	github.com/hashicorp/go-version v1.9.0 // indirect
+	github.com/hbollon/go-edlib v1.7.0 // indirect
 	github.com/huandu/xstrings v1.6.1 // indirect
 	github.com/jedib0t/go-pretty/v6 v6.8.3 // indirect
 	github.com/joho/godotenv v1.5.1 // indirect
