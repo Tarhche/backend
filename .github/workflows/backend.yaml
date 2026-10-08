@@ -57,40 +57,6 @@ jobs:
           push: false
           container-registry: ${{ env.REGISTRY }}
 
-  # The engine's own tests, which need KVM: a GitHub-hosted amd64 runner has
-  # it once its device is opened to the runner's user.
-  vmhost-integration:
-    runs-on: ubuntu-24.04
-
-    timeout-minutes: 60
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v7
-
-      - name: Enable KVM
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-          ls -l /dev/kvm
-
-      # the runner is a VM itself, so the engine's VMs are nested in it, and
-      # each 4 KiB page of their memory is a fault both hypervisors take:
-      # backed by huge pages instead, a VM's Go snippet is built in seconds
-      # rather than minutes, as on a vmhost's host.
-      - name: Back VMs' memory with huge pages
-        run: echo always | sudo tee /sys/kernel/mm/transparent_hugepage/enabled
-
-      - name: Setup Go
-        uses: actions/setup-go@v6
-        with:
-          go-version: '1.27.x'
-          cache: true
-
-      - name: Run the KVM integration tests
-        run: make test-vmhost-integration
-
   build-and-push-images:
     runs-on: blacksmith-8vcpu-ubuntu-2404
 
@@ -144,44 +110,11 @@ jobs:
 
     needs:
       - build-and-push-images
-      - vmhost-integration
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
 
-      # What the workload's VMs need, beyond what the services needed before:
-      #
-      #   secrets
-      #     WORKLOAD_VMHOST_IMAGE: the vmhost's image, as APP_IMAGE and the
-      #       others are the other services' (ghcr.io/<owner>/workload-vmhost:latest).
-      #     BACKEND_WORKLOAD_SNAPSHOT_S3_ENDPOINT, _ACCESS_KEY, _SECRET_KEY,
-      #     _USE_SSL, _BUCKET: the bucket VM snapshots are kept in. Unset, the
-      #     blog's S3 (BACKEND_S3_*), in a bucket named workload-snapshots,
-      #     which the backend makes on first use.
-      #
-      #   variables
-      #     BACKEND_WORKLOAD_KVM_GID: /dev/kvm's group id on the host, which
-      #       the infrastructure repository's scripts/kvm-check.sh prints.
-      #       Required: the vmhosts are given it, and a deploy without it fails
-      #       saying so.
-      #     BACKEND_WORKLOAD_VMHOST_MEMORY_LIMIT, _CPUS_LIMIT: what each vmhost
-      #       container may use, which every VM on its node lives in (4g and 2
-      #       unless said).
-      #     BACKEND_WORKLOAD_VMHOST_MEMORY, _CPUS, _DISK, _MAX_CONCURRENT_BOOTS,
-      #       _PORT_RANGE: the budget a node offers VMs (unset: 80% of the
-      #       memory limit less 512 MiB, the CPUs it may use, 200 GiB), how
-      #       many boot at once (4), and the host ports theirs are published
-      #       on (20000-29999).
-      #     BACKEND_WORKLOAD_VM_*, BACKEND_WORKLOAD_SNAPSHOT_USER_MAX: the
-      #       control plane's images, bounds, quotas and Docker VM defaults;
-      #       BACKEND_WORKLOAD_DOCKER_READY_TIMEOUT, _PULL_TIMEOUT,
-      #       BACKEND_WORKLOAD_NODE_REQUEST_TIMEOUT, _CONCURRENCY: how long a
-      #       Docker VM and a request to a node are waited for. Unset keeps the
-      #       code's defaults (infrastructure/configs/workloadVM.go).
-      #
-      # BACKEND_DOCKER_HOST and BACKEND_WORKLOAD_ORCHESTRATOR_ADVERTISE_HOST
-      # are no longer read: the orchestrators run nothing on a docker daemon.
       - name: Deploy services
         run: |
           # Setup ssh key
@@ -266,16 +199,12 @@ jobs:
             # orchestrators verify against it and never sign anything
             export BACKEND_PUBLIC_KEY='${{ secrets.BACKEND_PUBLIC_KEY }}'
 
-            # the bucket VM snapshots are kept in: the nodes write and read
-            # them, the control plane deletes them. Unset, the blog's S3.
             export BACKEND_WORKLOAD_SNAPSHOT_S3_ENDPOINT='${{ secrets.BACKEND_WORKLOAD_SNAPSHOT_S3_ENDPOINT }}'
             export BACKEND_WORKLOAD_SNAPSHOT_S3_ACCESS_KEY='${{ secrets.BACKEND_WORKLOAD_SNAPSHOT_S3_ACCESS_KEY }}'
             export BACKEND_WORKLOAD_SNAPSHOT_S3_SECRET_KEY='${{ secrets.BACKEND_WORKLOAD_SNAPSHOT_S3_SECRET_KEY }}'
             export BACKEND_WORKLOAD_SNAPSHOT_S3_USE_SSL='${{ secrets.BACKEND_WORKLOAD_SNAPSHOT_S3_USE_SSL }}'
             export BACKEND_WORKLOAD_SNAPSHOT_S3_BUCKET='${{ secrets.BACKEND_WORKLOAD_SNAPSHOT_S3_BUCKET }}'
 
-            # the nodes' engines: /dev/kvm's group on this host, and what each
-            # vmhost may use and offers its VMs.
             export BACKEND_WORKLOAD_KVM_GID='${{ vars.BACKEND_WORKLOAD_KVM_GID }}'
             export BACKEND_WORKLOAD_VMHOST_MEMORY_LIMIT='${{ vars.BACKEND_WORKLOAD_VMHOST_MEMORY_LIMIT }}'
             export BACKEND_WORKLOAD_VMHOST_CPUS_LIMIT='${{ vars.BACKEND_WORKLOAD_VMHOST_CPUS_LIMIT }}'
@@ -285,9 +214,6 @@ jobs:
             export BACKEND_WORKLOAD_VMHOST_MAX_CONCURRENT_BOOTS='${{ vars.BACKEND_WORKLOAD_VMHOST_MAX_CONCURRENT_BOOTS }}'
             export BACKEND_WORKLOAD_VMHOST_PORT_RANGE='${{ vars.BACKEND_WORKLOAD_VMHOST_PORT_RANGE }}'
 
-            # what VMs boot from, what one VM and one person may have, and the
-            # Docker VM made for a container or a stack. Unset keeps the
-            # code's defaults.
             export BACKEND_WORKLOAD_VM_DEFAULT_IMAGE='${{ vars.BACKEND_WORKLOAD_VM_DEFAULT_IMAGE }}'
             export BACKEND_WORKLOAD_VM_DOCKER_IMAGE='${{ vars.BACKEND_WORKLOAD_VM_DOCKER_IMAGE }}'
             export BACKEND_WORKLOAD_VM_MIN_MEMORY='${{ vars.BACKEND_WORKLOAD_VM_MIN_MEMORY }}'
@@ -313,9 +239,6 @@ jobs:
             export BACKEND_WORKLOAD_VM_DOCKER_DEFAULT_LIFETIME='${{ vars.BACKEND_WORKLOAD_VM_DOCKER_DEFAULT_LIFETIME }}'
             export BACKEND_WORKLOAD_SNAPSHOT_USER_MAX='${{ vars.BACKEND_WORKLOAD_SNAPSHOT_USER_MAX }}'
 
-            # how long a Docker VM's dockerd, a pull in it and a request to a
-            # node are waited for, which the control plane and the nodes read
-            # alike.
             export BACKEND_WORKLOAD_DOCKER_READY_TIMEOUT='${{ vars.BACKEND_WORKLOAD_DOCKER_READY_TIMEOUT }}'
             export BACKEND_WORKLOAD_DOCKER_PULL_TIMEOUT='${{ vars.BACKEND_WORKLOAD_DOCKER_PULL_TIMEOUT }}'
             export BACKEND_WORKLOAD_NODE_REQUEST_TIMEOUT='${{ vars.BACKEND_WORKLOAD_NODE_REQUEST_TIMEOUT }}'

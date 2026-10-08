@@ -1,9 +1,9 @@
 package createVM
 
 import (
-	"github.com/khanzadimahdi/testproject/application/dashboard/workload/input"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
+	"github.com/khanzadimahdi/testproject/infrastructure/workload/input"
 )
 
 // Request is a VM to create. It is always created for whoever asks.

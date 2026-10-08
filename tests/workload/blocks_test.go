@@ -21,7 +21,6 @@ import (
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/image/deleteImage"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/image/getImages"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/image/pullImage"
-	"github.com/khanzadimahdi/testproject/application/dashboard/workload/input"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/network/createNetwork"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/network/deleteNetwork"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/network/getNetworks"
@@ -41,6 +40,7 @@ import (
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
+	"github.com/khanzadimahdi/testproject/infrastructure/workload/input"
 )
 
 // TestAContainer walks a container through its life from the dashboard, as

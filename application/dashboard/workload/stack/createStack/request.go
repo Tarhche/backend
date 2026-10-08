@@ -3,8 +3,8 @@ package createStack
 import (
 	"strings"
 
-	"github.com/khanzadimahdi/testproject/application/dashboard/workload/input"
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/infrastructure/workload/input"
 )
 
 // MaxCompose is the longest compose file a stack is deployed from, in bytes.

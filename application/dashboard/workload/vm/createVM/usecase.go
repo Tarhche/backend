@@ -3,13 +3,13 @@ package createVM
 import (
 	"context"
 
-	"github.com/khanzadimahdi/testproject/application/dashboard/workload/input"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/presenter"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/refusal"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/translator"
 	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
+	"github.com/khanzadimahdi/testproject/infrastructure/workload/input"
 )
 
 // UseCase asks the workload for a VM. The workload owns a VM's life, and holds

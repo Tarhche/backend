@@ -10,13 +10,13 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/khanzadimahdi/testproject/application/dashboard/workload/input"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/workloadtest"
 	"github.com/khanzadimahdi/testproject/domain"
 	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/domain/workload/stack"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane/client"
+	"github.com/khanzadimahdi/testproject/infrastructure/workload/input"
 )
 
 const compose = "services:\n  web:\n    image: nginx:1.27\n"

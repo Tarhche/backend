@@ -1,8 +1,8 @@
 package createSnapshot
 
 import (
-	"github.com/khanzadimahdi/testproject/application/dashboard/workload/input"
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/infrastructure/workload/input"
 )
 
 // Request is a snapshot to take of one of the caller's own VMs, which has to

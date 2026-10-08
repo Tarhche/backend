@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/container/getVMContainers"
-	"github.com/khanzadimahdi/testproject/application/dashboard/workload/input"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/presenter"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/snapshot/createSnapshot"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/snapshot/getSnapshot"
@@ -34,6 +33,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	infraDocker "github.com/khanzadimahdi/testproject/infrastructure/workload/docker"
+	"github.com/khanzadimahdi/testproject/infrastructure/workload/input"
 )
 
 // TestAMachineVM walks a VM through its life from the dashboard: asked for,

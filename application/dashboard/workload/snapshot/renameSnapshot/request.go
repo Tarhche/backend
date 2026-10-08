@@ -1,8 +1,8 @@
 package renameSnapshot
 
 import (
-	"github.com/khanzadimahdi/testproject/application/dashboard/workload/input"
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/infrastructure/workload/input"
 )
 
 // Request renames a snapshot, which is all there is to change about one.

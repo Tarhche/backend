@@ -1,9 +1,9 @@
 package createVolume
 
 import (
-	"github.com/khanzadimahdi/testproject/application/dashboard/workload/input"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/docker"
+	"github.com/khanzadimahdi/testproject/infrastructure/workload/input"
 )
 
 // Request is a volume to create inside a Docker VM. It lives on the VM's

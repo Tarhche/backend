@@ -1,8 +1,8 @@
 package updateVM
 
 import (
-	"github.com/khanzadimahdi/testproject/application/dashboard/workload/input"
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/infrastructure/workload/input"
 )
 
 // Request is what changes about a VM. Anything left out stays as it is. Its

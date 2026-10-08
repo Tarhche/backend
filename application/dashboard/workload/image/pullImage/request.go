@@ -1,8 +1,8 @@
 package pullImage
 
 import (
-	"github.com/khanzadimahdi/testproject/application/dashboard/workload/input"
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/infrastructure/workload/input"
 )
 
 // Request is an image to pull into a Docker VM.

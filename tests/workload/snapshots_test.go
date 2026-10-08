@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/khanzadimahdi/testproject/application/dashboard/workload/input"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/presenter"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/snapshot/createSnapshot"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/snapshot/deleteSnapshot"
@@ -21,6 +20,7 @@ import (
 	snapshotKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/snapshot"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
+	"github.com/khanzadimahdi/testproject/infrastructure/workload/input"
 )
 
 // TestASnapshot walks a snapshot through its life from the dashboard, as a
