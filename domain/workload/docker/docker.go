@@ -140,7 +140,8 @@ type Image struct {
 	InUse bool
 
 	// Unmanaged says nobody keeps it: it was pulled from its VM's terminal,
-	// or by a stack, and nothing would pull it again.
+	// and no container the platform keeps, nor any of a stack's, uses it, so
+	// nothing would pull it again.
 	Unmanaged bool
 }
 

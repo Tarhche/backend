@@ -2012,7 +2012,7 @@ definitions:
       unmanaged:
         description: |-
           Unmanaged says nobody keeps it: it was pulled from its VM's terminal,
-          or for a stack.
+          and no container the platform keeps, nor any of a stack's, uses it.
         type: boolean
     type: object
   presenter.LogLine:

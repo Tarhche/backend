@@ -7,7 +7,9 @@
 // stack or from the VM's terminal, is reported in every heartbeat as well,
 // and each building block's strategy takes what its kind's reports say of it
 // (Blocks.Witnessed) and shows it beside its records as its extras: a
-// stack's, as part of the stack, and nobody's, as unmanaged. None of it is
+// stack's, as part of the stack, and nobody's, as unmanaged. A kind whose
+// objects what lives beside them can keep says what keeps them (Keeper): an
+// image is the container's that uses it, or the stack's. None of it is
 // stored, and none of it is ever reconciled: each control plane keeps what
 // the heartbeats it hears say (Sightings), and it can be acted on and read,
 // through the node holding it, as a record can.
@@ -76,6 +78,16 @@ type Kind interface {
 	// asked for action as it is, as its node would refuse it, or nothing: a
 	// container that runs is not removed but by force.
 	Refuse(ctx context.Context, r kind.Raw, action string, payload any) error
+}
+
+// Keeper is a building block that what lives beside it in its Docker VM can
+// keep with no record of its own: an image, which the containers made from it
+// keep.
+type Keeper interface {
+	// Keepers are what keeps each of the kind's objects on a node that has
+	// no record of its own, by its uuid, as LabelManagedBy says it. What
+	// nothing keeps is not among them.
+	Keepers(ctx context.Context, nodeName string) (map[string]string, error)
 }
 
 // Adoption is what an object found with no record is taken in as.
@@ -330,6 +342,11 @@ func (b *Blocks) Witnessed(ctx context.Context, nodeName string, report kind.Rep
 		vms[v.Metadata.UUID] = v
 	}
 
+	keepers, err := b.keepers(ctx, nodeName, report)
+	if err != nil {
+		return err
+	}
+
 	seen := make(map[string][]kind.Raw, len(report.Read))
 	restored := make(map[string]time.Time)
 
@@ -362,7 +379,7 @@ func (b *Blocks) Witnessed(ctx context.Context, nodeName string, report kind.Rep
 			}
 		}
 
-		seen[parent.UUID] = append(seen[parent.UUID], b.sighted(nodeName, v, instance))
+		seen[parent.UUID] = append(seen[parent.UUID], b.sighted(nodeName, v, instance, keepers))
 	}
 
 	for _, vmUUID := range report.Read {
@@ -449,10 +466,21 @@ func (b *Blocks) adopt(ctx context.Context, nodeName string, v vmKind.VM, instan
 	return false, err
 }
 
+// keepers are what keeps what of the kind on a node has no record of its own,
+// by uuid, when the kind says what lives beside it can keep it.
+func (b *Blocks) keepers(ctx context.Context, nodeName string, report kind.Report[json.RawMessage]) (map[string]string, error) {
+	keeper, keeps := b.kind.(Keeper)
+	if !keeps || len(report.Instances) == 0 {
+		return nil, nil
+	}
+
+	return keeper.Keepers(ctx, nodeName)
+}
+
 // sighted is the manifest of what nobody keeps a record of, as a node saw
-// it in v: a stack's or nobody's, its VM's owner's, under a uuid its Docker id
-// gives it when no label does.
-func (b *Blocks) sighted(nodeName string, v vmKind.VM, instance kind.Observation) kind.Raw {
+// it in v: a stack's, what keepers say keeps it, or nobody's, its VM's owner's,
+// under a uuid its Docker id gives it when no label does.
+func (b *Blocks) sighted(nodeName string, v vmKind.VM, instance kind.Observation, keepers map[string]string) kind.Raw {
 	observed := ObservedOf(instance.Status)
 
 	uuid := instance.UUID
@@ -461,8 +489,14 @@ func (b *Blocks) sighted(nodeName string, v vmKind.VM, instance kind.Observation
 	}
 
 	managedBy := blockKinds.ManagedByNobody
-	if _, stacked := ownerOf(instance.Owners, stackKind.Name); stacked || len(observed.Docker.Labels[docker.LabelComposeProject]) > 0 {
+
+	_, stacked := ownerOf(instance.Owners, stackKind.Name)
+
+	switch keeper := keepers[uuid]; {
+	case stacked, len(observed.Docker.Labels[docker.LabelComposeProject]) > 0:
 		managedBy = blockKinds.ManagedByStack
+	case len(keeper) > 0:
+		managedBy = keeper
 	}
 
 	return kind.Raw{

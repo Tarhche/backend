@@ -13,6 +13,11 @@
 // An image that a container kept in its VM uses is implied present, and is
 // not removed, whether it is kept itself or not, while that container is
 // kept. One a container nobody keeps uses is removed only by force.
+//
+// An image with no record of its own is shown as kept by what uses it
+// (Keepers): the container's kept in its VM that was asked for it or made
+// from it, or the stack's whose container was made from it. Only one nothing
+// kept uses is unmanaged.
 package image
 
 import (
@@ -25,6 +30,7 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/blocks"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
+	blockKinds "github.com/khanzadimahdi/testproject/domain/workload/kinds/blocks"
 	containerKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/container"
 	imageKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/image"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
@@ -39,6 +45,7 @@ var (
 	_ kind.ControlPlane[imageKind.Spec, imageKind.Status] = &Images{}
 	_ kind.Preparer[imageKind.Spec, imageKind.Status]     = &Images{}
 	_ blocks.Kind                                         = &Images{}
+	_ blocks.Keeper                                       = &Images{}
 )
 
 // New is the strategy over what the building blocks share.
@@ -181,6 +188,64 @@ func (s *Images) Named(r kind.Raw, name string) bool {
 	}
 
 	return false
+}
+
+// Keepers are the images on a node that the containers beside them keep, by
+// their uuids: under every reference a container kept in its VM was asked
+// for, or was made from as docker lists it, the container's, which it is
+// implied present for; and under the one a stack's container was made from,
+// the stack's. An image only a container nobody keeps uses is nobody's.
+func (s *Images) Keepers(ctx context.Context, nodeName string) (map[string]string, error) {
+	keepers := make(map[string]string)
+
+	for _, c := range s.Sightings.All(containerKind.Name) {
+		if c.Metadata.Node == nodeName && c.Metadata.Labels[blockKinds.LabelManagedBy] == blockKinds.ManagedByStack {
+			keep(keepers, c, blockKinds.ManagedByStack)
+		}
+	}
+
+	containers, _, err := s.Resources.GetAll(ctx, containerKind.Name, resource.Filter{Node: nodeName}, 0, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, c := range containers {
+		keep(keepers, c.Raw, blockKinds.ManagedByContainer)
+	}
+
+	return keepers, nil
+}
+
+// keep has keeper keep the images of c's VM that c was asked for, or was
+// made from: what docker lists it as made from is the image's id once its
+// reference names another image, which is what an image nothing names any
+// more is known by.
+func keep(keepers map[string]string, c kind.Raw, keeper string) {
+	vm, in := c.Metadata.Owner(containerKind.Parent)
+	if !in {
+		return
+	}
+
+	var spec containerKind.Spec
+	if len(c.Spec) > 0 {
+		_ = json.Unmarshal(c.Spec, &spec)
+	}
+
+	var status containerKind.Status
+	if len(c.Status) > 0 {
+		_ = json.Unmarshal(c.Status, &status)
+	}
+
+	references := []string{spec.Image}
+	if status.Docker != nil {
+		references = append(references, status.Docker.Image)
+	}
+
+	for _, reference := range references {
+		if len(strings.TrimSpace(reference)) > 0 {
+			keepers[imageKind.UUIDOf(vm.UUID, reference)] = keeper
+		}
+	}
 }
 
 func cmpOr(values ...string) string {

@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/khanzadimahdi/testproject/application/dashboard/workload/image/getImages"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/presenter"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/stack/createStack"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/stack/deleteStack"
@@ -67,6 +68,15 @@ func TestAStack(t *testing.T) {
 		}
 
 		assert.Equal(t, []string{"up -d --remove-orphans"}, w.dockerd.Ran(slug))
+	})
+
+	t.Run("the images its containers were made from are kept by it", func(t *testing.T) {
+		w.images(t, vmUUID, "the stack's images kept", func(images map[string]presenter.Image) bool {
+			web, pulled := images["nginx:alpine"]
+			cache, alsoPulled := images["redis:alpine"]
+
+			return pulled && alsoPulled && !web.Unmanaged && !cache.Unmanaged
+		})
 	})
 
 	t.Run("a container that falls over leaves it degraded, and it is brought back", func(t *testing.T) {
@@ -153,7 +163,36 @@ func TestAStack(t *testing.T) {
 
 		_, err = w.resources.GetOne(ctx, stackKind.Name, stackUUID)
 		assert.ErrorIs(t, err, domain.ErrNotExists, "record and all")
+
+		w.images(t, vmUUID, "the images it left behind nobody's", func(images map[string]presenter.Image) bool {
+			web, left := images["nginx:alpine"]
+			cache, alsoLeft := images["redis:alpine"]
+
+			return left && alsoLeft && web.Unmanaged && cache.Unmanaged
+		})
 	})
+}
+
+// images are the images the dashboard lists in the Docker VM vmUUID names,
+// by each of their tags, once condition holds of them.
+func (w *workload) images(t *testing.T, vmUUID string, what string, condition func(map[string]presenter.Image) bool) map[string]presenter.Image {
+	t.Helper()
+
+	return eventually(t, what, func(ctx context.Context) (map[string]presenter.Image, error) {
+		listed, err := getImages.NewUseCase(w.client, w.translator).Execute(ctx, &getImages.Request{VMUUID: vmUUID, OwnerUUID: ownerUUID})
+		if err != nil {
+			return nil, err
+		}
+
+		images := make(map[string]presenter.Image)
+		for _, i := range listed.Items {
+			for _, tag := range i.Tags {
+				images[tag] = i
+			}
+		}
+
+		return images, nil
+	}, condition)
 }
 
 // stackIn is the stack as the dashboard shows it, once it is in state with

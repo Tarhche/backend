@@ -99,7 +99,7 @@ type Image struct {
 	InUse bool `json:"in_use"`
 
 	// Unmanaged says nobody keeps it: it was pulled from its VM's terminal,
-	// or for a stack.
+	// and no container the platform keeps, nor any of a stack's, uses it.
 	Unmanaged bool `json:"unmanaged,omitempty"`
 }
 

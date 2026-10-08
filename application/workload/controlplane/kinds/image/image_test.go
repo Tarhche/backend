@@ -2,15 +2,20 @@ package image_test
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/blocks"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/blocks/blockstest"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/vmtest"
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/workload/docker"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
+	blockKinds "github.com/khanzadimahdi/testproject/domain/workload/kinds/blocks"
 	containerKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/container"
 	imageKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/image"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
@@ -149,6 +154,77 @@ func TestImages_Refuse(t *testing.T) {
 		_, _, err = w.Images.Prepare(ctx, kept, imageKind.ActionPull, nil)
 		assert.NoError(t, err, "and pulled again whatever uses it")
 	})
+}
+
+func TestImages_Witnessed(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	at := time.Now()
+
+	w := blockstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
+
+	// kept in vm-1, asked for redis:7 and made from what the tag named before
+	// it was pulled again, which docker lists by its id.
+	w.Keep(blockstest.AContainer("kept", "vm-1", containerKind.Running, containerKind.Running, func(c *containerKind.Container) {
+		c.Spec.Image = "redis:7"
+		c.Status.Docker.Image = "sha256:redis-before"
+	}))
+
+	w.Keep(blockstest.A[imageKind.Spec, imageKind.Status](imageKind.Name, imageKind.UUIDOf("vm-1", "alpine:3"), "vm-1", imageKind.Spec{Reference: "alpine:3"}, imageKind.Status{Status: kind.Status{State: imageKind.Present}}))
+
+	require.NoError(t, w.Containers.Witnessed(ctx, vmtest.Node, kind.Report[json.RawMessage]{Read: []string{"vm-1"}, Instances: []kind.Observation{
+		observed(t, "", containerKind.Status{Docker: &containerKind.Docker{ID: "c-shop", Name: "shop-web-1", Image: "nginx:alpine", State: "running", Labels: map[string]string{docker.LabelComposeProject: "shop"}}}, kind.Reference{Kind: "stack", UUID: "stack-uuid"}),
+		observed(t, "", containerKind.Status{Docker: &containerKind.Docker{ID: "c-db", Name: "db", Image: "postgres:17", State: "running"}}),
+	}}, at))
+
+	require.NoError(t, w.Images.Witnessed(ctx, vmtest.Node, kind.Report[json.RawMessage]{Read: []string{"vm-1"}, Instances: []kind.Observation{
+		held(t, "sha256:redis", "redis:7"),
+		held(t, "sha256:redis-before", ""),
+		held(t, "sha256:nginx", "nginx:alpine"),
+		held(t, "sha256:postgres", "postgres:17"),
+		held(t, "sha256:busybox", "busybox:latest"),
+		held(t, "sha256:alpine", "alpine:3"),
+	}}, at))
+
+	extras, err := w.Images.All(ctx)
+	require.NoError(t, err)
+
+	keepers := make(map[string]string, len(extras))
+	for _, r := range extras {
+		keepers[blocks.ObservedOf(r.Status).Docker.ID] = r.Metadata.Labels[blockKinds.LabelManagedBy]
+	}
+
+	assert.Equal(t, map[string]string{
+		"sha256:redis":        blockKinds.ManagedByContainer,
+		"sha256:redis-before": blockKinds.ManagedByContainer,
+		"sha256:nginx":        blockKinds.ManagedByStack,
+		"sha256:postgres":     blockKinds.ManagedByNobody,
+		"sha256:busybox":      blockKinds.ManagedByNobody,
+	}, keepers, "a kept container's images are the container's, both the one it was asked for and the one it was made from; a stack's container's, the stack's; and one only a container nobody keeps uses, or nothing does, nobody's. One kept itself is a record, not an extra")
+}
+
+// observed is something as vm-1's node reports it, under uuid.
+func observed(t *testing.T, uuid string, status any, owners ...kind.Reference) kind.Observation {
+	t.Helper()
+
+	encoded, err := json.Marshal(status)
+	require.NoError(t, err)
+
+	return kind.Observation{UUID: uuid, Owners: append([]kind.Reference{{Kind: "vm", UUID: "vm-1"}}, owners...), Status: encoded}
+}
+
+// held is an image vm-1's dockerd holds, as its node reports it: under the
+// reference, or under its Docker id when nothing names it.
+func held(t *testing.T, id string, reference string) kind.Observation {
+	t.Helper()
+
+	uuid := blockKinds.Derived(imageKind.Name, "vm-1", id)
+	if len(reference) > 0 {
+		uuid = imageKind.UUIDOf("vm-1", reference)
+	}
+
+	return observed(t, uuid, imageKind.Status{Status: kind.Status{State: imageKind.Present}, Docker: &imageKind.Docker{ID: id, Reference: reference}})
 }
 
 func TestImages_Named(t *testing.T) {

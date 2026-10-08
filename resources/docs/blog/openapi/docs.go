@@ -10953,7 +10953,7 @@ const docTemplate = `{
                     }
                 },
                 "unmanaged": {
-                    "description": "Unmanaged says nobody keeps it: it was pulled from its VM's terminal,\nor for a stack.",
+                    "description": "Unmanaged says nobody keeps it: it was pulled from its VM's terminal,\nand no container the platform keeps, nor any of a stack's, uses it.",
                     "type": "boolean"
                 }
             }

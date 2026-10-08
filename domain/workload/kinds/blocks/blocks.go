@@ -18,7 +18,8 @@
 //     well, and kept by whoever made it: a stack, whose compose project it is
 //     part of and which keeps it as one with the rest, or nobody, when it was
 //     made from the VM's terminal, in which case it is shown as unmanaged and
-//     never reconciled (OwnershipOf);
+//     never reconciled (OwnershipOf). An image, which nothing can label, is
+//     kept by what uses it: a container the platform keeps, or a stack's;
 //   - and they are asked under the containers' permissions, which the
 //     dashboard has always asked them under (PermissionsOf).
 package blocks
@@ -65,8 +66,13 @@ const (
 	// LabelManagedBy says what keeps what has no record of its own.
 	LabelManagedBy = "workload.managed-by"
 
-	// ManagedByStack is what a stack made, as part of its compose project.
+	// ManagedByStack is what a stack made, as part of its compose project,
+	// and an image one of a stack's containers was made from.
 	ManagedByStack = "stack"
+
+	// ManagedByContainer is an image a container the platform keeps was
+	// asked for as, or made from, which it is implied present for.
+	ManagedByContainer = "container"
 
 	// ManagedByNobody is what nobody keeps: what was made from the VM's
 	// terminal. It is shown as unmanaged, and is never reconciled.

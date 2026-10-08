@@ -377,6 +377,8 @@ func TestTheBuildingBlocksOfADockerVM(t *testing.T) {
 			switch {
 			case slices.Contains(i.Tags, "redis:7"):
 				assert.False(t, i.Unmanaged, "pulled through the platform")
+			case slices.Contains(i.Tags, "nginx:1.27"):
+				assert.False(t, i.Unmanaged, "pulled for a container it keeps, which keeps it")
 			case slices.Contains(i.Tags, "postgres:17"):
 				assert.True(t, i.Unmanaged, "pulled from its terminal")
 			}

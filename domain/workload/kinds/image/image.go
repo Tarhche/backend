@@ -14,7 +14,9 @@
 //	present   pending or missing, VM running  create, which pulls it
 //
 // An image a stored container uses is implied present, and cannot be deleted
-// while that container is stored.
+// while that container is stored. One with no record of its own is kept by
+// what uses it: the stored container's, or a stack's when one of the stack's
+// containers was made from it. Only one nothing kept uses is unmanaged.
 package image
 
 import (
