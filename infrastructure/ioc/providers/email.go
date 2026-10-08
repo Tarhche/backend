@@ -43,7 +43,7 @@ func (p *emailProvider) Register(ctx context.Context, c provider.Container) erro
 		Port: blogConfigs.MailPort,
 	})
 
-	mailer := email.NewVerified(smtp, emailverifier.NewVerifier(), logger)
+	mailer := email.NewVerifiedDecorator(smtp, emailverifier.NewVerifier(), logger)
 
 	if err := c.Bind(func() domain.Mailer { return mailer }, provider.Singleton()); err != nil {
 		return err

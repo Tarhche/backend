@@ -28,20 +28,20 @@ const (
 	reasonUnreachable      = "mailbox unreachable"
 )
 
-// verified is a domain.Mailer that hands mail to the next mailer only when the
+// verifiedDecorator is a domain.Mailer that hands mail to the next mailer only when the
 // recipient address is verified to be able to receive it, and logs the mail it
 // drops instead of sending it.
-type verified struct {
+type verifiedDecorator struct {
 	next     domain.Mailer
 	verifier Verifier
 	logger   *slog.Logger
 	tracer   oteltrace.Tracer
 }
 
-var _ domain.Mailer = &verified{}
+var _ domain.Mailer = &verifiedDecorator{}
 
-func NewVerified(next domain.Mailer, verifier Verifier, logger *slog.Logger) *verified {
-	return &verified{
+func NewVerifiedDecorator(next domain.Mailer, verifier Verifier, logger *slog.Logger) *verifiedDecorator {
+	return &verifiedDecorator{
 		next:     next,
 		verifier: verifier,
 		logger:   logger,
@@ -49,7 +49,7 @@ func NewVerified(next domain.Mailer, verifier Verifier, logger *slog.Logger) *ve
 	}
 }
 
-func (m *verified) SendMail(ctx context.Context, from string, to string, subject string, body []byte) error {
+func (m *verifiedDecorator) SendMail(ctx context.Context, from string, to string, subject string, body []byte) error {
 	ctx, span := m.tracer.Start(ctx, "email.verify")
 	defer span.End()
 

@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-func TestVerified_SendMail(t *testing.T) {
+func TestVerifiedDecorator_SendMail(t *testing.T) {
 	t.Parallel()
 
 	const (
@@ -44,7 +44,7 @@ func TestVerified_SendMail(t *testing.T) {
 		next.On("SendMail", mock.Anything, from, to, subject, body).Once().Return(nil)
 		defer next.AssertExpectations(t)
 
-		mailer := NewVerified(&next, &verifier, slog.New(slog.NewTextHandler(&log, nil)))
+		mailer := NewVerifiedDecorator(&next, &verifier, slog.New(slog.NewTextHandler(&log, nil)))
 
 		assert.NoError(t, mailer.SendMail(context.Background(), from, to, subject, body))
 		assert.Empty(t, log.String())
@@ -66,7 +66,7 @@ func TestVerified_SendMail(t *testing.T) {
 		next.On("SendMail", mock.Anything, from, to, subject, body).Once().Return(sendErr)
 		defer next.AssertExpectations(t)
 
-		mailer := NewVerified(&next, &verifier, slog.New(slog.DiscardHandler))
+		mailer := NewVerifiedDecorator(&next, &verifier, slog.New(slog.DiscardHandler))
 
 		assert.ErrorIs(t, mailer.SendMail(context.Background(), from, to, subject, body), sendErr)
 	})
@@ -137,7 +137,7 @@ func TestVerified_SendMail(t *testing.T) {
 				defer verifier.AssertExpectations(t)
 				defer next.AssertNotCalled(t, "SendMail", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 
-				mailer := NewVerified(&next, &verifier, slog.New(slog.NewTextHandler(&log, nil)))
+				mailer := NewVerifiedDecorator(&next, &verifier, slog.New(slog.NewTextHandler(&log, nil)))
 
 				assert.NoError(t, mailer.SendMail(context.Background(), from, tc.result.Email, subject, body))
 
@@ -169,7 +169,7 @@ func TestVerified_SendMail(t *testing.T) {
 		defer verifier.AssertExpectations(t)
 		defer next.AssertNotCalled(t, "SendMail", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 
-		mailer := NewVerified(&next, &verifier, slog.New(slog.NewTextHandler(&log, nil)))
+		mailer := NewVerifiedDecorator(&next, &verifier, slog.New(slog.NewTextHandler(&log, nil)))
 
 		assert.ErrorIs(t, mailer.SendMail(context.Background(), from, to, subject, body), lookupErr)
 		assert.Empty(t, log.String())
@@ -184,7 +184,7 @@ func TestVerified_SendMail(t *testing.T) {
 				log  bytes.Buffer
 			)
 
-			mailer := NewVerified(&next, emailverifier.NewVerifier(), slog.New(slog.NewTextHandler(&log, nil)))
+			mailer := NewVerifiedDecorator(&next, emailverifier.NewVerifier(), slog.New(slog.NewTextHandler(&log, nil)))
 
 			assert.NoError(t, mailer.SendMail(context.Background(), from, address, subject, body))
 			next.AssertNotCalled(t, "SendMail", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
