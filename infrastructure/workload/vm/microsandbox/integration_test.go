@@ -27,6 +27,8 @@ import (
 	"github.com/khanzadimahdi/testproject/application/code/runCode"
 	"github.com/khanzadimahdi/testproject/domain"
 	dockerdomain "github.com/khanzadimahdi/testproject/domain/workload/docker"
+	"github.com/khanzadimahdi/testproject/domain/workload/kind"
+	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
 	"github.com/khanzadimahdi/testproject/domain/workload/network"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
@@ -502,14 +504,20 @@ func TestDockerVM(t *testing.T) {
 	})
 
 	t.Run("a compose stack comes up, stops, starts, restarts and goes", func(t *testing.T) {
-		compose := daemons.Compose(spec.ID)
+		compose := docker.NewCompose(e)
 
-		const yaml = `services:
+		demo := stackKind.Stack{
+			Metadata: kind.Metadata{UUID: "it-stack-demo", Slug: "demo"},
+			Spec: stackKind.Spec{
+				VM: stackKind.VMChoice{UUID: spec.ID},
+				Compose: `services:
   app:
     image: busybox:latest
     command: ["sh", "-c", "echo up; sleep 3600"]
     restart: unless-stopped
-`
+`,
+			},
+		}
 
 		stack := func() []dockerdomain.Container {
 			containers, err := daemon.Containers(ctx, dockerdomain.ContainerFilter{All: true, Stack: "demo"})
@@ -518,29 +526,32 @@ func TestDockerVM(t *testing.T) {
 			return containers
 		}
 
-		_, err := compose.Up(ctx, "demo", yaml)
+		_, err := compose.Up(ctx, demo)
 		require.NoError(t, err)
 		require.Len(t, stack(), 1)
 		assert.Equal(t, "running", stack()[0].State)
 
-		_, err = compose.Stop(ctx, "demo", yaml)
+		_, err = compose.Stop(ctx, demo)
 		require.NoError(t, err)
 		assert.Equal(t, "exited", stack()[0].State)
 
-		_, err = compose.Start(ctx, "demo", yaml)
+		_, err = compose.Start(ctx, demo)
 		require.NoError(t, err)
 		assert.Equal(t, "running", stack()[0].State)
 
-		_, err = compose.Restart(ctx, "demo", yaml)
+		_, err = compose.Restart(ctx, demo)
 		require.NoError(t, err)
 		assert.Equal(t, "running", stack()[0].State)
 
-		_, err = compose.Down(ctx, "demo", yaml, true)
+		_, err = compose.Down(ctx, demo, true)
 		require.NoError(t, err)
 		assert.Empty(t, stack())
 
-		_, err = compose.Up(ctx, "demo", "services: [not valid")
-		assert.Error(t, err, "compose's own refusal is an error")
+		invalid := demo
+		invalid.Spec.Compose = "services: [not valid"
+
+		_, err = compose.Up(ctx, invalid)
+		assert.Error(t, err, "a compose file that cannot be read is an error")
 	})
 
 	t.Run("a stop stops dockerd gracefully, and a start brings its containers back", func(t *testing.T) {
@@ -1043,7 +1054,7 @@ func main() {
 			limits := request.ResourceLimits()
 
 			goes := execution(fmt.Sprintf("it-task-go-%d", i), request.Image(), nil, []string{"--timeout", strconv.Itoa(int(runCode.CodeTimeout.Seconds())), request.Code})
-			goes.ResourceLimits = task.ResourceLimits{Cpu: limits.Cpu, Memory: limits.Memory, Disk: limits.Disk}
+			goes.ResourceLimits = limits.ResourceLimits()
 			goes.NetworkPolicy = network.DefaultPolicy
 
 			_, run, logs := ran(t, goes)
