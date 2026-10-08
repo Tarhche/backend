@@ -438,6 +438,46 @@ func TestUseCase_Execute(t *testing.T) {
 		assert.Equal(t, kindstest.Running, kindstest.Typed(resource.Record{Raw: response.Resource}).Status.State, "it is as the answer left it, never as it was before the loop came upon it")
 	})
 
+	t.Run("and one whose answer is written down before its admission reads it again is answered with it", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(nil)
+		registry := kindstest.Registry(f.fans)
+		binding, _ := registry.Lookup(kindstest.Kind)
+
+		// the loop's pass sends it its first command, and its node answers at
+		// once, which another control plane writes down: all before admitting
+		// it follows it.
+		loop := dispatch.New(f.resources, f.producer, f.waiters, f.clock.Now)
+		kept := &passedOver{Repository: f.resources, pass: func(r resource.Record) {
+			asked, err := loop.Follow(ctx, binding, r)
+			require.NoError(t, err)
+			require.NotNil(t, asked.Command)
+
+			_, err = loop.Send(ctx, *asked.Command, 0)
+			require.NoError(t, err)
+
+			answer(f, "made before it was looked for")
+		}}
+
+		admitting := admitResource.NewUseCase(registry, kept, dispatch.New(kept, f.producer, f.waiters, f.clock.Now, dispatch.PollEvery(time.Millisecond)), slog.New(slog.DiscardHandler))
+
+		request := asked("kitchen", `{"blades": 3}`)
+		request.Wait = time.Minute
+
+		response, err := admitting.Execute(ctx, &request)
+		require.NoError(t, err)
+
+		sent, err := messagingMock.Produced[kind.Command](f.producer, kind.CommandName)
+		require.NoError(t, err)
+		require.Len(t, sent, 1, "what the loop sent is not sent again")
+
+		assert.Nil(t, response.Command)
+		require.NotNil(t, response.Result, "what came of it is what was waited for, though it came first")
+		assert.Equal(t, "made before it was looked for", response.Result.Output)
+		assert.Equal(t, kindstest.Running, kindstest.Typed(resource.Record{Raw: response.Resource}).Status.State)
+	})
+
 	t.Run("and not waited for, it is as the loop left it all the same", func(t *testing.T) {
 		t.Parallel()
 

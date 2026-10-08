@@ -106,7 +106,7 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 	if dispatched.Command == nil {
 		// what it waits on was sent by the reconcile loop, which got to it
 		// first: that is what came of being asked for, and what is waited for.
-		if result := uc.dispatcher.Await(ctx, dispatched.Record, request.Wait); result != nil {
+		if result := uc.awaited(ctx, dispatched.Record, request.Wait); result != nil {
 			response.Result = result
 			response.Resource = uc.latest(ctx, d, dispatched.Record)
 		}
@@ -156,6 +156,22 @@ func (uc *UseCase) follow(ctx context.Context, binding kind.ControlPlaneBinding,
 
 		r = latest
 	}
+}
+
+// awaited is what came of the command the reconcile loop sent a resource
+// just admitted in its admission's place, waited for for as long as wait: it
+// is written down already when it came before the resource was read again,
+// since nothing but that command was answered for a resource made a moment
+// ago.
+func (uc *UseCase) awaited(ctx context.Context, r resource.Record, wait time.Duration) *kind.Result {
+	switch {
+	case wait <= 0:
+		return nil
+	case r.Pending == nil:
+		return r.Answer
+	}
+
+	return uc.dispatcher.Await(ctx, r, wait)
 }
 
 // latest is the resource as it is kept now, after what came of its first
