@@ -20,16 +20,20 @@
 //     the control plane; whether it is a command, answered later as a Result,
 //     a query, answered at once, or a stream such as a terminal; the states it
 //     is allowed in and the one it desires; the permission it is asked under,
-//     workload.<plural>.<verb> and its self. twin; and the Codec its payload
-//     is read with, so a strategy is handed the action's own struct.
+//     workload.<plural>.<verb> and its self. twin, or another kind's
+//     (PermissionsOf); how long its node may take over a command, when that
+//     may be longer than the control plane's patience (Timeout, a name each
+//     service sizes from its settings); and the Codec its payload is read
+//     with, so a strategy is handed the action's own struct.
 //
 // And it has a strategy in each service that runs it: ControlPlane, for
 // admission, for deciding what to ask for when what a resource was asked to
 // be and what it is differ, and for the actions run on its record; Node, for
 // carrying out commands, answering queries, and its state, which is
 // everything of the kind a node holds, and, as an Attacher and an Exposer,
-// for its streams and its ports; and Ingress, for where an instance is
-// reached. The vmhost runs none: it stays the engine, and knows nothing of
+// for its streams and its ports, and, as a Prompt, for being asked what it
+// holds between beats too, when somebody waits on its changes as they
+// happen; and Ingress, for where an instance is reached. The vmhost runs none: it stays the engine, and knows nothing of
 // kinds.
 //
 // Every service runs one generic loop over a Registry of the kinds it runs,
