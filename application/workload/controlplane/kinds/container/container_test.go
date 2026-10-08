@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/blocks"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/blocks/blockstest"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/observe"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/vmtest"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
@@ -18,6 +20,7 @@ import (
 	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
+	"github.com/khanzadimahdi/testproject/domain/workload/resource"
 )
 
 func asked(spec containerKind.Spec, owners ...kind.Reference) containerKind.Container {
@@ -404,3 +407,40 @@ func TestContainers_Apply(t *testing.T) {
 // what is shared, the containers' own refusals among it, is held to the
 // rules of the container kind.
 var _ blocks.Kind = blockstest.New().Containers
+
+// TestContainer_startAnswered holds a container being started to its start's
+// answer: a look its node took between the start being asked and carried out
+// says it is stopped, as it was, and is not what the start came to. Taken for
+// it, the start's answer that it runs came for nothing anybody waited on, and
+// the dashboard showed a container it had just started as exited.
+func TestContainer_startAnswered(t *testing.T) {
+	t.Parallel()
+
+	d := containerKind.Descriptor()
+	at := time.Now()
+
+	r := resource.Record{Raw: blockstest.AContainer("web-uuid", "01", containerKind.Starting, containerKind.Running)}
+	r.Pending = &resource.Pending{Action: containerKind.ActionStart, IDs: []string{"start-1"}, SentAt: at}
+
+	stopped, err := json.Marshal(containerKind.Status{Status: kind.Status{State: containerKind.Stopped}, Docker: &containerKind.Docker{ID: "c1", Name: "web", State: "exited"}})
+	require.NoError(t, err)
+
+	_, err = observe.Observe(d, &r, stopped, at.Add(time.Millisecond))
+	require.NoError(t, err)
+
+	common, err := r.Common()
+	require.NoError(t, err)
+	assert.Equal(t, containerKind.Starting, common.State, "a look before the start reached its node says nothing of it")
+	require.NotNil(t, r.Pending, "and the start is still waited for")
+
+	running, err := json.Marshal(containerKind.Status{Status: kind.Status{State: containerKind.Running}, Docker: &containerKind.Docker{ID: "c1", Name: "web", State: "running"}})
+	require.NoError(t, err)
+
+	_, err = observe.Answer(d, &r, kind.Result{ID: "start-1", Kind: containerKind.Name, UUID: "web-uuid", Action: containerKind.ActionStart, OK: true, Status: running}, at.Add(2*time.Millisecond))
+	require.NoError(t, err)
+
+	common, err = r.Common()
+	require.NoError(t, err)
+	assert.Equal(t, containerKind.Running, common.State, "its answer says what it came to")
+	assert.Nil(t, r.Pending)
+}

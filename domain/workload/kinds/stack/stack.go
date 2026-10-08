@@ -351,6 +351,11 @@ func Machine() kind.Machine {
 		Transitions: transitions,
 		Terminal:    []kind.State{Stopped, Failed, Deleted},
 		InFlight:    []kind.State{Deploying, Starting, Stopping, Restarting, Removing},
+
+		// a look its node took between a command being asked and carried out
+		// says the stack is as it was, which says nothing of what the command
+		// came to.
+		Answered: []kind.State{Deploying, Starting, Restarting},
 	}
 }
 

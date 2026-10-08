@@ -113,6 +113,7 @@ func TestMachine(t *testing.T) {
 
 	assert.Empty(t, m.Validate())
 	assert.Equal(t, stack.Waiting, m.Initial, "a stack is admitted waiting to be deployed")
+	assert.ElementsMatch(t, []kind.State{stack.Deploying, stack.Starting, stack.Restarting}, m.Answered, "a look taken before a command reached its node says the stack is as it was, so only the command's answer says what it came to")
 
 	for name, tt := range map[string]struct {
 		from  kind.State

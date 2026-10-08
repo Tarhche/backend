@@ -101,6 +101,8 @@ func TestMachine(t *testing.T) {
 
 	m := container.Machine()
 
+	assert.ElementsMatch(t, []kind.State{container.Starting, container.Restarting}, m.Answered, "a look taken before a start or a restart reached its node says nothing of what it came to, so only their answers say")
+
 	for name, tt := range map[string]struct {
 		from kind.State
 		on   kind.Trigger

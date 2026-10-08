@@ -587,8 +587,10 @@ func Descriptor() kind.Descriptor {
 // A command is waited on in flight until its own answer, or its node, says
 // where it got: creating, starting and restarting end in running, stopped or
 // completed, stopping in stopped or completed, and removing only in the
-// container being gone. A restart is over only once it is answered: a
-// container runs before it as it does after it.
+// container being gone. A start and a restart are over only once they are
+// answered: a container runs before a restart as it does after it, and a
+// look its node took between the start being asked and carried out says it
+// is stopped, as it was, which says nothing of what the start came to.
 //
 // At rest, a container is what its node says: running, stopped or completed,
 // missing when its VM's dockerd has none of it, and waiting while its VM is
@@ -639,7 +641,7 @@ func Machine() kind.Machine {
 		Transitions: transitions,
 		Terminal:    []kind.State{Stopped, Completed, Failed, Deleted},
 		InFlight:    []kind.State{Creating, Starting, Stopping, Restarting, Removing},
-		Answered:    []kind.State{Restarting},
+		Answered:    []kind.State{Starting, Restarting},
 	}
 }
 
