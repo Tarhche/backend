@@ -1,22 +1,3 @@
-// Package heartbeat answers the code runner's readers with what became of
-// their snippets, from what the nodes running them say.
-//
-// A snippet runs as a task of the guest's, named after the request that asked
-// for it. Every node's heartbeat says what each task it runs is doing, its
-// run's output and the ports that came up (taskKind.Run), and every command a
-// node carries out is answered with what came of it: so whichever of the
-// blog's replicas hears either answers the request a task is named after,
-// without asking anything that keeps records.
-//
-// A snippet nobody is watching is answered once, when it has ended, with
-// what it printed. One that is watched is told what it is doing at every
-// heartbeat, where its ports are and when it will be stopped, and its last
-// answer is the one that says it ended. One that could not be run at all is
-// answered with why.
-//
-// A task that has ended is reported until its node has taken it away, which
-// is a few heartbeats later, so each replica answers its end once, and lets
-// go of having done so a while after.
 package heartbeat
 
 import (
@@ -25,8 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"maps"
-	"sync"
 	"time"
 
 	"github.com/khanzadimahdi/testproject/domain"
@@ -34,10 +13,6 @@ import (
 	taskKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/task"
 	nodeEvents "github.com/khanzadimahdi/testproject/domain/workload/node/events"
 )
-
-// forgetEndedAfter is how long a replica remembers it answered a task's end:
-// longer than its node takes to take an ended task away.
-const forgetEndedAfter = 10 * time.Minute
 
 type heartbeat struct {
 	replyer domain.Replyer
@@ -47,11 +22,6 @@ type heartbeat struct {
 	ingressDomain string
 
 	logger *slog.Logger
-
-	// ended are the tasks whose end this replica answered, by uuid, and when.
-	lock  sync.Mutex
-	ended map[string]time.Time
-	now   func() time.Time
 }
 
 var _ domain.MessageHandler = &heartbeat{}
@@ -62,8 +32,6 @@ func NewHeartbeatHandler(replyer domain.Replyer, ingressDomain string, logger *s
 		replyer:       replyer,
 		ingressDomain: ingressDomain,
 		logger:        logger,
-		ended:         make(map[string]time.Time),
-		now:           time.Now,
 	}
 }
 
@@ -117,12 +85,6 @@ func (h *heartbeat) answer(ctx context.Context, uuid string, status taskKind.Sta
 		return nil
 	}
 
-	// its end is said once: what its node goes on saying until it has taken
-	// the task away says nothing new.
-	if ended && h.answeredEnd(uuid) {
-		return nil
-	}
-
 	response := &Response{
 		Name:      run.Name,
 		State:     string(status.State),
@@ -151,41 +113,7 @@ func (h *heartbeat) answer(ctx context.Context, uuid string, status taskKind.Sta
 		}
 	}
 
-	if err := h.replyer.Reply(ctx, reply); err != nil {
-		return err
-	}
-
-	if ended {
-		h.answerEnd(uuid)
-	}
-
-	return nil
-}
-
-// answeredEnd reports whether this replica answered the end of the task uuid
-// names already.
-func (h *heartbeat) answeredEnd(uuid string) bool {
-	h.lock.Lock()
-	defer h.lock.Unlock()
-
-	_, answered := h.ended[uuid]
-
-	return answered
-}
-
-// answerEnd remembers that the end of the task uuid names was answered, and
-// lets go of the ends answered long enough ago.
-func (h *heartbeat) answerEnd(uuid string) {
-	h.lock.Lock()
-	defer h.lock.Unlock()
-
-	now := h.now()
-
-	maps.DeleteFunc(h.ended, func(_ string, at time.Time) bool {
-		return now.Sub(at) > forgetEndedAfter
-	})
-
-	h.ended[uuid] = now
+	return h.replyer.Reply(ctx, reply)
 }
 
 // deadline is when a snippet being watched will be stopped. Its node sets it

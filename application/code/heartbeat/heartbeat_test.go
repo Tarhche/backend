@@ -3,7 +3,6 @@ package heartbeat
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"log/slog"
 	"testing"
 	"time"
@@ -194,44 +193,6 @@ func TestHeartbeat_Handle(t *testing.T) {
 			"no-name":   snippet(taskKind.Completed, "", func(s *taskKind.Status) { s.Run.Name = "" }),
 			"no-saying": snippet("", "", watched),
 		}))
-	})
-
-	t.Run("an end is answered once, however many beats go on saying it", func(t *testing.T) {
-		t.Parallel()
-
-		var replyer messagingMock.RecordingReplyer
-		handler := NewHeartbeatHandler(&replyer, ingressDomain, slog.New(slog.DiscardHandler))
-
-		ended := beat(t, map[string]taskKind.Status{"task-uuid": snippet(taskKind.Completed, "hello\n")})
-		watchedEnded := beat(t, map[string]taskKind.Status{"live-uuid": snippet(taskKind.Completed, "bye\n", watched, func(s *taskKind.Status) { s.Run.Name = "request-live" })})
-		watchedRunning := beat(t, map[string]taskKind.Status{"live-uuid": snippet(taskKind.Running, "", watched, func(s *taskKind.Status) { s.Run.Name = "request-live" })})
-
-		for _, payload := range [][]byte{watchedRunning, watchedRunning, ended, ended, watchedEnded, ended, watchedEnded} {
-			require.NoError(t, handler.Handle(context.Background(), payload))
-		}
-
-		var kinds []domain.ReplyKind
-		for _, reply := range replyer.Replies() {
-			kinds = append(kinds, reply.Kind)
-		}
-
-		assert.Equal(t, []domain.ReplyKind{domain.ReplyChunk, domain.ReplyChunk, domain.ReplyFinal, domain.ReplyEOF}, kinds, "every beat of one running, and each end once")
-
-		handler.now = func() time.Time { return time.Now().Add(forgetEndedAfter + time.Minute) }
-		handler.answerEnd("another-uuid")
-		assert.False(t, handler.answeredEnd("task-uuid"), "an end answered long ago is let go of")
-	})
-
-	t.Run("one whose answer could not be sent is answered again at the next beat", func(t *testing.T) {
-		t.Parallel()
-
-		replyer := messagingMock.RecordingReplyer{Fail: errors.New("the reply bus is down")}
-		handler := NewHeartbeatHandler(&replyer, ingressDomain, slog.New(slog.DiscardHandler))
-
-		ended := beat(t, map[string]taskKind.Status{"task-uuid": snippet(taskKind.Completed, "hello\n")})
-
-		assert.Error(t, handler.Handle(context.Background(), ended))
-		assert.False(t, handler.answeredEnd("task-uuid"))
 	})
 
 	t.Run("every snippet a beat speaks of is answered", func(t *testing.T) {
