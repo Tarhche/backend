@@ -91,8 +91,7 @@ func (s *Volumes) Apply(_ context.Context, _ volumeKind.Volume, action string, _
 	return volumeKind.Volume{}, nil, fmt.Errorf("%w: a volume has no %q run in the control plane", kind.ErrUnknownAction, action)
 }
 
-// Prepare readies a volume's command: one a container mounts is refused its
-// delete, as Refuse says.
+// Prepare readies a volume's command, which Refuse refuses nothing of.
 func (s *Volumes) Prepare(ctx context.Context, v volumeKind.Volume, action string, payload any) (volumeKind.Volume, domain.ValidationErrors, error) {
 	raw, err := kind.Encode(v)
 	if err != nil {
@@ -106,17 +105,12 @@ func (s *Volumes) Prepare(ctx context.Context, v volumeKind.Volume, action strin
 	return v, nil, nil
 }
 
-// Refuse is why a volume, kept or not, is not removed, in docker's own words:
-// a container mounts it, which no force changes.
-func (s *Volumes) Refuse(_ context.Context, r kind.Raw, action string, _ any) error {
-	if action != volumeKind.ActionDelete {
-		return nil
-	}
-
-	if seen := blocks.ObservedOf(r.Status).Docker; seen.InUse {
-		return blocks.Refused("remove %s: volume is in use", seen.Name)
-	}
-
+// Refuse refuses a volume nothing. Whether a container mounts one is its
+// dockerd's to say, which refuses its delete in its own words, whatever the
+// force: what its node last reported of it may be from before a container
+// that mounted it was removed a moment ago, which would refuse a delete
+// docker would carry out.
+func (s *Volumes) Refuse(context.Context, kind.Raw, string, any) error {
 	return nil
 }
 

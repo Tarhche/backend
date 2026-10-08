@@ -121,10 +121,13 @@ func TestImages_Refuse(t *testing.T) {
 		assert.Contains(t, refused.Message, "used by the container web, which is kept")
 	})
 
-	t.Run("one a container nobody keeps uses is removed only by force", func(t *testing.T) {
+	t.Run("whether a container nobody keeps uses one is its dockerd's to say", func(t *testing.T) {
 		t.Parallel()
 
-		assert.Error(t, w.Images.Refuse(ctx, image("nginx:1.27", true), imageKind.ActionDelete, imageKind.DeletePayload{}))
+		// what its node reported may be from before that container was
+		// removed: docker refuses the delete unless it is forced, if it is
+		// still used.
+		assert.NoError(t, w.Images.Refuse(ctx, image("nginx:1.27", true), imageKind.ActionDelete, imageKind.DeletePayload{}))
 		assert.NoError(t, w.Images.Refuse(ctx, image("nginx:1.27", true), imageKind.ActionDelete, imageKind.DeletePayload{Force: true}))
 	})
 

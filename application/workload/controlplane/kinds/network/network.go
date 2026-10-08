@@ -90,8 +90,8 @@ func (s *Networks) Apply(_ context.Context, _ networkKind.Network, action string
 	return networkKind.Network{}, nil, fmt.Errorf("%w: a network has no %q run in the control plane", kind.ErrUnknownAction, action)
 }
 
-// Prepare readies a network's command: one with containers on it is refused
-// its delete, as Refuse says.
+// Prepare readies a network's command: one every dockerd has of its own is
+// refused its delete, as Refuse says.
 func (s *Networks) Prepare(ctx context.Context, n networkKind.Network, action string, payload any) (networkKind.Network, domain.ValidationErrors, error) {
 	raw, err := kind.Encode(n)
 	if err != nil {
@@ -106,7 +106,10 @@ func (s *Networks) Prepare(ctx context.Context, n networkKind.Network, action st
 }
 
 // Refuse is why a network, kept or not, is not removed, in docker's own
-// words: one every dockerd has of its own, and one with containers on it.
+// words: one every dockerd has of its own. Whether a container is on it is
+// its dockerd's to say, which refuses its delete in the same words: what its
+// node last reported of it may be from before a container was taken off it a
+// moment ago, which would refuse a delete docker would carry out.
 func (s *Networks) Refuse(_ context.Context, r kind.Raw, action string, _ any) error {
 	if action != networkKind.ActionDelete {
 		return nil
@@ -114,11 +117,8 @@ func (s *Networks) Refuse(_ context.Context, r kind.Raw, action string, _ any) e
 
 	seen := blocks.ObservedOf(r.Status).Docker
 
-	switch {
-	case networkKind.Default(seen.Name):
+	if networkKind.Default(seen.Name) {
 		return blocks.Refused("%s is a pre-defined network and cannot be removed", seen.Name)
-	case len(seen.Containers) > 0:
-		return blocks.Refused("error while removing network: network %s has active endpoints (%s)", seen.Name, strings.Join(seen.Containers, ", "))
 	}
 
 	return nil

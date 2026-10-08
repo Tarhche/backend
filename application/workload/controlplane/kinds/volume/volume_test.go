@@ -13,7 +13,6 @@ import (
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	volumeKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/volume"
-	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 )
 
 func TestVolumes_Admit(t *testing.T) {
@@ -56,11 +55,7 @@ func TestVolumes_Refuse(t *testing.T) {
 		})
 	}
 
-	var refused *noderequest.Error
-
-	require.ErrorAs(t, w.Volumes.Refuse(context.Background(), volume(true), volumeKind.ActionDelete, volumeKind.DeletePayload{Force: true}), &refused)
-	assert.Equal(t, "remove data: volume is in use", refused.Message, "one a container mounts, whatever the force, as docker says")
-
+	assert.NoError(t, w.Volumes.Refuse(context.Background(), volume(true), volumeKind.ActionDelete, volumeKind.DeletePayload{Force: true}), "whether a container mounts it is its dockerd's to say: what its node reported may be from before the container was removed")
 	assert.NoError(t, w.Volumes.Refuse(context.Background(), volume(false), volumeKind.ActionDelete, volumeKind.DeletePayload{}))
 }
 

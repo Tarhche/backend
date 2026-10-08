@@ -285,6 +285,46 @@ func TestTheBuildingBlocksOfADockerVM(t *testing.T) {
 		}, settle, beat, "the network was never removed")
 	})
 
+	t.Run("taken off a network a moment before the network is removed, before its node says so, the network is removed all the same", func(t *testing.T) {
+		made, err := createNetwork.NewUseCase(w.client, w.validator, w.translator).Execute(ctx, &createNetwork.Request{VMUUID: vmUUID, Name: "frontend", OwnerUUID: ownerUUID})
+		require.NoError(t, err)
+		require.Empty(t, made.ValidationErrors)
+
+		connected, err := connectNetwork.NewUseCase(w.client, w.validator, w.translator).Execute(ctx, &connectNetwork.Request{VMUUID: vmUUID, ID: "api", Network: "frontend", OwnerUUID: ownerUUID})
+		require.NoError(t, err)
+		require.Empty(t, connected.ValidationErrors)
+
+		// what the node says of the network is that the container is on it.
+		eventually(t, "the network seen with the container on it", func(ctx context.Context) ([]presenter.DockerNetwork, error) {
+			listed, err := getNetworks.NewUseCase(w.client, w.translator).Execute(ctx, &getNetworks.Request{VMUUID: vmUUID, OwnerUUID: ownerUUID})
+			if err != nil {
+				return nil, err
+			}
+
+			return listed.Items, nil
+		}, func(networks []presenter.DockerNetwork) bool {
+			return slices.ContainsFunc(networks, func(n presenter.DockerNetwork) bool {
+				return n.Name == "frontend" && slices.Contains(n.Containers, "api")
+			})
+		})
+
+		// and goes on saying it: the node says nothing more until the network
+		// is removed.
+		w.beating.Store(false)
+		defer w.beating.Store(true)
+
+		disconnected, err := disconnectNetwork.NewUseCase(w.client, w.translator).Execute(ctx, &disconnectNetwork.Request{VMUUID: vmUUID, ID: "api", Network: "frontend", OwnerUUID: ownerUUID})
+		require.NoError(t, err)
+		require.Empty(t, disconnected.ValidationErrors)
+
+		deleted, err := deleteNetwork.NewUseCase(w.client, w.translator).Execute(ctx, &deleteNetwork.Request{VMUUID: vmUUID, ID: "frontend", OwnerUUID: ownerUUID})
+		require.NoError(t, err)
+		require.Empty(t, deleted.ValidationErrors, "whether a container is on it is its dockerd's to say, and nothing is")
+
+		_, there := w.dockerd.Holds(t, vmUUID).Network("frontend")
+		assert.False(t, there, "removed")
+	})
+
 	t.Run("a volume is made in it, and removed", func(t *testing.T) {
 		made, err := createVolume.NewUseCase(w.client, w.validator, w.translator).Execute(ctx, &createVolume.Request{VMUUID: vmUUID, Name: "data", OwnerUUID: ownerUUID})
 		require.NoError(t, err)

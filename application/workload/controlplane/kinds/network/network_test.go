@@ -62,8 +62,7 @@ func TestNetworks_Refuse(t *testing.T) {
 
 	var refused *noderequest.Error
 
-	require.ErrorAs(t, w.Networks.Refuse(context.Background(), network("backend", "web"), networkKind.ActionDelete, nil), &refused)
-	assert.Equal(t, "error while removing network: network backend has active endpoints (web)", refused.Message, "one with containers on it, in docker's words")
+	assert.NoError(t, w.Networks.Refuse(context.Background(), network("backend", "web"), networkKind.ActionDelete, nil), "whether a container is on it is its dockerd's to say: what its node reported may be from before the container was taken off it")
 
 	require.ErrorAs(t, w.Networks.Refuse(context.Background(), network("bridge"), networkKind.ActionDelete, nil), &refused)
 	assert.Equal(t, "bridge is a pre-defined network and cannot be removed", refused.Message)

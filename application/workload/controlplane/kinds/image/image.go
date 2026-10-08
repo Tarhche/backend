@@ -101,8 +101,8 @@ func (s *Images) Apply(_ context.Context, _ imageKind.Image, action string, _ an
 	return imageKind.Image{}, nil, fmt.Errorf("%w: an image has no %q run in the control plane", kind.ErrUnknownAction, action)
 }
 
-// Prepare readies an image's command: one a container uses is refused its
-// delete, as Refuse says.
+// Prepare readies an image's command: one a container kept in its VM uses is
+// refused its delete, as Refuse says.
 func (s *Images) Prepare(ctx context.Context, i imageKind.Image, action string, payload any) (imageKind.Image, domain.ValidationErrors, error) {
 	raw, err := kind.Encode(i)
 	if err != nil {
@@ -117,8 +117,10 @@ func (s *Images) Prepare(ctx context.Context, i imageKind.Image, action string, 
 }
 
 // Refuse is why an image, kept or not, is not removed: a container kept in
-// its VM uses it, which it is implied present for; or a container nobody
-// keeps uses it, and it is not removed by force.
+// its VM uses it, which it is implied present for. Whether any other
+// container uses it is its dockerd's to say, which refuses its delete unless
+// it is forced: what its node last reported of it may be from before a
+// container using it was removed a moment ago.
 func (s *Images) Refuse(ctx context.Context, r kind.Raw, action string, payload any) error {
 	if action != imageKind.ActionDelete {
 		return nil
@@ -151,10 +153,6 @@ func (s *Images) Refuse(ctx context.Context, r kind.Raw, action string, payload 
 				return blocks.Refused("the image %s is used by the container %s, which is kept: it is not removed while the container is", imageKind.Normalized(reference), cmpOr(c.Metadata.Name, c.Metadata.UUID))
 			}
 		}
-	}
-
-	if remove, _ := payload.(imageKind.DeletePayload); seen.InUse && !remove.Force {
-		return blocks.Refused("conflict: unable to remove repository reference %q (must force) - a container is using its referenced image", cmpOr(seen.Reference, seen.ID))
 	}
 
 	return nil
