@@ -65,9 +65,4 @@ certs-env:
 test-vmhost-integration:
 	./scripts/vmhost-integration.sh
 
-# what the vmhost image is tagged with: it is rebuilt and redeployed, which
-# stops every VM on a node, only when this changes.
-vmhost-fingerprint:
-	@./scripts/vmhost-fingerprint.sh
-
-.PHONY: ps up up-vms down restart restart-% sh-% logs-% certs certs-env migrate test-vmhost-integration vmhost-fingerprint
+.PHONY: ps up up-vms down restart restart-% sh-% logs-% certs certs-env migrate test-vmhost-integration

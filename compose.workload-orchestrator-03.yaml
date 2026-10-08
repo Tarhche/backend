@@ -1,11 +1,9 @@
 # One node of the workload: an orchestrator and the vmhost beside it, on a
 # network of their own that nothing else joins.
 #
-# The two are deployed apart. The orchestrator is redeployed on every push; the
-# vmhost holds the node's VMs, which stop when it does, so it is recreated only
-# when its image (tagged with its fingerprint) or its configuration changes,
-# and never as a dependency of the orchestrator: deploys name one service at a
-# time, with --no-deps.
+# Both are deployed on every push, as every other service is. The vmhost holds
+# the node's VMs: recreated, it stops them gracefully, and the control plane
+# starts them again once it is back.
 services:
   workload-orchestrator-03:
     image: ${WORKLOAD_ORCHESTRATOR_IMAGE}

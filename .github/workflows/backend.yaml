@@ -30,6 +30,8 @@ jobs:
             target: production-workload-ingress
           - name: workload-orchestrator
             target: production-workload-orchestrator
+          - name: workload-vmhost
+            target: production-workload-vmhost
 
     steps:
       - name: Checkout code
@@ -54,99 +56,6 @@ jobs:
           target: ${{ matrix.image.target }}
           push: false
           container-registry: ${{ env.REGISTRY }}
-
-  # The vmhost runs the node's VMs, and they stop when it is redeployed, so its
-  # image is not rebuilt on every push as the others are: it is tagged with
-  # the fingerprint of what it is built from (scripts/vmhost-fingerprint.sh),
-  # and built, pushed and deployed only when no image has that tag yet.
-  vmhost-fingerprint:
-    runs-on: blacksmith-4vcpu-ubuntu-2404
-
-    permissions:
-      contents: read
-      packages: read
-
-    outputs:
-      fingerprint: ${{ steps.fingerprint.outputs.fingerprint }}
-      image: ${{ steps.fingerprint.outputs.image }}
-      built: ${{ steps.registry.outputs.built }}
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v7
-
-      - name: Setup Go
-        uses: actions/setup-go@v6
-        with:
-          go-version: '1.27.x'
-          cache: true
-
-      - name: Fingerprint the vmhost
-        id: fingerprint
-        run: |
-          fingerprint=$(./scripts/vmhost-fingerprint.sh)
-          owner=$(printf '%s' "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')
-
-          echo "fingerprint=$fingerprint" >> "$GITHUB_OUTPUT"
-          echo "image=$REGISTRY/$owner/workload-vmhost:$fingerprint" >> "$GITHUB_OUTPUT"
-
-          echo "the vmhost's fingerprint is $fingerprint, a hash of:"
-          ./scripts/vmhost-fingerprint.sh --manifest
-
-      # a pull request that may not read the registry builds the image, as
-      # though it were new, which is the safe way to be wrong.
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v4
-        continue-on-error: true
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Is it built already
-        id: registry
-        env:
-          IMAGE: ${{ steps.fingerprint.outputs.image }}
-        run: |
-          if docker manifest inspect "$IMAGE" > /dev/null 2>&1; then
-            echo "built=true" >> "$GITHUB_OUTPUT"
-            echo "$IMAGE is built already: the vmhosts are left as they are"
-          else
-            echo "built=false" >> "$GITHUB_OUTPUT"
-            echo "$IMAGE is new: it is built, and on $GITHUB_REF_NAME pushed and deployed"
-          fi
-
-  # Built on a pull request only when it changes, to hold the Dockerfile's
-  # vmhost stages to building; pushed only from main.
-  vmhost-image:
-    runs-on: blacksmith-8vcpu-ubuntu-2404
-
-    needs:
-      - ci
-      - vmhost-fingerprint
-
-    if: ${{ needs.vmhost-fingerprint.outputs.built != 'true' }}
-
-    permissions:
-      packages: write
-      contents: read
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v7
-
-      - name: Build the vmhost image, and push it from main
-        uses: ./.github/actions/docker-build
-        with:
-          context: .
-          dockerfile: Dockerfile
-          image-name: workload-vmhost
-          target: production-workload-vmhost
-          tags: ${{ needs.vmhost-fingerprint.outputs.image }}
-          push: ${{ format('refs/heads/{0}', github.event.repository.default_branch) == github.ref }}
-          container-registry: ${{ env.REGISTRY }}
-          container-registry-username: ${{ github.actor }}
-          container-registry-password: ${{ secrets.GITHUB_TOKEN }}
 
   # The engine's own tests, which need KVM: a GitHub-hosted amd64 runner has
   # it once its device is opened to the runner's user.
@@ -205,6 +114,8 @@ jobs:
             target: production-workload-ingress
           - name: workload-orchestrator
             target: production-workload-orchestrator
+          - name: workload-vmhost
+            target: production-workload-vmhost
 
     steps:
       - name: Checkout code
@@ -225,17 +136,7 @@ jobs:
   deploy:
     runs-on: blacksmith-4vcpu-ubuntu-2404
 
-    # the vmhost image is built only when it changed, so its job being skipped
-    # is as good as its having succeeded.
-    if: >-
-      ${{
-        !cancelled() &&
-        format('refs/heads/{0}', github.event.repository.default_branch) == github.ref &&
-        needs.build-and-push-images.result == 'success' &&
-        needs.vmhost-fingerprint.result == 'success' &&
-        needs.vmhost-integration.result == 'success' &&
-        (needs.vmhost-image.result == 'success' || needs.vmhost-image.result == 'skipped')
-      }}
+    if: ${{ format('refs/heads/{0}', github.event.repository.default_branch) == github.ref }}
 
     permissions:
       packages: read
@@ -243,8 +144,6 @@ jobs:
 
     needs:
       - build-and-push-images
-      - vmhost-fingerprint
-      - vmhost-image
       - vmhost-integration
 
     steps:
@@ -254,6 +153,8 @@ jobs:
       # What the workload's VMs need, beyond what the services needed before:
       #
       #   secrets
+      #     WORKLOAD_VMHOST_IMAGE: the vmhost's image, as APP_IMAGE and the
+      #       others are the other services' (ghcr.io/<owner>/workload-vmhost:latest).
       #     BACKEND_WORKLOAD_SNAPSHOT_S3_ENDPOINT, _ACCESS_KEY, _SECRET_KEY,
       #     _USE_SSL, _BUCKET: the bucket VM snapshots are kept in. Unset, the
       #     blog's S3 (BACKEND_S3_*), in a bucket named workload-snapshots,
@@ -278,10 +179,6 @@ jobs:
       #       BACKEND_WORKLOAD_NODE_REQUEST_TIMEOUT, _CONCURRENCY: how long a
       #       Docker VM and a request to a node are waited for. Unset keeps the
       #       code's defaults (infrastructure/configs/workloadVM.go).
-      #
-      #   set by this workflow
-      #     WORKLOAD_VMHOST_IMAGE: the vmhost image, tagged with its
-      #       fingerprint.
       #
       # BACKEND_DOCKER_HOST and BACKEND_WORKLOAD_ORCHESTRATOR_ADVERTISE_HOST
       # are no longer read: the orchestrators run nothing on a docker daemon.
@@ -377,10 +274,8 @@ jobs:
             export BACKEND_WORKLOAD_SNAPSHOT_S3_USE_SSL='${{ secrets.BACKEND_WORKLOAD_SNAPSHOT_S3_USE_SSL }}'
             export BACKEND_WORKLOAD_SNAPSHOT_S3_BUCKET='${{ secrets.BACKEND_WORKLOAD_SNAPSHOT_S3_BUCKET }}'
 
-            # the nodes' engines: the vmhost image, tagged with its
-            # fingerprint, /dev/kvm's group on this host, and what each vmhost
-            # may use and offers its VMs.
-            export WORKLOAD_VMHOST_IMAGE='${{ needs.vmhost-fingerprint.outputs.image }}'
+            # the nodes' engines: /dev/kvm's group on this host, and what each
+            # vmhost may use and offers its VMs.
             export BACKEND_WORKLOAD_KVM_GID='${{ vars.BACKEND_WORKLOAD_KVM_GID }}'
             export BACKEND_WORKLOAD_VMHOST_MEMORY_LIMIT='${{ vars.BACKEND_WORKLOAD_VMHOST_MEMORY_LIMIT }}'
             export BACKEND_WORKLOAD_VMHOST_CPUS_LIMIT='${{ vars.BACKEND_WORKLOAD_VMHOST_CPUS_LIMIT }}'
@@ -430,6 +325,7 @@ jobs:
             export WORKLOAD_CONTROLPLANE_IMAGE='${{ secrets.WORKLOAD_CONTROLPLANE_IMAGE }}'
             export WORKLOAD_INGRESS_IMAGE='${{ secrets.WORKLOAD_INGRESS_IMAGE }}'
             export WORKLOAD_ORCHESTRATOR_IMAGE='${{ secrets.WORKLOAD_ORCHESTRATOR_IMAGE }}'
+            export WORKLOAD_VMHOST_IMAGE='${{ secrets.WORKLOAD_VMHOST_IMAGE }}'
 
             export OTEL_EXPORTER_OTLP_INSECURE='${{ secrets.OTEL_EXPORTER_OTLP_INSECURE }}'
             export OTEL_EXPORTER_OTLP_PROTOCOL='${{ secrets.OTEL_EXPORTER_OTLP_PROTOCOL }}'
@@ -440,61 +336,41 @@ jobs:
             # Run Docker Compose
             cd /tmp/deployment_backend/
 
-            # deploy brings a compose file's services up, or only those it
-            # names, and none of what they depend on. --wait holds the deploy
-            # until every replica passes the healthcheck defined in the compose
-            # file, for up to the seconds given, so a version that cannot serve
-            # traffic fails the job instead of being reported as deployed. A
-            # service that never gets there says so in its own words: what it
-            # printed before it gave up is the only thing that explains why.
+            # deploy brings a compose file's services up. --wait holds the
+            # deploy until every replica passes the healthcheck defined in the
+            # compose file, for up to the seconds given, so a version that
+            # cannot serve traffic fails the job instead of being reported as
+            # deployed. A service that never gets there says so in its own
+            # words: what it printed before it gave up is the only thing that
+            # explains why.
             deploy() {
                 seconds=$1 file=$2 project=$3
-                shift 3
 
-                if docker compose -f "$file" --project-name "$project" up --pull always --detach --no-deps --wait --wait-timeout "$seconds" "$@"; then
+                if docker compose -f "$file" --project-name "$project" up --pull always --detach --wait --wait-timeout "$seconds"; then
                     return 0
                 fi
 
-                echo "::error::$project${1:+ ($*)} did not come up; what it said follows"
-                docker compose -f "$file" --project-name "$project" ps -a "$@"
-                docker compose -f "$file" --project-name "$project" logs --tail 50 --no-color "$@"
+                echo "::error::$project did not come up; what it said follows"
+                docker compose -f "$file" --project-name "$project" ps -a
+                docker compose -f "$file" --project-name "$project" logs --tail 50 --no-color
 
                 return 1
-            }
-
-            # a vmhost holds its node's VMs, and they stop when it does. It is
-            # recreated only when what it runs changed -- its image, tagged with
-            # its fingerprint, or its configuration -- which compose's config
-            # hash says, and it is never touched by its orchestrator's deploy.
-            # It is given longer to come up: before it serves, it advances the
-            # PID counter past every PID its engine recorded and takes its VMs
-            # over.
-            deploy_vmhost() {
-                file=$1 project=$2 service=$3
-
-                wanted=$(docker compose -f "$file" --project-name "$project" config --hash "$service" | awk '{print $2}')
-                running=$(docker ps --filter "label=com.docker.compose.project=$project" --filter "label=com.docker.compose.service=$service" --format '{{.Label "com.docker.compose.config-hash"}}')
-
-                if [ -n "$wanted" ] && [ "$running" = "$wanted" ]; then
-                    echo "$service is as it was ($WORKLOAD_VMHOST_IMAGE): left running, with its VMs"
-                    return 0
-                fi
-
-                echo "$service changed: recreating it with $WORKLOAD_VMHOST_IMAGE, which stops its node's VMs"
-                deploy 600 "$file" "$project" "$service"
             }
 
             deploy 180 compose.app.yaml app
             deploy 180 compose.workload-controlplane.yaml workload-controlplane
             deploy 180 compose.workload-ingress.yaml workload-ingress
 
-            # a node whose vmhost does not come up still gets its orchestrator,
-            # which says its VMs fail and why; the job fails once every node
-            # has been deployed.
+            # a node is its orchestrator and its vmhost. A vmhost recreated
+            # stops its node's VMs gracefully, and the control plane starts
+            # them again once it is back. It is given longer to come up: before
+            # it serves, it advances the PID counter past every PID its engine
+            # recorded and takes its VMs over. A node that does not come up
+            # does not keep the others from being deployed; the job fails once
+            # every node has been.
             failed=
             for node in 01 02 03; do
-                deploy_vmhost compose.workload-orchestrator-$node.yaml workload-orchestrator-$node workload-vmhost-$node || failed="$failed workload-vmhost-$node"
-                deploy 180 compose.workload-orchestrator-$node.yaml workload-orchestrator-$node workload-orchestrator-$node || failed="$failed workload-orchestrator-$node"
+                deploy 600 compose.workload-orchestrator-$node.yaml workload-orchestrator-$node || failed="$failed workload-orchestrator-$node"
             done
 
             if [ -n "$failed" ]; then

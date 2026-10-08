@@ -1,10 +1,7 @@
 // Package vmhost wires a vmhost: the node's engine, made from the vmhost's
 // settings, and the API that serves it to the orchestrator beside it.
 //
-// It imports nothing that wires another service. What the vmhost command
-// imports is what decides when its image is rebuilt and redeployed
-// (scripts/vmhost-fingerprint.sh), and redeploying it stops every VM on the
-// node, so a change to the blog or to an orchestrator must not reach it.
+// It imports nothing that wires another service.
 package vmhost
 
 import (
