@@ -64,6 +64,12 @@ func (e *engine) Shutdown(ctx context.Context) error {
 	case <-done:
 		e.logger.Info("every vm was stopped", "took", time.Since(stopping))
 
+		// no msb process is left to close its connection, and the engine's
+		// are to be the last ones.
+		if e.database != nil {
+			_ = e.database.Close()
+		}
+
 		return nil
 	case <-ctx.Done():
 		e.logger.Warn("the vmhost went before every vm had stopped", "took", time.Since(stopping))

@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"maps"
 	"net"
@@ -97,6 +98,10 @@ type engine struct {
 
 	boots    chan struct{}
 	logReads chan struct{}
+
+	// database holds microsandbox's database open for as long as the engine
+	// runs (holdDatabase).
+	database io.Closer
 
 	lock      sync.Mutex
 	instances map[string]*instance
@@ -227,6 +232,15 @@ func New(ctx context.Context, options Options) (Engine, error) {
 
 	if err := e.adopt(ctx); err != nil {
 		return nil, err
+	}
+
+	// taking back what was left has had microsandbox open its database, which
+	// no msb process is to take itself for the last one to close from now on.
+	database, err := holdDatabase(filepath.Join(options.Home, "db", "msb.db"))
+	if err != nil {
+		e.logger.Warn("the engine's database could not be held open: once a vm stops, the vmhost may be unable to read it until it restarts", "error", err)
+	} else {
+		e.database = database
 	}
 
 	e.logger.Info("vm engine ready",
