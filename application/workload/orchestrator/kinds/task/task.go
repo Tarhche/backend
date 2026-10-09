@@ -21,12 +21,13 @@
 //
 // Its state is every task this node runs, each as the run of it that runs, or
 // otherwise its latest: what its program is doing, and the run itself, with
-// what a job has written so far (Run.Output) and the ports that came up. The
-// outputs of a node's tasks share a budget, what a beat carries of them
-// between them, a task in each of the task kind's heartbeats. A task's
-// terminal is a shell inside its running run, anybody's for a task of the
-// guest's, as the page a snippet runs on is, and its owner's alone otherwise;
-// its ports are wherever its run was published.
+// what a job has written so far (Run.Output), the ports its VM publishes,
+// which the ingress reaches it on, and those that came up. The outputs of a
+// node's tasks share a budget, what a beat carries of them between them, a
+// task in each of the task kind's heartbeats. A task's terminal is a shell
+// inside its running run, anybody's for a task of the guest's, as the page a
+// snippet runs on is, and its owner's alone otherwise; its ports are wherever
+// its run was published.
 package task
 
 import (
@@ -552,6 +553,7 @@ func statusOf(run task.Execution) taskKind.Status {
 			Slug:        run.Slug,
 			Kind:        run.Kind,
 			Interactive: run.Interactive,
+			Ports:       portsOf(run),
 			StartedAt:   run.StartedAt,
 			Deadline:    run.Deadline(),
 			Endpoints:   endpointsOf(run),
@@ -567,6 +569,13 @@ func statusOf(run task.Execution) taskKind.Status {
 	}
 
 	return status
+}
+
+// portsOf are the ports a run's VM publishes, lowest first, whether or not
+// they are up now: those it serves, as it was made, under a network policy
+// that lets anything in, and none otherwise.
+func portsOf(run task.Execution) []port.Port {
+	return slices.Sorted(maps.Keys(run.ExposedPorts))
 }
 
 // endpointsOf are the ports of a run that came up, lowest first, and where

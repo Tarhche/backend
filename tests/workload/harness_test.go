@@ -16,6 +16,7 @@ import (
 
 	"github.com/nats-io/nats-server/v2/server"
 	"github.com/nats-io/nats.go"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/presenter"
@@ -32,6 +33,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	providers "github.com/khanzadimahdi/testproject/infrastructure/ioc/providers/workload"
+	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/core/pubsub"
 	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/jetstream/produceConsumer"
 	nodesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/nodes"
 	resourcesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/resources"
@@ -40,6 +42,7 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/translator"
 	"github.com/khanzadimahdi/testproject/infrastructure/validator"
 	"github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane/client"
+	ingressMemory "github.com/khanzadimahdi/testproject/infrastructure/workload/ingress/memory"
 	infraNode "github.com/khanzadimahdi/testproject/infrastructure/workload/node"
 	"github.com/khanzadimahdi/testproject/infrastructure/workload/vm/memory"
 	"github.com/khanzadimahdi/testproject/infrastructure/workload/vm/vmhost"
@@ -271,6 +274,71 @@ func start(t *testing.T, options ...option) *workload {
 	}, settle, beat, "the node never said what it offers")
 
 	return w
+}
+
+// ingress is the kinds the workload's ingress finds, wired as its serve
+// command wires them, hearing where the tasks and the VMs are over core NATS
+// as it does when served: what their node says of them, and what the control
+// plane sends their node, beside the JetStream consumers that keep the same
+// messages for the others.
+func (w *workload) ingress(t *testing.T) *kind.Registry[kind.IngressBinding] {
+	t.Helper()
+
+	logger := slog.New(slog.DiscardHandler)
+
+	served, err := providers.NewIngressWorkload(ingressMemory.NewLocations(configs.NewWorkloadIngress().ResourceSilentAfter), logger)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	subscriber := pubsub.NewPublishSubscriber(connect(t, w.natsURL), logger)
+
+	for subject, handler := range served.Subscribers {
+		require.NoError(t, subscriber.Subscribe(ctx, subject, handler))
+	}
+
+	t.Cleanup(func() {
+		cancel()
+		subscriber.Wait()
+	})
+
+	return served.Kinds
+}
+
+// reached is where the ingress finds the resource of the named kind a slug
+// names, and why it cannot reach it, once condition holds of the two: it
+// hears what is said of the resource as it is said.
+func reached(t *testing.T, kinds *kind.Registry[kind.IngressBinding], kindName string, slug string, what string, condition func(kind.Location, error) bool) (kind.Location, error) {
+	t.Helper()
+
+	binding, registered := kinds.Lookup(kindName)
+	require.True(t, registered, "the ingress finds no %s", kindName)
+
+	var (
+		lock     sync.Mutex
+		location kind.Location
+		failure  error
+	)
+
+	held := assert.Eventually(t, func() bool {
+		found, err := binding.BySlug(t.Context(), slug)
+
+		lock.Lock()
+		defer lock.Unlock()
+
+		location, failure = found, err
+
+		return condition(found, err)
+	}, settle, beat)
+
+	lock.Lock()
+	defer lock.Unlock()
+
+	if !held {
+		t.Fatalf("%s never happened: last found %+v, %v", what, location, failure)
+	}
+
+	return location, failure
 }
 
 // programs are what the programs VMs run as their main process do, a

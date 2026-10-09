@@ -25,7 +25,8 @@
 // restored, which is how the control plane knows a change of its ports
 // reached it.
 //
-// Its state is every VM instance the engine holds, with a sample of what each
+// Its state is every VM instance the engine holds, with the slug it was
+// labelled with, which the ingress finds it by, and a sample of what each
 // running one uses, its CPU 0 to 100 of all the vCPUs it was given. While a
 // command is carried out on a VM, the VM is said to be still in flight, as
 // the command left it on the control plane, so that what it is doing halfway
@@ -711,11 +712,12 @@ func UUIDOf(instance vm.Instance) string {
 	return instance.ID
 }
 
-// statusOf is what an instance says a VM is doing, in the kind's words. An
-// instance that exists and has not booted yet says nothing either way, and
-// one whose main process ended is not running.
+// statusOf is what an instance says a VM is doing, in the kind's words, under
+// the slug it was labelled with. An instance that exists and has not booted
+// yet says nothing either way, and one whose main process ended is not
+// running.
 func statusOf(instance vm.Instance) vmKind.Status {
-	status := vmKind.Status{Endpoints: vmKind.EndpointsOf(instance.Endpoints)}
+	status := vmKind.Status{Slug: instance.Labels[vm.LabelSlug], Endpoints: vmKind.EndpointsOf(instance.Endpoints)}
 
 	switch instance.State {
 	case vm.InstanceRunning:

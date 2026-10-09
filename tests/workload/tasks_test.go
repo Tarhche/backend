@@ -19,7 +19,6 @@ import (
 	"github.com/khanzadimahdi/testproject/application/code/stop"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/presenter"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/getVMs"
-	ingressTasks "github.com/khanzadimahdi/testproject/application/workload/ingress/kinds/task"
 	getresourceendpoint "github.com/khanzadimahdi/testproject/application/workload/orchestrator/getResourceEndpoint"
 	"github.com/khanzadimahdi/testproject/domain"
 	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
@@ -361,6 +360,7 @@ func TestALiveSnippet(t *testing.T) {
 	w.programs.are(programs.run)
 
 	runner := w.codeRunner(t)
+	ingress := w.ingress(t)
 
 	code := `require("http").createServer((q, s) => s.end("served")).listen(3000)`
 
@@ -382,7 +382,7 @@ func TestALiveSnippet(t *testing.T) {
 	})
 
 	t.Run("its port is found on its node, by its slug, as the ingress finds it", func(t *testing.T) {
-		location, err := ingressTasks.New(w.resources).BySlug(ctx, slug)
+		location, err := reached(t, ingress, taskKind.Name, slug, "the ingress hearing it runs", func(_ kind.Location, err error) bool { return err == nil })
 		require.NoError(t, err)
 		assert.Equal(t, nodeName, location.Node)
 		assert.Equal(t, []port.Port{3000}, location.Ports)
@@ -447,5 +447,8 @@ func TestALiveSnippet(t *testing.T) {
 
 		_, err = getresourceendpoint.NewUseCase(w.kinds).Execute(ctx, &getresourceendpoint.Request{Kind: taskKind.Name, Slug: slug, Port: 3000})
 		assert.ErrorIs(t, err, domain.ErrNotExists, "its port is served no more")
+
+		_, err = reached(t, ingress, taskKind.Name, slug, "the ingress hearing it is gone", func(_ kind.Location, err error) bool { return errors.Is(err, domain.ErrNotExists) })
+		assert.ErrorIs(t, err, domain.ErrNotExists, "and the ingress finds it nowhere")
 	})
 }

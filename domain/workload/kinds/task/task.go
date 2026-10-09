@@ -207,10 +207,11 @@ type Status struct {
 //
 // A run is made from the task as it was recorded, and carries what it was
 // made as on the VM it runs in, which its node reads back off the VM: its
-// name, its slug, its kind, whether it is watched, and which attempt at the
-// task it is. That is what lets whoever follows a task from its node's
-// heartbeats answer for it without asking anything that keeps records: the
-// code runner answers the request a snippet's task is named after.
+// name, its slug, its kind, whether it is watched, which attempt at the task
+// it is, and the ports it lets the ingress reach. That is what lets whoever
+// follows a task from its node's heartbeats answer for it without asking
+// anything that keeps records: the code runner answers the request a
+// snippet's task is named after, and the ingress routes to it by its slug.
 type Run struct {
 	// ID is the run's on its node.
 	ID string `json:"id,omitempty"`
@@ -222,6 +223,12 @@ type Run struct {
 	Slug        string    `json:"slug,omitempty"`
 	Kind        task.Kind `json:"kind,omitempty"`
 	Interactive bool      `json:"interactive,omitempty"`
+
+	// Ports are the ports its VM publishes, lowest first, whether or not they
+	// are up now: the ports it serves, under a network policy that lets
+	// anything in, and none otherwise. They are the ones the ingress reaches
+	// it on.
+	Ports []port.Port `json:"ports,omitempty"`
 
 	// StartedAt is when its program started, as its node says, and Deadline
 	// when it will be stopped for having run long enough: its ttl after that.

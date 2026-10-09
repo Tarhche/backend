@@ -2,6 +2,8 @@ package ingress
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -9,6 +11,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/assert"
@@ -16,14 +19,15 @@ import (
 
 	ingressTasks "github.com/khanzadimahdi/testproject/application/workload/ingress/kinds/task"
 	ingressVMs "github.com/khanzadimahdi/testproject/application/workload/ingress/kinds/vm"
+	"github.com/khanzadimahdi/testproject/application/workload/ingress/locateResources"
 	"github.com/khanzadimahdi/testproject/domain"
+	ingressContract "github.com/khanzadimahdi/testproject/domain/workload/ingress"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	taskKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/task"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
-	"github.com/khanzadimahdi/testproject/domain/workload/resource"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
-	resourcesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/resources"
+	ingressMemory "github.com/khanzadimahdi/testproject/infrastructure/workload/ingress/memory"
 )
 
 const testDomain = "workload.localhost"
@@ -73,10 +77,10 @@ func newNode(t *testing.T, handler http.Handler) *node {
 }
 
 // ingressFor builds the handler the way the provider does, finding tasks, the
-// first kind it asks, as the task kind's ingress strategy finds them in the
-// records kept of them, with a transport that stands for the tunnel: the
-// address names a node, and what comes back is a connection to the one
-// standing in for it.
+// first kind it asks, as the task kind's ingress strategy finds them where
+// their nodes' heartbeats say they are, with a transport that stands for the
+// tunnel: the address names a node, and what comes back is a connection to
+// the one standing in for it.
 func ingressFor(t *testing.T, tasks []taskKind.Task, nodes map[string]*node) *taskHandler {
 	t.Helper()
 
@@ -84,7 +88,8 @@ func ingressFor(t *testing.T, tasks []taskKind.Task, nodes map[string]*node) *ta
 }
 
 // ingressWithVMs is ingressFor with VMs to find after the tasks, as the vm
-// kind's ingress strategy finds them in the records kept of them.
+// kind's ingress strategy finds them where their nodes' heartbeats say they
+// are.
 func ingressWithVMs(t *testing.T, vms []vmKind.VM, nodes map[string]*node) *taskHandler {
 	t.Helper()
 
@@ -117,43 +122,91 @@ func ingressWithKinds(t *testing.T, kinds *kind.Registry[kind.IngressBinding], n
 }
 
 // vmsIn is the vm kind registered as the ingress registers it, finding vms
-// in the records the control plane keeps of them.
+// where their nodes' heartbeats say they are.
 func vmsIn(t *testing.T, vms ...vmKind.VM) *kind.Registry[kind.IngressBinding] {
 	t.Helper()
 
 	return finding(t, vmsBy(t, vms...))
 }
 
-// vmsBy is the vm kind as the ingress binds it, finding vms in the records
-// the control plane keeps of them.
+// vmsBy is the vm kind as the ingress binds it, finding vms where their
+// nodes' heartbeats say they are: each vm as the node holding it says it,
+// which publishes every port it was given while its ingress is allowed and
+// none while it is denied, and nothing of one no node holds.
 func vmsBy(t *testing.T, vms ...vmKind.VM) kind.IngressBinding {
 	t.Helper()
 
-	records := make([]resource.Record, len(vms))
-	for i := range vms {
-		raw, err := kind.Encode(vms[i])
-		require.NoError(t, err)
+	locations := ingressMemory.NewLocations(time.Minute)
+	strategy := ingressVMs.New(locations)
 
-		records[i] = resource.Record{Raw: raw}
+	heartbeats := make([]kind.Heartbeat, len(vms))
+	for i, v := range vms {
+		status := vmKind.Status{Status: kind.Status{State: v.Status.State}, Slug: v.Metadata.Slug}
+
+		if v.Spec.Network.Ingress == vm.AccessAllow {
+			for j, p := range v.Spec.Ports {
+				status.Endpoints = append(status.Endpoints, vmKind.Endpoint{Port: p, Address: fmt.Sprintf("vmhost:%d", 20000+j)})
+			}
+		}
+
+		heartbeats[i] = heartbeatOf(t, v.Metadata.Node, vmKind.Name, v.Metadata.UUID, status)
 	}
 
-	return kind.BindIngress(vmKind.Descriptor(), ingressVMs.New(resourcesMemory.NewRepository(records...)))
+	hear(t, locations, vmKind.Name, strategy, heartbeats...)
+
+	return kind.BindIngress(vmKind.Descriptor(), strategy)
 }
 
-// tasksIn is the task kind as the ingress binds it, finding tasks in the
-// records the control plane keeps of them.
+// tasksIn is the task kind as the ingress binds it, finding tasks where
+// their nodes' heartbeats say they are: each task as the node holding it
+// says it, whose VM publishes the ports it serves while its policy lets
+// anything in, and nothing of one no node holds.
 func tasksIn(t *testing.T, tasks ...taskKind.Task) kind.IngressBinding {
 	t.Helper()
 
-	records := make([]resource.Record, len(tasks))
-	for i := range tasks {
-		raw, err := kind.Encode(tasks[i])
-		require.NoError(t, err)
+	locations := ingressMemory.NewLocations(time.Minute)
+	strategy := ingressTasks.New(locations)
 
-		records[i] = resource.Record{Raw: raw}
+	heartbeats := make([]kind.Heartbeat, len(tasks))
+	for i, tk := range tasks {
+		run := &taskKind.Run{Slug: tk.Metadata.Slug}
+
+		if tk.Spec.Policy().VMNetwork().Ingress == vm.AccessAllow {
+			run.Ports = tk.Spec.Ports
+		}
+
+		heartbeats[i] = heartbeatOf(t, tk.Metadata.Node, taskKind.Name, tk.Metadata.UUID, taskKind.Status{Status: kind.Status{State: tk.Status.State}, Run: run})
 	}
 
-	return kind.BindIngress(taskKind.Descriptor(), ingressTasks.New(resourcesMemory.NewRepository(records...)))
+	hear(t, locations, taskKind.Name, strategy, heartbeats...)
+
+	return kind.BindIngress(taskKind.Descriptor(), strategy)
+}
+
+// heartbeatOf is what a node's heartbeat says of an instance of the named
+// kind it holds.
+func heartbeatOf(t *testing.T, nodeName string, kindName string, uuid string, status any) kind.Heartbeat {
+	t.Helper()
+
+	raw, err := json.Marshal(status)
+	require.NoError(t, err)
+
+	return kind.Heartbeat{Node: nodeName, At: time.Now(), Observed: kind.Observation{Kind: kindName, UUID: uuid, Status: raw}}
+}
+
+// hear has locations hear heartbeats of the named kind as the ingress hears
+// them, read by its strategy: one that names no node is let go of.
+func hear(t *testing.T, locations ingressContract.Locations, kindName string, strategy locateResources.Kind, heartbeats ...kind.Heartbeat) {
+	t.Helper()
+
+	handler := locateResources.NewHeartbeatHandler(locations, map[string]locateResources.Kind{kindName: strategy}, slog.New(slog.DiscardHandler))
+
+	for _, heartbeat := range heartbeats {
+		payload, err := json.Marshal(heartbeat)
+		require.NoError(t, err)
+
+		require.NoError(t, handler.Handle(context.Background(), payload))
+	}
 }
 
 // held is a running task serving ports 80 and 8080, under a slug, on a node.
@@ -346,7 +399,7 @@ func TestTaskHandler(t *testing.T) {
 		assert.Contains(t, rw.Body.String(), "not running")
 	})
 
-	t.Run("a task that has not been scheduled is unavailable", func(t *testing.T) {
+	t.Run("a task no node holds yet is not there: no node has said where it is", func(t *testing.T) {
 		tasks := []taskKind.Task{held("nginx-xkfqz", "")}
 
 		rw := httptest.NewRecorder()
@@ -355,8 +408,8 @@ func TestTaskHandler(t *testing.T) {
 
 		ingressFor(t, tasks, nil).ServeHTTP(rw, request)
 
-		assert.Equal(t, http.StatusServiceUnavailable, rw.Code)
-		assert.Contains(t, rw.Body.String(), "not been scheduled")
+		assert.Equal(t, http.StatusNotFound, rw.Code)
+		assert.Contains(t, rw.Body.String(), "unknown task")
 	})
 
 	t.Run("a node that is not connected cannot be asked", func(t *testing.T) {
@@ -536,11 +589,10 @@ func TestTaskHandler_VMs(t *testing.T) {
 			status: http.StatusServiceUnavailable,
 			says:   "the vm is not running",
 		},
-		"a vm on no node is unavailable": {
+		"a vm no node holds yet is not there: no node has said where it is": {
 			vm:     exposing("box-xkfqz", "", 80),
 			host:   "box-xkfqz",
-			status: http.StatusServiceUnavailable,
-			says:   "not been scheduled",
+			status: http.StatusNotFound,
 		},
 		"a vm whose node is not connected cannot be asked": {
 			vm:     exposing("box-xkfqz", "workload-orchestrator-09", 80),

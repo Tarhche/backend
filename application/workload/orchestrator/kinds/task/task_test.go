@@ -154,6 +154,7 @@ func TestNode_create(t *testing.T) {
 			Slug:        "request-task-1-abcde",
 			Kind:        task.KindJob,
 			Interactive: true,
+			Ports:       []port.Port{3000},
 			StartedAt:   run.StartedAt,
 			Deadline:    run.StartedAt.Add(2 * time.Minute),
 			Endpoints:   []taskKind.Endpoint{{Port: 3000, Address: "vmhost:20000"}},
@@ -406,6 +407,28 @@ func TestNode_State(t *testing.T) {
 		require.Len(t, report.Instances, 1)
 		assert.Equal(t, taskKind.Running, report.Instances[0].Status.State)
 		assert.Equal(t, 1, report.Instances[0].Status.Run.Attempt)
+	})
+
+	t.Run("a run says the ports its vm publishes, which the ingress reaches it on, whether or not they are up", func(t *testing.T) {
+		t.Parallel()
+
+		f := onNode()
+
+		f.created(t, snippet("task-1", live))
+		require.NoError(t, f.engine.Exit(f.run(t, "task-1").ID, 0))
+
+		f.created(t, snippet("task-2", live, func(t *taskKind.Task) { t.Spec.NetworkPolicy = network.PolicyNone }))
+
+		report, err := f.node.State(ctx)
+		require.NoError(t, err)
+		require.Len(t, report.Instances, 2)
+
+		ended := report.Instances[0].Status.Run
+		assert.Equal(t, []port.Port{3000}, ended.Ports, "a run that has ended still says what it serves")
+		assert.Empty(t, ended.Endpoints, "and serves nothing now")
+
+		assert.Equal(t, taskKind.Running, report.Instances[1].Status.State)
+		assert.Empty(t, report.Instances[1].Status.Run.Ports, "one whose policy lets nothing in publishes nothing")
 	})
 }
 

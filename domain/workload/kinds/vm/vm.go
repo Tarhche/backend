@@ -10,10 +10,12 @@
 // else on the node knows a VM is a record anywhere.
 //
 // Its spec is what it was asked for, its config of ports, network and
-// resources among it; its status is what its node last said of it, a sample
-// of what it uses and where its ports are published among it, and the config
-// its node last gave the instance it runs, which is how a VM whose ports were
-// changed is known to be reconfigured on its node.
+// resources among it; its status is what its node last said of it, the slug
+// it was given, a sample of what it uses and where its ports are published
+// among it, and the config its node last gave the instance it runs, which is
+// how a VM whose ports were changed is known to be reconfigured on its node.
+// The ingress routes to a VM by what its node says there, less what a
+// command on its way to the node takes away.
 //
 // Its states are the ones the dashboard has always shown a VM in: created,
 // scheduled, starting, running, stopping, stopped, restarting, restoring,
@@ -256,11 +258,19 @@ func (c Config) Equal(other Config) bool {
 type Status struct {
 	kind.Status
 
+	// Slug is the name its ports are served under, as its node was given it
+	// with the instance it runs: what the ingress finds it by, which reads it
+	// off the VM's heartbeats rather than off its record.
+	Slug string `json:"slug,omitempty"`
+
 	// Stats is the last sample of what it uses, while it runs; nothing
 	// otherwise, and nothing until its node has sampled it.
 	Stats *Stats `json:"stats"`
 
-	// Endpoints are where its node reaches each of its published ports.
+	// Endpoints are where its node reaches each of its published ports: every
+	// port it was given while its ingress is allowed, and none while it is
+	// denied, whether it runs or not. Their ports are the ones the ingress
+	// reaches it on.
 	Endpoints []Endpoint `json:"endpoints"`
 
 	// StartedAt is when it last came up.

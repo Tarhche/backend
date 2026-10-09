@@ -10,6 +10,7 @@ import (
 	"github.com/danceable/console"
 	"github.com/danceable/provider"
 
+	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/certificate"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers"
@@ -25,6 +26,12 @@ const (
 type ServeCommand struct {
 	configs *configs.WorkloadIngress
 	handler http.Handler
+
+	// subscriber hears, over core NATS, what says where the tasks and the
+	// VMs are, which subscribers write down: their nodes' heartbeats, and the
+	// commands sent to their nodes and what came of them.
+	subscriber  domain.Subscriber
+	subscribers map[string]domain.MessageHandler
 
 	// tunnel is where the orchestrators connect. Requests go back down those
 	// connections, so this is the only way into an orchestrator and the only thing
@@ -76,14 +83,15 @@ func (c *ServeCommand) Configure(flagSet *console.FlagSet) {
 }
 
 // Providers returns the service providers required to serve the workload ingress.
-// The orchestrators come to it, so it reaches none of them; the database is only for
-// looking up which node is holding a task.
+// The orchestrators come to it, so it reaches none of them, and it reads no
+// database: which node is holding a task or a VM is what that node says of
+// it, heard over NATS.
 func (c *ServeCommand) Providers() []provider.Provider {
 	return []provider.Provider{
 		core.NewConfigsProvider(c.configs),
 		core.NewOpenTelemetryProvider("workload-ingress", "workload-ingress"),
 		core.NewProfilerProvider("workload-ingress"),
-		providers.NewMongodbProvider(),
+		providers.NewNatsProvider(),
 		core.NewContainerProvider(),
 		workload.NewIngressProvider(),
 		c,
@@ -98,6 +106,14 @@ func (c *ServeCommand) Register(ctx context.Context, task provider.Container) er
 // Boot resolves the command's dependencies from the booted task.
 func (c *ServeCommand) Boot(ctx context.Context, task provider.Container) error {
 	if err := task.Resolve(&c.handler); err != nil {
+		return err
+	}
+
+	if err := task.Resolve(&c.subscriber); err != nil {
+		return err
+	}
+
+	if err := task.Resolve(&c.subscribers, provider.ResolveName(workload.IngressSubscribers)); err != nil {
 		return err
 	}
 
@@ -137,6 +153,14 @@ func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 	})
 	if err != nil {
 		c.logger.ErrorContext(ctx, "the tunnel's certificates are unusable", "error", err)
+		return console.ExitFailure
+	}
+
+	// where the tasks and the VMs are is listened to before anything is
+	// routed to them: a beat later, every node has said where everything it
+	// holds is.
+	if err := c.subscribeTopics(ctx); err != nil {
+		c.logger.ErrorContext(ctx, "failed to subscribe to topics", "error", err)
 		return console.ExitFailure
 	}
 
@@ -198,4 +222,14 @@ func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 	}
 
 	return console.ExitSuccess
+}
+
+func (c *ServeCommand) subscribeTopics(ctx context.Context) error {
+	for subject, messageHandler := range c.subscribers {
+		if err := c.subscriber.Subscribe(ctx, subject, messageHandler); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

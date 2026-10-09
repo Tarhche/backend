@@ -137,6 +137,13 @@ func TestWorkloadConfigsBind(t *testing.T) {
 		})
 	})
 
+	t.Run("the ingress", func(t *testing.T) {
+		defaults(t, NewWorkloadIngress(), map[string]string{
+			"WORKLOAD_INGRESS_DOMAIN":                "workload.localhost",
+			"WORKLOAD_INGRESS_RESOURCE_SILENT_AFTER": "30s",
+		})
+	})
+
 	t.Run("an orchestrator", func(t *testing.T) {
 		defaults(t, NewWorkloadOrchestrator(), map[string]string{
 			"WORKLOAD_VMHOST_SOCKET":            "/run/vmhost/vmhost.sock",

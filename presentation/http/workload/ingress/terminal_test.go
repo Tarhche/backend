@@ -140,10 +140,10 @@ func TestTerminalHandler(t *testing.T) {
 			status: http.StatusNotFound,
 			says:   "no such vm",
 		},
-		"a vm on no node": {
+		"a vm no node holds yet, which no node has said where it is": {
 			vms:    []vmKind.VM{exposing("box", "")},
-			status: http.StatusServiceUnavailable,
-			says:   "not been scheduled",
+			status: http.StatusNotFound,
+			says:   "no such vm",
 		},
 		"a vm whose node is not connected": {
 			vms:    []vmKind.VM{exposing("box", "workload-orchestrator-09")},

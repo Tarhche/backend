@@ -33,6 +33,7 @@ import (
 	logsMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/logs"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/permissions"
 	infraDocker "github.com/khanzadimahdi/testproject/infrastructure/workload/docker"
+	ingressMemory "github.com/khanzadimahdi/testproject/infrastructure/workload/ingress/memory"
 	"github.com/khanzadimahdi/testproject/infrastructure/workload/task/vmruntime"
 	"github.com/khanzadimahdi/testproject/infrastructure/workload/vm/memory"
 )
@@ -180,7 +181,7 @@ func TestConformance(t *testing.T) {
 
 	plane := served(t)
 
-	ingress, err := ingressKinds(plane.resources)
+	ingress, _, err := ingressKinds(ingressMemory.NewLocations(time.Minute))
 	require.NoError(t, err)
 
 	services := kind.Services{
@@ -194,8 +195,8 @@ func TestConformance(t *testing.T) {
 	assert.Equal(t, allKinds, kindNames(services.Descriptors()), "every kind the services run")
 
 	// a subject is the name of the stream JetStream keeps it in, which has
-	// none of these and is no longer than this; who hears it does so under a
-	// durable consumer named after their service.
+	// none of these and is no longer than this; who keeps what it says hears
+	// it under a durable consumer named after their service.
 	for _, d := range services.Descriptors() {
 		subject := kind.HeartbeatName(d.Name)
 

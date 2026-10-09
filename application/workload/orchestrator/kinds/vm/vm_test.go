@@ -197,6 +197,7 @@ func TestNode_Execute(t *testing.T) {
 
 		assert.Equal(t, vmKind.Running, status.State)
 		assert.Equal(t, f.now(), status.StartedAt)
+		assert.Equal(t, "box-01", status.Slug, "it is said under the slug it was given")
 		require.NotNil(t, status.Applied, "it was given its config")
 		assert.Equal(t, v.Spec.Config(), *status.Applied)
 		assert.Equal(t, []vmKind.Endpoint{{Port: 80, Address: "vmhost:20000"}, {Port: 8080, Address: "vmhost:20001"}}, status.Endpoints)
@@ -617,6 +618,27 @@ func TestNode_State(t *testing.T) {
 		require.Len(t, f.gauges.counts, 1)
 		assert.Equal(t, map[vm.State]int{vm.Running: 1, vm.Stopped: 1, vm.Failed: 1}, f.gauges.counts[0], "its VMs, and not what else its engine holds")
 		assert.Equal(t, uint(16), f.gauges.info[0].CPUs)
+	})
+
+	t.Run("a vm is reported under the slug it was given, and with what its node published for it while its ingress is allowed, whether it runs or not", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t)
+		f.made(t, aVM("01", vmKind.Scheduled))
+		f.made(t, aVM("02", vmKind.Scheduled, func(v *vmKind.VM) { v.Spec.Network.Ingress = vm.AccessDeny }))
+		require.NoError(t, f.engine.Stop(ctx, "01"))
+
+		report, err := f.node.State(ctx)
+		require.NoError(t, err)
+
+		stopped := find(t, report, "01")
+		assert.Equal(t, "box-01", stopped.Slug, "which the ingress finds it by, from its heartbeats alone")
+		assert.Equal(t, vmKind.Stopped, stopped.State)
+		assert.Equal(t, []vmKind.Endpoint{{Port: 80, Address: "vmhost:20000"}, {Port: 8080, Address: "vmhost:20001"}}, stopped.Endpoints, "the ports the ingress reaches it on, while it is stopped too")
+
+		denied := find(t, report, "02")
+		assert.Equal(t, "box-02", denied.Slug)
+		assert.Empty(t, denied.Endpoints, "one whose ingress is denied has nothing published")
 	})
 
 	t.Run("a running vm is sampled every other beat, and its sample shown in between", func(t *testing.T) {

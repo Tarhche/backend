@@ -17,6 +17,10 @@ const (
 	defaultWorkloadIngressDomain    = "workload.localhost"
 	defaultWorkloadMaxLogBytes      = 32 << 20 // 32 MB per task
 
+	// as long as the control plane waits before it takes a resource its node
+	// goes on beating without a word of to be gone from it.
+	defaultWorkloadIngressResourceSilentAfter = 30 * time.Second
+
 	defaultWorkloadTunnelPort = 81
 
 	defaultWorkloadTunnelMinConnections = 2
@@ -174,6 +178,10 @@ type WorkloadIngress struct {
 	TunnelMaxSessionsPerOrchestrator int `usage:"How many connections one orchestrator may hold here." env:"WORKLOAD_TUNNEL_MAX_SESSIONS_PER_ORCHESTRATOR" long:"tunnel-max-sessions-per-orchestrator"`
 
 	ForwardedPorts string `usage:"Ports to carry arbitrary TCP into the tunnel on, as listen=orchestrator:target, separated by commas — 8022=orchestrator-a:22 reaches port 22 on that orchestrator, 9000=:api reaches the api service on whichever orchestrator the router picks. Nothing is forwarded by default." env:"WORKLOAD_INGRESS_FORWARDS" long:"forward"`
+
+	// where a task or a VM is, is what the heartbeats of the node holding it
+	// say, every second, and no heartbeat says one is gone.
+	ResourceSilentAfter time.Duration `usage:"How long a task or a VM may go unheard in its node's heartbeats before the ingress forgets which node holds it. A node says it every second." env:"WORKLOAD_INGRESS_RESOURCE_SILENT_AFTER" long:"resource-silent-after"`
 }
 
 // NewWorkloadIngress returns the configuration of the serve-workload-ingress
@@ -185,6 +193,7 @@ func NewWorkloadIngress() *WorkloadIngress {
 		TunnelPort:                       defaultWorkloadTunnelPort,
 		TunnelMaxStreamsPerSession:       defaultTunnelMaxStreamsPerSession,
 		TunnelMaxSessionsPerOrchestrator: defaultTunnelMaxSessionsPerOrchestrator,
+		ResourceSilentAfter:              defaultWorkloadIngressResourceSilentAfter,
 	}
 }
 

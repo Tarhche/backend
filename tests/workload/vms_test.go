@@ -46,6 +46,8 @@ func TestAMachineVM(t *testing.T) {
 	w := start(t)
 	ctx := t.Context()
 
+	ingress := w.ingress(t)
+
 	created, err := createVM.NewUseCase(w.client, w.validator, w.translator, w.owners, ingressDomain).Execute(ctx, &createVM.Request{
 		Name:           "box",
 		Kind:           string(vm.KindMachine),
@@ -62,11 +64,18 @@ func TestAMachineVM(t *testing.T) {
 	uuid := created.VM.UUID
 	assert.Equal(t, "scheduled", created.VM.State, "it is asked of its node, which has not made it yet")
 
+	var slug string
+
 	t.Run("the control plane schedules it, its node makes it, and its heartbeat says it runs", func(t *testing.T) {
 		running := w.vmIn(t, uuid, "running")
+		slug = running.Slug
 
 		assert.Equal(t, nodeName, running.NodeName)
 		assert.Equal(t, []presenter.URL{{Port: 8080, URL: "https://" + running.Slug + "-8080." + ingressDomain}}, running.URLs)
+
+		location, err := reached(t, ingress, vmKind.Name, running.Slug, "the ingress hearing it runs", func(_ kind.Location, err error) bool { return err == nil })
+		require.NoError(t, err)
+		assert.Equal(t, kind.Location{UUID: uuid, Node: nodeName, Ports: []port.Port{8080}}, location, "where the ingress finds it, from what its node says alone")
 
 		instance, err := w.engine.Inspect(ctx, uuid)
 		require.NoError(t, err)
@@ -111,6 +120,9 @@ func TestAMachineVM(t *testing.T) {
 		instance, err := w.engine.Inspect(ctx, uuid)
 		require.NoError(t, err)
 		assert.Equal(t, vm.InstanceStopped, instance.State)
+
+		_, err = reached(t, ingress, vmKind.Name, slug, "the ingress hearing it stopped", func(_ kind.Location, err error) bool { return errors.Is(err, kind.ErrUnreachable) })
+		assert.ErrorContains(t, err, "the vm is not running")
 	})
 
 	require.NoError(t, w.engine.SetDisk(uuid, []byte("what was on it")))
@@ -180,6 +192,11 @@ func TestAMachineVM(t *testing.T) {
 			{Port: 8080, URL: "https://" + running.Slug + "-8080." + ingressDomain},
 			{Port: 9090, URL: "https://" + running.Slug + "-9090." + ingressDomain},
 		}, running.URLs)
+
+		_, err = reached(t, ingress, vmKind.Name, slug, "the ingress reaching both", func(l kind.Location, err error) bool {
+			return err == nil && slices.Equal(l.Ports, []port.Port{8080, 9090})
+		})
+		assert.NoError(t, err)
 	})
 
 	require.NoError(t, w.engine.SetDisk(uuid, []byte("what was written since")))
@@ -220,6 +237,9 @@ func TestAMachineVM(t *testing.T) {
 
 		_, err = getVM.NewUseCase(w.client, w.owners, ingressDomain).Execute(ctx, &getVM.Request{UUID: uuid, OwnerUUID: ownerUUID})
 		assert.ErrorIs(t, err, domain.ErrNotExists, "the dashboard finds it gone")
+
+		_, err = reached(t, ingress, vmKind.Name, slug, "the ingress hearing it is gone", func(_ kind.Location, err error) bool { return errors.Is(err, domain.ErrNotExists) })
+		assert.ErrorIs(t, err, domain.ErrNotExists, "and so does the ingress")
 
 		_, err = w.resources.GetOne(ctx, snapshotKind.Name, snapshotUUID)
 		assert.NoError(t, err)

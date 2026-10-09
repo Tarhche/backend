@@ -14,8 +14,10 @@ import (
 //
 // A kind's name is a word (Check), lowercase letters, digits and hyphens, so
 // what it is made into has none of what a JetStream stream may not be named
-// with, and is the name of its stream, as every subject is. Whoever hears it
-// does so under a durable consumer named after the service, not the subject.
+// with, and is the name of its stream, as every subject is. Whoever keeps
+// what it says hears it under a durable consumer named after the service, not
+// the subject; the ingress, which keeps nothing a beat would not say again,
+// hears it over core NATS, as it is said.
 func HeartbeatName(kindName string) string {
 	capitalized := kindName
 	if len(kindName) > 0 {
