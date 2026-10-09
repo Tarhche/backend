@@ -12,10 +12,10 @@ import (
 	messaging "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
 )
 
-func TestCommandHandler_Handle(t *testing.T) {
+func TestActOnResourceHandler_Handle(t *testing.T) {
 	t.Parallel()
 
-	handling := func(t *testing.T) (*CommandHandler, *[]string, *messaging.Recorder) {
+	handling := func(t *testing.T) (*ActOnResourceHandler, *[]string, *messaging.Recorder) {
 		t.Helper()
 
 		var executed []string
@@ -23,7 +23,7 @@ func TestCommandHandler_Handle(t *testing.T) {
 
 		useCase := NewUseCase(running(t, lights(&executed)), lock.New(), recorder)
 
-		return NewCommandHandler(useCase, "node-1", slog.New(slog.DiscardHandler)), &executed, recorder
+		return NewActOnResourceHandler(useCase, "node-1", slog.New(slog.DiscardHandler)), &executed, recorder
 	}
 
 	t.Run("a command addressed here is carried out", func(t *testing.T) {

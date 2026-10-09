@@ -45,8 +45,8 @@ type Restorer interface {
 	Restored(ctx context.Context, parent kind.Reference, at time.Time) error
 }
 
-// Result takes the results of commands onto their resources.
-type Result struct {
+// ResourceActedOnHandler takes the results of commands onto their resources.
+type ResourceActedOnHandler struct {
 	registry  *kind.Registry[kind.ControlPlaneBinding]
 	resources resource.Repository
 	waiters   *waiters.Waiters
@@ -55,27 +55,28 @@ type Result struct {
 	now       func() time.Time
 }
 
-var _ domain.MessageHandler = &Result{}
+var _ domain.MessageHandler = &ResourceActedOnHandler{}
 
 // Option changes how results are taken.
-type Option func(*Result)
+type Option func(*ResourceActedOnHandler)
 
 // WithRestorer has what lives in a resource restored from a snapshot reset
 // by restorer once the restore is carried out.
 func WithRestorer(restorer Restorer) Option {
-	return func(r *Result) {
+	return func(r *ResourceActedOnHandler) {
 		r.restorer = restorer
 	}
 }
 
-// NewResult is a handler that keeps resources in resources and tells
-// waiters what came of their commands. A clock of nil is the time now.
-func NewResult(registry *kind.Registry[kind.ControlPlaneBinding], resources resource.Repository, waiting *waiters.Waiters, logger *slog.Logger, now func() time.Time, options ...Option) *Result {
+// NewResourceActedOnHandler is a handler that keeps resources in resources
+// and tells waiters what came of their commands. A clock of nil is the time
+// now.
+func NewResourceActedOnHandler(registry *kind.Registry[kind.ControlPlaneBinding], resources resource.Repository, waiting *waiters.Waiters, logger *slog.Logger, now func() time.Time, options ...Option) *ResourceActedOnHandler {
 	if now == nil {
 		now = time.Now
 	}
 
-	r := &Result{registry: registry, resources: resources, waiters: waiting, logger: logger, now: now}
+	r := &ResourceActedOnHandler{registry: registry, resources: resources, waiters: waiting, logger: logger, now: now}
 
 	for _, option := range options {
 		option(r)
@@ -84,7 +85,7 @@ func NewResult(registry *kind.Registry[kind.ControlPlaneBinding], resources reso
 	return r
 }
 
-func (h *Result) Handle(ctx context.Context, data []byte) error {
+func (h *ResourceActedOnHandler) Handle(ctx context.Context, data []byte) error {
 	var result kind.ResourceActedOn
 	if err := json.Unmarshal(data, &result); err != nil {
 		h.logger.ErrorContext(ctx, "a command's result that cannot be read", "error", err)
@@ -128,7 +129,7 @@ func permanent(err error) bool {
 
 // take takes a result onto its resource, reading the resource again when
 // something else wrote it first.
-func (h *Result) take(ctx context.Context, result kind.ResourceActedOn) error {
+func (h *ResourceActedOnHandler) take(ctx context.Context, result kind.ResourceActedOn) error {
 	binding, registered := h.registry.Lookup(result.Kind)
 	if !registered {
 		return fmt.Errorf("%w: %w: %q", errNotTaken, kind.ErrUnknownKind, result.Kind)

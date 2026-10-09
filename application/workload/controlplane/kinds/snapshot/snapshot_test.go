@@ -569,7 +569,7 @@ func TestSnapshots_bound(t *testing.T) {
 		answer, err := json.Marshal(kind.ResourceActedOn{ID: admitted.Command.ID, Kind: snapshotKind.Name, UUID: uuid, Action: snapshotKind.ActionCreate, Node: vmtest.Node, OK: true, Status: status})
 		require.NoError(t, err)
 
-		require.NoError(t, recordResult.NewResult(w.Registry, w.Resources, nil, logger, nil).Handle(ctx, answer))
+		require.NoError(t, recordResult.NewResourceActedOnHandler(w.Registry, w.Resources, nil, logger, nil).Handle(ctx, answer))
 
 		require.NoError(t, reconcileResources.NewUseCase(w.Registry, w.Resources, w.Nodes, w.Dispatcher, logger, reconcileResources.DefaultConfig()).Execute(ctx))
 

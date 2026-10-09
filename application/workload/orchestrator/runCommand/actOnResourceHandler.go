@@ -9,24 +9,24 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 )
 
-// CommandHandler carries out the commands addressed to this node, of every
-// kind it runs.
+// ActOnResourceHandler carries out the commands addressed to this node, of
+// every kind it runs.
 //
 // Every node hears every command and carries out only those addressed to it,
 // as it does the commands about VMs, snapshots and stacks.
-type CommandHandler struct {
+type ActOnResourceHandler struct {
 	useCase  *UseCase
 	nodeName string
 	logger   *slog.Logger
 }
 
-var _ domain.MessageHandler = &CommandHandler{}
+var _ domain.MessageHandler = &ActOnResourceHandler{}
 
-func NewCommandHandler(useCase *UseCase, nodeName string, logger *slog.Logger) *CommandHandler {
-	return &CommandHandler{useCase: useCase, nodeName: nodeName, logger: logger}
+func NewActOnResourceHandler(useCase *UseCase, nodeName string, logger *slog.Logger) *ActOnResourceHandler {
+	return &ActOnResourceHandler{useCase: useCase, nodeName: nodeName, logger: logger}
 }
 
-func (h *CommandHandler) Handle(ctx context.Context, data []byte) error {
+func (h *ActOnResourceHandler) Handle(ctx context.Context, data []byte) error {
 	var command kind.ActOnResource
 	if err := json.Unmarshal(data, &command); err != nil {
 		// read again, it is as unreadable, and it says nothing a result could

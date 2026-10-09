@@ -1118,7 +1118,7 @@ func blog(
 		forgetpassword.SendForgetPasswordEmailName: forgetpassword.NewSendForgetPasswordEmailHandler(userRepository, authTokenGenerator, mailer, mailFromAddress, webURL, renderer, translator),
 		register.SendRegisterationEmailName:        register.NewSendRegisterationEmailHandler(authTokenGenerator, mailer, mailFromAddress, webURL, renderer, translator),
 		nodeEvents.HeartbeatName:                   answerCodeRun.NewHeartbeatHandler(cachedGateway, ingressDomain, logger),
-		kind.ResourceActedOnName:                   answerCodeRun.NewResultHandler(cachedGateway, logger),
+		kind.ResourceActedOnName:                   answerCodeRun.NewResourceActedOnHandler(cachedGateway, logger),
 	}
 
 	if err := iocContainer.Bind(func() map[string]domain.MessageHandler {

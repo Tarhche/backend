@@ -167,7 +167,7 @@ func NewControlPlaneKinds(
 			return controlPlaneKindsAPI.Route(mux, registry.Descriptors(), useCases)
 		},
 		Subscribers: map[string]domain.MessageHandler{
-			kind.ResourceActedOnName: recordResult.NewResult(registry, resources, waiting, logger, nil, recordResult.WithRestorer(resources.Cascade())),
+			kind.ResourceActedOnName: recordResult.NewResourceActedOnHandler(registry, resources, waiting, logger, nil, recordResult.WithRestorer(resources.Cascade())),
 		},
 		Observer:   observer,
 		Reconcile:  kindsReconcileResources.NewUseCase(registry, resources, stores.Nodes, dispatcher, logger, settings.reconcile),

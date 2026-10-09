@@ -56,7 +56,7 @@ func (w *workload) codeRunner(t *testing.T) *codeRunner {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	require.NoError(t, blogMessages.Consume(ctx, nodeEvents.HeartbeatName, answerCodeRun.NewHeartbeatHandler(replies, ingressDomain, logger)))
-	require.NoError(t, blogMessages.Consume(ctx, kind.ResourceActedOnName, answerCodeRun.NewResultHandler(replies, logger)))
+	require.NoError(t, blogMessages.Consume(ctx, kind.ResourceActedOnName, answerCodeRun.NewResourceActedOnHandler(replies, logger)))
 
 	t.Cleanup(func() {
 		cancel()

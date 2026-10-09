@@ -10,28 +10,28 @@ import (
 	taskKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/task"
 )
 
-// result answers whoever ran a snippet that could not be run at all: its
-// task's node could not make the run, and said why as what came of the
-// command to make it. A snippet that ran and failed speaks for itself
+// resourceActedOn answers whoever ran a snippet that could not be run at
+// all: its task's node could not make the run, and said why as what came of
+// the command to make it. A snippet that ran and failed speaks for itself
 // through its own output, at a heartbeat.
 //
 // What a node says of a create that failed is the run it was to be, which
 // is whose request it answers. A snippet's task is never asked for again
 // after it fails, so its first failure is its last, and is answered.
-type result struct {
+type resourceActedOn struct {
 	replyer domain.Replyer
 	logger  *slog.Logger
 }
 
-var _ domain.MessageHandler = &result{}
+var _ domain.MessageHandler = &resourceActedOn{}
 
-// NewResultHandler answers readers from what came of the commands to run
-// their snippets.
-func NewResultHandler(replyer domain.Replyer, logger *slog.Logger) *result {
-	return &result{replyer: replyer, logger: logger}
+// NewResourceActedOnHandler answers readers from what came of the commands
+// to run their snippets.
+func NewResourceActedOnHandler(replyer domain.Replyer, logger *slog.Logger) *resourceActedOn {
+	return &resourceActedOn{replyer: replyer, logger: logger}
 }
 
-func (h *result) Handle(ctx context.Context, data []byte) error {
+func (h *resourceActedOn) Handle(ctx context.Context, data []byte) error {
 	var answered kind.ResourceActedOn
 	if err := json.Unmarshal(data, &answered); err != nil {
 		// read again, it is as unreadable.

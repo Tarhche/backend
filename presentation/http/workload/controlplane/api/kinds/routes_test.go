@@ -111,7 +111,7 @@ func newAPI(t *testing.T) *api {
 
 	nodeBinding := kind.BindNode[kindstest.Spec, kindstest.Status](kindstest.Descriptor(), a.held)
 
-	a.node = &node{binding: nodeBinding, results: recordResult.NewResult(registry, a.resources, waiting, logger, nil)}
+	a.node = &node{binding: nodeBinding, results: recordResult.NewResourceActedOnHandler(registry, a.resources, waiting, logger, nil)}
 
 	requester := &messagingMock.Requester{Answer: func(ctx context.Context, _ string, request noderequest.Request) (noderequest.Reply, error) {
 		query, err := kind.QueryOf(request)

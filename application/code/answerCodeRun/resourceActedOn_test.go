@@ -41,7 +41,7 @@ func failedCreate(t *testing.T, change ...func(r *kind.ResourceActedOn, s *taskK
 	return payload
 }
 
-func TestResult_Handle(t *testing.T) {
+func TestResourceActedOn_Handle(t *testing.T) {
 	t.Parallel()
 
 	t.Run("somebody whose code never ran is told why", func(t *testing.T) {
@@ -49,7 +49,7 @@ func TestResult_Handle(t *testing.T) {
 
 		var replyer messagingMock.RecordingReplyer
 
-		require.NoError(t, NewResultHandler(&replyer, slog.New(slog.DiscardHandler)).Handle(context.Background(), failedCreate(t)))
+		require.NoError(t, NewResourceActedOnHandler(&replyer, slog.New(slog.DiscardHandler)).Handle(context.Background(), failedCreate(t)))
 
 		replies := replyer.Replies()
 		require.Len(t, replies, 1)
@@ -77,7 +77,7 @@ func TestResult_Handle(t *testing.T) {
 
 			var replyer messagingMock.RecordingReplyer
 
-			require.NoError(t, NewResultHandler(&replyer, slog.New(slog.DiscardHandler)).Handle(context.Background(), failedCreate(t, change)))
+			require.NoError(t, NewResourceActedOnHandler(&replyer, slog.New(slog.DiscardHandler)).Handle(context.Background(), failedCreate(t, change)))
 			assert.Empty(t, replyer.Replies())
 		})
 	}
@@ -87,7 +87,7 @@ func TestResult_Handle(t *testing.T) {
 
 		var replyer messagingMock.RecordingReplyer
 
-		assert.NoError(t, NewResultHandler(&replyer, slog.New(slog.DiscardHandler)).Handle(context.Background(), []byte("{")))
+		assert.NoError(t, NewResourceActedOnHandler(&replyer, slog.New(slog.DiscardHandler)).Handle(context.Background(), []byte("{")))
 		assert.Empty(t, replyer.Replies())
 	})
 }

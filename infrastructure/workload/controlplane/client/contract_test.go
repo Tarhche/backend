@@ -154,7 +154,7 @@ func controlPlane(t *testing.T, w *blockstest.Workload) *client.Client {
 	// what is sent to a container's node comes back from it, and what is
 	// sent to any other node is kept unanswered.
 	waiting := waiters.New()
-	containers := &containersNode{results: recordResult.NewResult(w.Registry, w.Resources, waiting, logger, nil), others: w.Producer}
+	containers := &containersNode{results: recordResult.NewResourceActedOnHandler(w.Registry, w.Resources, waiting, logger, nil), others: w.Producer}
 	dispatcher := dispatch.New(w.Resources, containers, waiting, nil, dispatch.PollEvery(10*time.Millisecond))
 
 	mux := http.NewServeMux()

@@ -24,7 +24,7 @@ type fixture struct {
 	racing  *kindstest.Racing
 	waiters *waiters.Waiters
 	clock   *kindstest.Clock
-	handler *recordResult.Result
+	handler *recordResult.ResourceActedOnHandler
 }
 
 func newFixture(t *testing.T, records ...resource.Record) *fixture {
@@ -38,7 +38,7 @@ func newFixture(t *testing.T, records ...resource.Record) *fixture {
 		require.NoError(t, err)
 	}
 
-	f.handler = recordResult.NewResult(kindstest.Registry(&kindstest.Fans{}), f.racing, f.waiters, slog.New(slog.DiscardHandler), f.clock.Now)
+	f.handler = recordResult.NewResourceActedOnHandler(kindstest.Registry(&kindstest.Fans{}), f.racing, f.waiters, slog.New(slog.DiscardHandler), f.clock.Now)
 
 	return f
 }
@@ -72,7 +72,7 @@ func waiting(state kind.State, expected kind.State, action string) resource.Reco
 	return r
 }
 
-func TestResult_Handle(t *testing.T) {
+func TestResourceActedOnHandler_Handle(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -287,7 +287,7 @@ func (r *restorer) Restored(_ context.Context, parent kind.Reference, _ time.Tim
 	return nil
 }
 
-func TestResult_Handle_restores(t *testing.T) {
+func TestResourceActedOnHandler_Handle_restores(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -309,7 +309,7 @@ func TestResult_Handle_restores(t *testing.T) {
 		registry := kind.NewRegistry[kind.ControlPlaneBinding]()
 		require.NoError(t, registry.Register(kind.BindControlPlane[kindstest.Spec, kindstest.Status](d, &kindstest.Fans{})))
 
-		f.handler = recordResult.NewResult(registry, f.racing, f.waiters, slog.New(slog.DiscardHandler), f.clock.Now, recordResult.WithRestorer(told))
+		f.handler = recordResult.NewResourceActedOnHandler(registry, f.racing, f.waiters, slog.New(slog.DiscardHandler), f.clock.Now, recordResult.WithRestorer(told))
 
 		return f
 	}

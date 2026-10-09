@@ -107,7 +107,7 @@ func NewOrchestratorWorkload(d OrchestratorDependencies) (*OrchestratorWorkload,
 
 	subscribers := map[string]domain.MessageHandler{
 		// every kind's commands, carried out one at a time per resource.
-		kind.ActOnResourceName: orchestratorRunCommand.NewCommandHandler(orchestratorRunCommand.NewUseCase(kinds, locks, d.Producer), d.NodeName, d.Logger),
+		kind.ActOnResourceName: orchestratorRunCommand.NewActOnResourceHandler(orchestratorRunCommand.NewUseCase(kinds, locks, d.Producer), d.NodeName, d.Logger),
 	}
 
 	// the control plane's requests to this node, every kind's queries, and
