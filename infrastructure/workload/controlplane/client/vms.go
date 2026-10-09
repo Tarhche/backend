@@ -145,7 +145,7 @@ func (c *Client) imageOf(request workloadControlPlane.VMRequest) (string, domain
 	}
 
 	if len(request.Kind) > 0 && len(image) > 0 && vm.KindOf(image, c.dockerImage) != request.Kind {
-		return "", domain.ValidationErrors{"image": "invalid_image"}
+		return "", domain.ValidationErrors{"image": "image_of_another_kind"}
 	}
 
 	return image, nil

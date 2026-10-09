@@ -47,6 +47,7 @@ var farsi = map[string]string{
 	"too_many_ports":         "حداکثر ۱۶ پورت را می‌توان منتشر کرد",
 	"invalid_lifetime":       "طول عمر باید بر حسب ثانیه باشد و صفر یعنی تا زمان حذف نگه داشته شود",
 	"invalid_image":          "نام ایمیج باید بدون فاصله باشد، مانند nginx:1.27",
+	"image_of_another_kind":  "یک ماشین مجازی از نوع docker با ایمیج داکر ساخته می‌شود و از نوع machine با هر ایمیج دیگری",
 	"invalid_name":           "فقط حروف، ارقام، نقطه، خط تیره و زیرخط مجاز است و باید با حرف یا رقم شروع شود",
 	"invalid_protocol":       "پروتکل باید tcp یا udp باشد",
 	"invalid_mount_type":     "نوع اتصال باید volume، bind یا tmpfs باشد",

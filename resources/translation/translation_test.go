@@ -43,7 +43,7 @@ func TestTheWorkloadsCodesAreSaid(t *testing.T) {
 	codes := []string{
 		// the dashboard's
 		"invalid_kind", "invalid_access", "invalid_port", "duplicate_port", "too_many_ports",
-		"invalid_lifetime", "invalid_image", "invalid_name", "invalid_protocol",
+		"invalid_lifetime", "invalid_image", "image_of_another_kind", "invalid_name", "invalid_protocol",
 		"invalid_mount_type", "invalid_mount", "invalid_restart_policy",
 		"invalid_network_driver", "invalid_volume_driver", "vm_or_new_vm",
 

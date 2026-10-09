@@ -47,6 +47,7 @@ var english = map[string]string{
 	"too_many_ports":         "at most 16 ports may be exposed",
 	"invalid_lifetime":       "the lifetime is a number of seconds, and zero keeps it until it is deleted",
 	"invalid_image":          "an image is named by a reference with no spaces in it, such as nginx:1.27",
+	"image_of_another_kind":  "a Docker VM boots the Docker image, and a machine any other image",
 	"invalid_name":           "may hold only letters, digits, dots, dashes and underscores, and starts with a letter or a digit",
 	"invalid_protocol":       "the protocol must be either tcp or udp",
 	"invalid_mount_type":     "a mount's type must be volume, bind or tmpfs",

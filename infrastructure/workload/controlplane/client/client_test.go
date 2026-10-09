@@ -259,7 +259,7 @@ func TestClient_requests(t *testing.T) {
 
 			var refused *ValidationError
 			require.ErrorAs(t, err, &refused)
-			assert.Equal(t, domain.ValidationErrors{"image": "invalid_image"}, refused.ValidationErrors, "the image would make it another kind than it was asked for as")
+			assert.Equal(t, domain.ValidationErrors{"image": "image_of_another_kind"}, refused.ValidationErrors, "the image would make it another kind than it was asked for as")
 			assert.Empty(t, asked.method, "nothing is asked of the control plane")
 		})
 	}
