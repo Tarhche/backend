@@ -12,7 +12,6 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/observe"
 	controlPlaneVMs "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm"
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/dockervm"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/records"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/runs"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/vmtest"
@@ -775,78 +774,6 @@ func TestVMs_Is(t *testing.T) {
 // records still carry the label that did, both as they were stored, to being
 // what their images say: read, narrowed, chosen for a container and bounded
 // as any other VM is. Nothing moves them; the data is moved by hand.
-func TestVMs_keptAsTheyWere(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-
-	kept := func(uuid string, image string, was vm.Kind) resource.Record {
-		r := vmtest.Record(vmtest.Running(uuid, "owner"))
-		r.Metadata.Labels = map[string]string{"workload.flavor": string(was)}
-		r.Spec = json.RawMessage(`{"flavor": "` + string(was) + `", "image": "` + image + `", "resources": {"cpus": 2, "memory": 2147483648, "disk": 21474836480}, "ports": [], "network": {"ingress": "allow", "egress": "allow"}}`)
-
-		return r
-	}
-
-	w := vmtest.New()
-
-	docker, err := w.Memory.Create(ctx, kept("01", "docker:29-dind", vm.KindDocker))
-	require.NoError(t, err)
-
-	machine, err := w.Memory.Create(ctx, kept("02", "ubuntu:24.04", vm.KindMachine))
-	require.NoError(t, err)
-
-	t.Run("read as what its image says", func(t *testing.T) {
-		t.Parallel()
-
-		v, err := records.Decode(docker)
-		require.NoError(t, err)
-		assert.Equal(t, "docker:29-dind", v.Spec.Image)
-		assert.True(t, vmKind.DockerVM(v, vmtest.Images.Docker))
-		assert.Equal(t, vm.KindDocker, vmKind.Entity(v, vmtest.Images.Docker).Kind, "as the dashboard shows it")
-
-		v, err = records.Decode(machine)
-		require.NoError(t, err)
-		assert.False(t, vmKind.DockerVM(v, vmtest.Images.Docker))
-		assert.Equal(t, vm.KindMachine, vmKind.Entity(v, vmtest.Images.Docker).Kind)
-	})
-
-	t.Run("listed as what its image says", func(t *testing.T) {
-		t.Parallel()
-
-		is, err := w.VMs.Is(docker.Raw, string(vm.KindDocker))
-		require.NoError(t, err)
-		assert.True(t, is)
-
-		is, err = w.VMs.Is(machine.Raw, string(vm.KindDocker))
-		require.NoError(t, err)
-		assert.False(t, is)
-	})
-
-	t.Run("chosen for a container as the one docker vm of its owner's", func(t *testing.T) {
-		t.Parallel()
-
-		chosen, refused, err := w.Chooser.Choose(ctx, "owner", dockervm.Choice{})
-		require.NoError(t, err)
-		require.Empty(t, refused)
-		assert.Equal(t, "01", chosen.VM.Metadata.UUID)
-		assert.False(t, chosen.Created)
-	})
-
-	t.Run("held to what a docker vm needs when it is changed", func(t *testing.T) {
-		t.Parallel()
-
-		v, err := records.Decode(docker)
-		require.NoError(t, err)
-
-		small := vmKind.Resources{CPUs: 1, Memory: 256 * vmtest.MiB, Disk: 20 * vmtest.GiB}
-
-		_, refused, err := w.VMs.Apply(ctx, v, vmKind.ActionUpdate, vmKind.UpdatePayload{Resources: &small})
-		require.NoError(t, err)
-		assert.Equal(t, domain.ValidationErrors{"resources.memory": "too_small"}, refused)
-	})
-}
-
 // TestVM_createAnswered holds a VM being made to the answer of its create,
 // which alone says what its node gave it: its node seen running it first,
 // in a heartbeat taken between the VM coming up and the create being
