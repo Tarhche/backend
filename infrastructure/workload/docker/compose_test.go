@@ -68,7 +68,7 @@ func composeIn(t *testing.T, fake *fakeCompose) *Compose {
 
 	e := memory.New(memory.WithExec(fake.exec))
 
-	_, err := e.Create(t.Context(), vm.Spec{ID: "vm-1", Kind: vm.KindDocker, Image: "docker:29-dind"})
+	_, err := e.Create(t.Context(), vm.Spec{ID: "vm-1", Image: "docker:29-dind"})
 	require.NoError(t, err)
 
 	return NewCompose(e)
@@ -198,7 +198,7 @@ func TestCompose(t *testing.T) {
 
 		e := memory.New(memory.WithExec((&fakeCompose{}).exec))
 
-		_, err := e.Create(t.Context(), vm.Spec{ID: "vm-1", Kind: vm.KindDocker, Image: "docker:29-dind"})
+		_, err := e.Create(t.Context(), vm.Spec{ID: "vm-1", Image: "docker:29-dind"})
 		require.NoError(t, err)
 		require.NoError(t, e.Stop(t.Context(), "vm-1"))
 
@@ -218,7 +218,7 @@ func TestCompose(t *testing.T) {
 			return -1
 		}))
 
-		_, err := e.Create(t.Context(), vm.Spec{ID: "vm-1", Kind: vm.KindDocker, Image: "docker:29-dind"})
+		_, err := e.Create(t.Context(), vm.Spec{ID: "vm-1", Image: "docker:29-dind"})
 		require.NoError(t, err)
 
 		ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)

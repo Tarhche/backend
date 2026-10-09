@@ -96,7 +96,6 @@ func TestManifest(t *testing.T) {
 				Slug:      "request-run-uuid-abcde",
 				OwnerUUID: task.GuestOwnerUUID,
 				Labels: map[string]string{
-					vmKind.LabelFlavor:    "machine",
 					vmKind.LabelManagedBy: vmKind.ManagedByCodeRunner,
 				},
 				Node: vmtest.Node,
@@ -109,8 +108,7 @@ func TestManifest(t *testing.T) {
 				UpdatedAt: started,
 			},
 			Spec: vmKind.Spec{
-				Flavor: vmKind.FlavorMachine,
-				Image:  "ghcr.io/tarhche/code-runner:go-1.24-latest",
+				Image: "ghcr.io/tarhche/code-runner:go-1.24-latest",
 
 				// whole vCPUs, rounded up, and bytes as they were asked for.
 				Resources: vmKind.Resources{CPUs: 2, Memory: 512 << 20, Disk: 512 << 20},
@@ -208,7 +206,7 @@ func TestManifest(t *testing.T) {
 	t.Run("and the vm it is shown as is the code runner's, the blog's way", func(t *testing.T) {
 		t.Parallel()
 
-		shown := vmKind.Entity(runs.Manifest(run("run-uuid")))
+		shown := vmKind.Entity(runs.Manifest(run("run-uuid")), vmtest.Images.Docker)
 		assert.Equal(t, vm.ManagedByCodeRunner, shown.ManagedBy)
 		assert.Equal(t, vm.KindMachine, shown.Kind)
 		assert.Equal(t, vm.Running, shown.CurrentState)

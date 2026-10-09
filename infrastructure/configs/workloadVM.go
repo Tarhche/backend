@@ -16,9 +16,10 @@ const (
 
 	defaultWorkloadVMHostMaxConcurrentBoots = 4
 
-	// defaultWorkloadVMDockerImage is what a Docker VM boots from. The control
-	// plane names it in the specs it sends and a vmhost is given it too, so the
-	// two say the same thing unless somebody makes them differ.
+	// defaultWorkloadVMDockerImage is what a Docker VM boots from, and what
+	// tells one (vm.KindOf). The control plane names it in the specs it sends,
+	// and a vmhost and the blog are given it too, so they say the same thing
+	// unless somebody makes them differ.
 	defaultWorkloadVMDockerImage = "docker:29-dind"
 
 	defaultWorkloadVMDefaultImage = "ubuntu:24.04"
@@ -78,7 +79,7 @@ type WorkloadVMHost struct {
 
 	Home string `usage:"Directory the engine keeps its VMs, images and records in. It has to outlive the container." env:"MSB_HOME" long:"home"`
 
-	DockerImage string `usage:"Image a Docker VM boots from: a docker-in-docker image whose dockerd comes up with the VM." env:"WORKLOAD_VMHOST_DOCKER_IMAGE" long:"docker-image"`
+	DockerImage string `usage:"Image a Docker VM boots from: a docker-in-docker image whose dockerd comes up with the VM. A VM whose image is it, or another tag of it, is booted as a Docker VM." env:"WORKLOAD_VMHOST_DOCKER_IMAGE" long:"docker-image"`
 
 	CPUs   uint   `usage:"vCPUs this node offers to VMs. Zero offers every CPU this container may use: its CPU limit, or the host's CPUs when it has none." env:"WORKLOAD_VMHOST_CPUS" long:"cpus"`
 	Memory uint64 `usage:"Memory, in bytes, this node offers to VMs. Zero offers 80% of this container's memory limit, less 512 MiB." env:"WORKLOAD_VMHOST_MEMORY" long:"memory"`

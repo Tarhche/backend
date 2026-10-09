@@ -332,7 +332,7 @@ func (n *Node) containers(ctx context.Context, s stackKind.Stack, vmUUID string)
 }
 
 // dockerVM is the uuid of a VM instance and whether it is a Docker VM: one
-// labelled as one, or one a stack's command named.
+// its engine says is one, as its image does, or one a stack's command named.
 func (n *Node) dockerVM(instance vm.Instance) (string, bool) {
 	if instance.Labels[vm.LabelPurpose] != vm.PurposeVM {
 		return "", false

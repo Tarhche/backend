@@ -21,6 +21,13 @@ const (
 	// LabelTask is the task's uuid, for an instance that runs a code-runner
 	// task.
 	LabelTask = "workload.task"
+
+	// LabelDocker marks an instance its engine boots as a Docker VM, with
+	// "true". The engine says it of every instance it holds whose image is its
+	// Docker image (KindOf), and of no other, whatever the instance was given:
+	// it is how a node tells, from its engine alone, which of its VMs have a
+	// dockerd it reads.
+	LabelDocker = "workload.docker"
 )
 
 // What an instance is for, under LabelPurpose.

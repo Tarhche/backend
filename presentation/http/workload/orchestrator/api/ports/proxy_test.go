@@ -47,7 +47,6 @@ func TestProxyHandler(t *testing.T) {
 	} {
 		_, err = e.Create(t.Context(), vm.Spec{
 			ID:      id,
-			Kind:    vm.KindMachine,
 			Image:   "ubuntu:24.04",
 			Ports:   []port.Port{80},
 			Network: vm.Network{Ingress: vm.AccessAllow, Egress: vm.AccessDeny},

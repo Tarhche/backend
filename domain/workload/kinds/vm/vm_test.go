@@ -324,7 +324,6 @@ func TestConfig(t *testing.T) {
 	t.Parallel()
 
 	spec := vmKind.Spec{
-		Flavor:    vmKind.FlavorMachine,
 		Image:     "ubuntu:24.04",
 		Resources: vmKind.Resources{CPUs: 2, Memory: 1 << 30, Disk: 10 << 30},
 		Ports:     []port.Port{80},
@@ -375,22 +374,30 @@ func TestStatus(t *testing.T) {
 	})
 }
 
+func TestDockerVM(t *testing.T) {
+	t.Parallel()
+
+	booting := func(image string) vmKind.VM {
+		return vmKind.VM{Spec: vmKind.Spec{Image: image}}
+	}
+
+	assert.True(t, vmKind.DockerVM(booting("docker:29-dind"), "docker:29-dind"))
+	assert.True(t, vmKind.DockerVM(booting("docker:28-dind"), "docker:29-dind"), "one made before the docker image moved on")
+	assert.False(t, vmKind.DockerVM(booting("ubuntu:24.04"), "docker:29-dind"))
+	assert.False(t, vmKind.DockerVM(booting(""), "docker:29-dind"), "a machine that names no image")
+}
+
 func TestUp(t *testing.T) {
 	t.Parallel()
 
 	docker := func(state kind.State, node string) vmKind.VM {
-		return vmKind.VM{Metadata: kind.Metadata{Node: node}, Spec: vmKind.Spec{Flavor: vmKind.FlavorDocker}, Status: vmKind.Status{Status: kind.Status{State: state}}}
+		return vmKind.VM{Metadata: kind.Metadata{Node: node}, Spec: vmKind.Spec{Image: "docker:29-dind"}, Status: vmKind.Status{Status: kind.Status{State: state}}}
 	}
 
 	assert.True(t, vmKind.Up(docker(vmKind.Running, "node-1")))
 	assert.True(t, vmKind.Up(docker(vmKind.Starting, "node-1")), "on its way up")
 	assert.False(t, vmKind.Up(docker(vmKind.Stopped, "node-1")))
 	assert.False(t, vmKind.Up(docker(vmKind.Running, "")), "on no node")
-
-	machine := docker(vmKind.Running, "node-1")
-	machine.Spec.Flavor = vmKind.FlavorMachine
-	assert.False(t, vmKind.Up(machine), "a machine has no dockerd")
-	assert.False(t, vmKind.DockerVM(machine))
 }
 
 func TestStateOf(t *testing.T) {
@@ -427,7 +434,6 @@ func TestEntity(t *testing.T) {
 			Name:      "box",
 			Slug:      "box-abcde",
 			OwnerUUID: "owner-uuid",
-			Labels:    map[string]string{vmKind.LabelFlavor: "machine"},
 			Node:      "workload-orchestrator-01",
 			Lifetime:  time.Hour,
 			ExpiresAt: created.Add(time.Hour),
@@ -435,7 +441,6 @@ func TestEntity(t *testing.T) {
 			UpdatedAt: created.Add(time.Minute),
 		},
 		Spec: vmKind.Spec{
-			Flavor:         vmKind.FlavorMachine,
 			Image:          "ubuntu:24.04",
 			Resources:      vmKind.Resources{CPUs: 2, Memory: 1 << 30, Disk: 10 << 30},
 			Ports:          []port.Port{80, 8080},
@@ -470,14 +475,17 @@ func TestEntity(t *testing.T) {
 		CreatedAt:       created,
 		StartedAt:       created.Add(time.Minute),
 		UpdatedAt:       created.Add(time.Minute),
-	}, vmKind.Entity(v))
+	}, vmKind.Entity(v, "docker:29-dind"))
 
 	v.Spec.Ports = nil
 	v.Status.Expected = vmKind.Deleted
 	v.Metadata.Labels = map[string]string{vmKind.LabelManagedBy: vmKind.ManagedByCodeRunner}
 
-	entity := vmKind.Entity(v)
+	entity := vmKind.Entity(v, "docker:29-dind")
 	assert.Equal(t, []port.Port{}, entity.Ports, "none, rather than nothing")
 	assert.Equal(t, vm.Deleting, entity.ExpectedState, "one expected deleted is on its way out")
 	assert.Equal(t, vm.ManagedByCodeRunner, entity.ManagedBy)
+
+	v.Spec.Image = "docker:28-dind"
+	assert.Equal(t, vm.KindDocker, vmKind.Entity(v, "docker:29-dind").Kind, "a docker vm is one as its image says")
 }

@@ -27,7 +27,6 @@ import (
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/node"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
-	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
 )
 
@@ -98,12 +97,13 @@ func (b *bucket) put(objectName string) {
 // resources, archives kept in archives, with room for userMax snapshots each.
 func strategyOf(w *vmtest.Workload, archives snapshotKind.Store, userMax uint) *controlPlaneSnapshots.Snapshots {
 	return controlPlaneSnapshots.New(controlPlaneSnapshots.Dependencies{
-		VMs:       w.Records,
-		Nodes:     w.Placement,
-		Resources: w.Resources,
-		Archives:  archives,
-		UserMax:   userMax,
-		Logger:    slog.New(slog.DiscardHandler),
+		VMs:         w.Records,
+		Nodes:       w.Placement,
+		Resources:   w.Resources,
+		Archives:    archives,
+		UserMax:     userMax,
+		DockerImage: vmtest.Images.Docker,
+		Logger:      slog.New(slog.DiscardHandler),
 	})
 }
 
@@ -133,7 +133,6 @@ func kept(uuid string, changes ...func(s *snapshotKind.Snapshot)) resource.Recor
 		Spec: snapshotKind.Spec{VM: snapshotKind.VMRef{UUID: "01", Name: "box"}},
 		Status: snapshotKind.Status{
 			Status: kind.Status{State: snapshotKind.Ready, Expected: snapshotKind.Ready},
-			Flavor: vm.KindMachine,
 			Image:  "ubuntu:24.04",
 			Disk:   10 * vmtest.GiB,
 			Engine: "microsandbox/0.7.6",
@@ -192,8 +191,7 @@ func TestSnapshots_Admit(t *testing.T) {
 
 		assert.Equal(t, snapshotKind.Creating, admitted.Status.State)
 		assert.Equal(t, snapshotKind.Ready, admitted.Status.Expected)
-		assert.Equal(t, vm.KindMachine, admitted.Status.Flavor)
-		assert.Equal(t, "ubuntu:24.04", admitted.Status.Image)
+		assert.Equal(t, "ubuntu:24.04", admitted.Status.Image, "which says it was a machine's")
 		assert.Equal(t, uint64(10*vmtest.GiB), admitted.Status.Disk)
 	})
 
@@ -401,7 +399,7 @@ func TestSnapshots_Restorable(t *testing.T) {
 
 	ctx := context.Background()
 
-	onto := snapshotKind.Target{OwnerUUID: "owner", Flavor: vm.KindMachine, Disk: 20 * vmtest.GiB, Engine: "microsandbox"}
+	onto := snapshotKind.Target{OwnerUUID: "owner", Image: "debian:13", Disk: 20 * vmtest.GiB, Engine: "microsandbox"}
 
 	t.Run("one that can be restored is what it took of its vm", func(t *testing.T) {
 		t.Parallel()
@@ -409,7 +407,18 @@ func TestSnapshots_Restorable(t *testing.T) {
 		taken, refused, err := strategyOf(keeping(t, []resource.Record{kept("s1")}), nil, 10).Restorable(ctx, "s1", onto)
 		require.NoError(t, err)
 		assert.Empty(t, refused)
-		assert.Equal(t, snapshotKind.Taken{Flavor: vm.KindMachine, Image: "ubuntu:24.04", Disk: 10 * vmtest.GiB}, taken)
+		assert.Equal(t, snapshotKind.Taken{Image: "ubuntu:24.04", Disk: 10 * vmtest.GiB}, taken, "a machine's, for a machine whatever it boots")
+	})
+
+	t.Run("a docker vm's is restored onto a docker vm, whichever tag of the docker image either boots", func(t *testing.T) {
+		t.Parallel()
+
+		docker := kept("s1", func(s *snapshotKind.Snapshot) { s.Status.Image = "docker:28-dind" })
+
+		taken, refused, err := strategyOf(keeping(t, []resource.Record{docker}), nil, 10).Restorable(ctx, "s1", snapshotKind.Target{OwnerUUID: "owner", Image: "docker:29-dind", Disk: 20 * vmtest.GiB})
+		require.NoError(t, err)
+		assert.Empty(t, refused)
+		assert.Equal(t, "docker:28-dind", taken.Image)
 	})
 
 	for name, tt := range map[string]struct {
@@ -434,9 +443,9 @@ func TestSnapshots_Restorable(t *testing.T) {
 			snapshot: kept("s1", func(s *snapshotKind.Snapshot) { s.Status.State = snapshotKind.Creating }), uuid: "s1", onto: onto,
 			want: snapshotKind.RefusedNotReady,
 		},
-		"one of another flavor": {
-			snapshot: kept("s1", func(s *snapshotKind.Snapshot) { s.Status.Flavor = vm.KindDocker }), uuid: "s1", onto: onto,
-			want: snapshotKind.RefusedFlavor,
+		"a docker vm's, for a machine": {
+			snapshot: kept("s1", func(s *snapshotKind.Snapshot) { s.Status.Image = "docker:29-dind" }), uuid: "s1", onto: onto,
+			want: snapshotKind.RefusedKind,
 		},
 		"one larger than its disk": {
 			snapshot: kept("s1", func(s *snapshotKind.Snapshot) { s.Status.Disk = 21 * vmtest.GiB }), uuid: "s1", onto: onto,

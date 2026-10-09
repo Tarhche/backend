@@ -9,10 +9,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/khanzadimahdi/testproject/domain/workload/docker"
-	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	"github.com/khanzadimahdi/testproject/infrastructure/workload/vm/memory"
 )
+
+// DockerImage is the image the node boots Docker VMs from, as a vmhost's
+// Docker image is: a VM booting it is a Docker VM, which its engine says.
+const DockerImage = "docker:29-dind"
 
 // Node is a node's engine, kept in memory, and the dockerds of its Docker
 // VMs.
@@ -25,23 +28,18 @@ type Node struct {
 
 // NewNode is a node with no VM on it.
 func NewNode() *Node {
-	return &Node{Engine: memory.New(memory.WithCapacity(64, 256<<30, 4096<<30)), dockerds: make(map[string]*Dockerd)}
+	return &Node{Engine: memory.New(memory.WithCapacity(64, 256<<30, 4096<<30), memory.WithDockerImage(DockerImage)), dockerds: make(map[string]*Dockerd)}
 }
 
-// DockerVM is a running Docker VM on the node, made as a node makes one, and
-// its dockerd.
+// DockerVM is a running Docker VM on the node, made as a node makes one, from
+// the Docker image, and its dockerd.
 func (n *Node) DockerVM(t testing.TB, uuid string) *Dockerd {
 	t.Helper()
 
 	_, err := n.Engine.Create(t.Context(), vm.Spec{
-		ID:    uuid,
-		Kind:  vm.KindDocker,
-		Image: "docker:29-dind",
-		Labels: map[string]string{
-			vm.LabelPurpose:    vm.PurposeVM,
-			vm.LabelVM:         uuid,
-			vmKind.LabelDocker: "true",
-		},
+		ID:     uuid,
+		Image:  DockerImage,
+		Labels: map[string]string{vm.LabelPurpose: vm.PurposeVM, vm.LabelVM: uuid},
 	})
 	require.NoError(t, err)
 
@@ -60,7 +58,6 @@ func (n *Node) Machine(t testing.TB, uuid string) {
 
 	_, err := n.Engine.Create(t.Context(), vm.Spec{
 		ID:     uuid,
-		Kind:   vm.KindMachine,
 		Image:  "ubuntu:24.04",
 		Labels: map[string]string{vm.LabelPurpose: vm.PurposeVM, vm.LabelVM: uuid},
 	})

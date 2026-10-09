@@ -72,7 +72,7 @@ func newBlocksPlane(t *testing.T) (*Client, *blocksPlane) {
 			write(http.StatusOK, vmKind.VM{
 				Kind:     vmKind.Name,
 				Metadata: kind.Metadata{UUID: "vm-uuid", Name: "docker-1", OwnerUUID: "owner-uuid", Node: "node-1"},
-				Spec:     vmKind.Spec{Flavor: vmKind.FlavorDocker},
+				Spec:     vmKind.Spec{Image: "docker:29-dind"},
 				Status:   vmKind.Status{Status: kind.Status{State: vmKind.Running}},
 			})
 		case answered:
@@ -89,7 +89,7 @@ func newBlocksPlane(t *testing.T) (*Client, *blocksPlane) {
 	}))
 	t.Cleanup(server.Close)
 
-	c, err := New(server.URL)
+	c, err := New(server.URL, "docker:29-dind")
 	require.NoError(t, err)
 
 	return c, p

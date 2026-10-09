@@ -26,8 +26,8 @@ import (
 // TestASnapshot walks a snapshot through its life from the dashboard, as a
 // kind the control plane keeps and a node takes: taken of a VM's disk into
 // the bucket, restored onto the VM and as a new VM, renamed, and deleted with
-// its archive; and refused as what a VM of another flavor, or with too small
-// a disk, is restored from.
+// its archive; and refused as what a VM of another kind, as their images say,
+// or with too small a disk, is restored from.
 func TestASnapshot(t *testing.T) {
 	t.Parallel()
 
@@ -118,7 +118,7 @@ func TestASnapshot(t *testing.T) {
 		assert.Equal(t, "what was on it", string(disk))
 	})
 
-	t.Run("it is not restored onto a vm of another flavor", func(t *testing.T) {
+	t.Run("it is not restored onto a vm of another kind", func(t *testing.T) {
 		created, err := createVM.NewUseCase(w.client, w.validator, w.translator, w.owners, ingressDomain).Execute(ctx, &createVM.Request{
 			Name:      "builds",
 			Kind:      string(vm.KindDocker),

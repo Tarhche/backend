@@ -114,11 +114,10 @@ type VMRef struct {
 type Status struct {
 	kind.Status
 
-	// Flavor and Image are those of the VM it was taken of: a VM it is
-	// restored onto has to be of that flavor, and one made from it is of that
-	// flavor and boots that image.
-	Flavor vm.Kind `json:"flavor,omitempty"`
-	Image  string  `json:"image,omitempty"`
+	// Image is that of the VM it was taken of, which says what the VM was, a
+	// machine or a Docker VM (vm.KindOf): a VM it is restored onto has to be
+	// the same, and one made from it boots that image.
+	Image string `json:"image,omitempty"`
 
 	// Disk is the disk, in bytes, a VM it is restored onto needs at least.
 	Disk uint64 `json:"disk,omitempty"`
@@ -247,8 +246,10 @@ const (
 	// being taken, or one that failed.
 	RefusedNotReady = "snapshot_not_ready"
 
-	// RefusedFlavor is a snapshot of a VM of another flavor.
-	RefusedFlavor = "kind_mismatch"
+	// RefusedKind is a snapshot of a VM of another kind than the one it would
+	// be restored onto: a machine's onto a Docker VM, or a Docker VM's onto a
+	// machine.
+	RefusedKind = "kind_mismatch"
 
 	// RefusedDisk is a snapshot whose disk is larger than the VM's.
 	RefusedDisk = "disk_too_small"
@@ -265,9 +266,11 @@ type Target struct {
 	// VMs alone, and is not there for anybody else.
 	OwnerUUID string
 
-	// Flavor is the VM's, which the snapshot has to be of. None is a VM made
-	// from it, which takes its flavor.
-	Flavor vm.Kind
+	// Image is what the VM boots from, or what a VM made from it is asked to
+	// boot, which says what the VM is (vm.KindOf): the snapshot has to have
+	// been taken of a VM of the same kind. A VM asked to boot none is a
+	// machine.
+	Image string
 
 	// Disk is the VM's disk, in bytes, which the snapshot's has to fit in.
 	// None is a VM made from it, whose disk grows to fit it.
@@ -283,9 +286,8 @@ type Target struct {
 // Taken is what a snapshot took of its VM, which is what a VM restored from
 // it, or made from it, is given.
 type Taken struct {
-	Flavor vm.Kind
-	Image  string
-	Disk   uint64
+	Image string
+	Disk  uint64
 }
 
 // Restores is the snapshot kind's own say on whether a snapshot can be
@@ -300,17 +302,19 @@ type Restores interface {
 }
 
 // Restorable is why s cannot be restored onto onto, as one of the Refused
-// codes, or nothing when it can be: it has to be onto's owner's, ready, of
-// onto's flavor, no larger than its disk, and written by the engine its node
-// runs. What onto leaves out it is not held to.
-func Restorable(s Snapshot, onto Target) string {
+// codes, or nothing when it can be: it has to be onto's owner's, ready, taken
+// of a VM of onto's kind, as their images say where dockerImage is the image
+// Docker VMs boot from (vm.KindOf), no larger than its disk, and written by
+// the engine its node runs. What onto leaves out of its disk and its engine
+// it is not held to.
+func Restorable(s Snapshot, onto Target, dockerImage string) string {
 	switch {
 	case s.Metadata.OwnerUUID != onto.OwnerUUID:
 		return RefusedNotFound
 	case s.Status.State != Ready || s.Status.Expected == Deleted:
 		return RefusedNotReady
-	case len(onto.Flavor) > 0 && s.Status.Flavor != onto.Flavor:
-		return RefusedFlavor
+	case vm.KindOf(s.Status.Image, dockerImage) != vm.KindOf(onto.Image, dockerImage):
+		return RefusedKind
 	case onto.Disk > 0 && s.Status.Disk > onto.Disk:
 		return RefusedDisk
 	}

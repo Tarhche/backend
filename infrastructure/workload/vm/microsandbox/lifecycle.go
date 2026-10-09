@@ -87,10 +87,11 @@ func (e *engine) abandon(i *instance) {
 	}
 }
 
-// imageOf is what an instance boots from: a Docker VM boots the vmhost's own
-// docker-in-docker image, which the control plane names too.
+// imageOf is what an instance boots from: a Docker VM, one whose image is the
+// vmhost's own docker-in-docker image or another tag of it (vm.KindOf), boots
+// the vmhost's own, which the control plane names too.
 func (e *engine) imageOf(spec vm.Spec) string {
-	if spec.Kind == vm.KindDocker && len(e.dockerImage) > 0 {
+	if vm.KindOf(spec.Image, e.dockerImage) == vm.KindDocker {
 		return e.dockerImage
 	}
 
@@ -103,15 +104,11 @@ func (e *engine) validate(spec vm.Spec) error {
 		return err
 	}
 
-	if !spec.Kind.IsValid() {
-		return fmt.Errorf("%q is not a kind of vm", spec.Kind)
-	}
-
 	if len(e.imageOf(spec)) == 0 {
 		return errors.New("a vm boots from an image, and none was named")
 	}
 
-	if spec.Kind == vm.KindDocker && spec.HasMainProcess() {
+	if vm.KindOf(spec.Image, e.dockerImage) == vm.KindDocker && spec.HasMainProcess() {
 		return errors.New("a docker vm runs dockerd, not a main process of its own")
 	}
 
@@ -398,7 +395,7 @@ func (e *engine) boot(ctx context.Context, i *instance, h *msb.SandboxHandle) er
 func (e *engine) booted(ctx context.Context, i *instance, sb *msb.Sandbox, turn func()) error {
 	r := i.current()
 
-	if r.Spec.Kind == vm.KindDocker {
+	if r.kind(e.dockerImage) == vm.KindDocker {
 		if err := e.ensure(ctx, i, sb); err != nil {
 			e.logger.Warn("dockerd's supervisor could not be ensured", "vm", i.id, "error", err)
 		}
@@ -455,7 +452,7 @@ func (e *engine) halt(i *instance) {
 // killing it when it cannot. A Docker VM's supervisor is stopped first: with
 // the agent as the guest's init, a stop kills everything at once.
 func (e *engine) shutdownSandbox(ctx context.Context, i *instance, h *msb.SandboxHandle, timeout time.Duration) error {
-	if i.current().Spec.Kind == vm.KindDocker && h.Status() == msb.SandboxStatusRunning {
+	if i.current().kind(e.dockerImage) == vm.KindDocker && h.Status() == msb.SandboxStatusRunning {
 		e.preStop(ctx, i)
 	}
 

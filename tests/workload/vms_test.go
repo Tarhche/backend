@@ -92,7 +92,6 @@ func TestAMachineVM(t *testing.T) {
 
 		spec, err := w.engine.Spec(uuid)
 		require.NoError(t, err)
-		assert.Equal(t, vm.KindMachine, spec.Kind)
 		assert.Equal(t, vm.Resources{CPUs: 2, Memory: 1 << 30, Disk: 10 << 30}, spec.Resources)
 		assert.Equal(t, []port.Port{8080}, spec.Ports)
 		assert.Equal(t, vm.Network{Ingress: vm.AccessAllow, Egress: vm.AccessDeny}, spec.Network)
@@ -274,8 +273,11 @@ func TestADockerVM(t *testing.T) {
 
 	spec, err := w.engine.Spec(uuid)
 	require.NoError(t, err)
-	assert.Equal(t, vm.KindDocker, spec.Kind)
 	assert.Equal(t, "docker:29-dind", spec.Image, "a Docker VM boots from the workload's own image")
+
+	instance, err := w.engine.Inspect(ctx, uuid)
+	require.NoError(t, err)
+	assert.Equal(t, "true", instance.Labels[vm.LabelDocker], "which its engine says makes it one")
 
 	t.Run("its dockerd answers, through the control plane and its node", func(t *testing.T) {
 		require.NoError(t, w.client.Docker(ownerUUID, uuid).Ping(ctx))

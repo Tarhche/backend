@@ -134,7 +134,6 @@ func TestClient_Spec(t *testing.T) {
 			name: "a docker vm",
 			spec: vm.Spec{
 				ID:             "vm-1",
-				Kind:           vm.KindDocker,
 				Image:          "docker:29-dind",
 				Resources:      vm.Resources{CPUs: 2, Memory: 2 << 30, Disk: 20 << 30},
 				Ports:          []port.Port{80, 443, 8080},
@@ -147,7 +146,6 @@ func TestClient_Spec(t *testing.T) {
 			name: "a code runner's task, keeping its image's entrypoint",
 			spec: vm.Spec{
 				ID:         "run-1",
-				Kind:       vm.KindMachine,
 				Image:      "python:3.12-alpine",
 				Resources:  vm.Resources{CPUs: 1, Memory: 128 << 20},
 				Network:    vm.Network{Ingress: vm.AccessDeny, Egress: vm.AccessDeny},

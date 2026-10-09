@@ -136,7 +136,9 @@ type VMRequest struct {
 	Name string
 	Kind vm.Kind
 
-	// Image is what it boots from; empty takes its kind's default.
+	// Image is what it boots from, which is what makes it a Docker VM or a
+	// machine; empty is the Docker image for a Docker VM, and the default one
+	// for a machine.
 	Image string
 
 	Resources      vm.Resources

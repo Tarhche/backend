@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/khanzadimahdi/testproject/domain"
 	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
@@ -23,6 +24,11 @@ import (
 // already where it would go is left as it is, what it asks of one on its way
 // somewhere is done once it gets there, and what a VM's state does not allow
 // is refused under the vm.
+//
+// What the dashboard calls a VM's kind, a machine or a Docker VM, is what its
+// image says, with the Docker image (vm.KindOf): a VM is shown as one by its
+// image, asked for as one by the image it is to boot, and listed as one by the
+// control plane, which tells them apart the same way (?is=).
 const vmsPath = "/api/" + vmKind.Plural
 
 func vmPath(uuid string) string {
@@ -64,11 +70,10 @@ type vmLogs struct {
 	Result vmKind.Logs `json:"result"`
 }
 
-func (c *Client) VMs(ctx context.Context, ownerUUID string, flavor vm.Kind, number uint) (workloadControlPlane.Page[vm.VM], error) {
-	query := owned(ownerUUID, url.Values{"page": {page(number)}})
-	if len(flavor) > 0 {
-		query.Add("label", vmKind.LabelFlavor+"="+string(flavor))
-	}
+// VMs is a page of VMs, narrowed to those of one kind unless which is empty:
+// the control plane says which VMs are Docker VMs, as their images say.
+func (c *Client) VMs(ctx context.Context, ownerUUID string, which vm.Kind, number uint) (workloadControlPlane.Page[vm.VM], error) {
+	query := owned(ownerUUID, url.Values{"page": {page(number)}, "is": {string(which)}})
 
 	var payload vmPage
 	if err := c.call(ctx, http.MethodGet, c.path(vmsPath, query), nil, &payload); err != nil {
@@ -77,7 +82,7 @@ func (c *Client) VMs(ctx context.Context, ownerUUID string, flavor vm.Kind, numb
 
 	items := make([]vm.VM, len(payload.Items))
 	for i := range payload.Items {
-		items[i] = vmKind.Entity(payload.Items[i])
+		items[i] = vmKind.Entity(payload.Items[i], c.dockerImage)
 	}
 
 	return workloadControlPlane.Page[vm.VM]{Items: items, TotalPages: payload.Pagination.TotalPages, CurrentPage: payload.Pagination.CurrentPage}, nil
@@ -89,16 +94,23 @@ func (c *Client) VM(ctx context.Context, ownerUUID string, uuid string) (vm.VM, 
 		return vm.VM{}, err
 	}
 
-	return vmKind.Entity(manifest), nil
+	return vmKind.Entity(manifest, c.dockerImage), nil
 }
 
+// CreateVM asks for a VM of the kind the request names by the image that
+// makes it one: a Docker VM boots the Docker image, and a machine the image
+// it names, or the default one when it names none.
 func (c *Client) CreateVM(ctx context.Context, ownerUUID string, request workloadControlPlane.VMRequest) (vm.VM, error) {
+	image, refused := c.imageOf(request)
+	if len(refused) > 0 {
+		return vm.VM{}, &ValidationError{ValidationErrors: refused}
+	}
+
 	asked := askedVM{
 		Kind:     vmKind.Name,
 		Metadata: kind.Metadata{Name: request.Name, Lifetime: request.Lifetime},
 		Spec: vmKind.Spec{
-			Flavor:         request.Kind,
-			Image:          request.Image,
+			Image:          image,
 			Resources:      vmKind.ResourcesOf(request.Resources),
 			Ports:          slices.Clone(request.Ports),
 			Network:        vmKind.Network{Ingress: request.Network.Ingress, Egress: request.Network.Egress},
@@ -115,7 +127,28 @@ func (c *Client) CreateVM(ctx context.Context, ownerUUID string, request workloa
 		return vm.VM{}, err
 	}
 
-	return resourceOf(payload)
+	return c.resourceOf(payload)
+}
+
+// imageOf is the image a VM asked for as request is to boot, which is what
+// says what it is: the Docker image for a Docker VM that names none, and
+// otherwise the one it names, or none for a machine, which then boots the
+// default one. An image that would make it another kind than it was asked
+// for as is refused, as the control plane refuses a Docker VM another image:
+// a machine cannot boot the Docker image, nor a Docker VM a machine's. A VM
+// made from a snapshot is asked for as its kind the same way, and boots the
+// snapshot's image.
+func (c *Client) imageOf(request workloadControlPlane.VMRequest) (string, domain.ValidationErrors) {
+	image := request.Image
+	if request.Kind == vm.KindDocker && len(image) == 0 {
+		image = c.dockerImage
+	}
+
+	if len(request.Kind) > 0 && len(image) > 0 && vm.KindOf(image, c.dockerImage) != request.Kind {
+		return "", domain.ValidationErrors{"image": "invalid_image"}
+	}
+
+	return image, nil
 }
 
 // UpdateVM changes a VM in the control plane, which has its node apply a
@@ -137,7 +170,7 @@ func (c *Client) UpdateVM(ctx context.Context, ownerUUID string, uuid string, up
 		return vm.VM{}, err
 	}
 
-	return resourceOf(answer)
+	return c.resourceOf(answer)
 }
 
 // DeleteVM asks for a VM to be removed. Its snapshots stay.
@@ -245,10 +278,10 @@ func (c *Client) vm(ctx context.Context, ownerUUID string, uuid string) (vmManif
 }
 
 // resourceOf is the VM an answer of the resource API carries.
-func resourceOf(answer commandedVM) (vm.VM, error) {
+func (c *Client) resourceOf(answer commandedVM) (vm.VM, error) {
 	if answer.Resource == nil {
 		return vm.VM{}, errors.New("the workload answered with no vm")
 	}
 
-	return vmKind.Entity(*answer.Resource), nil
+	return vmKind.Entity(*answer.Resource, c.dockerImage), nil
 }

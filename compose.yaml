@@ -108,6 +108,7 @@ services:
       PROFILING_ENABLED: ${PROFILING_ENABLED:-true}
       WORKLOAD_CONTROLPLANE_URL: ${WORKLOAD_CONTROLPLANE_URL}
       WORKLOAD_INGRESS_DOMAIN: ${WORKLOAD_PUBLIC_INGRESS_DOMAIN}
+      WORKLOAD_VM_DOCKER_IMAGE: ${WORKLOAD_VM_DOCKER_IMAGE:-docker:29-dind}
 
   workload-controlplane:
     <<: *app
@@ -137,6 +138,9 @@ services:
       WORKLOAD_SNAPSHOT_S3_SECRET_KEY: ${S3_SECRET_KEY}
       WORKLOAD_SNAPSHOT_S3_BUCKET: ${WORKLOAD_SNAPSHOT_S3_BUCKET}
       WORKLOAD_SNAPSHOT_S3_USE_SSL: ${S3_USE_SSL}
+      # what every Docker VM boots from, the same image the vmhosts and the
+      # blog are given: a VM is a Docker VM when its image is it.
+      WORKLOAD_VM_DOCKER_IMAGE: ${WORKLOAD_VM_DOCKER_IMAGE:-docker:29-dind}
 
   workload-ingress:
     <<: *app

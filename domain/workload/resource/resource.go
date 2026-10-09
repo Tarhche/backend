@@ -141,8 +141,9 @@ type Filter struct {
 	// uuid is.
 	Parent kind.Reference
 
-	// Labels are labels they carry, each with the value given: the Docker
-	// VMs are the VMs labelled workload.flavor=docker.
+	// Labels are labels they carry, each with the value given: the code
+	// runner's runs among anybody's VMs are labelled
+	// workload.managed-by=code-runner.
 	Labels map[string]string
 }
 

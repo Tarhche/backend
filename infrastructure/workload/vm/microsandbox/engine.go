@@ -376,7 +376,7 @@ func (e *engine) adoptRunning(ctx context.Context, i *instance, lost bool) {
 		return
 	}
 
-	if i.current().Spec.Kind != vm.KindDocker {
+	if i.current().kind(e.dockerImage) != vm.KindDocker {
 		return
 	}
 
@@ -475,7 +475,8 @@ func (e *engine) inspect(ctx context.Context, i *instance) (vm.Instance, error) 
 }
 
 // view is an instance as the engine reports it: what its record says has
-// become of it, and otherwise what its sandbox is doing.
+// become of it, and otherwise what its sandbox is doing, and whether it is a
+// Docker VM, as the image it boots says, whatever it was given.
 func (e *engine) view(i *instance, status msb.SandboxStatus, exists bool) vm.Instance {
 	r := i.current()
 
@@ -483,6 +484,17 @@ func (e *engine) view(i *instance, status msb.SandboxStatus, exists bool) vm.Ins
 		ID:        i.id,
 		Labels:    maps.Clone(r.Spec.Labels),
 		StartedAt: r.StartedAt,
+	}
+
+	switch r.kind(e.dockerImage) {
+	case vm.KindDocker:
+		if instance.Labels == nil {
+			instance.Labels = make(map[string]string, 1)
+		}
+
+		instance.Labels[vm.LabelDocker] = "true"
+	default:
+		delete(instance.Labels, vm.LabelDocker)
 	}
 
 	switch {

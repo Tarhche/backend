@@ -117,13 +117,13 @@ func (c *Client) runningDockerVMs(ctx context.Context, ownerUUID string, vmUUID 
 		return running, nil
 	}
 
-	vms, err := every[vmKind.Spec, vmKind.Status](ctx, c, vmsPath, owned(ownerUUID, url.Values{"label": {vmKind.LabelFlavor + "=" + string(vmKind.FlavorDocker)}}))
+	vms, err := every[vmKind.Spec, vmKind.Status](ctx, c, vmsPath, owned(ownerUUID, url.Values{"is": {string(vm.KindDocker)}}))
 	if err != nil {
 		return nil, err
 	}
 
 	for _, v := range vms {
-		if vmKind.DockerVM(v) && len(v.Metadata.Node) > 0 && v.Status.State == vmKind.Running {
+		if vmKind.DockerVM(v, c.dockerImage) && len(v.Metadata.Node) > 0 && v.Status.State == vmKind.Running {
 			running[v.Metadata.UUID] = v.Metadata.Name
 		}
 	}

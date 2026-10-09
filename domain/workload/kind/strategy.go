@@ -120,6 +120,22 @@ type Resolver interface {
 	Resolve(ctx context.Context, parent Reference, name string) (string, error)
 }
 
+// Narrower is a control-plane strategy whose listings can be narrowed to what
+// it says its resources are, in a word of its own that only it can tell of
+// them: a VM is a machine or docker, as its image says, read with the Docker
+// image the control plane is given.
+//
+// The control plane's generic API asks it of every resource a listing that
+// names a word would have otherwise, the kind's extras among them: such a
+// listing reads all of them, and is paged once it is narrowed.
+type Narrower interface {
+	// Narrows reports whether word is one the kind says of its resources.
+	Narrows(word string) bool
+
+	// Is reports whether r is what word says.
+	Is(r Raw, word string) (bool, error)
+}
+
 // Intent is what a kind's reconcile asks for: one of its actions, which the
 // loop sends as an ActOnResource when it runs on a node and applies in place
 // when it runs in the control plane.

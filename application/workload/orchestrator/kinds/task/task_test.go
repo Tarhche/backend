@@ -112,8 +112,7 @@ func TestNode_create(t *testing.T) {
 		spec, err := f.engine.Spec(run.ID)
 		require.NoError(t, err)
 
-		assert.Equal(t, vm.KindMachine, spec.Kind)
-		assert.Equal(t, "ghcr.io/tarhche/code-runner:nodejs-22.14-latest", spec.Image)
+		assert.Equal(t, "ghcr.io/tarhche/code-runner:nodejs-22.14-latest", spec.Image, "a machine's, as it says")
 		assert.Equal(t, []string{"--timeout", "30", "console.log(1)"}, spec.Command)
 		assert.Equal(t, vm.Resources{CPUs: 2, Memory: 200 << 20, Disk: 100 << 20}, spec.Resources, "whole vCPUs, rounded up, and bytes as they were asked for")
 		assert.Equal(t, []port.Port{3000}, spec.Ports)
@@ -373,7 +372,7 @@ func TestNode_State(t *testing.T) {
 
 		f := onNode()
 
-		_, err := f.engine.Create(ctx, vm.Spec{ID: "stray", Kind: vm.KindMachine, Image: "busybox", Labels: map[string]string{vm.LabelPurpose: vm.PurposeTask}})
+		_, err := f.engine.Create(ctx, vm.Spec{ID: "stray", Image: "busybox", Labels: map[string]string{vm.LabelPurpose: vm.PurposeTask}})
 		require.NoError(t, err)
 
 		// a run made by another node, which shares this one's engine.

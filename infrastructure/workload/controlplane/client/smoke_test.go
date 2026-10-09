@@ -179,7 +179,8 @@ func TestSmoke(t *testing.T) {
 	heartbeat()
 	time.Sleep(time.Second)
 
-	workload, err := client.New(controlPlaneURL)
+	// the control plane's own docker image, unless it is told another.
+	workload, err := client.New(controlPlaneURL, "docker:29-dind")
 	require.NoError(t, err)
 
 	created, err := workload.CreateVM(ctx, ownerUUID, workloadControlPlane.VMRequest{

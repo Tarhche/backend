@@ -159,7 +159,7 @@ func TestActOnResourceHandler_Handle(t *testing.T) {
 			raw, err := kind.Encode(vmKind.VM{
 				Kind:     vmKind.Name,
 				Metadata: kind.Metadata{UUID: uuid, Slug: "box-" + uuid, Node: nodeName},
-				Spec:     vmKind.Spec{Flavor: vmKind.FlavorMachine, Ports: []port.Port{80}, Network: network},
+				Spec:     vmKind.Spec{Ports: []port.Port{80}, Network: network},
 			})
 			require.NoError(t, err)
 

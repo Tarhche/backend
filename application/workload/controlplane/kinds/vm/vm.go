@@ -2,10 +2,17 @@
 // as, what it is asked for when what it is doing is not what it was asked to
 // be, and what is changed of it in the control plane.
 //
+// A VM is a machine or a Docker VM as its image says, read with the Docker
+// image the control plane is given (vm.KindOf), and nothing else says it: its
+// bounds, its owner's Docker VMs, what may live in it and the snapshots it
+// may be restored from all go by its image.
+//
 // A VM is admitted with what it asked for checked and what it left out filled
-// in: its flavor's image, a network open both ways, and, when it is made from
-// a snapshot of its owner's that the snapshot kind says it can be made from,
-// that snapshot's flavor, image and disk. It is
+// in: the default image for a machine that names none, a network open both
+// ways, and, when it is made from a snapshot of its owner's that the snapshot
+// kind says it can be made from, that snapshot's image and disk. A Docker VM,
+// one asked to boot the Docker image's repository, boots the Docker image
+// itself and nothing else. It is
 // held to what one VM may be given and to what its owner's VMs may be given
 // between them, given a slug nothing else holds, and placed on the node
 // with the most room for it. One no node has room for is kept failed, as
@@ -32,11 +39,12 @@
 // owner's quota and its node's room: that its node has not applied them is
 // what has it reconfigured, at once. A restore is held, before it is sent, to
 // what the snapshot kind says of its snapshot (snapshotKind.Restores): of its
-// owner's, ready, of its flavor, no larger than its disk and from its node's
-// engine; and the VM to being on a node that can be asked.
+// owner's, ready, taken of a VM of its kind, no larger than its disk and from
+// its node's engine; and the VM to being on a node that can be asked.
 //
 // Beside its records, a listing of anybody's VMs has the code runner's runs,
-// its extras.
+// its extras, and a listing of VMs may be narrowed to the Docker VMs or to the
+// machines, as their images say (kind.Narrower).
 package vm
 
 import (
@@ -62,13 +70,15 @@ import (
 // ReasonNoCapacity is why a VM no node had room for is failed.
 const ReasonNoCapacity = "no_capacity"
 
-// Images are what VMs boot from when they do not say.
+// Images are what VMs boot from: a machine that names none, and every Docker
+// VM, which is what its image makes it.
 type Images struct {
 	// Machine is a machine's when it names none.
 	Machine string
 
 	// Docker is every Docker VM's: a docker-in-docker image, the same one the
-	// nodes are given.
+	// nodes are given. A VM is a Docker VM when its image is this one, or
+	// another tag of it (vm.KindOf).
 	Docker string
 }
 
@@ -108,6 +118,7 @@ var (
 	_ kind.ControlPlane[vmKind.Spec, vmKind.Status] = &VMs{}
 	_ kind.Preparer[vmKind.Spec, vmKind.Status]     = &VMs{}
 	_ kind.Extender                                 = &VMs{}
+	_ kind.Narrower                                 = &VMs{}
 )
 
 func New(d Dependencies) *VMs {
@@ -145,7 +156,7 @@ func (s *VMs) Admit(ctx context.Context, asked vmKind.VM) (vmKind.VM, domain.Val
 	}
 
 	limits := s.Quota.Limits()
-	maps.Copy(invalid, limits.Bounds("", spec.Flavor, spec.Resources))
+	maps.Copy(invalid, limits.Bounds("", s.kindOf(spec), spec.Resources))
 	maps.Copy(invalid, limits.Lifetime("", asked.Metadata.Lifetime))
 
 	if len(invalid) > 0 {
@@ -165,11 +176,6 @@ func (s *VMs) Admit(ctx context.Context, asked vmKind.VM) (vmKind.VM, domain.Val
 	}
 
 	labels := maps.Clone(asked.Metadata.Labels)
-	if labels == nil {
-		labels = make(map[string]string, 1)
-	}
-
-	labels[vmKind.LabelFlavor] = string(spec.Flavor)
 	delete(labels, vmKind.LabelManagedBy)
 
 	admitted := vmKind.VM{
@@ -321,7 +327,7 @@ func (s *VMs) respecified(ctx context.Context, v vmKind.VM, update vmKind.Update
 		return spec, nil
 	}
 
-	refused := s.Quota.Limits().Bounds("", spec.Flavor, spec.Resources)
+	refused := s.Quota.Limits().Bounds("", s.kindOf(spec), spec.Resources)
 	if spec.Resources.Disk < v.Spec.Resources.Disk {
 		refused["resources.disk"] = "disk_cannot_shrink"
 	}
@@ -398,7 +404,7 @@ func (s *VMs) restorable(ctx context.Context, v vmKind.VM, snapshotUUID string) 
 
 	_, refused, err := s.Snapshots.Restorable(ctx, snapshotUUID, snapshotKind.Target{
 		OwnerUUID: v.Metadata.OwnerUUID,
-		Flavor:    v.Spec.Flavor,
+		Image:     v.Spec.Image,
 		Disk:      v.Spec.Resources.Disk,
 		Engine:    engine,
 	})
@@ -452,39 +458,62 @@ func (s *VMs) Extras() kind.Extras {
 	return s.Dependencies.Extras
 }
 
+// Narrows reports whether word is what a VM can be: a machine or docker.
+func (s *VMs) Narrows(word string) bool {
+	return vm.Kind(word).IsValid()
+}
+
+// Is reports whether r is a VM of the kind word names, machine or docker, as
+// its image says. One of the code runner's runs is a machine, booted from the
+// runner's image.
+func (s *VMs) Is(r kind.Raw, word string) (bool, error) {
+	v, err := kind.Decode[vmKind.Spec, vmKind.Status](r)
+	if err != nil {
+		return false, err
+	}
+
+	return s.kindOf(v.Spec) == vm.Kind(word), nil
+}
+
+// kindOf is what a VM of spec is, a machine or a Docker VM, as its image
+// says.
+func (s *VMs) kindOf(spec vmKind.Spec) vm.Kind {
+	return vm.KindOf(spec.Image, s.Images.Docker)
+}
+
 // fromSnapshot makes spec from a snapshot of ownerUUID's that the snapshot
-// kind says a VM can be made from: its flavor and image are the snapshot's,
-// and its disk is at least the snapshot's. A flavor the VM asked for and the
-// snapshot is not of is refused under the flavor it was asked under.
+// kind says a VM can be made from: its image, and so what it is, is the
+// snapshot's, and its disk is at least the snapshot's. One asked to boot an
+// image of another kind than the snapshot was taken of, where naming none is
+// asking for a machine, is refused under kind, the field the dashboard asks
+// what a VM is under.
 func (s *VMs) fromSnapshot(ctx context.Context, ownerUUID string, spec *vmKind.Spec) (domain.ValidationErrors, error) {
-	taken, refused, err := s.Snapshots.Restorable(ctx, spec.Source.Snapshot, snapshotKind.Target{OwnerUUID: ownerUUID, Flavor: spec.Flavor})
+	taken, refused, err := s.Snapshots.Restorable(ctx, spec.Source.Snapshot, snapshotKind.Target{OwnerUUID: ownerUUID, Image: spec.Image})
 
 	switch {
 	case err != nil:
 		return nil, err
-	case refused == snapshotKind.RefusedFlavor:
+	case refused == snapshotKind.RefusedKind:
 		return refusedFrom(refused, "kind"), nil
 	case len(refused) > 0:
 		return refusedFrom(refused, "snapshot_uuid"), nil
 	}
 
-	spec.Flavor = taken.Flavor
 	spec.Image = taken.Image
 	spec.Resources.Disk = max(spec.Resources.Disk, taken.Disk)
 
 	return nil, nil
 }
 
-// imaged gives spec its flavor's image. dockerd and the way it is started
-// are the Docker image's, so a Docker VM boots from nothing else; a machine
-// boots from the default image when it names none.
+// imaged gives spec its image. One that names the Docker image's repository
+// is a Docker VM, and dockerd and the way it is started are the Docker
+// image's, so a Docker VM boots from nothing else; a machine boots from the
+// default image when it names none.
 func (s *VMs) imaged(spec *vmKind.Spec, invalid domain.ValidationErrors) {
-	if spec.Flavor == vmKind.FlavorDocker {
-		if len(spec.Image) > 0 && spec.Image != s.Images.Docker {
+	if s.kindOf(*spec) == vm.KindDocker {
+		if spec.Image != s.Images.Docker {
 			invalid["image"] = "invalid_image"
 		}
-
-		spec.Image = s.Images.Docker
 
 		return
 	}
@@ -502,17 +531,6 @@ func validate(asked vmKind.VM) domain.ValidationErrors {
 
 	if code, ok := vmKind.ValidateName(asked.Metadata.Name); !ok {
 		invalid["name"] = code
-	}
-
-	// a VM made from a snapshot is of the snapshot's flavor, so it need not
-	// say.
-	fromSnapshot := asked.Spec.Source != nil && len(strings.TrimSpace(asked.Spec.Source.Snapshot)) > 0
-
-	switch flavor := asked.Spec.Flavor; {
-	case len(flavor) == 0 && !fromSnapshot:
-		invalid["kind"] = "required_field"
-	case len(flavor) > 0 && !flavor.IsValid():
-		invalid["kind"] = "invalid_kind"
 	}
 
 	if code, ok := vmKind.ValidatePorts(asked.Spec.Ports); !ok {

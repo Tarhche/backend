@@ -12,7 +12,9 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/observe"
 	controlPlaneVMs "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/dockervm"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/records"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/runs"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/vmtest"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/slugs"
 	"github.com/khanzadimahdi/testproject/domain"
@@ -25,14 +27,13 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
 
-// asked is a machine somebody asks for, as admission is handed one, changed
-// as changes say.
+// asked is a machine somebody asks for, naming no image, as admission is
+// handed one, changed as changes say.
 func asked(changes ...func(v *vmKind.VM)) vmKind.VM {
 	v := vmKind.VM{
 		Kind:     vmKind.Name,
 		Metadata: kind.Metadata{Name: "My Box", OwnerUUID: "owner-uuid"},
 		Spec: vmKind.Spec{
-			Flavor:    vmKind.FlavorMachine,
 			Resources: vmKind.Resources{CPUs: 2, Memory: 2 * vmtest.GiB, Disk: 10 * vmtest.GiB},
 			Ports:     []port.Port{8080, 22, 8080},
 			Network:   vmKind.Network{Ingress: vm.AccessAllow, Egress: vm.AccessDeny},
@@ -70,8 +71,9 @@ func TestVMs_Admit(t *testing.T) {
 		assert.True(t, strings.HasPrefix(admitted.Metadata.Slug, "my-box-"), admitted.Metadata.Slug)
 		assert.Equal(t, "owner-uuid", admitted.Metadata.OwnerUUID)
 		assert.Equal(t, vmtest.Node, admitted.Metadata.Node)
-		assert.Equal(t, map[string]string{vmKind.LabelFlavor: "machine"}, admitted.Metadata.Labels, "its flavor is a label, which a listing narrows by")
+		assert.Empty(t, admitted.Metadata.Labels, "nothing but its image says what it is")
 		assert.Equal(t, "ubuntu:24.04", admitted.Spec.Image, "a machine that names no image boots the default one")
+		assert.False(t, vmKind.DockerVM(admitted, vmtest.Images.Docker))
 		assert.Equal(t, []port.Port{22, 8080}, admitted.Spec.Ports, "sorted, each once")
 		assert.Equal(t, vmKind.Network{Ingress: vm.AccessAllow, Egress: vm.AccessDeny}, admitted.Spec.Network)
 		assert.Nil(t, admitted.Spec.Source)
@@ -80,13 +82,13 @@ func TestVMs_Admit(t *testing.T) {
 		assert.Empty(t, admitted.Status.Reason)
 	})
 
-	t.Run("a docker vm boots from the docker image and nothing else", func(t *testing.T) {
+	t.Run("a docker vm, one asked to boot the docker image, boots it and nothing else", func(t *testing.T) {
 		t.Parallel()
 
 		w := vmtest.New()
 
 		docker := asked(func(v *vmKind.VM) {
-			v.Spec.Flavor = vmKind.FlavorDocker
+			v.Spec.Image = "docker:29-dind"
 			v.Spec.Resources = vmKind.Resources{CPUs: 2, Memory: 2 * vmtest.GiB, Disk: 20 * vmtest.GiB}
 		})
 
@@ -94,13 +96,14 @@ func TestVMs_Admit(t *testing.T) {
 		require.NoError(t, err)
 		require.Empty(t, invalid)
 		assert.Equal(t, "docker:29-dind", admitted.Spec.Image)
-		assert.Equal(t, "docker", admitted.Metadata.Labels[vmKind.LabelFlavor])
+		assert.True(t, vmKind.DockerVM(admitted, vmtest.Images.Docker))
+		assert.Empty(t, admitted.Metadata.Labels, "nothing but its image says what it is")
 
-		docker.Spec.Image = "alpine:3"
+		docker.Spec.Image = "docker:28-dind"
 
 		_, invalid, err = w.VMs.Admit(ctx, docker)
 		require.NoError(t, err)
-		assert.Equal(t, domain.ValidationErrors{"image": "invalid_image"}, invalid)
+		assert.Equal(t, domain.ValidationErrors{"image": "invalid_image"}, invalid, "another tag of it is a docker vm, which boots the docker image alone")
 	})
 
 	t.Run("a network left out is open both ways, and no ports are none", func(t *testing.T) {
@@ -121,11 +124,11 @@ func TestVMs_Admit(t *testing.T) {
 		t.Parallel()
 
 		admitted, _, err := vmtest.New().VMs.Admit(ctx, asked(func(v *vmKind.VM) {
-			v.Metadata.Labels = map[string]string{"team": "web", vmKind.LabelManagedBy: vmKind.ManagedByCodeRunner, vmKind.LabelFlavor: "docker"}
+			v.Metadata.Labels = map[string]string{"team": "web", vmKind.LabelManagedBy: vmKind.ManagedByCodeRunner}
 		}))
 		require.NoError(t, err)
 
-		assert.Equal(t, map[string]string{"team": "web", vmKind.LabelFlavor: "machine"}, admitted.Metadata.Labels)
+		assert.Equal(t, map[string]string{"team": "web"}, admitted.Metadata.Labels)
 	})
 
 	t.Run("its lifetime is kept", func(t *testing.T) {
@@ -145,23 +148,17 @@ func TestVMs_Admit(t *testing.T) {
 		"what can be told from the request alone": {
 			change: func(v *vmKind.VM) {
 				v.Metadata.Name = "  "
-				v.Spec.Flavor = "firecore"
 				v.Spec.Ports = []port.Port{0}
 				v.Spec.Network = vmKind.Network{Ingress: "open", Egress: "closed"}
 				v.Metadata.Lifetime = -time.Second
 			},
 			want: domain.ValidationErrors{
 				"name":             "required_field",
-				"kind":             "invalid_kind",
 				"ports":            "invalid_port",
 				"network.ingress":  "invalid_access",
 				"network.egress":   "invalid_access",
 				"lifetime_seconds": "invalid_lifetime",
 			},
-		},
-		"a vm of no flavor": {
-			change: func(v *vmKind.VM) { v.Spec.Flavor = "" },
-			want:   domain.ValidationErrors{"kind": "required_field"},
 		},
 		"a name nobody could show": {
 			change: func(v *vmKind.VM) { v.Metadata.Name = strings.Repeat("a", vmKind.MaxNameLength+1) },
@@ -200,7 +197,7 @@ func TestVMs_Admit(t *testing.T) {
 		},
 		"less than a docker vm needs": {
 			change: func(v *vmKind.VM) {
-				v.Spec.Flavor = vmKind.FlavorDocker
+				v.Spec.Image = "docker:29-dind"
 				v.Spec.Resources = vmKind.Resources{CPUs: 1, Memory: 256 * vmtest.MiB, Disk: 2 * vmtest.GiB}
 			},
 			want: domain.ValidationErrors{
@@ -280,32 +277,30 @@ func TestVMs_Admit(t *testing.T) {
 		assert.Empty(t, admitted.Metadata.Node)
 	})
 
-	t.Run("a vm made from a snapshot is the snapshot's flavor and image, with room for its disk", func(t *testing.T) {
+	t.Run("a vm made from a snapshot boots the snapshot's image, and so is what it was, with room for its disk", func(t *testing.T) {
 		t.Parallel()
 
 		w := vmtest.New(vmtest.WithSnapshots(vmtest.Snapshot("snapshot-uuid", "owner-uuid", func(s *snapshotKind.Snapshot) {
-			s.Status.Flavor = vm.KindDocker
 			s.Status.Image = "docker:28-dind"
 			s.Status.Disk = 30 * vmtest.GiB
 		})))
 
 		admitted, invalid, err := w.VMs.Admit(ctx, asked(func(v *vmKind.VM) {
-			v.Spec.Flavor = ""
+			v.Spec.Image = "docker:29-dind"
 			v.Spec.Source = &vmKind.Source{Snapshot: "snapshot-uuid"}
 		}))
 		require.NoError(t, err)
 		require.Empty(t, invalid)
 
-		assert.Equal(t, vmKind.FlavorDocker, admitted.Spec.Flavor)
 		assert.Equal(t, "docker:28-dind", admitted.Spec.Image, "the image it was taken of")
+		assert.True(t, vmKind.DockerVM(admitted, vmtest.Images.Docker), "a tag of the docker image the docker image has moved on from")
 		assert.Equal(t, uint64(30*vmtest.GiB), admitted.Spec.Resources.Disk)
 		assert.Equal(t, &vmKind.Source{Snapshot: "snapshot-uuid"}, admitted.Spec.Source, "its node makes it from the snapshot")
-		assert.Equal(t, "docker", admitted.Metadata.Labels[vmKind.LabelFlavor])
 	})
 
 	for name, tt := range map[string]struct {
 		snapshot snapshotKind.Snapshot
-		flavor   vmKind.Flavor
+		image    string
 		want     domain.ValidationErrors
 	}{
 		"one that is not stored yet": {
@@ -316,9 +311,13 @@ func TestVMs_Admit(t *testing.T) {
 			snapshot: vmtest.Snapshot("snapshot-uuid", "other"),
 			want:     domain.ValidationErrors{"snapshot_uuid": "not_found"},
 		},
-		"one of another flavor": {
-			snapshot: vmtest.Snapshot("snapshot-uuid", "owner-uuid", func(s *snapshotKind.Snapshot) { s.Status.Flavor = vm.KindDocker }),
-			flavor:   vmKind.FlavorMachine,
+		"a docker vm's, for a machine": {
+			snapshot: vmtest.Snapshot("snapshot-uuid", "owner-uuid", func(s *snapshotKind.Snapshot) { s.Status.Image = "docker:29-dind" }),
+			want:     domain.ValidationErrors{"kind": "kind_mismatch"},
+		},
+		"a machine's, for a docker vm": {
+			snapshot: vmtest.Snapshot("snapshot-uuid", "owner-uuid"),
+			image:    "docker:29-dind",
 			want:     domain.ValidationErrors{"kind": "kind_mismatch"},
 		},
 	} {
@@ -328,7 +327,7 @@ func TestVMs_Admit(t *testing.T) {
 			w := vmtest.New(vmtest.WithSnapshots(tt.snapshot))
 
 			_, invalid, err := w.VMs.Admit(ctx, asked(func(v *vmKind.VM) {
-				v.Spec.Flavor = tt.flavor
+				v.Spec.Image = tt.image
 				v.Spec.Source = &vmKind.Source{Snapshot: "snapshot-uuid"}
 			}))
 			require.NoError(t, err)
@@ -609,7 +608,7 @@ func TestVMs_Prepare(t *testing.T) {
 		return vmtest.Snapshot("snapshot-uuid", "owner", change)
 	}
 
-	t.Run("a restore from a snapshot of the vm's owner, flavor and engine, that its disk has room for, is sent as it is", func(t *testing.T) {
+	t.Run("a restore from a snapshot of the vm's owner, kind and engine, that its disk has room for, is sent as it is", func(t *testing.T) {
 		t.Parallel()
 
 		v := vmtest.Stopped("01", "owner")
@@ -637,8 +636,8 @@ func TestVMs_Prepare(t *testing.T) {
 			snapshot: changed(func(s *snapshotKind.Snapshot) { s.Status.State = snapshotKind.Creating }),
 			want:     domain.ValidationErrors{"snapshot_uuid": "snapshot_not_ready"},
 		},
-		"one of another flavor": {
-			snapshot: changed(func(s *snapshotKind.Snapshot) { s.Status.Flavor = vm.KindDocker }),
+		"one of a docker vm, onto a machine": {
+			snapshot: changed(func(s *snapshotKind.Snapshot) { s.Status.Image = "docker:29-dind" }),
 			want:     domain.ValidationErrors{"snapshot_uuid": "kind_mismatch"},
 		},
 		"one larger than its disk": {
@@ -736,6 +735,116 @@ func TestVMs_Extras(t *testing.T) {
 	w := vmtest.New()
 
 	assert.Same(t, w.Runs, w.VMs.Extras(), "the code runner's runs are among anybody's vms")
+}
+
+func TestVMs_Is(t *testing.T) {
+	t.Parallel()
+
+	w := vmtest.New()
+
+	assert.True(t, w.VMs.Narrows("docker"))
+	assert.True(t, w.VMs.Narrows("machine"))
+	assert.False(t, w.VMs.Narrows("firecore"))
+
+	for name, tt := range map[string]struct {
+		v    vmKind.VM
+		want vm.Kind
+	}{
+		"a machine":   {v: vmtest.Running("01", "owner"), want: vm.KindMachine},
+		"a docker vm": {v: vmtest.Docker("02", "owner"), want: vm.KindDocker},
+		"a docker vm made before the docker image moved on to a newer tag": {
+			v:    vmtest.In(vmtest.Docker("03", "owner"), func(v *vmKind.VM) { v.Spec.Image = "docker:27-dind" }),
+			want: vm.KindDocker,
+		},
+		"one of the code runner's runs, booted from the runner's image": {v: runs.Manifest(vmtest.Run("run-1")), want: vm.KindMachine},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			for _, word := range []vm.Kind{vm.KindMachine, vm.KindDocker} {
+				is, err := w.VMs.Is(vmtest.Record(tt.v).Raw, string(word))
+				require.NoError(t, err)
+				assert.Equal(t, word == tt.want, is, word)
+			}
+		})
+	}
+}
+
+// TestVMs_keptAsTheyWere holds the VMs kept before their images alone said
+// what they are, whose specs still carry the field that said it and whose
+// records still carry the label that did, both as they were stored, to being
+// what their images say: read, narrowed, chosen for a container and bounded
+// as any other VM is. Nothing moves them; the data is moved by hand.
+func TestVMs_keptAsTheyWere(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	kept := func(uuid string, image string, was vm.Kind) resource.Record {
+		r := vmtest.Record(vmtest.Running(uuid, "owner"))
+		r.Metadata.Labels = map[string]string{"workload.flavor": string(was)}
+		r.Spec = json.RawMessage(`{"flavor": "` + string(was) + `", "image": "` + image + `", "resources": {"cpus": 2, "memory": 2147483648, "disk": 21474836480}, "ports": [], "network": {"ingress": "allow", "egress": "allow"}}`)
+
+		return r
+	}
+
+	w := vmtest.New()
+
+	docker, err := w.Memory.Create(ctx, kept("01", "docker:29-dind", vm.KindDocker))
+	require.NoError(t, err)
+
+	machine, err := w.Memory.Create(ctx, kept("02", "ubuntu:24.04", vm.KindMachine))
+	require.NoError(t, err)
+
+	t.Run("read as what its image says", func(t *testing.T) {
+		t.Parallel()
+
+		v, err := records.Decode(docker)
+		require.NoError(t, err)
+		assert.Equal(t, "docker:29-dind", v.Spec.Image)
+		assert.True(t, vmKind.DockerVM(v, vmtest.Images.Docker))
+		assert.Equal(t, vm.KindDocker, vmKind.Entity(v, vmtest.Images.Docker).Kind, "as the dashboard shows it")
+
+		v, err = records.Decode(machine)
+		require.NoError(t, err)
+		assert.False(t, vmKind.DockerVM(v, vmtest.Images.Docker))
+		assert.Equal(t, vm.KindMachine, vmKind.Entity(v, vmtest.Images.Docker).Kind)
+	})
+
+	t.Run("listed as what its image says", func(t *testing.T) {
+		t.Parallel()
+
+		is, err := w.VMs.Is(docker.Raw, string(vm.KindDocker))
+		require.NoError(t, err)
+		assert.True(t, is)
+
+		is, err = w.VMs.Is(machine.Raw, string(vm.KindDocker))
+		require.NoError(t, err)
+		assert.False(t, is)
+	})
+
+	t.Run("chosen for a container as the one docker vm of its owner's", func(t *testing.T) {
+		t.Parallel()
+
+		chosen, refused, err := w.Chooser.Choose(ctx, "owner", dockervm.Choice{})
+		require.NoError(t, err)
+		require.Empty(t, refused)
+		assert.Equal(t, "01", chosen.VM.Metadata.UUID)
+		assert.False(t, chosen.Created)
+	})
+
+	t.Run("held to what a docker vm needs when it is changed", func(t *testing.T) {
+		t.Parallel()
+
+		v, err := records.Decode(docker)
+		require.NoError(t, err)
+
+		small := vmKind.Resources{CPUs: 1, Memory: 256 * vmtest.MiB, Disk: 20 * vmtest.GiB}
+
+		_, refused, err := w.VMs.Apply(ctx, v, vmKind.ActionUpdate, vmKind.UpdatePayload{Resources: &small})
+		require.NoError(t, err)
+		assert.Equal(t, domain.ValidationErrors{"resources.memory": "too_small"}, refused)
+	})
 }
 
 // TestVM_createAnswered holds a VM being made to the answer of its create,

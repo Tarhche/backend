@@ -1,13 +1,15 @@
 // Package vm is the vm kind: a virtual machine on one node, declared once for
 // every service that runs it (domain/workload/kind).
 //
-// A VM is one of two flavors, which it is made as and never changes: a
-// machine, which boots an operating system image and is somebody's to open a
-// terminal in, and a Docker VM, which boots the workload's docker-in-docker
-// image and is what containers and stacks live in. A VM lives on one node for
-// its whole life, because its disk is there, and its node's engine is what
-// runs it (vm.Engine): the kind's node strategy is that engine's, and nothing
-// else on the node knows a VM is a record anywhere.
+// A VM is a machine, which boots an operating system image and is somebody's
+// to open a terminal in, or a Docker VM, which boots the workload's
+// docker-in-docker image, the Docker image, and is what containers and stacks
+// live in. Its image says which (vm.KindOf), and nothing else does: the
+// control plane, with the Docker image it is given, and the vmhost holding
+// it, with its own, read it off the image, which never changes. A VM lives
+// on one node for its whole life, because its disk is there, and its node's
+// engine is what runs it (vm.Engine): the kind's node strategy is that
+// engine's, and nothing else on the node knows a VM is a record anywhere.
 //
 // Its spec is what it was asked for, its config of ports, network and
 // resources among it; its status is what its node last said of it, the slug
@@ -124,26 +126,14 @@ const (
 	ActionAttach = "attach"
 )
 
-// Flavor is what a VM boots into: a machine, or a Docker VM. It is the
-// engine's vm.Kind, named apart from the kind a VM is.
-type Flavor = vm.Kind
-
-const (
-	FlavorMachine Flavor = vm.KindMachine
-	FlavorDocker  Flavor = vm.KindDocker
-)
-
 // The labels of a VM.
 const (
-	// LabelFlavor is on every VM's record, its flavor: the Docker VMs are the
-	// VMs labelled workload.flavor=docker, however they are listed.
-	LabelFlavor = "workload.flavor"
-
 	// LabelDocker marks an instance a node's engine holds as a Docker VM,
 	// with "true": it is how a node tells, from its engine alone, which of its
 	// VMs have a dockerd it reads, since nothing ever looks inside a VM to
-	// find one. Every Docker VM's instance is made with it.
-	LabelDocker = "workload.docker"
+	// find one. The engine says it of every instance whose image is its Docker
+	// image, and of no other.
+	LabelDocker = vm.LabelDocker
 
 	// LabelManagedBy names what keeps a VM that is not a record of its own,
 	// such as ManagedByCodeRunner: it is on the manifest of one of the code
@@ -169,10 +159,10 @@ const (
 
 // Spec is what a VM is asked for as.
 type Spec struct {
-	Flavor Flavor `json:"flavor"`
-
-	// Image is the OCI reference it boots from: its flavor's own when it
-	// names none, and never anything else for a Docker VM. It never changes.
+	// Image is the OCI reference it boots from, which says what it is
+	// (vm.KindOf): the Docker image for a Docker VM, which boots from nothing
+	// else, and an operating system's for a machine, the default one when it
+	// names none. It never changes.
 	Image string `json:"image,omitempty"`
 
 	Resources Resources `json:"resources"`
@@ -236,7 +226,7 @@ func (n Network) VM() vm.Network {
 // Source is what a VM's disk is made from when it is not its image.
 type Source struct {
 	// Snapshot is a snapshot of its owner's, whose disk it is made with: its
-	// flavor and image are the snapshot's.
+	// image, and so what it is, are the snapshot's.
 	Snapshot string `json:"snapshot"`
 }
 
@@ -362,7 +352,8 @@ func EndpointsOf(endpoints []vm.Endpoint) []Endpoint {
 // UpdatePayload is what changes about a VM: anything it leaves out stays as
 // it is. Its name and lifetime are its record's alone; its ports, network and
 // resources are its node's to apply, which restarts it when the engine has
-// to. Its flavor and its image never change, and its disk only grows.
+// to. Its image, which says what it is, never changes, and its disk only
+// grows.
 //
 // What is wrong with it is said under the fields the dashboard asks with.
 type UpdatePayload struct {
@@ -420,7 +411,9 @@ func (p UpdatePayload) Changes() bool {
 }
 
 // RestorePayload is the snapshot a VM's disk is restored from: one of its
-// owner's, of its flavor, ready, and no larger than its disk.
+// owner's, ready, no larger than its disk, and taken of a VM of its kind, a
+// machine's of a machine and a Docker VM's of a Docker VM, as their images
+// say.
 type RestorePayload struct {
 	SnapshotUUID string `json:"snapshot_uuid"`
 }
@@ -632,15 +625,18 @@ func Machine() kind.Machine {
 	}
 }
 
-// DockerVM reports whether a VM is a Docker VM, which only its flavor says.
-func DockerVM(v VM) bool {
-	return v.Spec.Flavor == FlavorDocker
+// DockerVM reports whether a VM is a Docker VM, which only its image says,
+// where dockerImage is the image Docker VMs boot from (vm.KindOf).
+func DockerVM(v VM, dockerImage string) bool {
+	return vm.KindOf(v.Spec.Image, dockerImage) == vm.KindDocker
 }
 
-// Up reports whether a VM's dockerd can be asked anything, now or once it is
-// up: a Docker VM, placed on a node, running or on its way up.
+// Up reports whether a Docker VM's dockerd can be asked anything, now or once
+// it is up: placed on a node, running or on its way up. That it is a Docker
+// VM at all is its image's to say (DockerVM), which whoever chose it for what
+// lives in it has asked already.
 func Up(v VM) bool {
-	if !DockerVM(v) || len(v.Metadata.Node) == 0 {
+	if len(v.Metadata.Node) == 0 {
 		return false
 	}
 

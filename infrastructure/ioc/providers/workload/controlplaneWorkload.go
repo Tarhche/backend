@@ -152,14 +152,16 @@ func NewControlPlaneWorkload(
 	chooser := dockervm.NewChooser(vms, kinds.Resources, kinds.Admit, dockerDefaults)
 
 	// a snapshot is taken of one of its owner's VMs, by the node holding it,
-	// and is the kind's own to say a VM can be restored or made from.
+	// and is the kind's own to say a VM can be restored or made from: one of
+	// the same kind, as both their images say.
 	snapshots := controlPlaneSnapshots.New(controlPlaneSnapshots.Dependencies{
-		VMs:       vms,
-		Nodes:     vmPlacement,
-		Resources: kinds.Resources,
-		Archives:  stores.Archives,
-		UserMax:   controlPlaneConfigs.SnapshotUserMax,
-		Logger:    logger,
+		VMs:         vms,
+		Nodes:       vmPlacement,
+		Resources:   kinds.Resources,
+		Archives:    stores.Archives,
+		UserMax:     controlPlaneConfigs.SnapshotUserMax,
+		DockerImage: controlPlaneConfigs.VMDockerImage,
+		Logger:      logger,
 	})
 
 	// what the building blocks of Docker VMs share: what the nodes report of
@@ -268,9 +270,10 @@ func vmLimits(controlPlaneConfigs *configs.WorkloadControlPlane) quota.Limits {
 }
 
 // dockerVMDefaults is what a Docker VM made for a container or a stack is
-// given, as the control plane was configured. Settings that cannot be what
-// they say are refused here, when the control plane starts, rather than when
-// somebody first adds a container.
+// given, as the control plane was configured: the Docker image, which is what
+// makes it one, among it. Settings that cannot be what they say are refused
+// here, when the control plane starts, rather than when somebody first adds a
+// container.
 func dockerVMDefaults(controlPlaneConfigs *configs.WorkloadControlPlane) (dockervm.Defaults, error) {
 	ports, err := controlPlaneConfigs.DockerDefaultPorts()
 	if err != nil {
@@ -283,6 +286,7 @@ func dockerVMDefaults(controlPlaneConfigs *configs.WorkloadControlPlane) (docker
 	}
 
 	return dockervm.Defaults{
+		Image: controlPlaneConfigs.VMDockerImage,
 		Resources: vmKind.Resources{
 			CPUs:   controlPlaneConfigs.VMDockerDefaultCPUs,
 			Memory: controlPlaneConfigs.VMDockerDefaultMemory,

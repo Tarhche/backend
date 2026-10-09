@@ -165,7 +165,7 @@ func newStacksPlane(t *testing.T) (*Client, *stacksPlane) {
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
 
-	c, err := New(server.URL)
+	c, err := New(server.URL, "docker:29-dind")
 	require.NoError(t, err)
 
 	return c, p
@@ -247,8 +247,8 @@ func shopIn(vmUUID string, state kind.State) stackManifest {
 func dockerVM(uuid string, state kind.State, expected kind.State) vmManifest {
 	return vmManifest{
 		Kind:     vmKind.Name,
-		Metadata: kind.Metadata{UUID: uuid, Name: "docker-1", Labels: map[string]string{vmKind.LabelFlavor: string(vmKind.FlavorDocker)}, Node: "node-1"},
-		Spec:     vmKind.Spec{Flavor: vmKind.FlavorDocker},
+		Metadata: kind.Metadata{UUID: uuid, Name: "docker-1", Node: "node-1"},
+		Spec:     vmKind.Spec{Image: "docker:29-dind"},
 		Status:   vmKind.Status{Status: kind.Status{State: state, Expected: expected}},
 	}
 }
@@ -414,7 +414,7 @@ func TestClient_CreateStack_asked(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	c, err := New(server.URL)
+	c, err := New(server.URL, "docker:29-dind")
 	require.NoError(t, err)
 
 	_, err = c.CreateStack(t.Context(), "owner-uuid", workloadControlPlane.StackRequest{

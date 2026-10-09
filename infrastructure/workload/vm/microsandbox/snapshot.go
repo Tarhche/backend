@@ -64,7 +64,7 @@ func (e *engine) Snapshot(ctx context.Context, id string, archive io.Writer) (vm
 
 	header := archiveHeader{
 		Engine: archiveEngine(),
-		Kind:   r.Spec.Kind,
+		Kind:   r.kind(e.dockerImage),
 		Image:  r.Image,
 		Disk:   r.Spec.Resources.Disk,
 	}

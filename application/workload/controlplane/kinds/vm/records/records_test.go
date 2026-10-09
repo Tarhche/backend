@@ -43,9 +43,13 @@ func TestRecords(t *testing.T) {
 
 	ctx := context.Background()
 
-	elsewhere := vmtest.In(vmtest.Docker("03", "other"), func(v *vmKind.VM) { v.Metadata.Node = "workload-orchestrator-02" })
+	labelled := func(v *vmKind.VM) { v.Metadata.Labels = map[string]string{"team": "web"} }
+	elsewhere := vmtest.In(vmtest.Docker("03", "other"), func(v *vmKind.VM) {
+		v.Metadata.Node = "workload-orchestrator-02"
+		labelled(v)
+	})
 
-	r := recordsOf(t, vmtest.Running("01", "owner"), vmtest.Docker("02", "owner"), elsewhere)
+	r := recordsOf(t, vmtest.Running("01", "owner"), vmtest.In(vmtest.Docker("02", "owner"), labelled), elsewhere)
 
 	t.Run("a vm is read as its kind's manifest, by its uuid and by its slug", func(t *testing.T) {
 		t.Parallel()
@@ -73,7 +77,7 @@ func TestRecords(t *testing.T) {
 		assert.ErrorIs(t, err, domain.ErrNotExists)
 	})
 
-	t.Run("a person's, a node's, and those of a flavor", func(t *testing.T) {
+	t.Run("a person's, a node's, and those labelled so", func(t *testing.T) {
 		t.Parallel()
 
 		owned, err := r.Owned(ctx, "owner")
@@ -84,9 +88,9 @@ func TestRecords(t *testing.T) {
 		require.NoError(t, err)
 		assert.ElementsMatch(t, []string{"01", "02"}, uuidsOf(held))
 
-		docker, err := r.All(ctx, resource.Filter{Labels: map[string]string{vmKind.LabelFlavor: "docker"}})
+		web, err := r.All(ctx, resource.Filter{Labels: map[string]string{"team": "web"}})
 		require.NoError(t, err)
-		assert.ElementsMatch(t, []string{"02", "03"}, uuidsOf(docker))
+		assert.ElementsMatch(t, []string{"02", "03"}, uuidsOf(web))
 
 		nobodys, err := r.Owned(ctx, "")
 		require.NoError(t, err)

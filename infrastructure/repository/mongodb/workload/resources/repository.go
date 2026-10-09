@@ -351,8 +351,8 @@ func filterOf(kindName string, filter resource.Filter) bson.D {
 		}}}})
 	}
 
-	// a label's key has dots in it, workload.flavor, which a path would take
-	// for fields within fields, so each is read as the one field it is.
+	// a label's key has dots in it, workload.managed-by, which a path would
+	// take for fields within fields, so each is read as the one field it is.
 	if len(filter.Labels) > 0 {
 		carried := make(bson.A, 0, len(filter.Labels))
 

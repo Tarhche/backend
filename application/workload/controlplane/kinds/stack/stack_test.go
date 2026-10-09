@@ -109,7 +109,7 @@ func TestStacks_Admit(t *testing.T) {
 		made, kept := w.Stored(admitted.Spec.VM.UUID)
 		require.True(t, kept)
 		assert.Equal(t, "builds", made.Metadata.Name)
-		assert.Equal(t, vmKind.FlavorDocker, made.Spec.Flavor)
+		assert.True(t, vmKind.DockerVM(made, vmtest.Images.Docker))
 		assert.Equal(t, vmKind.Resources{CPUs: 2, Memory: 4 * vmtest.GiB, Disk: 20 * vmtest.GiB}, made.Spec.Resources)
 
 		assert.Equal(t, stackKind.Waiting, admitted.Status.State)

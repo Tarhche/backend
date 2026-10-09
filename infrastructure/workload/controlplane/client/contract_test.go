@@ -172,7 +172,7 @@ func controlPlane(t *testing.T, w *blockstest.Workload) *client.Client {
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
 
-	c, err := client.New(server.URL)
+	c, err := client.New(server.URL, vmtest.Images.Docker)
 	require.NoError(t, err)
 
 	return c
@@ -242,6 +242,25 @@ func TestContract_VMs(t *testing.T) {
 	updated, err := c.UpdateVM(ctx, "owner", created.UUID, workloadControlPlane.VMUpdate{Name: &name})
 	require.NoError(t, err)
 	assert.Equal(t, "renamed", updated.Name)
+
+	// a docker vm is asked for by the docker image, and is one as its image
+	// says, which is how the control plane lists one too.
+	docker, err := c.CreateVM(ctx, "owner", workloadControlPlane.VMRequest{
+		Name:      "builds",
+		Kind:      vm.KindDocker,
+		Resources: vm.Resources{CPUs: 2, Memory: 2 * vmtest.GiB, Disk: 20 * vmtest.GiB},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, vm.KindDocker, docker.Kind)
+	assert.Equal(t, vmtest.Images.Docker, docker.Image)
+
+	for which, want := range map[vm.Kind]string{vm.KindDocker: docker.UUID, vm.KindMachine: created.UUID} {
+		listed, err := c.VMs(ctx, "owner", which, 1)
+		require.NoError(t, err)
+		require.Len(t, listed.Items, 1, which)
+		assert.Equal(t, want, listed.Items[0].UUID, which)
+		assert.Equal(t, which, listed.Items[0].Kind)
+	}
 
 	_, err = c.CreateVM(ctx, "owner", workloadControlPlane.VMRequest{
 		Name:      "huge",

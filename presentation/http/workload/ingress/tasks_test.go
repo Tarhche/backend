@@ -500,7 +500,6 @@ func exposing(slug string, nodeName string, ports ...port.Port) vmKind.VM {
 		Kind:     vmKind.Name,
 		Metadata: kind.Metadata{UUID: "vm-" + slug, Slug: slug, Node: nodeName},
 		Spec: vmKind.Spec{
-			Flavor:  vmKind.FlavorMachine,
 			Ports:   ports,
 			Network: vmKind.Network{Ingress: vm.AccessAllow, Egress: vm.AccessAllow},
 		},

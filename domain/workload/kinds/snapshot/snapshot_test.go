@@ -208,7 +208,6 @@ func ready(changes ...func(s *snapshotKind.Snapshot)) snapshotKind.Snapshot {
 		Spec:     snapshotKind.Spec{VM: snapshotKind.VMRef{UUID: "vm-uuid", Name: "box"}},
 		Status: snapshotKind.Status{
 			Status: kind.Status{State: snapshotKind.Ready, Expected: snapshotKind.Ready},
-			Flavor: vm.KindMachine,
 			Image:  "ubuntu:24.04",
 			Disk:   5 << 30,
 			Engine: "microsandbox/0.7.6",
@@ -226,14 +225,14 @@ func ready(changes ...func(s *snapshotKind.Snapshot)) snapshotKind.Snapshot {
 func TestRestorable(t *testing.T) {
 	t.Parallel()
 
-	onto := snapshotKind.Target{OwnerUUID: "owner", Flavor: vm.KindMachine, Disk: 10 << 30, Engine: "microsandbox"}
+	onto := snapshotKind.Target{OwnerUUID: "owner", Image: "debian:13", Disk: 10 << 30, Engine: "microsandbox"}
 
 	for name, tt := range map[string]struct {
 		snapshot snapshotKind.Snapshot
 		onto     snapshotKind.Target
 		want     string
 	}{
-		"one of its owner's, ready, of its flavor and engine, that fits its disk": {
+		"one of its owner's, ready, of its kind and engine, that fits its disk": {
 			snapshot: ready(), onto: onto,
 		},
 		"one exactly as large as its disk": {
@@ -255,9 +254,18 @@ func TestRestorable(t *testing.T) {
 			snapshot: ready(func(s *snapshotKind.Snapshot) { s.Status.Expected = snapshotKind.Deleted }), onto: onto,
 			want: snapshotKind.RefusedNotReady,
 		},
-		"one of another flavor": {
-			snapshot: ready(func(s *snapshotKind.Snapshot) { s.Status.Flavor = vm.KindDocker }), onto: onto,
-			want: snapshotKind.RefusedFlavor,
+		"a docker vm's, onto a machine": {
+			snapshot: ready(func(s *snapshotKind.Snapshot) { s.Status.Image = "docker:29-dind" }), onto: onto,
+			want: snapshotKind.RefusedKind,
+		},
+		"a machine's, onto a docker vm": {
+			snapshot: ready(),
+			onto:     snapshotKind.Target{OwnerUUID: "owner", Image: "docker:29-dind", Disk: 10 << 30},
+			want:     snapshotKind.RefusedKind,
+		},
+		"a docker vm's, onto a docker vm, whichever tag of the docker image either boots": {
+			snapshot: ready(func(s *snapshotKind.Snapshot) { s.Status.Image = "docker:28-dind" }),
+			onto:     snapshotKind.Target{OwnerUUID: "owner", Image: "docker:29-dind", Disk: 10 << 30},
 		},
 		"one larger than its disk": {
 			snapshot: ready(func(s *snapshotKind.Snapshot) { s.Status.Disk = 11 << 30 }), onto: onto,
@@ -272,17 +280,22 @@ func TestRestorable(t *testing.T) {
 		},
 		"no engine is held against a node that has not said its own": {
 			snapshot: ready(func(s *snapshotKind.Snapshot) { s.Status.Engine = "firecracker/1.9" }),
-			onto:     snapshotKind.Target{OwnerUUID: "owner", Flavor: vm.KindMachine, Disk: 10 << 30},
+			onto:     snapshotKind.Target{OwnerUUID: "owner", Image: "debian:13", Disk: 10 << 30},
 		},
-		"a vm made from it takes its flavor, and a disk it fits in": {
+		"a machine made from it, naming no image, and a disk it fits in": {
 			snapshot: ready(func(s *snapshotKind.Snapshot) { s.Status.Disk = 40 << 30 }),
 			onto:     snapshotKind.Target{OwnerUUID: "owner"},
+		},
+		"a machine made from a docker vm's": {
+			snapshot: ready(func(s *snapshotKind.Snapshot) { s.Status.Image = "docker:29-dind" }),
+			onto:     snapshotKind.Target{OwnerUUID: "owner"},
+			want:     snapshotKind.RefusedKind,
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			assert.Equal(t, tt.want, snapshotKind.Restorable(tt.snapshot, tt.onto))
+			assert.Equal(t, tt.want, snapshotKind.Restorable(tt.snapshot, tt.onto, "docker:29-dind"))
 		})
 	}
 }
@@ -312,7 +325,15 @@ func TestEntity(t *testing.T) {
 		State:       snapshot.Ready,
 		CreatedAt:   created,
 		CompletedAt: created.Add(time.Minute),
-	}, snapshotKind.Entity(taken))
+	}, snapshotKind.Entity(taken, "docker:29-dind"))
+
+	t.Run("a docker vm's is one, as the image it took says", func(t *testing.T) {
+		t.Parallel()
+
+		docker := snapshotKind.Entity(ready(func(s *snapshotKind.Snapshot) { s.Status.Image = "docker:28-dind" }), "docker:29-dind")
+
+		assert.Equal(t, vm.KindDocker, docker.Kind)
+	})
 
 	t.Run("a failed one was done with when it failed", func(t *testing.T) {
 		t.Parallel()
@@ -321,7 +342,7 @@ func TestEntity(t *testing.T) {
 			s.Status.State = snapshotKind.Failed
 			s.Status.Reason = "no space left on device"
 			s.Status.Since = created.Add(time.Hour)
-		}))
+		}), "docker:29-dind")
 
 		assert.Equal(t, snapshot.Failed, failed.State)
 		assert.Equal(t, "no space left on device", failed.Reason)

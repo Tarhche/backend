@@ -263,7 +263,7 @@ func (r *Reader) look(ctx context.Context, at time.Time) (Read, error) {
 }
 
 // dockerVM is the uuid of a VM instance and whether it is a Docker VM: one
-// labelled as one, or one a command named.
+// its engine says is one, as its image does, or one a command named.
 func (r *Reader) dockerVM(instance vm.Instance) (string, bool) {
 	if instance.Labels[vm.LabelPurpose] != vm.PurposeVM {
 		return "", false

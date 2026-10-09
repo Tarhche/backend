@@ -61,7 +61,7 @@ func (c *Client) Snapshots(ctx context.Context, ownerUUID string, vmUUID string,
 
 	items := make([]snapshot.Snapshot, len(payload.Items))
 	for i := range payload.Items {
-		items[i] = snapshotKind.Entity(payload.Items[i])
+		items[i] = snapshotKind.Entity(payload.Items[i], c.dockerImage)
 	}
 
 	return workloadControlPlane.Page[snapshot.Snapshot]{Items: items, TotalPages: payload.Pagination.TotalPages, CurrentPage: payload.Pagination.CurrentPage}, nil
@@ -73,7 +73,7 @@ func (c *Client) Snapshot(ctx context.Context, ownerUUID string, uuid string) (s
 		return snapshot.Snapshot{}, err
 	}
 
-	return snapshotKind.Entity(manifest), nil
+	return snapshotKind.Entity(manifest, c.dockerImage), nil
 }
 
 // CreateSnapshot takes a snapshot of a VM's disk, for ownerUUID: a VM of
@@ -91,7 +91,7 @@ func (c *Client) CreateSnapshot(ctx context.Context, ownerUUID string, vmUUID st
 		return snapshot.Snapshot{}, err
 	}
 
-	return snapshotOf(payload)
+	return c.snapshotOf(payload)
 }
 
 func (c *Client) RenameSnapshot(ctx context.Context, ownerUUID string, uuid string, name string) (snapshot.Snapshot, error) {
@@ -100,7 +100,7 @@ func (c *Client) RenameSnapshot(ctx context.Context, ownerUUID string, uuid stri
 		return snapshot.Snapshot{}, err
 	}
 
-	return snapshotOf(payload)
+	return c.snapshotOf(payload)
 }
 
 // DeleteSnapshot removes a snapshot and its archive. One still being taken
@@ -134,10 +134,10 @@ func (c *Client) snapshotAct(ctx context.Context, ownerUUID string, uuid string,
 }
 
 // snapshotOf is the snapshot an answer of the resource API carries.
-func snapshotOf(answer commandedSnapshot) (snapshot.Snapshot, error) {
+func (c *Client) snapshotOf(answer commandedSnapshot) (snapshot.Snapshot, error) {
 	if answer.Resource == nil {
 		return snapshot.Snapshot{}, errors.New("the workload answered with no snapshot")
 	}
 
-	return snapshotKind.Entity(*answer.Resource), nil
+	return snapshotKind.Entity(*answer.Resource, c.dockerImage), nil
 }

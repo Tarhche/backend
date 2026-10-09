@@ -27,7 +27,6 @@ func TestStore(t *testing.T) {
 		written := &record{
 			Spec: vm.Spec{
 				ID:             "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b",
-				Kind:           vm.KindDocker,
 				Image:          "docker:29-dind",
 				Resources:      vm.Resources{CPUs: 2, Memory: 2 << 30, Disk: 20 << 30},
 				Ports:          []port.Port{80, 443},
@@ -102,6 +101,30 @@ func TestStore(t *testing.T) {
 		assert.Empty(t, records)
 	})
 
+	t.Run("a record kept while the orchestrator said what an instance boots into reads as its image says", func(t *testing.T) {
+		t.Parallel()
+
+		dir := filepath.Join(t.TempDir(), "instances")
+		s, err := newStore(dir)
+		require.NoError(t, err)
+
+		kept := map[string]string{
+			"vm-1": `{"spec": {"ID": "vm-1", "Kind": "docker", "Image": "docker:29-dind", "Labels": {"workload.docker": "true"}}, "image": "docker:29-dind"}`,
+			"vm-2": `{"spec": {"ID": "vm-2", "Kind": "machine", "Image": "ubuntu:24.04"}, "image": "ubuntu:24.04"}`,
+		}
+
+		for id, content := range kept {
+			require.NoError(t, os.WriteFile(filepath.Join(dir, id+".json"), []byte(content), 0o600))
+		}
+
+		records, err := s.load()
+		require.NoError(t, err)
+		require.Len(t, records, 2)
+
+		assert.Equal(t, vm.KindDocker, records["vm-1"].kind("docker:30-dind"), "booting the vmhost's own image, an older tag of it")
+		assert.Equal(t, vm.KindMachine, records["vm-2"].kind("docker:30-dind"))
+	})
+
 	t.Run("a record that cannot be read says whose it is", func(t *testing.T) {
 		t.Parallel()
 
@@ -114,6 +137,17 @@ func TestStore(t *testing.T) {
 		_, err = s.load()
 		assert.ErrorContains(t, err, `"vm-1"`)
 	})
+}
+
+func TestRecordKind(t *testing.T) {
+	t.Parallel()
+
+	const dockerImage = "docker:29-dind"
+
+	assert.Equal(t, vm.KindDocker, (&record{Image: dockerImage}).kind(dockerImage), "the vmhost's own image")
+	assert.Equal(t, vm.KindDocker, (&record{Image: "docker:28-dind", Spec: vm.Spec{Image: "docker:28-dind"}}).kind(dockerImage), "another tag of it")
+	assert.Equal(t, vm.KindMachine, (&record{Image: "ubuntu:24.04", Spec: vm.Spec{Image: "ubuntu:24.04"}}).kind(dockerImage))
+	assert.Equal(t, vm.KindMachine, (&record{Image: "golang:1.27", Spec: vm.Spec{Image: "golang:1.27", Command: []string{"go", "run", "."}}}).kind(dockerImage), "a code runner's run")
 }
 
 func TestRecordClone(t *testing.T) {

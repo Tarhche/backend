@@ -32,16 +32,17 @@ func StateOf(s kind.State) vm.State {
 
 // Entity is a VM's manifest as the vm package's VM, which is what the
 // dashboard shows a VM as, and what the parts of the workload not on the
-// framework yet read one as: its spec, its status in the words a VM has
-// always had, and when its node last spoke for it, which is when it was last
-// observed.
-func Entity(v VM) vm.VM {
+// framework yet read one as: its spec, what it is, a machine or a Docker VM,
+// as its image says where dockerImage is the image Docker VMs boot from
+// (vm.KindOf), its status in the words a VM has always had, and when its node
+// last spoke for it, which is when it was last observed.
+func Entity(v VM, dockerImage string) vm.VM {
 	entity := vm.VM{
 		UUID:           v.Metadata.UUID,
 		Name:           v.Metadata.Name,
 		Slug:           v.Metadata.Slug,
 		OwnerUUID:      v.Metadata.OwnerUUID,
-		Kind:           v.Spec.Flavor,
+		Kind:           vm.KindOf(v.Spec.Image, dockerImage),
 		Image:          v.Spec.Image,
 		Resources:      v.Spec.Resources.VM(),
 		Ports:          slices.Clone(v.Spec.Ports),

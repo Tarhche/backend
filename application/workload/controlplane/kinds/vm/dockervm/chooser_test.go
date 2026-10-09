@@ -102,8 +102,7 @@ func TestChooser_Choose(t *testing.T) {
 
 		assert.Equal(t, "docker", made.Metadata.Name)
 		assert.Equal(t, "owner", made.Metadata.OwnerUUID)
-		assert.Equal(t, vmKind.FlavorDocker, made.Spec.Flavor)
-		assert.Equal(t, "docker:29-dind", made.Spec.Image)
+		assert.Equal(t, "docker:29-dind", made.Spec.Image, "the docker image, which makes it a docker vm")
 		assert.Equal(t, vmtest.DockerDefaults.Resources, made.Spec.Resources)
 		assert.Equal(t, []port.Port{80}, made.Spec.Ports)
 		assert.Equal(t, vmtest.DockerDefaults.Network, made.Spec.Network)

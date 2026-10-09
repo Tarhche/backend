@@ -12,6 +12,7 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/vmtest"
 	"github.com/khanzadimahdi/testproject/domain"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
+	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
 
 func TestLimits_Bounds(t *testing.T) {
@@ -20,46 +21,46 @@ func TestLimits_Bounds(t *testing.T) {
 	limits := vmtest.Limits
 
 	for name, tt := range map[string]struct {
-		flavor    vmKind.Flavor
+		kind      vm.Kind
 		resources vmKind.Resources
 		want      domain.ValidationErrors
 	}{
 		"a machine within its bounds": {
-			flavor:    vmKind.FlavorMachine,
+			kind:      vm.KindMachine,
 			resources: vmKind.Resources{CPUs: 4, Memory: 128 * vmtest.MiB, Disk: 50 * vmtest.GiB},
 			want:      domain.ValidationErrors{},
 		},
 		"more than one vm may be given": {
-			flavor:    vmKind.FlavorMachine,
+			kind:      vm.KindMachine,
 			resources: vmKind.Resources{CPUs: 5, Memory: 8*vmtest.GiB + 1, Disk: 50*vmtest.GiB + 1},
 			want:      domain.ValidationErrors{"resources.cpus": "too_large", "resources.memory": "too_large", "resources.disk": "too_large"},
 		},
 		"less than a machine needs": {
-			flavor:    vmKind.FlavorMachine,
+			kind:      vm.KindMachine,
 			resources: vmKind.Resources{CPUs: 1, Memory: 127 * vmtest.MiB, Disk: vmtest.GiB - 1},
 			want:      domain.ValidationErrors{"resources.memory": "too_small", "resources.disk": "too_small"},
 		},
 		"what a machine gets by on is too little for a docker vm": {
-			flavor:    vmKind.FlavorDocker,
+			kind:      vm.KindDocker,
 			resources: vmKind.Resources{CPUs: 1, Memory: 256 * vmtest.MiB, Disk: 2 * vmtest.GiB},
 			want:      domain.ValidationErrors{"resources.memory": "too_small", "resources.disk": "too_small"},
 		},
 		"nothing at all": {
-			flavor: vmKind.FlavorMachine,
-			want:   domain.ValidationErrors{"resources.cpus": "required_field", "resources.memory": "required_field", "resources.disk": "required_field"},
+			kind: vm.KindMachine,
+			want: domain.ValidationErrors{"resources.cpus": "required_field", "resources.memory": "required_field", "resources.disk": "required_field"},
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			assert.Equal(t, tt.want, limits.Bounds("", tt.flavor, tt.resources))
+			assert.Equal(t, tt.want, limits.Bounds("", tt.kind, tt.resources))
 		})
 	}
 
 	t.Run("each field is said where it was asked", func(t *testing.T) {
 		t.Parallel()
 
-		assert.Equal(t, domain.ValidationErrors{"vm.new.resources.cpus": "too_large"}, limits.Bounds("vm.new.", vmKind.FlavorDocker, vmKind.Resources{CPUs: 8, Memory: vmtest.GiB, Disk: 10 * vmtest.GiB}))
+		assert.Equal(t, domain.ValidationErrors{"vm.new.resources.cpus": "too_large"}, limits.Bounds("vm.new.", vm.KindDocker, vmKind.Resources{CPUs: 8, Memory: vmtest.GiB, Disk: 10 * vmtest.GiB}))
 	})
 }
 

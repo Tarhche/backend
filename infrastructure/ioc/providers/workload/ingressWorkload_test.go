@@ -94,7 +94,7 @@ func TestNewIngressWorkload(t *testing.T) {
 		recorded, err := kind.Encode(vmKind.VM{
 			Kind:     vmKind.Name,
 			Metadata: kind.Metadata{UUID: "vm-uuid", Slug: "box-xkfqz", Node: "workload-orchestrator-02"},
-			Spec:     vmKind.Spec{Flavor: vmKind.FlavorMachine, Ports: []port.Port{80}, Network: vmKind.Network{Ingress: vm.AccessAllow, Egress: vm.AccessAllow}},
+			Spec:     vmKind.Spec{Ports: []port.Port{80}, Network: vmKind.Network{Ingress: vm.AccessAllow, Egress: vm.AccessAllow}},
 		})
 		require.NoError(t, err)
 

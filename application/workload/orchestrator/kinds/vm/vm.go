@@ -3,10 +3,11 @@
 //
 // Everything is done through the node's engine (vm.Engine), which knows
 // instances rather than records: a VM is the instance named by its uuid,
-// labelled with whose it is, the slug its ports are served under, that it is
-// a VM, and that it is a Docker VM when it is one (vmKind.LabelDocker). What
-// the node knows of a VM is what a command carries, the VM as the control
-// plane recorded it, and what the engine says.
+// labelled with whose it is, the slug its ports are served under and that it
+// is a VM. Whether it is a Docker VM, its engine tells from its image, as it
+// boots it, and says of it from then on (vmKind.LabelDocker). What the node
+// knows of a VM is what a command carries, the VM as the control plane
+// recorded it, and what the engine says.
 //
 // A command is carried out the way it always was:
 //
@@ -674,9 +675,10 @@ func (n *Node) end(uuid string) {
 // Spec is the spec a VM's instance is made, reconfigured or restored with.
 //
 // It is named by the VM's uuid, which is what the engine calls it from then
-// on, and labelled with whose it is, the slug its ports are served under,
-// that it is a VM, which is what puts it in the node's heartbeats, and that
-// it is a Docker VM when it is one, which is how the node tells the VMs whose
+// on, and labelled with whose it is, the slug its ports are served under, and
+// that it is a VM, which is what puts it in the node's heartbeats. What it
+// boots into is its image's to say, to the engine, which says it back of the
+// instance (vmKind.LabelDocker): that is how the node tells the VMs whose
 // dockerds it reads from the rest.
 func Spec(v vmKind.VM) vm.Spec {
 	labels := map[string]string{
@@ -686,13 +688,8 @@ func Spec(v vmKind.VM) vm.Spec {
 		vm.LabelPurpose: vm.PurposeVM,
 	}
 
-	if vmKind.DockerVM(v) {
-		labels[vmKind.LabelDocker] = "true"
-	}
-
 	return vm.Spec{
 		ID:             v.Metadata.UUID,
-		Kind:           v.Spec.Flavor,
 		Image:          v.Spec.Image,
 		Resources:      v.Spec.Resources.VM(),
 		Ports:          slices.Clone(v.Spec.Ports),

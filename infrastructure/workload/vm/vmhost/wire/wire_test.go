@@ -36,7 +36,6 @@ func TestSpec(t *testing.T) {
 			name: "a vm, everything said",
 			spec: vm.Spec{
 				ID:             "vm-1",
-				Kind:           vm.KindDocker,
 				Image:          "docker:29-dind",
 				Resources:      vm.Resources{CPUs: 2, Memory: 2 << 30, Disk: 1<<62 + 1},
 				Ports:          []port.Port{80, 443, 8080},
@@ -51,7 +50,6 @@ func TestSpec(t *testing.T) {
 			name: "a code runner's task, keeping its image's entrypoint",
 			spec: vm.Spec{
 				ID:         "run-1",
-				Kind:       vm.KindMachine,
 				Image:      "python:3.12-alpine",
 				Entrypoint: nil,
 				Command:    []string{"python", "-c", "print(1)"},

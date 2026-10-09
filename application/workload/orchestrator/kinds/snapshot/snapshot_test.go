@@ -55,7 +55,6 @@ func holding(t *testing.T, disk string) *memory.Engine {
 
 	_, err := e.Create(t.Context(), vm.Spec{
 		ID:        "vm-1",
-		Kind:      vm.KindDocker,
 		Image:     "docker:29-dind",
 		Resources: vm.Resources{CPUs: 2, Memory: 2 << 30, Disk: 20 << 30},
 		Labels:    map[string]string{vm.LabelVM: "vm-1", vm.LabelPurpose: vm.PurposeVM},
@@ -81,7 +80,6 @@ func aSnapshot(uuid string) snapshotKind.Snapshot {
 		Spec: snapshotKind.Spec{VM: snapshotKind.VMRef{UUID: "vm-1", Name: "builds"}},
 		Status: snapshotKind.Status{
 			Status: kind.Status{State: snapshotKind.Creating, Expected: snapshotKind.Ready},
-			Flavor: vm.KindDocker,
 			Image:  "docker:29-dind",
 			Disk:   10 << 30,
 		},
@@ -113,14 +111,13 @@ func TestNode_Execute(t *testing.T) {
 		assert.Equal(t, "memory/1", status.Engine)
 		assert.Equal(t, uint64(20<<30), status.Disk, "the disk the engine says a restore needs")
 		assert.Equal(t, time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC), status.CompletedAt)
-		assert.Equal(t, vm.KindDocker, status.Flavor, "what was taken of the vm is as it was")
-		assert.Equal(t, "docker:29-dind", status.Image)
+		assert.Equal(t, "docker:29-dind", status.Image, "what was taken of the vm is as it was")
 
 		assert.Equal(t, []int64{int64(len(archive))}, recorder.recordedSizes())
 
 		// what was stored is all a restore needs.
 		restored := memory.New()
-		_, err = restored.Restore(t.Context(), vm.Spec{ID: "vm-2", Kind: vm.KindDocker}, bytes.NewReader(archive))
+		_, err = restored.Restore(t.Context(), vm.Spec{ID: "vm-2", Image: "docker:29-dind"}, bytes.NewReader(archive))
 		require.NoError(t, err)
 
 		disk, err := restored.Disk("vm-2")
@@ -256,7 +253,7 @@ func TestNode_Execute(t *testing.T) {
 		archive, _ := archives.Object(snapshotKind.ObjectKey("snapshot-1"))
 
 		restored := memory.New()
-		_, err = restored.Restore(t.Context(), vm.Spec{ID: "vm-2", Kind: vm.KindDocker}, bytes.NewReader(archive))
+		_, err = restored.Restore(t.Context(), vm.Spec{ID: "vm-2", Image: "docker:29-dind"}, bytes.NewReader(archive))
 		require.NoError(t, err)
 
 		disk, err := restored.Disk("vm-2")

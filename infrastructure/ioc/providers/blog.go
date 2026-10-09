@@ -429,7 +429,7 @@ func blog(
 	// snippet's task, which the control plane admits and keeps, so one
 	// service owns a task's lifecycle; and it answers the reader from what
 	// the nodes running it say.
-	workload, err := workloadClient.New(blogConfigs.WorkloadControlPlaneURL)
+	workload, err := workloadClient.New(blogConfigs.WorkloadControlPlaneURL, blogConfigs.WorkloadVMDockerImage)
 	if err != nil {
 		return nil, err
 	}

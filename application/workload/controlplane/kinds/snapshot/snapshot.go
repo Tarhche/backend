@@ -5,8 +5,9 @@
 // A snapshot is admitted of one of its owner's VMs that is running or
 // stopped, on a node that can be asked, and only while its owner keeps fewer
 // snapshots than one person may. It is placed where its VM is, belongs to its
-// VM, and is admitted creating, with what it takes of the VM: its flavor, its
-// image and its disk, and what the VM is called. Its create is asked for at
+// VM, and is admitted creating, with what it takes of the VM: its image,
+// which says what the VM is, and its disk, and what the VM is called. Its
+// create is asked for at
 // once, of the node holding the VM, which takes it and answers with how large
 // its archive came out and which engine wrote it. What is refused is said
 // under the fields the dashboard asks with.
@@ -20,7 +21,9 @@
 //
 // Whether a snapshot can be restored onto a VM is this kind's to say
 // (snapshotKind.Restores), from its record: the vm kind asks before it
-// restores a VM from one, or makes a VM from one.
+// restores a VM from one, or makes a VM from one. Whether the two are of one
+// kind, a machine's onto a machine and a Docker VM's onto a Docker VM, their
+// images say, read with the Docker image the control plane is given.
 package snapshot
 
 import (
@@ -64,6 +67,10 @@ type Dependencies struct {
 
 	// UserMax is the most snapshots one person may keep.
 	UserMax uint
+
+	// DockerImage is the image Docker VMs boot from, by which a snapshot's
+	// image and a VM's say whether each is a Docker VM's (vm.KindOf).
+	DockerImage string
 
 	Logger *slog.Logger
 }
@@ -132,7 +139,6 @@ func (s *Snapshots) Admit(ctx context.Context, asked snapshotKind.Snapshot) (sna
 		Spec: snapshotKind.Spec{VM: snapshotKind.VMRef{UUID: v.Metadata.UUID, Name: v.Metadata.Name}},
 		Status: snapshotKind.Status{
 			Status: kind.Status{State: snapshotKind.Creating, Expected: snapshotKind.Ready},
-			Flavor: v.Spec.Flavor,
 			Image:  v.Spec.Image,
 			Disk:   v.Spec.Resources.Disk,
 		},
@@ -212,11 +218,11 @@ func (s *Snapshots) Restorable(ctx context.Context, uuid string, onto snapshotKi
 		return snapshotKind.Taken{}, "", err
 	}
 
-	if refused := snapshotKind.Restorable(taken, onto); len(refused) > 0 {
+	if refused := snapshotKind.Restorable(taken, onto, s.DockerImage); len(refused) > 0 {
 		return snapshotKind.Taken{}, refused, nil
 	}
 
-	return snapshotKind.Taken{Flavor: taken.Status.Flavor, Image: taken.Status.Image, Disk: taken.Status.Disk}, "", nil
+	return snapshotKind.Taken{Image: taken.Status.Image, Disk: taken.Status.Disk}, "", nil
 }
 
 // validate is what is wrong with a snapshot as it was asked for, that the

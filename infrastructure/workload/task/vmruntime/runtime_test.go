@@ -78,7 +78,6 @@ func TestRuntime_Create(t *testing.T) {
 
 		assert.Equal(t, vm.Spec{
 			ID:    id,
-			Kind:  vm.KindMachine,
 			Image: "ghcr.io/tarhche/code-runner:go-1.24",
 
 			// whole vCPUs, rounded up; bytes as they were asked for.
@@ -167,7 +166,7 @@ func TestRuntime_Lookups(t *testing.T) {
 	require.NoError(t, err)
 
 	// a user's VM on the same engine is no task's.
-	_, err = e.Create(t.Context(), vm.Spec{ID: "vm-1", Kind: vm.KindMachine, Image: "ubuntu:24.04", Labels: map[string]string{
+	_, err = e.Create(t.Context(), vm.Spec{ID: "vm-1", Image: "ubuntu:24.04", Labels: map[string]string{
 		vm.LabelPurpose: vm.PurposeVM, vm.LabelSlug: "snippet-abcde", vm.LabelTask: "task-uuid",
 	}})
 	require.NoError(t, err)

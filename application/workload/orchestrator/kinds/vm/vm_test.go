@@ -144,11 +144,9 @@ func aVM(uuid string, state kind.State, changes ...func(v *vmKind.VM)) vmKind.VM
 			Name:      "box",
 			Slug:      "box-" + uuid,
 			OwnerUUID: "owner-uuid",
-			Labels:    map[string]string{vmKind.LabelFlavor: string(vmKind.FlavorMachine)},
 			Node:      nodeName,
 		},
 		Spec: vmKind.Spec{
-			Flavor:         vmKind.FlavorMachine,
 			Image:          "ubuntu:24.04",
 			Resources:      vmKind.Resources{CPUs: 2, Memory: gib, Disk: 10 * gib},
 			Ports:          []port.Port{80, 8080},
@@ -216,16 +214,20 @@ func TestNode_Execute(t *testing.T) {
 		assert.True(t, spec.PersistentDisk)
 	})
 
-	t.Run("a docker vm is labelled as one, which is how its node tells its dockerd from the rest", func(t *testing.T) {
+	t.Run("a docker vm is asked for by its image alone, and its engine says it is one, which is how its node tells its dockerd from the rest", func(t *testing.T) {
 		t.Parallel()
 
-		f := newFixture(t)
-		f.made(t, aVM("01", vmKind.Scheduled, func(v *vmKind.VM) { v.Spec.Flavor = vmKind.FlavorDocker }))
+		f := newFixture(t, memory.WithDockerImage("docker:29-dind"))
+		f.made(t, aVM("01", vmKind.Scheduled, func(v *vmKind.VM) { v.Spec.Image = "docker:28-dind" }))
 
 		spec, err := f.engine.Spec("01")
 		require.NoError(t, err)
-		assert.Equal(t, vm.KindDocker, spec.Kind)
-		assert.Equal(t, "true", spec.Labels[vmKind.LabelDocker])
+		assert.Equal(t, "docker:28-dind", spec.Image)
+		assert.NotContains(t, spec.Labels, vmKind.LabelDocker, "nothing but its image says what it is")
+
+		instance, err := f.engine.Inspect(context.Background(), "01")
+		require.NoError(t, err)
+		assert.Equal(t, "true", instance.Labels[vmKind.LabelDocker], "as its engine tells it, from its image")
 	})
 
 	t.Run("a vm created from a snapshot is made with the snapshot's disk", func(t *testing.T) {
@@ -587,7 +589,7 @@ func TestNode_State(t *testing.T) {
 		require.NoError(t, f.engine.Fail("03", ""))
 
 		// a task's VM is the engine's too, and not a VM of the kind's.
-		_, err := f.engine.Create(ctx, vm.Spec{ID: "task", Kind: vm.KindMachine, Resources: vm.Resources{CPUs: 1, Memory: gib, Disk: gib}, Labels: map[string]string{vm.LabelPurpose: "task"}})
+		_, err := f.engine.Create(ctx, vm.Spec{ID: "task", Resources: vm.Resources{CPUs: 1, Memory: gib, Disk: gib}, Labels: map[string]string{vm.LabelPurpose: "task"}})
 		require.NoError(t, err)
 
 		report, err := f.node.State(ctx)

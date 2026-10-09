@@ -24,7 +24,7 @@ func dialled(t *testing.T, exec memory.ExecFunc) (*conn, *memory.Engine) {
 
 	e := memory.New(memory.WithExec(exec))
 
-	_, err := e.Create(t.Context(), vm.Spec{ID: "vm-1", Kind: vm.KindDocker, Image: "docker:29-dind"})
+	_, err := e.Create(t.Context(), vm.Spec{ID: "vm-1", Image: "docker:29-dind"})
 	require.NoError(t, err)
 
 	session, err := e.Exec(t.Context(), "vm-1", vm.ExecOptions{Command: dialStdio})

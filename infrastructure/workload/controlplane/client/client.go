@@ -47,15 +47,21 @@ const (
 type Client struct {
 	baseURL    *url.URL
 	httpClient *http.Client
+
+	// dockerImage is the image Docker VMs boot from, the control plane's and
+	// the vmhosts' own: a VM's image says whether it is one (vm.KindOf), which
+	// is what the dashboard calls its kind, and a Docker VM is asked for by it.
+	dockerImage string
 }
 
 var _ workloadControlPlane.Client = &Client{}
 
 // New builds a client for the control plane at baseURL, e.g.
-// "http://workload-controlplane:80". It answers about tasks, VMs, snapshots,
+// "http://workload-controlplane:80", whose Docker VMs boot dockerImage, as
+// the control plane is told they do. It answers about tasks, VMs, snapshots,
 // containers and stacks; reaching one is the ingress's business and does not
 // pass through here.
-func New(baseURL string) (*Client, error) {
+func New(baseURL string, dockerImage string) (*Client, error) {
 	parsed, err := usable(baseURL, "workload control plane")
 	if err != nil {
 		return nil, err
@@ -64,8 +70,9 @@ func New(baseURL string) (*Client, error) {
 	// each call is bounded by its own timeout, since the slowest of them takes
 	// minutes and the fastest should not.
 	return &Client{
-		baseURL:    parsed,
-		httpClient: &http.Client{},
+		baseURL:     parsed,
+		httpClient:  &http.Client{},
+		dockerImage: dockerImage,
 	}, nil
 }
 

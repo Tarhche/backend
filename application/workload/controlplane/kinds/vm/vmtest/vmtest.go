@@ -72,8 +72,9 @@ var Limits = quota.Limits{
 }
 
 // DockerDefaults are what a Docker VM made for a container or a stack is
-// given in the tests.
+// given in the tests: the Docker image among it, which makes it one.
 var DockerDefaults = dockervm.Defaults{
+	Image:     Images.Docker,
 	Resources: vmKind.Resources{CPUs: 2, Memory: 2 * GiB, Disk: 20 * GiB},
 	Ports:     []port.Port{80},
 	Network:   vmKind.Network{Ingress: vm.AccessAllow, Egress: vm.AccessAllow},
@@ -188,10 +189,11 @@ func New(opts ...Option) *Workload {
 	}
 
 	w.Snapshots = controlPlaneSnapshots.New(controlPlaneSnapshots.Dependencies{
-		VMs:       w.Records,
-		Nodes:     w.Placement,
-		Resources: w.Resources,
-		UserMax:   SnapshotUserMax,
+		VMs:         w.Records,
+		Nodes:       w.Placement,
+		Resources:   w.Resources,
+		UserMax:     SnapshotUserMax,
+		DockerImage: Images.Docker,
 	})
 
 	w.VMs = controlPlaneVMs.New(controlPlaneVMs.Dependencies{
@@ -332,13 +334,11 @@ func Running(uuid string, ownerUUID string) vmKind.VM {
 			Name:      "box",
 			Slug:      "box-" + uuid,
 			OwnerUUID: ownerUUID,
-			Labels:    map[string]string{vmKind.LabelFlavor: string(vmKind.FlavorMachine)},
 			Node:      Node,
 			CreatedAt: made,
 			UpdatedAt: made,
 		},
 		Spec: vmKind.Spec{
-			Flavor:    vmKind.FlavorMachine,
 			Image:     "ubuntu:24.04",
 			Resources: vmKind.Resources{CPUs: 1, Memory: GiB, Disk: 10 * GiB},
 			Ports:     []port.Port{},
@@ -364,12 +364,10 @@ func Stopped(uuid string, ownerUUID string) vmKind.VM {
 	return v
 }
 
-// Docker is a running Docker VM on Node.
+// Docker is a running Docker VM on Node: one booting the Docker image.
 func Docker(uuid string, ownerUUID string) vmKind.VM {
 	v := Running(uuid, ownerUUID)
-	v.Metadata.Labels[vmKind.LabelFlavor] = string(vmKind.FlavorDocker)
-	v.Spec.Flavor = vmKind.FlavorDocker
-	v.Spec.Image = "docker:29-dind"
+	v.Spec.Image = Images.Docker
 	v.Spec.Resources = vmKind.Resources{CPUs: 2, Memory: 2 * GiB, Disk: 20 * GiB}
 
 	config := v.Spec.Config()
@@ -404,7 +402,6 @@ func Snapshot(uuid string, ownerUUID string, changes ...func(s *snapshotKind.Sna
 		Spec: snapshotKind.Spec{VM: snapshotKind.VMRef{UUID: "01", Name: "box"}},
 		Status: snapshotKind.Status{
 			Status:      kind.Status{State: snapshotKind.Ready, Expected: snapshotKind.Ready, Since: taken},
-			Flavor:      vm.KindMachine,
 			Image:       "ubuntu:24.04",
 			Disk:        5 * GiB,
 			Engine:      "microsandbox/0.7.5",

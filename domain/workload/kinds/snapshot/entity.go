@@ -3,6 +3,7 @@ package snapshot
 import (
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/snapshot"
+	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
 
 // StateOf is what the dashboard has always called the state a snapshot is
@@ -28,9 +29,10 @@ func StateOf(status kind.Status) snapshot.State {
 }
 
 // Entity is a snapshot's manifest as the snapshot package's Snapshot, which
-// is what the dashboard shows a snapshot as. A snapshot that failed was done
-// with when it failed.
-func Entity(s Snapshot) snapshot.Snapshot {
+// is what the dashboard shows a snapshot as: of a machine or of a Docker VM,
+// as the image it took says where dockerImage is the image Docker VMs boot
+// from (vm.KindOf). A snapshot that failed was done with when it failed.
+func Entity(s Snapshot, dockerImage string) snapshot.Snapshot {
 	completed := s.Status.CompletedAt
 	if completed.IsZero() && s.Status.State == Failed {
 		completed = s.Status.Since
@@ -42,7 +44,7 @@ func Entity(s Snapshot) snapshot.Snapshot {
 		OwnerUUID:   s.Metadata.OwnerUUID,
 		VMUUID:      VMOf(s),
 		VMName:      s.Spec.VM.Name,
-		Kind:        s.Status.Flavor,
+		Kind:        vm.KindOf(s.Status.Image, dockerImage),
 		Image:       s.Status.Image,
 		Disk:        s.Status.Disk,
 		Engine:      s.Status.Engine,

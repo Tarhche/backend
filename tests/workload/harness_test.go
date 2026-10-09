@@ -154,14 +154,19 @@ func start(t *testing.T, options ...option) *workload {
 
 	w.beating.Store(true)
 
+	// the control plane's settings as it is served, its Docker image among
+	// them, which the node's engine is given too, as a vmhost is.
+	controlPlaneConfigs := configs.NewWorkloadControlPlane()
+
 	// docker is there only in a Docker VM, as it is on a node: a machine VM
 	// has no such command. A VM that runs a program of its own, a task's, runs
 	// what the test says it does.
 	w.engine = memory.New(
 		memory.WithCapacity(16, 64<<30, 1000<<30),
+		memory.WithDockerImage(controlPlaneConfigs.VMDockerImage),
 		memory.WithMain(w.programs.main),
 		memory.WithExec(func(ctx context.Context, id string, options vm.ExecOptions, stdin io.Reader, stdout io.Writer, stderr io.Writer) int {
-			if spec, err := w.engine.Spec(id); err != nil || spec.Kind != vm.KindDocker {
+			if spec, err := w.engine.Spec(id); err != nil || vm.KindOf(spec.Image, controlPlaneConfigs.VMDockerImage) != vm.KindDocker {
 				_, _ = io.WriteString(stderr, "sh: docker: not found\n")
 
 				return 127
@@ -215,7 +220,7 @@ func start(t *testing.T, options ...option) *workload {
 	controlPlaneMessages, err := produceConsumer.NewProduceConsumer(controlPlaneConnection, "workload-controlplane", logger)
 	require.NoError(t, err)
 
-	controlPlane, err := providers.NewControlPlaneWorkload(configs.NewWorkloadControlPlane(), providers.ControlPlaneStores{
+	controlPlane, err := providers.NewControlPlaneWorkload(controlPlaneConfigs, providers.ControlPlaneStores{
 		Resources: w.resources,
 		Nodes:     w.nodes,
 		TaskLogs:  logsMock.NewInMemoryRepository(),
@@ -228,7 +233,7 @@ func start(t *testing.T, options ...option) *workload {
 
 	api := httptest.NewServer(mux)
 
-	w.client, err = client.New(api.URL)
+	w.client, err = client.New(api.URL, controlPlaneConfigs.VMDockerImage)
 	require.NoError(t, err)
 
 	// each side listens before anything is said: a JetStream subject keeps a

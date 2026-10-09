@@ -9,12 +9,13 @@
 package vm
 
 import (
+	"strings"
 	"time"
 
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
 )
 
-// Kind is what a VM boots into.
+// Kind is what a VM boots into, which its image says (KindOf).
 type Kind string
 
 const (
@@ -22,9 +23,10 @@ const (
 	// a machine somebody opens a terminal in, and it runs until it is stopped.
 	KindMachine Kind = "machine"
 
-	// KindDocker boots a docker-in-docker image with dockerd running, which is
-	// what containers and stacks are run in. A VM is a Docker VM because it was
-	// made as one; nothing ever looks inside a VM to find a docker daemon.
+	// KindDocker boots the Docker image, a docker-in-docker image, with
+	// dockerd running, which is what containers and stacks are run in. A VM
+	// is a Docker VM because its image is the Docker image; nothing ever looks
+	// inside a VM to find a docker daemon.
 	KindDocker Kind = "docker"
 )
 
@@ -40,6 +42,60 @@ func (k Kind) IsValid() bool {
 
 func (k Kind) String() string {
 	return string(k)
+}
+
+// dockerHub is the registry an image whose name says none is pulled from.
+const dockerHub = "docker.io"
+
+// KindOf is what a VM that boots image boots into, where dockerImage is the
+// image Docker VMs boot from: a Docker VM when the two name the same
+// repository, whatever either is tagged or pinned to, so that a VM made
+// before the Docker image moved on to a newer tag is a Docker VM still; and a
+// machine otherwise, one that names no image, which boots the default one,
+// among them.
+//
+// It is the one rule for what a VM is. Nothing records it beside the image:
+// every service that has to know reads it off the image, with the Docker
+// image it is given, which is the same one everywhere.
+func KindOf(image string, dockerImage string) Kind {
+	if repository := repositoryOf(dockerImage); len(repository) > 0 && repositoryOf(image) == repository {
+		return KindDocker
+	}
+
+	return KindMachine
+}
+
+// repositoryOf is the repository an image names, as a registry knows it:
+// without its digest or its tag, and in full on Docker Hub, where
+// docker:29-dind is docker.io/library/docker. A tag follows the last colon
+// after the last slash, which a registry's port never does, and a name's
+// first part is a registry only when it has a dot or a port in it, or is
+// localhost. No image names no repository.
+func repositoryOf(image string) string {
+	name, _, _ := strings.Cut(strings.TrimSpace(image), "@")
+
+	if colon := strings.LastIndex(name, ":"); colon > strings.LastIndex(name, "/") {
+		name = name[:colon]
+	}
+
+	if len(name) == 0 {
+		return ""
+	}
+
+	registry, path, qualified := strings.Cut(name, "/")
+	if !qualified || (!strings.ContainsAny(registry, ".:") && registry != "localhost") {
+		registry, path = dockerHub, name
+	}
+
+	if registry == "index."+dockerHub {
+		registry = dockerHub
+	}
+
+	if registry == dockerHub && !strings.Contains(path, "/") {
+		path = "library/" + path
+	}
+
+	return registry + "/" + path
 }
 
 // Access is whether one direction of a VM's network is open.
@@ -95,10 +151,13 @@ type VM struct {
 	Slug string
 
 	OwnerUUID string
-	Kind      Kind
 
-	// Image is the OCI reference it boots from. A VM that names none takes its
-	// kind's default, and it never changes once the VM exists.
+	// Kind is what it boots into, which its image says (KindOf).
+	Kind Kind
+
+	// Image is the OCI reference it boots from. A VM that names none is a
+	// machine, and boots the default image; it never changes once the VM
+	// exists.
 	Image string
 
 	Resources Resources

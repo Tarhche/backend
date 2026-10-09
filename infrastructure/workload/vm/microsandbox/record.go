@@ -28,7 +28,7 @@ type record struct {
 	Spec vm.Spec `json:"spec"`
 
 	// Image is what the instance booted from: its spec's, or the vmhost's own
-	// for a Docker VM.
+	// for a Docker VM. It is what says what the instance is (kind).
 	Image string `json:"image"`
 
 	// HostPorts is the host port each guest port was given. It is kept for as
@@ -71,6 +71,14 @@ type exit struct {
 	Reason string `json:"reason,omitempty"`
 
 	At time.Time `json:"at"`
+}
+
+// kind is what the instance boots into, as the image it boots from says
+// (vm.KindOf), where dockerImage is the vmhost's: a Docker VM boots the
+// vmhost's own image, or an older tag of it. Nothing else says it, so a record
+// kept from when the orchestrator said it too is read the same way.
+func (r *record) kind(dockerImage string) vm.Kind {
+	return vm.KindOf(r.Image, dockerImage)
 }
 
 // clone is a copy of r that shares nothing with it.

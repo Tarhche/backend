@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -49,7 +50,7 @@ func controlPlane(t *testing.T, status int, body string) (*Client, *answering) {
 	}))
 	t.Cleanup(server.Close)
 
-	c, err := New(server.URL)
+	c, err := New(server.URL, "docker:29-dind")
 	require.NoError(t, err)
 
 	return c, asked
@@ -180,7 +181,7 @@ func TestClient_requests(t *testing.T) {
 		_, err := c.VMs(ctx, "owner-uuid", vm.KindDocker, 2)
 		require.NoError(t, err)
 		assert.Equal(t, "/api/vms", asked.path)
-		assert.Equal(t, "label=workload.flavor%3Ddocker&owner=owner-uuid&page=2", asked.query, "a docker vm is a vm labelled so")
+		assert.Equal(t, "is=docker&owner=owner-uuid&page=2", asked.query, "the control plane says which vms are docker vms, as their images do")
 
 		_, err = c.VMs(ctx, "", "", 0)
 		require.NoError(t, err)
@@ -193,7 +194,7 @@ func TestClient_requests(t *testing.T) {
 		c, asked := controlPlane(t, http.StatusCreated, `{"resource":{
 			"kind": "vm",
 			"metadata": {"uuid": "vm-uuid", "name": "box", "lifetime": 3600000000000},
-			"spec": {"flavor": "machine", "resources": {"cpus": 2, "memory": 2147483648, "disk": 10737418240}, "ports": [22, 80], "network": {"ingress": "allow", "egress": "deny"}},
+			"spec": {"image": "ubuntu:24.04", "resources": {"cpus": 2, "memory": 2147483648, "disk": 10737418240}, "ports": [22, 80], "network": {"ingress": "allow", "egress": "deny"}},
 			"status": {"state": "scheduled", "expected": "running"}
 		}, "command": {"id": "command-1", "action": "create"}}`)
 
@@ -214,7 +215,6 @@ func TestClient_requests(t *testing.T) {
 			"kind": "vm",
 			"metadata": {"name": "box", "lifetime": 3600000000000},
 			"spec": {
-				"flavor": "machine",
 				"resources": {"cpus": 2, "memory": 2147483648, "disk": 10737418240},
 				"ports": [22, 80],
 				"network": {"ingress": "allow", "egress": "deny"}
@@ -222,11 +222,47 @@ func TestClient_requests(t *testing.T) {
 		}`, string(asked.body), "a vm is asked for as its kind's manifest")
 
 		assert.Equal(t, "vm-uuid", created.UUID)
+		assert.Equal(t, vm.KindMachine, created.Kind, "as its image says")
 		assert.Equal(t, vm.Scheduled, created.CurrentState)
 		assert.Equal(t, vm.Running, created.ExpectedState)
 		assert.Equal(t, time.Hour, created.Lifetime)
 		assert.Equal(t, uint64(2<<30), created.Resources.Memory)
 	})
+
+	t.Run("a docker vm is asked for by the docker image, which makes it one", func(t *testing.T) {
+		t.Parallel()
+
+		c, asked := controlPlane(t, http.StatusCreated, `{"resource":{"kind":"vm","metadata":{"uuid":"vm-uuid"},"spec":{"image":"docker:29-dind"}}}`)
+
+		created, err := c.CreateVM(ctx, "owner-uuid", workloadControlPlane.VMRequest{Name: "builds", Kind: vm.KindDocker})
+		require.NoError(t, err)
+
+		var spec struct {
+			Spec map[string]any `json:"spec"`
+		}
+
+		require.NoError(t, json.Unmarshal(asked.body, &spec))
+		assert.Equal(t, "docker:29-dind", spec.Spec["image"])
+		assert.Equal(t, vm.KindDocker, created.Kind, "as its image says")
+	})
+
+	for name, request := range map[string]workloadControlPlane.VMRequest{
+		"a machine booting the docker image":    {Name: "box", Kind: vm.KindMachine, Image: "docker:29-dind"},
+		"a docker vm booting a machine's image": {Name: "box", Kind: vm.KindDocker, Image: "ubuntu:24.04"},
+	} {
+		t.Run("not asked for: "+name, func(t *testing.T) {
+			t.Parallel()
+
+			c, asked := controlPlane(t, http.StatusCreated, `{}`)
+
+			_, err := c.CreateVM(ctx, "owner-uuid", request)
+
+			var refused *ValidationError
+			require.ErrorAs(t, err, &refused)
+			assert.Equal(t, domain.ValidationErrors{"image": "invalid_image"}, refused.ValidationErrors, "the image would make it another kind than it was asked for as")
+			assert.Empty(t, asked.method, "nothing is asked of the control plane")
+		})
+	}
 
 	t.Run("an update says only what changes", func(t *testing.T) {
 		t.Parallel()

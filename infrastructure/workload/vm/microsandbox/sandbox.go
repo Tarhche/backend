@@ -86,7 +86,7 @@ func (e *engine) createOptions(r *record) ([]msb.SandboxOption, error) {
 		options = append(options, msb.WithWorkdir(spec.WorkingDir))
 	}
 
-	if spec.Kind == vm.KindDocker {
+	if r.kind(e.dockerImage) == vm.KindDocker {
 		options = append(options,
 			msb.WithScripts(map[string]string{"vminit": vminitScript}),
 			msb.WithInit(msb.Init.Cmd(vminitInit, msb.InitOptions{Args: []string{"--pid1"}})),

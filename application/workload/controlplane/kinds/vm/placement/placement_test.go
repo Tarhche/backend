@@ -40,7 +40,7 @@ func on(uuid string, nodeName string, resources vmKind.Resources, observed time.
 	return vmKind.VM{
 		Kind:     vmKind.Name,
 		Metadata: kind.Metadata{UUID: uuid, Slug: "vm-" + uuid, OwnerUUID: "owner", Node: nodeName},
-		Spec:     vmKind.Spec{Flavor: vmKind.FlavorMachine, Resources: resources},
+		Spec:     vmKind.Spec{Resources: resources},
 		Status:   vmKind.Status{Status: kind.Status{State: state, Expected: vmKind.Running, Since: observed, ObservedAt: observed}},
 	}
 }

@@ -88,7 +88,6 @@ func socketPath(t *testing.T) string {
 func machine(id string) vm.Spec {
 	return vm.Spec{
 		ID:        id,
-		Kind:      vm.KindMachine,
 		Image:     "ubuntu:24.04",
 		Resources: vm.Resources{CPUs: 1, Memory: 256 << 20, Disk: 1 << 30},
 		Ports:     []port.Port{80, 8080},

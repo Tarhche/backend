@@ -314,7 +314,7 @@ func dockerVM(t *testing.T, fake *fakeDocker, refusals *atomic.Int32, readyTimeo
 
 	e := memory.New(memory.WithExec(dialStdioTo(server.Listener.Addr().String(), refusals)))
 
-	_, err := e.Create(t.Context(), vm.Spec{ID: "vm-1", Kind: vm.KindDocker, Image: "docker:29-dind"})
+	_, err := e.Create(t.Context(), vm.Spec{ID: "vm-1", Image: "docker:29-dind"})
 	require.NoError(t, err)
 
 	daemons := NewDaemons(e, readyTimeout, slog.New(slog.DiscardHandler))
@@ -363,7 +363,7 @@ func TestDaemon_Ping(t *testing.T) {
 		{
 			name: "a VM with no docker in it is no Docker VM, and is not waited for",
 			prepare: func(t *testing.T, e *memory.Engine) {
-				_, err := e.Create(t.Context(), vm.Spec{ID: "machine", Kind: vm.KindMachine, Image: "ubuntu:24.04"})
+				_, err := e.Create(t.Context(), vm.Spec{ID: "machine", Image: "ubuntu:24.04"})
 				require.NoError(t, err)
 			},
 			vmUUID: "machine",

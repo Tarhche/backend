@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"net"
 	"net/http"
 	"os"
@@ -137,7 +138,6 @@ func machineImage() string {
 func machine(id string, changes ...func(spec *vm.Spec)) vm.Spec {
 	spec := vm.Spec{
 		ID:             id,
-		Kind:           vm.KindMachine,
 		Image:          machineImage(),
 		Resources:      vm.Resources{CPUs: 1, Memory: 256 << 20, Disk: 1 << 30},
 		Network:        vm.Network{Ingress: vm.AccessAllow, Egress: vm.AccessAllow},
@@ -157,14 +157,22 @@ func machine(id string, changes ...func(spec *vm.Spec)) vm.Spec {
 	return spec
 }
 
-// dockerVM is a Docker VM, sized the way the control plane's floor for one
-// is.
+// dockerVM is a Docker VM, one booting the engine's Docker image, sized the
+// way the control plane's floor for one is.
 func dockerVM(id string, changes ...func(spec *vm.Spec)) vm.Spec {
 	return machine(id, append([]func(spec *vm.Spec){func(spec *vm.Spec) {
-		spec.Kind = vm.KindDocker
 		spec.Image = envOr("VMHOST_IT_DOCKER_IMAGE", "docker:29-dind")
 		spec.Resources = vm.Resources{CPUs: 2, Memory: 1 << 30, Disk: 6 << 30}
 	}}, changes...)...)
+}
+
+// dockerLabels is labels as the engine reports a Docker VM's: said to be
+// one.
+func dockerLabels(labels map[string]string) map[string]string {
+	said := maps.Clone(labels)
+	said[vm.LabelDocker] = "true"
+
+	return said
 }
 
 func withPorts(ports ...port.Port) func(spec *vm.Spec) {

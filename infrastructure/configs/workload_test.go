@@ -137,6 +137,13 @@ func TestWorkloadConfigsBind(t *testing.T) {
 		})
 	})
 
+	t.Run("the blog, of the workload", func(t *testing.T) {
+		defaults(t, NewBlog(), map[string]string{
+			"WORKLOAD_CONTROLPLANE_URL": "http://workload-controlplane:80",
+			"WORKLOAD_VM_DOCKER_IMAGE":  "docker:29-dind",
+		})
+	})
+
 	t.Run("the ingress", func(t *testing.T) {
 		defaults(t, NewWorkloadIngress(), map[string]string{
 			"WORKLOAD_INGRESS_DOMAIN":                "workload.localhost",

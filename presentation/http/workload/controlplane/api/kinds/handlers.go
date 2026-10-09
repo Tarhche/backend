@@ -66,6 +66,7 @@ func NewIndexHandler(useCase *getResources.UseCase, kindName string) *indexHandl
 // @Param			owner	query		string	false	"Only this person's own"
 // @Param			parent	query		string	false	"Only those living in this resource"
 // @Param			label	query		[]string	false	"Only those labelled so, as key=value; given more than once, every one of them"	collectionFormat(multi)
+// @Param			is		query		string	false	"Only those the kind says are so, in a word of its own: docker or machine for a VM, as its image says"
 // @Param			page	query		int		false	"Page number"	default(1)
 // @Success		200		{object}	getResources.Response
 // @Failure		400		{object}	map[string]interface{}
@@ -84,15 +85,18 @@ func (h *indexHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		OwnerUUID: respond.Owner(r),
 		Parent:    r.URL.Query().Get("parent"),
 		Labels:    labels,
+		Is:        r.URL.Query().Get("is"),
 		Page:      respond.Page(r),
 	})
-	if err != nil {
+
+	switch {
+	case err != nil:
 		failed(rw, r, err)
-
-		return
+	case len(response.ValidationErrors) > 0:
+		respond.Refused(rw, response.ValidationErrors)
+	default:
+		respond.JSON(rw, http.StatusOK, response)
 	}
-
-	respond.JSON(rw, http.StatusOK, response)
 }
 
 type createHandler struct {

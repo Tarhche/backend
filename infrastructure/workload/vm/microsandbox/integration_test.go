@@ -470,6 +470,8 @@ func TestDockerVM(t *testing.T) {
 	daemon := daemons.Daemon(spec.ID)
 	dockerUp(t, e, daemons, spec.ID)
 
+	assert.Equal(t, "true", instance.Labels[vm.LabelDocker], "the engine says it is a docker vm, as its image does")
+
 	assert.Equal(t, "vminit", runOK(t, e, spec.ID, "cat /proc/1/comm"), "dockerd is looked after by vminit as the guest's init")
 
 	page := func(address string) func() bool {
@@ -580,7 +582,7 @@ func TestDockerVM(t *testing.T) {
 		instance := restored(t, e, copied, archive)
 
 		assert.Equal(t, vm.InstanceRunning, instance.State)
-		assert.Equal(t, copied.Labels, instance.Labels, "its labels are the spec's, which a restore drops")
+		assert.Equal(t, dockerLabels(copied.Labels), instance.Labels, "its labels are the spec's, which a restore drops, and that it is a docker vm")
 		dockerUp(t, e, daemons, copied.ID)
 
 		assert.Equal(t, "docker-data", runOK(t, e, copied.ID, "cat /root/data.txt"))
@@ -740,7 +742,7 @@ func TestSnapshotAndRestore(t *testing.T) {
 	t.Run("an archive another engine wrote is refused, and the vm left as it was", func(t *testing.T) {
 		other := memory.New()
 
-		_, err := other.Create(ctx, vm.Spec{ID: spec.ID, Kind: vm.KindMachine, Image: machineImage()})
+		_, err := other.Create(ctx, vm.Spec{ID: spec.ID, Image: machineImage()})
 		require.NoError(t, err)
 
 		var foreign bytes.Buffer

@@ -40,7 +40,7 @@ type WorkloadControlPlane struct {
 	MaxLogBytes int64 `usage:"How much log one task may keep. Past it, further lines are dropped rather than stored." env:"WORKLOAD_MAX_LOG_BYTES" long:"max-log-bytes"`
 
 	VMDefaultImage string `usage:"Image a machine VM boots from when it names none." env:"WORKLOAD_VM_DEFAULT_IMAGE" long:"vm-default-image"`
-	VMDockerImage  string `usage:"Image every Docker VM boots from: a docker-in-docker image, the same one the vmhosts are given." env:"WORKLOAD_VM_DOCKER_IMAGE" long:"vm-docker-image"`
+	VMDockerImage  string `usage:"Image every Docker VM boots from: a docker-in-docker image, the same one the vmhosts are given. A VM whose image is it, or another tag of it, is a Docker VM." env:"WORKLOAD_VM_DOCKER_IMAGE" long:"vm-docker-image"`
 
 	// the least a VM may be given, which is more for a Docker VM: dockerd and
 	// the images it pulls need room before anything runs in it.

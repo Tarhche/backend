@@ -17,7 +17,6 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/docker"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
-	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	"github.com/khanzadimahdi/testproject/infrastructure/workload/vm/memory"
 )
@@ -188,12 +187,13 @@ type fixture struct {
 	node    *stack.Node
 }
 
-// newFixture is a node with a running Docker VM, vm-1, labelled as one.
+// newFixture is a node with a running Docker VM, vm-1, which its engine says
+// is one.
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
 
 	f := &fixture{
-		engine:  memory.New(),
+		engine:  memory.New(memory.WithDockerImage("docker:29-dind")),
 		daemons: daemons{"vm-1": &dockerd{}},
 		applier: &applier{output: "Container shop-abcde-web-1  Started\n"},
 	}
@@ -204,19 +204,17 @@ func newFixture(t *testing.T) *fixture {
 	return f
 }
 
-// vm makes a VM on the node, a Docker VM labelled as one when docker says.
+// vm makes a VM on the node, a Docker VM, booting the Docker image, when
+// isDocker says, and a machine otherwise.
 func (f *fixture) vm(t *testing.T, uuid string, isDocker bool) {
 	t.Helper()
 
-	labels := map[string]string{vm.LabelPurpose: vm.PurposeVM, vm.LabelVM: uuid}
-	kindOf := vm.KindMachine
-
+	image := "ubuntu:24.04"
 	if isDocker {
-		labels[vmKind.LabelDocker] = "true"
-		kindOf = vm.KindDocker
+		image = "docker:29-dind"
 	}
 
-	_, err := f.engine.Create(t.Context(), vm.Spec{ID: uuid, Kind: kindOf, Labels: labels})
+	_, err := f.engine.Create(t.Context(), vm.Spec{ID: uuid, Image: image, Labels: map[string]string{vm.LabelPurpose: vm.PurposeVM, vm.LabelVM: uuid}})
 	require.NoError(t, err)
 }
 
@@ -462,7 +460,7 @@ func TestNode_State(t *testing.T) {
 
 		f := newFixture(t)
 
-		_, err := f.engine.Create(t.Context(), vm.Spec{ID: "old", Kind: vm.KindDocker, Labels: map[string]string{vm.LabelPurpose: vm.PurposeVM, vm.LabelVM: "old"}})
+		_, err := f.engine.Create(t.Context(), vm.Spec{ID: "old", Labels: map[string]string{vm.LabelPurpose: vm.PurposeVM, vm.LabelVM: "old"}})
 		require.NoError(t, err)
 
 		f.daemons["old"] = &dockerd{}

@@ -89,7 +89,7 @@ func TestContainers_Admit(t *testing.T) {
 
 		made, kept := w.Stored(containerKind.VMOf(admitted))
 		require.True(t, kept)
-		assert.True(t, vmKind.DockerVM(made))
+		assert.True(t, vmKind.DockerVM(made, vmtest.Images.Docker))
 		assert.Equal(t, "its vm is scheduled", admitted.Status.Reason, "and it waits for it to come up")
 	})
 

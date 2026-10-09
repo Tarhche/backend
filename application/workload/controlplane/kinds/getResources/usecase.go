@@ -6,6 +6,12 @@
 // are the guest's and live in nothing, so only a listing of anybody's VMs has
 // them; what a Docker VM's dockerd holds that a stack or its terminal made is
 // its VM's owner's, and lives in the VM.
+//
+// A listing may be narrowed, too, to what the kind says its resources are, in
+// a word of its own (kind.Narrower): the VMs that are Docker VMs, as their
+// images say. Only the kind can tell that of a resource, so such a listing
+// reads every record and extra the rest of it lets through, and pages what
+// the kind keeps of them.
 package getResources
 
 import (
@@ -14,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/presenter"
+	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
 )
@@ -31,11 +38,16 @@ func NewUseCase(registry *kind.Registry[kind.ControlPlaneBinding], resources res
 }
 
 // Execute is the page asked for, or kind.ErrUnknownKind for a kind not run
-// here.
+// here. A word the kind does not say of its resources is refused under is.
 func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
 	binding, registered := uc.registry.Lookup(request.Kind)
 	if !registered {
 		return nil, fmt.Errorf("%w: %q", kind.ErrUnknownKind, request.Kind)
+	}
+
+	narrower, narrows := binding.Narrower()
+	if len(request.Is) > 0 && (!narrows || !narrower.Narrows(request.Is)) {
+		return &Response{ValidationErrors: domain.ValidationErrors{"is": "invalid_value"}}, nil
 	}
 
 	d := binding.Descriptor()
@@ -56,9 +68,12 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		total uint
 	)
 
-	if len(extras) == 0 {
+	switch {
+	case len(request.Is) > 0:
+		items, total, err = uc.narrowed(ctx, d.Name, filter, extras, narrower, request.Is, offset)
+	case len(extras) == 0:
 		items, total, err = uc.records(ctx, d.Name, filter, offset, Limit)
-	} else {
+	default:
 		items, total, err = uc.withExtras(ctx, d.Name, filter, extras, offset)
 	}
 
@@ -128,6 +143,38 @@ func (uc *UseCase) withExtras(ctx context.Context, kindName string, filter resou
 	}
 
 	return merged[offset:end], total + uint(len(extras)), nil
+}
+
+// narrowed is the page that starts at offset of the kind's records and its
+// extras together, of those narrower says are what word says, and how many of
+// those there are. Only the kind can tell which they are, so every record the
+// filter lets through is read.
+func (uc *UseCase) narrowed(ctx context.Context, kindName string, filter resource.Filter, extras []kind.Raw, narrower kind.Narrower, word string, offset uint) ([]kind.Raw, uint, error) {
+	records, _, err := uc.records(ctx, kindName, filter, 0, 0)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	merged := Merge(records, extras)
+
+	kept := make([]kind.Raw, 0, len(merged))
+	for _, r := range merged {
+		is, err := narrower.Is(r, word)
+		if err != nil {
+			return nil, 0, err
+		}
+
+		if is {
+			kept = append(kept, r)
+		}
+	}
+
+	end := min(offset+Limit, uint(len(kept)))
+	if offset >= end {
+		return []kind.Raw{}, uint(len(kept)), nil
+	}
+
+	return kept[offset:end], uint(len(kept)), nil
 }
 
 // Merge is records and extras in one listing, newest first, as each of them

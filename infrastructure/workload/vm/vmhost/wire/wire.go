@@ -125,9 +125,10 @@ type Network struct {
 
 // Spec is a vm.Spec as it travels. No list or map in it is omitted when it is
 // empty: null and [] are told apart, as the spec tells nil and empty apart.
+// What an instance boots into is not in it: the vmhost reads it off the
+// image.
 type Spec struct {
 	ID             string            `json:"id"`
-	Kind           vm.Kind           `json:"kind"`
 	Image          string            `json:"image"`
 	Resources      Resources         `json:"resources"`
 	Ports          []port.Port       `json:"ports"`
@@ -143,7 +144,6 @@ type Spec struct {
 func NewSpec(s vm.Spec) Spec {
 	return Spec{
 		ID:             s.ID,
-		Kind:           s.Kind,
 		Image:          s.Image,
 		Resources:      NewResources(s.Resources),
 		Ports:          slices.Clone(s.Ports),
@@ -160,7 +160,6 @@ func NewSpec(s vm.Spec) Spec {
 func (s Spec) ToVM() vm.Spec {
 	return vm.Spec{
 		ID:             s.ID,
-		Kind:           s.Kind,
 		Image:          s.Image,
 		Resources:      s.Resources.ToVM(),
 		Ports:          slices.Clone(s.Ports),

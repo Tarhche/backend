@@ -3,8 +3,9 @@
 // One that names a VM goes into it, and it has to be a Docker VM of the
 // person asking. One that names none goes into their only Docker VM, or into
 // one made for it with the defaults when they have none; with several to
-// choose from, the person asking has to say which. Detection is only by
-// flavor: nothing ever looks inside a VM for a dockerd.
+// choose from, the person asking has to say which. A Docker VM is one whose
+// image is the Docker image, or another tag of it (vm.KindOf), and nothing
+// else tells one: nothing ever looks inside a VM for a dockerd.
 //
 // A Docker VM made for a container or a stack is admitted as any VM is,
 // through the control plane's admission of the vm kind: its bounds, its
@@ -60,6 +61,11 @@ type New struct {
 
 // Defaults are what a Docker VM made for a container or a stack is given.
 type Defaults struct {
+	// Image is the Docker image, which a Docker VM boots from and which is
+	// what makes it one: a person's Docker VMs are those of their VMs that
+	// boot it.
+	Image string
+
 	Resources      vmKind.Resources
 	Ports          []port.Port
 	Network        vmKind.Network
@@ -110,14 +116,14 @@ func (c *Chooser) Choose(ctx context.Context, ownerUUID string, choice Choice) (
 		return c.made(ctx, ownerUUID, choice.New)
 	}
 
-	owned, err := c.records.All(ctx, resource.Filter{OwnerUUID: ownerUUID, Labels: map[string]string{vmKind.LabelFlavor: string(vmKind.FlavorDocker)}})
+	owned, err := c.records.Owned(ctx, ownerUUID)
 	if err != nil {
 		return Chosen{}, nil, err
 	}
 
 	usable := make([]vmKind.VM, 0, len(owned))
 	for _, v := range owned {
-		if vmKind.DockerVM(v) && !records.Going(v) {
+		if vmKind.DockerVM(v, c.defaults.Image) && !records.Going(v) {
 			usable = append(usable, v)
 		}
 	}
@@ -142,7 +148,7 @@ func (c *Chooser) named(ctx context.Context, ownerUUID string, uuid string) (Cho
 	}
 
 	switch {
-	case !vmKind.DockerVM(v):
+	case !vmKind.DockerVM(v, c.defaults.Image):
 		return Chosen{}, domain.ValidationErrors{"vm.uuid": "not_docker"}, nil
 	case records.Going(v):
 		return Chosen{}, domain.ValidationErrors{"vm.uuid": "not_found"}, nil
@@ -162,7 +168,7 @@ func (c *Chooser) made(ctx context.Context, ownerUUID string, asked *New) (Chose
 	}
 
 	spec := vmKind.Spec{
-		Flavor:         vmKind.FlavorDocker,
+		Image:          c.defaults.Image,
 		Resources:      c.defaults.Resources,
 		Ports:          c.defaults.Ports,
 		Network:        c.defaults.Network,

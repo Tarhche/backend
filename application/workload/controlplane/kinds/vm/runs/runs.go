@@ -309,7 +309,6 @@ func Manifest(t taskKind.Task) vmKind.VM {
 			Slug:      t.Metadata.Slug,
 			OwnerUUID: t.Metadata.OwnerUUID,
 			Labels: map[string]string{
-				vmKind.LabelFlavor:    string(vmKind.FlavorMachine),
 				vmKind.LabelManagedBy: vmKind.ManagedByCodeRunner,
 			},
 			Node:      t.Metadata.Node,
@@ -319,7 +318,6 @@ func Manifest(t taskKind.Task) vmKind.VM {
 			UpdatedAt: latest(t.Metadata.CreatedAt, startedAt, endedAt),
 		},
 		Spec: vmKind.Spec{
-			Flavor:    vmKind.FlavorMachine,
 			Image:     t.Spec.Image,
 			Resources: vmKind.ResourcesOf(t.Spec.Limits.ResourceLimits().VMResources()),
 			Ports:     vmKind.Normalized(t.Spec.Ports),

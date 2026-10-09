@@ -162,7 +162,7 @@ func TestServeCommand_Run(t *testing.T) {
 
 	client := answering(t, c.configs.Socket)
 
-	_, err := client.Create(t.Context(), vm.Spec{ID: "vm-1", Kind: vm.KindMachine, Image: "ubuntu:24.04"})
+	_, err := client.Create(t.Context(), vm.Spec{ID: "vm-1", Image: "ubuntu:24.04"})
 	require.NoError(t, err)
 
 	info, err := os.Stat(c.configs.Socket)

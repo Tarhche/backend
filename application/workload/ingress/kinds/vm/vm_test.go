@@ -208,7 +208,7 @@ func TestIngress_Allowed(t *testing.T) {
 	allowed := func(t *testing.T, ingress vm.Access, ports ...port.Port) []port.Port {
 		t.Helper()
 
-		raw, err := kind.Encode(vmKind.VM{Kind: vmKind.Name, Metadata: kind.Metadata{UUID: "01"}, Spec: vmKind.Spec{Flavor: vmKind.FlavorMachine, Ports: ports, Network: vmKind.Network{Ingress: ingress, Egress: vm.AccessAllow}}})
+		raw, err := kind.Encode(vmKind.VM{Kind: vmKind.Name, Metadata: kind.Metadata{UUID: "01"}, Spec: vmKind.Spec{Ports: ports, Network: vmKind.Network{Ingress: ingress, Egress: vm.AccessAllow}}})
 		require.NoError(t, err)
 
 		allowed, err := vms.Allowed(raw)

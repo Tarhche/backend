@@ -48,7 +48,10 @@ type Options struct {
 	FirstPort port.Port
 	LastPort  port.Port
 
-	// DockerImage is what a Docker VM boots from.
+	// DockerImage is what a Docker VM boots from, and what tells one: an
+	// instance whose image is it, or another tag of it, is booted as a Docker
+	// VM, and said to be one (vm.KindOf, vm.LabelDocker). Nothing else asks
+	// for one.
 	DockerImage string
 
 	// Capacity is the budget this node offers to VMs. An instance that would

@@ -105,14 +105,25 @@ func WithClock(now func() time.Time) Option {
 	}
 }
 
+// WithDockerImage is the image the engine boots Docker VMs from, as a
+// vmhost's Docker image is: an instance whose image is it, or another tag of
+// it, is a Docker VM, which the engine says of it (vm.LabelDocker). Without
+// it, no instance is one.
+func WithDockerImage(image string) Option {
+	return func(e *Engine) {
+		e.dockerImage = image
+	}
+}
+
 // Engine is a vm.Engine whose instances live in memory.
 type Engine struct {
 	lock sync.Mutex
 
-	budget    vm.Info
-	host      string
-	nextPort  int
-	instances map[string]*instance
+	budget      vm.Info
+	host        string
+	dockerImage string
+	nextPort    int
+	instances   map[string]*instance
 
 	exec ExecFunc
 	main MainFunc
@@ -444,7 +455,7 @@ func (e *Engine) Snapshot(ctx context.Context, id string, writer io.Writer) (vm.
 
 	return vm.Archive{
 		Engine: written.Engine,
-		Kind:   written.Spec.Kind,
+		Kind:   vm.KindOf(written.Spec.Image, e.dockerImage),
 		Image:  written.Spec.Image,
 		Disk:   written.Spec.Resources.Disk,
 		Size:   counted.written,
@@ -723,8 +734,8 @@ func (e *Engine) halt(i *instance, state vm.InstanceState) {
 	i.state = state
 }
 
-// view is an instance as the engine reports it. It is called with the lock
-// held.
+// view is an instance as the engine reports it, a Docker VM said to be one
+// as its image says. It is called with the lock held.
 func (e *Engine) view(id string, i *instance) vm.Instance {
 	instance := vm.Instance{
 		ID:        id,
@@ -732,6 +743,17 @@ func (e *Engine) view(id string, i *instance) vm.Instance {
 		Labels:    maps.Clone(i.spec.Labels),
 		Reason:    i.reason,
 		StartedAt: i.startedAt,
+	}
+
+	switch vm.KindOf(i.spec.Image, e.dockerImage) {
+	case vm.KindDocker:
+		if instance.Labels == nil {
+			instance.Labels = make(map[string]string, 1)
+		}
+
+		instance.Labels[vm.LabelDocker] = "true"
+	default:
+		delete(instance.Labels, vm.LabelDocker)
 	}
 
 	if i.state == vm.InstanceExited {

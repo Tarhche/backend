@@ -25,7 +25,7 @@ func running(t *testing.T, engine vm.Engine) *httptest.Server {
 	server := httptest.NewServer(NewServer(engine, slog.New(slog.DiscardHandler)))
 	t.Cleanup(server.Close)
 
-	_, err := engine.Create(t.Context(), vm.Spec{ID: "vm-1", Kind: vm.KindMachine, Image: "ubuntu:24.04"})
+	_, err := engine.Create(t.Context(), vm.Spec{ID: "vm-1", Image: "ubuntu:24.04"})
 	require.NoError(t, err)
 
 	return server

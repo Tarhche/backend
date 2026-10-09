@@ -223,3 +223,55 @@ func TestControlPlaneBinding_Extras(t *testing.T) {
 		assert.JSONEq(t, `"on the shelf"`, string(json.RawMessage(answer)))
 	})
 }
+
+// sizedBoxControlPlane is a box's control-plane strategy that says of a box
+// whether it is big: larger than 10.
+type sizedBoxControlPlane struct {
+	boxControlPlane
+}
+
+var _ Narrower = &sizedBoxControlPlane{}
+
+func (b *sizedBoxControlPlane) Narrows(word string) bool {
+	return word == "big"
+}
+
+func (b *sizedBoxControlPlane) Is(r Raw, word string) (bool, error) {
+	typed, err := Decode[boxSpec, boxStatus](r)
+	if err != nil {
+		return false, err
+	}
+
+	return word == "big" && typed.Spec.Size > 10, nil
+}
+
+func TestControlPlaneBinding_Narrower(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a strategy that is no narrower narrows nothing", func(t *testing.T) {
+		t.Parallel()
+
+		narrower, narrows := BindControlPlane[boxSpec, boxStatus](box(), &boxControlPlane{}).Narrower()
+
+		assert.False(t, narrows)
+		assert.Nil(t, narrower)
+	})
+
+	t.Run("one that is says what the kind's resources are", func(t *testing.T) {
+		t.Parallel()
+
+		narrower, narrows := BindControlPlane[boxSpec, boxStatus](box(), &sizedBoxControlPlane{}).Narrower()
+		require.True(t, narrows)
+
+		assert.True(t, narrower.Narrows("big"))
+		assert.False(t, narrower.Narrows("small"))
+
+		big, err := narrower.Is(rawBox(t, func(r *Resource[boxSpec, boxStatus]) { r.Spec.Size = 11 }), "big")
+		require.NoError(t, err)
+		assert.True(t, big)
+
+		big, err = narrower.Is(rawBox(t), "big")
+		require.NoError(t, err)
+		assert.False(t, big)
+	})
+}

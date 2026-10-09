@@ -74,7 +74,7 @@ func TestArchiveHeader(t *testing.T) {
 
 		other := memory.New()
 
-		_, err := other.Create(t.Context(), vm.Spec{ID: "vm-1", Kind: vm.KindMachine, Image: "ubuntu:24.04"})
+		_, err := other.Create(t.Context(), vm.Spec{ID: "vm-1", Image: "ubuntu:24.04"})
 		require.NoError(t, err)
 		require.NoError(t, other.SetDisk("vm-1", []byte("a disk")))
 

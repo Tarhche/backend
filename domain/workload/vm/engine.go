@@ -63,8 +63,11 @@ type Spec struct {
 	// execution's for a code-runner task.
 	ID string
 
-	Kind      Kind
-	Image     string
+	// Image is what it boots from, and so what it boots into: an engine boots
+	// one whose image is its Docker image as a Docker VM (KindOf), and says so
+	// of it from then on (LabelDocker). Nothing else asks for one.
+	Image string
+
 	Resources Resources
 	Ports     []port.Port
 	Network   Network
@@ -220,6 +223,8 @@ type Archive struct {
 	// "microsandbox/0.7.6". A restore needs the same engine.
 	Engine string
 
+	// Image is what the instance boots from, and Kind what the engine booted
+	// it as, which its image says.
 	Kind  Kind
 	Image string
 

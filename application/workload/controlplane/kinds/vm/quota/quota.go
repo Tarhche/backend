@@ -13,11 +13,12 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/records"
 	"github.com/khanzadimahdi/testproject/domain"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
+	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
 
 // The codes a request is refused with.
 const (
-	// CodeTooSmall is less than one VM of its flavor may be given.
+	// CodeTooSmall is less than one VM of its kind may be given.
 	CodeTooSmall = "too_small"
 
 	// CodeTooLarge is more than one VM may be given.
@@ -52,14 +53,15 @@ type Limits struct {
 	MaxLifetime time.Duration
 }
 
-// Bounds checks what one VM of a flavor is given against what one VM may be
-// given. Each field is reported under prefix, so a VM asked for inside
-// another request is reported where it was asked.
-func (l Limits) Bounds(prefix string, flavor vmKind.Flavor, resources vmKind.Resources) domain.ValidationErrors {
+// Bounds checks what one VM of a kind, a machine or a Docker VM, as its image
+// says, is given against what one VM may be given. Each field is reported
+// under prefix, so a VM asked for inside another request is reported where it
+// was asked.
+func (l Limits) Bounds(prefix string, kind vm.Kind, resources vmKind.Resources) domain.ValidationErrors {
 	invalid := make(domain.ValidationErrors)
 
 	minMemory, minDisk := l.MinMemory, l.MinDisk
-	if flavor == vmKind.FlavorDocker {
+	if kind == vm.KindDocker {
 		minMemory, minDisk = l.DockerMinMemory, l.DockerMinDisk
 	}
 

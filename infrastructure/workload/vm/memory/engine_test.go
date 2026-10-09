@@ -17,12 +17,11 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
 
-// machine is a spec for an instance of the machine kind, reachable on its
-// ports.
+// machine is a spec for an instance of the machine kind, as its image says,
+// reachable on its ports.
 func machine(id string) vm.Spec {
 	return vm.Spec{
 		ID:        id,
-		Kind:      vm.KindMachine,
 		Image:     "ubuntu:24.04",
 		Resources: vm.Resources{CPUs: 1, Memory: 256 << 20, Disk: 1 << 30},
 		Ports:     []port.Port{8080, 80},
@@ -257,6 +256,54 @@ func TestEngine_Endpoints(t *testing.T) {
 			{Port: 8080, Address: "vmhost:20000"},
 			{Port: 9000, Address: "vmhost:20002"},
 		}, reconfigured.Endpoints)
+	})
+}
+
+func TestEngine_DockerVMs(t *testing.T) {
+	t.Parallel()
+
+	t.Run("an instance booting the docker image, or another tag of it, is said to be a docker vm", func(t *testing.T) {
+		t.Parallel()
+
+		e := New(WithDockerImage("docker:29-dind"))
+
+		for id, image := range map[string]string{"vm-1": "docker:29-dind", "vm-2": "docker:28-dind"} {
+			spec := machine(id)
+			spec.Image = image
+
+			created, err := e.Create(t.Context(), spec)
+			require.NoError(t, err)
+			assert.Equal(t, "true", created.Labels[vm.LabelDocker], image)
+		}
+
+		listed, err := e.List(t.Context())
+		require.NoError(t, err)
+
+		for _, instance := range listed {
+			assert.Equal(t, "true", instance.Labels[vm.LabelDocker], instance.ID)
+		}
+	})
+
+	t.Run("one booting any other image is not, whatever it was labelled", func(t *testing.T) {
+		t.Parallel()
+
+		spec := machine("vm-1")
+		spec.Labels[vm.LabelDocker] = "true"
+
+		created, err := New(WithDockerImage("docker:29-dind")).Create(t.Context(), spec)
+		require.NoError(t, err)
+		assert.NotContains(t, created.Labels, vm.LabelDocker)
+	})
+
+	t.Run("nor is any, without a docker image", func(t *testing.T) {
+		t.Parallel()
+
+		spec := machine("vm-1")
+		spec.Image = "docker:29-dind"
+
+		created, err := New().Create(t.Context(), spec)
+		require.NoError(t, err)
+		assert.NotContains(t, created.Labels, vm.LabelDocker)
 	})
 }
 

@@ -116,7 +116,6 @@ func (r *Runtime) EnsureImage(context.Context, string) error {
 func (r *Runtime) Create(ctx context.Context, execution *task.Execution) (string, error) {
 	spec := vm.Spec{
 		ID:         executionID(execution),
-		Kind:       vm.KindMachine,
 		Image:      execution.Image,
 		Resources:  execution.ResourceLimits.VMResources(),
 		Ports:      portsOf(execution),

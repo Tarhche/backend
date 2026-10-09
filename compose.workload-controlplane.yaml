@@ -61,7 +61,8 @@ services:
       OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
       PROFILING_ENABLED: ${PROFILING_ENABLED:-true}
       # what a VM boots from when it names nothing, and what every Docker VM
-      # does: the same image the vmhosts are given.
+      # does, which is what makes it one: the same image the vmhosts and the
+      # blog are given.
       WORKLOAD_VM_DEFAULT_IMAGE: ${BACKEND_WORKLOAD_VM_DEFAULT_IMAGE:-ubuntu:24.04}
       WORKLOAD_VM_DOCKER_IMAGE: ${BACKEND_WORKLOAD_VM_DOCKER_IMAGE:-docker:29-dind}
       # what one VM may be given, what one person's VMs may be given between
