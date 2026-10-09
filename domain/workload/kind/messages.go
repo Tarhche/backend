@@ -126,14 +126,17 @@ type Observed[Status any] struct {
 type Observation = Observed[json.RawMessage]
 
 // Report is everything of one kind a node holds, as its state action found
-// it.
+// it: what its node's heartbeats say, an instance in each, and what a query
+// for one resource's state is answered from.
 //
-// What it does not list is not on the node, which is how a resource its node
-// lost is noticed. For a kind whose resources live inside a parent, that
-// holds only inside the parents the node read: a Docker VM whose dockerd did
-// not answer is Unseen, and says nothing about the containers in it, either
-// way; and one the node did not look inside at all, because it is not running
-// there, is neither read nor unseen, and what lives in it waits on it.
+// What it does not list is not on the node, which is how a query for a
+// resource its node lost answers that it is missing. For a kind whose
+// resources live inside a parent, that holds only inside the parents the node
+// read: a Docker VM whose dockerd did not answer is Unseen, and says nothing
+// about the containers in it, either way; and one the node did not look inside
+// at all, because it is not running there, is neither read nor unseen, and
+// what lives in it waits on it. None of that travels in a heartbeat, which
+// carries one instance and nothing of what its node left out.
 type Report[Status any] struct {
 	Instances []Observed[Status] `json:"instances"`
 

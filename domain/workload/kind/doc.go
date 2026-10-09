@@ -52,16 +52,19 @@
 //     back;
 //   - a Query, as a node request whose op is the kind and the action,
 //     "stack.state", on the subject every node already answers on;
-//   - and, every beat, a Heartbeat of each kind whose state its nodes know,
-//     on a subject of the kind's own (HeartbeatName), beside the node's own
-//     heartbeat and stamped as that is, so that a service hears only the
-//     kinds it needs. It carries the kind's Report: everything of the kind
-//     the node holds, the parents it read and those it could not look inside,
-//     so that what a report leaves out of a parent it read is known to be gone,
-//     what lives in a parent it could not read is merely unseen, and what lives
-//     in one it did not look inside at all, because it is not running, waits
-//     on it. A kind that could not look sends none, and nothing is concluded
-//     from its silence.
+//   - and, every beat, a Heartbeat of every instance of every kind whose
+//     state its nodes know, on a subject of the kind's own (HeartbeatName),
+//     beside the node's own heartbeat and stamped as that is, so that a
+//     service hears only the kinds it needs. It carries one instance as its
+//     node observed it, and nothing of what the node does not hold: gone is
+//     concluded by time, by the control plane's reconcile loop. A resource its
+//     node goes on beating without a word of for long enough
+//     (ResourceSilentAfter) is missing from the node; one inside a parent
+//     that is not running waits on it instead, and one whose parent was
+//     restored since it was last heard is forgotten. A kind that could not
+//     look sends nothing, and that is the price of it: a kind, or a Docker
+//     VM's dockerd, that cannot answer for that long has what it holds look
+//     missing until it is heard again.
 //
 // Registering a kind holds its descriptor to the rules every kind keeps
 // (Check), so a kind that could not run is found out when its service is put

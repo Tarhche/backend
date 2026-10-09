@@ -2,9 +2,7 @@ package observe_test
 
 import (
 	"context"
-	"encoding/json"
 	"log/slog"
-	"slices"
 	"testing"
 	"time"
 
@@ -18,21 +16,16 @@ import (
 	resourcesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/resources"
 )
 
-// report is what a node says of the fans it holds, having read the house
-// they are in unless it is among the unseen.
-func report(t *testing.T, unseen []string, instances map[string]kindstest.Status) kind.Report[json.RawMessage] {
+// instance is a fan as its node says it is, in the house fans are in.
+func instance(t *testing.T, uuid string, s kindstest.Status) kind.Observation {
 	t.Helper()
 
-	r := kind.Report[json.RawMessage]{Instances: []kind.Observation{}, Unseen: unseen}
-	if !slices.Contains(unseen, kindstest.House) {
-		r.Read = []string{kindstest.House}
+	return kind.Observation{
+		Kind:   kindstest.Kind,
+		UUID:   uuid,
+		Owners: []kind.Reference{{Kind: kindstest.Parent, UUID: kindstest.House}},
+		Status: status(t, s),
 	}
-
-	for uuid, s := range instances {
-		r.Instances = append(r.Instances, kind.Observation{Kind: kindstest.Kind, UUID: uuid, Status: status(t, s)})
-	}
-
-	return r
 }
 
 func stored(t *testing.T, repository resource.Repository, uuid string) (resource.Record, bool) {
@@ -55,17 +48,20 @@ func create(t *testing.T, repository resource.Repository, records ...resource.Re
 	}
 }
 
+// heardAt is a fan whose node last said what it is doing at a moment.
+func heardAt(at time.Time) func(*kindstest.Fan) {
+	return func(f *kindstest.Fan) {
+		f.Status.ObservedAt = at
+	}
+}
+
 func TestObserver_Heartbeat(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 	logger := slog.New(slog.DiscardHandler)
 
-	inAnotherHouse := func(f *kindstest.Fan) {
-		f.Metadata.Owners = []kind.Reference{{Kind: kindstest.Parent, UUID: "house-2"}}
-	}
-
-	t.Run("what a node reports of what it holds is taken, and of nothing else", func(t *testing.T) {
+	t.Run("what a node says of what it holds is taken, one instance at a time, and of nothing else", func(t *testing.T) {
 		t.Parallel()
 
 		repository := resourcesMemory.NewRepository()
@@ -74,16 +70,19 @@ func TestObserver_Heartbeat(t *testing.T) {
 			kindstest.AFan("starting", kindstest.Starting, kindstest.Running),
 			kindstest.AFan("stopped", kindstest.Stopped, kindstest.Stopped),
 			kindstest.AFan("elsewhere", kindstest.Running, kindstest.Running, func(f *kindstest.Fan) { f.Metadata.Node = "node-2" }),
+			kindstest.AFan("unsaid", kindstest.Running, kindstest.Running),
 		)
 
 		observer := observe.NewObserver(kindstest.Registry(&kindstest.Fans{}), repository, logger)
 
-		observer.Heartbeat(ctx, kindstest.NodeName, kindstest.Kind, later, report(t, nil, map[string]kindstest.Status{
+		for uuid, s := range map[string]kindstest.Status{
 			"running":   observed(kindstest.Running, 3),
 			"starting":  observed(kindstest.Running, 1),
 			"stopped":   observed(kindstest.Stopped, 0),
 			"elsewhere": observed(kindstest.Stopped, 0),
-		}))
+		} {
+			observer.Heartbeat(ctx, kindstest.NodeName, later, instance(t, uuid, s))
+		}
 
 		running, _ := stored(t, repository, "running")
 		assert.Equal(t, 3, kindstest.Typed(running).Status.Speed)
@@ -95,107 +94,16 @@ func TestObserver_Heartbeat(t *testing.T) {
 		elsewhere, _ := stored(t, repository, "elsewhere")
 		assert.Equal(t, kindstest.Running, kindstest.Typed(elsewhere).Status.State, "another node's word for it is not its node's")
 		assert.True(t, kindstest.Typed(elsewhere).Status.ObservedAt.IsZero())
+
+		unsaid, _ := stored(t, repository, "unsaid")
+		assert.Equal(t, kindstest.Running, kindstest.Typed(unsaid).Status.State, "what no heartbeat says is not concluded from any of them")
+		assert.Equal(t, int64(1), unsaid.Version, "it is not even written")
 	})
 
-	t.Run("what a report could see and does not list is gone from the node, but what it could not see is not", func(t *testing.T) {
+	t.Run("one whose parent was restored is as it is found once it is heard of, and a look taken before the restore says nothing of it", func(t *testing.T) {
 		t.Parallel()
 
-		repository := resourcesMemory.NewRepository()
-		create(t, repository,
-			kindstest.AFan("lost", kindstest.Running, kindstest.Running),
-			kindstest.AFan("deleting", kindstest.Deleting, kind.Deleted),
-			kindstest.AFan("on-its-way", kindstest.Starting, kindstest.Running),
-			kindstest.AFan("unseen", kindstest.Running, kindstest.Running, inAnotherHouse),
-		)
-
-		observer := observe.NewObserver(kindstest.Registry(&kindstest.Fans{}), repository, logger)
-
-		observer.Heartbeat(ctx, kindstest.NodeName, kindstest.Kind, later, report(t, []string{"house-2"}, map[string]kindstest.Status{}))
-
-		lost, _ := stored(t, repository, "lost")
-		assert.Equal(t, kind.Missing, kindstest.Typed(lost).Status.State)
-
-		_, kept := stored(t, repository, "deleting")
-		assert.False(t, kept, "one on its way out that is gone is deleted, record and all")
-
-		onItsWay, _ := stored(t, repository, "on-its-way")
-		assert.Equal(t, kindstest.Starting, kindstest.Typed(onItsWay).Status.State, "one being made is not there yet")
-
-		unseen, _ := stored(t, repository, "unseen")
-		assert.Equal(t, kindstest.Running, kindstest.Typed(unseen).Status.State, "a house that did not answer says nothing of the fans in it")
-		assert.True(t, kindstest.Typed(unseen).Status.ObservedAt.IsZero())
-		assert.Equal(t, int64(1), unseen.Version, "it is not even written")
-	})
-
-	t.Run("what lives in a parent its node did not look into waits on the parent, as the parent is", func(t *testing.T) {
-		t.Parallel()
-
-		inHouse := func(house string) func(f *kindstest.Fan) {
-			return func(f *kindstest.Fan) { f.Metadata.Owners = []kind.Reference{{Kind: kindstest.Parent, UUID: house}} }
-		}
-
-		repository := resourcesMemory.NewRepository()
-		create(t, repository,
-			kindstest.AFan("in-a-closed-house", kindstest.Running, kindstest.Running, inHouse("house-3")),
-			kindstest.AFan("in-an-open-house", kindstest.Running, kindstest.Running, inHouse("house-4")),
-			kindstest.AFan("stopped-in-a-closed-house", kindstest.Stopped, kindstest.Stopped, inHouse("house-3")),
-			kindstest.AFan("on-its-way-in-a-closed-house", kindstest.Starting, kindstest.Running, inHouse("house-3")),
-		)
-
-		houses := parents{"house-3": "closed"}
-		observer := observe.NewObserver(kindstest.Registry(&kindstest.Fans{}), repository, logger, observe.WithParents(houses))
-
-		observer.Heartbeat(ctx, kindstest.NodeName, kindstest.Kind, later, report(t, nil, map[string]kindstest.Status{}))
-
-		closed, _ := stored(t, repository, "in-a-closed-house")
-		assert.Equal(t, kind.Waiting, kindstest.Typed(closed).Status.State)
-		assert.Equal(t, "its house is closed", kindstest.Typed(closed).Status.Reason)
-		assert.Equal(t, kindstest.Running, kindstest.Typed(closed).Status.Expected)
-
-		stoppedInIt, _ := stored(t, repository, "stopped-in-a-closed-house")
-		assert.Equal(t, kind.Waiting, kindstest.Typed(stoppedInIt).Status.State, "whatever it was doing")
-
-		onItsWay, _ := stored(t, repository, "on-its-way-in-a-closed-house")
-		assert.Equal(t, kindstest.Starting, kindstest.Typed(onItsWay).Status.State, "what is in flight is its command's to end")
-
-		open, _ := stored(t, repository, "in-an-open-house")
-		assert.Equal(t, kindstest.Running, kindstest.Typed(open).Status.State, "a parent that is not down, as far as anybody knows, says nothing")
-		assert.Equal(t, int64(1), open.Version)
-	})
-
-	t.Run("and with nobody to say what parents are doing, nothing is concluded of what is in them", func(t *testing.T) {
-		t.Parallel()
-
-		repository := resourcesMemory.NewRepository()
-		create(t, repository, kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running, inAnotherHouse))
-
-		observer := observe.NewObserver(kindstest.Registry(&kindstest.Fans{}), repository, logger)
-
-		observer.Heartbeat(ctx, kindstest.NodeName, kindstest.Kind, later, report(t, nil, map[string]kindstest.Status{}))
-
-		fan, _ := stored(t, repository, "fan-uuid")
-		assert.Equal(t, kindstest.Running, kindstest.Typed(fan).Status.State)
-		assert.Equal(t, int64(1), fan.Version)
-	})
-
-	t.Run("one missing from a parent it was read in says so", func(t *testing.T) {
-		t.Parallel()
-
-		repository := resourcesMemory.NewRepository()
-		create(t, repository, kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running))
-
-		observe.NewObserver(kindstest.Registry(&kindstest.Fans{}), repository, logger).
-			Heartbeat(ctx, kindstest.NodeName, kindstest.Kind, later, report(t, nil, map[string]kindstest.Status{}))
-
-		fan, _ := stored(t, repository, "fan-uuid")
-		assert.Equal(t, kind.Missing, kindstest.Typed(fan).Status.State)
-		assert.Equal(t, "its house has none of it", kindstest.Typed(fan).Status.Reason)
-	})
-
-	t.Run("one whose parent was restored is what the restored parent holds: forgotten when it is not there", func(t *testing.T) {
-		t.Parallel()
-
-		reset := func(r resource.Record) resource.Record {
+		restored := func(r resource.Record) resource.Record {
 			r.Reset = true
 
 			return r
@@ -203,66 +111,25 @@ func TestObserver_Heartbeat(t *testing.T) {
 
 		repository := resourcesMemory.NewRepository()
 		create(t, repository,
-			reset(kindstest.AFan("gone-with-the-restore", kindstest.Running, kindstest.Running)),
-			reset(kindstest.AFan("kept-by-the-restore", kindstest.Running, kindstest.Running)),
-			reset(kindstest.AFan("not-seen-yet", kindstest.Running, kindstest.Running, inAnotherHouse)),
+			restored(kindstest.AFan("found", kindstest.Running, kindstest.Running, heardAt(later))),
+			restored(kindstest.AFan("seen-before-the-restore", kindstest.Running, kindstest.Running, heardAt(later))),
 		)
 
 		observer := observe.NewObserver(kindstest.Registry(&kindstest.Fans{}), repository, logger)
 
-		observer.Heartbeat(ctx, kindstest.NodeName, kindstest.Kind, later, report(t, []string{"house-2"}, map[string]kindstest.Status{
-			"kept-by-the-restore": observed(kindstest.Stopped, 0),
-		}))
+		observer.Heartbeat(ctx, kindstest.NodeName, later.Add(time.Second), instance(t, "found", observed(kindstest.Stopped, 0)))
+		observer.Heartbeat(ctx, kindstest.NodeName, later.Add(-time.Second), instance(t, "seen-before-the-restore", observed(kindstest.Stopped, 0)))
 
-		_, kept := stored(t, repository, "gone-with-the-restore")
-		assert.False(t, kept, "the restored house does not have it, so it is not made again")
-
-		found, _ := stored(t, repository, "kept-by-the-restore")
+		found, _ := stored(t, repository, "found")
 		assert.Equal(t, kindstest.Stopped, kindstest.Typed(found).Status.State, "it is as it was found")
 		assert.False(t, found.Reset, "and is reconciled as anything else from now on")
 
-		notSeen, _ := stored(t, repository, "not-seen-yet")
-		assert.True(t, notSeen.Reset, "a house not read yet says nothing of it")
+		before, _ := stored(t, repository, "seen-before-the-restore")
+		assert.Equal(t, kindstest.Running, kindstest.Typed(before).Status.State)
+		assert.True(t, before.Reset, "it is not taken to be on the restored disk")
 	})
 
-	t.Run("and a look taken before its parent was restored says nothing of it either way", func(t *testing.T) {
-		t.Parallel()
-
-		restoredAt := func(r resource.Record) resource.Record {
-			r.Reset = true
-
-			common, err := r.Common()
-			require.NoError(t, err)
-
-			common.ObservedAt = later
-
-			require.NoError(t, r.SetCommon(common))
-
-			return r
-		}
-
-		repository := resourcesMemory.NewRepository()
-		create(t, repository,
-			restoredAt(kindstest.AFan("made-since-the-snapshot", kindstest.Running, kindstest.Running)),
-			restoredAt(kindstest.AFan("deleted-since-the-snapshot", kind.Missing, kindstest.Running)),
-		)
-
-		observer := observe.NewObserver(kindstest.Registry(&kindstest.Fans{}), repository, logger)
-
-		// what the house held just before it was restored.
-		observer.Heartbeat(ctx, kindstest.NodeName, kindstest.Kind, later.Add(-time.Second), report(t, nil, map[string]kindstest.Status{
-			"made-since-the-snapshot": observed(kindstest.Running, 1),
-		}))
-
-		made, _ := stored(t, repository, "made-since-the-snapshot")
-		assert.True(t, made.Reset, "it is not taken to be on the restored disk")
-
-		deleted, kept := stored(t, repository, "deleted-since-the-snapshot")
-		require.True(t, kept, "nor not to be")
-		assert.True(t, deleted.Reset)
-	})
-
-	t.Run("a report made before a resource was asked what it is on its way to says nothing of it", func(t *testing.T) {
+	t.Run("a heartbeat made before a resource was asked what it is on its way to says nothing of it", func(t *testing.T) {
 		t.Parallel()
 
 		repository := resourcesMemory.NewRepository()
@@ -270,13 +137,13 @@ func TestObserver_Heartbeat(t *testing.T) {
 
 		observer := observe.NewObserver(kindstest.Registry(&kindstest.Fans{}), repository, logger)
 
-		observer.Heartbeat(ctx, kindstest.NodeName, kindstest.Kind, later.Add(-time.Second), report(t, nil, map[string]kindstest.Status{"fan-uuid": observed(kindstest.Running, 2)}))
+		observer.Heartbeat(ctx, kindstest.NodeName, later.Add(-time.Second), instance(t, "fan-uuid", observed(kindstest.Running, 2)))
 
 		fan, _ := stored(t, repository, "fan-uuid")
 		assert.Equal(t, kindstest.Starting, kindstest.Typed(fan).Status.State)
 		assert.Equal(t, int64(1), fan.Version)
 
-		observer.Heartbeat(ctx, kindstest.NodeName, kindstest.Kind, later.Add(time.Second), report(t, nil, map[string]kindstest.Status{"fan-uuid": observed(kindstest.Running, 2)}))
+		observer.Heartbeat(ctx, kindstest.NodeName, later.Add(time.Second), instance(t, "fan-uuid", observed(kindstest.Running, 2)))
 
 		fan, _ = stored(t, repository, "fan-uuid")
 		assert.Equal(t, kindstest.Running, kindstest.Typed(fan).Status.State, "one made after is")
@@ -308,7 +175,10 @@ func TestObserver_Heartbeat(t *testing.T) {
 			repository := resourcesMemory.NewRepository()
 			create(t, repository, kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running))
 
-			observe.NewObserver(tt.registry, repository, logger).Heartbeat(ctx, kindstest.NodeName, tt.kind, later, report(t, nil, map[string]kindstest.Status{}))
+			said := instance(t, "fan-uuid", observed(kindstest.Stopped, 0))
+			said.Kind = tt.kind
+
+			observe.NewObserver(tt.registry, repository, logger).Heartbeat(ctx, kindstest.NodeName, later, said)
 
 			fan, _ := stored(t, repository, "fan-uuid")
 			assert.Equal(t, kindstest.Running, kindstest.Typed(fan).Status.State, name)
@@ -316,15 +186,15 @@ func TestObserver_Heartbeat(t *testing.T) {
 		}
 	})
 
-	t.Run("a report older than what was last heard is not taken", func(t *testing.T) {
+	t.Run("a heartbeat older than what was last heard is not taken", func(t *testing.T) {
 		t.Parallel()
 
 		repository := resourcesMemory.NewRepository()
-		create(t, repository, kindstest.AFan("fan-uuid", kindstest.Stopped, kindstest.Stopped, func(f *kindstest.Fan) { f.Status.ObservedAt = later }))
+		create(t, repository, kindstest.AFan("fan-uuid", kindstest.Stopped, kindstest.Stopped, heardAt(later)))
 
 		observer := observe.NewObserver(kindstest.Registry(&kindstest.Fans{}), repository, logger)
 
-		observer.Heartbeat(ctx, kindstest.NodeName, kindstest.Kind, later.Add(-time.Second), report(t, nil, map[string]kindstest.Status{"fan-uuid": observed(kindstest.Running, 1)}))
+		observer.Heartbeat(ctx, kindstest.NodeName, later.Add(-time.Second), instance(t, "fan-uuid", observed(kindstest.Running, 1)))
 
 		fan, _ := stored(t, repository, "fan-uuid")
 		assert.Equal(t, kindstest.Stopped, kindstest.Typed(fan).Status.State)
@@ -337,27 +207,49 @@ func TestObserver_Heartbeat(t *testing.T) {
 		create(t, repository, kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running))
 
 		observer := observe.NewObserver(kindstest.Registry(&kindstest.Fans{}), repository, logger)
-		running := report(t, nil, map[string]kindstest.Status{"fan-uuid": observed(kindstest.Running, 1)})
+		running := instance(t, "fan-uuid", observed(kindstest.Running, 1))
 
-		observer.Heartbeat(ctx, kindstest.NodeName, kindstest.Kind, later, running)
+		observer.Heartbeat(ctx, kindstest.NodeName, later, running)
 
 		fan, _ := stored(t, repository, "fan-uuid")
 		assert.Equal(t, int64(2), fan.Version, "first heard, it is written")
 
-		observer.Heartbeat(ctx, kindstest.NodeName, kindstest.Kind, later.Add(time.Second), running)
+		observer.Heartbeat(ctx, kindstest.NodeName, later.Add(time.Second), running)
 
 		fan, _ = stored(t, repository, "fan-uuid")
 		assert.Equal(t, int64(2), fan.Version, "a second later, the same is not")
 		assert.Equal(t, later, kindstest.Typed(fan).Status.ObservedAt)
 
-		observer.Heartbeat(ctx, kindstest.NodeName, kindstest.Kind, later.Add(time.Minute), running)
+		observer.Heartbeat(ctx, kindstest.NodeName, later.Add(time.Minute), running)
 
 		fan, _ = stored(t, repository, "fan-uuid")
 		assert.Equal(t, int64(3), fan.Version, "a while later, it is, so when it was observed stays roughly true")
 		assert.Equal(t, later.Add(time.Minute), kindstest.Typed(fan).Status.ObservedAt)
 	})
 
-	t.Run("a report crossing a command is taken on what the command left, never over it", func(t *testing.T) {
+	t.Run("and as often as it is told to be, so that one its node keeps saying is never taken to be unheard", func(t *testing.T) {
+		t.Parallel()
+
+		repository := resourcesMemory.NewRepository()
+		create(t, repository, kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running))
+
+		observer := observe.NewObserver(kindstest.Registry(&kindstest.Fans{}), repository, logger, observe.WithRefresh(time.Second))
+		running := instance(t, "fan-uuid", observed(kindstest.Running, 1))
+
+		observer.Heartbeat(ctx, kindstest.NodeName, later, running)
+		observer.Heartbeat(ctx, kindstest.NodeName, later.Add(500*time.Millisecond), running)
+
+		fan, _ := stored(t, repository, "fan-uuid")
+		assert.Equal(t, int64(2), fan.Version)
+
+		observer.Heartbeat(ctx, kindstest.NodeName, later.Add(time.Second), running)
+
+		fan, _ = stored(t, repository, "fan-uuid")
+		assert.Equal(t, int64(3), fan.Version)
+		assert.Equal(t, later.Add(time.Second), kindstest.Typed(fan).Status.ObservedAt)
+	})
+
+	t.Run("a heartbeat crossing a command is taken on what the command left, never over it", func(t *testing.T) {
 		t.Parallel()
 
 		memory := resourcesMemory.NewRepository()
@@ -377,7 +269,7 @@ func TestObserver_Heartbeat(t *testing.T) {
 
 		observer := observe.NewObserver(kindstest.Registry(&kindstest.Fans{}), racing, logger)
 
-		observer.Heartbeat(ctx, kindstest.NodeName, kindstest.Kind, later, report(t, nil, map[string]kindstest.Status{"fan-uuid": observed(kindstest.Running, 2)}))
+		observer.Heartbeat(ctx, kindstest.NodeName, later, instance(t, "fan-uuid", observed(kindstest.Running, 2)))
 
 		fan, _ := stored(t, memory, "fan-uuid")
 
@@ -399,11 +291,181 @@ func TestObserver_Heartbeat(t *testing.T) {
 
 		observer := observe.NewObserver(kindstest.Registry(&kindstest.Fans{}), racing, logger)
 
-		observer.Heartbeat(ctx, kindstest.NodeName, kindstest.Kind, later, report(t, nil, map[string]kindstest.Status{"fan-uuid": observed(kindstest.Stopped, 0)}))
+		observer.Heartbeat(ctx, kindstest.NodeName, later, instance(t, "fan-uuid", observed(kindstest.Stopped, 0)))
 
 		fan, _ := stored(t, memory, "fan-uuid")
 		assert.Equal(t, kindstest.Running, kindstest.Typed(fan).Status.State)
 		assert.Equal(t, "node-2", fan.Metadata.Node)
+	})
+}
+
+// TestObserver_Unheard holds a node's silence about a resource, once it has
+// gone on for long enough, to being taken as the resource being gone from the
+// node, the same way for every kind: missing, waiting on its parent when the
+// parent is down, or forgotten when the parent was restored since it was last
+// heard of; and to being taken by the guards anything its node says is.
+func TestObserver_Unheard(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	logger := slog.New(slog.DiscardHandler)
+
+	// when the node, beating on, has long said nothing of what it holds.
+	silence := later.Add(time.Minute)
+
+	unhoused := func(f *kindstest.Fan) { f.Metadata.Owners = nil }
+	inHouse := func(house string) func(f *kindstest.Fan) {
+		return func(f *kindstest.Fan) { f.Metadata.Owners = []kind.Reference{{Kind: kindstest.Parent, UUID: house}} }
+	}
+
+	for name, tt := range map[string]struct {
+		record resource.Record
+		houses parents
+		gone   bool
+		state  kind.State
+		reason string
+		since  time.Time
+	}{
+		"what its node has long said nothing of is missing from its house": {
+			record: kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running, heardAt(later)),
+			state:  kind.Missing, reason: "its house has none of it", since: silence,
+		},
+		"and one that lives in nothing from its node": {
+			record: kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running, heardAt(later), unhoused),
+			state:  kind.Missing, since: silence,
+		},
+		"one on its way out is gone, record and all": {
+			record: kindstest.AFan("fan-uuid", kindstest.Deleting, kind.Deleted, heardAt(later)),
+			gone:   true,
+		},
+		"one on its way somewhere is as its machine takes it: not there yet": {
+			record: kindstest.AFan("fan-uuid", kindstest.Starting, kindstest.Running, heardAt(later)),
+			state:  kindstest.Starting, since: kindstest.Moment,
+		},
+		"one in a house that is down waits on it, as the house is": {
+			record: kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running, heardAt(later), inHouse("house-3")),
+			houses: parents{"house-3": "closed"},
+			state:  kind.Waiting, reason: "its house is closed", since: silence,
+		},
+		"whatever it was doing, rather than missing": {
+			record: kindstest.AFan("fan-uuid", kindstest.Stopped, kindstest.Stopped, heardAt(later), inHouse("house-3")),
+			houses: parents{"house-3": "closed"},
+			state:  kind.Waiting, reason: "its house is closed", since: silence,
+		},
+		"but what is in flight in it is its command's to end": {
+			record: kindstest.AFan("fan-uuid", kindstest.Starting, kindstest.Running, heardAt(later), inHouse("house-3")),
+			houses: parents{"house-3": "closed"},
+			state:  kindstest.Starting, since: kindstest.Moment,
+		},
+		"one in a house nobody says is down is missing from it": {
+			record: kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running, heardAt(later), inHouse("house-4")),
+			houses: parents{"house-3": "closed"},
+			state:  kind.Missing, reason: "its house has none of it", since: silence,
+		},
+		"and with nobody to say what houses are doing, a house is taken to be open": {
+			record: kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running, heardAt(later), inHouse("house-3")),
+			state:  kind.Missing, reason: "its house has none of it", since: silence,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			repository := resourcesMemory.NewRepository()
+			create(t, repository, tt.record)
+
+			var options []observe.Option
+			if tt.houses != nil {
+				options = append(options, observe.WithParents(tt.houses))
+			}
+
+			r, _ := stored(t, repository, "fan-uuid")
+
+			require.NoError(t, observe.NewObserver(kindstest.Registry(&kindstest.Fans{}), repository, logger, options...).Unheard(ctx, kindstest.Descriptor(), r, silence))
+
+			kept, there := stored(t, repository, "fan-uuid")
+
+			if tt.gone {
+				assert.False(t, there)
+
+				return
+			}
+
+			require.True(t, there)
+
+			fan := kindstest.Typed(kept)
+			assert.Equal(t, tt.state, fan.Status.State, "state")
+			assert.Equal(t, tt.reason, fan.Status.Reason, "reason")
+			assert.Equal(t, tt.since, fan.Status.Since, "since")
+			assert.Equal(t, silence, fan.Status.ObservedAt, "its node's silence said so then")
+			assert.Equal(t, kindstest.Typed(tt.record).Status.Expected, fan.Status.Expected, "what is expected is never its node's to say")
+		})
+	}
+
+	t.Run("one whose parent was restored since it was last heard of is forgotten, rather than made again", func(t *testing.T) {
+		t.Parallel()
+
+		repository := resourcesMemory.NewRepository()
+
+		r := kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running, heardAt(later))
+		r.Reset = true
+		create(t, repository, r)
+
+		observer := observe.NewObserver(kindstest.Registry(&kindstest.Fans{}), repository, logger)
+
+		require.NoError(t, observer.Unheard(ctx, kindstest.Descriptor(), r, later))
+
+		_, there := stored(t, repository, "fan-uuid")
+		require.True(t, there, "silence up to the restore itself says nothing of it")
+
+		require.NoError(t, observer.Unheard(ctx, kindstest.Descriptor(), r, silence))
+
+		_, there = stored(t, repository, "fan-uuid")
+		assert.False(t, there, "the restored house does not have it")
+	})
+
+	t.Run("silence older than what was last heard of it, or than the command it is on its way to, says nothing", func(t *testing.T) {
+		t.Parallel()
+
+		repository := resourcesMemory.NewRepository()
+		create(t, repository,
+			kindstest.AFan("heard-since", kindstest.Running, kindstest.Running, heardAt(silence.Add(time.Second))),
+			kindstest.AFan("asked-since", kindstest.Deleting, kind.Deleted, heardAt(later), func(f *kindstest.Fan) { f.Status.Since = silence.Add(time.Second) }),
+		)
+
+		observer := observe.NewObserver(kindstest.Registry(&kindstest.Fans{}), repository, logger)
+
+		for _, uuid := range []string{"heard-since", "asked-since"} {
+			r, _ := stored(t, repository, uuid)
+			require.NoError(t, observer.Unheard(ctx, kindstest.Descriptor(), r, silence))
+
+			kept, there := stored(t, repository, uuid)
+			require.True(t, there, uuid)
+			assert.Equal(t, int64(1), kept.Version, uuid)
+		}
+	})
+
+	t.Run("and a word of it heard as late as the silence, which crossed it, breaks it", func(t *testing.T) {
+		t.Parallel()
+
+		memory := resourcesMemory.NewRepository()
+		create(t, memory, kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running, heardAt(later)))
+
+		racing := &kindstest.Racing{Repository: memory}
+
+		// its node's heartbeat of the very beat the silence is judged at is
+		// heard between the silence reading the fan and writing it back.
+		racing.Cross(kindstest.Rewrite(memory, func(r *resource.Record) {
+			common, _ := r.Common()
+			common.ObservedAt = silence
+			_ = r.SetCommon(common)
+		}))
+
+		r, _ := stored(t, memory, "fan-uuid")
+
+		require.NoError(t, observe.NewObserver(kindstest.Registry(&kindstest.Fans{}), racing, logger).Unheard(ctx, kindstest.Descriptor(), r, silence))
+
+		fan, _ := stored(t, memory, "fan-uuid")
+		assert.Equal(t, kindstest.Running, kindstest.Typed(fan).Status.State, "it was heard, so it is not gone")
 	})
 }
 
@@ -452,6 +514,10 @@ func TestObserver_Heartbeat_orphans(t *testing.T) {
 
 	unhoused := func(f *kindstest.Fan) { f.Metadata.Owners = nil }
 
+	running := func(uuid string) kind.Observation {
+		return kind.Observation{Kind: kindstest.Kind, UUID: uuid, Status: status(t, kindstest.Status{Status: kind.Status{State: kindstest.Running}})}
+	}
+
 	t.Run("what a node holds that nobody keeps a record of is an orphan", func(t *testing.T) {
 		t.Parallel()
 
@@ -464,13 +530,11 @@ func TestObserver_Heartbeat_orphans(t *testing.T) {
 		told := &orphans{}
 		observer := observe.NewObserver(homeless(), repository, logger, observe.WithOrphans(told))
 
-		observer.Heartbeat(ctx, kindstest.NodeName, kindstest.Kind, kindstest.Moment, report(t, nil, map[string]kindstest.Status{
-			"kept":           {Status: kind.Status{State: kindstest.Running}},
-			"kept-elsewhere": {Status: kind.Status{State: kindstest.Running}},
-			"orphan":         {Status: kind.Status{State: kindstest.Running}},
-		}))
+		for _, uuid := range []string{"kept", "kept-elsewhere", "orphan", ""} {
+			observer.Heartbeat(ctx, kindstest.NodeName, kindstest.Moment, running(uuid))
+		}
 
-		assert.Equal(t, []string{"fan orphan on " + kindstest.NodeName}, told.told, "one kept elsewhere is its own node's to speak for")
+		assert.Equal(t, []string{"fan orphan on " + kindstest.NodeName}, told.told, "one kept elsewhere is its own node's to speak for, and one that says no uuid names nothing to tell of")
 	})
 
 	t.Run("what lives in a parent is never an orphan of its own", func(t *testing.T) {
@@ -479,9 +543,7 @@ func TestObserver_Heartbeat_orphans(t *testing.T) {
 		told := &orphans{}
 		observer := observe.NewObserver(kindstest.Registry(&kindstest.Fans{}), resourcesMemory.NewRepository(), logger, observe.WithOrphans(told))
 
-		observer.Heartbeat(ctx, kindstest.NodeName, kindstest.Kind, kindstest.Moment, report(t, nil, map[string]kindstest.Status{
-			"orphan": {Status: kind.Status{State: kindstest.Running}},
-		}))
+		observer.Heartbeat(ctx, kindstest.NodeName, kindstest.Moment, running("orphan"))
 
 		assert.Empty(t, told.told)
 	})
@@ -492,17 +554,15 @@ func TestObserver_Heartbeat_orphans(t *testing.T) {
 		observer := observe.NewObserver(homeless(), resourcesMemory.NewRepository(), logger)
 
 		assert.NotPanics(t, func() {
-			observer.Heartbeat(ctx, kindstest.NodeName, kindstest.Kind, kindstest.Moment, report(t, nil, map[string]kindstest.Status{
-				"orphan": {Status: kind.Status{State: kindstest.Running}},
-			}))
+			observer.Heartbeat(ctx, kindstest.NodeName, kindstest.Moment, running("orphan"))
 		})
 	})
 }
 
-// TestObserver_Heartbeat_witness holds a kind that hears its reports to being
-// told the whole of each, once what it says of the records is written down:
-// what nobody keeps a record of is there for it, and is not the framework's
-// to make anything of.
+// TestObserver_Heartbeat_witness holds a kind that hears its heartbeats to
+// being told of every instance, and of whether a record of its is it, once
+// what one says of a record is written down: what nobody keeps a record of is
+// there for it, and is not the framework's to make anything of.
 func TestObserver_Heartbeat_witness(t *testing.T) {
 	t.Parallel()
 
@@ -518,24 +578,20 @@ func TestObserver_Heartbeat_witness(t *testing.T) {
 
 	observer := observe.NewObserver(registry, repository, slog.New(slog.DiscardHandler))
 
-	unrecorded := report(t, nil, map[string]kindstest.Status{"running": observed(kindstest.Running, 2)})
-	unrecorded.Instances = append(unrecorded.Instances, kind.Observation{
-		Kind:   kindstest.Kind,
-		Owners: []kind.Reference{{Kind: kindstest.Parent, UUID: kindstest.House}},
-		Status: status(t, observed(kindstest.Running, 1)),
-	})
+	recorded := instance(t, "running", observed(kindstest.Running, 2))
+	unrecorded := instance(t, "", observed(kindstest.Running, 1))
 
-	observer.Heartbeat(ctx, kindstest.NodeName, kindstest.Kind, later, unrecorded)
-
-	heard := witness.Heard()
-	require.Len(t, heard, 1)
-
-	assert.Equal(t, kindstest.NodeName, heard[0].Node)
-	assert.Equal(t, later, heard[0].At)
-	assert.Equal(t, unrecorded, heard[0].Report, "all of it, what has no record among it")
+	observer.Heartbeat(ctx, kindstest.NodeName, later, recorded)
 
 	running, _ := stored(t, repository, "running")
 	assert.Equal(t, 2, kindstest.Typed(running).Status.Speed, "what it says of a record is written down as ever")
+
+	observer.Heartbeat(ctx, kindstest.NodeName, later, unrecorded)
+
+	assert.Equal(t, []kindstest.Heard{
+		{Node: kindstest.NodeName, Instance: recorded, Kept: true, At: later},
+		{Node: kindstest.NodeName, Instance: unrecorded, At: later},
+	}, witness.Heard(), "each as it was said, and whether a record is it")
 
 	all, _, err := repository.GetAll(ctx, kindstest.Kind, resource.Filter{}, 0, 0)
 	require.NoError(t, err)

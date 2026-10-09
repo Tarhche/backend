@@ -25,8 +25,18 @@
 //     loop's patience, and then the command is sent again, as another try.
 //     One in flight with no command to wait on, which nothing will move on,
 //     is failed;
-//   - one whose parent was restored from a snapshot waits for the next look
-//     inside the parent, which keeps it as it is found or forgets it
+//   - one of a kind whose state is its nodes', on a node that is alive, is
+//     gone from the node once the node has gone on beating for longer than
+//     ResourceSilentAfter without a word of it, since it was last heard of or
+//     last moved: missing, or waiting on its parent when the parent is not
+//     running, or forgotten when the parent was restored since, as its node's
+//     silence is taken (observe.Observer.Unheard). No heartbeat says what a
+//     node does not hold, so gone is concluded by time: that is how a
+//     resource its node lost is noticed, and why what a kind, or a Docker
+//     VM's dockerd, cannot say anything of for that long looks missing until
+//     it is heard again. What it is missing is asked for at the next pass;
+//   - one whose parent was restored from a snapshot waits to be heard of,
+//     which keeps it as it is found, or to go unheard, which forgets it
 //     (kind.CascadeReset);
 //   - one that has been tried for already, and is not yet what it is
 //     expected to be, is left alone for longer each time: its backoff. The
@@ -82,6 +92,11 @@ type Config struct {
 	// is taken to be lost.
 	NodeSilentAfter time.Duration
 
+	// ResourceSilentAfter is how long a resource whose state is its node's
+	// may go unheard while its node beats, before it is taken to be gone from
+	// the node: no heartbeat says what a node does not hold.
+	ResourceSilentAfter time.Duration
+
 	// Patience is how long a command a resource in flight is waiting on goes
 	// unanswered before it is sent again, beyond what its node may take over
 	// it: a command given a timeout (kind.Action.Timeout) is waited on for
@@ -105,11 +120,12 @@ type Config struct {
 // DefaultConfig is how patient the control plane is.
 func DefaultConfig() Config {
 	return Config{
-		Batch:           20,
-		NodeSilentAfter: 30 * time.Second,
-		Patience:        5 * time.Minute,
-		Backoff:         15 * time.Second,
-		MaxBackoff:      15 * time.Minute,
+		Batch:               20,
+		NodeSilentAfter:     30 * time.Second,
+		ResourceSilentAfter: 30 * time.Second,
+		Patience:            5 * time.Minute,
+		Backoff:             15 * time.Second,
+		MaxBackoff:          15 * time.Minute,
 	}
 }
 
@@ -147,15 +163,20 @@ type UseCase struct {
 	resources  resource.Repository
 	nodes      node.Repository
 	dispatcher *dispatch.Dispatcher
+	observer   *observe.Observer
 	logger     *slog.Logger
 	config     Config
 }
 
+// NewUseCase is a pass that takes what a node has long said nothing of to be
+// gone from it through observer, as the node's silence about it is taken. With
+// no observer, nothing is ever taken to be gone that way.
 func NewUseCase(
 	registry *kind.Registry[kind.ControlPlaneBinding],
 	resources resource.Repository,
 	nodes node.Repository,
 	dispatcher *dispatch.Dispatcher,
+	observer *observe.Observer,
 	logger *slog.Logger,
 	config Config,
 ) *UseCase {
@@ -164,6 +185,7 @@ func NewUseCase(
 		resources:  resources,
 		nodes:      nodes,
 		dispatcher: dispatcher,
+		observer:   observer,
 		logger:     logger,
 		config:     config,
 	}
@@ -186,7 +208,7 @@ func (uc *UseCase) Execute(ctx context.Context) error {
 	// not called late for the time a long pass took to reach it.
 	now := uc.dispatcher.Now()
 
-	alive, err := uc.aliveNodes(ctx, now)
+	beats, err := uc.beats(ctx)
 	if err != nil {
 		return err
 	}
@@ -194,14 +216,14 @@ func (uc *UseCase) Execute(ctx context.Context) error {
 	var failed error
 
 	for _, binding := range bindings {
-		failed = errors.Join(failed, uc.pass(ctx, binding, now, alive))
+		failed = errors.Join(failed, uc.pass(ctx, binding, now, beats))
 	}
 
 	return failed
 }
 
 // pass looks at every resource of one kind.
-func (uc *UseCase) pass(ctx context.Context, binding kind.ControlPlaneBinding, now time.Time, alive map[string]bool) error {
+func (uc *UseCase) pass(ctx context.Context, binding kind.ControlPlaneBinding, now time.Time, beats map[string]time.Time) error {
 	d := binding.Descriptor()
 
 	for offset := uint(0); ; offset += uc.config.Batch {
@@ -211,7 +233,7 @@ func (uc *UseCase) pass(ctx context.Context, binding kind.ControlPlaneBinding, n
 		}
 
 		for i := range records {
-			if err := uc.look(ctx, binding, records[i], now, alive); err != nil {
+			if err := uc.look(ctx, binding, records[i], now, beats); err != nil {
 				uc.logger.ErrorContext(ctx, "could not bring a resource back to what was asked of it", "error", err, "kind", d.Name, "uuid", records[i].Metadata.UUID)
 			}
 		}
@@ -222,23 +244,24 @@ func (uc *UseCase) pass(ctx context.Context, binding kind.ControlPlaneBinding, n
 	}
 }
 
-// aliveNodes is which nodes have spoken lately.
-func (uc *UseCase) aliveNodes(ctx context.Context, now time.Time) (map[string]bool, error) {
+// beats are when each node last beat, by its name: what tells which nodes are
+// alive, and what their silence about what they hold is judged by.
+func (uc *UseCase) beats(ctx context.Context) (map[string]time.Time, error) {
 	nodes, err := uc.nodes.GetAll(ctx, 0, nodesLimit)
 	if err != nil {
 		return nil, err
 	}
 
-	alive := make(map[string]bool, len(nodes))
+	beats := make(map[string]time.Time, len(nodes))
 	for i := range nodes {
-		alive[nodes[i].Name] = now.Sub(nodes[i].LastHeartbeatAt) <= uc.config.NodeSilentAfter
+		beats[nodes[i].Name] = nodes[i].LastHeartbeatAt
 	}
 
-	return alive, nil
+	return beats, nil
 }
 
 // look asks for what one resource is missing, if it is missing anything.
-func (uc *UseCase) look(ctx context.Context, binding kind.ControlPlaneBinding, r resource.Record, now time.Time, alive map[string]bool) error {
+func (uc *UseCase) look(ctx context.Context, binding kind.ControlPlaneBinding, r resource.Record, now time.Time, beats map[string]time.Time) error {
 	d := binding.Descriptor()
 
 	common, err := r.Common()
@@ -246,9 +269,14 @@ func (uc *UseCase) look(ctx context.Context, binding kind.ControlPlaneBinding, r
 		return err
 	}
 
+	// when its node last beat, if it was heard at all, and whether that was
+	// lately.
+	beat, heard := beats[r.Metadata.Node]
+	alive := len(r.Metadata.Node) > 0 && heard && now.Sub(beat) <= uc.config.NodeSilentAfter
+
 	// a node speaks for what it holds, and, of a kind whose state is the
 	// control plane's, only for the command it was sent and has not answered.
-	silent := len(r.Metadata.Node) > 0 && !alive[r.Metadata.Node] && (d.StateBy == kind.OnNode || r.Pending != nil)
+	silent := len(r.Metadata.Node) > 0 && !alive && (d.StateBy == kind.OnNode || r.Pending != nil)
 
 	switch {
 	case common.State == kind.Deleted:
@@ -274,9 +302,15 @@ func (uc *UseCase) look(ctx context.Context, binding kind.ControlPlaneBinding, r
 	case d.Machine.IsInFlight(common.State):
 		return uc.inFlight(ctx, d, r, common, now)
 
-	// its parent was restored from a snapshot: the next look inside the
-	// parent keeps it as it is found there, or forgets it, and making it
-	// again before that would make what the restored disk does not have.
+	// its node, alive, has gone on beating for long enough without a word of
+	// it: it is not on the node, or waits on its parent, or went with its
+	// parent's restore.
+	case alive && uc.unheard(d, common, beat):
+		return uc.gone(ctx, d, r, beat)
+
+	// its parent was restored from a snapshot: being heard of keeps it as it
+	// is found there, and going unheard forgets it, and making it again before
+	// either would make what the restored disk does not have.
 	case r.Reset:
 		return nil
 
@@ -300,6 +334,35 @@ func (uc *UseCase) look(ctx context.Context, binding kind.ControlPlaneBinding, r
 	}
 
 	return uc.ask(ctx, binding, r, common, intents, false)
+}
+
+// unheard reports whether a resource of d's kind is one its node went on
+// beating without a word of, up to its last beat, for longer than
+// ResourceSilentAfter: since it was last heard of, or since it last moved,
+// when that was later, so that one just made, or just moved by what it was
+// asked, has as long as any other to be heard of first. Only a node speaks
+// for a kind whose state is its nodes', and only through an observer is its
+// silence taken.
+func (uc *UseCase) unheard(d kind.Descriptor, common kind.Status, beat time.Time) bool {
+	if uc.observer == nil || d.StateBy != kind.OnNode {
+		return false
+	}
+
+	last := common.ObservedAt
+	if common.Since.After(last) {
+		last = common.Since
+	}
+
+	return beat.Sub(last) > uc.config.ResourceSilentAfter
+}
+
+// gone takes a resource its node has long said nothing of to be gone from it,
+// as of its node's last beat, as its node's silence about it is taken.
+// Nothing is asked of it until the next pass.
+func (uc *UseCase) gone(ctx context.Context, d kind.Descriptor, r resource.Record, beat time.Time) error {
+	uc.logger.DebugContext(ctx, "a resource its node has long said nothing of is taken to be gone from it", "kind", d.Name, "uuid", r.Metadata.UUID, "node", r.Metadata.Node)
+
+	return uc.observer.Unheard(ctx, d, r, beat)
 }
 
 // settled forgets the tries it took to make a resource what it is expected

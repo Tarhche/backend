@@ -3,7 +3,6 @@ package answerCodeRun
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"log/slog"
 
 	"github.com/khanzadimahdi/testproject/domain"
@@ -19,8 +18,8 @@ type heartbeat struct {
 
 var _ domain.MessageHandler = &heartbeat{}
 
-// NewHeartbeatHandler answers readers from the task kind's heartbeats, which
-// say what the nodes' tasks are doing.
+// NewHeartbeatHandler answers readers from the task kind's heartbeats, each
+// of which says what one of the nodes' tasks is doing.
 func NewHeartbeatHandler(replyer domain.Replyer, ingressDomain string, logger *slog.Logger) *heartbeat {
 	return &heartbeat{
 		replyer:       replyer,
@@ -41,19 +40,14 @@ func (h *heartbeat) Handle(ctx context.Context, data []byte) error {
 		return nil
 	}
 
-	var failed error
-	for _, observed := range beat.Instances {
-		var status taskKind.Status
-		if err := json.Unmarshal(observed.Status, &status); err != nil {
-			h.logger.WarnContext(ctx, "a task's status that cannot be read", "error", err, "task", observed.UUID)
+	var status taskKind.Status
+	if err := json.Unmarshal(beat.Status, &status); err != nil {
+		h.logger.WarnContext(ctx, "a task's status that cannot be read", "error", err, "task", beat.UUID)
 
-			continue
-		}
-
-		failed = errors.Join(failed, h.answer(ctx, observed.UUID, status))
+		return nil
 	}
 
-	return failed
+	return h.answer(ctx, beat.UUID, status)
 }
 
 // answer tells whoever ran a snippet what its task is doing, when there is

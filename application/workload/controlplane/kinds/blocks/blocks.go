@@ -4,15 +4,16 @@
 //
 // What the platform made in a Docker VM is a record of its kind, stored and
 // reconciled as any resource is. What a VM's dockerd holds besides, made by a
-// stack or from the VM's terminal, is reported in every heartbeat as well,
-// and each building block's strategy takes what its kind's reports say of it
-// (Blocks.Witnessed) and shows it beside its records as its extras: a
-// stack's, as part of the stack, and nobody's, as unmanaged. A kind whose
-// objects what lives beside them can keep says what keeps them (Keeper): an
-// image is the container's that uses it, or the stack's. None of it is
-// stored, and none of it is ever reconciled: each control plane keeps what
-// the heartbeats it hears say (Sightings), and it can be acted on and read,
-// through the node holding it, as a record can.
+// stack or from the VM's terminal, is reported every beat as well, each in a
+// heartbeat of its own, and each building block's strategy takes what its
+// kind's heartbeats say of it (Blocks.Witnessed) and shows it beside its
+// records as its extras: a stack's, as part of the stack, and nobody's, as
+// unmanaged. A kind whose objects what lives beside them can keep says what
+// keeps them (Keeper): an image is the container's that uses it, or the
+// stack's. None of it is stored, and none of it is ever reconciled: each
+// control plane keeps what the heartbeats it hears say (Sightings), until they
+// stop saying it for long enough, and it can be acted on and read, through the
+// node holding it, as a record can.
 //
 // What is found in a Docker VM labelled as the platform's with no record of
 // its own, in the first look into a VM whose disk was just restored from a
@@ -134,9 +135,29 @@ type Blocks struct {
 
 	lock sync.Mutex
 
-	// adopted are the restores of each Docker VM what was found in it was
-	// taken in again after, by when each was.
-	adopted map[string]time.Time
+	// adopted is the first look into each Docker VM since its disk was last
+	// restored, by the VM: what was found in it labelled as the platform's
+	// was taken in again then.
+	adopted map[string]look
+
+	// keeping is what keeps what each node holds of the kind that has no
+	// record of its own, by the node, as the last beat it was worked out for
+	// found.
+	keeping map[string]keepersAt
+}
+
+// look is the first look into a Docker VM since its disk was restored: the
+// beat whose heartbeats said what it held then.
+type look struct {
+	restoredAt time.Time
+	at         time.Time
+}
+
+// keepersAt are what keeps what of a kind a node holds that has no record of
+// its own, by its uuid, as worked out for the beat at a moment.
+type keepersAt struct {
+	at      time.Time
+	keepers map[string]string
 }
 
 var (
@@ -156,7 +177,7 @@ func New(d kind.Descriptor, k Kind, dependencies Dependencies) *Blocks {
 		dependencies.Logger = slog.New(slog.DiscardHandler)
 	}
 
-	return &Blocks{Dependencies: dependencies, descriptor: d, kind: k, adopted: make(map[string]time.Time)}
+	return &Blocks{Dependencies: dependencies, descriptor: d, kind: k, adopted: make(map[string]look), keeping: make(map[string]keepersAt)}
 }
 
 // Descriptor is the kind's.
@@ -315,93 +336,64 @@ func (b *Blocks) request(ctx context.Context, r kind.Raw, action string, payload
 	return reply, nil
 }
 
-// Witnessed takes in what a node's report at a moment said of the kind that
-// nobody keeps a record of: what it saw in each Docker VM it read is what is
-// shown of that VM from now on, what it could not read is shown as it was
-// seen last, and what it did not look into at all, a VM stopped or gone, is
-// let go of. What it found labelled as the platform's with no record, in the
-// first look into a VM whose disk was just restored, is taken in again.
-func (b *Blocks) Witnessed(ctx context.Context, nodeName string, report kind.Report[json.RawMessage], at time.Time) error {
-	recorded, _, err := b.Resources.GetAll(ctx, b.descriptor.Name, resource.Filter{Node: nodeName}, 0, 0)
-	if err != nil {
+// Witnessed takes in what a node's heartbeat at a moment said of a thing of
+// the kind in a Docker VM: one a record speaks for is shown as the record
+// alone, and one nobody keeps a record of is shown as it was seen from now on,
+// until a later heartbeat says otherwise, or until none has said it for long
+// enough (Sightings). What it found labelled as the platform's with no record,
+// in the first look into a VM whose disk was just restored, is taken in again
+// instead.
+func (b *Blocks) Witnessed(ctx context.Context, nodeName string, instance kind.Observation, kept bool, at time.Time) error {
+	if kept {
+		b.Sightings.Forget(b.descriptor.Name, instance.UUID)
+
+		return nil
+	}
+
+	parent, in := ownerOf(instance.Owners, blockKinds.Parent)
+	if !in {
+		return nil
+	}
+
+	v, err := b.VMs.GetOne(ctx, parent.UUID)
+	switch {
+	case errors.Is(err, domain.ErrNotExists):
+		// a VM nobody keeps a record of, on its way out.
+		return nil
+	case err != nil:
 		return err
+	case v.Metadata.Node != nodeName:
+		// its record says it is elsewhere: that node's to speak for.
+		return nil
 	}
-
-	kept := make(map[string]bool, len(recorded))
-	for i := range recorded {
-		kept[recorded[i].Metadata.UUID] = true
-	}
-
-	held, err := b.VMs.Held(ctx, nodeName)
-	if err != nil {
-		return err
-	}
-
-	vms := make(map[string]vmKind.VM, len(held))
-	for _, v := range held {
-		vms[v.Metadata.UUID] = v
-	}
-
-	keepers, err := b.keepers(ctx, nodeName, report)
-	if err != nil {
-		return err
-	}
-
-	seen := make(map[string][]kind.Raw, len(report.Read))
-	restored := make(map[string]time.Time)
 
 	var failed error
 
-	for _, instance := range report.Instances {
-		parent, in := ownerOf(instance.Owners, blockKinds.Parent)
-		if !in || !slices.Contains(report.Read, parent.UUID) {
-			continue
+	if len(instance.UUID) > 0 && b.adoptable(v, at) {
+		adopted, err := b.adopt(ctx, nodeName, v, instance, at)
+		if adopted {
+			b.Sightings.Forget(b.descriptor.Name, instance.UUID)
+
+			return nil
 		}
 
-		if len(instance.UUID) > 0 && kept[instance.UUID] {
-			continue
-		}
-
-		v, known := vms[parent.UUID]
-		if !known {
-			// a VM nobody keeps a record of, on its way out.
-			continue
-		}
-
-		if len(instance.UUID) > 0 && b.adoptable(v, at) {
-			restored[v.Metadata.UUID] = v.Status.RestoredAt
-
-			adopted, err := b.adopt(ctx, nodeName, v, instance, at)
-			failed = errors.Join(failed, err)
-
-			if adopted {
-				continue
-			}
-		}
-
-		seen[parent.UUID] = append(seen[parent.UUID], b.sighted(nodeName, v, instance, keepers))
+		failed = err
 	}
 
-	for _, vmUUID := range report.Read {
-		b.Sightings.Saw(b.descriptor.Name, vmUUID, Seen{Node: nodeName, At: at, Manifests: seen[vmUUID]})
+	keepers, err := b.keepers(ctx, nodeName, at)
+	if err != nil {
+		return errors.Join(failed, err)
 	}
 
-	b.Sightings.Forget(b.descriptor.Name, nodeName, func(vmUUID string) bool {
-		return slices.Contains(report.Read, vmUUID) || slices.Contains(report.Unseen, vmUUID)
-	})
-
-	b.lock.Lock()
-	for vmUUID, at := range restored {
-		b.adopted[vmUUID] = at
-	}
-	b.lock.Unlock()
+	b.Sightings.Saw(b.descriptor.Name, Seen{Node: nodeName, At: at, Manifest: b.sighted(nodeName, v, instance, keepers)})
 
 	return failed
 }
 
 // adoptable reports whether what is found in v labelled as the platform's,
-// with no record, is taken in again: in the first look into it since its disk
-// was restored, not long ago.
+// with no record, is taken in again at a moment: in the first look into it
+// since its disk was restored, not long ago, which is every heartbeat of the
+// beat that first said what it held.
 func (b *Blocks) adoptable(v vmKind.VM, at time.Time) bool {
 	restoredAt := v.Status.RestoredAt
 	if restoredAt.IsZero() || at.Before(restoredAt) || at.Sub(restoredAt) > adoptWithin {
@@ -411,7 +403,14 @@ func (b *Blocks) adoptable(v vmKind.VM, at time.Time) bool {
 	b.lock.Lock()
 	defer b.lock.Unlock()
 
-	return !b.adopted[v.Metadata.UUID].Equal(restoredAt)
+	first, looked := b.adopted[v.Metadata.UUID]
+	if !looked || !first.restoredAt.Equal(restoredAt) {
+		b.adopted[v.Metadata.UUID] = look{restoredAt: restoredAt, at: at}
+
+		return true
+	}
+
+	return first.at.Equal(at)
 }
 
 // adopt takes in what was found labelled as the platform's in a restored VM,
@@ -467,14 +466,32 @@ func (b *Blocks) adopt(ctx context.Context, nodeName string, v vmKind.VM, instan
 }
 
 // keepers are what keeps what of the kind on a node has no record of its own,
-// by uuid, when the kind says what lives beside it can keep it.
-func (b *Blocks) keepers(ctx context.Context, nodeName string, report kind.Report[json.RawMessage]) (map[string]string, error) {
+// by uuid, when the kind says what lives beside it can keep it: worked out
+// once a beat, for every heartbeat of it.
+func (b *Blocks) keepers(ctx context.Context, nodeName string, at time.Time) (map[string]string, error) {
 	keeper, keeps := b.kind.(Keeper)
-	if !keeps || len(report.Instances) == 0 {
+	if !keeps {
 		return nil, nil
 	}
 
-	return keeper.Keepers(ctx, nodeName)
+	b.lock.Lock()
+	worked, known := b.keeping[nodeName]
+	b.lock.Unlock()
+
+	if known && worked.at.Equal(at) {
+		return worked.keepers, nil
+	}
+
+	keepers, err := keeper.Keepers(ctx, nodeName)
+	if err != nil {
+		return nil, err
+	}
+
+	b.lock.Lock()
+	b.keeping[nodeName] = keepersAt{at: at, keepers: keepers}
+	b.lock.Unlock()
+
+	return keepers, nil
 }
 
 // sighted is the manifest of what nobody keeps a record of, as a node saw

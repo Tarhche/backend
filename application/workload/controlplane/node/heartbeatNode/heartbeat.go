@@ -17,8 +17,9 @@ var _ domain.MessageHandler = &Heartbeat{}
 
 // NewHeartbeatHandler is a handler that writes down what a node says of
 // itself in nodeRepository: that it is alive, what it is, what it uses and
-// what it offers. What it holds of every kind is heard in the kind's own
-// heartbeat (kinds/heartbeatResources).
+// what it offers. What it holds is heard an instance at a time, on each
+// kind's own subject (kinds/heartbeatResources), and when it last beat is
+// what its silence about any of it is judged by (kinds/reconcileResources).
 func NewHeartbeatHandler(nodeRepository node.Repository) *Heartbeat {
 	return &Heartbeat{nodeRepository: nodeRepository}
 }

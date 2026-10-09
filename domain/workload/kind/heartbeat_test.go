@@ -38,35 +38,40 @@ func TestHeartbeat(t *testing.T) {
 
 	sent := Heartbeat{
 		Node: "node-1",
-		Kind: "box",
 		At:   time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC),
-		Report: Report[json.RawMessage]{
-			Instances: []Observation{{
-				Kind:   "box",
-				UUID:   "box-1",
-				Owners: []Reference{{Kind: "vm", UUID: "vm-1"}},
-				Status: json.RawMessage(`{"state":"running"}`),
-			}},
-			Read:   []string{"vm-1"},
-			Unseen: []string{"vm-2"},
+		Observed: Observation{
+			Kind:   "box",
+			UUID:   "box-1",
+			Owners: []Reference{{Kind: "vm", UUID: "vm-1"}},
+			Status: json.RawMessage(`{"state":"running"}`),
 		},
 	}
 
-	t.Run("a kind's heartbeat arrives as it left", func(t *testing.T) {
+	t.Run("an instance's heartbeat arrives as it left", func(t *testing.T) {
 		t.Parallel()
 
 		assert.Equal(t, sent, travel(t, sent))
 	})
 
-	t.Run("it travels under the names the rest of the workload uses, its report's beside its own", func(t *testing.T) {
+	t.Run("it travels under the names the rest of the workload uses, its instance's beside its own", func(t *testing.T) {
 		t.Parallel()
 
 		named := fields(t, sent)
 
-		for _, name := range []string{"node", "kind", "at", "instances", "read", "unseen"} {
+		for _, name := range []string{"node", "at", "kind", "uuid", "owners", "status"} {
 			assert.Contains(t, named, name)
 		}
 
-		assert.Len(t, named, 6)
+		assert.Len(t, named, 6, "one instance, and no list of what its node holds or read")
+	})
+
+	t.Run("one nobody keeps a record of says no uuid", func(t *testing.T) {
+		t.Parallel()
+
+		unrecorded := sent
+		unrecorded.UUID = ""
+
+		assert.NotContains(t, fields(t, unrecorded), "uuid")
+		assert.Equal(t, unrecorded, travel(t, unrecorded))
 	})
 }

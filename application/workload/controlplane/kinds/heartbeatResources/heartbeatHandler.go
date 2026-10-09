@@ -1,13 +1,13 @@
 // Package heartbeatResources hears what the nodes hold of every kind whose
-// state is theirs to say, in a heartbeat of each kind's own, on the kind's own
+// state is theirs to say, an instance in each heartbeat, on its kind's own
 // subject (kind.HeartbeatName), and hands it to whoever writes it down.
 //
-// A heartbeat says everything of one kind its node holds, so what it leaves
-// out is gone from the node; a kind that sent none could not look, and
-// nothing is concluded from its silence. What a node says of itself, that it
-// is alive and what it offers, is heard in its own heartbeat
-// (node/heartbeatNode), and the heartbeats of one beat, the node's and its
-// kinds', are heard in no particular order.
+// A heartbeat says one instance its node holds, and nothing of what the node
+// does not: a resource its node goes on beating without a word of for long
+// enough is taken to be gone by the reconcile loop (reconcileResources), not
+// here. What a node says of itself, that it is alive and what it offers, is
+// heard in its own heartbeat (node/heartbeatNode), and the heartbeats of one
+// beat, the node's and its instances', are heard in no particular order.
 //
 // A heartbeat is never failed: the next beat says it all again. One that
 // cannot be read, or that names no node or no kind, is let go of.
@@ -23,14 +23,13 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 )
 
-// Observer writes down what a node's heartbeat of one kind at a moment says
-// of the resources of that kind the node holds. It fails nothing: the next
-// beat says it all again.
+// Observer writes down what a node's heartbeat at a moment says of one
+// instance it holds. It fails nothing: the next beat says it all again.
 type Observer interface {
-	Heartbeat(ctx context.Context, nodeName string, kindName string, at time.Time, report kind.Report[json.RawMessage])
+	Heartbeat(ctx context.Context, nodeName string, at time.Time, instance kind.Observation)
 }
 
-// HeartbeatHandler hands what a kind's heartbeat says to the observer.
+// HeartbeatHandler hands what an instance's heartbeat says to the observer.
 type HeartbeatHandler struct {
 	observer Observer
 	logger   *slog.Logger
@@ -38,8 +37,8 @@ type HeartbeatHandler struct {
 
 var _ domain.MessageHandler = &HeartbeatHandler{}
 
-// NewHeartbeatHandler is a handler that hands what each kind's heartbeat says
-// of the resources its node holds to observer.
+// NewHeartbeatHandler is a handler that hands what each heartbeat says of an
+// instance its node holds to observer.
 func NewHeartbeatHandler(observer Observer, logger *slog.Logger) *HeartbeatHandler {
 	return &HeartbeatHandler{observer: observer, logger: logger}
 }
@@ -53,8 +52,8 @@ func (h *HeartbeatHandler) Handle(ctx context.Context, data []byte) error {
 		return nil
 	}
 
-	// one that names no node would be taken to speak for what every node
-	// holds, and one that names no kind speaks for none.
+	// one that names no node speaks for nothing a node holds, and one that
+	// names no kind for nothing of any kind.
 	if len(heartbeat.Node) == 0 || len(heartbeat.Kind) == 0 {
 		h.logger.ErrorContext(ctx, "a heartbeat that names no node or no kind", "node", heartbeat.Node, "kind", heartbeat.Kind)
 
@@ -66,7 +65,7 @@ func (h *HeartbeatHandler) Handle(ctx context.Context, data []byte) error {
 		at = time.Now()
 	}
 
-	h.observer.Heartbeat(ctx, heartbeat.Node, heartbeat.Kind, at, heartbeat.Report)
+	h.observer.Heartbeat(ctx, heartbeat.Node, at, heartbeat.Observed)
 
 	return nil
 }

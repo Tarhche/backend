@@ -160,13 +160,14 @@ func NewControlPlaneWorkload(
 
 	// what the building blocks of Docker VMs share: what the nodes report of
 	// them that nobody keeps a record of, which each control plane keeps from
-	// the heartbeats it hears, and the Docker VMs they go into.
+	// the heartbeats it hears, shown for twice as long as a record goes
+	// unheard before it is taken to be gone, and the Docker VMs they go into.
 	buildingBlocks := blocks.Dependencies{
 		Resources: kinds.Resources,
 		VMs:       vms,
 		Chooser:   chooser,
 		Requester: requester,
-		Sightings: blocks.NewSightings(),
+		Sightings: blocks.NewSightings(2 * settingsOf(options).reconcile.ResourceSilentAfter),
 		Logger:    logger,
 	}
 
@@ -196,9 +197,9 @@ func NewControlPlaneWorkload(
 		return kinds.Route(mux)
 	}
 
-	// what the nodes hold of every kind whose state is theirs to say, heard in
-	// the kind's own heartbeat; a kind whose state is the control plane's has
-	// none.
+	// what the nodes hold of every kind whose state is theirs to say, heard an
+	// instance at a time, on the kind's own subject; a kind whose state is the
+	// control plane's has none.
 	subscribers := maps.Clone(kinds.Subscribers)
 	heartbeats := heartbeatResources.NewHeartbeatHandler(kinds.Observer, logger)
 

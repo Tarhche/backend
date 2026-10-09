@@ -21,10 +21,9 @@ import (
 
 // heard is one heartbeat an observer was handed.
 type heard struct {
-	node   string
-	kind   string
-	at     time.Time
-	report kind.Report[json.RawMessage]
+	node     string
+	at       time.Time
+	instance kind.Observation
 }
 
 // recording is an observer that keeps what it is handed.
@@ -33,11 +32,11 @@ type recording struct {
 	heard []heard
 }
 
-func (r *recording) Heartbeat(_ context.Context, nodeName string, kindName string, at time.Time, report kind.Report[json.RawMessage]) {
+func (r *recording) Heartbeat(_ context.Context, nodeName string, at time.Time, instance kind.Observation) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
-	r.heard = append(r.heard, heard{node: nodeName, kind: kindName, at: at, report: report})
+	r.heard = append(r.heard, heard{node: nodeName, at: at, instance: instance})
 }
 
 func message(t *testing.T, heartbeat kind.Heartbeat) []byte {
@@ -65,27 +64,23 @@ func TestHeartbeatHandler_Handle(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 	at := kindstest.Moment.Add(time.Minute)
 
-	// what a node says of the fans it holds: one running, in the house it
-	// read.
-	fans := kind.Report[json.RawMessage]{
-		Instances: []kind.Observation{{
-			Kind:   kindstest.Kind,
-			UUID:   "fan-uuid",
-			Owners: []kind.Reference{{Kind: kindstest.Parent, UUID: kindstest.House}},
-			Status: json.RawMessage(`{"state":"running","speed":2}`),
-		}},
-		Read: []string{kindstest.House},
+	// what a node says of a fan it holds: running, in its house.
+	fan := kind.Observation{
+		Kind:   kindstest.Kind,
+		UUID:   "fan-uuid",
+		Owners: []kind.Reference{{Kind: kindstest.Parent, UUID: kindstest.House}},
+		Status: json.RawMessage(`{"state":"running","speed":2}`),
 	}
 
-	t.Run("what a kind's heartbeat says is handed on, as its node's word for that kind at that moment", func(t *testing.T) {
+	t.Run("what an instance's heartbeat says is handed on, as its node's word for it at that moment", func(t *testing.T) {
 		t.Parallel()
 
 		observer := &recording{}
 
-		require.NoError(t, heartbeatResources.NewHeartbeatHandler(observer, logger).Handle(ctx, message(t, kind.Heartbeat{Node: kindstest.NodeName, Kind: kindstest.Kind, At: at, Report: fans})))
+		require.NoError(t, heartbeatResources.NewHeartbeatHandler(observer, logger).Handle(ctx, message(t, kind.Heartbeat{Node: kindstest.NodeName, At: at, Observed: fan})))
 
 		require.Len(t, observer.heard, 1)
-		assert.Equal(t, heard{node: kindstest.NodeName, kind: kindstest.Kind, at: at, report: fans}, observer.heard[0])
+		assert.Equal(t, heard{node: kindstest.NodeName, at: at, instance: fan}, observer.heard[0])
 	})
 
 	t.Run("one that says not when is heard now", func(t *testing.T) {
@@ -93,7 +88,7 @@ func TestHeartbeatHandler_Handle(t *testing.T) {
 
 		observer := &recording{}
 
-		require.NoError(t, heartbeatResources.NewHeartbeatHandler(observer, logger).Handle(ctx, message(t, kind.Heartbeat{Node: kindstest.NodeName, Kind: kindstest.Kind, Report: fans})))
+		require.NoError(t, heartbeatResources.NewHeartbeatHandler(observer, logger).Handle(ctx, message(t, kind.Heartbeat{Node: kindstest.NodeName, Observed: fan})))
 
 		require.Len(t, observer.heard, 1)
 		assert.WithinDuration(t, time.Now(), observer.heard[0].at, time.Minute)
@@ -105,21 +100,24 @@ func TestHeartbeatHandler_Handle(t *testing.T) {
 		observer := &recording{}
 		handler := heartbeatResources.NewHeartbeatHandler(observer, logger)
 
+		nameless := fan
+		nameless.Kind = ""
+
 		assert.NoError(t, handler.Handle(ctx, []byte("{")), "read again, it is as unreadable")
-		assert.NoError(t, handler.Handle(ctx, message(t, kind.Heartbeat{Kind: kindstest.Kind, At: at, Report: fans})))
-		assert.NoError(t, handler.Handle(ctx, message(t, kind.Heartbeat{Node: kindstest.NodeName, At: at, Report: fans})))
+		assert.NoError(t, handler.Handle(ctx, message(t, kind.Heartbeat{At: at, Observed: fan})))
+		assert.NoError(t, handler.Handle(ctx, message(t, kind.Heartbeat{Node: kindstest.NodeName, At: at, Observed: nameless})))
 
 		assert.Empty(t, observer.heard)
 	})
 
-	t.Run("what it says is taken onto the resources of its kind its node holds", func(t *testing.T) {
+	t.Run("what it says is taken onto the resource it is, and nothing is taken of what it does not say", func(t *testing.T) {
 		t.Parallel()
 
 		resources := resourcesMemory.NewRepository()
 
 		for _, r := range []resource.Record{
 			kindstest.AFan("fan-uuid", kindstest.Starting, kindstest.Running),
-			kindstest.AFan("lost", kindstest.Running, kindstest.Running),
+			kindstest.AFan("unsaid", kindstest.Running, kindstest.Running),
 		} {
 			_, err := resources.Create(ctx, r)
 			require.NoError(t, err)
@@ -127,14 +125,16 @@ func TestHeartbeatHandler_Handle(t *testing.T) {
 
 		observer := observe.NewObserver(kindstest.Registry(&kindstest.Fans{}), resources, logger)
 
-		require.NoError(t, heartbeatResources.NewHeartbeatHandler(observer, logger).Handle(ctx, message(t, kind.Heartbeat{Node: kindstest.NodeName, Kind: kindstest.Kind, At: at, Report: fans})))
+		require.NoError(t, heartbeatResources.NewHeartbeatHandler(observer, logger).Handle(ctx, message(t, kind.Heartbeat{Node: kindstest.NodeName, At: at, Observed: fan})))
 
-		fan := stored(t, resources, "fan-uuid")
-		assert.Equal(t, kindstest.Running, fan.Status.State, "it arrived")
-		assert.Equal(t, 2, fan.Status.Speed)
-		assert.Equal(t, at, fan.Status.ObservedAt, "when its node said so")
+		taken := stored(t, resources, "fan-uuid")
+		assert.Equal(t, kindstest.Running, taken.Status.State, "it arrived")
+		assert.Equal(t, 2, taken.Status.Speed)
+		assert.Equal(t, at, taken.Status.ObservedAt, "when its node said so")
 
-		assert.Equal(t, kind.Missing, stored(t, resources, "lost").Status.State, "what it leaves out of the house it read is gone from it")
+		unsaid := stored(t, resources, "unsaid")
+		assert.Equal(t, kindstest.Running, unsaid.Status.State, "a heartbeat of another says nothing of it: going unheard is the reconcile loop's to make anything of")
+		assert.True(t, unsaid.Status.ObservedAt.IsZero())
 	})
 
 	t.Run("and a kind the control plane does not run, or whose state is not its nodes' to say, is not listened to", func(t *testing.T) {
@@ -162,16 +162,19 @@ func TestHeartbeatHandler_Handle(t *testing.T) {
 		} {
 			resources := resourcesMemory.NewRepository()
 
-			_, err := resources.Create(ctx, kindstest.AFan("lost", kindstest.Running, kindstest.Running))
+			_, err := resources.Create(ctx, kindstest.AFan("fan-uuid", kindstest.Starting, kindstest.Running))
 			require.NoError(t, err)
 
 			observer := observe.NewObserver(tt.registry, resources, logger)
 
-			require.NoError(t, heartbeatResources.NewHeartbeatHandler(observer, logger).Handle(ctx, message(t, kind.Heartbeat{Node: kindstest.NodeName, Kind: tt.kind, At: at, Report: fans})), name)
+			said := fan
+			said.Kind = tt.kind
 
-			lost := stored(t, resources, "lost")
-			assert.Equal(t, kindstest.Running, lost.Status.State, name)
-			assert.True(t, lost.Status.ObservedAt.IsZero(), name)
+			require.NoError(t, heartbeatResources.NewHeartbeatHandler(observer, logger).Handle(ctx, message(t, kind.Heartbeat{Node: kindstest.NodeName, At: at, Observed: said})), name)
+
+			untouched := stored(t, resources, "fan-uuid")
+			assert.Equal(t, kindstest.Starting, untouched.Status.State, name)
+			assert.True(t, untouched.Status.ObservedAt.IsZero(), name)
 		}
 	})
 }

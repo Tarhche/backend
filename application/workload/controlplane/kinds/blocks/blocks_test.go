@@ -39,8 +39,14 @@ func seen(t *testing.T, uuid string, docker containerKind.Docker, owners ...kind
 	}
 }
 
-func report(read []string, unseen []string, instances ...kind.Observation) kind.Report[json.RawMessage] {
-	return kind.Report[json.RawMessage]{Instances: instances, Read: read, Unseen: unseen}
+// witnessed has the containers' strategy hear of each instance, nobody's
+// record, in a heartbeat of its own taken at a moment.
+func witnessed(t *testing.T, w *blockstest.Workload, at time.Time, instances ...kind.Observation) {
+	t.Helper()
+
+	for _, instance := range instances {
+		require.NoError(t, w.Containers.Witnessed(context.Background(), vmtest.Node, instance, false, at))
+	}
 }
 
 func TestBlocks_Witnessed(t *testing.T) {
@@ -55,11 +61,12 @@ func TestBlocks_Witnessed(t *testing.T) {
 		w := blockstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
 		w.Keep(blockstest.AContainer("kept", "vm-1", containerKind.Running, containerKind.Running))
 
-		require.NoError(t, w.Containers.Witnessed(ctx, vmtest.Node, report([]string{"vm-1"}, nil,
-			seen(t, "kept", containerKind.Docker{ID: "c-kept", Name: "web", State: "running"}),
+		require.NoError(t, w.Containers.Witnessed(ctx, vmtest.Node, seen(t, "kept", containerKind.Docker{ID: "c-kept", Name: "web", State: "running"}), true, at))
+
+		witnessed(t, w, at,
 			seen(t, "", containerKind.Docker{ID: "c-db", Name: "db", State: "running", CreatedAt: at.Add(-time.Hour)}),
 			seen(t, "", containerKind.Docker{ID: "c-shop", Name: "shop-web-1", State: "running", Labels: map[string]string{docker.LabelComposeProject: "shop"}, CreatedAt: at}, kind.Reference{Kind: "stack", UUID: "stack-uuid"}),
-		), at))
+		)
 
 		extras, err := w.Containers.All(ctx)
 		require.NoError(t, err)
@@ -84,7 +91,25 @@ func TestBlocks_Witnessed(t *testing.T) {
 		assert.ErrorIs(t, err, domain.ErrNotExists, "a record is not an extra")
 	})
 
-	t.Run("what a vm that could not be read held is shown as it was last seen, and a vm not looked into is let go of", func(t *testing.T) {
+	t.Run("what was seen of one before a record was kept of it is let go of once the record is heard of", func(t *testing.T) {
+		t.Parallel()
+
+		w := blockstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
+
+		web := seen(t, "web-uuid", containerKind.Docker{ID: "c-web", Name: "web", State: "running", Labels: labelled(t, "web-uuid")})
+
+		witnessed(t, w, at, web)
+
+		_, err := w.Containers.One(ctx, "web-uuid")
+		require.NoError(t, err, "nobody's, while nobody keeps a record of it")
+
+		require.NoError(t, w.Containers.Witnessed(ctx, vmtest.Node, web, true, at.Add(time.Second)))
+
+		_, err = w.Containers.One(ctx, "web-uuid")
+		assert.ErrorIs(t, err, domain.ErrNotExists, "a record speaks for it now, and it is not shown twice")
+	})
+
+	t.Run("what was seen is shown as it was last seen, until it goes unheard for long enough", func(t *testing.T) {
 		t.Parallel()
 
 		w := blockstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner"), vmtest.Docker("vm-2", "owner")))
@@ -92,23 +117,19 @@ func TestBlocks_Witnessed(t *testing.T) {
 		inVM2 := seen(t, "", containerKind.Docker{ID: "c-2", Name: "cache", State: "running"})
 		inVM2.Owners = []kind.Reference{{Kind: "vm", UUID: "vm-2"}}
 
-		require.NoError(t, w.Containers.Witnessed(ctx, vmtest.Node, report([]string{"vm-1", "vm-2"}, nil,
-			seen(t, "", containerKind.Docker{ID: "c-1", Name: "db", State: "running"}),
-			inVM2,
-		), at))
+		witnessed(t, w, at, seen(t, "", containerKind.Docker{ID: "c-1", Name: "db", State: "running"}))
+		witnessed(t, w, at.Add(-2*time.Minute), inVM2)
 
-		require.NoError(t, w.Containers.Witnessed(ctx, vmtest.Node, report(nil, []string{"vm-1"}), at.Add(time.Second)))
+		// what was seen a moment before, heard after it.
+		witnessed(t, w, at.Add(-time.Second), seen(t, "", containerKind.Docker{ID: "c-1", Name: "db", State: "exited"}))
 
 		extras, err := w.Containers.All(ctx)
 		require.NoError(t, err)
-		require.Len(t, extras, 1)
-		assert.Equal(t, "db", extras[0].Metadata.Name, "vm-1 is shown as it was last seen; vm-2, not looked into, is let go of")
+		require.Len(t, extras, 1, "what nothing has said for long enough, a vm's stopped or gone, is let go of")
+		assert.Equal(t, "db", extras[0].Metadata.Name)
+		assert.Equal(t, "running", blocks.ObservedOf(extras[0].Status).Docker.State, "as it was last seen, not as it was seen before that")
 
-		require.NoError(t, w.Containers.Witnessed(ctx, vmtest.Node, report([]string{"vm-1"}, nil), at.Add(2*time.Second)))
-
-		extras, err = w.Containers.All(ctx)
-		require.NoError(t, err)
-		assert.Empty(t, extras, "and once vm-1 is read again, what is gone from it is gone")
+		assert.Empty(t, w.Sightings.In(containerKind.Name, "vm-2"))
 	})
 
 	t.Run("what is labelled as the platform's with no record is nobody's, rather than taken in", func(t *testing.T) {
@@ -118,9 +139,7 @@ func TestBlocks_Witnessed(t *testing.T) {
 
 		labels := labelled(t, "deleted-a-moment-ago")
 
-		require.NoError(t, w.Containers.Witnessed(ctx, vmtest.Node, report([]string{"vm-1"}, nil,
-			seen(t, "deleted-a-moment-ago", containerKind.Docker{ID: "c1", Name: "web", State: "running", Labels: labels}),
-		), at))
+		witnessed(t, w, at, seen(t, "deleted-a-moment-ago", containerKind.Docker{ID: "c1", Name: "web", State: "running", Labels: labels}))
 
 		_, kept := w.Kept(containerKind.Name, "deleted-a-moment-ago")
 		assert.False(t, kept, "what a node saw before it removed it does not come back")
@@ -137,11 +156,10 @@ func TestBlocks_Witnessed(t *testing.T) {
 		restored := vmtest.In(vmtest.Docker("vm-1", "owner"), func(v *vmKind.VM) { v.Status.RestoredAt = at.Add(-time.Minute) })
 		w := blockstest.New(vmtest.WithVMs(restored))
 
-		labels := labelled(t, "from-the-snapshot")
+		first := seen(t, "from-the-snapshot", containerKind.Docker{ID: "c1", Name: "web", State: "running", Labels: labelled(t, "from-the-snapshot")})
+		second := seen(t, "also-from-the-snapshot", containerKind.Docker{ID: "c2", Name: "api", State: "running", Labels: labelled(t, "also-from-the-snapshot")})
 
-		look := report([]string{"vm-1"}, nil, seen(t, "from-the-snapshot", containerKind.Docker{ID: "c1", Name: "web", State: "running", Labels: labels}))
-
-		require.NoError(t, w.Containers.Witnessed(ctx, vmtest.Node, look, at))
+		witnessed(t, w, at, first, second)
 
 		adopted, kept := w.Kept(containerKind.Name, "from-the-snapshot")
 		require.True(t, kept)
@@ -156,12 +174,15 @@ func TestBlocks_Witnessed(t *testing.T) {
 		assert.Equal(t, containerKind.Running, c.Status.State)
 		assert.Equal(t, containerKind.Running, c.Status.Expected)
 
+		_, kept = w.Kept(containerKind.Name, "also-from-the-snapshot")
+		assert.True(t, kept, "every heartbeat of that beat is that look")
+
 		extras, err := w.Containers.All(ctx)
 		require.NoError(t, err)
 		assert.Empty(t, extras, "and it is not shown as nobody's")
 
 		require.NoError(t, w.Resources.Delete(ctx, containerKind.Name, "from-the-snapshot"))
-		require.NoError(t, w.Containers.Witnessed(ctx, vmtest.Node, look, at.Add(time.Second)))
+		witnessed(t, w, at.Add(time.Second), first)
 
 		_, kept = w.Kept(containerKind.Name, "from-the-snapshot")
 		assert.False(t, kept, "only the first look after the restore takes anything in")
@@ -173,26 +194,27 @@ func TestBlocks_Witnessed(t *testing.T) {
 		restored := vmtest.In(vmtest.Docker("vm-1", "owner"), func(v *vmKind.VM) { v.Status.RestoredAt = at.Add(-time.Hour) })
 		w := blockstest.New(vmtest.WithVMs(restored))
 
-		require.NoError(t, w.Containers.Witnessed(ctx, vmtest.Node, report([]string{"vm-1"}, nil,
-			seen(t, "from-the-snapshot", containerKind.Docker{ID: "c1", Name: "web", State: "running", Labels: labelled(t, "from-the-snapshot")}),
-		), at))
+		witnessed(t, w, at, seen(t, "from-the-snapshot", containerKind.Docker{ID: "c1", Name: "web", State: "running", Labels: labelled(t, "from-the-snapshot")}))
 
 		_, kept := w.Kept(containerKind.Name, "from-the-snapshot")
 		assert.False(t, kept)
 	})
 
-	t.Run("what a vm nobody keeps a record of holds is not shown", func(t *testing.T) {
+	t.Run("what a vm nobody keeps a record of holds is not shown, nor what one holds that its record says is on another node", func(t *testing.T) {
 		t.Parallel()
 
-		w := blockstest.New()
+		elsewhere := vmtest.In(vmtest.Docker("vm-1", "owner"), func(v *vmKind.VM) { v.Metadata.Node = "node-2" })
 
-		require.NoError(t, w.Containers.Witnessed(ctx, vmtest.Node, report([]string{"vm-1"}, nil,
-			seen(t, "", containerKind.Docker{ID: "c1", Name: "db", State: "running"}),
-		), at))
+		for name, w := range map[string]*blockstest.Workload{
+			"nobody's":       blockstest.New(),
+			"another node's": blockstest.New(vmtest.WithVMs(elsewhere)),
+		} {
+			witnessed(t, w, at, seen(t, "", containerKind.Docker{ID: "c1", Name: "db", State: "running"}))
 
-		extras, err := w.Containers.All(ctx)
-		require.NoError(t, err)
-		assert.Empty(t, extras)
+			extras, err := w.Containers.All(ctx)
+			require.NoError(t, err)
+			assert.Empty(t, extras, name)
+		}
 	})
 }
 
@@ -215,10 +237,10 @@ func TestBlocks_Act(t *testing.T) {
 
 	ctx := context.Background()
 
-	witnessed := func(t *testing.T, w *blockstest.Workload, docker containerKind.Docker) kind.Raw {
+	sighted := func(t *testing.T, w *blockstest.Workload, docker containerKind.Docker) kind.Raw {
 		t.Helper()
 
-		require.NoError(t, w.Containers.Witnessed(ctx, vmtest.Node, report([]string{"vm-1"}, nil, seen(t, "", docker)), time.Now()))
+		witnessed(t, w, time.Now(), seen(t, "", docker))
 
 		extras, err := w.Containers.All(ctx)
 		require.NoError(t, err)
@@ -231,7 +253,7 @@ func TestBlocks_Act(t *testing.T) {
 		t.Parallel()
 
 		w := blockstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
-		db := witnessed(t, w, containerKind.Docker{ID: "c-db", Name: "db", State: "running"})
+		db := sighted(t, w, containerKind.Docker{ID: "c-db", Name: "db", State: "running"})
 
 		w.Answer(func(query kind.Query) kind.ResourceActedOn {
 			status, _ := json.Marshal(containerKind.Status{Status: kind.Status{State: containerKind.Completed}, Docker: &containerKind.Docker{ID: "c-db", Name: "db", State: "exited"}})
@@ -260,9 +282,11 @@ func TestBlocks_Act(t *testing.T) {
 		t.Parallel()
 
 		w := blockstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
-		db := witnessed(t, w, containerKind.Docker{ID: "c-db", Name: "db", State: "exited"})
+		db := sighted(t, w, containerKind.Docker{ID: "c-db", Name: "db", State: "exited"})
 
 		w.Answer(func(query kind.Query) kind.ResourceActedOn { return kind.ResourceActedOn{OK: true} }, nil)
+
+		before := time.Now()
 
 		_, gone, _, err := w.Containers.Act(ctx, db, containerKind.ActionDelete, nil)
 		require.NoError(t, err)
@@ -270,13 +294,18 @@ func TestBlocks_Act(t *testing.T) {
 
 		_, err = w.Containers.One(ctx, db.Metadata.UUID)
 		assert.ErrorIs(t, err, domain.ErrNotExists)
+
+		witnessed(t, w, before, seen(t, "", containerKind.Docker{ID: "c-db", Name: "db", State: "exited"}))
+
+		_, err = w.Containers.One(ctx, db.Metadata.UUID)
+		assert.ErrorIs(t, err, domain.ErrNotExists, "and what its node saw before it was removed does not bring it back")
 	})
 
 	t.Run("one that runs is not removed but by force, and its node is not asked", func(t *testing.T) {
 		t.Parallel()
 
 		w := blockstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
-		db := witnessed(t, w, containerKind.Docker{ID: "c-db", Name: "db", State: "running"})
+		db := sighted(t, w, containerKind.Docker{ID: "c-db", Name: "db", State: "running"})
 
 		_, _, _, err := w.Containers.Act(ctx, db, containerKind.ActionDelete, nil)
 
@@ -290,7 +319,7 @@ func TestBlocks_Act(t *testing.T) {
 		t.Parallel()
 
 		w := blockstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
-		db := witnessed(t, w, containerKind.Docker{ID: "c-db", Name: "db", State: "exited"})
+		db := sighted(t, w, containerKind.Docker{ID: "c-db", Name: "db", State: "exited"})
 
 		w.Answer(func(query kind.Query) kind.ResourceActedOn {
 			status, _ := json.Marshal(containerKind.Status{Status: kind.Status{State: containerKind.Failed}, Failure: &noderequest.Error{Code: noderequest.CodeInvalid, Message: "port is already allocated"}})
@@ -309,7 +338,7 @@ func TestBlocks_Act(t *testing.T) {
 		t.Parallel()
 
 		w := blockstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
-		db := witnessed(t, w, containerKind.Docker{ID: "c-db", Name: "db", State: "running"})
+		db := sighted(t, w, containerKind.Docker{ID: "c-db", Name: "db", State: "running"})
 
 		_, _, refused, err := w.Containers.Act(ctx, db, containerKind.ActionStart, nil)
 		require.NoError(t, err)
@@ -320,7 +349,7 @@ func TestBlocks_Act(t *testing.T) {
 		t.Parallel()
 
 		w := blockstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
-		db := witnessed(t, w, containerKind.Docker{ID: "c-db", Name: "db", State: "running"})
+		db := sighted(t, w, containerKind.Docker{ID: "c-db", Name: "db", State: "running"})
 
 		_, _, _, err := w.Containers.Act(ctx, db, containerKind.ActionCreate, nil)
 		assert.ErrorIs(t, err, kind.ErrUnknownAction)
@@ -334,10 +363,10 @@ func TestBlocks_Query(t *testing.T) {
 
 	w := blockstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
 
-	require.NoError(t, w.Containers.Witnessed(ctx, vmtest.Node, report([]string{"vm-1"}, nil,
+	witnessed(t, w, time.Now(),
 		seen(t, "", containerKind.Docker{ID: "c-db", Name: "db", State: "running"}),
 		seen(t, "", containerKind.Docker{ID: "c-old", Name: "old", State: "exited"}),
-	), time.Now()))
+	)
 
 	w.Answer(nil, json.RawMessage(`{"lines":[{"line":"ready"}]}`))
 
@@ -386,9 +415,7 @@ func TestBlocks_Resolve(t *testing.T) {
 		c.Status.Docker.Name = "cache"
 	}))
 
-	require.NoError(t, w.Containers.Witnessed(ctx, vmtest.Node, report([]string{"vm-1"}, nil,
-		seen(t, "", containerKind.Docker{ID: "0123ffff", Name: "db", State: "running"}),
-	), time.Now()))
+	witnessed(t, w, time.Now(), seen(t, "", containerKind.Docker{ID: "0123ffff", Name: "db", State: "running"}))
 
 	unmanaged := blockKinds.Derived(containerKind.Name, "vm-1", "0123ffff")
 	vm1 := kind.Reference{Kind: "vm", UUID: "vm-1"}

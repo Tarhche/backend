@@ -179,11 +179,12 @@ func controlPlane(t *testing.T, w *blockstest.Workload) *client.Client {
 }
 
 // witnessed has the containers' strategy hear that the node holds, in the
-// Docker VM vmUUID names, what docker says of each container.
+// Docker VM vmUUID names, what docker says of each container, a heartbeat for
+// each.
 func witnessed(t *testing.T, w *blockstest.Workload, vmUUID string, containers ...containerKind.Docker) {
 	t.Helper()
 
-	report := kind.Report[json.RawMessage]{Read: []string{vmUUID}}
+	at := time.Now()
 
 	for _, c := range containers {
 		owners := []kind.Reference{{Kind: "vm", UUID: vmUUID}}
@@ -194,10 +195,8 @@ func witnessed(t *testing.T, w *blockstest.Workload, vmUUID string, containers .
 		status, err := json.Marshal(containerKind.Status{Status: kind.Status{State: containerKind.StateOf(c.State, "")}, Docker: &c})
 		require.NoError(t, err)
 
-		report.Instances = append(report.Instances, kind.Observation{Kind: containerKind.Name, Owners: owners, Status: status})
+		require.NoError(t, w.Containers.Witnessed(t.Context(), vmtest.Node, kind.Observation{Kind: containerKind.Name, Owners: owners, Status: status}, false, at))
 	}
-
-	require.NoError(t, w.Containers.Witnessed(t.Context(), vmtest.Node, report, time.Now()))
 }
 
 func TestContract_VMs(t *testing.T) {

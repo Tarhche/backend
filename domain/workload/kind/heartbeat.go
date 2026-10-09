@@ -25,25 +25,28 @@ func HeartbeatName(kindName string) string {
 	return "workload" + capitalized + "Heartbeat"
 }
 
-// Heartbeat is what a node's beat found of one kind on it: the kind's Report,
-// everything of the kind the node holds, sent on the kind's own subject
+// Heartbeat is what a node's beat found of one instance of a kind on it: the
+// instance as its node observed it, sent on its kind's own subject
 // (HeartbeatName) beside the node's own heartbeat, and stamped as that is.
+// Every beat says every instance a node holds, each in a heartbeat of its own.
 //
-// A kind that could not say what it holds sends none that beat, and nothing
-// is concluded from its silence, while one that sends a report with nothing
-// in it holds nothing. Heartbeats of different kinds, and the node's own, are
-// heard in no particular order, those of one beat as well.
+// A heartbeat speaks for its instance alone, and no beat says what is not on
+// its node: a resource its node goes on beating without a word of for long
+// enough is taken to be gone from it by whoever keeps its record, whatever
+// kept the node from saying it. A kind that could not say what it holds sends
+// nothing that beat, so one that cannot for that long has what it holds taken
+// to be gone until it says it again. Heartbeats of different instances and
+// kinds, and the node's own, are heard in no particular order, those of one
+// beat as well.
 type Heartbeat struct {
-	// Node is the node that holds what it reports.
+	// Node is the node that holds the instance.
 	Node string `json:"node"`
 
-	// Kind is the kind it reports.
-	Kind string `json:"kind"`
-
 	// At is when the beat asked its node's kinds what they hold, which the
-	// node's own heartbeat of that beat is stamped with too: what it reports
-	// was observed no earlier.
+	// node's own heartbeat of that beat, and every other heartbeat of it, is
+	// stamped with too: the instance was observed no earlier.
 	At time.Time `json:"at"`
 
-	Report[json.RawMessage]
+	// Observed is the instance, its kind among it.
+	Observed[json.RawMessage]
 }

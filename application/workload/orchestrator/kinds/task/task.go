@@ -22,10 +22,11 @@
 // Its state is every task this node runs, each as the run of it that runs, or
 // otherwise its latest: what its program is doing, and the run itself, with
 // what a job has written so far (Run.Output) and the ports that came up. The
-// outputs of a node's tasks share a budget, since they ride one heartbeat,
-// the task kind's. A task's terminal is a shell inside its running run,
-// anybody's for a task of the guest's, as the page a snippet runs on is, and
-// its owner's alone otherwise; its ports are wherever its run was published.
+// outputs of a node's tasks share a budget, what a beat carries of them
+// between them, a task in each of the task kind's heartbeats. A task's
+// terminal is a shell inside its running run, anybody's for a task of the
+// guest's, as the page a snippet runs on is, and its owner's alone otherwise;
+// its ports are wherever its run was published.
 package task
 
 import (
@@ -56,9 +57,8 @@ import (
 
 const (
 	// ReportOutput is the most of their outputs a node's tasks report
-	// between them, written out as JSON: the task kind's heartbeat carries
-	// them beside the rest of what its tasks are doing, in one NATS message
-	// of 1 MiB.
+	// between them a beat, written out as JSON: a task in each of the task
+	// kind's heartbeats, each one NATS message of 1 MiB at most.
 	ReportOutput = 512 << 10
 
 	// reading is how many runs' outputs are read at once.

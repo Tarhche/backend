@@ -80,9 +80,9 @@ type controlPlaneKindsOptions struct {
 // ControlPlaneKindsOption changes how the plumbing goes about its work.
 type ControlPlaneKindsOption func(*controlPlaneKindsOptions)
 
-// WithParents has what lives in a parent that its node did not look into
-// observed waiting on it, as parents say the parent is: a stack in a VM that
-// is stopped.
+// WithParents has what lives in a parent that is not running observed
+// waiting on it, as parents say the parent is, rather than gone, once its
+// node has long said nothing of it: a stack in a VM that is stopped.
 func WithParents(parents observe.Parents) ControlPlaneKindsOption {
 	return func(o *controlPlaneKindsOptions) {
 		o.parents = parents
@@ -107,6 +107,20 @@ func WithTimeouts(timeouts map[kind.Timeout]time.Duration) ControlPlaneKindsOpti
 	}
 }
 
+// settingsOf is how the plumbing goes about its work, as options say.
+func settingsOf(options []ControlPlaneKindsOption) controlPlaneKindsOptions {
+	settings := controlPlaneKindsOptions{reconcile: kindsReconcileResources.DefaultConfig()}
+	for _, option := range options {
+		option(&settings)
+	}
+
+	if settings.reconcile.Timeouts == nil {
+		settings.reconcile.Timeouts = settings.timeouts
+	}
+
+	return settings
+}
+
 // NewControlPlaneKinds builds the control plane's plumbing for the kinds in
 // registry, asking the nodes queries through requester and sending them
 // commands with producer.
@@ -128,14 +142,7 @@ func NewControlPlaneKinds(
 	logger *slog.Logger,
 	options ...ControlPlaneKindsOption,
 ) *ControlPlaneKinds {
-	settings := controlPlaneKindsOptions{reconcile: kindsReconcileResources.DefaultConfig()}
-	for _, option := range options {
-		option(&settings)
-	}
-
-	if settings.reconcile.Timeouts == nil {
-		settings.reconcile.Timeouts = settings.timeouts
-	}
+	settings := settingsOf(options)
 
 	resources := cascade.NewRepository(registry, stores.Resources)
 
@@ -145,7 +152,10 @@ func NewControlPlaneKinds(
 
 	dispatcher := dispatch.New(resources, producer, waiting, nil)
 
-	observing := []observe.Option{observe.WithOrphans(dispatcher)}
+	// what a node keeps saying of a resource is written down at least twice in
+	// the time the reconcile loop gives a resource to be heard of, so that one
+	// its node keeps saying is never taken to be gone.
+	observing := []observe.Option{observe.WithOrphans(dispatcher), observe.WithRefresh(settings.reconcile.ResourceSilentAfter / 2)}
 	if settings.parents != nil {
 		observing = append(observing, observe.WithParents(settings.parents))
 	}
@@ -170,7 +180,7 @@ func NewControlPlaneKinds(
 			kind.ResourceActedOnName: recordResult.NewResourceActedOnHandler(registry, resources, waiting, logger, nil, recordResult.WithRestorer(resources.Cascade())),
 		},
 		Observer:   observer,
-		Reconcile:  kindsReconcileResources.NewUseCase(registry, resources, stores.Nodes, dispatcher, logger, settings.reconcile),
+		Reconcile:  kindsReconcileResources.NewUseCase(registry, resources, stores.Nodes, dispatcher, observer, logger, settings.reconcile),
 		Admit:      useCases.Admit,
 		Resources:  resources,
 		Dispatcher: dispatcher,

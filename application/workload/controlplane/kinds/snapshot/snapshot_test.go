@@ -571,7 +571,7 @@ func TestSnapshots_bound(t *testing.T) {
 
 		require.NoError(t, recordResult.NewResourceActedOnHandler(w.Registry, w.Resources, nil, logger, nil).Handle(ctx, answer))
 
-		require.NoError(t, reconcileResources.NewUseCase(w.Registry, w.Resources, w.Nodes, w.Dispatcher, logger, reconcileResources.DefaultConfig()).Execute(ctx))
+		require.NoError(t, reconcileResources.NewUseCase(w.Registry, w.Resources, w.Nodes, w.Dispatcher, nil, logger, reconcileResources.DefaultConfig()).Execute(ctx))
 
 		_, err = w.Resources.GetOne(ctx, snapshotKind.Name, uuid)
 		assert.ErrorIs(t, err, domain.ErrNotExists)

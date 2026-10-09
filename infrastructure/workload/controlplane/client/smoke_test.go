@@ -120,20 +120,12 @@ func TestSmoke(t *testing.T) {
 
 	capacity := vm.Info{Engine: "microsandbox", Version: "0.7.6", CPUs: 8, Memory: 16 << 30, Disk: 200 << 30}
 
-	// heartbeat says what the node offers, and, in a heartbeat of the vm
-	// kind's own, every VM it holds.
+	// heartbeat says what the node offers, and every VM it holds, each in a
+	// heartbeat of its own on the vm kind's subject.
 	heartbeat := func(instances ...kind.Observed[vmKind.Status]) {
 		t.Helper()
 
 		at := time.Now()
-
-		report := kind.Report[json.RawMessage]{Instances: make([]kind.Observation, len(instances))}
-		for i, instance := range instances {
-			status, err := json.Marshal(instance.Status)
-			require.NoError(t, err)
-
-			report.Instances[i] = kind.Observation{Kind: vmKind.Name, UUID: instance.UUID, Status: status}
-		}
 
 		beat, err := json.Marshal(nodeEvents.Heartbeat{
 			Name:     nodeName,
@@ -144,9 +136,14 @@ func TestSmoke(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, jetstream.Produce(ctx, nodeEvents.HeartbeatName, beat))
 
-		held, err := json.Marshal(kind.Heartbeat{Node: nodeName, Kind: vmKind.Name, At: at, Report: report})
-		require.NoError(t, err)
-		require.NoError(t, jetstream.Produce(ctx, kind.HeartbeatName(vmKind.Name), held))
+		for _, instance := range instances {
+			status, err := json.Marshal(instance.Status)
+			require.NoError(t, err)
+
+			held, err := json.Marshal(kind.Heartbeat{Node: nodeName, At: at, Observed: kind.Observation{Kind: vmKind.Name, UUID: instance.UUID, Status: status}})
+			require.NoError(t, err)
+			require.NoError(t, jetstream.Produce(ctx, kind.HeartbeatName(vmKind.Name), held))
+		}
 	}
 
 	// answer is what the node says a command came to.

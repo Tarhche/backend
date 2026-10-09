@@ -173,19 +173,24 @@ func TestImages_Witnessed(t *testing.T) {
 
 	w.Keep(blockstest.A[imageKind.Spec, imageKind.Status](imageKind.Name, imageKind.UUIDOf("vm-1", "alpine:3"), "vm-1", imageKind.Spec{Reference: "alpine:3"}, imageKind.Status{Status: kind.Status{State: imageKind.Present}}))
 
-	require.NoError(t, w.Containers.Witnessed(ctx, vmtest.Node, kind.Report[json.RawMessage]{Read: []string{"vm-1"}, Instances: []kind.Observation{
+	for _, container := range []kind.Observation{
 		observed(t, "", containerKind.Status{Docker: &containerKind.Docker{ID: "c-shop", Name: "shop-web-1", Image: "nginx:alpine", State: "running", Labels: map[string]string{docker.LabelComposeProject: "shop"}}}, kind.Reference{Kind: "stack", UUID: "stack-uuid"}),
 		observed(t, "", containerKind.Status{Docker: &containerKind.Docker{ID: "c-db", Name: "db", Image: "postgres:17", State: "running"}}),
-	}}, at))
+	} {
+		require.NoError(t, w.Containers.Witnessed(ctx, vmtest.Node, container, false, at))
+	}
 
-	require.NoError(t, w.Images.Witnessed(ctx, vmtest.Node, kind.Report[json.RawMessage]{Read: []string{"vm-1"}, Instances: []kind.Observation{
+	for _, image := range []kind.Observation{
 		held(t, "sha256:redis", "redis:7"),
 		held(t, "sha256:redis-before", ""),
 		held(t, "sha256:nginx", "nginx:alpine"),
 		held(t, "sha256:postgres", "postgres:17"),
 		held(t, "sha256:busybox", "busybox:latest"),
-		held(t, "sha256:alpine", "alpine:3"),
-	}}, at))
+	} {
+		require.NoError(t, w.Images.Witnessed(ctx, vmtest.Node, image, false, at))
+	}
+
+	require.NoError(t, w.Images.Witnessed(ctx, vmtest.Node, held(t, "sha256:alpine", "alpine:3"), true, at))
 
 	extras, err := w.Images.All(ctx)
 	require.NoError(t, err)

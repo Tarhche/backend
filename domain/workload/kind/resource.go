@@ -25,16 +25,17 @@ const (
 	// has it.
 	Deleted State = "deleted"
 
-	// Missing is what a node's report says of a resource it could have
-	// listed and did not: the node no longer holds it. It is an observation
+	// Missing is what is observed of a resource its node no longer holds:
+	// one its node has gone on beating without a word of for long enough, or
+	// one a query for its state did not find there. It is an observation
 	// first, and a state only for a kind whose machine has it.
 	Missing State = "missing"
 
 	// Waiting is what is observed of a resource that lives inside a parent
-	// its node did not look inside, because the parent is not running: none
-	// of it can be seen, and it waits on its parent, whose state its reason
-	// says. It is an observation first, and a state only for a kind whose
-	// machine has it.
+	// its node cannot look inside, because the parent is not running: none of
+	// it can be seen, and it waits on its parent, whose state its reason says.
+	// It is an observation first, and a state only for a kind whose machine
+	// has it.
 	Waiting State = "waiting"
 )
 
@@ -64,7 +65,9 @@ type Status struct {
 	Since time.Time `json:"since,omitzero"`
 
 	// ObservedAt is when its node, or a command's result, last said what it
-	// is doing.
+	// is doing, or when its node's silence about it last did: a resource
+	// whose state is its node's is taken to be gone from the node once the
+	// node goes on beating for long enough after it without a word of it.
 	ObservedAt time.Time `json:"observed_at,omitzero"`
 }
 

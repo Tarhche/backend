@@ -2,7 +2,6 @@ package kind
 
 import (
 	"context"
-	"encoding/json"
 	"io"
 	"time"
 
@@ -14,9 +13,10 @@ import (
 //
 // The control plane's generic code keeps the records, dispatches actions and
 // runs the reconcile loop for every kind alike: paging through resources,
-// failing those whose node fell silent, deleting those that expired, asking
-// again for what is stuck in flight, with backoff. A kind only decides what
-// is particular to it.
+// failing those whose node fell silent, taking those a node that is alive has
+// long said nothing of to be gone from it, deleting those that expired,
+// asking again for what is stuck in flight, with backoff. A kind only decides
+// what is particular to it.
 type ControlPlane[Spec, Status any] interface {
 	// Admit makes what somebody asked for into a resource to keep: its
 	// defaults, its validation, its owner's quotas and where it is placed.
@@ -90,18 +90,21 @@ type Extender interface {
 }
 
 // Witness is a control-plane strategy that hears everything its kind's
-// reports say, what nobody keeps a record of among it: the containers a stack
-// or a VM's terminal made, which its extras show, and those labelled as the
-// platform's whose record a restored disk has outlived, which it adopts.
+// heartbeats say, what nobody keeps a record of among it: the containers a
+// stack or a VM's terminal made, which its extras show, and those labelled as
+// the platform's whose record a restored disk has outlived, which it adopts.
 //
-// The framework writes down what a report says of the kind's records; the
+// The framework writes down what a heartbeat says of the kind's records; the
 // rest is the kind's to make of, and only a kind whose instances are made
-// behind its back has any of it.
+// behind its back has any of it. A heartbeat says one instance, and nothing
+// of what its node no longer holds: what the kind makes of an instance it
+// hears no more is its own to let go of, in time.
 type Witness interface {
-	// Witnessed is told what a node's report at a moment said of the kind,
-	// once what it says of the records the node holds is written down. What
-	// fails is reported and changes nothing else about the heartbeat.
-	Witnessed(ctx context.Context, nodeName string, report Report[json.RawMessage], at time.Time) error
+	// Witnessed is told what a node's heartbeat at a moment said of an
+	// instance of the kind, once what it says of a record is written down:
+	// kept says one of the kind's records is that instance. What fails is
+	// reported and changes nothing else about the heartbeat.
+	Witnessed(ctx context.Context, nodeName string, instance Observation, kept bool, at time.Time) error
 }
 
 // Resolver is a control-plane strategy whose resources are named by more than
@@ -149,11 +152,11 @@ type Node[Spec, Status any] interface {
 	Query(ctx context.Context, r Resource[Spec, Status], action string, payload any) (any, error)
 
 	// State is the kind's state action: every instance of the kind this
-	// node holds, as it is now. It is what every heartbeat reports, asked as
-	// of the moment the heartbeat was taken (BeatOf), and what a query for
-	// one resource's state is answered from. An error is that it could see
-	// nothing; a parent it could not look inside is Unseen, and the rest is
-	// reported.
+	// node holds, as it is now. It is what every beat reports, an instance in
+	// each heartbeat, asked as of the moment the beat was taken (BeatOf), and
+	// what a query for one resource's state is answered from. An error is that
+	// it could see nothing; a parent it could not look inside is Unseen, and
+	// the rest is reported.
 	State(ctx context.Context) (Report[Status], error)
 }
 
@@ -182,7 +185,7 @@ type Attacher interface {
 // Prompt is a node strategy some of whose changes somebody waits on as they
 // happen: a code-runner snippet ending, which whoever ran it is watching its
 // page for. Its node asks it what it holds between beats too, as often as
-// Prompt says, and reports at once what it holds when that changed since it
+// Prompt says, and reports at once each instance that changed since it was
 // last reported, rather than at the next beat. Its State is asked that often,
 // so it is cheap to ask.
 type Prompt interface {

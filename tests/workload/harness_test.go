@@ -68,13 +68,15 @@ const (
 
 // patience is how patient the control plane's reconcile loop is with the
 // resources of every kind: far less than when it is served, so a test does
-// not wait on its backoff.
+// not wait on its backoff, nor long for what a node no longer holds to be
+// taken to be gone, which nothing but time says.
 var patience = kindsReconcileResources.Config{
-	Batch:           20,
-	NodeSilentAfter: 30 * time.Second,
-	Patience:        10 * time.Second,
-	Backoff:         500 * time.Millisecond,
-	MaxBackoff:      2 * time.Second,
+	Batch:               20,
+	NodeSilentAfter:     30 * time.Second,
+	ResourceSilentAfter: 3 * time.Second,
+	Patience:            10 * time.Second,
+	Backoff:             500 * time.Millisecond,
+	MaxBackoff:          2 * time.Second,
 }
 
 // workload is a control plane and one node, as their serve commands wire them,

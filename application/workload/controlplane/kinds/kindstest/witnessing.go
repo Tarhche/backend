@@ -2,7 +2,6 @@ package kindstest
 
 import (
 	"context"
-	"encoding/json"
 	"slices"
 	"sync"
 	"time"
@@ -12,12 +11,13 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
 )
 
-// Witnessing is the fan's control-plane strategy that hears every report of
-// fans (kind.Witness), keeping what it heard for a test to read; finds a fan
-// inside its house by its name (kind.Resolver), as a container is found in
-// its Docker VM by its Docker name; and readies its commands as Refuse says
-// (kind.Preparer). The fans on its Shelf, when it has one, are shown beside
-// its records, and found by their names too.
+// Witnessing is the fan's control-plane strategy that hears of every fan a
+// node holds (kind.Witness), keeping what it heard for a test to read; finds
+// a fan inside its house by its name
+// (kind.Resolver), as a container is found in its Docker VM by its Docker
+// name; and readies its commands as Refuse says (kind.Preparer). The fans on
+// its Shelf, when it has one, are shown beside its records, and found by
+// their names too.
 type Witnessing struct {
 	*Fans
 
@@ -35,11 +35,13 @@ type Witnessing struct {
 	heard []Heard
 }
 
-// Heard is one report a Witnessing was told of.
+// Heard is one instance a Witnessing was told of, and whether a record of
+// the fan's was it.
 type Heard struct {
-	Node   string
-	Report kind.Report[json.RawMessage]
-	At     time.Time
+	Node     string
+	Instance kind.Observation
+	Kept     bool
+	At       time.Time
 }
 
 var (
@@ -50,16 +52,16 @@ var (
 	_ kind.ControlPlane[Spec, Status] = &Witnessing{}
 )
 
-func (w *Witnessing) Witnessed(_ context.Context, nodeName string, report kind.Report[json.RawMessage], at time.Time) error {
+func (w *Witnessing) Witnessed(_ context.Context, nodeName string, instance kind.Observation, kept bool, at time.Time) error {
 	w.lock.Lock()
 	defer w.lock.Unlock()
 
-	w.heard = append(w.heard, Heard{Node: nodeName, Report: report, At: at})
+	w.heard = append(w.heard, Heard{Node: nodeName, Instance: instance, Kept: kept, At: at})
 
 	return nil
 }
 
-// Heard is every report it was told of, in turn.
+// Heard is every instance it was told of, in turn.
 func (w *Witnessing) Heard() []Heard {
 	w.lock.Lock()
 	defer w.lock.Unlock()

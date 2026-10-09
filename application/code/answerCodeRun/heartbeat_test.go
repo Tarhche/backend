@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"maps"
+	"slices"
 	"testing"
 	"time"
 
@@ -50,36 +52,36 @@ func watched(s *taskKind.Status) {
 	s.Run.Endpoints = []taskKind.Endpoint{{Port: 3000, Address: "vmhost:20000"}, {Port: 8080, Address: "vmhost:20001"}}
 }
 
-// beat is the task kind's heartbeat from a node, saying what its tasks are
-// doing, by uuid.
-func beat(t *testing.T, tasks map[string]taskKind.Status) []byte {
+// beat is a heartbeat of the task kind's from a node, saying what one of its
+// tasks, by uuid, is doing.
+func beat(t *testing.T, uuid string, status taskKind.Status) []byte {
 	t.Helper()
 
-	report := kind.Report[json.RawMessage]{}
-	for uuid, status := range tasks {
-		encoded, err := json.Marshal(status)
-		require.NoError(t, err)
-
-		report.Instances = append(report.Instances, kind.Observation{Kind: taskKind.Name, UUID: uuid, Status: encoded})
-	}
+	encoded, err := json.Marshal(status)
+	require.NoError(t, err)
 
 	payload, err := json.Marshal(kind.Heartbeat{
-		Node:   "workload-orchestrator-01",
-		Kind:   taskKind.Name,
-		At:     started,
-		Report: report,
+		Node:     "workload-orchestrator-01",
+		At:       started,
+		Observed: kind.Observation{Kind: taskKind.Name, UUID: uuid, Status: encoded},
 	})
 	require.NoError(t, err)
 
 	return payload
 }
 
+// heard is what a node's tasks are answered with, by uuid, a heartbeat of
+// each heard in turn.
 func heard(t *testing.T, tasks map[string]taskKind.Status) []domain.Reply {
 	t.Helper()
 
 	var replyer messagingMock.RecordingReplyer
 
-	require.NoError(t, NewHeartbeatHandler(&replyer, ingressDomain, slog.New(slog.DiscardHandler)).Handle(context.Background(), beat(t, tasks)))
+	handler := NewHeartbeatHandler(&replyer, ingressDomain, slog.New(slog.DiscardHandler))
+
+	for _, uuid := range slices.Sorted(maps.Keys(tasks)) {
+		require.NoError(t, handler.Handle(context.Background(), beat(t, uuid, tasks[uuid])))
+	}
 
 	return replyer.Replies()
 }
@@ -193,7 +195,7 @@ func TestHeartbeat_Handle(t *testing.T) {
 		}))
 	})
 
-	t.Run("every snippet a beat speaks of is answered", func(t *testing.T) {
+	t.Run("every snippet a heartbeat speaks of is answered, one in each", func(t *testing.T) {
 		t.Parallel()
 
 		replies := heard(t, map[string]taskKind.Status{
@@ -209,7 +211,7 @@ func TestHeartbeat_Handle(t *testing.T) {
 		assert.ElementsMatch(t, []string{"request-1", "request-2"}, requests)
 	})
 
-	t.Run("a beat that cannot be read is let go of, and one of another kind speaks of no task, whatever it holds", func(t *testing.T) {
+	t.Run("a beat that cannot be read is let go of, so is a task whose status cannot be, and one of another kind speaks of no task, whatever it holds", func(t *testing.T) {
 		t.Parallel()
 
 		var replyer messagingMock.RecordingReplyer
@@ -217,13 +219,19 @@ func TestHeartbeat_Handle(t *testing.T) {
 
 		assert.NoError(t, handler.Handle(context.Background(), []byte("{")))
 
+		unreadable, err := json.Marshal(kind.Heartbeat{
+			Node:     "workload-orchestrator-01",
+			Observed: kind.Observation{Kind: taskKind.Name, UUID: "task-uuid", Status: json.RawMessage(`"running"`)},
+		})
+		require.NoError(t, err)
+		assert.NoError(t, handler.Handle(context.Background(), unreadable))
+
 		ended, err := json.Marshal(snippet(taskKind.Completed, "bye\n"))
 		require.NoError(t, err)
 
 		payload, err := json.Marshal(kind.Heartbeat{
-			Node:   "workload-orchestrator-01",
-			Kind:   "vm",
-			Report: kind.Report[json.RawMessage]{Instances: []kind.Observation{{Kind: "vm", UUID: "vm-1", Status: ended}}},
+			Node:     "workload-orchestrator-01",
+			Observed: kind.Observation{Kind: "vm", UUID: "vm-1", Status: ended},
 		})
 		require.NoError(t, err)
 		assert.NoError(t, handler.Handle(context.Background(), payload))

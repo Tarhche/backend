@@ -10,9 +10,9 @@ import (
 const HeartbeatName = "workloadNodeHeartbeat"
 
 // Heartbeat is what a node says of itself every beat: that it is alive, what
-// it is, what it uses and what it offers. What every kind it runs holds on it
-// is said in a heartbeat of the kind's own (kind.Heartbeat), stamped as this
-// one is.
+// it is, what it uses and what it offers. Every instance it holds of every
+// kind it runs is said in a heartbeat of its own (kind.Heartbeat), on its
+// kind's own subject, stamped as this one is.
 type Heartbeat struct {
 	Name  string
 	Role  node.Role

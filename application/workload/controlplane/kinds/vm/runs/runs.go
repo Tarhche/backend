@@ -241,7 +241,7 @@ func refusal() domain.ValidationErrors {
 // there were more of them than an answer carries.
 //
 // A run is a job, and a job's output rides every heartbeat its node sends of
-// its tasks and is kept on its task. Its lines have no time to them, so each
+// its task and is kept on the task. Its lines have no time to them, so each
 // is given the moment the run was made, a nanosecond after the line before
 // it: that keeps them in the order they were written, keeps two that say the
 // same thing apart, and lets whoever is following the log ask for what came

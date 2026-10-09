@@ -2,6 +2,7 @@ package reconcileResources_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -13,7 +14,9 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/dispatch"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/kindstest"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/observe"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/reconcileResources"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/recordResult"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/waiters"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/node"
@@ -24,16 +27,18 @@ import (
 )
 
 // now is when the passes in these tests are made: an hour after the fans
-// were made, with node-1 heard a moment ago and node-2 long ago.
+// were made, with node-1 heard a moment ago, node-3 twenty seconds ago, after
+// it went quiet, and node-2 long ago.
 var now = kindstest.Moment.Add(time.Hour)
 
 func config() reconcileResources.Config {
 	return reconcileResources.Config{
-		Batch:           2,
-		NodeSilentAfter: 30 * time.Second,
-		Patience:        5 * time.Minute,
-		Backoff:         15 * time.Second,
-		MaxBackoff:      15 * time.Minute,
+		Batch:               2,
+		NodeSilentAfter:     30 * time.Second,
+		ResourceSilentAfter: 30 * time.Second,
+		Patience:            5 * time.Minute,
+		Backoff:             15 * time.Second,
+		MaxBackoff:          15 * time.Minute,
 	}
 }
 
@@ -42,6 +47,8 @@ type fixture struct {
 	nodes     *nodesMemory.Repository
 	producer  *messagingMock.Recorder
 	fans      *kindstest.Fans
+	houses    houses
+	clock     *kindstest.Clock
 	useCase   *reconcileResources.UseCase
 }
 
@@ -53,9 +60,12 @@ func newFixture(t *testing.T, records ...resource.Record) *fixture {
 		nodes: nodesMemory.NewRepository(
 			node.Node{Name: kindstest.NodeName, LastHeartbeatAt: now.Add(-time.Second)},
 			node.Node{Name: "node-2", LastHeartbeatAt: now.Add(-time.Hour)},
+			node.Node{Name: "node-3", LastHeartbeatAt: now.Add(-20 * time.Second)},
 		),
 		producer: &messagingMock.Recorder{},
 		fans:     &kindstest.Fans{Node: kindstest.NodeName},
+		houses:   houses{},
+		clock:    kindstest.NewClock(),
 	}
 
 	for _, r := range records {
@@ -63,13 +73,28 @@ func newFixture(t *testing.T, records ...resource.Record) *fixture {
 		require.NoError(t, err)
 	}
 
-	clock := kindstest.NewClock()
-	clock.Advance(time.Hour)
+	f.clock.Advance(time.Hour)
 
-	dispatcher := dispatch.New(f.resources, f.producer, waiters.New(), clock.Now)
-	f.useCase = reconcileResources.NewUseCase(kindstest.Registry(f.fans), f.resources, f.nodes, dispatcher, slog.New(slog.DiscardHandler), config())
+	logger := slog.New(slog.DiscardHandler)
+	registry := kindstest.Registry(f.fans)
+
+	dispatcher := dispatch.New(f.resources, f.producer, waiters.New(), f.clock.Now)
+	observer := observe.NewObserver(registry, f.resources, logger, observe.WithParents(f.houses))
+	f.useCase = reconcileResources.NewUseCase(registry, f.resources, f.nodes, dispatcher, observer, logger, config())
 
 	return f
+}
+
+// houses are the houses fans live in that are closed, and what they are: a
+// fan in one cannot be looked at, as a container in a VM that is stopped.
+type houses map[string]kind.State
+
+func (h houses) Down(_ context.Context, parent kind.Reference) (kind.State, error) {
+	if parent.Kind != kindstest.Parent {
+		return "", nil
+	}
+
+	return h[parent.UUID], nil
 }
 
 func (f *fixture) sent(t *testing.T) []kind.ActOnResource {
@@ -93,17 +118,35 @@ func (f *fixture) stored(t *testing.T, uuid string) (resource.Record, bool) {
 }
 
 // fan is a record of a fan for these tests: doing state, expected to be
-// expected, on node, as changes say otherwise.
+// expected, on node, heard of a moment ago, as changes say otherwise.
 func fan(state kind.State, expected kind.State, onNode string, changes ...func(*resource.Record)) resource.Record {
 	r := kindstest.AFan("fan-uuid", state, expected, func(f *kindstest.Fan) {
 		f.Metadata.Node = onNode
 	})
+
+	heard(time.Second)(&r)
 
 	for _, change := range changes {
 		change(&r)
 	}
 
 	return r
+}
+
+// heard is a record whose node last said what it is doing ago.
+func heard(ago time.Duration) func(*resource.Record) {
+	return func(r *resource.Record) {
+		common, _ := r.Common()
+		common.ObservedAt = now.Add(-ago)
+		_ = r.SetCommon(common)
+	}
+}
+
+// unheard is a record nothing was ever heard of.
+func unheard(r *resource.Record) {
+	common, _ := r.Common()
+	common.ObservedAt = time.Time{}
+	_ = r.SetCommon(common)
 }
 
 func pending(action string, sentAgo time.Duration, attempts int) func(*resource.Record) {
@@ -353,6 +396,13 @@ func TestUseCase_Execute(t *testing.T) {
 			kindstest.AFan("just-back", kindstest.Running, kindstest.Running),
 		)
 
+		for _, uuid := range []string{"settled", "just-back"} {
+			r, _ := f.stored(t, uuid)
+			heard(time.Second)(&r)
+			_, err := f.resources.Update(ctx, r)
+			require.NoError(t, err)
+		}
+
 		settled, _ := f.stored(t, "settled")
 		tried(3, time.Hour)(&settled)
 		since(time.Minute)(&settled)
@@ -398,7 +448,10 @@ func TestUseCase_Execute(t *testing.T) {
 
 		var records []resource.Record
 		for i := range 5 {
-			records = append(records, kindstest.AFan(fmt.Sprintf("fan-%d", i), kindstest.Stopped, kindstest.Running))
+			record := kindstest.AFan(fmt.Sprintf("fan-%d", i), kindstest.Stopped, kindstest.Running)
+			heard(time.Second)(&record)
+
+			records = append(records, record)
 		}
 
 		f := newFixture(t, records...)
@@ -411,8 +464,11 @@ func TestUseCase_Execute(t *testing.T) {
 	t.Run("one the kind could not decide about is no reason to leave the rest", func(t *testing.T) {
 		t.Parallel()
 
+		thinking := kindstest.AFan("fan-1", kindstest.Stopped, kindstest.Running)
+		heard(time.Second)(&thinking)
+
 		f := newFixture(t,
-			kindstest.AFan("fan-1", kindstest.Stopped, kindstest.Running),
+			thinking,
 			kindstest.AFan("fan-2", kindstest.Running, kindstest.Running, func(f *kindstest.Fan) { f.Metadata.Node = "node-2" }),
 		)
 		f.fans.Failure = errors.New("the kind cannot think")
@@ -433,7 +489,7 @@ func TestUseCase_Execute(t *testing.T) {
 		resources := resourcesMemory.NewRepository()
 		dispatcher := dispatch.New(resources, &messagingMock.Recorder{}, nil, nil)
 
-		useCase := reconcileResources.NewUseCase(kind.NewRegistry[kind.ControlPlaneBinding](), resources, nodes, dispatcher, slog.New(slog.DiscardHandler), config())
+		useCase := reconcileResources.NewUseCase(kind.NewRegistry[kind.ControlPlaneBinding](), resources, nodes, dispatcher, nil, slog.New(slog.DiscardHandler), config())
 
 		assert.NoError(t, useCase.Execute(ctx))
 	})
@@ -455,6 +511,171 @@ func TestUseCase_Execute(t *testing.T) {
 
 		assert.ErrorIs(t, f.useCase.Execute(ctx), f.resources.Fail)
 	})
+}
+
+// TestUseCase_Execute_unheard holds the loop to taking a resource its node
+// has gone on beating without a word of for long enough to be gone from the
+// node, as the node's silence about it is taken: missing, waiting on its
+// parent when the parent is not running, or forgotten when the parent was
+// restored since it was last heard of. No heartbeat says what a node does not
+// hold, so nothing else says it.
+func TestUseCase_Execute_unheard(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	for name, tt := range map[string]struct {
+		record   resource.Record
+		closed   bool
+		gone     bool
+		state    kind.State
+		expected kind.State
+		reason   string
+		sent     []string
+	}{
+		"one its node has gone on beating without a word of for longer than it may is missing": {
+			record: fan(kindstest.Running, kindstest.Running, kindstest.NodeName, heard(40*time.Second)),
+			state:  kind.Missing, expected: kindstest.Running, reason: "its house has none of it",
+		},
+		"and is asked for what it is missing at the next pass, not this one": {
+			record: fan(kindstest.Stopped, kindstest.Running, kindstest.NodeName, heard(40*time.Second)),
+			state:  kind.Missing, expected: kindstest.Running, reason: "its house has none of it",
+		},
+		"one heard of lately is as it was heard": {
+			record: fan(kindstest.Running, kindstest.Running, kindstest.NodeName, heard(20*time.Second)),
+			state:  kindstest.Running, expected: kindstest.Running,
+		},
+		"and so is one whose node, alive, has not beaten for as long since it was last heard of: a node gone quiet says nothing of what it holds": {
+			record: fan(kindstest.Running, kindstest.Running, "node-3", heard(40*time.Second)),
+			state:  kindstest.Running, expected: kindstest.Running,
+		},
+		"one on a node that fell silent is lost with it, not missing": {
+			record: fan(kindstest.Running, kindstest.Running, "node-2", heard(2*time.Hour)),
+			state:  kind.Failed, expected: kindstest.Running, reason: reconcileResources.ReasonNodeLost,
+		},
+		"one in a house that is not open waits on it, rather than being missing": {
+			record: fan(kindstest.Running, kindstest.Running, kindstest.NodeName, heard(40*time.Second)),
+			closed: true,
+			state:  kind.Waiting, expected: kindstest.Running, reason: "its house is closed",
+		},
+		"one whose house was restored since it was last heard of is forgotten, not made again": {
+			record: fan(kindstest.Running, kindstest.Running, kindstest.NodeName, heard(40*time.Second), reset),
+			gone:   true,
+		},
+		"but only once it has gone unheard for long enough": {
+			record: fan(kindstest.Running, kindstest.Running, kindstest.NodeName, heard(20*time.Second), reset),
+			state:  kindstest.Running, expected: kindstest.Running,
+		},
+		"one never heard of yet, made a moment ago, has as long as any other to be heard of": {
+			record: fan(kindstest.Running, kindstest.Running, kindstest.NodeName, unheard, since(10*time.Second)),
+			state:  kindstest.Running, expected: kindstest.Running,
+		},
+		"as has one moved a moment ago by what it was asked": {
+			record: fan(kindstest.Stopped, kindstest.Stopped, kindstest.NodeName, heard(40*time.Second), since(10*time.Second)),
+			state:  kindstest.Stopped, expected: kindstest.Stopped,
+		},
+		"but one never heard of since it was made long ago is missing": {
+			record: fan(kindstest.Running, kindstest.Running, kindstest.NodeName, unheard, since(40*time.Second)),
+			state:  kind.Missing, expected: kindstest.Running, reason: "its house has none of it",
+		},
+		"and one in flight is its command's, however long its node says nothing of it": {
+			record: fan(kindstest.Starting, kindstest.Running, kindstest.NodeName, heard(time.Hour), pending("start", time.Minute, 1)),
+			state:  kindstest.Starting, expected: kindstest.Running,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			f := newFixture(t, tt.record)
+			if tt.closed {
+				f.houses[kindstest.House] = "closed"
+			}
+
+			require.NoError(t, f.useCase.Execute(ctx))
+
+			stored, kept := f.stored(t, "fan-uuid")
+
+			if tt.gone {
+				assert.False(t, kept, "it is gone, record and all")
+
+				return
+			}
+
+			require.True(t, kept)
+
+			fan := kindstest.Typed(stored)
+			assert.Equal(t, tt.state, fan.Status.State, "state")
+			assert.Equal(t, tt.expected, fan.Status.Expected, "expected")
+			assert.Equal(t, tt.reason, fan.Status.Reason, "reason")
+			assert.Empty(t, f.sent(t), "nothing is asked of it in the pass that takes it to be gone")
+		})
+	}
+
+	t.Run("it is taken to be gone as of its node's last beat, and asked for what it is missing at the next pass", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t, fan(kindstest.Running, kindstest.Running, kindstest.NodeName, heard(40*time.Second)))
+
+		require.NoError(t, f.useCase.Execute(ctx))
+
+		missing, _ := f.stored(t, "fan-uuid")
+		assert.Equal(t, kind.Missing, kindstest.Typed(missing).Status.State)
+		assert.Equal(t, now.Add(-time.Second), kindstest.Typed(missing).Status.ObservedAt, "its node's last beat, in its node's own time")
+
+		require.NoError(t, f.useCase.Execute(ctx))
+
+		var actions []string
+		for _, command := range f.sent(t) {
+			actions = append(actions, command.Action)
+		}
+
+		assert.Equal(t, []string{"create"}, actions)
+	})
+}
+
+// TestUseCase_Execute_heardOfByItsResult holds a resource just acted on to
+// having as long as any other to be heard of, counted from when the result of
+// what it was asked said what it is: a command's result is a word of it.
+func TestUseCase_Execute_heardOfByItsResult(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	// asked to start an hour ago, and never heard of since.
+	f := newFixture(t, fan(kindstest.Starting, kindstest.Running, kindstest.NodeName, unheard, since(time.Hour), pending("start", time.Hour, 1)))
+
+	status, err := json.Marshal(kindstest.Status{Status: kind.Status{State: kindstest.Running}, Speed: 2})
+	require.NoError(t, err)
+
+	answeredAt := now.Add(-10 * time.Second)
+
+	result, err := json.Marshal(kind.ResourceActedOn{ID: "command-1", Kind: kindstest.Kind, UUID: "fan-uuid", Action: "start", Node: kindstest.NodeName, OK: true, Status: status, At: answeredAt})
+	require.NoError(t, err)
+
+	require.NoError(t, recordResult.NewResourceActedOnHandler(kindstest.Registry(f.fans), f.resources, nil, slog.New(slog.DiscardHandler), f.clock.Now).Handle(ctx, result))
+
+	answered, _ := f.stored(t, "fan-uuid")
+	assert.Equal(t, answeredAt, kindstest.Typed(answered).Status.ObservedAt, "what its result said is a word of it")
+
+	require.NoError(t, f.useCase.Execute(ctx))
+
+	running, _ := f.stored(t, "fan-uuid")
+	assert.Equal(t, kindstest.Running, kindstest.Typed(running).Status.State, "it is not taken to be gone before it could be heard of")
+
+	// half a minute on, its node has beaten on without a word of it.
+	f.clock.Advance(30 * time.Second)
+
+	beating, err := f.nodes.GetOne(ctx, kindstest.NodeName)
+	require.NoError(t, err)
+
+	beating.LastHeartbeatAt = f.clock.Now().Add(-time.Second)
+	_, err = f.nodes.Save(ctx, &beating)
+	require.NoError(t, err)
+
+	require.NoError(t, f.useCase.Execute(ctx))
+
+	missing, _ := f.stored(t, "fan-uuid")
+	assert.Equal(t, kind.Missing, kindstest.Typed(missing).Status.State, "and once it has gone unheard for long enough since, it is gone")
 }
 
 // TestUseCase_Execute_stateKeptInTheControlPlane holds a kind whose state
@@ -512,7 +733,9 @@ func TestUseCase_Execute_stateKeptInTheControlPlane(t *testing.T) {
 			producer := &messagingMock.Recorder{}
 			dispatcher := dispatch.New(resources, producer, waiters.New(), clock.Now)
 
-			require.NoError(t, reconcileResources.NewUseCase(registry, resources, nodes, dispatcher, slog.New(slog.DiscardHandler), config()).Execute(ctx))
+			observer := observe.NewObserver(registry, resources, slog.New(slog.DiscardHandler))
+
+			require.NoError(t, reconcileResources.NewUseCase(registry, resources, nodes, dispatcher, observer, slog.New(slog.DiscardHandler), config()).Execute(ctx))
 
 			stored, err := resources.GetOne(ctx, kindstest.Kind, "fan-uuid")
 			require.NoError(t, err)
@@ -533,6 +756,7 @@ func TestDefaultConfig(t *testing.T) {
 
 	assert.Positive(t, c.Batch)
 	assert.Equal(t, 30*time.Second, c.NodeSilentAfter, "the silence a VM's node is taken to be lost after, as it always was")
+	assert.Equal(t, 30*time.Second, c.ResourceSilentAfter, "and what its node holds to be gone after, while the node beats")
 	assert.Greater(t, c.MaxBackoff, c.Backoff)
 	assert.Greater(t, c.Patience, c.Backoff)
 }
@@ -590,7 +814,8 @@ func TestUseCase_Execute_timeouts(t *testing.T) {
 			clock.Advance(time.Hour)
 
 			dispatcher := dispatch.New(f.resources, f.producer, waiters.New(), clock.Now)
-			useCase := reconcileResources.NewUseCase(registry, f.resources, f.nodes, dispatcher, slog.New(slog.DiscardHandler), settings)
+			observer := observe.NewObserver(registry, f.resources, slog.New(slog.DiscardHandler))
+			useCase := reconcileResources.NewUseCase(registry, f.resources, f.nodes, dispatcher, observer, slog.New(slog.DiscardHandler), settings)
 
 			require.NoError(t, useCase.Execute(ctx))
 

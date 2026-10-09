@@ -28,8 +28,8 @@ import (
 // A node runs every kind registered on it with the same code, whatever the
 // kind: its commands arrive on workloadActOnResource and what came of them
 // goes back on workloadResourceActedOn, its queries are node requests named
-// after it, and what it holds is in a heartbeat of its own every beat, on a
-// subject named after it. These tests
+// after it, and each instance it holds is in a heartbeat of its own every
+// beat, on a subject named after the kind. These tests
 // register a kind of their own, a lamp, on a node wired as its serve command
 // wires one, and play the control plane's part over a NATS server of the
 // test's own.
@@ -333,21 +333,24 @@ func TestKinds(t *testing.T) {
 		assert.Equal(t, noderequest.CodeInvalid, refused.Code)
 	})
 
-	t.Run("every beat says what the lamps on the node are doing, in a heartbeat of the lamps' own", func(t *testing.T) {
+	t.Run("every beat says what each lamp on the node is doing, in a heartbeat of its own on the lamps' subject", func(t *testing.T) {
 		require.NoError(t, heartbeat.Execute(ctx))
 
 		beat := heartbeats.next(t, func(heartbeat nodeEvents.Heartbeat) bool { return heartbeat.Name == nodeName })
-		lamps := lampBeats.next(t, func(heartbeat kind.Heartbeat) bool { return heartbeat.Node == nodeName })
-
-		assert.Equal(t, "lamp", lamps.Kind)
-		assert.True(t, lamps.At.Equal(beat.At), "stamped as its node's beat is")
 
 		var uuids []string
-		for _, instance := range lamps.Instances {
-			uuids = append(uuids, instance.UUID)
-			assert.JSONEq(t, `{"state":"lit"}`, string(instance.Status))
+		for range 2 {
+			lamp := lampBeats.next(t, func(heartbeat kind.Heartbeat) bool { return heartbeat.Node == nodeName })
+
+			assert.Equal(t, "lamp", lamp.Kind)
+			assert.True(t, lamp.At.Equal(beat.At), "stamped as its node's beat is")
+			assert.JSONEq(t, `{"state":"lit"}`, string(lamp.Status))
+
+			uuids = append(uuids, lamp.UUID)
 		}
 
 		assert.ElementsMatch(t, []string{"lamp-1", "lamp-3"}, uuids)
+
+		lampBeats.quiet(t, 300*time.Millisecond)
 	})
 }

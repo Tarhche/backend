@@ -46,7 +46,7 @@ type Workload struct {
 func New(options ...vmtest.Option) *Workload {
 	w := &Workload{
 		Workload:  vmtest.New(options...),
-		Sightings: blocks.NewSightings(),
+		Sightings: blocks.NewSightings(time.Minute),
 		Requester: &messagingMock.Requester{},
 	}
 

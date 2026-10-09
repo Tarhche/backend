@@ -1,12 +1,13 @@
 // Package observe takes what the nodes say of resources onto their records:
-// what a heartbeat's report observed of each, and what a command's result
-// says it left one as.
+// what a heartbeat observed of one, what a command's result says it left one
+// as, and what a node's silence about one says once it has gone on for long
+// enough.
 //
 // What a node says a resource is doing is its word for it; what that makes
 // the resource is the kind's machine's to say, since only the control plane
 // knows what was asked of it. A resource at rest is what its node says it
 // is; one in flight takes only the arrivals its machine declares, so that a
-// report sent before a stop reached the node does not undo the stop, and one
+// heartbeat sent before a stop reached the node does not undo the stop, and one
 // its machine says is answered takes them only from its command's result. The
 // kind's own fields of what was observed, a VM's usage or a stack's services,
 // are taken whatever becomes of the state.
