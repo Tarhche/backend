@@ -12,5 +12,6 @@ func All() []Migration {
 		vmsAsManifests,
 		snapshotsAsManifests,
 		tasksAsManifests,
+		moveResourcesToWorkloads,
 	}
 }

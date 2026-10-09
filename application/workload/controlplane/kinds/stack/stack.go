@@ -4,7 +4,7 @@
 //
 // A stack is admitted into a Docker VM chosen by the rules a container's is:
 // the one it names, its owner's only one, or one made for it. It is placed
-// where its VM is, belongs to its VM, and is given a slug no other stack has,
+// where its VM is, belongs to its VM, and is given a slug nothing else has,
 // which is its compose project. It starts waiting, and is deployed as soon as
 // its VM runs.
 //
@@ -53,15 +53,15 @@ const (
 type Stacks struct {
 	vms     *records.Records
 	chooser *dockervm.Chooser
-	taken   slugs.Taken
+	taken   []slugs.Taken
 }
 
 var _ kind.ControlPlane[stackKind.Spec, stackKind.Status] = &Stacks{}
 
 // New is the strategy that chooses Docker VMs with chooser, reads them, the
-// vm kind's resources, from vms, and gives stacks slugs taken does not say
+// vm kind's resources, from vms, and gives stacks slugs none of taken says
 // are held.
-func New(vms *records.Records, chooser *dockervm.Chooser, taken slugs.Taken) *Stacks {
+func New(vms *records.Records, chooser *dockervm.Chooser, taken ...slugs.Taken) *Stacks {
 	return &Stacks{vms: vms, chooser: chooser, taken: taken}
 }
 
@@ -92,7 +92,7 @@ func (s *Stacks) Admit(ctx context.Context, asked stackKind.Stack) (stackKind.St
 
 	name := strings.TrimSpace(asked.Metadata.Name)
 
-	slug, err := slugs.Generate(ctx, name, s.taken)
+	slug, err := slugs.Generate(ctx, name, s.taken...)
 	if err != nil {
 		return stackKind.Stack{}, nil, err
 	}

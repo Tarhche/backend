@@ -15,6 +15,8 @@ import (
 
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
+
+	"github.com/khanzadimahdi/testproject/domain"
 )
 
 const collectionName = "migrations"
@@ -36,8 +38,44 @@ type Migrator struct {
 	migrations []Migration
 }
 
+var _ domain.Migrations = &Migrator{}
+
 func NewMigrator(database *mongo.Database, migrations ...Migration) *Migrator {
 	return &Migrator{database: database, migrations: migrations}
+}
+
+// Pending is the names of its migrations not recorded as applied, in the
+// order they are applied: none once the database has had every one of them.
+// It is what a service that waits for them reads, and changes nothing.
+func (m *Migrator) Pending(ctx context.Context) ([]string, error) {
+	names := make([]string, len(m.migrations))
+	for i, migration := range m.migrations {
+		names[i] = migration.Name
+	}
+
+	cursor, err := m.database.Collection(collectionName).Find(ctx, bson.D{{Key: "_id", Value: bson.D{{Key: "$in", Value: names}}}})
+	if err != nil {
+		return nil, err
+	}
+
+	var applied []record
+	if err := cursor.All(ctx, &applied); err != nil {
+		return nil, err
+	}
+
+	recorded := make(map[string]bool, len(applied))
+	for _, r := range applied {
+		recorded[r.Name] = true
+	}
+
+	var pending []string
+	for _, name := range names {
+		if !recorded[name] {
+			pending = append(pending, name)
+		}
+	}
+
+	return pending, nil
 }
 
 // Migrate applies, in order, every migration not yet recorded, and returns

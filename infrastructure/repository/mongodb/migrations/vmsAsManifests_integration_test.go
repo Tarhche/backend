@@ -88,6 +88,25 @@ func TestVMsAsManifests(t *testing.T) {
 	require.NoError(t, vmsAsManifests.Up(ctx, database))
 	require.NoError(t, vmsAsManifests.Up(ctx, database), "run again, it changes nothing")
 
+	indexes, err := database.Collection("vms").Indexes().List(ctx)
+	require.NoError(t, err)
+
+	var names []string
+	for indexes.Next(ctx) {
+		names = append(names, indexes.Current.Lookup("name").StringValue())
+	}
+
+	for _, gone := range []string{"slug_1", "owner_uuid_1__id_-1", "owner_uuid_1_kind_1", "node_name_1"} {
+		assert.NotContains(t, names, gone)
+	}
+
+	assert.Contains(t, names, "metadata.slug_1")
+	assert.Contains(t, names, "metadata.node_1")
+
+	// read where the migrations after this one leave them, workloads, as
+	// `app migrate` goes on to apply them.
+	migrateAfter(t, database, vmsAsManifests.Name)
+
 	repository := resources.NewRepository(database)
 	require.NoError(t, repository.EnsureKind(ctx, vmKind.Descriptor()), "the control plane indexes it as it is")
 
@@ -152,8 +171,8 @@ func TestVMsAsManifests(t *testing.T) {
 	assert.Equal(t, uint(4), total)
 	assert.Len(t, held, 4)
 
-	// a vm admitted after them, with a slug of its own, is kept beside them:
-	// the old unique slug is gone. One with a slug taken is refused.
+	// a vm admitted after them, with a slug of its own, is kept beside them.
+	// One with a slug taken is refused.
 	_, err = repository.Create(ctx, resource.Record{Raw: kind.Raw{Kind: vmKind.Name, Metadata: kind.Metadata{Slug: "new-uvwxy", OwnerUUID: "owner-uuid"}}})
 	require.NoError(t, err)
 
@@ -162,19 +181,4 @@ func TestVMsAsManifests(t *testing.T) {
 
 	_, err = repository.Create(ctx, resource.Record{Raw: kind.Raw{Kind: vmKind.Name, Metadata: kind.Metadata{Slug: "box-abcde", OwnerUUID: "other"}}})
 	assert.Error(t, err)
-
-	indexes, err := database.Collection("vms").Indexes().List(ctx)
-	require.NoError(t, err)
-
-	var names []string
-	for indexes.Next(ctx) {
-		names = append(names, indexes.Current.Lookup("name").StringValue())
-	}
-
-	for _, gone := range []string{"slug_1", "owner_uuid_1__id_-1", "owner_uuid_1_kind_1", "node_name_1"} {
-		assert.NotContains(t, names, gone)
-	}
-
-	assert.Contains(t, names, "metadata.slug_1")
-	assert.Contains(t, names, "metadata.node_1")
 }

@@ -104,6 +104,22 @@ func TestTasksAsManifests(t *testing.T) {
 	require.NoError(t, tasksAsManifests.Up(ctx, database))
 	require.NoError(t, tasksAsManifests.Up(ctx, database), "run again, it changes nothing")
 
+	indexes, err := tasks.Indexes().List(ctx)
+	require.NoError(t, err)
+
+	var names []string
+	for indexes.Next(ctx) {
+		names = append(names, indexes.Current.Lookup("name").StringValue())
+	}
+
+	assert.NotContains(t, names, "slug_1")
+	assert.Contains(t, names, "metadata.slug_1")
+	assert.Contains(t, names, "metadata.node_1")
+
+	// read where the migrations after this one leave them, workloads, as
+	// `app migrate` goes on to apply them.
+	migrateAfter(t, database, tasksAsManifests.Name)
+
 	repository := resources.NewRepository(database)
 	require.NoError(t, repository.EnsureKind(ctx, taskKind.Descriptor()), "the control plane indexes it as it is")
 
@@ -172,8 +188,8 @@ func TestTasksAsManifests(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "running-uuid", bySlug.Metadata.UUID)
 
-	// a task admitted after them, with a slug of its own, is kept beside them:
-	// the old unique slug is gone. One with a slug taken is refused.
+	// a task admitted after them, with a slug of its own, is kept beside them.
+	// One with a slug taken is refused.
 	_, err = repository.Create(ctx, resource.Record{Raw: kind.Raw{Kind: taskKind.Name, Metadata: kind.Metadata{Slug: "request-new-uvwxy", OwnerUUID: task.GuestOwnerUUID}}})
 	require.NoError(t, err)
 
@@ -182,16 +198,4 @@ func TestTasksAsManifests(t *testing.T) {
 
 	_, err = repository.Create(ctx, resource.Record{Raw: kind.Raw{Kind: taskKind.Name, Metadata: kind.Metadata{Slug: "request-running-abcde", OwnerUUID: task.GuestOwnerUUID}}})
 	assert.Error(t, err)
-
-	indexes, err := tasks.Indexes().List(ctx)
-	require.NoError(t, err)
-
-	var names []string
-	for indexes.Next(ctx) {
-		names = append(names, indexes.Current.Lookup("name").StringValue())
-	}
-
-	assert.NotContains(t, names, "slug_1")
-	assert.Contains(t, names, "metadata.slug_1")
-	assert.Contains(t, names, "metadata.node_1")
 }

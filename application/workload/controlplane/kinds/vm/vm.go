@@ -7,7 +7,7 @@
 // a snapshot of its owner's that the snapshot kind says it can be made from,
 // that snapshot's flavor, image and disk. It is
 // held to what one VM may be given and to what its owner's VMs may be given
-// between them, given a slug no VM and no task holds, and placed on the node
+// between them, given a slug nothing else holds, and placed on the node
 // with the most room for it. One no node has room for is kept failed, as
 // no_capacity, and given up on until somebody starts it, which places it
 // then; what is refused is said under the fields the dashboard asks with.
@@ -84,8 +84,9 @@ type Dependencies struct {
 	Quota     *quota.Quota
 	Placement *placement.Placement
 
-	// Slugs say which slugs are held already: a VM's is unique among VMs and
-	// tasks, which share the ingress's hostnames.
+	// Slugs say which slugs are held already, by a resource of any kind that
+	// has one: a slug is one resource's, whatever its kind, and a VM's is
+	// what the ingress serves its ports under, as a task's is.
 	Slugs []slugs.Taken
 
 	Images Images

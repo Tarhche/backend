@@ -25,6 +25,7 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	infraHealth "github.com/khanzadimahdi/testproject/infrastructure/health"
 	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/jetstream/produceConsumer"
+	"github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/migrations"
 	logrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/workload/logs"
 	noderepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/workload/nodes"
 	resourcerepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/workload/resources"
@@ -38,6 +39,12 @@ import (
 
 const (
 	ControlPlaneSubscribers = "workload:controlplane:subscribers"
+
+	// ControlPlanePrepare names what readies the stores the workload is kept
+	// in, a func(context.Context) error, which the serve command runs once
+	// what is stored is migrated and before anything of the workload is
+	// heard, reconciled or served.
+	ControlPlanePrepare = "workload:controlplane:prepare"
 )
 
 // controlPlaneProvider builds the workload control plane's messaging singleton, HTTP handler
@@ -99,8 +106,6 @@ func controlPlaneConsoleCommand(
 	translator translatorContract.Translator,
 	iocContainer provider.Container,
 ) (http.Handler, error) {
-	ctx := context.Background()
-
 	var logger *slog.Logger
 	if err := iocContainer.Resolve(&logger, provider.WithParams("workload-controlplane")); err != nil {
 		return nil, err
@@ -113,12 +118,6 @@ func controlPlaneConsoleCommand(
 
 	nodeRepository := noderepository.NewRepository(database)
 	logRepository := logrepository.NewRepository(database)
-
-	// a task's log is only ever read one task at a time, in the
-	// order it was written, so that is the index it needs.
-	if err := logRepository.EnsureIndexes(ctx); err != nil {
-		return nil, err
-	}
 
 	controlPlaneGetNodeUseCase := controlPlaneGetNode.NewUseCase(nodeRepository)
 	controlPlaneGetNodesUseCase := controlPlaneGetNodes.NewUseCase(nodeRepository)
@@ -146,12 +145,39 @@ func controlPlaneConsoleCommand(
 		return nil, err
 	}
 
-	// a kind's collection is indexed here rather than by a migration, which
-	// runs without the registry and cannot know the kinds there are.
-	for _, d := range workload.Registry.Descriptors() {
-		if err := resourceRepository.EnsureKind(ctx, d); err != nil {
-			return nil, err
+	// nothing of the workload is touched before what is stored is in the
+	// shape this version reads: the serve command waits until every migration
+	// it knows of is recorded as applied, as the migrator records them.
+	if err := iocContainer.Bind(func() domain.Migrations {
+		return migrations.NewMigrator(database, migrations.All()...)
+	}, provider.Singleton()); err != nil {
+		return nil, err
+	}
+
+	// once it is, the serve command readies what the workload is kept in,
+	// before it hears, reconciles or serves any of it: every kind the control
+	// plane runs is kept, and indexed, here rather than by a migration, which
+	// runs without the registry and cannot know the kinds there are; and the
+	// task logs are indexed the one way they are read, one task's at a time,
+	// in the order they were written.
+	prepare := func(ctx context.Context) error {
+		if err := logRepository.EnsureIndexes(ctx); err != nil {
+			return err
 		}
+
+		for _, d := range workload.Registry.Descriptors() {
+			if err := resourceRepository.EnsureKind(ctx, d); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	}
+
+	if err := iocContainer.Bind(func() func(context.Context) error {
+		return prepare
+	}, provider.Singleton(), provider.WithName(ControlPlanePrepare)); err != nil {
+		return nil, err
 	}
 
 	// every kind's own heartbeat, which the serve command runs on a ticker.

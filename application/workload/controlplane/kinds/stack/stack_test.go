@@ -142,13 +142,19 @@ func TestStacks_Admit(t *testing.T) {
 		assert.Equal(t, "02", admitted.Spec.VM.UUID)
 	})
 
-	t.Run("it is given a slug no other stack holds", func(t *testing.T) {
+	t.Run("it is given a slug nothing else holds", func(t *testing.T) {
 		t.Parallel()
 
 		w := vmtest.New(vmtest.WithVMs(vmtest.Docker("01", "owner")))
 
 		_, _, err := strategyOf(w, "web-").Admit(ctx, asked("web", stackKind.VMChoice{}))
 		assert.ErrorIs(t, err, slugs.ErrExhausted, "every one it could be given is held")
+
+		byStacks := func(context.Context, string) (bool, error) { return false, nil }
+		byVMs := func(_ context.Context, slug string) (bool, error) { return strings.HasPrefix(slug, "web-"), nil }
+
+		_, _, err = stack.New(w.Records, w.Chooser, byStacks, byVMs).Admit(ctx, asked("web", stackKind.VMChoice{}))
+		assert.ErrorIs(t, err, slugs.ErrExhausted, "by a stack or by anything else")
 	})
 
 	t.Run("one into a docker vm that is not coming up is refused", func(t *testing.T) {

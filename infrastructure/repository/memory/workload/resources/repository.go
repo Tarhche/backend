@@ -1,11 +1,13 @@
 // Package resources keeps the resources of every kind in memory, the way the
-// MongoDB repository keeps them: each kind apart, one slug per resource of a
-// kind, newest first, a copy written back only over the version it was read
-// at, and times to the millisecond, in UTC.
+// MongoDB repository keeps them: every kind's together, each read, written
+// and deleted as one of its kind, a uuid and a slug one resource's of
+// whatever kind, newest first, a copy written back only over the version it
+// was read at, and times to the millisecond, in UTC.
 package resources
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"strings"
 	"sync"
@@ -20,8 +22,8 @@ import (
 type Repository struct {
 	lock sync.Mutex
 
-	// kinds are the resources kept, by kind and then by uuid.
-	kinds map[string]map[string]resource.Record
+	// records are the resources kept, of every kind, by uuid.
+	records map[string]resource.Record
 
 	// Fail, when set, is what every call reports instead of doing anything.
 	Fail error
@@ -29,12 +31,17 @@ type Repository struct {
 
 var _ resource.Repository = &Repository{}
 
-// NewRepository is a repository holding records, as they are given.
+// NewRepository is a repository holding records, as they are given. Two of
+// them under one uuid cannot both be kept, whatever their kinds.
 func NewRepository(records ...resource.Record) *Repository {
-	r := &Repository{kinds: make(map[string]map[string]resource.Record)}
+	r := &Repository{records: make(map[string]resource.Record, len(records))}
 
 	for _, record := range records {
-		r.of(record.Kind)[record.Metadata.UUID] = kept(record)
+		if other, taken := r.records[record.Metadata.UUID]; taken {
+			panic(fmt.Sprintf("a %s and a %s cannot both be kept under the uuid %q", other.Kind, record.Kind, record.Metadata.UUID))
+		}
+
+		r.records[record.Metadata.UUID] = kept(record)
 	}
 
 	return r
@@ -57,15 +64,13 @@ func (r *Repository) Create(_ context.Context, record resource.Record) (resource
 		record.Metadata.UUID = id.String()
 	}
 
-	stored := r.of(record.Kind)
-
-	if _, taken := stored[record.Metadata.UUID]; taken || r.slugTaken(record) {
+	if _, taken := r.of()[record.Metadata.UUID]; taken || r.slugTaken(record) {
 		return resource.Record{}, domain.ErrAlreadyExists
 	}
 
 	record.Version = 1
 	record = kept(record)
-	stored[record.Metadata.UUID] = record
+	r.records[record.Metadata.UUID] = record
 
 	return record.Clone(), nil
 }
@@ -78,11 +83,9 @@ func (r *Repository) Update(_ context.Context, record resource.Record) (resource
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
-	stored := r.of(record.Kind)
-
-	current, exists := stored[record.Metadata.UUID]
+	current, exists := r.of()[record.Metadata.UUID]
 	switch {
-	case !exists:
+	case !exists || current.Kind != record.Kind:
 		return resource.Record{}, domain.ErrNotExists
 	case current.Version != record.Version:
 		return resource.Record{}, resource.ErrConflict
@@ -92,7 +95,7 @@ func (r *Repository) Update(_ context.Context, record resource.Record) (resource
 
 	record.Version++
 	record = kept(record)
-	stored[record.Metadata.UUID] = record
+	r.records[record.Metadata.UUID] = record
 
 	return record.Clone(), nil
 }
@@ -105,7 +108,9 @@ func (r *Repository) Delete(_ context.Context, kindName string, uuid string) err
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
-	delete(r.of(kindName), uuid)
+	if current, exists := r.of()[uuid]; exists && current.Kind == kindName {
+		delete(r.records, uuid)
+	}
 
 	return nil
 }
@@ -137,8 +142,8 @@ func (r *Repository) GetAll(_ context.Context, kindName string, filter resource.
 	defer r.lock.Unlock()
 
 	var matching []resource.Record
-	for _, record := range r.of(kindName) {
-		if passes(record, filter) {
+	for _, record := range r.of() {
+		if record.Kind == kindName && passes(record, filter) {
 			matching = append(matching, record)
 		}
 	}
@@ -172,7 +177,14 @@ func (r *Repository) Len(kindName string) int {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
-	return len(r.kinds[kindName])
+	count := 0
+	for _, record := range r.records {
+		if record.Kind == kindName {
+			count++
+		}
+	}
+
+	return count
 }
 
 // Stored is the resource of the kind kept under uuid, for a test to look at.
@@ -180,9 +192,12 @@ func (r *Repository) Stored(kindName string, uuid string) (resource.Record, bool
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
-	record, ok := r.kinds[kindName][uuid]
+	record, ok := r.records[uuid]
+	if !ok || record.Kind != kindName {
+		return resource.Record{}, false
+	}
 
-	return record.Clone(), ok
+	return record.Clone(), true
 }
 
 func (r *Repository) one(kindName string, matches func(resource.Record) bool) (resource.Record, error) {
@@ -193,8 +208,8 @@ func (r *Repository) one(kindName string, matches func(resource.Record) bool) (r
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
-	for _, record := range r.of(kindName) {
-		if matches(record) {
+	for _, record := range r.of() {
+		if record.Kind == kindName && matches(record) {
 			return record.Clone(), nil
 		}
 	}
@@ -202,29 +217,23 @@ func (r *Repository) one(kindName string, matches func(resource.Record) bool) (r
 	return resource.Record{}, domain.ErrNotExists
 }
 
-// of is the resources of one kind, made the first time the kind is.
-func (r *Repository) of(kindName string) map[string]resource.Record {
-	if r.kinds == nil {
-		r.kinds = make(map[string]map[string]resource.Record)
+// of is the resources kept, of every kind, made the first time they are.
+func (r *Repository) of() map[string]resource.Record {
+	if r.records == nil {
+		r.records = make(map[string]resource.Record)
 	}
 
-	stored, ok := r.kinds[kindName]
-	if !ok {
-		stored = make(map[string]resource.Record)
-		r.kinds[kindName] = stored
-	}
-
-	return stored
+	return r.records
 }
 
-// slugTaken reports whether another resource of the record's kind has its
-// slug. A resource reached under no name shares none.
+// slugTaken reports whether another resource, of whatever kind, has the
+// record's slug. A resource reached under no name shares none.
 func (r *Repository) slugTaken(record resource.Record) bool {
 	if len(record.Metadata.Slug) == 0 {
 		return false
 	}
 
-	for uuid, other := range r.of(record.Kind) {
+	for uuid, other := range r.of() {
 		if uuid != record.Metadata.UUID && other.Metadata.Slug == record.Metadata.Slug {
 			return true
 		}

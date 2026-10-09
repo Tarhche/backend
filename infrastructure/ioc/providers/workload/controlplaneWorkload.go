@@ -130,12 +130,16 @@ func NewControlPlaneWorkload(
 	// are asked.
 	codeRunner := runs.New(kinds.Resources, registry, kinds.Dispatcher)
 
-	// a slug is unique among VMs and tasks, which share the ingress's
-	// hostnames.
+	// a slug is one resource's, whatever its kind, as the resources of every
+	// kind are kept together: a VM's and a task's are what the ingress serves
+	// their ports under, and a stack's is its compose project.
 	slugsHeld := []slugs.Taken{
 		slugs.By(vms.GetOneBySlug),
 		slugs.By(func(ctx context.Context, slug string) (resource.Record, error) {
 			return stores.Resources.GetOneBySlug(ctx, taskKind.Name, slug)
+		}),
+		slugs.By(func(ctx context.Context, slug string) (resource.Record, error) {
+			return stores.Resources.GetOneBySlug(ctx, stackKind.Name, slug)
 		}),
 	}
 
@@ -180,9 +184,7 @@ func NewControlPlaneWorkload(
 		Slugs:     slugsHeld,
 		Images:    controlPlaneVMs.Images{Machine: controlPlaneConfigs.VMDefaultImage, Docker: controlPlaneConfigs.VMDockerImage},
 		Extras:    codeRunner,
-	}, snapshots, controlPlaneStacks.New(vms, chooser, slugs.By(func(ctx context.Context, slug string) (resource.Record, error) {
-		return stores.Resources.GetOneBySlug(ctx, stackKind.Name, slug)
-	})), controlPlaneTasks.New(controlPlaneTasks.Dependencies{
+	}, snapshots, controlPlaneStacks.New(vms, chooser, slugsHeld...), controlPlaneTasks.New(controlPlaneTasks.Dependencies{
 		Nodes:     stores.Nodes,
 		Scheduler: roundrobin.New(),
 		Slugs:     slugsHeld,

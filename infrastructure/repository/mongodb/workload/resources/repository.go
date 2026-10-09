@@ -1,14 +1,21 @@
 // Package resources keeps the resources of every kind in MongoDB.
 //
-// Each kind has a collection of its own, named by its plural: a stack's are
-// in stacks, a VM's in vms. A document is the resource's manifest, its
-// metadata, spec and status, beside its version and what the control plane
-// keeps of what it is in the middle of asking:
+// Every kind's are kept in one collection, workloads, and everything the
+// repository reads, writes or deletes is of one kind, which every query it
+// runs names: what is asked of one kind never reaches another's. A document
+// is the resource's manifest, its kind, metadata, spec and status, beside its
+// version and what the control plane keeps of what it is in the middle of
+// asking:
 //
 //	{_id: <uuid>, kind, metadata: {name, slug, owner_uuid, labels, owners,
 //	 node, lifetime, expires_at, created_at, updated_at}, spec: {…},
 //	 status: {…}, version, control: {pending, attempts, tried_at, answer,
 //	 reset}}
+//
+// Its uuid is its _id, so no two resources share one, whatever their kinds,
+// and no two share a slug either: a VM's and a task's are what the ingress
+// serves their ports under and a stack's is its compose project, and the one
+// collection holds each to one resource.
 //
 // The spec and the status are the kind's own JSON, kept as documents of
 // their own so that they can be read in the database as they are in the API.
@@ -19,17 +26,44 @@
 //
 // # Indexes
 //
-// A kind's collection is indexed when the control plane starts, for every
-// kind it registers (EnsureKind), rather than by a migration. The migrations
-// are a fixed list, applied once each by `app migrate`, which runs without the
-// control plane's registry and so cannot know which kinds there are; and a
-// released migration is never edited, so it could not be told of a kind added
-// later. Creating an index that is already there, with the same keys and
-// options, changes nothing, so doing it at every start costs one round trip
-// per kind, as the task logs' index already does. What a migration is still
-// for is changing what is stored: a collection a kind takes over from the
-// records kept before kinds, vms or stacks, is converted, and its old indexes
-// dropped, by a migration of the step that takes it over.
+// The collection is indexed the ways resources are read:
+//
+//   - by slug, unique among the resources that have one, whatever their
+//     kinds: a partial index, of the documents with a slug, rather than a
+//     sparse one, whose documents left out change once it is compound;
+//   - every resource of a kind, newest first, which the reconcile loop pages
+//     through and a listing narrowed by nothing reads;
+//   - a person's own of a kind, newest first;
+//   - what a node holds of a kind;
+//   - and what belongs to a resource, of any kind, which is how what lives
+//     in a resource is found, a Docker VM's building blocks among it.
+//
+// A resource read by its uuid or its slug needs nothing led by its kind: each
+// names one document at most.
+//
+// It is indexed by the control plane as it starts, for every kind it
+// registers (EnsureKind), rather than by a migration alone: the migrations
+// are a fixed list, applied once each by `app migrate`, and a released
+// migration is never edited, so none could be told of an index added later.
+// Creating an index that is already there, with the same keys and options,
+// changes nothing, so doing it at every start costs one round trip per kind,
+// as the task logs' index already does. What a migration is for is changing
+// what is stored: the collections each kind was kept in before, named by its
+// plural, vms and stacks among them, were moved into workloads by
+// moveResourcesToWorkloads, which indexed it first, as it is indexed here, so
+// that nothing it moved in could share a slug.
+//
+// # Migrated first
+//
+// The control plane touches none of it until every migration it knows of is
+// recorded as applied (domain.Migrations): it hears nothing the nodes say,
+// reconciles nothing and answers every request but a health check with 503,
+// and looks again every 10 s, saying it waits for `app migrate`. Read before
+// what it reads was moved there, an empty workloads would have it ask every
+// node to delete every VM the node holds, as one nobody keeps a record of. So
+// a version is deployed and then migrated: its control plane comes up, waits,
+// and starts as soon as `app migrate` is done, and what the nodes said
+// meanwhile is heard then, kept in JetStream for it.
 package resources
 
 import (
@@ -52,14 +86,19 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
 )
 
-const queryTimeout = 3 * time.Second
+const (
+	queryTimeout = 3 * time.Second
+
+	// collectionName is the collection every kind's resources are kept in.
+	collectionName = "workloads"
+)
 
 // Repository keeps the resources of the kinds it was told of.
 type Repository struct {
-	database *mongo.Database
+	workloads *mongo.Collection
 
-	lock        sync.RWMutex
-	collections map[string]*mongo.Collection
+	lock  sync.RWMutex
+	kinds map[string]bool
 }
 
 var _ resource.Repository = &Repository{}
@@ -69,41 +108,37 @@ func NewRepository(database *mongo.Database) *Repository {
 		panic("database should not be nil")
 	}
 
-	return &Repository{database: database, collections: make(map[string]*mongo.Collection)}
+	return &Repository{workloads: database.Collection(collectionName), kinds: make(map[string]bool)}
 }
 
-// EnsureKind makes the collection a kind's resources are kept in ready to
-// keep them: named by the kind's plural, and indexed the ways resources are
-// read. A kind it was not told of is not kept: asked for one, every method
-// says kind.ErrUnknownKind.
-//
-// The indexes are a unique slug, among the resources that have one; a
-// person's own, newest first; what one node holds, which every heartbeat
-// reads; and what belongs to one resource, which is how a Docker VM's
-// building blocks are listed.
+// EnsureKind has the repository keep a kind's resources, in workloads beside
+// every other kind's, and makes sure workloads is indexed the ways resources
+// are read, which it may be already. A kind it was not told of is not kept:
+// asked for one, every method says kind.ErrUnknownKind.
 func (r *Repository) EnsureKind(ctx context.Context, d kind.Descriptor) error {
-	if len(d.Name) == 0 || len(d.Plural) == 0 {
-		return fmt.Errorf("a kind is kept under its name and its plural, and %q has %q", d.Name, d.Plural)
+	if len(d.Name) == 0 {
+		return errors.New("a kind is kept under its name, and this one has none")
 	}
-
-	collection := r.database.Collection(d.Plural)
 
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
-	if _, err := collection.Indexes().CreateMany(ctx, []mongo.IndexModel{
-		{Keys: bson.D{{Key: "metadata.slug", Value: 1}}, Options: options.Index().SetUnique(true).SetSparse(true)},
-		{Keys: bson.D{{Key: "metadata.owner_uuid", Value: 1}, {Key: "_id", Value: -1}}},
-		{Keys: bson.D{{Key: "metadata.node", Value: 1}}},
+	if _, err := r.workloads.Indexes().CreateMany(ctx, []mongo.IndexModel{
+		{Keys: bson.D{{Key: "metadata.slug", Value: 1}}, Options: options.Index().SetUnique(true).SetPartialFilterExpression(bson.D{
+			{Key: "metadata.slug", Value: bson.D{{Key: "$exists", Value: true}}},
+		})},
+		{Keys: bson.D{{Key: "kind", Value: 1}, {Key: "_id", Value: -1}}},
+		{Keys: bson.D{{Key: "kind", Value: 1}, {Key: "metadata.owner_uuid", Value: 1}, {Key: "_id", Value: -1}}},
+		{Keys: bson.D{{Key: "kind", Value: 1}, {Key: "metadata.node", Value: 1}}},
 		{Keys: bson.D{{Key: "metadata.owners.uuid", Value: 1}, {Key: "metadata.owners.kind", Value: 1}}},
 	}); err != nil {
-		return fmt.Errorf("the %s cannot be indexed: %w", d.Plural, err)
+		return fmt.Errorf("%s cannot be indexed: %w", collectionName, err)
 	}
 
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
-	r.collections[d.Name] = collection
+	r.kinds[d.Name] = true
 
 	return nil
 }
@@ -162,8 +197,10 @@ func (r *Repository) Update(ctx context.Context, record resource.Record) (resour
 	defer cancel()
 
 	// only the version this copy was read at is replaced: a resource written
-	// since is at another, and matches nothing.
-	replaced, err := collection.ReplaceOne(ctx, bson.D{{Key: "_id", Value: stored.UUID}, {Key: "version", Value: read}}, stored)
+	// since is at another, and matches nothing; nor does one of another kind.
+	ofItsKind := bson.D{{Key: "_id", Value: stored.UUID}, {Key: "kind", Value: stored.Kind}}
+
+	replaced, err := collection.ReplaceOne(ctx, slices.Concat(ofItsKind, bson.D{{Key: "version", Value: read}}), stored)
 	if mongo.IsDuplicateKeyError(err) {
 		return resource.Record{}, domain.ErrAlreadyExists
 	} else if err != nil {
@@ -171,7 +208,7 @@ func (r *Repository) Update(ctx context.Context, record resource.Record) (resour
 	}
 
 	if replaced.MatchedCount == 0 {
-		exists, err := collection.CountDocuments(ctx, bson.D{{Key: "_id", Value: stored.UUID}})
+		exists, err := collection.CountDocuments(ctx, ofItsKind)
 		if err != nil {
 			return resource.Record{}, err
 		}
@@ -195,7 +232,7 @@ func (r *Repository) Delete(ctx context.Context, kindName string, uuid string) e
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
-	_, err = collection.DeleteOne(ctx, bson.D{{Key: "_id", Value: uuid}})
+	_, err = collection.DeleteOne(ctx, bson.D{{Key: "_id", Value: uuid}, {Key: "kind", Value: kindName}})
 
 	return err
 }
@@ -225,7 +262,7 @@ func (r *Repository) GetAll(ctx context.Context, kindName string, filter resourc
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
-	query := filterOf(filter)
+	query := filterOf(kindName, filter)
 
 	total, err := collection.CountDocuments(ctx, query)
 	if err != nil {
@@ -266,6 +303,7 @@ func (r *Repository) GetAll(ctx context.Context, kindName string, filter resourc
 	return records, uint(total), nil
 }
 
+// findOne is the one resource of the kind that filter lets through.
 func (r *Repository) findOne(ctx context.Context, kindName string, filter bson.D) (resource.Record, error) {
 	collection, err := r.collection(kindName)
 	if err != nil {
@@ -276,7 +314,7 @@ func (r *Repository) findOne(ctx context.Context, kindName string, filter bson.D
 	defer cancel()
 
 	var stored document
-	if err := collection.FindOne(ctx, filter).Decode(&stored); err != nil {
+	if err := collection.FindOne(ctx, append(bson.D{{Key: "kind", Value: kindName}}, filter...)).Decode(&stored); err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			return resource.Record{}, domain.ErrNotExists
 		}
@@ -287,22 +325,22 @@ func (r *Repository) findOne(ctx context.Context, kindName string, filter bson.D
 	return toRecord(stored)
 }
 
-// collection is the collection a kind's resources are kept in.
+// collection is the collection a kind's resources are kept in, which is
+// every kind's, once the repository was told of the kind.
 func (r *Repository) collection(kindName string) (*mongo.Collection, error) {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
 
-	collection, ok := r.collections[kindName]
-	if !ok {
+	if !r.kinds[kindName] {
 		return nil, fmt.Errorf("%w: no %q is kept here", kind.ErrUnknownKind, kindName)
 	}
 
-	return collection, nil
+	return r.workloads, nil
 }
 
-// filterOf is what a filter lets through, as a query.
-func filterOf(filter resource.Filter) bson.D {
-	query := bson.D{}
+// filterOf is what a filter lets through of a kind's resources, as a query.
+func filterOf(kindName string, filter resource.Filter) bson.D {
+	query := bson.D{{Key: "kind", Value: kindName}}
 
 	if len(filter.OwnerUUID) > 0 {
 		query = append(query, bson.E{Key: "metadata.owner_uuid", Value: filter.OwnerUUID})
@@ -357,7 +395,8 @@ type document struct {
 }
 
 // metadata leaves out a slug it does not have, so the unique index on slugs,
-// which is sparse, holds only the resources reached under a name.
+// which is of the documents that have one, holds only the resources reached
+// under a name.
 type metadata struct {
 	Name      string            `bson:"name,omitempty"`
 	Slug      string            `bson:"slug,omitempty"`

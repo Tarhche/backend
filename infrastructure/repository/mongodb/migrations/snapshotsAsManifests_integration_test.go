@@ -68,6 +68,23 @@ func TestSnapshotsAsManifests(t *testing.T) {
 	require.NoError(t, snapshotsAsManifests.Up(ctx, database))
 	require.NoError(t, snapshotsAsManifests.Up(ctx, database), "run again, it changes nothing")
 
+	indexes, err := database.Collection("snapshots").Indexes().List(ctx)
+	require.NoError(t, err)
+
+	var names []string
+	for indexes.Next(ctx) {
+		names = append(names, indexes.Current.Lookup("name").StringValue())
+	}
+
+	assert.NotContains(t, names, "owner_uuid_1__id_-1")
+	assert.NotContains(t, names, "vm_uuid_1")
+	assert.Contains(t, names, "metadata.owner_uuid_1__id_-1")
+	assert.Contains(t, names, "metadata.owners.uuid_1_metadata.owners.kind_1")
+
+	// read where the migrations after this one leave them, workloads, as
+	// `app migrate` goes on to apply them.
+	migrateAfter(t, database, snapshotsAsManifests.Name)
+
 	repository := resources.NewRepository(database)
 	require.NoError(t, repository.EnsureKind(ctx, snapshotKind.Descriptor()), "the control plane indexes it as it is")
 
@@ -104,17 +121,4 @@ func TestSnapshotsAsManifests(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, uint(2), total, "both were taken of the vm")
 	assert.Len(t, ofVM, 2)
-
-	indexes, err := database.Collection("snapshots").Indexes().List(ctx)
-	require.NoError(t, err)
-
-	var names []string
-	for indexes.Next(ctx) {
-		names = append(names, indexes.Current.Lookup("name").StringValue())
-	}
-
-	assert.NotContains(t, names, "owner_uuid_1__id_-1")
-	assert.NotContains(t, names, "vm_uuid_1")
-	assert.Contains(t, names, "metadata.owner_uuid_1__id_-1")
-	assert.Contains(t, names, "metadata.owners.uuid_1_metadata.owners.kind_1")
 }

@@ -78,7 +78,7 @@ func Repository(t *testing.T, make Maker) {
 		assert.NoError(t, err)
 	})
 
-	t.Run("a uuid or a slug another resource of the kind has already is taken", func(t *testing.T) {
+	t.Run("a uuid or a slug another resource has already, of whatever kind, is taken", func(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()
@@ -93,15 +93,28 @@ func Repository(t *testing.T, make Maker) {
 		_, err = repository.Create(ctx, aFan("another-uuid", "kitchen-abcde"))
 		assert.ErrorIs(t, err, domain.ErrAlreadyExists, "the slug is taken")
 
-		light := aFan("fan-uuid", "kitchen-abcde")
+		light := aFan("fan-uuid", "hall-abcde")
 		light.Kind = lights
 		_, err = repository.Create(ctx, light)
-		assert.NoError(t, err, "a light is not a fan: its uuid and its slug are its own kind's")
+		assert.ErrorIs(t, err, domain.ErrAlreadyExists, "a light is not kept under a fan's uuid")
+
+		light = aFan("light-uuid", "kitchen-abcde")
+		light.Kind = lights
+		_, err = repository.Create(ctx, light)
+		assert.ErrorIs(t, err, domain.ErrAlreadyExists, "nor reached under a fan's slug")
+
+		_, err = repository.GetOne(ctx, lights, "light-uuid")
+		assert.ErrorIs(t, err, domain.ErrNotExists, "a light refused is not kept at all")
 
 		for i := range 3 {
 			_, err := repository.Create(ctx, aFan(fmt.Sprintf("no-slug-%d", i), ""))
 			assert.NoError(t, err, "resources reached under no name do not share one")
 		}
+
+		light = aFan("dark-uuid", "")
+		light.Kind = lights
+		_, err = repository.Create(ctx, light)
+		assert.NoError(t, err, "whatever their kinds")
 	})
 
 	t.Run("a resource is written back over the version it was read at, and only over that", func(t *testing.T) {
@@ -156,11 +169,11 @@ func Repository(t *testing.T, make Maker) {
 		assert.NoError(t, repository.Delete(ctx, fans, "fan-uuid"), "what is gone is gone already")
 	})
 
-	t.Run("nor be given a slug another has", func(t *testing.T) {
+	t.Run("nor be given a slug another has, of whatever kind", func(t *testing.T) {
 		t.Parallel()
 
 		ctx := context.Background()
-		repository := make(t, fans)
+		repository := make(t, fans, lights)
 
 		_, err := repository.Create(ctx, aFan("kitchen-uuid", "kitchen-abcde"))
 		require.NoError(t, err)
@@ -171,6 +184,37 @@ func Repository(t *testing.T, make Maker) {
 		hall.Metadata.Slug = "kitchen-abcde"
 		_, err = repository.Update(ctx, hall)
 		assert.ErrorIs(t, err, domain.ErrAlreadyExists)
+
+		porch := aFan("porch-uuid", "porch-abcde")
+		porch.Kind = lights
+		porch, err = repository.Create(ctx, porch)
+		require.NoError(t, err)
+
+		porch.Metadata.Slug = "kitchen-abcde"
+		_, err = repository.Update(ctx, porch)
+		assert.ErrorIs(t, err, domain.ErrAlreadyExists, "a light is not reached under a fan's slug")
+	})
+
+	t.Run("a resource is written back and taken away as one of its kind, and only so", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		repository := make(t, fans, lights)
+
+		created, err := repository.Create(ctx, aFan("fan-uuid", "kitchen-abcde"))
+		require.NoError(t, err)
+
+		light := created.Clone()
+		light.Kind = lights
+		light.Status = json.RawMessage(`{"state":"failed","reason":"it is not a light"}`)
+		_, err = repository.Update(ctx, light)
+		assert.ErrorIs(t, err, domain.ErrNotExists, "no light is kept under the fan's uuid")
+
+		assert.NoError(t, repository.Delete(ctx, lights, "fan-uuid"), "nor taken away, as it is not there")
+
+		stored, err := repository.GetOne(ctx, fans, "fan-uuid")
+		require.NoError(t, err, "the fan is kept")
+		Equal(t, created, stored)
 	})
 
 	t.Run("a resource is found by its uuid, its owner's and its slug, within its kind", func(t *testing.T) {
@@ -198,6 +242,9 @@ func Repository(t *testing.T, make Maker) {
 
 		_, err = repository.GetOne(ctx, lights, "fan-uuid")
 		assert.ErrorIs(t, err, domain.ErrNotExists, "a fan is not a light")
+
+		_, err = repository.GetOneByOwner(ctx, lights, "owner-uuid", "fan-uuid")
+		assert.ErrorIs(t, err, domain.ErrNotExists)
 
 		_, err = repository.GetOneBySlug(ctx, lights, "kitchen-abcde")
 		assert.ErrorIs(t, err, domain.ErrNotExists)
@@ -236,9 +283,13 @@ func Repository(t *testing.T, make Maker) {
 			require.NoError(t, err)
 		}
 
+		// a light beside them, which every filter of theirs would let through
+		// but for its kind.
 		light := aFan("light-1", "")
 		light.Kind = lights
 		light.Metadata.OwnerUUID = "alice"
+		light.Metadata.Node = "node-1"
+		light.Metadata.Owners = []kind.Reference{{Kind: "house", UUID: "house-1"}}
 		_, err := repository.Create(ctx, light)
 		require.NoError(t, err)
 

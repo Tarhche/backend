@@ -1,11 +1,12 @@
-// Package slugs gives a VM or a stack a slug nothing else holds.
+// Package slugs gives a VM, a task or a stack a slug nothing else holds.
 //
-// A slug is what a VM's ports are served under and a stack's compose project,
-// so it is unique: a VM's among VMs and tasks, which share the ingress's
-// hostnames, and a stack's among stacks. It is made from the name and a random
-// suffix, and made again in the rare case that one is taken. The unique indexes
-// are what hold two asked for at the same moment apart; this is what keeps
-// that from being the common case.
+// A slug is what a VM's or a task's ports are served under and a stack's
+// compose project, so it is unique, and unique among them all, whatever their
+// kinds: the resources of every kind are kept together, under one unique
+// index of slugs. It is made from the name and a random suffix, and made
+// again in the rare case that one is taken. The unique index is what holds
+// two asked for at the same moment apart; this is what keeps that from being
+// the common case.
 package slugs
 
 import (

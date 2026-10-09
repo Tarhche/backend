@@ -73,26 +73,37 @@ func TestRepository_EnsureKind(t *testing.T) {
 		assert.ErrorIs(t, err, kind.ErrUnknownKind)
 	})
 
-	t.Run("a kind's resources are kept in a collection named by its plural, indexed the ways they are read", func(t *testing.T) {
+	t.Run("every kind's resources are kept in one collection, workloads, indexed the ways they are read", func(t *testing.T) {
 		fan := kind.Descriptor{Name: "fan", Plural: "fans"}
 
 		require.NoError(t, repository.EnsureKind(ctx, fan))
 		require.NoError(t, repository.EnsureKind(ctx, fan), "it is told of a kind again at every start")
+		require.NoError(t, repository.EnsureKind(ctx, kind.Descriptor{Name: "light", Plural: "lights"}))
 
 		_, err := repository.Create(ctx, resource.Record{Raw: kind.Raw{Kind: "fan", Metadata: kind.Metadata{UUID: "fan-uuid"}}})
 		require.NoError(t, err)
 
-		stored, err := db.Collection("fans").CountDocuments(ctx, bson.D{{Key: "_id", Value: "fan-uuid"}})
+		_, err = repository.Create(ctx, resource.Record{Raw: kind.Raw{Kind: "light", Metadata: kind.Metadata{UUID: "light-uuid"}}})
 		require.NoError(t, err)
-		assert.Equal(t, int64(1), stored)
 
-		cursor, err := db.Collection("fans").Indexes().List(ctx)
+		for uuid, kindName := range map[string]string{"fan-uuid": "fan", "light-uuid": "light"} {
+			stored, err := db.Collection("workloads").CountDocuments(ctx, bson.D{{Key: "_id", Value: uuid}, {Key: "kind", Value: kindName}})
+			require.NoError(t, err)
+			assert.Equal(t, int64(1), stored, "a %s is kept as one", kindName)
+		}
+
+		collections, err := db.ListCollectionNames(ctx, bson.D{})
+		require.NoError(t, err)
+		assert.Equal(t, []string{"workloads"}, collections, "no kind has a collection of its own")
+
+		cursor, err := db.Collection("workloads").Indexes().List(ctx)
 		require.NoError(t, err)
 
 		var indexes []struct {
-			Key    bson.D `bson:"key"`
-			Unique bool   `bson:"unique"`
-			Sparse bool   `bson:"sparse"`
+			Key     bson.D `bson:"key"`
+			Unique  bool   `bson:"unique"`
+			Sparse  bool   `bson:"sparse"`
+			Partial bson.D `bson:"partialFilterExpression"`
 		}
 		require.NoError(t, cursor.All(ctx, &indexes))
 
@@ -106,16 +117,20 @@ func TestRepository_EnsureKind(t *testing.T) {
 			keys[names] = true
 
 			if names == "metadata.slug " {
-				assert.True(t, index.Unique && index.Sparse, "a slug is unique among the resources that have one")
+				assert.True(t, index.Unique, "a slug is unique, whatever the kinds")
+				assert.False(t, index.Sparse)
+				assert.Equal(t, bson.D{{Key: "metadata.slug", Value: bson.D{{Key: "$exists", Value: true}}}}, index.Partial, "among the resources that have one")
 			}
 		}
 
-		for _, want := range []string{"_id ", "metadata.slug ", "metadata.owner_uuid _id ", "metadata.node ", "metadata.owners.uuid metadata.owners.kind "} {
+		for _, want := range []string{"_id ", "metadata.slug ", "kind _id ", "kind metadata.owner_uuid _id ", "kind metadata.node ", "metadata.owners.uuid metadata.owners.kind "} {
 			assert.True(t, keys[want], "an index on %q", want)
 		}
+
+		assert.Len(t, indexes, 6, "and on nothing else")
 	})
 
-	t.Run("and one without a plural cannot be", func(t *testing.T) {
-		assert.Error(t, repository.EnsureKind(ctx, kind.Descriptor{Name: "fan"}))
+	t.Run("and one without a name cannot be", func(t *testing.T) {
+		assert.Error(t, repository.EnsureKind(ctx, kind.Descriptor{Plural: "fans"}))
 	})
 }

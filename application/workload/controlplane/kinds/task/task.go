@@ -4,7 +4,7 @@
 //
 // A task is admitted with what it asked for checked, as tasks always were,
 // and what it left out filled in: a job, isolated, worth the retries its kind
-// is usually worth. It is given a slug no task and no VM holds, which is what
+// is usually worth. It is given a slug nothing else holds, which is what
 // its ports are served under, and placed on one of the nodes that spoke in
 // the last few seconds, as the scheduler picks; one admitted while none has
 // is placed when it is run, by the reconcile loop, once one has.
@@ -72,8 +72,9 @@ type Dependencies struct {
 	// Scheduler picks which of the nodes that spoke lately a task goes to.
 	Scheduler task.Scheduler
 
-	// Slugs say which slugs are held already: a task's is unique among tasks
-	// and VMs, which share the ingress's hostnames.
+	// Slugs say which slugs are held already, by a resource of any kind that
+	// has one: a slug is one resource's, whatever its kind, and a task's is
+	// what the ingress serves its ports under, as a VM's is.
 	Slugs []slugs.Taken
 
 	// Logs are what services' runs write, kept by the control plane, which

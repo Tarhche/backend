@@ -173,23 +173,27 @@ func (f Filter) Passes(m kind.Metadata) bool {
 	return true
 }
 
-// Repository keeps the resources of every kind, each kind apart from the
-// others: one kind's resources are never another's, whatever their uuids.
+// Repository keeps the resources of every kind together, and reads, writes
+// and deletes each kind's apart from the others': what is asked of one kind
+// never reaches another's. A uuid is one resource's, and so is a slug: no two
+// resources share either, whatever their kinds.
 //
 // A listing is newest first.
 type Repository interface {
-	// Create keeps a new resource. One whose uuid or slug another resource of
-	// its kind has already is domain.ErrAlreadyExists. It comes back as it is
-	// kept: given a uuid when it had none, at its first version.
+	// Create keeps a new resource. One whose uuid or slug another resource
+	// has already, of whatever kind, is domain.ErrAlreadyExists. It comes
+	// back as it is kept: given a uuid when it had none, at its first
+	// version.
 	Create(ctx context.Context, r Record) (Record, error)
 
 	// Update writes a resource back over the version it was read at, and is
 	// the resource at its next version. It is ErrConflict when something
-	// wrote it since, domain.ErrNotExists when it is gone, and
-	// domain.ErrAlreadyExists when its slug is another's.
+	// wrote it since, domain.ErrNotExists when it is gone, or was never one
+	// of its kind, and domain.ErrAlreadyExists when its slug is another's.
 	Update(ctx context.Context, r Record) (Record, error)
 
-	// Delete takes a resource away. One that is not there is gone already.
+	// Delete takes away the resource of the kind that uuid names. One that is
+	// not there, as one of the kind, is gone already.
 	Delete(ctx context.Context, kindName string, uuid string) error
 
 	// GetOne is the resource of the kind that uuid names, or

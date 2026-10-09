@@ -26,6 +26,7 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/slugs"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	snapshotKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/snapshot"
+	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
 	taskKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/task"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/network"
@@ -180,6 +181,9 @@ func New(opts ...Option) *Workload {
 		slugs.By(w.Records.GetOneBySlug),
 		slugs.By(func(ctx context.Context, slug string) (resource.Record, error) {
 			return w.Resources.GetOneBySlug(ctx, taskKind.Name, slug)
+		}),
+		slugs.By(func(ctx context.Context, slug string) (resource.Record, error) {
+			return w.Resources.GetOneBySlug(ctx, stackKind.Name, slug)
 		}),
 	}
 

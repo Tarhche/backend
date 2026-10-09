@@ -68,6 +68,22 @@ func TestStacksAsManifests(t *testing.T) {
 	require.NoError(t, stacksAsManifests.Up(ctx, database))
 	require.NoError(t, stacksAsManifests.Up(ctx, database), "run again, it changes nothing")
 
+	indexes, err := database.Collection("stacks").Indexes().List(ctx)
+	require.NoError(t, err)
+
+	var names []string
+	for indexes.Next(ctx) {
+		names = append(names, indexes.Current.Lookup("name").StringValue())
+	}
+
+	assert.NotContains(t, names, "slug_1")
+	assert.NotContains(t, names, "vm_uuid_1")
+	assert.Contains(t, names, "metadata.slug_1")
+
+	// read where the migrations after this one leave them, workloads, as
+	// `app migrate` goes on to apply them.
+	migrateAfter(t, database, stacksAsManifests.Name)
+
 	repository := resources.NewRepository(database)
 	require.NoError(t, repository.EnsureKind(ctx, stackKind.Descriptor()), "the control plane indexes it as it is")
 
@@ -104,23 +120,10 @@ func TestStacksAsManifests(t *testing.T) {
 	assert.Equal(t, uint(2), total)
 	assert.Len(t, held, 2)
 
-	// a stack admitted after it, with a slug of its own, is kept beside them:
-	// the old unique slug is gone.
+	// a stack admitted after it, with a slug of its own, is kept beside them.
 	_, err = repository.Create(ctx, resource.Record{Raw: kind.Raw{Kind: stackKind.Name, Metadata: kind.Metadata{Slug: "new-klmno", OwnerUUID: "owner-uuid"}}})
 	require.NoError(t, err)
 
 	_, err = repository.Create(ctx, resource.Record{Raw: kind.Raw{Kind: stackKind.Name, Metadata: kind.Metadata{Slug: "another-pqrst", OwnerUUID: "owner-uuid"}}})
 	require.NoError(t, err)
-
-	indexes, err := database.Collection("stacks").Indexes().List(ctx)
-	require.NoError(t, err)
-
-	var names []string
-	for indexes.Next(ctx) {
-		names = append(names, indexes.Current.Lookup("name").StringValue())
-	}
-
-	assert.NotContains(t, names, "slug_1")
-	assert.NotContains(t, names, "vm_uuid_1")
-	assert.Contains(t, names, "metadata.slug_1")
 }
