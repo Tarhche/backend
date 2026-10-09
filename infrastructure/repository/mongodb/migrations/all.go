@@ -5,13 +5,5 @@ package migrations
 func All() []Migration {
 	return []Migration{
 		renameRunnerToWorkload,
-		removeTaskStacks,
-		replaceTaskPermissions,
-		indexWorkloadVMs,
-		stacksAsManifests,
-		vmsAsManifests,
-		snapshotsAsManifests,
-		tasksAsManifests,
-		moveResourcesToWorkloads,
 	}
 }

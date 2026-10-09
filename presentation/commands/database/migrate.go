@@ -18,9 +18,8 @@ import (
 const migrateName = "migrate"
 
 // MigrateCommand brings what is stored up to what this version reads. It is
-// run once a version is deployed, whose control plane waits for it before it
-// touches the workload, and running it again applies nothing that was
-// applied already.
+// run before a version is deployed, and running it again applies nothing that
+// was applied already.
 type MigrateCommand struct {
 	migrator *migrations.Migrator
 

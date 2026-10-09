@@ -8,7 +8,6 @@ package client_test
 // answers a question about it, stops it and removes it, and the control
 // plane's record follows.
 //
-//	app migrate
 //	app serve-workload-controlplane --port 18020
 //	SMOKE_CONTROLPLANE_URL=http://127.0.0.1:18020 SMOKE_NATS_URL=nats://127.0.0.1:14222 \
 //		go test -tags smoke -run TestSmoke ./infrastructure/workload/controlplane/client/

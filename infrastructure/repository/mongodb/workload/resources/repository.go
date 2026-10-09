@@ -42,28 +42,18 @@
 // names one document at most.
 //
 // It is indexed by the control plane as it starts, for every kind it
-// registers (EnsureKind), rather than by a migration alone: the migrations
-// are a fixed list, applied once each by `app migrate`, and a released
-// migration is never edited, so none could be told of an index added later.
-// Creating an index that is already there, with the same keys and options,
-// changes nothing, so doing it at every start costs one round trip per kind,
-// as the task logs' index already does. What a migration is for is changing
-// what is stored: the collections each kind was kept in before, named by its
-// plural, vms and stacks among them, were moved into workloads by
-// moveResourcesToWorkloads, which indexed it first, as it is indexed here, so
-// that nothing it moved in could share a slug.
+// registers (EnsureKind), rather than by a migration. The migrations are a
+// fixed list, applied once each by `app migrate`, which runs without the
+// control plane's registry and so cannot know which kinds there are; and a
+// released migration is never edited, so none could be told of an index
+// added later. Creating an index that is already there, with the same keys
+// and options, changes nothing, so doing it at every start costs one round
+// trip per kind, as the task logs' index already does.
 //
-// # Migrated first
-//
-// The control plane touches none of it until every migration it knows of is
-// recorded as applied (domain.Migrations): it hears nothing the nodes say,
-// reconciles nothing and answers every request but a health check with 503,
-// and looks again every 10 s, saying it waits for `app migrate`. Read before
-// what it reads was moved there, an empty workloads would have it ask every
-// node to delete every VM the node holds, as one nobody keeps a record of. So
-// a version is deployed and then migrated: its control plane comes up, waits,
-// and starts as soon as `app migrate` is done, and what the nodes said
-// meanwhile is heard then, kept in JetStream for it.
+// No migration moves what was kept before workloads into it: that is moved
+// by hand. A control plane started on an empty workloads while the nodes
+// hold VMs takes each VM a node reports for one nobody keeps a record of, and
+// asks its node to delete it.
 package resources
 
 import (

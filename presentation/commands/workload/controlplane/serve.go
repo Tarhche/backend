@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"sync/atomic"
 	"time"
 
 	"github.com/danceable/console"
@@ -28,15 +27,6 @@ const (
 	// looking at it; rarely enough that it is not a poll of the whole
 	// workload.
 	heartbeatInterval = 10 * time.Second
-
-	// migrationsInterval is how often the control plane looks again at
-	// whether what is stored is migrated, while it waits for it to be.
-	migrationsInterval = 10 * time.Second
-
-	// healthPath is the one route served while the control plane waits: its
-	// health is its database's and its messaging's, migrated or not, so a
-	// deploy finds it up and goes on to `app migrate`.
-	healthPath = "/health"
 )
 
 type ServeCommand struct {
@@ -51,24 +41,6 @@ type ServeCommand struct {
 	// to be.
 	reconcileKinds *kindsReconcileResources.UseCase
 
-	// migrations say what is still to be applied to what is stored. Until
-	// none is, the control plane touches nothing of the workload: what it
-	// read would not be what the workload is, and a VM a node holds that it
-	// found no record of, it would ask the node to delete.
-	migrations domain.Migrations
-
-	// prepare readies the stores the workload is kept in, once what is
-	// stored is migrated.
-	prepare func(ctx context.Context) error
-
-	// migrationsEvery is how often the migrations are looked at again while
-	// they are waited for.
-	migrationsEvery time.Duration
-
-	// started is whether the control plane has started: until it has, its
-	// API answers 503.
-	started atomic.Bool
-
 	logger *slog.Logger
 }
 
@@ -79,7 +51,7 @@ var (
 )
 
 func NewServeCommand() *ServeCommand {
-	return &ServeCommand{configs: configs.NewWorkloadControlPlane(), migrationsEvery: migrationsInterval}
+	return &ServeCommand{configs: configs.NewWorkloadControlPlane()}
 }
 
 // Name returns the name of the command which is used to identify it.
@@ -147,14 +119,6 @@ func (c *ServeCommand) Boot(ctx context.Context, task provider.Container) error 
 		return err
 	}
 
-	if err := task.Resolve(&c.migrations); err != nil {
-		return err
-	}
-
-	if err := task.Resolve(&c.prepare, provider.ResolveName(workload.ControlPlanePrepare)); err != nil {
-		return err
-	}
-
 	return task.Resolve(&c.consumers, provider.ResolveName(workload.ControlPlaneSubscribers))
 }
 
@@ -178,7 +142,7 @@ func (c *ServeCommand) Terminate(ctx context.Context) error {
 func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 	server := http.Server{
 		Addr:        fmt.Sprintf("0.0.0.0:%d", c.configs.Port),
-		Handler:     c.unlessStarted(c.handler),
+		Handler:     c.handler,
 		ReadTimeout: 20 * time.Second,
 		IdleTimeout: 10 * time.Second,
 	}
@@ -193,115 +157,19 @@ func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 		_ = server.Shutdown(shutdownCtx)
 	}()
 
-	// its health is served at once, and the rest once it has started, which
-	// it does as soon as what is stored is migrated. One that cannot start
-	// stops serving.
-	failed := make(chan error, 1)
+	if err := c.consumeTopics(ctx); err != nil {
+		c.logger.ErrorContext(ctx, "failed to consume topics", "error", err)
+		return console.ExitFailure
+	}
 
-	go func() {
-		if err := c.start(ctx); err != nil && ctx.Err() == nil {
-			failed <- err
-			_ = server.Close()
-		}
-	}()
+	go c.heartbeat(ctx)
 
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		c.logger.ErrorContext(ctx, "server failed", "error", err)
 		return console.ExitFailure
 	}
 
-	select {
-	case err := <-failed:
-		c.logger.ErrorContext(ctx, "the control plane could not start", "error", err)
-		return console.ExitFailure
-	default:
-		return console.ExitSuccess
-	}
-}
-
-// start waits for what is stored to be migrated, and then starts the control
-// plane as it always started: the stores the workload is kept in readied,
-// what the nodes say heard, and every resource kept as it was asked to be,
-// before its API is served. Until then, nothing of the workload is touched,
-// and what the nodes say waits in its streams. It is nil when ctx ends first.
-func (c *ServeCommand) start(ctx context.Context) error {
-	if !c.migrated(ctx) {
-		return nil
-	}
-
-	if err := c.prepare(ctx); err != nil {
-		return fmt.Errorf("the workload's stores could not be readied: %w", err)
-	}
-
-	if err := c.consumeTopics(ctx); err != nil {
-		return fmt.Errorf("failed to consume topics: %w", err)
-	}
-
-	go c.heartbeat(ctx)
-
-	c.started.Store(true)
-
-	return nil
-}
-
-// migrated waits until no migration is pending, looking again every
-// migrationsEvery and saying each time what it waits for, and reports whether
-// it got there before ctx ended.
-func (c *ServeCommand) migrated(ctx context.Context) bool {
-	ticker := time.NewTicker(c.migrationsEvery)
-	defer ticker.Stop()
-
-	waited := false
-
-	for {
-		pending, err := c.pending(ctx)
-
-		switch {
-		case ctx.Err() != nil:
-			return false
-		case err != nil:
-			c.logger.ErrorContext(ctx, "what is migrated could not be read: waiting for `app migrate` until it can be", "error", err)
-		case len(pending) > 0:
-			waited = true
-			c.logger.WarnContext(ctx, "waiting for `app migrate`: nothing of the workload is touched until what is stored is migrated", "pending", pending)
-		default:
-			if waited {
-				c.logger.InfoContext(ctx, "what is stored is migrated: the control plane starts")
-			}
-
-			return true
-		}
-
-		select {
-		case <-ticker.C:
-		case <-ctx.Done():
-			return false
-		}
-	}
-}
-
-// pending is the migrations not applied yet, read in no longer than the wait
-// before the next look.
-func (c *ServeCommand) pending(ctx context.Context) ([]string, error) {
-	ctx, cancel := context.WithTimeout(ctx, c.migrationsEvery)
-	defer cancel()
-
-	return c.migrations.Pending(ctx)
-}
-
-// unlessStarted answers every request but a health check with 503 until the
-// control plane has started: what its API reads and writes is the workload,
-// which it does not touch before.
-func (c *ServeCommand) unlessStarted(handler http.Handler) http.Handler {
-	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
-		if !c.started.Load() && r.URL.Path != healthPath {
-			http.Error(rw, "the control plane is waiting for what is stored to be migrated (app migrate)", http.StatusServiceUnavailable)
-
-			return
-		}
-
-		handler.ServeHTTP(rw, r)
-	})
+	return console.ExitSuccess
 }
 
 // heartbeat keeps the resources of every kind, VMs, stacks and tasks among
