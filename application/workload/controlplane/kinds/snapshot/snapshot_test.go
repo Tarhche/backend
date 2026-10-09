@@ -17,8 +17,8 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/actOnResource"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/admitResource"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/deleteResource"
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/reconcile"
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/resourceResult"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/reconcileResources"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/recordResult"
 	controlPlaneSnapshots "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/snapshot"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/vmtest"
 	"github.com/khanzadimahdi/testproject/domain"
@@ -515,7 +515,7 @@ func TestSnapshots_bound(t *testing.T) {
 		assert.Equal(t, snapshotKind.ActionCreate, admitted.Command.Action)
 		assert.Equal(t, vmtest.Node, admitted.Command.Node)
 
-		commands, err := messagingMock.Produced[kind.Command](w.Producer, kind.CommandName)
+		commands, err := messagingMock.Produced[kind.ActOnResource](w.Producer, kind.ActOnResourceName)
 		require.NoError(t, err)
 		require.Len(t, commands, 1)
 		assert.Equal(t, admitted.Resource.Metadata.UUID, commands[0].UUID)
@@ -566,12 +566,12 @@ func TestSnapshots_bound(t *testing.T) {
 		status, err := json.Marshal(snapshotKind.Status{Status: kind.Status{State: snapshotKind.Ready}, Engine: "memory/1", Size: 7})
 		require.NoError(t, err)
 
-		answer, err := json.Marshal(kind.Result{ID: admitted.Command.ID, Kind: snapshotKind.Name, UUID: uuid, Action: snapshotKind.ActionCreate, Node: vmtest.Node, OK: true, Status: status})
+		answer, err := json.Marshal(kind.ResourceActedOn{ID: admitted.Command.ID, Kind: snapshotKind.Name, UUID: uuid, Action: snapshotKind.ActionCreate, Node: vmtest.Node, OK: true, Status: status})
 		require.NoError(t, err)
 
-		require.NoError(t, resourceResult.NewResult(w.Registry, w.Resources, nil, logger, nil).Handle(ctx, answer))
+		require.NoError(t, recordResult.NewResult(w.Registry, w.Resources, nil, logger, nil).Handle(ctx, answer))
 
-		require.NoError(t, reconcile.NewUseCase(w.Registry, w.Resources, w.Nodes, w.Dispatcher, logger, reconcile.DefaultConfig()).Execute(ctx))
+		require.NoError(t, reconcileResources.NewUseCase(w.Registry, w.Resources, w.Nodes, w.Dispatcher, logger, reconcileResources.DefaultConfig()).Execute(ctx))
 
 		_, err = w.Resources.GetOne(ctx, snapshotKind.Name, uuid)
 		assert.ErrorIs(t, err, domain.ErrNotExists)

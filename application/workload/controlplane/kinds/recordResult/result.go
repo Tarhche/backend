@@ -1,5 +1,5 @@
-// Package resourceResult hears what came of the commands the nodes were
-// sent, for every kind, on workloadResult.
+// Package recordResult hears what came of the commands the nodes were
+// sent, for every kind, on workloadResourceActedOn.
 //
 // A result is taken onto its resource only when the resource is waiting on
 // that command: a result for a command sent before something else was asked,
@@ -17,7 +17,7 @@
 // be refused the same way, at once and for ever. Only what may go another way
 // next time fails it: the database, or a record written by something else
 // every time it was read.
-package resourceResult
+package recordResult
 
 import (
 	"context"
@@ -85,7 +85,7 @@ func NewResult(registry *kind.Registry[kind.ControlPlaneBinding], resources reso
 }
 
 func (h *Result) Handle(ctx context.Context, data []byte) error {
-	var result kind.Result
+	var result kind.ResourceActedOn
 	if err := json.Unmarshal(data, &result); err != nil {
 		h.logger.ErrorContext(ctx, "a command's result that cannot be read", "error", err)
 
@@ -128,7 +128,7 @@ func permanent(err error) bool {
 
 // take takes a result onto its resource, reading the resource again when
 // something else wrote it first.
-func (h *Result) take(ctx context.Context, result kind.Result) error {
+func (h *Result) take(ctx context.Context, result kind.ResourceActedOn) error {
 	binding, registered := h.registry.Lookup(result.Kind)
 	if !registered {
 		return fmt.Errorf("%w: %w: %q", errNotTaken, kind.ErrUnknownKind, result.Kind)

@@ -38,10 +38,10 @@ func lights(asked *[]string) executing {
 }
 
 // results are the results said so far.
-func results(t *testing.T, recorder *messaging.Recorder) []kind.Result {
+func results(t *testing.T, recorder *messaging.Recorder) []kind.ResourceActedOn {
 	t.Helper()
 
-	said, err := messaging.Produced[kind.Result](recorder, kind.ResultName)
+	said, err := messaging.Produced[kind.ResourceActedOn](recorder, kind.ResourceActedOnName)
 	require.NoError(t, err)
 
 	return said
@@ -51,7 +51,7 @@ func TestUseCase_Execute(t *testing.T) {
 	t.Parallel()
 
 	for name, tt := range map[string]struct {
-		command  func(t *testing.T) kind.Command
+		command  func(t *testing.T) kind.ActOnResource
 		execute  func(asked *[]string) executing
 		ok       bool
 		status   string
@@ -60,7 +60,7 @@ func TestUseCase_Execute(t *testing.T) {
 		executed []string
 	}{
 		"a command is carried out, and what it left is said": {
-			command:  func(t *testing.T) kind.Command { return aCommand(t, "lamp-1", "light", `{"brightness": 80}`) },
+			command:  func(t *testing.T) kind.ActOnResource { return aCommand(t, "lamp-1", "light", `{"brightness": 80}`) },
 			execute:  lights,
 			ok:       true,
 			status:   `{"state":"lit","brightness":80}`,
@@ -68,14 +68,14 @@ func TestUseCase_Execute(t *testing.T) {
 			executed: []string{"light lamp-1 {80}"},
 		},
 		"an action asked with nothing is carried out with nothing": {
-			command:  func(t *testing.T) kind.Command { return aCommand(t, "lamp-1", "delete", ``) },
+			command:  func(t *testing.T) kind.ActOnResource { return aCommand(t, "lamp-1", "delete", ``) },
 			execute:  lights,
 			ok:       true,
 			status:   `{"state":"deleted"}`,
 			executed: []string{"delete lamp-1 <nil>"},
 		},
 		"a command that failed is said to have, and why": {
-			command: func(t *testing.T) kind.Command { return aCommand(t, "lamp-1", "light", `{"brightness": 80}`) },
+			command: func(t *testing.T) kind.ActOnResource { return aCommand(t, "lamp-1", "light", `{"brightness": 80}`) },
 			execute: func(asked *[]string) executing {
 				return func(_ context.Context, r kind.Resource[lampSpec, lampStatus], action string, _ any) (kind.Outcome[lampStatus], error) {
 					*asked = append(*asked, action+" "+r.Metadata.UUID)
@@ -88,7 +88,7 @@ func TestUseCase_Execute(t *testing.T) {
 			executed: []string{"light lamp-1"},
 		},
 		"a kind this node does not run is said not to be": {
-			command: func(t *testing.T) kind.Command {
+			command: func(t *testing.T) kind.ActOnResource {
 				c := aCommand(t, "lamp-1", "light", `{"brightness": 80}`)
 				c.Kind = "kettle"
 
@@ -98,27 +98,27 @@ func TestUseCase_Execute(t *testing.T) {
 			reason:  `unknown kind: this node runs no "kettle"`,
 		},
 		"an action the kind does not have is said not to be": {
-			command: func(t *testing.T) kind.Command { return aCommand(t, "lamp-1", "explode", ``) },
+			command: func(t *testing.T) kind.ActOnResource { return aCommand(t, "lamp-1", "explode", ``) },
 			execute: lights,
 			reason:  "unknown action",
 		},
 		"and so is a query sent as a command": {
-			command: func(t *testing.T) kind.Command { return aCommand(t, "lamp-1", "state", ``) },
+			command: func(t *testing.T) kind.ActOnResource { return aCommand(t, "lamp-1", "state", ``) },
 			execute: lights,
 			reason:  "unknown action",
 		},
 		"a payload that cannot be read is said to be": {
-			command: func(t *testing.T) kind.Command { return aCommand(t, "lamp-1", "light", `{"brightness": "very"}`) },
+			command: func(t *testing.T) kind.ActOnResource { return aCommand(t, "lamp-1", "light", `{"brightness": "very"}`) },
 			execute: lights,
 			reason:  "invalid payload",
 		},
 		"and so is one that is not valid, with why": {
-			command: func(t *testing.T) kind.Command { return aCommand(t, "lamp-1", "light", `{"brightness": 500}`) },
+			command: func(t *testing.T) kind.ActOnResource { return aCommand(t, "lamp-1", "light", `{"brightness": 500}`) },
 			execute: lights,
 			reason:  "brightness: out_of_range",
 		},
 		"a command that names no resource is carried out on none": {
-			command: func(t *testing.T) kind.Command {
+			command: func(t *testing.T) kind.ActOnResource {
 				c := aCommand(t, "", "light", `{"brightness": 80}`)
 
 				return c

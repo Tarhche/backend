@@ -91,7 +91,7 @@ func (w *Workload) Kept(kindName string, uuid string) (resource.Record, bool) {
 
 // Answer has every node answer a command asked of it at once with result,
 // and a query with answer.
-func (w *Workload) Answer(result func(query kind.Query) kind.Result, answer json.RawMessage) {
+func (w *Workload) Answer(result func(query kind.Query) kind.ResourceActedOn, answer json.RawMessage) {
 	w.Requester.Answer = func(_ context.Context, _ string, request noderequest.Request) (noderequest.Reply, error) {
 		query, err := kind.QueryOf(request)
 		if err != nil {

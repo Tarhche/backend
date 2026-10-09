@@ -595,11 +595,11 @@ func TestDispatcher_Desire(t *testing.T) {
 // with what answer says.
 type answering struct {
 	waiters *waiters.Waiters
-	answer  func(command kind.Command) kind.Result
+	answer  func(command kind.ActOnResource) kind.ResourceActedOn
 }
 
 func (a *answering) Produce(_ context.Context, subject string, payload []byte) error {
-	var command kind.Command
+	var command kind.ActOnResource
 	if err := json.Unmarshal(payload, &command); err != nil {
 		return err
 	}
@@ -614,9 +614,9 @@ func TestDispatcher_Send(t *testing.T) {
 
 	ctx := context.Background()
 
-	command := kind.Command{ID: "command-1", Kind: kindstest.Kind, UUID: "fan-uuid", Action: "start", Node: kindstest.NodeName}
+	command := kind.ActOnResource{ID: "command-1", Kind: kindstest.Kind, UUID: "fan-uuid", Action: "start", Node: kindstest.NodeName}
 
-	t.Run("a command is sent on workloadCommand, to the node it is addressed to", func(t *testing.T) {
+	t.Run("a command is sent on workloadActOnResource, to the node it is addressed to", func(t *testing.T) {
 		t.Parallel()
 
 		f := newFixture(t)
@@ -625,7 +625,7 @@ func TestDispatcher_Send(t *testing.T) {
 		require.NoError(t, err)
 		assert.Nil(t, result, "nothing is waited for")
 
-		sent, err := messagingMock.Produced[kind.Command](f.producer, kind.CommandName)
+		sent, err := messagingMock.Produced[kind.ActOnResource](f.producer, kind.ActOnResourceName)
 		require.NoError(t, err)
 		require.Len(t, sent, 1)
 
@@ -640,8 +640,8 @@ func TestDispatcher_Send(t *testing.T) {
 		t.Parallel()
 
 		f := newFixture(t)
-		node := &answering{waiters: f.waiters, answer: func(c kind.Command) kind.Result {
-			return kind.Result{ID: c.ID, Kind: c.Kind, UUID: c.UUID, Action: c.Action, OK: true, Output: "started"}
+		node := &answering{waiters: f.waiters, answer: func(c kind.ActOnResource) kind.ResourceActedOn {
+			return kind.ResourceActedOn{ID: c.ID, Kind: c.Kind, UUID: c.UUID, Action: c.Action, OK: true, Output: "started"}
 		}}
 
 		result, err := dispatch.New(f.resources, node, f.waiters, f.clock.Now).Send(ctx, command, time.Minute)
@@ -656,7 +656,7 @@ func TestDispatcher_Send(t *testing.T) {
 		t.Parallel()
 
 		record := kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running)
-		record.Answer = &kind.Result{ID: "command-1", Kind: kindstest.Kind, UUID: "fan-uuid", Action: "start", OK: false, Reason: "the blades are stuck"}
+		record.Answer = &kind.ResourceActedOn{ID: "command-1", Kind: kindstest.Kind, UUID: "fan-uuid", Action: "start", OK: false, Reason: "the blades are stuck"}
 
 		f := newFixture(t, record)
 
@@ -757,7 +757,7 @@ func TestDispatcher_Deliver(t *testing.T) {
 			time.Sleep(5 * time.Millisecond)
 
 			stored := f.stored(t, "fan-uuid")
-			stored.Answer = &kind.Result{ID: asked.Command.ID, Action: "start", OK: true}
+			stored.Answer = &kind.ResourceActedOn{ID: asked.Command.ID, Action: "start", OK: true}
 			common, _ := stored.Common()
 			common.State = kindstest.Running
 			_ = stored.SetCommon(common)
@@ -788,7 +788,7 @@ func TestDispatcher_Orphaned(t *testing.T) {
 		require.NoError(t, f.dispatch.Orphaned(ctx, kindstest.Descriptor(), kindstest.NodeName, "orphan"))
 		require.NoError(t, f.dispatch.Orphaned(ctx, kindstest.Descriptor(), kindstest.NodeName, "orphan"))
 
-		sent, err := messagingMock.Produced[kind.Command](f.producer, kind.CommandName)
+		sent, err := messagingMock.Produced[kind.ActOnResource](f.producer, kind.ActOnResourceName)
 		require.NoError(t, err)
 		require.Len(t, sent, 1, "asked once, however often it is reported")
 
@@ -805,7 +805,7 @@ func TestDispatcher_Orphaned(t *testing.T) {
 		f.clock.Advance(time.Minute)
 		require.NoError(t, f.dispatch.Orphaned(ctx, kindstest.Descriptor(), kindstest.NodeName, "orphan"))
 
-		sent, err = messagingMock.Produced[kind.Command](f.producer, kind.CommandName)
+		sent, err = messagingMock.Produced[kind.ActOnResource](f.producer, kind.ActOnResourceName)
 		require.NoError(t, err)
 		assert.Len(t, sent, 3, "another node holding it is asked too, and the first again a minute on")
 		assert.Equal(t, 0, f.resources.Len(kindstest.Kind), "and nothing is written down")

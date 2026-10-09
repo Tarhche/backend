@@ -343,7 +343,7 @@ func TestNode_bound(t *testing.T) {
 	raw, err := kind.Encode(aSnapshot("snapshot-1"))
 	require.NoError(t, err)
 
-	result := binding.Execute(t.Context(), kind.Command{ID: "command-1", Kind: snapshotKind.Name, UUID: "snapshot-1", Action: snapshotKind.ActionCreate, Resource: raw})
+	result := binding.Execute(t.Context(), kind.ActOnResource{ID: "command-1", Kind: snapshotKind.Name, UUID: "snapshot-1", Action: snapshotKind.ActionCreate, Resource: raw})
 	require.True(t, result.OK, result.Reason)
 
 	var status snapshotKind.Status
@@ -351,7 +351,7 @@ func TestNode_bound(t *testing.T) {
 	assert.Equal(t, snapshotKind.Ready, status.State)
 	assert.Positive(t, status.Size)
 
-	failed := binding.Execute(t.Context(), kind.Command{ID: "command-2", Kind: snapshotKind.Name, UUID: "snapshot-2", Action: snapshotKind.ActionCreate, Resource: raw})
+	failed := binding.Execute(t.Context(), kind.ActOnResource{ID: "command-2", Kind: snapshotKind.Name, UUID: "snapshot-2", Action: snapshotKind.ActionCreate, Resource: raw})
 	assert.False(t, failed.OK, "a command carrying another snapshot than it names")
 
 	_, err = binding.Query(t.Context(), kind.Query{Kind: snapshotKind.Name, UUID: "snapshot-1", Action: snapshotKind.ActionState, Resource: raw})

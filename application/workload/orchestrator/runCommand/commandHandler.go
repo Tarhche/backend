@@ -27,7 +27,7 @@ func NewCommandHandler(useCase *UseCase, nodeName string, logger *slog.Logger) *
 }
 
 func (h *CommandHandler) Handle(ctx context.Context, data []byte) error {
-	var command kind.Command
+	var command kind.ActOnResource
 	if err := json.Unmarshal(data, &command); err != nil {
 		// read again, it is as unreadable, and it says nothing a result could
 		// be sent back about.

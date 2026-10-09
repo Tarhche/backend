@@ -771,7 +771,7 @@ func TestVM_createAnswered(t *testing.T) {
 	made, err := json.Marshal(vmKind.Status{Status: kind.Status{State: vmKind.Running}, Applied: &config})
 	require.NoError(t, err)
 
-	_, err = observe.Answer(d, &r, kind.Result{ID: "create-1", Kind: vmKind.Name, UUID: "01", Action: vmKind.ActionCreate, OK: true, Status: made}, at)
+	_, err = observe.Answer(d, &r, kind.ResourceActedOn{ID: "create-1", Kind: vmKind.Name, UUID: "01", Action: vmKind.ActionCreate, OK: true, Status: made}, at)
 	require.NoError(t, err)
 
 	answered, err := records.Decode(r)

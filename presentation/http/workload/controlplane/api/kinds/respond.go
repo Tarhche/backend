@@ -49,7 +49,7 @@ type result struct {
 // it stands for: a resource gone is 204, one whose command was carried out or
 // answered is 200 (201 when it was made), and one whose command is on its way
 // is 202.
-func respondCommanded(rw http.ResponseWriter, resource kind.Raw, gone bool, sent *kind.Command, answered *kind.Result, made bool) {
+func respondCommanded(rw http.ResponseWriter, resource kind.Raw, gone bool, sent *kind.ActOnResource, answered *kind.ResourceActedOn, made bool) {
 	if gone {
 		rw.WriteHeader(http.StatusNoContent)
 

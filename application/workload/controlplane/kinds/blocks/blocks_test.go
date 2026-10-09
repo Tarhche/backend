@@ -233,10 +233,10 @@ func TestBlocks_Act(t *testing.T) {
 		w := blockstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
 		db := witnessed(t, w, containerKind.Docker{ID: "c-db", Name: "db", State: "running"})
 
-		w.Answer(func(query kind.Query) kind.Result {
+		w.Answer(func(query kind.Query) kind.ResourceActedOn {
 			status, _ := json.Marshal(containerKind.Status{Status: kind.Status{State: containerKind.Completed}, Docker: &containerKind.Docker{ID: "c-db", Name: "db", State: "exited"}})
 
-			return kind.Result{OK: true, Kind: query.Kind, UUID: query.UUID, Action: query.Action, Status: status}
+			return kind.ResourceActedOn{OK: true, Kind: query.Kind, UUID: query.UUID, Action: query.Action, Status: status}
 		}, nil)
 
 		after, gone, refused, err := w.Containers.Act(ctx, db, containerKind.ActionStop, nil)
@@ -262,7 +262,7 @@ func TestBlocks_Act(t *testing.T) {
 		w := blockstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
 		db := witnessed(t, w, containerKind.Docker{ID: "c-db", Name: "db", State: "exited"})
 
-		w.Answer(func(query kind.Query) kind.Result { return kind.Result{OK: true} }, nil)
+		w.Answer(func(query kind.Query) kind.ResourceActedOn { return kind.ResourceActedOn{OK: true} }, nil)
 
 		_, gone, _, err := w.Containers.Act(ctx, db, containerKind.ActionDelete, nil)
 		require.NoError(t, err)
@@ -292,10 +292,10 @@ func TestBlocks_Act(t *testing.T) {
 		w := blockstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
 		db := witnessed(t, w, containerKind.Docker{ID: "c-db", Name: "db", State: "exited"})
 
-		w.Answer(func(query kind.Query) kind.Result {
+		w.Answer(func(query kind.Query) kind.ResourceActedOn {
 			status, _ := json.Marshal(containerKind.Status{Status: kind.Status{State: containerKind.Failed}, Failure: &noderequest.Error{Code: noderequest.CodeInvalid, Message: "port is already allocated"}})
 
-			return kind.Result{OK: false, Reason: "port is already allocated", Status: status}
+			return kind.ResourceActedOn{OK: false, Reason: "port is already allocated", Status: status}
 		}, nil)
 
 		_, _, _, err := w.Containers.Act(ctx, db, containerKind.ActionStart, nil)

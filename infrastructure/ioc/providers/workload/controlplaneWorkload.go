@@ -15,7 +15,7 @@ import (
 	controlPlaneImages "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/image"
 	controlPlaneNetworks "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/network"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/observe"
-	kindsReconcile "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/reconcile"
+	kindsReconcileResources "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/reconcileResources"
 	controlPlaneSnapshots "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/snapshot"
 	controlPlaneStacks "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/stack"
 	controlPlaneTasks "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/task"
@@ -75,7 +75,7 @@ type ControlPlaneWorkload struct {
 	// Observer is what the node heartbeat consumer hands what it heard to,
 	// and Reconcile the loop that keeps every resource as it was asked to be.
 	Observer  *observe.Observer
-	Reconcile *kindsReconcile.UseCase
+	Reconcile *kindsReconcileResources.UseCase
 }
 
 // NewControlPlaneWorkload builds the control plane's workload over stores,

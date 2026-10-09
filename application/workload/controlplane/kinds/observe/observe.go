@@ -112,12 +112,12 @@ func observe(d kind.Descriptor, r *resource.Record, status json.RawMessage, at t
 // command that failed for good fails the resource, with its reason, when the
 // command was to make it something: one that was not, a query's or a
 // snapshot's say, fails only itself. One its node refused as it was asked
-// (kind.Result.Refused) did nothing: the resource is what its node says it
-// is, and when the command was to make it something, it is expected to stay
-// what it is rather than to be asked the same again, which would be refused
-// the same way. A volume a container mounts is not removed, and is not
-// removed later either, once nobody remembers it was asked.
-func Answer(d kind.Descriptor, r *resource.Record, result kind.Result, at time.Time) (Change, error) {
+// (kind.ResourceActedOn.Refused) did nothing: the resource is what its node
+// says it is, and when the command was to make it something, it is expected
+// to stay what it is rather than to be asked the same again, which would be
+// refused the same way. A volume a container mounts is not removed, and is
+// not removed later either, once nobody remembers it was asked.
+func Answer(d kind.Descriptor, r *resource.Record, result kind.ResourceActedOn, at time.Time) (Change, error) {
 	if !r.Pending.Answers(result.ID) {
 		return Change{}, ErrNotWaitedOn
 	}
@@ -209,7 +209,7 @@ func Answer(d kind.Descriptor, r *resource.Record, result kind.Result, at time.T
 // rest, and what it is expected to be is that, when the command was to make
 // it something else. What its node did not say leaves it as it was recorded,
 // in flight as the command left it, until its node reports it.
-func refused(d kind.Descriptor, r *resource.Record, recorded kind.Status, action kind.Action, result kind.Result, at time.Time) (Change, error) {
+func refused(d kind.Descriptor, r *resource.Record, recorded kind.Status, action kind.Action, result kind.ResourceActedOn, at time.Time) (Change, error) {
 	common := recorded
 
 	observed, err := resource.Common(result.Status)

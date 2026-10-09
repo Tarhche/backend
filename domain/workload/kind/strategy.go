@@ -118,8 +118,8 @@ type Resolver interface {
 }
 
 // Intent is what a kind's reconcile asks for: one of its actions, which the
-// loop sends as a Command when it runs on a node and applies in place when it
-// runs in the control plane.
+// loop sends as an ActOnResource when it runs on a node and applies in place
+// when it runs in the control plane.
 type Intent struct {
 	Action string
 
@@ -139,9 +139,9 @@ type Intent struct {
 type Node[Spec, Status any] interface {
 	// Execute carries out one of the kind's command actions on r, and is
 	// what it left r as. An error is a failure: carried out again, it would
-	// fail the same way, so it is said once as the Result and not asked
-	// again. The outcome is kept even then, since what compose printed is most
-	// worth reading when it failed.
+	// fail the same way, so it is said once as the ResourceActedOn and not
+	// asked again. The outcome is kept even then, since what compose printed
+	// is most worth reading when it failed.
 	Execute(ctx context.Context, r Resource[Spec, Status], action string, payload any) (Outcome[Status], error)
 
 	// Query answers one of the kind's query actions about r at once: a log,
@@ -162,8 +162,8 @@ type Outcome[Status any] struct {
 	// Status is the resource's status as the command left it.
 	Status Status
 
-	// Output is what the command printed, of which the Result keeps the
-	// last MaxOutput bytes.
+	// Output is what the command printed, of which the ResourceActedOn keeps
+	// the last MaxOutput bytes.
 	Output string
 }
 

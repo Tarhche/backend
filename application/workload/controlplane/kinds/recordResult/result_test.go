@@ -1,4 +1,4 @@
-package resourceResult_test
+package recordResult_test
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/kindstest"
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/resourceResult"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/recordResult"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/waiters"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
@@ -24,7 +24,7 @@ type fixture struct {
 	racing  *kindstest.Racing
 	waiters *waiters.Waiters
 	clock   *kindstest.Clock
-	handler *resourceResult.Result
+	handler *recordResult.Result
 }
 
 func newFixture(t *testing.T, records ...resource.Record) *fixture {
@@ -38,7 +38,7 @@ func newFixture(t *testing.T, records ...resource.Record) *fixture {
 		require.NoError(t, err)
 	}
 
-	f.handler = resourceResult.NewResult(kindstest.Registry(&kindstest.Fans{}), f.racing, f.waiters, slog.New(slog.DiscardHandler), f.clock.Now)
+	f.handler = recordResult.NewResult(kindstest.Registry(&kindstest.Fans{}), f.racing, f.waiters, slog.New(slog.DiscardHandler), f.clock.Now)
 
 	return f
 }
@@ -54,7 +54,7 @@ func (f *fixture) stored(t *testing.T, uuid string) (resource.Record, bool) {
 	return r, true
 }
 
-func message(t *testing.T, result kind.Result) []byte {
+func message(t *testing.T, result kind.ResourceActedOn) []byte {
 	t.Helper()
 
 	payload, err := json.Marshal(result)
@@ -78,7 +78,7 @@ func TestResult_Handle(t *testing.T) {
 	ctx := context.Background()
 	at := kindstest.Moment.Add(time.Minute)
 
-	started := kind.Result{ID: "command-1", Kind: kindstest.Kind, UUID: "fan-uuid", Action: "start", Node: kindstest.NodeName, Attempt: 1, OK: true, Status: json.RawMessage(`{"state":"running","speed":2}`), Output: "started", At: at}
+	started := kind.ResourceActedOn{ID: "command-1", Kind: kindstest.Kind, UUID: "fan-uuid", Action: "start", Node: kindstest.NodeName, Attempt: 1, OK: true, Status: json.RawMessage(`{"state":"running","speed":2}`), Output: "started", At: at}
 
 	t.Run("what a command left its resource as is taken, and whoever waits for it is told", func(t *testing.T) {
 		t.Parallel()
@@ -112,7 +112,7 @@ func TestResult_Handle(t *testing.T) {
 
 		f := newFixture(t, waiting(kindstest.Starting, kindstest.Running, "start"))
 
-		failed := kind.Result{ID: "command-1", Kind: kindstest.Kind, UUID: "fan-uuid", Action: "start", OK: false, Reason: "the blades are stuck"}
+		failed := kind.ResourceActedOn{ID: "command-1", Kind: kindstest.Kind, UUID: "fan-uuid", Action: "start", OK: false, Reason: "the blades are stuck"}
 
 		assert.NoError(t, f.handler.Handle(ctx, message(t, failed)), "redelivered, it would fail the same way")
 
@@ -135,7 +135,7 @@ func TestResult_Handle(t *testing.T) {
 		wait := f.waiters.Expect("command-1")
 		defer wait.Done()
 
-		require.NoError(t, f.handler.Handle(ctx, message(t, kind.Result{ID: "command-1", Kind: kindstest.Kind, UUID: "fan-uuid", Action: "delete", OK: true})))
+		require.NoError(t, f.handler.Handle(ctx, message(t, kind.ResourceActedOn{ID: "command-1", Kind: kindstest.Kind, UUID: "fan-uuid", Action: "delete", OK: true})))
 
 		_, kept := f.stored(t, "fan-uuid")
 		assert.False(t, kept)
@@ -309,12 +309,12 @@ func TestResult_Handle_restores(t *testing.T) {
 		registry := kind.NewRegistry[kind.ControlPlaneBinding]()
 		require.NoError(t, registry.Register(kind.BindControlPlane[kindstest.Spec, kindstest.Status](d, &kindstest.Fans{})))
 
-		f.handler = resourceResult.NewResult(registry, f.racing, f.waiters, slog.New(slog.DiscardHandler), f.clock.Now, resourceResult.WithRestorer(told))
+		f.handler = recordResult.NewResult(registry, f.racing, f.waiters, slog.New(slog.DiscardHandler), f.clock.Now, recordResult.WithRestorer(told))
 
 		return f
 	}
 
-	restored := kind.Result{ID: "command-1", Kind: kindstest.Kind, UUID: "fan-uuid", Action: "start", OK: true, Status: json.RawMessage(`{"state":"running"}`)}
+	restored := kind.ResourceActedOn{ID: "command-1", Kind: kindstest.Kind, UUID: "fan-uuid", Action: "start", OK: true, Status: json.RawMessage(`{"state":"running"}`)}
 
 	t.Run("a restore carried out resets what lives in its resource, and is taken", func(t *testing.T) {
 		t.Parallel()

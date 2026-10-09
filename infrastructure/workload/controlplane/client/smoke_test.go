@@ -42,11 +42,11 @@ import (
 // commands is what the control plane asked of the node.
 type commands struct {
 	lock  sync.Mutex
-	asked []kind.Command
+	asked []kind.ActOnResource
 }
 
 func (c *commands) keep(_ context.Context, payload []byte) error {
-	var command kind.Command
+	var command kind.ActOnResource
 	if err := json.Unmarshal(payload, &command); err != nil {
 		return nil
 	}
@@ -61,10 +61,10 @@ func (c *commands) keep(_ context.Context, payload []byte) error {
 
 // addressedTo is the first command for action of the VM vmUUID addressed to
 // nodeName, once it has arrived.
-func (c *commands) addressedTo(t *testing.T, action string, vmUUID string, nodeName string) kind.Command {
+func (c *commands) addressedTo(t *testing.T, action string, vmUUID string, nodeName string) kind.ActOnResource {
 	t.Helper()
 
-	var found kind.Command
+	var found kind.ActOnResource
 
 	require.Eventually(t, func() bool {
 		c.lock.Lock()
@@ -106,7 +106,7 @@ func TestSmoke(t *testing.T) {
 	// the node listens for what it may be asked before anything is asked, as
 	// a node's consumers do: every node hears every kind's commands.
 	asked := &commands{}
-	require.NoError(t, jetstream.Consume(ctx, kind.CommandName, domain.MessageHandlerFunc(asked.keep)))
+	require.NoError(t, jetstream.Consume(ctx, kind.ActOnResourceName, domain.MessageHandlerFunc(asked.keep)))
 
 	// and answers the control plane's questions on its own subject: a VM's
 	// log is the vm kind's logs query.
@@ -144,13 +144,13 @@ func TestSmoke(t *testing.T) {
 	}
 
 	// answer is what the node says a command came to.
-	answer := func(command kind.Command, state kind.State) {
+	answer := func(command kind.ActOnResource, state kind.State) {
 		t.Helper()
 
 		status, err := json.Marshal(vmKind.Status{Status: kind.Status{State: state}})
 		require.NoError(t, err)
 
-		result, err := json.Marshal(kind.Result{
+		result, err := json.Marshal(kind.ResourceActedOn{
 			ID:      command.ID,
 			Kind:    command.Kind,
 			UUID:    command.UUID,
@@ -162,7 +162,7 @@ func TestSmoke(t *testing.T) {
 			At:      time.Now(),
 		})
 		require.NoError(t, err)
-		require.NoError(t, jetstream.Produce(ctx, kind.ResultName, result))
+		require.NoError(t, jetstream.Produce(ctx, kind.ResourceActedOnName, result))
 	}
 
 	running := func(uuid string, started time.Time, cpu float64) kind.Observed[vmKind.Status] {

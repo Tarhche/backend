@@ -291,10 +291,10 @@ func TestRuns_Act(t *testing.T) {
 
 	ctx := context.Background()
 
-	commands := func(t *testing.T, w *vmtest.Workload) []kind.Command {
+	commands := func(t *testing.T, w *vmtest.Workload) []kind.ActOnResource {
 		t.Helper()
 
-		sent, err := messagingMock.Produced[kind.Command](w.Producer, kind.CommandName)
+		sent, err := messagingMock.Produced[kind.ActOnResource](w.Producer, kind.ActOnResourceName)
 		require.NoError(t, err)
 
 		return sent

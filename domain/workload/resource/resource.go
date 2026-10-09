@@ -54,7 +54,7 @@ type Record struct {
 	// Answer is what came of the last command answered: whoever waited for
 	// it and was not the one that heard it reads it here. Its status is not
 	// kept, since it is the resource's already.
-	Answer *kind.Result
+	Answer *kind.ResourceActedOn
 
 	// Reset says the parent the resource lives in was restored from a
 	// snapshot since its node last saw it there, and its kind resets to what

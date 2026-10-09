@@ -10,25 +10,25 @@ import (
 // The subjects every kind's commands and results travel on, over JetStream.
 // They replace the requests and results each workload type had its own of.
 const (
-	CommandName = "workloadCommand"
-	ResultName  = "workloadResult"
+	ActOnResourceName   = "workloadActOnResource"
+	ResourceActedOnName = "workloadResourceActedOn"
 )
 
-// MaxOutput is the most of an action's output a Result carries, in bytes,
-// counted from the end: the last lines are the ones that say what went
-// wrong.
+// MaxOutput is the most of an action's output a ResourceActedOn carries, in
+// bytes, counted from the end: the last lines are the ones that say what
+// went wrong.
 const MaxOutput = 16 << 10
 
-// Command asks the node holding a resource to carry out one of its kind's
-// command actions.
+// ActOnResource asks the node holding a resource to carry out one of its
+// kind's command actions.
 //
 // Every node hears every command and carries out only those addressed to it,
 // as it always has. A command carries the resource as the control plane
 // recorded it, so a node needs no database to act on it.
-type Command struct {
+type ActOnResource struct {
 	// ID tells this command from every other, the same one sent again
-	// included, and comes back on its Result: whoever waits for what came of
-	// a command waits for its ID.
+	// included, and comes back on its ResourceActedOn: whoever waits for what
+	// came of a command waits for its ID.
 	ID string `json:"id"`
 
 	Kind   string `json:"kind"`
@@ -50,12 +50,12 @@ type Command struct {
 	Resource Raw `json:"resource"`
 }
 
-// Result is what came of a Command.
+// ResourceActedOn is what came of an ActOnResource.
 //
 // A command that could not be carried out is a result too, rather than an
 // error: carried out again, it would fail the same way, so it is said once
 // and not redelivered.
-type Result struct {
+type ResourceActedOn struct {
 	// ID is the command's.
 	ID string `json:"id"`
 

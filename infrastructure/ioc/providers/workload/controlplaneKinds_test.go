@@ -112,7 +112,7 @@ func TestNewControlPlaneKinds(t *testing.T) {
 		}
 
 		subjects := slices.Collect(maps.Keys(plane.workload.Subscribers))
-		assert.ElementsMatch(t, []string{kind.ResultName}, subjects, "every kind's results are heard on one subject")
+		assert.ElementsMatch(t, []string{kind.ResourceActedOnName}, subjects, "every kind's results are heard on one subject")
 
 		assert.NoError(t, plane.workload.Reconcile.Execute(context.Background()), "a pass over nothing does nothing")
 	})
@@ -144,9 +144,9 @@ func TestNewControlPlaneKinds(t *testing.T) {
 		require.Equal(t, http.StatusOK, status)
 		assert.JSONEq(t, `{"items":[],"pagination":{"total_pages":0,"current_page":1}}`, body)
 
-		result, err := json.Marshal(kind.Result{ID: "command-1", Kind: kindstest.Kind, UUID: "fan-uuid", Action: "start", OK: true})
+		result, err := json.Marshal(kind.ResourceActedOn{ID: "command-1", Kind: kindstest.Kind, UUID: "fan-uuid", Action: "start", OK: true})
 		require.NoError(t, err)
-		assert.NoError(t, kinds.Subscribers[kind.ResultName].Handle(context.Background(), result), "a result for a resource that is gone is never asked for again")
+		assert.NoError(t, kinds.Subscribers[kind.ResourceActedOnName].Handle(context.Background(), result), "a result for a resource that is gone is never asked for again")
 	})
 }
 

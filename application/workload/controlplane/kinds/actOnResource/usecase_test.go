@@ -124,7 +124,7 @@ func TestUseCase_Execute(t *testing.T) {
 		assert.False(t, response.Gone)
 		assert.Equal(t, kindstest.Starting, kindstest.Typed(resource.Record{Raw: response.Resource}).Status.State)
 
-		sent, err := messagingMock.Produced[kind.Command](f.producer, kind.CommandName)
+		sent, err := messagingMock.Produced[kind.ActOnResource](f.producer, kind.ActOnResourceName)
 		require.NoError(t, err)
 		require.Len(t, sent, 1)
 		assert.Equal(t, response.Command.ID, sent[0].ID)
@@ -145,13 +145,13 @@ func TestUseCase_Execute(t *testing.T) {
 				time.Sleep(time.Millisecond)
 			}
 
-			sent, _ := messagingMock.Produced[kind.Command](f.producer, kind.CommandName)
+			sent, _ := messagingMock.Produced[kind.ActOnResource](f.producer, kind.ActOnResourceName)
 			for len(sent) == 0 {
 				time.Sleep(time.Millisecond)
-				sent, _ = messagingMock.Produced[kind.Command](f.producer, kind.CommandName)
+				sent, _ = messagingMock.Produced[kind.ActOnResource](f.producer, kind.ActOnResourceName)
 			}
 
-			f.waiters.Answer(kind.Result{ID: sent[0].ID, Kind: kindstest.Kind, UUID: "fan-uuid", Action: "stop", OK: true, Output: "stopped"})
+			f.waiters.Answer(kind.ResourceActedOn{ID: sent[0].ID, Kind: kindstest.Kind, UUID: "fan-uuid", Action: "stop", OK: true, Output: "stopped"})
 		}()
 
 		response, err := f.useCase.Execute(ctx, &actOnResource.Request{Kind: kindstest.Kind, UUID: "fan-uuid", Action: "stop", Wait: time.Minute})
@@ -403,7 +403,7 @@ func TestUseCase_Execute_follows(t *testing.T) {
 		assert.Equal(t, "stop", response.Command.Action)
 		assert.Equal(t, "hall", response.Resource.Metadata.Name)
 
-		sent, err := messagingMock.Produced[kind.Command](f.producer, kind.CommandName)
+		sent, err := messagingMock.Produced[kind.ActOnResource](f.producer, kind.ActOnResourceName)
 		require.NoError(t, err)
 		require.Len(t, sent, 1)
 		assert.Equal(t, "hall", sent[0].Resource.Metadata.Name, "carrying the resource as it was changed")

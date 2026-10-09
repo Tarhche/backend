@@ -221,10 +221,10 @@ func TestControlPlaneBinding(t *testing.T) {
 }
 
 // aCommand is a box's command, asked of node-1.
-func aCommand(t *testing.T, action string, payload string) Command {
+func aCommand(t *testing.T, action string, payload string) ActOnResource {
 	t.Helper()
 
-	return Command{
+	return ActOnResource{
 		ID:       "command-uuid",
 		Kind:     "box",
 		UUID:     "box-uuid",
@@ -243,7 +243,7 @@ func TestNodeBinding_Execute(t *testing.T) {
 
 	for name, tt := range map[string]struct {
 		strategy *boxNode
-		command  func(t *testing.T) Command
+		command  func(t *testing.T) ActOnResource
 		ok       bool
 		status   string
 		reason   string
@@ -252,7 +252,7 @@ func TestNodeBinding_Execute(t *testing.T) {
 	}{
 		"a command is carried out, and says what it left": {
 			strategy: &boxNode{outcome: Outcome[boxStatus]{Status: stopped, Output: "stopped"}},
-			command:  func(t *testing.T) Command { return aCommand(t, "stop", "") },
+			command:  func(t *testing.T) ActOnResource { return aCommand(t, "stop", "") },
 			ok:       true,
 			status:   `{"state":"stopped"}`,
 			output:   "stopped",
@@ -260,7 +260,7 @@ func TestNodeBinding_Execute(t *testing.T) {
 		},
 		"a failure says why, and what it left when the strategy said": {
 			strategy: &boxNode{outcome: Outcome[boxStatus]{Status: boxStatus{Status: Status{State: Failed}}, Output: "no such image"}, failure: errors.New("pulling nginx:alpine failed")},
-			command:  func(t *testing.T) Command { return aCommand(t, "create", "") },
+			command:  func(t *testing.T) ActOnResource { return aCommand(t, "create", "") },
 			status:   `{"state":"failed"}`,
 			reason:   "pulling nginx:alpine failed",
 			output:   "no such image",
@@ -268,33 +268,33 @@ func TestNodeBinding_Execute(t *testing.T) {
 		},
 		"a failure that left nothing it said leaves no status": {
 			strategy: &boxNode{failure: errors.New("the vmhost is not answering")},
-			command:  func(t *testing.T) Command { return aCommand(t, "start", "") },
+			command:  func(t *testing.T) ActOnResource { return aCommand(t, "start", "") },
 			reason:   "the vmhost is not answering",
 			executed: []string{"start box-uuid"},
 		},
 		"a command the kind does not have is not carried out": {
 			strategy: &boxNode{},
-			command:  func(t *testing.T) Command { return aCommand(t, "explode", "") },
+			command:  func(t *testing.T) ActOnResource { return aCommand(t, "explode", "") },
 			reason:   "unknown action",
 		},
 		"nor is a query sent as a command": {
 			strategy: &boxNode{},
-			command:  func(t *testing.T) Command { return aCommand(t, "logs", "") },
+			command:  func(t *testing.T) ActOnResource { return aCommand(t, "logs", "") },
 			reason:   "unknown action",
 		},
 		"nor one that runs in the control plane": {
 			strategy: &boxNode{},
-			command:  func(t *testing.T) Command { return aCommand(t, "resize", `{"size":3}`) },
+			command:  func(t *testing.T) ActOnResource { return aCommand(t, "resize", `{"size":3}`) },
 			reason:   "unknown action",
 		},
 		"nor one with a payload it is not asked with": {
 			strategy: &boxNode{},
-			command:  func(t *testing.T) Command { return aCommand(t, "stop", `{"force":true}`) },
+			command:  func(t *testing.T) ActOnResource { return aCommand(t, "stop", `{"force":true}`) },
 			reason:   "invalid payload",
 		},
 		"nor one of another kind": {
 			strategy: &boxNode{},
-			command: func(t *testing.T) Command {
+			command: func(t *testing.T) ActOnResource {
 				c := aCommand(t, "stop", "")
 				c.Kind = "vm"
 
@@ -304,7 +304,7 @@ func TestNodeBinding_Execute(t *testing.T) {
 		},
 		"nor one carrying a resource that is not the kind's": {
 			strategy: &boxNode{},
-			command: func(t *testing.T) Command {
+			command: func(t *testing.T) ActOnResource {
 				c := aCommand(t, "stop", "")
 				c.Resource.Spec = json.RawMessage(`{"image": 7}`)
 
@@ -314,7 +314,7 @@ func TestNodeBinding_Execute(t *testing.T) {
 		},
 		"nor one carrying another resource than it names": {
 			strategy: &boxNode{},
-			command: func(t *testing.T) Command {
+			command: func(t *testing.T) ActOnResource {
 				c := aCommand(t, "stop", "")
 				c.UUID = "another-box"
 

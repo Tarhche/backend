@@ -1,4 +1,4 @@
-package heartbeat
+package answerCodeRun
 
 import (
 	"context"
@@ -32,7 +32,7 @@ func NewResultHandler(replyer domain.Replyer, logger *slog.Logger) *result {
 }
 
 func (h *result) Handle(ctx context.Context, data []byte) error {
-	var answered kind.Result
+	var answered kind.ResourceActedOn
 	if err := json.Unmarshal(data, &answered); err != nil {
 		// read again, it is as unreadable.
 		h.logger.WarnContext(ctx, "a command's result that cannot be read", "error", err)

@@ -1,4 +1,4 @@
-package reconcile_test
+package reconcileResources_test
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/dispatch"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/kindstest"
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/reconcile"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/reconcileResources"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/waiters"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/node"
@@ -27,8 +27,8 @@ import (
 // were made, with node-1 heard a moment ago and node-2 long ago.
 var now = kindstest.Moment.Add(time.Hour)
 
-func config() reconcile.Config {
-	return reconcile.Config{
+func config() reconcileResources.Config {
+	return reconcileResources.Config{
 		Batch:           2,
 		NodeSilentAfter: 30 * time.Second,
 		Patience:        5 * time.Minute,
@@ -42,7 +42,7 @@ type fixture struct {
 	nodes     *nodesMemory.Repository
 	producer  *messagingMock.Recorder
 	fans      *kindstest.Fans
-	useCase   *reconcile.UseCase
+	useCase   *reconcileResources.UseCase
 }
 
 func newFixture(t *testing.T, records ...resource.Record) *fixture {
@@ -67,15 +67,15 @@ func newFixture(t *testing.T, records ...resource.Record) *fixture {
 	clock.Advance(time.Hour)
 
 	dispatcher := dispatch.New(f.resources, f.producer, waiters.New(), clock.Now)
-	f.useCase = reconcile.NewUseCase(kindstest.Registry(f.fans), f.resources, f.nodes, dispatcher, slog.New(slog.DiscardHandler), config())
+	f.useCase = reconcileResources.NewUseCase(kindstest.Registry(f.fans), f.resources, f.nodes, dispatcher, slog.New(slog.DiscardHandler), config())
 
 	return f
 }
 
-func (f *fixture) sent(t *testing.T) []kind.Command {
+func (f *fixture) sent(t *testing.T) []kind.ActOnResource {
 	t.Helper()
 
-	commands, err := messagingMock.Produced[kind.Command](f.producer, kind.CommandName)
+	commands, err := messagingMock.Produced[kind.ActOnResource](f.producer, kind.ActOnResourceName)
 	require.NoError(t, err)
 
 	return commands
@@ -160,15 +160,15 @@ func TestUseCase_Execute(t *testing.T) {
 		// silence
 		"a running resource whose node fell silent is failed as lost, and still expected running": {
 			record: fan(kindstest.Running, kindstest.Running, "node-2"),
-			state:  kind.Failed, expected: kindstest.Running, reason: reconcile.ReasonNodeLost,
+			state:  kind.Failed, expected: kindstest.Running, reason: reconcileResources.ReasonNodeLost,
 		},
 		"and so is one on its way somewhere, which is not getting there": {
 			record: fan(kindstest.Starting, kindstest.Running, "node-2", pending("start", time.Hour, 1)),
-			state:  kind.Failed, expected: kindstest.Running, reason: reconcile.ReasonNodeLost,
+			state:  kind.Failed, expected: kindstest.Running, reason: reconcileResources.ReasonNodeLost,
 		},
 		"and one on a node nobody ever heard of": {
 			record: fan(kindstest.Running, kindstest.Running, "node-9"),
-			state:  kind.Failed, expected: kindstest.Running, reason: reconcile.ReasonNodeLost,
+			state:  kind.Failed, expected: kindstest.Running, reason: reconcileResources.ReasonNodeLost,
 		},
 		"but one that ended stays as it ended": {
 			record: fan(kindstest.Stopped, kindstest.Stopped, "node-2"),
@@ -184,7 +184,7 @@ func TestUseCase_Execute(t *testing.T) {
 		},
 		"and one expected deleted on its way somewhere else is not getting there": {
 			record: fan(kindstest.Starting, kind.Deleted, "node-2", pending("start", time.Minute, 1)),
-			state:  kind.Failed, expected: kind.Deleted, reason: reconcile.ReasonNodeLost,
+			state:  kind.Failed, expected: kind.Deleted, reason: reconcileResources.ReasonNodeLost,
 		},
 
 		// lifetimes
@@ -220,7 +220,7 @@ func TestUseCase_Execute(t *testing.T) {
 		},
 		"and failed when nothing comes of it": {
 			record: fan(kindstest.Pending, kindstest.Running, kindstest.NodeName, since(10*time.Minute)),
-			state:  kind.Failed, expected: kindstest.Running, reason: reconcile.ReasonStuck,
+			state:  kind.Failed, expected: kindstest.Running, reason: reconcileResources.ReasonStuck,
 		},
 
 		// a restored parent
@@ -433,7 +433,7 @@ func TestUseCase_Execute(t *testing.T) {
 		resources := resourcesMemory.NewRepository()
 		dispatcher := dispatch.New(resources, &messagingMock.Recorder{}, nil, nil)
 
-		useCase := reconcile.NewUseCase(kind.NewRegistry[kind.ControlPlaneBinding](), resources, nodes, dispatcher, slog.New(slog.DiscardHandler), config())
+		useCase := reconcileResources.NewUseCase(kind.NewRegistry[kind.ControlPlaneBinding](), resources, nodes, dispatcher, slog.New(slog.DiscardHandler), config())
 
 		assert.NoError(t, useCase.Execute(ctx))
 	})
@@ -483,7 +483,7 @@ func TestUseCase_Execute_stateKeptInTheControlPlane(t *testing.T) {
 	}{
 		"one waiting on a command its silent node will not answer is lost with it": {
 			record: fan(kindstest.Starting, kindstest.Running, "node-2", pending("start", time.Minute, 1)),
-			state:  kind.Failed, reason: reconcile.ReasonNodeLost,
+			state:  kind.Failed, reason: reconcileResources.ReasonNodeLost,
 		},
 		"and one at rest is not: the node does not speak for it": {
 			record: fan(kindstest.Running, kindstest.Running, "node-2"),
@@ -512,7 +512,7 @@ func TestUseCase_Execute_stateKeptInTheControlPlane(t *testing.T) {
 			producer := &messagingMock.Recorder{}
 			dispatcher := dispatch.New(resources, producer, waiters.New(), clock.Now)
 
-			require.NoError(t, reconcile.NewUseCase(registry, resources, nodes, dispatcher, slog.New(slog.DiscardHandler), config()).Execute(ctx))
+			require.NoError(t, reconcileResources.NewUseCase(registry, resources, nodes, dispatcher, slog.New(slog.DiscardHandler), config()).Execute(ctx))
 
 			stored, err := resources.GetOne(ctx, kindstest.Kind, "fan-uuid")
 			require.NoError(t, err)
@@ -529,7 +529,7 @@ func TestUseCase_Execute_stateKeptInTheControlPlane(t *testing.T) {
 func TestDefaultConfig(t *testing.T) {
 	t.Parallel()
 
-	c := reconcile.DefaultConfig()
+	c := reconcileResources.DefaultConfig()
 
 	assert.Positive(t, c.Batch)
 	assert.Equal(t, 30*time.Second, c.NodeSilentAfter, "the silence a VM's node is taken to be lost after, as it always was")
@@ -590,7 +590,7 @@ func TestUseCase_Execute_timeouts(t *testing.T) {
 			clock.Advance(time.Hour)
 
 			dispatcher := dispatch.New(f.resources, f.producer, waiters.New(), clock.Now)
-			useCase := reconcile.NewUseCase(registry, f.resources, f.nodes, dispatcher, slog.New(slog.DiscardHandler), settings)
+			useCase := reconcileResources.NewUseCase(registry, f.resources, f.nodes, dispatcher, slog.New(slog.DiscardHandler), settings)
 
 			require.NoError(t, useCase.Execute(ctx))
 

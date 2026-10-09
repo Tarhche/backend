@@ -14,6 +14,6 @@ type Response struct {
 
 	// Command is the first command it was sent, when its kind asked for one,
 	// and Result what came of it, when it was waited for and came in time.
-	Command *kind.Command
-	Result  *kind.Result
+	Command *kind.ActOnResource
+	Result  *kind.ResourceActedOn
 }

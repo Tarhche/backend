@@ -613,7 +613,7 @@ func TestBinding(t *testing.T) {
 	resource, err := kind.Encode(snippet("task-1"))
 	require.NoError(t, err)
 
-	result := binding.Execute(context.Background(), kind.Command{ID: "command-1", Kind: taskKind.Name, UUID: "task-1", Action: taskKind.ActionCreate, Node: nodeName, Resource: resource})
+	result := binding.Execute(context.Background(), kind.ActOnResource{ID: "command-1", Kind: taskKind.Name, UUID: "task-1", Action: taskKind.ActionCreate, Node: nodeName, Resource: resource})
 	assert.False(t, result.OK)
 	assert.NotEmpty(t, result.Reason)
 

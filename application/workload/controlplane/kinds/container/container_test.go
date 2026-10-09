@@ -436,7 +436,7 @@ func TestContainer_startAnswered(t *testing.T) {
 	running, err := json.Marshal(containerKind.Status{Status: kind.Status{State: containerKind.Running}, Docker: &containerKind.Docker{ID: "c1", Name: "web", State: "running"}})
 	require.NoError(t, err)
 
-	_, err = observe.Answer(d, &r, kind.Result{ID: "start-1", Kind: containerKind.Name, UUID: "web-uuid", Action: containerKind.ActionStart, OK: true, Status: running}, at.Add(2*time.Millisecond))
+	_, err = observe.Answer(d, &r, kind.ResourceActedOn{ID: "start-1", Kind: containerKind.Name, UUID: "web-uuid", Action: containerKind.ActionStart, OK: true, Status: running}, at.Add(2*time.Millisecond))
 	require.NoError(t, err)
 
 	common, err = r.Common()

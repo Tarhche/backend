@@ -26,7 +26,7 @@ type Mode string
 
 const (
 	// ModeCommand is asked and answered later: it changes something, and
-	// what came of it comes back as a Result.
+	// what came of it comes back as a ResourceActedOn.
 	ModeCommand Mode = "command"
 
 	// ModeQuery is asked and answered at once, and changes nothing.

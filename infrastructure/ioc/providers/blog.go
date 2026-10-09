@@ -24,7 +24,7 @@ import (
 	"github.com/khanzadimahdi/testproject/application/auth/verify"
 	"github.com/khanzadimahdi/testproject/application/bookmark/bookmarkExists"
 	"github.com/khanzadimahdi/testproject/application/bookmark/updateBookmark"
-	"github.com/khanzadimahdi/testproject/application/code/heartbeat"
+	"github.com/khanzadimahdi/testproject/application/code/answerCodeRun"
 	"github.com/khanzadimahdi/testproject/application/code/runCode"
 	codeStop "github.com/khanzadimahdi/testproject/application/code/stop"
 	"github.com/khanzadimahdi/testproject/application/comment/createComment"
@@ -1117,8 +1117,8 @@ func blog(
 	subscribers := map[string]domain.MessageHandler{
 		forgetpassword.SendForgetPasswordEmailName: forgetpassword.NewSendForgetPasswordEmailHandler(userRepository, authTokenGenerator, mailer, mailFromAddress, webURL, renderer, translator),
 		register.SendRegisterationEmailName:        register.NewSendRegisterationEmailHandler(authTokenGenerator, mailer, mailFromAddress, webURL, renderer, translator),
-		nodeEvents.HeartbeatName:                   heartbeat.NewHeartbeatHandler(cachedGateway, ingressDomain, logger),
-		kind.ResultName:                            heartbeat.NewResultHandler(cachedGateway, logger),
+		nodeEvents.HeartbeatName:                   answerCodeRun.NewHeartbeatHandler(cachedGateway, ingressDomain, logger),
+		kind.ResourceActedOnName:                   answerCodeRun.NewResultHandler(cachedGateway, logger),
 	}
 
 	if err := iocContainer.Bind(func() map[string]domain.MessageHandler {

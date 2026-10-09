@@ -84,7 +84,7 @@ func answer(f *fixture, output string) {
 		records, _, _ := f.resources.GetAll(context.Background(), kindstest.Kind, resource.Filter{}, 0, 0)
 		if len(records) == 1 && records[0].Pending != nil {
 			stored := records[0]
-			stored.Answer = &kind.Result{ID: stored.Pending.IDs[0], Action: stored.Pending.Action, OK: true, Output: output}
+			stored.Answer = &kind.ResourceActedOn{ID: stored.Pending.IDs[0], Action: stored.Pending.Action, OK: true, Output: output}
 			stored.Pending = nil
 
 			common, _ := stored.Common()
@@ -159,7 +159,7 @@ func TestUseCase_Execute(t *testing.T) {
 		assert.Equal(t, stored.Raw, response.Resource)
 		assert.Nil(t, response.Result, "nothing was waited for")
 
-		sent, err := messagingMock.Produced[kind.Command](f.producer, kind.CommandName)
+		sent, err := messagingMock.Produced[kind.ActOnResource](f.producer, kind.ActOnResourceName)
 		require.NoError(t, err)
 		require.Len(t, sent, 1)
 		assert.Equal(t, response.Command.ID, sent[0].ID)
@@ -214,7 +214,7 @@ func TestUseCase_Execute(t *testing.T) {
 				records, _, _ := f.resources.GetAll(context.Background(), kindstest.Kind, resource.Filter{}, 0, 0)
 				if len(records) == 1 && records[0].Pending != nil {
 					stored := records[0]
-					stored.Answer = &kind.Result{ID: stored.Pending.IDs[0], Action: "create", OK: true, Output: "made"}
+					stored.Answer = &kind.ResourceActedOn{ID: stored.Pending.IDs[0], Action: "create", OK: true, Output: "made"}
 					stored.Pending = nil
 
 					common, _ := stored.Common()
@@ -427,7 +427,7 @@ func TestUseCase_Execute(t *testing.T) {
 		require.NoError(t, err)
 		require.Empty(t, response.ValidationErrors)
 
-		sent, err := messagingMock.Produced[kind.Command](f.producer, kind.CommandName)
+		sent, err := messagingMock.Produced[kind.ActOnResource](f.producer, kind.ActOnResourceName)
 		require.NoError(t, err)
 		require.Len(t, sent, 1, "what the loop sent is not sent again")
 		assert.Equal(t, "create", sent[0].Action)
@@ -468,7 +468,7 @@ func TestUseCase_Execute(t *testing.T) {
 		response, err := admitting.Execute(ctx, &request)
 		require.NoError(t, err)
 
-		sent, err := messagingMock.Produced[kind.Command](f.producer, kind.CommandName)
+		sent, err := messagingMock.Produced[kind.ActOnResource](f.producer, kind.ActOnResourceName)
 		require.NoError(t, err)
 		require.Len(t, sent, 1, "what the loop sent is not sent again")
 

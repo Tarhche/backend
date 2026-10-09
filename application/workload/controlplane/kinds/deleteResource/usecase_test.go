@@ -75,7 +75,7 @@ func TestUseCase_Execute(t *testing.T) {
 		assert.Equal(t, kindstest.Deleting, fan.Status.State)
 		assert.Equal(t, kind.Deleted, fan.Status.Expected)
 
-		assert.Equal(t, []string{kind.CommandName}, f.producer.Subjects())
+		assert.Equal(t, []string{kind.ActOnResourceName}, f.producer.Subjects())
 	})
 
 	t.Run("one being deleted already is left to it", func(t *testing.T) {

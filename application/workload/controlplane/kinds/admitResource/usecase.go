@@ -163,7 +163,7 @@ func (uc *UseCase) follow(ctx context.Context, binding kind.ControlPlaneBinding,
 // is written down already when it came before the resource was read again,
 // since nothing but that command was answered for a resource made a moment
 // ago.
-func (uc *UseCase) awaited(ctx context.Context, r resource.Record, wait time.Duration) *kind.Result {
+func (uc *UseCase) awaited(ctx context.Context, r resource.Record, wait time.Duration) *kind.ResourceActedOn {
 	switch {
 	case wait <= 0:
 		return nil

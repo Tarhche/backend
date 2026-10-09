@@ -22,7 +22,7 @@ import (
 	getresource "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/getResource"
 	getresources "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/getResources"
 	queryresource "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/queryResource"
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/resourceResult"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/recordResult"
 	controlplanestacks "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/stack"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/runs"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/vmtest"
@@ -80,12 +80,12 @@ type containersNode struct {
 }
 
 func (n *containersNode) Produce(ctx context.Context, subject string, payload []byte) error {
-	var command kind.Command
-	if subject != kind.CommandName || json.Unmarshal(payload, &command) != nil {
+	var command kind.ActOnResource
+	if subject != kind.ActOnResourceName || json.Unmarshal(payload, &command) != nil {
 		return n.others.Produce(ctx, subject, payload)
 	}
 
-	result := kind.Result{ID: command.ID, Kind: command.Kind, UUID: command.UUID, Action: command.Action, Node: command.Node, OK: true, At: time.Now()}
+	result := kind.ResourceActedOn{ID: command.ID, Kind: command.Kind, UUID: command.UUID, Action: command.Action, Node: command.Node, OK: true, At: time.Now()}
 
 	var (
 		status any
@@ -154,7 +154,7 @@ func controlPlane(t *testing.T, w *blockstest.Workload) *client.Client {
 	// what is sent to a container's node comes back from it, and what is
 	// sent to any other node is kept unanswered.
 	waiting := waiters.New()
-	containers := &containersNode{results: resourceResult.NewResult(w.Registry, w.Resources, waiting, logger, nil), others: w.Producer}
+	containers := &containersNode{results: recordResult.NewResult(w.Registry, w.Resources, waiting, logger, nil), others: w.Producer}
 	dispatcher := dispatch.New(w.Resources, containers, waiting, nil, dispatch.PollEvery(10*time.Millisecond))
 
 	mux := http.NewServeMux()
@@ -383,7 +383,7 @@ func TestContract_Tasks(t *testing.T) {
 	assert.Equal(t, vmtest.Node, run.Metadata.Node)
 	assert.Equal(t, taskKind.Scheduled, run.Status.State, "asked of its node at once")
 
-	sent, err := messagingMock.Produced[kind.Command](w.Producer, kind.CommandName)
+	sent, err := messagingMock.Produced[kind.ActOnResource](w.Producer, kind.ActOnResourceName)
 	require.NoError(t, err)
 	require.Len(t, sent, 1)
 	assert.Equal(t, taskKind.ActionCreate, sent[0].Action)

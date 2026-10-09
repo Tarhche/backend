@@ -1,4 +1,4 @@
-package heartbeat
+package answerCodeRun
 
 import (
 	"context"
@@ -16,7 +16,7 @@ import (
 )
 
 // failedCreate is what a node says of a snippet's task it could not run.
-func failedCreate(t *testing.T, change ...func(r *kind.Result, s *taskKind.Status)) []byte {
+func failedCreate(t *testing.T, change ...func(r *kind.ResourceActedOn, s *taskKind.Status)) []byte {
 	t.Helper()
 
 	status := taskKind.Status{
@@ -24,7 +24,7 @@ func failedCreate(t *testing.T, change ...func(r *kind.Result, s *taskKind.Statu
 		Run:    &taskKind.Run{Name: "request-id", Slug: "request-id-abcde", Kind: task.KindJob},
 	}
 
-	result := kind.Result{ID: "command-1", Kind: taskKind.Name, UUID: "task-uuid", Action: taskKind.ActionCreate, Node: "workload-orchestrator-01", Reason: "no such image: ghcr.io/example/workload:latest"}
+	result := kind.ResourceActedOn{ID: "command-1", Kind: taskKind.Name, UUID: "task-uuid", Action: taskKind.ActionCreate, Node: "workload-orchestrator-01", Reason: "no such image: ghcr.io/example/workload:latest"}
 
 	for _, c := range change {
 		c(&result, &status)
@@ -64,13 +64,13 @@ func TestResult_Handle(t *testing.T) {
 		assert.JSONEq(t, `{"name":"request-id","logs":null,"error":"no such image: ghcr.io/example/workload:latest"}`, string(replies[0].Payload))
 	})
 
-	for name, change := range map[string]func(r *kind.Result, s *taskKind.Status){
-		"a create carried out says nothing here":  func(r *kind.Result, _ *taskKind.Status) { r.OK, r.Reason = true, "" },
-		"nor does another of a task's commands":   func(r *kind.Result, _ *taskKind.Status) { r.Action = taskKind.ActionStop },
-		"nor what came of another kind's":         func(r *kind.Result, _ *taskKind.Status) { r.Kind = "vm" },
-		"nor a failure that says nothing of why":  func(r *kind.Result, _ *taskKind.Status) { r.Reason = "" },
-		"nor one of a task that is not a request": func(_ *kind.Result, s *taskKind.Status) { s.Run.Kind = task.KindService },
-		"nor one whose run says of no request":    func(_ *kind.Result, s *taskKind.Status) { s.Run = nil },
+	for name, change := range map[string]func(r *kind.ResourceActedOn, s *taskKind.Status){
+		"a create carried out says nothing here":  func(r *kind.ResourceActedOn, _ *taskKind.Status) { r.OK, r.Reason = true, "" },
+		"nor does another of a task's commands":   func(r *kind.ResourceActedOn, _ *taskKind.Status) { r.Action = taskKind.ActionStop },
+		"nor what came of another kind's":         func(r *kind.ResourceActedOn, _ *taskKind.Status) { r.Kind = "vm" },
+		"nor a failure that says nothing of why":  func(r *kind.ResourceActedOn, _ *taskKind.Status) { r.Reason = "" },
+		"nor one of a task that is not a request": func(_ *kind.ResourceActedOn, s *taskKind.Status) { s.Run.Kind = task.KindService },
+		"nor one whose run says of no request":    func(_ *kind.ResourceActedOn, s *taskKind.Status) { s.Run = nil },
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()

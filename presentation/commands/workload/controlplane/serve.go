@@ -10,7 +10,7 @@ import (
 	"github.com/danceable/console"
 	"github.com/danceable/provider"
 
-	kindsReconcile "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/reconcile"
+	kindsReconcileResources "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/reconcileResources"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers"
@@ -39,7 +39,7 @@ type ServeCommand struct {
 	// resources of every kind registered, VMs, stacks and tasks among them,
 	// asking the nodes for whatever would make each of them what it is meant
 	// to be.
-	reconcileKinds *kindsReconcile.UseCase
+	reconcileKinds *kindsReconcileResources.UseCase
 
 	logger *slog.Logger
 }

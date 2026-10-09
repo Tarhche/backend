@@ -31,7 +31,7 @@ func New() *Waiters {
 // before the command is sent, so that no answer can come before anybody
 // waits for it, and ended with Done.
 func (w *Waiters) Expect(ids ...string) *Wait {
-	wait := &Wait{waiters: w, ids: ids, answer: make(chan kind.Result, 1)}
+	wait := &Wait{waiters: w, ids: ids, answer: make(chan kind.ResourceActedOn, 1)}
 
 	w.lock.Lock()
 	defer w.lock.Unlock()
@@ -49,7 +49,7 @@ func (w *Waiters) Expect(ids ...string) *Wait {
 
 // Answer hands what came of a command to everybody here waiting for it. One
 // nobody waits for is nobody's business.
-func (w *Waiters) Answer(result kind.Result) {
+func (w *Waiters) Answer(result kind.ResourceActedOn) {
 	w.lock.Lock()
 	defer w.lock.Unlock()
 
@@ -92,19 +92,19 @@ func (w *Waiters) done(wait *Wait) {
 
 // Check looks for a command's answer where it is written down, and says
 // whether it found one.
-type Check func(ctx context.Context) (kind.Result, bool)
+type Check func(ctx context.Context) (kind.ResourceActedOn, bool)
 
 // Wait is one wait for what came of one command, under any of its IDs.
 type Wait struct {
 	waiters *Waiters
 	ids     []string
-	answer  chan kind.Result
+	answer  chan kind.ResourceActedOn
 }
 
 // For waits for the answer for as long as timeout, unless ctx ends first, and
 // is the answer and whether there was one in time. Every interval it asks
 // check, when there is one, whether the answer was heard elsewhere.
-func (w *Wait) For(ctx context.Context, timeout time.Duration, interval time.Duration, check Check) (kind.Result, bool) {
+func (w *Wait) For(ctx context.Context, timeout time.Duration, interval time.Duration, check Check) (kind.ResourceActedOn, bool) {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
@@ -130,7 +130,7 @@ func (w *Wait) For(ctx context.Context, timeout time.Duration, interval time.Dur
 			case result := <-w.answer:
 				return result, true
 			default:
-				return kind.Result{}, false
+				return kind.ResourceActedOn{}, false
 			}
 		}
 	}

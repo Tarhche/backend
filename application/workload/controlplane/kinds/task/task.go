@@ -37,7 +37,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/reconcile"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/reconcileResources"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/slugs"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
@@ -153,7 +153,7 @@ func (s *Tasks) Reconcile(_ context.Context, t taskKind.Task) ([]kind.Intent, er
 	case state == taskKind.Created && expected == taskKind.Running:
 		return intent(taskKind.ActionCreate, "it was admitted, and is to be run")
 
-	case state == taskKind.Failed && t.Status.Reason == reconcile.ReasonNodeLost:
+	case state == taskKind.Failed && t.Status.Reason == reconcileResources.ReasonNodeLost:
 		// its node says what became of it once it speaks again; a job it never
 		// comes back for is given up on.
 		if job && s.Now().Sub(t.Status.Since) >= LostAfter {

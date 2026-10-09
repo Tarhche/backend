@@ -17,14 +17,15 @@
 //     Deleted, Missing and Waiting are the states the framework itself moves
 //     resources into.
 //   - its Actions. What it can be asked; where each runs, on its node or in
-//     the control plane; whether it is a command, answered later as a Result,
-//     a query, answered at once, or a stream such as a terminal; the states it
-//     is allowed in and the one it desires; the permission it is asked under,
-//     workload.<plural>.<verb> and its self. twin, or another kind's
-//     (PermissionsOf); how long its node may take over a command, when that
-//     may be longer than the control plane's patience (Timeout, a name each
-//     service sizes from its settings); and the Codec its payload is read
-//     with, so a strategy is handed the action's own struct.
+//     the control plane; whether it is a command, answered later as a
+//     ResourceActedOn, a query, answered at once, or a stream such as a
+//     terminal; the states it is allowed in and the one it desires; the
+//     permission it is asked under, workload.<plural>.<verb> and
+//     its self. twin, or another kind's (PermissionsOf); how long its node
+//     may take over a command, when that may be longer than the control
+//     plane's patience (Timeout, a name each service sizes from its
+//     settings); and the Codec its payload is read with, so a strategy is
+//     handed the action's own struct.
 //
 // And it has a strategy in each service that runs it: ControlPlane, for
 // admission, for deciding what to ask for when what a resource was asked to
@@ -45,9 +46,10 @@
 //
 // What the services tell each other is the same for every kind:
 //
-//   - a Command, on CommandName, from the control plane to the node it
-//     names, carrying the resource as it was recorded so that a node needs no
-//     database, and its Result, on ResultName, back;
+//   - an ActOnResource, on ActOnResourceName, from the control plane to the
+//     node it names, carrying the resource as it was recorded so that a node
+//     needs no database, and its ResourceActedOn, on ResourceActedOnName,
+//     back;
 //   - a Query, as a node request whose op is the kind and the action,
 //     "stack.state", on the subject every node already answers on;
 //   - and every kind's Report in the node's heartbeat: everything of the kind

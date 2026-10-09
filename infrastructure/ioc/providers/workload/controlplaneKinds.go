@@ -15,8 +15,8 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/getResources"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/observe"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/queryResource"
-	kindsReconcile "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/reconcile"
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/resourceResult"
+	kindsReconcileResources "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/reconcileResources"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/recordResult"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/waiters"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
@@ -49,11 +49,11 @@ type ControlPlaneKinds struct {
 	// is an error for a kind whose routes are taken already.
 	Route func(mux *http.ServeMux) error
 
-	// Subscribers hear workloadResult.
+	// Subscribers hear workloadResourceActedOn.
 	Subscribers map[string]domain.MessageHandler
 
 	Observer  *observe.Observer
-	Reconcile *kindsReconcile.UseCase
+	Reconcile *kindsReconcileResources.UseCase
 
 	// Admit takes in a resource of any kind, as the resource API does: a
 	// Docker VM made for a container or a stack is admitted through it.
@@ -73,7 +73,7 @@ type ControlPlaneKinds struct {
 // controlPlaneKindsOptions are how the plumbing goes about its work.
 type controlPlaneKindsOptions struct {
 	parents   observe.Parents
-	reconcile kindsReconcile.Config
+	reconcile kindsReconcileResources.Config
 	timeouts  map[kind.Timeout]time.Duration
 }
 
@@ -91,7 +91,7 @@ func WithParents(parents observe.Parents) ControlPlaneKindsOption {
 
 // WithReconcileConfig is how patient the reconcile loop is, in place of the
 // control plane's own: a test's is far less.
-func WithReconcileConfig(config kindsReconcile.Config) ControlPlaneKindsOption {
+func WithReconcileConfig(config kindsReconcileResources.Config) ControlPlaneKindsOption {
 	return func(o *controlPlaneKindsOptions) {
 		o.reconcile = config
 	}
@@ -128,7 +128,7 @@ func NewControlPlaneKinds(
 	logger *slog.Logger,
 	options ...ControlPlaneKindsOption,
 ) *ControlPlaneKinds {
-	settings := controlPlaneKindsOptions{reconcile: kindsReconcile.DefaultConfig()}
+	settings := controlPlaneKindsOptions{reconcile: kindsReconcileResources.DefaultConfig()}
 	for _, option := range options {
 		option(&settings)
 	}
@@ -167,10 +167,10 @@ func NewControlPlaneKinds(
 			return controlPlaneKindsAPI.Route(mux, registry.Descriptors(), useCases)
 		},
 		Subscribers: map[string]domain.MessageHandler{
-			kind.ResultName: resourceResult.NewResult(registry, resources, waiting, logger, nil, resourceResult.WithRestorer(resources.Cascade())),
+			kind.ResourceActedOnName: recordResult.NewResult(registry, resources, waiting, logger, nil, recordResult.WithRestorer(resources.Cascade())),
 		},
 		Observer:   observer,
-		Reconcile:  kindsReconcile.NewUseCase(registry, resources, stores.Nodes, dispatcher, logger, settings.reconcile),
+		Reconcile:  kindsReconcileResources.NewUseCase(registry, resources, stores.Nodes, dispatcher, logger, settings.reconcile),
 		Admit:      useCases.Admit,
 		Resources:  resources,
 		Dispatcher: dispatcher,

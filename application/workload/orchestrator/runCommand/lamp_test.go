@@ -100,7 +100,7 @@ func running(t *testing.T, execute executing) *kind.Registry[kind.NodeBinding] {
 }
 
 // aCommand asks node-1 for an action on the lamp uuid names, with payload.
-func aCommand(t *testing.T, uuid string, action string, payload string) kind.Command {
+func aCommand(t *testing.T, uuid string, action string, payload string) kind.ActOnResource {
 	t.Helper()
 
 	resource, err := kind.Encode(kind.Resource[lampSpec, lampStatus]{
@@ -111,7 +111,7 @@ func aCommand(t *testing.T, uuid string, action string, payload string) kind.Com
 	})
 	require.NoError(t, err)
 
-	return kind.Command{
+	return kind.ActOnResource{
 		ID:       "command-" + uuid + "-" + action,
 		Kind:     "lamp",
 		UUID:     uuid,

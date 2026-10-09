@@ -1,5 +1,6 @@
-// Package reconcile brings the resources of every kind back to what was
-// asked of them, one pass at a time, on the control plane's own heartbeat.
+// Package reconcileResources brings the resources of every kind back to
+// what was asked of them, one pass at a time, on the control plane's own
+// heartbeat.
 //
 // What a resource is expected to be is written down; what it is doing is
 // what its node last observed. A resource whose node fell silent, one whose
@@ -39,7 +40,7 @@
 // Nothing found wrong with one resource stops a pass: it is reported, and
 // the next pass tries it again. Nothing here is a message, so nothing is
 // redelivered for ever either.
-package reconcile
+package reconcileResources
 
 import (
 	"context"

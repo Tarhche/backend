@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/reconcile"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/reconcileResources"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/slugs"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
@@ -244,9 +244,9 @@ func TestTasks_Reconcile(t *testing.T) {
 		"one that never started is never killed for it":        {task: in(taskKind.Running, taskKind.Running, func(t *taskKind.Task) { t.Metadata.CreatedAt = now.Add(-time.Hour) })},
 		"nor one that may run as long as it likes":             {task: in(taskKind.Running, taskKind.Running, started(time.Hour), func(t *taskKind.Task) { t.Spec.TTL = 0 })},
 		"one running while it was expected stopped is stopped": {task: in(taskKind.Running, taskKind.Stopped, started(time.Second)), want: taskKind.ActionStop},
-		"a job whose node fell silent is left to its node":     {task: in(taskKind.Failed, taskKind.Running, func(t *taskKind.Task) { t.Status.Reason = reconcile.ReasonNodeLost })},
+		"a job whose node fell silent is left to its node":     {task: in(taskKind.Failed, taskKind.Running, func(t *taskKind.Task) { t.Status.Reason = reconcileResources.ReasonNodeLost })},
 		"until it is given up on": {task: in(taskKind.Failed, taskKind.Running, func(t *taskKind.Task) {
-			t.Status.Reason, t.Status.Since = reconcile.ReasonNodeLost, now.Add(-LostAfter)
+			t.Status.Reason, t.Status.Since = reconcileResources.ReasonNodeLost, now.Add(-LostAfter)
 		}), want: taskKind.ActionDelete},
 		"a service that failed is run again":         {task: in(taskKind.Failed, taskKind.Running, service), want: taskKind.ActionCreate},
 		"and one that stopped unasked":               {task: in(taskKind.Stopped, taskKind.Running, service), want: taskKind.ActionCreate},
@@ -254,7 +254,7 @@ func TestTasks_Reconcile(t *testing.T) {
 		"forever when it is worth as many":           {task: in(taskKind.Failed, taskKind.Running, service, retried(300), func(t *taskKind.Task) { forever := task.RetryForever; t.Spec.MaxRetries = &forever }), want: taskKind.ActionCreate},
 		"a service stopped as asked is left stopped": {task: in(taskKind.Stopped, taskKind.Stopped, service)},
 		"a service whose node fell silent is left to its node": {task: in(taskKind.Failed, taskKind.Running, service, func(t *taskKind.Task) {
-			t.Status.Reason, t.Status.Since = reconcile.ReasonNodeLost, now.Add(-time.Hour)
+			t.Status.Reason, t.Status.Since = reconcileResources.ReasonNodeLost, now.Add(-time.Hour)
 		})},
 		"a service that runs is left to run": {task: in(taskKind.Running, taskKind.Running, service)},
 	} {

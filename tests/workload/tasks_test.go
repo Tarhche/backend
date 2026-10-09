@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/khanzadimahdi/testproject/application/code/heartbeat"
+	"github.com/khanzadimahdi/testproject/application/code/answerCodeRun"
 	"github.com/khanzadimahdi/testproject/application/code/runCode"
 	"github.com/khanzadimahdi/testproject/application/code/stop"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/presenter"
@@ -55,8 +55,8 @@ func (w *workload) codeRunner(t *testing.T) *codeRunner {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	require.NoError(t, blogMessages.Consume(ctx, nodeEvents.HeartbeatName, heartbeat.NewHeartbeatHandler(replies, ingressDomain, logger)))
-	require.NoError(t, blogMessages.Consume(ctx, kind.ResultName, heartbeat.NewResultHandler(replies, logger)))
+	require.NoError(t, blogMessages.Consume(ctx, nodeEvents.HeartbeatName, answerCodeRun.NewHeartbeatHandler(replies, ingressDomain, logger)))
+	require.NoError(t, blogMessages.Consume(ctx, kind.ResourceActedOnName, answerCodeRun.NewResultHandler(replies, logger)))
 
 	t.Cleanup(func() {
 		cancel()
@@ -82,11 +82,11 @@ func (c *codeRunner) ask(t *testing.T, request runCode.Request) {
 
 // answered is the first reply to requestID that says what condition wants,
 // and its kind.
-func (c *codeRunner) answered(t *testing.T, requestID string, what string, condition func(heartbeat.Response, domain.ReplyKind) bool) (heartbeat.Response, domain.ReplyKind) {
+func (c *codeRunner) answered(t *testing.T, requestID string, what string, condition func(answerCodeRun.Response, domain.ReplyKind) bool) (answerCodeRun.Response, domain.ReplyKind) {
 	t.Helper()
 
 	type answer struct {
-		response heartbeat.Response
+		response answerCodeRun.Response
 		kind     domain.ReplyKind
 	}
 
@@ -96,7 +96,7 @@ func (c *codeRunner) answered(t *testing.T, requestID string, what string, condi
 				continue
 			}
 
-			var response heartbeat.Response
+			var response answerCodeRun.Response
 			if err := json.Unmarshal(reply.Payload, &response); err != nil {
 				return answer{}, err
 			}
@@ -267,9 +267,9 @@ func TestASnippet(t *testing.T) {
 
 		close(release)
 
-		response, replyKind := runner.answered(t, "request-hello", "answered", func(heartbeat.Response, domain.ReplyKind) bool { return true })
+		response, replyKind := runner.answered(t, "request-hello", "answered", func(answerCodeRun.Response, domain.ReplyKind) bool { return true })
 		assert.Equal(t, domain.ReplyFinal, replyKind)
-		assert.Equal(t, heartbeat.Response{TaskUUID: running.Metadata.UUID, Name: "request-hello", Logs: []byte("hello from e2e\n"), State: "completed"}, response)
+		assert.Equal(t, answerCodeRun.Response{TaskUUID: running.Metadata.UUID, Name: "request-hello", Logs: []byte("hello from e2e\n"), State: "completed"}, response)
 
 		w.taskGone(t, running.Metadata.UUID)
 	})
@@ -277,7 +277,7 @@ func TestASnippet(t *testing.T) {
 	t.Run("a job whose program exits with a code of its own failed, and says what it printed", func(t *testing.T) {
 		runner.ask(t, runCode.Request{ID: "request-timeout", Code: "while(true){}", Runner: "php-8.4"})
 
-		response, _ := runner.answered(t, "request-timeout", "answered", func(heartbeat.Response, domain.ReplyKind) bool { return true })
+		response, _ := runner.answered(t, "request-timeout", "answered", func(answerCodeRun.Response, domain.ReplyKind) bool { return true })
 		assert.Equal(t, "failed", response.State)
 		assert.Equal(t, "still going\n⏰ Execution timed out after 30 seconds\n", string(response.Logs))
 		assert.Empty(t, response.Error)
@@ -337,7 +337,7 @@ func TestAJobPastItsTTL(t *testing.T) {
 	})
 	assert.Equal(t, running.Status.Run.StartedAt.Add(time.Second), running.Status.Run.Deadline, "its ttl after it started")
 
-	response, _ := runner.answered(t, "request-forever", "answered", func(heartbeat.Response, domain.ReplyKind) bool { return true })
+	response, _ := runner.answered(t, "request-forever", "answered", func(answerCodeRun.Response, domain.ReplyKind) bool { return true })
 	assert.Equal(t, "completed", response.State, "a job cut short completed")
 	assert.Equal(t, "listening\n", string(response.Logs))
 
@@ -367,7 +367,7 @@ func TestALiveSnippet(t *testing.T) {
 
 	runner.ask(t, runCode.Request{ID: "request-live", Code: code, Runner: "nodejs-22.14", Ports: []port.Port{3000}, Terminal: true})
 
-	followed, replyKind := runner.answered(t, "request-live", "followed while it runs", func(response heartbeat.Response, _ domain.ReplyKind) bool {
+	followed, replyKind := runner.answered(t, "request-live", "followed while it runs", func(response answerCodeRun.Response, _ domain.ReplyKind) bool {
 		return response.State == "running" && len(response.Endpoints) > 0
 	})
 	assert.Equal(t, domain.ReplyChunk, replyKind, "a snippet somebody watches is told as it goes")
@@ -376,7 +376,7 @@ func TestALiveSnippet(t *testing.T) {
 	slug := running.Metadata.Slug
 
 	t.Run("its reader is told where it is reached, and when it will be stopped", func(t *testing.T) {
-		assert.Equal(t, []heartbeat.Endpoint{{TaskPort: 3000, URL: "http://" + slug + "-3000." + ingressDomain}}, followed.Endpoints)
+		assert.Equal(t, []answerCodeRun.Endpoint{{TaskPort: 3000, URL: "http://" + slug + "-3000." + ingressDomain}}, followed.Endpoints)
 		require.NotNil(t, followed.Deadline)
 		assert.Equal(t, running.Status.Run.StartedAt.Add(runCode.LiveTTL), *followed.Deadline)
 		assert.Equal(t, running.Metadata.UUID, followed.TaskUUID)

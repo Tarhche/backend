@@ -31,10 +31,10 @@ type Locks interface {
 // operation this node answers.
 //
 // A command asked as a request is carried out, under its resource's lock as
-// one sent on workloadCommand is, and answered with its Result: it is how the
-// control plane asks something of an instance nobody keeps a record of, such
-// as a container made from its VM's terminal, since nothing would hear its
-// Result on workloadResult.
+// one sent on workloadActOnResource is, and answered with its
+// ResourceActedOn: it is how the control plane asks something of an instance
+// nobody keeps a record of, such as a container made from its VM's terminal,
+// since nothing would hear its ResourceActedOn on workloadResourceActedOn.
 //
 // What a kind's query fails with is the reply's error, in the codes every
 // side knows. A query this node cannot ask at all, of an action the kind
@@ -100,7 +100,7 @@ func (uc *UseCase) Handle(ctx context.Context, request noderequest.Request) node
 
 // command carries out a command asked as a request, and answers with what
 // came of it: a command that failed is answered as well as one that did not,
-// its Result saying so.
+// its ResourceActedOn saying so.
 func (uc *UseCase) command(ctx context.Context, binding kind.NodeBinding, query kind.Query) noderequest.Reply {
 	if uc.locks != nil {
 		release, err := uc.locks.Lock(ctx, query.UUID)
@@ -110,7 +110,7 @@ func (uc *UseCase) command(ctx context.Context, binding kind.NodeBinding, query 
 		defer release()
 	}
 
-	result := binding.Execute(ctx, kind.Command{
+	result := binding.Execute(ctx, kind.ActOnResource{
 		Kind:     query.Kind,
 		UUID:     query.UUID,
 		Action:   query.Action,

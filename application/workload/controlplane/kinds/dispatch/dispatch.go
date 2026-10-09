@@ -6,12 +6,12 @@
 // and makes what the command desires what the resource is expected to be. A
 // command run in the control plane is carried out there and then, on the
 // record. One run on a node is written down first, as the command the
-// resource is waiting on, and sent second, on workloadCommand, to the node
-// that holds the resource, carrying the resource as it was written down, so
-// that the node needs no database. Always in that order: a command its node
-// never hears of is sent again by the reconcile loop, which reads what was
-// written, while a node that heard of something nobody wrote down is one
-// nothing would ever correct.
+// resource is waiting on, and sent second, on workloadActOnResource, to the
+// node that holds the resource, carrying the resource as it was written
+// down, so that the node needs no database. Always in that order: a command
+// its node never hears of is sent again by the reconcile loop, which reads
+// what was written, while a node that heard of something nobody wrote down
+// is one nothing would ever correct.
 package dispatch
 
 import (
@@ -105,7 +105,7 @@ type Asked struct {
 	// Command is what its node is to be sent: written down as what the
 	// resource is waiting on, and not sent yet. It is nil for a command
 	// carried out in the control plane.
-	Command *kind.Command
+	Command *kind.ActOnResource
 
 	// Gone says the resource's record was taken away: it was deleted in
 	// place, or there was nothing of it anywhere to delete.
@@ -423,7 +423,7 @@ func (d *Dispatcher) Orphaned(ctx context.Context, desc kind.Descriptor, nodeNam
 		return err
 	}
 
-	_, err = d.Send(ctx, kind.Command{
+	_, err = d.Send(ctx, kind.ActOnResource{
 		ID:     id,
 		Kind:   desc.Name,
 		UUID:   uuid,
@@ -477,14 +477,14 @@ func (d *Dispatcher) forget(ctx context.Context, r resource.Record) (Asked, doma
 	return Asked{Record: r, Gone: true}, nil, nil
 }
 
-// Send sends a command to the node it is addressed to, on workloadCommand.
-// What it asks has been written down by now, so a caller that has gone away
-// does not take the command back with it.
+// Send sends a command to the node it is addressed to, on
+// workloadActOnResource. What it asks has been written down by now, so a
+// caller that has gone away does not take the command back with it.
 //
 // When wait is more than nothing, it waits for what came of the command for
 // that long, and is that, or nil when nothing came in time: the command is
 // still the resource's, and its result is taken whenever it comes.
-func (d *Dispatcher) Send(ctx context.Context, command kind.Command, wait time.Duration) (*kind.Result, error) {
+func (d *Dispatcher) Send(ctx context.Context, command kind.ActOnResource, wait time.Duration) (*kind.ResourceActedOn, error) {
 	var expected *waiters.Wait
 	if wait > 0 && d.waiters != nil {
 		expected = d.waiters.Expect(command.ID)
@@ -496,7 +496,7 @@ func (d *Dispatcher) Send(ctx context.Context, command kind.Command, wait time.D
 		return nil, err
 	}
 
-	if err := d.producer.Produce(context.WithoutCancel(ctx), kind.CommandName, payload); err != nil {
+	if err := d.producer.Produce(context.WithoutCancel(ctx), kind.ActOnResourceName, payload); err != nil {
 		return nil, err
 	}
 
@@ -517,12 +517,12 @@ func (d *Dispatcher) Send(ctx context.Context, command kind.Command, wait time.D
 // control plane, asking it for the same a moment before. A result for any of
 // the command's tries answers it. It is that, or nil when nothing came in
 // time, or when the resource waits on nothing.
-func (d *Dispatcher) Await(ctx context.Context, r resource.Record, wait time.Duration) *kind.Result {
+func (d *Dispatcher) Await(ctx context.Context, r resource.Record, wait time.Duration) *kind.ResourceActedOn {
 	if wait <= 0 || r.Pending == nil || d.waiters == nil {
 		return nil
 	}
 
-	command := kind.Command{Kind: r.Kind, UUID: r.Metadata.UUID, Action: r.Pending.Action, Node: r.Metadata.Node}
+	command := kind.ActOnResource{Kind: r.Kind, UUID: r.Metadata.UUID, Action: r.Pending.Action, Node: r.Metadata.Node}
 
 	expected := d.waiters.Expect(r.Pending.IDs...)
 	defer expected.Done()
@@ -550,8 +550,8 @@ type Delivered struct {
 
 	// Command is what its node was sent, for a command run on one, and
 	// Result what came of it, when it was waited for and came in time.
-	Command *kind.Command
-	Result  *kind.Result
+	Command *kind.ActOnResource
+	Result  *kind.ResourceActedOn
 }
 
 // Deliver sends the command asking came to, when it is one for a node, and
@@ -593,31 +593,31 @@ func (d *Dispatcher) Deliver(ctx context.Context, asked Asked, wait time.Duratio
 // tries, on its resource, which keeps its last command's answer: what another
 // control plane heard is found there. A resource that is gone was deleted,
 // which is what came of a delete; any other command is overtaken by it.
-func (d *Dispatcher) answered(command kind.Command, ids ...string) waiters.Check {
-	return func(ctx context.Context) (kind.Result, bool) {
+func (d *Dispatcher) answered(command kind.ActOnResource, ids ...string) waiters.Check {
+	return func(ctx context.Context) (kind.ResourceActedOn, bool) {
 		r, err := d.resources.GetOne(ctx, command.Kind, command.UUID)
 
 		switch {
 		case errors.Is(err, domain.ErrNotExists):
-			result := kind.Result{ID: command.ID, Kind: command.Kind, UUID: command.UUID, Action: command.Action, Node: command.Node, OK: command.Action == deleteAction}
+			result := kind.ResourceActedOn{ID: command.ID, Kind: command.Kind, UUID: command.UUID, Action: command.Action, Node: command.Node, OK: command.Action == deleteAction}
 			if !result.OK {
 				result.Reason = fmt.Sprintf("the %s is gone", command.Kind)
 			}
 
 			return result, true
 		case err != nil:
-			return kind.Result{}, false
+			return kind.ResourceActedOn{}, false
 		case r.Answer != nil && slices.Contains(ids, r.Answer.ID):
 			return *r.Answer, true
 		}
 
-		return kind.Result{}, false
+		return kind.ResourceActedOn{}, false
 	}
 }
 
 // commandOf is the command a resource, as it was written down, is sent.
-func commandOf(r resource.Record, id string, action string, attempt int, payload json.RawMessage) *kind.Command {
-	return &kind.Command{
+func commandOf(r resource.Record, id string, action string, attempt int, payload json.RawMessage) *kind.ActOnResource {
+	return &kind.ActOnResource{
 		ID:       id,
 		Kind:     r.Kind,
 		UUID:     r.Metadata.UUID,

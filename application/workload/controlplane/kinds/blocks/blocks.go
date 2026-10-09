@@ -272,15 +272,15 @@ func (b *Blocks) Query(ctx context.Context, r kind.Raw, action string, payload [
 
 // ask has the node holding r carry out a command on it at once, and is what
 // came of it.
-func (b *Blocks) ask(ctx context.Context, r kind.Raw, action string, payload json.RawMessage) (kind.Result, error) {
+func (b *Blocks) ask(ctx context.Context, r kind.Raw, action string, payload json.RawMessage) (kind.ResourceActedOn, error) {
 	reply, err := b.request(ctx, r, action, payload)
 	if err != nil {
-		return kind.Result{}, err
+		return kind.ResourceActedOn{}, err
 	}
 
-	var result kind.Result
+	var result kind.ResourceActedOn
 	if err := json.Unmarshal(reply.Result, &result); err != nil {
-		return kind.Result{}, &noderequest.Error{Code: noderequest.CodeInternal, Message: "the node answered with something that is not what came of the command"}
+		return kind.ResourceActedOn{}, &noderequest.Error{Code: noderequest.CodeInternal, Message: "the node answered with something that is not what came of the command"}
 	}
 
 	return result, nil

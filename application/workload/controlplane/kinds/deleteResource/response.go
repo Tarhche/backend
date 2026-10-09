@@ -21,6 +21,6 @@ type Response struct {
 	// when it was waited for and came in time. Neither is there when it is
 	// being deleted already, or cannot be asked yet: deleting it is what is
 	// expected of it, and it is asked for once it can be.
-	Command *kind.Command
-	Result  *kind.Result
+	Command *kind.ActOnResource
+	Result  *kind.ResourceActedOn
 }

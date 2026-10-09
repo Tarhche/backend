@@ -526,7 +526,7 @@ func toRecord(stored document) (resource.Record, error) {
 	}
 
 	if a := stored.Control.Answer; a != nil {
-		record.Answer = &kind.Result{
+		record.Answer = &kind.ResourceActedOn{
 			ID:      a.ID,
 			Kind:    a.Kind,
 			UUID:    a.UUID,

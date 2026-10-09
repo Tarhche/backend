@@ -111,8 +111,8 @@ func TestChooser_Choose(t *testing.T) {
 		assert.Equal(t, vmKind.Scheduled, made.Status.State, "its create was sent")
 		assert.Equal(t, vmKind.Scheduled, chosen.VM.Status.State, "and what was chosen says so")
 
-		var command kind.Command
-		require.True(t, w.Producer.Last(kind.CommandName, &command))
+		var command kind.ActOnResource
+		require.True(t, w.Producer.Last(kind.ActOnResourceName, &command))
 		assert.Equal(t, vmKind.ActionCreate, command.Action)
 		assert.Equal(t, made.Metadata.UUID, command.UUID)
 	})

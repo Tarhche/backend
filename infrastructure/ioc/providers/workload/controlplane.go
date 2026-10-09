@@ -11,7 +11,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	checkhealth "github.com/khanzadimahdi/testproject/application/app/checkHealth"
-	kindsReconcile "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/reconcile"
+	kindsReconcileResources "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/reconcileResources"
 	controlPlaneGetNode "github.com/khanzadimahdi/testproject/application/workload/controlplane/node/getNode"
 	controlPlaneGetNodes "github.com/khanzadimahdi/testproject/application/workload/controlplane/node/getNodes"
 	controlPlaneHeartbeatNode "github.com/khanzadimahdi/testproject/application/workload/controlplane/node/heartbeatNode"
@@ -155,7 +155,7 @@ func controlPlaneConsoleCommand(
 	}
 
 	// every kind's own heartbeat, which the serve command runs on a ticker.
-	if err := iocContainer.Bind(func() *kindsReconcile.UseCase {
+	if err := iocContainer.Bind(func() *kindsReconcileResources.UseCase {
 		return workload.Reconcile
 	}, provider.Singleton()); err != nil {
 		return nil, err

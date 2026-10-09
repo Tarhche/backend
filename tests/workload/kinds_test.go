@@ -26,11 +26,12 @@ import (
 )
 
 // A node runs every kind registered on it with the same code, whatever the
-// kind: its commands arrive on workloadCommand and what came of them goes
-// back on workloadResult, its queries are node requests named after it, and
-// what it holds is in every node heartbeat. These tests register a kind of
-// their own, a lamp, on a node wired as its serve command wires one, and play
-// the control plane's part over a NATS server of the test's own.
+// kind: its commands arrive on workloadActOnResource and what came of them
+// goes back on workloadResourceActedOn, its queries are node requests named
+// after it, and what it holds is in every node heartbeat. These tests
+// register a kind of their own, a lamp, on a node wired as its serve command
+// wires one, and play the control plane's part over a NATS server of the
+// test's own.
 
 type lampSpec struct {
 	Watts int `json:"watts"`
@@ -229,7 +230,7 @@ func TestKinds(t *testing.T) {
 	controlPlaneMessages, err := produceConsumer.NewProduceConsumer(controlPlaneConnection, "workload-controlplane", logger)
 	require.NoError(t, err)
 
-	results := hearing[kind.Result](t, ctx, controlPlaneMessages, kind.ResultName)
+	results := hearing[kind.ResourceActedOn](t, ctx, controlPlaneMessages, kind.ResourceActedOnName)
 	heartbeats := hearing[nodeEvents.Heartbeat](t, ctx, controlPlaneMessages, nodeEvents.HeartbeatName)
 
 	for subject, handler := range node.Subscribers {
@@ -251,7 +252,7 @@ func TestKinds(t *testing.T) {
 	command := func(id string, kindName string, uuid string, action string, node string) {
 		t.Helper()
 
-		payload, err := json.Marshal(kind.Command{
+		payload, err := json.Marshal(kind.ActOnResource{
 			ID:       id,
 			Kind:     kindName,
 			UUID:     uuid,
@@ -261,11 +262,11 @@ func TestKinds(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		require.NoError(t, controlPlaneMessages.Produce(ctx, kind.CommandName, payload))
+		require.NoError(t, controlPlaneMessages.Produce(ctx, kind.ActOnResourceName, payload))
 	}
 
-	resultOf := func(id string) func(kind.Result) bool {
-		return func(result kind.Result) bool { return result.ID == id }
+	resultOf := func(id string) func(kind.ResourceActedOn) bool {
+		return func(result kind.ResourceActedOn) bool { return result.ID == id }
 	}
 
 	t.Run("a command to a lamp on the node is carried out, and what came of it said", func(t *testing.T) {
@@ -303,7 +304,7 @@ func TestKinds(t *testing.T) {
 
 		// the first is never answered: nothing is heard of it before the
 		// second's result, or after.
-		results.next(t, func(result kind.Result) bool {
+		results.next(t, func(result kind.ResourceActedOn) bool {
 			require.NotEqual(t, "light-elsewhere", result.ID, "it is not this node's to answer")
 
 			return result.ID == "light-2"

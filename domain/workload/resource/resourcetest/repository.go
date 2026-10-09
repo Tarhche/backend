@@ -381,7 +381,7 @@ func aFan(uuid string, slug string) resource.Record {
 		Attempts: 1,
 		TriedAt:  moment(12),
 		Reset:    true,
-		Answer: &kind.Result{
+		Answer: &kind.ResourceActedOn{
 			ID:     "command-0",
 			Kind:   fans,
 			UUID:   uuid,

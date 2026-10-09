@@ -27,7 +27,7 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/kindstest"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/observe"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/queryResource"
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/resourceResult"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/recordResult"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/waiters"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
@@ -47,15 +47,15 @@ type node struct {
 	silent  atomic.Bool
 
 	lock sync.Mutex
-	sent []kind.Command
+	sent []kind.ActOnResource
 }
 
 func (n *node) Produce(_ context.Context, subject string, payload []byte) error {
-	if subject != kind.CommandName {
+	if subject != kind.ActOnResourceName {
 		return nil
 	}
 
-	var command kind.Command
+	var command kind.ActOnResource
 	if err := json.Unmarshal(payload, &command); err != nil {
 		return err
 	}
@@ -79,11 +79,11 @@ func (n *node) Produce(_ context.Context, subject string, payload []byte) error 
 	return nil
 }
 
-func (n *node) commands() []kind.Command {
+func (n *node) commands() []kind.ActOnResource {
 	n.lock.Lock()
 	defer n.lock.Unlock()
 
-	return append([]kind.Command(nil), n.sent...)
+	return append([]kind.ActOnResource(nil), n.sent...)
 }
 
 // api is the control plane's resource API with fans registered in it, over
@@ -111,7 +111,7 @@ func newAPI(t *testing.T) *api {
 
 	nodeBinding := kind.BindNode[kindstest.Spec, kindstest.Status](kindstest.Descriptor(), a.held)
 
-	a.node = &node{binding: nodeBinding, results: resourceResult.NewResult(registry, a.resources, waiting, logger, nil)}
+	a.node = &node{binding: nodeBinding, results: recordResult.NewResult(registry, a.resources, waiting, logger, nil)}
 
 	requester := &messagingMock.Requester{Answer: func(ctx context.Context, _ string, request noderequest.Request) (noderequest.Reply, error) {
 		query, err := kind.QueryOf(request)
@@ -643,7 +643,7 @@ func TestRoutes(t *testing.T) {
 	})
 }
 
-func ids(commands []kind.Command) []string {
+func ids(commands []kind.ActOnResource) []string {
 	var listed []string
 	for _, command := range commands {
 		listed = append(listed, command.ID)

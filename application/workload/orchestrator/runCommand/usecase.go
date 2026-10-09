@@ -56,8 +56,8 @@ func NewUseCase(kinds *kind.Registry[kind.NodeBinding], locks Locks, producer do
 }
 
 // Execute carries out a command addressed to this node and says what came of
-// it, on kind.ResultName.
-func (uc *UseCase) Execute(ctx context.Context, command kind.Command) error {
+// it, on kind.ResourceActedOnName.
+func (uc *UseCase) Execute(ctx context.Context, command kind.ActOnResource) error {
 	trace.SpanFromContext(ctx).SetAttributes(
 		attribute.String("workload.kind", command.Kind),
 		attribute.String("workload.resource", command.UUID),
@@ -97,7 +97,7 @@ func (uc *UseCase) Execute(ctx context.Context, command kind.Command) error {
 
 // say sends what came of a command. It is detached from the command's
 // context, so it is said even when whoever was waiting has gone.
-func (uc *UseCase) say(ctx context.Context, result kind.Result) error {
+func (uc *UseCase) say(ctx context.Context, result kind.ResourceActedOn) error {
 	result.At = time.Now()
 
 	payload, err := json.Marshal(result)
@@ -105,12 +105,12 @@ func (uc *UseCase) say(ctx context.Context, result kind.Result) error {
 		return err
 	}
 
-	return uc.producer.Produce(context.WithoutCancel(ctx), kind.ResultName, payload)
+	return uc.producer.Produce(context.WithoutCancel(ctx), kind.ResourceActedOnName, payload)
 }
 
 // failed is the result of a command that was not carried out, and why.
-func failed(command kind.Command, cause error) kind.Result {
-	return kind.Result{
+func failed(command kind.ActOnResource, cause error) kind.ResourceActedOn {
+	return kind.ResourceActedOn{
 		ID:      command.ID,
 		Kind:    command.Kind,
 		UUID:    command.UUID,

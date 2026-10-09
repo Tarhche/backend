@@ -83,8 +83,9 @@ type NodeBinding interface {
 	// Execute carries out a command addressed to this node, and is what came
 	// of it. It never fails: whatever went wrong, a command that is not the
 	// kind's or a payload that cannot be read as much as a strategy that
-	// failed, is the Result's Reason. Its At is left for whoever sends it.
-	Execute(ctx context.Context, command Command) Result
+	// failed, is the ResourceActedOn's Reason. Its At is left for whoever
+	// sends it.
+	Execute(ctx context.Context, command ActOnResource) ResourceActedOn
 
 	// Query answers a query: the strategy's answer as JSON, or, for state,
 	// the resource's Observation, read off State. A resource the node does
@@ -294,8 +295,8 @@ func (b *nodeBinding[Spec, Status, S]) Descriptor() Descriptor {
 	return b.descriptor
 }
 
-func (b *nodeBinding[Spec, Status, S]) Execute(ctx context.Context, command Command) Result {
-	result := Result{
+func (b *nodeBinding[Spec, Status, S]) Execute(ctx context.Context, command ActOnResource) ResourceActedOn {
+	result := ResourceActedOn{
 		ID:      command.ID,
 		Kind:    command.Kind,
 		UUID:    command.UUID,
@@ -304,7 +305,7 @@ func (b *nodeBinding[Spec, Status, S]) Execute(ctx context.Context, command Comm
 		Attempt: command.Attempt,
 	}
 
-	failed := func(err error) Result {
+	failed := func(err error) ResourceActedOn {
 		result.OK = false
 		result.Refused = errors.Is(err, ErrRefused)
 		result.Reason = err.Error()

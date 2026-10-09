@@ -22,14 +22,14 @@ import (
 //     than kinds, and is what the responder's traces say a request is about;
 //   - its payload is the action's own payload and the resource as the control
 //     plane recorded it, so a node answers without a database, as it carries
-//     out a Command.
+//     out an ActOnResource.
 //
 // The reply is a noderequest.Reply as it always was.
 //
 // A command for an instance nobody keeps a record of, one of a kind's extras
 // such as a container made from its VM's terminal, travels the same way, and
-// its reply is its Result: with no record for a Result to be taken onto,
-// whoever asked can only hear what came of it in the answer.
+// its reply is its ResourceActedOn: with no record for a ResourceActedOn to
+// be taken onto, whoever asked can only hear what came of it in the answer.
 type Query struct {
 	Kind   string
 	UUID   string

@@ -30,7 +30,7 @@ func TestCommand(t *testing.T) {
 	raw, err := Encode(aBox())
 	require.NoError(t, err)
 
-	command := Command{
+	command := ActOnResource{
 		ID:       "command-uuid",
 		Kind:     "box",
 		UUID:     "box-uuid",
@@ -64,8 +64,8 @@ func TestCommand(t *testing.T) {
 			assert.Contains(t, named, name)
 		}
 
-		assert.NotContains(t, fields(t, Command{Kind: "box"}), "payload", "a command asked with nothing carries nothing")
-		assert.NotContains(t, fields(t, Command{Kind: "box"}), "attempt", "the first attempt says nothing")
+		assert.NotContains(t, fields(t, ActOnResource{Kind: "box"}), "payload", "a command asked with nothing carries nothing")
+		assert.NotContains(t, fields(t, ActOnResource{Kind: "box"}), "attempt", "the first attempt says nothing")
 	})
 }
 
@@ -75,7 +75,7 @@ func TestResult(t *testing.T) {
 	t.Run("it travels under the names the rest of the workload uses", func(t *testing.T) {
 		t.Parallel()
 
-		named := fields(t, Result{
+		named := fields(t, ResourceActedOn{
 			ID:      "command-uuid",
 			Kind:    "box",
 			UUID:    "box-uuid",
@@ -97,7 +97,7 @@ func TestResult(t *testing.T) {
 	t.Run("a success says only that", func(t *testing.T) {
 		t.Parallel()
 
-		named := fields(t, Result{ID: "command-uuid", OK: true})
+		named := fields(t, ResourceActedOn{ID: "command-uuid", OK: true})
 
 		for _, name := range []string{"status", "reason", "output", "at", "attempt"} {
 			assert.NotContains(t, named, name)

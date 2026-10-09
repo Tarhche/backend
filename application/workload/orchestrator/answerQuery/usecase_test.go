@@ -212,8 +212,8 @@ func (l *locks) Lock(_ context.Context, uuid string) (func(), error) {
 
 // TestUseCase_Handle_command holds a command asked as a request, which is
 // how something nobody keeps a record of is asked for one, to being carried
-// out under its resource's lock and answered with its Result, whatever came
-// of it.
+// out under its resource's lock and answered with its ResourceActedOn,
+// whatever came of it.
 func TestUseCase_Handle_command(t *testing.T) {
 	t.Parallel()
 
@@ -226,7 +226,7 @@ func TestUseCase_Handle_command(t *testing.T) {
 		answered := NewUseCase(running(t, strategy), WithLocks(held)).Handle(t.Context(), asking(t, "light", ""))
 		require.True(t, answered.OK, "%v", answered.Error)
 
-		var result kind.Result
+		var result kind.ResourceActedOn
 		require.NoError(t, json.Unmarshal(answered.Result, &result))
 
 		assert.True(t, result.OK)
@@ -248,7 +248,7 @@ func TestUseCase_Handle_command(t *testing.T) {
 		answered := NewUseCase(running(t, &lamps{failure: errors.New("the bulb is gone")})).Handle(t.Context(), asking(t, "delete", ""))
 		require.True(t, answered.OK, "%v", answered.Error)
 
-		var result kind.Result
+		var result kind.ResourceActedOn
 		require.NoError(t, json.Unmarshal(answered.Result, &result))
 
 		assert.False(t, result.OK)

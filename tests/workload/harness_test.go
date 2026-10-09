@@ -19,7 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/presenter"
-	kindsReconcile "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/reconcile"
+	kindsReconcileResources "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/reconcileResources"
 	controlPlaneHeartbeatNode "github.com/khanzadimahdi/testproject/application/workload/controlplane/node/heartbeatNode"
 	orchestratorHeartbeat "github.com/khanzadimahdi/testproject/application/workload/orchestrator/beatHeart"
 	"github.com/khanzadimahdi/testproject/domain"
@@ -69,7 +69,7 @@ const (
 // patience is how patient the control plane's reconcile loop is with the
 // resources of every kind: far less than when it is served, so a test does
 // not wait on its backoff.
-var patience = kindsReconcile.Config{
+var patience = kindsReconcileResources.Config{
 	Batch:           20,
 	NodeSilentAfter: 30 * time.Second,
 	Patience:        10 * time.Second,
@@ -110,12 +110,12 @@ type workload struct {
 }
 
 // option is how a test's workload differs from every other's.
-type option func(*kindsReconcile.Config)
+type option func(*kindsReconcileResources.Config)
 
 // silentAfter has the control plane give up on a node that has said nothing
 // for this long, rather than for as long as it does when served.
 func silentAfter(d time.Duration) option {
-	return func(config *kindsReconcile.Config) {
+	return func(config *kindsReconcileResources.Config) {
 		config.NodeSilentAfter = d
 	}
 }

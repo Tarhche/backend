@@ -20,6 +20,6 @@ type Response struct {
 
 	// Command is what its node was sent, for a command run on one, and
 	// Result what came of it, when it was waited for and came in time.
-	Command *kind.Command
-	Result  *kind.Result
+	Command *kind.ActOnResource
+	Result  *kind.ResourceActedOn
 }

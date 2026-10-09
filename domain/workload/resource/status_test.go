@@ -166,7 +166,7 @@ func TestRecord(t *testing.T) {
 				Status:   json.RawMessage(`{"state":"running"}`),
 			},
 			Pending: &Pending{Action: "stop", Payload: json.RawMessage(`{}`), IDs: []string{"command-1"}},
-			Answer:  &kind.Result{ID: "command-0", Status: json.RawMessage(`{}`)},
+			Answer:  &kind.ResourceActedOn{ID: "command-0", Status: json.RawMessage(`{}`)},
 		}
 
 		clone := r.Clone()

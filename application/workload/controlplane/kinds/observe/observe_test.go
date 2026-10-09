@@ -180,7 +180,7 @@ func TestObserve_answered(t *testing.T) {
 
 		r := starting()
 
-		_, err := observe.Answer(d, &r, kind.Result{ID: "command-1", Action: "start", OK: true, Status: status(t, observed(kindstest.Running, 2))}, later)
+		_, err := observe.Answer(d, &r, kind.ResourceActedOn{ID: "command-1", Action: "start", OK: true, Status: status(t, observed(kindstest.Running, 2))}, later)
 		require.NoError(t, err)
 
 		assert.Equal(t, kindstest.Running, kindstest.Typed(r).Status.State)
@@ -192,7 +192,7 @@ func TestObserve_answered(t *testing.T) {
 
 		r := starting()
 
-		_, err := observe.Answer(d, &r, kind.Result{ID: "command-1", Action: "start", Reason: "the blades are stuck"}, later)
+		_, err := observe.Answer(d, &r, kind.ResourceActedOn{ID: "command-1", Action: "start", Reason: "the blades are stuck"}, later)
 		require.NoError(t, err)
 
 		fan := kindstest.Typed(r)
@@ -208,7 +208,7 @@ func TestAnswer(t *testing.T) {
 		recorded  kind.State
 		expected  kind.State
 		pending   *resource.Pending
-		result    kind.Result
+		result    kind.ResourceActedOn
 		state     kind.State
 		reason    string
 		pendingIs bool
@@ -217,40 +217,40 @@ func TestAnswer(t *testing.T) {
 		"what a command left the resource as is taken": {
 			recorded: kindstest.Starting, expected: kindstest.Running,
 			pending: &resource.Pending{Action: "start", IDs: []string{"command-1"}},
-			result:  kind.Result{ID: "command-1", Action: "start", OK: true, Status: json.RawMessage(`{"state":"running","speed":2}`)},
+			result:  kind.ResourceActedOn{ID: "command-1", Action: "start", OK: true, Status: json.RawMessage(`{"state":"running","speed":2}`)},
 			state:   kindstest.Running,
 		},
 		"a try sent before the latest answers it as well": {
 			recorded: kindstest.Starting, expected: kindstest.Running,
 			pending: &resource.Pending{Action: "start", IDs: []string{"command-1", "command-2"}},
-			result:  kind.Result{ID: "command-1", Action: "start", OK: true, Status: json.RawMessage(`{"state":"running"}`)},
+			result:  kind.ResourceActedOn{ID: "command-1", Action: "start", OK: true, Status: json.RawMessage(`{"state":"running"}`)},
 			state:   kindstest.Running,
 		},
 		"one that says nothing leaves it waiting on its node to say where it got to": {
 			recorded: kindstest.Starting, expected: kindstest.Running,
 			pending:   &resource.Pending{Action: "create", IDs: []string{"command-1"}},
-			result:    kind.Result{ID: "command-1", Action: "create", OK: true},
+			result:    kind.ResourceActedOn{ID: "command-1", Action: "create", OK: true},
 			state:     kindstest.Starting,
 			pendingIs: true,
 		},
 		"one that deleted it leaves it gone, whatever it said": {
 			recorded: kindstest.Deleting, expected: kind.Deleted,
 			pending: &resource.Pending{Action: "delete", IDs: []string{"command-1"}},
-			result:  kind.Result{ID: "command-1", Action: "delete", OK: true},
+			result:  kind.ResourceActedOn{ID: "command-1", Action: "delete", OK: true},
 			state:   kindstest.Deleting,
 			gone:    true,
 		},
 		"one that failed for good fails it, with its reason": {
 			recorded: kindstest.Starting, expected: kindstest.Running,
 			pending: &resource.Pending{Action: "start", IDs: []string{"command-1"}},
-			result:  kind.Result{ID: "command-1", Action: "start", OK: false, Reason: "the blades are stuck"},
+			result:  kind.ResourceActedOn{ID: "command-1", Action: "start", OK: false, Reason: "the blades are stuck"},
 			state:   kind.Failed,
 			reason:  "the blades are stuck",
 		},
 		"or with what failed when it said nothing": {
 			recorded: kindstest.Stopping, expected: kindstest.Stopped,
 			pending: &resource.Pending{Action: "stop", IDs: []string{"command-1"}},
-			result:  kind.Result{ID: "command-1", Action: "stop", OK: false},
+			result:  kind.ResourceActedOn{ID: "command-1", Action: "stop", OK: false},
 			state:   kind.Failed,
 			reason:  "the stop failed",
 		},
@@ -288,7 +288,7 @@ func TestAnswer(t *testing.T) {
 		r := kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running)
 		r.Pending = &resource.Pending{Action: "dust", IDs: []string{"command-1"}}
 
-		_, err := observe.Answer(d, &r, kind.Result{ID: "command-1", Action: "dust", OK: false, Reason: "no duster", Status: json.RawMessage(`{"speed":2}`)}, later)
+		_, err := observe.Answer(d, &r, kind.ResourceActedOn{ID: "command-1", Action: "dust", OK: false, Reason: "no duster", Status: json.RawMessage(`{"speed":2}`)}, later)
 		require.NoError(t, err)
 
 		fan := kindstest.Typed(r)
@@ -306,7 +306,7 @@ func TestAnswer(t *testing.T) {
 		r := kindstest.AFan("fan-uuid", kindstest.Deleting, kind.Deleted)
 		r.Pending = &resource.Pending{Action: "delete", IDs: []string{"command-1"}}
 
-		change, err := observe.Answer(kindstest.Descriptor(), &r, kind.Result{
+		change, err := observe.Answer(kindstest.Descriptor(), &r, kind.ResourceActedOn{
 			ID:      "command-1",
 			Action:  "delete",
 			OK:      false,
@@ -335,7 +335,7 @@ func TestAnswer(t *testing.T) {
 		r := kindstest.AFan("fan-uuid", kindstest.Starting, kindstest.Running)
 		r.Pending = &resource.Pending{Action: "start", IDs: []string{"command-1"}}
 
-		_, err := observe.Answer(kindstest.Descriptor(), &r, kind.Result{ID: "command-1", Action: "start", Refused: true, Reason: "refused"}, later)
+		_, err := observe.Answer(kindstest.Descriptor(), &r, kind.ResourceActedOn{ID: "command-1", Action: "start", Refused: true, Reason: "refused"}, later)
 		require.NoError(t, err)
 
 		fan := kindstest.Typed(r)
@@ -356,7 +356,7 @@ func TestAnswer(t *testing.T) {
 			r.Pending = pending
 			before := r.Clone()
 
-			change, err := observe.Answer(kindstest.Descriptor(), &r, kind.Result{ID: "command-1", Action: "start", OK: true, Status: json.RawMessage(`{"state":"running"}`)}, later)
+			change, err := observe.Answer(kindstest.Descriptor(), &r, kind.ResourceActedOn{ID: "command-1", Action: "start", OK: true, Status: json.RawMessage(`{"state":"running"}`)}, later)
 
 			assert.ErrorIs(t, err, observe.ErrNotWaitedOn)
 			assert.Equal(t, observe.Change{}, change)
