@@ -17,10 +17,5 @@ type Request struct {
 	// workload.managed-by=code-runner.
 	Labels map[string]string
 
-	// Is narrows them to what the kind says they are, in a word of its own
-	// (kind.Narrower): docker for the VMs that are Docker VMs, as their images
-	// say, and machine for the rest. Empty does not narrow them.
-	Is string
-
 	Page uint
 }

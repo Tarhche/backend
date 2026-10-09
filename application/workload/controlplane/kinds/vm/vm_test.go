@@ -13,7 +13,6 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/observe"
 	controlPlaneVMs "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/records"
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/runs"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/vmtest"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/slugs"
 	"github.com/khanzadimahdi/testproject/domain"
@@ -734,39 +733,6 @@ func TestVMs_Extras(t *testing.T) {
 	w := vmtest.New()
 
 	assert.Same(t, w.Runs, w.VMs.Extras(), "the code runner's runs are among anybody's vms")
-}
-
-func TestVMs_Is(t *testing.T) {
-	t.Parallel()
-
-	w := vmtest.New()
-
-	assert.True(t, w.VMs.Narrows("docker"))
-	assert.True(t, w.VMs.Narrows("machine"))
-	assert.False(t, w.VMs.Narrows("firecore"))
-
-	for name, tt := range map[string]struct {
-		v    vmKind.VM
-		want vm.Kind
-	}{
-		"a machine":   {v: vmtest.Running("01", "owner"), want: vm.KindMachine},
-		"a docker vm": {v: vmtest.Docker("02", "owner"), want: vm.KindDocker},
-		"a docker vm made before the docker image moved on to a newer tag": {
-			v:    vmtest.In(vmtest.Docker("03", "owner"), func(v *vmKind.VM) { v.Spec.Image = "docker:27-dind" }),
-			want: vm.KindDocker,
-		},
-		"one of the code runner's runs, booted from the runner's image": {v: runs.Manifest(vmtest.Run("run-1")), want: vm.KindMachine},
-	} {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
-			for _, word := range []vm.Kind{vm.KindMachine, vm.KindDocker} {
-				is, err := w.VMs.Is(vmtest.Record(tt.v).Raw, string(word))
-				require.NoError(t, err)
-				assert.Equal(t, word == tt.want, is, word)
-			}
-		})
-	}
 }
 
 // TestVMs_keptAsTheyWere holds the VMs kept before their images alone said

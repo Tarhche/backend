@@ -2,7 +2,7 @@
 // every kind it runs, under the kind's plural, which the blog reaches every
 // kind's resources through.
 //
-//	GET    /api/{plural}?owner=&parent=&is=&page=    a page of manifests
+//	GET    /api/{plural}?owner=&parent=&page=        a page of manifests
 //	POST   /api/{plural}?owner=&parent=&wait=        admit one
 //	GET    /api/{plural}/{uuid}?owner=&parent=       one manifest
 //	DELETE /api/{plural}/{uuid}?owner=&parent=&wait= delete one
@@ -12,9 +12,7 @@
 //
 // A parent holds a request about one resource to what lives in it, and
 // inside it a kind may name the resource by more than its uuid: a container
-// by its Docker id or its name, in its Docker VM. A listing's is narrows it
-// to what the kind says its resources are, in a word of its own: a VM is
-// docker or a machine, as its image says.
+// by its Docker id or its name, in its Docker VM.
 //
 // They answer the way the rest of the control plane's API does: JSON, a
 // refusal as 400 with the codes it was refused for, what is not there as

@@ -43,8 +43,7 @@
 // its node's engine; and the VM to being on a node that can be asked.
 //
 // Beside its records, a listing of anybody's VMs has the code runner's runs,
-// its extras, and a listing of VMs may be narrowed to the Docker VMs or to the
-// machines, as their images say (kind.Narrower).
+// its extras.
 package vm
 
 import (
@@ -118,7 +117,6 @@ var (
 	_ kind.ControlPlane[vmKind.Spec, vmKind.Status] = &VMs{}
 	_ kind.Preparer[vmKind.Spec, vmKind.Status]     = &VMs{}
 	_ kind.Extender                                 = &VMs{}
-	_ kind.Narrower                                 = &VMs{}
 )
 
 func New(d Dependencies) *VMs {
@@ -456,23 +454,6 @@ func refusedFrom(refused string, field string) domain.ValidationErrors {
 // beside their records.
 func (s *VMs) Extras() kind.Extras {
 	return s.Dependencies.Extras
-}
-
-// Narrows reports whether word is what a VM can be: a machine or docker.
-func (s *VMs) Narrows(word string) bool {
-	return vm.Kind(word).IsValid()
-}
-
-// Is reports whether r is a VM of the kind word names, machine or docker, as
-// its image says. One of the code runner's runs is a machine, booted from the
-// runner's image.
-func (s *VMs) Is(r kind.Raw, word string) (bool, error) {
-	v, err := kind.Decode[vmKind.Spec, vmKind.Status](r)
-	if err != nil {
-		return false, err
-	}
-
-	return s.kindOf(v.Spec) == vm.Kind(word), nil
 }
 
 // kindOf is what a VM of spec is, a machine or a Docker VM, as its image

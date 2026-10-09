@@ -46,8 +46,8 @@ type Client interface {
 	// is a request to have it gone.
 	DeleteTask(ctx context.Context, uuid string) error
 
-	// VMs is a page of VMs, narrowed to one kind unless kind is empty.
-	VMs(ctx context.Context, ownerUUID string, kind vm.Kind, page uint) (Page[vm.VM], error)
+	// VMs is a page of VMs.
+	VMs(ctx context.Context, ownerUUID string, page uint) (Page[vm.VM], error)
 	VM(ctx context.Context, ownerUUID string, uuid string) (vm.VM, error)
 	CreateVM(ctx context.Context, ownerUUID string, request VMRequest) (vm.VM, error)
 	UpdateVM(ctx context.Context, ownerUUID string, uuid string, update VMUpdate) (vm.VM, error)

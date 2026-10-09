@@ -904,11 +904,11 @@ func vmTools() []tool {
 	return slices.Concat(
 		both(tool{
 			name:        "dashboard_vms_list",
-			description: "A page of the VMs the workload holds, whoever owns them, narrowed to one kind with kind. The code runner's snippets are among them while they run, as the guest's machines with managed_by code-runner.",
+			description: "A page of the VMs the workload holds, whoever owns them. The code runner's snippets are among them while they run, as the guest's machines with managed_by code-runner.",
 			route:       "GET /api/dashboard/workload/vms",
-			params:      []Parameter{page(), choice("kind", "only VMs of this kind: docker lists the ones containers and stacks can go in", "machine", "docker")},
+			params:      []Parameter{page()},
 			readOnly:    true,
-		}, "A page of this session owner's own VMs, narrowed to one kind with kind."),
+		}, "A page of this session owner's own VMs."),
 		[]tool{{
 			name:        "dashboard_vm_create",
 			description: "Create a VM for this session's owner: a machine from an OS image, or a Docker VM to run containers and stacks in, or one restored from a snapshot of theirs. Resources are whole vCPUs and bytes; the workload boots it in its own time, and its state says how that is going.",

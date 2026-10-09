@@ -27,8 +27,7 @@ import (
 //
 // What the dashboard calls a VM's kind, a machine or a Docker VM, is what its
 // image says, with the Docker image (vm.KindOf): a VM is shown as one by its
-// image, asked for as one by the image it is to boot, and listed as one by the
-// control plane, which tells them apart the same way (?is=).
+// image, and asked for as one by the image it is to boot.
 const vmsPath = "/api/" + vmKind.Plural
 
 func vmPath(uuid string) string {
@@ -70,10 +69,9 @@ type vmLogs struct {
 	Result vmKind.Logs `json:"result"`
 }
 
-// VMs is a page of VMs, narrowed to those of one kind unless which is empty:
-// the control plane says which VMs are Docker VMs, as their images say.
-func (c *Client) VMs(ctx context.Context, ownerUUID string, which vm.Kind, number uint) (workloadControlPlane.Page[vm.VM], error) {
-	query := owned(ownerUUID, url.Values{"page": {page(number)}, "is": {string(which)}})
+// VMs is a page of VMs.
+func (c *Client) VMs(ctx context.Context, ownerUUID string, number uint) (workloadControlPlane.Page[vm.VM], error) {
+	query := owned(ownerUUID, url.Values{"page": {page(number)}})
 
 	var payload vmPage
 	if err := c.call(ctx, http.MethodGet, c.path(vmsPath, query), nil, &payload); err != nil {

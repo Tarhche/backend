@@ -12,7 +12,6 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/getResources"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/kindstest"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/presenter"
-	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	resourcesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/resources"
 )
@@ -263,129 +262,6 @@ func TestUseCase_Execute_ownedExtras(t *testing.T) {
 			assert.Equal(t, tt.want, uuids)
 		})
 	}
-}
-
-// bladed is the fan's control-plane strategy with a shelf of fans beside its
-// records, which says of a fan whether it is many-bladed, more than three of
-// them: a word only it can tell of a fan.
-type bladed struct {
-	*kindstest.Shelved
-}
-
-var _ kind.Narrower = &bladed{}
-
-func (b *bladed) Narrows(word string) bool {
-	return word == "many-bladed"
-}
-
-func (b *bladed) Is(r kind.Raw, word string) (bool, error) {
-	fan, err := kind.Decode[kindstest.Spec, kindstest.Status](r)
-	if err != nil {
-		return false, err
-	}
-
-	return word == "many-bladed" && fan.Spec.Blades > 3, nil
-}
-
-// TestUseCase_Execute_narrowed holds a listing narrowed to what a kind says
-// its resources are to having those of its records and its extras the rest of
-// it lets through that the kind says are so, newest first, a page at a time.
-func TestUseCase_Execute_narrowed(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-
-	resources := resourcesMemory.NewRepository()
-
-	// 25 fans kept as records, one made a minute after another from noon on,
-	// each of four blades but every fifth, of three.
-	for i := range 25 {
-		_, err := resources.Create(ctx, kindstest.AFan(fmt.Sprintf("fan-%02d", i), kindstest.Running, kindstest.Running, func(f *kindstest.Fan) {
-			f.Metadata.CreatedAt = kindstest.Moment.Add(time.Duration(i) * time.Minute)
-
-			if i%5 != 0 {
-				f.Spec.Blades = 4
-			}
-		}))
-		require.NoError(t, err)
-	}
-
-	// and two on the shelf, the guest's: one of five blades made after the
-	// records, and one of three made among them.
-	shelf := kindstest.NewShelf(
-		kindstest.AShelvedFan("shelf-b", func(f *kindstest.Fan) {
-			f.Metadata.CreatedAt = kindstest.Moment.Add(30 * time.Minute)
-			f.Spec.Blades = 5
-		}),
-		kindstest.AShelvedFan("shelf-a", func(f *kindstest.Fan) {
-			f.Metadata.CreatedAt = kindstest.Moment.Add(90 * time.Second)
-		}),
-	)
-
-	registry := kind.NewRegistry[kind.ControlPlaneBinding]()
-	require.NoError(t, registry.Register(kind.BindControlPlane[kindstest.Spec, kindstest.Status](kindstest.Descriptor(), &bladed{Shelved: &kindstest.Shelved{Fans: &kindstest.Fans{}, Shelf: shelf}})))
-
-	useCase := getResources.NewUseCase(registry, resources)
-
-	for name, tt := range map[string]struct {
-		request    getResources.Request
-		want       []string
-		pagination presenter.Pagination
-	}{
-		"those the kind says are so, extras among them, newest first": {
-			request:    getResources.Request{Kind: kindstest.Kind, Is: "many-bladed"},
-			want:       []string{"shelf-b", "fan-24", "fan-23", "fan-22", "fan-21", "fan-19", "fan-18", "fan-17", "fan-16", "fan-14", "fan-13", "fan-12", "fan-11", "fan-09", "fan-08", "fan-07", "fan-06", "fan-04", "fan-03", "fan-02"},
-			pagination: presenter.Pagination{TotalPages: 2, CurrentPage: 1},
-		},
-		"and the page after": {
-			request:    getResources.Request{Kind: kindstest.Kind, Is: "many-bladed", Page: 2},
-			want:       []string{"fan-01"},
-			pagination: presenter.Pagination{TotalPages: 2, CurrentPage: 2},
-		},
-		"a page past the last has nothing": {
-			request:    getResources.Request{Kind: kindstest.Kind, Is: "many-bladed", Page: 3},
-			want:       []string{},
-			pagination: presenter.Pagination{TotalPages: 2, CurrentPage: 3},
-		},
-		"of somebody's own, which has none of the guest's": {
-			request:    getResources.Request{Kind: kindstest.Kind, Is: "many-bladed", OwnerUUID: kindstest.OwnerUUID},
-			want:       []string{"fan-24", "fan-23", "fan-22", "fan-21", "fan-19", "fan-18", "fan-17", "fan-16", "fan-14", "fan-13", "fan-12", "fan-11", "fan-09", "fan-08", "fan-07", "fan-06", "fan-04", "fan-03", "fan-02", "fan-01"},
-			pagination: presenter.Pagination{TotalPages: 1, CurrentPage: 1},
-		},
-	} {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
-			response, err := useCase.Execute(ctx, &tt.request)
-			require.NoError(t, err)
-			require.Empty(t, response.ValidationErrors)
-
-			uuids := make([]string, len(response.Items))
-			for i, item := range response.Items {
-				uuids[i] = item.Metadata.UUID
-			}
-
-			assert.Equal(t, tt.want, uuids)
-			assert.Equal(t, tt.pagination, response.Pagination)
-		})
-	}
-
-	t.Run("a word the kind does not say of its resources is refused", func(t *testing.T) {
-		t.Parallel()
-
-		response, err := useCase.Execute(ctx, &getResources.Request{Kind: kindstest.Kind, Is: "fast"})
-		require.NoError(t, err)
-		assert.Equal(t, domain.ValidationErrors{"is": "invalid_value"}, response.ValidationErrors)
-		assert.Empty(t, response.Items)
-	})
-
-	t.Run("and so is any, of a kind that says none", func(t *testing.T) {
-		t.Parallel()
-
-		response, err := getResources.NewUseCase(kindstest.Registry(&kindstest.Fans{}), resources).Execute(ctx, &getResources.Request{Kind: kindstest.Kind, Is: "many-bladed"})
-		require.NoError(t, err)
-		assert.Equal(t, domain.ValidationErrors{"is": "invalid_value"}, response.ValidationErrors)
-	})
 }
 
 func TestMerge(t *testing.T) {

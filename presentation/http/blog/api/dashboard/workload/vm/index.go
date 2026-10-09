@@ -21,7 +21,6 @@ func NewIndexHandler(useCase *getVMs.UseCase, owner workload.Owner) *indexHandle
 // @Tags			dashboard workload vms
 // @Produce		json
 // @Param			page	query		int		false	"Page"	default(1)
-// @Param			kind	query		string	false	"Only VMs of this kind"	Enums(machine, docker)
 // @Success		200		{object}	getVMs.Response
 // @Failure		400		{object}	workload.Refusal
 // @Failure		500		{object}	workload.Failure
@@ -30,7 +29,6 @@ func NewIndexHandler(useCase *getVMs.UseCase, owner workload.Owner) *indexHandle
 func (h *indexHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	response, err := h.useCase.Execute(r.Context(), &getVMs.Request{
 		Page:      workload.Page(r),
-		Kind:      r.URL.Query().Get("kind"),
 		OwnerUUID: h.owner(r),
 	})
 

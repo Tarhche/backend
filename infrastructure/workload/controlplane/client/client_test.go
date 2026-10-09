@@ -178,12 +178,12 @@ func TestClient_requests(t *testing.T) {
 
 		c, asked := controlPlane(t, http.StatusOK, `{"items":[],"pagination":{"total_pages":0,"current_page":2}}`)
 
-		_, err := c.VMs(ctx, "owner-uuid", vm.KindDocker, 2)
+		_, err := c.VMs(ctx, "owner-uuid", 2)
 		require.NoError(t, err)
 		assert.Equal(t, "/api/vms", asked.path)
-		assert.Equal(t, "is=docker&owner=owner-uuid&page=2", asked.query, "the control plane says which vms are docker vms, as their images do")
+		assert.Equal(t, "owner=owner-uuid&page=2", asked.query)
 
-		_, err = c.VMs(ctx, "", "", 0)
+		_, err = c.VMs(ctx, "", 0)
 		require.NoError(t, err)
 		assert.Empty(t, asked.query)
 	})

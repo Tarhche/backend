@@ -72,10 +72,6 @@ type ControlPlaneBinding interface {
 	// Resolver is what finds the kind's resources by what else names them
 	// inside their parents, when its strategy is a Resolver.
 	Resolver() (Resolver, bool)
-
-	// Narrower is what narrows the kind's listings to what it says its
-	// resources are, when its strategy is a Narrower.
-	Narrower() (Narrower, bool)
 }
 
 // NodeBinding is a kind's node strategy with its types erased: what an
@@ -283,12 +279,6 @@ func (b *controlPlaneBinding[Spec, Status]) Resolver() (Resolver, bool) {
 	resolver, resolves := b.strategy.(Resolver)
 
 	return resolver, resolves
-}
-
-func (b *controlPlaneBinding[Spec, Status]) Narrower() (Narrower, bool) {
-	narrower, narrows := b.strategy.(Narrower)
-
-	return narrower, narrows
 }
 
 type nodeBinding[Spec, Status any, S interface {

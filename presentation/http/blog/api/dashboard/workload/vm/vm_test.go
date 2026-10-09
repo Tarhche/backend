@@ -70,23 +70,16 @@ func TestTheRoutesOfBothSets(t *testing.T) {
 			answer string
 		}{
 			{
-				name:   "a page of VMs, of one kind",
+				name:   "a page of VMs",
 				method: http.MethodGet,
-				target: "/vms?page=2&kind=docker",
+				target: "/vms?page=2",
 				expect: func(client *controlplane.MockClient) {
-					client.On("VMs", mock.Anything, set.OwnerUUID, vm.KindDocker, uint(2)).Once().Return(workloadControlPlane.Page[vm.VM]{
+					client.On("VMs", mock.Anything, set.OwnerUUID, uint(2)).Once().Return(workloadControlPlane.Page[vm.VM]{
 						Items: []vm.VM{workloadtest.VM()}, TotalPages: 2, CurrentPage: 2,
 					}, nil)
 				},
 				status: http.StatusOK,
 				answer: `{"items": [` + workloadtest.VMJSON + `], "pagination": {"total_pages": 2, "current_page": 2}}`,
-			},
-			{
-				name:   "a kind that is not one",
-				method: http.MethodGet,
-				target: "/vms?kind=lxc",
-				status: http.StatusBadRequest,
-				answer: `{"errors": {"kind": "the kind must be either machine or docker"}}`,
 			},
 			{
 				name:   "one VM",

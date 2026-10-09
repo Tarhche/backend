@@ -37,8 +37,8 @@ func (m *MockClient) DeleteTask(ctx context.Context, uuid string) error {
 	return m.Called(ctx, uuid).Error(0)
 }
 
-func (m *MockClient) VMs(ctx context.Context, ownerUUID string, kind vm.Kind, page uint) (workloadControlPlane.Page[vm.VM], error) {
-	args := m.Called(ctx, ownerUUID, kind, page)
+func (m *MockClient) VMs(ctx context.Context, ownerUUID string, page uint) (workloadControlPlane.Page[vm.VM], error) {
+	args := m.Called(ctx, ownerUUID, page)
 
 	return args.Get(0).(workloadControlPlane.Page[vm.VM]), args.Error(1)
 }

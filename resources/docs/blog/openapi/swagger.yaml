@@ -4768,13 +4768,6 @@ paths:
         in: query
         name: page
         type: integer
-      - description: Only VMs of this kind
-        enum:
-        - machine
-        - docker
-        in: query
-        name: kind
-        type: string
       produces:
       - application/json
       responses:
@@ -6703,13 +6696,6 @@ paths:
         in: query
         name: page
         type: integer
-      - description: Only VMs of this kind
-        enum:
-        - machine
-        - docker
-        in: query
-        name: kind
-        type: string
       produces:
       - application/json
       responses:

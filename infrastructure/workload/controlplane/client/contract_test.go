@@ -233,7 +233,7 @@ func TestContract_VMs(t *testing.T) {
 	_, err = c.VM(ctx, "owner", "theirs")
 	assert.ErrorIs(t, err, domain.ErrNotExists)
 
-	page, err := c.VMs(ctx, "owner", "", 1)
+	page, err := c.VMs(ctx, "owner", 1)
 	require.NoError(t, err)
 	require.Len(t, page.Items, 1)
 	assert.Equal(t, uint(1), page.TotalPages)
@@ -254,13 +254,15 @@ func TestContract_VMs(t *testing.T) {
 	assert.Equal(t, vm.KindDocker, docker.Kind)
 	assert.Equal(t, vmtest.Images.Docker, docker.Image)
 
-	for which, want := range map[vm.Kind]string{vm.KindDocker: docker.UUID, vm.KindMachine: created.UUID} {
-		listed, err := c.VMs(ctx, "owner", which, 1)
-		require.NoError(t, err)
-		require.Len(t, listed.Items, 1, which)
-		assert.Equal(t, want, listed.Items[0].UUID, which)
-		assert.Equal(t, which, listed.Items[0].Kind)
+	listed, err := c.VMs(ctx, "owner", 1)
+	require.NoError(t, err)
+
+	kinds := make(map[string]vm.Kind, len(listed.Items))
+	for _, item := range listed.Items {
+		kinds[item.UUID] = item.Kind
 	}
+
+	assert.Equal(t, map[string]vm.Kind{docker.UUID: vm.KindDocker, created.UUID: vm.KindMachine}, kinds, "each is listed as what its image says")
 
 	_, err = c.CreateVM(ctx, "owner", workloadControlPlane.VMRequest{
 		Name:      "huge",
@@ -314,7 +316,7 @@ func TestContract_Runs(t *testing.T) {
 	w := blockstest.New(vmtest.WithVMs(vmtest.Running("theirs", "other")), vmtest.WithTasks(run))
 	c := controlPlane(t, w)
 
-	page, err := c.VMs(ctx, "", "", 1)
+	page, err := c.VMs(ctx, "", 1)
 	require.NoError(t, err)
 	require.Len(t, page.Items, 2)
 	assert.Equal(t, "run", page.Items[0].UUID, "the newest first")
@@ -323,11 +325,9 @@ func TestContract_Runs(t *testing.T) {
 	assert.Equal(t, vm.Running, page.Items[0].CurrentState)
 	assert.Empty(t, page.Items[1].ManagedBy)
 
-	docker, err := c.VMs(ctx, "", vm.KindDocker, 1)
-	require.NoError(t, err)
-	assert.Empty(t, docker.Items, "a run is a machine")
+	assert.Equal(t, vm.KindMachine, page.Items[0].Kind, "a run is a machine")
 
-	theirs, err := c.VMs(ctx, "other", "", 1)
+	theirs, err := c.VMs(ctx, "other", 1)
 	require.NoError(t, err)
 	require.Len(t, theirs.Items, 1, "and nobody's own")
 

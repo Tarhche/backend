@@ -117,7 +117,7 @@ func (c *Client) runningDockerVMs(ctx context.Context, ownerUUID string, vmUUID 
 		return running, nil
 	}
 
-	vms, err := every[vmKind.Spec, vmKind.Status](ctx, c, vmsPath, owned(ownerUUID, url.Values{"is": {string(vm.KindDocker)}}))
+	vms, err := every[vmKind.Spec, vmKind.Status](ctx, c, vmsPath, owned(ownerUUID, url.Values{}))
 	if err != nil {
 		return nil, err
 	}

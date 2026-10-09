@@ -3112,16 +3112,6 @@ const docTemplate = `{
                         "description": "Page",
                         "name": "page",
                         "in": "query"
-                    },
-                    {
-                        "enum": [
-                            "machine",
-                            "docker"
-                        ],
-                        "type": "string",
-                        "description": "Only VMs of this kind",
-                        "name": "kind",
-                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -5945,16 +5935,6 @@ const docTemplate = `{
                         "default": 1,
                         "description": "Page",
                         "name": "page",
-                        "in": "query"
-                    },
-                    {
-                        "enum": [
-                            "machine",
-                            "docker"
-                        ],
-                        "type": "string",
-                        "description": "Only VMs of this kind",
-                        "name": "kind",
                         "in": "query"
                     }
                 ],

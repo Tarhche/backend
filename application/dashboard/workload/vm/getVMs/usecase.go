@@ -6,7 +6,6 @@ import (
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/presenter"
 	"github.com/khanzadimahdi/testproject/domain"
 	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
-	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
 
 // UseCase lists VMs: everybody's, or one person's own.
@@ -40,7 +39,7 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		request.Page = 1
 	}
 
-	page, err := uc.workload.VMs(ctx, request.OwnerUUID, vm.Kind(request.Kind), request.Page)
+	page, err := uc.workload.VMs(ctx, request.OwnerUUID, request.Page)
 	if err != nil {
 		return nil, err
 	}

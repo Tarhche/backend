@@ -48,10 +48,12 @@ func dockerPath(vmUUID string, rest ...string) string {
 // VM's images and volumes are made and removed beside it.
 func TestContainers(t *testing.T) {
 	var vms page[vmView]
-	user.call(t, http.MethodGet, "/api/dashboard/my/workload/vms?kind=docker", nil, http.StatusOK, &vms)
+	user.call(t, http.MethodGet, "/api/dashboard/my/workload/vms", nil, http.StatusOK, &vms)
 
-	if len(vms.Items) > 0 {
-		t.Fatalf("the run's account already has a Docker VM, %s, so none would be made", vms.Items[0].UUID)
+	for _, v := range vms.Items {
+		if v.Kind == "docker" {
+			t.Fatalf("the run's account already has a Docker VM, %s, so none would be made", v.UUID)
+		}
 	}
 
 	marker := "e2e-" + random(6)
