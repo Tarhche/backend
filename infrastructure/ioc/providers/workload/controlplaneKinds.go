@@ -41,9 +41,9 @@ type ControlPlaneKindStores struct {
 }
 
 // ControlPlaneKinds is the control plane's generic plumbing for the kinds it
-// runs: the resource API, the result consumer, the observer the node
-// heartbeat consumer hands what it heard to, and the reconcile loop that
-// keeps every resource as it was asked to be.
+// runs: the resource API, the result consumer, the observer every kind's
+// heartbeat is handed to, and the reconcile loop that keeps every resource as
+// it was asked to be.
 type ControlPlaneKinds struct {
 	// Route serves the resource API, a kind's routes under its plural, and
 	// is an error for a kind whose routes are taken already.

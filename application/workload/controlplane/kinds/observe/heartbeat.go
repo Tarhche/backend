@@ -6,8 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"maps"
-	"slices"
 	"time"
 
 	"github.com/khanzadimahdi/testproject/domain"
@@ -86,8 +84,8 @@ func NewObserver(registry *kind.Registry[kind.ControlPlaneBinding], resources re
 	return o
 }
 
-// Heartbeat writes down what a node's heartbeat at a moment says, kind by
-// kind, of the resources the node holds.
+// Heartbeat writes down what a node's heartbeat of one kind at a moment says
+// of the resources of that kind the node holds.
 //
 // A kind's report lists everything of it the node holds, so a resource of it
 // that the node is said to hold and that the report leaves out is gone from
@@ -112,49 +110,51 @@ func NewObserver(registry *kind.Registry[kind.ControlPlaneBinding], resources re
 // nobody keeps a record of among it: a container a VM's terminal made is the
 // kind's to show, never the framework's to keep.
 //
-// A kind that sent no report could not look at all this beat, and nothing is
-// concluded from its silence. A kind the control plane does not run, or
+// A kind that sent no heartbeat could not look at all this beat, and nothing
+// is concluded from its silence. A kind the control plane does not run, or
 // whose state is not its nodes' to say, is not listened to.
+//
+// The heartbeats of one beat's kinds are heard in no particular order, so a
+// parent is what its own kind last said it is, which may be a beat behind.
+// What lives in it is concluded from that only to wait on it, which the next
+// look inside it undoes: what is missing is only ever its own kind's report's
+// to say.
 //
 // Nothing here fails the heartbeat: what could not be written down is
 // reported, and the next beat says it all again.
-func (o *Observer) Heartbeat(ctx context.Context, nodeName string, at time.Time, reports map[string]kind.Report[json.RawMessage]) {
-	for _, kindName := range slices.Sorted(maps.Keys(reports)) {
-		binding, registered := o.registry.Lookup(kindName)
-		if !registered {
-			o.logger.DebugContext(ctx, "a node reported a kind the control plane does not run", "node", nodeName, "kind", kindName)
+func (o *Observer) Heartbeat(ctx context.Context, nodeName string, kindName string, at time.Time, report kind.Report[json.RawMessage]) {
+	binding, registered := o.registry.Lookup(kindName)
+	if !registered {
+		o.logger.DebugContext(ctx, "a node reported a kind the control plane does not run", "node", nodeName, "kind", kindName)
 
-			continue
+		return
+	}
+
+	d := binding.Descriptor()
+	if d.StateBy != kind.OnNode {
+		return
+	}
+
+	held, _, err := o.resources.GetAll(ctx, d.Name, resource.Filter{Node: nodeName}, 0, 0)
+	if err != nil {
+		o.logger.ErrorContext(ctx, "could not read what a node holds", "error", err, "node", nodeName, "kind", d.Name)
+
+		return
+	}
+
+	for i := range held {
+		if err := o.observe(ctx, d, nodeName, held[i], report, at); err != nil {
+			o.logger.WarnContext(ctx, "could not write down what a node said of a resource", "error", err, "node", nodeName, "kind", d.Name, "uuid", held[i].Metadata.UUID)
 		}
+	}
 
-		d := binding.Descriptor()
-		if d.StateBy != kind.OnNode {
-			continue
-		}
+	if err := o.orphaned(ctx, d, nodeName, held, report); err != nil {
+		o.logger.WarnContext(ctx, "could not tell what a node holds that nobody keeps a record of", "error", err, "node", nodeName, "kind", d.Name)
+	}
 
-		held, _, err := o.resources.GetAll(ctx, d.Name, resource.Filter{Node: nodeName}, 0, 0)
-		if err != nil {
-			o.logger.ErrorContext(ctx, "could not read what a node holds", "error", err, "node", nodeName, "kind", d.Name)
-
-			continue
-		}
-
-		report := reports[kindName]
-
-		for i := range held {
-			if err := o.observe(ctx, d, nodeName, held[i], report, at); err != nil {
-				o.logger.WarnContext(ctx, "could not write down what a node said of a resource", "error", err, "node", nodeName, "kind", d.Name, "uuid", held[i].Metadata.UUID)
-			}
-		}
-
-		if err := o.orphaned(ctx, d, nodeName, held, report); err != nil {
-			o.logger.WarnContext(ctx, "could not tell what a node holds that nobody keeps a record of", "error", err, "node", nodeName, "kind", d.Name)
-		}
-
-		if witness, witnesses := binding.Witness(); witnesses {
-			if err := witness.Witnessed(ctx, nodeName, report, at); err != nil {
-				o.logger.WarnContext(ctx, "a kind could not take in what a node reported of it", "error", err, "node", nodeName, "kind", d.Name)
-			}
+	if witness, witnesses := binding.Witness(); witnesses {
+		if err := witness.Witnessed(ctx, nodeName, report, at); err != nil {
+			o.logger.WarnContext(ctx, "a kind could not take in what a node reported of it", "error", err, "node", nodeName, "kind", d.Name)
 		}
 	}
 }

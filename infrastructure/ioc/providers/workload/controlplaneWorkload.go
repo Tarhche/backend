@@ -12,9 +12,9 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/blocks"
 	controlPlaneContainers "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/container"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/heartbeatResources"
 	controlPlaneImages "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/image"
 	controlPlaneNetworks "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/network"
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/observe"
 	kindsReconcileResources "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/reconcileResources"
 	controlPlaneSnapshots "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/snapshot"
 	controlPlaneStacks "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/stack"
@@ -69,12 +69,12 @@ type ControlPlaneWorkload struct {
 	// error for a kind whose routes are taken already.
 	Route func(mux *http.ServeMux) error
 
-	// Subscribers hear the results of every kind's commands.
+	// Subscribers hear the results of every kind's commands, and what the
+	// nodes hold of every kind whose state is theirs to say, each kind in a
+	// heartbeat on its own subject.
 	Subscribers map[string]domain.MessageHandler
 
-	// Observer is what the node heartbeat consumer hands what it heard to,
-	// and Reconcile the loop that keeps every resource as it was asked to be.
-	Observer  *observe.Observer
+	// Reconcile is the loop that keeps every resource as it was asked to be.
 	Reconcile *kindsReconcileResources.UseCase
 }
 
@@ -196,11 +196,22 @@ func NewControlPlaneWorkload(
 		return kinds.Route(mux)
 	}
 
+	// what the nodes hold of every kind whose state is theirs to say, heard in
+	// the kind's own heartbeat; a kind whose state is the control plane's has
+	// none.
+	subscribers := maps.Clone(kinds.Subscribers)
+	heartbeats := heartbeatResources.NewHeartbeatHandler(kinds.Observer, logger)
+
+	for _, d := range registry.Descriptors() {
+		if d.StateBy == kind.OnNode {
+			subscribers[kind.HeartbeatName(d.Name)] = heartbeats
+		}
+	}
+
 	return &ControlPlaneWorkload{
 		Registry:    registry,
 		Route:       route,
-		Subscribers: maps.Clone(kinds.Subscribers),
-		Observer:    kinds.Observer,
+		Subscribers: subscribers,
 		Reconcile:   kinds.Reconcile,
 	}, nil
 }

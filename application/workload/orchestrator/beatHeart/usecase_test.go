@@ -65,17 +65,18 @@ func beating(t *testing.T, kinds *kind.Registry[kind.NodeBinding], stateTimeout 
 	return n
 }
 
-// beat beats once, and is the heartbeat it sent and that heartbeat's fields
-// as they were written.
-func (n *aNode) beat(t *testing.T) (events.Heartbeat, map[string]json.RawMessage) {
+// beat beats once, and is the node's own heartbeat it sent, that heartbeat's
+// fields as they were written, and the heartbeat it sent of each kind, by
+// kind.
+func (n *aNode) beat(t *testing.T) (events.Heartbeat, map[string]json.RawMessage, map[string]kind.Heartbeat) {
 	t.Helper()
 
 	n.recorder.Reset()
 	require.NoError(t, n.heartbeat.Execute(t.Context()))
 
 	messages := n.recorder.Messages()
-	require.Len(t, messages, 1)
-	require.Equal(t, events.HeartbeatName, messages[0].Subject)
+	require.NotEmpty(t, messages)
+	require.Equal(t, events.HeartbeatName, messages[0].Subject, "the node's own goes first")
 
 	var heartbeat events.Heartbeat
 	require.NoError(t, json.Unmarshal(messages[0].Payload, &heartbeat))
@@ -83,7 +84,35 @@ func (n *aNode) beat(t *testing.T) (events.Heartbeat, map[string]json.RawMessage
 	var fields map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(messages[0].Payload, &fields))
 
-	return heartbeat, fields
+	kinds := make(map[string]kind.Heartbeat)
+
+	for _, message := range messages[1:] {
+		var held kind.Heartbeat
+		require.NoError(t, json.Unmarshal(message.Payload, &held))
+
+		require.Equal(t, kind.HeartbeatName(held.Kind), message.Subject, "each kind's on a subject of its own")
+		require.NotContains(t, kinds, held.Kind, "once a beat")
+
+		kinds[held.Kind] = held
+	}
+
+	return heartbeat, fields, kinds
+}
+
+// refusing is NATS refusing what is said on one subject, and taking the
+// rest.
+type refusing struct {
+	*messaging.Recorder
+
+	subject string
+}
+
+func (r refusing) Produce(ctx context.Context, subject string, payload []byte) error {
+	if subject == r.subject {
+		return errors.New("nats refused it")
+	}
+
+	return r.Recorder.Produce(ctx, subject, payload)
 }
 
 func TestUseCase_Execute(t *testing.T) {
@@ -105,7 +134,7 @@ func TestUseCase_Execute(t *testing.T) {
 			t.Run(name, func(t *testing.T) {
 				t.Parallel()
 
-				heartbeat, fields := beating(t, kinds, time.Second).beat(t)
+				heartbeat, fields, held := beating(t, kinds, time.Second).beat(t)
 
 				assert.Equal(t, "node-1", heartbeat.Name)
 				assert.Equal(t, node.OrchestratorRole, heartbeat.Role)
@@ -114,6 +143,7 @@ func TestUseCase_Execute(t *testing.T) {
 				assert.WithinDuration(t, time.Now(), heartbeat.At, time.Minute)
 
 				assert.ElementsMatch(t, []string{"Name", "Role", "Stats", "Capacity", "At"}, keys(fields))
+				assert.Empty(t, held, "and nothing of any kind")
 			})
 		}
 	})
@@ -123,7 +153,7 @@ func TestUseCase_Execute(t *testing.T) {
 		want   map[string]string
 		logs   []string
 	}{
-		"every kind's report is in the beat, by kind, with the parents it could not look inside": {
+		"every kind's report is in a heartbeat of its own, with the parents it could not look inside": {
 			states: map[string]func(context.Context) (kind.Report[lampStatus], error){
 				"lamp":   holding(kind.Report[lampStatus]{Instances: []kind.Observed[lampStatus]{lamp}, Unseen: []string{"room-2"}}),
 				"kettle": holding(kind.Report[lampStatus]{}),
@@ -133,7 +163,7 @@ func TestUseCase_Execute(t *testing.T) {
 				"kettle": `{"instances":[]}`,
 			},
 		},
-		"a kind that could not look is left out, and never reported holding nothing": {
+		"a kind that could not look sends nothing, and is never reported holding nothing": {
 			states: map[string]func(context.Context) (kind.Report[lampStatus], error){
 				"lamp": func(context.Context) (kind.Report[lampStatus], error) {
 					return kind.Report[lampStatus]{}, errors.New("the fuse box is locked")
@@ -143,7 +173,7 @@ func TestUseCase_Execute(t *testing.T) {
 			want: map[string]string{"kettle": `{"instances":[]}`},
 			logs: []string{"kind=lamp", "the fuse box is locked"},
 		},
-		"a kind that takes too long is left out, and holds up neither the beat nor the others": {
+		"a kind that takes too long sends nothing, and holds up neither the beat nor the others": {
 			states: map[string]func(context.Context) (kind.Report[lampStatus], error){
 				"lamp": func(ctx context.Context) (kind.Report[lampStatus], error) {
 					<-ctx.Done()
@@ -155,7 +185,7 @@ func TestUseCase_Execute(t *testing.T) {
 			want: map[string]string{"kettle": `{"instances":[{"kind":"kettle","uuid":"lamp-1","owners":[{"kind":"room","uuid":"room-1"}],"status":{"state":"lit","brightness":80}}]}`},
 			logs: []string{"kind=lamp"},
 		},
-		"and when no kind could say anything, the beat goes out all the same": {
+		"and when no kind could say anything, the node's beat goes out all the same": {
 			states: map[string]func(context.Context) (kind.Report[lampStatus], error){
 				"lamp": func(context.Context) (kind.Report[lampStatus], error) {
 					return kind.Report[lampStatus]{}, errors.New("the fuse box is locked")
@@ -170,26 +200,22 @@ func TestUseCase_Execute(t *testing.T) {
 			n := beating(t, registered(t, tt.states), 100*time.Millisecond)
 
 			started := time.Now()
-			heartbeat, fields := n.beat(t)
+			heartbeat, _, held := n.beat(t)
 
 			assert.Less(t, time.Since(started), 5*time.Second, "the beat waits for nobody longer than it gives them")
 			assert.Equal(t, node.Stats{PIDs: 7}, heartbeat.Stats, "what the node offers is said whatever the kinds said")
 
-			observed := make(map[string]string, len(heartbeat.Observations))
-			for name, report := range heartbeat.Observations {
-				encoded, err := json.Marshal(report)
+			require.Len(t, held, len(tt.want))
+			for name, report := range tt.want {
+				require.Contains(t, held, name)
+
+				assert.Equal(t, "node-1", held[name].Node)
+				assert.True(t, heartbeat.At.Equal(held[name].At), "stamped as its node's beat is")
+
+				encoded, err := json.Marshal(held[name].Report)
 				require.NoError(t, err)
 
-				observed[name] = string(encoded)
-			}
-
-			require.Len(t, observed, len(tt.want))
-			for name, report := range tt.want {
-				assert.JSONEq(t, report, observed[name], name)
-			}
-
-			if len(tt.want) == 0 {
-				assert.NotContains(t, fields, "observations", "a beat with nothing observed says nothing of it")
+				assert.JSONEq(t, report, string(encoded), name)
 			}
 
 			for _, said := range tt.logs {
@@ -212,9 +238,9 @@ func TestUseCase_Execute(t *testing.T) {
 			},
 		})))
 
-		heartbeat, _ := beating(t, kinds, time.Second).beat(t)
+		_, _, held := beating(t, kinds, time.Second).beat(t)
 
-		assert.Empty(t, heartbeat.Observations)
+		assert.Empty(t, held)
 		assert.Zero(t, asked.Load())
 	})
 
@@ -250,9 +276,9 @@ func TestUseCase_Execute(t *testing.T) {
 			states[fmt.Sprintf("lamp%d", i)] = together
 		}
 
-		heartbeat, _ := beating(t, registered(t, states), 10*time.Second).beat(t)
+		_, _, held := beating(t, registered(t, states), 10*time.Second).beat(t)
 
-		assert.Len(t, heartbeat.Observations, many)
+		assert.Len(t, held, many)
 	})
 
 	t.Run("a kind that does not let go is asked once, not once a beat", func(t *testing.T) {
@@ -272,11 +298,11 @@ func TestUseCase_Execute(t *testing.T) {
 
 		n := beating(t, registered(t, map[string]func(context.Context) (kind.Report[lampStatus], error){"lamp": stuck}), 20*time.Millisecond)
 
-		heartbeat, _ := n.beat(t)
-		assert.Empty(t, heartbeat.Observations, "it did not answer in time")
+		_, _, held := n.beat(t)
+		assert.Empty(t, held, "it did not answer in time")
 
-		heartbeat, _ = n.beat(t)
-		assert.Empty(t, heartbeat.Observations, "it is still answering the last beat")
+		_, _, held = n.beat(t)
+		assert.Empty(t, held, "it is still answering the last beat")
 		assert.Equal(t, int32(1), asked.Load(), "and is not asked again meanwhile")
 		assert.Contains(t, n.logs.String(), "still saying what it holds")
 
@@ -289,9 +315,9 @@ func TestUseCase_Execute(t *testing.T) {
 				return false
 			}
 
-			var heartbeat events.Heartbeat
+			var heartbeat kind.Heartbeat
 
-			return n.recorder.Last(events.HeartbeatName, &heartbeat) && len(heartbeat.Observations) == 1
+			return n.recorder.Last(kind.HeartbeatName("lamp"), &heartbeat) && heartbeat.Kind == "lamp"
 		}, 5*time.Second, 10*time.Millisecond, "once it lets go it is asked, and heard, again")
 	})
 
@@ -309,9 +335,10 @@ func TestUseCase_Execute(t *testing.T) {
 			},
 		}), time.Second)
 
-		heartbeat, _ := n.beat(t)
+		heartbeat, _, held := n.beat(t)
 
-		require.Len(t, heartbeat.Observations, 1)
+		require.Contains(t, held, "lamp")
+		assert.True(t, held["lamp"].At.Equal(heartbeat.At), "every heartbeat of a beat is stamped alike")
 		assert.False(t, heartbeat.At.After(askedAt.Load().(time.Time)), "what it reports was observed no earlier than its stamp")
 	})
 
@@ -337,12 +364,33 @@ func TestUseCase_Execute(t *testing.T) {
 
 		assert.ErrorContains(t, n.heartbeat.Execute(t.Context()), "nats is away")
 	})
+
+	for name, refused := range map[string]string{
+		"a node's own heartbeat that cannot be sent keeps no kind's from being": events.HeartbeatName,
+		"nor does a kind's keep the node's, or another kind's":                  kind.HeartbeatName("kettle"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			n := beating(t, registered(t, map[string]func(context.Context) (kind.Report[lampStatus], error){
+				"lamp":   holding(kind.Report[lampStatus]{}),
+				"kettle": holding(kind.Report[lampStatus]{}),
+			}), time.Second)
+			n.heartbeat.producer = refusing{Recorder: n.recorder, subject: refused}
+
+			assert.ErrorContains(t, n.heartbeat.Execute(t.Context()), "nats refused it", "and the beat says so")
+
+			sent := n.recorder.Subjects()
+			assert.NotContains(t, sent, refused)
+			assert.Len(t, sent, 2, "the others are sent all the same")
+		})
+	}
 }
 
 // TestUseCase_Hurry holds a node to telling at once what a kind somebody
 // watches as it changes holds, a code-runner snippet that ended say, rather
-// than at its next beat: in a beat of its own, which carries that kind alone
-// and what the node offered at its last beat, and only when it changed.
+// than at its next beat: in a heartbeat of the kind's own, and only when it
+// changed.
 func TestUseCase_Hurry(t *testing.T) {
 	t.Parallel()
 
@@ -379,7 +427,7 @@ func TestUseCase_Hurry(t *testing.T) {
 	assert.Equal(t, 300*time.Millisecond, n.heartbeat.Prompt(), "it is hurried as often as its promptest kind asks")
 
 	require.NoError(t, n.heartbeat.Hurry(t.Context()))
-	assert.Empty(t, n.recorder.Messages(), "nothing is told before the node's first beat says what it offers")
+	assert.Equal(t, []string{kind.HeartbeatName("lamp")}, n.recorder.Subjects(), "what it holds is told as soon as it is asked, before the node's first beat too: it says nothing of the node")
 
 	n.beat(t)
 	n.recorder.Reset()
@@ -397,19 +445,17 @@ func TestUseCase_Hurry(t *testing.T) {
 	require.NoError(t, n.heartbeat.Hurry(t.Context()))
 
 	messages := n.recorder.Messages()
-	require.Len(t, messages, 1, "what changed is told at once")
-	require.Equal(t, events.HeartbeatName, messages[0].Subject)
+	require.Len(t, messages, 1, "what changed is told at once, and nothing of the node or of the kinds that were not asked")
+	require.Equal(t, kind.HeartbeatName("lamp"), messages[0].Subject, "in a heartbeat of its kind's own")
 
-	var heartbeat events.Heartbeat
+	var heartbeat kind.Heartbeat
 	require.NoError(t, json.Unmarshal(messages[0].Payload, &heartbeat))
 
-	assert.Equal(t, "node-1", heartbeat.Name)
-	assert.Equal(t, node.Stats{PIDs: 7}, heartbeat.Stats, "with what the node offered at its last beat")
-	assert.Equal(t, uint(8), heartbeat.Capacity.CPUs)
+	assert.Equal(t, "node-1", heartbeat.Node)
+	assert.Equal(t, "lamp", heartbeat.Kind)
 	assert.WithinDuration(t, time.Now(), heartbeat.At, time.Minute)
-	require.Len(t, heartbeat.Observations, 1, "and nothing of the kinds that were not asked")
 
-	report, err := json.Marshal(heartbeat.Observations["lamp"])
+	report, err := json.Marshal(heartbeat.Report)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"instances":[{"kind":"lamp","uuid":"lamp-1","status":{"state":"unlit"}}]}`, string(report))
 

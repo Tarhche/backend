@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/node"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
@@ -27,7 +26,7 @@ func TestHeartbeat(t *testing.T) {
 		assert.Equal(t, Heartbeat{Name: "workload-orchestrator-01", Role: node.OrchestratorRole, Stats: node.Stats{PIDs: 7}, At: at}, heartbeat)
 	})
 
-	t.Run("and one from a node that runs no kinds is sent as it always was", func(t *testing.T) {
+	t.Run("and one is sent as it always was, saying nothing of what the node holds", func(t *testing.T) {
 		t.Parallel()
 
 		payload, err := json.Marshal(Heartbeat{Name: "workload-orchestrator-01", Role: node.OrchestratorRole, At: at})
@@ -58,38 +57,13 @@ func TestHeartbeat(t *testing.T) {
 		assert.Equal(t, sent, arrived)
 	})
 
-	t.Run("what every kind observed arrives as it left, by kind", func(t *testing.T) {
+	t.Run("one from a node that still says what its kinds hold in it is read for what it says of the node", func(t *testing.T) {
 		t.Parallel()
 
-		sent := Heartbeat{
-			Name: "workload-orchestrator-01",
-			Role: node.OrchestratorRole,
-			At:   at,
-			Observations: map[string]kind.Report[json.RawMessage]{
-				"stack": {
-					Instances: []kind.Observation{{
-						Kind:   "stack",
-						UUID:   "stack-uuid",
-						Owners: []kind.Reference{{Kind: "vm", UUID: "vm-uuid"}},
-						Status: json.RawMessage(`{"state":"degraded","reason":"1 of 2 services is not running"}`),
-					}},
-					Unseen: []string{"another-vm-uuid"},
-				},
-				"vm": {Instances: []kind.Observation{}},
-			},
-		}
+		var heartbeat Heartbeat
+		require.NoError(t, json.Unmarshal([]byte(`{"Name":"workload-orchestrator-01","Role":"orchestrator","At":"2026-10-06T12:00:00Z","observations":{"vm":{"instances":[]}}}`), &heartbeat))
 
-		payload, err := json.Marshal(sent)
-		require.NoError(t, err)
-
-		var arrived Heartbeat
-		require.NoError(t, json.Unmarshal(payload, &arrived))
-
-		assert.Equal(t, sent, arrived)
-
-		var fields map[string]json.RawMessage
-		require.NoError(t, json.Unmarshal(payload, &fields))
-		assert.Contains(t, fields, "observations")
+		assert.Equal(t, Heartbeat{Name: "workload-orchestrator-01", Role: node.OrchestratorRole, At: at}, heartbeat)
 	})
 }
 

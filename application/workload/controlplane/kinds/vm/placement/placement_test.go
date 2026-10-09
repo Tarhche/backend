@@ -34,15 +34,22 @@ func spoke(name string, ago time.Duration, cpus uint, memory uint64, disk uint64
 	}
 }
 
-// on is a VM given resources on a node, last observed at observed: zero for
-// one its node has not reported yet.
+// on is a VM given resources on a node, in state since it was last observed
+// at observed: zero for one its node has not reported yet.
 func on(uuid string, nodeName string, resources vmKind.Resources, observed time.Time, state kind.State) vmKind.VM {
 	return vmKind.VM{
 		Kind:     vmKind.Name,
 		Metadata: kind.Metadata{UUID: uuid, Slug: "vm-" + uuid, OwnerUUID: "owner", Node: nodeName},
 		Spec:     vmKind.Spec{Flavor: vmKind.FlavorMachine, Resources: resources},
-		Status:   vmKind.Status{Status: kind.Status{State: state, Expected: vmKind.Running, ObservedAt: observed}},
+		Status:   vmKind.Status{Status: kind.Status{State: state, Expected: vmKind.Running, Since: observed, ObservedAt: observed}},
 	}
+}
+
+// since is v in its state since a moment before it was last observed.
+func since(v vmKind.VM, at time.Time) vmKind.VM {
+	v.Status.Since = at
+
+	return v
 }
 
 func placementOf(t *testing.T, nodes []node.Node, vms ...vmKind.VM) *Placement {
@@ -134,6 +141,26 @@ func TestPlacement_Pick(t *testing.T) {
 				on("reported", "a", vmKind.Resources{CPUs: 1, Memory: 20 * gib, Disk: 10 * gib}, now.Add(-time.Second).Add(999*time.Microsecond), vmKind.Running),
 			},
 			want: "a",
+		},
+		"nor is one that has run since before its node spoke, heard of again before its node is": {
+			nodes: []node.Node{
+				spoke("a", time.Second, 16, 64, 1000, vm.Resources{Memory: 20 * gib}),
+				spoke("b", time.Second, 16, 64, 1000, vm.Resources{Memory: 30 * gib}),
+			},
+			vms: []vmKind.VM{
+				since(on("heard-first", "a", vmKind.Resources{CPUs: 1, Memory: 20 * gib, Disk: 10 * gib}, now, vmKind.Running), now.Add(-time.Hour)),
+			},
+			want: "a",
+		},
+		"while one at rest otherwise is counted as given once observed since, as a stopped one is once its node says what it gave it": {
+			nodes: []node.Node{
+				spoke("a", time.Second, 16, 64, 1000, vm.Resources{Memory: 20 * gib}),
+				spoke("b", time.Second, 16, 64, 1000, vm.Resources{Memory: 30 * gib}),
+			},
+			vms: []vmKind.VM{
+				since(on("reconfigured", "a", vmKind.Resources{CPUs: 1, Memory: 20 * gib, Disk: 10 * gib}, now, vmKind.Stopped), now.Add(-time.Hour)),
+			},
+			want: "b",
 		},
 		"nor is one that failed or is on its way out": {
 			nodes: []node.Node{

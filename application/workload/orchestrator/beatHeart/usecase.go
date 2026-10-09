@@ -1,12 +1,16 @@
-// Package beatHeart says, every beat, what this node offers and what every
-// kind it runs holds on it.
+// Package beatHeart says, every beat, what this node offers, and what every
+// kind it runs holds on it, each kind in a heartbeat of its own.
 package beatHeart
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log/slog"
+	"maps"
+	"slices"
 	"sync"
 	"time"
 
@@ -14,34 +18,38 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/node"
 	"github.com/khanzadimahdi/testproject/domain/workload/node/events"
-	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
 
 // UseCase is this node's heartbeat.
 //
 // What the node offers, its stats and its capacity for VMs, is what the
-// control plane places work by. What it holds is every kind's state action, asked of all of them at once, each for
-// at most the state timeout, so a kind slow to answer holds up neither the
-// beat nor the other kinds.
+// control plane places work by, and is said in the node's own heartbeat
+// (events.Heartbeat), which says it is alive: first, before any kind is asked
+// anything, so that no kind holds it up. What it holds is every kind's state
+// action, asked of all of them at once, each for at most the state timeout,
+// and each kind that answers says it in a heartbeat of its own
+// (kind.Heartbeat), on the kind's own subject: a service hears only the kinds
+// it needs, and a kind slow to answer holds up neither the node's beat nor
+// the other kinds.
 //
 // A kind that fails, that takes longer than that, or that is still answering
-// an earlier beat, is left out of this one, and the log says why: a kind that
-// is not in a heartbeat said nothing this beat, and nothing is concluded from
-// its silence, while one that is there with nothing in it holds nothing. So a
-// kind that could not look is never reported as one whose resources are all
-// gone. A kind whose state is known in the control plane, as a snapshot's is,
-// holds nothing on a node to report, and is not asked.
+// an earlier beat, sends nothing this beat, and the log says why: a kind that
+// says nothing could not look, and nothing is concluded from its silence,
+// while one that reports nothing holds nothing. So a kind that could not look
+// is never reported as one whose resources are all gone. A kind whose state is
+// known in the control plane, as a snapshot's is, holds nothing on a node to
+// report, and is not asked. A heartbeat that cannot be sent keeps none of the
+// others from being.
 //
-// A beat is stamped with when the kinds were asked, so whatever it reports
-// was observed no earlier than its stamp: a command's result stamped after it
-// is newer than anything in it.
+// A beat is stamped with when the kinds were asked, every heartbeat of it,
+// the node's and each kind's, alike, so whatever it reports was observed no
+// earlier than its stamp: a command's result stamped after it is newer than
+// anything in it.
 //
 // A kind some of whose changes somebody waits on as they happen (kind.Prompt),
 // a code-runner snippet ending, is asked between beats too (Hurry), and what
-// it holds is reported at once, in a beat of its own, when that changed since
-// it was last reported. Such a beat carries that kind alone, beside what the
-// node offered at the last beat: the kinds it leaves out said nothing, as at
-// any beat, and nothing is concluded about them.
+// it holds is reported at once, in a heartbeat of its own, when that changed
+// since it was last reported.
 type UseCase struct {
 	producer    domain.Producer
 	nodeManager node.Manager
@@ -57,18 +65,9 @@ type UseCase struct {
 	lock   sync.Mutex
 	asking map[string]bool
 
-	// reported is what each kind last said it holds, as it was reported, and
-	// offered what the node offered at its last beat, which a beat between
-	// beats says again: what a prompt kind is held to, and what its beats are
-	// sent with.
+	// reported is what each kind last said it holds, as it was reported:
+	// what a prompt kind is held to.
 	reported map[string][]byte
-	offered  *offer
-}
-
-// offer is what a node offers, as a beat says it.
-type offer struct {
-	stats    node.Stats
-	capacity vm.Info
 }
 
 // NewUseCase is the heartbeat of nodeName, reporting what kinds hold, each
@@ -106,24 +105,15 @@ func (h *UseCase) Execute(ctx context.Context) error {
 
 	at := time.Now()
 
-	heartbeat := events.Heartbeat{
-		Name:         h.nodeName,
-		Role:         node.OrchestratorRole,
-		Stats:        nodeStats,
-		Capacity:     capacity,
-		At:           at,
-		Observations: h.observe(kind.WithBeat(ctx, at)),
-	}
+	beaten := h.send(ctx, events.HeartbeatName, events.Heartbeat{
+		Name:     h.nodeName,
+		Role:     node.OrchestratorRole,
+		Stats:    nodeStats,
+		Capacity: capacity,
+		At:       at,
+	})
 
-	if err := h.beat(ctx, heartbeat); err != nil {
-		return err
-	}
-
-	h.lock.Lock()
-	h.offered = &offer{stats: nodeStats, capacity: capacity}
-	h.lock.Unlock()
-
-	return nil
+	return errors.Join(beaten, h.report(ctx, at, h.observe(kind.WithBeat(ctx, at))))
 }
 
 // Prompt is how often Hurry is to be asked: as often as the promptest kind
@@ -141,23 +131,14 @@ func (h *UseCase) Prompt() time.Duration {
 }
 
 // Hurry asks every prompt kind this node runs what it holds, and reports at
-// once, in a beat of its own, those that hold something other than they last
-// reported: a snippet that ended, or came up and serves its ports, is told of
-// as it happens rather than at the next beat. A kind still answering an
-// earlier ask is left for the next, and nothing is reported before the node's
-// first beat has said what it offers.
+// once, each in a heartbeat of its own, those that hold something other than
+// they last reported: a snippet that ended, or came up and serves its ports,
+// is told of as it happens rather than at the next beat. A kind still
+// answering an earlier ask is left for the next.
 func (h *UseCase) Hurry(ctx context.Context) error {
-	h.lock.Lock()
-	offered := h.offered
-	h.lock.Unlock()
-
-	if offered == nil {
-		return nil
-	}
-
 	at := time.Now()
 
-	observations := make(map[string]kind.Report[json.RawMessage])
+	changed := make(map[string]kind.Report[json.RawMessage])
 
 	for _, binding := range h.kinds.All() {
 		name := binding.Descriptor().Name
@@ -178,46 +159,46 @@ func (h *UseCase) Hurry(ctx context.Context) error {
 		}
 
 		if h.changed(name, report) {
-			observations[name] = report
+			changed[name] = report
 		}
 	}
 
-	if len(observations) == 0 {
-		return nil
-	}
-
-	return h.beat(ctx, events.Heartbeat{
-		Name:         h.nodeName,
-		Role:         node.OrchestratorRole,
-		Stats:        offered.stats,
-		Capacity:     offered.capacity,
-		At:           at,
-		Observations: observations,
-	})
+	return h.report(ctx, at, changed)
 }
 
-// beat sends a heartbeat, and remembers what each kind in it was reported
-// holding.
-func (h *UseCase) beat(ctx context.Context, heartbeat events.Heartbeat) error {
-	payload, err := json.Marshal(heartbeat)
+// report sends what each kind holds in a heartbeat of its own, stamped at,
+// and remembers what each was reported holding. One that cannot be sent
+// keeps none of the others from being.
+func (h *UseCase) report(ctx context.Context, at time.Time, reports map[string]kind.Report[json.RawMessage]) error {
+	var failed error
+
+	for _, name := range slices.Sorted(maps.Keys(reports)) {
+		report := reports[name]
+
+		if err := h.send(ctx, kind.HeartbeatName(name), kind.Heartbeat{Node: h.nodeName, Kind: name, At: at, Report: report}); err != nil {
+			failed = errors.Join(failed, fmt.Errorf("kind %q: %w", name, err))
+
+			continue
+		}
+
+		if said, err := json.Marshal(report); err == nil {
+			h.lock.Lock()
+			h.reported[name] = said
+			h.lock.Unlock()
+		}
+	}
+
+	return failed
+}
+
+// send says message on subject.
+func (h *UseCase) send(ctx context.Context, subject string, message any) error {
+	payload, err := json.Marshal(message)
 	if err != nil {
 		return err
 	}
 
-	if err := h.producer.Produce(ctx, events.HeartbeatName, payload); err != nil {
-		return err
-	}
-
-	h.lock.Lock()
-	defer h.lock.Unlock()
-
-	for name, report := range heartbeat.Observations {
-		if said, err := json.Marshal(report); err == nil {
-			h.reported[name] = said
-		}
-	}
-
-	return nil
+	return h.producer.Produce(ctx, subject, payload)
 }
 
 // changed reports whether a kind holds something other than it was last

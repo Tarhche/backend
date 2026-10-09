@@ -7,8 +7,8 @@ import (
 	"log/slog"
 
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	taskKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/task"
-	nodeEvents "github.com/khanzadimahdi/testproject/domain/workload/node/events"
 )
 
 type heartbeat struct {
@@ -19,7 +19,8 @@ type heartbeat struct {
 
 var _ domain.MessageHandler = &heartbeat{}
 
-// NewHeartbeatHandler answers readers from the nodes' heartbeats.
+// NewHeartbeatHandler answers readers from the task kind's heartbeats, which
+// say what the nodes' tasks are doing.
 func NewHeartbeatHandler(replyer domain.Replyer, ingressDomain string, logger *slog.Logger) *heartbeat {
 	return &heartbeat{
 		replyer:       replyer,
@@ -29,20 +30,19 @@ func NewHeartbeatHandler(replyer domain.Replyer, ingressDomain string, logger *s
 }
 
 func (h *heartbeat) Handle(ctx context.Context, data []byte) error {
-	var beat nodeEvents.Heartbeat
+	var beat kind.Heartbeat
 	if err := json.Unmarshal(data, &beat); err != nil {
 		h.logger.WarnContext(ctx, "a heartbeat that cannot be read", "error", err)
 
 		return nil
 	}
 
-	report, reported := beat.Observations[taskKind.Name]
-	if !reported {
+	if beat.Kind != taskKind.Name {
 		return nil
 	}
 
 	var failed error
-	for _, observed := range report.Instances {
+	for _, observed := range beat.Instances {
 		var status taskKind.Status
 		if err := json.Unmarshal(observed.Status, &status); err != nil {
 			h.logger.WarnContext(ctx, "a task's status that cannot be read", "error", err, "task", observed.UUID)

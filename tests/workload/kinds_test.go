@@ -28,7 +28,8 @@ import (
 // A node runs every kind registered on it with the same code, whatever the
 // kind: its commands arrive on workloadActOnResource and what came of them
 // goes back on workloadResourceActedOn, its queries are node requests named
-// after it, and what it holds is in every node heartbeat. These tests
+// after it, and what it holds is in a heartbeat of its own every beat, on a
+// subject named after it. These tests
 // register a kind of their own, a lamp, on a node wired as its serve command
 // wires one, and play the control plane's part over a NATS server of the
 // test's own.
@@ -232,6 +233,7 @@ func TestKinds(t *testing.T) {
 
 	results := hearing[kind.ResourceActedOn](t, ctx, controlPlaneMessages, kind.ResourceActedOnName)
 	heartbeats := hearing[nodeEvents.Heartbeat](t, ctx, controlPlaneMessages, nodeEvents.HeartbeatName)
+	lampBeats := hearing[kind.Heartbeat](t, ctx, controlPlaneMessages, kind.HeartbeatName("lamp"))
 
 	for subject, handler := range node.Subscribers {
 		require.NoError(t, nodeMessages.Consume(ctx, subject, handler))
@@ -331,15 +333,17 @@ func TestKinds(t *testing.T) {
 		assert.Equal(t, noderequest.CodeInvalid, refused.Code)
 	})
 
-	t.Run("every heartbeat says what the lamps on the node are doing", func(t *testing.T) {
+	t.Run("every beat says what the lamps on the node are doing, in a heartbeat of the lamps' own", func(t *testing.T) {
 		require.NoError(t, heartbeat.Execute(ctx))
 
 		beat := heartbeats.next(t, func(heartbeat nodeEvents.Heartbeat) bool { return heartbeat.Name == nodeName })
+		lamps := lampBeats.next(t, func(heartbeat kind.Heartbeat) bool { return heartbeat.Node == nodeName })
 
-		require.Contains(t, beat.Observations, "lamp")
+		assert.Equal(t, "lamp", lamps.Kind)
+		assert.True(t, lamps.At.Equal(beat.At), "stamped as its node's beat is")
 
 		var uuids []string
-		for _, instance := range beat.Observations["lamp"].Instances {
+		for _, instance := range lamps.Instances {
 			uuids = append(uuids, instance.UUID)
 			assert.JSONEq(t, `{"state":"lit"}`, string(instance.Status))
 		}

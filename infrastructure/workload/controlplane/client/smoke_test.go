@@ -120,9 +120,12 @@ func TestSmoke(t *testing.T) {
 
 	capacity := vm.Info{Engine: "microsandbox", Version: "0.7.6", CPUs: 8, Memory: 16 << 30, Disk: 200 << 30}
 
-	// heartbeat says what the node offers, and every VM it holds.
+	// heartbeat says what the node offers, and, in a heartbeat of the vm
+	// kind's own, every VM it holds.
 	heartbeat := func(instances ...kind.Observed[vmKind.Status]) {
 		t.Helper()
+
+		at := time.Now()
 
 		report := kind.Report[json.RawMessage]{Instances: make([]kind.Observation, len(instances))}
 		for i, instance := range instances {
@@ -133,14 +136,17 @@ func TestSmoke(t *testing.T) {
 		}
 
 		beat, err := json.Marshal(nodeEvents.Heartbeat{
-			Name:         nodeName,
-			Role:         nodeContract.OrchestratorRole,
-			Capacity:     capacity,
-			At:           time.Now(),
-			Observations: map[string]kind.Report[json.RawMessage]{vmKind.Name: report},
+			Name:     nodeName,
+			Role:     nodeContract.OrchestratorRole,
+			Capacity: capacity,
+			At:       at,
 		})
 		require.NoError(t, err)
 		require.NoError(t, jetstream.Produce(ctx, nodeEvents.HeartbeatName, beat))
+
+		held, err := json.Marshal(kind.Heartbeat{Node: nodeName, Kind: vmKind.Name, At: at, Report: report})
+		require.NoError(t, err)
+		require.NoError(t, jetstream.Produce(ctx, kind.HeartbeatName(vmKind.Name), held))
 	}
 
 	// answer is what the node says a command came to.

@@ -152,7 +152,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/permission"
 	translatorContract "github.com/khanzadimahdi/testproject/domain/translator"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
-	nodeEvents "github.com/khanzadimahdi/testproject/domain/workload/node/events"
+	taskKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/task"
 	"github.com/khanzadimahdi/testproject/infrastructure/cache"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	infraHealth "github.com/khanzadimahdi/testproject/infrastructure/health"
@@ -1117,7 +1117,7 @@ func blog(
 	subscribers := map[string]domain.MessageHandler{
 		forgetpassword.SendForgetPasswordEmailName: forgetpassword.NewSendForgetPasswordEmailHandler(userRepository, authTokenGenerator, mailer, mailFromAddress, webURL, renderer, translator),
 		register.SendRegisterationEmailName:        register.NewSendRegisterationEmailHandler(authTokenGenerator, mailer, mailFromAddress, webURL, renderer, translator),
-		nodeEvents.HeartbeatName:                   answerCodeRun.NewHeartbeatHandler(cachedGateway, ingressDomain, logger),
+		kind.HeartbeatName(taskKind.Name):          answerCodeRun.NewHeartbeatHandler(cachedGateway, ingressDomain, logger),
 		kind.ResourceActedOnName:                   answerCodeRun.NewResourceActedOnHandler(cachedGateway, logger),
 	}
 

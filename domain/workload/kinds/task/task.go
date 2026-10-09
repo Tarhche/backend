@@ -255,8 +255,8 @@ type Endpoint struct {
 }
 
 // MaxOutput is the most of a job's output its run carries, in bytes, counted
-// from the end. It rides every heartbeat of its node, beside every other
-// kind's state, which has to fit in one message.
+// from the end. It rides every heartbeat of its node's tasks, beside every
+// other task's, which has to fit in one message.
 const MaxOutput = 256 << 10
 
 // LogsPayload narrows what is read of a task's log.

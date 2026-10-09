@@ -13,7 +13,6 @@ import (
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	taskKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/task"
-	nodeEvents "github.com/khanzadimahdi/testproject/domain/workload/node/events"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
 )
@@ -51,7 +50,8 @@ func watched(s *taskKind.Status) {
 	s.Run.Endpoints = []taskKind.Endpoint{{Port: 3000, Address: "vmhost:20000"}, {Port: 8080, Address: "vmhost:20001"}}
 }
 
-// beat is a node's heartbeat saying what its tasks are doing, by uuid.
+// beat is the task kind's heartbeat from a node, saying what its tasks are
+// doing, by uuid.
 func beat(t *testing.T, tasks map[string]taskKind.Status) []byte {
 	t.Helper()
 
@@ -63,13 +63,11 @@ func beat(t *testing.T, tasks map[string]taskKind.Status) []byte {
 		report.Instances = append(report.Instances, kind.Observation{Kind: taskKind.Name, UUID: uuid, Status: encoded})
 	}
 
-	payload, err := json.Marshal(nodeEvents.Heartbeat{
-		Name: "workload-orchestrator-01",
-		At:   started,
-		Observations: map[string]kind.Report[json.RawMessage]{
-			taskKind.Name: report,
-			"vm":          {Instances: []kind.Observation{{Kind: "vm", UUID: "vm-1", Status: json.RawMessage(`{"state":"running"}`)}}},
-		},
+	payload, err := json.Marshal(kind.Heartbeat{
+		Node:   "workload-orchestrator-01",
+		Kind:   taskKind.Name,
+		At:     started,
+		Report: report,
 	})
 	require.NoError(t, err)
 
@@ -211,7 +209,7 @@ func TestHeartbeat_Handle(t *testing.T) {
 		assert.ElementsMatch(t, []string{"request-1", "request-2"}, requests)
 	})
 
-	t.Run("a beat that cannot be read is let go of, and one that speaks of no task says nothing", func(t *testing.T) {
+	t.Run("a beat that cannot be read is let go of, and one of another kind speaks of no task, whatever it holds", func(t *testing.T) {
 		t.Parallel()
 
 		var replyer messagingMock.RecordingReplyer
@@ -219,7 +217,14 @@ func TestHeartbeat_Handle(t *testing.T) {
 
 		assert.NoError(t, handler.Handle(context.Background(), []byte("{")))
 
-		payload, err := json.Marshal(nodeEvents.Heartbeat{Name: "workload-orchestrator-01"})
+		ended, err := json.Marshal(snippet(taskKind.Completed, "bye\n"))
+		require.NoError(t, err)
+
+		payload, err := json.Marshal(kind.Heartbeat{
+			Node:   "workload-orchestrator-01",
+			Kind:   "vm",
+			Report: kind.Report[json.RawMessage]{Instances: []kind.Observation{{Kind: "vm", UUID: "vm-1", Status: ended}}},
+		})
 		require.NoError(t, err)
 		assert.NoError(t, handler.Handle(context.Background(), payload))
 

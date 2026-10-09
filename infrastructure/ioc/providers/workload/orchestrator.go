@@ -52,10 +52,11 @@ const (
 	commandProgress = 10 * time.Second
 
 	// kindStateTimeout is how long each kind this node runs is given, every
-	// heartbeat, to say what it holds here. A heartbeat goes every second, and
-	// the control plane schedules only on a node it heard from in the last
-	// three, so a kind slow to answer is left out of a beat rather than
-	// holding the beat up past that.
+	// beat, to say what it holds here. A beat goes every second, so a kind
+	// slow to answer is left out of one rather than holding the other kinds'
+	// heartbeats up past the next. The node's own heartbeat, which the
+	// control plane schedules by, only on a node it heard from in the last
+	// three, goes before any kind is asked, and waits on none.
 	kindStateTimeout = time.Second
 )
 

@@ -206,6 +206,13 @@ func (p *Placement) allocated(ctx context.Context, n node.Node, except string) (
 // room for, which is asked for again; counting one never gives a node more
 // than it has.
 //
+// One that runs is weighed by when it came to run rather than by when it was
+// last observed: the vm kind's heartbeats and its node's own are heard in no
+// particular order, so one heard running in a beat whose node heartbeat is not
+// heard yet may have run since long before, and is counted by its engine
+// already. Whatever changes what a running VM is given, its create, a
+// restart, a reconfigure, has it come to run again.
+//
 // The two moments are weighed to the millisecond, which is all a node's is
 // kept to: a VM observed in a node's last heartbeat was observed when the
 // node spoke, not after it.
@@ -218,7 +225,12 @@ func pending(v vmKind.VM, n node.Node) bool {
 		return true
 	}
 
-	return v.Status.ObservedAt.Truncate(time.Millisecond).After(n.LastHeartbeatAt.Truncate(time.Millisecond))
+	since := v.Status.ObservedAt
+	if v.Status.State == vmKind.Running {
+		since = v.Status.Since
+	}
+
+	return since.Truncate(time.Millisecond).After(n.LastHeartbeatAt.Truncate(time.Millisecond))
 }
 
 // fit reports whether resources fit in what a node offers beyond what it has

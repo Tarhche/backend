@@ -20,7 +20,7 @@ import (
 
 // report is what a node says of the fans it holds, having read the house
 // they are in unless it is among the unseen.
-func report(t *testing.T, unseen []string, instances map[string]kindstest.Status) map[string]kind.Report[json.RawMessage] {
+func report(t *testing.T, unseen []string, instances map[string]kindstest.Status) kind.Report[json.RawMessage] {
 	t.Helper()
 
 	r := kind.Report[json.RawMessage]{Instances: []kind.Observation{}, Unseen: unseen}
@@ -32,7 +32,7 @@ func report(t *testing.T, unseen []string, instances map[string]kindstest.Status
 		r.Instances = append(r.Instances, kind.Observation{Kind: kindstest.Kind, UUID: uuid, Status: status(t, s)})
 	}
 
-	return map[string]kind.Report[json.RawMessage]{kindstest.Kind: r}
+	return r
 }
 
 func stored(t *testing.T, repository resource.Repository, uuid string) (resource.Record, bool) {
@@ -78,7 +78,7 @@ func TestObserver_Heartbeat(t *testing.T) {
 
 		observer := observe.NewObserver(kindstest.Registry(&kindstest.Fans{}), repository, logger)
 
-		observer.Heartbeat(ctx, kindstest.NodeName, later, report(t, nil, map[string]kindstest.Status{
+		observer.Heartbeat(ctx, kindstest.NodeName, kindstest.Kind, later, report(t, nil, map[string]kindstest.Status{
 			"running":   observed(kindstest.Running, 3),
 			"starting":  observed(kindstest.Running, 1),
 			"stopped":   observed(kindstest.Stopped, 0),
@@ -110,7 +110,7 @@ func TestObserver_Heartbeat(t *testing.T) {
 
 		observer := observe.NewObserver(kindstest.Registry(&kindstest.Fans{}), repository, logger)
 
-		observer.Heartbeat(ctx, kindstest.NodeName, later, report(t, []string{"house-2"}, map[string]kindstest.Status{}))
+		observer.Heartbeat(ctx, kindstest.NodeName, kindstest.Kind, later, report(t, []string{"house-2"}, map[string]kindstest.Status{}))
 
 		lost, _ := stored(t, repository, "lost")
 		assert.Equal(t, kind.Missing, kindstest.Typed(lost).Status.State)
@@ -145,7 +145,7 @@ func TestObserver_Heartbeat(t *testing.T) {
 		houses := parents{"house-3": "closed"}
 		observer := observe.NewObserver(kindstest.Registry(&kindstest.Fans{}), repository, logger, observe.WithParents(houses))
 
-		observer.Heartbeat(ctx, kindstest.NodeName, later, report(t, nil, map[string]kindstest.Status{}))
+		observer.Heartbeat(ctx, kindstest.NodeName, kindstest.Kind, later, report(t, nil, map[string]kindstest.Status{}))
 
 		closed, _ := stored(t, repository, "in-a-closed-house")
 		assert.Equal(t, kind.Waiting, kindstest.Typed(closed).Status.State)
@@ -171,7 +171,7 @@ func TestObserver_Heartbeat(t *testing.T) {
 
 		observer := observe.NewObserver(kindstest.Registry(&kindstest.Fans{}), repository, logger)
 
-		observer.Heartbeat(ctx, kindstest.NodeName, later, report(t, nil, map[string]kindstest.Status{}))
+		observer.Heartbeat(ctx, kindstest.NodeName, kindstest.Kind, later, report(t, nil, map[string]kindstest.Status{}))
 
 		fan, _ := stored(t, repository, "fan-uuid")
 		assert.Equal(t, kindstest.Running, kindstest.Typed(fan).Status.State)
@@ -185,7 +185,7 @@ func TestObserver_Heartbeat(t *testing.T) {
 		create(t, repository, kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running))
 
 		observe.NewObserver(kindstest.Registry(&kindstest.Fans{}), repository, logger).
-			Heartbeat(ctx, kindstest.NodeName, later, report(t, nil, map[string]kindstest.Status{}))
+			Heartbeat(ctx, kindstest.NodeName, kindstest.Kind, later, report(t, nil, map[string]kindstest.Status{}))
 
 		fan, _ := stored(t, repository, "fan-uuid")
 		assert.Equal(t, kind.Missing, kindstest.Typed(fan).Status.State)
@@ -210,7 +210,7 @@ func TestObserver_Heartbeat(t *testing.T) {
 
 		observer := observe.NewObserver(kindstest.Registry(&kindstest.Fans{}), repository, logger)
 
-		observer.Heartbeat(ctx, kindstest.NodeName, later, report(t, []string{"house-2"}, map[string]kindstest.Status{
+		observer.Heartbeat(ctx, kindstest.NodeName, kindstest.Kind, later, report(t, []string{"house-2"}, map[string]kindstest.Status{
 			"kept-by-the-restore": observed(kindstest.Stopped, 0),
 		}))
 
@@ -250,7 +250,7 @@ func TestObserver_Heartbeat(t *testing.T) {
 		observer := observe.NewObserver(kindstest.Registry(&kindstest.Fans{}), repository, logger)
 
 		// what the house held just before it was restored.
-		observer.Heartbeat(ctx, kindstest.NodeName, later.Add(-time.Second), report(t, nil, map[string]kindstest.Status{
+		observer.Heartbeat(ctx, kindstest.NodeName, kindstest.Kind, later.Add(-time.Second), report(t, nil, map[string]kindstest.Status{
 			"made-since-the-snapshot": observed(kindstest.Running, 1),
 		}))
 
@@ -270,33 +270,50 @@ func TestObserver_Heartbeat(t *testing.T) {
 
 		observer := observe.NewObserver(kindstest.Registry(&kindstest.Fans{}), repository, logger)
 
-		observer.Heartbeat(ctx, kindstest.NodeName, later.Add(-time.Second), report(t, nil, map[string]kindstest.Status{"fan-uuid": observed(kindstest.Running, 2)}))
+		observer.Heartbeat(ctx, kindstest.NodeName, kindstest.Kind, later.Add(-time.Second), report(t, nil, map[string]kindstest.Status{"fan-uuid": observed(kindstest.Running, 2)}))
 
 		fan, _ := stored(t, repository, "fan-uuid")
 		assert.Equal(t, kindstest.Starting, kindstest.Typed(fan).Status.State)
 		assert.Equal(t, int64(1), fan.Version)
 
-		observer.Heartbeat(ctx, kindstest.NodeName, later.Add(time.Second), report(t, nil, map[string]kindstest.Status{"fan-uuid": observed(kindstest.Running, 2)}))
+		observer.Heartbeat(ctx, kindstest.NodeName, kindstest.Kind, later.Add(time.Second), report(t, nil, map[string]kindstest.Status{"fan-uuid": observed(kindstest.Running, 2)}))
 
 		fan, _ = stored(t, repository, "fan-uuid")
 		assert.Equal(t, kindstest.Running, kindstest.Typed(fan).Status.State, "one made after is")
 	})
 
-	t.Run("a kind that sent no report, or that the control plane does not run, says nothing", func(t *testing.T) {
+	t.Run("a kind the control plane does not run, or whose state is not its nodes' to say, is not listened to", func(t *testing.T) {
 		t.Parallel()
 
-		repository := resourcesMemory.NewRepository()
-		create(t, repository, kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running))
+		// a fan whose state is its record's, as a snapshot's is.
+		ledger := kindstest.Descriptor()
+		ledger.StateBy = kind.OnControlPlane
 
-		observer := observe.NewObserver(kindstest.Registry(&kindstest.Fans{}), repository, logger)
+		for i := range ledger.Actions {
+			if ledger.Actions[i].Name == "state" {
+				ledger.Actions[i].Runs = kind.OnControlPlane
+			}
+		}
 
-		observer.Heartbeat(ctx, kindstest.NodeName, later, map[string]kind.Report[json.RawMessage]{
-			"kettle": {Instances: []kind.Observation{}},
-		})
+		kept := kind.NewRegistry[kind.ControlPlaneBinding]()
+		require.NoError(t, kept.Register(kind.BindControlPlane[kindstest.Spec, kindstest.Status](ledger, &kindstest.Fans{})))
 
-		fan, _ := stored(t, repository, "fan-uuid")
-		assert.Equal(t, kindstest.Running, kindstest.Typed(fan).Status.State)
-		assert.Equal(t, int64(1), fan.Version)
+		for name, tt := range map[string]struct {
+			registry *kind.Registry[kind.ControlPlaneBinding]
+			kind     string
+		}{
+			"not run":               {registry: kindstest.Registry(&kindstest.Fans{}), kind: "kettle"},
+			"not its nodes' to say": {registry: kept, kind: kindstest.Kind},
+		} {
+			repository := resourcesMemory.NewRepository()
+			create(t, repository, kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running))
+
+			observe.NewObserver(tt.registry, repository, logger).Heartbeat(ctx, kindstest.NodeName, tt.kind, later, report(t, nil, map[string]kindstest.Status{}))
+
+			fan, _ := stored(t, repository, "fan-uuid")
+			assert.Equal(t, kindstest.Running, kindstest.Typed(fan).Status.State, name)
+			assert.Equal(t, int64(1), fan.Version, name)
+		}
 	})
 
 	t.Run("a report older than what was last heard is not taken", func(t *testing.T) {
@@ -307,7 +324,7 @@ func TestObserver_Heartbeat(t *testing.T) {
 
 		observer := observe.NewObserver(kindstest.Registry(&kindstest.Fans{}), repository, logger)
 
-		observer.Heartbeat(ctx, kindstest.NodeName, later.Add(-time.Second), report(t, nil, map[string]kindstest.Status{"fan-uuid": observed(kindstest.Running, 1)}))
+		observer.Heartbeat(ctx, kindstest.NodeName, kindstest.Kind, later.Add(-time.Second), report(t, nil, map[string]kindstest.Status{"fan-uuid": observed(kindstest.Running, 1)}))
 
 		fan, _ := stored(t, repository, "fan-uuid")
 		assert.Equal(t, kindstest.Stopped, kindstest.Typed(fan).Status.State)
@@ -322,18 +339,18 @@ func TestObserver_Heartbeat(t *testing.T) {
 		observer := observe.NewObserver(kindstest.Registry(&kindstest.Fans{}), repository, logger)
 		running := report(t, nil, map[string]kindstest.Status{"fan-uuid": observed(kindstest.Running, 1)})
 
-		observer.Heartbeat(ctx, kindstest.NodeName, later, running)
+		observer.Heartbeat(ctx, kindstest.NodeName, kindstest.Kind, later, running)
 
 		fan, _ := stored(t, repository, "fan-uuid")
 		assert.Equal(t, int64(2), fan.Version, "first heard, it is written")
 
-		observer.Heartbeat(ctx, kindstest.NodeName, later.Add(time.Second), running)
+		observer.Heartbeat(ctx, kindstest.NodeName, kindstest.Kind, later.Add(time.Second), running)
 
 		fan, _ = stored(t, repository, "fan-uuid")
 		assert.Equal(t, int64(2), fan.Version, "a second later, the same is not")
 		assert.Equal(t, later, kindstest.Typed(fan).Status.ObservedAt)
 
-		observer.Heartbeat(ctx, kindstest.NodeName, later.Add(time.Minute), running)
+		observer.Heartbeat(ctx, kindstest.NodeName, kindstest.Kind, later.Add(time.Minute), running)
 
 		fan, _ = stored(t, repository, "fan-uuid")
 		assert.Equal(t, int64(3), fan.Version, "a while later, it is, so when it was observed stays roughly true")
@@ -360,7 +377,7 @@ func TestObserver_Heartbeat(t *testing.T) {
 
 		observer := observe.NewObserver(kindstest.Registry(&kindstest.Fans{}), racing, logger)
 
-		observer.Heartbeat(ctx, kindstest.NodeName, later, report(t, nil, map[string]kindstest.Status{"fan-uuid": observed(kindstest.Running, 2)}))
+		observer.Heartbeat(ctx, kindstest.NodeName, kindstest.Kind, later, report(t, nil, map[string]kindstest.Status{"fan-uuid": observed(kindstest.Running, 2)}))
 
 		fan, _ := stored(t, memory, "fan-uuid")
 
@@ -382,7 +399,7 @@ func TestObserver_Heartbeat(t *testing.T) {
 
 		observer := observe.NewObserver(kindstest.Registry(&kindstest.Fans{}), racing, logger)
 
-		observer.Heartbeat(ctx, kindstest.NodeName, later, report(t, nil, map[string]kindstest.Status{"fan-uuid": observed(kindstest.Stopped, 0)}))
+		observer.Heartbeat(ctx, kindstest.NodeName, kindstest.Kind, later, report(t, nil, map[string]kindstest.Status{"fan-uuid": observed(kindstest.Stopped, 0)}))
 
 		fan, _ := stored(t, memory, "fan-uuid")
 		assert.Equal(t, kindstest.Running, kindstest.Typed(fan).Status.State)
@@ -447,7 +464,7 @@ func TestObserver_Heartbeat_orphans(t *testing.T) {
 		told := &orphans{}
 		observer := observe.NewObserver(homeless(), repository, logger, observe.WithOrphans(told))
 
-		observer.Heartbeat(ctx, kindstest.NodeName, kindstest.Moment, report(t, nil, map[string]kindstest.Status{
+		observer.Heartbeat(ctx, kindstest.NodeName, kindstest.Kind, kindstest.Moment, report(t, nil, map[string]kindstest.Status{
 			"kept":           {Status: kind.Status{State: kindstest.Running}},
 			"kept-elsewhere": {Status: kind.Status{State: kindstest.Running}},
 			"orphan":         {Status: kind.Status{State: kindstest.Running}},
@@ -462,7 +479,7 @@ func TestObserver_Heartbeat_orphans(t *testing.T) {
 		told := &orphans{}
 		observer := observe.NewObserver(kindstest.Registry(&kindstest.Fans{}), resourcesMemory.NewRepository(), logger, observe.WithOrphans(told))
 
-		observer.Heartbeat(ctx, kindstest.NodeName, kindstest.Moment, report(t, nil, map[string]kindstest.Status{
+		observer.Heartbeat(ctx, kindstest.NodeName, kindstest.Kind, kindstest.Moment, report(t, nil, map[string]kindstest.Status{
 			"orphan": {Status: kind.Status{State: kindstest.Running}},
 		}))
 
@@ -475,7 +492,7 @@ func TestObserver_Heartbeat_orphans(t *testing.T) {
 		observer := observe.NewObserver(homeless(), resourcesMemory.NewRepository(), logger)
 
 		assert.NotPanics(t, func() {
-			observer.Heartbeat(ctx, kindstest.NodeName, kindstest.Moment, report(t, nil, map[string]kindstest.Status{
+			observer.Heartbeat(ctx, kindstest.NodeName, kindstest.Kind, kindstest.Moment, report(t, nil, map[string]kindstest.Status{
 				"orphan": {Status: kind.Status{State: kindstest.Running}},
 			}))
 		})
@@ -501,17 +518,14 @@ func TestObserver_Heartbeat_witness(t *testing.T) {
 
 	observer := observe.NewObserver(registry, repository, slog.New(slog.DiscardHandler))
 
-	reports := report(t, nil, map[string]kindstest.Status{"running": observed(kindstest.Running, 2)})
-
-	unrecorded := reports[kindstest.Kind]
+	unrecorded := report(t, nil, map[string]kindstest.Status{"running": observed(kindstest.Running, 2)})
 	unrecorded.Instances = append(unrecorded.Instances, kind.Observation{
 		Kind:   kindstest.Kind,
 		Owners: []kind.Reference{{Kind: kindstest.Parent, UUID: kindstest.House}},
 		Status: status(t, observed(kindstest.Running, 1)),
 	})
-	reports[kindstest.Kind] = unrecorded
 
-	observer.Heartbeat(ctx, kindstest.NodeName, later, reports)
+	observer.Heartbeat(ctx, kindstest.NodeName, kindstest.Kind, later, unrecorded)
 
 	heard := witness.Heard()
 	require.Len(t, heard, 1)

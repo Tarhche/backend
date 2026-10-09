@@ -52,12 +52,16 @@
 //     back;
 //   - a Query, as a node request whose op is the kind and the action,
 //     "stack.state", on the subject every node already answers on;
-//   - and every kind's Report in the node's heartbeat: everything of the kind
+//   - and, every beat, a Heartbeat of each kind whose state its nodes know,
+//     on a subject of the kind's own (HeartbeatName), beside the node's own
+//     heartbeat and stamped as that is, so that a service hears only the
+//     kinds it needs. It carries the kind's Report: everything of the kind
 //     the node holds, the parents it read and those it could not look inside,
 //     so that what a report leaves out of a parent it read is known to be gone,
 //     what lives in a parent it could not read is merely unseen, and what lives
 //     in one it did not look inside at all, because it is not running, waits
-//     on it.
+//     on it. A kind that could not look sends none, and nothing is concluded
+//     from its silence.
 //
 // Registering a kind holds its descriptor to the rules every kind keeps
 // (Check), so a kind that could not run is found out when its service is put

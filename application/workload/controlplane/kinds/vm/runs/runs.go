@@ -240,13 +240,14 @@ func refusal() domain.ValidationErrors {
 // Logs is what a run has written, as the lines of a VM's log, and whether
 // there were more of them than an answer carries.
 //
-// A run is a job, and a job's output rides every heartbeat its node sends and
-// is kept on its task. Its lines have no time to them, so each is given the
-// moment the run was made, a nanosecond after the line before it: that keeps
-// them in the order they were written, keeps two that say the same thing
-// apart, and lets whoever is following the log ask for what came after the
-// last line they read, as they would of a VM's. Since leaves out the lines
-// before it, and the last Tail are kept, or as many as an answer carries.
+// A run is a job, and a job's output rides every heartbeat its node sends of
+// its tasks and is kept on its task. Its lines have no time to them, so each
+// is given the moment the run was made, a nanosecond after the line before
+// it: that keeps them in the order they were written, keeps two that say the
+// same thing apart, and lets whoever is following the log ask for what came
+// after the last line they read, as they would of a VM's. Since leaves out
+// the lines before it, and the last Tail are kept, or as many as an answer
+// carries.
 func Logs(t taskKind.Task, options vmKind.LogsPayload) vmKind.Logs {
 	lines := make([]vmKind.LogLine, 0)
 

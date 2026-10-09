@@ -195,6 +195,11 @@ func (s *Images) Named(r kind.Raw, name string) bool {
 // for, or was made from as docker lists it, the container's, which it is
 // implied present for; and under the one a stack's container was made from,
 // the stack's. An image only a container nobody keeps uses is nobody's.
+//
+// The containers are what their own kind's heartbeats last said, which may be
+// a beat behind the images': an image first seen with the stack's container
+// that keeps it is shown as nobody's until the next beat at most, and nothing
+// is done to it for that.
 func (s *Images) Keepers(ctx context.Context, nodeName string) (map[string]string, error) {
 	keepers := make(map[string]string)
 

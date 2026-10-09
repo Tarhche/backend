@@ -198,8 +198,9 @@ func start(t *testing.T, options ...option) *workload {
 
 	w.kinds = node.Kinds
 
-	// the node's heartbeat, which says what it offers and what every kind it
-	// runs holds on it, VMs among them, as its serve command beats it.
+	// the node's heartbeat, which says what it offers, and what every kind it
+	// runs holds on it, VMs among them, each in a heartbeat of its own, as its
+	// serve command beats it.
 	nodeHeartbeat := orchestratorHeartbeat.NewUseCase(nodeMessages, infraNode.NewManager(nodeEngine), node.Kinds, time.Second, nodeName, logger)
 
 	// the control plane: its API is what the blog's client calls, and what
@@ -226,12 +227,14 @@ func start(t *testing.T, options ...option) *workload {
 	require.NoError(t, err)
 
 	// each side listens before anything is said: a JetStream subject keeps a
-	// message only for those already listening, as it does when served.
+	// message only for those already listening, as it does when served. The
+	// control plane hears every kind's results and heartbeats among its
+	// workload's subscribers, and each node's own heartbeat beside them.
 	for subject, handler := range controlPlane.Subscribers {
 		require.NoError(t, controlPlaneMessages.Consume(ctx, subject, handler))
 	}
 
-	require.NoError(t, controlPlaneMessages.Consume(ctx, nodeEvents.HeartbeatName, controlPlaneHeartbeatNode.NewHeartbeatHandler(w.nodes, controlPlane.Observer)))
+	require.NoError(t, controlPlaneMessages.Consume(ctx, nodeEvents.HeartbeatName, controlPlaneHeartbeatNode.NewHeartbeatHandler(w.nodes)))
 
 	for subject, handler := range node.Subscribers {
 		require.NoError(t, nodeMessages.Consume(ctx, subject, handler))

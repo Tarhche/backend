@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -112,7 +113,16 @@ func TestNewControlPlaneKinds(t *testing.T) {
 		}
 
 		subjects := slices.Collect(maps.Keys(plane.workload.Subscribers))
-		assert.ElementsMatch(t, []string{kind.ResourceActedOnName}, subjects, "every kind's results are heard on one subject")
+		assert.ElementsMatch(t, []string{
+			kind.ResourceActedOnName,
+			"workloadVmHeartbeat",
+			"workloadStackHeartbeat",
+			"workloadTaskHeartbeat",
+			"workloadContainerHeartbeat",
+			"workloadImageHeartbeat",
+			"workloadNetworkHeartbeat",
+			"workloadVolumeHeartbeat",
+		}, subjects, "every kind's results are heard on one subject, and what the nodes hold of every kind whose state is theirs on the kind's own: a snapshot's is the control plane's")
 
 		assert.NoError(t, plane.workload.Reconcile.Execute(context.Background()), "a pass over nothing does nothing")
 	})
@@ -152,7 +162,8 @@ func TestNewControlPlaneKinds(t *testing.T) {
 
 // TestConformance holds every kind the services register, as they register
 // them, to the rules every kind keeps: what a kind declares, a strategy
-// wherever one of its actions runs, and permissions that exist, with a name.
+// wherever one of its actions runs, permissions that exist, with a name, and
+// heartbeats on a subject that names their stream.
 func TestConformance(t *testing.T) {
 	t.Parallel()
 
@@ -181,6 +192,16 @@ func TestConformance(t *testing.T) {
 	kindtest.Conformance(t, services, permissions.NewRepository())
 
 	assert.Equal(t, allKinds, kindNames(services.Descriptors()), "every kind the services run")
+
+	// a subject is the name of the stream JetStream keeps it in, which has
+	// none of these and is no longer than this; who hears it does so under a
+	// durable consumer named after their service.
+	for _, d := range services.Descriptors() {
+		subject := kind.HeartbeatName(d.Name)
+
+		assert.False(t, strings.ContainsAny(subject, " \t\r\n\f.*>/\\"), "%q names no stream", subject)
+		assert.LessOrEqual(t, len(subject), 255, "%q names no stream", subject)
+	}
 }
 
 // allKinds are the kinds the services run, in the order they are registered.

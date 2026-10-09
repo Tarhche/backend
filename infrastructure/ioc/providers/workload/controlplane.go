@@ -211,7 +211,9 @@ func controlPlaneConsoleCommand(
 	)
 
 	subscribers := map[string]domain.MessageHandler{
-		nodeEvents.HeartbeatName: controlPlaneHeartbeatNode.NewHeartbeatHandler(nodeRepository, workload.Observer),
+		// what a node says of itself, that it is alive and what it offers:
+		// what it holds of every kind is heard among the workload's own.
+		nodeEvents.HeartbeatName: controlPlaneHeartbeatNode.NewHeartbeatHandler(nodeRepository),
 
 		// what services' tasks write, shipped a line at a time, kept for as
 		// long as their tasks are.
