@@ -78,4 +78,20 @@ var english = map[string]string{
 	"node_lost":              "the node holding it went away",
 	"waiting_for_vm":         "waiting for its VM to come up",
 	"managed_by_code_runner": "the code runner runs this VM for as long as its snippet runs: it can only be stopped or deleted",
+
+	// a stack's file: what the platform reads in it, and refuses of it.
+	"unsupported_key":      "a stack's file does not take this key",
+	"duplicate_key":        "this key is given more than once",
+	"undefined_service":    "the file has no service called this",
+	"undefined_volume":     "the file declares no volume called this under its volumes",
+	"undefined_network":    "the file declares no network called this under its networks",
+	"invalid_restart":      "a service's restart is either no or unless-stopped",
+	"invalid_port_mapping": "a port is [ip:][host:]container[/tcp|udp], ranges allowed, or target, published, host_ip and protocol",
+	"invalid_cpus":         "cpus is a number of cores above zero, such as 0.5",
+	"invalid_memory":       "memory is a number of bytes above zero, or one with a unit, k, m or g, such as 512m",
+	"relative_bind":        "a bind mounts an absolute path of the VM, such as /srv/data",
+	"anonymous_volume":     "a volume is mounted by its name, which the file declares under its volumes",
+	"invalid_volume_type":  "a service's volume is either a bind or a volume",
+	"invalid_condition":    "a service waits for one it depends on only to have started: service_started",
+	"depends_on_cycle":     "the services depend on one another in a ring, which no order starts",
 }

@@ -78,4 +78,20 @@ var farsi = map[string]string{
 	"node_lost":              "گره‌ای که آن را نگه می‌داشت از دسترس خارج شد",
 	"waiting_for_vm":         "در انتظار بالا آمدن ماشین مجازی",
 	"managed_by_code_runner": "این ماشین مجازی را اجراکنندهٔ کد تا پایان اجرای قطعه‌کد نگه می‌دارد: فقط می‌توان آن را متوقف یا حذف کرد",
+
+	// a stack's file: what the platform reads in it, and refuses of it.
+	"unsupported_key":      "فایل استک این کلید را نمی‌پذیرد",
+	"duplicate_key":        "این کلید بیش از یک بار آمده است",
+	"undefined_service":    "فایل سرویسی با این نام ندارد",
+	"undefined_volume":     "فایل ولومی با این نام در بخش volumes تعریف نکرده است",
+	"undefined_network":    "فایل شبکه‌ای با این نام در بخش networks تعریف نکرده است",
+	"invalid_restart":      "راه‌اندازی دوبارهٔ سرویس باید no یا unless-stopped باشد",
+	"invalid_port_mapping": "پورت باید به شکل [ip:][host:]container[/tcp|udp] باشد، با امکان بازه، یا با target، published، host_ip و protocol",
+	"invalid_cpus":         "cpus باید تعداد هسته‌ای بزرگ‌تر از صفر باشد، مانند 0.5",
+	"invalid_memory":       "memory باید تعداد بایتی بزرگ‌تر از صفر باشد، یا عددی با واحد k، m یا g، مانند 512m",
+	"relative_bind":        "bind باید مسیری مطلق از ماشین مجازی را متصل کند، مانند /srv/data",
+	"anonymous_volume":     "ولوم با نامش متصل می‌شود و این نام باید در بخش volumes فایل تعریف شده باشد",
+	"invalid_volume_type":  "ولوم سرویس یا bind است یا volume",
+	"invalid_condition":    "سرویس فقط منتظر شروع شدن سرویسی می‌ماند که به آن وابسته است: service_started",
+	"depends_on_cycle":     "سرویس‌ها به‌صورت حلقه‌ای به یکدیگر وابسته‌اند و هیچ ترتیبی آن‌ها را راه‌اندازی نمی‌کند",
 }
