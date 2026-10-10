@@ -14,7 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/khanzadimahdi/testproject/domain/workload/graph"
-	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	containerKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/container"
 	networkKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/network"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
@@ -61,14 +60,14 @@ func (r *reading) GetAll(ctx context.Context, kindName string, filter resource.F
 }
 
 // TestNewControlPlaneWorkload_graphs holds the control plane to keeping the
-// graphs of roots of no kind yet, as a holder of leases of its own, and to
-// not starting with settings it cannot go about.
+// graphs of the containers nobody's stack owns, as a holder of leases of its
+// own, and to not starting with settings it cannot go about.
 func TestNewControlPlaneWorkload_graphs(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 
-	t.Run("a graph is made of a vm and the building blocks a container needs, and no kind's resources are roots yet", func(t *testing.T) {
+	t.Run("a graph is made of a vm and the building blocks a container needs, and a container nothing owns is a root of its own", func(t *testing.T) {
 		t.Parallel()
 
 		kinds := controlPlaneGraphKinds(nil, blockStrategies{}, nil)
@@ -76,10 +75,10 @@ func TestNewControlPlaneWorkload_graphs(t *testing.T) {
 		assert.Equal(t, []string{containerKind.Name, networkKind.Name, vmKind.Name, volumeKind.Name}, slices.Sorted(maps.Keys(kinds)))
 		assert.Implements(t, (*graph.RootKind)(nil), kinds[containerKind.Name], "a container may be a root of its own")
 
-		assert.Empty(t, graphRoots())
+		assert.Equal(t, graph.Roots{containerKind.Name}, graphRoots(), "and is: stacks are compose's still")
 	})
 
-	t.Run("so nothing is queued, read or reconciled", func(t *testing.T) {
+	t.Run("so a container is queued and reconciled, and what changed under one is followed up to it, and nothing else", func(t *testing.T) {
 		t.Parallel()
 
 		records := &reading{Repository: resourcesMemory.NewRepository()}
@@ -93,12 +92,14 @@ func TestNewControlPlaneWorkload_graphs(t *testing.T) {
 		container := graph.Ref{Kind: containerKind.Name, UUID: "c-uuid"}
 
 		workload.Graphs.Enqueue(container)
+		workload.Graphs.Enqueue(graph.Ref{Kind: vmKind.Name, UUID: "vm-uuid"})
+
+		assert.Equal(t, []graph.Ref{container}, workload.Graphs.Queued(), "a vm is no root")
+		assert.NoError(t, workload.Graphs.Reconcile(ctx, container), "a container is one, and one that is gone is forgotten")
+
 		require.NoError(t, workload.Graphs.Changed(ctx, graph.Ref{Kind: vmKind.Name, UUID: "vm-uuid"}))
 		require.NoError(t, workload.Graphs.Resync(ctx))
-
-		assert.Empty(t, workload.Graphs.Queued())
-		assert.Zero(t, records.Reads())
-		assert.ErrorIs(t, workload.Graphs.Reconcile(ctx, container), kind.ErrUnknownKind, "a container is no root yet")
+		assert.NotZero(t, records.Reads(), "what changed is read")
 
 		working, stop := context.WithCancel(ctx)
 

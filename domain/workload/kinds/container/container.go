@@ -16,10 +16,15 @@
 // one-off that ran to its end, which its restart policy says it is, rather
 // than broken.
 //
-// What is decided of it, given what it was asked to be and what it is:
+// One nothing owns is the root of a graph of its own, which makes its Docker
+// VM, the networks it joins and the volumes it mounts, and then it, in order,
+// and makes each again whenever it is gone, but for what it names that is not
+// its own (Spec.External). What is decided of it beside, given what it was
+// asked to be and what it is:
 //
 //	expected  observed                       asked
-//	any       pending or missing, VM running  create, pulling its image
+//	any       pending or missing             nothing: its graph makes it,
+//	                                         pulling its image
 //	stopped   running                        stop
 //	running   stopped                        start: only a container docker
 //	                                         restarts itself is ever stopped
@@ -145,10 +150,10 @@ func Restarts(policy string) bool {
 // Spec is a container as it is asked for: Docker's own container spec, and
 // the Docker VM it goes into.
 type Spec struct {
-	// VM is the Docker VM it goes into, chosen by the rules a stack's is: as
-	// it is asked, one of the person's Docker VMs, named by its uuid, or one
-	// made for it with whatever else it gives; as it is kept, the uuid of the
-	// one it went into.
+	// VM is the Docker VM it goes into: as it is asked, one of the person's
+	// Docker VMs, named by its uuid, or one made for it with whatever else it
+	// gives; as it is kept, the uuid of the one it went into and what to make
+	// that one with again whenever it is gone (stackKind.VMChoice).
 	VM stackKind.VMChoice `json:"vm"`
 
 	// Name is docker's name for it; empty lets docker pick one.
@@ -175,8 +180,10 @@ type Spec struct {
 
 	// External are the networks and volumes it names that are not its own:
 	// ones that were there before it, made by somebody else, written as the
-	// nodes of a graph they are, network/<name> and volume/<name>. A graph
-	// never makes or removes them for it, and it waits while one is missing.
+	// nodes of a graph they are, network/<name> and volume/<name>, as its
+	// admission found them in its VM and connect and disconnect changed them.
+	// A graph never makes or removes them for it, and it waits while one is
+	// missing.
 	External []string `json:"external,omitempty"`
 
 	// RestartPolicy is no, always, unless-stopped or on-failure; empty is no.

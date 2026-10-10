@@ -11,18 +11,27 @@
 // through the control plane's admission of the vm kind: its bounds, its
 // owner's quota and its placement are the vm kind's, and it is sent its
 // create at once. One a graph needs is made the same way, under the uuid what
-// needs it names it by (Chooser.Make).
+// needs it names it by (Chooser.Make). What goes into one that a graph is to
+// make, rather than the request, is given a uuid for it when it is asked for,
+// and the VM is held then to what its admission would hold it to, counting
+// the others planned for its owner, but not kept (Chooser.Plan): a container
+// that names none.
 package dockervm
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
+
+	"github.com/gofrs/uuid/v5"
 
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/admitResource"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/records"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
+	containerKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/container"
+	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
@@ -76,18 +85,27 @@ type Admitter interface {
 	Execute(ctx context.Context, request *admitResource.Request) (*admitResource.Response, error)
 }
 
+// Checker holds a VM to what the vm kind would admit it as, counting what is
+// planned beside its owner's VMs, and keeps nothing: the vm kind's
+// control-plane strategy.
+type Checker interface {
+	Check(ctx context.Context, asked vmKind.VM, planned ...vmKind.Resources) (vmKind.VM, domain.ValidationErrors, error)
+}
+
 // Chooser chooses Docker VMs.
 type Chooser struct {
 	records   *records.Records
 	resources resource.Repository
 	admit     Admitter
+	check     Checker
 	defaults  Defaults
 }
 
 // NewChooser is a chooser that reads VMs from vms and makes them through
-// admit, taking away from resources one made for nothing.
-func NewChooser(vms *records.Records, resources resource.Repository, admit Admitter, defaults Defaults) *Chooser {
-	return &Chooser{records: vms, resources: resources, admit: admit, defaults: defaults}
+// admit, taking away from resources one made for nothing, and holds one a
+// graph is to make to what check says of it.
+func NewChooser(vms *records.Records, resources resource.Repository, admit Admitter, check Checker, defaults Defaults) *Chooser {
+	return &Chooser{records: vms, resources: resources, admit: admit, check: check, defaults: defaults}
 }
 
 // Choose is the Docker VM ownerUUID's choice names, or one made for them when
@@ -122,6 +140,99 @@ func (c *Chooser) Make(ctx context.Context, ownerUUID string, uuid string, choic
 	return c.made(ctx, ownerUUID, uuid, choice)
 }
 
+// Plan is a Docker VM a graph is to make for ownerUUID, later, for what goes
+// into it and names none: under a uuid made now, with whatever choice gives
+// and the defaults for the rest, as Make makes one, and held now to what the
+// vm kind would admit it as, its bounds and its owner's quota, counting the
+// Docker VMs graphs are to make for them and have not. Nothing is kept, and no
+// node's room is looked at: one no node has room for is made once one has.
+// Which VM choice names, if it names one, is not read. Why it is refused is
+// said under the request's vm field, as for one made now.
+func (c *Chooser) Plan(ctx context.Context, ownerUUID string, choice Choice) (vmKind.VM, domain.ValidationErrors, error) {
+	if len(ownerUUID) == 0 {
+		return vmKind.VM{}, domain.ValidationErrors{"owner_uuid": "required_field"}, nil
+	}
+
+	planned, err := c.planned(ctx, ownerUUID)
+	if err != nil {
+		return vmKind.VM{}, nil, err
+	}
+
+	checked, refused, err := c.check.Check(ctx, c.asked(ownerUUID, choice), planned...)
+	switch {
+	case err != nil:
+		return vmKind.VM{}, nil, err
+	case len(refused) > 0:
+		return vmKind.VM{}, asVM(refused), nil
+	}
+
+	id, err := uuid.NewV7()
+	if err != nil {
+		return vmKind.VM{}, nil, err
+	}
+
+	checked.Metadata.UUID = id.String()
+
+	return checked, nil, nil
+}
+
+// planned are the Docker VMs graphs are to make for ownerUUID and have not,
+// each once: what each container of theirs that was not asked to go keeps of
+// the VM it goes into, by a uuid none of their VMs is kept under, sized as it
+// says, the defaults where it says nothing.
+func (c *Chooser) planned(ctx context.Context, ownerUUID string) ([]vmKind.Resources, error) {
+	owned, err := c.records.Owned(ctx, ownerUUID)
+	if err != nil {
+		return nil, err
+	}
+
+	seen := make(map[string]bool, len(owned))
+	for _, v := range owned {
+		seen[v.Metadata.UUID] = true
+	}
+
+	containers, _, err := c.resources.GetAll(ctx, containerKind.Name, resource.Filter{OwnerUUID: ownerUUID}, 0, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	var planned []vmKind.Resources
+
+	for _, r := range containers {
+		common, err := r.Common()
+		if err != nil {
+			return nil, err
+		}
+
+		if common.Expected == kind.Deleted || !r.Metadata.DeletionRequestedAt.IsZero() {
+			continue
+		}
+
+		var spec struct {
+			VM stackKind.VMChoice `json:"vm"`
+		}
+
+		if err := json.Unmarshal(r.Spec, &spec); err != nil {
+			return nil, err
+		}
+
+		if len(spec.VM.UUID) == 0 || seen[spec.VM.UUID] {
+			continue
+		}
+
+		seen[spec.VM.UUID] = true
+
+		resources := c.defaults.Resources
+		if asked := spec.VM.Resources; asked != nil {
+			resources = sized(resources, vmKind.Resources{CPUs: asked.CPUs, Memory: asked.Memory, Disk: asked.Disk})
+		}
+
+		planned = append(planned, resources)
+	}
+
+	return planned, nil
+}
+
 // named is the Docker VM a request names, which has to be the person's own.
 func (c *Chooser) named(ctx context.Context, ownerUUID string, uuid string) (vmKind.VM, domain.ValidationErrors, error) {
 	v, err := c.records.GetOneByOwner(ctx, ownerUUID, uuid)
@@ -146,6 +257,40 @@ func (c *Chooser) named(ctx context.Context, ownerUUID string, uuid string) (vmK
 // asked for. One no node has room for is not kept: nobody asked for it but
 // the container or the stack that cannot go into it.
 func (c *Chooser) made(ctx context.Context, ownerUUID string, uuid string, asked Choice) (vmKind.VM, domain.ValidationErrors, error) {
+	manifest, err := kind.Encode(c.asked(ownerUUID, asked))
+	if err != nil {
+		return vmKind.VM{}, nil, err
+	}
+
+	admitted, err := c.admit.Execute(ctx, &admitResource.Request{Kind: vmKind.Name, OwnerUUID: ownerUUID, Manifest: manifest, UUID: uuid})
+	if err != nil {
+		return vmKind.VM{}, nil, err
+	}
+
+	if len(admitted.ValidationErrors) > 0 {
+		return vmKind.VM{}, asVM(admitted.ValidationErrors), nil
+	}
+
+	v, err := kind.Decode[vmKind.Spec, vmKind.Status](admitted.Resource)
+	if err != nil {
+		return vmKind.VM{}, nil, err
+	}
+
+	if v.Status.State == vmKind.Failed && v.Status.Reason == ReasonNoCapacity {
+		if err := c.resources.Delete(ctx, vmKind.Name, v.Metadata.UUID); err != nil {
+			return vmKind.VM{}, nil, err
+		}
+
+		return vmKind.VM{}, domain.ValidationErrors{"vm": ReasonNoCapacity}, nil
+	}
+
+	return v, nil, nil
+}
+
+// asked is the Docker VM ownerUUID asks for when what goes into it asks for
+// one as choice says: called what it is asked to be, or docker, with the
+// Docker image, and the defaults with whatever it gives in place of each.
+func (c *Chooser) asked(ownerUUID string, asked Choice) vmKind.VM {
 	name := asked.Name
 	if len(name) == 0 {
 		name = defaultName
@@ -177,43 +322,22 @@ func (c *Chooser) made(ctx context.Context, ownerUUID string, uuid string, asked
 		}
 	}
 
-	manifest, err := kind.Encode(vmKind.VM{
+	return vmKind.VM{
 		Kind:     vmKind.Name,
-		Metadata: kind.Metadata{Name: name, Lifetime: c.defaults.Lifetime},
+		Metadata: kind.Metadata{Name: name, OwnerUUID: ownerUUID, Lifetime: c.defaults.Lifetime},
 		Spec:     spec,
-	})
-	if err != nil {
-		return vmKind.VM{}, nil, err
+	}
+}
+
+// asVM is what a Docker VM was refused for, under the request's vm field,
+// where it was asked for.
+func asVM(refused domain.ValidationErrors) domain.ValidationErrors {
+	under := make(domain.ValidationErrors, len(refused))
+	for field, code := range refused {
+		under["vm."+field] = code
 	}
 
-	admitted, err := c.admit.Execute(ctx, &admitResource.Request{Kind: vmKind.Name, OwnerUUID: ownerUUID, Manifest: manifest, UUID: uuid})
-	if err != nil {
-		return vmKind.VM{}, nil, err
-	}
-
-	if len(admitted.ValidationErrors) > 0 {
-		refused := make(domain.ValidationErrors, len(admitted.ValidationErrors))
-		for field, code := range admitted.ValidationErrors {
-			refused["vm."+field] = code
-		}
-
-		return vmKind.VM{}, refused, nil
-	}
-
-	v, err := kind.Decode[vmKind.Spec, vmKind.Status](admitted.Resource)
-	if err != nil {
-		return vmKind.VM{}, nil, err
-	}
-
-	if v.Status.State == vmKind.Failed && v.Status.Reason == ReasonNoCapacity {
-		if err := c.resources.Delete(ctx, vmKind.Name, v.Metadata.UUID); err != nil {
-			return vmKind.VM{}, nil, err
-		}
-
-		return vmKind.VM{}, domain.ValidationErrors{"vm": ReasonNoCapacity}, nil
-	}
-
-	return v, nil, nil
+	return under
 }
 
 // sized is the defaults with what was asked for in place of each, where it

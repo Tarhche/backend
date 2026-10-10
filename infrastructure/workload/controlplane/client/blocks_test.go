@@ -14,11 +14,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/khanzadimahdi/testproject/domain"
+	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/domain/workload/docker"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	containerKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/container"
 	imageKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/image"
 	networkKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/network"
+	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	volumeKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/volume"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
@@ -411,4 +413,35 @@ func TestAnswered(t *testing.T) {
 			assert.Equal(t, tt.want, answered(status))
 		})
 	}
+}
+
+// TestClient_CreateContainer_vmToBeMade holds a container that names no VM to
+// being answered as one a VM is made for, though its graph makes that VM after
+// the control plane answered, and its record may not be there yet: it is
+// called what the container keeps of it.
+func TestClient_CreateContainer_vmToBeMade(t *testing.T) {
+	t.Parallel()
+
+	c, p := newBlocksPlane(t)
+
+	made := containerKind.Container{
+		Kind:     containerKind.Name,
+		Metadata: kind.Metadata{UUID: "c-uuid", Name: "web", Refs: []kind.Reference{{Kind: vmKind.Name, UUID: "planned-uuid"}}},
+		Spec:     containerKind.Spec{Name: "web", Image: "nginx:1.27", VM: stackKind.VMChoice{UUID: "planned-uuid", Name: "builds"}},
+		Status: containerKind.Status{
+			Status: kind.Status{State: containerKind.Running},
+			Docker: &containerKind.Docker{ID: "c1", Name: "web", State: "running"},
+		},
+	}
+
+	p.answers(http.MethodPost, "/api/containers", http.StatusCreated, done(made))
+
+	created, err := c.CreateContainer(context.Background(), "owner-uuid", workloadControlPlane.ContainerRequest{
+		VM:        workloadControlPlane.DockerVMChoice{New: &workloadControlPlane.NewDockerVM{Name: "builds"}},
+		Container: docker.ContainerSpec{Name: "web", Image: "nginx:1.27"},
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, workloadControlPlane.ChosenVM{UUID: "planned-uuid", Name: "builds", Created: true}, created.VM)
+	assert.Equal(t, "c1", created.Container.ID)
 }

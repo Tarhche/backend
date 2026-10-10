@@ -1,6 +1,7 @@
 package client
 
 import (
+	"cmp"
 	"context"
 	"net/url"
 
@@ -14,9 +15,14 @@ import (
 
 // CreateContainer keeps a container in the Docker VM the request names, or in
 // one made for it when it names none, and is it once it is made. It may wait
-// for that VM to come up and for its image to be pulled, so it is given as
-// long as both take. One that could not be made is not kept, and what refused
-// it is the answer.
+// for that VM to be made and come up and for its image to be pulled, so it is
+// given as long as all of it takes. One that could not be made is not kept,
+// and what refused it is the answer.
+//
+// A VM made for it is its graph's to make, after the control plane answered
+// that the container is kept, and its record may not be there yet: the
+// answer says it was made for the container all the same, and calls it what
+// the container keeps of it.
 func (c *Client) CreateContainer(ctx context.Context, ownerUUID string, request workloadControlPlane.ContainerRequest) (workloadControlPlane.CreatedContainer, error) {
 	spec := containerKind.SpecOf(request.Container)
 	spec.VM = choiceOf(request.VM)
@@ -42,7 +48,7 @@ func (c *Client) CreateContainer(ctx context.Context, ownerUUID string, request 
 		return workloadControlPlane.CreatedContainer{}, err
 	}
 
-	created.VM.Name = name
+	created.VM.Name = cmp.Or(name, made.Spec.VM.Name)
 
 	return created, nil
 }

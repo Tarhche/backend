@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
+	"github.com/gofrs/uuid/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -12,8 +14,11 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/vmtest"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
+	containerKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/container"
+	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
+	"github.com/khanzadimahdi/testproject/domain/workload/resource"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
 
@@ -242,6 +247,145 @@ func TestChooser_Make(t *testing.T) {
 			assert.Zero(t, w.Memory.Len(vmKind.Name))
 		})
 	}
+}
+
+// containerIn is a container of ownerUUID's whose spec keeps the vm it goes
+// into as vm, as changes say otherwise.
+func containerIn(uuid string, ownerUUID string, vm stackKind.VMChoice, changes ...func(c *containerKind.Container)) resource.Record {
+	c := containerKind.Container{
+		Kind:     containerKind.Name,
+		Metadata: kind.Metadata{UUID: uuid, OwnerUUID: ownerUUID, Refs: []kind.Reference{{Kind: vmKind.Name, UUID: vm.UUID}}},
+		Spec:     containerKind.Spec{VM: vm, Image: "nginx"},
+		Status:   containerKind.Status{Status: kind.Status{State: containerKind.Pending, Expected: containerKind.Running}},
+	}
+
+	for _, change := range changes {
+		change(&c)
+	}
+
+	return vmtest.Record(c)
+}
+
+func TestChooser_Plan(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	t.Run("one is planned as one made for what names none is, under a uuid of its own, and kept nowhere", func(t *testing.T) {
+		t.Parallel()
+
+		full := vmtest.Alive(vmtest.Node)
+		full.Capacity.Allocated = vm.Resources{Memory: 64 * vmtest.GiB}
+
+		w := vmtest.New(vmtest.WithNodes(full))
+
+		planned, refused, err := w.Chooser.Plan(ctx, "owner", dockervm.Choice{UUID: "another", Name: "builds", Resources: &vmKind.Resources{Memory: 4 * vmtest.GiB}})
+		require.NoError(t, err)
+		require.Empty(t, refused, "no node's room is looked at")
+
+		parsed, err := uuid.FromString(planned.Metadata.UUID)
+		require.NoError(t, err, "and not under any it names")
+		assert.Equal(t, byte(7), parsed.Version())
+
+		assert.Equal(t, "builds", planned.Metadata.Name)
+		assert.Equal(t, "owner", planned.Metadata.OwnerUUID)
+		assert.Equal(t, vmtest.Images.Docker, planned.Spec.Image)
+		assert.Equal(t, vmKind.Resources{CPUs: 2, Memory: 4 * vmtest.GiB, Disk: 20 * vmtest.GiB}, planned.Spec.Resources, "the defaults where it says nothing")
+		assert.Equal(t, []port.Port{80}, planned.Spec.Ports)
+		assert.Equal(t, vmtest.DockerDefaults.Network, planned.Spec.Network)
+		assert.Empty(t, planned.Metadata.Node)
+
+		assert.Zero(t, w.Memory.Len(vmKind.Name), "nothing is kept")
+		assert.Empty(t, w.Producer.Messages(), "nor asked of a node")
+
+		another, _, err := w.Chooser.Plan(ctx, "owner", dockervm.Choice{})
+		require.NoError(t, err)
+		assert.NotEqual(t, planned.Metadata.UUID, another.Metadata.UUID)
+		assert.Equal(t, "docker", another.Metadata.Name)
+	})
+
+	for name, tt := range map[string]struct {
+		vms        []vmKind.VM
+		containers []resource.Record
+		choice     dockervm.Choice
+		want       domain.ValidationErrors
+	}{
+		"one past what one vm may be given is refused where it was asked for": {
+			choice: dockervm.Choice{Resources: &vmKind.Resources{CPUs: 64}},
+			want:   domain.ValidationErrors{"vm.resources.cpus": "too_large"},
+		},
+		"and one past its owner's quota": {
+			vms:    []vmKind.VM{vmtest.Docker("01", "owner"), vmtest.Docker("02", "owner"), vmtest.Docker("03", "owner")},
+			choice: dockervm.Choice{Resources: &vmKind.Resources{CPUs: 3}},
+			want:   domain.ValidationErrors{"vm.resources.cpus": "quota_exceeded"},
+		},
+		"the vms planned for them, and not made, counted as theirs": {
+			vms: []vmKind.VM{vmtest.Docker("01", "owner")},
+			containers: []resource.Record{
+				containerIn("c-1", "owner", stackKind.VMChoice{UUID: "planned-1", Resources: &stackKind.Resources{CPUs: 3}}),
+				containerIn("c-2", "owner", stackKind.VMChoice{UUID: "planned-1", Resources: &stackKind.Resources{CPUs: 3}}),
+			},
+			choice: dockervm.Choice{Resources: &vmKind.Resources{CPUs: 4}},
+			want:   domain.ValidationErrors{"vm.resources.cpus": "quota_exceeded"},
+		},
+		"the defaults where what plans one says nothing": {
+			vms: []vmKind.VM{vmtest.Docker("01", "owner")},
+			containers: []resource.Record{
+				containerIn("c-1", "owner", stackKind.VMChoice{UUID: "planned-1"}),
+				containerIn("c-2", "owner", stackKind.VMChoice{UUID: "planned-2"}),
+			},
+			choice: dockervm.Choice{Resources: &vmKind.Resources{CPUs: 3}},
+			want:   domain.ValidationErrors{"vm.resources.cpus": "quota_exceeded"},
+		},
+		"and each once, however many plan it": {
+			vms: []vmKind.VM{vmtest.Docker("01", "owner")},
+			containers: []resource.Record{
+				containerIn("c-1", "owner", stackKind.VMChoice{UUID: "planned-1"}),
+				containerIn("c-2", "owner", stackKind.VMChoice{UUID: "planned-1"}),
+				containerIn("c-3", "owner", stackKind.VMChoice{UUID: "planned-2"}),
+			},
+			choice: dockervm.Choice{Resources: &vmKind.Resources{CPUs: 2}},
+			want:   nil,
+		},
+		"but not what is made already, what was asked to go, or what is somebody else's": {
+			vms: []vmKind.VM{vmtest.Docker("01", "owner")},
+			containers: []resource.Record{
+				containerIn("c-1", "owner", stackKind.VMChoice{UUID: "01", Resources: &stackKind.Resources{CPUs: 4}}),
+				containerIn("c-2", "owner", stackKind.VMChoice{UUID: "planned-1", Resources: &stackKind.Resources{CPUs: 4}}, func(c *containerKind.Container) {
+					c.Metadata.DeletionRequestedAt = time.Now()
+					c.Status.Expected = kind.Deleted
+				}),
+				containerIn("c-3", "other", stackKind.VMChoice{UUID: "planned-2", Resources: &stackKind.Resources{CPUs: 4}}),
+			},
+			choice: dockervm.Choice{Resources: &vmKind.Resources{CPUs: 4}},
+			want:   nil,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			w := vmtest.New(vmtest.WithVMs(tt.vms...))
+
+			for _, c := range tt.containers {
+				_, err := w.Memory.Create(ctx, c)
+				require.NoError(t, err)
+			}
+
+			_, refused, err := w.Chooser.Plan(ctx, "owner", tt.choice)
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.want, refused)
+			assert.Equal(t, len(tt.vms), w.Memory.Len(vmKind.Name), "and nothing is kept")
+		})
+	}
+
+	t.Run("somebody has to be asking", func(t *testing.T) {
+		t.Parallel()
+
+		_, refused, err := vmtest.New().Chooser.Plan(ctx, "", dockervm.Choice{})
+		require.NoError(t, err)
+		assert.Equal(t, domain.ValidationErrors{"owner_uuid": "required_field"}, refused)
+	})
 }
 
 func TestChoice_JSON(t *testing.T) {

@@ -83,7 +83,7 @@ func New(options ...vmtest.Option) *Workload {
 
 	// a Docker VM a graph needs is made as any Docker VM made for what lives
 	// in it is.
-	chooser := dockervm.NewChooser(w.Workload.Records, w.Resources, admission, vmtest.DockerDefaults)
+	chooser := dockervm.NewChooser(w.Workload.Records, w.Resources, admission, w.VMs, vmtest.DockerDefaults)
 
 	w.Kinds = graph.Kinds{
 		vmKind.Name:        controlPlaneVMs.NewGraph(chooser, w.Requirements),

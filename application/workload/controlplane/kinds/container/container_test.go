@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gofrs/uuid/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -19,6 +20,7 @@ import (
 	networkKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/network"
 	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
+	volumeKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/volume"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
@@ -48,7 +50,7 @@ func TestContainers_Admit(t *testing.T) {
 
 	ctx := context.Background()
 
-	t.Run("into the docker vm it names, which it belongs to and is placed where", func(t *testing.T) {
+	t.Run("into the docker vm it names, which it belongs to and is placed where, keeping what to make it with again", func(t *testing.T) {
 		t.Parallel()
 
 		w := blockstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
@@ -62,8 +64,15 @@ func TestContainers_Admit(t *testing.T) {
 		assert.Equal(t, vmtest.Node, admitted.Metadata.Node)
 		assert.Equal(t, "web", admitted.Metadata.Name)
 		assert.Equal(t, "nginx:1.27", admitted.Spec.Image)
-		assert.Equal(t, stackKind.VMChoice{UUID: "vm-1"}, admitted.Spec.VM)
-		assert.Equal(t, containerKind.Pending, admitted.Status.Status.State, "to be made once its vm runs")
+		assert.Equal(t, stackKind.VMChoice{
+			UUID:      "vm-1",
+			Name:      "box",
+			Resources: &stackKind.Resources{CPUs: 2, Memory: 2 * vmtest.GiB, Disk: 20 * vmtest.GiB},
+			Ports:     []port.Port{},
+			Network:   &stackKind.Network{Ingress: "allow", Egress: "allow"},
+		}, admitted.Spec.VM, "its uuid, and its name, resources, ports and network as its record has them")
+		assert.Equal(t, containerKind.Pending, admitted.Status.Status.State, "for its graph to make")
+		assert.Empty(t, admitted.Status.Reason)
 		assert.Equal(t, containerKind.Running, admitted.Status.Expected)
 	})
 
@@ -85,7 +94,7 @@ func TestContainers_Admit(t *testing.T) {
 		require.NoError(t, err)
 		require.Empty(t, invalid)
 
-		spec.VM = stackKind.VMChoice{UUID: "vm-1"}
+		spec.VM = vmKind.ChoiceOf(vmtest.Docker("vm-1", "owner"))
 		assert.Equal(t, spec, admitted.Spec, "a runtime is its vm's dockerd's to refuse")
 	})
 
@@ -106,37 +115,140 @@ func TestContainers_Admit(t *testing.T) {
 		assert.Equal(t, "vm-1", containerKind.VMOf(admitted))
 	})
 
-	t.Run("into one made for it when it names none, though its owner has a docker vm already", func(t *testing.T) {
+	t.Run("into one its graph is to make when it names none, though its owner has a docker vm already, which is kept nowhere yet", func(t *testing.T) {
 		t.Parallel()
 
 		w := blockstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
 
-		admitted, invalid, err := w.Containers.Admit(ctx, asked(containerKind.Spec{Image: "nginx"}))
+		admitted, invalid, err := w.Containers.Admit(ctx, asked(containerKind.Spec{Image: "nginx", External: []string{"volume/data"}}))
 		require.NoError(t, err)
 		require.Empty(t, invalid)
 
-		made, kept := w.Stored(containerKind.VMOf(admitted))
-		require.True(t, kept)
-		assert.NotEqual(t, "vm-1", made.Metadata.UUID)
-		assert.True(t, vmKind.DockerVM(made, vmtest.Images.Docker))
-		assert.Equal(t, stackKind.VMChoice{UUID: made.Metadata.UUID}, admitted.Spec.VM, "kept as the uuid of the vm it went into, and nothing else")
-		assert.Equal(t, "its vm is scheduled", admitted.Status.Reason, "and it waits for it to come up")
+		planned := containerKind.VMOf(admitted)
+
+		parsed, err := uuid.FromString(planned)
+		require.NoError(t, err, "a uuid of its own, given it now")
+		assert.Equal(t, byte(7), parsed.Version())
+		assert.NotEqual(t, "vm-1", planned)
+
+		_, kept := w.Stored(planned)
+		assert.False(t, kept, "its graph makes it")
+		assert.Equal(t, 1, w.Memory.Len(vmKind.Name), "and nothing else is made")
+		assert.Empty(t, w.Producer.Messages())
+
+		assert.Equal(t, stackKind.VMChoice{
+			UUID:      planned,
+			Name:      "docker",
+			Resources: &stackKind.Resources{CPUs: 2, Memory: 2 * vmtest.GiB, Disk: 20 * vmtest.GiB},
+			Ports:     []port.Port{80},
+			Network:   &stackKind.Network{Ingress: "allow", Egress: "allow"},
+		}, admitted.Spec.VM, "kept with what to make it with, the defaults filled in")
+		assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: planned}}, admitted.Metadata.Refs, "it lives in it already")
+		assert.Empty(t, admitted.Metadata.Node, "and is on no node until it is")
+		assert.Equal(t, containerKind.Pending, admitted.Status.Status.State)
+		assert.Equal(t, "its vm is being made", admitted.Status.Reason)
+		assert.Empty(t, admitted.Spec.External, "nothing is in a vm still to be made")
 	})
 
-	t.Run("into one made for it as it describes it, which is kept as the vm's uuid alone", func(t *testing.T) {
+	t.Run("into one its graph is to make as it describes it, the defaults filled in for what it leaves out", func(t *testing.T) {
 		t.Parallel()
 
 		w := blockstest.New()
 
-		admitted, invalid, err := w.Containers.Admit(ctx, asked(containerKind.Spec{Image: "nginx", VM: stackKind.VMChoice{Name: "builds", Ports: []port.Port{}}}))
+		admitted, invalid, err := w.Containers.Admit(ctx, asked(containerKind.Spec{Image: "nginx", VM: stackKind.VMChoice{Name: "builds", Ports: []port.Port{}, Resources: &stackKind.Resources{Memory: 4 * vmtest.GiB}}}))
 		require.NoError(t, err)
 		require.Empty(t, invalid)
 
-		made, kept := w.Stored(containerKind.VMOf(admitted))
-		require.True(t, kept)
-		assert.Equal(t, "builds", made.Metadata.Name)
-		assert.Empty(t, made.Spec.Ports, "ports given empty are none")
-		assert.Equal(t, stackKind.VMChoice{UUID: made.Metadata.UUID}, admitted.Spec.VM)
+		_, kept := w.Stored(containerKind.VMOf(admitted))
+		assert.False(t, kept)
+
+		assert.Equal(t, stackKind.VMChoice{
+			UUID:      containerKind.VMOf(admitted),
+			Name:      "builds",
+			Resources: &stackKind.Resources{CPUs: 2, Memory: 4 * vmtest.GiB, Disk: 20 * vmtest.GiB},
+			Ports:     []port.Port{},
+			Network:   &stackKind.Network{Ingress: "allow", Egress: "allow"},
+		}, admitted.Spec.VM, "ports given empty are none")
+	})
+
+	t.Run("one whose vm its graph is to make is held to what its owner's vms are planned to be given besides", func(t *testing.T) {
+		t.Parallel()
+
+		w := blockstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
+
+		// a container whose vm is still to be made, of four vcpus.
+		w.Keep(blockstest.AContainer("waiting", "planned-vm", containerKind.Pending, containerKind.Running, func(c *containerKind.Container) {
+			c.Spec.VM = stackKind.VMChoice{UUID: "planned-vm", Resources: &stackKind.Resources{CPUs: 4}}
+			c.Metadata.Node = ""
+		}))
+
+		_, invalid, err := w.Containers.Admit(ctx, asked(containerKind.Spec{Image: "nginx", VM: stackKind.VMChoice{Resources: &stackKind.Resources{CPUs: 3}}}))
+		require.NoError(t, err)
+
+		assert.Equal(t, domain.ValidationErrors{"vm.resources.cpus": "quota_exceeded"}, invalid)
+	})
+
+	t.Run("one in a docker vm it names keeps as not its own what its vm has already", func(t *testing.T) {
+		t.Parallel()
+
+		w := blockstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
+
+		present := func(uuid string, kindName string, name string, changes ...func(r *kind.Raw)) {
+			r := blockstest.A[map[string]string, map[string]any](kindName, uuid, "vm-1", map[string]string{"name": name}, map[string]any{"state": "present", "expected": "present", "name": name})
+			for _, change := range changes {
+				change(&r)
+			}
+
+			w.Keep(r)
+		}
+
+		present("n-1", networkKind.Name, "backend")
+		present("n-2", networkKind.Name, "leaving", func(r *kind.Raw) { r.Metadata.DeletionRequestedAt = time.Now() })
+		present("v-1", volumeKind.Name, "data")
+
+		sighted := func(kindName string, name string) {
+			w.Sightings.Saw(kindName, blocks.Seen{Node: vmtest.Node, At: time.Now(), Manifest: kind.Raw{
+				Kind:     kindName,
+				Metadata: kind.Metadata{UUID: kindName + "-" + name, Owners: []kind.Reference{{Kind: "vm", UUID: "vm-1"}}},
+				Status:   json.RawMessage(`{"state":"present","name":"` + name + `"}`),
+			}})
+		}
+
+		sighted(networkKind.Name, "shared")
+		sighted(volumeKind.Name, "cache")
+
+		admitted, invalid, err := w.Containers.Admit(ctx, asked(containerKind.Spec{
+			Image:    "nginx",
+			Networks: []string{"bridge", "backend", "frontend", "shared", "leaving", "backend"},
+			Mounts: []containerKind.Mount{
+				{Type: containerKind.MountVolume, Source: "data", Target: "/data"},
+				{Type: containerKind.MountVolume, Source: "fresh", Target: "/fresh"},
+				{Type: containerKind.MountVolume, Source: "cache", Target: "/cache"},
+				{Type: containerKind.MountBind, Source: "/srv", Target: "/srv"},
+			},
+			External: []string{"network/frontend"},
+		}, kind.Reference{Kind: "vm", UUID: "vm-1"}))
+		require.NoError(t, err)
+		require.Empty(t, invalid)
+
+		assert.Equal(t, []string{"network/backend", "network/shared", "volume/data", "volume/cache"}, admitted.Spec.External,
+			"what its records keep and its dockerd holds with nobody keeping it, but not what is on its way out, what it was asked to say, or what every dockerd has")
+	})
+
+	t.Run("and one something owns keeps what it was asked to say of it", func(t *testing.T) {
+		t.Parallel()
+
+		w := blockstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
+		w.Keep(blockstest.A[networkKind.Spec, networkKind.Status](networkKind.Name, "n-1", "vm-1", networkKind.Spec{Name: "backend"}, networkKind.Status{Status: kind.Status{State: networkKind.Present}}))
+
+		c := asked(containerKind.Spec{Image: "nginx", Networks: []string{"backend"}, External: []string{"network/elsewhere"}}, kind.Reference{Kind: "vm", UUID: "vm-1"})
+		c.Metadata.Owners = []kind.Reference{{Kind: "stack", UUID: "stack-uuid"}}
+
+		admitted, invalid, err := w.Containers.Admit(ctx, c)
+		require.NoError(t, err)
+		require.Empty(t, invalid)
+
+		assert.Equal(t, []string{"network/elsewhere"}, admitted.Spec.External, "its graph's to say")
 	})
 
 	for name, tt := range map[string]struct {
@@ -158,6 +270,15 @@ func TestContainers_Admit(t *testing.T) {
 		"one naming a vm and describing a new one": {
 			spec: containerKind.Spec{Image: "nginx", VM: stackKind.VMChoice{UUID: "vm-1", Name: "builds"}},
 			want: domain.ValidationErrors{"vm": "vm_or_new_vm"},
+		},
+		"one whose vm its graph is to make would be given more than one vm may be": {
+			spec: containerKind.Spec{Image: "nginx", VM: stackKind.VMChoice{Resources: &stackKind.Resources{CPUs: 64}}},
+			want: domain.ValidationErrors{"vm.resources.cpus": "too_large"},
+		},
+		"or more than its owner's vms may be given between them": {
+			vms:  []vmKind.VM{vmtest.Docker("vm-1", "owner"), vmtest.Docker("vm-2", "owner"), vmtest.Docker("vm-3", "owner")},
+			spec: containerKind.Spec{Image: "nginx", VM: stackKind.VMChoice{Resources: &stackKind.Resources{CPUs: 3}}},
+			want: domain.ValidationErrors{"vm.resources.cpus": "quota_exceeded"},
 		},
 		"one published on what is not an address": {
 			vms:  []vmKind.VM{vmtest.Docker("vm-1", "owner")},
@@ -226,22 +347,19 @@ func TestContainers_Reconcile(t *testing.T) {
 		container kind.Raw
 		want      []kind.Intent
 	}{
-		"one not made yet, in a vm that runs, is made": {
+		"one not made yet, in a vm that runs, is its graph's to make": {
 			container: blockstest.AContainer("c", "vm-1", containerKind.Pending, containerKind.Running),
-			want:      []kind.Intent{{Action: containerKind.ActionCreate, Reason: "it is not in its vm, which runs"}},
 		},
 		"and so is one its vm lost": {
 			container: blockstest.AContainer("c", "vm-1", containerKind.Missing, containerKind.Running),
-			want:      []kind.Intent{{Action: containerKind.ActionCreate, Reason: "it is not in its vm, which runs"}},
 		},
 		"even one that is to be stopped, which is stopped once it is made": {
 			container: blockstest.AContainer("c", "vm-1", containerKind.Missing, containerKind.Stopped),
-			want:      []kind.Intent{{Action: containerKind.ActionCreate, Reason: "it is not in its vm, which runs"}},
 		},
-		"but not in a vm that does not run": {
+		"and one in a vm that does not run": {
 			container: blockstest.AContainer("c", "vm-stopped", containerKind.Pending, containerKind.Running),
 		},
-		"nor in one that is gone": {
+		"or in one that is gone": {
 			container: blockstest.AContainer("c", "vm-gone", containerKind.Missing, containerKind.Running),
 		},
 		"one waiting on its vm waits": {
@@ -329,7 +447,7 @@ func TestContainers_Prepare(t *testing.T) {
 		assert.NoError(t, err)
 	})
 
-	t.Run("put on a network, its spec names it, with the names it is reached by there", func(t *testing.T) {
+	t.Run("put on a network, its spec names it, with the names it is reached by there, as not its own", func(t *testing.T) {
 		t.Parallel()
 
 		prepared, _, err := w.Containers.Prepare(ctx, running, containerKind.ActionConnect, containerKind.ConnectPayload{Network: "backend", Aliases: []string{"api"}})
@@ -337,6 +455,7 @@ func TestContainers_Prepare(t *testing.T) {
 
 		assert.Equal(t, []string{"backend"}, prepared.Spec.Networks)
 		assert.Equal(t, map[string][]string{"backend": {"api"}}, prepared.Spec.Aliases)
+		assert.Equal(t, []string{"network/backend"}, prepared.Spec.External, "it was there before it was put on it")
 
 		taken, _, err := w.Containers.Prepare(ctx, prepared, containerKind.ActionDisconnect, containerKind.DisconnectPayload{Network: "backend"})
 		require.ErrorAs(t, err, new(*noderequest.Error), "what docker has not done, it is not undone")
@@ -353,6 +472,50 @@ func TestContainers_Prepare(t *testing.T) {
 
 		assert.Empty(t, taken.Spec.Networks, "and taken off it, its spec names it no longer")
 		assert.Nil(t, taken.Spec.Aliases)
+		assert.Nil(t, taken.Spec.External)
+	})
+
+	t.Run("a kept spec naming its vm and what to make it with again is no request, and is not refused for asking for two vms", func(t *testing.T) {
+		t.Parallel()
+
+		kept := typed(t, blockstest.AContainer("c", "vm-1", containerKind.Running, containerKind.Running, func(c *containerKind.Container) {
+			c.Spec.VM = vmKind.ChoiceOf(vmtest.Docker("vm-1", "owner"))
+		}))
+
+		prepared, invalid, err := w.Containers.Prepare(ctx, kept, containerKind.ActionConnect, containerKind.ConnectPayload{Network: "backend"})
+		require.NoError(t, err)
+		require.Empty(t, invalid)
+		assert.Equal(t, kept.Spec.VM, prepared.Spec.VM, "it is kept as it was")
+
+		seen := *prepared.Status.Docker
+		seen.Networks = []string{"backend", "bridge"}
+		prepared.Status.Docker = &seen
+
+		taken, invalid, err := w.Containers.Prepare(ctx, prepared, containerKind.ActionDisconnect, containerKind.DisconnectPayload{Network: "backend"})
+		require.NoError(t, err)
+		require.Empty(t, invalid)
+		assert.Equal(t, kept.Spec.VM, taken.Spec.VM)
+	})
+
+	t.Run("one its graph made for it is its own", func(t *testing.T) {
+		t.Parallel()
+
+		w := blockstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
+		w.Keep(blockstest.A[networkKind.Spec, networkKind.Status](networkKind.Name, "n-uuid", "vm-1", networkKind.Spec{Name: "backend"}, networkKind.Status{
+			Status: kind.Status{State: networkKind.Present},
+			Docker: &networkKind.Docker{ID: "0a1b2c3d", Name: "backend"},
+		}))
+
+		r, _ := w.Kept(networkKind.Name, "n-uuid")
+		r.Metadata.Owners = []kind.Reference{{Kind: containerKind.Name, UUID: "c"}}
+		_, err := w.Memory.Update(ctx, r)
+		require.NoError(t, err)
+
+		prepared, _, err := w.Containers.Prepare(ctx, running, containerKind.ActionConnect, containerKind.ConnectPayload{Network: "backend"})
+		require.NoError(t, err)
+
+		assert.Equal(t, []string{"backend"}, prepared.Spec.Networks)
+		assert.Empty(t, prepared.Spec.External)
 	})
 
 	t.Run("a network its vm has not is not found, and its spec is left as it was", func(t *testing.T) {

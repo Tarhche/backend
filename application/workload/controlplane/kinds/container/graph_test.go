@@ -361,7 +361,7 @@ func TestGraph_Create(t *testing.T) {
 		assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "vm-1"}}, c.Metadata.Refs, "it lives in its vm")
 		assert.Empty(t, c.Metadata.Owners, "and nothing owns it until its graph says so")
 		assert.Equal(t, int64(1), c.Metadata.Generation)
-		assert.Equal(t, stackKind.VMChoice{UUID: "vm-1"}, c.Spec.VM, "its vm by its uuid alone, as a container is kept")
+		assert.Equal(t, vmKind.ChoiceOf(vmtest.Docker("vm-1", "owner")), c.Spec.VM, "its vm as its record has it, as a container is kept")
 		assert.Equal(t, "web", c.Spec.Name)
 
 		sent := w.Node.Sent()
@@ -651,6 +651,21 @@ func TestGraph_Delete(t *testing.T) {
 
 		_, kept := stored(t, w, "c-1")
 		assert.True(t, kept)
+		assert.Empty(t, w.Node.Sent())
+	})
+
+	t.Run("but one on no node, whose vm is still being made, goes at once, and nothing is asked", func(t *testing.T) {
+		t.Parallel()
+
+		w := requirementstest.New(vmtest.WithVMs(vmtest.In(vmtest.Docker("vm-1", "owner"), func(v *vmKind.VM) { v.Status.State = vmKind.Scheduled })))
+		w.Keep(blockstest.AContainer("c-1", "vm-1", containerKind.Pending, containerKind.Running, unmade, func(c *containerKind.Container) {
+			c.Metadata.Node = ""
+		}))
+
+		require.NoError(t, w.Kinds[containerKind.Name].Delete(ctx, web))
+
+		_, kept := stored(t, w, "c-1")
+		assert.False(t, kept)
 		assert.Empty(t, w.Node.Sent())
 	})
 

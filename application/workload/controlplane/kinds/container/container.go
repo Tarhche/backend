@@ -2,16 +2,23 @@
 // container is admitted as, what it is asked for when what it is doing is
 // not what it was asked to be, and what is shown beside the containers kept.
 //
-// A container is admitted into the Docker VM the stacks' rules choose, or
-// make: the one it names, or one made for it when it names none. It belongs
-// to that VM and is placed where it is, and it starts pending, to be made as
-// soon as its VM runs.
+// A container is admitted into the Docker VM it names, which has to be its
+// owner's and running or on its way up, or, when it names none, into one its
+// graph is to make for it: given a uuid now, and held now to what the vm kind
+// would admit it as, but made by its graph, before the container. Either way
+// it keeps the VM's uuid and what to make the VM with again whenever it is
+// gone, and what it names that its VM has already, which is not its own
+// (Spec.External). It belongs to that VM and is placed where it is, once the
+// VM is placed, and it starts pending.
 //
-// What it is asked for after that is decided from what its node last said of
-// it:
+// A container nothing owns is the root of a graph of its own (Graph): its
+// graph makes its VM, the networks and volumes it needs and then it, in
+// order, makes each again whenever it is gone, but what is not its own, and
+// removes it, and the networks it owns, once it is asked to go. What it is
+// asked for beside that is decided from what its node last said of it:
 //
 //	expected  observed                          asked
-//	any       pending or missing, its VM runs   create, which pulls its image
+//	any       pending or missing                nothing: its graph makes it
 //	any       waiting                           nothing: its VM's own reconcile
 //	stopped   running                           stop
 //	running   stopped                           start
@@ -39,11 +46,13 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/blocks"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/dockervm"
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/workload/graph"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	containerKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/container"
 	networkKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/network"
 	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
+	volumeKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/volume"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
@@ -68,8 +77,14 @@ func New(dependencies blocks.Dependencies) *Containers {
 	return c
 }
 
-// Admit takes in a container its owner asked for: its spec checked, and its
-// Docker VM chosen, or made, which has to be running or on its way up.
+// Admit takes in a container its owner asked for: its spec checked, in the
+// Docker VM it names, which has to be theirs and running or on its way up, or
+// in one its graph is to make for it when it names none, held now to what the
+// vm kind would admit it as. What it keeps of its VM is the VM's uuid and what
+// to make it with again whenever it is gone, as the VM's record has it, or as
+// it was asked for with the defaults filled in; and one nothing owns, the
+// root of its graph, keeps what it names that its VM has already as not its
+// own.
 func (s *Containers) Admit(ctx context.Context, asked containerKind.Container) (containerKind.Container, domain.ValidationErrors, error) {
 	choice := asked.Spec.VM
 	if parent, named := asked.Metadata.Owner(containerKind.Parent); named && len(choice.UUID) == 0 && !choice.Describes() {
@@ -80,18 +95,14 @@ func (s *Containers) Admit(ctx context.Context, asked containerKind.Container) (
 		return containerKind.Container{}, invalid, nil
 	}
 
-	v, refused, err := s.Chooser.Choose(ctx, asked.Metadata.OwnerUUID, choiceOf(choice))
+	v, there, refused, err := s.vmOf(ctx, asked.Metadata.OwnerUUID, choice)
 	if err != nil || len(refused) > 0 {
 		return containerKind.Container{}, refused, err
 	}
 
-	if !vmKind.Up(v) {
-		return containerKind.Container{}, domain.ValidationErrors{"vm": "not_running"}, nil
-	}
-
 	spec := asked.Spec
 	spec.Image = strings.TrimSpace(spec.Image)
-	spec.VM = stackKind.VMChoice{UUID: v.Metadata.UUID}
+	spec.VM = vmKind.ChoiceOf(v)
 
 	admitted := containerKind.Container{
 		Kind: containerKind.Name,
@@ -107,29 +118,168 @@ func (s *Containers) Admit(ctx context.Context, asked containerKind.Container) (
 		Status: containerKind.Status{Status: kind.Status{State: containerKind.Pending, Expected: containerKind.Running}},
 	}
 
-	if v.Status.State != vmKind.Running {
+	switch {
+	case !there:
+		admitted.Status.Reason = "its vm is being made"
+	case v.Status.State != vmKind.Running:
 		admitted.Status.Reason = fmt.Sprintf("its vm is %s", v.Status.State)
+	}
+
+	// a root keeps what was there before it as not its own, which its graph
+	// never makes or removes: nothing is in a VM still to be made.
+	if len(asked.Metadata.Owning(containerKind.Parent)) == 0 {
+		admitted.Spec.External = nil
+
+		if there {
+			if admitted.Spec.External, err = s.external(ctx, v.Metadata.UUID, spec); err != nil {
+				return containerKind.Container{}, nil, err
+			}
+		}
 	}
 
 	return admitted, nil, nil
 }
 
+// vmOf is the Docker VM a container of ownerUUID's goes into, as choice says,
+// and whether it is there: the one choice names, which has to be theirs and
+// running or on its way up; or, when it names none, one its graph is to make
+// for it, as choice describes it, planned now under a uuid of its own
+// (dockervm.Chooser.Plan), which is not there yet.
+func (s *Containers) vmOf(ctx context.Context, ownerUUID string, choice stackKind.VMChoice) (vmKind.VM, bool, domain.ValidationErrors, error) {
+	if len(choice.UUID) == 0 {
+		v, refused, err := s.Chooser.Plan(ctx, ownerUUID, choiceOf(choice))
+
+		return v, false, refused, err
+	}
+
+	v, refused, err := s.Chooser.Choose(ctx, ownerUUID, dockervm.Choice{UUID: choice.UUID})
+	switch {
+	case err != nil || len(refused) > 0:
+		return vmKind.VM{}, false, refused, err
+	case !vmKind.Up(v):
+		return vmKind.VM{}, false, domain.ValidationErrors{"vm": "not_running"}, nil
+	}
+
+	return v, true, nil, nil
+}
+
+// external are what of the networks a container joins and the volumes it
+// mounts by their names the Docker VM vmUUID names has already, each as the
+// node of a graph it is, network/<name> or volume/<name>, once: what was there
+// before it, made by somebody else, which its graph never makes or removes
+// for it, and which it waits on while one is missing.
+func (s *Containers) external(ctx context.Context, vmUUID string, spec containerKind.Spec) ([]string, error) {
+	var external []string
+
+	held := func(kindName string, name string) error {
+		id := graph.ID(kindName, name).String()
+		if len(strings.TrimSpace(name)) == 0 || slices.Contains(external, id) {
+			return nil
+		}
+
+		there, err := s.holds(ctx, kindName, vmUUID, name)
+		if err == nil && there {
+			external = append(external, id)
+		}
+
+		return err
+	}
+
+	for _, network := range spec.Networks {
+		if networkKind.Default(network) {
+			continue
+		}
+
+		if err := held(networkKind.Name, network); err != nil {
+			return nil, err
+		}
+	}
+
+	for _, m := range spec.Mounts {
+		if m.Type != containerKind.MountVolume {
+			continue
+		}
+
+		if err := held(volumeKind.Name, m.Source); err != nil {
+			return nil, err
+		}
+	}
+
+	return external, nil
+}
+
+// holds reports whether the Docker VM vmUUID names has what of the named kind
+// is called name, its Docker name: kept by a record that is not on its way
+// out, which one of the same name may be about to take the place of, or held
+// by its dockerd with nobody keeping it, as its node last said.
+func (s *Containers) holds(ctx context.Context, kindName string, vmUUID string, name string) (bool, error) {
+	kept, _, err := s.Resources.GetAll(ctx, kindName, resource.Filter{Parent: kind.Reference{Kind: containerKind.Parent, UUID: vmUUID}}, 0, 0)
+	if err != nil {
+		return false, err
+	}
+
+	for i := range kept {
+		if !called(kept[i].Raw, name) {
+			continue
+		}
+
+		common, err := kept[i].Common()
+		if err != nil {
+			return false, err
+		}
+
+		if common.Expected != kind.Deleted && common.State != kind.Deleted && kept[i].Metadata.DeletionRequestedAt.IsZero() {
+			return true, nil
+		}
+	}
+
+	return slices.ContainsFunc(s.Sightings.In(kindName, vmUUID), func(r kind.Raw) bool { return called(r, name) }), nil
+}
+
+// owns reports whether c owns what of the named kind its Docker VM keeps a
+// record of under name, its Docker name: what its graph made for it, which
+// names it among its owners.
+func (s *Containers) owns(ctx context.Context, c containerKind.Container, kindName string, name string) (bool, error) {
+	kept, _, err := s.Resources.GetAll(ctx, kindName, resource.Filter{Parent: kind.Reference{Kind: containerKind.Parent, UUID: containerKind.VMOf(c)}}, 0, 0)
+	if err != nil {
+		return false, err
+	}
+
+	owner := kind.Reference{Kind: containerKind.Name, UUID: c.Metadata.UUID}
+
+	return slices.ContainsFunc(kept, func(r resource.Record) bool {
+		return called(r.Raw, name) && slices.Contains(r.Metadata.Owners, owner)
+	}), nil
+}
+
+// called reports whether a network or a volume of a Docker VM is called name:
+// the name it was asked for with, or the one its VM's dockerd last said it
+// has.
+func called(r kind.Raw, name string) bool {
+	var spec struct {
+		Name string `json:"name"`
+	}
+
+	if len(r.Spec) > 0 && json.Unmarshal(r.Spec, &spec) == nil && spec.Name == name {
+		return true
+	}
+
+	return blocks.ObservedOf(r.Status).Docker.Name == name
+}
+
 // Reconcile is what a container is asked for, given what it was asked to be
-// and what it was last seen doing.
-func (s *Containers) Reconcile(ctx context.Context, c containerKind.Container) ([]kind.Intent, error) {
+// and what it was last seen doing. One that is not made, its graph makes, in
+// order, after what it needs.
+func (s *Containers) Reconcile(_ context.Context, c containerKind.Container) ([]kind.Intent, error) {
 	state, expected := c.Status.Status.State, c.Status.Expected
 
 	switch {
 	case expected != containerKind.Running && expected != containerKind.Stopped:
 		return nil, nil
 
+	// not made yet, or gone: its graph makes it, after what it needs.
 	case state == containerKind.Pending || state == containerKind.Missing:
-		running, err := s.Running(ctx, containerKind.VMOf(c))
-		if err != nil || !running {
-			return nil, err
-		}
-
-		return []kind.Intent{{Action: containerKind.ActionCreate, Reason: "it is not in its vm, which runs"}}, nil
+		return nil, nil
 
 	case expected == containerKind.Stopped && state == containerKind.Running:
 		return []kind.Intent{{Action: containerKind.ActionStop, Reason: "it runs while it was expected stopped"}}, nil
@@ -174,7 +324,9 @@ func (s *Containers) Apply(_ context.Context, _ containerKind.Container, action 
 // Prepare readies a container's command: one that runs is not removed but by
 // force, which is refused as docker would refuse it; and putting it on a
 // network, or taking it off one, changes the networks its spec names, which
-// are what it is put back on.
+// are what it is put back on. A network it is put on is there already, and is
+// not its own (Spec.External) unless its graph made it for it; one it is
+// taken off it names no more.
 func (s *Containers) Prepare(ctx context.Context, c containerKind.Container, action string, payload any) (containerKind.Container, domain.ValidationErrors, error) {
 	switch action {
 	case containerKind.ActionDelete:
@@ -197,8 +349,17 @@ func (s *Containers) Prepare(ctx context.Context, c containerKind.Container, act
 
 		connect.Network = network
 
+		own, err := s.owns(ctx, c, networkKind.Name, connect.Network)
+		if err != nil {
+			return containerKind.Container{}, nil, err
+		}
+
 		if !slices.Contains(c.Spec.Networks, connect.Network) {
 			c.Spec.Networks = append(slices.Clone(c.Spec.Networks), connect.Network)
+		}
+
+		if external := graph.ID(networkKind.Name, connect.Network).String(); !own && !networkKind.Default(connect.Network) && !slices.Contains(c.Spec.External, external) {
+			c.Spec.External = append(slices.Clone(c.Spec.External), external)
 		}
 
 		aliases := make(map[string][]string, len(c.Spec.Aliases)+1)
@@ -235,6 +396,13 @@ func (s *Containers) Prepare(ctx context.Context, c containerKind.Container, act
 		disconnect.Network = network
 
 		c.Spec.Networks = slices.DeleteFunc(slices.Clone(c.Spec.Networks), func(network string) bool { return network == disconnect.Network })
+
+		if external := graph.ID(networkKind.Name, disconnect.Network).String(); slices.Contains(c.Spec.External, external) {
+			c.Spec.External = slices.DeleteFunc(slices.Clone(c.Spec.External), func(id string) bool { return id == external })
+			if len(c.Spec.External) == 0 {
+				c.Spec.External = nil
+			}
+		}
 
 		if _, aliased := c.Spec.Aliases[disconnect.Network]; aliased {
 			aliases := make(map[string][]string, len(c.Spec.Aliases))

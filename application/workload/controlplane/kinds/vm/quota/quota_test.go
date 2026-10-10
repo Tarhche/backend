@@ -164,6 +164,29 @@ func TestQuota_Check(t *testing.T) {
 		assert.Empty(t, invalid, "one of them changing is not one more")
 	})
 
+	t.Run("what is planned for them is counted as theirs, a vm at a time", func(t *testing.T) {
+		t.Parallel()
+
+		planned := []vmKind.Resources{{CPUs: 1, Memory: 2 * vmtest.GiB, Disk: 20 * vmtest.GiB}}
+
+		invalid, err := w.Quota.Check(ctx, "vm.", "owner", vmKind.Resources{CPUs: 1, Memory: 2 * vmtest.GiB, Disk: 20 * vmtest.GiB}, "", planned...)
+		require.NoError(t, err)
+		assert.Equal(t, domain.ValidationErrors{}, invalid, "within what is left beside it")
+
+		invalid, err = w.Quota.Check(ctx, "vm.", "owner", vmKind.Resources{CPUs: 2, Memory: 2 * vmtest.GiB, Disk: 20 * vmtest.GiB}, "", planned...)
+		require.NoError(t, err)
+		assert.Equal(t, domain.ValidationErrors{"vm.resources.cpus": "quota_exceeded"}, invalid, "and past it")
+
+		many := make([]vmKind.Resources, vmtest.Limits.UserMaxVMs-2)
+		for i := range many {
+			many[i] = vmKind.Resources{CPUs: 0, Memory: 1, Disk: 1}
+		}
+
+		invalid, err = w.Quota.Check(ctx, "", "owner", vmKind.Resources{Memory: 1, Disk: 1}, "", many...)
+		require.NoError(t, err)
+		assert.Equal(t, domain.ValidationErrors{"vms": "quota_exceeded"}, invalid, "each one of the vms they have")
+	})
+
 	t.Run("what it holds people to", func(t *testing.T) {
 		t.Parallel()
 

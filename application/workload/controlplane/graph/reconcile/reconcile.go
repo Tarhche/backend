@@ -9,7 +9,8 @@
 // skipped, and so is one backed off after its plan failed, until its backoff
 // is over. A root asked to be deleted is removed, from the top down, through
 // what it owns (execute.Executor.Remove), however often it is reconciled, and
-// is never made again; any other is applied at its record's generation
+// whatever its failures backed it off for, and is never made again; any other
+// is applied at its record's generation
 // (execute.Executor.Apply), which makes what is missing of it, from the
 // bottom up, and nothing else. How its plan ended is kept on its lease as it
 // is let go of: one that failed backs the root off, longer with every failure
@@ -205,7 +206,8 @@ func New(dependencies Dependencies, config Config) (*Reconciler, error) {
 // is taken first, as this control plane's: a root another holds is skipped,
 // ErrHeld; and so is one backed off, ErrBackedOff, unless it is gone
 // meanwhile, when its lease is forgotten, since nothing would take it again
-// to forget it. Then its record is read. One that is gone, or that something
+// to forget it, or it was asked to go, which what its plan failed with before
+// holds back nothing of: its backoff is forgotten, and its lease taken. Then its record is read. One that is gone, or that something
 // owns now and is a root no more, has its lease and how its plan went
 // forgotten, and that is all. Any other's graph is planned, from what its
 // kind says it needs (graph.RootKind.Root), and carried out while its lease
@@ -236,6 +238,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, root graph.Ref) error {
 	defer r.end(root)
 
 	lease, err := r.leases.Take(ctx, root.UUID, r.holder, r.config.Lease)
+	if errors.Is(err, graph.ErrBackedOff) {
+		lease, err = r.goingNow(ctx, root, lease, err)
+	}
+
 	switch {
 	case errors.Is(err, graph.ErrBackedOff):
 		return r.backedOff(ctx, root, lease, err)
@@ -402,6 +408,27 @@ func (r *Reconciler) held(ctx context.Context, root graph.Ref, carry func(ctx co
 	<-renewing
 
 	return outcome, err
+}
+
+// goingNow is root's lease, which was not taken while root is backed off,
+// err, taken after all when root was asked to go: what failed of its plan
+// before holds back nothing of its delete, and is forgotten. Any other root's
+// is left as it was.
+func (r *Reconciler) goingNow(ctx context.Context, root graph.Ref, lease graph.Lease, err error) (graph.Lease, error) {
+	rec, there, readErr := r.read(ctx, root)
+	if readErr != nil || !there || rec.Metadata.DeletionRequestedAt.IsZero() {
+		return lease, err
+	}
+
+	if forgetErr := r.leases.Forget(ctx, root.UUID); forgetErr != nil {
+		r.logger.ErrorContext(ctx, "could not forget the backoff of a root asked to go", "error", forgetErr, "kind", root.Kind, "uuid", root.UUID)
+
+		return lease, err
+	}
+
+	r.logger.InfoContext(ctx, "a root asked to go is removed whatever its plan's failures backed it off for", "kind", root.Kind, "uuid", root.UUID, "failures", lease.Failures)
+
+	return r.leases.Take(ctx, root.UUID, r.holder, r.config.Lease)
 }
 
 // backedOff is root's lease not taken while root is backed off, err: a root

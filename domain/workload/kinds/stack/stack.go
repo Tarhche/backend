@@ -113,19 +113,24 @@ type Spec struct {
 	Compose string `json:"compose"`
 }
 
-// VMChoice is which Docker VM a stack goes into.
+// VMChoice is which Docker VM a stack or a container goes into.
 //
 // As it is asked, it names one of the person's Docker VMs by its uuid, or
-// names none, which is a Docker VM made for the stack with whatever of the
-// rest it gives and the defaults for what it leaves out. As it is kept, it is
-// the uuid of the VM the stack went into, made for it or not, and nothing
-// else: what a VM was made with is its own record's to say.
+// names none, which is a Docker VM made for it with whatever of the rest it
+// gives and the defaults for what it leaves out: naming one and describing
+// one besides is refused, as asking for two VMs (vm_or_new_vm), of what is
+// asked and of nothing kept. As a container keeps it, it is the uuid of the
+// VM it went into, made for it or not, and beside it what to make that VM
+// with again, under that uuid, whenever it is gone: its name, resources,
+// ports and network, as the VM's record had them when it was named, or as it
+// was asked for with the defaults filled in when its graph is to make it. A
+// stack keeps the uuid alone.
 type VMChoice struct {
 	UUID string `json:"uuid,omitempty"`
 
 	// Name, Resources, Ports and Network are what a Docker VM made for a
-	// stack is given beyond the defaults. Anything left out is the default;
-	// ports that are there and empty are none.
+	// stack or a container is given beyond the defaults. Anything left out is
+	// the default; ports that are there and empty are none.
 	Name      string      `json:"name,omitempty"`
 	Resources *Resources  `json:"resources,omitempty"`
 	Ports     []port.Port `json:"ports,omitzero"`

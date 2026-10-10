@@ -128,8 +128,47 @@ func New(d Dependencies) *VMs {
 }
 
 // Admit takes in a VM its owner asked for: checked, its defaults filled in,
-// held to its bounds and its owner's quota, given a slug and placed.
+// held to its bounds and its owner's quota (Check), given a slug and placed.
 func (s *VMs) Admit(ctx context.Context, asked vmKind.VM) (vmKind.VM, domain.ValidationErrors, error) {
+	admitted, invalid, err := s.Check(ctx, asked)
+	if err != nil || len(invalid) > 0 {
+		return vmKind.VM{}, invalid, err
+	}
+
+	slug, err := slugs.Generate(ctx, admitted.Metadata.Name, s.Slugs...)
+	if err != nil {
+		return vmKind.VM{}, nil, err
+	}
+
+	admitted.Metadata.Slug = slug
+
+	chosen, err := s.Placement.Pick(ctx, admitted.Spec.Resources)
+
+	switch {
+	case errors.Is(err, vm.ErrNoCapacity):
+		// failed, and given up on, rather than asked for again and again:
+		// whoever wants it starts it once there is room, which places it.
+		admitted.Status.State = vmKind.Failed
+		admitted.Status.Expected = vmKind.Failed
+		admitted.Status.Reason = ReasonNoCapacity
+	case err != nil:
+		return vmKind.VM{}, nil, err
+	default:
+		admitted.Metadata.Node = chosen.Name
+	}
+
+	return admitted, nil, nil
+}
+
+// Check is a VM its owner asked for as it would be admitted, and why it
+// would not be: what it asked for checked, its defaults filled in, and held
+// to its bounds and to its owner's quota, counting beside their VMs those
+// planned for them, the Docker VMs graphs are to make and have not; but
+// neither kept, given a slug nor placed. It is what a Docker VM a graph is to
+// make later is held to when what goes into it is asked for, so that what its
+// admission would refuse is refused then, rather than when its graph makes
+// it. No node's room is looked at.
+func (s *VMs) Check(ctx context.Context, asked vmKind.VM, planned ...vmKind.Resources) (vmKind.VM, domain.ValidationErrors, error) {
 	if invalid := validate(asked); len(invalid) > 0 {
 		return vmKind.VM{}, invalid, nil
 	}
@@ -161,50 +200,25 @@ func (s *VMs) Admit(ctx context.Context, asked vmKind.VM) (vmKind.VM, domain.Val
 		return vmKind.VM{}, invalid, nil
 	}
 
-	held, err := s.Quota.Check(ctx, "", asked.Metadata.OwnerUUID, spec.Resources, "")
+	held, err := s.Quota.Check(ctx, "", asked.Metadata.OwnerUUID, spec.Resources, "", planned...)
 	if err != nil || len(held) > 0 {
 		return vmKind.VM{}, held, err
-	}
-
-	name := strings.TrimSpace(asked.Metadata.Name)
-
-	slug, err := slugs.Generate(ctx, name, s.Slugs...)
-	if err != nil {
-		return vmKind.VM{}, nil, err
 	}
 
 	labels := maps.Clone(asked.Metadata.Labels)
 	delete(labels, vmKind.LabelManagedBy)
 
-	admitted := vmKind.VM{
+	return vmKind.VM{
 		Kind: vmKind.Name,
 		Metadata: kind.Metadata{
-			Name:      name,
-			Slug:      slug,
+			Name:      strings.TrimSpace(asked.Metadata.Name),
 			OwnerUUID: asked.Metadata.OwnerUUID,
 			Labels:    labels,
 			Lifetime:  asked.Metadata.Lifetime,
 		},
 		Spec:   spec,
 		Status: vmKind.Status{Status: kind.Status{State: vmKind.Created, Expected: vmKind.Running}},
-	}
-
-	chosen, err := s.Placement.Pick(ctx, spec.Resources)
-
-	switch {
-	case errors.Is(err, vm.ErrNoCapacity):
-		// failed, and given up on, rather than asked for again and again:
-		// whoever wants it starts it once there is room, which places it.
-		admitted.Status.State = vmKind.Failed
-		admitted.Status.Expected = vmKind.Failed
-		admitted.Status.Reason = ReasonNoCapacity
-	case err != nil:
-		return vmKind.VM{}, nil, err
-	default:
-		admitted.Metadata.Node = chosen.Name
-	}
-
-	return admitted, nil, nil
+	}, nil, nil
 }
 
 // Reconcile is what a VM is asked for, given what it was asked to be and

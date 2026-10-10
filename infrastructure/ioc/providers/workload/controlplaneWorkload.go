@@ -87,10 +87,9 @@ type ControlPlaneWorkload struct {
 	// plane is configured with laid over them.
 	Policy graph.DependencyPolicy
 
-	// Graphs keeps every root's graph made: its workers reconcile the roots
-	// queued, and its resync, which the serve command runs on a ticker of
-	// its own, queues every root. No kind's resources are roots yet, so it
-	// reconciles nothing, and reads nothing.
+	// Graphs keeps every root's graph made, a container's that no stack
+	// owns: its workers reconcile the roots queued, and its resync, which the
+	// serve command runs on a ticker of its own, queues every root.
 	Graphs *reconcile.Reconciler
 
 	// Holder is this control plane, as the leases of the roots it reconciles
@@ -200,9 +199,6 @@ func NewControlPlaneWorkload(
 		return nil, err
 	}
 
-	// a Docker VM made for a container or a stack is admitted as any VM is.
-	chooser := dockervm.NewChooser(vms, kinds.Resources, kinds.Admit, dockerDefaults)
-
 	// a snapshot is taken of one of its owner's VMs, by the node holding it,
 	// and is the kind's own to say a VM can be restored or made from: one of
 	// the same kind, as both their images say.
@@ -215,6 +211,24 @@ func NewControlPlaneWorkload(
 		DockerImage: controlPlaneConfigs.VMDockerImage,
 		Logger:      logger,
 	})
+
+	// a VM is admitted, placed and held to its owner's quota as the vm kind
+	// says.
+	vmStrategy := controlPlaneVMs.New(controlPlaneVMs.Dependencies{
+		Records:   vms,
+		Snapshots: snapshots,
+		Nodes:     stores.Nodes,
+		Quota:     quota.New(vms, vmLimits(controlPlaneConfigs)),
+		Placement: vmPlacement,
+		Slugs:     slugsHeld,
+		Images:    controlPlaneVMs.Images{Machine: controlPlaneConfigs.VMDefaultImage, Docker: controlPlaneConfigs.VMDockerImage},
+		Extras:    codeRunner,
+	})
+
+	// a Docker VM made for a container or a stack is admitted as any VM is,
+	// and one a graph is to make for a container is held to what the vm kind
+	// would admit it as when the container is asked for.
+	chooser := dockervm.NewChooser(vms, kinds.Resources, kinds.Admit, vmStrategy, dockerDefaults)
 
 	// what the building blocks of Docker VMs share: what the nodes report of
 	// them that nobody keeps a record of, which each control plane keeps from
@@ -231,16 +245,7 @@ func NewControlPlaneWorkload(
 
 	strategies := newBlockStrategies(buildingBlocks)
 
-	if err := registerControlPlaneKinds(registry, controlPlaneVMs.Dependencies{
-		Records:   vms,
-		Snapshots: snapshots,
-		Nodes:     stores.Nodes,
-		Quota:     quota.New(vms, vmLimits(controlPlaneConfigs)),
-		Placement: vmPlacement,
-		Slugs:     slugsHeld,
-		Images:    controlPlaneVMs.Images{Machine: controlPlaneConfigs.VMDefaultImage, Docker: controlPlaneConfigs.VMDockerImage},
-		Extras:    codeRunner,
-	}, snapshots, controlPlaneStacks.New(vms, chooser, slugsHeld...), controlPlaneTasks.New(controlPlaneTasks.Dependencies{
+	if err := registerControlPlaneKinds(registry, vmStrategy, snapshots, controlPlaneStacks.New(vms, chooser, slugsHeld...), controlPlaneTasks.New(controlPlaneTasks.Dependencies{
 		Nodes:     stores.Nodes,
 		Scheduler: roundrobin.New(),
 		Slugs:     slugsHeld,
@@ -308,9 +313,9 @@ func NewControlPlaneWorkload(
 // task, the code runner's runs among them, is admitted and placed as tasks
 // says; and the building blocks of a Docker VM, its containers, images,
 // networks and volumes, live in it, through their strategies.
-func registerControlPlaneKinds(registry *kind.Registry[kind.ControlPlaneBinding], vms controlPlaneVMs.Dependencies, snapshots *controlPlaneSnapshots.Snapshots, stacks *controlPlaneStacks.Stacks, tasks *controlPlaneTasks.Tasks, strategies blockStrategies) error {
+func registerControlPlaneKinds(registry *kind.Registry[kind.ControlPlaneBinding], vms *controlPlaneVMs.VMs, snapshots *controlPlaneSnapshots.Snapshots, stacks *controlPlaneStacks.Stacks, tasks *controlPlaneTasks.Tasks, strategies blockStrategies) error {
 	for _, binding := range []kind.ControlPlaneBinding{
-		kind.BindControlPlane[vmKind.Spec, vmKind.Status](vmKind.Descriptor(), controlPlaneVMs.New(vms)),
+		kind.BindControlPlane[vmKind.Spec, vmKind.Status](vmKind.Descriptor(), vms),
 		kind.BindControlPlane[snapshotKind.Spec, snapshotKind.Status](snapshotKind.Descriptor(), snapshots),
 		kind.BindControlPlane[stackKind.Spec, stackKind.Status](stackKind.Descriptor(), stacks),
 		kind.BindControlPlane[taskKind.Spec, taskKind.Status](taskKind.Descriptor(), tasks),

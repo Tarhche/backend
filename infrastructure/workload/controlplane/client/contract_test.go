@@ -13,24 +13,33 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/graph/execute"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/graph/ownership"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/graph/reconcile"
 	actonresource "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/actOnResource"
 	admitresource "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/admitResource"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/blocks/blockstest"
+	controlplanecontainers "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/container"
 	deleteresource "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/deleteResource"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/dispatch"
 	getkinds "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/getKinds"
 	getresource "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/getResource"
 	getresources "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/getResources"
+	controlplanenetworks "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/network"
 	queryresource "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/queryResource"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/recordResult"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/requirements"
 	controlplanestacks "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/stack"
+	controlplanevms "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/runs"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/vmtest"
+	controlplanevolumes "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/volume"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/waiters"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/slugs"
 	"github.com/khanzadimahdi/testproject/domain"
 	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/domain/workload/docker"
+	"github.com/khanzadimahdi/testproject/domain/workload/graph"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	containerKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/container"
 	networkKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/network"
@@ -47,6 +56,8 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
+	executionsMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/executions"
+	leasesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/leases"
 	"github.com/khanzadimahdi/testproject/infrastructure/workload/controlplane/client"
 	kindsAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/controlplane/api/kinds"
 )
@@ -134,7 +145,8 @@ func (n *containersNode) Produce(ctx context.Context, subject string, payload []
 // controlPlane is the control plane's API, wired the way its provider wires
 // it, over memory repositories and a node that answers: VMs, their snapshots,
 // stacks, tasks and the building blocks of Docker VMs are kinds, served by the
-// resource API every kind is.
+// resource API every kind is, and a container nobody's stack owns is the root
+// of a graph, which its workers keep made until the test ends.
 func controlPlane(t *testing.T, w *blockstest.Workload) *client.Client {
 	t.Helper()
 
@@ -151,18 +163,28 @@ func controlPlane(t *testing.T, w *blockstest.Workload) *client.Client {
 		})),
 	)))
 
+	// what the graphs of roots are told of, before what keeps them made is
+	// built over what tells it.
+	roots := graph.Roots{containerKind.Name}
+	relay := &graph.Relay{}
+
 	// what is sent to a container's node comes back from it, and what is
 	// sent to any other node is kept unanswered.
 	waiting := waiters.New()
-	containers := &containersNode{results: recordResult.NewResourceActedOnHandler(w.Registry, w.Resources, waiting, logger, nil), others: w.Producer}
+	containers := &containersNode{results: recordResult.NewResourceActedOnHandler(w.Registry, w.Resources, waiting, logger, nil, recordResult.WithNotifier(relay)), others: w.Producer}
 	dispatcher := dispatch.New(w.Resources, containers, waiting, nil, dispatch.PollEvery(10*time.Millisecond))
+
+	admission := admitresource.NewUseCase(w.Registry, w.Resources, dispatcher, logger, admitresource.WithGraphs(roots, relay))
+	deletion := deleteresource.NewUseCase(w.Registry, w.Resources, dispatcher, deleteresource.WithGraphs(roots, relay))
+
+	relay.To(graphs(t, w, roots, dispatcher, admission, deletion))
 
 	mux := http.NewServeMux()
 
 	require.NoError(t, kindsAPI.Route(mux, w.Registry.Descriptors(), kindsAPI.UseCases{
-		Admit:  admitresource.NewUseCase(w.Registry, w.Resources, dispatcher, logger),
-		Act:    actonresource.NewUseCase(w.Registry, w.Resources, dispatcher, logger),
-		Delete: deleteresource.NewUseCase(w.Registry, w.Resources, dispatcher),
+		Admit:  admission,
+		Act:    actonresource.NewUseCase(w.Registry, w.Resources, dispatcher, logger, actonresource.WithGraphs(roots, relay)),
+		Delete: deletion,
 		Get:    getresource.NewUseCase(w.Registry, w.Resources),
 		List:   getresources.NewUseCase(w.Registry, w.Resources),
 		Query:  queryresource.NewUseCase(w.Registry, w.Resources, requester, nil, nil),
@@ -176,6 +198,64 @@ func controlPlane(t *testing.T, w *blockstest.Workload) *client.Client {
 	require.NoError(t, err)
 
 	return c
+}
+
+// graphs keep the graphs of roots of the kinds roots names made, over what w
+// keeps, made, asked and removed through dispatcher, admission and deletion,
+// as the control plane's workers keep them, until the test ends.
+func graphs(t *testing.T, w *blockstest.Workload, roots graph.Roots, dispatcher *dispatch.Dispatcher, admission *admitresource.UseCase, deletion *deleteresource.UseCase) *reconcile.Reconciler {
+	t.Helper()
+
+	records := requirements.New(requirements.Dependencies{
+		Registry:   w.Registry,
+		Resources:  w.Resources,
+		Dispatcher: dispatcher,
+		Admission:  admission,
+		Deletion:   deletion,
+		Patience:   time.Minute,
+	})
+
+	kinds := graph.Kinds{
+		vmKind.Name:        controlplanevms.NewGraph(w.Chooser, records),
+		containerKind.Name: controlplanecontainers.NewGraph(w.Containers, records),
+		networkKind.Name:   controlplanenetworks.NewGraph(w.Networks, records),
+		volumeKind.Name:    controlplanevolumes.NewGraph(w.Volumes, records),
+	}
+
+	executions := executionsMemory.NewRepository()
+
+	executor, err := execute.New(kinds, ownership.New(w.Registry, w.Resources, nil), executions, nil)
+	require.NoError(t, err)
+
+	reconciler, err := reconcile.New(reconcile.Dependencies{
+		Registry:   w.Registry,
+		Resources:  w.Resources,
+		Kinds:      kinds,
+		Roots:      roots,
+		Planner:    graph.NewPlanner(kinds, graph.DefaultPolicy()),
+		Executor:   executor,
+		Executions: executions,
+		Leases:     leasesMemory.NewRepository(nil),
+		Holder:     "contract",
+		Logger:     slog.New(slog.DiscardHandler),
+	}, reconcile.DefaultConfig())
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	worked := make(chan struct{})
+
+	go func() {
+		defer close(worked)
+
+		reconciler.Work(ctx)
+	}()
+
+	t.Cleanup(func() {
+		cancel()
+		<-worked
+	})
+
+	return reconciler
 }
 
 // witnessed has the containers' strategy hear that the node holds, in the

@@ -52,9 +52,9 @@ const tries = 3
 // it (Status.Docker), which its record keeps once it is said.
 //
 // One that is not made is made: admitted when there is no record of it, its
-// create asked again when its record is pending or missing, started, which
-// makes it, when it failed before it ever was, and waited on while it is being
-// made. What is asked of one is asked on the node its VM is on, where it is
+// create asked when its record is pending, a root's from when it was admitted
+// on, or missing, started, which makes it, when it failed before it ever was,
+// and waited on while it is being made. What is asked of one is asked on the node its VM is on, where it is
 // placed first when it is not: one admitted before its VM was made, or kept
 // when its VM went, which was made again elsewhere. Nothing is asked of it
 // while its VM does not run, nor of one on its way out: both wait.
@@ -198,10 +198,13 @@ func (g *Graph) create(ctx context.Context, w containerKind.Want, vmUUID string)
 		return graph.Ref{}, err
 	}
 
-	if found {
-		r, err = g.again(ctx, r, vmUUID)
-	} else {
+	// one admitted is pending, its graph's to make, as one found may be.
+	if !found {
 		r, err = g.admit(ctx, w, vmUUID)
+	}
+
+	if err == nil {
+		r, err = g.again(ctx, r, vmUUID)
 	}
 
 	if err != nil {
@@ -274,7 +277,7 @@ func (g *Graph) ask(ctx context.Context, r resource.Record, vmUUID string, actio
 }
 
 // admit admits the container w names into the Docker VM vmUUID names, and is
-// its record once its node has made it.
+// its record, pending: what makes it is its graph's to ask.
 func (g *Graph) admit(ctx context.Context, w containerKind.Want, vmUUID string) (resource.Record, error) {
 	spec := w.Spec
 	spec.VM = stackKind.VMChoice{UUID: vmUUID}
@@ -299,7 +302,8 @@ func (g *Graph) admit(ctx context.Context, w containerKind.Want, vmUUID string) 
 
 // Delete removes the container ref names, running or not, by force, and is
 // done once its node has: one gone already is removed. Nothing is asked while
-// its VM does not run, which it waits on.
+// its VM does not run, which it waits on, but of one on no node, which no node
+// has anything of: it goes at once.
 func (g *Graph) Delete(ctx context.Context, ref graph.Ref) error {
 	if ref.Kind != containerKind.Name {
 		return fmt.Errorf("%w: a %s is not a container", kind.ErrUnknownKind, ref.Kind)
@@ -315,9 +319,12 @@ func (g *Graph) Delete(ctx context.Context, ref graph.Ref) error {
 		return err
 	}
 
-	// one in a VM that is not there any more goes with it.
-	if err := g.containers.Ready(ctx, containerKind.VMOf(c)); err != nil && !errors.Is(err, domain.ErrNotExists) {
-		return err
+	// one in a VM that is not there any more goes with it, and one on no
+	// node has nothing of it anywhere to wait to remove.
+	if len(r.Metadata.Node) > 0 {
+		if err := g.containers.Ready(ctx, containerKind.VMOf(c)); err != nil && !errors.Is(err, domain.ErrNotExists) {
+			return err
+		}
 	}
 
 	forced, err := json.Marshal(containerKind.DeletePayload{Force: true})

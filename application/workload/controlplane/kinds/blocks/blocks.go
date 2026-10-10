@@ -636,20 +636,6 @@ func (b *Blocks) Present(ctx context.Context, state kind.State, expected kind.St
 	return []kind.Intent{{Action: blockKinds.ActionCreate, Reason: "it is not in its vm, which runs"}}, nil
 }
 
-// Running reports whether the Docker VM uuid names runs: what lives in one
-// that does not waits on it, and one that is gone takes what lived in it
-// with it.
-func (b *Blocks) Running(ctx context.Context, vmUUID string) (bool, error) {
-	v, err := b.VMs.GetOne(ctx, vmUUID)
-	if errors.Is(err, domain.ErrNotExists) {
-		return false, nil
-	} else if err != nil {
-		return false, err
-	}
-
-	return v.Status.State == vmKind.Running, nil
-}
-
 // Refused is a refusal in the words a node would refuse with, which is what
 // the dashboard shows of a request docker would have turned down.
 func Refused(format string, args ...any) error {

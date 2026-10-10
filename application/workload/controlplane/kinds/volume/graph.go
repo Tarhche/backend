@@ -212,7 +212,9 @@ func (g *Graph) admit(ctx context.Context, w volumeKind.Want, vmUUID string) (re
 // Delete removes the volume ref names, by force, and what was in it with it,
 // and is done once its node has: one gone already is removed. One a container
 // still mounts is not, as docker would not remove it, whatever the force.
-// Nothing is asked while its VM does not run, which it waits on.
+// Nothing is asked while its VM does not run, which it waits on, but of one
+// on no node, kept when its VM went, which no node has anything of: it goes at
+// once.
 func (g *Graph) Delete(ctx context.Context, ref graph.Ref) error {
 	if ref.Kind != volumeKind.Name {
 		return fmt.Errorf("%w: a %s is not a volume", kind.ErrUnknownKind, ref.Kind)
@@ -228,9 +230,12 @@ func (g *Graph) Delete(ctx context.Context, ref graph.Ref) error {
 		return err
 	}
 
-	// one in a VM that is not there any more goes with it.
-	if err := g.volumes.Ready(ctx, volumeKind.VMOf(v)); err != nil && !errors.Is(err, domain.ErrNotExists) {
-		return err
+	// one in a VM that is not there any more goes with it, and one on no
+	// node has nothing of it anywhere to wait to remove.
+	if len(r.Metadata.Node) > 0 {
+		if err := g.volumes.Ready(ctx, volumeKind.VMOf(v)); err != nil && !errors.Is(err, domain.ErrNotExists) {
+			return err
+		}
 	}
 
 	forced, err := json.Marshal(volumeKind.DeletePayload{Force: true})

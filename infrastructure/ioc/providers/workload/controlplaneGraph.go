@@ -27,10 +27,10 @@ import (
 )
 
 // graphRoots are the kinds whose resources are roots of graphs of their own,
-// each one nothing owns, which the control plane keeps made: none yet, so
-// that nothing is reconciled through its graph, and nothing is read for it.
+// each one nothing owns, which the control plane keeps made: a container
+// somebody asked for, which no stack owns. Stacks are compose's still.
 func graphRoots() graph.Roots {
-	return nil
+	return graph.Roots{containerKind.Name}
 }
 
 // controlPlaneGraphKinds are the kinds a root's graph is made of, as a graph

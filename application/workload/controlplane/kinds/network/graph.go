@@ -212,7 +212,8 @@ func (g *Graph) admit(ctx context.Context, w networkKind.Want, vmUUID string) (r
 // Delete removes the network ref names, and is done once its node has: one
 // gone already is removed. One a container is still on is not, as docker
 // would not remove it. Nothing is asked while its VM does not run, which it
-// waits on.
+// waits on, but of one on no node, kept when its VM went, which no node has
+// anything of: it goes at once.
 func (g *Graph) Delete(ctx context.Context, ref graph.Ref) error {
 	if ref.Kind != networkKind.Name {
 		return fmt.Errorf("%w: a %s is not a network", kind.ErrUnknownKind, ref.Kind)
@@ -228,9 +229,12 @@ func (g *Graph) Delete(ctx context.Context, ref graph.Ref) error {
 		return err
 	}
 
-	// one in a VM that is not there any more goes with it.
-	if err := g.networks.Ready(ctx, networkKind.VMOf(n)); err != nil && !errors.Is(err, domain.ErrNotExists) {
-		return err
+	// one in a VM that is not there any more goes with it, and one on no
+	// node has nothing of it anywhere to wait to remove.
+	if len(r.Metadata.Node) > 0 {
+		if err := g.networks.Ready(ctx, networkKind.VMOf(n)); err != nil && !errors.Is(err, domain.ErrNotExists) {
+			return err
+		}
 	}
 
 	return g.records.Remove(ctx, ref, nil)

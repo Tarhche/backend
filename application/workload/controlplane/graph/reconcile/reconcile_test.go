@@ -342,6 +342,35 @@ func TestReconciler_Reconcile(t *testing.T) {
 		assert.Empty(t, kinds.Calls())
 	})
 
+	t.Run("but one asked to go is removed at once, whatever its failures backed it off for", func(t *testing.T) {
+		t.Parallel()
+
+		kinds := container()
+		kinds.Hold(vm, network, volume, web)
+
+		f := newFixture(t, kinds, root(deleting))
+
+		kinds.On(graphtest.Forget, web, func(ctx context.Context) error {
+			return f.records.Delete(ctx, containerKind.Name, "web")
+		})
+
+		_, err := f.leases.Take(ctx, "web", "another", time.Minute)
+		require.NoError(t, err)
+
+		_, err = f.leases.Release(ctx, "web", "another", graph.Ended{State: graph.StateFailed, Reason: "broken", Backoff: reconcile.DefaultConfig().Backoff})
+		require.NoError(t, err)
+
+		r := f.reconciler(t, "one", reconcile.DefaultConfig(), containerKind.Name)
+
+		require.NoError(t, r.Reconcile(ctx, refOf(web)))
+
+		assert.Equal(t, []graph.NodeID{web, network}, kinds.Asked(graphtest.Delete), "removed, and then what it owned")
+		assert.Empty(t, kinds.Asked(graphtest.Create))
+
+		_, kept := f.leases.Lease("web")
+		assert.False(t, kept, "and its lease, its failures with it, forgotten, as it is gone")
+	})
+
 	t.Run("what something owns now is a root no more: its lease is forgotten, and its graph is not carried out", func(t *testing.T) {
 		t.Parallel()
 

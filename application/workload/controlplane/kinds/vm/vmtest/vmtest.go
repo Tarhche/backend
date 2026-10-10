@@ -221,7 +221,7 @@ func New(opts ...Option) *Workload {
 	logger := slog.New(slog.DiscardHandler)
 
 	w.Admit = admitResource.NewUseCase(w.Registry, w.Resources, w.Dispatcher, logger)
-	w.Chooser = dockervm.NewChooser(w.Records, w.Resources, w.Admit, DockerDefaults)
+	w.Chooser = dockervm.NewChooser(w.Records, w.Resources, w.Admit, w.VMs, DockerDefaults)
 
 	return w
 }

@@ -94,9 +94,12 @@ type workload struct {
 	archives *storageMemory.Storage
 
 	// what the control plane keeps: the resources of every kind, VMs, their
-	// snapshots, stacks and the code runner's tasks among them, and the nodes.
-	resources *resourcesMemory.Repository
-	nodes     *nodesMemory.Repository
+	// snapshots, stacks and the code runner's tasks among them, the nodes,
+	// and how each node of each root's plan went, the last time it was
+	// carried out.
+	resources  *resourcesMemory.Repository
+	nodes      *nodesMemory.Repository
+	executions *executionsMemory.Repository
 
 	// programs are what a task's program does once its VM boots, as a test
 	// says; kinds are the kinds the node runs; and natsURL is where the
@@ -148,6 +151,7 @@ func start(t *testing.T, options ...option) *workload {
 		archives:   storageMemory.New(),
 		resources:  resourcesMemory.NewRepository(),
 		nodes:      nodesMemory.NewRepository(),
+		executions: executionsMemory.NewRepository(),
 		natsURL:    natsURL,
 		translator: english,
 		validator:  validator.New(english),
@@ -226,7 +230,7 @@ func start(t *testing.T, options ...option) *workload {
 		Resources:  w.resources,
 		Nodes:      w.nodes,
 		TaskLogs:   logsMock.NewInMemoryRepository(),
-		Executions: executionsMemory.NewRepository(),
+		Executions: w.executions,
 		Leases:     leasesMemory.NewRepository(nil),
 		Archives:   w.archives,
 	}, controlPlaneConnection, controlPlaneMessages, logger, providers.WithReconcileConfig(reconcileConfig))

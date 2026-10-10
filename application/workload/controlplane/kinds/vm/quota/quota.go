@@ -126,8 +126,10 @@ func (q *Quota) Limits() Limits {
 // Check reports what would take ownerUUID past their quota if one of their
 // VMs were given resources: a new one when except is empty, or the one except
 // names, in place of what it has now. A VM on its way out is not counted: it
-// is going, and asking for its replacement is not asking for more.
-func (q *Quota) Check(ctx context.Context, prefix string, ownerUUID string, resources vmKind.Resources, except string) (domain.ValidationErrors, error) {
+// is going, and asking for its replacement is not asking for more. What is
+// planned beside their VMs is counted as VMs of theirs: the Docker VMs graphs
+// are to make for what goes into them, which are not there yet.
+func (q *Quota) Check(ctx context.Context, prefix string, ownerUUID string, resources vmKind.Resources, except string, planned ...vmKind.Resources) (domain.ValidationErrors, error) {
 	owned, err := q.records.Owned(ctx, ownerUUID)
 	if err != nil {
 		return nil, err
@@ -137,6 +139,13 @@ func (q *Quota) Check(ctx context.Context, prefix string, ownerUUID string, reso
 		count uint
 		total vmKind.Resources
 	)
+
+	for _, p := range planned {
+		count++
+		total.CPUs += p.CPUs
+		total.Memory += p.Memory
+		total.Disk += p.Disk
+	}
 
 	for _, v := range owned {
 		if v.Metadata.UUID == except || records.Going(v) {

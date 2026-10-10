@@ -371,6 +371,69 @@ func TestVMs_Admit(t *testing.T) {
 	})
 }
 
+// TestVMs_Check holds a vm checked, as what a graph is to make later is when
+// it is asked for, to what its admission would hold it to, the vms planned for
+// its owner counted, and to nothing more: it is given no slug and no node,
+// and nothing is kept.
+func TestVMs_Check(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	t.Run("one is as it would be admitted, its defaults filled in, with no slug and no node", func(t *testing.T) {
+		t.Parallel()
+
+		full := vmtest.Alive(vmtest.Node)
+		full.Capacity.Allocated = vm.Resources{Memory: 64 * vmtest.GiB}
+
+		w := vmtest.New(vmtest.WithNodes(full))
+
+		checked, invalid, err := w.VMs.Check(ctx, asked(func(v *vmKind.VM) { v.Metadata.Name = " My Box " }))
+		require.NoError(t, err)
+		require.Empty(t, invalid, "no node's room is looked at")
+
+		assert.Equal(t, "My Box", checked.Metadata.Name)
+		assert.Equal(t, "owner-uuid", checked.Metadata.OwnerUUID)
+		assert.Empty(t, checked.Metadata.Slug)
+		assert.Empty(t, checked.Metadata.Node)
+		assert.Equal(t, "ubuntu:24.04", checked.Spec.Image)
+		assert.Equal(t, []port.Port{22, 8080}, checked.Spec.Ports)
+		assert.Equal(t, vmKind.Created, checked.Status.State)
+		assert.Zero(t, w.Memory.Len(vmKind.Name), "and nothing is kept")
+	})
+
+	for name, tt := range map[string]struct {
+		vms     []vmKind.VM
+		asked   vmKind.VM
+		planned []vmKind.Resources
+		want    domain.ValidationErrors
+	}{
+		"what is wrong with it is refused": {
+			asked: asked(func(v *vmKind.VM) { v.Metadata.Name = strings.Repeat("a", vmKind.MaxNameLength+1) }),
+			want:  domain.ValidationErrors{"name": "invalid_name"},
+		},
+		"and so is what is past its bounds": {
+			asked: asked(func(v *vmKind.VM) { v.Spec.Resources.CPUs = 64 }),
+			want:  domain.ValidationErrors{"resources.cpus": "too_large"},
+		},
+		"and past its owner's quota, what is planned for them counted": {
+			vms:     []vmKind.VM{owned("01", vmKind.Resources{CPUs: 4, Memory: 8 * vmtest.GiB, Disk: 100 * vmtest.GiB})},
+			asked:   asked(),
+			planned: []vmKind.Resources{{CPUs: 3, Memory: 2 * vmtest.GiB, Disk: 20 * vmtest.GiB}},
+			want:    domain.ValidationErrors{"resources.cpus": "quota_exceeded"},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			_, invalid, err := vmtest.New(vmtest.WithVMs(tt.vms...)).VMs.Check(ctx, tt.asked, tt.planned...)
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.want, invalid)
+		})
+	}
+}
+
 func TestVMs_Reconcile(t *testing.T) {
 	t.Parallel()
 

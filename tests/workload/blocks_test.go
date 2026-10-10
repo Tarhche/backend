@@ -45,8 +45,9 @@ import (
 
 // TestAContainer walks a container through its life from the dashboard, as
 // a kind the control plane keeps and a node carries out: asked for naming no
-// Docker VM, made in one made for it, made again when it is removed behind
-// the platform's back, stopped and left stopped, read, started and deleted.
+// Docker VM, made by its graph in one its graph made for it, made again by its
+// graph when it is removed behind the platform's back, stopped and left
+// stopped, read, started and deleted, by its graph too.
 func TestAContainer(t *testing.T) {
 	t.Parallel()
 
@@ -66,10 +67,14 @@ func TestAContainer(t *testing.T) {
 
 	vmUUID := created.VM.UUID
 
-	t.Run("it named no docker vm, so one was made for it, and it was made in it once it came up", func(t *testing.T) {
+	t.Run("it named no docker vm, so its graph made one for it, and then it in it, once it came up", func(t *testing.T) {
 		assert.True(t, created.VM.Created)
+		assert.Equal(t, "docker", created.VM.Name)
 		assert.Equal(t, "web", created.Container.Name)
 		assert.False(t, created.Container.Unmanaged)
+
+		made := w.stored(t, vmUUID, "running", func(v vmKind.VM) bool { return v.Status.State == vmKind.Running })
+		assert.Equal(t, vmKind.ChoiceOf(made), w.containerRecord(t, vmUUID, "web").Spec.VM, "and keeps what to make it with again")
 
 		running := w.containerIn(t, vmUUID, "web", "running")
 		assert.Equal(t, "nginx:1.27", running.Image)
@@ -82,7 +87,7 @@ func TestAContainer(t *testing.T) {
 		assert.Equal(t, w.containerRecord(t, vmUUID, "web").Metadata.UUID, c.Labels[blockKinds.Label(containerKind.Name)], "as the resource it is")
 	})
 
-	t.Run("removed behind the platform's back, it is made again", func(t *testing.T) {
+	t.Run("removed behind the platform's back, its graph makes it again", func(t *testing.T) {
 		before, _ := w.dockerd.Holds(t, vmUUID).Container("web")
 
 		w.dockerd.Remove(t, vmUUID, "web")
@@ -131,7 +136,7 @@ func TestAContainer(t *testing.T) {
 		w.containerIn(t, vmUUID, "web", "running")
 	})
 
-	t.Run("one that runs is not deleted but by force, and deleted, it is gone", func(t *testing.T) {
+	t.Run("one that runs is not deleted but by force, and deleted, its graph removes it", func(t *testing.T) {
 		refused, err := deleteContainer.NewUseCase(w.client, w.translator).Execute(ctx, &deleteContainer.Request{VMUUID: vmUUID, ID: "web", OwnerUUID: ownerUUID})
 		require.NoError(t, err)
 		require.NotEmpty(t, refused.ValidationErrors, "as docker refuses it")
