@@ -60,7 +60,7 @@ func TestContainers_Admit(t *testing.T) {
 		assert.Equal(t, "web", admitted.Metadata.Name)
 		assert.Equal(t, "nginx:1.27", admitted.Spec.Image)
 		assert.Equal(t, stackKind.VMChoice{UUID: "vm-1"}, admitted.Spec.VM)
-		assert.Equal(t, containerKind.Pending, admitted.Status.State, "to be made once its vm runs")
+		assert.Equal(t, containerKind.Pending, admitted.Status.Status.State, "to be made once its vm runs")
 		assert.Equal(t, containerKind.Running, admitted.Status.Expected)
 	})
 

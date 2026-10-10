@@ -727,8 +727,13 @@ func follow[Spec, Status any](ctx context.Context, c *Client, path string, owner
 func answered(status json.RawMessage) bool {
 	var observed struct {
 		State   kind.State         `json:"state"`
-		Docker  json.RawMessage    `json:"docker"`
 		Failure *noderequest.Error `json:"failure"`
+
+		// what its VM's dockerd said of it is beside its state, and always
+		// says its id, or a volume's name, since a volume has no id: one it
+		// said nothing of has neither.
+		ID   json.RawMessage `json:"id"`
+		Name json.RawMessage `json:"name"`
 	}
 
 	if err := json.Unmarshal(status, &observed); err != nil {
@@ -738,7 +743,7 @@ func answered(status json.RawMessage) bool {
 	switch {
 	case observed.Failure != nil && len(observed.Failure.Code) > 0, observed.State == kind.Failed:
 		return true
-	case len(observed.Docker) == 0 || string(observed.Docker) == "null":
+	case len(observed.ID) == 0 && len(observed.Name) == 0:
 		return false
 	}
 
@@ -791,7 +796,7 @@ func containerOf(m containerManifest) docker.Container {
 		}
 	}
 
-	switch state := m.Status.State; state {
+	switch state := m.Status.Status.State; state {
 	case containerKind.Pending, containerKind.Creating, containerKind.Missing:
 		c.State = "created"
 		c.Status = statusSentence(state, m.Status.Reason)

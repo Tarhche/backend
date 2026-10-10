@@ -171,7 +171,7 @@ func TestBlocks_Witnessed(t *testing.T) {
 		assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "vm-1"}}, c.Metadata.Owners)
 		assert.Equal(t, vmtest.Node, c.Metadata.Node)
 		assert.Equal(t, "nginx:1.27", c.Spec.Image, "as its label says it was asked for")
-		assert.Equal(t, containerKind.Running, c.Status.State)
+		assert.Equal(t, containerKind.Running, c.Status.Status.State)
 		assert.Equal(t, containerKind.Running, c.Status.Expected)
 
 		_, kept = w.Kept(containerKind.Name, "also-from-the-snapshot")
@@ -509,6 +509,28 @@ func TestBlocks_Present(t *testing.T) {
 			assert.Equal(t, tt.want, intents)
 		})
 	}
+}
+
+func TestObservedOf(t *testing.T) {
+	t.Parallel()
+
+	status, err := json.Marshal(containerKind.Status{
+		Status: kind.Status{State: containerKind.Stopped},
+		Docker: &containerKind.Docker{ID: "c1", Name: "web", State: "exited", Labels: map[string]string{docker.LabelComposeProject: "shop"}},
+	})
+	require.NoError(t, err)
+
+	observed := blocks.ObservedOf(status)
+	assert.Equal(t, containerKind.Stopped, observed.Status.State, "what a container is doing, in the kind's words")
+	assert.Equal(t, "exited", observed.Docker.State, "and in docker's, beside it")
+	assert.Equal(t, "c1", observed.Docker.ID)
+	assert.Equal(t, "web", observed.Docker.Name)
+	assert.Equal(t, "shop", observed.Docker.Labels[docker.LabelComposeProject])
+
+	unseen := blocks.ObservedOf(json.RawMessage(`{"state": "pending"}`))
+	assert.Equal(t, containerKind.Pending, unseen.Status.State)
+	require.NotNil(t, unseen.Docker, "what docker has said nothing of says nothing")
+	assert.Empty(t, unseen.Docker.ID)
 }
 
 func TestRefusal(t *testing.T) {

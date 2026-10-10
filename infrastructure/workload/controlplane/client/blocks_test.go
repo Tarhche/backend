@@ -371,3 +371,44 @@ func TestContainerOf(t *testing.T) {
 	assert.Equal(t, "Exited (0) 1 second ago", seen.Status)
 	assert.True(t, seen.Unmanaged)
 }
+
+func TestAnswered(t *testing.T) {
+	t.Parallel()
+
+	for name, tt := range map[string]struct {
+		status any
+		want   bool
+	}{
+		"one its node made, which docker says beside its state": {
+			status: containerKind.Status{Status: kind.Status{State: containerKind.Running}, Docker: &containerKind.Docker{ID: "c1", Name: "web", State: "running"}},
+			want:   true,
+		},
+		"a volume, which docker knows by its name alone": {
+			status: volumeKind.Status{Status: kind.Status{State: volumeKind.Present}, Docker: &volumeKind.Docker{Name: "data"}},
+			want:   true,
+		},
+		"one its node has said nothing of yet": {
+			status: containerKind.Status{Status: kind.Status{State: containerKind.Pending}},
+		},
+		"one still being made": {
+			status: imageKind.Status{Status: kind.Status{State: imageKind.Pulling}, Docker: &imageKind.Docker{ID: "sha256:abc"}},
+		},
+		"one that failed": {
+			status: networkKind.Status{Status: kind.Status{State: kind.Failed}},
+			want:   true,
+		},
+		"one refused, in the codes every side knows": {
+			status: imageKind.Status{Status: kind.Status{State: imageKind.Pending}, Failure: &noderequest.Error{Code: noderequest.CodeNotFound}},
+			want:   true,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			status, err := json.Marshal(tt.status)
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.want, answered(status))
+		})
+	}
+}

@@ -1,13 +1,17 @@
 package network_test
 
 import (
+	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/khanzadimahdi/testproject/domain/workload/docker"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/kinds/network"
+	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 )
 
 func TestDescriptor(t *testing.T) {
@@ -56,4 +60,47 @@ func TestDocker(t *testing.T) {
 
 	assert.Equal(t, held, network.DockerOf(held).Network())
 	assert.Equal(t, []string{}, network.DockerOf(docker.Network{}).Containers, "a list is a list even when it is empty")
+}
+
+func TestStatus(t *testing.T) {
+	t.Parallel()
+
+	at := time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC)
+
+	status := network.Status{
+		Status: kind.Status{State: network.Present, Expected: network.Present, ObservedAt: at},
+		Docker: &network.Docker{
+			ID:         "n1",
+			Name:       "backend",
+			Driver:     "bridge",
+			Scope:      "local",
+			Internal:   true,
+			Containers: []string{"web"},
+			Labels:     map[string]string{"workload.managed": "true"},
+			CreatedAt:  at,
+		},
+		Failure: &noderequest.Error{Code: noderequest.CodeInvalid, Message: "network backend has active endpoints"},
+	}
+
+	written, err := json.Marshal(status)
+	require.NoError(t, err)
+
+	assert.JSONEq(t, `{
+		"state": "present",
+		"expected": "present",
+		"observed_at": "2026-10-06T12:00:00Z",
+		"id": "n1",
+		"name": "backend",
+		"driver": "bridge",
+		"scope": "local",
+		"internal": true,
+		"containers": ["web"],
+		"labels": {"workload.managed": "true"},
+		"created_at": "2026-10-06T12:00:00Z",
+		"failure": {"code": "invalid", "message": "network backend has active endpoints"}
+	}`, string(written), "what docker said of it is beside its state")
+
+	var read network.Status
+	require.NoError(t, json.Unmarshal(written, &read))
+	assert.Equal(t, status, read)
 }

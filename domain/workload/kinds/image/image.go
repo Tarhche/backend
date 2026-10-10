@@ -83,13 +83,13 @@ type Spec struct {
 }
 
 // Status is what an image is: its state, and what its VM's dockerd last said
-// of it.
+// of it beside it, in one object.
 type Status struct {
 	kind.Status
 
-	// Docker is the image as its VM's dockerd last had it, and nothing until
-	// it is pulled.
-	Docker *Docker `json:"docker,omitempty"`
+	// Docker is the image as its VM's dockerd last had it, its fields beside
+	// the state's, and nothing until it is pulled.
+	*Docker
 
 	// Failure is what the last command on it failed with, in the codes every
 	// side knows; an empty one is a command that did not fail since.
@@ -98,17 +98,21 @@ type Status struct {
 
 // Docker is an image as its VM's dockerd has it, under one of the references
 // it holds it under.
+//
+// Each of its fields is written whenever it is there, empty or not: a status
+// taken onto a record keeps a field the report leaves out (resource.Merge),
+// so what docker says of it takes the place of all it said before.
 type Docker struct {
 	// Reference is the one it is seen under here: one of its tags, or one of
 	// its digests, or nothing for an image nothing names any more.
-	Reference string `json:"reference,omitempty"`
+	Reference string `json:"reference"`
 
 	ID   string   `json:"id"`
 	Tags []string `json:"tags"`
 
 	// Size is in bytes.
 	Size      int64     `json:"size"`
-	CreatedAt time.Time `json:"created_at,omitzero"`
+	CreatedAt time.Time `json:"created_at"`
 
 	// InUse says a container was made from it.
 	InUse bool `json:"in_use"`

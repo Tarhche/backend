@@ -87,13 +87,13 @@ func (s Spec) Docker(uuid string) docker.NetworkSpec {
 }
 
 // Status is what a network is: its state, and what its VM's dockerd last said
-// of it.
+// of it beside it, in one object.
 type Status struct {
 	kind.Status
 
-	// Docker is the network as its VM's dockerd last had it, and nothing
-	// until it is made.
-	Docker *Docker `json:"docker,omitempty"`
+	// Docker is the network as its VM's dockerd last had it, its fields
+	// beside the state's, and nothing until it is made.
+	*Docker
 
 	// Failure is what the last command on it failed with, in the codes every
 	// side knows; an empty one is a command that did not fail since.
@@ -101,6 +101,10 @@ type Status struct {
 }
 
 // Docker is a network as its VM's dockerd has it.
+//
+// Each of its fields is written whenever it is there, empty or not: a status
+// taken onto a record keeps a field the report leaves out (resource.Merge),
+// so what docker says of it takes the place of all it said before.
 type Docker struct {
 	ID       string `json:"id"`
 	Name     string `json:"name"`
@@ -111,8 +115,8 @@ type Docker struct {
 	// Containers are the containers attached to it, by their names.
 	Containers []string `json:"containers"`
 
-	Labels    map[string]string `json:"labels,omitempty"`
-	CreatedAt time.Time         `json:"created_at,omitzero"`
+	Labels    map[string]string `json:"labels"`
+	CreatedAt time.Time         `json:"created_at"`
 }
 
 // DockerOf is a network as docker has it, as a status has it.

@@ -218,7 +218,7 @@ func (b *Blocks) Act(ctx context.Context, r kind.Raw, action string, payload []b
 		return kind.Raw{}, false, nil, fmt.Errorf("%w: a %s has no command %q", kind.ErrUnknownAction, b.descriptor.Name, action)
 	}
 
-	if !b.descriptor.Allows(action, ObservedOf(r.Status).State) {
+	if !b.descriptor.Allows(action, ObservedOf(r.Status).Status.State) {
 		return kind.Raw{}, false, domain.ValidationErrors{"action": "invalid_state_transition"}, nil
 	}
 
@@ -270,7 +270,7 @@ func (b *Blocks) Query(ctx context.Context, r kind.Raw, action string, payload [
 		return nil, nil, fmt.Errorf("%w: a %s has no query %q", kind.ErrUnknownAction, b.descriptor.Name, action)
 	}
 
-	if state := ObservedOf(r.Status).State; !b.descriptor.Allows(action, state) {
+	if state := ObservedOf(r.Status).Status.State; !b.descriptor.Allows(action, state) {
 		return nil, nil, &noderequest.Error{Code: noderequest.CodeNotRunning, Message: fmt.Sprintf("a %s that is %s cannot be asked for its %s", b.descriptor.Name, state, action)}
 	}
 

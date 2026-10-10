@@ -115,7 +115,7 @@ func (s *Containers) Admit(ctx context.Context, asked containerKind.Container) (
 // Reconcile is what a container is asked for, given what it was asked to be
 // and what it was last seen doing.
 func (s *Containers) Reconcile(ctx context.Context, c containerKind.Container) ([]kind.Intent, error) {
-	state, expected := c.Status.State, c.Status.Expected
+	state, expected := c.Status.Status.State, c.Status.Expected
 
 	switch {
 	case expected != containerKind.Running && expected != containerKind.Stopped:
@@ -146,7 +146,7 @@ func attachments(c containerKind.Container) []kind.Intent {
 	seen := c.Status.Docker
 
 	switch {
-	case seen == nil, c.Status.State != containerKind.Running && c.Status.State != containerKind.Stopped && c.Status.State != containerKind.Completed:
+	case seen == nil, c.Status.Status.State != containerKind.Running && c.Status.Status.State != containerKind.Stopped && c.Status.Status.State != containerKind.Completed:
 		return nil
 	}
 
@@ -359,7 +359,7 @@ func (s *Containers) Adopt(observed kind.Observation) (blocks.Adoption, bool) {
 	}
 
 	expected := containerKind.Running
-	if status.State == containerKind.Stopped {
+	if status.Status.State == containerKind.Stopped {
 		expected = containerKind.Stopped
 	}
 

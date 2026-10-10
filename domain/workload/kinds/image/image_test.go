@@ -1,14 +1,17 @@
 package image_test
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/khanzadimahdi/testproject/domain/workload/docker"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/kinds/image"
+	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 )
 
 func TestDescriptor(t *testing.T) {
@@ -124,4 +127,36 @@ func TestDocker(t *testing.T) {
 
 	var none *image.Docker
 	assert.Equal(t, docker.Image{}, none.Image())
+}
+
+func TestStatus(t *testing.T) {
+	t.Parallel()
+
+	at := time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC)
+
+	status := image.Status{
+		Status:  kind.Status{State: image.Present, Expected: image.Present, ObservedAt: at},
+		Docker:  &image.Docker{Reference: "nginx:1.27", ID: "sha256:abc", Tags: []string{"nginx:1.27"}, Size: 42, CreatedAt: at, InUse: true},
+		Failure: &noderequest.Error{Code: noderequest.CodeNotFound, Message: "no such image"},
+	}
+
+	written, err := json.Marshal(status)
+	require.NoError(t, err)
+
+	assert.JSONEq(t, `{
+		"state": "present",
+		"expected": "present",
+		"observed_at": "2026-10-06T12:00:00Z",
+		"reference": "nginx:1.27",
+		"id": "sha256:abc",
+		"tags": ["nginx:1.27"],
+		"size": 42,
+		"created_at": "2026-10-06T12:00:00Z",
+		"in_use": true,
+		"failure": {"code": "not_found", "message": "no such image"}
+	}`, string(written), "what docker said of it is beside its state")
+
+	var read image.Status
+	require.NoError(t, json.Unmarshal(written, &read))
+	assert.Equal(t, status, read)
 }

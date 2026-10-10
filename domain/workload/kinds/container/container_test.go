@@ -12,6 +12,8 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/docker"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/kinds/container"
+	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
+	"github.com/khanzadimahdi/testproject/domain/workload/resource"
 )
 
 func TestDescriptor(t *testing.T) {
@@ -222,6 +224,98 @@ func TestDocker(t *testing.T) {
 	assert.Equal(t, []container.PortBinding{}, empty.Ports, "a list is a list even when it is empty")
 	assert.Equal(t, []string{}, empty.Networks)
 	assert.Equal(t, []container.Mount{}, empty.Mounts)
+}
+
+func TestStatus(t *testing.T) {
+	t.Parallel()
+
+	at := time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC)
+
+	status := container.Status{
+		Status: kind.Status{State: container.Stopped, Expected: container.Running, Reason: "it stopped", Since: at, ObservedAt: at},
+		Docker: &container.Docker{
+			ID:            "c0ffee",
+			Name:          "web",
+			Image:         "nginx:1.27",
+			State:         "exited",
+			Status:        "Exited (1) 5 minutes ago",
+			Command:       "nginx",
+			Ports:         []container.PortBinding{{ContainerPort: 80, HostPort: 8080, Protocol: "tcp"}},
+			Networks:      []string{"bridge"},
+			Mounts:        []container.Mount{{Type: "volume", Source: "data", Target: "/data"}},
+			Labels:        map[string]string{"workload.managed": "true"},
+			RestartPolicy: container.RestartAlways,
+			CreatedAt:     at,
+		},
+		Failure: &noderequest.Error{Code: noderequest.CodeInvalid, Message: "it would not start"},
+	}
+
+	written, err := json.Marshal(status)
+	require.NoError(t, err)
+
+	assert.JSONEq(t, `{
+		"state": "stopped",
+		"expected": "running",
+		"reason": "it stopped",
+		"since": "2026-10-06T12:00:00Z",
+		"observed_at": "2026-10-06T12:00:00Z",
+		"id": "c0ffee",
+		"name": "web",
+		"image": "nginx:1.27",
+		"docker_state": "exited",
+		"docker_status": "Exited (1) 5 minutes ago",
+		"command": "nginx",
+		"ports": [{"container_port": 80, "host_port": 8080, "protocol": "tcp"}],
+		"networks": ["bridge"],
+		"mounts": [{"type": "volume", "source": "data", "target": "/data"}],
+		"labels": {"workload.managed": "true"},
+		"restart_policy": "always",
+		"created_at": "2026-10-06T12:00:00Z",
+		"failure": {"code": "invalid", "message": "it would not start"}
+	}`, string(written), "what docker said of it is beside its state, docker's own state under a name of its own")
+
+	var read container.Status
+	require.NoError(t, json.Unmarshal(written, &read))
+	assert.Equal(t, status, read)
+	assert.Equal(t, container.Stopped, read.Status.State, "its state, in the kind's words, survives")
+	assert.Equal(t, "exited", read.Docker.State, "and docker's beside it")
+
+	raw, err := kind.Encode(container.Container{Kind: container.Name, Status: status})
+	require.NoError(t, err)
+
+	decoded, err := kind.Decode[container.Spec, container.Status](raw)
+	require.NoError(t, err)
+	assert.Equal(t, status, decoded.Status, "as the framework writes and reads it")
+
+	pending, err := json.Marshal(container.Status{Status: kind.Status{State: container.Pending, Expected: container.Running}})
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"state": "pending", "expected": "running"}`, string(pending), "one docker has not made yet has nothing of docker's")
+
+	var unseen container.Status
+	require.NoError(t, json.Unmarshal(pending, &unseen))
+	assert.Nil(t, unseen.Docker)
+	assert.Equal(t, container.Pending, unseen.Status.State)
+
+	t.Run("taken onto its record, what docker says takes the place of all it said before", func(t *testing.T) {
+		t.Parallel()
+
+		again, err := json.Marshal(container.Status{Docker: &container.Docker{ID: "c0ffee", Name: "web", Image: "nginx:1.27", State: "running"}})
+		require.NoError(t, err)
+
+		merged, err := resource.Merge(written, again)
+		require.NoError(t, err)
+
+		var taken container.Status
+		require.NoError(t, json.Unmarshal(merged, &taken))
+		assert.Equal(t, &container.Docker{ID: "c0ffee", Name: "web", Image: "nginx:1.27", State: "running"}, taken.Docker, "what it left empty among it")
+
+		missing, err := resource.Merge(written, json.RawMessage(`{"state": "missing"}`))
+		require.NoError(t, err)
+
+		var kept container.Status
+		require.NoError(t, json.Unmarshal(missing, &kept))
+		assert.Equal(t, status.Docker, kept.Docker, "and a report that says nothing of docker leaves what it said as it was")
+	})
 }
 
 func TestPayloads(t *testing.T) {

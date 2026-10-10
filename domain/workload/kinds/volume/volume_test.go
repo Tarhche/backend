@@ -1,14 +1,17 @@
 package volume_test
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/khanzadimahdi/testproject/domain/workload/docker"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/kinds/volume"
+	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 )
 
 func TestDescriptor(t *testing.T) {
@@ -56,4 +59,44 @@ func TestDocker(t *testing.T) {
 
 	var none *volume.Docker
 	assert.Equal(t, docker.Volume{}, none.Volume())
+}
+
+func TestStatus(t *testing.T) {
+	t.Parallel()
+
+	at := time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC)
+
+	status := volume.Status{
+		Status: kind.Status{State: volume.Present, Expected: volume.Present, Reason: "it went missing and was made again", ObservedAt: at},
+		Docker: &volume.Docker{
+			Name:       "data",
+			Driver:     "local",
+			Mountpoint: "/var/lib/docker/volumes/data/_data",
+			Labels:     map[string]string{"workload.managed": "true"},
+			InUse:      true,
+			CreatedAt:  at,
+		},
+		Failure: &noderequest.Error{Code: noderequest.CodeInvalid, Message: "volume is in use"},
+	}
+
+	written, err := json.Marshal(status)
+	require.NoError(t, err)
+
+	assert.JSONEq(t, `{
+		"state": "present",
+		"expected": "present",
+		"reason": "it went missing and was made again",
+		"observed_at": "2026-10-06T12:00:00Z",
+		"name": "data",
+		"driver": "local",
+		"mountpoint": "/var/lib/docker/volumes/data/_data",
+		"labels": {"workload.managed": "true"},
+		"in_use": true,
+		"created_at": "2026-10-06T12:00:00Z",
+		"failure": {"code": "invalid", "message": "volume is in use"}
+	}`, string(written), "what docker said of it is beside its state")
+
+	var read volume.Status
+	require.NoError(t, json.Unmarshal(written, &read))
+	assert.Equal(t, status, read)
 }

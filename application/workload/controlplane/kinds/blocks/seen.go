@@ -9,13 +9,14 @@ import (
 )
 
 // Observed is what every building block's status says of it that the shared
-// code reads: what it is doing, what its VM's dockerd last said of it, and
-// what the last command on it failed with. Each kind's own status has these
-// under the same names, whatever else it has.
+// code reads: what it is doing, what its VM's dockerd last said of it beside
+// that, and what the last command on it failed with. Each kind's own status
+// has these under the same names, whatever else it has. A container's state
+// is read as o.Status.State, and docker's as o.Docker.State.
 type Observed struct {
 	kind.Status
 
-	Docker *Docker `json:"docker,omitempty"`
+	*Docker
 
 	Failure *noderequest.Error `json:"failure,omitempty"`
 }
@@ -27,8 +28,8 @@ type Docker struct {
 	Name      string `json:"name,omitempty"`
 	Reference string `json:"reference,omitempty"`
 
-	// State is a container's, in docker's words.
-	State string `json:"state,omitempty"`
+	// State is a container's, in docker's words, beside the status's own.
+	State string `json:"docker_state,omitempty"`
 
 	// InUse says a container uses an image or a volume, and Containers are
 	// the containers on a network.

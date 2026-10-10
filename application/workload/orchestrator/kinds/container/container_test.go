@@ -64,7 +64,7 @@ func TestNode_Execute(t *testing.T) {
 		outcome, err := strategy.Execute(t.Context(), aContainer("c-uuid"), containerKind.ActionCreate, nil)
 		require.NoError(t, err)
 
-		assert.Equal(t, containerKind.Running, outcome.Status.State)
+		assert.Equal(t, containerKind.Running, outcome.Status.Status.State)
 		require.NotNil(t, outcome.Status.Docker)
 		assert.Equal(t, "web", outcome.Status.Docker.Name)
 		assert.Equal(t, containerKind.RestartAlways, outcome.Status.Docker.RestartPolicy)
@@ -93,7 +93,7 @@ func TestNode_Execute(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Len(t, dockerd.Held(), 1)
-		assert.Equal(t, containerKind.Running, outcome.Status.State)
+		assert.Equal(t, containerKind.Running, outcome.Status.Status.State)
 	})
 
 	t.Run("one that is to be stopped is stopped once it is made", func(t *testing.T) {
@@ -106,7 +106,7 @@ func TestNode_Execute(t *testing.T) {
 		}), containerKind.ActionCreate, nil)
 		require.NoError(t, err)
 
-		assert.Equal(t, containerKind.Stopped, outcome.Status.State)
+		assert.Equal(t, containerKind.Stopped, outcome.Status.Status.State)
 		assert.Equal(t, "exited", dockerd.Held()[0].State)
 	})
 
@@ -119,7 +119,7 @@ func TestNode_Execute(t *testing.T) {
 		outcome, err := strategy.Execute(t.Context(), aContainer("c-uuid"), containerKind.ActionCreate, nil)
 		require.ErrorIs(t, err, docker.ErrInvalid)
 
-		assert.Equal(t, containerKind.Failed, outcome.Status.State)
+		assert.Equal(t, containerKind.Failed, outcome.Status.Status.State)
 		require.NotNil(t, outcome.Status.Failure)
 		assert.Equal(t, noderequest.CodeInvalid, outcome.Status.Failure.Code)
 		assert.Contains(t, outcome.Status.Failure.Message, "port is already allocated")
@@ -161,15 +161,15 @@ func TestNode_Execute(t *testing.T) {
 
 		stopped, err := strategy.Execute(t.Context(), recorded, containerKind.ActionStop, nil)
 		require.NoError(t, err)
-		assert.Equal(t, containerKind.Stopped, stopped.Status.State, "one docker restarts by itself is stopped, not completed")
+		assert.Equal(t, containerKind.Stopped, stopped.Status.Status.State, "one docker restarts by itself is stopped, not completed")
 
 		started, err := strategy.Execute(t.Context(), recorded, containerKind.ActionStart, nil)
 		require.NoError(t, err)
-		assert.Equal(t, containerKind.Running, started.Status.State)
+		assert.Equal(t, containerKind.Running, started.Status.Status.State)
 
 		restarted, err := strategy.Execute(t.Context(), recorded, containerKind.ActionRestart, nil)
 		require.NoError(t, err)
-		assert.Equal(t, containerKind.Running, restarted.Status.State)
+		assert.Equal(t, containerKind.Running, restarted.Status.Status.State)
 
 		assert.Equal(t, 1, dockerd.Calls("StopContainer"))
 		assert.Equal(t, 1, dockerd.Calls("StartContainer"))
@@ -189,7 +189,7 @@ func TestNode_Execute(t *testing.T) {
 
 		stopped, err := strategy.Execute(t.Context(), oneOff, containerKind.ActionStop, nil)
 		require.NoError(t, err)
-		assert.Equal(t, containerKind.Completed, stopped.Status.State)
+		assert.Equal(t, containerKind.Completed, stopped.Status.Status.State)
 	})
 
 	t.Run("started when its vm has none of it, it is made", func(t *testing.T) {
@@ -202,7 +202,7 @@ func TestNode_Execute(t *testing.T) {
 		}), containerKind.ActionStart, nil)
 		require.NoError(t, err)
 
-		assert.Equal(t, containerKind.Running, outcome.Status.State)
+		assert.Equal(t, containerKind.Running, outcome.Status.Status.State)
 		assert.Len(t, dockerd.Held(), 1)
 	})
 
@@ -214,7 +214,7 @@ func TestNode_Execute(t *testing.T) {
 		outcome, err := strategy.Execute(t.Context(), aContainer("c-uuid"), containerKind.ActionStop, nil)
 		require.NoError(t, err)
 
-		assert.Equal(t, containerKind.Stopped, outcome.Status.State)
+		assert.Equal(t, containerKind.Stopped, outcome.Status.Status.State)
 		assert.Empty(t, dockerd.Held(), "and nothing is made for it")
 	})
 
@@ -249,7 +249,7 @@ func TestNode_Execute(t *testing.T) {
 
 		outcome, err := strategy.Execute(t.Context(), aContainer("c-uuid"), containerKind.ActionDelete, containerKind.DeletePayload{})
 		require.NoError(t, err)
-		assert.Empty(t, outcome.Status.State)
+		assert.Empty(t, outcome.Status.Status.State)
 		assert.Empty(t, dockerd.Held(), "whether one that runs may be removed was asked before it was sent here")
 
 		_, err = strategy.Execute(t.Context(), aContainer("c-uuid"), containerKind.ActionDelete, containerKind.DeletePayload{})
@@ -359,11 +359,11 @@ func TestNode_State(t *testing.T) {
 		require.Len(t, byName, 4)
 
 		assert.Equal(t, "c-uuid", byName["web"].UUID)
-		assert.Equal(t, containerKind.Running, byName["web"].Status.State)
+		assert.Equal(t, containerKind.Running, byName["web"].Status.Status.State)
 		assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "vm-1"}}, byName["web"].Owners)
 
 		assert.Equal(t, "one-off", byName["migrate"].UUID)
-		assert.Equal(t, containerKind.Completed, byName["migrate"].Status.State, "a one-off that ran to its end")
+		assert.Equal(t, containerKind.Completed, byName["migrate"].Status.Status.State, "a one-off that ran to its end")
 		assert.Equal(t, containerKind.RestartNo, byName["migrate"].Status.Docker.RestartPolicy, "as its spec says")
 
 		assert.Empty(t, byName["shop-web-1"].UUID, "a stack's is not one of the kind's records")
@@ -394,6 +394,6 @@ func TestObserved(t *testing.T) {
 	}})
 
 	assert.Equal(t, "c-uuid", observed.UUID)
-	assert.Equal(t, containerKind.Stopped, observed.Status.State, "docker starts it again by itself")
+	assert.Equal(t, containerKind.Stopped, observed.Status.Status.State, "docker starts it again by itself")
 	assert.Equal(t, containerKind.RestartUnlessStopped, observed.Status.Docker.RestartPolicy)
 }

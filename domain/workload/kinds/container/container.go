@@ -305,13 +305,15 @@ func PolicyOf(labels map[string]string) (string, bool) {
 }
 
 // Status is what a container is doing: its state, and what its VM's dockerd
-// last said of it.
+// last said of it beside it, in one object. Docker has a state of its own, so
+// each is read where it is from: s.Status.State is the container's, in the
+// kind's words, and s.Docker.State docker's.
 type Status struct {
 	kind.Status
 
-	// Docker is the container as its VM's dockerd last had it, and nothing
-	// until it is made.
-	Docker *Docker `json:"docker,omitempty"`
+	// Docker is the container as its VM's dockerd last had it, its fields
+	// beside the state's, and nothing until it is made.
+	*Docker
 
 	// Failure is what the last command on it failed with, in the codes every
 	// side knows, so that whoever waited for the command says it as its node
@@ -320,24 +322,29 @@ type Status struct {
 }
 
 // Docker is a container as its VM's dockerd has it.
+//
+// Each of its fields is written whenever it is there, empty or not: a status
+// taken onto a record keeps a field the report leaves out (resource.Merge),
+// so what docker says of it takes the place of all it said before.
 type Docker struct {
 	ID    string `json:"id"`
 	Name  string `json:"name"`
 	Image string `json:"image"`
 
 	// State is docker's: created, running, paused, restarting, removing,
-	// exited or dead. Status is the sentence docker puts it in.
-	State  string `json:"state"`
-	Status string `json:"status"`
+	// exited or dead. Status is the sentence docker puts it in. Beside a
+	// status's own state, they are docker_state and docker_status.
+	State  string `json:"docker_state"`
+	Status string `json:"docker_status"`
 
-	Command  string            `json:"command,omitempty"`
+	Command  string            `json:"command"`
 	Ports    []PortBinding     `json:"ports"`
 	Networks []string          `json:"networks"`
 	Mounts   []Mount           `json:"mounts"`
-	Labels   map[string]string `json:"labels,omitempty"`
+	Labels   map[string]string `json:"labels"`
 
-	RestartPolicy string    `json:"restart_policy,omitempty"`
-	CreatedAt     time.Time `json:"created_at,omitzero"`
+	RestartPolicy string    `json:"restart_policy"`
+	CreatedAt     time.Time `json:"created_at"`
 }
 
 // DockerOf is a container as docker has it, as a status has it.
