@@ -1990,6 +1990,17 @@ definitions:
       sampled_at:
         type: string
     type: object
+  presenter.Dependent:
+    properties:
+      kind:
+        type: string
+      name:
+        type: string
+      recreates:
+        type: boolean
+      uuid:
+        type: string
+    type: object
   presenter.DockerNetwork:
     properties:
       containers:
@@ -2684,6 +2695,17 @@ definitions:
     properties:
       errors:
         $ref: '#/definitions/domain.ValidationErrors'
+    type: object
+  workload.Removal:
+    properties:
+      dependents:
+        items:
+          $ref: '#/definitions/presenter.Dependent'
+        type: array
+      errors:
+        $ref: '#/definitions/domain.ValidationErrors'
+      recreated:
+        type: boolean
     type: object
 info:
   contact: {}
@@ -4808,19 +4830,26 @@ paths:
   /dashboard/my/workload/vms/{uuid}:
     delete:
       description: ask for a VM and its disk to be removed; it is deleting until its
-        node has removed it, and its snapshots stay
+        node has removed it, and its snapshots stay. The containers in it make it
+        again, under its uuid and as it was, and then themselves in it, unless cascade
+        deletes them with it; when any container needs it, it is answered with them,
+        and with whether one of them makes it again
       parameters:
       - description: VM UUID
         in: path
         name: uuid
         required: true
         type: string
+      - description: Delete the containers in it with it, rather than have them make
+          it again
+        in: query
+        name: cascade
+        type: boolean
       responses:
         "202":
           description: Accepted
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Removal'
         "400":
           description: Bad Request
           schema:
@@ -5511,7 +5540,9 @@ paths:
   /dashboard/my/workload/vms/{uuid}/networks/{id}:
     delete:
       description: remove a docker network from a Docker VM; one a container is attached
-        to is refused
+        to is refused, unless cascade deletes the containers that need it first. When
+        any container needs it, it is answered with them, and with whether one of
+        them makes it again, as a container that owns it does
       parameters:
       - description: VM UUID
         in: path
@@ -5523,7 +5554,15 @@ paths:
         name: id
         required: true
         type: string
+      - description: Delete the containers that need it first
+        in: query
+        name: cascade
+        type: boolean
       responses:
+        "202":
+          description: Accepted
+          schema:
+            $ref: '#/definitions/workload.Removal'
         "204":
           description: No Content
           schema:
@@ -5532,7 +5571,7 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/workload.Refusal'
+            $ref: '#/definitions/workload.Removal'
         "404":
           description: Not Found
           schema:
@@ -5747,7 +5786,9 @@ paths:
   /dashboard/my/workload/vms/{uuid}/volumes/{name}:
     delete:
       description: remove a volume, and what was kept in it, from a Docker VM; one
-        a container mounts only by force
+        a container mounts only by force, or once cascade deleted the containers that
+        need it first. When any container needs it, it is answered with them, and
+        with whether one of them makes it again
       parameters:
       - description: VM UUID
         in: path
@@ -5763,7 +5804,15 @@ paths:
         in: query
         name: force
         type: boolean
+      - description: Delete the containers that need it first
+        in: query
+        name: cascade
+        type: boolean
       responses:
+        "202":
+          description: Accepted
+          schema:
+            $ref: '#/definitions/workload.Removal'
         "204":
           description: No Content
           schema:
@@ -5772,7 +5821,7 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/workload.Refusal'
+            $ref: '#/definitions/workload.Removal'
         "404":
           description: Not Found
           schema:
@@ -6761,19 +6810,26 @@ paths:
   /dashboard/workload/vms/{uuid}:
     delete:
       description: ask for a VM and its disk to be removed; it is deleting until its
-        node has removed it, and its snapshots stay
+        node has removed it, and its snapshots stay. The containers in it make it
+        again, under its uuid and as it was, and then themselves in it, unless cascade
+        deletes them with it; when any container needs it, it is answered with them,
+        and with whether one of them makes it again
       parameters:
       - description: VM UUID
         in: path
         name: uuid
         required: true
         type: string
+      - description: Delete the containers in it with it, rather than have them make
+          it again
+        in: query
+        name: cascade
+        type: boolean
       responses:
         "202":
           description: Accepted
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Removal'
         "400":
           description: Bad Request
           schema:
@@ -7464,7 +7520,9 @@ paths:
   /dashboard/workload/vms/{uuid}/networks/{id}:
     delete:
       description: remove a docker network from a Docker VM; one a container is attached
-        to is refused
+        to is refused, unless cascade deletes the containers that need it first. When
+        any container needs it, it is answered with them, and with whether one of
+        them makes it again, as a container that owns it does
       parameters:
       - description: VM UUID
         in: path
@@ -7476,7 +7534,15 @@ paths:
         name: id
         required: true
         type: string
+      - description: Delete the containers that need it first
+        in: query
+        name: cascade
+        type: boolean
       responses:
+        "202":
+          description: Accepted
+          schema:
+            $ref: '#/definitions/workload.Removal'
         "204":
           description: No Content
           schema:
@@ -7485,7 +7551,7 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/workload.Refusal'
+            $ref: '#/definitions/workload.Removal'
         "404":
           description: Not Found
           schema:
@@ -7740,7 +7806,9 @@ paths:
   /dashboard/workload/vms/{uuid}/volumes/{name}:
     delete:
       description: remove a volume, and what was kept in it, from a Docker VM; one
-        a container mounts only by force
+        a container mounts only by force, or once cascade deleted the containers that
+        need it first. When any container needs it, it is answered with them, and
+        with whether one of them makes it again
       parameters:
       - description: VM UUID
         in: path
@@ -7756,7 +7824,15 @@ paths:
         in: query
         name: force
         type: boolean
+      - description: Delete the containers that need it first
+        in: query
+        name: cascade
+        type: boolean
       responses:
+        "202":
+          description: Accepted
+          schema:
+            $ref: '#/definitions/workload.Removal'
         "204":
           description: No Content
           schema:
@@ -7765,7 +7841,7 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/workload.Refusal'
+            $ref: '#/definitions/workload.Removal'
         "404":
           description: Not Found
           schema:

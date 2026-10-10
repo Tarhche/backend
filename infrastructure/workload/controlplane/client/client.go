@@ -155,6 +155,42 @@ func (c *Client) path(path string, query url.Values) string {
 	return u.String()
 }
 
+// deletedAnswer is what the control plane says of what needs what a delete
+// asked to go, beside what came of the delete: the roots that need it, and
+// whether one of them makes it again.
+type deletedAnswer struct {
+	Dependents []struct {
+		Kind      string `json:"kind"`
+		UUID      string `json:"uuid"`
+		Name      string `json:"name"`
+		Recreates bool   `json:"recreates"`
+	} `json:"dependents"`
+	Recreated bool `json:"recreated"`
+}
+
+// deleted is what the answer says, as the blog has it.
+func (a deletedAnswer) deleted() workloadControlPlane.Deleted {
+	var deleted workloadControlPlane.Deleted
+
+	for _, d := range a.Dependents {
+		deleted.Dependents = append(deleted.Dependents, workloadControlPlane.Dependent{Kind: d.Kind, UUID: d.UUID, Name: d.Name, Recreates: d.Recreates})
+	}
+
+	deleted.Recreated = a.Recreated
+
+	return deleted
+}
+
+// cascading is the query that asks a delete to take what needs it with it,
+// when cascade says so, and nothing otherwise.
+func cascading(cascade bool) url.Values {
+	if !cascade {
+		return nil
+	}
+
+	return url.Values{"cascade": {"true"}}
+}
+
 // owned is the query of a call narrowed to ownerUUID's own, with what else it
 // asks; anything empty is left out.
 func owned(ownerUUID string, rest url.Values) url.Values {

@@ -12,4 +12,8 @@ type Request struct {
 	// OwnerUUID narrows what is acted on to one person's own, and is empty
 	// for anybody's.
 	OwnerUUID string `json:"-"`
+
+	// Cascade deletes the containers that need it first, nothing owning
+	// them: one that mounts it, which would have it refused.
+	Cascade bool `json:"-"`
 }

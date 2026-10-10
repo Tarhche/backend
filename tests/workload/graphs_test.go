@@ -15,6 +15,7 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/container/createContainer"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/container/deleteContainer"
+	"github.com/khanzadimahdi/testproject/application/dashboard/workload/presenter"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/createVM"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/deleteVM"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/volume/createVolume"
@@ -338,11 +339,11 @@ func (w *workload) blockRecord(t *testing.T, kindName string, vmUUID string, nam
 	return r
 }
 
-// TestAVMDeletedWithWhatNeedsIt deletes the Docker VM a container's graph
-// made for it, with what needs it (cascade): the answer names the container,
-// which would have made it again; the container goes, with the network it
-// owned, and the volume goes with the VM, as what lives in a VM always does;
-// and nothing is made again.
+// TestAVMDeletedWithWhatNeedsIt deletes, from the dashboard, the Docker VM a
+// container's graph made for it, with what needs it (cascade): the answer
+// names the container, which would have made it again; the container goes,
+// with the network it owned, and the volume goes with the VM, as what lives in
+// a VM always does; and nothing is made again.
 func TestAVMDeletedWithWhatNeedsIt(t *testing.T) {
 	t.Parallel()
 
@@ -350,12 +351,12 @@ func TestAVMDeletedWithWhatNeedsIt(t *testing.T) {
 
 	vmUUID, root := w.containerWithItsOwn(t, "web")
 
-	status, body := w.controlPlane(t, http.MethodDelete, "/api/vms/"+vmUUID, url.Values{"cascade": {"true"}})
-	require.Equal(t, http.StatusAccepted, status, string(body))
+	deleted, err := deleteVM.NewUseCase(w.client, w.translator).Execute(t.Context(), &deleteVM.Request{UUID: vmUUID, OwnerUUID: ownerUUID, Cascade: true})
+	require.NoError(t, err)
+	require.Empty(t, deleted.ValidationErrors)
 
-	answer := deletedOf(t, body)
-	assert.Equal(t, []dependentShown{{Kind: containerKind.Name, UUID: root.UUID, Name: "web", Recreates: true}}, answer.Dependents)
-	assert.False(t, answer.Recreated, "it goes with them, and none makes it again")
+	assert.Equal(t, []presenter.Dependent{{Kind: containerKind.Name, UUID: root.UUID, Name: "web", Recreates: true}}, deleted.Dependents)
+	assert.False(t, deleted.Recreated, "it goes with them, and none makes it again")
 
 	w.gone(t, vmUUID)
 
@@ -384,9 +385,10 @@ func TestAVMWhoseLifetimeEndsUnderAContainer(t *testing.T) {
 }
 
 // TestAVolumeAContainerMounts deletes a volume a container's graph made for
-// it, in a Docker VM it named: alone, its node refuses, since the container
-// mounts it, and the answer names the container beside the refusal; with what
-// needs it, the container goes first, and then the volume, and the VM stays.
+// it, in a Docker VM it named, as the control plane's API is asked and as the
+// dashboard asks: alone, its node refuses, since the container mounts it, and
+// the answer names the container beside the refusal; with what needs it, the
+// container goes first, and then the volume, and the VM stays.
 func TestAVolumeAContainerMounts(t *testing.T) {
 	t.Parallel()
 
@@ -437,14 +439,25 @@ func TestAVolumeAContainerMounts(t *testing.T) {
 		w.containerIn(t, vmUUID, "app", "running")
 	})
 
-	t.Run("with what needs it, the container goes first, and then the volume, and the vm stays", func(t *testing.T) {
-		status, body := w.controlPlane(t, http.MethodDelete, "/api/volumes/"+volume.Metadata.UUID, url.Values{"cascade": {"true"}, "wait": {"30s"}})
-		require.Equal(t, http.StatusAccepted, status, string(body))
+	t.Run("and so it is from the dashboard, which says the refusal and the container beside it", func(t *testing.T) {
+		refused, err := deleteVolume.NewUseCase(w.client, w.translator).Execute(ctx, &deleteVolume.Request{VMUUID: vmUUID, Name: "data", OwnerUUID: ownerUUID})
+		require.NoError(t, err)
 
-		answer := deletedOf(t, body)
-		assert.Nil(t, answer.Resource, "it is gone")
-		assert.Equal(t, needs, answer.Dependents)
-		assert.False(t, answer.Recreated)
+		assert.Contains(t, refused.ValidationErrors["docker"], "volume is in use")
+		assert.Equal(t, []presenter.Dependent{{Kind: containerKind.Name, UUID: app.Metadata.UUID, Name: "app", Recreates: true}}, refused.Dependents)
+		assert.True(t, refused.Recreated)
+
+		_, kept := w.findBlock(t, volumeKind.Name, vmUUID, "data")
+		assert.True(t, kept)
+	})
+
+	t.Run("with what needs it, the container goes first, and then the volume, and the vm stays", func(t *testing.T) {
+		deleted, err := deleteVolume.NewUseCase(w.client, w.translator).Execute(ctx, &deleteVolume.Request{VMUUID: vmUUID, Name: "data", OwnerUUID: ownerUUID, Cascade: true})
+		require.NoError(t, err)
+		require.Empty(t, deleted.ValidationErrors)
+
+		assert.Equal(t, []presenter.Dependent{{Kind: containerKind.Name, UUID: app.Metadata.UUID, Name: "app", Recreates: true}}, deleted.Dependents)
+		assert.False(t, deleted.Recreated)
 
 		assert.Empty(t, w.containerRecords(t, vmUUID))
 

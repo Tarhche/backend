@@ -445,3 +445,91 @@ func TestClient_CreateContainer_vmToBeMade(t *testing.T) {
 	assert.Equal(t, workloadControlPlane.ChosenVM{UUID: "planned-uuid", Name: "builds", Created: true}, created.VM)
 	assert.Equal(t, "c1", created.Container.ID)
 }
+
+// TestClient_deletes holds a delete of what containers need to asking with
+// cascade when it is asked to, and to reading the 202 its answer is, with the
+// containers that need it and whether one makes it again, beside a refusal
+// among it.
+func TestClient_deletes(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	needs := map[string]any{
+		"dependents": []map[string]any{{"kind": "container", "uuid": "c-uuid", "name": "web", "recreates": true}},
+		"recreated":  true,
+	}
+
+	wanted := workloadControlPlane.Deleted{
+		Dependents: []workloadControlPlane.Dependent{{Kind: "container", UUID: "c-uuid", Name: "web", Recreates: true}},
+		Recreated:  true,
+	}
+
+	t.Run("a vm's delete reads the 202 with what needs it, and asks with cascade when it is asked to", func(t *testing.T) {
+		t.Parallel()
+
+		c, p := newBlocksPlane(t)
+		p.answers(http.MethodDelete, "/api/vms/vm-uuid", http.StatusAccepted, needs)
+
+		deleted, err := c.DeleteVM(ctx, "owner-uuid", "vm-uuid", false)
+		require.NoError(t, err)
+		assert.Equal(t, wanted, deleted)
+		assert.Equal(t, "owner=owner-uuid", p.last(http.MethodDelete).query)
+
+		_, err = c.DeleteVM(ctx, "owner-uuid", "vm-uuid", true)
+		require.NoError(t, err)
+		assert.Equal(t, "cascade=true&owner=owner-uuid", p.last(http.MethodDelete).query)
+	})
+
+	t.Run("and one nothing needs, answered with nothing, is nothing", func(t *testing.T) {
+		t.Parallel()
+
+		c, p := newBlocksPlane(t)
+		p.answers(http.MethodDelete, "/api/vms/vm-uuid", http.StatusNoContent, nil)
+
+		deleted, err := c.DeleteVM(ctx, "owner-uuid", "vm-uuid", false)
+		require.NoError(t, err)
+		assert.Equal(t, workloadControlPlane.Deleted{}, deleted)
+	})
+
+	t.Run("a network's delete is its kind's, with cascade when it is asked to, and is what needs it", func(t *testing.T) {
+		t.Parallel()
+
+		answer := done(nil)
+		answer["dependents"] = needs["dependents"]
+		answer["recreated"] = false
+
+		c, p := newBlocksPlane(t)
+		p.answers(http.MethodPost, "/api/networks/backend/actions/delete", http.StatusAccepted, answer)
+
+		deleted, err := c.DeleteNetwork(ctx, "owner-uuid", "vm-uuid", "backend", true)
+		require.NoError(t, err)
+		assert.Equal(t, workloadControlPlane.Deleted{Dependents: wanted.Dependents}, deleted)
+
+		asked := p.last(http.MethodPost)
+		assert.Equal(t, "cascade=true&owner=owner-uuid&parent=vm-uuid&wait=30s", asked.query)
+	})
+
+	t.Run("a volume's refused, as its node refused it, is what needs it all the same", func(t *testing.T) {
+		t.Parallel()
+
+		answer := map[string]any{
+			"resource":   map[string]any{"kind": "volume", "status": map[string]any{"state": "present", "failure": map[string]any{"code": "invalid", "message": "remove data: volume is in use - [c-1]"}}},
+			"command":    map[string]any{"id": "command-1"},
+			"result":     map[string]any{"id": "command-1", "ok": false, "reason": "remove data: volume is in use - [c-1]"},
+			"dependents": needs["dependents"],
+			"recreated":  true,
+		}
+
+		c, p := newBlocksPlane(t)
+		p.answers(http.MethodPost, "/api/volumes/data/actions/delete", http.StatusAccepted, answer)
+
+		deleted, err := c.DeleteVolume(ctx, "owner-uuid", "vm-uuid", "data", false, false)
+		require.ErrorIs(t, err, docker.ErrInvalid, "refused, in its node's words")
+		assert.Equal(t, wanted, deleted)
+
+		asked := p.last(http.MethodPost)
+		assert.Equal(t, "owner=owner-uuid&parent=vm-uuid&wait=30s", asked.query, "and with no cascade, none is asked for")
+		assert.JSONEq(t, `{}`, asked.body, "not by force")
+	})
+}

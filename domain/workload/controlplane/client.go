@@ -52,8 +52,11 @@ type Client interface {
 	CreateVM(ctx context.Context, ownerUUID string, request VMRequest) (vm.VM, error)
 	UpdateVM(ctx context.Context, ownerUUID string, uuid string, update VMUpdate) (vm.VM, error)
 
-	// DeleteVM asks for a VM to be removed. Its snapshots stay.
-	DeleteVM(ctx context.Context, ownerUUID string, uuid string) error
+	// DeleteVM asks for a VM to be removed. Its snapshots stay. The
+	// containers in it make it again, under its uuid and as it was, and then
+	// themselves in it, unless cascade deletes them with it; either way it is
+	// answered with them (Deleted).
+	DeleteVM(ctx context.Context, ownerUUID string, uuid string, cascade bool) (Deleted, error)
 
 	StartVM(ctx context.Context, ownerUUID string, uuid string) error
 	StopVM(ctx context.Context, ownerUUID string, uuid string) error
@@ -95,6 +98,21 @@ type Client interface {
 	// a node asks of it directly are one interface.
 	Docker(ownerUUID string, vmUUID string) docker.Daemon
 
+	// DeleteNetwork removes a docker network from a Docker VM by its id or
+	// its name, as Docker(...).RemoveNetwork does, and is answered with the
+	// containers that need it (Deleted): one that owns it makes it again, and
+	// one a container is on is refused, unless cascade deletes the
+	// containers that need it first. The refusal is answered with them all
+	// the same.
+	DeleteNetwork(ctx context.Context, ownerUUID string, vmUUID string, id string, cascade bool) (Deleted, error)
+
+	// DeleteVolume removes a volume from a Docker VM by its name, as
+	// Docker(...).RemoveVolume does, and is answered with the containers that
+	// need it (Deleted): one a container mounts is refused, unless cascade
+	// deletes the containers that need it first, and is answered with them
+	// all the same.
+	DeleteVolume(ctx context.Context, ownerUUID string, vmUUID string, name string, force bool, cascade bool) (Deleted, error)
+
 	// CreateContainer creates a container in the Docker VM the request
 	// chooses, making that VM first when it says so or when ownerUUID has
 	// none.
@@ -123,6 +141,24 @@ type Client interface {
 	StartStack(ctx context.Context, ownerUUID string, uuid string) error
 	StopStack(ctx context.Context, ownerUUID string, uuid string) error
 	RestartStack(ctx context.Context, ownerUUID string, uuid string) error
+}
+
+// Deleted is what deleting what containers need came to: the containers that
+// need it, nothing owning them, and whether one of them makes it again once
+// it is gone. What nothing needs has none.
+type Deleted struct {
+	Dependents []Dependent
+	Recreated  bool
+}
+
+// Dependent is what needs what was deleted: a container nothing owns, which
+// makes it again whenever it is gone, or, when it was there before it, only
+// waits on it while it is missing.
+type Dependent struct {
+	Kind      string
+	UUID      string
+	Name      string
+	Recreates bool
 }
 
 // TaskRequest is a task to run: what it is called, and what it runs.

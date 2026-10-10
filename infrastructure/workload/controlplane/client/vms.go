@@ -171,9 +171,16 @@ func (c *Client) UpdateVM(ctx context.Context, ownerUUID string, uuid string, up
 	return c.resourceOf(answer)
 }
 
-// DeleteVM asks for a VM to be removed. Its snapshots stay.
-func (c *Client) DeleteVM(ctx context.Context, ownerUUID string, uuid string) error {
-	return c.call(ctx, http.MethodDelete, c.path(vmPath(uuid), owned(ownerUUID, nil)), nil, nil)
+// DeleteVM asks for a VM to be removed. Its snapshots stay. The control plane
+// answers it with the containers that need it, when any do, as 202 with what
+// it says of them, which is read; with cascade, they go with it.
+func (c *Client) DeleteVM(ctx context.Context, ownerUUID string, uuid string, cascade bool) (workloadControlPlane.Deleted, error) {
+	var answer deletedAnswer
+	if err := c.call(ctx, http.MethodDelete, c.path(vmPath(uuid), owned(ownerUUID, cascading(cascade))), nil, &answer); err != nil {
+		return workloadControlPlane.Deleted{}, err
+	}
+
+	return answer.deleted(), nil
 }
 
 func (c *Client) StartVM(ctx context.Context, ownerUUID string, uuid string) error {

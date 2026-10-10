@@ -19,6 +19,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/khanzadimahdi/testproject/application/auth"
+	"github.com/khanzadimahdi/testproject/application/dashboard/workload/presenter"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 	infraTrace "github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
@@ -86,6 +87,34 @@ func said(err error) string {
 	}
 
 	return ""
+}
+
+// Removal is what a delete of what containers need is answered with: what it
+// was refused for, when it was, the containers that need it, nothing owning
+// them, and whether one of them makes it again.
+type Removal struct {
+	Errors     domain.ValidationErrors `json:"errors,omitempty"`
+	Dependents []presenter.Dependent   `json:"dependents"`
+	Recreated  bool                    `json:"recreated"`
+}
+
+// Removed answers a delete of what containers need, with them, and reports
+// whether anything needed it: 400 with what it was refused for, when it was,
+// and 202 otherwise, whatever a delete nothing needs is answered with, since
+// that may say nothing. Nothing is written when nothing needs it.
+func Removed(rw http.ResponseWriter, refused domain.ValidationErrors, dependents []presenter.Dependent, recreated bool) bool {
+	if len(dependents) == 0 {
+		return false
+	}
+
+	status := http.StatusAccepted
+	if len(refused) > 0 {
+		status = http.StatusBadRequest
+	}
+
+	JSON(rw, status, Removal{Errors: refused, Dependents: dependents, Recreated: recreated})
+
+	return true
 }
 
 // Refused answers a request that was refused, and reports whether it was.

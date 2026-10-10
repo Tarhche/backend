@@ -17,13 +17,15 @@ func NewDeleteHandler(useCase *deleteVolume.UseCase, owner workload.Owner) *dele
 }
 
 // @Summary		Remove a volume
-// @Description	remove a volume, and what was kept in it, from a Docker VM; one a container mounts only by force
+// @Description	remove a volume, and what was kept in it, from a Docker VM; one a container mounts only by force, or once cascade deleted the containers that need it first. When any container needs it, it is answered with them, and with whether one of them makes it again
 // @Tags			dashboard workload volumes
 // @Param			uuid	path		string	true	"VM UUID"
 // @Param			name	path		string	true	"Volume name"
 // @Param			force	query		bool	false	"Remove it even while a container uses it"
+// @Param			cascade	query		bool	false	"Delete the containers that need it first"
+// @Success		202		{object}	workload.Removal
 // @Success		204		{object}	map[string]interface{}
-// @Failure		400		{object}	workload.Refusal
+// @Failure		400		{object}	workload.Removal
 // @Failure		404		{object}	workload.Failure
 // @Failure		500		{object}	workload.Failure
 // @Router			/dashboard/workload/vms/{uuid}/volumes/{name} [delete]
@@ -34,10 +36,12 @@ func (h *deleteHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		Name:      r.PathValue("name"),
 		Force:     workload.Flag(r, "force"),
 		OwnerUUID: h.owner(r),
+		Cascade:   workload.Flag(r, "cascade"),
 	})
 
 	switch {
 	case workload.Failed(rw, r, err):
+	case workload.Removed(rw, response.ValidationErrors, response.Dependents, response.Recreated):
 	case workload.Refused(rw, response.ValidationErrors):
 	default:
 		rw.WriteHeader(http.StatusNoContent)

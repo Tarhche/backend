@@ -11,6 +11,7 @@ import (
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/volume/deleteVolume"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/volume/getVolumes"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/workloadtest"
+	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/domain/workload/docker"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/controlplane"
@@ -44,6 +45,7 @@ func TestTheRoutesOfBothSets(t *testing.T) {
 			target string
 			body   string
 			expect func(daemon *dockerMock.MockDaemon)
+			asked  func(workload *controlplane.MockClient, ownerUUID string)
 			status int
 			answer string
 		}{
@@ -89,10 +91,35 @@ func TestTheRoutesOfBothSets(t *testing.T) {
 				name:   "a removal",
 				method: http.MethodDelete,
 				target: "/vms/vm-uuid/volumes/data?force=true",
-				expect: func(daemon *dockerMock.MockDaemon) {
-					daemon.On("RemoveVolume", mock.Anything, "data", true).Once().Return(nil)
+				asked: func(workload *controlplane.MockClient, ownerUUID string) {
+					workload.On("DeleteVolume", mock.Anything, ownerUUID, "vm-uuid", "data", true, false).Once().Return(workloadControlPlane.Deleted{}, nil)
 				},
 				status: http.StatusNoContent,
+			},
+			{
+				name:   "a removal refused, since a container mounts it, answered with it beside the refusal",
+				method: http.MethodDelete,
+				target: "/vms/vm-uuid/volumes/data",
+				asked: func(workload *controlplane.MockClient, ownerUUID string) {
+					workload.On("DeleteVolume", mock.Anything, ownerUUID, "vm-uuid", "data", false, false).Once().Return(workloadControlPlane.Deleted{
+						Dependents: []workloadControlPlane.Dependent{{Kind: "container", UUID: "c-uuid", Name: "app", Recreates: true}},
+						Recreated:  true,
+					}, &noderequest.Error{Code: noderequest.CodeInvalid, Message: "remove data: volume is in use - [c-1]"})
+				},
+				status: http.StatusBadRequest,
+				answer: `{"errors": {"docker": "Docker refused the request: remove data: volume is in use - [c-1]"}, "dependents": [{"kind": "container", "uuid": "c-uuid", "name": "app", "recreates": true}], "recreated": true}`,
+			},
+			{
+				name:   "and with cascade, the container goes first, and then it",
+				method: http.MethodDelete,
+				target: "/vms/vm-uuid/volumes/data?cascade=true",
+				asked: func(workload *controlplane.MockClient, ownerUUID string) {
+					workload.On("DeleteVolume", mock.Anything, ownerUUID, "vm-uuid", "data", false, true).Once().Return(workloadControlPlane.Deleted{
+						Dependents: []workloadControlPlane.Dependent{{Kind: "container", UUID: "c-uuid", Name: "app", Recreates: true}},
+					}, nil)
+				},
+				status: http.StatusAccepted,
+				answer: `{"dependents": [{"kind": "container", "uuid": "c-uuid", "name": "app", "recreates": true}], "recreated": false}`,
 			},
 		}
 
@@ -109,6 +136,10 @@ func TestTheRoutesOfBothSets(t *testing.T) {
 
 				if tt.expect != nil {
 					tt.expect(&daemon)
+				}
+
+				if tt.asked != nil {
+					tt.asked(&workload, set.OwnerUUID)
 				}
 				defer workload.AssertExpectations(t)
 				defer daemon.AssertExpectations(t)

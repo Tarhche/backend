@@ -11,6 +11,7 @@ import (
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/network/deleteNetwork"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/network/getNetworks"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/workloadtest"
+	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/domain/workload/docker"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/controlplane"
@@ -44,6 +45,7 @@ func TestTheRoutesOfBothSets(t *testing.T) {
 			target string
 			body   string
 			expect func(daemon *dockerMock.MockDaemon)
+			asked  func(workload *controlplane.MockClient, ownerUUID string)
 			status int
 			answer string
 		}{
@@ -89,10 +91,48 @@ func TestTheRoutesOfBothSets(t *testing.T) {
 				name:   "a removal",
 				method: http.MethodDelete,
 				target: "/vms/vm-uuid/networks/backend",
-				expect: func(daemon *dockerMock.MockDaemon) {
-					daemon.On("RemoveNetwork", mock.Anything, "backend").Once().Return(nil)
+				asked: func(workload *controlplane.MockClient, ownerUUID string) {
+					workload.On("DeleteNetwork", mock.Anything, ownerUUID, "vm-uuid", "backend", false).Once().Return(workloadControlPlane.Deleted{}, nil)
 				},
 				status: http.StatusNoContent,
+			},
+			{
+				name:   "a removal of what a container needs is answered with it, and whether it makes it again",
+				method: http.MethodDelete,
+				target: "/vms/vm-uuid/networks/backend",
+				asked: func(workload *controlplane.MockClient, ownerUUID string) {
+					workload.On("DeleteNetwork", mock.Anything, ownerUUID, "vm-uuid", "backend", false).Once().Return(workloadControlPlane.Deleted{
+						Dependents: []workloadControlPlane.Dependent{{Kind: "container", UUID: "c-uuid", Name: "web", Recreates: true}},
+						Recreated:  true,
+					}, nil)
+				},
+				status: http.StatusAccepted,
+				answer: `{"dependents": [{"kind": "container", "uuid": "c-uuid", "name": "web", "recreates": true}], "recreated": true}`,
+			},
+			{
+				name:   "and with cascade, it goes first",
+				method: http.MethodDelete,
+				target: "/vms/vm-uuid/networks/backend?cascade=true",
+				asked: func(workload *controlplane.MockClient, ownerUUID string) {
+					workload.On("DeleteNetwork", mock.Anything, ownerUUID, "vm-uuid", "backend", true).Once().Return(workloadControlPlane.Deleted{
+						Dependents: []workloadControlPlane.Dependent{{Kind: "container", UUID: "c-uuid", Name: "web", Recreates: true}},
+					}, nil)
+				},
+				status: http.StatusAccepted,
+				answer: `{"dependents": [{"kind": "container", "uuid": "c-uuid", "name": "web", "recreates": true}], "recreated": false}`,
+			},
+			{
+				name:   "a removal refused is answered with what needs it beside the refusal",
+				method: http.MethodDelete,
+				target: "/vms/vm-uuid/networks/backend",
+				asked: func(workload *controlplane.MockClient, ownerUUID string) {
+					workload.On("DeleteNetwork", mock.Anything, ownerUUID, "vm-uuid", "backend", false).Once().Return(workloadControlPlane.Deleted{
+						Dependents: []workloadControlPlane.Dependent{{Kind: "container", UUID: "c-uuid", Name: "web", Recreates: true}},
+						Recreated:  true,
+					}, &noderequest.Error{Code: noderequest.CodeInvalid, Message: "network backend has active endpoints"})
+				},
+				status: http.StatusBadRequest,
+				answer: `{"errors": {"docker": "Docker refused the request: network backend has active endpoints"}, "dependents": [{"kind": "container", "uuid": "c-uuid", "name": "web", "recreates": true}], "recreated": true}`,
 			},
 		}
 
@@ -109,6 +149,10 @@ func TestTheRoutesOfBothSets(t *testing.T) {
 
 				if tt.expect != nil {
 					tt.expect(&daemon)
+				}
+
+				if tt.asked != nil {
+					tt.asked(&workload, set.OwnerUUID)
 				}
 				defer workload.AssertExpectations(t)
 				defer daemon.AssertExpectations(t)

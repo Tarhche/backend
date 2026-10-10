@@ -240,7 +240,8 @@ func TestSmoke(t *testing.T) {
 		return err == nil && v.CurrentState == vm.Stopped
 	}, 15*time.Second, 200*time.Millisecond, "the control plane never heard the vm stopped")
 
-	require.NoError(t, workload.DeleteVM(ctx, ownerUUID, created.UUID))
+	_, err = workload.DeleteVM(ctx, ownerUUID, created.UUID, false)
+	require.NoError(t, err)
 	answer(asked.addressedTo(t, vmKind.ActionDelete, created.UUID, nodeName), vmKind.Deleted)
 
 	require.Eventually(t, func() bool {

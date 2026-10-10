@@ -133,9 +133,34 @@ func TestTheRoutesOfBothSets(t *testing.T) {
 				method: http.MethodDelete,
 				target: "/vms/vm-uuid",
 				expect: func(client *controlplane.MockClient) {
-					client.On("DeleteVM", mock.Anything, set.OwnerUUID, "vm-uuid").Once().Return(nil)
+					client.On("DeleteVM", mock.Anything, set.OwnerUUID, "vm-uuid", false).Once().Return(workloadControlPlane.Deleted{}, nil)
 				},
 				status: http.StatusAccepted,
+			},
+			{
+				name:   "a delete of a vm containers are in, answered with them, which make it again",
+				method: http.MethodDelete,
+				target: "/vms/vm-uuid",
+				expect: func(client *controlplane.MockClient) {
+					client.On("DeleteVM", mock.Anything, set.OwnerUUID, "vm-uuid", false).Once().Return(workloadControlPlane.Deleted{
+						Dependents: []workloadControlPlane.Dependent{{Kind: "container", UUID: "c-uuid", Name: "web", Recreates: true}},
+						Recreated:  true,
+					}, nil)
+				},
+				status: http.StatusAccepted,
+				answer: `{"dependents": [{"kind": "container", "uuid": "c-uuid", "name": "web", "recreates": true}], "recreated": true}`,
+			},
+			{
+				name:   "and with cascade, they go with it",
+				method: http.MethodDelete,
+				target: "/vms/vm-uuid?cascade=true",
+				expect: func(client *controlplane.MockClient) {
+					client.On("DeleteVM", mock.Anything, set.OwnerUUID, "vm-uuid", true).Once().Return(workloadControlPlane.Deleted{
+						Dependents: []workloadControlPlane.Dependent{{Kind: "container", UUID: "c-uuid", Name: "web", Recreates: true}},
+					}, nil)
+				},
+				status: http.StatusAccepted,
+				answer: `{"dependents": [{"kind": "container", "uuid": "c-uuid", "name": "web", "recreates": true}], "recreated": false}`,
 			},
 			{
 				name:   "a start",

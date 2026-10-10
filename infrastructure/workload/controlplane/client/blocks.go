@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/khanzadimahdi/testproject/domain"
+	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/domain/workload/docker"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	blockKinds "github.com/khanzadimahdi/testproject/domain/workload/kinds/blocks"
@@ -83,7 +84,8 @@ type asked[Spec any] struct {
 
 // commanded is what asking for a building block, or for one of its
 // commands, came to: the resource as it is now, the command its node was
-// sent, and what came of it, when that was waited for and came in time.
+// sent, and what came of it, when that was waited for and came in time; and,
+// of a command that deletes what containers need, what needs it.
 type commanded[Spec, Status any] struct {
 	Resource *kind.Resource[Spec, Status] `json:"resource"`
 
@@ -95,6 +97,8 @@ type commanded[Spec, Status any] struct {
 		OK     bool   `json:"ok"`
 		Reason string `json:"reason"`
 	} `json:"result"`
+
+	deletedAnswer
 }
 
 // queried is a query's answer.
@@ -507,13 +511,28 @@ func (b *blocks) CreateNetwork(ctx context.Context, spec docker.NetworkSpec) (do
 
 // RemoveNetwork removes a network by its Docker id or its name.
 func (b *blocks) RemoveNetwork(ctx context.Context, id string) error {
-	if err := b.up(ctx); err != nil {
-		return err
-	}
-
-	_, err := act[networkKind.Spec, networkKind.Status](ctx, b.client, networksPath, id, b.query(nil), networkKind.ActionDelete, nil, commandWait)
+	_, err := b.removeNetwork(ctx, id, false)
 
 	return err
+}
+
+// DeleteNetwork removes a network from a Docker VM by its Docker id or its
+// name, and is answered with what needs it, when anything does, a refusal
+// among it: with cascade, what needs it goes first.
+func (c *Client) DeleteNetwork(ctx context.Context, ownerUUID string, vmUUID string, id string, cascade bool) (workloadControlPlane.Deleted, error) {
+	return (&blocks{client: c, ownerUUID: ownerUUID, vmUUID: vmUUID}).removeNetwork(ctx, id, cascade)
+}
+
+// removeNetwork removes a network by its Docker id or its name, with what
+// needs it when cascade says so, and is what needs it, whatever came of it.
+func (b *blocks) removeNetwork(ctx context.Context, id string, cascade bool) (workloadControlPlane.Deleted, error) {
+	if err := b.up(ctx); err != nil {
+		return workloadControlPlane.Deleted{}, err
+	}
+
+	answer, err := act[networkKind.Spec, networkKind.Status](ctx, b.client, networksPath, id, b.query(cascading(cascade)), networkKind.ActionDelete, nil, commandWait)
+
+	return answer.deleted(), err
 }
 
 // Volumes are the VM's docker volumes: those kept, as they were last seen,
@@ -563,13 +582,28 @@ func (b *blocks) CreateVolume(ctx context.Context, spec docker.VolumeSpec) (dock
 
 // RemoveVolume removes a volume by its name, which is the only id it has.
 func (b *blocks) RemoveVolume(ctx context.Context, name string, force bool) error {
-	if err := b.up(ctx); err != nil {
-		return err
-	}
-
-	_, err := act[volumeKind.Spec, volumeKind.Status](ctx, b.client, volumesPath, name, b.query(nil), volumeKind.ActionDelete, volumeKind.DeletePayload{Force: force}, commandWait)
+	_, err := b.removeVolume(ctx, name, force, false)
 
 	return err
+}
+
+// DeleteVolume removes a volume from a Docker VM by its name, and is answered
+// with what needs it, when anything does, a refusal among it: with cascade,
+// what needs it goes first.
+func (c *Client) DeleteVolume(ctx context.Context, ownerUUID string, vmUUID string, name string, force bool, cascade bool) (workloadControlPlane.Deleted, error) {
+	return (&blocks{client: c, ownerUUID: ownerUUID, vmUUID: vmUUID}).removeVolume(ctx, name, force, cascade)
+}
+
+// removeVolume removes a volume by its name, with what needs it when cascade
+// says so, and is what needs it, whatever came of it.
+func (b *blocks) removeVolume(ctx context.Context, name string, force bool, cascade bool) (workloadControlPlane.Deleted, error) {
+	if err := b.up(ctx); err != nil {
+		return workloadControlPlane.Deleted{}, err
+	}
+
+	answer, err := act[volumeKind.Spec, volumeKind.Status](ctx, b.client, volumesPath, name, b.query(cascading(cascade)), volumeKind.ActionDelete, volumeKind.DeletePayload{Force: force}, commandWait)
+
+	return answer.deleted(), err
 }
 
 // every is every resource of a kind a listing lets through, every page of

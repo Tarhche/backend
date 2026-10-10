@@ -384,7 +384,10 @@ func TestContract_VMs(t *testing.T) {
 	require.Len(t, lines, 1)
 	assert.Equal(t, "booted", lines[0].Line)
 
-	require.NoError(t, c.DeleteVM(ctx, "owner", created.UUID))
+	deleted, err := c.DeleteVM(ctx, "owner", created.UUID, false)
+	require.NoError(t, err)
+	assert.Empty(t, deleted.Dependents, "a machine nothing needs")
+	assert.False(t, deleted.Recreated)
 
 	deleting, err := c.VM(ctx, "", created.UUID)
 	require.NoError(t, err)
@@ -450,7 +453,8 @@ func TestContract_Runs(t *testing.T) {
 	assert.Equal(t, vm.Stopping, stopping.CurrentState)
 	assert.Equal(t, vm.Stopped, stopping.ExpectedState)
 
-	require.NoError(t, c.DeleteVM(ctx, "", "run"))
+	_, err = c.DeleteVM(ctx, "", "run", false)
+	require.NoError(t, err)
 
 	deleting, err := c.VM(ctx, "", "run")
 	require.NoError(t, err)

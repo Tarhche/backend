@@ -17,12 +17,14 @@ func NewDeleteHandler(useCase *deleteNetwork.UseCase, owner workload.Owner) *del
 }
 
 // @Summary		Remove a network
-// @Description	remove a docker network from a Docker VM; one a container is attached to is refused
+// @Description	remove a docker network from a Docker VM; one a container is attached to is refused, unless cascade deletes the containers that need it first. When any container needs it, it is answered with them, and with whether one of them makes it again, as a container that owns it does
 // @Tags			dashboard workload networks
 // @Param			uuid	path		string	true	"VM UUID"
 // @Param			id	path		string	true	"Network id or name"
+// @Param			cascade	query		bool	false	"Delete the containers that need it first"
+// @Success		202		{object}	workload.Removal
 // @Success		204		{object}	map[string]interface{}
-// @Failure		400		{object}	workload.Refusal
+// @Failure		400		{object}	workload.Removal
 // @Failure		404		{object}	workload.Failure
 // @Failure		500		{object}	workload.Failure
 // @Router			/dashboard/workload/vms/{uuid}/networks/{id} [delete]
@@ -32,10 +34,12 @@ func (h *deleteHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		VMUUID:    r.PathValue("uuid"),
 		ID:        r.PathValue("id"),
 		OwnerUUID: h.owner(r),
+		Cascade:   workload.Flag(r, "cascade"),
 	})
 
 	switch {
 	case workload.Failed(rw, r, err):
+	case workload.Removed(rw, response.ValidationErrors, response.Dependents, response.Recreated):
 	case workload.Refused(rw, response.ValidationErrors):
 	default:
 		rw.WriteHeader(http.StatusNoContent)
