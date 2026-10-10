@@ -148,6 +148,20 @@ type Filter struct {
 	// runner's runs among anybody's VMs are labelled
 	// workload.managed-by=code-runner.
 	Labels map[string]string
+
+	// Unowned, when it is there, narrows them to what nothing owns, the
+	// roots of their graphs: as their metadata says, whatever is there of
+	// what it names (kind.Metadata.Owning).
+	Unowned *Unowned
+}
+
+// Unowned narrows a listing to what nothing owns (Filter.Unowned). What a
+// resource lives in owns nothing, and a record kept before refs has it among
+// its owners all the same: an owner of the kind Parent names is no owner.
+type Unowned struct {
+	// Parent is the kind what is listed lives in, or nothing for a kind that
+	// lives in nothing, every owner of which is one.
+	Parent string
 }
 
 // Passes reports whether a resource's metadata is what filter lets through,
@@ -163,6 +177,10 @@ func (f Filter) Passes(m kind.Metadata) bool {
 	}
 
 	if len(f.Parent.UUID) > 0 && !m.BelongsTo(f.Parent) {
+		return false
+	}
+
+	if f.Unowned != nil && len(m.Owning(f.Unowned.Parent)) > 0 {
 		return false
 	}
 

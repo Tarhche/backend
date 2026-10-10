@@ -29,6 +29,8 @@ import (
 	volumeKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/volume"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
+	executionsMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/executions"
+	leasesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/leases"
 	nodesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/nodes"
 	resourcesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/resources"
 	logsMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/logs"
@@ -52,14 +54,22 @@ func served(t *testing.T) *controlPlane {
 
 	resources := resourcesMemory.NewRepository()
 
-	workload, err := NewControlPlaneWorkload(configs.NewWorkloadControlPlane(), ControlPlaneStores{
-		Resources: resources,
-		Nodes:     nodesMemory.NewRepository(),
-		TaskLogs:  logsMock.NewInMemoryRepository(),
-	}, nil, &messagingMock.Recorder{}, slog.New(slog.DiscardHandler))
+	workload, err := NewControlPlaneWorkload(configs.NewWorkloadControlPlane(), storesOf(resources), nil, &messagingMock.Recorder{}, slog.New(slog.DiscardHandler))
 	require.NoError(t, err)
 
 	return &controlPlane{workload: workload, resources: resources}
+}
+
+// storesOf are what a control plane keeps everything in, kept in memory: the
+// resources of every kind in resources.
+func storesOf(resources *resourcesMemory.Repository) ControlPlaneStores {
+	return ControlPlaneStores{
+		Resources:  resources,
+		Nodes:      nodesMemory.NewRepository(),
+		TaskLogs:   logsMock.NewInMemoryRepository(),
+		Executions: executionsMemory.NewRepository(),
+		Leases:     leasesMemory.NewRepository(nil),
+	}
 }
 
 func kindsOf(registry *kind.Registry[kind.ControlPlaneBinding], resources *resourcesMemory.Repository) *ControlPlaneKinds {
@@ -172,11 +182,7 @@ func TestNewControlPlaneWorkload_dependencyPolicy(t *testing.T) {
 		controlPlaneConfigs := configs.NewWorkloadControlPlane()
 		controlPlaneConfigs.DependencyPolicy = policy
 
-		return NewControlPlaneWorkload(controlPlaneConfigs, ControlPlaneStores{
-			Resources: resourcesMemory.NewRepository(),
-			Nodes:     nodesMemory.NewRepository(),
-			TaskLogs:  logsMock.NewInMemoryRepository(),
-		}, nil, &messagingMock.Recorder{}, slog.New(slog.DiscardHandler))
+		return NewControlPlaneWorkload(controlPlaneConfigs, storesOf(resourcesMemory.NewRepository()), nil, &messagingMock.Recorder{}, slog.New(slog.DiscardHandler))
 	}
 
 	for name, tt := range map[string]struct {

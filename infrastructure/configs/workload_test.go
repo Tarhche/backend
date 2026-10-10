@@ -136,6 +136,10 @@ func TestWorkloadConfigsBind(t *testing.T) {
 			"WORKLOAD_SNAPSHOT_S3_USE_SSL":               "false",
 			"WORKLOAD_NODE_REQUEST_TIMEOUT":              "30s",
 			"WORKLOAD_DEPENDENCY_POLICY":                 "",
+			"WORKLOAD_GRAPH_WORKERS":                     "4",
+			"WORKLOAD_GRAPH_CONCURRENCY":                 "4",
+			"WORKLOAD_GRAPH_RESYNC":                      "1m0s",
+			"WORKLOAD_GRAPH_LEASE":                       "30s",
 		})
 	})
 

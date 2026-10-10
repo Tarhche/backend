@@ -86,6 +86,33 @@ func TestKind(t *testing.T) {
 		assert.NoError(t, kinds.Delete(ctx, ref), "and one gone already is removed")
 	})
 
+	t.Run("a root's record is the root of the node of its kind named by its uuid", func(t *testing.T) {
+		t.Parallel()
+
+		kinds := graphtest.NewKind()
+
+		root, err := kinds.Root(kind.Raw{Kind: "container", Metadata: kind.Metadata{UUID: "web", Name: "anything"}})
+		require.NoError(t, err)
+		assert.Equal(t, graphtest.Requirement("container", "web"), root)
+		assert.Equal(t, web, root.ID())
+
+		assert.Equal(t, []graphtest.Call{{Op: graphtest.Root, Node: web}}, kinds.Calls(), "and it is recorded as asked")
+
+		broken := errors.New("broken")
+		kinds.On(graphtest.Root, web, func(context.Context) error { return broken })
+
+		_, err = kinds.Root(kind.Raw{Kind: "container", Metadata: kind.Metadata{UUID: "web"}})
+		assert.ErrorIs(t, err, broken, "doing first what a test has it do")
+
+		for name, r := range map[string]kind.Raw{
+			"of no uuid": {Kind: "container"},
+			"of no kind": {Metadata: kind.Metadata{UUID: "web"}},
+		} {
+			_, err := kinds.Root(r)
+			assert.ErrorIs(t, err, kind.ErrInvalidPayload, "a record %s is no root", name)
+		}
+	})
+
 	t.Run("a record not made is its record all the same, and not made, until it is made", func(t *testing.T) {
 		t.Parallel()
 

@@ -11,6 +11,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 
 	checkhealth "github.com/khanzadimahdi/testproject/application/app/checkHealth"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/graph/reconcile"
 	kindsReconcileResources "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/reconcileResources"
 	controlPlaneGetNode "github.com/khanzadimahdi/testproject/application/workload/controlplane/node/getNode"
 	controlPlaneGetNodes "github.com/khanzadimahdi/testproject/application/workload/controlplane/node/getNodes"
@@ -26,6 +27,8 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	infraHealth "github.com/khanzadimahdi/testproject/infrastructure/health"
 	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/jetstream/produceConsumer"
+	executionrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/workload/executions"
+	leaserepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/workload/leases"
 	logrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/workload/logs"
 	noderepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/workload/nodes"
 	resourcerepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/workload/resources"
@@ -114,10 +117,19 @@ func controlPlaneConsoleCommand(
 
 	nodeRepository := noderepository.NewRepository(database)
 	logRepository := logrepository.NewRepository(database)
+	executionRepository := executionrepository.NewRepository(database)
+	leaseRepository := leaserepository.NewRepository(database)
 
 	// a task's log is only ever read one task at a time, in the
 	// order it was written, so that is the index it needs.
 	if err := logRepository.EnsureIndexes(ctx); err != nil {
+		return nil, err
+	}
+
+	// how each node of a root's plan went is read and forgotten a root at a
+	// time, in the order of its levels; a root's lease is read by its _id
+	// alone, which needs no index of its own.
+	if err := executionRepository.EnsureIndexes(ctx); err != nil {
 		return nil, err
 	}
 
@@ -132,10 +144,12 @@ func controlPlaneConsoleCommand(
 	resourceRepository := resourcerepository.NewRepository(database)
 
 	workload, err := NewControlPlaneWorkload(controlPlaneConfigs, ControlPlaneStores{
-		Resources: resourceRepository,
-		Nodes:     nodeRepository,
-		TaskLogs:  logRepository,
-		Archives:  snapshotStore(controlPlaneConfigs.SnapshotStorage),
+		Resources:  resourceRepository,
+		Nodes:      nodeRepository,
+		TaskLogs:   logRepository,
+		Executions: executionRepository,
+		Leases:     leaseRepository,
+		Archives:   snapshotStore(controlPlaneConfigs.SnapshotStorage),
 	}, natsConnection, jetStreamProduceConsumer, logger)
 	if err != nil {
 		return nil, err
@@ -167,6 +181,14 @@ func controlPlaneConsoleCommand(
 	// plane is configured: what its graph is planned with.
 	if err := iocContainer.Bind(func() graph.DependencyPolicy {
 		return workload.Policy
+	}, provider.Singleton()); err != nil {
+		return nil, err
+	}
+
+	// what keeps every root's graph made, whose workers and resync the
+	// serve command runs beside the kinds' heartbeat.
+	if err := iocContainer.Bind(func() *reconcile.Reconciler {
+		return workload.Graphs
 	}, provider.Singleton()); err != nil {
 		return nil, err
 	}

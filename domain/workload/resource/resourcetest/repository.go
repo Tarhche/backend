@@ -391,6 +391,69 @@ func Repository(t *testing.T, make Maker) {
 		}
 	})
 
+	t.Run("what nothing owns names no owner, or none but where it lives, as one kept before refs does", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		repository := make(t, fans, lights)
+
+		house := kind.Reference{Kind: "house", UUID: "house-1"}
+		light := kind.Reference{Kind: lights, UUID: "light-1"}
+		porch := kind.Reference{Kind: lights, UUID: "light-2"}
+
+		for _, each := range []struct {
+			uuid, owner  string
+			refs, owners []kind.Reference
+		}{
+			{uuid: "fan-a", owner: "alice", refs: []kind.Reference{house}},
+			{uuid: "fan-b", owner: "alice", owners: []kind.Reference{house}},
+			{uuid: "fan-c", owner: "alice", refs: []kind.Reference{house}, owners: []kind.Reference{light}},
+			{uuid: "fan-d", owner: "bob", owners: []kind.Reference{house, light}},
+			{uuid: "fan-e", owner: "bob", refs: []kind.Reference{house}, owners: []kind.Reference{}},
+			{uuid: "fan-f", owner: "bob", refs: []kind.Reference{house}, owners: []kind.Reference{light, porch}},
+			{uuid: "fan-g", owner: "bob"},
+		} {
+			r := aFan(each.uuid, "")
+			r.Metadata.OwnerUUID = each.owner
+			r.Metadata.Refs = each.refs
+			r.Metadata.Owners = each.owners
+
+			_, err := repository.Create(ctx, r)
+			require.NoError(t, err)
+		}
+
+		// a light owned by nothing, which a listing of fans never lets
+		// through.
+		unowned := aFan("light-1", "")
+		unowned.Kind = lights
+		unowned.Metadata.Owners = nil
+		_, err := repository.Create(ctx, unowned)
+		require.NoError(t, err)
+
+		for name, tt := range map[string]struct {
+			filter resource.Filter
+			want   []string
+		}{
+			"owned by nothing but where they live, which one kept before refs names among its owners": {filter: resource.Filter{Unowned: &resource.Unowned{Parent: "house"}}, want: []string{"fan-g", "fan-e", "fan-b", "fan-a"}},
+			"owned by nothing at all, for what lives in nothing":                                      {filter: resource.Filter{Unowned: &resource.Unowned{}}, want: []string{"fan-g", "fan-e", "fan-a"}},
+			"and narrowed every other way besides":                                                    {filter: resource.Filter{OwnerUUID: "alice", Parent: house, Unowned: &resource.Unowned{Parent: "house"}}, want: []string{"fan-b", "fan-a"}},
+			"not narrowed by what owns them when nothing is asked of it":                              {filter: resource.Filter{OwnerUUID: "bob"}, want: []string{"fan-g", "fan-f", "fan-e", "fan-d"}},
+		} {
+			t.Run(name, func(t *testing.T) {
+				page, total, err := repository.GetAll(ctx, fans, tt.filter, 0, 10)
+				require.NoError(t, err)
+
+				assert.Equal(t, tt.want, uuids(page))
+				assert.Equal(t, uint(len(tt.want)), total)
+			})
+		}
+
+		page, total, err := repository.GetAll(ctx, fans, resource.Filter{Unowned: &resource.Unowned{Parent: "house"}}, 1, 2)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"fan-e", "fan-b"}, uuids(page), "a page of them")
+		assert.Equal(t, uint(4), total, "and how many there are")
+	})
+
 	t.Run("what is read is a copy: changing it changes nothing kept", func(t *testing.T) {
 		t.Parallel()
 

@@ -35,6 +35,8 @@ import (
 	providers "github.com/khanzadimahdi/testproject/infrastructure/ioc/providers/workload"
 	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/core/pubsub"
 	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/jetstream/produceConsumer"
+	executionsMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/executions"
+	leasesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/leases"
 	nodesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/nodes"
 	resourcesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/resources"
 	logsMock "github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/logs"
@@ -221,10 +223,12 @@ func start(t *testing.T, options ...option) *workload {
 	require.NoError(t, err)
 
 	controlPlane, err := providers.NewControlPlaneWorkload(controlPlaneConfigs, providers.ControlPlaneStores{
-		Resources: w.resources,
-		Nodes:     w.nodes,
-		TaskLogs:  logsMock.NewInMemoryRepository(),
-		Archives:  w.archives,
+		Resources:  w.resources,
+		Nodes:      w.nodes,
+		TaskLogs:   logsMock.NewInMemoryRepository(),
+		Executions: executionsMemory.NewRepository(),
+		Leases:     leasesMemory.NewRepository(nil),
+		Archives:   w.archives,
 	}, controlPlaneConnection, controlPlaneMessages, logger, providers.WithReconcileConfig(reconcileConfig))
 	require.NoError(t, err)
 
@@ -259,10 +263,23 @@ func start(t *testing.T, options ...option) *workload {
 	})
 	reconciles := every(ctx, 4*beat, func() { _ = controlPlane.Reconcile.Execute(ctx) })
 
+	// the graphs of roots, kept made by the control plane's workers, every
+	// root queued as often as the kinds' own loop runs here.
+	graphsWorked := make(chan struct{})
+	go func() {
+		defer close(graphsWorked)
+
+		controlPlane.Graphs.Work(ctx)
+	}()
+
+	resyncs := every(ctx, 4*beat, func() { _ = controlPlane.Graphs.Resync(ctx) })
+
 	t.Cleanup(func() {
 		cancel()
 		<-nodeBeats
 		<-reconciles
+		<-graphsWorked
+		<-resyncs
 
 		controlPlaneMessages.Wait()
 		nodeMessages.Wait()

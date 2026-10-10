@@ -10,6 +10,7 @@ import (
 	"github.com/danceable/console"
 	"github.com/danceable/provider"
 
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/graph/reconcile"
 	kindsReconcileResources "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/reconcileResources"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
@@ -40,6 +41,11 @@ type ServeCommand struct {
 	// asking the nodes for whatever would make each of them what it is meant
 	// to be.
 	reconcileKinds *kindsReconcileResources.UseCase
+
+	// reconcileGraphs keeps every root's graph made: its workers reconcile
+	// the roots queued, and its resync, every WORKLOAD_GRAPH_RESYNC, queues
+	// every root and removes what records owned that are all gone.
+	reconcileGraphs *reconcile.Reconciler
 
 	logger *slog.Logger
 }
@@ -119,6 +125,10 @@ func (c *ServeCommand) Boot(ctx context.Context, task provider.Container) error 
 		return err
 	}
 
+	if err := task.Resolve(&c.reconcileGraphs); err != nil {
+		return err
+	}
+
 	return task.Resolve(&c.consumers, provider.ResolveName(workload.ControlPlaneSubscribers))
 }
 
@@ -164,12 +174,59 @@ func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 
 	go c.heartbeat(ctx)
 
+	graphsStopped := c.graphs(ctx)
+
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		c.logger.ErrorContext(ctx, "server failed", "error", err)
 		return console.ExitFailure
 	}
 
+	// the server is closed once ctx is done, which stops the graphs'
+	// workers too: each lets go of the lease it holds before the control
+	// plane goes.
+	<-graphsStopped
+
 	return console.ExitSuccess
+}
+
+// graphs keeps every root's graph made for as long as the control plane is
+// up: its workers reconcile the roots queued, and every so often, as it is
+// configured to, every root is queued and what records owned that are all
+// gone is removed. What it returns is closed once the workers have stopped,
+// which they do once ctx is done; at once, with no graphs to keep.
+func (c *ServeCommand) graphs(ctx context.Context) <-chan struct{} {
+	stopped := make(chan struct{})
+
+	if c.reconcileGraphs == nil {
+		close(stopped)
+
+		return stopped
+	}
+
+	go func() {
+		defer close(stopped)
+
+		c.reconcileGraphs.Work(ctx)
+	}()
+
+	go func() {
+		ticker := time.NewTicker(c.configs.GraphResync)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				if err := c.reconcileGraphs.Resync(ctx); err != nil {
+					c.logger.ErrorContext(ctx, "the graphs' resync failed", "error", err)
+				}
+
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	return stopped
 }
 
 // heartbeat keeps the resources of every kind, VMs, stacks and tasks among

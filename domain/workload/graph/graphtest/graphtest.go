@@ -21,11 +21,13 @@ type Op string
 
 const (
 	// Requires is asking what it needs, Exists whether it is there, Create
-	// to make it and Delete to remove it.
+	// to make it and Delete to remove it; Root is asking what a root's
+	// record says it needs.
 	Requires Op = "requires"
 	Exists   Op = "exists"
 	Create   Op = "create"
 	Delete   Op = "delete"
+	Root     Op = "root"
 
 	// Owners is asking what owns its record, Disown to take owners out of
 	// what does, Link to keep its record, and the record of what it needs,
@@ -59,7 +61,8 @@ type Event struct {
 // Kind is a graph.Kind a test says everything of. A resource's spec is its
 // node's id (Requirement), and its record is its kind and its name (Ref), so
 // one Kind may be every kind of a graph at once (Kinds), and what they were
-// all asked is in one order.
+// all asked is in one order. Each of them is a graph.RootKind too: a root's
+// record is the node of its kind named by its uuid.
 //
 // What a node requires is what Require said, and nothing else. Whether there
 // is a record of it, and whether it is made, is what the kind holds: Create
@@ -91,7 +94,7 @@ type Kind struct {
 	events []Event
 }
 
-var _ graph.Kind = &Kind{}
+var _ graph.RootKind = &Kind{}
 
 // NewKind is a kind that holds nothing, and whose every node requires
 // nothing.
@@ -183,8 +186,8 @@ func (k *Kind) Held() []graph.NodeID {
 // On has the node id do what do says whenever it is asked op, before
 // anything else, and be answered with what it fails with when it fails: a
 // test may block in it, or fail the node, or have it wait (graph.Waiting).
-// Requires, which is handed no context, hands it an empty one. A nil do
-// undoes it.
+// Requires and Root, which are handed no context, hand it an empty one. A
+// nil do undoes it.
 func (k *Kind) On(op Op, id graph.NodeID, do func(ctx context.Context) error) {
 	k.lock.Lock()
 	defer k.lock.Unlock()
@@ -332,6 +335,23 @@ func (k *Kind) Delete(ctx context.Context, ref graph.Ref) error {
 	k.forget(id)
 
 	return nil
+}
+
+// Root is the requirement the record r is the root of: the node of its kind
+// named by its uuid, as a fake kind requires it.
+func (k *Kind) Root(r kind.Raw) (graph.Requirement, error) {
+	id := graph.ID(r.Kind, r.Metadata.UUID)
+	if _, _, ok := id.Split(); !ok {
+		return graph.Requirement{}, fmt.Errorf("%w: a fake kind's root is a record of a kind, by its uuid, not %q", kind.ErrInvalidPayload, id)
+	}
+
+	defer k.returned(Root, id)
+
+	if err := k.ask(context.Background(), Call{Op: Root, Node: id}); err != nil {
+		return graph.Requirement{}, err
+	}
+
+	return Requirement(r.Kind, r.Metadata.UUID), nil
 }
 
 // Ownership is what owns the records k holds.

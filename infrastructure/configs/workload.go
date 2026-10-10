@@ -21,6 +21,14 @@ const (
 	// goes on beating without a word of to be gone from it.
 	defaultWorkloadIngressResourceSilentAfter = 30 * time.Second
 
+	// how the graphs of roots are kept made: roots reconciled at once, nodes
+	// of a level made at once, how often every root is reconciled whatever
+	// changed, and how long a root's lease lasts unless it is renewed.
+	defaultWorkloadGraphWorkers     = 4
+	defaultWorkloadGraphConcurrency = 4
+	defaultWorkloadGraphResync      = time.Minute
+	defaultWorkloadGraphLease       = 30 * time.Second
+
 	defaultWorkloadTunnelPort = 81
 
 	defaultWorkloadTunnelMinConnections = 2
@@ -94,6 +102,14 @@ type WorkloadControlPlane struct {
 	// given is laid over the defaults, entry by entry (graph.ParsePolicy),
 	// and nothing given is the defaults.
 	DependencyPolicy string `usage:"Whether what a resource needs goes with it when it is deleted, by kind: kind=owned or kind=loose, or dependent/required=owned or loose for one pair of kinds, as stack/volume=owned, separated by commas. What is owned goes with the last of what owns it, and what is loose stays. Each is laid over the defaults, container=owned,network=owned,vm=loose,volume=loose, and any other kind is owned. Empty keeps the defaults." env:"WORKLOAD_DEPENDENCY_POLICY" long:"dependency-policy"`
+
+	// how the graph of each root, a stack or a container no stack owns, is
+	// kept made: roots are reconciled by workers, a root's graph a level at
+	// a time, under a lease each, which one control plane holds at a time.
+	GraphWorkers     int           `usage:"How many roots, stacks and containers no stack owns, are reconciled at once." env:"WORKLOAD_GRAPH_WORKERS" long:"graph-workers"`
+	GraphConcurrency int           `usage:"How many nodes of one level of a root's graph are made or removed at once." env:"WORKLOAD_GRAPH_CONCURRENCY" long:"graph-concurrency"`
+	GraphResync      time.Duration `usage:"How often every root is reconciled, whatever was told of it, and what records owned that are all gone is removed." env:"WORKLOAD_GRAPH_RESYNC" long:"graph-resync"`
+	GraphLease       time.Duration `usage:"How long a control plane holds a root's lease, which keeps any other from reconciling the root, before another may take it. It is renewed every third of it while the root is reconciled." env:"WORKLOAD_GRAPH_LEASE" long:"graph-lease"`
 }
 
 // NewWorkloadControlPlane returns the configuration of the serve-workload-controlplane
@@ -137,6 +153,11 @@ func NewWorkloadControlPlane() *WorkloadControlPlane {
 		NodeRequestTimeout: defaultWorkloadNodeRequestTimeout,
 		DockerReadyTimeout: defaultWorkloadDockerReadyTimeout,
 		DockerPullTimeout:  defaultWorkloadDockerPullTimeout,
+
+		GraphWorkers:     defaultWorkloadGraphWorkers,
+		GraphConcurrency: defaultWorkloadGraphConcurrency,
+		GraphResync:      defaultWorkloadGraphResync,
+		GraphLease:       defaultWorkloadGraphLease,
 	}
 }
 

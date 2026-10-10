@@ -113,6 +113,16 @@ services:
       # commas, laid over the defaults the code holds, entry by entry:
       # container=owned,network=owned,vm=loose,volume=loose. Unset keeps them.
       WORKLOAD_DEPENDENCY_POLICY: ${BACKEND_WORKLOAD_DEPENDENCY_POLICY:-}
+      # how the graph of each root, a stack or a container no stack owns, is
+      # kept made: how many roots are reconciled at once, how many nodes of a
+      # level of a root's graph are made at once, how often every root is
+      # reconciled whatever was told of it, and how long a control plane holds
+      # a root's lease, renewing it every third of it, before another may take
+      # it. Unset keeps the defaults the code holds: 4, 4, 1m and 30s.
+      WORKLOAD_GRAPH_WORKERS: ${BACKEND_WORKLOAD_GRAPH_WORKERS:-}
+      WORKLOAD_GRAPH_CONCURRENCY: ${BACKEND_WORKLOAD_GRAPH_CONCURRENCY:-}
+      WORKLOAD_GRAPH_RESYNC: ${BACKEND_WORKLOAD_GRAPH_RESYNC:-}
+      WORKLOAD_GRAPH_LEASE: ${BACKEND_WORKLOAD_GRAPH_LEASE:-}
 
 networks:
   workload_controlplane:

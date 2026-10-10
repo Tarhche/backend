@@ -124,6 +124,115 @@ func TestGraph_Requires(t *testing.T) {
 	}
 }
 
+func TestGraph_Root(t *testing.T) {
+	t.Parallel()
+
+	containers := requirementstest.New().Kinds[containerKind.Name]
+
+	roots, isRoot := containers.(graph.RootKind)
+	require.True(t, isRoot, "a container is the root of a graph of its own")
+
+	t.Run("one no stack owns is its record's uuid, its owner's, labelled as its record is and asked for as its spec asks, in the vm its spec names", func(t *testing.T) {
+		t.Parallel()
+
+		r := blockstest.AContainer("c-1", "vm-1", containerKind.Running, containerKind.Running, func(c *containerKind.Container) {
+			c.Metadata.Labels = map[string]string{"team": "shop"}
+			c.Spec.Networks = []string{"backend"}
+			c.Spec.Mounts = []containerKind.Mount{{Type: containerKind.MountVolume, Source: "data", Target: "/data"}}
+			c.Spec.External = []string{"volume/data"}
+		})
+
+		root, err := roots.Root(r)
+		require.NoError(t, err)
+
+		assert.Equal(t, graph.Requirement{
+			Kind: containerKind.Name,
+			Name: "web",
+			Spec: containerKind.Want{
+				UUID:      "c-1",
+				OwnerUUID: "owner",
+				Labels:    map[string]string{"team": "shop"},
+				VM:        stackKind.VMChoice{UUID: "vm-1"},
+				Spec:      typed(t, r).Spec,
+			},
+		}, root)
+
+		// what it needs is what it needs as a root: its vm, its network
+		// and the volume that is not its own.
+		required, err := containers.Requires(root.Spec)
+		require.NoError(t, err)
+
+		var ids []graph.NodeID
+		for _, each := range required {
+			ids = append(ids, each.ID())
+		}
+
+		assert.Equal(t, []graph.NodeID{graph.ID(vmKind.Name, "vm-1"), graph.ID(networkKind.Name, "backend"), graph.ID(volumeKind.Name, "data")}, ids)
+		assert.True(t, required[2].External)
+	})
+
+	t.Run("its vm is all its spec says of it, so that it is made again as it was asked for", func(t *testing.T) {
+		t.Parallel()
+
+		described := stackKind.VMChoice{UUID: "vm-1", Name: "builds", Resources: &stackKind.Resources{CPUs: 2, Memory: 4 << 30}, Ports: []port.Port{}}
+
+		root, err := roots.Root(blockstest.AContainer("c-1", "vm-1", containerKind.Running, containerKind.Running, func(c *containerKind.Container) {
+			c.Spec.VM = described
+		}))
+		require.NoError(t, err)
+
+		w, ok := root.Spec.(containerKind.Want)
+		require.True(t, ok)
+		assert.Equal(t, described, w.VM)
+
+		required, err := containers.Requires(root.Spec)
+		require.NoError(t, err)
+		assert.Equal(t, vmKind.Want{OwnerUUID: "owner", VM: described}, required[0].Spec, "which its vm is wanted as")
+	})
+
+	t.Run("one docker names is named by its record's uuid", func(t *testing.T) {
+		t.Parallel()
+
+		root, err := roots.Root(blockstest.AContainer("c-1", "vm-1", containerKind.Running, containerKind.Running, func(c *containerKind.Container) {
+			c.Spec.Name = ""
+		}))
+		require.NoError(t, err)
+
+		assert.Equal(t, graph.ID(containerKind.Name, "c-1"), root.ID())
+	})
+
+	for name, tt := range map[string]struct {
+		record kind.Raw
+		want   error
+	}{
+		"a record of another kind": {
+			record: blockstest.A(networkKind.Name, "n-1", "vm-1", networkKind.Spec{Name: "backend"}, networkKind.Status{}),
+			want:   kind.ErrUnknownKind,
+		},
+		"a container in no vm": {
+			record: blockstest.AContainer("c-1", "", containerKind.Running, containerKind.Running),
+			want:   kind.ErrInvalidPayload,
+		},
+	} {
+		t.Run("not "+name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := roots.Root(tt.record)
+			assert.ErrorIs(t, err, tt.want)
+		})
+	}
+
+	t.Run("nor one whose spec cannot be read", func(t *testing.T) {
+		t.Parallel()
+
+		r := blockstest.AContainer("c-1", "vm-1", containerKind.Running, containerKind.Running)
+		r.Spec = []byte(`{"vm":`)
+
+		_, err := roots.Root(r)
+		assert.Error(t, err)
+	})
+}
+
 func TestGraph_Exists(t *testing.T) {
 	t.Parallel()
 

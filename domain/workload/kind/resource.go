@@ -181,6 +181,25 @@ func (m Metadata) BelongsTo(r Reference) bool {
 	return slices.ContainsFunc(m.Refs, belongs) || slices.ContainsFunc(m.Owners, belongs)
 }
 
+// Owning are the resources that own this one, each once, in the order its
+// owners name them, but one of the kind it lives in, parent: a record kept
+// before refs has where it lives among its owners, and what a resource lives
+// in owns nothing. A resource none owns is the root of its graph. With no
+// parent given, every owner owns it.
+func (m Metadata) Owning(parent string) []Reference {
+	var owning []Reference
+
+	for _, r := range m.Owners {
+		if (len(parent) > 0 && r.Kind == parent) || slices.Contains(owning, r) {
+			continue
+		}
+
+		owning = append(owning, r)
+	}
+
+	return owning
+}
+
 // Belongs are the resources this one belongs to, each once: its refs, the
 // resource it lives in among them, and then its owners. It is what an
 // observation of it says it belongs to (Observed.Owners).

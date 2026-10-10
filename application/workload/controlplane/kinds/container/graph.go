@@ -61,12 +61,41 @@ type Graph struct {
 	records    *requirements.Records
 }
 
-var _ graph.Kind = &Graph{}
+var _ graph.RootKind = &Graph{}
 
 // NewGraph is the container kind as a graph needs it, over what its
 // strategy reads, keeping and removing containers through records.
 func NewGraph(containers *Containers, records *requirements.Records) *Graph {
 	return &Graph{containers: containers, records: records}
+}
+
+// Root is the container r is the record of, as the root of a graph of its
+// own needs it, one somebody asked for that no stack owns: known by its
+// record's uuid, its owner's, labelled as its record is and asked for as its
+// spec asks, in the Docker VM its spec names, by its uuid and whatever else
+// its spec says of it. A record of another kind is kind.ErrUnknownKind, and
+// one of a container in no VM named by its uuid is kind.ErrInvalidPayload.
+func (g *Graph) Root(r kind.Raw) (graph.Requirement, error) {
+	if r.Kind != containerKind.Name {
+		return graph.Requirement{}, fmt.Errorf("%w: a %s is not a container", kind.ErrUnknownKind, r.Kind)
+	}
+
+	c, err := kind.Decode[containerKind.Spec, containerKind.Status](r)
+	if err != nil {
+		return graph.Requirement{}, err
+	}
+
+	if len(c.Spec.VM.UUID) == 0 {
+		return graph.Requirement{}, fmt.Errorf("%w: the container %s is in no vm named by its uuid", kind.ErrInvalidPayload, c.Metadata.UUID)
+	}
+
+	return containerKind.Want{
+		UUID:      c.Metadata.UUID,
+		OwnerUUID: c.Metadata.OwnerUUID,
+		Labels:    c.Metadata.Labels,
+		VM:        c.Spec.VM,
+		Spec:      c.Spec,
+	}.Requirement(), nil
 }
 
 // Requires is what a container needs directly: its Docker VM, wanted as it

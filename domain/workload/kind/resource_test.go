@@ -256,6 +256,33 @@ func TestMetadata_BelongsTo(t *testing.T) {
 	}
 }
 
+func TestMetadata_Owning(t *testing.T) {
+	t.Parallel()
+
+	vm := Reference{Kind: "vm", UUID: "vm-uuid"}
+	stack := Reference{Kind: "stack", UUID: "stack-uuid"}
+	web := Reference{Kind: "container", UUID: "web-uuid"}
+
+	for name, tt := range map[string]struct {
+		metadata Metadata
+		parent   string
+		want     []Reference
+	}{
+		"what owns it, in the order it names them": {metadata: Metadata{Refs: []Reference{vm}, Owners: []Reference{stack, web}}, parent: "vm", want: []Reference{stack, web}},
+		"each once": {metadata: Metadata{Owners: []Reference{stack, web, stack}}, parent: "vm", want: []Reference{stack, web}},
+		"never what it lives in, which a record kept before refs has among its owners": {metadata: Metadata{Owners: []Reference{vm, stack}}, parent: "vm", want: []Reference{stack}},
+		"so one kept before refs, owned by nothing else, is owned by nothing":          {metadata: Metadata{Owners: []Reference{vm}}, parent: "vm"},
+		"and one that lives in nothing is owned by every owner it names":               {metadata: Metadata{Owners: []Reference{vm, stack}}, want: []Reference{vm, stack}},
+		"one that names none is owned by nothing":                                      {metadata: Metadata{Refs: []Reference{vm}}, parent: "vm"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, tt.want, tt.metadata.Owning(tt.parent))
+		})
+	}
+}
+
 func TestMetadata_Belongs(t *testing.T) {
 	t.Parallel()
 

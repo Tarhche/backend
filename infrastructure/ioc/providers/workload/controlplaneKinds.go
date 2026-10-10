@@ -56,8 +56,11 @@ type ControlPlaneKinds struct {
 	Reconcile *kindsReconcileResources.UseCase
 
 	// Admit takes in a resource of any kind, as the resource API does: a
-	// Docker VM made for a container or a stack is admitted through it.
-	Admit *admitResource.UseCase
+	// Docker VM made for a container or a stack is admitted through it. Delete
+	// deletes one, as the resource API does: what a root's graph made is
+	// removed through it.
+	Admit  *admitResource.UseCase
+	Delete *deleteResource.UseCase
 
 	// Resources are what every part of the plumbing keeps resources in: the
 	// stores' resources, deleting what lives in a resource with it, as the
@@ -182,6 +185,7 @@ func NewControlPlaneKinds(
 		Observer:   observer,
 		Reconcile:  kindsReconcileResources.NewUseCase(registry, resources, stores.Nodes, dispatcher, observer, logger, settings.reconcile),
 		Admit:      useCases.Admit,
+		Delete:     useCases.Delete,
 		Resources:  resources,
 		Dispatcher: dispatcher,
 	}

@@ -32,7 +32,8 @@
 //     kinds: a partial index, of the documents with a slug, rather than a
 //     sparse one, whose documents left out change once it is compound;
 //   - every resource of a kind, newest first, which the reconcile loop pages
-//     through and a listing narrowed by nothing reads;
+//     through and a listing narrowed by nothing reads, as the reconciler's
+//     resync does, narrowed to what nothing owns;
 //   - a person's own of a kind, newest first;
 //   - what a node holds of a kind;
 //   - and what belongs to a resource, of any kind, by its refs and by its
@@ -365,6 +366,18 @@ func filterOf(kindName string, filter resource.Filter) bson.D {
 			bson.D{{Key: "metadata.refs", Value: named}},
 			bson.D{{Key: "metadata.owners", Value: named}},
 		}})
+	}
+
+	// what nothing owns names no owner, or none but of the kind it lives in,
+	// which a record kept before refs has among its owners.
+	switch unowned := filter.Unowned; {
+	case unowned == nil:
+	case len(unowned.Parent) == 0:
+		query = append(query, bson.E{Key: "metadata.owners.0", Value: bson.D{{Key: "$exists", Value: false}}})
+	default:
+		query = append(query, bson.E{Key: "metadata.owners", Value: bson.D{{Key: "$not", Value: bson.D{
+			{Key: "$elemMatch", Value: bson.D{{Key: "kind", Value: bson.D{{Key: "$ne", Value: unowned.Parent}}}}},
+		}}}})
 	}
 
 	// a label's key has dots in it, workload.managed-by, which a path would

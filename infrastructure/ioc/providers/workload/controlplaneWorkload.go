@@ -10,6 +10,7 @@ import (
 
 	"github.com/nats-io/nats.go"
 
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/graph/reconcile"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/blocks"
 	controlPlaneContainers "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/container"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/heartbeatResources"
@@ -48,15 +49,18 @@ import (
 
 // ControlPlaneStores are what the control plane keeps everything it runs
 // in: the resources of every kind, VMs, snapshots, stacks and tasks among
-// them, the nodes it places them on, and the logs services' tasks ship, which
-// go with their tasks. Archives is the bucket a snapshot's archive is taken
-// out of when the snapshot goes, and may be nil: with no bucket configured, an
-// archive is left where it is.
+// them, the nodes it places them on, the logs services' tasks ship, which go
+// with their tasks, how each node of each root's plan went, and each root's
+// lease. Archives is the bucket a snapshot's archive is taken out of when the
+// snapshot goes, and may be nil: with no bucket configured, an archive is
+// left where it is.
 type ControlPlaneStores struct {
-	Resources resource.Repository
-	Nodes     nodeContract.Repository
-	TaskLogs  taskContract.LogRepository
-	Archives  snapshotKind.Store
+	Resources  resource.Repository
+	Nodes      nodeContract.Repository
+	TaskLogs   taskContract.LogRepository
+	Executions graph.Executions
+	Leases     graph.Leases
+	Archives   snapshotKind.Store
 }
 
 // ControlPlaneWorkload is what the control plane runs of the workload: every
@@ -82,6 +86,36 @@ type ControlPlaneWorkload struct {
 	// what a resource needs goes with it, the defaults with what the control
 	// plane is configured with laid over them.
 	Policy graph.DependencyPolicy
+
+	// Graphs keeps every root's graph made: its workers reconcile the roots
+	// queued, and its resync, which the serve command runs on a ticker of
+	// its own, queues every root. No kind's resources are roots yet, so it
+	// reconciles nothing, and reads nothing.
+	Graphs *reconcile.Reconciler
+
+	// Holder is this control plane, as the leases of the roots it reconciles
+	// say it: a uuid made as it starts.
+	Holder string
+}
+
+// blockStrategies are the control-plane strategies of the building blocks of
+// Docker VMs, which a root's graph needs some of besides.
+type blockStrategies struct {
+	containers *controlPlaneContainers.Containers
+	images     *controlPlaneImages.Images
+	networks   *controlPlaneNetworks.Networks
+	volumes    *controlPlaneVolumes.Volumes
+}
+
+// newBlockStrategies are the building blocks' strategies, over what they
+// share.
+func newBlockStrategies(buildingBlocks blocks.Dependencies) blockStrategies {
+	return blockStrategies{
+		containers: controlPlaneContainers.New(buildingBlocks),
+		images:     controlPlaneImages.New(buildingBlocks),
+		networks:   controlPlaneNetworks.New(buildingBlocks),
+		volumes:    controlPlaneVolumes.New(buildingBlocks),
+	}
 }
 
 // NewControlPlaneWorkload builds the control plane's workload over stores,
@@ -125,13 +159,16 @@ func NewControlPlaneWorkload(
 		kind.TimeoutTransfer: snapshotKind.TransferTimeout,
 	}
 
+	kindsOptions := append([]ControlPlaneKindsOption{WithParents(vms), WithTimeouts(timeouts)}, options...)
+	settings := settingsOf(kindsOptions)
+
 	kinds := NewControlPlaneKinds(
 		registry,
 		ControlPlaneKindStores{Resources: stores.Resources, Nodes: stores.Nodes},
 		requester,
 		producer,
 		logger,
-		append([]ControlPlaneKindsOption{WithParents(vms), WithTimeouts(timeouts)}, options...)...,
+		kindsOptions...,
 	)
 
 	vmPlacement := placement.New(stores.Nodes, vms, controlPlaneConfigs.VMCPUOvercommit)
@@ -184,9 +221,11 @@ func NewControlPlaneWorkload(
 		VMs:       vms,
 		Chooser:   chooser,
 		Requester: requester,
-		Sightings: blocks.NewSightings(2 * settingsOf(options).reconcile.ResourceSilentAfter),
+		Sightings: blocks.NewSightings(2 * settings.reconcile.ResourceSilentAfter),
 		Logger:    logger,
 	}
+
+	strategies := newBlockStrategies(buildingBlocks)
 
 	if err := registerControlPlaneKinds(registry, controlPlaneVMs.Dependencies{
 		Records:   vms,
@@ -202,7 +241,25 @@ func NewControlPlaneWorkload(
 		Scheduler: roundrobin.New(),
 		Slugs:     slugsHeld,
 		Logs:      stores.TaskLogs,
-	}), buildingBlocks); err != nil {
+	}), strategies); err != nil {
+		return nil, err
+	}
+
+	// the graph of each root, a stack or a container no stack owns, made of
+	// the Docker VM it goes into and the building blocks it needs, each made
+	// through the control plane's own admission, commands and delete, and
+	// waited on as the reconcile loop waits on it.
+	graphs, holder, err := newControlPlaneGraphs(
+		controlPlaneConfigs,
+		registry,
+		kinds,
+		controlPlaneGraphKinds(chooser, strategies, controlPlaneGraphRecords(registry, kinds, settings.reconcile)),
+		stores,
+		policy,
+		settings.reconcile,
+		logger,
+	)
+	if err != nil {
 		return nil, err
 	}
 
@@ -230,6 +287,8 @@ func NewControlPlaneWorkload(
 		Subscribers: subscribers,
 		Reconcile:   kinds.Reconcile,
 		Policy:      policy,
+		Graphs:      graphs,
+		Holder:      holder,
 	}, nil
 }
 
@@ -242,17 +301,17 @@ func NewControlPlaneWorkload(
 // admitted into the Docker VM stacks chooses, or makes, which it lives in; a
 // task, the code runner's runs among them, is admitted and placed as tasks
 // says; and the building blocks of a Docker VM, its containers, images,
-// networks and volumes, live in it, over what building blocks share.
-func registerControlPlaneKinds(registry *kind.Registry[kind.ControlPlaneBinding], vms controlPlaneVMs.Dependencies, snapshots *controlPlaneSnapshots.Snapshots, stacks *controlPlaneStacks.Stacks, tasks *controlPlaneTasks.Tasks, buildingBlocks blocks.Dependencies) error {
+// networks and volumes, live in it, through their strategies.
+func registerControlPlaneKinds(registry *kind.Registry[kind.ControlPlaneBinding], vms controlPlaneVMs.Dependencies, snapshots *controlPlaneSnapshots.Snapshots, stacks *controlPlaneStacks.Stacks, tasks *controlPlaneTasks.Tasks, strategies blockStrategies) error {
 	for _, binding := range []kind.ControlPlaneBinding{
 		kind.BindControlPlane[vmKind.Spec, vmKind.Status](vmKind.Descriptor(), controlPlaneVMs.New(vms)),
 		kind.BindControlPlane[snapshotKind.Spec, snapshotKind.Status](snapshotKind.Descriptor(), snapshots),
 		kind.BindControlPlane[stackKind.Spec, stackKind.Status](stackKind.Descriptor(), stacks),
 		kind.BindControlPlane[taskKind.Spec, taskKind.Status](taskKind.Descriptor(), tasks),
-		kind.BindControlPlane[containerKind.Spec, containerKind.Status](containerKind.Descriptor(), controlPlaneContainers.New(buildingBlocks)),
-		kind.BindControlPlane[imageKind.Spec, imageKind.Status](imageKind.Descriptor(), controlPlaneImages.New(buildingBlocks)),
-		kind.BindControlPlane[networkKind.Spec, networkKind.Status](networkKind.Descriptor(), controlPlaneNetworks.New(buildingBlocks)),
-		kind.BindControlPlane[volumeKind.Spec, volumeKind.Status](volumeKind.Descriptor(), controlPlaneVolumes.New(buildingBlocks)),
+		kind.BindControlPlane[containerKind.Spec, containerKind.Status](containerKind.Descriptor(), strategies.containers),
+		kind.BindControlPlane[imageKind.Spec, imageKind.Status](imageKind.Descriptor(), strategies.images),
+		kind.BindControlPlane[networkKind.Spec, networkKind.Status](networkKind.Descriptor(), strategies.networks),
+		kind.BindControlPlane[volumeKind.Spec, volumeKind.Status](volumeKind.Descriptor(), strategies.volumes),
 	} {
 		if err := registry.Register(binding); err != nil {
 			return err
