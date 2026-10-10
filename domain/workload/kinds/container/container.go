@@ -173,6 +173,12 @@ type Spec struct {
 	Networks []string            `json:"networks,omitempty"`
 	Aliases  map[string][]string `json:"aliases,omitempty"`
 
+	// External are the networks and volumes it names that are not its own:
+	// ones that were there before it, made by somebody else, written as the
+	// nodes of a graph they are, network/<name> and volume/<name>. A graph
+	// never makes or removes them for it, and it waits while one is missing.
+	External []string `json:"external,omitempty"`
+
 	// RestartPolicy is no, always, unless-stopped or on-failure; empty is no.
 	RestartPolicy string `json:"restart_policy,omitempty"`
 
@@ -209,6 +215,18 @@ type PortBinding struct {
 	// Protocol is tcp or udp.
 	Protocol string `json:"protocol"`
 }
+
+// The sorts of mount docker has, a Mount's Type.
+const (
+	// MountVolume mounts a volume of its VM: the one its source names, or,
+	// when it names none, one docker makes for it and names itself.
+	MountVolume = "volume"
+
+	// MountBind mounts a path of its VM, and MountTmpfs a tmpfs, which is
+	// made where it is mounted.
+	MountBind  = "bind"
+	MountTmpfs = "tmpfs"
+)
 
 // Mount is something mounted into a container: a volume of its VM, a path of
 // its VM (bind), or a tmpfs.

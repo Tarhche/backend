@@ -73,7 +73,7 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 			return &Response{ValidationErrors: invalid}, nil
 		}
 
-		record, err := uc.kept(d, request.OwnerUUID, admitted)
+		record, err := uc.kept(d, request, admitted)
 		if err != nil {
 			return nil, err
 		}
@@ -186,16 +186,21 @@ func (uc *UseCase) latest(ctx context.Context, d kind.Descriptor, r resource.Rec
 }
 
 // kept is a resource as its kind admitted it, as it is kept: for whom it was
-// asked, made now, with the end of its lifetime, in the state its machine
-// starts it in unless its kind said otherwise.
-func (uc *UseCase) kept(d kind.Descriptor, ownerUUID string, admitted kind.Raw) (resource.Record, error) {
+// asked, under the uuid the control plane holds for it when it holds one,
+// made now, with the end of its lifetime, in the state its machine starts it
+// in unless its kind said otherwise.
+func (uc *UseCase) kept(d kind.Descriptor, request *Request, admitted kind.Raw) (resource.Record, error) {
 	now := uc.dispatcher.Now()
 
 	r := resource.Record{Raw: admitted}
 	r.Kind = d.Name
-	r.Metadata.OwnerUUID = ownerUUID
+	r.Metadata.OwnerUUID = request.OwnerUUID
 	r.Metadata.CreatedAt = now
 	r.Metadata.UpdatedAt = now
+
+	if len(request.UUID) > 0 {
+		r.Metadata.UUID = request.UUID
+	}
 
 	if r.Metadata.Lifetime > 0 && r.Metadata.ExpiresAt.IsZero() {
 		r.Metadata.ExpiresAt = now.Add(r.Metadata.Lifetime)

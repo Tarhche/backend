@@ -7,7 +7,8 @@ import (
 
 // Response is what asking for a resource to be deleted came to.
 type Response struct {
-	// ValidationErrors is why an extra would not be deleted: a delete is a
+	// ValidationErrors is why an extra would not be deleted, or what its
+	// kind's delete refused of the payload it was asked with: a delete is a
 	// request to have a resource gone and is never refused, but an extra says
 	// for itself what it can be asked.
 	ValidationErrors domain.ValidationErrors

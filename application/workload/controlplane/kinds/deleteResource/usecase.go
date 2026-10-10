@@ -2,6 +2,7 @@
 // what it is expected to be.
 //
 // Its kind's delete is asked for at once when the state it is in allows it,
+// with what it is asked with, a container that runs removed by force say,
 // and is otherwise written down, to be asked for by the reconcile loop once
 // it can be: a delete is a request to have it gone, and is never refused.
 // One that is being deleted already is left to it.
@@ -62,14 +63,17 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 			return nil, err
 		}
 
-		var asked dispatch.Asked
+		var (
+			asked   dispatch.Asked
+			invalid domain.ValidationErrors
+		)
 
 		switch {
 		case common.Expected == kind.Deleted && r.Pending != nil && r.Pending.Action == deleteAction:
 			return &Response{Resource: r.Raw}, nil
 
 		case d.Allows(deleteAction, common.State):
-			asked, _, err = uc.dispatcher.Ask(ctx, binding, r, deleteAction, nil, true)
+			asked, invalid, err = uc.dispatcher.Ask(ctx, binding, r, deleteAction, request.Payload, true)
 
 		default:
 			asked.Record, err = uc.dispatcher.Desire(ctx, r, kind.Deleted, true)
@@ -79,6 +83,10 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 			continue
 		} else if err != nil {
 			return nil, err
+		}
+
+		if len(invalid) > 0 {
+			return &Response{ValidationErrors: invalid}, nil
 		}
 
 		delivered, err := uc.dispatcher.Deliver(ctx, asked, request.Wait)
@@ -104,7 +112,7 @@ func extra(ctx context.Context, binding kind.ControlPlaneBinding, request *Reque
 		return nil, err
 	}
 
-	after, gone, refused, err := extras.Act(ctx, r, deleteAction, nil)
+	after, gone, refused, err := extras.Act(ctx, r, deleteAction, request.Payload)
 	switch {
 	case err != nil:
 		return nil, err

@@ -169,6 +169,43 @@ func TestUseCase_Execute(t *testing.T) {
 		assert.Equal(t, []string{response.Command.ID}, stored.Pending.IDs)
 	})
 
+	t.Run("one the control plane holds a uuid for already is kept under it", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(nil)
+
+		request := asked("kitchen", `{"blades": 3}`)
+		request.UUID = "held-uuid"
+		request.Manifest.Metadata.UUID = "chosen-by-the-caller"
+
+		response, err := f.useCase.Execute(ctx, &request)
+		require.NoError(t, err)
+		require.Empty(t, response.ValidationErrors)
+
+		records := f.all(t)
+		require.Len(t, records, 1)
+		assert.Equal(t, "held-uuid", records[0].Metadata.UUID, "the one the control plane holds, never the manifest's")
+		assert.Equal(t, "held-uuid", response.Command.UUID, "and its first command is its")
+	})
+
+	t.Run("but not under one another is kept under already", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(nil)
+
+		_, err := f.resources.Create(ctx, kindstest.AFan("held-uuid", kindstest.Running, kindstest.Running))
+		require.NoError(t, err)
+
+		request := asked("kitchen", `{"blades": 3}`)
+		request.UUID = "held-uuid"
+
+		_, err = f.useCase.Execute(ctx, &request)
+
+		assert.ErrorIs(t, err, domain.ErrAlreadyExists)
+		assert.Len(t, f.all(t), 1, "and nothing else is kept")
+		assert.Empty(t, f.producer.Messages())
+	})
+
 	t.Run("one of a kind that asks for nothing is only kept", func(t *testing.T) {
 		t.Parallel()
 

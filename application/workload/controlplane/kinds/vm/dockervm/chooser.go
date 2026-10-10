@@ -10,7 +10,8 @@
 // A Docker VM made for a container or a stack is admitted as any VM is,
 // through the control plane's admission of the vm kind: its bounds, its
 // owner's quota and its placement are the vm kind's, and it is sent its
-// create at once.
+// create at once. One a graph needs is made the same way, under the uuid what
+// needs it names it by (Chooser.Make).
 package dockervm
 
 import (
@@ -100,7 +101,25 @@ func (c *Chooser) Choose(ctx context.Context, ownerUUID string, choice Choice) (
 		return c.named(ctx, ownerUUID, choice.UUID)
 	}
 
-	return c.made(ctx, ownerUUID, choice)
+	return c.made(ctx, ownerUUID, "", choice)
+}
+
+// Make is a Docker VM made for ownerUUID under uuid, as one made for what
+// names none is, with whatever choice gives and the defaults for the rest:
+// what a graph makes for the stacks and containers that go into it, under the
+// uuid they name it by, before it is there and again once it is gone. Which VM
+// choice names, if it names one, is not read. Why it is not made is said
+// under the request's vm field, a uuid another resource is kept under
+// already being domain.ErrAlreadyExists.
+func (c *Chooser) Make(ctx context.Context, ownerUUID string, uuid string, choice Choice) (vmKind.VM, domain.ValidationErrors, error) {
+	switch {
+	case len(ownerUUID) == 0:
+		return vmKind.VM{}, domain.ValidationErrors{"owner_uuid": "required_field"}, nil
+	case len(uuid) == 0:
+		return vmKind.VM{}, domain.ValidationErrors{"vm.uuid": "required_field"}, nil
+	}
+
+	return c.made(ctx, ownerUUID, uuid, choice)
 }
 
 // named is the Docker VM a request names, which has to be the person's own.
@@ -122,11 +141,11 @@ func (c *Chooser) named(ctx context.Context, ownerUUID string, uuid string) (vmK
 	return v, nil, nil
 }
 
-// made is a Docker VM made for a container or a stack. Whatever it is refused
-// for is reported under vm, where it was asked for. One no node has room for
-// is not kept: nobody asked for it but the container or the stack that cannot
-// go into it.
-func (c *Chooser) made(ctx context.Context, ownerUUID string, asked Choice) (vmKind.VM, domain.ValidationErrors, error) {
+// made is a Docker VM made for a container or a stack, under uuid when it is
+// given one. Whatever it is refused for is reported under vm, where it was
+// asked for. One no node has room for is not kept: nobody asked for it but
+// the container or the stack that cannot go into it.
+func (c *Chooser) made(ctx context.Context, ownerUUID string, uuid string, asked Choice) (vmKind.VM, domain.ValidationErrors, error) {
 	name := asked.Name
 	if len(name) == 0 {
 		name = defaultName
@@ -167,7 +186,7 @@ func (c *Chooser) made(ctx context.Context, ownerUUID string, asked Choice) (vmK
 		return vmKind.VM{}, nil, err
 	}
 
-	admitted, err := c.admit.Execute(ctx, &admitResource.Request{Kind: vmKind.Name, OwnerUUID: ownerUUID, Manifest: manifest})
+	admitted, err := c.admit.Execute(ctx, &admitResource.Request{Kind: vmKind.Name, OwnerUUID: ownerUUID, Manifest: manifest, UUID: uuid})
 	if err != nil {
 		return vmKind.VM{}, nil, err
 	}

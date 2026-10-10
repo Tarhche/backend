@@ -78,6 +78,36 @@ func TestUseCase_Execute(t *testing.T) {
 		assert.Equal(t, []string{kind.ActOnResourceName}, f.producer.Subjects())
 	})
 
+	t.Run("its kind's delete is asked with what it is asked with", func(t *testing.T) {
+		t.Parallel()
+
+		// a fan deleted at a speed.
+		d := kindstest.Descriptor()
+		for i := range d.Actions {
+			if d.Actions[i].Name == "delete" {
+				d.Actions[i].Payload = kind.Payload[kindstest.StartPayload]()
+			}
+		}
+
+		f := newFixture(t, d, kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running))
+
+		response, err := f.useCase.Execute(ctx, &deleteResource.Request{Kind: kindstest.Kind, UUID: "fan-uuid", Payload: []byte(`{"speed": 2}`)})
+		require.NoError(t, err)
+
+		require.NotNil(t, response.Command)
+		assert.JSONEq(t, `{"speed": 2}`, string(response.Command.Payload))
+
+		g := newFixture(t, d, kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running))
+
+		refused, err := g.useCase.Execute(ctx, &deleteResource.Request{Kind: kindstest.Kind, UUID: "fan-uuid", Payload: []byte(`{"speed": 9}`)})
+		require.NoError(t, err)
+
+		assert.Equal(t, domain.ValidationErrors{"speed": "invalid_value"}, refused.ValidationErrors, "and what its codec refuses of it is said, rather than nothing asked")
+		assert.Nil(t, refused.Command)
+		assert.Empty(t, g.producer.Messages())
+		assert.Equal(t, kindstest.Running, kindstest.Typed(g.stored(t, "fan-uuid")).Status.State, "and it is left as it was")
+	})
+
 	t.Run("one being deleted already is left to it", func(t *testing.T) {
 		t.Parallel()
 

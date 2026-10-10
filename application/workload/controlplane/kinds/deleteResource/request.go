@@ -1,6 +1,9 @@
 package deleteResource
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // Request asks for a resource to be deleted.
 type Request struct {
@@ -16,6 +19,11 @@ type Request struct {
 	// container is named by its Docker id or its name (kind.Resolver).
 	UUID   string
 	Parent string
+
+	// Payload is what its kind's delete is asked with, as its codec reads
+	// it: a container that runs removed by force. Nothing is the delete asked
+	// with nothing.
+	Payload json.RawMessage
 
 	// Wait is how long to wait for its node to say it deleted it: nothing is
 	// not waiting.

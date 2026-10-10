@@ -166,6 +166,84 @@ func TestChooser_Choose(t *testing.T) {
 	})
 }
 
+func TestChooser_Make(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	t.Run("one is made under the uuid it is given, as one made for what names none is", func(t *testing.T) {
+		t.Parallel()
+
+		w := vmtest.New()
+
+		made, refused, err := w.Chooser.Make(ctx, "owner", "vm-held", dockervm.Choice{UUID: "another", Name: "builds", Ports: []port.Port{}})
+		require.NoError(t, err)
+		require.Empty(t, refused)
+
+		assert.Equal(t, "vm-held", made.Metadata.UUID, "and not under any it names")
+
+		kept, there := w.Stored("vm-held")
+		require.True(t, there)
+		assert.Equal(t, "builds", kept.Metadata.Name)
+		assert.Equal(t, "owner", kept.Metadata.OwnerUUID)
+		assert.True(t, vmKind.DockerVM(kept, vmtest.Images.Docker))
+		assert.Equal(t, []port.Port{}, kept.Spec.Ports)
+		assert.Equal(t, vmtest.DockerDefaults.Resources, kept.Spec.Resources)
+
+		var command kind.ActOnResource
+		require.True(t, w.Producer.Last(kind.ActOnResourceName, &command))
+		assert.Equal(t, vmKind.ActionCreate, command.Action, "it is asked of its node at once")
+		assert.Equal(t, "vm-held", command.UUID)
+	})
+
+	t.Run("but not under one another is kept under already", func(t *testing.T) {
+		t.Parallel()
+
+		w := vmtest.New(vmtest.WithVMs(vmtest.Docker("vm-held", "owner")))
+
+		_, _, err := w.Chooser.Make(ctx, "owner", "vm-held", dockervm.Choice{})
+
+		assert.ErrorIs(t, err, domain.ErrAlreadyExists)
+		assert.Equal(t, 1, w.Memory.Len(vmKind.Name))
+	})
+
+	t.Run("one no node has room for is not kept", func(t *testing.T) {
+		t.Parallel()
+
+		full := vmtest.Alive(vmtest.Node)
+		full.Capacity.Allocated = vm.Resources{Memory: 64 * vmtest.GiB}
+
+		w := vmtest.New(vmtest.WithNodes(full))
+
+		_, refused, err := w.Chooser.Make(ctx, "owner", "vm-held", dockervm.Choice{})
+		require.NoError(t, err)
+
+		assert.Equal(t, domain.ValidationErrors{"vm": dockervm.ReasonNoCapacity}, refused)
+		assert.Zero(t, w.Memory.Len(vmKind.Name))
+	})
+
+	for name, tt := range map[string]struct {
+		owner string
+		uuid  string
+		want  domain.ValidationErrors
+	}{
+		"somebody has to be asking":  {uuid: "vm-held", want: domain.ValidationErrors{"owner_uuid": "required_field"}},
+		"and a uuid has to be given": {owner: "owner", want: domain.ValidationErrors{"vm.uuid": "required_field"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			w := vmtest.New()
+
+			_, refused, err := w.Chooser.Make(ctx, tt.owner, tt.uuid, dockervm.Choice{})
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.want, refused)
+			assert.Zero(t, w.Memory.Len(vmKind.Name))
+		})
+	}
+}
+
 func TestChoice_JSON(t *testing.T) {
 	t.Parallel()
 
