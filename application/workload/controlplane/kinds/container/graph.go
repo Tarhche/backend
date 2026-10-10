@@ -51,13 +51,15 @@ const tries = 3
 // Whether docker ever had it is whether its node ever said what docker has of
 // it (Status.Docker), which its record keeps once it is said.
 //
-// One that is not made is made: admitted when there is no record of it, its
-// create asked when its record is pending, a root's from when it was admitted
-// on, or missing, started, which makes it, when it failed before it ever was,
-// and waited on while it is being made. What is asked of one is asked on the node its VM is on, where it is
-// placed first when it is not: one admitted before its VM was made, or kept
-// when its VM went, which was made again elsewhere. Nothing is asked of it
-// while its VM does not run, nor of one on its way out: both wait.
+// One that is not made is made: admitted when there is no record of it, but
+// for a root, whose record gone is never admitted again; its create asked
+// when its record is pending, a root's from when it was admitted on, or
+// missing; started, which makes it, when it failed before it ever was; and
+// waited on while it is being made. What is asked of one is asked on the
+// node its VM is on, where it is placed first when it is not: one admitted
+// before its VM was made, or kept when its VM went, which was made again
+// elsewhere. Nothing is asked of it while its VM does not run, nor of one on
+// its way out: both wait.
 type Graph struct {
 	containers *Containers
 	records    *requirements.Records
@@ -194,12 +196,17 @@ func (g *Graph) create(ctx context.Context, w containerKind.Want, vmUUID string)
 	}
 
 	r, found, err := g.find(ctx, w, vmUUID)
-	if err != nil {
+	switch {
+	case err != nil:
 		return graph.Ref{}, err
-	}
+
+	// a root, known by its uuid, is its own record's: one gone is gone with
+	// whatever was making it, and is never admitted again under its uuid.
+	case !found && len(w.UUID) > 0:
+		return graph.Ref{}, requirements.Gone(resource.Record{Raw: kind.Raw{Kind: containerKind.Name, Metadata: kind.Metadata{UUID: w.UUID, Name: w.Spec.Name}}})
 
 	// one admitted is pending, its graph's to make, as one found may be.
-	if !found {
+	case !found:
 		r, err = g.admit(ctx, w, vmUUID)
 	}
 

@@ -62,7 +62,8 @@ func New(dependencies Dependencies) *Records {
 // Admit admits what request asks for, through its kind's admission, sends it
 // the first command its kind asks of it, and is its record once what came of
 // that is heard, or once it has waited as long as that command may take.
-// What its kind refuses is an error saying why, field by field.
+// What its kind refuses is a refusal saying why, field by field
+// (Inadmissible).
 func (r *Records) Admit(ctx context.Context, request admitResource.Request) (resource.Record, error) {
 	request.Wait = 0
 
@@ -71,7 +72,7 @@ func (r *Records) Admit(ctx context.Context, request admitResource.Request) (res
 	case err != nil:
 		return resource.Record{}, err
 	case len(admitted.ValidationErrors) > 0:
-		return resource.Record{}, Refused(request.Kind, admitted.ValidationErrors)
+		return resource.Record{}, Inadmissible(request.Kind, admitted.ValidationErrors)
 	}
 
 	return r.Settled(ctx, request.Kind, admitted.Resource.Metadata.UUID)
@@ -255,6 +256,22 @@ func Refused(kindName string, invalid domain.ValidationErrors) error {
 	}
 
 	return fmt.Errorf("the %s was refused: %s", kindName, strings.Join(said, ", "))
+}
+
+// Inadmissible is what a kind's admission refused of what a graph was to
+// make, field by field, as its admission would have refused whoever asked for
+// it: a refusal of the graph's (graph.Refused), whose code is the code of the
+// first of its fields, in their order, and whose message says them all, as
+// Refused does.
+func Inadmissible(kindName string, invalid domain.ValidationErrors) error {
+	fields := slices.Sorted(maps.Keys(invalid))
+
+	var code string
+	if len(fields) > 0 {
+		code = invalid[fields[0]]
+	}
+
+	return &graph.Refused{Code: code, Message: Refused(kindName, invalid).Error()}
 }
 
 // NotDone is an error saying a record is not done, as it was to be, and

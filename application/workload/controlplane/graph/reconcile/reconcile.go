@@ -15,7 +15,11 @@
 // bottom up, and nothing else. How its plan ended is kept on its lease as it
 // is let go of: one that failed backs the root off, longer with every failure
 // in a row, one done clears that, and one that waits on what it needs leaves
-// it. A root that is gone has its lease and how its plan went forgotten.
+// it. While the root itself is not made, why its plan failed or waits is said
+// on its record too, a refusal as its failure, by its code, for whoever waits
+// for it to be made. A root that is gone has its lease and how its plan went
+// forgotten, one that went while its plan ran among them, which nothing makes
+// again.
 //
 // What is reconciled is queued (Enqueue), each root once however often it is
 // queued before it is reconciled, and reconciled by as many workers as the
@@ -37,6 +41,7 @@ package reconcile
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -57,6 +62,11 @@ import (
 // it already: a lease is taken again by the control plane that holds it, so
 // it is the reconciler that keeps two of its own runs off one root.
 var ErrReconciling = errors.New("the root is being reconciled here already")
+
+// tries is how many times a root's record is read and written again, when
+// something else wrote it in the meantime, to say why its plan fails or
+// waits.
+const tries = 3
 
 // Config is how the reconciler goes about it.
 type Config struct {
@@ -264,6 +274,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, root graph.Ref) error {
 		return r.forget(ctx, root)
 	}
 
+	r.explain(context.WithoutCancel(ctx), root, lease.Reason, ended, err)
+
 	released, releaseErr := r.leases.Release(context.WithoutCancel(ctx), root.UUID, r.holder, ended)
 
 	switch {
@@ -346,6 +358,16 @@ func (r *Reconciler) carry(ctx context.Context, root graph.Ref, rooted graph.Roo
 		return r.executor.Apply(ctx, root, generation, plan)
 	})
 
+	// gone while its plan ran, it is not made again, whatever is left of its
+	// plan: it is forgotten, as a root found gone is.
+	if !deleting && err == nil && outcome.State != execute.Done {
+		if _, there, readErr := r.read(ctx, root); readErr == nil && !there {
+			r.logger.InfoContext(ctx, "forgetting a root that went while its plan ran, its lease and how its plan went", "kind", root.Kind, "uuid", root.UUID)
+
+			return graph.Ended{}, true, nil
+		}
+	}
+
 	switch {
 	case err != nil:
 		return r.failed(err)
@@ -366,6 +388,157 @@ func (r *Reconciler) carry(ctx context.Context, root graph.Ref, rooted graph.Roo
 	// cut short, by a lease lost or a control plane stopping, it is not
 	// done, and is taken up again once the root is not backed off.
 	return r.failed(fmt.Errorf("its plan was cut short: %s", interruptedBy(outcome)))
+}
+
+// explain writes onto the record of root why its plan failed or waits, as
+// ended says, while the root itself is not made, in its kind's first state or
+// missing: why goes in its status's reason, and a refusal (graph.Refused), as
+// its own admission would have refused it, in its failure, by its code and
+// with that reason, which whoever waits for the root to be made reads as
+// what it was refused for. What failed for any other reason, the database or
+// a timeout, is a reason only. What a plan said of it is let go of once a
+// later plan says otherwise: its failure, which a plan said when its message
+// is what last failed its plan, as its lease kept it (last), is cleared once
+// a plan is done, or fails or waits for another reason. A root that is made
+// is its node's to say of, and so is one asked to go; and nothing is written
+// that is what is written already. What reading or writing fails with is
+// logged, and is said again by the next run.
+func (r *Reconciler) explain(ctx context.Context, root graph.Ref, last string, ended graph.Ended, failure error) {
+	for try := 1; try <= tries; try++ {
+		rec, there, err := r.read(ctx, root)
+		if err != nil || !there || going(rec) {
+			return
+		}
+
+		explained, changed, err := r.explained(rec, last, ended, failure)
+		if err != nil {
+			r.logger.WarnContext(ctx, "could not say on a root why its plan fails or waits", "error", err, "kind", root.Kind, "uuid", root.UUID)
+
+			return
+		}
+
+		if !changed {
+			return
+		}
+
+		explained.Metadata.UpdatedAt = time.Now()
+
+		_, err = r.resources.Update(ctx, explained)
+		switch {
+		case err == nil, errors.Is(err, domain.ErrNotExists):
+			return
+		case !errors.Is(err, resource.ErrConflict):
+			r.logger.WarnContext(ctx, "could not say on a root why its plan fails or waits", "error", err, "kind", root.Kind, "uuid", root.UUID)
+
+			return
+		}
+	}
+}
+
+// explained is rec, the record of a root, saying why its plan failed or
+// waits, as explain says, and whether that changed it.
+func (r *Reconciler) explained(rec resource.Record, last string, ended graph.Ended, failure error) (resource.Record, bool, error) {
+	common, err := rec.Common()
+	if err != nil {
+		return resource.Record{}, false, err
+	}
+
+	said, err := failureOf(rec.Status)
+	if err != nil {
+		return resource.Record{}, false, err
+	}
+
+	// what a plan said is what last failed its plan.
+	ours := len(said.Code) > 0 && len(last) > 0 && said.Message == last
+
+	var refused *graph.Refused
+
+	wanted := said
+
+	switch {
+	case ended.State == graph.StateFailed && errors.As(failure, &refused):
+		wanted = planFailure{Code: refused.Code, Message: ended.Reason}
+	case ours:
+		wanted = planFailure{}
+	}
+
+	unmade := common.State == kind.Missing
+	if binding, registered := r.registry.Lookup(rec.Kind); registered {
+		unmade = unmade || common.State == binding.Descriptor().Machine.Initial
+	}
+
+	changed := false
+
+	// a root made says what it is doing itself, or its node does: what a plan
+	// said of it is let go of, and nothing more is said.
+	if !unmade || ended.State == graph.StateDone {
+		if !ours {
+			return rec, false, nil
+		}
+
+		wanted = planFailure{}
+	} else if common.Reason != ended.Reason {
+		common.Reason = ended.Reason
+		changed = true
+
+		if err := rec.SetCommon(common); err != nil {
+			return resource.Record{}, false, err
+		}
+	}
+
+	if wanted != said {
+		status, err := resource.Merge(rec.Status, failureStatus(wanted))
+		if err != nil {
+			return resource.Record{}, false, err
+		}
+
+		rec.Status = status
+		changed = true
+	}
+
+	return rec, changed, nil
+}
+
+// planFailure is what a root's status says its last command, or its plan,
+// failed with: a code, and what was said of it, in the words every side
+// knows. An empty one is none.
+type planFailure struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+// failureOf is what status says its resource failed with, or none.
+func failureOf(status json.RawMessage) (planFailure, error) {
+	var said struct {
+		Failure *planFailure `json:"failure"`
+	}
+
+	if len(status) == 0 {
+		return planFailure{}, nil
+	}
+
+	if err := json.Unmarshal(status, &said); err != nil {
+		return planFailure{}, err
+	}
+
+	if said.Failure == nil {
+		return planFailure{}, nil
+	}
+
+	return *said.Failure, nil
+}
+
+// failureStatus is a status that says nothing but that its resource failed
+// with failure, which an empty one says it did not.
+func failureStatus(failure planFailure) json.RawMessage {
+	status, err := json.Marshal(struct {
+		Failure planFailure `json:"failure"`
+	}{Failure: failure})
+	if err != nil {
+		panic(err)
+	}
+
+	return status
 }
 
 // held runs carry under root's lease, renewed every third of its time until

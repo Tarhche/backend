@@ -2,6 +2,7 @@ package requirements_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -79,6 +80,17 @@ func TestRefused(t *testing.T) {
 	err := requirements.Refused("vm", domain.ValidationErrors{"vm.resources.memory": "too_small", "vm": "no_capacity"})
 
 	assert.EqualError(t, err, "the vm was refused: vm: no_capacity, vm.resources.memory: too_small", "field by field, in order")
+}
+
+func TestInadmissible(t *testing.T) {
+	t.Parallel()
+
+	err := requirements.Inadmissible("vm", domain.ValidationErrors{"vm.resources.memory": "too_small", "vm": "no_capacity"})
+
+	var refused *graph.Refused
+	require.ErrorAs(t, fmt.Errorf("vm/v-uuid: %w", err), &refused, "a refusal of the graph's, however it is wrapped")
+	assert.Equal(t, "no_capacity", refused.Code, "the code of its first field")
+	assert.Equal(t, "the vm was refused: vm: no_capacity, vm.resources.memory: too_small", refused.Message, "and every field said")
 }
 
 func TestNotDone(t *testing.T) {

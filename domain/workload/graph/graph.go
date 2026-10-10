@@ -160,3 +160,19 @@ type Waiting struct {
 func (w *Waiting) Error() string {
 	return "waiting: " + w.Reason
 }
+
+// Refused is what a kind makes nothing with because its admission refused
+// what it was to make, as it would have refused whoever asked for it: no node
+// has room for a VM. A root whose plan fails with it says so as its failure,
+// by its code, while it is not made, as its own admission would have said it.
+// errors.As finds it, however it is wrapped.
+type Refused struct {
+	// Code is why, in a word the control plane answers a refusal with:
+	// no_capacity. Message is what was refused, field by field.
+	Code    string
+	Message string
+}
+
+func (r *Refused) Error() string {
+	return r.Message
+}

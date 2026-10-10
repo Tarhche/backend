@@ -370,18 +370,34 @@ func TestGraph_Create(t *testing.T) {
 		assert.Equal(t, ref.UUID, sent[0].UUID)
 	})
 
-	t.Run("under its record's uuid, when it is known by one", func(t *testing.T) {
+	t.Run("under its record's uuid, when it is known by one, as its admission kept it", func(t *testing.T) {
 		t.Parallel()
 
 		w := requirementstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
+		w.Keep(blockstest.AContainer("c-held", "vm-1", containerKind.Pending, containerKind.Running, unmade))
 
 		ref, err := w.Kinds[containerKind.Name].Create(ctx, wanted("vm-1", func(w *containerKind.Want) { w.UUID = "c-held" }), inVM)
 		require.NoError(t, err)
 
 		assert.Equal(t, graph.Ref{Kind: containerKind.Name, UUID: "c-held"}, ref)
 
-		_, kept := stored(t, w, "c-held")
-		assert.True(t, kept)
+		c, kept := stored(t, w, "c-held")
+		require.True(t, kept)
+		assert.Equal(t, containerKind.Running, c.Status.Status.State)
+	})
+
+	t.Run("but one whose record is gone, a root, is never admitted again under its uuid", func(t *testing.T) {
+		t.Parallel()
+
+		w := requirementstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
+
+		_, err := w.Kinds[containerKind.Name].Create(ctx, wanted("vm-1", func(w *containerKind.Want) { w.UUID = "c-gone" }), inVM)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "is gone")
+
+		_, kept := stored(t, w, "c-gone")
+		assert.False(t, kept, "nothing is kept under its uuid")
+		assert.Empty(t, w.Node.Sent(), "nor asked of its node")
 	})
 
 	t.Run("one made already is its record, and nothing is asked", func(t *testing.T) {
@@ -502,6 +518,7 @@ func TestGraph_Create(t *testing.T) {
 		t.Parallel()
 
 		w := requirementstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
+		w.Keep(blockstest.AContainer("c-1", "vm-1", containerKind.Pending, containerKind.Running, unmade))
 		w.Node.Answer(func(command kind.ActOnResource) (kind.ResourceActedOn, bool) {
 			return requirementstest.Fail(command, "pull access denied for nginx"), true
 		})

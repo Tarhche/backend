@@ -125,6 +125,12 @@ func TestClient_errors(t *testing.T) {
 			body:   `{"error":{"code":"internal","message":"the node holding the vm is not answering"}}`,
 			node:   noderequest.CodeInternal,
 		},
+		"what the control plane refused, in a code no node says, as its admission refuses a vm": {
+			status:  http.StatusBadGateway,
+			body:    `{"error":{"code":"no_capacity","message":"vm/v-uuid: the vm was refused: vm: no_capacity"}}`,
+			refused: domain.ValidationErrors{"vm": "no_capacity"},
+			node:    "no_capacity",
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()

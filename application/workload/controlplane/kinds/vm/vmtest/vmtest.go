@@ -114,6 +114,14 @@ type options struct {
 	vms       []vmKind.VM
 	snapshots []snapshotKind.Snapshot
 	tasks     []taskKind.Task
+	cascading []cascade.Option
+}
+
+// WithCascade has what lives in a resource follow it as cascading says, as
+// the control plane's own does: kept, when a graph makes it again
+// (cascade.WithGraphs).
+func WithCascade(cascading ...cascade.Option) Option {
+	return func(o *options) { o.cascading = append(o.cascading, cascading...) }
 }
 
 // WithNodes replaces the one node a Workload has with these.
@@ -170,7 +178,7 @@ func New(opts ...Option) *Workload {
 		}
 	}
 
-	w.Resources = cascade.NewRepository(w.Registry, w.Memory)
+	w.Resources = cascade.NewRepository(w.Registry, w.Memory, o.cascading...)
 	w.Records = records.New(w.Resources)
 	w.Dispatcher = dispatch.New(w.Resources, w.Producer, waiters.New(), nil)
 

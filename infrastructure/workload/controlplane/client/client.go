@@ -121,6 +121,12 @@ func (e *ValidationError) Refused() domain.ValidationErrors {
 // be asked is something the person asking can do something about, so it is a
 // refusal under the vm field; anything else is the node's error as it said it,
 // which errors.Is reads as the domain's own: a not_found is domain.ErrNotExists.
+//
+// A failure that says a code no node says is the control plane's own refusal,
+// as its admission refuses what is asked: a container whose VM no node has
+// room for (no_capacity), which its graph says on it once it comes to make the
+// VM, after the container was kept. It is a refusal under the vm field, as a
+// container's VM was always refused.
 func refusedByNode(refused *noderequest.Error) error {
 	switch refused.Code {
 	case noderequest.CodeNotRunning, noderequest.CodeNotDocker, noderequest.CodeDockerUnavailable:
@@ -128,8 +134,13 @@ func refusedByNode(refused *noderequest.Error) error {
 			ValidationErrors: domain.ValidationErrors{"vm": string(refused.Code)},
 			cause:            refused,
 		}
-	default:
+	case noderequest.CodeNotFound, noderequest.CodeInvalid, noderequest.CodeTimeout, noderequest.CodeInternal, "":
 		return refused
+	default:
+		return &ValidationError{
+			ValidationErrors: domain.ValidationErrors{"vm": string(refused.Code)},
+			cause:            refused,
+		}
 	}
 }
 

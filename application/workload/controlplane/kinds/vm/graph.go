@@ -99,7 +99,7 @@ func (g *Graph) Create(ctx context.Context, spec any, _ map[graph.NodeID]graph.R
 		case err != nil:
 			return graph.Ref{}, err
 		case len(refused) > 0:
-			return graph.Ref{}, requirements.Refused(vmKind.Name, refused)
+			return graph.Ref{}, requirements.Inadmissible(vmKind.Name, refused)
 		}
 
 		made, err := g.records.Settled(ctx, vmKind.Name, w.VM.UUID)

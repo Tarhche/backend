@@ -19,6 +19,7 @@ import (
 	actonresource "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/actOnResource"
 	admitresource "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/admitResource"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/blocks/blockstest"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/cascade"
 	controlplanecontainers "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/container"
 	deleteresource "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/deleteResource"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/dispatch"
@@ -150,6 +151,15 @@ func (n *containersNode) Produce(ctx context.Context, subject string, payload []
 func controlPlane(t *testing.T, w *blockstest.Workload) *client.Client {
 	t.Helper()
 
+	return controlPlaneTelling(t, w, &graph.Relay{})
+}
+
+// controlPlaneTelling is the control plane's API as controlPlane is, telling
+// the graphs of roots through relay, which w's cascade may tell too, as the
+// control plane's own does.
+func controlPlaneTelling(t *testing.T, w *blockstest.Workload, relay *graph.Relay) *client.Client {
+	t.Helper()
+
 	logger := slog.New(slog.DiscardHandler)
 	requester := node()
 
@@ -166,7 +176,6 @@ func controlPlane(t *testing.T, w *blockstest.Workload) *client.Client {
 	// what the graphs of roots are told of, before what keeps them made is
 	// built over what tells it.
 	roots := graph.Roots{containerKind.Name}
-	relay := &graph.Relay{}
 
 	// what is sent to a container's node comes back from it, and what is
 	// sent to any other node is kept unanswered.
@@ -806,4 +815,46 @@ func TestContract_NewDockerVM(t *testing.T) {
 	assert.Equal(t, "docker", made.Name)
 	assert.Equal(t, vm.Resources{CPUs: 2, Memory: 2 * vmtest.GiB, Disk: 20 * vmtest.GiB}, made.Resources)
 	assert.Equal(t, []port.Port{80}, made.Ports)
+}
+
+// TestContract_NoRoomForAContainersVM holds a container whose VM no node has
+// room for to being refused within seconds, as it was when its VM was
+// admitted with it, though its graph comes to make the VM only once the
+// container is kept: its graph says so on it, and the client follows it until
+// it does, refuses it under the vm field, and takes it away.
+func TestContract_NoRoomForAContainersVM(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	full := vmtest.Alive(vmtest.Node)
+	full.Capacity.Allocated = vm.Resources{Memory: 64 * vmtest.GiB}
+
+	// the VM a container's graph admits and no node has room for goes, and
+	// the container is kept, as the control plane's own cascade keeps it.
+	relay := &graph.Relay{}
+
+	w := blockstest.New(vmtest.WithNodes(full), vmtest.WithCascade(cascade.WithGraphs(graph.Roots{containerKind.Name}, relay)))
+	c := controlPlaneTelling(t, w, relay)
+
+	began := time.Now()
+
+	_, err := c.CreateContainer(ctx, "owner", workloadControlPlane.ContainerRequest{
+		Container: docker.ContainerSpec{Name: "web", Image: "nginx:1.27"},
+	})
+
+	var refused *client.ValidationError
+	require.ErrorAs(t, err, &refused)
+	assert.Equal(t, domain.ValidationErrors{"vm": "no_capacity"}, refused.ValidationErrors)
+	assert.Less(t, time.Since(began), 10*time.Second, "within seconds")
+
+	require.Eventually(t, func() bool {
+		kept, _, err := w.Memory.GetAll(ctx, containerKind.Name, resource.Filter{OwnerUUID: "owner"}, 0, 0)
+
+		return err == nil && len(kept) == 0
+	}, 10*time.Second, 10*time.Millisecond, "the container refused was never taken away")
+
+	vms, _, err := w.Memory.GetAll(ctx, vmKind.Name, resource.Filter{OwnerUUID: "owner"}, 0, 0)
+	require.NoError(t, err)
+	assert.Empty(t, vms, "and no vm was kept for it")
 }
