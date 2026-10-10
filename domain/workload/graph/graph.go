@@ -25,9 +25,11 @@
 // made in, a level at a time; what removing the root takes with it, the nodes
 // it owns (Plan.Owned), and the order they are removed in (Plan.LevelsOf);
 // what owns each node's record and what each uses, as the records say
-// (Ownership); and how each node of it went the last time it was carried out
-// (Execution), which a repository keeps (Executions). Nothing here carries a
-// plan out: nothing here reads or writes anything.
+// (Ownership); how each node of it went the last time it was carried out
+// (Execution), which a repository keeps (Executions); and which control plane
+// carries a root's plan out, and when the root may be carried out again once
+// its plan failed (Lease), which a repository keeps too (Leases). Nothing here
+// carries a plan out: nothing here reads or writes anything.
 package graph
 
 import (
