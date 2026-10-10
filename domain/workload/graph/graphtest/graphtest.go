@@ -1,9 +1,11 @@
 // Package graphtest is a graph.Kind a test says everything of (Kind), which
-// may stand for every kind of a graph at once: what the tests of a plan, and
-// of what carries one out, are written against.
+// may stand for every kind of a graph at once, and what owns the records it
+// holds (Ownership): what the tests of a plan, and of what carries one out,
+// are written against.
 package graphtest
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"maps"
@@ -14,7 +16,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 )
 
-// Op is what a kind is asked of a resource.
+// Op is what a kind, or what owns its records, is asked of a resource.
 type Op string
 
 const (
@@ -24,17 +26,25 @@ const (
 	Exists   Op = "exists"
 	Create   Op = "create"
 	Delete   Op = "delete"
+
+	// Owners is asking what owns its record, Disown to take owners out of
+	// what does, and Forget to remove a root's record.
+	Owners Op = "owners"
+	Disown Op = "disown"
+	Forget Op = "forget"
 )
 
-// Call is a kind asked something of a node: Deps are the records of what it
-// needs that a create was handed.
+// Call is a kind, or what owns its records, asked something of a node: Deps
+// are the records of what it needs that a create was handed, and Owners the
+// owners a disown was handed.
 type Call struct {
-	Op   Op
-	Node graph.NodeID
-	Deps map[graph.NodeID]graph.Ref
+	Op     Op
+	Node   graph.NodeID
+	Deps   map[graph.NodeID]graph.Ref
+	Owners []graph.Ref
 }
 
-// Event is a call to a kind beginning, or, when Returned, returning.
+// Event is a call beginning, or, when Returned, returning.
 type Event struct {
 	Op       Op
 	Node     graph.NodeID
@@ -46,20 +56,31 @@ type Event struct {
 // one Kind may be every kind of a graph at once (Kinds), and what they were
 // all asked is in one order.
 //
-// What a node requires is what Require said, and nothing else. Whether it is
-// there is whether the kind holds it: Create holds it, Delete lets it go, and
-// Hold holds it as if it were made before; one that is not held is removed
-// all the same. What a test has a node do when it is asked something (On) is
-// done first, and what that fails with is what it is answered. Everything the
-// kind is asked is recorded (Calls), and when each call began and returned
-// (Events), and it may be asked from several goroutines at once.
+// What a node requires is what Require said, and nothing else. Whether there
+// is a record of it, and whether it is made, is what the kind holds: Create
+// holds it made, Delete lets it go, or leaves it, not made, when a test says
+// so (Leave), Hold holds it as if it were made before, and Record holds a
+// record of it that is not made; one that is not held is removed all the
+// same. What owns each record is what a test says (Ownership), and goes with
+// the record. What a test has a node do when it is asked something (On) is
+// done first, and what that fails with is what it is answered. Everything
+// the kind, and what owns its records, is asked is recorded (Calls), and when
+// each call began and returned (Events), and it may be asked from several
+// goroutines at once.
 type Kind struct {
 	lock     sync.Mutex
 	requires map[graph.NodeID][]graph.Requirement
-	held     map[graph.NodeID]bool
-	on       map[Op]map[graph.NodeID]func(ctx context.Context) error
-	calls    []Call
-	events   []Event
+
+	// records are the nodes it holds a record of, and whether each is made,
+	// and owners what each record names as its owners; left are the nodes
+	// whose records a delete leaves.
+	records map[graph.NodeID]bool
+	owners  map[graph.NodeID][]graph.NodeID
+	left    map[graph.NodeID]bool
+
+	on     map[Op]map[graph.NodeID]func(ctx context.Context) error
+	calls  []Call
+	events []Event
 }
 
 var _ graph.Kind = &Kind{}
@@ -69,7 +90,9 @@ var _ graph.Kind = &Kind{}
 func NewKind() *Kind {
 	return &Kind{
 		requires: make(map[graph.NodeID][]graph.Requirement),
-		held:     make(map[graph.NodeID]bool),
+		records:  make(map[graph.NodeID]bool),
+		owners:   make(map[graph.NodeID][]graph.NodeID),
+		left:     make(map[graph.NodeID]bool),
 		on:       make(map[Op]map[graph.NodeID]func(ctx context.Context) error),
 	}
 }
@@ -111,16 +134,40 @@ func (k *Kind) Hold(ids ...graph.NodeID) {
 	defer k.lock.Unlock()
 
 	for _, id := range ids {
-		k.held[id] = true
+		k.records[id] = true
 	}
 }
 
-// Held are the nodes the kind holds, in the order of their ids.
+// Record holds a record of each node ids name that is not made: one being
+// made, say, or that failed before it was, or that is going away.
+func (k *Kind) Record(ids ...graph.NodeID) {
+	k.lock.Lock()
+	defer k.lock.Unlock()
+
+	for _, id := range ids {
+		k.records[id] = false
+	}
+}
+
+// Leave has Delete leave the record of each node ids name, not made, rather
+// than let it go: what a kind does whose record goes last of all, once what
+// it owns is removed (graph.Ownership.Forget).
+func (k *Kind) Leave(ids ...graph.NodeID) {
+	k.lock.Lock()
+	defer k.lock.Unlock()
+
+	for _, id := range ids {
+		k.left[id] = true
+	}
+}
+
+// Held are the nodes the kind holds a record of, made or not, in the order
+// of their ids.
 func (k *Kind) Held() []graph.NodeID {
 	k.lock.Lock()
 	defer k.lock.Unlock()
 
-	return slices.Sorted(maps.Keys(k.held))
+	return slices.Sorted(maps.Keys(k.records))
 }
 
 // On has the node id do what do says whenever it is asked op, before
@@ -145,7 +192,8 @@ func (k *Kind) On(op Op, id graph.NodeID, do func(ctx context.Context) error) {
 	k.on[op][id] = do
 }
 
-// Calls are everything the kind was asked, in order.
+// Calls are everything the kind, and what owns its records, was asked, in
+// order.
 func (k *Kind) Calls() []Call {
 	k.lock.Lock()
 	defer k.lock.Unlock()
@@ -153,15 +201,16 @@ func (k *Kind) Calls() []Call {
 	calls := make([]Call, 0, len(k.calls))
 	for _, c := range k.calls {
 		c.Deps = maps.Clone(c.Deps)
+		c.Owners = slices.Clone(c.Owners)
 		calls = append(calls, c)
 	}
 
 	return calls
 }
 
-// Events are when each call to the kind began, and when it returned, in the
-// order they did: a call returns once what it does is done, so whatever began
-// after it returned began after all of it.
+// Events are when each call began, and when it returned, in the order they
+// did: a call returns once what it does is done, so whatever began after it
+// returned began after all of it.
 func (k *Kind) Events() []Event {
 	k.lock.Lock()
 	defer k.lock.Unlock()
@@ -169,7 +218,7 @@ func (k *Kind) Events() []Event {
 	return slices.Clone(k.events)
 }
 
-// Asked are the nodes the kind was asked op of, in order, once each time.
+// Asked are the nodes op was asked of, in order, once each time.
 func (k *Kind) Asked(op Op) []graph.NodeID {
 	k.lock.Lock()
 	defer k.lock.Unlock()
@@ -194,7 +243,7 @@ func (k *Kind) Requires(spec any) ([]graph.Requirement, error) {
 
 	defer k.returned(Requires, id)
 
-	if err := k.ask(context.Background(), Requires, id, nil); err != nil {
+	if err := k.ask(context.Background(), Call{Op: Requires, Node: id}); err != nil {
 		return nil, err
 	}
 
@@ -204,7 +253,8 @@ func (k *Kind) Requires(spec any) ([]graph.Requirement, error) {
 	return slices.Clone(k.requires[id]), nil
 }
 
-// Exists is the record of the node spec names, when the kind holds it.
+// Exists is the record of the node spec names, when the kind holds one, and
+// whether it is made.
 func (k *Kind) Exists(ctx context.Context, spec any) (graph.Ref, bool, error) {
 	id, err := nodeOf(spec)
 	if err != nil {
@@ -213,21 +263,22 @@ func (k *Kind) Exists(ctx context.Context, spec any) (graph.Ref, bool, error) {
 
 	defer k.returned(Exists, id)
 
-	if err := k.ask(ctx, Exists, id, nil); err != nil {
+	if err := k.ask(ctx, Call{Op: Exists, Node: id}); err != nil {
 		return graph.Ref{}, false, err
 	}
 
 	k.lock.Lock()
 	defer k.lock.Unlock()
 
-	if !k.held[id] {
+	made, recorded := k.records[id]
+	if !recorded {
 		return graph.Ref{}, false, nil
 	}
 
-	return Ref(id), true, nil
+	return Ref(id), made, nil
 }
 
-// Create holds the node spec names, and is its record.
+// Create holds the node spec names, made, and is its record.
 func (k *Kind) Create(ctx context.Context, spec any, deps map[graph.NodeID]graph.Ref) (graph.Ref, error) {
 	id, err := nodeOf(spec)
 	if err != nil {
@@ -236,43 +287,55 @@ func (k *Kind) Create(ctx context.Context, spec any, deps map[graph.NodeID]graph
 
 	defer k.returned(Create, id)
 
-	if err := k.ask(ctx, Create, id, deps); err != nil {
+	if err := k.ask(ctx, Call{Op: Create, Node: id, Deps: maps.Clone(deps)}); err != nil {
 		return graph.Ref{}, err
 	}
 
 	k.lock.Lock()
 	defer k.lock.Unlock()
 
-	k.held[id] = true
+	k.records[id] = true
 
 	return Ref(id), nil
 }
 
-// Delete lets the node ref is the record of go.
+// Delete lets the node ref is the record of go, and what owns it with it, or
+// leaves its record, not made, when a test says so (Leave).
 func (k *Kind) Delete(ctx context.Context, ref graph.Ref) error {
 	id := graph.ID(ref.Kind, ref.UUID)
 
 	defer k.returned(Delete, id)
 
-	if err := k.ask(ctx, Delete, id, nil); err != nil {
+	if err := k.ask(ctx, Call{Op: Delete, Node: id}); err != nil {
 		return err
 	}
 
 	k.lock.Lock()
 	defer k.lock.Unlock()
 
-	delete(k.held, id)
+	if _, recorded := k.records[id]; recorded && k.left[id] {
+		k.records[id] = false
+
+		return nil
+	}
+
+	k.forget(id)
 
 	return nil
 }
 
-// ask records the node id asked op, and does what the test has it do first,
+// Ownership is what owns the records k holds.
+func (k *Kind) Ownership() *Ownership {
+	return &Ownership{kind: k}
+}
+
+// ask records the call, and does what the test has its node do first,
 // outside the lock, so that it may block.
-func (k *Kind) ask(ctx context.Context, op Op, id graph.NodeID, deps map[graph.NodeID]graph.Ref) error {
+func (k *Kind) ask(ctx context.Context, call Call) error {
 	k.lock.Lock()
-	k.calls = append(k.calls, Call{Op: op, Node: id, Deps: maps.Clone(deps)})
-	k.events = append(k.events, Event{Op: op, Node: id})
-	do := k.on[op][id]
+	k.calls = append(k.calls, call)
+	k.events = append(k.events, Event{Op: call.Op, Node: call.Node})
+	do := k.on[call.Op][call.Node]
 	k.lock.Unlock()
 
 	if do == nil {
@@ -289,6 +352,133 @@ func (k *Kind) returned(op Op, id graph.NodeID) {
 	defer k.lock.Unlock()
 
 	k.events = append(k.events, Event{Op: op, Node: id, Returned: true})
+}
+
+// forget lets the record of the node id go, and what owns it with it. The
+// lock is held.
+func (k *Kind) forget(id graph.NodeID) {
+	delete(k.records, id)
+	delete(k.owners, id)
+}
+
+// Ownership is what owns the records a fake kind holds (graph.Ownership), as
+// a test says (Own): an owner owns a record while the kind holds a record of
+// it, and what owns a record goes with it. What it is asked is recorded
+// among what the kind is asked, in one order, and what a test has a node do
+// when it is asked something (Kind.On) is done first, as the kind's own
+// calls are.
+type Ownership struct {
+	kind *Kind
+}
+
+var _ graph.Ownership = &Ownership{}
+
+// Own has the record of the node id owned by the nodes owners name too,
+// each once, whether or not the kind holds a record of any of them yet.
+func (o *Ownership) Own(id graph.NodeID, owners ...graph.NodeID) {
+	o.kind.lock.Lock()
+	defer o.kind.lock.Unlock()
+
+	for _, owner := range owners {
+		if !slices.Contains(o.kind.owners[id], owner) {
+			o.kind.owners[id] = append(o.kind.owners[id], owner)
+		}
+	}
+}
+
+// OwnersOf are what the record of the node id names as its owners, in the
+// order of their ids, whether or not the kind holds their records.
+func (o *Ownership) OwnersOf(id graph.NodeID) []graph.NodeID {
+	o.kind.lock.Lock()
+	defer o.kind.lock.Unlock()
+
+	owners := slices.Clone(o.kind.owners[id])
+	slices.Sort(owners)
+
+	return owners
+}
+
+// Owners are the records that own ref's record that the kind holds, in the
+// order of their kinds and their uuids: none when it holds no record of ref.
+func (o *Ownership) Owners(ctx context.Context, ref graph.Ref) ([]graph.Ref, error) {
+	id := graph.ID(ref.Kind, ref.UUID)
+
+	defer o.kind.returned(Owners, id)
+
+	if err := o.kind.ask(ctx, Call{Op: Owners, Node: id}); err != nil {
+		return nil, err
+	}
+
+	o.kind.lock.Lock()
+	defer o.kind.lock.Unlock()
+
+	return o.owning(id), nil
+}
+
+// Disown takes owners out of what owns ref's record, and is what owns it
+// still, as Owners says it: nothing when the kind holds no record of ref.
+func (o *Ownership) Disown(ctx context.Context, ref graph.Ref, owners ...graph.Ref) ([]graph.Ref, error) {
+	id := graph.ID(ref.Kind, ref.UUID)
+
+	defer o.kind.returned(Disown, id)
+
+	if err := o.kind.ask(ctx, Call{Op: Disown, Node: id, Owners: slices.Clone(owners)}); err != nil {
+		return nil, err
+	}
+
+	o.kind.lock.Lock()
+	defer o.kind.lock.Unlock()
+
+	if _, recorded := o.kind.records[id]; !recorded {
+		return nil, nil
+	}
+
+	o.kind.owners[id] = slices.DeleteFunc(o.kind.owners[id], func(owner graph.NodeID) bool {
+		return slices.Contains(owners, Ref(owner))
+	})
+
+	return o.owning(id), nil
+}
+
+// Forget lets root's record go, and what owns it with it: one the kind does
+// not hold is forgotten already.
+func (o *Ownership) Forget(ctx context.Context, root graph.Ref) error {
+	id := graph.ID(root.Kind, root.UUID)
+
+	defer o.kind.returned(Forget, id)
+
+	if err := o.kind.ask(ctx, Call{Op: Forget, Node: id}); err != nil {
+		return err
+	}
+
+	o.kind.lock.Lock()
+	defer o.kind.lock.Unlock()
+
+	o.kind.forget(id)
+
+	return nil
+}
+
+// owning are the records that own the record of the node id that the kind
+// holds, in the order of their kinds and their uuids: none when it holds no
+// record of the node. The lock is held.
+func (o *Ownership) owning(id graph.NodeID) []graph.Ref {
+	if _, recorded := o.kind.records[id]; !recorded {
+		return nil
+	}
+
+	var owning []graph.Ref
+	for _, owner := range o.kind.owners[id] {
+		if _, there := o.kind.records[owner]; there {
+			owning = append(owning, Ref(owner))
+		}
+	}
+
+	slices.SortFunc(owning, func(a, b graph.Ref) int {
+		return cmp.Or(cmp.Compare(a.Kind, b.Kind), cmp.Compare(a.UUID, b.UUID))
+	})
+
+	return owning
 }
 
 // nodeOf is the node a fake kind's spec names, which is the spec itself.

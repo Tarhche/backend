@@ -22,9 +22,12 @@
 //
 // Here are the contracts, the plan of what a root needs (Planner, Plan): its
 // nodes, each once, what each needs of the others, and the order they are
-// made in, a level at a time; and how each node of it went the last time it
-// was carried out (Execution), which a repository keeps (Executions). Nothing
-// here carries a plan out: nothing here reads or writes anything.
+// made in, a level at a time; what removing the root takes with it, the nodes
+// it owns (Plan.Owned), and the order they are removed in (Plan.LevelsOf);
+// what owns each node's record, as the records say (Ownership); and how each
+// node of it went the last time it was carried out (Execution), which a
+// repository keeps (Executions). Nothing here carries a plan out: nothing
+// here reads or writes anything.
 package graph
 
 import (
@@ -113,9 +116,13 @@ type Kind interface {
 	// that needs in turn is its own kind's to say. It reads nothing but spec.
 	Requires(spec any) ([]Requirement, error)
 
-	// Exists is the record a resource is, and whether its node has made it,
-	// as its node last said: a node speaks for what it holds every second,
-	// and thirty seconds of silence say it is gone. One going away is not.
+	// Exists is the record a resource is, whenever there is one, and
+	// whether its node has made it, as its node last said: a node speaks for
+	// what it holds every second, and thirty seconds of silence say it is
+	// gone. A record not made yet, or that failed before it was, or that is
+	// going away, is its record all the same, and is not made, so that what
+	// removes a node finds it whatever it is doing; with no record, it is
+	// the zero Ref.
 	Exists(ctx context.Context, spec any) (Ref, bool, error)
 
 	// Create makes a resource, and is the record it is once its node has

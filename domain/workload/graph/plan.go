@@ -226,17 +226,79 @@ func (p *Plan) Edge(from NodeID, to NodeID) (Edge, bool) {
 // another and may be made at once. Each level is in the order of its nodes'
 // ids, so that a plan is made in one order, however it was planned.
 func (p *Plan) Levels() [][]NodeID {
+	return p.levels(func(NodeID) bool { return true })
+}
+
+// Owned are the nodes the node id names owns, in the order of their ids: what
+// it needs through an owned edge, what those need through one, and so on,
+// which go when it goes. What it uses loosely, or is only made after, it does
+// not own, nor anything reached through it; and an external node is never
+// owned, since it is never made or removed through a graph, nor anything
+// reached through one. A node the plan does not have owns nothing.
+func (p *Plan) Owned(id NodeID) []NodeID {
+	if _, ok := p.nodes[id]; !ok {
+		return nil
+	}
+
+	owned := make(map[NodeID]bool)
+
+	// from the node down, along the owned edges to each node reached.
+	queue := []NodeID{id}
+	for len(queue) > 0 {
+		dependent := queue[0]
+		queue = queue[1:]
+
+		for edge, t := range p.edges {
+			needed := edge[0]
+			if edge[1] != dependent || t != Owned || owned[needed] || p.nodes[needed].External {
+				continue
+			}
+
+			owned[needed] = true
+			queue = append(queue, needed)
+		}
+	}
+
+	return slices.Sorted(maps.Keys(owned))
+}
+
+// LevelsOf are the levels of the part of the plan the nodes ids name make,
+// ordered by every edge among them, as Levels are of the whole plan: what
+// removing a root removes, from the last level to the first, as a plan is
+// made from the first to the last. An edge between two of them orders them
+// whatever its type, a loose one too, so that what needs a node goes before
+// it: a service goes before a volume it mounts, loosely, that its stack owns
+// and removes too. An edge to a node not among them orders nothing, and a
+// node the plan does not have is in none of them.
+func (p *Plan) LevelsOf(ids []NodeID) [][]NodeID {
+	in := make(map[NodeID]bool, len(ids))
+	for _, id := range ids {
+		if _, ok := p.nodes[id]; ok {
+			in[id] = true
+		}
+	}
+
+	return p.levels(func(id NodeID) bool { return in[id] })
+}
+
+// levels are the plan's nodes in holds of, a level at a time, ordered by
+// every edge between them: Kahn's algorithm, the first level what waits on
+// nothing, and each after it what waits on nothing but the levels before it,
+// each in the order of its nodes' ids.
+func (p *Plan) levels(in func(NodeID) bool) [][]NodeID {
 	// how many nodes each node still waits on, and which wait on it.
 	waits := make(map[NodeID]int, len(p.nodes))
 	waiting := make(map[NodeID][]NodeID, len(p.nodes))
 	for edge := range p.edges {
-		waits[edge[1]]++
-		waiting[edge[0]] = append(waiting[edge[0]], edge[1])
+		if in(edge[0]) && in(edge[1]) {
+			waits[edge[1]]++
+			waiting[edge[0]] = append(waiting[edge[0]], edge[1])
+		}
 	}
 
 	var level []NodeID
 	for id := range p.nodes {
-		if waits[id] == 0 {
+		if in(id) && waits[id] == 0 {
 			level = append(level, id)
 		}
 	}

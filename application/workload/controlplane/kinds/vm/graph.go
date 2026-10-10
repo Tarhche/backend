@@ -55,8 +55,8 @@ func (g *Graph) Requires(spec any) ([]graph.Requirement, error) {
 	return nil, nil
 }
 
-// Exists is the VM the want names, when its record is there and is not on
-// its way out.
+// Exists is the record of the VM the want names, whenever there is one, and
+// whether it is there: whether it is not on its way out.
 func (g *Graph) Exists(ctx context.Context, spec any) (graph.Ref, bool, error) {
 	w, err := wantOf(spec)
 	if err != nil {
@@ -64,11 +64,11 @@ func (g *Graph) Exists(ctx context.Context, spec any) (graph.Ref, bool, error) {
 	}
 
 	v, there, err := g.read(ctx, w.VM.UUID)
-	if err != nil || !there || records.Going(v) {
+	if err != nil || !there {
 		return graph.Ref{}, false, err
 	}
 
-	return refOf(v), true, nil
+	return refOf(v), !records.Going(v), nil
 }
 
 // Create makes the Docker VM the want names under its uuid when it is not

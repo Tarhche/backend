@@ -59,9 +59,12 @@ func TestGraph_Exists(t *testing.T) {
 
 	ctx := context.Background()
 
+	// whether it is there, and its record, there or not: none when there is
+	// no record of it.
 	for name, tt := range map[string]struct {
 		vm     vmKind.VM
 		exists bool
+		none   bool
 	}{
 		"one that runs":                          {vm: vmtest.Docker("vm-1", "owner"), exists: true},
 		"one stopped, which its own loop starts": {vm: vmtest.In(vmtest.Docker("vm-1", "owner"), func(v *vmKind.VM) { v.Status.State = vmKind.Stopped }), exists: true},
@@ -72,7 +75,7 @@ func TestGraph_Exists(t *testing.T) {
 			v.Status.Expected = vmKind.Deleted
 		})},
 		"nor one that runs and is to be deleted": {vm: vmtest.In(vmtest.Docker("vm-1", "owner"), func(v *vmKind.VM) { v.Status.Expected = vmKind.Deleted })},
-		"nor another":                            {vm: vmtest.Docker("vm-2", "owner")},
+		"nor another":                            {vm: vmtest.Docker("vm-2", "owner"), none: true},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -84,8 +87,10 @@ func TestGraph_Exists(t *testing.T) {
 
 			assert.Equal(t, tt.exists, exists)
 
-			if tt.exists {
-				assert.Equal(t, graph.Ref{Kind: vmKind.Name, UUID: "vm-1"}, ref)
+			if tt.none {
+				assert.Zero(t, ref, "there is no record of it")
+			} else {
+				assert.Equal(t, graph.Ref{Kind: vmKind.Name, UUID: "vm-1"}, ref, "its record, there or not")
 			}
 		})
 	}

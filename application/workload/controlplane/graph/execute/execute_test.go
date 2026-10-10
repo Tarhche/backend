@@ -52,7 +52,9 @@ func TestNew(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			executor, err := execute.New(graphtest.NewKind().Kinds(every...), executionsMemory.NewRepository(), nil, tt.options...)
+			kinds := graphtest.NewKind()
+
+			executor, err := execute.New(kinds.Kinds(every...), kinds.Ownership(), executionsMemory.NewRepository(), nil, tt.options...)
 			if tt.refused {
 				assert.Error(t, err)
 				assert.Nil(t, executor)
@@ -67,10 +69,11 @@ func TestNew(t *testing.T) {
 }
 
 // fixture is an executor of plans every node of which is of one fake kind,
-// keeping how each node went in memory, with every save recorded, on a clock
-// a test moves on.
+// which owns the records it holds as a test says, keeping how each node went
+// in memory, with every save recorded, on a clock a test moves on.
 type fixture struct {
 	kinds      *graphtest.Kind
+	ownership  *graphtest.Ownership
 	executions *recorder
 	clock      *kindstest.Clock
 	executor   *execute.Executor
@@ -81,11 +84,12 @@ func newFixture(t *testing.T, kinds *graphtest.Kind, options ...execute.Option) 
 
 	f := &fixture{
 		kinds:      kinds,
+		ownership:  kinds.Ownership(),
 		executions: &recorder{Repository: executionsMemory.NewRepository()},
 		clock:      kindstest.NewClock(),
 	}
 
-	executor, err := execute.New(kinds.Kinds(every...), f.executions, f.clock.Now, options...)
+	executor, err := execute.New(kinds.Kinds(every...), f.ownership, f.executions, f.clock.Now, options...)
 	require.NoError(t, err)
 
 	f.executor = executor
@@ -110,6 +114,48 @@ func (f *fixture) apply(t *testing.T, plan *graph.Plan) execute.Outcome {
 	t.Helper()
 
 	outcome, err := f.executor.Apply(context.Background(), graphtest.Ref(plan.Root()), 1, plan)
+	require.NoError(t, err)
+
+	return outcome
+}
+
+// planUnder is the plan of what the node id names needs, under the policy
+// configured laid over the defaults.
+func (f *fixture) planUnder(t *testing.T, id graph.NodeID, configured string) *graph.Plan {
+	t.Helper()
+
+	policy, err := graph.ParsePolicy(configured)
+	require.NoError(t, err)
+
+	plan, err := graph.NewPlanner(f.kinds.Kinds(every...), graph.DefaultPolicy().With(policy)).Plan(requirement(id))
+	require.NoError(t, err)
+
+	return plan
+}
+
+// made has every node of the plans made, and owned by what owns it through
+// an edge, as applying them leaves their records: an external node is
+// somebody else's, and nothing a plan makes owns it.
+func (f *fixture) made(plans ...*graph.Plan) {
+	for _, plan := range plans {
+		for _, node := range plan.Nodes() {
+			f.kinds.Hold(node.ID())
+		}
+
+		for _, edge := range plan.Edges() {
+			if needed, _ := plan.Node(edge.From); edge.Type == graph.Owned && !needed.External {
+				f.ownership.Own(edge.From, edge.To)
+			}
+		}
+	}
+}
+
+// remove removes plan as the first generation of its root, the record the
+// fake says its root's node is, which it is no error to.
+func (f *fixture) remove(t *testing.T, plan *graph.Plan) execute.Outcome {
+	t.Helper()
+
+	outcome, err := f.executor.Remove(context.Background(), graphtest.Ref(plan.Root()), 1, plan)
 	require.NoError(t, err)
 
 	return outcome
@@ -213,6 +259,31 @@ func services(after map[graph.NodeID][]graph.NodeID) *graphtest.Kind {
 	kinds.Require(volume, requirement(vm))
 
 	return kinds
+}
+
+// declared is the stack s as its file declares it: its services, web, api
+// and db, each made after the services after says, its network and its
+// volume; each service in one Docker VM and on the stack's network, and db
+// mounting its volume.
+func declared(after map[graph.NodeID][]graph.NodeID) *graphtest.Kind {
+	kinds := services(after)
+	kinds.Require(stack, requirement(web, after[web]...), requirement(api, after[api]...), requirement(db, after[db]...), requirement(network), requirement(volume))
+
+	return kinds
+}
+
+// byLevel are the nodes executions are of, level by level.
+func byLevel(executions []graph.Execution) [][]graph.NodeID {
+	var levels [][]graph.NodeID
+	for _, e := range executions {
+		for len(levels) <= e.Level {
+			levels = append(levels, nil)
+		}
+
+		levels[e.Level] = append(levels[e.Level], e.Node)
+	}
+
+	return levels
 }
 
 // byNode is how each node went, by node.

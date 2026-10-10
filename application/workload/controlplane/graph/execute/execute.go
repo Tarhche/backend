@@ -1,6 +1,7 @@
 // Package execute carries out the plan of what a root needs (graph.Plan): it
-// makes what is not there, from the bottom up, a level at a time (Apply), and
-// says what that would do, without doing it (Preview).
+// makes what is not there, from the bottom up, a level at a time (Apply),
+// removes the root and what it owns, from the top down (Remove), and says
+// what either would do, without doing it (Preview, PreviewRemove).
 //
 // A level's nodes are made at once, as many at a time as the executor is
 // let, and the next level is started once every node of it is done: each
@@ -10,11 +11,18 @@
 // is taken up where it stopped. An external node is never made: while it is
 // missing, it waits.
 //
-// How each node went, the last time its root's plan was applied, is kept
+// A root is removed the other way, through the edges that own what they
+// need and no other: what is loose, only ordered or external is never
+// touched, and what something that stays owns stays too, and is unlinked
+// from what goes (graph.Ownership). A node gone already is done as it is, so
+// a delete that stopped part way is taken up where it stopped too.
+//
+// How each node went, the last time its root's plan was carried out, is kept
 // (graph.Executions): pending until it is started, running while it is
-// looked for and made, and then done, waiting, or failed. A level with a node
-// that waits or failed is the last one started: what is done stays done,
-// nothing is undone, and the rest stay pending, for the next time.
+// looked for and made or removed, and then done, waiting, or failed. A level
+// with a node that waits or failed is the last one started: what is done
+// stays done, nothing is undone, and the rest stay pending, for the next
+// time.
 package execute
 
 import (
@@ -26,14 +34,15 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 )
 
-// DefaultConcurrency is how many nodes of a level are made at once, unless
-// an executor is told otherwise.
+// DefaultConcurrency is how many nodes of a level are made or removed at
+// once, unless an executor is told otherwise.
 const DefaultConcurrency = 4
 
-// Executor carries out plans on the kinds their nodes are of, keeping how
-// each node went.
+// Executor carries out plans on the kinds their nodes are of, knowing what
+// owns their records, and keeping how each node went.
 type Executor struct {
 	kinds       graph.Kinds
+	ownership   graph.Ownership
 	executions  graph.Executions
 	concurrency int
 	now         func() time.Time
@@ -42,23 +51,25 @@ type Executor struct {
 // Option changes how an executor goes about it.
 type Option func(*Executor)
 
-// Concurrency is how many nodes of a level are made at once, at most.
+// Concurrency is how many nodes of a level are made or removed at once, at
+// most.
 func Concurrency(limit int) Option {
 	return func(e *Executor) {
 		e.concurrency = limit
 	}
 }
 
-// New is an executor of plans of kinds, which keeps how each node went in
-// executions, and makes DefaultConcurrency nodes of a level at once, unless
-// it is told otherwise; one told to make fewer than one is refused. A clock
-// of nil is the time now.
-func New(kinds graph.Kinds, executions graph.Executions, now func() time.Time, options ...Option) (*Executor, error) {
+// New is an executor of plans of kinds, which knows what owns their records
+// through ownership, keeps how each node went in executions, and makes or
+// removes DefaultConcurrency nodes of a level at once, unless it is told
+// otherwise; one told to make fewer than one is refused. A clock of nil is
+// the time now.
+func New(kinds graph.Kinds, ownership graph.Ownership, executions graph.Executions, now func() time.Time, options ...Option) (*Executor, error) {
 	if now == nil {
 		now = time.Now
 	}
 
-	e := &Executor{kinds: kinds, executions: executions, concurrency: DefaultConcurrency, now: now}
+	e := &Executor{kinds: kinds, ownership: ownership, executions: executions, concurrency: DefaultConcurrency, now: now}
 
 	for _, option := range options {
 		option(e)

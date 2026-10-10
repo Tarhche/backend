@@ -129,9 +129,12 @@ func TestGraph_Exists(t *testing.T) {
 
 	ctx := context.Background()
 
+	// whether it is made, and its record, made or not: none when there is no
+	// record of it.
 	for name, tt := range map[string]struct {
 		container kind.Raw
 		exists    bool
+		none      bool
 	}{
 		"one that runs":                                 {container: blockstest.AContainer("c-1", "vm-1", containerKind.Running, containerKind.Running), exists: true},
 		"one stopped":                                   {container: blockstest.AContainer("c-1", "vm-1", containerKind.Stopped, containerKind.Stopped), exists: true},
@@ -145,8 +148,8 @@ func TestGraph_Exists(t *testing.T) {
 		"nor one waiting on its vm":                     {container: blockstest.AContainer("c-1", "vm-1", containerKind.Waiting, containerKind.Running)},
 		"nor one being removed":                         {container: blockstest.AContainer("c-1", "vm-1", containerKind.Removing, kind.Deleted)},
 		"nor one that runs and is to be removed":        {container: blockstest.AContainer("c-1", "vm-1", containerKind.Running, kind.Deleted)},
-		"nor one of another name":                       {container: blockstest.AContainer("c-1", "vm-1", containerKind.Running, containerKind.Running, func(c *containerKind.Container) { c.Spec.Name = "db" })},
-		"nor one of its name in another vm":             {container: blockstest.AContainer("c-1", "vm-2", containerKind.Running, containerKind.Running)},
+		"nor one of another name":                       {container: blockstest.AContainer("c-1", "vm-1", containerKind.Running, containerKind.Running, func(c *containerKind.Container) { c.Spec.Name = "db" }), none: true},
+		"nor one of its name in another vm":             {container: blockstest.AContainer("c-1", "vm-2", containerKind.Running, containerKind.Running), none: true},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -159,20 +162,23 @@ func TestGraph_Exists(t *testing.T) {
 
 			assert.Equal(t, tt.exists, exists)
 
-			if tt.exists {
-				assert.Equal(t, graph.Ref{Kind: containerKind.Name, UUID: "c-1"}, ref)
+			if tt.none {
+				assert.Zero(t, ref, "there is no record of it")
+			} else {
+				assert.Equal(t, graph.Ref{Kind: containerKind.Name, UUID: "c-1"}, ref, "its record, made or not")
 			}
 		})
 	}
 
-	t.Run("nor one there is no record of", func(t *testing.T) {
+	t.Run("nor one there is no record of, which is no record", func(t *testing.T) {
 		t.Parallel()
 
 		w := requirementstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
 
-		_, exists, err := w.Kinds[containerKind.Name].Exists(ctx, wanted("vm-1"))
+		ref, exists, err := w.Kinds[containerKind.Name].Exists(ctx, wanted("vm-1"))
 		require.NoError(t, err)
 		assert.False(t, exists)
+		assert.Zero(t, ref)
 	})
 
 	t.Run("one known by its uuid is found by it, whatever it is called", func(t *testing.T) {
@@ -203,6 +209,19 @@ func TestGraph_Exists(t *testing.T) {
 
 		assert.True(t, exists)
 		assert.Equal(t, "c-new", ref.UUID)
+	})
+
+	t.Run("and one on its way out, not made, when it is the only one", func(t *testing.T) {
+		t.Parallel()
+
+		w := requirementstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
+		w.Keep(blockstest.AContainer("c-old", "vm-1", containerKind.Removing, kind.Deleted))
+
+		ref, exists, err := w.Kinds[containerKind.Name].Exists(ctx, wanted("vm-1"))
+		require.NoError(t, err)
+
+		assert.False(t, exists)
+		assert.Equal(t, "c-old", ref.UUID)
 	})
 }
 

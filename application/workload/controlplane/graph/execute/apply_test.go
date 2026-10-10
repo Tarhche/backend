@@ -144,6 +144,27 @@ func TestExecutor_Apply(t *testing.T) {
 		}, states(f.kept(t, plan)))
 	})
 
+	t.Run("a node whose record is there and not made is made, as one with none is, and one made is not", func(t *testing.T) {
+		t.Parallel()
+
+		// the network's record is there, being made say, and the vm is
+		// made.
+		kinds := container(false)
+		kinds.Record(network)
+		kinds.Hold(vm)
+
+		f := newFixture(t, kinds)
+		plan := f.plan(t, web)
+
+		outcome := f.apply(t, plan)
+		require.Equal(t, execute.Done, outcome.State)
+
+		assert.ElementsMatch(t, []graph.NodeID{network, volume, web}, kinds.Asked(graphtest.Create), "made only what is not made, whatever its record")
+
+		made, _ := outcome.Node(network)
+		assert.Equal(t, graphtest.Ref(network), made.Ref, "as the record it was made")
+	})
+
 	t.Run("a node that waits stops the plan as waiting, not as failed", func(t *testing.T) {
 		t.Parallel()
 
@@ -364,7 +385,7 @@ func TestExecutor_Apply(t *testing.T) {
 
 		executions := &recorder{Repository: executionsMemory.NewRepository()}
 
-		executor, err := execute.New(kinds.Kinds(vmKind.Name, networkKind.Name, containerKind.Name), executions, nil)
+		executor, err := execute.New(kinds.Kinds(vmKind.Name, networkKind.Name, containerKind.Name), kinds.Ownership(), executions, nil)
 		require.NoError(t, err)
 
 		_, err = executor.Apply(ctx, graphtest.Ref(web), 1, plan)
@@ -405,7 +426,7 @@ func TestExecutor_Apply_concurrency(t *testing.T) {
 				id := graph.ID(containerKind.Name, fmt.Sprintf("s_%d", i))
 				required = append(required, requirement(id))
 
-				kinds.On(graphtest.Create, id, flight.create)
+				kinds.On(graphtest.Create, id, flight.call)
 			}
 
 			kinds.Require(stack, required...)
@@ -581,12 +602,12 @@ func TestExecutor_Apply_unsaved(t *testing.T) {
 	})
 }
 
-// flight is how many creates are under way at once, and the most that ever
-// were. The first together of them wait for one another, so that as many as
-// that are under way at once when the executor lets them be, and fail once
-// they have waited long enough when it does not; and each is under way a
-// moment longer, so that any the executor should not have let start beside
-// them would be under way with them.
+// flight is how many calls, creates or deletes, are under way at once, and
+// the most that ever were. The first together of them wait for one another,
+// so that as many as that are under way at once when the executor lets them
+// be, and fail once they have waited long enough when it does not; and each
+// is under way a moment longer, so that any the executor should not have let
+// start beside them would be under way with them.
 type flight struct {
 	lock     sync.Mutex
 	together int
@@ -600,8 +621,8 @@ func newFlight(together int) *flight {
 	return &flight{together: together, all: make(chan struct{})}
 }
 
-// create is one create under way.
-func (f *flight) create(ctx context.Context) error {
+// call is one call under way.
+func (f *flight) call(ctx context.Context) error {
 	f.lock.Lock()
 	f.now++
 	f.highest = max(f.highest, f.now)
@@ -626,7 +647,7 @@ func (f *flight) create(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-time.After(10 * time.Second):
-			return fmt.Errorf("%d creates were never under way at once", f.together)
+			return fmt.Errorf("%d calls were never under way at once", f.together)
 		}
 	}
 
@@ -635,7 +656,7 @@ func (f *flight) create(ctx context.Context) error {
 	return nil
 }
 
-// most is the most creates that were under way at once.
+// most is the most calls that were under way at once.
 func (f *flight) most() int {
 	f.lock.Lock()
 	defer f.lock.Unlock()

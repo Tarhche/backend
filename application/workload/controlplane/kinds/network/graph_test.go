@@ -89,9 +89,12 @@ func TestGraph_Exists(t *testing.T) {
 
 	ctx := context.Background()
 
+	// whether it is made, and its record, made or not: none when there is no
+	// record of it.
 	for name, tt := range map[string]struct {
 		network kind.Raw
 		exists  bool
+		none    bool
 	}{
 		"one docker has":                                {network: aNetwork("n-1", "vm-1", networkKind.Present, networkKind.Present, true), exists: true},
 		"one that failed once docker had it":            {network: aNetwork("n-1", "vm-1", networkKind.Failed, networkKind.Present, true), exists: true},
@@ -101,7 +104,7 @@ func TestGraph_Exists(t *testing.T) {
 		"nor one its vm has none of":                    {network: aNetwork("n-1", "vm-1", networkKind.Missing, networkKind.Present, true)},
 		"nor one waiting on its vm":                     {network: aNetwork("n-1", "vm-1", networkKind.Waiting, networkKind.Present, true)},
 		"nor one being removed":                         {network: aNetwork("n-1", "vm-1", networkKind.Removing, kind.Deleted, true)},
-		"nor one of its name in another vm":             {network: aNetwork("n-1", "vm-2", networkKind.Present, networkKind.Present, true)},
+		"nor one of its name in another vm":             {network: aNetwork("n-1", "vm-2", networkKind.Present, networkKind.Present, true), none: true},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -114,11 +117,24 @@ func TestGraph_Exists(t *testing.T) {
 
 			assert.Equal(t, tt.exists, exists)
 
-			if tt.exists {
-				assert.Equal(t, graph.Ref{Kind: networkKind.Name, UUID: "n-1"}, ref)
+			if tt.none {
+				assert.Zero(t, ref, "there is no record of it")
+			} else {
+				assert.Equal(t, graph.Ref{Kind: networkKind.Name, UUID: "n-1"}, ref, "its record, made or not")
 			}
 		})
 	}
+
+	t.Run("nor one there is no record of, which is no record", func(t *testing.T) {
+		t.Parallel()
+
+		w := requirementstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
+
+		ref, exists, err := w.Kinds[networkKind.Name].Exists(ctx, wanted("vm-1"))
+		require.NoError(t, err)
+		assert.False(t, exists)
+		assert.Zero(t, ref)
+	})
 }
 
 func TestGraph_Create(t *testing.T) {

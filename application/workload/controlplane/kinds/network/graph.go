@@ -69,8 +69,8 @@ func (g *Graph) Requires(spec any) ([]graph.Requirement, error) {
 	return []graph.Requirement{vmKind.Want{OwnerUUID: w.OwnerUUID, VM: w.VM}.Requirement()}, nil
 }
 
-// Exists is the network the want names, when its node has made it and it is
-// not on its way out.
+// Exists is the record of the network the want names, whenever there is one,
+// and whether its node has made it and it is not on its way out.
 func (g *Graph) Exists(ctx context.Context, spec any) (graph.Ref, bool, error) {
 	w, err := wantOf(spec)
 	if err != nil {
@@ -83,11 +83,11 @@ func (g *Graph) Exists(ctx context.Context, spec any) (graph.Ref, bool, error) {
 	}
 
 	made, err := madeBy(r)
-	if err != nil || !made {
+	if err != nil {
 		return graph.Ref{}, false, err
 	}
 
-	return requirements.RefOf(r), true, nil
+	return requirements.RefOf(r), made, nil
 }
 
 // Create makes the network the want names in the Docker VM the graph made for

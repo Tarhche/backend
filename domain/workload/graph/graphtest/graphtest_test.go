@@ -86,6 +86,66 @@ func TestKind(t *testing.T) {
 		assert.NoError(t, kinds.Delete(ctx, ref), "and one gone already is removed")
 	})
 
+	t.Run("a record not made is its record all the same, and not made, until it is made", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		kinds := graphtest.NewKind()
+		kinds.Record(web)
+
+		ref, made, err := kinds.Exists(ctx, web)
+		require.NoError(t, err)
+		assert.False(t, made)
+		assert.Equal(t, graphtest.Ref(web), ref, "its record")
+		assert.Equal(t, []graph.NodeID{web}, kinds.Held(), "which it holds")
+
+		ref, made, err = kinds.Exists(ctx, vm)
+		require.NoError(t, err)
+		assert.False(t, made)
+		assert.Zero(t, ref, "and one it holds no record of is none")
+
+		_, err = kinds.Create(ctx, web, nil)
+		require.NoError(t, err)
+
+		ref, made, err = kinds.Exists(ctx, web)
+		require.NoError(t, err)
+		assert.True(t, made, "once it is made")
+		assert.Equal(t, graphtest.Ref(web), ref)
+
+		kinds.Record(web)
+
+		_, made, err = kinds.Exists(ctx, web)
+		require.NoError(t, err)
+		assert.False(t, made, "and not once a test says it is not")
+
+		require.NoError(t, kinds.Delete(ctx, ref))
+		assert.Empty(t, kinds.Held(), "and it goes when it is removed, made or not")
+	})
+
+	t.Run("a record a delete is told to leave is left, not made, until it is forgotten", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		kinds := graphtest.NewKind()
+		kinds.Hold(web, vm)
+		kinds.Leave(web)
+
+		require.NoError(t, kinds.Delete(ctx, graphtest.Ref(web)))
+		require.NoError(t, kinds.Delete(ctx, graphtest.Ref(vm)))
+
+		ref, made, err := kinds.Exists(ctx, web)
+		require.NoError(t, err)
+		assert.False(t, made)
+		assert.Equal(t, graphtest.Ref(web), ref, "its record is there")
+		assert.Equal(t, []graph.NodeID{web}, kinds.Held(), "while one it is not told to leave goes")
+
+		require.NoError(t, kinds.Ownership().Forget(ctx, graphtest.Ref(web)))
+		assert.Empty(t, kinds.Held(), "until it is forgotten")
+
+		require.NoError(t, kinds.Delete(ctx, graphtest.Ref(web)))
+		assert.Empty(t, kinds.Held(), "and one gone is not left")
+	})
+
 	t.Run("a node held is there as if it were made before", func(t *testing.T) {
 		t.Parallel()
 
@@ -280,5 +340,200 @@ func TestKind(t *testing.T) {
 		assert.Len(t, kinds.Held(), nodes)
 		assert.Len(t, kinds.Asked(graphtest.Create), nodes)
 		assert.Len(t, kinds.Asked(graphtest.Exists), nodes)
+	})
+}
+
+func TestOwnership(t *testing.T) {
+	t.Parallel()
+
+	network := graph.ID("network", "s_default")
+	api := graph.ID("container", "api")
+	stack := graph.ID("stack", "s-uuid")
+
+	ref := graphtest.Ref
+
+	t.Run("what owns a record is what a test says, and each owns it while its record is there", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		kinds := graphtest.NewKind()
+		ownership := kinds.Ownership()
+
+		kinds.Hold(network, web, stack)
+		ownership.Own(network, web, stack)
+		ownership.Own(network, api, web)
+
+		assert.Equal(t, []graph.NodeID{api, web, stack}, ownership.OwnersOf(network), "each once, in the order of their ids")
+
+		owners, err := ownership.Owners(ctx, ref(network))
+		require.NoError(t, err)
+		assert.Equal(t, []graph.Ref{ref(web), ref(stack)}, owners, "api, which it holds no record of, owns nothing")
+
+		kinds.Record(api)
+
+		owners, err = ownership.Owners(ctx, ref(network))
+		require.NoError(t, err)
+		assert.Equal(t, []graph.Ref{ref(api), ref(web), ref(stack)}, owners, "until it holds one, made or not, in the order of their kinds and uuids")
+
+		require.NoError(t, kinds.Delete(ctx, ref(web)))
+
+		owners, err = ownership.Owners(ctx, ref(network))
+		require.NoError(t, err)
+		assert.Equal(t, []graph.Ref{ref(api), ref(stack)}, owners, "and one whose record is gone owns nothing")
+		assert.Equal(t, []graph.NodeID{api, web, stack}, ownership.OwnersOf(network), "though the record names it still")
+	})
+
+	t.Run("disowning takes owners out of what owns a record, and is what owns it still", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		kinds := graphtest.NewKind()
+		ownership := kinds.Ownership()
+
+		kinds.Hold(network, web, api, stack)
+		ownership.Own(network, web, api, stack)
+
+		owners, err := ownership.Disown(ctx, ref(network), ref(web), ref(stack), ref(vm))
+		require.NoError(t, err)
+		assert.Equal(t, []graph.Ref{ref(api)}, owners, "what does not own it is taken out of nothing")
+		assert.Equal(t, []graph.NodeID{api}, ownership.OwnersOf(network))
+
+		owners, err = ownership.Disown(ctx, ref(network), ref(api))
+		require.NoError(t, err)
+		assert.Empty(t, owners)
+		assert.ElementsMatch(t, []graph.NodeID{network, web, api, stack}, kinds.Held(), "and no record goes for it")
+	})
+
+	t.Run("a record that is gone is owned by nothing, disowned already, and forgotten already", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		kinds := graphtest.NewKind()
+		ownership := kinds.Ownership()
+
+		kinds.Hold(web)
+		ownership.Own(network, web)
+
+		owners, err := ownership.Owners(ctx, ref(network))
+		require.NoError(t, err)
+		assert.Empty(t, owners)
+
+		owners, err = ownership.Disown(ctx, ref(network), ref(web))
+		require.NoError(t, err)
+		assert.Empty(t, owners)
+
+		assert.NoError(t, ownership.Forget(ctx, ref(stack)))
+	})
+
+	t.Run("what owns a record goes with it, whether it is removed or forgotten", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		kinds := graphtest.NewKind()
+		ownership := kinds.Ownership()
+
+		kinds.Hold(network, web, stack)
+		ownership.Own(network, web)
+		ownership.Own(web, stack)
+
+		require.NoError(t, kinds.Delete(ctx, ref(network)))
+		assert.Empty(t, ownership.OwnersOf(network))
+
+		require.NoError(t, ownership.Forget(ctx, ref(web)))
+		assert.Empty(t, ownership.OwnersOf(web))
+		assert.Equal(t, []graph.NodeID{stack}, kinds.Held(), "and forgetting a record lets it go")
+	})
+
+	t.Run("what it is asked is recorded among what the kind is, and does first what a test has it do", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		broken := errors.New("broken")
+
+		kinds := graphtest.NewKind()
+		ownership := kinds.Ownership()
+
+		kinds.Hold(network, web, stack)
+		ownership.Own(network, web, stack)
+
+		kinds.On(graphtest.Disown, network, func(context.Context) error { return broken })
+
+		_, err := ownership.Disown(ctx, ref(network), ref(web))
+		require.ErrorIs(t, err, broken)
+		assert.Equal(t, []graph.NodeID{web, stack}, ownership.OwnersOf(network), "and is disowned of nothing")
+
+		kinds.On(graphtest.Owners, network, func(context.Context) error { return broken })
+
+		_, err = ownership.Owners(ctx, ref(network))
+		require.ErrorIs(t, err, broken)
+
+		kinds.On(graphtest.Forget, stack, func(ctx context.Context) error {
+			<-ctx.Done()
+
+			return ctx.Err()
+		})
+
+		cancelled, cancel := context.WithCancel(ctx)
+		cancel()
+
+		require.ErrorIs(t, ownership.Forget(cancelled, ref(stack)), context.Canceled, "with the context it is asked with")
+		assert.Contains(t, kinds.Held(), stack, "and is not forgotten")
+
+		_, _, err = kinds.Exists(ctx, network)
+		require.NoError(t, err)
+
+		assert.Equal(t, []graphtest.Call{
+			{Op: graphtest.Disown, Node: network, Owners: []graph.Ref{ref(web)}},
+			{Op: graphtest.Owners, Node: network},
+			{Op: graphtest.Forget, Node: stack},
+			{Op: graphtest.Exists, Node: network},
+		}, kinds.Calls(), "a disown with the owners it was handed")
+
+		assert.Equal(t, []graphtest.Event{
+			{Op: graphtest.Disown, Node: network},
+			{Op: graphtest.Disown, Node: network, Returned: true},
+			{Op: graphtest.Owners, Node: network},
+			{Op: graphtest.Owners, Node: network, Returned: true},
+			{Op: graphtest.Forget, Node: stack},
+			{Op: graphtest.Forget, Node: stack, Returned: true},
+			{Op: graphtest.Exists, Node: network},
+			{Op: graphtest.Exists, Node: network, Returned: true},
+		}, kinds.Events())
+
+		assert.Equal(t, []graph.NodeID{network}, kinds.Asked(graphtest.Disown))
+	})
+
+	t.Run("it may be asked from several goroutines at once", func(t *testing.T) {
+		t.Parallel()
+
+		const owners = 20
+
+		ctx := context.Background()
+		kinds := graphtest.NewKind()
+		ownership := kinds.Ownership()
+		kinds.Hold(network)
+
+		var wg sync.WaitGroup
+		for i := range owners {
+			owner := graph.ID("container", fmt.Sprintf("c-%d", i))
+
+			wg.Go(func() {
+				kinds.Hold(owner)
+				ownership.Own(network, owner)
+
+				_, err := ownership.Owners(ctx, ref(network))
+				assert.NoError(t, err)
+
+				_, err = ownership.Disown(ctx, ref(network), ref(owner))
+				assert.NoError(t, err)
+
+				_ = ownership.OwnersOf(network)
+			})
+		}
+
+		wg.Wait()
+
+		assert.Empty(t, ownership.OwnersOf(network), "each disowned of what it was owned by")
+		assert.Len(t, kinds.Asked(graphtest.Disown), owners)
 	})
 }

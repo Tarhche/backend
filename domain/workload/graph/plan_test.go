@@ -650,6 +650,195 @@ func TestPlan_Levels(t *testing.T) {
 	})
 }
 
+func TestPlan_Owned(t *testing.T) {
+	t.Parallel()
+
+	front := graph.ID(networkKind.Name, "s_front")
+	inner := graph.ID(networkKind.Name, "s_inner")
+	nowhere := graph.ID(containerKind.Name, "s_nowhere")
+
+	for name, tt := range map[string]struct {
+		kinds      func() *graphtest.Kind
+		configured string
+		root       graph.NodeID
+		of         graph.NodeID
+		owned      []graph.NodeID
+	}{
+		"a stack owns its services and its network, and not its vm or its volume, which are loose": {
+			kinds: func() *graphtest.Kind { return declared(map[graph.NodeID][]graph.NodeID{web: {api}, api: {db}}) },
+			root:  stack,
+			of:    stack,
+			owned: []graph.NodeID{api, db, web, network},
+		},
+		"a service owns its network, and not the service it is made after": {
+			kinds: func() *graphtest.Kind { return declared(map[graph.NodeID][]graph.NodeID{web: {api}, api: {db}}) },
+			root:  stack,
+			of:    web,
+			owned: []graph.NodeID{network},
+		},
+		"a vm owns nothing": {
+			kinds: func() *graphtest.Kind { return declared(nil) },
+			root:  stack,
+			of:    vm,
+		},
+		"a stack owns its volume once the policy says a volume is owned, and no kind does": {
+			kinds:      func() *graphtest.Kind { return declared(nil) },
+			configured: "volume=owned",
+			root:       stack,
+			of:         stack,
+			owned:      []graph.NodeID{api, db, web, network, volume},
+		},
+		"and once it says the pair is": {
+			kinds:      func() *graphtest.Kind { return declared(nil) },
+			configured: "stack/volume=owned",
+			root:       stack,
+			of:         stack,
+			owned:      []graph.NodeID{api, db, web, network, volume},
+		},
+		"and nothing owns a network the policy says is loose": {
+			kinds:      func() *graphtest.Kind { return declared(nil) },
+			configured: "network=loose",
+			root:       stack,
+			of:         stack,
+			owned:      []graph.NodeID{api, db, web},
+		},
+		"what it owns owns, and so on down": {
+			kinds: func() *graphtest.Kind {
+				kinds := graphtest.NewKind()
+				kinds.Require(web, requirement(vm), requirement(front))
+				kinds.Require(front, requirement(vm), requirement(inner))
+				kinds.Require(inner, requirement(vm))
+
+				return kinds
+			},
+			root:  web,
+			of:    web,
+			owned: []graph.NodeID{front, inner},
+		},
+		"an external node is never owned, nor what is reached through it alone": {
+			kinds: func() *graphtest.Kind {
+				kinds := graphtest.NewKind()
+				kinds.Require(web, requirement(vm), requirement(network), external(front))
+				kinds.Require(network, requirement(vm))
+				kinds.Require(front, requirement(vm), requirement(inner))
+				kinds.Require(inner, requirement(vm))
+
+				return kinds
+			},
+			root:  web,
+			of:    web,
+			owned: []graph.NodeID{network},
+		},
+		"a node the plan does not have owns nothing": {
+			kinds: func() *graphtest.Kind { return declared(nil) },
+			root:  stack,
+			of:    nowhere,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			configured, err := graph.ParsePolicy(tt.configured)
+			require.NoError(t, err)
+
+			policy := graph.DefaultPolicy().With(configured)
+
+			plan, err := graph.NewPlanner(tt.kinds().Kinds(vmKind.Name, networkKind.Name, volumeKind.Name, containerKind.Name, stackKind.Name), policy).Plan(requirement(tt.root))
+			require.NoError(t, err)
+
+			owned := plan.Owned(tt.of)
+			assert.Equal(t, tt.owned, owned)
+
+			for _, id := range owned {
+				node, found := plan.Node(id)
+				require.True(t, found)
+				assert.False(t, node.External, "%s is the graph's to remove", id)
+			}
+		})
+	}
+}
+
+func TestPlan_LevelsOf(t *testing.T) {
+	t.Parallel()
+
+	// the stack s, web made after api and api after db, its network and its
+	// volume, which db mounts.
+	plan, err := planner(declared(map[graph.NodeID][]graph.NodeID{web: {api}, api: {db}})).Plan(requirement(stack))
+	require.NoError(t, err)
+
+	for name, tt := range map[string]struct {
+		ids    []graph.NodeID
+		levels [][]graph.NodeID
+	}{
+		"what a stack owns is made in the order of the edges among it, its services in the order they depend_on one another": {
+			ids:    []graph.NodeID{stack, web, api, db, network},
+			levels: [][]graph.NodeID{{network}, {db}, {api}, {web}, {stack}},
+		},
+		"whatever order they are named in": {
+			ids:    []graph.NodeID{network, db, web, stack, api},
+			levels: [][]graph.NodeID{{network}, {db}, {api}, {web}, {stack}},
+		},
+		"a loose edge orders them too: db is made after the vm and the volume it uses, and so removed before them": {
+			ids:    []graph.NodeID{db, volume, vm},
+			levels: [][]graph.NodeID{{vm}, {volume}, {db}},
+		},
+		"and every node of the plan is in the levels the plan is made in": {
+			ids:    []graph.NodeID{vm, network, volume, web, api, db, stack},
+			levels: [][]graph.NodeID{{vm}, {network, volume}, {db}, {api}, {web}, {stack}},
+		},
+		"an edge to what is not among them orders nothing": {
+			ids:    []graph.NodeID{web, db},
+			levels: [][]graph.NodeID{{db, web}},
+		},
+		"a node the plan does not have is in none": {
+			ids:    []graph.NodeID{web, graph.ID(containerKind.Name, "s_nowhere")},
+			levels: [][]graph.NodeID{{web}},
+		},
+		"and none are no levels": {},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, tt.levels, plan.LevelsOf(tt.ids))
+		})
+	}
+
+	assert.Equal(t, [][]graph.NodeID{{vm}, {network, volume}, {db}, {api}, {web}, {stack}}, plan.Levels(), "as the whole plan is made through every edge")
+
+	t.Run("a volume its stack owns is made before the service that mounts it loosely, and so removed after it, never beside it", func(t *testing.T) {
+		t.Parallel()
+
+		// the stack s of web, on its network, and db, which joins none and
+		// mounts the stack's volume: the stack owns its volume, as the pair
+		// says, and db uses it loosely, as every container does a volume.
+		kinds := graphtest.NewKind()
+		kinds.Require(stack, requirement(web), requirement(db), requirement(network), requirement(volume))
+		kinds.Require(web, requirement(vm), requirement(network))
+		kinds.Require(db, requirement(vm), requirement(volume))
+		kinds.Require(network, requirement(vm))
+		kinds.Require(volume, requirement(vm))
+
+		policy := graph.DefaultPolicy().With(graph.DependencyPolicy{ByPair: map[[2]string]graph.EdgeType{{stackKind.Name, volumeKind.Name}: graph.Owned}})
+
+		plan, err := graph.NewPlanner(kinds.Kinds(vmKind.Name, networkKind.Name, volumeKind.Name, containerKind.Name, stackKind.Name), policy).Plan(requirement(stack))
+		require.NoError(t, err)
+
+		for edge, want := range map[[2]graph.NodeID]graph.EdgeType{
+			{volume, stack}: graph.Owned,
+			{volume, db}:    graph.Loose,
+		} {
+			e, found := plan.Edge(edge[0], edge[1])
+			require.True(t, found, "%s is made before %s", edge[0], edge[1])
+			require.Equal(t, want, e.Type, "%s to %s", edge[0], edge[1])
+		}
+
+		owned := plan.Owned(stack)
+		require.Equal(t, []graph.NodeID{db, web, network, volume}, owned)
+
+		assert.Equal(t, [][]graph.NodeID{{network, volume}, {db, web}, {stack}}, plan.LevelsOf(append([]graph.NodeID{stack}, owned...)))
+	})
+}
+
 // planner plans graphs every kind of which is kinds, under the default
 // policy.
 func planner(kinds *graphtest.Kind) *graph.Planner {
@@ -676,6 +865,25 @@ func services(after map[graph.NodeID][]graph.NodeID) *graphtest.Kind {
 	kinds.Require(db, requirement(vm), requirement(network), requirement(volume))
 	kinds.Require(network, requirement(vm))
 	kinds.Require(volume, requirement(vm))
+
+	return kinds
+}
+
+// external is the node id as a fake kind requires it, made by somebody else.
+func external(id graph.NodeID) graph.Requirement {
+	r := requirement(id)
+	r.External = true
+
+	return r
+}
+
+// declared is the stack s as its file declares it: its services, web, api
+// and db, each made after the services after says, its network and its
+// volume; each service in one Docker VM and on the stack's network, and db
+// mounting its volume.
+func declared(after map[graph.NodeID][]graph.NodeID) *graphtest.Kind {
+	kinds := services(after)
+	kinds.Require(stack, requirement(web, after[web]...), requirement(api, after[api]...), requirement(db, after[db]...), requirement(network), requirement(volume))
 
 	return kinds
 }
