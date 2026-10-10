@@ -33,7 +33,8 @@
 // written.
 //
 // Nothing reads a lease but by its _id, which MongoDB indexes, so there is
-// no index of its own to make.
+// no index of its own to make: a root's plan, as the API shows it, reads its
+// lease by its _id too (Get).
 package leases
 
 import (
@@ -46,6 +47,7 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
+	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/graph"
 )
 
@@ -192,6 +194,23 @@ func (r *Repository) Forget(ctx context.Context, rootUUID string) error {
 	_, err := r.collection.DeleteOne(ctx, bson.D{{Key: "_id", Value: rootUUID}})
 
 	return err
+}
+
+func (r *Repository) Get(ctx context.Context, rootUUID string) (graph.Lease, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
+	var stored document
+	err := r.collection.FindOne(ctx, bson.D{{Key: "_id", Value: rootUUID}}).Decode(&stored)
+
+	switch {
+	case errors.Is(err, mongo.ErrNoDocuments):
+		return graph.Lease{}, domain.ErrNotExists
+	case err != nil:
+		return graph.Lease{}, err
+	}
+
+	return toLease(stored), nil
 }
 
 // held writes the root's lease, which holder holds, as change says, and is

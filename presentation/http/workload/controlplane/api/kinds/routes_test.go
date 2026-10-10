@@ -17,15 +17,18 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/graph/execute"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/actOnResource"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/admitResource"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/deleteResource"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/dispatch"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/getKinds"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/getPlan"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/getResource"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/getResources"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/kindstest"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/observe"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/planResource"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/queryResource"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/recordResult"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/waiters"
@@ -36,6 +39,8 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
+	executionsMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/executions"
+	leasesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/leases"
 	resourcesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/resources"
 )
 
@@ -89,13 +94,31 @@ func (n *node) commands() []kind.ActOnResource {
 }
 
 // api is the control plane's resource API with fans registered in it, over
-// fans kept in memory and a node that holds them.
+// fans kept in memory and a node that holds them, and how the plans of the
+// roots among them went.
 type api struct {
-	handler   http.Handler
-	resources *resourcesMemory.Repository
-	fans      *kindstest.Fans
-	held      *kindstest.Node
-	node      *node
+	handler    http.Handler
+	resources  *resourcesMemory.Repository
+	fans       *kindstest.Fans
+	held       *kindstest.Node
+	node       *node
+	executions *executionsMemory.Repository
+	leases     *leasesMemory.Repository
+}
+
+// previews are the graphs as the API's dry runs see them: what needs what is
+// what Told says, and what carrying a root's graph out, or removing it, would
+// do is one node, the root, with the verdict each says.
+type previews struct {
+	*graphtest.Told
+}
+
+func (p previews) PreviewCreate(_ context.Context, root kind.Raw) (execute.Preview, error) {
+	return execute.Preview{Levels: [][]execute.Previewed{{{Node: graph.ID(root.Kind, root.Metadata.UUID), Kind: root.Kind, Verdict: execute.Create, Reason: "it is not there"}}}}, nil
+}
+
+func (p previews) PreviewRemove(_ context.Context, root graph.Ref) (execute.Preview, error) {
+	return execute.Preview{Levels: [][]execute.Previewed{{{Node: graph.ID(root.Kind, root.UUID), Kind: root.Kind, Verdict: execute.Delete, Ref: root}}}}, nil
 }
 
 func newAPI(t *testing.T) *api {
@@ -110,9 +133,11 @@ func newAPIWith(t *testing.T, told *graphtest.Told) *api {
 	t.Helper()
 
 	a := &api{
-		resources: resourcesMemory.NewRepository(),
-		fans:      &kindstest.Fans{Node: kindstest.NodeName},
-		held:      &kindstest.Node{},
+		resources:  resourcesMemory.NewRepository(),
+		fans:       &kindstest.Fans{Node: kindstest.NodeName},
+		held:       &kindstest.Node{},
+		executions: executionsMemory.NewRepository(),
+		leases:     leasesMemory.NewRepository(nil),
 	}
 
 	registry := kindstest.Registry(a.fans)
@@ -143,22 +168,31 @@ func newAPIWith(t *testing.T, told *graphtest.Told) *api {
 	var (
 		acting   []actOnResource.Option
 		deleting []deleteResource.Option
+		roots    graph.Roots
+		graphs   planResource.Graphs
 	)
 
 	if told != nil {
-		acting = append(acting, actOnResource.WithGraphs(graph.Roots{kindstest.Kind}, told))
-		deleting = append(deleting, deleteResource.WithGraphs(graph.Roots{kindstest.Kind}, told))
+		roots = graph.Roots{kindstest.Kind}
+		graphs = previews{Told: told}
+
+		acting = append(acting, actOnResource.WithGraphs(roots, told))
+		deleting = append(deleting, deleteResource.WithGraphs(roots, told))
 	}
+
+	admission := admitResource.NewUseCase(registry, a.resources, dispatcher, logger)
 
 	mux := http.NewServeMux()
 	require.NoError(t, Route(mux, registry.Descriptors(), UseCases{
-		Admit:  admitResource.NewUseCase(registry, a.resources, dispatcher, logger),
-		Act:    actOnResource.NewUseCase(registry, a.resources, dispatcher, slog.New(slog.DiscardHandler), acting...),
-		Delete: deleteResource.NewUseCase(registry, a.resources, dispatcher, deleting...),
-		Get:    getResource.NewUseCase(registry, a.resources),
-		List:   getResources.NewUseCase(registry, a.resources),
-		Query:  queryResource.NewUseCase(registry, a.resources, requester, observer, nil),
-		Kinds:  getKinds.NewUseCase(registry),
+		Admit:   admission,
+		Act:     actOnResource.NewUseCase(registry, a.resources, dispatcher, slog.New(slog.DiscardHandler), acting...),
+		Delete:  deleteResource.NewUseCase(registry, a.resources, dispatcher, deleting...),
+		Get:     getResource.NewUseCase(registry, a.resources),
+		List:    getResources.NewUseCase(registry, a.resources),
+		Query:   queryResource.NewUseCase(registry, a.resources, requester, observer, nil),
+		Kinds:   getKinds.NewUseCase(registry),
+		Plan:    planResource.NewUseCase(registry, a.resources, admission, roots, graphs),
+		GetPlan: getPlan.NewUseCase(registry, a.resources, a.executions, a.leases, roots),
 	}))
 
 	a.handler = mux
@@ -653,6 +687,129 @@ func TestRoutes(t *testing.T) {
 		assert.Empty(t, a.node.commands())
 	})
 
+	t.Run("a dry run of an admission keeps nothing and sends nothing, and says what carrying out a root's graph would do", func(t *testing.T) {
+		t.Parallel()
+
+		a := newAPIWith(t, &graphtest.Told{})
+
+		status, body := a.do(t, http.MethodPost, "/api/fans?owner=owner-uuid&dry_run=true", `{"metadata": {"name": "kitchen"}, "spec": {"blades": 3, "house": "house-1"}}`)
+		require.Equal(t, http.StatusOK, status, body)
+
+		answered := decode[struct {
+			Resource *kindstest.Fan   `json:"resource"`
+			Plan     *execute.Preview `json:"plan"`
+		}](t, body)
+
+		require.NotNil(t, answered.Resource)
+		assert.NotEmpty(t, answered.Resource.Metadata.UUID)
+		assert.Equal(t, kindstest.Starting, answered.Resource.Status.State, "as its create would leave it")
+
+		require.NotNil(t, answered.Plan)
+		assert.Equal(t, execute.Create, answered.Plan.Levels[0][0].Verdict)
+		assert.Equal(t, "it is not there", answered.Plan.Levels[0][0].Reason)
+
+		records, _, err := a.resources.GetAll(context.Background(), kindstest.Kind, resource.Filter{}, 0, 0)
+		require.NoError(t, err)
+		assert.Empty(t, records, "nothing is kept")
+		assert.Empty(t, a.node.commands(), "nor sent")
+	})
+
+	t.Run("and refuses what the admission would", func(t *testing.T) {
+		t.Parallel()
+
+		a := newAPIWith(t, &graphtest.Told{})
+
+		status, body := a.do(t, http.MethodPost, "/api/fans?owner=owner-uuid&dry_run=true", `{"metadata": {"name": "kitchen"}, "spec": {"blades": 0}}`)
+		assert.Equal(t, http.StatusBadRequest, status)
+		assert.JSONEq(t, `{"errors": {"blades": "required_field"}}`, body)
+
+		status, body = a.do(t, http.MethodPost, "/api/fans?owner=owner-uuid&dry_run=perhaps", `{"metadata": {"name": "kitchen"}, "spec": {"blades": 3}}`)
+		assert.Equal(t, http.StatusBadRequest, status)
+		assert.JSONEq(t, `{"errors": {"dry_run": "invalid_value"}}`, body)
+	})
+
+	t.Run("a dry run of a delete changes nothing: a root's says what removing it would do, and anything else's which roots need it", func(t *testing.T) {
+		t.Parallel()
+
+		root := graph.Ref{Kind: kindstest.Kind, UUID: "web"}
+		needed := graph.Ref{Kind: kindstest.Kind, UUID: "needed"}
+
+		a := newAPIWith(t, &graphtest.Told{Depending: map[graph.Ref][]graph.Dependent{needed: {{Root: root, Name: "kitchen", Recreates: true}}}})
+		a.keep(t, kindstest.AFan("web", kindstest.Running, kindstest.Running))
+		a.keep(t, kindstest.AFan("needed", kindstest.Running, kindstest.Running, func(f *kindstest.Fan) {
+			f.Metadata.Owners = []kind.Reference{{Kind: kindstest.Kind, UUID: "web"}}
+		}))
+
+		status, body := a.do(t, http.MethodDelete, "/api/fans/web?dry_run=true", "")
+		require.Equal(t, http.StatusOK, status, body)
+		assert.JSONEq(t, `{"plan": {"levels": [[{"node": "fan/web", "kind": "fan", "verdict": "delete", "ref": {"kind": "fan", "uuid": "web"}}]]}}`, body)
+
+		status, body = a.do(t, http.MethodDelete, "/api/fans/needed?dry_run=true", "")
+		require.Equal(t, http.StatusOK, status, body)
+		assert.JSONEq(t, `{"dependents": [{"kind": "fan", "uuid": "web", "name": "kitchen", "recreates": true}], "recreated": true}`, body)
+
+		status, body = a.do(t, http.MethodDelete, "/api/fans/needed?dry_run=true&cascade=true", "")
+		require.Equal(t, http.StatusOK, status, body)
+		assert.JSONEq(t, `{"dependents": [{"kind": "fan", "uuid": "web", "name": "kitchen", "recreates": true, "plan": {"levels": [[{"node": "fan/web", "kind": "fan", "verdict": "delete", "ref": {"kind": "fan", "uuid": "web"}}]]}}], "recreated": false}`, body)
+
+		for _, uuid := range []string{"web", "needed"} {
+			fan, kept := a.stored(t, uuid)
+			require.True(t, kept)
+			assert.Equal(t, kindstest.Running, fan.Status.Expected, "%s is as it was", uuid)
+		}
+
+		assert.Empty(t, a.node.commands())
+
+		status, _ = a.do(t, http.MethodDelete, "/api/fans/nowhere?dry_run=true", "")
+		assert.Equal(t, http.StatusNotFound, status)
+	})
+
+	t.Run("a root's plan is how each of its nodes went, and its lease's failures; what is no root has none", func(t *testing.T) {
+		t.Parallel()
+
+		root := graph.Ref{Kind: kindstest.Kind, UUID: "web"}
+
+		a := newAPIWith(t, &graphtest.Told{})
+		a.keep(t, kindstest.AFan("web", kindstest.Running, kindstest.Running))
+		a.keep(t, kindstest.AFan("owned", kindstest.Running, kindstest.Running, func(f *kindstest.Fan) {
+			f.Metadata.Owners = []kind.Reference{root}
+		}))
+
+		started := kindstest.Moment
+		require.NoError(t, a.executions.Save(context.Background(), graph.Execution{
+			Root: root, Generation: 1, Node: "fan/web", Kind: kindstest.Kind, Action: graph.ActionCreate, Level: 0,
+			State: graph.StateWaiting, Reason: "its house is closed", StartedAt: started, FinishedAt: started.Add(time.Second),
+		}))
+
+		status, body := a.do(t, http.MethodGet, "/api/fans/web/plan?owner=owner-uuid", "")
+		require.Equal(t, http.StatusOK, status, body)
+		assert.JSONEq(t, `{
+			"root": {"kind": "fan", "uuid": "web"},
+			"generation": 1,
+			"nodes": [{"node": "fan/web", "level": 0, "kind": "fan", "action": "create", "state": "waiting", "reason": "its house is closed", "started_at": "2026-10-06T12:00:00Z", "finished_at": "2026-10-06T12:00:01Z"}]
+		}`, body)
+
+		_, err := a.leases.Take(context.Background(), "web", "one", time.Minute)
+		require.NoError(t, err)
+
+		released, err := a.leases.Release(context.Background(), "web", "one", graph.Ended{State: graph.StateFailed, Reason: "fan/web: broken", Backoff: graph.Backoff{First: time.Minute, Most: time.Minute}})
+		require.NoError(t, err)
+
+		status, body = a.do(t, http.MethodGet, "/api/fans/web/plan", "")
+		require.Equal(t, http.StatusOK, status, body)
+
+		lease := decode[struct {
+			Lease map[string]any `json:"lease"`
+		}](t, body).Lease
+
+		assert.Equal(t, map[string]any{"failures": float64(1), "next_at": released.NextAt.Format(time.RFC3339Nano), "reason": "fan/web: broken"}, lease)
+
+		for _, target := range []string{"/api/fans/owned/plan", "/api/fans/web/plan?owner=somebody-else", "/api/fans/nowhere/plan"} {
+			status, _ := a.do(t, http.MethodGet, target, "")
+			assert.Equal(t, http.StatusNotFound, status, target)
+		}
+	})
+
 	t.Run("somebody else's is not there to delete", func(t *testing.T) {
 		t.Parallel()
 
@@ -792,6 +949,28 @@ func TestRoute(t *testing.T) {
 		err := Route(http.NewServeMux(), []kind.Descriptor{d}, useCases())
 
 		assert.Error(t, err)
+	})
+
+	t.Run("served with no dry runs, a dry run is refused rather than done, and no plan is served", func(t *testing.T) {
+		t.Parallel()
+
+		mux := http.NewServeMux()
+		require.NoError(t, Route(mux, []kind.Descriptor{kindstest.Descriptor()}, useCases()))
+
+		for _, asked := range []struct{ method, target, body string }{
+			{http.MethodPost, "/api/fans?owner=owner-uuid&dry_run=true", `{"spec": {"blades": 3}}`},
+			{http.MethodDelete, "/api/fans/fan-uuid?dry_run=true", ""},
+		} {
+			recorder := httptest.NewRecorder()
+			mux.ServeHTTP(recorder, httptest.NewRequest(asked.method, asked.target, strings.NewReader(asked.body)))
+
+			assert.Equal(t, http.StatusBadRequest, recorder.Code, asked.target)
+			assert.JSONEq(t, `{"errors": {"dry_run": "invalid_value"}}`, recorder.Body.String())
+		}
+
+		recorder := httptest.NewRecorder()
+		mux.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/fans/fan-uuid/plan", nil))
+		assert.Equal(t, http.StatusNotFound, recorder.Code, "no query is called plan either")
 	})
 }
 

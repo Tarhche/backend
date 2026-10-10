@@ -48,12 +48,12 @@ func TestExecutor_Preview(t *testing.T) {
 				{Node: vm, Kind: vmKind.Name, Verdict: execute.Exists, Ref: graphtest.Ref(vm)},
 			},
 			{
-				{Node: network, Kind: networkKind.Name, Verdict: execute.Create},
+				{Node: network, Kind: networkKind.Name, Verdict: execute.Create, Reason: "it is not there"},
 				{Node: front, Kind: networkKind.Name, Verdict: execute.Exists, External: true, Ref: graphtest.Ref(front)},
-				{Node: volume, Kind: volumeKind.Name, Verdict: execute.Wait, External: true},
+				{Node: volume, Kind: volumeKind.Name, Verdict: execute.Wait, Reason: "it is external, and missing", External: true},
 			},
 			{
-				{Node: web, Kind: containerKind.Name, Verdict: execute.Create},
+				{Node: web, Kind: containerKind.Name, Verdict: execute.Create, Reason: "it is not there"},
 			},
 		}}, preview)
 
@@ -69,12 +69,12 @@ func TestExecutor_Preview(t *testing.T) {
 				{"node": "vm/v-uuid", "kind": "vm", "verdict": "exists", "ref": {"kind": "vm", "uuid": "v-uuid"}}
 			],
 			[
-				{"node": "network/s_default", "kind": "network", "verdict": "create"},
+				{"node": "network/s_default", "kind": "network", "verdict": "create", "reason": "it is not there"},
 				{"node": "network/s_front", "kind": "network", "verdict": "exists", "external": true, "ref": {"kind": "network", "uuid": "s_front"}},
-				{"node": "volume/s_data", "kind": "volume", "verdict": "wait", "external": true}
+				{"node": "volume/s_data", "kind": "volume", "verdict": "wait", "reason": "it is external, and missing", "external": true}
 			],
 			[
-				{"node": "container/s_web", "kind": "container", "verdict": "create"}
+				{"node": "container/s_web", "kind": "container", "verdict": "create", "reason": "it is not there"}
 			]
 		]}`, string(served), "as it is served")
 	})
@@ -98,11 +98,11 @@ func TestExecutor_Preview(t *testing.T) {
 				{Node: vm, Kind: vmKind.Name, Verdict: execute.Exists, Ref: graphtest.Ref(vm)},
 			},
 			{
-				{Node: network, Kind: networkKind.Name, Verdict: execute.Create, Ref: graphtest.Ref(network)},
-				{Node: volume, Kind: volumeKind.Name, Verdict: execute.Wait, External: true, Ref: graphtest.Ref(volume)},
+				{Node: network, Kind: networkKind.Name, Verdict: execute.Create, Reason: "it is there, and not made", Ref: graphtest.Ref(network)},
+				{Node: volume, Kind: volumeKind.Name, Verdict: execute.Wait, Reason: "it is external, and missing", External: true, Ref: graphtest.Ref(volume)},
 			},
 			{
-				{Node: web, Kind: containerKind.Name, Verdict: execute.Create},
+				{Node: web, Kind: containerKind.Name, Verdict: execute.Create, Reason: "it is not there"},
 			},
 		}}, preview)
 	})
@@ -198,7 +198,7 @@ func TestExecutor_PreviewRemove(t *testing.T) {
 
 		assert.Equal(t, execute.Preview{Levels: [][]execute.Previewed{
 			{
-				{Node: shared, Kind: networkKind.Name, Verdict: execute.Unlink, Ref: ref(shared)},
+				{Node: shared, Kind: networkKind.Name, Verdict: execute.Unlink, Reason: "kept, owned by container/c_other", Ref: ref(shared)},
 			},
 			{
 				{Node: stack, Kind: stackKind.Name, Verdict: execute.Delete, Ref: ref(stack)},
@@ -210,15 +210,15 @@ func TestExecutor_PreviewRemove(t *testing.T) {
 				{Node: api, Kind: containerKind.Name, Verdict: execute.Delete, Ref: ref(api)},
 			},
 			{
-				{Node: db, Kind: containerKind.Name, Verdict: execute.Gone},
+				{Node: db, Kind: containerKind.Name, Verdict: execute.Gone, Reason: "it is gone already"},
 			},
 			{
 				{Node: network, Kind: networkKind.Name, Verdict: execute.Delete, Ref: ref(network)},
 			},
 			{
-				{Node: front, Kind: networkKind.Name, Verdict: execute.Keep, External: true},
-				{Node: vm, Kind: vmKind.Name, Verdict: execute.Keep},
-				{Node: volume, Kind: volumeKind.Name, Verdict: execute.Keep},
+				{Node: front, Kind: networkKind.Name, Verdict: execute.Keep, Reason: "it is external", External: true},
+				{Node: vm, Kind: vmKind.Name, Verdict: execute.Keep, Reason: "the root does not own it"},
+				{Node: volume, Kind: volumeKind.Name, Verdict: execute.Keep, Reason: "the root does not own it"},
 			},
 		}}, preview, "unlinked first, then removed from the top down, and last what is never touched")
 
@@ -236,7 +236,7 @@ func TestExecutor_PreviewRemove(t *testing.T) {
 
 		assert.JSONEq(t, `{"levels": [
 			[
-				{"node": "network/shared", "kind": "network", "verdict": "unlink", "ref": {"kind": "network", "uuid": "shared"}}
+				{"node": "network/shared", "kind": "network", "verdict": "unlink", "reason": "kept, owned by container/c_other", "ref": {"kind": "network", "uuid": "shared"}}
 			],
 			[
 				{"node": "stack/s-uuid", "kind": "stack", "verdict": "delete", "ref": {"kind": "stack", "uuid": "s-uuid"}}
@@ -248,15 +248,15 @@ func TestExecutor_PreviewRemove(t *testing.T) {
 				{"node": "container/s_api", "kind": "container", "verdict": "delete", "ref": {"kind": "container", "uuid": "s_api"}}
 			],
 			[
-				{"node": "container/s_db", "kind": "container", "verdict": "gone"}
+				{"node": "container/s_db", "kind": "container", "verdict": "gone", "reason": "it is gone already"}
 			],
 			[
 				{"node": "network/s_default", "kind": "network", "verdict": "delete", "ref": {"kind": "network", "uuid": "s_default"}}
 			],
 			[
-				{"node": "network/s_front", "kind": "network", "verdict": "keep", "external": true},
-				{"node": "vm/v-uuid", "kind": "vm", "verdict": "keep"},
-				{"node": "volume/s_data", "kind": "volume", "verdict": "keep"}
+				{"node": "network/s_front", "kind": "network", "verdict": "keep", "reason": "it is external", "external": true},
+				{"node": "vm/v-uuid", "kind": "vm", "verdict": "keep", "reason": "the root does not own it"},
+				{"node": "volume/s_data", "kind": "volume", "verdict": "keep", "reason": "the root does not own it"}
 			]
 		]}`, string(served), "as it is served")
 	})

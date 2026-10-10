@@ -186,6 +186,10 @@ func TestCheck(t *testing.T) {
 			breaking: func(d *Descriptor) { changing(d, "stop", func(a *Action) { a.Name = "stop.now" }) },
 			want:     `action "stop.now": its name is not a lowercase word`,
 		},
+		"an action named as a root's plan is served": {
+			breaking: func(d *Descriptor) { changing(d, "logs", func(a *Action) { a.Name = PlanAction }) },
+			want:     `action "plan" is named as a root's plan is served on the resource API, which it would be taken for`,
+		},
 		"an action declared twice": {
 			breaking: func(d *Descriptor) { d.Actions = append(d.Actions, d.Actions[1]) },
 			want:     `action "start" is declared more than once`,

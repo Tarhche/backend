@@ -13,9 +13,11 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/graph/reconcile"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/blocks"
 	controlPlaneContainers "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/container"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/getPlan"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/heartbeatResources"
 	controlPlaneImages "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/image"
 	controlPlaneNetworks "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/network"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/planResource"
 	kindsReconcileResources "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/reconcileResources"
 	controlPlaneSnapshots "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/snapshot"
 	controlPlaneStacks "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/stack"
@@ -45,6 +47,7 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/core/request"
 	"github.com/khanzadimahdi/testproject/infrastructure/workload/scheduler/roundrobin"
+	controlPlaneKindsAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/controlplane/api/kinds"
 )
 
 // ControlPlaneStores are what the control plane keeps everything it runs
@@ -275,9 +278,14 @@ func NewControlPlaneWorkload(
 	relay.To(graphs)
 
 	// the resource API of every kind registered, each under its own plural,
-	// and the kinds themselves.
+	// and the kinds themselves: its dry runs preview what the graphs of roots
+	// would do, and how each root's plan went is served beside its queries.
+	useCases := kinds.UseCases
+	useCases.Plan = planResource.NewUseCase(registry, kinds.Resources, kinds.Admit, graphRoots(), graphs)
+	useCases.GetPlan = getPlan.NewUseCase(registry, kinds.Resources, stores.Executions, stores.Leases, graphRoots())
+
 	route := func(mux *http.ServeMux) error {
-		return kinds.Route(mux)
+		return controlPlaneKindsAPI.Route(mux, registry.Descriptors(), useCases)
 	}
 
 	// what the nodes hold of every kind whose state is theirs to say, heard an

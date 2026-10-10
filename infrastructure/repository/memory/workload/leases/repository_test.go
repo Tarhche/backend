@@ -86,6 +86,9 @@ func TestRepository_clock(t *testing.T) {
 
 		assert.ErrorIs(t, repository.Forget(ctx, "root"), broken)
 
+		_, err = repository.Get(ctx, "root")
+		assert.ErrorIs(t, err, broken)
+
 		_, kept := repository.Lease("root")
 		assert.False(t, kept)
 	})

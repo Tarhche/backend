@@ -226,8 +226,13 @@ func (s *Tasks) Prepare(ctx context.Context, t taskKind.Task, action string, _ a
 }
 
 // place is the node a task goes to: one of those that spoke lately, as the
-// scheduler picks, or none when none has.
+// scheduler picks, or none when none has. In a dry run (kind.DryRun) it is
+// none: the scheduler picks in turn, and a dry run takes nobody's turn.
 func (s *Tasks) place(ctx context.Context) (string, error) {
+	if kind.IsDryRun(ctx) {
+		return "", nil
+	}
+
 	nodes, err := s.Nodes.GetAll(ctx, 0, nodesLimit)
 	if err != nil {
 		return "", err

@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/graph"
 )
 
@@ -315,6 +316,44 @@ func Repository(t *testing.T, make Maker) {
 
 		_, err = repository.Renew(ctx, cache, another, time.Minute)
 		assert.NoError(t, err, "nor is forgetting one forgetting another")
+	})
+
+	t.Run("a lease is read as it is kept, held or let go of, and taking nothing, and one there is none of is not there", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		repository := make(t)
+
+		_, err := repository.Get(ctx, shop)
+		require.ErrorIs(t, err, domain.ErrNotExists)
+
+		taken, err := repository.Take(ctx, shop, one, time.Minute)
+		require.NoError(t, err)
+
+		read, err := repository.Get(ctx, shop)
+		require.NoError(t, err)
+		assert.Equal(t, taken, read, "held, as it was taken")
+
+		released, err := repository.Release(ctx, shop, one, graph.Ended{State: graph.StateFailed, Reason: "its vm has no room", Backoff: loops})
+		require.NoError(t, err)
+
+		read, err = repository.Get(ctx, shop)
+		require.NoError(t, err)
+		assert.Equal(t, released, read, "let go of, its failure and its backoff kept")
+		assert.Equal(t, 1, read.Failures)
+		assert.Equal(t, "its vm has no room", read.Reason)
+		assert.Empty(t, read.Holder)
+
+		_, err = repository.Get(ctx, cache)
+		assert.ErrorIs(t, err, domain.ErrNotExists, "each root's is its own")
+
+		_, err = repository.Take(ctx, shop, another, time.Minute)
+		assert.ErrorIs(t, err, graph.ErrBackedOff, "and reading it took nothing")
+
+		require.NoError(t, repository.Forget(ctx, shop))
+
+		_, err = repository.Get(ctx, shop)
+		assert.ErrorIs(t, err, domain.ErrNotExists, "nor is one forgotten")
 	})
 
 	t.Run("a lease of no root, for nobody, or for less than a millisecond is not taken, nor anything else done to it", func(t *testing.T) {

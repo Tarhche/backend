@@ -162,6 +162,42 @@ func TestChooser_Choose(t *testing.T) {
 		assert.Zero(t, w.Memory.Len(vmKind.Name), "nobody asked for it but what cannot go into it")
 	})
 
+	t.Run("in a dry run, one is admitted as a dry run, and nothing is kept or sent", func(t *testing.T) {
+		t.Parallel()
+
+		w := vmtest.New()
+
+		chosen, refused, err := w.Chooser.Choose(kind.DryRun(ctx), "owner", dockervm.Choice{Name: "builds"})
+		require.NoError(t, err)
+		require.Empty(t, refused)
+
+		assert.NotEmpty(t, chosen.Metadata.UUID, "under a uuid nothing holds")
+		assert.Equal(t, "builds", chosen.Metadata.Name)
+		assert.NotEmpty(t, chosen.Metadata.Slug)
+		assert.Equal(t, vmtest.Node, chosen.Metadata.Node, "where it would be placed")
+		assert.Equal(t, vmKind.Scheduled, chosen.Status.State, "as its create would leave it")
+		assert.True(t, vmKind.Up(chosen), "on its way up, as one made for what goes into it always is")
+
+		assert.Zero(t, w.Memory.Len(vmKind.Name), "nothing is kept")
+
+		var command kind.ActOnResource
+		assert.False(t, w.Producer.Last(kind.ActOnResourceName, &command), "nor sent")
+	})
+
+	t.Run("and one no node has room for is refused, with nothing kept to take away", func(t *testing.T) {
+		t.Parallel()
+
+		full := vmtest.Alive(vmtest.Node)
+		full.Capacity.Allocated = vm.Resources{Memory: 64 * vmtest.GiB}
+
+		w := vmtest.New(vmtest.WithNodes(full))
+
+		_, refused, err := w.Chooser.Choose(kind.DryRun(ctx), "owner", dockervm.Choice{})
+		require.NoError(t, err)
+		assert.Equal(t, domain.ValidationErrors{"vm": dockervm.ReasonNoCapacity}, refused)
+		assert.Zero(t, w.Memory.Len(vmKind.Name))
+	})
+
 	t.Run("somebody has to be asking", func(t *testing.T) {
 		t.Parallel()
 

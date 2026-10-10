@@ -125,4 +125,9 @@ type Leases interface {
 	// Forget removes the root's lease, its failures with it, once the root
 	// is gone. One there is none of is forgotten already.
 	Forget(ctx context.Context, rootUUID string) error
+
+	// Get is the root's lease as it is kept, held or not, taking nothing:
+	// how its plan went lately, for whoever asks. One there is none of is
+	// domain.ErrNotExists.
+	Get(ctx context.Context, rootUUID string) (Lease, error)
 }

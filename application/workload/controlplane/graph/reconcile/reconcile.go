@@ -28,6 +28,8 @@
 // root went. The same walk says which live roots need a record, and whether
 // each makes it again (Dependents, its graph.Dependents), queueing nothing:
 // what a record's delete answers with, and takes with it when it is asked to.
+// What carrying a root's graph out, or removing it, would do now is read and
+// not done (PreviewCreate, PreviewRemove): a dry run's answer.
 //
 // It runs the kinds it is given as roots, and no others: given none, nothing
 // is queued, read or reconciled.

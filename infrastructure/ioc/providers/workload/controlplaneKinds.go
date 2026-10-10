@@ -14,6 +14,7 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/getResource"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/getResources"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/observe"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/planResource"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/queryResource"
 	kindsReconcileResources "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/reconcileResources"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/recordResult"
@@ -47,8 +48,14 @@ type ControlPlaneKindStores struct {
 // it was asked to be.
 type ControlPlaneKinds struct {
 	// Route serves the resource API, a kind's routes under its plural, and
-	// is an error for a kind whose routes are taken already.
-	Route func(mux *http.ServeMux) error
+	// is an error for a kind whose routes are taken already: its dry runs say
+	// what would be admitted, and which roots need what would be deleted, but
+	// nothing of what carrying a root's graph out would do, and no root's
+	// plan is served. UseCases are what it serves, for a control plane that
+	// keeps the graphs of roots to serve with what previews them and keeps
+	// how their plans went.
+	Route    func(mux *http.ServeMux) error
+	UseCases controlPlaneKindsAPI.UseCases
 
 	// Subscribers hear workloadResourceActedOn.
 	Subscribers map[string]domain.MessageHandler
@@ -215,14 +222,17 @@ func NewControlPlaneKinds(
 
 	observer := observe.NewObserver(registry, resources, logger, observing...)
 
+	admission := admitResource.NewUseCase(registry, resources, dispatcher, logger, admitting...)
+
 	useCases := controlPlaneKindsAPI.UseCases{
-		Admit:  admitResource.NewUseCase(registry, resources, dispatcher, logger, admitting...),
+		Admit:  admission,
 		Act:    actOnResource.NewUseCase(registry, resources, dispatcher, logger, acting...),
 		Delete: deleteResource.NewUseCase(registry, resources, dispatcher, deleting...),
 		Get:    getResource.NewUseCase(registry, resources),
 		List:   getResources.NewUseCase(registry, resources),
 		Query:  queryResource.NewUseCase(registry, resources, requester, observer, nil),
 		Kinds:  getKinds.NewUseCase(registry),
+		Plan:   planResource.NewUseCase(registry, resources, admission, nil, nil),
 	}
 
 	recording = append(recording, recordResult.WithRestorer(resources.Cascade()))
@@ -234,6 +244,7 @@ func NewControlPlaneKinds(
 		Subscribers: map[string]domain.MessageHandler{
 			kind.ResourceActedOnName: recordResult.NewResourceActedOnHandler(registry, resources, waiting, logger, nil, recording...),
 		},
+		UseCases:   useCases,
 		Observer:   observer,
 		Reconcile:  kindsReconcileResources.NewUseCase(registry, resources, stores.Nodes, dispatcher, observer, logger, settings.reconcile, reconciling...),
 		Admit:      useCases.Admit,

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -649,4 +650,103 @@ func TestUseCase_Execute_roots(t *testing.T) {
 			assert.Empty(t, told.Queued())
 		})
 	}
+}
+
+// watching is the fans' strategy, which keeps whether it was last asked to
+// admit one as a dry run.
+type watching struct {
+	*kindstest.Fans
+
+	dry atomic.Bool
+}
+
+func (w *watching) Admit(ctx context.Context, asked kindstest.Fan) (kindstest.Fan, domain.ValidationErrors, error) {
+	w.dry.Store(kind.IsDryRun(ctx))
+
+	return w.Fans.Admit(ctx, asked)
+}
+
+// TestUseCase_Execute_dryRun holds an admission asked as a dry run to keeping,
+// sending and queueing nothing: its kind admits it as a dry run, and it is
+// answered as it would be kept, and as its first command would leave it.
+func TestUseCase_Execute_dryRun(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	// watched is a registry of the fans, through strategy.
+	watched := func(strategy *watching) func(fans *kindstest.Fans) *kind.Registry[kind.ControlPlaneBinding] {
+		return func(fans *kindstest.Fans) *kind.Registry[kind.ControlPlaneBinding] {
+			strategy.Fans = fans
+
+			registry := kind.NewRegistry[kind.ControlPlaneBinding]()
+			if err := registry.Register(kind.BindControlPlane[kindstest.Spec, kindstest.Status](kindstest.Descriptor(), strategy)); err != nil {
+				panic(err)
+			}
+
+			return registry
+		}
+	}
+
+	t.Run("what would be admitted is answered, as its first command would leave it, and nothing is kept, sent or queued", func(t *testing.T) {
+		t.Parallel()
+
+		strategy := &watching{}
+		told := &graphtest.Told{}
+		f := newFixture(watched(strategy), admitResource.WithGraphs(graph.Roots{kindstest.Kind}, told))
+
+		request := asked("kitchen", `{"blades": 3, "house": "house-1"}`)
+		request.DryRun = true
+		request.Wait = time.Minute
+
+		response, err := f.useCase.Execute(ctx, &request)
+		require.NoError(t, err)
+		require.Empty(t, response.ValidationErrors)
+
+		assert.True(t, strategy.dry.Load(), "its kind admitted it as a dry run")
+
+		fan := kindstest.Typed(resource.Record{Raw: response.Resource})
+		assert.NotEmpty(t, fan.Metadata.UUID, "under a uuid of its own")
+		assert.Equal(t, "kitchen-fan", fan.Metadata.Slug, "as its kind gave it")
+		assert.Equal(t, kindstest.OwnerUUID, fan.Metadata.OwnerUUID)
+		assert.Equal(t, int64(1), fan.Metadata.Generation)
+		assert.Equal(t, kindstest.Starting, fan.Status.State, "as its create would leave it")
+		assert.Equal(t, kindstest.Running, fan.Status.Expected)
+
+		assert.Nil(t, response.Command)
+		assert.Nil(t, response.Result)
+		assert.Empty(t, f.all(t), "nothing is kept")
+		assert.Empty(t, f.producer.Messages(), "nor sent")
+		assert.Empty(t, told.Queued(), "nor queued")
+	})
+
+	t.Run("what it would be refused is refused, and nothing is kept", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(watched(&watching{}))
+
+		request := asked("kitchen", `{"blades": 0}`)
+		request.DryRun = true
+
+		response, err := f.useCase.Execute(ctx, &request)
+		require.NoError(t, err)
+
+		assert.Equal(t, domain.ValidationErrors{"blades": "required_field"}, response.ValidationErrors)
+		assert.Empty(t, f.all(t))
+	})
+
+	t.Run("an admission that is no dry run is no dry run to its kind", func(t *testing.T) {
+		t.Parallel()
+
+		strategy := &watching{}
+		f := newFixture(watched(strategy))
+
+		request := asked("kitchen", `{"blades": 3}`)
+
+		_, err := f.useCase.Execute(ctx, &request)
+		require.NoError(t, err)
+
+		assert.False(t, strategy.dry.Load())
+		assert.Len(t, f.all(t), 1)
+	})
 }

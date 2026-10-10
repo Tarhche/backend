@@ -54,6 +54,12 @@ type Previewed struct {
 	Kind    string       `json:"kind"`
 	Verdict Verdict      `json:"verdict"`
 
+	// Reason is why it is what it would be, in a few words, when there is
+	// anything to say: what would be made is not there, or not made; what
+	// would be waited on is external, and missing; what would be kept is
+	// owned by what stays, or not by the root.
+	Reason string `json:"reason,omitempty"`
+
 	// External is a node made by somebody else, which is never made or
 	// removed here.
 	External bool `json:"external,omitempty"`
@@ -92,8 +98,13 @@ func (e *Executor) Preview(ctx context.Context, plan *graph.Plan) (Preview, erro
 				previewed.Verdict = Exists
 			case node.External:
 				previewed.Verdict = Wait
+				previewed.Reason = "it is external, and missing"
+			case ref == (graph.Ref{}):
+				previewed.Verdict = Create
+				previewed.Reason = "it is not there"
 			default:
 				previewed.Verdict = Create
+				previewed.Reason = "it is there, and not made"
 			}
 
 			level = append(level, previewed)
@@ -135,14 +146,16 @@ func (e *Executor) PreviewRemove(ctx context.Context, plan *graph.Plan) (Preview
 
 			previewed := Previewed{Node: id, Kind: node.Kind, External: node.External, Ref: d.records[id]}
 
-			_, kept := d.kept[id]
+			owners, kept := d.kept[id]
 			_, recorded := d.records[id]
 
 			switch {
 			case kept:
 				previewed.Verdict = Unlink
+				previewed.Reason = keptBy(owners)
 			case !recorded:
 				previewed.Verdict = Gone
+				previewed.Reason = "it is gone already"
 			default:
 				previewed.Verdict = Delete
 			}
@@ -156,9 +169,16 @@ func (e *Executor) PreviewRemove(ctx context.Context, plan *graph.Plan) (Preview
 	var untouched []Previewed
 
 	for _, node := range plan.Nodes() {
-		if !slices.Contains(d.candidates, node.ID()) {
-			untouched = append(untouched, Previewed{Node: node.ID(), Kind: node.Kind, Verdict: Keep, External: node.External})
+		if slices.Contains(d.candidates, node.ID()) {
+			continue
 		}
+
+		reason := "the root does not own it"
+		if node.External {
+			reason = "it is external"
+		}
+
+		untouched = append(untouched, Previewed{Node: node.ID(), Kind: node.Kind, Verdict: Keep, Reason: reason, External: node.External})
 	}
 
 	if len(untouched) > 0 {

@@ -127,6 +127,28 @@ func TestTasks_Admit(t *testing.T) {
 		assert.Equal(t, task.DefaultMaxRetries(task.KindService), *admitted.Spec.MaxRetries)
 	})
 
+	t.Run("in a dry run, it is placed on no node, and the scheduler's turn is not taken", func(t *testing.T) {
+		t.Parallel()
+
+		scheduler := &picking{}
+
+		f := strategy([]node.Node{spoke("node-01", time.Second)})
+		f.tasks.Scheduler = scheduler
+
+		admitted, invalid, err := f.tasks.Admit(kind.DryRun(ctx), snippet())
+		require.NoError(t, err)
+		require.Empty(t, invalid)
+
+		assert.Empty(t, admitted.Metadata.Node)
+		assert.NotEmpty(t, admitted.Metadata.Slug, "its slug is given, which nothing holds until it is kept")
+		assert.Zero(t, scheduler.picked)
+
+		admitted, _, err = f.tasks.Admit(ctx, snippet())
+		require.NoError(t, err)
+		assert.Equal(t, "node-01", admitted.Metadata.Node, "and when it is no dry run, it is")
+		assert.Equal(t, 1, scheduler.picked)
+	})
+
 	t.Run("one admitted while no node has spoken lately is placed when it is run", func(t *testing.T) {
 		t.Parallel()
 
@@ -367,4 +389,15 @@ func TestBinding(t *testing.T) {
 		"limits.memory": "required_field",
 		"limits.disk":   "required_field",
 	}, invalid)
+}
+
+// picking is a scheduler that picks the first node, and counts its turns.
+type picking struct {
+	picked int
+}
+
+func (p *picking) Pick(candidates []node.Node) node.Node {
+	p.picked++
+
+	return candidates[0]
 }

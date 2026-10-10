@@ -10,8 +10,10 @@ import (
 	admitResource "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/admitResource"
 	deleteResource "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/deleteResource"
 	getKinds "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/getKinds"
+	getPlan "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/getPlan"
 	getResource "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/getResource"
 	getResources "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/getResources"
+	planResource "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/planResource"
 	queryResource "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/queryResource"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
@@ -110,15 +112,19 @@ func (h *indexHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 type createHandler struct {
 	useCase  *admitResource.UseCase
+	plan     *planResource.UseCase
 	kindName string
 }
 
-func NewCreateHandler(useCase *admitResource.UseCase, kindName string) *createHandler {
-	return &createHandler{useCase: useCase, kindName: kindName}
+// NewCreateHandler admits a kind's resources through useCase, and says what
+// admitting one would do through plan, which may be nothing: a dry run is
+// refused then.
+func NewCreateHandler(useCase *admitResource.UseCase, plan *planResource.UseCase, kindName string) *createHandler {
+	return &createHandler{useCase: useCase, plan: plan, kindName: kindName}
 }
 
 // @Summary		Admit a resource
-// @Description	admit a resource of a kind for its owner: its kind sets its defaults, checks it and places it, and it is sent the first command its kind asks for; with wait, the answer waits that long for what came of that command
+// @Description	admit a resource of a kind for its owner: its kind sets its defaults, checks it and places it, and it is sent the first command its kind asks for; with wait, the answer waits that long for what came of that command. With dry_run, nothing is kept or sent: the answer is what would be admitted, and, of a root of a graph, what carrying out its graph would do, level by level
 // @Tags			workload resources
 // @Accept			json
 // @Produce		json
@@ -126,7 +132,9 @@ func NewCreateHandler(useCase *admitResource.UseCase, kindName string) *createHa
 // @Param			owner	query		string		true	"Whom the resource is for"
 // @Param			parent	query		string		false	"The resource it is to live in"
 // @Param			wait	query		string		false	"How long to wait for its first command's result: seconds, or a duration such as 90s"
+// @Param			dry_run	query		bool		false	"Say what would be admitted, and keep nothing"
 // @Param			body	body		kind.Raw	true	"The manifest: its metadata's name, labels, owners and lifetime, and its spec"
+// @Success		200		{object}	previewedAdmission
 // @Success		201		{object}	commanded
 // @Failure		400		{object}	map[string]interface{}
 // @Failure		500		{object}	map[string]interface{}
@@ -137,8 +145,19 @@ func (h *createHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	dryRun, ok := flag(rw, r, "dry_run")
+	if !ok {
+		return
+	}
+
 	var manifest kind.Raw
 	if !respond.Decode(rw, r, &manifest) {
+		return
+	}
+
+	if dryRun {
+		h.dryRun(rw, r, manifest)
+
 		return
 	}
 
@@ -157,6 +176,32 @@ func (h *createHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		respond.Refused(rw, response.ValidationErrors)
 	default:
 		respondCommanded(rw, response.Resource, false, response.Command, response.Result, true)
+	}
+}
+
+// dryRun says what admitting manifest would do, and does nothing: a route
+// that serves no dry run refuses one.
+func (h *createHandler) dryRun(rw http.ResponseWriter, r *http.Request, manifest kind.Raw) {
+	if h.plan == nil {
+		respond.Refused(rw, domain.ValidationErrors{"dry_run": "invalid_value"})
+
+		return
+	}
+
+	response, err := h.plan.Execute(r.Context(), &planResource.Request{
+		Kind:      h.kindName,
+		OwnerUUID: respond.Owner(r),
+		Parent:    r.URL.Query().Get("parent"),
+		Manifest:  manifest,
+	})
+
+	switch {
+	case err != nil:
+		failed(rw, r, err)
+	case len(response.ValidationErrors) > 0:
+		respond.Refused(rw, response.ValidationErrors)
+	default:
+		respond.JSON(rw, http.StatusOK, previewedAdmission{Resource: &response.Resource, Plan: response.Plan})
 	}
 }
 
@@ -198,11 +243,15 @@ func (h *showHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 type deleteHandler struct {
 	useCase  *deleteResource.UseCase
+	plan     *planResource.UseCase
 	kindName string
 }
 
-func NewDeleteHandler(useCase *deleteResource.UseCase, kindName string) *deleteHandler {
-	return &deleteHandler{useCase: useCase, kindName: kindName}
+// NewDeleteHandler deletes a kind's resources through useCase, and says what
+// deleting one would do through plan, which may be nothing: a dry run is
+// refused then.
+func NewDeleteHandler(useCase *deleteResource.UseCase, plan *planResource.UseCase, kindName string) *deleteHandler {
+	return &deleteHandler{useCase: useCase, plan: plan, kindName: kindName}
 }
 
 // @Summary		Delete a resource
@@ -215,7 +264,8 @@ func NewDeleteHandler(useCase *deleteResource.UseCase, kindName string) *deleteH
 // @Param			parent	query		string	false	"The resource it lives in: inside it, a kind may name it by more than its uuid"
 // @Param			wait	query		string	false	"How long to wait for its node to say it is gone"
 // @Param			cascade	query		bool	false	"Delete the roots whose graphs need it with it"
-// @Success		200		{object}	commanded
+// @Param			dry_run	query		bool	false	"Say what deleting it would do, and do nothing: of a root, what removing it would remove, unlink and keep; of anything else, the roots that need it, and, with cascade, what removing each would do"
+// @Success		200		{object}	previewedNeeded
 // @Success		202		{object}	deleted
 // @Success		204
 // @Failure		400		{object}	map[string]interface{}
@@ -230,6 +280,17 @@ func (h *deleteHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 	cascade, ok := flag(rw, r, "cascade")
 	if !ok {
+		return
+	}
+
+	dryRun, ok := flag(rw, r, "dry_run")
+	if !ok {
+		return
+	}
+
+	if dryRun {
+		h.dryRun(rw, r, cascade)
+
 		return
 	}
 
@@ -267,6 +328,33 @@ func (h *deleteHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	}
 
 	respondCommanded(rw, response.Resource, response.Gone, response.Command, response.Result, false)
+}
+
+// dryRun says what deleting the resource the request names would do, with
+// the roots that need it when cascade says so, and does nothing: a route that
+// serves no dry run refuses one.
+func (h *deleteHandler) dryRun(rw http.ResponseWriter, r *http.Request, cascade bool) {
+	if h.plan == nil {
+		respond.Refused(rw, domain.ValidationErrors{"dry_run": "invalid_value"})
+
+		return
+	}
+
+	response, err := h.plan.Execute(r.Context(), &planResource.Request{
+		Kind:      h.kindName,
+		OwnerUUID: respond.Owner(r),
+		Parent:    r.URL.Query().Get("parent"),
+		Delete:    true,
+		UUID:      r.PathValue("uuid"),
+		Cascade:   cascade,
+	})
+	if err != nil {
+		failed(rw, r, err)
+
+		return
+	}
+
+	respond.JSON(rw, http.StatusOK, previewedDeleteOf(response))
 }
 
 type actionHandler struct {
@@ -404,6 +492,43 @@ func (h *queryHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	default:
 		respond.JSON(rw, http.StatusOK, answer{Result: response.Result, Truncated: response.Truncated})
 	}
+}
+
+type planHandler struct {
+	useCase  *getPlan.UseCase
+	kindName string
+}
+
+func NewPlanHandler(useCase *getPlan.UseCase, kindName string) *planHandler {
+	return &planHandler{useCase: useCase, kindName: kindName}
+}
+
+// @Summary		How a root's plan went
+// @Description	how the plan of a root of a graph went, the last time it was carried out: each node's level, kind, action, state, reason, record and times, and its lease's failures, next try and reason. What is no root is not there
+// @Tags			workload resources
+// @Produce		json
+// @Param			plural	path		string	true	"The kind's plural"
+// @Param			uuid	path		string	true	"Resource UUID, or what else names it inside its parent"
+// @Param			owner	query		string	false	"Only this owner's"
+// @Param			parent	query		string	false	"The resource it lives in: inside it, a kind may name it by more than its uuid"
+// @Success		200		{object}	planShown
+// @Failure		404		{object}	map[string]interface{}
+// @Failure		500		{object}	map[string]interface{}
+// @Router			/{plural}/{uuid}/plan [get]
+func (h *planHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
+	response, err := h.useCase.Execute(r.Context(), &getPlan.Request{
+		Kind:      h.kindName,
+		OwnerUUID: respond.Owner(r),
+		UUID:      r.PathValue("uuid"),
+		Parent:    r.URL.Query().Get("parent"),
+	})
+	if err != nil {
+		failed(rw, r, err)
+
+		return
+	}
+
+	respond.JSON(rw, http.StatusOK, planShownOf(response))
 }
 
 type kindsHandler struct {

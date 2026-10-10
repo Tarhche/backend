@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/graph"
 )
 
@@ -158,6 +159,22 @@ func (r *Repository) Forget(_ context.Context, rootUUID string) error {
 	delete(r.of(), rootUUID)
 
 	return nil
+}
+
+func (r *Repository) Get(_ context.Context, rootUUID string) (graph.Lease, error) {
+	if r.Fail != nil {
+		return graph.Lease{}, r.Fail
+	}
+
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	lease, kept := r.of()[rootUUID]
+	if !kept {
+		return graph.Lease{}, domain.ErrNotExists
+	}
+
+	return lease, nil
 }
 
 // Lease is the lease kept of the root uuid names, and whether one is, for a

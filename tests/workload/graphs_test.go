@@ -548,3 +548,233 @@ func deletedOf(t *testing.T, body []byte) deletedAnswer {
 
 	return answer
 }
+
+// TestDryRunsAndPlans asks the control plane what admitting a container, and
+// deleting one or its VM, would do, which keeps, sends and changes nothing,
+// and how a container's plan went.
+func TestDryRunsAndPlans(t *testing.T) {
+	t.Parallel()
+
+	w := start(t)
+	ctx := t.Context()
+
+	vmUUID := w.dockerVM(t, "builds")
+
+	t.Run("a container's admission, in a docker vm it names, is answered with its graph's levels, and nothing is kept", func(t *testing.T) {
+		status, body := w.controlPlaneWith(t, http.MethodPost, "/api/containers", url.Values{"dry_run": {"true"}}, `{
+			"metadata": {"name": "web"},
+			"spec": {"name": "web", "image": "nginx:1.27", "vm": {"uuid": "`+vmUUID+`"}, "networks": ["backend"], "mounts": [{"type": "volume", "source": "data", "target": "/data"}]}
+		}`)
+		require.Equal(t, http.StatusOK, status, string(body))
+
+		answer := admittedOf(t, body)
+		assert.Equal(t, vmUUID, answer.Resource.Spec.VM.UUID)
+		assert.Equal(t, containerKind.Pending, answer.Resource.Status.Status.State, "its graph's to make")
+
+		assert.Equal(t, [][]previewedNode{
+			{{Node: graph.ID(vmKind.Name, vmUUID), Kind: vmKind.Name, Verdict: "exists"}},
+			{
+				{Node: graph.ID(networkKind.Name, "backend"), Kind: networkKind.Name, Verdict: "create", Reason: "it is not there"},
+				{Node: graph.ID(volumeKind.Name, "data"), Kind: volumeKind.Name, Verdict: "create", Reason: "it is not there"},
+			},
+			{{Node: graph.ID(containerKind.Name, "web"), Kind: containerKind.Name, Verdict: "create", Reason: "it is not there"}},
+		}, answer.levels())
+
+		assert.Empty(t, w.containerRecords(t, vmUUID), "nothing is kept")
+
+		_, kept := w.findBlock(t, networkKind.Name, vmUUID, "backend")
+		assert.False(t, kept)
+
+		_, there := w.dockerd.Holds(t, vmUUID).Container("web")
+		assert.False(t, there, "nor made")
+	})
+
+	t.Run("one naming no vm is answered with the vm its graph would make, kept nowhere", func(t *testing.T) {
+		before, _, err := w.resources.GetAll(ctx, vmKind.Name, resource.Filter{OwnerUUID: ownerUUID}, 0, 0)
+		require.NoError(t, err)
+
+		status, body := w.controlPlaneWith(t, http.MethodPost, "/api/containers", url.Values{"dry_run": {"true"}}, `{
+			"metadata": {"name": "api"},
+			"spec": {"name": "api", "image": "nginx:1.27"}
+		}`)
+		require.Equal(t, http.StatusOK, status, string(body))
+
+		answer := admittedOf(t, body)
+		planned := answer.Resource.Spec.VM.UUID
+		require.NotEmpty(t, planned)
+
+		assert.Equal(t, [][]previewedNode{
+			{{Node: graph.ID(vmKind.Name, planned), Kind: vmKind.Name, Verdict: "create", Reason: "it is not there"}},
+			{{Node: graph.ID(containerKind.Name, "api"), Kind: containerKind.Name, Verdict: "create", Reason: "it is not there"}},
+		}, answer.levels())
+
+		after, _, err := w.resources.GetAll(ctx, vmKind.Name, resource.Filter{OwnerUUID: ownerUUID}, 0, 0)
+		require.NoError(t, err)
+		assert.Len(t, after, len(before), "no vm is kept")
+	})
+
+	// a container, a root, in the vm, joining a network of its own.
+	created, err := createContainer.NewUseCase(w.client, w.validator, w.translator).Execute(ctx, &createContainer.Request{
+		VMUUID:        vmUUID,
+		Name:          "app",
+		Image:         "nginx:1.27",
+		RestartPolicy: containerKind.RestartAlways,
+		Networks:      []string{"backend"},
+		OwnerUUID:     ownerUUID,
+	})
+	require.NoError(t, err)
+	require.Empty(t, created.ValidationErrors)
+
+	app := w.containerRecord(t, vmUUID, "app")
+	root := graph.Ref{Kind: containerKind.Name, UUID: app.Metadata.UUID}
+
+	w.plan(t, root, "made", func(executions []graph.Execution) bool {
+		return len(executions) == 3 && !slices.ContainsFunc(executions, func(e graph.Execution) bool { return e.State != graph.StateDone })
+	})
+
+	t.Run("a root's delete is answered with what removing it would do, and a vm's with the roots that need it, and nothing changes", func(t *testing.T) {
+		status, body := w.controlPlane(t, http.MethodDelete, "/api/containers/"+root.UUID, url.Values{"dry_run": {"true"}})
+		require.Equal(t, http.StatusOK, status, string(body))
+
+		var removing struct {
+			Plan *struct {
+				Levels [][]previewedNode `json:"levels"`
+			} `json:"plan"`
+		}
+		require.NoError(t, json.Unmarshal(body, &removing))
+		require.NotNil(t, removing.Plan)
+
+		network := w.blockRecord(t, networkKind.Name, vmUUID, "backend")
+
+		assert.Equal(t, [][]previewedNode{
+			{{Node: graph.ID(containerKind.Name, "app"), Kind: containerKind.Name, Verdict: "delete", Ref: &kind.Reference{Kind: containerKind.Name, UUID: root.UUID}}},
+			{{Node: graph.ID(networkKind.Name, "backend"), Kind: networkKind.Name, Verdict: "delete", Ref: &kind.Reference{Kind: networkKind.Name, UUID: network.Metadata.UUID}}},
+			{{Node: graph.ID(vmKind.Name, vmUUID), Kind: vmKind.Name, Verdict: "keep", Reason: "the root does not own it"}},
+		}, removing.Plan.Levels, "it, then the network it owns, and its vm never touched")
+
+		status, body = w.controlPlane(t, http.MethodDelete, "/api/vms/"+vmUUID, url.Values{"dry_run": {"true"}})
+		require.Equal(t, http.StatusOK, status, string(body))
+		assert.JSONEq(t, `{"dependents": [{"kind": "container", "uuid": "`+root.UUID+`", "name": "app", "recreates": true}], "recreated": true}`, string(body))
+
+		status, body = w.controlPlane(t, http.MethodDelete, "/api/vms/"+vmUUID, url.Values{"dry_run": {"true"}, "cascade": {"true"}})
+		require.Equal(t, http.StatusOK, status, string(body))
+
+		var cascading struct {
+			Dependents []struct {
+				dependentShown
+
+				Plan *struct {
+					Levels [][]previewedNode `json:"levels"`
+				} `json:"plan"`
+			} `json:"dependents"`
+			Recreated bool `json:"recreated"`
+		}
+		require.NoError(t, json.Unmarshal(body, &cascading))
+		require.Len(t, cascading.Dependents, 1)
+		require.NotNil(t, cascading.Dependents[0].Plan, "what removing the container would do")
+		assert.Len(t, cascading.Dependents[0].Plan.Levels, 3)
+		assert.False(t, cascading.Recreated)
+
+		kept := w.containerRecord(t, vmUUID, "app")
+		assert.Equal(t, containerKind.Running, kept.Status.Expected, "nothing changed")
+		assert.True(t, kept.Metadata.DeletionRequestedAt.IsZero())
+
+		w.stored(t, vmUUID, "running", func(v vmKind.VM) bool { return v.Status.State == vmKind.Running && v.Status.Expected == vmKind.Running })
+		w.containerIn(t, vmUUID, "app", "running")
+	})
+
+	t.Run("a root's plan says how each of its nodes went; a vm has none", func(t *testing.T) {
+		status, body := w.controlPlane(t, http.MethodGet, "/api/containers/"+root.UUID+"/plan", nil)
+		require.Equal(t, http.StatusOK, status, string(body))
+
+		var plan struct {
+			Root       kind.Reference `json:"root"`
+			Generation int64          `json:"generation"`
+			Nodes      []struct {
+				Node       graph.NodeID    `json:"node"`
+				Level      int             `json:"level"`
+				Kind       string          `json:"kind"`
+				Action     string          `json:"action"`
+				State      string          `json:"state"`
+				Ref        *kind.Reference `json:"ref"`
+				StartedAt  time.Time       `json:"started_at"`
+				FinishedAt time.Time       `json:"finished_at"`
+			} `json:"nodes"`
+			Lease *struct {
+				Failures int `json:"failures"`
+			} `json:"lease"`
+		}
+		require.NoError(t, json.Unmarshal(body, &plan))
+
+		assert.Equal(t, root, plan.Root)
+		assert.Equal(t, int64(1), plan.Generation)
+
+		levels := map[graph.NodeID]int{}
+		for _, node := range plan.Nodes {
+			levels[node.Node] = node.Level
+
+			assert.Equal(t, "create", node.Action, "%s", node.Node)
+			assert.Equal(t, "done", node.State, "%s", node.Node)
+			assert.NotNil(t, node.Ref, "%s", node.Node)
+			assert.False(t, node.FinishedAt.Before(node.StartedAt), "%s", node.Node)
+		}
+
+		assert.Equal(t, map[graph.NodeID]int{
+			graph.ID(vmKind.Name, vmUUID):         0,
+			graph.ID(networkKind.Name, "backend"): 1,
+			graph.ID(containerKind.Name, "app"):   2,
+		}, levels)
+
+		require.NotNil(t, plan.Lease, "its lease says how it went lately")
+		assert.Zero(t, plan.Lease.Failures)
+
+		status, _ = w.controlPlane(t, http.MethodGet, "/api/vms/"+vmUUID+"/plan", nil)
+		assert.Equal(t, http.StatusNotFound, status, "a vm is no root")
+	})
+}
+
+// previewedNode is a node of a plan, as a dry run says it.
+type previewedNode struct {
+	Node     graph.NodeID    `json:"node"`
+	Kind     string          `json:"kind"`
+	Verdict  string          `json:"verdict"`
+	Reason   string          `json:"reason,omitempty"`
+	External bool            `json:"external,omitempty"`
+	Ref      *kind.Reference `json:"ref,omitempty"`
+}
+
+// admittedAnswer is what a dry run of a container's admission is answered
+// with.
+type admittedAnswer struct {
+	Resource containerKind.Container `json:"resource"`
+
+	Plan *struct {
+		Levels [][]previewedNode `json:"levels"`
+	} `json:"plan"`
+}
+
+// levels are what the plan says of each node, but its record.
+func (a admittedAnswer) levels() [][]previewedNode {
+	if a.Plan == nil {
+		return nil
+	}
+
+	levels := make([][]previewedNode, len(a.Plan.Levels))
+	for i, level := range a.Plan.Levels {
+		for _, node := range level {
+			node.Ref = nil
+			levels[i] = append(levels[i], node)
+		}
+	}
+
+	return levels
+}
+
+func admittedOf(t *testing.T, body []byte) admittedAnswer {
+	t.Helper()
+
+	var answer admittedAnswer
+	require.NoError(t, json.Unmarshal(body, &answer), string(body))
+
+	return answer
+}

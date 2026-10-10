@@ -255,14 +255,17 @@ func (c *Chooser) named(ctx context.Context, ownerUUID string, uuid string) (vmK
 // made is a Docker VM made for a container or a stack, under uuid when it is
 // given one. Whatever it is refused for is reported under vm, where it was
 // asked for. One no node has room for is not kept: nobody asked for it but
-// the container or the stack that cannot go into it.
+// the container or the stack that cannot go into it. In a dry run
+// (kind.DryRun), it is admitted as a dry run too, and nothing is kept.
 func (c *Chooser) made(ctx context.Context, ownerUUID string, uuid string, asked Choice) (vmKind.VM, domain.ValidationErrors, error) {
 	manifest, err := kind.Encode(c.asked(ownerUUID, asked))
 	if err != nil {
 		return vmKind.VM{}, nil, err
 	}
 
-	admitted, err := c.admit.Execute(ctx, &admitResource.Request{Kind: vmKind.Name, OwnerUUID: ownerUUID, Manifest: manifest, UUID: uuid})
+	dry := kind.IsDryRun(ctx)
+
+	admitted, err := c.admit.Execute(ctx, &admitResource.Request{Kind: vmKind.Name, OwnerUUID: ownerUUID, Manifest: manifest, UUID: uuid, DryRun: dry})
 	if err != nil {
 		return vmKind.VM{}, nil, err
 	}
@@ -277,8 +280,10 @@ func (c *Chooser) made(ctx context.Context, ownerUUID string, uuid string, asked
 	}
 
 	if v.Status.State == vmKind.Failed && v.Status.Reason == ReasonNoCapacity {
-		if err := c.resources.Delete(ctx, vmKind.Name, v.Metadata.UUID); err != nil {
-			return vmKind.VM{}, nil, err
+		if !dry {
+			if err := c.resources.Delete(ctx, vmKind.Name, v.Metadata.UUID); err != nil {
+				return vmKind.VM{}, nil, err
+			}
 		}
 
 		return vmKind.VM{}, domain.ValidationErrors{"vm": ReasonNoCapacity}, nil

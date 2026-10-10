@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -314,22 +315,35 @@ func start(t *testing.T, options ...option) *workload {
 func (w *workload) controlPlane(t *testing.T, method string, path string, query url.Values) (int, []byte) {
 	t.Helper()
 
+	return w.controlPlaneWith(t, method, path, query, "")
+}
+
+// controlPlaneWith asks the control plane's own API, as its owner, with body,
+// and is its status and its body.
+func (w *workload) controlPlaneWith(t *testing.T, method string, path string, query url.Values, body string) (int, []byte) {
+	t.Helper()
+
 	asked := url.Values{"owner": {ownerUUID}}
 	for key, values := range query {
 		asked[key] = values
 	}
 
-	request, err := http.NewRequestWithContext(t.Context(), method, w.api+path+"?"+asked.Encode(), nil)
+	var sent io.Reader
+	if len(body) > 0 {
+		sent = strings.NewReader(body)
+	}
+
+	request, err := http.NewRequestWithContext(t.Context(), method, w.api+path+"?"+asked.Encode(), sent)
 	require.NoError(t, err)
 
 	response, err := http.DefaultClient.Do(request)
 	require.NoError(t, err)
 	defer response.Body.Close()
 
-	body, err := io.ReadAll(response.Body)
+	answered, err := io.ReadAll(response.Body)
 	require.NoError(t, err)
 
-	return response.StatusCode, body
+	return response.StatusCode, answered
 }
 
 // ingress is the kinds the workload's ingress finds, wired as its serve

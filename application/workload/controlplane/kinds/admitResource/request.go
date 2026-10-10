@@ -33,4 +33,11 @@ type Request struct {
 	// Wait is how long to wait for what came of its first command, when it
 	// has one: nothing is not waiting.
 	Wait time.Duration
+
+	// DryRun asks what would be admitted, and keeps nothing: its kind admits
+	// it as a dry run (kind.DryRun), and it is answered as it would be kept,
+	// under a uuid of its own that nothing holds, and as its first command
+	// would leave it, which is neither written nor sent; nor is it queued to
+	// its graph.
+	DryRun bool
 }

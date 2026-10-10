@@ -10,6 +10,10 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/permission"
 )
 
+// PlanAction is the name the plan of a root of a graph is served under on the
+// resource API, beside a resource's queries, which no action takes.
+const PlanAction = "plan"
+
 var (
 	// word is a kind's name, its plural, its parent and its actions' names.
 	// They name routes, subjects and node requests, and a node request's op
@@ -48,6 +52,8 @@ func IsWord(name string) bool {
 //     desires a state waits in flight, and only a command restores. A
 //     command given a timeout runs on a node, and the timeout is one of the
 //     names a service sizes.
+//   - No action is named plan (PlanAction), which is what the plan of a root
+//     of a graph is served as, beside a resource's queries.
 //   - Every action has a permission, but an internal one, which only a
 //     command can be; and only a stream is public. A kind whose actions are
 //     asked under another kind's permissions names that kind's plural, a
@@ -172,6 +178,10 @@ func checkParent(d Descriptor, add func(format string, args ...any)) {
 func checkAction(d Descriptor, a Action, add func(format string, args ...any)) {
 	if !word.MatchString(a.Name) {
 		add("action %q: its name is not a lowercase word", a.Name)
+	}
+
+	if a.Name == PlanAction {
+		add("action %q is named as a root's plan is served on the resource API, which it would be taken for", a.Name)
 	}
 
 	if !a.Runs.IsValid() {

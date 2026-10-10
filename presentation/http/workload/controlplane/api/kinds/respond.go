@@ -11,6 +11,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/graph/execute"
+	getPlan "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/getPlan"
+	planResource "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/planResource"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/graph"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
@@ -75,6 +78,111 @@ type deleted struct {
 
 	Dependents []dependent `json:"dependents"`
 	Recreated  bool        `json:"recreated"`
+}
+
+// previewedAdmission is what a dry run says admitting a resource would do:
+// what would be admitted, and, of a root, what carrying out its graph would.
+type previewedAdmission struct {
+	Resource *kind.Raw        `json:"resource"`
+	Plan     *execute.Preview `json:"plan,omitempty"`
+}
+
+// previewedDelete is what a dry run says deleting a root would do: what
+// removing it would remove, unlink and keep.
+type previewedDelete struct {
+	Plan *execute.Preview `json:"plan"`
+}
+
+// previewedNeeded is what a dry run says deleting what is not a root would
+// do: the roots that need it, none among them, each with what removing it
+// would do when it would go with it, and whether one of them would make it
+// again.
+type previewedNeeded struct {
+	Dependents []previewedDependent `json:"dependents"`
+	Recreated  bool                 `json:"recreated"`
+}
+
+// previewedDependent is a root that needs what would be deleted, and what
+// removing it would do, when it would go with it.
+type previewedDependent struct {
+	dependent
+
+	Plan *execute.Preview `json:"plan,omitempty"`
+}
+
+// previewedDeleteOf is what a dry run of a delete came to, as the API shows
+// it: a root's plan, or the roots that need what is not one.
+func previewedDeleteOf(response *planResource.Response) any {
+	if response.Plan != nil {
+		return previewedDelete{Plan: response.Plan}
+	}
+
+	shown := previewedNeeded{Dependents: make([]previewedDependent, len(response.Dependents)), Recreated: response.Recreated}
+
+	for i, d := range response.Dependents {
+		shown.Dependents[i] = previewedDependent{dependent: dependentsOf([]graph.Dependent{d.Dependent})[0], Plan: d.Plan}
+	}
+
+	return shown
+}
+
+// planShown is how a root's plan went, as the API shows it: each node, and
+// what its lease keeps of its failures, while it has one.
+type planShown struct {
+	Root       kind.Reference `json:"root"`
+	Generation int64          `json:"generation"`
+	Nodes      []nodeShown    `json:"nodes"`
+	Lease      *leaseShown    `json:"lease,omitempty"`
+}
+
+// nodeShown is how one node of a root's plan went.
+type nodeShown struct {
+	Node       graph.NodeID    `json:"node"`
+	Level      int             `json:"level"`
+	Kind       string          `json:"kind"`
+	Action     graph.Action    `json:"action"`
+	State      graph.State     `json:"state"`
+	Reason     string          `json:"reason,omitempty"`
+	Ref        *kind.Reference `json:"ref,omitempty"`
+	StartedAt  time.Time       `json:"started_at,omitzero"`
+	FinishedAt time.Time       `json:"finished_at,omitzero"`
+}
+
+// leaseShown is what a root's lease keeps of how its plan went lately: its
+// failures in a row, when it is carried out again, and why it failed.
+type leaseShown struct {
+	Failures int       `json:"failures"`
+	NextAt   time.Time `json:"next_at,omitzero"`
+	Reason   string    `json:"reason,omitempty"`
+}
+
+// planShownOf is how a root's plan went, as the API shows it.
+func planShownOf(response *getPlan.Response) planShown {
+	shown := planShown{Root: response.Root, Generation: response.Generation, Nodes: make([]nodeShown, len(response.Executions))}
+
+	for i, e := range response.Executions {
+		shown.Nodes[i] = nodeShown{
+			Node:       e.Node,
+			Level:      e.Level,
+			Kind:       e.Kind,
+			Action:     e.Action,
+			State:      e.State,
+			Reason:     e.Reason,
+			StartedAt:  e.StartedAt,
+			FinishedAt: e.FinishedAt,
+		}
+
+		if e.Ref != (graph.Ref{}) {
+			ref := e.Ref
+			shown.Nodes[i].Ref = &ref
+		}
+	}
+
+	if lease := response.Lease; lease != nil {
+		shown.Lease = &leaseShown{Failures: lease.Failures, NextAt: lease.NextAt, Reason: lease.Reason}
+	}
+
+	return shown
 }
 
 // respondDeleted writes what asking for what roots need to go came to, with

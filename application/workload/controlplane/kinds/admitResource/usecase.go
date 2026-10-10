@@ -21,6 +21,10 @@
 // The root of a graph, of a kind whose graph makes it (WithGraphs), is queued
 // to its graph once it is kept, which makes what it needs and then it, in
 // order, at once.
+//
+// Asked as a dry run (Request.DryRun), it is admitted by its kind as a dry
+// run (kind.DryRun) and answered as it would be kept, and as its first
+// command would leave it, and nothing is kept, sent or queued.
 package admitResource
 
 import (
@@ -30,6 +34,8 @@ import (
 	"log/slog"
 	"slices"
 	"time"
+
+	"github.com/gofrs/uuid/v5"
 
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/dispatch"
 	"github.com/khanzadimahdi/testproject/domain"
@@ -90,6 +96,10 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 	}
 
 	asked := askedFor(d, request)
+
+	if request.DryRun {
+		return uc.rehearsed(ctx, binding, request, asked)
+	}
 
 	var created resource.Record
 
@@ -169,6 +179,74 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 	response.Resource = uc.latest(ctx, d, dispatched.Record)
 
 	return response, nil
+}
+
+// rehearsed is what asked would be admitted as, kept nowhere and sent
+// nothing: its kind admits it as a dry run, and it is as it would be kept,
+// under a uuid nothing holds when it is given none, and moved as the first
+// command its kind would ask of it would move it (dispatch.Dispatcher.Ask),
+// what it would desire being what it is expected to be. What is refused is
+// refused as it would be.
+func (uc *UseCase) rehearsed(ctx context.Context, binding kind.ControlPlaneBinding, request *Request, asked kind.Raw) (*Response, error) {
+	d := binding.Descriptor()
+
+	admitted, invalid, err := binding.Admit(kind.DryRun(ctx), asked)
+	switch {
+	case errors.Is(err, kind.ErrInvalidPayload):
+		return &Response{ValidationErrors: domain.ValidationErrors{"spec": "invalid_value"}}, nil
+	case err != nil:
+		return nil, err
+	case len(invalid) > 0:
+		return &Response{ValidationErrors: invalid}, nil
+	}
+
+	r, err := uc.kept(d, request, admitted)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(r.Metadata.UUID) == 0 {
+		id, err := uuid.NewV7()
+		if err != nil {
+			return nil, err
+		}
+
+		r.Metadata.UUID = id.String()
+	}
+
+	intents, err := binding.Reconcile(ctx, r.Raw)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(intents) == 0 {
+		return &Response{Resource: r.Raw}, nil
+	}
+
+	common, err := r.Common()
+	if err != nil {
+		return nil, err
+	}
+
+	first, found := d.Action(intents[0].Action)
+	if !found || !d.Allows(first.Name, common.State) {
+		return &Response{Resource: r.Raw}, nil
+	}
+
+	if len(first.Desires) > 0 {
+		common.Expected = first.Desires
+	}
+
+	if to, moved := d.Machine.Next(common.State, kind.OnAction(first.Name)); moved && to != common.State {
+		common.State = to
+		common.Reason = ""
+	}
+
+	if err := r.SetCommon(common); err != nil {
+		return nil, err
+	}
+
+	return &Response{Resource: r.Raw}, nil
 }
 
 // follow asks a resource just admitted for what its kind asks of it, as
