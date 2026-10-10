@@ -60,6 +60,54 @@ services:
       OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT: ${OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT:-}
       OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
       PROFILING_ENABLED: ${PROFILING_ENABLED:-true}
+      # what a VM boots from when it names nothing, and what every Docker VM
+      # does, which is what makes it one: the same image the vmhosts and the
+      # blog are given.
+      WORKLOAD_VM_DEFAULT_IMAGE: ${BACKEND_WORKLOAD_VM_DEFAULT_IMAGE:-ubuntu:24.04}
+      WORKLOAD_VM_DOCKER_IMAGE: ${BACKEND_WORKLOAD_VM_DOCKER_IMAGE:-docker:29-dind}
+      # what one VM may be given, what one person's VMs may be given between
+      # them, and the Docker VM made for a container or a stack that names none
+      # to go in. Sizes are bytes. Unset keeps the defaults the code holds
+      # (infrastructure/configs/workloadVM.go): 128 MiB to 8 GiB of memory and
+      # 1 to 50 GiB of disk a VM, up to 4 vCPUs; 5 VMs, 8 vCPUs, 16 GiB and
+      # 200 GiB a person; a Docker VM of 2 vCPUs, 2 GiB and 20 GiB.
+      WORKLOAD_VM_MIN_MEMORY: ${BACKEND_WORKLOAD_VM_MIN_MEMORY:-}
+      WORKLOAD_VM_MIN_DISK: ${BACKEND_WORKLOAD_VM_MIN_DISK:-}
+      WORKLOAD_VM_DOCKER_MIN_MEMORY: ${BACKEND_WORKLOAD_VM_DOCKER_MIN_MEMORY:-}
+      WORKLOAD_VM_DOCKER_MIN_DISK: ${BACKEND_WORKLOAD_VM_DOCKER_MIN_DISK:-}
+      WORKLOAD_VM_MAX_CPUS: ${BACKEND_WORKLOAD_VM_MAX_CPUS:-}
+      WORKLOAD_VM_MAX_MEMORY: ${BACKEND_WORKLOAD_VM_MAX_MEMORY:-}
+      WORKLOAD_VM_MAX_DISK: ${BACKEND_WORKLOAD_VM_MAX_DISK:-}
+      WORKLOAD_VM_USER_MAX_VMS: ${BACKEND_WORKLOAD_VM_USER_MAX_VMS:-}
+      WORKLOAD_VM_USER_CPUS: ${BACKEND_WORKLOAD_VM_USER_CPUS:-}
+      WORKLOAD_VM_USER_MEMORY: ${BACKEND_WORKLOAD_VM_USER_MEMORY:-}
+      WORKLOAD_VM_USER_DISK: ${BACKEND_WORKLOAD_VM_USER_DISK:-}
+      WORKLOAD_VM_MAX_LIFETIME: ${BACKEND_WORKLOAD_VM_MAX_LIFETIME:-}
+      WORKLOAD_VM_CPU_OVERCOMMIT: ${BACKEND_WORKLOAD_VM_CPU_OVERCOMMIT:-}
+      WORKLOAD_VM_DOCKER_DEFAULT_CPUS: ${BACKEND_WORKLOAD_VM_DOCKER_DEFAULT_CPUS:-}
+      WORKLOAD_VM_DOCKER_DEFAULT_MEMORY: ${BACKEND_WORKLOAD_VM_DOCKER_DEFAULT_MEMORY:-}
+      WORKLOAD_VM_DOCKER_DEFAULT_DISK: ${BACKEND_WORKLOAD_VM_DOCKER_DEFAULT_DISK:-}
+      WORKLOAD_VM_DOCKER_DEFAULT_PORTS: ${BACKEND_WORKLOAD_VM_DOCKER_DEFAULT_PORTS:-}
+      WORKLOAD_VM_DOCKER_DEFAULT_INGRESS: ${BACKEND_WORKLOAD_VM_DOCKER_DEFAULT_INGRESS:-}
+      WORKLOAD_VM_DOCKER_DEFAULT_EGRESS: ${BACKEND_WORKLOAD_VM_DOCKER_DEFAULT_EGRESS:-}
+      WORKLOAD_VM_DOCKER_DEFAULT_PERSISTENT_DISK: ${BACKEND_WORKLOAD_VM_DOCKER_DEFAULT_PERSISTENT_DISK:-}
+      WORKLOAD_VM_DOCKER_DEFAULT_LIFETIME: ${BACKEND_WORKLOAD_VM_DOCKER_DEFAULT_LIFETIME:-}
+      WORKLOAD_SNAPSHOT_USER_MAX: ${BACKEND_WORKLOAD_SNAPSHOT_USER_MAX:-}
+      # the bucket the nodes keep snapshots in, which the control plane
+      # deletes them from: the blog's S3, in a bucket of its own, unless said
+      # otherwise. The orchestrators read the same.
+      WORKLOAD_SNAPSHOT_S3_ENDPOINT: ${BACKEND_WORKLOAD_SNAPSHOT_S3_ENDPOINT:-${BACKEND_S3_ENDPOINT}}
+      WORKLOAD_SNAPSHOT_S3_ACCESS_KEY: ${BACKEND_WORKLOAD_SNAPSHOT_S3_ACCESS_KEY:-${BACKEND_S3_ACCESS_KEY}}
+      WORKLOAD_SNAPSHOT_S3_SECRET_KEY: ${BACKEND_WORKLOAD_SNAPSHOT_S3_SECRET_KEY:-${BACKEND_S3_SECRET_KEY}}
+      WORKLOAD_SNAPSHOT_S3_BUCKET: ${BACKEND_WORKLOAD_SNAPSHOT_S3_BUCKET:-workload-snapshots}
+      WORKLOAD_SNAPSHOT_S3_USE_SSL: ${BACKEND_WORKLOAD_SNAPSHOT_S3_USE_SSL:-${BACKEND_S3_USE_SSL}}
+      # how long a node is given to answer a request.
+      WORKLOAD_NODE_REQUEST_TIMEOUT: ${BACKEND_WORKLOAD_NODE_REQUEST_TIMEOUT:-30s}
+      # how long a node gives a command that may pull an image first, the
+      # wait for its VM's dockerd and then the pull, which the control plane
+      # waits for before it asks again: the same two the nodes read.
+      WORKLOAD_DOCKER_READY_TIMEOUT: ${BACKEND_WORKLOAD_DOCKER_READY_TIMEOUT:-3m}
+      WORKLOAD_DOCKER_PULL_TIMEOUT: ${BACKEND_WORKLOAD_DOCKER_PULL_TIMEOUT:-10m}
 
 networks:
   workload_controlplane:
@@ -70,9 +118,6 @@ networks:
     external: true
   nats:
     name: nats
-    external: true
-  docker:
-    name: docker
     external: true
   monitoring:
     name: monitoring

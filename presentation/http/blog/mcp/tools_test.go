@@ -44,26 +44,16 @@ func TestTheParametersThatComeUpAgainAndAgain(t *testing.T) {
 	})
 
 	t.Run("an uuid says whose it is", func(t *testing.T) {
-		parameter := uuidOf("task")
+		parameter := uuidOf("article")
 
 		assert.Equal(t, "uuid", parameter.name)
-		assert.Contains(t, parameter.description, "task")
+		assert.Contains(t, parameter.description, "article")
 	})
 
 	t.Run("an article is named by what it keeps across its languages", func(t *testing.T) {
 		assert.Equal(t, "correlation_uuid", correlationUUID().name)
 		assert.Contains(t, correlationUUID().description, "correlation uuid")
 		assert.Equal(t, "language_code", languageCode().name)
-	})
-
-	t.Run("reading a log takes where to start and how much", func(t *testing.T) {
-		names := make([]string, 0, 3)
-		for _, parameter := range logParams("task") {
-			names = append(names, parameter.name)
-			assert.NotEmpty(t, parameter.description, parameter.name)
-		}
-
-		assert.Equal(t, []string{"uuid", "after", "limit"}, names)
 	})
 }
 
@@ -132,7 +122,7 @@ func TestTheTableIsOneToolPerRoute(t *testing.T) {
 
 		method, path, found := strings.Cut(tool.route, " ")
 		require.True(t, found, "%q is not a \"METHOD /path\" pattern", tool.route)
-		assert.Contains(t, []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete}, method)
+		assert.Contains(t, []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete}, method)
 		assert.True(t, strings.HasPrefix(path, "/"), tool.route)
 
 		if previous, taken := names[tool.name]; taken {

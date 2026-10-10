@@ -8,16 +8,18 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/danceable/console"
 	orchestratorHeartbeat "github.com/khanzadimahdi/testproject/application/workload/orchestrator/beatHeart"
-	taskHeartbeat "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/beatHeart"
 	shipLogs "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/shipLogs"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/node"
+	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
+	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	messaging "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
 	"github.com/khanzadimahdi/testproject/infrastructure/repository/mocks/workload/runtime"
 	"github.com/khanzadimahdi/testproject/infrastructure/tunnel"
@@ -206,6 +208,7 @@ func TestServe(t *testing.T) {
 
 		var nodeManager runtime.MockNodeManager
 		nodeManager.On("Stats", mock.Anything, mock.Anything).Return(node.Stats{}, nil).Maybe()
+		nodeManager.On("Capacity", mock.Anything).Return(vm.Info{}, nil).Maybe()
 
 		var taskManager runtime.MockRuntime
 		taskManager.On("Of", mock.Anything, mock.Anything).
@@ -223,8 +226,10 @@ func TestServe(t *testing.T) {
 		// Run starts it, and a command assembled by hand has to be assembled
 		// completely.
 		command.logShipper = shipLogs.NewUseCase(&taskManager, &consumer, consumerName, command.logger)
-		command.taskHeartBeat = taskHeartbeat.NewUseCase(&taskManager, &consumer, consumerName, command.logger)
-		command.orchestratorHeartBeat = orchestratorHeartbeat.NewUseCase(&consumer, &nodeManager, consumerName)
+		command.orchestratorHeartBeat = orchestratorHeartbeat.NewUseCase(&consumer, &nodeManager, nil, time.Second, consumerName, command.logger)
+
+		requests := &answering{}
+		command.requests = requests
 
 		// nothing is listening for it, so the pool spends the test trying to
 		// connect and the orchestrator serves its own port regardless — which is the
@@ -264,7 +269,32 @@ func TestServe(t *testing.T) {
 		defer resp.Body.Close()
 
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		// the control plane's requests are answered on the node's own subject.
+		assert.Equal(t, noderequest.Subject(consumerName), requests.subject())
 	})
+}
+
+// answering keeps the subject it was asked to answer requests on.
+type answering struct {
+	lock    sync.Mutex
+	serving string
+}
+
+func (a *answering) Serve(_ context.Context, subject string) error {
+	a.lock.Lock()
+	defer a.lock.Unlock()
+
+	a.serving = subject
+
+	return nil
+}
+
+func (a *answering) subject() string {
+	a.lock.Lock()
+	defer a.lock.Unlock()
+
+	return a.serving
 }
 
 // findAvailablePort finds an available port to use for testing

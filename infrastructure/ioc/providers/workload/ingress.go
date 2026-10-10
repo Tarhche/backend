@@ -7,18 +7,21 @@ import (
 	"time"
 
 	"github.com/danceable/provider"
-	"go.mongodb.org/mongo-driver/v2/mongo"
+	"github.com/nats-io/nats.go"
 
 	checkhealth "github.com/khanzadimahdi/testproject/application/app/checkHealth"
 	ingressCheckOrchestratorExists "github.com/khanzadimahdi/testproject/application/workload/ingress/checkOrchestratorExists"
+	"github.com/khanzadimahdi/testproject/domain"
 	ingressContract "github.com/khanzadimahdi/testproject/domain/workload/ingress"
+	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/certificate"
 	infraHealth "github.com/khanzadimahdi/testproject/infrastructure/health"
-	taskrepository "github.com/khanzadimahdi/testproject/infrastructure/repository/mongodb/workload/tasks"
+	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/core/pubsub"
 	"github.com/khanzadimahdi/testproject/infrastructure/telemetry/profiler"
 	"github.com/khanzadimahdi/testproject/infrastructure/tunnel"
 	infraIngress "github.com/khanzadimahdi/testproject/infrastructure/workload/ingress"
+	ingressMemory "github.com/khanzadimahdi/testproject/infrastructure/workload/ingress/memory"
 	healthAPI "github.com/khanzadimahdi/testproject/presentation/http/health"
 	"github.com/khanzadimahdi/testproject/presentation/http/middleware"
 	ingressAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/ingress"
@@ -32,6 +35,12 @@ const (
 	// IngressForwarder is the ports arbitrary TCP arrives on, which the serve
 	// command needs in order to listen on them.
 	IngressForwarder = "workload:ingress:forwarder"
+
+	// IngressSubscribers are what the ingress hears, which the serve command
+	// subscribes to before it routes anything: what says where the tasks and
+	// the VMs are, their nodes' heartbeats, and the commands sent to their
+	// nodes and what came of them.
+	IngressSubscribers = "workload:ingress:subscribers"
 
 	// workloadAPIService is the name an orchestrator offers its own http api under. The
 	// ingress asks for a service rather than an address, so where the orchestrator
@@ -48,8 +57,11 @@ const (
 )
 
 // ingressProvider builds the tunnel the orchestrators connect to, the registry of
-// what is connected, and the HTTP handler that routes to them.
-type ingressProvider struct{}
+// what is connected, what the ingress hears of where the tasks and the VMs
+// are, and the HTTP handler that routes to them.
+type ingressProvider struct {
+	terminate func()
+}
 
 // Ensure ingressProvider implements provider interface.
 var _ provider.Provider = &ingressProvider{}
@@ -63,6 +75,11 @@ func (p *ingressProvider) Register(ctx context.Context, c provider.Container) er
 }
 
 func (p *ingressProvider) Boot(ctx context.Context, c provider.Container) error {
+	var natsConnection *nats.Conn
+	if err := c.Resolve(&natsConnection); err != nil {
+		return err
+	}
+
 	var logger *slog.Logger
 	if err := c.Resolve(&logger, provider.WithParams(ingressLoggerName)); err != nil {
 		return err
@@ -71,6 +88,25 @@ func (p *ingressProvider) Boot(ctx context.Context, c provider.Container) error 
 	var ingressConfigs *configs.WorkloadIngress
 	if err := c.Resolve(&ingressConfigs); err != nil {
 		return err
+	}
+
+	// what the ingress hears, it hears over core NATS rather than through a
+	// JetStream consumer: every ingress hears every heartbeat, command and
+	// result as it is said, beside the consumers that keep them for the nodes
+	// and the control plane, and nothing is kept for one that is not
+	// listening, which a beat later would hear said again anyway.
+	ps := pubsub.NewPublishSubscriber(natsConnection, logger)
+
+	if err := c.Bind(func() domain.Subscriber { return ps }, provider.Singleton()); err != nil {
+		return err
+	}
+
+	if err := c.Bind(func() domain.PublishSubscriber { return ps }, provider.Singleton()); err != nil {
+		return err
+	}
+
+	p.terminate = func() {
+		defer ps.Wait()
 	}
 
 	tunnelConfig := tunnel.DefaultConfig()
@@ -127,11 +163,15 @@ func (p *ingressProvider) Boot(ctx context.Context, c provider.Container) error 
 }
 
 func (p *ingressProvider) Terminate(ctx context.Context) error {
+	if p.terminate != nil {
+		p.terminate()
+	}
+
 	return nil
 }
 
 func ingressConsoleCommand(
-	database *mongo.Database,
+	natsConnection *nats.Conn,
 	tracedProfiler *profiler.TracedProfiler,
 	registry ingressContract.Registry,
 	iocContainer provider.Container,
@@ -153,12 +193,10 @@ func ingressConsoleCommand(
 
 	checkOrchestratorExistsUseCase := ingressCheckOrchestratorExists.NewUseCase(registry)
 
-	// which node is holding a task is the control plane's record of it, and the
-	// only thing here that outlives a connection.
-	taskRepository := taskrepository.NewRepository(database)
-
+	// the ingress talks to no database, so messaging, which says where
+	// everything it routes to is, is its only dependency
 	checkHealthUseCase := checkhealth.NewUseCase(
-		checkhealth.Dependency{Name: "database", Pinger: infraHealth.NewMongodbPinger(database)},
+		checkhealth.Dependency{Name: "messaging", Pinger: infraHealth.NewNatsPinger(natsConnection)},
 	)
 
 	// a transport that dials nothing: the address it is handed names a workload,
@@ -177,17 +215,39 @@ func ingressConsoleCommand(
 	mux.Handle("GET /health", middleware.NewCORSMiddleware(healthAPI.NewHealthHandler(checkHealthUseCase)))
 	mux.Handle("/orchestrators/{name}/{path...}", ingressAPI.NewProxyHandler(checkOrchestratorExistsUseCase, transport, logger))
 
-	// a terminal, which the browser opens here rather than anywhere else: the
-	// ingress works out which node is holding the task and carries the
-	// connection there. Who may open one is the node's to decide, from the
-	// owner on the task and the token on this request.
-	mux.Handle("GET /tasks/{uuid}/attach", ingressAPI.NewTerminalHandler(taskRepository, registry, transport, logger))
+	// which node holds a task or a VM is what that node last said of it,
+	// less what a command on its way to it takes away, kept here for as long
+	// as it goes on saying it: one unheard for as long as the control plane
+	// waits before it takes one to be gone from its node is forgotten.
+	locations := ingressMemory.NewLocations(ingressConfigs.ResourceSilentAfter)
 
-	// a request to a hostname under the tasks' domain is a task's own
-	// traffic and goes to the node holding it; everything else is one of the
-	// ingress's own routes.
+	// the kinds whose resources the ingress finds, by their ingress
+	// strategies: each stream of theirs, a terminal, which the browser opens
+	// here rather than anywhere else, is carried to the node holding the
+	// resource, under the kind's own plural, a task's at /tasks/{uuid}/attach
+	// and a VM's at /vms/{uuid}/attach; and a slug is asked of those with
+	// endpoints, a task's first. Who may open a terminal is the node's to
+	// decide, from the owner on the resource and the token on the request.
+	// What the ingress reads of them is what their nodes said and what was
+	// sent to their nodes, which the subscribers hear.
+	workload, err := NewIngressWorkload(locations, logger)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := iocContainer.Bind(func() *kind.Registry[kind.IngressBinding] { return workload.Kinds }, provider.Singleton()); err != nil {
+		return nil, err
+	}
+
+	if err := ingressAPI.RouteKinds(mux, workload.Kinds, registry, transport, logger); err != nil {
+		return nil, err
+	}
+
+	// a request to a hostname under the workload's domain is a resource's own
+	// traffic, a task's or a VM's, and goes to the node holding it;
+	// everything else is one of the ingress's own routes.
 	router := ingressAPI.NewRouter(
-		ingressAPI.NewTaskHandler(taskRepository, registry, transport, ingressConfigs.Domain, logger),
+		ingressAPI.NewTaskHandler(workload.Kinds, registry, transport, ingressConfigs.Domain, logger),
 		mux,
 		ingressConfigs.Domain,
 	)
@@ -210,6 +270,13 @@ func ingressConsoleCommand(
 		),
 		logger,
 	)
+
+	// ingress subscribers
+	if err := iocContainer.Bind(func() map[string]domain.MessageHandler {
+		return workload.Subscribers
+	}, provider.Singleton(), provider.WithName(IngressSubscribers)); err != nil {
+		return nil, err
+	}
 
 	return handler, nil
 }

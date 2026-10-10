@@ -3,13 +3,11 @@ package mcp
 import (
 	"encoding/json"
 	"fmt"
-	"reflect"
 	"slices"
 	"strings"
 
 	"github.com/google/jsonschema-go/jsonschema"
 
-	"github.com/khanzadimahdi/testproject/application/workload/spec"
 	"github.com/khanzadimahdi/testproject/domain"
 )
 
@@ -18,48 +16,6 @@ import (
 // what keeps a tool's schema and the use case behind it from drifting apart.
 const requiredField = "required_field"
 
-// composeSchemas describe the fields a compose file writes in more than one
-// shape. Inferring them from the Go types would describe what they are
-// normalised into rather than what may be sent, so a caller would be told that
-// a command must be a list and that a port is an object with a Task in it.
-var composeSchemas = map[reflect.Type]*jsonschema.Schema{
-	reflect.TypeFor[spec.StringOrSlice](): {
-		Description: "a command line, either as one string or as its arguments",
-		AnyOf: []*jsonschema.Schema{
-			{Type: "string"},
-			{Type: "array", Items: &jsonschema.Schema{Type: "string"}},
-		},
-	},
-	reflect.TypeFor[spec.Environment](): {
-		Description: `the environment, either as {"KEY": "value"} or as a list of "KEY=value"`,
-		AnyOf: []*jsonschema.Schema{
-			{Type: "object", AdditionalProperties: &jsonschema.Schema{Type: "string"}},
-			{Type: "array", Items: &jsonschema.Schema{Type: "string"}},
-		},
-	},
-	reflect.TypeFor[spec.Port](): {
-		Description: `a port the task listens on, as a number or in compose's own "8080:80" form; the workload picks the host side itself`,
-		AnyOf: []*jsonschema.Schema{
-			{Type: "integer", Minimum: new(1.0), Maximum: new(65535.0)},
-			{Type: "string"},
-		},
-	},
-	reflect.TypeFor[spec.Decimal](): {
-		Description: "a number, or the same number written as a string",
-		AnyOf: []*jsonschema.Schema{
-			{Type: "number"},
-			{Type: "string"},
-		},
-	},
-	reflect.TypeFor[spec.ByteSize](): {
-		Description: `a size in bytes, or with a unit the way compose writes one, such as "256M"`,
-		AnyOf: []*jsonschema.Schema{
-			{Type: "integer"},
-			{Type: "string"},
-		},
-	},
-}
-
 // body describes what a use case's request carries, from the request itself.
 //
 // What is required comes from asking an empty request what is missing: fields
@@ -67,7 +23,7 @@ var composeSchemas = map[reflect.Type]*jsonschema.Schema{
 // in — are not in the schema at all, because they are not part of the json a
 // caller sends, and so they are never asked for.
 func body[T any](omit ...string) *jsonschema.Schema {
-	schema, err := jsonschema.For[T](&jsonschema.ForOptions{TypeSchemas: composeSchemas})
+	schema, err := jsonschema.For[T](nil)
 	if err != nil {
 		panic(fmt.Errorf("mcp: describing %T: %w", *new(T), err))
 	}

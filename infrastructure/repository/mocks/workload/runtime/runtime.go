@@ -7,12 +7,12 @@ import (
 
 	"github.com/stretchr/testify/mock"
 
-	"github.com/khanzadimahdi/testproject/domain/workload/network"
 	"github.com/khanzadimahdi/testproject/domain/workload/node"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
+	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
 
-// MockRuntime stands in for whatever runs the tasks: docker, here.
+// MockRuntime stands in for whatever runs the tasks: VMs, here.
 type MockRuntime struct {
 	mock.Mock
 }
@@ -95,25 +95,6 @@ func (m *MockRuntime) Exec(ctx context.Context, taskUUID string, options task.Ex
 	return session, args.Error(1)
 }
 
-// MockNetworkManager stands in for the networks the workload owns.
-type MockNetworkManager struct {
-	mock.Mock
-}
-
-var _ network.Manager = &MockNetworkManager{}
-
-func (m *MockNetworkManager) EnsureIsolatedNetwork(ctx context.Context) error {
-	return m.Called(ctx).Error(0)
-}
-
-func (m *MockNetworkManager) EnsureStackNetwork(ctx context.Context, stackSlug string) error {
-	return m.Called(ctx, stackSlug).Error(0)
-}
-
-func (m *MockNetworkManager) RemoveStackNetwork(ctx context.Context, stackSlug string) error {
-	return m.Called(ctx, stackSlug).Error(0)
-}
-
 // MockNodeManager stands in for what a node reports about itself.
 type MockNodeManager struct {
 	mock.Mock
@@ -125,4 +106,10 @@ func (m *MockNodeManager) Stats(ctx context.Context, nodeName string) (node.Stat
 	args := m.Called(ctx, nodeName)
 
 	return args.Get(0).(node.Stats), args.Error(1)
+}
+
+func (m *MockNodeManager) Capacity(ctx context.Context) (vm.Info, error) {
+	args := m.Called(ctx)
+
+	return args.Get(0).(vm.Info), args.Error(1)
 }

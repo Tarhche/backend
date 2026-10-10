@@ -10,20 +10,22 @@ import (
 	"github.com/danceable/console"
 	"github.com/danceable/provider"
 
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/task/reconcile"
+	kindsReconcileResources "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/reconcileResources"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers"
+	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers/core"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers/workload"
 )
 
 const (
 	serveName string = "serve-workload-controlplane"
 
-	// heartbeatInterval is how often the control plane looks at what the tasks
-	// are doing against what was asked of them. Often enough that a task
-	// somebody stopped by hand comes back while they are still looking at it;
-	// rarely enough that it is not a poll of the whole workload.
+	// heartbeatInterval is how often the control plane looks at what the
+	// resources of every kind are doing against what was asked of them. Often
+	// enough that one somebody stopped by hand comes back while they are still
+	// looking at it; rarely enough that it is not a poll of the whole
+	// workload.
 	heartbeatInterval = 10 * time.Second
 )
 
@@ -33,10 +35,11 @@ type ServeCommand struct {
 	consumer  domain.Consumer
 	consumers map[string]domain.MessageHandler
 
-	// reconcile is the control plane's own heartbeat: one pass over the tasks,
+	// reconcileKinds is the control plane's own heartbeat: one pass over the
+	// resources of every kind registered, VMs, stacks and tasks among them,
 	// asking the nodes for whatever would make each of them what it is meant
 	// to be.
-	reconcile *reconcile.UseCase
+	reconcileKinds *kindsReconcileResources.UseCase
 
 	logger *slog.Logger
 }
@@ -80,14 +83,14 @@ func (c *ServeCommand) Configure(flagSet *console.FlagSet) {
 // Providers returns the service providers required to serve the workload control plane.
 func (c *ServeCommand) Providers() []provider.Provider {
 	return []provider.Provider{
-		providers.NewConfigsProvider(c.configs),
-		providers.NewOpenTelemetryProvider("workload-controlplane", "workload-controlplane"),
-		providers.NewProfilerProvider("workload-controlplane"),
+		core.NewConfigsProvider(c.configs),
+		core.NewOpenTelemetryProvider("workload-controlplane", "workload-controlplane"),
+		core.NewProfilerProvider("workload-controlplane"),
 		providers.NewMongodbProvider(),
 		providers.NewNatsProvider(),
 		providers.NewTranslationProvider(),
 		providers.NewValidationProvider(),
-		providers.NewContainerProvider(),
+		core.NewContainerProvider(),
 		workload.NewManagerProvider(),
 		c,
 	}
@@ -112,7 +115,7 @@ func (c *ServeCommand) Boot(ctx context.Context, task provider.Container) error 
 		return err
 	}
 
-	if err := task.Resolve(&c.reconcile); err != nil {
+	if err := task.Resolve(&c.reconcileKinds); err != nil {
 		return err
 	}
 
@@ -169,8 +172,8 @@ func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 	return console.ExitSuccess
 }
 
-// heartbeat keeps the tasks as they were asked to be, for as long as the
-// control plane is up.
+// heartbeat keeps the resources of every kind, VMs, stacks and tasks among
+// them, as they were asked to be, for as long as the control plane is up.
 func (c *ServeCommand) heartbeat(ctx context.Context) {
 	ticker := time.NewTicker(heartbeatInterval)
 	defer ticker.Stop()
@@ -178,8 +181,10 @@ func (c *ServeCommand) heartbeat(ctx context.Context) {
 	for {
 		select {
 		case <-ticker.C:
-			if err := c.reconcile.Execute(ctx); err != nil {
-				c.logger.ErrorContext(ctx, "the workload's heartbeat failed", "error", err)
+			if c.reconcileKinds != nil {
+				if err := c.reconcileKinds.Execute(ctx); err != nil {
+					c.logger.ErrorContext(ctx, "the kinds' heartbeat failed", "error", err)
+				}
 			}
 
 		case <-ctx.Done():

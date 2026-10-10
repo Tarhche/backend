@@ -9,37 +9,34 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/ingress"
+	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
-	"github.com/khanzadimahdi/testproject/domain/workload/task"
 	infraTrace "github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
 	"go.opentelemetry.io/otel/trace"
 )
 
-// Resolver finds which node is holding a task, by the slug a hostname
-// carries or by the uuid a terminal asks for. It is the task repository in
-// production; the ingress asks for no more than this so it can be driven by a
-// double in tests.
-type Resolver interface {
-	GetOneBySlug(ctx context.Context, slug string) (task.Task, error)
-	GetOne(ctx context.Context, uuid string) (task.Task, error)
-}
-
-// taskHandler serves the ports tasks expose. A task's slug is
-// the left-most label of the hostname it answers on, so "nginx-xkfqz" reaches
-// the task's lowest exposed port and "nginx-xkfqz-8080" reaches port 8080
-// of the same task.
+// taskHandler serves the ports the resources of kinds with endpoints, tasks
+// and VMs, expose. A slug is unique across them, so it is asked of the kinds
+// with endpoints in the order they were registered, the tasks first. A slug
+// is the left-most label of the hostname it answers on, so "nginx-xkfqz"
+// reaches the lowest exposed port of what it names and "nginx-xkfqz-8080"
+// reaches its port 8080.
 //
-// The ingress cannot see a task — only the node holding one can — so it
-// works out which node that is and sends the request down that node's own
+// The ingress cannot see a task or a VM — only the node holding one can — so
+// it works out which node that is and sends the request down that node's own
 // connection. What the node finds there is the node's to report.
 type taskHandler struct {
-	resolver Resolver
 	registry ingress.Registry
+
+	// kinds are the kinds whose resources the ingress finds, of which those
+	// with endpoints are asked for a slug.
+	kinds *kind.Registry[kind.IngressBinding]
 
 	// domain is the suffix every task hostname carries, without a leading
 	// dot: "workload.tarhche.com", or "workload.localhost" while developing.
@@ -52,14 +49,14 @@ type taskHandler struct {
 var _ http.Handler = &taskHandler{}
 
 func NewTaskHandler(
-	resolver Resolver,
+	kinds *kind.Registry[kind.IngressBinding],
 	registry ingress.Registry,
 	transport http.RoundTripper,
 	domain string,
 	logger *slog.Logger,
 ) *taskHandler {
 	h := &taskHandler{
-		resolver: resolver,
+		kinds:    kinds,
 		registry: registry,
 		domain:   strings.ToLower(strings.Trim(domain, ".")),
 		logger:   logger,
@@ -109,34 +106,22 @@ func (h *taskHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	t, err := h.resolver.GetOneBySlug(r.Context(), slug)
+	nodeName, route, refused, err := h.locateKind(r.Context(), slug, taskPort)
 	switch {
-	case errors.Is(err, domain.ErrNotExists):
-		http.Error(rw, "unknown task", http.StatusNotFound)
-
-		return
 	case err != nil:
 		infraTrace.RecordError(trace.SpanFromContext(r.Context()), err)
 		rw.WriteHeader(http.StatusInternalServerError)
 
 		return
-	}
-
-	if t.CurrentState != task.Running {
-		http.Error(rw, "the task is not running", http.StatusServiceUnavailable)
+	case refused != nil:
+		http.Error(rw, refused.message, refused.status)
 
 		return
 	}
 
-	if len(t.NodeName) == 0 {
-		http.Error(rw, "the task has not been scheduled yet", http.StatusServiceUnavailable)
-
-		return
-	}
-
-	// only the node holding it can reach a task, and only a node that is
-	// connected can be asked to.
-	connected, err := h.registry.Exists(r.Context(), t.NodeName)
+	// only the node holding it can reach a task or a resource, and only a
+	// node that is connected can be asked to.
+	connected, err := h.registry.Exists(r.Context(), nodeName)
 	if err != nil {
 		infraTrace.RecordError(trace.SpanFromContext(r.Context()), err)
 		rw.WriteHeader(http.StatusInternalServerError)
@@ -152,9 +137,9 @@ func (h *taskHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
 	target := &url.URL{
 		Scheme: "http",
-		Host:   t.NodeName,
+		Host:   nodeName,
 		Path: strings.Join([]string{
-			"/tasks",
+			route,
 			url.PathEscape(slug),
 			strconv.FormatUint(uint64(taskPort), 10),
 			strings.TrimPrefix(r.URL.Path, "/"),
@@ -162,6 +147,77 @@ func (h *taskHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	}
 
 	h.proxy.ServeHTTP(rw, r.WithContext(context.WithValue(r.Context(), targetKey{}, target)))
+}
+
+// unavailable is why what a slug names cannot be reached, and the status that
+// says so.
+type unavailable struct {
+	status  int
+	message string
+}
+
+// unknown is a slug that names nothing the ingress serves. A VM that lets
+// nothing in, and a port a VM does not expose, are answered the same way:
+// what is not served is not there, as far as anybody asking is concerned.
+var unknown = &unavailable{status: http.StatusNotFound, message: "unknown task"}
+
+// locateKind is the node holding the resource a slug names among the kinds
+// with endpoints, asked in the order they were registered, and the route the
+// node serves the kind's ports on: under the kind's plural. A kind that has
+// nothing by the slug passes it to the next.
+func (h *taskHandler) locateKind(ctx context.Context, slug string, requested port.Port) (string, string, *unavailable, error) {
+	for _, binding := range h.kinds.All() {
+		d := binding.Descriptor()
+		if !d.Endpoints {
+			continue
+		}
+
+		location, err := binding.BySlug(ctx, slug)
+
+		switch {
+		case errors.Is(err, domain.ErrNotExists):
+			continue
+		case errors.Is(err, kind.ErrUnreachable) && unexposed(location, requested):
+			// a port it does not expose is not there, whether or not it can
+			// be reached now.
+			return "", "", unknown, nil
+		case errors.Is(err, kind.ErrUnreachable):
+			return "", "", &unavailable{status: http.StatusServiceUnavailable, message: err.Error()}, nil
+		case err != nil:
+			return "", "", nil, err
+		}
+
+		nodeName, refused := locatedNode(d.Name, location, requested)
+
+		return nodeName, "/" + d.Plural, refused, nil
+	}
+
+	return "", "", unknown, nil
+}
+
+// unexposed reports whether a port asked for is one a resource that cannot be
+// reached now says it would not let the ingress reach.
+func unexposed(location kind.Location, requested port.Port) bool {
+	return requested != 0 && len(location.Ports) > 0 && !slices.Contains(location.Ports, requested)
+}
+
+// locatedNode is the node holding a resource whose port is asked for, when
+// the resource lets the ingress in to that port and is on a node to be
+// reached. With no port named, its node answers on the lowest one it exposes.
+func locatedNode(kindName string, location kind.Location, requested port.Port) (string, *unavailable) {
+	if len(location.Ports) == 0 {
+		return "", unknown
+	}
+
+	if requested != 0 && !slices.Contains(location.Ports, requested) {
+		return "", unknown
+	}
+
+	if len(location.Node) == 0 {
+		return "", &unavailable{status: http.StatusServiceUnavailable, message: "the " + kindName + " has not been scheduled yet"}
+	}
+
+	return location.Node, nil
 }
 
 // parseHost takes the task's slug, and optionally the port it names, out

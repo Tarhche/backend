@@ -15,6 +15,11 @@ type Heartbeat struct {
 
 var _ domain.MessageHandler = &Heartbeat{}
 
+// NewHeartbeatHandler is a handler that writes down what a node says of
+// itself in nodeRepository: that it is alive, what it is, what it uses and
+// what it offers. What it holds is heard an instance at a time, on each
+// kind's own subject (kinds/heartbeatResources), and when it last beat is
+// what its silence about any of it is judged by (kinds/reconcileResources).
 func NewHeartbeatHandler(nodeRepository node.Repository) *Heartbeat {
 	return &Heartbeat{nodeRepository: nodeRepository}
 }
@@ -33,11 +38,14 @@ func (h *Heartbeat) Handle(ctx context.Context, data []byte) error {
 	n.Name = heartbeat.Name
 	n.Role = heartbeat.Role
 	n.Stats = heartbeat.Stats
+	n.Capacity = heartbeat.Capacity
 	n.LastHeartbeatAt = heartbeat.At
 
-	_, err = h.nodeRepository.Save(ctx, &n)
+	if _, err := h.nodeRepository.Save(ctx, &n); err != nil {
+		return err
+	}
 
-	return err
+	return nil
 }
 
 func (h *Heartbeat) getNode(ctx context.Context, name string) (node.Node, error) {

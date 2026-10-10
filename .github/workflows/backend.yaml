@@ -30,6 +30,8 @@ jobs:
             target: production-workload-ingress
           - name: workload-orchestrator
             target: production-workload-orchestrator
+          - name: workload-vmhost
+            target: production-workload-vmhost
 
     steps:
       - name: Checkout code
@@ -78,6 +80,8 @@ jobs:
             target: production-workload-ingress
           - name: workload-orchestrator
             target: production-workload-orchestrator
+          - name: workload-vmhost
+            target: production-workload-vmhost
 
     steps:
       - name: Checkout code
@@ -130,10 +134,7 @@ jobs:
           # Copy files
           scp -q -i ~/hetzner-key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -r ./compose.*.yaml $HETZNER_SSH_ENDPOINT:/tmp/deployment_backend/ 2>/dev/null
 
-          # Connect and deploy services. What the remote shell prints comes back
-          # to the job log: a deploy that fails says why here rather than only in
-          # a container nobody is looking at. The commands themselves are never
-          # echoed -- no set -x -- so the exports below stay out of it.
+          # Deploy services
           ssh -q -i ~/hetzner-key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $HETZNER_SSH_ENDPOINT << 'EOF'
             # a failure surfaces through the exit status, which set -e propagates back through ssh
             set -e
@@ -169,16 +170,10 @@ jobs:
             export BACKEND_S3_USE_SSL='${{ secrets.BACKEND_S3_USE_SSL }}'
             export BACKEND_S3_BUCKET_NAME='${{ secrets.BACKEND_S3_BUCKET_NAME }}'
 
-            export BACKEND_DOCKER_HOST='${{ secrets.BACKEND_DOCKER_HOST }}'
-
             export BACKEND_WORKLOAD_CONTROLPLANE_URL='${{ secrets.BACKEND_WORKLOAD_CONTROLPLANE_URL }}'
             export BACKEND_WORKLOAD_INGRESS_DOMAIN='${{ secrets.BACKEND_WORKLOAD_INGRESS_DOMAIN }}'
-            export BACKEND_WORKLOAD_ORCHESTRATOR_ADVERTISE_HOST='${{ secrets.BACKEND_WORKLOAD_ORCHESTRATOR_ADVERTISE_HOST }}'
             export BACKEND_WORKLOAD_TUNNEL_ADDRESSES='${{ secrets.BACKEND_WORKLOAD_TUNNEL_ADDRESSES }}'
 
-            # each service's own certificate and the authority to check the
-            # other end against, as the PEM itself. ca.key is deliberately not
-            # here: nothing that runs needs it.
             export BACKEND_WORKLOAD_TUNNEL_CA_CERT='${{ secrets.BACKEND_WORKLOAD_TUNNEL_CA_CERT }}'
             export BACKEND_WORKLOAD_TUNNEL_SERVER_NAME='${{ secrets.BACKEND_WORKLOAD_TUNNEL_SERVER_NAME }}'
             export BACKEND_WORKLOAD_INGRESS_TUNNEL_CERT='${{ secrets.BACKEND_WORKLOAD_INGRESS_TUNNEL_CERT }}'
@@ -190,18 +185,60 @@ jobs:
             export BACKEND_WORKLOAD_ORCHESTRATOR_03_TUNNEL_CERT='${{ secrets.BACKEND_WORKLOAD_ORCHESTRATOR_03_TUNNEL_CERT }}'
             export BACKEND_WORKLOAD_ORCHESTRATOR_03_TUNNEL_KEY='${{ secrets.BACKEND_WORKLOAD_ORCHESTRATOR_03_TUNNEL_KEY }}'
 
-            # the ports arbitrary TCP arrives on, and what an orchestrator will connect
-            # a stream to beyond the services it offers by name.
             export BACKEND_WORKLOAD_INGRESS_FORWARDS='${{ secrets.BACKEND_WORKLOAD_INGRESS_FORWARDS }}'
             export BACKEND_WORKLOAD_TUNNEL_ALLOWED_TARGETS='${{ secrets.BACKEND_WORKLOAD_TUNNEL_ALLOWED_TARGETS }}'
-            # the public half of the key the blog signs access tokens with; the
-            # orchestrators verify against it and never sign anything
             export BACKEND_PUBLIC_KEY='${{ secrets.BACKEND_PUBLIC_KEY }}'
+
+            export BACKEND_WORKLOAD_SNAPSHOT_S3_ENDPOINT='${{ secrets.BACKEND_WORKLOAD_SNAPSHOT_S3_ENDPOINT }}'
+            export BACKEND_WORKLOAD_SNAPSHOT_S3_ACCESS_KEY='${{ secrets.BACKEND_WORKLOAD_SNAPSHOT_S3_ACCESS_KEY }}'
+            export BACKEND_WORKLOAD_SNAPSHOT_S3_SECRET_KEY='${{ secrets.BACKEND_WORKLOAD_SNAPSHOT_S3_SECRET_KEY }}'
+            export BACKEND_WORKLOAD_SNAPSHOT_S3_USE_SSL='${{ secrets.BACKEND_WORKLOAD_SNAPSHOT_S3_USE_SSL }}'
+            export BACKEND_WORKLOAD_SNAPSHOT_S3_BUCKET='${{ secrets.BACKEND_WORKLOAD_SNAPSHOT_S3_BUCKET }}'
+
+            export BACKEND_WORKLOAD_KVM_GID='${{ vars.BACKEND_WORKLOAD_KVM_GID }}'
+            export BACKEND_WORKLOAD_VMHOST_MEMORY_LIMIT='${{ vars.BACKEND_WORKLOAD_VMHOST_MEMORY_LIMIT }}'
+            export BACKEND_WORKLOAD_VMHOST_CPUS_LIMIT='${{ vars.BACKEND_WORKLOAD_VMHOST_CPUS_LIMIT }}'
+            export BACKEND_WORKLOAD_VMHOST_MEMORY='${{ vars.BACKEND_WORKLOAD_VMHOST_MEMORY }}'
+            export BACKEND_WORKLOAD_VMHOST_CPUS='${{ vars.BACKEND_WORKLOAD_VMHOST_CPUS }}'
+            export BACKEND_WORKLOAD_VMHOST_DISK='${{ vars.BACKEND_WORKLOAD_VMHOST_DISK }}'
+            export BACKEND_WORKLOAD_VMHOST_MAX_CONCURRENT_BOOTS='${{ vars.BACKEND_WORKLOAD_VMHOST_MAX_CONCURRENT_BOOTS }}'
+            export BACKEND_WORKLOAD_VMHOST_PORT_RANGE='${{ vars.BACKEND_WORKLOAD_VMHOST_PORT_RANGE }}'
+
+            export BACKEND_WORKLOAD_VM_DEFAULT_IMAGE='${{ vars.BACKEND_WORKLOAD_VM_DEFAULT_IMAGE }}'
+            export BACKEND_WORKLOAD_VM_DOCKER_IMAGE='${{ vars.BACKEND_WORKLOAD_VM_DOCKER_IMAGE }}'
+            export BACKEND_WORKLOAD_VM_MIN_MEMORY='${{ vars.BACKEND_WORKLOAD_VM_MIN_MEMORY }}'
+            export BACKEND_WORKLOAD_VM_MIN_DISK='${{ vars.BACKEND_WORKLOAD_VM_MIN_DISK }}'
+            export BACKEND_WORKLOAD_VM_DOCKER_MIN_MEMORY='${{ vars.BACKEND_WORKLOAD_VM_DOCKER_MIN_MEMORY }}'
+            export BACKEND_WORKLOAD_VM_DOCKER_MIN_DISK='${{ vars.BACKEND_WORKLOAD_VM_DOCKER_MIN_DISK }}'
+            export BACKEND_WORKLOAD_VM_MAX_CPUS='${{ vars.BACKEND_WORKLOAD_VM_MAX_CPUS }}'
+            export BACKEND_WORKLOAD_VM_MAX_MEMORY='${{ vars.BACKEND_WORKLOAD_VM_MAX_MEMORY }}'
+            export BACKEND_WORKLOAD_VM_MAX_DISK='${{ vars.BACKEND_WORKLOAD_VM_MAX_DISK }}'
+            export BACKEND_WORKLOAD_VM_USER_MAX_VMS='${{ vars.BACKEND_WORKLOAD_VM_USER_MAX_VMS }}'
+            export BACKEND_WORKLOAD_VM_USER_CPUS='${{ vars.BACKEND_WORKLOAD_VM_USER_CPUS }}'
+            export BACKEND_WORKLOAD_VM_USER_MEMORY='${{ vars.BACKEND_WORKLOAD_VM_USER_MEMORY }}'
+            export BACKEND_WORKLOAD_VM_USER_DISK='${{ vars.BACKEND_WORKLOAD_VM_USER_DISK }}'
+            export BACKEND_WORKLOAD_VM_MAX_LIFETIME='${{ vars.BACKEND_WORKLOAD_VM_MAX_LIFETIME }}'
+            export BACKEND_WORKLOAD_VM_CPU_OVERCOMMIT='${{ vars.BACKEND_WORKLOAD_VM_CPU_OVERCOMMIT }}'
+            export BACKEND_WORKLOAD_VM_DOCKER_DEFAULT_CPUS='${{ vars.BACKEND_WORKLOAD_VM_DOCKER_DEFAULT_CPUS }}'
+            export BACKEND_WORKLOAD_VM_DOCKER_DEFAULT_MEMORY='${{ vars.BACKEND_WORKLOAD_VM_DOCKER_DEFAULT_MEMORY }}'
+            export BACKEND_WORKLOAD_VM_DOCKER_DEFAULT_DISK='${{ vars.BACKEND_WORKLOAD_VM_DOCKER_DEFAULT_DISK }}'
+            export BACKEND_WORKLOAD_VM_DOCKER_DEFAULT_PORTS='${{ vars.BACKEND_WORKLOAD_VM_DOCKER_DEFAULT_PORTS }}'
+            export BACKEND_WORKLOAD_VM_DOCKER_DEFAULT_INGRESS='${{ vars.BACKEND_WORKLOAD_VM_DOCKER_DEFAULT_INGRESS }}'
+            export BACKEND_WORKLOAD_VM_DOCKER_DEFAULT_EGRESS='${{ vars.BACKEND_WORKLOAD_VM_DOCKER_DEFAULT_EGRESS }}'
+            export BACKEND_WORKLOAD_VM_DOCKER_DEFAULT_PERSISTENT_DISK='${{ vars.BACKEND_WORKLOAD_VM_DOCKER_DEFAULT_PERSISTENT_DISK }}'
+            export BACKEND_WORKLOAD_VM_DOCKER_DEFAULT_LIFETIME='${{ vars.BACKEND_WORKLOAD_VM_DOCKER_DEFAULT_LIFETIME }}'
+            export BACKEND_WORKLOAD_SNAPSHOT_USER_MAX='${{ vars.BACKEND_WORKLOAD_SNAPSHOT_USER_MAX }}'
+
+            export BACKEND_WORKLOAD_DOCKER_READY_TIMEOUT='${{ vars.BACKEND_WORKLOAD_DOCKER_READY_TIMEOUT }}'
+            export BACKEND_WORKLOAD_DOCKER_PULL_TIMEOUT='${{ vars.BACKEND_WORKLOAD_DOCKER_PULL_TIMEOUT }}'
+            export BACKEND_WORKLOAD_NODE_REQUEST_TIMEOUT='${{ vars.BACKEND_WORKLOAD_NODE_REQUEST_TIMEOUT }}'
+            export BACKEND_WORKLOAD_NODE_REQUEST_CONCURRENCY='${{ vars.BACKEND_WORKLOAD_NODE_REQUEST_CONCURRENCY }}'
 
             export APP_IMAGE='${{ secrets.APP_IMAGE }}'
             export WORKLOAD_CONTROLPLANE_IMAGE='${{ secrets.WORKLOAD_CONTROLPLANE_IMAGE }}'
             export WORKLOAD_INGRESS_IMAGE='${{ secrets.WORKLOAD_INGRESS_IMAGE }}'
             export WORKLOAD_ORCHESTRATOR_IMAGE='${{ secrets.WORKLOAD_ORCHESTRATOR_IMAGE }}'
+            export WORKLOAD_VMHOST_IMAGE='${{ secrets.WORKLOAD_VMHOST_IMAGE }}'
 
             export OTEL_EXPORTER_OTLP_INSECURE='${{ secrets.OTEL_EXPORTER_OTLP_INSECURE }}'
             export OTEL_EXPORTER_OTLP_PROTOCOL='${{ secrets.OTEL_EXPORTER_OTLP_PROTOCOL }}'
@@ -212,11 +249,6 @@ jobs:
             # Run Docker Compose
             cd /tmp/deployment_backend/
 
-            # --wait holds the deploy until every replica passes the healthcheck
-            # defined in the compose file, so a version that cannot serve traffic
-            # fails the job instead of being reported as deployed. A service that
-            # never gets there says so in its own words: what it printed before
-            # it gave up is the only thing that explains why.
             deploy() {
                 if docker compose -f "$1" --project-name "$2" up --pull always --detach --wait --wait-timeout 180; then
                     return 0

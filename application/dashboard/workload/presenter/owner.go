@@ -1,15 +1,24 @@
+// Package presenter turns what the workload reports into what the dashboard
+// shows. The shapes live in one place because a VM, a container or a stack
+// looks the same whether it is listed, shown, created or changed, and whether
+// it is asked for as anybody's or as one's own.
 package presenter
 
 import (
+	"context"
+
 	"github.com/khanzadimahdi/testproject/domain/user"
+	"github.com/khanzadimahdi/testproject/domain/workload/task"
 )
 
-// Owner is who a task or a stack belongs to, as the dashboard shows it.
+// Owner is who a VM, a snapshot or a stack belongs to, as the dashboard shows
+// them beside it. Its uuid is the owner_uuid the record carries anyway; the
+// rest is what puts a face to it.
 //
-// It is empty for a task that belongs to nobody: the code runner on the
-// public pages starts one for whoever is reading, signed in or not, and an id
-// that names no one names no one whether it was never set, set to a guest, or
-// left behind by somebody who has since gone.
+// The code runner's runs are the guest's, whoever was reading the page they
+// were run from, signed in or not: their owner is the guest's uuid and nothing
+// more, since there is nobody to put a face to, as it was when the dashboard
+// listed them as tasks.
 type Owner struct {
 	UUID     string `json:"uuid"`
 	Name     string `json:"name,omitempty"`
@@ -17,8 +26,8 @@ type Owner struct {
 	Username string `json:"username,omitempty"`
 }
 
-// Owners are the people behind a page of tasks or stacks, so a listing
-// asks who they are once rather than once per row.
+// Owners are the people behind a page of records, so a listing asks who they
+// are once rather than once per row.
 type Owners map[string]user.User
 
 func NewOwners(users []user.User) Owners {
@@ -30,17 +39,69 @@ func NewOwners(users []user.User) Owners {
 	return owners
 }
 
-// Of is who that id belongs to, and nobody at all when it belongs to no one.
-func (o Owners) Of(uuid string) Owner {
-	u, ok := o[uuid]
-	if !ok {
-		return Owner{}
+// Of is who that id belongs to: the guest for the guest's, and nobody at all
+// when it names no one the dashboard has, since somebody who has since gone
+// still leaves their records, and the owner_uuid beside them is all there is
+// to say.
+func (o Owners) Of(uuid string) *Owner {
+	if uuid == task.GuestOwnerUUID {
+		return &Owner{UUID: uuid}
 	}
 
-	return Owner{
+	u, ok := o[uuid]
+	if !ok {
+		return nil
+	}
+
+	return &Owner{
 		UUID:     u.UUID,
 		Name:     u.Name,
 		Avatar:   u.Avatar,
 		Username: u.Username,
 	}
+}
+
+// Directory is who the workload's records belong to.
+//
+// The workload keeps the id of whoever asked for a VM, and nothing else about
+// them: a name to show beside it lives with the users. This is what puts the
+// two together, a page's worth at a time.
+type Directory struct {
+	users user.Repository
+}
+
+func NewDirectory(users user.Repository) *Directory {
+	return &Directory{users: users}
+}
+
+// Of looks up the people behind the given ids, each of them once. An id it
+// cannot place is left out rather than refused.
+func (d *Directory) Of(ctx context.Context, uuids ...string) (Owners, error) {
+	wanted := make([]string, 0, len(uuids))
+	seen := make(map[string]struct{}, len(uuids))
+
+	for _, uuid := range uuids {
+		// the guest is nobody the users know, so there is no one to look up.
+		if len(uuid) == 0 || uuid == task.GuestOwnerUUID {
+			continue
+		}
+
+		if _, asked := seen[uuid]; asked {
+			continue
+		}
+
+		seen[uuid] = struct{}{}
+		wanted = append(wanted, uuid)
+	}
+
+	if len(wanted) == 0 {
+		return NewOwners(nil), nil
+	}
+
+	users, err := d.users.GetByUUIDs(ctx, wanted)
+	if err != nil {
+		return nil, err
+	}
+
+	return NewOwners(users), nil
 }

@@ -11,19 +11,20 @@ import (
 	"github.com/danceable/provider"
 
 	orchestratorHeartbeat "github.com/khanzadimahdi/testproject/application/workload/orchestrator/beatHeart"
-	taskHeartbeat "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/beatHeart"
 	shipLogs "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/shipLogs"
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers"
+	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers/core"
 	"github.com/khanzadimahdi/testproject/infrastructure/ioc/providers/workload"
+	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/core/request"
 	"github.com/khanzadimahdi/testproject/infrastructure/tunnel"
 )
 
 const (
 	serveName                     string = "serve-workload-orchestrator"
 	orchestratorHeartbeatInterval        = 1 * time.Second
-	taskHeartbeatInterval                = 300 * time.Millisecond
 
 	// logShippingInterval is how often the followers are brought in line with
 	// what is running. A task that has just started is followed within
@@ -31,14 +32,23 @@ const (
 	logShippingInterval = 1 * time.Second
 )
 
+// requestServer answers the control plane's requests to this node.
+type requestServer interface {
+	Serve(ctx context.Context, subject string) error
+}
+
 type ServeCommand struct {
 	configs               *configs.WorkloadOrchestrator
 	handler               http.Handler
 	consumer              domain.Consumer
 	consumers             map[string]domain.MessageHandler
-	taskHeartBeat         *taskHeartbeat.UseCase
 	orchestratorHeartBeat *orchestratorHeartbeat.UseCase
 	logShipper            *shipLogs.UseCase
+
+	// requests answers what the control plane asks this node and waits for:
+	// every kind's queries, a VM's log say, and the commands for what nobody
+	// keeps a record of, a container made from its VM's terminal.
+	requests requestServer
 
 	// tunnel holds this orchestrator's connections to the ingresses. They are how a
 	// request reaches it: nothing dials an orchestrator, so its own port answers only
@@ -89,15 +99,14 @@ func (c *ServeCommand) Configure(flagSet *console.FlagSet) {
 // task so the orchestrator providers can resolve it.
 func (c *ServeCommand) Providers() []provider.Provider {
 	return []provider.Provider{
-		providers.NewConfigsProvider(c.configs),
+		core.NewConfigsProvider(c.configs),
 		workload.NewOrchestratorNameProvider(),
-		providers.NewOpenTelemetryProvider("workload-orchestrator", c.configs.Name),
-		providers.NewProfilerProvider("workload-orchestrator"),
+		core.NewOpenTelemetryProvider("workload-orchestrator", c.configs.Name),
+		core.NewProfilerProvider("workload-orchestrator"),
 		providers.NewNatsProvider(),
-		providers.NewDockerProvider(),
 		providers.NewTranslationProvider(),
 		providers.NewValidationProvider(),
-		providers.NewContainerProvider(),
+		core.NewContainerProvider(),
 		workload.NewOrchestratorProvider(),
 		c,
 	}
@@ -118,10 +127,6 @@ func (c *ServeCommand) Boot(ctx context.Context, task provider.Container) error 
 		return err
 	}
 
-	if err := task.Resolve(&c.taskHeartBeat); err != nil {
-		return err
-	}
-
 	if err := task.Resolve(&c.orchestratorHeartBeat); err != nil {
 		return err
 	}
@@ -129,6 +134,13 @@ func (c *ServeCommand) Boot(ctx context.Context, task provider.Container) error 
 	if err := task.Resolve(&c.logShipper); err != nil {
 		return err
 	}
+
+	var responder *request.Responder
+	if err := task.Resolve(&responder); err != nil {
+		return err
+	}
+
+	c.requests = responder
 
 	if err := task.Resolve(&c.tunnel); err != nil {
 		return err
@@ -185,8 +197,13 @@ func (c *ServeCommand) Run(ctx context.Context) console.ExitStatus {
 		return console.ExitFailure
 	}
 
-	go c.tasksHeartbeat(ctx)
+	if err := c.requests.Serve(ctx, noderequest.Subject(c.configs.Name)); err != nil {
+		c.logger.ErrorContext(ctx, "failed to answer node requests", "error", err)
+		return console.ExitFailure
+	}
+
 	go c.orchestratorHeartbeat(ctx)
+	go c.promptBeats(ctx)
 	go c.shipLogs(ctx)
 	go c.serveTunnel(ctx)
 
@@ -227,23 +244,6 @@ func (c *ServeCommand) consumeTopics(ctx context.Context) error {
 	return nil
 }
 
-func (c *ServeCommand) tasksHeartbeat(ctx context.Context) {
-	ticker := time.NewTicker(taskHeartbeatInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ticker.C:
-			err := c.taskHeartBeat.Execute(ctx)
-			if err != nil {
-				c.logger.ErrorContext(ctx, "task heartbeat failed", "error", err)
-			}
-		case <-ctx.Done():
-			return
-		}
-	}
-}
-
 // shipLogs keeps a follower on every long-running task this node holds, so
 // what they write reaches the control plane as it is written.
 func (c *ServeCommand) shipLogs(ctx context.Context) {
@@ -257,6 +257,31 @@ func (c *ServeCommand) shipLogs(ctx context.Context) {
 		case <-ticker.C:
 			if err := c.logShipper.Execute(ctx); err != nil {
 				c.logger.ErrorContext(ctx, "log shipping failed", "error", err)
+			}
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+// promptBeats tells at once what the kinds whose changes somebody waits on as
+// they happen hold, when that changed, between beats: a code-runner snippet
+// that ended is told of as soon as it is seen rather than at the next beat.
+// A node that runs no such kind is never asked.
+func (c *ServeCommand) promptBeats(ctx context.Context) {
+	every := c.orchestratorHeartBeat.Prompt()
+	if every <= 0 {
+		return
+	}
+
+	ticker := time.NewTicker(every)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			if err := c.orchestratorHeartBeat.Hurry(ctx); err != nil {
+				c.logger.ErrorContext(ctx, "orchestrator prompt beat failed", "error", err)
 			}
 		case <-ctx.Done():
 			return

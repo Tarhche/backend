@@ -35,8 +35,9 @@ type Blog struct {
 	MailUsername string `usage:"SMTP user, when the relay authenticates." env:"MAIL_SMTP_USERNAME" long:"mail-smtp-username"`
 	MailPassword string `usage:"SMTP password, when the relay authenticates." env:"MAIL_SMTP_PASSWORD" long:"mail-smtp-password"`
 
-	WorkloadControlPlaneURL string `usage:"Base URL of the workload control plane's API, which the dashboard passes task and stack commands to." env:"WORKLOAD_CONTROLPLANE_URL" long:"workload-controlplane-url"`
+	WorkloadControlPlaneURL string `usage:"Base URL of the workload control plane's API, which the blog reaches the workload through." env:"WORKLOAD_CONTROLPLANE_URL" long:"workload-controlplane-url"`
 	WorkloadIngressDomain   string `usage:"Domain a workload task's exposed ports are served on, used to build the addresses the dashboard shows." env:"WORKLOAD_INGRESS_DOMAIN" long:"workload-ingress-domain"`
+	WorkloadVMDockerImage   string `usage:"Image every Docker VM boots from, the same one the control plane and the vmhosts are given: a VM booting it is shown as a Docker VM, and one is asked for by it." env:"WORKLOAD_VM_DOCKER_IMAGE" long:"workload-vm-docker-image"`
 }
 
 // NewBlog returns the configuration of the serve-blog command, holding the
@@ -47,5 +48,6 @@ func NewBlog() *Blog {
 		Port:                    defaultBlogPort,
 		WorkloadControlPlaneURL: defaultWorkloadControlPlaneURL,
 		WorkloadIngressDomain:   defaultWorkloadPublicIngressDomain,
+		WorkloadVMDockerImage:   defaultWorkloadVMDockerImage,
 	}
 }

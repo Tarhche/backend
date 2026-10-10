@@ -13,23 +13,14 @@ import (
 	"github.com/nats-io/nats.go"
 
 	checkhealth "github.com/khanzadimahdi/testproject/application/app/checkHealth"
+	orchestratorAttachResource "github.com/khanzadimahdi/testproject/application/workload/orchestrator/attachResource"
 	orchestratorHeartbeat "github.com/khanzadimahdi/testproject/application/workload/orchestrator/beatHeart"
-	orchestratorDeleteStack "github.com/khanzadimahdi/testproject/application/workload/orchestrator/stack/deleteStack"
-	orchestratorAttachTask "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/attachTask"
-	orchestratorTaskHeartbeat "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/beatHeart"
-	orchestratorDeleteTask "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/deleteTask"
-	orchestratorGetEndpoint "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/getEndpoint"
-	orchestratorkilltask "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/killTask"
-	orchestratorrestarttask "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/restartTask"
-	orchestratorruntask "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/runTask"
+	orchestratorGetResourceEndpoint "github.com/khanzadimahdi/testproject/application/workload/orchestrator/getResourceEndpoint"
 	orchestratorShipLogs "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/shipLogs"
-	orchestratorstoptask "github.com/khanzadimahdi/testproject/application/workload/orchestrator/task/stopTask"
 	"github.com/khanzadimahdi/testproject/domain"
-	networkContract "github.com/khanzadimahdi/testproject/domain/workload/network"
 	nodeContract "github.com/khanzadimahdi/testproject/domain/workload/node"
-	stackEvents "github.com/khanzadimahdi/testproject/domain/workload/stack/events"
 	"github.com/khanzadimahdi/testproject/domain/workload/task"
-	taskEvents "github.com/khanzadimahdi/testproject/domain/workload/task/events"
+	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/certificate"
 	"github.com/khanzadimahdi/testproject/infrastructure/crypto/ecdsa"
@@ -38,15 +29,35 @@ import (
 	"github.com/khanzadimahdi/testproject/infrastructure/messaging/nats/jetstream/produceConsumer"
 	"github.com/khanzadimahdi/testproject/infrastructure/telemetry/profiler"
 	"github.com/khanzadimahdi/testproject/infrastructure/tunnel"
+	infraNode "github.com/khanzadimahdi/testproject/infrastructure/workload/node"
+	"github.com/khanzadimahdi/testproject/infrastructure/workload/task/vmruntime"
 	healthAPI "github.com/khanzadimahdi/testproject/presentation/http/health"
 	"github.com/khanzadimahdi/testproject/presentation/http/middleware"
-	orchestratorTaskAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/orchestrator/api/task"
+	orchestratorKindsAPI "github.com/khanzadimahdi/testproject/presentation/http/workload/orchestrator/api/kinds"
 )
 
 const (
 	OrchestratorSubscribers = "workload:orchestrator:subscribers"
 
 	consumerNamePrefix string = "workload-orchestrator-%s"
+
+	// commandConcurrency is how many of the control plane's commands of one
+	// kind an orchestrator carries out at once. Restoring a VM or pulling a
+	// stack's images takes minutes, and should not hold up every other VM's
+	// commands meanwhile.
+	commandConcurrency = 4
+
+	// commandProgress is how often JetStream is told that a command still
+	// being carried out is, which is well within its ack wait.
+	commandProgress = 10 * time.Second
+
+	// kindStateTimeout is how long each kind this node runs is given, every
+	// beat, to say what it holds here. A beat goes every second, so a kind
+	// slow to answer is left out of one rather than holding the other kinds'
+	// heartbeats up past the next. The node's own heartbeat, which the
+	// control plane schedules by, only on a node it heard from in the last
+	// three, goes before any kind is asked, and waits on none.
+	kindStateTimeout = time.Second
 )
 
 // orchestratorProvider builds the workload orchestrator's messaging singleton, HTTP handler,
@@ -83,7 +94,10 @@ func (p *orchestratorProvider) Boot(ctx context.Context, c provider.Container) e
 
 	consumerName := fmt.Sprintf(consumerNamePrefix, nodeName)
 
-	pc, err := produceConsumer.NewProduceConsumer(natsConnection, consumerName, logger)
+	pc, err := produceConsumer.NewProduceConsumer(natsConnection, consumerName, logger,
+		produceConsumer.WithConcurrency(commandConcurrency),
+		produceConsumer.WithProgress(commandProgress),
+	)
 	if err != nil {
 		return err
 	}
@@ -100,7 +114,39 @@ func (p *orchestratorProvider) Boot(ctx context.Context, c provider.Container) e
 		return err
 	}
 
+	if err := p.bindEngine(c, logger); err != nil {
+		return err
+	}
+
 	return c.Bind(orchestratorConsoleCommand, provider.Singleton())
+}
+
+// bindEngine binds what this node runs VMs on, and what it runs the code
+// runner's tasks and reports itself through, which is the same engine: a task
+// is an ephemeral VM of its own.
+func (p *orchestratorProvider) bindEngine(c provider.Container, logger *slog.Logger) error {
+	var orchestratorConfigs *configs.WorkloadOrchestrator
+	if err := c.Resolve(&orchestratorConfigs); err != nil {
+		return err
+	}
+
+	engine, err := vmhostEngine(orchestratorConfigs.VMHostSocket)
+	if err != nil {
+		return err
+	}
+
+	runtime := vmruntime.New(engine, logger)
+	nodeManager := infraNode.NewManager(engine)
+
+	if err := c.Bind(func() vm.Engine { return engine }, provider.Singleton()); err != nil {
+		return err
+	}
+
+	if err := c.Bind(func() task.Runtime { return runtime }, provider.Singleton()); err != nil {
+		return err
+	}
+
+	return c.Bind(func() nodeContract.Manager { return nodeManager }, provider.Singleton())
 }
 
 // bindTunnel builds this orchestrator's connections to the ingresses.
@@ -173,8 +219,8 @@ func (p *orchestratorProvider) Terminate(ctx context.Context) error {
 
 func orchestratorConsoleCommand(
 	natsConnection *nats.Conn,
+	engine vm.Engine,
 	taskManager task.Runtime,
-	networkManager networkContract.Manager,
 	nodeManager nodeContract.Manager,
 	asyncProduceConsumer domain.ProduceConsumer,
 	validator domain.Validator,
@@ -195,23 +241,29 @@ func orchestratorConsoleCommand(
 		return nil, err
 	}
 
-	// the network standalone isolated tasks share is made when the first
-	// task joins it rather than here. A node whose docker daemon is away
-	// for a moment — it restarts, or it comes up after the node does — would
-	// otherwise fail to start at all, and stay down until somebody noticed.
-
-	// tasks
-	runTaskUseCase := orchestratorruntask.NewUseCase(taskManager, networkManager, validator, nodeName)
-	stopTaskUseCase := orchestratorstoptask.NewUseCase(taskManager, validator)
-	killTaskUseCase := orchestratorkilltask.NewUseCase(taskManager, validator)
-	restartTaskUseCase := orchestratorrestarttask.NewUseCase(taskManager, validator)
-	deleteTaskUseCase := orchestratorDeleteTask.NewUseCase(taskManager, validator, logger)
-	attachTaskUseCase := orchestratorAttachTask.NewUseCase(taskManager, validator)
-
 	// the orchestrator talks to no database, so messaging is its only dependency
 	checkHealthUseCase := checkhealth.NewUseCase(
 		checkhealth.Dependency{Name: "messaging", Pinger: infraHealth.NewNatsPinger(natsConnection)},
 	)
+
+	subscribers := map[string]domain.MessageHandler{}
+
+	// what is asked of every kind this node runs, VMs, their snapshots, the
+	// stacks in them and the code runner's tasks, and the answers to what the
+	// control plane asks and waits for.
+	workload, err := bindOrchestratorWorkload(iocContainer, OrchestratorDependencies{
+		NATS:     natsConnection,
+		Engine:   engine,
+		Tasks:    taskManager,
+		Archives: snapshotArchives(orchestratorConfigs.SnapshotStorage),
+		Producer: asyncProduceConsumer,
+		Configs:  orchestratorConfigs,
+		NodeName: nodeName,
+		Logger:   logger,
+	}, subscribers)
+	if err != nil {
+		return nil, err
+	}
 
 	// what the tokens the blog signs are verified against. An orchestrator never mints
 	// one, so it holds the public half and could not sign a token if it tried.
@@ -222,27 +274,20 @@ func orchestratorConsoleCommand(
 
 	verifier := jwt.NewJWT(nil, publicKey)
 
-	// what a task is told to do -- run, stop, kill, restart, be deleted -- reaches
-	// this node as the control plane's messages, below, and in no other way, and
-	// what the node is holding goes back the same way, in its heartbeats. So
-	// there is no route for either. Everything under /api is reachable from
-	// outside, through the ingress, and a token proves only that the estate
-	// signed it for somebody: a route that ran or stopped a task would do it for
-	// anybody signed in, to anybody's task, with whatever image and resources
-	// they named, and the control plane would never hear of it.
+	// what a task or a VM is told to do -- run, stop, restart, snapshot, be
+	// deleted -- reaches this node as the control plane's messages, below, and
+	// in no other way, and what the node is holding goes back the same way, in
+	// its heartbeats. So there is no route for either. Everything under /api is
+	// reachable from outside, through the ingress, and a token proves only that
+	// the estate signed it for somebody: a route that ran or stopped something
+	// would do it for anybody signed in, to anybody's, and the control plane
+	// would never hear of it. A VM's terminal is the vm kind's stream, routed
+	// with every kind's below.
 	api := http.NewServeMux()
 
 	// the task healthcheck probes this, from inside the task, and it
 	// says nothing a caller could not find out by the service being up
 	api.Handle("GET /health", healthAPI.NewHealthHandler(checkHealthUseCase))
-
-	// a terminal inside a task, which the ingress carries here. It asks for a
-	// token and does not insist on one: a snippet has no owner, so there is
-	// nobody it could be checked against.
-	api.Handle("GET /api/tasks/{uuid}/attach", middleware.NewOptionalTokenMiddleware(
-		orchestratorTaskAPI.NewAttachHandler(attachTaskUseCase, logger),
-		verifier,
-	))
 
 	rateLimited, err := middleware.NewRateLimitMiddleware(api, 600, 1*time.Minute)
 	if err != nil {
@@ -254,12 +299,25 @@ func orchestratorConsoleCommand(
 	// the node's own answers, which are capped and carry its own headers
 	mux.Handle("/", middleware.NewCORSMiddleware(rateLimited))
 
-	// a task this node is holding, which only this node can reach: the
-	// ingress works out whose it is and sends the request here. Neither the cap
-	// nor the headers belong on it — what comes through is the task's own
-	// traffic, and answering for it is the task's, a preflight included.
-	getEndpointUseCase := orchestratorGetEndpoint.NewUseCase(taskManager, orchestratorConfigs.AdvertiseHost)
-	mux.Handle("/tasks/{slug}/{port}/{path...}", orchestratorTaskAPI.NewProxyHandler(getEndpointUseCase, logger))
+	// what the kinds this node runs serve, each under its own plural: the
+	// streams of those that serve them, among the node's own answers, a VM's
+	// terminal, opened for its owner alone, and a task's, opened for anybody
+	// for a snippet of the guest's; and the ports of those that serve them, a
+	// VM's and a task's, which only this node can reach: the ingress works out
+	// which node holds one and sends the request here. Neither the cap nor
+	// the headers belong on a port: what comes through is the resource's own
+	// traffic, and answering for it is its own, a preflight included. A kind
+	// takes no route until it is registered.
+	kindRoutes := orchestratorKindsAPI.NewRoutes(
+		workload.Kinds,
+		orchestratorAttachResource.NewUseCase(workload.Kinds, validator),
+		orchestratorGetResourceEndpoint.NewUseCase(workload.Kinds),
+		verifier,
+		logger,
+	)
+	if err := kindRoutes.Register(api, mux); err != nil {
+		return nil, err
+	}
 
 	var tracedProfiler *profiler.TracedProfiler
 	if err := iocContainer.Resolve(&tracedProfiler); err != nil {
@@ -283,15 +341,6 @@ func orchestratorConsoleCommand(
 		logger,
 	)
 
-	subscribers := map[string]domain.MessageHandler{
-		taskEvents.TaskScheduledName:         orchestratorruntask.NewTaskScheduled(runTaskUseCase, asyncProduceConsumer, nodeName, logger),
-		taskEvents.TaskStoppageRequestedName: orchestratorstoptask.NewStoppageTaskHandler(stopTaskUseCase),
-		taskEvents.TaskKillRequestedName:     orchestratorkilltask.NewKillTaskHandler(killTaskUseCase),
-		taskEvents.TaskRestartRequestedName:  orchestratorrestarttask.NewRestartTaskHandler(restartTaskUseCase),
-		taskEvents.TaskDeletedName:           orchestratorDeleteTask.NewDeleteTaskHandler(deleteTaskUseCase),
-		stackEvents.StackDeletedName:         orchestratorDeleteStack.NewStackDeletedHandler(networkManager, nodeName, logger),
-	}
-
 	// orchestrator subscribers
 	if err := iocContainer.Bind(func() map[string]domain.MessageHandler {
 		return subscribers
@@ -301,14 +350,7 @@ func orchestratorConsoleCommand(
 
 	// orchestrator heartbeat
 	if err := iocContainer.Bind(func() *orchestratorHeartbeat.UseCase {
-		return orchestratorHeartbeat.NewUseCase(asyncProduceConsumer, nodeManager, nodeName)
-	}, provider.Singleton()); err != nil {
-		return nil, err
-	}
-
-	// task heartbeat
-	if err := iocContainer.Bind(func() *orchestratorTaskHeartbeat.UseCase {
-		return orchestratorTaskHeartbeat.NewUseCase(taskManager, asyncProduceConsumer, nodeName, logger)
+		return orchestratorHeartbeat.NewUseCase(asyncProduceConsumer, nodeManager, workload.Kinds, kindStateTimeout, nodeName, logger)
 	}, provider.Singleton()); err != nil {
 		return nil, err
 	}

@@ -8,8 +8,10 @@ services:
       # hostnames to it, and the orchestrators dial in. The control plane is not here --
       # it schedules over NATS and asks the ingress for nothing.
       - workload_ingress
-      # which node is holding a container is the one thing it looks up
-      - mongodb
+      # where each task and VM is, which the nodes holding them say and the
+      # control plane's commands to them change, heard as it is said: the
+      # ingress reads no database.
+      - nats
       - monitoring
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:80/health"]
@@ -54,12 +56,7 @@ services:
         max-file: "3"
     environment:
       WORKLOAD_INGRESS_DOMAIN: ${BACKEND_WORKLOAD_INGRESS_DOMAIN}
-      MONGO_SCHEME: ${BACKEND_MONGO_SCHEME}
-      MONGO_USERNAME: ${BACKEND_MONGO_USERNAME}
-      MONGO_PASSWORD: ${BACKEND_MONGO_PASSWORD}
-      MONGO_HOST: ${BACKEND_MONGO_HOST}
-      MONGO_PORT: ${BACKEND_MONGO_PORT}
-      MONGO_DATABASE_NAME: ${BACKEND_MONGO_DATABASE_NAME}
+      NATS_URL: ${BACKEND_NATS_URL}
       # the authority and this ingress's own certificate, as the PEM itself.
       # The authority's private key is deliberately not here: nothing that runs
       # needs it.
@@ -81,9 +78,8 @@ networks:
   workload_ingress:
     name: workload_ingress
     external: true
-
-  mongodb:
-    name: mongodb
+  nats:
+    name: nats
     external: true
   monitoring:
     name: monitoring

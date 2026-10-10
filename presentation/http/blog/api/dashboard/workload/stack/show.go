@@ -1,47 +1,40 @@
 package stack
 
 import (
-	"encoding/json"
-	"errors"
 	"net/http"
 
-	getStack "github.com/khanzadimahdi/testproject/application/dashboard/workload/stack/getStack"
-	"github.com/khanzadimahdi/testproject/domain"
-	infraTrace "github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
-	"go.opentelemetry.io/otel/trace"
+	"github.com/khanzadimahdi/testproject/application/dashboard/workload/stack/getStack"
+	"github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/workload"
 )
 
 type showHandler struct {
 	useCase *getStack.UseCase
+	owner   workload.Owner
 }
 
-func NewShowHandler(useCase *getStack.UseCase) *showHandler {
-	return &showHandler{useCase: useCase}
+func NewShowHandler(useCase *getStack.UseCase, owner workload.Owner) *showHandler {
+	return &showHandler{useCase: useCase, owner: owner}
 }
 
-// @Summary		Get stack
-// @Description	retrieve a stack and the services in it
-// @Tags			dashboard workload
-// @Accept			json
+// @Summary		Show a stack
+// @Description	one stack, with its compose file and the containers compose made for it as its VM lists them now; note is vm_not_running when there are none because its VM is not running
+// @Tags			dashboard workload stacks
 // @Produce		json
 // @Param			uuid	path		string	true	"Stack UUID"
 // @Success		200		{object}	getStack.Response
-// @Failure		404		{object}	map[string]interface{}
-// @Failure		500		{object}	map[string]interface{}
+// @Failure		404		{object}	workload.Failure
+// @Failure		500		{object}	workload.Failure
 // @Router			/dashboard/workload/stacks/{uuid} [get]
+// @Router			/dashboard/my/workload/stacks/{uuid} [get]
 func (h *showHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	response, err := h.useCase.Execute(r.Context(), &getStack.Request{
-		UUID: r.PathValue("uuid"),
+		UUID:      r.PathValue("uuid"),
+		OwnerUUID: h.owner(r),
 	})
-	switch {
-	case errors.Is(err, domain.ErrNotExists):
-		rw.WriteHeader(http.StatusNotFound)
-	case err != nil:
-		infraTrace.RecordError(trace.SpanFromContext(r.Context()), err)
-		rw.WriteHeader(http.StatusInternalServerError)
-	default:
-		rw.Header().Add("Content-Type", "application/json")
-		rw.WriteHeader(http.StatusOK)
-		json.NewEncoder(rw).Encode(response)
+
+	if workload.Failed(rw, r, err) {
+		return
 	}
+
+	workload.JSON(rw, http.StatusOK, response)
 }

@@ -41,6 +41,109 @@ definitions:
       new_password:
         type: string
     type: object
+  connectNetwork.Request:
+    properties:
+      aliases:
+        description: |-
+          Aliases are the names its neighbours on that network reach it by, beside
+          its own.
+        items:
+          type: string
+        type: array
+      network:
+        description: Network is the network's id or its name.
+        type: string
+    type: object
+  createContainer.Mount:
+    properties:
+      read_only:
+        type: boolean
+      source:
+        type: string
+      target:
+        type: string
+      type:
+        type: string
+    type: object
+  createContainer.PortBinding:
+    properties:
+      container_port:
+        type: integer
+      host_port:
+        type: integer
+      protocol:
+        description: Protocol is tcp or udp; empty is tcp.
+        type: string
+    type: object
+  createContainer.Request:
+    properties:
+      command:
+        items:
+          type: string
+        type: array
+      cpus:
+        description: CPUs is in cores and Memory in bytes; zero is no limit beyond
+          the VM's.
+        type: number
+      entrypoint:
+        items:
+          type: string
+        type: array
+      env:
+        description: Env is the environment, each as KEY=value.
+        items:
+          type: string
+        type: array
+      image:
+        description: Image is pulled first when the VM does not hold it.
+        type: string
+      memory:
+        type: integer
+      mounts:
+        items:
+          $ref: '#/definitions/createContainer.Mount'
+        type: array
+      name:
+        description: Name is docker's name for it; empty lets docker pick one.
+        type: string
+      networks:
+        description: |-
+          Networks are the VM's docker networks to attach it to, beside the
+          default one.
+        items:
+          type: string
+        type: array
+      ports:
+        description: |-
+          Ports publish container ports on the VM. A VM port the VM also exposes
+          through the ingress is reachable from outside; any other is reachable
+          only from inside the VM.
+        items:
+          $ref: '#/definitions/createContainer.PortBinding'
+        type: array
+      restart_policy:
+        description: RestartPolicy is no, always, unless-stopped or on-failure.
+        type: string
+      vm:
+        $ref: '#/definitions/input.NewDockerVM'
+      vm_uuid:
+        type: string
+      working_dir:
+        type: string
+    type: object
+  createContainer.Response:
+    properties:
+      container:
+        $ref: '#/definitions/presenter.Container'
+      errors:
+        $ref: '#/definitions/domain.ValidationErrors'
+      vm:
+        allOf:
+        - $ref: '#/definitions/presenter.ChosenVM'
+        description: |-
+          VM is the Docker VM the container went into, and whether it was made
+          for it.
+    type: object
   createMessage.Request:
     properties:
       body:
@@ -50,6 +153,111 @@ definitions:
       phone:
         type: string
       subject:
+        type: string
+    type: object
+  createNetwork.Request:
+    properties:
+      driver:
+        description: |-
+          Driver is bridge, which is also what empty is: a VM is a single docker
+          host, and no other driver has anything to join there.
+        type: string
+      internal:
+        description: Internal keeps the containers on it from reaching anything outside
+          it.
+        type: boolean
+      labels:
+        additionalProperties:
+          type: string
+        type: object
+      name:
+        type: string
+    type: object
+  createSnapshot.Request:
+    properties:
+      name:
+        type: string
+    type: object
+  createStack.Request:
+    properties:
+      compose:
+        description: |-
+          Compose is the YAML, as it would be handed to docker compose. What it
+          calls its project is ignored: the stack's slug is the project.
+        type: string
+      name:
+        type: string
+      vm:
+        $ref: '#/definitions/input.NewDockerVM'
+      vm_uuid:
+        type: string
+    type: object
+  createStack.Response:
+    properties:
+      errors:
+        $ref: '#/definitions/domain.ValidationErrors'
+      stack:
+        $ref: '#/definitions/presenter.Stack'
+      vm:
+        allOf:
+        - $ref: '#/definitions/presenter.ChosenVM'
+        description: |-
+          VM is the Docker VM the stack went into, and whether it was made for
+          it.
+    type: object
+  createVM.Request:
+    properties:
+      image:
+        description: |-
+          Image is the OCI reference a machine boots from; empty takes its
+          kind's default, and a Docker VM is always the workload's own image.
+        type: string
+      kind:
+        description: |-
+          Kind is machine, an OS image somebody opens a terminal in, or docker,
+          the image containers and stacks are run in.
+        type: string
+      lifetime_seconds:
+        description: |-
+          LifetimeSeconds is how long the VM is kept before it is deleted, and
+          zero keeps it until somebody deletes it.
+        type: integer
+      name:
+        type: string
+      network:
+        $ref: '#/definitions/input.Network'
+      persistent_disk:
+        description: |-
+          PersistentDisk keeps what is written to the disk across a stop and a
+          start; without it the disk is as the image left it on every start.
+        type: boolean
+      ports:
+        description: Ports are the guest ports the ingress serves, while ingress allows
+          it.
+        items:
+          type: integer
+        type: array
+      resources:
+        $ref: '#/definitions/input.Resources'
+      snapshot_uuid:
+        description: |-
+          SnapshotUUID makes the VM from one of the caller's snapshots: its kind
+          and image are the snapshot's, and its disk the larger of the one asked
+          for and the snapshot's.
+        type: string
+    type: object
+  createVolume.Request:
+    properties:
+      driver:
+        description: |-
+          Driver is local, which is also what empty is: a volume lives on the
+          VM's own disk.
+        type: string
+      labels:
+        additionalProperties:
+          type: string
+        type: object
+      name:
         type: string
     type: object
   createarticle.Request:
@@ -414,6 +622,38 @@ definitions:
           type: string
         type: array
     type: object
+  getContainerLogs.Response:
+    properties:
+      errors:
+        $ref: '#/definitions/domain.ValidationErrors'
+      items:
+        items:
+          $ref: '#/definitions/presenter.LogLine'
+        type: array
+      truncated:
+        description: |-
+          Truncated says there was more than one answer carries: what is here is
+          the last of it.
+        type: boolean
+    type: object
+  getContainers.Response:
+    properties:
+      errors:
+        $ref: '#/definitions/domain.ValidationErrors'
+      items:
+        items:
+          $ref: '#/definitions/presenter.VMContainer'
+        type: array
+    type: object
+  getImages.Response:
+    properties:
+      errors:
+        $ref: '#/definitions/domain.ValidationErrors'
+      items:
+        items:
+          $ref: '#/definitions/presenter.Image'
+        type: array
+    type: object
   getMessage.Response:
     properties:
       body:
@@ -464,91 +704,121 @@ definitions:
       total_pages:
         type: integer
     type: object
-  getTask.Response:
+  getNetworks.Response:
     properties:
-      command:
+      errors:
+        $ref: '#/definitions/domain.ValidationErrors'
+      items:
         items:
-          type: string
+          $ref: '#/definitions/presenter.DockerNetwork'
         type: array
+    type: object
+  getSnapshot.Response:
+    properties:
+      completed_at:
+        type: string
       created_at:
         type: string
-      deadline:
-        description: |-
-          Deadline is when a task that is only allowed to run for so long
-          will be stopped. A task with no limit of its own has none.
-        type: string
-      endpoints:
-        items:
-          $ref: '#/definitions/presenter.Endpoint'
-        type: array
-      entrypoint:
-        items:
-          type: string
-        type: array
-      environment:
-        items:
-          type: string
-        type: array
-      expected_state:
-        type: string
-      finished_at:
+      disk:
+        description: Disk is the disk, in bytes, a VM it is restored onto needs at
+          least.
+        type: integer
+      engine:
+        description: Engine is what took it; only the same engine can restore it.
         type: string
       image:
         type: string
-      max_retries:
-        description: |-
-          MaxRetries is how many times a task that fails is asked for again
-          before the workload gives up on it. -1 never gives up. Retries is how many
-          of those have happened, so a task that keeps failing can say what is
-          being done about it.
-        type: integer
+      kind:
+        type: string
       name:
         type: string
       owner:
-        allOf:
-        - $ref: '#/definitions/presenter.Owner'
-        description: Owner is who asked for this task.
-      read_only:
-        type: boolean
+        $ref: '#/definitions/presenter.Owner'
+      owner_uuid:
+        type: string
       reason:
-        description: Reason is why a task failed, when the workload can say so.
         type: string
-      resource_limits:
-        $ref: '#/definitions/presenter.Limits'
-      retries:
+      size:
+        description: Size is how many bytes it takes where it is kept.
         type: integer
-      service_name:
-        type: string
-      slug:
-        type: string
-      stack_uuid:
-        type: string
-      started_at:
-        type: string
       state:
-        description: |-
-          State is what the task is doing; ExpectedState is what it was asked
-          to be doing. They differ while the workload is closing the gap.
         type: string
       uuid:
         type: string
-      working_dir:
+      vm_name:
+        type: string
+      vm_uuid:
+        description: VMUUID and VMName are the VM it was taken of, which may be gone
+          since.
         type: string
     type: object
-  getTaskLogs.log:
-    properties:
-      at:
-        type: string
-      content:
-        type: string
-      stream:
-        type: string
-    type: object
-  getTasks.Response:
+  getSnapshots.Response:
     properties:
       items:
         items:
-          $ref: '#/definitions/presenter.Task'
+          $ref: '#/definitions/presenter.Snapshot'
+        type: array
+      pagination:
+        $ref: '#/definitions/presenter.Pagination'
+    type: object
+  getStack.Response:
+    properties:
+      compose:
+        description: |-
+          Compose is the YAML as it was given. A listing leaves it out: it is
+          as long as somebody wrote it, and a listing is read to choose one.
+        type: string
+      containers:
+        items:
+          $ref: '#/definitions/presenter.Container'
+        type: array
+      created_at:
+        type: string
+      expected_state:
+        type: string
+      name:
+        type: string
+      note:
+        description: |-
+          Note says why there are no containers when it is not that the stack has
+          none: NoteVMNotRunning.
+        type: string
+      output:
+        description: Output is the tail of what the last compose command printed.
+        type: string
+      owner:
+        $ref: '#/definitions/presenter.Owner'
+      owner_uuid:
+        type: string
+      reason:
+        type: string
+      slug:
+        description: |-
+          Slug is the compose project's name inside the VM, which its containers
+          carry as their stack.
+        type: string
+      state:
+        description: |-
+          State is what the last compose command left it as; ExpectedState is
+          what it was asked to be, running or stopped.
+        type: string
+      updated_at:
+        type: string
+      uuid:
+        type: string
+      vm_name:
+        type: string
+      vm_uuid:
+        description: |-
+          VMUUID is the Docker VM it is deployed into, and VMName what that VM is
+          called now.
+        type: string
+    type: object
+  getStacks.Response:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/presenter.Stack'
         type: array
       pagination:
         $ref: '#/definitions/presenter.Pagination'
@@ -663,6 +933,126 @@ definitions:
         type: integer
       total_pages:
         type: integer
+    type: object
+  getVM.Response:
+    properties:
+      created_at:
+        type: string
+      expected_state:
+        type: string
+      expires_at:
+        type: string
+      image:
+        type: string
+      kind:
+        type: string
+      lifetime_seconds:
+        description: |-
+          LifetimeSeconds is how long the VM is kept, and zero is until it is
+          deleted. ExpiresAt is when one with a lifetime goes.
+        type: integer
+      managed_by:
+        description: |-
+          ManagedBy is code-runner for a snippet the code runner is running, in a
+          VM of its own for as long as it runs: the guest's, listed only among
+          everybody's VMs, and gone once the snippet has ended. Such a VM can be
+          stopped, deleted and read, and nothing else. It is left out for every
+          other VM.
+        enum:
+        - code-runner
+        type: string
+      name:
+        type: string
+      network:
+        $ref: '#/definitions/presenter.Network'
+      node_name:
+        type: string
+      owner:
+        $ref: '#/definitions/presenter.Owner'
+      owner_uuid:
+        type: string
+      persistent_disk:
+        type: boolean
+      ports:
+        description: Ports are the guest ports the ingress serves, sorted.
+        items:
+          type: integer
+        type: array
+      reason:
+        description: Reason is why it failed, or what is pending, when the workload
+          can say.
+        type: string
+      resources:
+        $ref: '#/definitions/presenter.Resources'
+      slug:
+        description: Slug is the name its ports are served under.
+        type: string
+      started_at:
+        type: string
+      state:
+        description: |-
+          State is what the VM is doing; ExpectedState is what it was asked to be
+          doing. They differ while the workload is closing the gap.
+        type: string
+      stats:
+        allOf:
+        - $ref: '#/definitions/presenter.Stats'
+        description: |-
+          Stats is the last sample its node reported, and is left out until there
+          is one.
+      updated_at:
+        type: string
+      urls:
+        description: URLs are where its ports are served, while its ingress allows
+          it.
+        items:
+          $ref: '#/definitions/presenter.URL'
+        type: array
+      uuid:
+        type: string
+    type: object
+  getVMContainers.Response:
+    properties:
+      errors:
+        $ref: '#/definitions/domain.ValidationErrors'
+      items:
+        items:
+          $ref: '#/definitions/presenter.Container'
+        type: array
+    type: object
+  getVMLogs.Response:
+    properties:
+      errors:
+        $ref: '#/definitions/domain.ValidationErrors'
+      items:
+        items:
+          $ref: '#/definitions/presenter.VMLogLine'
+        type: array
+      truncated:
+        description: |-
+          Truncated says there was more than one answer carries: what is here is
+          the last of it.
+        type: boolean
+    type: object
+  getVMs.Response:
+    properties:
+      errors:
+        $ref: '#/definitions/domain.ValidationErrors'
+      items:
+        items:
+          $ref: '#/definitions/presenter.VM'
+        type: array
+      pagination:
+        $ref: '#/definitions/presenter.Pagination'
+    type: object
+  getVolumes.Response:
+    properties:
+      errors:
+        $ref: '#/definitions/domain.ValidationErrors'
+      items:
+        items:
+          $ref: '#/definitions/presenter.Volume'
+        type: array
     type: object
   getarticle.author:
     properties:
@@ -1061,137 +1451,6 @@ definitions:
       uuid:
         type: string
     type: object
-  getuserstack.Response:
-    properties:
-      created_at:
-        type: string
-      expected_state:
-        description: |-
-          ExpectedState is what the stack was asked to be, which is what it is on
-          its way to while a command is still reaching its services.
-        type: string
-      name:
-        type: string
-      owner:
-        allOf:
-        - $ref: '#/definitions/presenter.Owner'
-        description: Owner is who asked for this stack.
-      services:
-        items:
-          $ref: '#/definitions/presenter.Task'
-        type: array
-      slug:
-        type: string
-      state:
-        type: string
-      uuid:
-        type: string
-    type: object
-  getuserstacks.Response:
-    properties:
-      items:
-        items:
-          $ref: '#/definitions/presenter.Stack'
-        type: array
-      pagination:
-        $ref: '#/definitions/presenter.Pagination'
-    type: object
-  getusertask.Response:
-    properties:
-      command:
-        items:
-          type: string
-        type: array
-      created_at:
-        type: string
-      deadline:
-        description: |-
-          Deadline is when a task that is only allowed to run for so long
-          will be stopped. A task with no limit of its own has none.
-        type: string
-      endpoints:
-        items:
-          $ref: '#/definitions/presenter.Endpoint'
-        type: array
-      entrypoint:
-        items:
-          type: string
-        type: array
-      environment:
-        items:
-          type: string
-        type: array
-      expected_state:
-        type: string
-      finished_at:
-        type: string
-      image:
-        type: string
-      max_retries:
-        description: |-
-          MaxRetries is how many times a task that fails is asked for again
-          before the workload gives up on it. -1 never gives up. Retries is how many
-          of those have happened, so a task that keeps failing can say what is
-          being done about it.
-        type: integer
-      name:
-        type: string
-      owner:
-        allOf:
-        - $ref: '#/definitions/presenter.Owner'
-        description: Owner is who asked for this task.
-      read_only:
-        type: boolean
-      reason:
-        description: Reason is why a task failed, when the workload can say so.
-        type: string
-      resource_limits:
-        $ref: '#/definitions/presenter.Limits'
-      retries:
-        type: integer
-      service_name:
-        type: string
-      slug:
-        type: string
-      stack_uuid:
-        type: string
-      started_at:
-        type: string
-      state:
-        description: |-
-          State is what the task is doing; ExpectedState is what it was asked
-          to be doing. They differ while the workload is closing the gap.
-        type: string
-      uuid:
-        type: string
-      working_dir:
-        type: string
-    type: object
-  getusertasklogs.Response:
-    properties:
-      items:
-        items:
-          $ref: '#/definitions/getusertasklogs.log'
-        type: array
-    type: object
-  getusertasklogs.log:
-    properties:
-      at:
-        type: string
-      content:
-        type: string
-      stream:
-        type: string
-    type: object
-  getusertasks.Response:
-    properties:
-      items:
-        items:
-          $ref: '#/definitions/presenter.Task'
-        type: array
-      pagination:
-        $ref: '#/definitions/presenter.Pagination'
-    type: object
   github_com_khanzadimahdi_testproject_application_article_getArticle.Response:
     properties:
       author:
@@ -1464,199 +1723,6 @@ definitions:
       name:
         type: string
     type: object
-  github_com_khanzadimahdi_testproject_application_dashboard_workload_stack_getStack.Response:
-    properties:
-      created_at:
-        type: string
-      expected_state:
-        description: |-
-          ExpectedState is what the stack was asked to be, which is what it is on
-          its way to while a command is still reaching its services.
-        type: string
-      name:
-        type: string
-      owner:
-        allOf:
-        - $ref: '#/definitions/presenter.Owner'
-        description: Owner is who asked for this stack.
-      services:
-        items:
-          $ref: '#/definitions/presenter.Task'
-        type: array
-      slug:
-        type: string
-      state:
-        type: string
-      uuid:
-        type: string
-    type: object
-  github_com_khanzadimahdi_testproject_application_dashboard_workload_stack_getStacks.Response:
-    properties:
-      items:
-        items:
-          $ref: '#/definitions/presenter.Stack'
-        type: array
-      pagination:
-        $ref: '#/definitions/presenter.Pagination'
-    type: object
-  github_com_khanzadimahdi_testproject_application_dashboard_workload_stack_runStack.Request:
-    properties:
-      name:
-        type: string
-      services:
-        additionalProperties:
-          $ref: '#/definitions/spec.Service'
-        type: object
-    type: object
-  github_com_khanzadimahdi_testproject_application_dashboard_workload_stack_runStack.Response:
-    properties:
-      created_at:
-        type: string
-      errors:
-        $ref: '#/definitions/domain.ValidationErrors'
-      expected_state:
-        description: |-
-          ExpectedState is what the stack was asked to be, which is what it is on
-          its way to while a command is still reaching its services.
-        type: string
-      name:
-        type: string
-      owner:
-        allOf:
-        - $ref: '#/definitions/presenter.Owner'
-        description: Owner is who asked for this stack.
-      services:
-        items:
-          $ref: '#/definitions/presenter.Task'
-        type: array
-      slug:
-        type: string
-      state:
-        type: string
-      uuid:
-        type: string
-    type: object
-  github_com_khanzadimahdi_testproject_application_dashboard_workload_task_getTaskLogs.Response:
-    properties:
-      items:
-        items:
-          $ref: '#/definitions/getTaskLogs.log'
-        type: array
-    type: object
-  github_com_khanzadimahdi_testproject_application_dashboard_workload_task_runTask.Request:
-    properties:
-      command:
-        items:
-          type: string
-        type: array
-      deploy:
-        $ref: '#/definitions/spec.Deploy'
-      entrypoint:
-        items:
-          type: string
-        type: array
-      environment:
-        items:
-          type: string
-        type: array
-      image:
-        type: string
-      name:
-        type: string
-      network_mode:
-        description: |-
-          NetworkMode is how much of the network the task reaches: "none",
-          "isolated" or "public". It is not docker's own network_mode — the workload
-          decides which networks a task joins — but it sits in the same place
-          a compose file puts that decision.
-        type: string
-      ports:
-        items:
-          $ref: '#/definitions/spec.Port'
-        type: array
-      read_only:
-        description: |-
-          ReadOnly makes the task's filesystem immutable, so nothing it runs
-          can change the image it was started from. It is compose's read_only.
-        type: boolean
-      restart:
-        type: string
-      working_dir:
-        type: string
-    type: object
-  github_com_khanzadimahdi_testproject_application_dashboard_workload_task_runTask.Response:
-    properties:
-      command:
-        items:
-          type: string
-        type: array
-      created_at:
-        type: string
-      deadline:
-        description: |-
-          Deadline is when a task that is only allowed to run for so long
-          will be stopped. A task with no limit of its own has none.
-        type: string
-      endpoints:
-        items:
-          $ref: '#/definitions/presenter.Endpoint'
-        type: array
-      entrypoint:
-        items:
-          type: string
-        type: array
-      environment:
-        items:
-          type: string
-        type: array
-      errors:
-        $ref: '#/definitions/domain.ValidationErrors'
-      expected_state:
-        type: string
-      finished_at:
-        type: string
-      image:
-        type: string
-      max_retries:
-        description: |-
-          MaxRetries is how many times a task that fails is asked for again
-          before the workload gives up on it. -1 never gives up. Retries is how many
-          of those have happened, so a task that keeps failing can say what is
-          being done about it.
-        type: integer
-      name:
-        type: string
-      owner:
-        allOf:
-        - $ref: '#/definitions/presenter.Owner'
-        description: Owner is who asked for this task.
-      read_only:
-        type: boolean
-      reason:
-        description: Reason is why a task failed, when the workload can say so.
-        type: string
-      resource_limits:
-        $ref: '#/definitions/presenter.Limits'
-      retries:
-        type: integer
-      service_name:
-        type: string
-      slug:
-        type: string
-      stack_uuid:
-        type: string
-      started_at:
-        type: string
-      state:
-        description: |-
-          State is what the task is doing; ExpectedState is what it was asked
-          to be doing. They differ while the workload is closing the gap.
-        type: string
-      uuid:
-        type: string
-      working_dir:
-        type: string
-    type: object
   github_com_khanzadimahdi_testproject_application_language_getLanguages.Response:
     properties:
       default_language:
@@ -1755,6 +1821,35 @@ definitions:
       uuid:
         type: string
     type: object
+  input.Network:
+    properties:
+      egress:
+        type: string
+      ingress:
+        type: string
+    type: object
+  input.NewDockerVM:
+    properties:
+      name:
+        type: string
+      network:
+        $ref: '#/definitions/input.Network'
+      ports:
+        items:
+          type: integer
+        type: array
+      resources:
+        $ref: '#/definitions/input.Resources'
+    type: object
+  input.Resources:
+    properties:
+      cpus:
+        type: integer
+      disk:
+        type: integer
+      memory:
+        type: integer
+    type: object
   login.Request:
     properties:
       identity:
@@ -1786,23 +1881,166 @@ definitions:
       uuid:
         type: string
     type: object
-  presenter.Endpoint:
+  presenter.ChosenVM:
     properties:
-      host:
+      created:
+        type: boolean
+      name:
         type: string
-      task_port:
-        type: integer
-      url:
+      uuid:
         type: string
     type: object
-  presenter.Limits:
+  presenter.Container:
     properties:
-      cpu:
+      command:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      image:
+        type: string
+      labels:
+        additionalProperties:
+          type: string
+        type: object
+      mounts:
+        items:
+          $ref: '#/definitions/presenter.Mount'
+        type: array
+      name:
+        type: string
+      networks:
+        items:
+          type: string
+        type: array
+      ports:
+        items:
+          $ref: '#/definitions/presenter.PortBinding'
+        type: array
+      restart_policy:
+        type: string
+      service:
+        type: string
+      stack:
+        description: |-
+          Stack and Service are the compose project and service it belongs to,
+          when a stack deployed it. The project is the stack's slug, and
+          StackUUID is the stack's uuid when the request could see that stack.
+        type: string
+      stack_uuid:
+        type: string
+      state:
+        description: |-
+          State is docker's: created, running, paused, restarting, removing,
+          exited or dead. Status is the sentence docker puts it in.
+        type: string
+      status:
+        type: string
+      unmanaged:
+        description: |-
+          Unmanaged says nobody keeps it: it was made from its VM's terminal, so
+          nothing brings it back when it stops or goes.
+        type: boolean
+    type: object
+  presenter.ContainerStats:
+    properties:
+      block_read:
+        type: integer
+      block_write:
+        type: integer
+      cpu_percent:
+        description: |-
+          CPUPercent is 0 to 100 of all of the CPUs the container can see, which
+          are its VM's vCPUs: 100 is every one of them busy.
         type: number
-      disk:
+      memory_limit:
         type: integer
-      memory:
+      memory_used:
         type: integer
+      network_rx:
+        type: integer
+      network_tx:
+        type: integer
+      pids:
+        type: integer
+      sampled_at:
+        type: string
+    type: object
+  presenter.DockerNetwork:
+    properties:
+      containers:
+        description: Containers are the containers attached to it.
+        items:
+          type: string
+        type: array
+      created_at:
+        type: string
+      driver:
+        type: string
+      id:
+        type: string
+      internal:
+        type: boolean
+      labels:
+        additionalProperties:
+          type: string
+        type: object
+      name:
+        type: string
+      scope:
+        type: string
+      unmanaged:
+        description: 'Unmanaged says nobody keeps it: it was made from its VM''s terminal.'
+        type: boolean
+    type: object
+  presenter.Image:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: string
+      in_use:
+        description: InUse says a container was created from it.
+        type: boolean
+      size:
+        type: integer
+      tags:
+        items:
+          type: string
+        type: array
+      unmanaged:
+        description: |-
+          Unmanaged says nobody keeps it: it was pulled from its VM's terminal,
+          and no container the platform keeps, nor any of a stack's, uses it.
+        type: boolean
+    type: object
+  presenter.LogLine:
+    properties:
+      at:
+        type: string
+      line:
+        type: string
+      stream:
+        type: string
+    type: object
+  presenter.Mount:
+    properties:
+      read_only:
+        type: boolean
+      source:
+        type: string
+      target:
+        type: string
+      type:
+        type: string
+    type: object
+  presenter.Network:
+    properties:
+      egress:
+        type: string
+      ingress:
+        type: string
     type: object
   presenter.Owner:
     properties:
@@ -1822,101 +2060,304 @@ definitions:
       total_pages:
         type: integer
     type: object
-  presenter.Stack:
+  presenter.PortBinding:
     properties:
+      container_port:
+        type: integer
+      host_port:
+        type: integer
+      protocol:
+        type: string
+    type: object
+  presenter.Resources:
+    properties:
+      cpus:
+        type: integer
+      disk:
+        type: integer
+      memory:
+        type: integer
+    type: object
+  presenter.Snapshot:
+    properties:
+      completed_at:
+        type: string
       created_at:
         type: string
-      expected_state:
-        description: |-
-          ExpectedState is what the stack was asked to be, which is what it is on
-          its way to while a command is still reaching its services.
+      disk:
+        description: Disk is the disk, in bytes, a VM it is restored onto needs at
+          least.
+        type: integer
+      engine:
+        description: Engine is what took it; only the same engine can restore it.
+        type: string
+      image:
+        type: string
+      kind:
         type: string
       name:
         type: string
       owner:
-        allOf:
-        - $ref: '#/definitions/presenter.Owner'
-        description: Owner is who asked for this stack.
-      services:
-        items:
-          $ref: '#/definitions/presenter.Task'
-        type: array
-      slug:
+        $ref: '#/definitions/presenter.Owner'
+      owner_uuid:
         type: string
+      reason:
+        type: string
+      size:
+        description: Size is how many bytes it takes where it is kept.
+        type: integer
       state:
         type: string
       uuid:
         type: string
+      vm_name:
+        type: string
+      vm_uuid:
+        description: VMUUID and VMName are the VM it was taken of, which may be gone
+          since.
+        type: string
     type: object
-  presenter.Task:
+  presenter.Stack:
     properties:
-      command:
-        items:
-          type: string
-        type: array
+      compose:
+        description: |-
+          Compose is the YAML as it was given. A listing leaves it out: it is
+          as long as somebody wrote it, and a listing is read to choose one.
+        type: string
       created_at:
         type: string
-      deadline:
-        description: |-
-          Deadline is when a task that is only allowed to run for so long
-          will be stopped. A task with no limit of its own has none.
-        type: string
-      endpoints:
-        items:
-          $ref: '#/definitions/presenter.Endpoint'
-        type: array
-      entrypoint:
-        items:
-          type: string
-        type: array
-      environment:
-        items:
-          type: string
-        type: array
       expected_state:
         type: string
-      finished_at:
+      name:
+        type: string
+      output:
+        description: Output is the tail of what the last compose command printed.
+        type: string
+      owner:
+        $ref: '#/definitions/presenter.Owner'
+      owner_uuid:
+        type: string
+      reason:
+        type: string
+      slug:
+        description: |-
+          Slug is the compose project's name inside the VM, which its containers
+          carry as their stack.
+        type: string
+      state:
+        description: |-
+          State is what the last compose command left it as; ExpectedState is
+          what it was asked to be, running or stopped.
+        type: string
+      updated_at:
+        type: string
+      uuid:
+        type: string
+      vm_name:
+        type: string
+      vm_uuid:
+        description: |-
+          VMUUID is the Docker VM it is deployed into, and VMName what that VM is
+          called now.
+        type: string
+    type: object
+  presenter.Stats:
+    properties:
+      cpu_percent:
+        description: |-
+          CPUPercent is 0 to 100 of all of the VM's vCPUs together: 100 is every
+          one of them busy, however many it has.
+        type: number
+      disk_total:
+        type: integer
+      disk_used:
+        type: integer
+      memory_limit:
+        type: integer
+      memory_used:
+        type: integer
+      network_rx:
+        type: integer
+      network_tx:
+        type: integer
+      sampled_at:
+        type: string
+    type: object
+  presenter.URL:
+    properties:
+      port:
+        type: integer
+      url:
+        type: string
+    type: object
+  presenter.VM:
+    properties:
+      created_at:
+        type: string
+      expected_state:
+        type: string
+      expires_at:
         type: string
       image:
         type: string
-      max_retries:
+      kind:
+        type: string
+      lifetime_seconds:
         description: |-
-          MaxRetries is how many times a task that fails is asked for again
-          before the workload gives up on it. -1 never gives up. Retries is how many
-          of those have happened, so a task that keeps failing can say what is
-          being done about it.
+          LifetimeSeconds is how long the VM is kept, and zero is until it is
+          deleted. ExpiresAt is when one with a lifetime goes.
         type: integer
+      managed_by:
+        description: |-
+          ManagedBy is code-runner for a snippet the code runner is running, in a
+          VM of its own for as long as it runs: the guest's, listed only among
+          everybody's VMs, and gone once the snippet has ended. Such a VM can be
+          stopped, deleted and read, and nothing else. It is left out for every
+          other VM.
+        enum:
+        - code-runner
+        type: string
       name:
         type: string
+      network:
+        $ref: '#/definitions/presenter.Network'
+      node_name:
+        type: string
       owner:
-        allOf:
-        - $ref: '#/definitions/presenter.Owner'
-        description: Owner is who asked for this task.
-      read_only:
+        $ref: '#/definitions/presenter.Owner'
+      owner_uuid:
+        type: string
+      persistent_disk:
         type: boolean
+      ports:
+        description: Ports are the guest ports the ingress serves, sorted.
+        items:
+          type: integer
+        type: array
       reason:
-        description: Reason is why a task failed, when the workload can say so.
+        description: Reason is why it failed, or what is pending, when the workload
+          can say.
         type: string
-      resource_limits:
-        $ref: '#/definitions/presenter.Limits'
-      retries:
-        type: integer
-      service_name:
-        type: string
+      resources:
+        $ref: '#/definitions/presenter.Resources'
       slug:
-        type: string
-      stack_uuid:
+        description: Slug is the name its ports are served under.
         type: string
       started_at:
         type: string
       state:
         description: |-
-          State is what the task is doing; ExpectedState is what it was asked
-          to be doing. They differ while the workload is closing the gap.
+          State is what the VM is doing; ExpectedState is what it was asked to be
+          doing. They differ while the workload is closing the gap.
         type: string
+      stats:
+        allOf:
+        - $ref: '#/definitions/presenter.Stats'
+        description: |-
+          Stats is the last sample its node reported, and is left out until there
+          is one.
+      updated_at:
+        type: string
+      urls:
+        description: URLs are where its ports are served, while its ingress allows
+          it.
+        items:
+          $ref: '#/definitions/presenter.URL'
+        type: array
       uuid:
         type: string
-      working_dir:
+    type: object
+  presenter.VMContainer:
+    properties:
+      command:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      image:
+        type: string
+      labels:
+        additionalProperties:
+          type: string
+        type: object
+      mounts:
+        items:
+          $ref: '#/definitions/presenter.Mount'
+        type: array
+      name:
+        type: string
+      networks:
+        items:
+          type: string
+        type: array
+      ports:
+        items:
+          $ref: '#/definitions/presenter.PortBinding'
+        type: array
+      restart_policy:
+        type: string
+      service:
+        type: string
+      stack:
+        description: |-
+          Stack and Service are the compose project and service it belongs to,
+          when a stack deployed it. The project is the stack's slug, and
+          StackUUID is the stack's uuid when the request could see that stack.
+        type: string
+      stack_uuid:
+        type: string
+      state:
+        description: |-
+          State is docker's: created, running, paused, restarting, removing,
+          exited or dead. Status is the sentence docker puts it in.
+        type: string
+      status:
+        type: string
+      unmanaged:
+        description: |-
+          Unmanaged says nobody keeps it: it was made from its VM's terminal, so
+          nothing brings it back when it stops or goes.
+        type: boolean
+      vm_name:
+        type: string
+      vm_uuid:
+        type: string
+    type: object
+  presenter.VMLogLine:
+    properties:
+      at:
+        type: string
+      line:
+        type: string
+      source:
+        type: string
+    type: object
+  presenter.Volume:
+    properties:
+      created_at:
+        type: string
+      driver:
+        type: string
+      in_use:
+        description: InUse says a container mounts it.
+        type: boolean
+      labels:
+        additionalProperties:
+          type: string
+        type: object
+      mountpoint:
+        type: string
+      name:
+        type: string
+      unmanaged:
+        description: 'Unmanaged says nobody keeps it: it was made from its VM''s terminal.'
+        type: boolean
+    type: object
+  pullImage.Request:
+    properties:
+      reference:
+        description: Reference is the image, as name[:tag] or name@digest.
         type: string
     type: object
   refresh.Request:
@@ -2000,6 +2441,11 @@ definitions:
       token_endpoint_auth_method:
         type: string
     type: object
+  renameSnapshot.Request:
+    properties:
+      name:
+        type: string
+    type: object
   resetpassword.Request:
     properties:
       password:
@@ -2007,78 +2453,12 @@ definitions:
       token:
         type: string
     type: object
-  spec.Deploy:
+  restoreVM.Request:
     properties:
-      resources:
-        $ref: '#/definitions/spec.Resources'
-      restart_policy:
-        $ref: '#/definitions/spec.RestartPolicy'
-    type: object
-  spec.Limits:
-    properties:
-      cpus:
-        type: number
-      disk:
-        type: integer
-      memory:
-        type: integer
-    type: object
-  spec.Port:
-    properties:
-      task:
-        type: integer
-    type: object
-  spec.Resources:
-    properties:
-      limits:
-        $ref: '#/definitions/spec.Limits'
-    type: object
-  spec.RestartPolicy:
-    properties:
-      max_attempts:
+      snapshot_uuid:
         description: |-
-          MaxAttempts is how many times a task that failed is asked for
-          again. Nothing at all leaves it to the workload, zero is not at all, and
-          -1 never gives up.
-        type: integer
-    type: object
-  spec.Service:
-    properties:
-      command:
-        items:
-          type: string
-        type: array
-      deploy:
-        $ref: '#/definitions/spec.Deploy'
-      entrypoint:
-        items:
-          type: string
-        type: array
-      environment:
-        items:
-          type: string
-        type: array
-      image:
-        type: string
-      network_mode:
-        description: |-
-          NetworkMode is how much of the network the task reaches: "none",
-          "isolated" or "public". It is not docker's own network_mode — the workload
-          decides which networks a task joins — but it sits in the same place
-          a compose file puts that decision.
-        type: string
-      ports:
-        items:
-          $ref: '#/definitions/spec.Port'
-        type: array
-      read_only:
-        description: |-
-          ReadOnly makes the task's filesystem immutable, so nothing it runs
-          can change the image it was started from. It is compose's read_only.
-        type: boolean
-      restart:
-        type: string
-      working_dir:
+          SnapshotUUID is the snapshot whose disk replaces the VM's: one of its
+          owner's, of the same kind and engine, and no larger than its disk.
         type: string
     type: object
   updateBookmark.Request:
@@ -2126,6 +2506,25 @@ definitions:
         type: string
       uuid:
         type: string
+    type: object
+  updateVM.Request:
+    properties:
+      lifetime_seconds:
+        description: |-
+          LifetimeSeconds counts again from now, and zero keeps the VM until it
+          is deleted.
+        type: integer
+      name:
+        type: string
+      network:
+        $ref: '#/definitions/input.Network'
+      ports:
+        description: Ports replace the ones it has; an empty list exposes none.
+        items:
+          type: integer
+        type: array
+      resources:
+        $ref: '#/definitions/input.Resources'
     type: object
   updatearticle.Request:
     properties:
@@ -2250,6 +2649,18 @@ definitions:
         type: string
       username:
         type: string
+    type: object
+  workload.Failure:
+    properties:
+      code:
+        type: string
+      message:
+        type: string
+    type: object
+  workload.Refusal:
+    properties:
+      errors:
+        $ref: '#/definitions/domain.ValidationErrors'
     type: object
 info:
   contact: {}
@@ -4014,59 +4425,224 @@ paths:
       summary: Delete own file
       tags:
       - dashboard files
+  /dashboard/my/workload/containers:
+    get:
+      description: 'the containers of every running Docker VM, each with the VM it
+        is in, narrowed to one VM with ?vm=: anybody''s on the workload routes, the
+        caller''s own on the my routes'
+      parameters:
+      - description: Only the containers of this Docker VM
+        in: query
+        name: vm
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getContainers.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: List containers across Docker VMs
+      tags:
+      - dashboard workload containers
+  /dashboard/my/workload/snapshots:
+    get:
+      description: 'a page of snapshots, of one VM''s with ?vm=: anybody''s on the
+        workload routes, the caller''s own on the my routes'
+      parameters:
+      - default: 1
+        description: Page
+        in: query
+        name: page
+        type: integer
+      - description: Only the snapshots of this VM
+        in: query
+        name: vm
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getSnapshots.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: List snapshots
+      tags:
+      - dashboard workload snapshots
+  /dashboard/my/workload/snapshots/{uuid}:
+    delete:
+      description: remove a snapshot and the archive it kept
+      parameters:
+      - description: Snapshot UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Delete a snapshot
+      tags:
+      - dashboard workload snapshots
+    get:
+      description: one snapshot
+      parameters:
+      - description: Snapshot UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getSnapshot.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Show a snapshot
+      tags:
+      - dashboard workload snapshots
+    patch:
+      consumes:
+      - application/json
+      description: give a snapshot another name, which is all there is to change about
+        one
+      parameters:
+      - description: Snapshot UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      - description: Its name
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/renameSnapshot.Request'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/presenter.Snapshot'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Rename a snapshot
+      tags:
+      - dashboard workload snapshots
   /dashboard/my/workload/stacks:
     get:
-      consumes:
-      - application/json
-      description: paginated list of the stacks the current user owns
+      description: 'a page of stacks, without their compose files, in one VM with
+        ?vm=: anybody''s on the workload routes, the caller''s own on the my routes'
       parameters:
       - default: 1
         description: Page
         in: query
         name: page
         type: integer
+      - description: Only the stacks deployed into this VM
+        in: query
+        name: vm
+        type: string
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/getuserstacks.Response'
+            $ref: '#/definitions/getStacks.Response'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
-      summary: List my stacks
+            $ref: '#/definitions/workload.Failure'
+      summary: List stacks
       tags:
-      - dashboard workload
+      - dashboard workload stacks
   /dashboard/my/workload/stacks/{uuid}:
     delete:
-      description: stop and remove one of your own stacks
+      description: take a stack down and remove it, with its volumes when ?volumes=true;
+        it is removing until compose is done
       parameters:
       - description: Stack UUID
         in: path
         name: uuid
         required: true
         type: string
+      - description: Remove its volumes too
+        in: query
+        name: volumes
+        type: boolean
       responses:
-        "204":
-          description: No Content
+        "202":
+          description: Accepted
           schema:
             additionalProperties: true
             type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
-      summary: Delete own stack
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Delete a stack
       tags:
-      - dashboard workload
+      - dashboard workload stacks
     get:
-      consumes:
-      - application/json
-      description: one of the stacks the current user owns
+      description: one stack, with its compose file and the containers compose made
+        for it as its VM lists them now; note is vm_not_running when there are none
+        because its VM is not running
       parameters:
       - description: Stack UUID
         in: path
@@ -4079,46 +4655,21 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/getuserstack.Response'
+            $ref: '#/definitions/getStack.Response'
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
-      summary: Show own stack
+            $ref: '#/definitions/workload.Failure'
+      summary: Show a stack
       tags:
-      - dashboard workload
-  /dashboard/my/workload/stacks/{uuid}/kill:
-    post:
-      description: stop every service of one of your own stacks at once
-      parameters:
-      - description: Stack UUID
-        in: path
-        name: uuid
-        required: true
-        type: string
-      responses:
-        "202":
-          description: Accepted
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Kill own stack
-      tags:
-      - dashboard workload
+      - dashboard workload stacks
   /dashboard/my/workload/stacks/{uuid}/restart:
     post:
-      description: restart every service of one of your own stacks
+      description: ask for a stack's containers to be restarted
       parameters:
       - description: Stack UUID
         in: path
@@ -4131,17 +4682,55 @@ paths:
           schema:
             additionalProperties: true
             type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
         "404":
           description: Not Found
           schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Restart a stack
+      tags:
+      - dashboard workload stacks
+  /dashboard/my/workload/stacks/{uuid}/start:
+    post:
+      description: ask for a stopped stack's containers to be started again; its state
+        says how it went
+      parameters:
+      - description: Stack UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      responses:
+        "202":
+          description: Accepted
+          schema:
             additionalProperties: true
             type: object
-      summary: Restart own stack
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Start a stack
       tags:
-      - dashboard workload
+      - dashboard workload stacks
   /dashboard/my/workload/stacks/{uuid}/stop:
     post:
-      description: stop every service of one of your own stacks
+      description: ask for a stack's containers to be stopped, and kept
       parameters:
       - description: Stack UUID
         in: path
@@ -4154,19 +4743,25 @@ paths:
           schema:
             additionalProperties: true
             type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
-      summary: Stop own stack
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Stop a stack
       tags:
-      - dashboard workload
-  /dashboard/my/workload/tasks:
+      - dashboard workload stacks
+  /dashboard/my/workload/vms:
     get:
-      consumes:
-      - application/json
-      description: paginated list of the tasks the current user owns
+      description: 'a page of VMs: anybody''s on the workload routes, the caller''s
+        own on the my routes'
       parameters:
       - default: 1
         description: Page
@@ -4179,22 +4774,329 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/getusertasks.Response'
+            $ref: '#/definitions/getVMs.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
-      summary: List my tasks
+            $ref: '#/definitions/workload.Failure'
+      summary: List VMs
       tags:
-      - dashboard workload
-  /dashboard/my/workload/tasks/{uuid}:
+      - dashboard workload vms
+  /dashboard/my/workload/vms/{uuid}:
     delete:
-      description: stop and remove one of your own tasks
+      description: ask for a VM and its disk to be removed; it is deleting until its
+        node has removed it, and its snapshots stay
       parameters:
-      - description: Task UUID
+      - description: VM UUID
         in: path
         name: uuid
+        required: true
+        type: string
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Delete a VM
+      tags:
+      - dashboard workload vms
+    get:
+      description: one VM, with the addresses its ports are served on while its ingress
+        is allowed
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getVM.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Show a VM
+      tags:
+      - dashboard workload vms
+    patch:
+      consumes:
+      - application/json
+      description: 'change what the request carries and leave the rest: name, lifetime_seconds,
+        ports, network and resources (sent whole). A change to the ports, the network
+        or the resources restarts a VM that is not stopped; the disk only grows'
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      - description: What changes
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/updateVM.Request'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/presenter.VM'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Change a VM
+      tags:
+      - dashboard workload vms
+  /dashboard/my/workload/vms/{uuid}/containers:
+    get:
+      description: every container of one Docker VM, stopped ones too, read from its
+        dockerd as it is now
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getVMContainers.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: List a Docker VM's containers
+      tags:
+      - dashboard workload containers
+  /dashboard/my/workload/vms/{uuid}/containers/{id}:
+    delete:
+      description: remove a container; one that is running only by force. Its volumes
+        stay
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      - description: Container id or name
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Remove it even while it runs
+        in: query
+        name: force
+        type: boolean
+      responses:
+        "204":
+          description: No Content
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Remove a container
+      tags:
+      - dashboard workload containers
+    get:
+      description: one container, read from its VM's dockerd as it is now
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      - description: Container id or name
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/presenter.Container'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Show a container
+      tags:
+      - dashboard workload containers
+  /dashboard/my/workload/vms/{uuid}/containers/{id}/logs:
+    get:
+      description: 'the tail of what a container has written: the last tail lines,
+        or those written since a moment'
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      - description: Container id or name
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Only lines written from this moment on (RFC 3339)
+        in: query
+        name: since
+        type: string
+      - description: Only the last this many lines
+        in: query
+        name: tail
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getContainerLogs.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Container logs
+      tags:
+      - dashboard workload containers
+  /dashboard/my/workload/vms/{uuid}/containers/{id}/networks:
+    post:
+      consumes:
+      - application/json
+      description: attach a container to another docker network of its VM, under the
+        aliases its neighbours there reach it by
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      - description: Container id or name
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: The network
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/connectNetwork.Request'
+      responses:
+        "204":
+          description: No Content
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Connect a container to a network
+      tags:
+      - dashboard workload containers
+  /dashboard/my/workload/vms/{uuid}/containers/{id}/networks/{network}:
+    delete:
+      description: detach a container from one of its VM's docker networks
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      - description: Container id or name
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Network id or name
+        in: path
+        name: network
         required: true
         type: string
       responses:
@@ -4203,20 +5105,170 @@ paths:
           schema:
             additionalProperties: true
             type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
         "404":
           description: Not Found
           schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Disconnect a container from a network
+      tags:
+      - dashboard workload containers
+  /dashboard/my/workload/vms/{uuid}/containers/{id}/restart:
+    post:
+      description: stop a container and start it again
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      - description: Container id or name
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+          schema:
             additionalProperties: true
             type: object
-      summary: Delete own task
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Restart a container
       tags:
-      - dashboard workload
-    get:
-      consumes:
-      - application/json
-      description: one of the tasks the current user owns
+      - dashboard workload containers
+  /dashboard/my/workload/vms/{uuid}/containers/{id}/start:
+    post:
+      description: start a container that is not running; it is running once this
+        answers
       parameters:
-      - description: Task UUID
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      - description: Container id or name
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Start a container
+      tags:
+      - dashboard workload containers
+  /dashboard/my/workload/vms/{uuid}/containers/{id}/stats:
+    get:
+      description: 'one sample of what a container uses: CPU, memory, network and
+        block counters, in bytes'
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      - description: Container id or name
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/presenter.ContainerStats'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Container stats
+      tags:
+      - dashboard workload containers
+  /dashboard/my/workload/vms/{uuid}/containers/{id}/stop:
+    post:
+      description: stop a container, giving it docker's grace period to shut down
+        on its own first
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      - description: Container id or name
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Stop a container
+      tags:
+      - dashboard workload containers
+  /dashboard/my/workload/vms/{uuid}/images:
+    get:
+      description: the images a Docker VM holds, read from its dockerd as it is now
+      parameters:
+      - description: VM UUID
         in: path
         name: uuid
         required: true
@@ -4227,61 +5279,122 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/getusertask.Response'
+            $ref: '#/definitions/getImages.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
-            additionalProperties: true
-            type: object
-      summary: Show own task
+            $ref: '#/definitions/workload.Failure'
+      summary: List a Docker VM's images
       tags:
-      - dashboard workload
-  /dashboard/my/workload/tasks/{uuid}/kill:
+      - dashboard workload images
     post:
-      description: stop one of your own tasks at once
+      consumes:
+      - application/json
+      description: pull an image into a Docker VM. A pull takes as long as the registry
+        does, and carries on after whoever asked has stopped waiting
       parameters:
-      - description: Task UUID
+      - description: VM UUID
         in: path
         name: uuid
         required: true
         type: string
+      - description: The image
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/pullImage.Request'
+      produces:
+      - application/json
       responses:
-        "202":
-          description: Accepted
+        "201":
+          description: Created
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/presenter.Image'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
-      summary: Kill own task
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "504":
+          description: Gateway Timeout
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Pull an image
       tags:
-      - dashboard workload
-  /dashboard/my/workload/tasks/{uuid}/logs:
-    get:
-      consumes:
-      - application/json
-      description: what one of your own tasks has written
+      - dashboard workload images
+  /dashboard/my/workload/vms/{uuid}/images/{id}:
+    delete:
+      description: remove an image from a Docker VM; one a container was created from
+        only by force
       parameters:
-      - description: Task UUID
+      - description: VM UUID
         in: path
         name: uuid
         required: true
         type: string
-      - description: Only lines written after this time (RFC3339)
-        in: query
-        name: after
+      - description: Image id or tag
+        in: path
+        name: id
+        required: true
         type: string
-      - description: How many lines
+      - description: Remove it even while a container uses it
         in: query
-        name: limit
+        name: force
+        type: boolean
+      responses:
+        "204":
+          description: No Content
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Remove an image
+      tags:
+      - dashboard workload images
+  /dashboard/my/workload/vms/{uuid}/logs:
+    get:
+      description: 'the tail of what a VM has written, read from its node as it is
+        now: the last tail lines, or those written since a moment'
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      - description: Only lines written from this moment on (RFC 3339)
+        in: query
+        name: since
+        type: string
+      - description: Only the last this many lines
+        in: query
+        name: tail
         type: integer
       produces:
       - application/json
@@ -4289,25 +5402,134 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/getusertasklogs.Response'
+            $ref: '#/definitions/getVMLogs.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
         "404":
           description: Not Found
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/workload.Failure'
         "500":
           description: Internal Server Error
           schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: VM logs
+      tags:
+      - dashboard workload vms
+  /dashboard/my/workload/vms/{uuid}/networks:
+    get:
+      description: the docker networks of a Docker VM, the ones docker made itself
+        included
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getNetworks.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: List a Docker VM's networks
+      tags:
+      - dashboard workload networks
+    post:
+      consumes:
+      - application/json
+      description: create a docker network in a Docker VM, for its containers to meet
+        on; it never reaches past the VM
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      - description: Network
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/createNetwork.Request'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/presenter.DockerNetwork'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Create a network
+      tags:
+      - dashboard workload networks
+  /dashboard/my/workload/vms/{uuid}/networks/{id}:
+    delete:
+      description: remove a docker network from a Docker VM; one a container is attached
+        to is refused
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      - description: Network id or name
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+          schema:
             additionalProperties: true
             type: object
-      summary: Own task logs
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Remove a network
       tags:
-      - dashboard workload
-  /dashboard/my/workload/tasks/{uuid}/restart:
+      - dashboard workload networks
+  /dashboard/my/workload/vms/{uuid}/restart:
     post:
-      description: restart one of your own tasks
+      description: ask for a VM to be stopped and started again in place
       parameters:
-      - description: Task UUID
+      - description: VM UUID
         in: path
         name: uuid
         required: true
@@ -4318,19 +5540,66 @@ paths:
           schema:
             additionalProperties: true
             type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
         "404":
           description: Not Found
           schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Restart a VM
+      tags:
+      - dashboard workload vms
+  /dashboard/my/workload/vms/{uuid}/restore:
+    post:
+      consumes:
+      - application/json
+      description: 'replace a VM''s disk with a snapshot''s: one of its owner''s,
+        of the same kind and engine, and no larger than its disk. The VM is stopped,
+        restored and started again; it keeps its uuid, its slug and its ports'
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      - description: The snapshot
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/restoreVM.Request'
+      responses:
+        "202":
+          description: Accepted
+          schema:
             additionalProperties: true
             type: object
-      summary: Restart own task
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Restore a VM from a snapshot
       tags:
-      - dashboard workload
-  /dashboard/my/workload/tasks/{uuid}/stop:
+      - dashboard workload vms
+  /dashboard/my/workload/vms/{uuid}/start:
     post:
-      description: stop one of your own tasks
+      description: ask for a stopped VM to be started; its state says how it is going
       parameters:
-      - description: Task UUID
+      - description: VM UUID
         in: path
         name: uuid
         required: true
@@ -4341,14 +5610,161 @@ paths:
           schema:
             additionalProperties: true
             type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
         "404":
           description: Not Found
           schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Start a VM
+      tags:
+      - dashboard workload vms
+  /dashboard/my/workload/vms/{uuid}/stop:
+    post:
+      description: ask for a VM to be stopped; its disk is kept where it lives
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      responses:
+        "202":
+          description: Accepted
+          schema:
             additionalProperties: true
             type: object
-      summary: Stop own task
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Stop a VM
       tags:
-      - dashboard workload
+      - dashboard workload vms
+  /dashboard/my/workload/vms/{uuid}/volumes:
+    get:
+      description: the volumes of a Docker VM
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getVolumes.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: List a Docker VM's volumes
+      tags:
+      - dashboard workload volumes
+    post:
+      consumes:
+      - application/json
+      description: create a volume in a Docker VM, on its disk, for its containers
+        to keep what they write in
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      - description: Volume
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/createVolume.Request'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/presenter.Volume'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Create a volume
+      tags:
+      - dashboard workload volumes
+  /dashboard/my/workload/vms/{uuid}/volumes/{name}:
+    delete:
+      description: remove a volume, and what was kept in it, from a Docker VM; one
+        a container mounts only by force
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      - description: Volume name
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Remove it even while a container uses it
+        in: query
+        name: force
+        type: boolean
+      responses:
+        "204":
+          description: No Content
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Remove a volume
+      tags:
+      - dashboard workload volumes
   /dashboard/permissions:
     get:
       consumes:
@@ -4638,401 +6054,6 @@ paths:
       summary: Get role
       tags:
       - dashboard roles
-  /dashboard/workload/stacks:
-    get:
-      consumes:
-      - application/json
-      description: paginated list of the stacks the workload is holding
-      parameters:
-      - default: 1
-        description: Page
-        in: query
-        name: page
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_workload_stack_getStacks.Response'
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: List stacks
-      tags:
-      - dashboard workload
-    post:
-      consumes:
-      - application/json
-      description: run a set of connected services from a docker compose specification
-      parameters:
-      - description: Stack specification
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_workload_stack_runStack.Request'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_workload_stack_runStack.Response'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Run a stack
-      tags:
-      - dashboard workload
-  /dashboard/workload/stacks/{uuid}:
-    delete:
-      description: 'remove a stack and everything it holds: its ports, its log and
-        the task itself'
-      parameters:
-      - description: Stack UUID
-        in: path
-        name: uuid
-        required: true
-        type: string
-      responses:
-        "204":
-          description: No Content
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Delete stack
-      tags:
-      - dashboard workload
-    get:
-      consumes:
-      - application/json
-      description: retrieve a stack and the services in it
-      parameters:
-      - description: Stack UUID
-        in: path
-        name: uuid
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_workload_stack_getStack.Response'
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get stack
-      tags:
-      - dashboard workload
-  /dashboard/workload/stacks/{uuid}/kill:
-    post:
-      description: stop every service of a stack at once, without a grace period
-      parameters:
-      - description: Stack UUID
-        in: path
-        name: uuid
-        required: true
-        type: string
-      responses:
-        "202":
-          description: Accepted
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Kill stack
-      tags:
-      - dashboard workload
-  /dashboard/workload/stacks/{uuid}/restart:
-    post:
-      description: restart every service of a stack
-      parameters:
-      - description: Stack UUID
-        in: path
-        name: uuid
-        required: true
-        type: string
-      responses:
-        "202":
-          description: Accepted
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Restart stack
-      tags:
-      - dashboard workload
-  /dashboard/workload/stacks/{uuid}/stop:
-    post:
-      description: stop every service of a stack, giving each a moment to shut down
-        on its own
-      parameters:
-      - description: Stack UUID
-        in: path
-        name: uuid
-        required: true
-        type: string
-      responses:
-        "202":
-          description: Accepted
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Stop stack
-      tags:
-      - dashboard workload
-  /dashboard/workload/tasks:
-    get:
-      consumes:
-      - application/json
-      description: paginated list of the tasks the workload is holding
-      parameters:
-      - default: 1
-        description: Page
-        in: query
-        name: page
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/getTasks.Response'
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: List tasks
-      tags:
-      - dashboard workload
-    post:
-      consumes:
-      - application/json
-      description: run one long-running task from a docker compose service specification
-      parameters:
-      - description: Task specification
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_workload_task_runTask.Request'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_workload_task_runTask.Response'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Run a task
-      tags:
-      - dashboard workload
-  /dashboard/workload/tasks/{uuid}:
-    delete:
-      description: 'remove a task and everything it holds: its ports, its log and
-        the task itself'
-      parameters:
-      - description: Task UUID
-        in: path
-        name: uuid
-        required: true
-        type: string
-      responses:
-        "204":
-          description: No Content
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Delete task
-      tags:
-      - dashboard workload
-    get:
-      consumes:
-      - application/json
-      description: retrieve one task, with the addresses its ports are served on
-      parameters:
-      - description: Task UUID
-        in: path
-        name: uuid
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/getTask.Response'
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Get task
-      tags:
-      - dashboard workload
-  /dashboard/workload/tasks/{uuid}/kill:
-    post:
-      description: stop a task at once, without a grace period
-      parameters:
-      - description: Task UUID
-        in: path
-        name: uuid
-        required: true
-        type: string
-      responses:
-        "202":
-          description: Accepted
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Kill task
-      tags:
-      - dashboard workload
-  /dashboard/workload/tasks/{uuid}/logs:
-    get:
-      consumes:
-      - application/json
-      description: read what a task has written, from its first line onward
-      parameters:
-      - description: Task UUID
-        in: path
-        name: uuid
-        required: true
-        type: string
-      - description: Only lines written after this moment (RFC3339)
-        in: query
-        name: after
-        type: string
-      - description: How many lines to return
-        in: query
-        name: limit
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/github_com_khanzadimahdi_testproject_application_dashboard_workload_task_getTaskLogs.Response'
-        "500":
-          description: Internal Server Error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Task logs
-      tags:
-      - dashboard workload
-  /dashboard/workload/tasks/{uuid}/restart:
-    post:
-      description: stop a task and start it again in place
-      parameters:
-      - description: Task UUID
-        in: path
-        name: uuid
-        required: true
-        type: string
-      responses:
-        "202":
-          description: Accepted
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Restart task
-      tags:
-      - dashboard workload
-  /dashboard/workload/tasks/{uuid}/stop:
-    post:
-      description: stop a task, giving it a moment to shut down on its own
-      parameters:
-      - description: Task UUID
-        in: path
-        name: uuid
-        required: true
-        type: string
-      responses:
-        "202":
-          description: Accepted
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Stop task
-      tags:
-      - dashboard workload
   /dashboard/users:
     get:
       consumes:
@@ -5255,6 +6276,1492 @@ paths:
       summary: Change password for a user
       tags:
       - dashboard users
+  /dashboard/workload/containers:
+    get:
+      description: 'the containers of every running Docker VM, each with the VM it
+        is in, narrowed to one VM with ?vm=: anybody''s on the workload routes, the
+        caller''s own on the my routes'
+      parameters:
+      - description: Only the containers of this Docker VM
+        in: query
+        name: vm
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getContainers.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: List containers across Docker VMs
+      tags:
+      - dashboard workload containers
+    post:
+      consumes:
+      - application/json
+      description: 'create and start a container for the caller, pulling its image
+        first when the VM does not hold it: in the Docker VM vm_uuid names, in a new
+        one vm describes, or with neither in a new one made with the defaults. The
+        answer says which VM it went into and whether it was made for it'
+      parameters:
+      - description: Container
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/createContainer.Request'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/createContainer.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "504":
+          description: Gateway Timeout
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Create a container
+      tags:
+      - dashboard workload containers
+  /dashboard/workload/snapshots:
+    get:
+      description: 'a page of snapshots, of one VM''s with ?vm=: anybody''s on the
+        workload routes, the caller''s own on the my routes'
+      parameters:
+      - default: 1
+        description: Page
+        in: query
+        name: page
+        type: integer
+      - description: Only the snapshots of this VM
+        in: query
+        name: vm
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getSnapshots.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: List snapshots
+      tags:
+      - dashboard workload snapshots
+  /dashboard/workload/snapshots/{uuid}:
+    delete:
+      description: remove a snapshot and the archive it kept
+      parameters:
+      - description: Snapshot UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Delete a snapshot
+      tags:
+      - dashboard workload snapshots
+    get:
+      description: one snapshot
+      parameters:
+      - description: Snapshot UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getSnapshot.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Show a snapshot
+      tags:
+      - dashboard workload snapshots
+    patch:
+      consumes:
+      - application/json
+      description: give a snapshot another name, which is all there is to change about
+        one
+      parameters:
+      - description: Snapshot UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      - description: Its name
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/renameSnapshot.Request'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/presenter.Snapshot'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Rename a snapshot
+      tags:
+      - dashboard workload snapshots
+  /dashboard/workload/stacks:
+    get:
+      description: 'a page of stacks, without their compose files, in one VM with
+        ?vm=: anybody''s on the workload routes, the caller''s own on the my routes'
+      parameters:
+      - default: 1
+        description: Page
+        in: query
+        name: page
+        type: integer
+      - description: Only the stacks deployed into this VM
+        in: query
+        name: vm
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getStacks.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: List stacks
+      tags:
+      - dashboard workload stacks
+    post:
+      consumes:
+      - application/json
+      description: 'deploy a compose project for the caller: in the Docker VM vm_uuid
+        names, in a new one vm describes, or with neither in a new one made with the
+        defaults. The deploy happens after the answer, which says which VM it went
+        into and whether it was made for it'
+      parameters:
+      - description: Stack
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/createStack.Request'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/createStack.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Deploy a stack
+      tags:
+      - dashboard workload stacks
+  /dashboard/workload/stacks/{uuid}:
+    delete:
+      description: take a stack down and remove it, with its volumes when ?volumes=true;
+        it is removing until compose is done
+      parameters:
+      - description: Stack UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      - description: Remove its volumes too
+        in: query
+        name: volumes
+        type: boolean
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Delete a stack
+      tags:
+      - dashboard workload stacks
+    get:
+      description: one stack, with its compose file and the containers compose made
+        for it as its VM lists them now; note is vm_not_running when there are none
+        because its VM is not running
+      parameters:
+      - description: Stack UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getStack.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Show a stack
+      tags:
+      - dashboard workload stacks
+  /dashboard/workload/stacks/{uuid}/restart:
+    post:
+      description: ask for a stack's containers to be restarted
+      parameters:
+      - description: Stack UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Restart a stack
+      tags:
+      - dashboard workload stacks
+  /dashboard/workload/stacks/{uuid}/start:
+    post:
+      description: ask for a stopped stack's containers to be started again; its state
+        says how it went
+      parameters:
+      - description: Stack UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Start a stack
+      tags:
+      - dashboard workload stacks
+  /dashboard/workload/stacks/{uuid}/stop:
+    post:
+      description: ask for a stack's containers to be stopped, and kept
+      parameters:
+      - description: Stack UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Stop a stack
+      tags:
+      - dashboard workload stacks
+  /dashboard/workload/vms:
+    get:
+      description: 'a page of VMs: anybody''s on the workload routes, the caller''s
+        own on the my routes'
+      parameters:
+      - default: 1
+        description: Page
+        in: query
+        name: page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getVMs.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: List VMs
+      tags:
+      - dashboard workload vms
+    post:
+      consumes:
+      - application/json
+      description: create a VM for the caller, from an image or from one of their
+        snapshots; the workload boots it in its own time
+      parameters:
+      - description: VM
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/createVM.Request'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/presenter.VM'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Create a VM
+      tags:
+      - dashboard workload vms
+  /dashboard/workload/vms/{uuid}:
+    delete:
+      description: ask for a VM and its disk to be removed; it is deleting until its
+        node has removed it, and its snapshots stay
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Delete a VM
+      tags:
+      - dashboard workload vms
+    get:
+      description: one VM, with the addresses its ports are served on while its ingress
+        is allowed
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getVM.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Show a VM
+      tags:
+      - dashboard workload vms
+    patch:
+      consumes:
+      - application/json
+      description: 'change what the request carries and leave the rest: name, lifetime_seconds,
+        ports, network and resources (sent whole). A change to the ports, the network
+        or the resources restarts a VM that is not stopped; the disk only grows'
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      - description: What changes
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/updateVM.Request'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/presenter.VM'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Change a VM
+      tags:
+      - dashboard workload vms
+  /dashboard/workload/vms/{uuid}/containers:
+    get:
+      description: every container of one Docker VM, stopped ones too, read from its
+        dockerd as it is now
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getVMContainers.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: List a Docker VM's containers
+      tags:
+      - dashboard workload containers
+  /dashboard/workload/vms/{uuid}/containers/{id}:
+    delete:
+      description: remove a container; one that is running only by force. Its volumes
+        stay
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      - description: Container id or name
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Remove it even while it runs
+        in: query
+        name: force
+        type: boolean
+      responses:
+        "204":
+          description: No Content
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Remove a container
+      tags:
+      - dashboard workload containers
+    get:
+      description: one container, read from its VM's dockerd as it is now
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      - description: Container id or name
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/presenter.Container'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Show a container
+      tags:
+      - dashboard workload containers
+  /dashboard/workload/vms/{uuid}/containers/{id}/logs:
+    get:
+      description: 'the tail of what a container has written: the last tail lines,
+        or those written since a moment'
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      - description: Container id or name
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Only lines written from this moment on (RFC 3339)
+        in: query
+        name: since
+        type: string
+      - description: Only the last this many lines
+        in: query
+        name: tail
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getContainerLogs.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Container logs
+      tags:
+      - dashboard workload containers
+  /dashboard/workload/vms/{uuid}/containers/{id}/networks:
+    post:
+      consumes:
+      - application/json
+      description: attach a container to another docker network of its VM, under the
+        aliases its neighbours there reach it by
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      - description: Container id or name
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: The network
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/connectNetwork.Request'
+      responses:
+        "204":
+          description: No Content
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Connect a container to a network
+      tags:
+      - dashboard workload containers
+  /dashboard/workload/vms/{uuid}/containers/{id}/networks/{network}:
+    delete:
+      description: detach a container from one of its VM's docker networks
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      - description: Container id or name
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Network id or name
+        in: path
+        name: network
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Disconnect a container from a network
+      tags:
+      - dashboard workload containers
+  /dashboard/workload/vms/{uuid}/containers/{id}/restart:
+    post:
+      description: stop a container and start it again
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      - description: Container id or name
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Restart a container
+      tags:
+      - dashboard workload containers
+  /dashboard/workload/vms/{uuid}/containers/{id}/start:
+    post:
+      description: start a container that is not running; it is running once this
+        answers
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      - description: Container id or name
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Start a container
+      tags:
+      - dashboard workload containers
+  /dashboard/workload/vms/{uuid}/containers/{id}/stats:
+    get:
+      description: 'one sample of what a container uses: CPU, memory, network and
+        block counters, in bytes'
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      - description: Container id or name
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/presenter.ContainerStats'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Container stats
+      tags:
+      - dashboard workload containers
+  /dashboard/workload/vms/{uuid}/containers/{id}/stop:
+    post:
+      description: stop a container, giving it docker's grace period to shut down
+        on its own first
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      - description: Container id or name
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Stop a container
+      tags:
+      - dashboard workload containers
+  /dashboard/workload/vms/{uuid}/images:
+    get:
+      description: the images a Docker VM holds, read from its dockerd as it is now
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getImages.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: List a Docker VM's images
+      tags:
+      - dashboard workload images
+    post:
+      consumes:
+      - application/json
+      description: pull an image into a Docker VM. A pull takes as long as the registry
+        does, and carries on after whoever asked has stopped waiting
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      - description: The image
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/pullImage.Request'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/presenter.Image'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "504":
+          description: Gateway Timeout
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Pull an image
+      tags:
+      - dashboard workload images
+  /dashboard/workload/vms/{uuid}/images/{id}:
+    delete:
+      description: remove an image from a Docker VM; one a container was created from
+        only by force
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      - description: Image id or tag
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Remove it even while a container uses it
+        in: query
+        name: force
+        type: boolean
+      responses:
+        "204":
+          description: No Content
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Remove an image
+      tags:
+      - dashboard workload images
+  /dashboard/workload/vms/{uuid}/logs:
+    get:
+      description: 'the tail of what a VM has written, read from its node as it is
+        now: the last tail lines, or those written since a moment'
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      - description: Only lines written from this moment on (RFC 3339)
+        in: query
+        name: since
+        type: string
+      - description: Only the last this many lines
+        in: query
+        name: tail
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getVMLogs.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: VM logs
+      tags:
+      - dashboard workload vms
+  /dashboard/workload/vms/{uuid}/networks:
+    get:
+      description: the docker networks of a Docker VM, the ones docker made itself
+        included
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getNetworks.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: List a Docker VM's networks
+      tags:
+      - dashboard workload networks
+    post:
+      consumes:
+      - application/json
+      description: create a docker network in a Docker VM, for its containers to meet
+        on; it never reaches past the VM
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      - description: Network
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/createNetwork.Request'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/presenter.DockerNetwork'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Create a network
+      tags:
+      - dashboard workload networks
+  /dashboard/workload/vms/{uuid}/networks/{id}:
+    delete:
+      description: remove a docker network from a Docker VM; one a container is attached
+        to is refused
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      - description: Network id or name
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Remove a network
+      tags:
+      - dashboard workload networks
+  /dashboard/workload/vms/{uuid}/restart:
+    post:
+      description: ask for a VM to be stopped and started again in place
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Restart a VM
+      tags:
+      - dashboard workload vms
+  /dashboard/workload/vms/{uuid}/restore:
+    post:
+      consumes:
+      - application/json
+      description: 'replace a VM''s disk with a snapshot''s: one of its owner''s,
+        of the same kind and engine, and no larger than its disk. The VM is stopped,
+        restored and started again; it keeps its uuid, its slug and its ports'
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      - description: The snapshot
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/restoreVM.Request'
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Restore a VM from a snapshot
+      tags:
+      - dashboard workload vms
+  /dashboard/workload/vms/{uuid}/snapshots:
+    post:
+      consumes:
+      - application/json
+      description: take a snapshot of one of the caller's own VMs, which is running
+        or stopped; it is being created until its archive is stored
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      - description: Snapshot
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/createSnapshot.Request'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/presenter.Snapshot'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Take a snapshot
+      tags:
+      - dashboard workload snapshots
+  /dashboard/workload/vms/{uuid}/start:
+    post:
+      description: ask for a stopped VM to be started; its state says how it is going
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Start a VM
+      tags:
+      - dashboard workload vms
+  /dashboard/workload/vms/{uuid}/stop:
+    post:
+      description: ask for a VM to be stopped; its disk is kept where it lives
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      responses:
+        "202":
+          description: Accepted
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Stop a VM
+      tags:
+      - dashboard workload vms
+  /dashboard/workload/vms/{uuid}/volumes:
+    get:
+      description: the volumes of a Docker VM
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/getVolumes.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: List a Docker VM's volumes
+      tags:
+      - dashboard workload volumes
+    post:
+      consumes:
+      - application/json
+      description: create a volume in a Docker VM, on its disk, for its containers
+        to keep what they write in
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      - description: Volume
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/createVolume.Request'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/presenter.Volume'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Create a volume
+      tags:
+      - dashboard workload volumes
+  /dashboard/workload/vms/{uuid}/volumes/{name}:
+    delete:
+      description: remove a volume, and what was kept in it, from a Docker VM; one
+        a container mounts only by force
+      parameters:
+      - description: VM UUID
+        in: path
+        name: uuid
+        required: true
+        type: string
+      - description: Volume name
+        in: path
+        name: name
+        required: true
+        type: string
+      - description: Remove it even while a container uses it
+        in: query
+        name: force
+        type: boolean
+      responses:
+        "204":
+          description: No Content
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/workload.Refusal'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/workload.Failure'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/workload.Failure'
+      summary: Remove a volume
+      tags:
+      - dashboard workload volumes
   /files/{uuid}:
     get:
       consumes:

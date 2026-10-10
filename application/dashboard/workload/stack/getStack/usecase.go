@@ -7,33 +7,27 @@ import (
 	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 )
 
-// UseCase reads one stack and the services in it.
+// UseCase reads one stack, with its compose file and the containers compose
+// made for it as its VM lists them now.
 type UseCase struct {
-	workload      workloadControlPlane.Client
-	owners        *presenter.Directory
-	ingressDomain string
+	workload workloadControlPlane.Client
+	owners   *presenter.Directory
 }
 
-func NewUseCase(workload workloadControlPlane.Client, ownerDirectory *presenter.Directory, ingressDomain string) *UseCase {
-	return &UseCase{workload: workload, owners: ownerDirectory, ingressDomain: ingressDomain}
+func NewUseCase(workload workloadControlPlane.Client, owners *presenter.Directory) *UseCase {
+	return &UseCase{workload: workload, owners: owners}
 }
 
 func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
-	s, err := uc.workload.Stack(ctx, request.UUID)
+	detail, err := uc.workload.Stack(ctx, request.OwnerUUID, request.UUID)
 	if err != nil {
 		return nil, err
 	}
 
-	ownerUUIDs := make([]string, 0, len(s.Services)+1)
-	ownerUUIDs = append(ownerUUIDs, s.OwnerUUID)
-	for i := range s.Services {
-		ownerUUIDs = append(ownerUUIDs, s.Services[i].OwnerUUID)
-	}
-
-	people, err := uc.owners.Of(ctx, ownerUUIDs...)
+	owners, err := uc.owners.Of(ctx, detail.OwnerUUID)
 	if err != nil {
 		return nil, err
 	}
 
-	return &Response{Stack: presenter.NewStack(s, uc.ingressDomain, people)}, nil
+	return &Response{StackDetail: presenter.NewStackDetail(detail, owners)}, nil
 }

@@ -15,42 +15,64 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/khanzadimahdi/testproject/domain"
 	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
-	"github.com/khanzadimahdi/testproject/domain/workload/task"
+	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 )
 
-// controlPlaneStack is the client's own name for what the contract calls a Stack,
-// so the wire mapping can build one without importing its own package.
-type controlPlaneStack = workloadControlPlane.Stack
+const (
+	// requestTimeout bounds a call that reads or writes the control plane's
+	// records and nothing else.
+	requestTimeout = 15 * time.Second
 
-// requestTimeout bounds a call to the control plane.
-const requestTimeout = 15 * time.Second
+	// nodeRequestTimeout bounds a call the control plane answers by asking a
+	// node — a log, what a Docker VM holds — which it gives up on after its own
+	// request timeout, 30 seconds unless it is configured otherwise.
+	nodeRequestTimeout = 45 * time.Second
+
+	// pullRequestTimeout bounds a call that may have to wait for a Docker VM
+	// to come up and pull an image: creating a container, pulling an image.
+	// Unless it is configured otherwise, the control plane gives a Docker VM
+	// made for a container five minutes to come up, and then waits for its
+	// node as long as the node may take, which is three minutes for dockerd
+	// and ten for the pull; the blog waits a little longer than all of that,
+	// so the control plane's answer is the one that comes back.
+	pullRequestTimeout = 20 * time.Minute
+)
 
 // Client is the workload control plane, reached over its HTTP API.
 type Client struct {
 	baseURL    *url.URL
 	httpClient *http.Client
+
+	// dockerImage is the image Docker VMs boot from, the control plane's and
+	// the vmhosts' own: a VM's image says whether it is one (vm.KindOf), which
+	// is what the dashboard calls its kind, and a Docker VM is asked for by it.
+	dockerImage string
 }
 
 var _ workloadControlPlane.Client = &Client{}
 
-// New builds a client for the control plane at baseURL, e.g. "http://workload-controlplane:80".
-// New builds a client for the control plane. It answers about tasks; reaching
-// one is the ingress's business and no longer passes through here.
-func New(baseURL string) (*Client, error) {
+// New builds a client for the control plane at baseURL, e.g.
+// "http://workload-controlplane:80", whose Docker VMs boot dockerImage, as
+// the control plane is told they do. It answers about tasks, VMs, snapshots,
+// containers and stacks; reaching one is the ingress's business and does not
+// pass through here.
+func New(baseURL string, dockerImage string) (*Client, error) {
 	parsed, err := usable(baseURL, "workload control plane")
 	if err != nil {
 		return nil, err
 	}
 
+	// each call is bounded by its own timeout, since the slowest of them takes
+	// minutes and the fastest should not.
 	return &Client{
-		baseURL:    parsed,
-		httpClient: &http.Client{Timeout: requestTimeout},
+		baseURL:     parsed,
+		httpClient:  &http.Client{},
+		dockerImage: dockerImage,
 	}, nil
 }
 
@@ -67,181 +89,48 @@ func usable(raw string, what string) (*url.URL, error) {
 	return parsed, nil
 }
 
-func (c *Client) Tasks(ctx context.Context, ownerUUID string, page uint) (workloadControlPlane.Page[task.Task], error) {
-	var payload tasksPayload
-	if err := c.call(ctx, http.MethodGet, c.path("/api/tasks", listing(ownerUUID, page)), nil, &payload); err != nil {
-		return workloadControlPlane.Page[task.Task]{}, err
-	}
-
-	items := make([]task.Task, len(payload.Items))
-	for i := range payload.Items {
-		items[i] = payload.Items[i].toTask()
-	}
-
-	return workloadControlPlane.Page[task.Task]{
-		Items:       items,
-		TotalPages:  payload.Pagination.TotalPages,
-		CurrentPage: payload.Pagination.CurrentPage,
-	}, nil
-}
-
-func (c *Client) Task(ctx context.Context, uuid string) (task.Task, error) {
-	var payload taskPayload
-	if err := c.call(ctx, http.MethodGet, c.path("/api/tasks/"+url.PathEscape(uuid), nil), nil, &payload); err != nil {
-		return task.Task{}, err
-	}
-
-	return payload.toTask(), nil
-}
-
-func (c *Client) TaskOf(ctx context.Context, ownerUUID string, uuid string) (task.Task, error) {
-	query := url.Values{}
-	query.Set("owner", ownerUUID)
-
-	var payload taskPayload
-	if err := c.call(ctx, http.MethodGet, c.path("/api/tasks/"+url.PathEscape(uuid), query), nil, &payload); err != nil {
-		return task.Task{}, err
-	}
-
-	return payload.toTask(), nil
-}
-
-func (c *Client) RunTask(ctx context.Context, spec workloadControlPlane.TaskSpec, ownerUUID string) (task.Task, error) {
-	body := map[string]any{"name": spec.Name, "owner_uuid": ownerUUID, "service": spec.Service}
-
-	var payload taskPayload
-	if err := c.call(ctx, http.MethodPost, c.path("/api/tasks/run", nil), body, &payload); err != nil {
-		return task.Task{}, err
-	}
-
-	return payload.toTask(), nil
-}
-
-func (c *Client) StopTask(ctx context.Context, uuid string) error {
-	return c.call(ctx, http.MethodPost, c.path("/api/tasks/"+url.PathEscape(uuid)+"/stop", nil), nil, nil)
-}
-
-func (c *Client) KillTask(ctx context.Context, uuid string) error {
-	return c.call(ctx, http.MethodPost, c.path("/api/tasks/"+url.PathEscape(uuid)+"/kill", nil), nil, nil)
-}
-
-func (c *Client) RestartTask(ctx context.Context, uuid string) error {
-	return c.call(ctx, http.MethodPost, c.path("/api/tasks/"+url.PathEscape(uuid)+"/restart", nil), nil, nil)
-}
-
-// DeleteTask removes a task whether or not it is still running: the
-// dashboard's delete is a request to have it gone.
-func (c *Client) DeleteTask(ctx context.Context, uuid string) error {
-	return c.call(ctx, http.MethodDelete, c.path("/api/tasks/"+url.PathEscape(uuid), url.Values{"force": {"true"}}), nil, nil)
-}
-
-func (c *Client) TaskLogs(ctx context.Context, uuid string, after time.Time, limit uint) ([]task.Log, error) {
-	query := url.Values{}
-	if !after.IsZero() {
-		query.Set("after", after.UTC().Format(time.RFC3339Nano))
-	}
-	if limit > 0 {
-		query.Set("limit", strconv.FormatUint(uint64(limit), 10))
-	}
-
-	var payload logsPayload
-	if err := c.call(ctx, http.MethodGet, c.path("/api/tasks/"+url.PathEscape(uuid)+"/logs", query), nil, &payload); err != nil {
-		return nil, err
-	}
-
-	logs := make([]task.Log, len(payload.Items))
-	for i := range payload.Items {
-		logs[i] = payload.Items[i].toLog(uuid)
-	}
-
-	return logs, nil
-}
-
-func (c *Client) Stacks(ctx context.Context, ownerUUID string, page uint) (workloadControlPlane.Page[workloadControlPlane.Stack], error) {
-	var payload stacksPayload
-	if err := c.call(ctx, http.MethodGet, c.path("/api/stacks", listing(ownerUUID, page)), nil, &payload); err != nil {
-		return workloadControlPlane.Page[workloadControlPlane.Stack]{}, err
-	}
-
-	items := make([]workloadControlPlane.Stack, len(payload.Items))
-	for i := range payload.Items {
-		items[i] = payload.Items[i].toStack()
-	}
-
-	return workloadControlPlane.Page[workloadControlPlane.Stack]{
-		Items:       items,
-		TotalPages:  payload.Pagination.TotalPages,
-		CurrentPage: payload.Pagination.CurrentPage,
-	}, nil
-}
-
-func (c *Client) Stack(ctx context.Context, uuid string) (workloadControlPlane.Stack, error) {
-	var payload stackPayload
-	if err := c.call(ctx, http.MethodGet, c.path("/api/stacks/"+url.PathEscape(uuid), nil), nil, &payload); err != nil {
-		return workloadControlPlane.Stack{}, err
-	}
-
-	return payload.toStack(), nil
-}
-
-func (c *Client) StackOf(ctx context.Context, ownerUUID string, uuid string) (workloadControlPlane.Stack, error) {
-	query := url.Values{}
-	query.Set("owner", ownerUUID)
-
-	var payload stackPayload
-	if err := c.call(ctx, http.MethodGet, c.path("/api/stacks/"+url.PathEscape(uuid), query), nil, &payload); err != nil {
-		return workloadControlPlane.Stack{}, err
-	}
-
-	return payload.toStack(), nil
-}
-
-func (c *Client) RunStack(ctx context.Context, spec workloadControlPlane.StackSpec, ownerUUID string) (workloadControlPlane.Stack, error) {
-	body := map[string]any{"name": spec.Name, "owner_uuid": ownerUUID, "services": spec.Services}
-
-	var payload stackPayload
-	if err := c.call(ctx, http.MethodPost, c.path("/api/stacks/run", nil), body, &payload); err != nil {
-		return workloadControlPlane.Stack{}, err
-	}
-
-	return payload.toStack(), nil
-}
-
-func (c *Client) StopStack(ctx context.Context, uuid string) error {
-	return c.call(ctx, http.MethodPost, c.path("/api/stacks/"+url.PathEscape(uuid)+"/stop", nil), nil, nil)
-}
-
-func (c *Client) KillStack(ctx context.Context, uuid string) error {
-	return c.call(ctx, http.MethodPost, c.path("/api/stacks/"+url.PathEscape(uuid)+"/kill", nil), nil, nil)
-}
-
-func (c *Client) RestartStack(ctx context.Context, uuid string) error {
-	return c.call(ctx, http.MethodPost, c.path("/api/stacks/"+url.PathEscape(uuid)+"/restart", nil), nil, nil)
-}
-
-func (c *Client) DeleteStack(ctx context.Context, uuid string) error {
-	return c.call(ctx, http.MethodDelete, c.path("/api/stacks/"+url.PathEscape(uuid), nil), nil, nil)
-}
-
 // ValidationError carries what the control plane refused, so the dashboard can show
 // the caller which field it was rather than a bare failure.
+//
+// Each value is a code, which the blog puts into the words of whoever asked.
+// A refusal that came from a node — a VM that is not running, one that is not
+// a Docker VM, a dockerd that did not come up — is one too, under the vm
+// field, and also unwraps to the node's own error, so errors.Is still reads it
+// as the domain's error it stands for.
 type ValidationError struct {
 	ValidationErrors domain.ValidationErrors
+
+	cause error
 }
 
 func (e *ValidationError) Error() string {
 	return fmt.Sprintf("the workload refused the request: %v", e.ValidationErrors)
 }
 
-// listing is what a page of somebody's tasks or stacks is asked for by.
-func listing(ownerUUID string, page uint) url.Values {
-	query := url.Values{"page": {strconv.FormatUint(uint64(page), 10)}}
+// Unwrap is the node's error a refusal stands for, when it stands for one.
+func (e *ValidationError) Unwrap() error {
+	return e.cause
+}
 
-	if len(ownerUUID) > 0 {
-		query.Set("owner", ownerUUID)
+// Refused is what was refused, field by field, as codes.
+func (e *ValidationError) Refused() domain.ValidationErrors {
+	return e.ValidationErrors
+}
+
+// refusedByNode is what a node's refusal is to whoever called. A VM that cannot
+// be asked is something the person asking can do something about, so it is a
+// refusal under the vm field; anything else is the node's error as it said it,
+// which errors.Is reads as the domain's own: a not_found is domain.ErrNotExists.
+func refusedByNode(refused *noderequest.Error) error {
+	switch refused.Code {
+	case noderequest.CodeNotRunning, noderequest.CodeNotDocker, noderequest.CodeDockerUnavailable:
+		return &ValidationError{
+			ValidationErrors: domain.ValidationErrors{"vm": string(refused.Code)},
+			cause:            refused,
+		}
+	default:
+		return refused
 	}
-
-	return query
 }
 
 func (c *Client) path(path string, query url.Values) string {
@@ -255,10 +144,38 @@ func (c *Client) path(path string, query url.Values) string {
 	return u.String()
 }
 
-// call makes one request and decodes its answer. A 404 becomes
-// domain.ErrNotExists and a 400 becomes a ValidationError, so the layers above
-// deal in the errors they already know.
+// owned is the query of a call narrowed to ownerUUID's own, with what else it
+// asks; anything empty is left out.
+func owned(ownerUUID string, rest url.Values) url.Values {
+	query := url.Values{}
+	for key, values := range rest {
+		for _, value := range values {
+			if len(value) > 0 {
+				query.Add(key, value)
+			}
+		}
+	}
+
+	if len(ownerUUID) > 0 {
+		query.Set("owner", ownerUUID)
+	}
+
+	return query
+}
+
+// call makes one request about the control plane's records.
 func (c *Client) call(ctx context.Context, method string, endpoint string, body any, out any) error {
+	return c.callWithin(ctx, requestTimeout, method, endpoint, body, out)
+}
+
+// callWithin makes one request and decodes its answer, giving up after
+// timeout. A 404 becomes domain.ErrNotExists, a 400 a ValidationError, and
+// what a node refused the error it stands for, so the layers above deal in the
+// errors they already know.
+func (c *Client) callWithin(ctx context.Context, timeout time.Duration, method string, endpoint string, body any, out any) error {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
 	var payload io.Reader
 
 	if body != nil {
@@ -285,23 +202,8 @@ func (c *Client) call(ctx context.Context, method string, endpoint string, body 
 	}
 	defer response.Body.Close()
 
-	switch {
-	case response.StatusCode == http.StatusNotFound:
-		return domain.ErrNotExists
-
-	case response.StatusCode == http.StatusBadRequest:
-		var refusal struct {
-			Errors domain.ValidationErrors `json:"errors"`
-		}
-
-		if err := json.NewDecoder(response.Body).Decode(&refusal); err != nil {
-			return fmt.Errorf("the workload refused the request")
-		}
-
-		return &ValidationError{ValidationErrors: refusal.Errors}
-
-	case response.StatusCode >= http.StatusBadRequest:
-		return fmt.Errorf("the workload answered %s", response.Status)
+	if response.StatusCode >= http.StatusBadRequest {
+		return refusal(response)
 	}
 
 	if out == nil || response.StatusCode == http.StatusNoContent {
@@ -315,4 +217,33 @@ func (c *Client) call(ctx context.Context, method string, endpoint string, body 
 	}
 
 	return nil
+}
+
+// refusal is the error an answer of 400 or more stands for.
+func refusal(response *http.Response) error {
+	answer, _ := io.ReadAll(io.LimitReader(response.Body, 1<<20))
+
+	var refused struct {
+		Errors domain.ValidationErrors `json:"errors"`
+		Error  *noderequest.Error      `json:"error"`
+	}
+
+	decoded := json.Unmarshal(answer, &refused) == nil
+
+	switch {
+	case decoded && refused.Error != nil && len(refused.Error.Code) > 0:
+		return refusedByNode(refused.Error)
+
+	case response.StatusCode == http.StatusNotFound:
+		return domain.ErrNotExists
+
+	case response.StatusCode == http.StatusBadRequest:
+		if !decoded {
+			return fmt.Errorf("the workload refused the request")
+		}
+
+		return &ValidationError{ValidationErrors: refused.Errors}
+	}
+
+	return fmt.Errorf("the workload answered %s", response.Status)
 }

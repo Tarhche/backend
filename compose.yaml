@@ -18,11 +18,58 @@ x-app: &app
     - nats
     - rustfs
     - rustfs_configure
-    - docker
     - mailserver
     - grafana
   volumes:
     - ./:/opt/app
+
+# a node's engine: microsandbox, which runs VMs as microVMs on KVM, so it runs
+# only where /dev/kvm is — Linux, or Lima on a Mac (CLAUDE.md, "VMs locally").
+# It is behind the vms profile, so `make up` works without it; `make up-vms`
+# brings it. It is the production image, as the engine is built only there.
+x-vmhost: &vmhost
+  profiles: ["vms"]
+  build:
+    context: .
+    dockerfile: Dockerfile
+    target: production-workload-vmhost
+  restart: unless-stopped
+  init: true
+  user: "10001:10001"
+  devices:
+    - /dev/kvm
+  # /dev/kvm's group where this runs: stat -c %g /dev/kvm
+  group_add:
+    - "${WORKLOAD_KVM_GID:-993}"
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  cpus: ${WORKLOAD_VMHOST_CPUS_LIMIT:-2}
+  # every VM on the node lives inside this. It offers 80% of it less 512 MiB,
+  # which at 4g holds the 2 GiB Docker VM made for somebody's first container
+  # or stack, as in production; at less, that VM fits on no node.
+  mem_limit: ${WORKLOAD_VMHOST_MEMORY_LIMIT:-4g}
+  pids_limit: 16384
+  stop_grace_period: 120s
+  healthcheck:
+    test: ["CMD", "app", "check-workload-vmhost"]
+    interval: 10s
+    timeout: 5s
+    retries: 3
+    start_period: 5m
+
+x-vmhost-environment: &vmhost-environment
+  MSB_HOME: /data/msb
+  WORKLOAD_VMHOST_SOCKET: /run/vmhost/vmhost.sock
+  WORKLOAD_VMHOST_DOCKER_IMAGE: ${WORKLOAD_VM_DOCKER_IMAGE:-docker:29-dind}
+  OTEL_EXPORTER_OTLP_INSECURE: ${OTEL_EXPORTER_OTLP_INSECURE}
+  OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL}
+  OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES}
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
+  OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT: ${OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT:-}
+  OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
+  PROFILING_ENABLED: ${PROFILING_ENABLED:-true}
 
 services:
   app:
@@ -61,6 +108,7 @@ services:
       PROFILING_ENABLED: ${PROFILING_ENABLED:-true}
       WORKLOAD_CONTROLPLANE_URL: ${WORKLOAD_CONTROLPLANE_URL}
       WORKLOAD_INGRESS_DOMAIN: ${WORKLOAD_PUBLIC_INGRESS_DOMAIN}
+      WORKLOAD_VM_DOCKER_IMAGE: ${WORKLOAD_VM_DOCKER_IMAGE:-docker:29-dind}
 
   workload-controlplane:
     <<: *app
@@ -83,6 +131,16 @@ services:
       OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT: ${OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT:-}
       OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
       PROFILING_ENABLED: ${PROFILING_ENABLED:-true}
+      # the bucket the nodes keep VM snapshots in, which the control plane
+      # deletes them from
+      WORKLOAD_SNAPSHOT_S3_ENDPOINT: ${S3_ENDPOINT}
+      WORKLOAD_SNAPSHOT_S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      WORKLOAD_SNAPSHOT_S3_SECRET_KEY: ${S3_SECRET_KEY}
+      WORKLOAD_SNAPSHOT_S3_BUCKET: ${WORKLOAD_SNAPSHOT_S3_BUCKET}
+      WORKLOAD_SNAPSHOT_S3_USE_SSL: ${S3_USE_SSL}
+      # what every Docker VM boots from, the same image the vmhosts and the
+      # blog are given: a VM is a Docker VM when its image is it.
+      WORKLOAD_VM_DOCKER_IMAGE: ${WORKLOAD_VM_DOCKER_IMAGE:-docker:29-dind}
 
   workload-ingress:
     <<: *app
@@ -95,12 +153,9 @@ services:
       - "8031:8031"
     environment:
       WORKLOAD_INGRESS_DOMAIN: ${WORKLOAD_INGRESS_DOMAIN}
-      MONGO_SCHEME: ${MONGO_SCHEME}
-      MONGO_USERNAME: ${MONGO_USERNAME}
-      MONGO_PASSWORD: ${MONGO_PASSWORD}
-      MONGO_HOST: ${MONGO_HOST}
-      MONGO_PORT: ${MONGO_PORT}
-      MONGO_DATABASE_NAME: ${MONGO_DATABASE_NAME}
+      # where each task and VM is, heard as it is said: the ingress reads no
+      # database.
+      NATS_URL: ${NATS_URL}
       WORKLOAD_TUNNEL_CA_CERT: ${WORKLOAD_TUNNEL_CA_CERT}
       WORKLOAD_TUNNEL_CERT: ${WORKLOAD_INGRESS_TUNNEL_CERT}
       WORKLOAD_TUNNEL_KEY: ${WORKLOAD_INGRESS_TUNNEL_KEY}
@@ -119,11 +174,26 @@ services:
       target: develop-workload-orchestrator
     ports:
       - "8040:80"
+    networks:
+      default: {}
+      # its vmhost's, which it reaches VMs' published ports on; a VM takes
+      # connections from this address alone.
+      workload_vmhost_01:
+        ipv4_address: 10.89.1.2
+    volumes:
+      - ./:/opt/app
+      # the directory its vmhost's socket is in
+      - workload_vmhost_01_run:/run/vmhost
     environment:
       WORKLOAD_ORCHESTRATOR_NAME: workload-orchestrator-01
-      # the containers' ports are published on the docker daemon's own host,
-      # which is the dind service rather than this one.
-      WORKLOAD_ORCHESTRATOR_ADVERTISE_HOST: ${WORKLOAD_ORCHESTRATOR_ADVERTISE_HOST}
+      # where its vmhost serves the node's engine. Without the vms profile
+      # nothing does, and its VMs fail saying the vmhost is not answering.
+      WORKLOAD_VMHOST_SOCKET: /run/vmhost/vmhost.sock
+      WORKLOAD_SNAPSHOT_S3_ENDPOINT: ${S3_ENDPOINT}
+      WORKLOAD_SNAPSHOT_S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      WORKLOAD_SNAPSHOT_S3_SECRET_KEY: ${S3_SECRET_KEY}
+      WORKLOAD_SNAPSHOT_S3_BUCKET: ${WORKLOAD_SNAPSHOT_S3_BUCKET}
+      WORKLOAD_SNAPSHOT_S3_USE_SSL: ${S3_USE_SSL}
       WORKLOAD_TUNNEL_ADDRESSES: ${WORKLOAD_TUNNEL_ADDRESSES}
       WORKLOAD_TUNNEL_CA_CERT: ${WORKLOAD_TUNNEL_CA_CERT}
       WORKLOAD_TUNNEL_CERT: ${WORKLOAD_ORCHESTRATOR_01_TUNNEL_CERT}
@@ -132,7 +202,6 @@ services:
       PUBLIC_KEY: ${PUBLIC_KEY}
       WORKLOAD_TUNNEL_ALLOWED_TARGETS: ${WORKLOAD_TUNNEL_ALLOWED_TARGETS}
       NATS_URL: ${NATS_URL}
-      DOCKER_HOST: ${BACKEND_DOCKER_HOST}
       OTEL_EXPORTER_OTLP_INSECURE: ${OTEL_EXPORTER_OTLP_INSECURE}
       OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL}
       OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES}
@@ -146,11 +215,26 @@ services:
       target: develop-workload-orchestrator
     ports:
       - "8041:80"
+    networks:
+      default: {}
+      # its vmhost's, which it reaches VMs' published ports on; a VM takes
+      # connections from this address alone.
+      workload_vmhost_02:
+        ipv4_address: 10.89.2.2
+    volumes:
+      - ./:/opt/app
+      # the directory its vmhost's socket is in
+      - workload_vmhost_02_run:/run/vmhost
     environment:
       WORKLOAD_ORCHESTRATOR_NAME: workload-orchestrator-02
-      # the containers' ports are published on the docker daemon's own host,
-      # which is the dind service rather than this one.
-      WORKLOAD_ORCHESTRATOR_ADVERTISE_HOST: ${WORKLOAD_ORCHESTRATOR_ADVERTISE_HOST}
+      # where its vmhost serves the node's engine. Without the vms profile
+      # nothing does, and its VMs fail saying the vmhost is not answering.
+      WORKLOAD_VMHOST_SOCKET: /run/vmhost/vmhost.sock
+      WORKLOAD_SNAPSHOT_S3_ENDPOINT: ${S3_ENDPOINT}
+      WORKLOAD_SNAPSHOT_S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      WORKLOAD_SNAPSHOT_S3_SECRET_KEY: ${S3_SECRET_KEY}
+      WORKLOAD_SNAPSHOT_S3_BUCKET: ${WORKLOAD_SNAPSHOT_S3_BUCKET}
+      WORKLOAD_SNAPSHOT_S3_USE_SSL: ${S3_USE_SSL}
       WORKLOAD_TUNNEL_ADDRESSES: ${WORKLOAD_TUNNEL_ADDRESSES}
       WORKLOAD_TUNNEL_CA_CERT: ${WORKLOAD_TUNNEL_CA_CERT}
       WORKLOAD_TUNNEL_CERT: ${WORKLOAD_ORCHESTRATOR_02_TUNNEL_CERT}
@@ -159,7 +243,6 @@ services:
       PUBLIC_KEY: ${PUBLIC_KEY}
       WORKLOAD_TUNNEL_ALLOWED_TARGETS: ${WORKLOAD_TUNNEL_ALLOWED_TARGETS}
       NATS_URL: ${NATS_URL}
-      DOCKER_HOST: ${BACKEND_DOCKER_HOST}
       OTEL_EXPORTER_OTLP_INSECURE: ${OTEL_EXPORTER_OTLP_INSECURE}
       OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL}
       OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES}
@@ -173,11 +256,26 @@ services:
       target: develop-workload-orchestrator
     ports:
       - "8042:80"
+    networks:
+      default: {}
+      # its vmhost's, which it reaches VMs' published ports on; a VM takes
+      # connections from this address alone.
+      workload_vmhost_03:
+        ipv4_address: 10.89.3.2
+    volumes:
+      - ./:/opt/app
+      # the directory its vmhost's socket is in
+      - workload_vmhost_03_run:/run/vmhost
     environment:
       WORKLOAD_ORCHESTRATOR_NAME: workload-orchestrator-03
-      # the containers' ports are published on the docker daemon's own host,
-      # which is the dind service rather than this one.
-      WORKLOAD_ORCHESTRATOR_ADVERTISE_HOST: ${WORKLOAD_ORCHESTRATOR_ADVERTISE_HOST}
+      # where its vmhost serves the node's engine. Without the vms profile
+      # nothing does, and its VMs fail saying the vmhost is not answering.
+      WORKLOAD_VMHOST_SOCKET: /run/vmhost/vmhost.sock
+      WORKLOAD_SNAPSHOT_S3_ENDPOINT: ${S3_ENDPOINT}
+      WORKLOAD_SNAPSHOT_S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      WORKLOAD_SNAPSHOT_S3_SECRET_KEY: ${S3_SECRET_KEY}
+      WORKLOAD_SNAPSHOT_S3_BUCKET: ${WORKLOAD_SNAPSHOT_S3_BUCKET}
+      WORKLOAD_SNAPSHOT_S3_USE_SSL: ${S3_USE_SSL}
       WORKLOAD_TUNNEL_ADDRESSES: ${WORKLOAD_TUNNEL_ADDRESSES}
       WORKLOAD_TUNNEL_CA_CERT: ${WORKLOAD_TUNNEL_CA_CERT}
       WORKLOAD_TUNNEL_CERT: ${WORKLOAD_ORCHESTRATOR_03_TUNNEL_CERT}
@@ -186,7 +284,6 @@ services:
       PUBLIC_KEY: ${PUBLIC_KEY}
       WORKLOAD_TUNNEL_ALLOWED_TARGETS: ${WORKLOAD_TUNNEL_ALLOWED_TARGETS}
       NATS_URL: ${NATS_URL}
-      DOCKER_HOST: ${BACKEND_DOCKER_HOST}
       OTEL_EXPORTER_OTLP_INSECURE: ${OTEL_EXPORTER_OTLP_INSECURE}
       OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL}
       OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES}
@@ -194,6 +291,51 @@ services:
       OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT: ${OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT:-}
       OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
       PROFILING_ENABLED: ${PROFILING_ENABLED:-true}
+
+  workload-vmhost-01:
+    <<: *vmhost
+    hostname: workload-vmhost-01
+    networks:
+      default: {}
+      workload_vmhost_01:
+        ipv4_address: 10.89.1.10
+    volumes:
+      - workload_vmhost_01_home:/data
+      - workload_vmhost_01_run:/run/vmhost
+    environment:
+      <<: *vmhost-environment
+      WORKLOAD_VMHOST_ADVERTISE_HOST: 10.89.1.10
+      WORKLOAD_VMHOST_ORCHESTRATOR_IP: 10.89.1.2
+
+  workload-vmhost-02:
+    <<: *vmhost
+    hostname: workload-vmhost-02
+    networks:
+      default: {}
+      workload_vmhost_02:
+        ipv4_address: 10.89.2.10
+    volumes:
+      - workload_vmhost_02_home:/data
+      - workload_vmhost_02_run:/run/vmhost
+    environment:
+      <<: *vmhost-environment
+      WORKLOAD_VMHOST_ADVERTISE_HOST: 10.89.2.10
+      WORKLOAD_VMHOST_ORCHESTRATOR_IP: 10.89.2.2
+
+  workload-vmhost-03:
+    <<: *vmhost
+    hostname: workload-vmhost-03
+    networks:
+      default: {}
+      workload_vmhost_03:
+        ipv4_address: 10.89.3.10
+    volumes:
+      - workload_vmhost_03_home:/data
+      - workload_vmhost_03_run:/run/vmhost
+    environment:
+      <<: *vmhost-environment
+      WORKLOAD_VMHOST_ADVERTISE_HOST: 10.89.3.10
+      WORKLOAD_VMHOST_ORCHESTRATOR_IP: 10.89.3.2
 
   mongodb:
     image: mongo
@@ -254,10 +396,13 @@ services:
       S3_ACCESS_KEY: ${S3_ACCESS_KEY}
       S3_SECRET_KEY: ${S3_SECRET_KEY}
       S3_BUCKET_NAME: ${S3_BUCKET_NAME}
+      WORKLOAD_SNAPSHOT_S3_BUCKET: ${WORKLOAD_SNAPSHOT_S3_BUCKET}
+    # the blog's bucket, and the one VM snapshots are kept in
     entrypoint: >
       /bin/sh -c "
         rc alias set local http://rustfs:9000 ${S3_ACCESS_KEY} ${S3_SECRET_KEY} &&
-        rc bucket create -p local/${S3_BUCKET_NAME:-zuora-backup}
+        rc bucket create -p local/${S3_BUCKET_NAME:-zuora-backup} &&
+        rc bucket create -p local/${WORKLOAD_SNAPSHOT_S3_BUCKET:-workload-snapshots}
       "
 
   nats:
@@ -280,36 +425,6 @@ services:
       - nats
     ports:
       - "8082:31311"
-
-  docker:
-    image: docker:28-dind
-    restart: unless-stopped
-    privileged: true
-    ports:
-      - "2375:2375"
-      # the range docker publishes a container's ports on. The workload proxies
-      # them by hostname, so this is only for reaching one directly.
-      - "32768-32868:32768-32868"
-    environment:
-      DOCKER_TLS_CERTDIR: "" # disable certs
-    # dockerd's own Prometheus metrics endpoint on 0.0.0.0:9323
-    command: ["--metrics-addr=0.0.0.0:9323", "--experimental"]
-
-  portainer:
-    image: portainer/portainer-ce
-    restart: unless-stopped
-    security_opt:
-      - no-new-privileges:true
-    depends_on:
-      - docker
-    ports:
-      - "9200:9000"
-      - "9443:9443"
-    command: >
-      --admin-password="$$2a$$12$$4xcOa82Ni5rjgQF.v.JWi.i71OyUm3fwmfWiumgJHIAPGU.uOw3qu"
-    # username: admin
-    # password: admin-password
-    # standalone docker API url: docker:2375
 
   mailserver:
     image: axllent/mailpit
@@ -360,3 +475,37 @@ services:
     environment:
       MONGODB_URI: ${MONGO_SCHEME}://${MONGO_USERNAME}:${MONGO_PASSWORD}@${MONGO_HOST}:${MONGO_PORT}/admin
     command: ["--collector.diagnosticdata", "--collector.dbstats"]
+
+networks:
+  # each node's own: its orchestrator at .2 and its vmhost at .10, as in
+  # production.
+  workload_vmhost_01:
+    ipam:
+      config:
+        - subnet: 10.89.1.0/24
+          ip_range: 10.89.1.128/25
+  workload_vmhost_02:
+    ipam:
+      config:
+        - subnet: 10.89.2.0/24
+          ip_range: 10.89.2.128/25
+  workload_vmhost_03:
+    ipam:
+      config:
+        - subnet: 10.89.3.0/24
+          ip_range: 10.89.3.128/25
+
+volumes:
+  workload_vmhost_01_home:
+  workload_vmhost_02_home:
+  workload_vmhost_03_home:
+  # a vmhost's socket, which its orchestrator shares: a tmpfs owned by group
+  # 10001, whichever of the two mounts it first.
+  workload_vmhost_01_run: &socket-volume
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: uid=10001,gid=10001,mode=0770,size=1m
+  workload_vmhost_02_run: *socket-volume
+  workload_vmhost_03_run: *socket-volume

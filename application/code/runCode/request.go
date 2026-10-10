@@ -4,13 +4,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/khanzadimahdi/testproject/domain"
+	taskKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/task"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
 )
 
 const (
 	codeRunnerImageUrl = "ghcr.io/tarhche/code-runner"
+
+	// goRunners is what the name of every Go runner starts with.
+	goRunners = "go-"
 
 	// maximum exposed ports threshold
 	maxPorts = 3
@@ -84,6 +89,23 @@ func (r *Request) Live() bool {
 
 func (r *Request) Image() string {
 	return fmt.Sprintf("%s:%s-latest", codeRunnerImageUrl, r.Runner)
+}
+
+// ResourceLimits is what a snippet's task is given: the defaults, but for a
+// Go snippet, which is built before it runs and needs more memory and disk
+// for that than any other snippet does to run.
+func (r *Request) ResourceLimits() taskKind.Limits {
+	limits := taskKind.Limits{
+		CPU:    DefaultMaxCpu,
+		Memory: DefaultMaxMemorySize,
+		Disk:   DefaultMaxDiskSize,
+	}
+
+	if strings.HasPrefix(r.Runner, goRunners) {
+		limits.Memory, limits.Disk = GoMaxMemorySize, GoMaxDiskSize
+	}
+
+	return limits
 }
 
 // Keepable reports whether the answer to a run is the same answer every time.

@@ -5,5 +5,5 @@ import (
 )
 
 type Response struct {
-	presenter.Stack
+	presenter.StackDetail
 }

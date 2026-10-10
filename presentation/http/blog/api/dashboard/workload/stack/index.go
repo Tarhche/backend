@@ -1,50 +1,41 @@
 package stack
 
 import (
-	"encoding/json"
-	"errors"
 	"net/http"
-	"strconv"
 
-	getStacks "github.com/khanzadimahdi/testproject/application/dashboard/workload/stack/getStacks"
-	"github.com/khanzadimahdi/testproject/domain"
-	infraTrace "github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
-	"go.opentelemetry.io/otel/trace"
+	"github.com/khanzadimahdi/testproject/application/dashboard/workload/stack/getStacks"
+	"github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/workload"
 )
 
 type indexHandler struct {
 	useCase *getStacks.UseCase
+	owner   workload.Owner
 }
 
-func NewIndexHandler(useCase *getStacks.UseCase) *indexHandler {
-	return &indexHandler{useCase: useCase}
+func NewIndexHandler(useCase *getStacks.UseCase, owner workload.Owner) *indexHandler {
+	return &indexHandler{useCase: useCase, owner: owner}
 }
 
 // @Summary		List stacks
-// @Description	paginated list of the stacks the workload is holding
-// @Tags			dashboard workload
-// @Accept			json
+// @Description	a page of stacks, without their compose files, in one VM with ?vm=: anybody's on the workload routes, the caller's own on the my routes
+// @Tags			dashboard workload stacks
 // @Produce		json
-// @Param			page	query		int	false	"Page"	default(1)
+// @Param			page	query		int		false	"Page"	default(1)
+// @Param			vm		query		string	false	"Only the stacks deployed into this VM"
 // @Success		200		{object}	getStacks.Response
-// @Failure		500		{object}	map[string]interface{}
+// @Failure		500		{object}	workload.Failure
 // @Router			/dashboard/workload/stacks [get]
+// @Router			/dashboard/my/workload/stacks [get]
 func (h *indexHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
-	var page uint = 1
-	if parsed, err := strconv.ParseUint(r.URL.Query().Get("page"), 10, 32); err == nil {
-		page = uint(parsed)
+	response, err := h.useCase.Execute(r.Context(), &getStacks.Request{
+		Page:      workload.Page(r),
+		VMUUID:    r.URL.Query().Get("vm"),
+		OwnerUUID: h.owner(r),
+	})
+
+	if workload.Failed(rw, r, err) {
+		return
 	}
 
-	response, err := h.useCase.Execute(r.Context(), &getStacks.Request{Page: page})
-	switch {
-	case errors.Is(err, domain.ErrNotExists):
-		rw.WriteHeader(http.StatusNotFound)
-	case err != nil:
-		infraTrace.RecordError(trace.SpanFromContext(r.Context()), err)
-		rw.WriteHeader(http.StatusInternalServerError)
-	default:
-		rw.Header().Add("Content-Type", "application/json")
-		rw.WriteHeader(http.StatusOK)
-		json.NewEncoder(rw).Encode(response)
-	}
+	workload.JSON(rw, http.StatusOK, response)
 }

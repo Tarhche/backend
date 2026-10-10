@@ -1,41 +1,40 @@
 package stack
 
 import (
-	"errors"
 	"net/http"
 
-	stopStack "github.com/khanzadimahdi/testproject/application/dashboard/workload/stack/stopStack"
-	"github.com/khanzadimahdi/testproject/domain"
-	infraTrace "github.com/khanzadimahdi/testproject/infrastructure/telemetry/trace"
-	"go.opentelemetry.io/otel/trace"
+	"github.com/khanzadimahdi/testproject/application/dashboard/workload/stack/stopStack"
+	"github.com/khanzadimahdi/testproject/presentation/http/blog/api/dashboard/workload"
 )
 
 type stopHandler struct {
 	useCase *stopStack.UseCase
+	owner   workload.Owner
 }
 
-func NewStopHandler(useCase *stopStack.UseCase) *stopHandler {
-	return &stopHandler{useCase: useCase}
+func NewStopHandler(useCase *stopStack.UseCase, owner workload.Owner) *stopHandler {
+	return &stopHandler{useCase: useCase, owner: owner}
 }
 
-// @Summary		Stop stack
-// @Description	stop every service of a stack, giving each a moment to shut down on its own
-// @Tags			dashboard workload
+// @Summary		Stop a stack
+// @Description	ask for a stack's containers to be stopped, and kept
+// @Tags			dashboard workload stacks
 // @Param			uuid	path		string	true	"Stack UUID"
 // @Success		202		{object}	map[string]interface{}
-// @Failure		404		{object}	map[string]interface{}
+// @Failure		400		{object}	workload.Refusal
+// @Failure		404		{object}	workload.Failure
+// @Failure		500		{object}	workload.Failure
 // @Router			/dashboard/workload/stacks/{uuid}/stop [post]
+// @Router			/dashboard/my/workload/stacks/{uuid}/stop [post]
 func (h *stopHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
-	err := h.useCase.Execute(r.Context(), &stopStack.Request{
-		UUID: r.PathValue("uuid"),
+	response, err := h.useCase.Execute(r.Context(), &stopStack.Request{
+		UUID:      r.PathValue("uuid"),
+		OwnerUUID: h.owner(r),
 	})
 
 	switch {
-	case errors.Is(err, domain.ErrNotExists):
-		rw.WriteHeader(http.StatusNotFound)
-	case err != nil:
-		infraTrace.RecordError(trace.SpanFromContext(r.Context()), err)
-		rw.WriteHeader(http.StatusInternalServerError)
+	case workload.Failed(rw, r, err):
+	case workload.Refused(rw, response.ValidationErrors):
 	default:
 		rw.WriteHeader(http.StatusAccepted)
 	}

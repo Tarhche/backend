@@ -52,12 +52,12 @@ func TestRequires(t *testing.T) {
 
 	t.Run("a route served under a permission says which", func(t *testing.T) {
 		requirements := Requires(NewAuthenticateMiddleware(
-			NewAuthorizeMiddleware(handler, &authorizer, permission.WorkloadTasksCreate),
+			NewAuthorizeMiddleware(handler, &authorizer, permission.ArticlesCreate),
 			&jwt.JWT{},
 			&userRepository,
 		))
 
 		assert.True(t, requirements.Authenticated)
-		assert.Equal(t, permission.WorkloadTasksCreate, requirements.Permission)
+		assert.Equal(t, permission.ArticlesCreate, requirements.Permission)
 	})
 }

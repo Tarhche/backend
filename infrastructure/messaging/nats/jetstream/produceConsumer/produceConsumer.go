@@ -29,6 +29,11 @@ type produceConsumer struct {
 	wg         sync.WaitGroup
 	logger     *slog.Logger
 	tracer     oteltrace.Tracer
+
+	// concurrency is how many messages of one subject are handled at once,
+	// and progress how often one being handled is said to still be.
+	concurrency int
+	progress    time.Duration
 }
 
 var _ domain.ProduceConsumer = &produceConsumer{}
@@ -41,6 +46,31 @@ type Option func(*produceConsumer)
 func WithAckWait(d time.Duration) Option {
 	return func(m *produceConsumer) {
 		m.ackWait = d
+	}
+}
+
+// WithConcurrency handles up to n messages of a subject at once rather than
+// one after another.
+//
+// A message is acknowledged once its handler is done with it either way, so
+// one that is redelivered after a crash is still handled. What changes is that
+// a handler that takes minutes — a VM restored from a snapshot, a stack whose
+// images are pulled — no longer holds up every message behind it on its
+// subject. Handlers that run at once have to be safe to: what they do to the
+// same thing has to take turns of its own accord.
+func WithConcurrency(n int) Option {
+	return func(m *produceConsumer) {
+		m.concurrency = n
+	}
+}
+
+// WithProgress tells JetStream every interval that a message being handled
+// still is, so a handler that takes longer than the ack wait is not handed the
+// same message again while it works. A handler that hangs holds its message for
+// as long as it hangs, so this is for handlers that bound their own time.
+func WithProgress(interval time.Duration) Option {
+	return func(m *produceConsumer) {
+		m.progress = interval
 	}
 }
 
@@ -131,38 +161,101 @@ func (m *produceConsumer) consumeInBackground(ctx context.Context, stream jetstr
 }
 
 func (m *produceConsumer) consumeFunc(handler domain.MessageHandler) func(msg jetstream.Msg) {
+	if m.concurrency <= 1 {
+		return func(msg jetstream.Msg) {
+			m.handle(handler, msg)
+		}
+	}
+
+	// a slot is taken before the next message is let in, so no more than the
+	// concurrency are handled at once and the rest wait their turn in
+	// JetStream rather than in memory.
+	slots := make(chan struct{}, m.concurrency)
+
 	return func(msg jetstream.Msg) {
-		// the producer's span context arrives in the traceparent header; the
-		// message is processed as a trace of its own that links back to the
-		// originating trace instead of continuing it
-		remoteCtx := otel.GetTextMapPropagator().Extract(context.Background(), infranats.HeaderCarrier(msg.Headers()))
+		slots <- struct{}{}
+		m.wg.Add(1)
 
-		msgCtx, span := m.tracer.Start(context.Background(), "jetstream.consume "+msg.Subject(),
-			oteltrace.WithSpanKind(oteltrace.SpanKindConsumer),
-			oteltrace.WithLinks(oteltrace.LinkFromContext(remoteCtx)),
-			oteltrace.WithAttributes(attribute.String("messaging.destination.name", msg.Subject())),
-		)
-		defer span.End()
+		go func() {
+			defer m.wg.Done()
+			defer func() { <-slots }()
 
-		if err := msg.InProgress(); err != nil {
-			m.logger.Error("in progress error", "error", err)
+			m.handle(handler, msg)
+		}()
+	}
+}
+
+// handle handles one message, and acknowledges it once its handler is done
+// with it, or asks for it again when its handler failed.
+func (m *produceConsumer) handle(handler domain.MessageHandler, msg jetstream.Msg) {
+	// the producer's span context arrives in the traceparent header; the
+	// message is processed as a trace of its own that links back to the
+	// originating trace instead of continuing it
+	remoteCtx := otel.GetTextMapPropagator().Extract(context.Background(), infranats.HeaderCarrier(msg.Headers()))
+
+	msgCtx, span := m.tracer.Start(context.Background(), "jetstream.consume "+msg.Subject(),
+		oteltrace.WithSpanKind(oteltrace.SpanKindConsumer),
+		oteltrace.WithLinks(oteltrace.LinkFromContext(remoteCtx)),
+		oteltrace.WithAttributes(attribute.String("messaging.destination.name", msg.Subject())),
+	)
+	defer span.End()
+
+	if err := msg.InProgress(); err != nil {
+		m.logger.Error("in progress error", "error", err)
+	}
+
+	stopProgress := m.keepInProgress(msg)
+	err := handler.Handle(msgCtx, msg.Data())
+	stopProgress()
+
+	if err := trace.RecordError(span, err); err != nil {
+		m.logger.Error("consume error", "error", err, "subject", string(msg.Subject()))
+
+		if err := msg.Nak(); err != nil {
+			m.logger.Error("nak error", "error", err)
 		}
+		return
+	}
 
-		if err := trace.RecordError(span, handler.Handle(msgCtx, msg.Data())); err != nil {
-			m.logger.Error("consume error", "error", err, "subject", string(msg.Subject()))
+	// Acking is a real infra call to NATS, not part of the traced unit of
+	// work above - keep it on its own background context rather than the
+	// (short-lived, span-scoped) message context.
+	if err := msg.DoubleAck(context.Background()); err != nil {
+		m.logger.Error("double ack error", "error", err)
+	}
+}
 
-			if err := msg.Nak(); err != nil {
-				m.logger.Error("nak error", "error", err)
+// keepInProgress tells JetStream every progress interval that msg is still
+// being handled, until what it returns is called.
+func (m *produceConsumer) keepInProgress(msg jetstream.Msg) func() {
+	if m.progress <= 0 {
+		return func() {}
+	}
+
+	done := make(chan struct{})
+	stopped := make(chan struct{})
+
+	go func() {
+		defer close(stopped)
+
+		ticker := time.NewTicker(m.progress)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				if err := msg.InProgress(); err != nil {
+					m.logger.Error("in progress error", "error", err)
+				}
+			case <-done:
+				return
 			}
-			return
 		}
+	}()
 
-		// Acking is a real infra call to NATS, not part of the traced unit of
-		// work above - keep it on its own background context rather than the
-		// (short-lived, span-scoped) message context.
-		if err := msg.DoubleAck(context.Background()); err != nil {
-			m.logger.Error("double ack error", "error", err)
-		}
+	return func() {
+		close(done)
+		<-stopped
 	}
 }
 
