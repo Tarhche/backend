@@ -15,11 +15,12 @@ type Request struct {
 	OwnerUUID string
 
 	// Parent is the resource it is to live in, when its kind has a parent:
-	// another way of naming one of its metadata's owners.
+	// another way of naming one of its metadata's refs.
 	Parent string
 
-	// Manifest is what was asked: of its metadata, the name, labels, owners
-	// and lifetime, and its spec. The rest of it is not the caller's to say.
+	// Manifest is what was asked: of its metadata, the name, labels, owners,
+	// refs and lifetime, and its spec. The rest of it is not the caller's to
+	// say.
 	Manifest kind.Raw
 
 	// UUID is what it is kept under, when the control plane holds one for

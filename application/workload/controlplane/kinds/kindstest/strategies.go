@@ -62,7 +62,7 @@ func (f *Fans) Admit(_ context.Context, asked Fan) (Fan, domain.ValidationErrors
 
 	if len(asked.Spec.House) > 0 {
 		if _, in := asked.Metadata.Owner(Parent); !in {
-			asked.Metadata.Owners = append(asked.Metadata.Owners, kind.Reference{Kind: Parent, UUID: asked.Spec.House})
+			asked.Metadata.Refs = append(asked.Metadata.Refs, kind.Reference{Kind: Parent, UUID: asked.Spec.House})
 		}
 	}
 
@@ -230,7 +230,7 @@ func (n *Node) State(context.Context) (kind.Report[Status], error) {
 
 		report.Instances = append(report.Instances, kind.Observed[Status]{
 			UUID:   fan.Metadata.UUID,
-			Owners: fan.Metadata.Owners,
+			Owners: fan.Metadata.Belongs(),
 			Status: Status{Status: kind.Status{State: fan.Status.State}, Speed: fan.Status.Speed},
 		})
 	}

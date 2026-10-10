@@ -163,7 +163,9 @@ func TestGraph_Create(t *testing.T) {
 		assert.Equal(t, volumeKind.Present, v.Status.Status.State, "as its node made it")
 		assert.Equal(t, volumeKind.Spec{Name: "data", Labels: map[string]string{"backup": "nightly"}}, v.Spec)
 		assert.Equal(t, "owner", v.Metadata.OwnerUUID)
-		assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "vm-1"}}, v.Metadata.Owners)
+		assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "vm-1"}}, v.Metadata.Refs, "it lives in its vm")
+		assert.Empty(t, v.Metadata.Owners, "and nothing owns it until its graph says so")
+		assert.Equal(t, int64(1), v.Metadata.Generation)
 
 		sent := w.Node.Sent()
 		require.Len(t, sent, 1)

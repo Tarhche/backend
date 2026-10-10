@@ -23,7 +23,8 @@ func TestUseCase_Execute(t *testing.T) {
 
 	resources := resourcesMemory.NewRepository()
 
-	// 25 of alice's in house-1, and 5 of bob's in house-2.
+	// 25 of alice's in house-1, and 5 of bob's in house-2: every third kept
+	// before refs, the house it is in among its owners.
 	for i := range 30 {
 		owner, house := "alice", "house-1"
 		if i >= 25 {
@@ -32,7 +33,11 @@ func TestUseCase_Execute(t *testing.T) {
 
 		_, err := resources.Create(ctx, kindstest.AFan(fmt.Sprintf("fan-%02d", i), kindstest.Running, kindstest.Running, func(f *kindstest.Fan) {
 			f.Metadata.OwnerUUID = owner
-			f.Metadata.Owners = []kind.Reference{{Kind: kindstest.Parent, UUID: house}}
+			f.Metadata.Refs = []kind.Reference{{Kind: kindstest.Parent, UUID: house}}
+
+			if i%3 == 0 {
+				f.Metadata.Owners, f.Metadata.Refs = f.Metadata.Refs, nil
+			}
 		}))
 		require.NoError(t, err)
 	}

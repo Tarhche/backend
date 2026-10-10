@@ -165,7 +165,9 @@ func TestGraph_Create(t *testing.T) {
 		assert.Equal(t, networkKind.Spec{Name: "backend", Internal: true}, n.Spec)
 		assert.Equal(t, "owner", n.Metadata.OwnerUUID)
 		assert.Equal(t, map[string]string{"stack": "shop"}, n.Metadata.Labels)
-		assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "vm-1"}}, n.Metadata.Owners)
+		assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "vm-1"}}, n.Metadata.Refs, "it lives in its vm")
+		assert.Empty(t, n.Metadata.Owners, "and nothing owns it until its graph says so")
+		assert.Equal(t, int64(1), n.Metadata.Generation)
 
 		sent := w.Node.Sent()
 		require.Len(t, sent, 1)

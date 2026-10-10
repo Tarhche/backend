@@ -12,7 +12,6 @@ package named
 import (
 	"context"
 	"errors"
-	"slices"
 
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/owner"
 	"github.com/khanzadimahdi/testproject/domain"
@@ -73,16 +72,15 @@ func Extra(ctx context.Context, binding kind.ControlPlaneBinding, ownerUUID stri
 }
 
 // Lives reports whether what m describes lives in parent, a resource of d's
-// parent kind, as one of its owners. A request that names no parent is about
-// whatever it names, wherever it lives.
+// parent kind, as one of its refs, or, kept before refs, as one of its
+// owners. A request that names no parent is about whatever it names, wherever
+// it lives.
 func Lives(m kind.Metadata, d kind.Descriptor, parent string) bool {
 	if len(parent) == 0 {
 		return true
 	}
 
-	return slices.ContainsFunc(m.Owners, func(o kind.Reference) bool {
-		return o.UUID == parent && (len(d.Parent) == 0 || o.Kind == d.Parent)
-	})
+	return m.BelongsTo(kind.Reference{Kind: d.Parent, UUID: parent})
 }
 
 // resolve is the uuid name stands for inside parent: what the kind resolves

@@ -2,6 +2,7 @@ package kind
 
 import (
 	"encoding/json"
+	"slices"
 	"testing"
 	"time"
 
@@ -56,11 +57,30 @@ func TestResource(t *testing.T) {
 			"kind": "box",
 			"metadata": {
 				"uuid": "box-uuid", "name": "shop", "slug": "shop-abcde", "owner_uuid": "owner-uuid",
-				"labels": {"team": "web"}, "owners": [{"kind": "vm", "uuid": "vm-uuid"}], "node": "node-1"
+				"labels": {"team": "web"}, "owners": [{"kind": "shelf", "uuid": "shelf-uuid"}],
+				"refs": [{"kind": "vm", "uuid": "vm-uuid"}], "node": "node-1", "generation": 1
 			},
 			"spec": {"image": "nginx:alpine", "size": 2},
 			"status": {"state": "running", "expected": "running", "uptime": 42}
 		}`, string(payload))
+	})
+
+	t.Run("when it was asked to go travels once it was", func(t *testing.T) {
+		t.Parallel()
+
+		sent := aBox()
+		sent.Metadata.DeletionRequestedAt = time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC)
+
+		raw, err := Encode(sent)
+		require.NoError(t, err)
+
+		payload, err := json.Marshal(raw.Metadata)
+		require.NoError(t, err)
+		assert.Contains(t, string(payload), `"deletion_requested_at":"2026-10-06T12:00:00Z"`)
+
+		arrived, err := Decode[boxSpec, boxStatus](travel(t, raw))
+		require.NoError(t, err)
+		assert.Equal(t, sent, arrived)
 	})
 
 	t.Run("a spec or a status that is not there is the zero value", func(t *testing.T) {
@@ -105,15 +125,19 @@ func TestResource(t *testing.T) {
 
 		raw.Metadata.Labels["team"] = "changed"
 		raw.Metadata.Owners[0].UUID = "changed"
+		raw.Metadata.Refs[0].UUID = "changed"
 
 		typed, err := Decode[boxSpec, boxStatus](raw)
 		require.NoError(t, err)
 
 		typed.Metadata.Labels["team"] = "changed again"
+		typed.Metadata.Refs[0].UUID = "changed again"
 
 		assert.Equal(t, "web", sent.Metadata.Labels["team"])
-		assert.Equal(t, "vm-uuid", sent.Metadata.Owners[0].UUID)
+		assert.Equal(t, "shelf-uuid", sent.Metadata.Owners[0].UUID)
+		assert.Equal(t, "vm-uuid", sent.Metadata.Refs[0].UUID)
 		assert.Equal(t, "changed", raw.Metadata.Labels["team"])
+		assert.Equal(t, "changed", raw.Metadata.Refs[0].UUID)
 	})
 }
 
@@ -170,25 +194,101 @@ func TestMetadata_Expired(t *testing.T) {
 func TestMetadata_Owner(t *testing.T) {
 	t.Parallel()
 
-	metadata := Metadata{Owners: []Reference{{Kind: "vm", UUID: "vm-uuid"}, {Kind: "stack", UUID: "stack-uuid"}}}
+	metadata := Metadata{
+		Refs:   []Reference{{Kind: "vm", UUID: "vm-uuid"}, {Kind: "volume", UUID: "volume-uuid"}},
+		Owners: []Reference{{Kind: "stack", UUID: "stack-uuid"}, {Kind: "vm", UUID: "another-vm-uuid"}},
+	}
+
+	// kept before refs: the vm it lives in is among its owners.
+	kept := Metadata{Owners: []Reference{{Kind: "vm", UUID: "vm-uuid"}, {Kind: "stack", UUID: "stack-uuid"}}}
 
 	for name, tt := range map[string]struct {
-		kind  string
-		want  Reference
-		found bool
+		metadata Metadata
+		kind     string
+		want     Reference
+		found    bool
 	}{
-		"the vm it lives in":             {kind: "vm", want: Reference{Kind: "vm", UUID: "vm-uuid"}, found: true},
-		"the stack that made it":         {kind: "stack", want: Reference{Kind: "stack", UUID: "stack-uuid"}, found: true},
-		"nothing of a kind it is not in": {kind: "task"},
-		"nothing of no kind at all":      {kind: ""},
+		"the vm it lives in, among its refs before its owners": {metadata: metadata, kind: "vm", want: Reference{Kind: "vm", UUID: "vm-uuid"}, found: true},
+		"what it uses":                                  {metadata: metadata, kind: "volume", want: Reference{Kind: "volume", UUID: "volume-uuid"}, found: true},
+		"the stack that owns it":                        {metadata: metadata, kind: "stack", want: Reference{Kind: "stack", UUID: "stack-uuid"}, found: true},
+		"the vm one kept before refs lives in":          {metadata: kept, kind: "vm", want: Reference{Kind: "vm", UUID: "vm-uuid"}, found: true},
+		"nothing of a kind it is not in":                {metadata: metadata, kind: "task"},
+		"nothing of no kind at all":                     {metadata: metadata, kind: ""},
+		"nor anything of a resource that names nothing": {kind: "vm"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			owner, found := metadata.Owner(tt.kind)
+			owner, found := tt.metadata.Owner(tt.kind)
 
 			assert.Equal(t, tt.found, found)
 			assert.Equal(t, tt.want, owner)
+		})
+	}
+}
+
+func TestMetadata_BelongsTo(t *testing.T) {
+	t.Parallel()
+
+	metadata := Metadata{
+		Refs:   []Reference{{Kind: "vm", UUID: "vm-uuid"}, {Kind: "garden", UUID: "shared-uuid"}},
+		Owners: []Reference{{Kind: "stack", UUID: "stack-uuid"}},
+	}
+
+	for name, tt := range map[string]struct {
+		metadata Metadata
+		to       Reference
+		want     bool
+	}{
+		"the vm it lives in, among its refs":            {metadata: metadata, to: Reference{Kind: "vm", UUID: "vm-uuid"}, want: true},
+		"the stack among its owners":                    {metadata: metadata, to: Reference{Kind: "stack", UUID: "stack-uuid"}, want: true},
+		"anything of a uuid it names, of no kind given": {metadata: metadata, to: Reference{UUID: "shared-uuid"}, want: true},
+		"the vm one kept before refs lives in":          {metadata: Metadata{Owners: []Reference{{Kind: "vm", UUID: "vm-uuid"}}}, to: Reference{Kind: "vm", UUID: "vm-uuid"}, want: true},
+		"but not one of another kind":                   {metadata: metadata, to: Reference{Kind: "house", UUID: "shared-uuid"}},
+		"nor one it does not name":                      {metadata: metadata, to: Reference{Kind: "vm", UUID: "another-uuid"}},
+		"nor anything, naming nothing":                  {to: Reference{UUID: "vm-uuid"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, tt.want, tt.metadata.BelongsTo(tt.to))
+		})
+	}
+}
+
+func TestMetadata_Belongs(t *testing.T) {
+	t.Parallel()
+
+	metadata := Metadata{
+		Refs:   []Reference{{Kind: "vm", UUID: "vm-uuid"}, {Kind: "volume", UUID: "volume-uuid"}},
+		Owners: []Reference{{Kind: "stack", UUID: "stack-uuid"}, {Kind: "vm", UUID: "vm-uuid"}},
+	}
+
+	assert.Equal(t, []Reference{{Kind: "vm", UUID: "vm-uuid"}, {Kind: "volume", UUID: "volume-uuid"}, {Kind: "stack", UUID: "stack-uuid"}}, metadata.Belongs(), "its refs, and then its owners, each once")
+	assert.Empty(t, Metadata{}.Belongs(), "and nothing, for one that belongs to nothing")
+}
+
+func TestLivingIn(t *testing.T) {
+	t.Parallel()
+
+	vm := Reference{Kind: "vm", UUID: "vm-uuid"}
+
+	for name, tt := range map[string]struct {
+		refs []Reference
+		want []Reference
+	}{
+		"the resource it lives in, when it uses nothing else": {want: []Reference{vm}},
+		"first, and what else it uses as it was":              {refs: []Reference{{Kind: "volume", UUID: "volume-uuid"}, {Kind: "network", UUID: "network-uuid"}}, want: []Reference{vm, {Kind: "volume", UUID: "volume-uuid"}, {Kind: "network", UUID: "network-uuid"}}},
+		"in place of another of its kind":                     {refs: []Reference{{Kind: "vm", UUID: "another-uuid"}, {Kind: "volume", UUID: "volume-uuid"}}, want: []Reference{vm, {Kind: "volume", UUID: "volume-uuid"}}},
+		"and once, however often it was named":                {refs: []Reference{vm, {Kind: "volume", UUID: "volume-uuid"}, vm, {Kind: "volume", UUID: "volume-uuid"}}, want: []Reference{vm, {Kind: "volume", UUID: "volume-uuid"}}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			refs := slices.Clone(tt.refs)
+
+			assert.Equal(t, tt.want, LivingIn(tt.refs, vm))
+			assert.Equal(t, refs, tt.refs, "and what it was handed is as it was")
 		})
 	}
 }

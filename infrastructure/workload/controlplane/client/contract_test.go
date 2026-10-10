@@ -434,7 +434,7 @@ func TestContract_Snapshots(t *testing.T) {
 	w := blockstest.New(
 		vmtest.WithVMs(vmtest.Stopped("01", "owner"), vmtest.Running("02", "owner")),
 		vmtest.WithSnapshots(vmtest.Snapshot("stored", "owner", func(s *snapshotKind.Snapshot) {
-			s.Metadata.Owners = []kind.Reference{{Kind: "vm", UUID: "02"}}
+			s.Metadata.Refs = []kind.Reference{{Kind: "vm", UUID: "02"}}
 			s.Spec.VM = snapshotKind.VMRef{UUID: "02", Name: "box"}
 		})),
 	)

@@ -24,7 +24,7 @@ func TestNetworks_Admit(t *testing.T) {
 	w := blockstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
 
 	asked := func(spec networkKind.Spec) networkKind.Network {
-		return networkKind.Network{Kind: networkKind.Name, Metadata: kind.Metadata{OwnerUUID: "owner", Owners: []kind.Reference{{Kind: "vm", UUID: "vm-1"}}}, Spec: spec}
+		return networkKind.Network{Kind: networkKind.Name, Metadata: kind.Metadata{OwnerUUID: "owner", Refs: []kind.Reference{{Kind: "vm", UUID: "vm-1"}}}, Spec: spec}
 	}
 
 	admitted, invalid, err := w.Networks.Admit(ctx, asked(networkKind.Spec{Name: " backend ", Internal: true}))
@@ -35,6 +35,8 @@ func TestNetworks_Admit(t *testing.T) {
 	assert.Equal(t, "backend", admitted.Metadata.Name)
 	assert.True(t, admitted.Spec.Internal)
 	assert.Equal(t, vmtest.Node, admitted.Metadata.Node)
+	assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "vm-1"}}, admitted.Metadata.Refs, "it lives in its vm")
+	assert.Empty(t, admitted.Metadata.Owners, "which does not own it")
 	assert.Equal(t, networkKind.Pending, admitted.Status.State)
 	assert.Equal(t, networkKind.Present, admitted.Status.Expected)
 

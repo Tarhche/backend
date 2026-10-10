@@ -242,7 +242,8 @@ func (r *Repository) slugTaken(record resource.Record) bool {
 	return false
 }
 
-// passes reports whether a record is one filter lets through.
+// passes reports whether a record is one filter lets through: what it lives
+// in among its refs or, kept before refs, among its owners.
 func passes(record resource.Record, filter resource.Filter) bool {
 	return filter.Passes(record.Metadata)
 }
@@ -253,6 +254,7 @@ func kept(record resource.Record) resource.Record {
 	record = record.Clone()
 
 	record.Metadata.ExpiresAt = millisecond(record.Metadata.ExpiresAt)
+	record.Metadata.DeletionRequestedAt = millisecond(record.Metadata.DeletionRequestedAt)
 	record.Metadata.CreatedAt = millisecond(record.Metadata.CreatedAt)
 	record.Metadata.UpdatedAt = millisecond(record.Metadata.UpdatedAt)
 	record.TriedAt = millisecond(record.TriedAt)

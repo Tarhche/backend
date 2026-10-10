@@ -309,6 +309,40 @@ func TestDispatcher_Ask(t *testing.T) {
 		assert.Equal(t, "delete", asked.Command.Action)
 	})
 
+	t.Run("the first delete asked of it is when its delete was requested, written as it is expected deleted, and kept once it is", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t, kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running))
+		f.clock.Advance(time.Minute)
+
+		asked, _, err := f.dispatch.Ask(ctx, f.binding, f.stored(t, "fan-uuid"), "delete", nil, true)
+		require.NoError(t, err)
+
+		requested := kindstest.Moment.Add(time.Minute)
+
+		stored := f.stored(t, "fan-uuid")
+		assert.Equal(t, requested, stored.Metadata.DeletionRequestedAt)
+		assert.Equal(t, int64(2), stored.Version, "in the one write")
+		assert.Equal(t, requested, asked.Command.Resource.Metadata.DeletionRequestedAt, "and the command carries it")
+
+		f.clock.Advance(time.Minute)
+
+		_, _, err = f.dispatch.Ask(ctx, f.binding, stored, "delete", nil, false)
+		require.NoError(t, err)
+		assert.Equal(t, requested, f.stored(t, "fan-uuid").Metadata.DeletionRequestedAt, "a delete asked again was requested when the first was")
+	})
+
+	t.Run("and nothing else asked of it says it was", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t, kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running))
+
+		_, _, err := f.dispatch.Ask(ctx, f.binding, f.stored(t, "fan-uuid"), "stop", nil, true)
+		require.NoError(t, err)
+
+		assert.True(t, f.stored(t, "fan-uuid").Metadata.DeletionRequestedAt.IsZero())
+	})
+
 	t.Run("a copy read before something else wrote the resource is not written over it", func(t *testing.T) {
 		t.Parallel()
 
@@ -589,6 +623,22 @@ func TestDispatcher_Desire(t *testing.T) {
 	assert.Equal(t, kind.Deleted, kindstest.Typed(stored).Status.Expected)
 	assert.Equal(t, kindstest.Starting, kindstest.Typed(stored).Status.State, "nothing is asked of it yet")
 	assert.Equal(t, 0, stored.Attempts)
+	assert.Equal(t, kindstest.Moment, stored.Metadata.DeletionRequestedAt, "and its delete was requested now, in the same write")
+	assert.Equal(t, int64(2), stored.Version)
+
+	f.clock.Advance(time.Minute)
+
+	_, err = f.dispatch.Desire(context.Background(), stored, kind.Deleted, false)
+	require.NoError(t, err)
+	assert.Equal(t, kindstest.Moment, f.stored(t, "fan-uuid").Metadata.DeletionRequestedAt, "and not again")
+
+	running := kindstest.AFan("running-uuid", kindstest.Stopped, kindstest.Stopped)
+	_, err = f.resources.Create(context.Background(), running)
+	require.NoError(t, err)
+
+	_, err = f.dispatch.Desire(context.Background(), f.stored(t, "running-uuid"), kindstest.Running, true)
+	require.NoError(t, err)
+	assert.True(t, f.stored(t, "running-uuid").Metadata.DeletionRequestedAt.IsZero(), "what desires anything else was asked nothing of the kind")
 }
 
 // answering is a node that answers every command as soon as it is sent,

@@ -230,7 +230,9 @@ func TestRoutes(t *testing.T) {
 		assert.Equal(t, "fan", admitted.Resource.Kind)
 		assert.Equal(t, "kitchen", admitted.Resource.Metadata.Name)
 		assert.Equal(t, "owner-uuid", admitted.Resource.Metadata.OwnerUUID)
-		assert.Equal(t, []kind.Reference{{Kind: "house", UUID: "house-1"}}, admitted.Resource.Metadata.Owners)
+		assert.Equal(t, []kind.Reference{{Kind: "house", UUID: "house-1"}}, admitted.Resource.Metadata.Refs, "it lives in the house it was asked into")
+		assert.Empty(t, admitted.Resource.Metadata.Owners, "which does not own it")
+		assert.Equal(t, int64(1), admitted.Resource.Metadata.Generation)
 		assert.Equal(t, kindstest.Running, admitted.Resource.Status.State, "made, and running")
 		assert.Equal(t, 1, admitted.Resource.Status.Speed)
 
@@ -303,7 +305,7 @@ func TestRoutes(t *testing.T) {
 		}))
 		a.keep(t, kindstest.AFan("fan-2", kindstest.Running, kindstest.Running, func(f *kindstest.Fan) {
 			f.Metadata.OwnerUUID = "somebody-else"
-			f.Metadata.Owners = []kind.Reference{{Kind: "house", UUID: "house-2"}}
+			f.Metadata.Refs = []kind.Reference{{Kind: "house", UUID: "house-2"}}
 			f.Metadata.Labels = map[string]string{"made.by": "hand"}
 		}))
 

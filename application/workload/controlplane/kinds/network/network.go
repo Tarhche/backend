@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"slices"
 	"strings"
 
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/blocks"
@@ -71,7 +72,8 @@ func (s *Networks) Admit(ctx context.Context, asked networkKind.Network) (networ
 			Name:      spec.Name,
 			OwnerUUID: asked.Metadata.OwnerUUID,
 			Labels:    asked.Metadata.Labels,
-			Owners:    []kind.Reference{{Kind: networkKind.Parent, UUID: v.Metadata.UUID}},
+			Owners:    slices.Clone(asked.Metadata.Owners),
+			Refs:      kind.LivingIn(asked.Metadata.Refs, kind.Reference{Kind: networkKind.Parent, UUID: v.Metadata.UUID}),
 			Node:      v.Metadata.Node,
 		},
 		Spec:   spec,

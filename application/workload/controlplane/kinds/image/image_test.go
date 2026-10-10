@@ -25,7 +25,7 @@ import (
 func asked(reference string, vmUUID string) imageKind.Image {
 	return imageKind.Image{
 		Kind:     imageKind.Name,
-		Metadata: kind.Metadata{OwnerUUID: "owner", Owners: []kind.Reference{{Kind: "vm", UUID: vmUUID}}},
+		Metadata: kind.Metadata{OwnerUUID: "owner", Refs: []kind.Reference{{Kind: "vm", UUID: vmUUID}}},
 		Spec:     imageKind.Spec{Reference: reference},
 	}
 }
@@ -47,6 +47,8 @@ func TestImages_Admit(t *testing.T) {
 		assert.Equal(t, imageKind.UUIDOf("vm-1", "nginx:latest"), admitted.Metadata.UUID)
 		assert.Equal(t, "nginx:latest", admitted.Metadata.Name)
 		assert.Equal(t, vmtest.Node, admitted.Metadata.Node)
+		assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "vm-1"}}, admitted.Metadata.Refs, "it lives in its vm")
+		assert.Empty(t, admitted.Metadata.Owners, "which does not own it")
 		assert.Equal(t, imageKind.Pending, admitted.Status.State)
 		assert.Equal(t, imageKind.Present, admitted.Status.Expected)
 	})

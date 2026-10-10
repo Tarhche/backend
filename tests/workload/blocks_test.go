@@ -303,8 +303,9 @@ func TestTheBuildingBlocksOfADockerVM(t *testing.T) {
 		on := w.container(t, vmUUID, "api", "on the network", func(c presenter.Container) bool { return slices.Contains(c.Networks, "backend") })
 		assert.ElementsMatch(t, []string{"backend", "bridge"}, on.Networks)
 
-		spec := w.containerRecord(t, vmUUID, "api").Spec
-		assert.Equal(t, []string{"backend"}, spec.Networks, "its spec names it, by its name")
+		kept := w.containerRecord(t, vmUUID, "api")
+		assert.Equal(t, []string{"backend"}, kept.Spec.Networks, "its spec names it, by its name")
+		assert.Equal(t, int64(2), kept.Metadata.Generation, "a spec changed once since it was admitted")
 
 		refused, err := deleteNetwork.NewUseCase(w.client, w.translator).Execute(ctx, &deleteNetwork.Request{VMUUID: vmUUID, ID: "backend", OwnerUUID: ownerUUID})
 		require.NoError(t, err)
@@ -330,7 +331,10 @@ func TestTheBuildingBlocksOfADockerVM(t *testing.T) {
 		require.Empty(t, disconnected.ValidationErrors)
 
 		w.container(t, vmUUID, "api", "off the network", func(c presenter.Container) bool { return !slices.Contains(c.Networks, "backend") })
-		assert.Empty(t, w.containerRecord(t, vmUUID, "api").Spec.Networks)
+
+		kept := w.containerRecord(t, vmUUID, "api")
+		assert.Empty(t, kept.Spec.Networks)
+		assert.Equal(t, int64(3), kept.Metadata.Generation, "and changed again, being put back on it changing nothing")
 
 		time.Sleep(20 * beat)
 

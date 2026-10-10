@@ -123,11 +123,11 @@ func TestRepository_EnsureKind(t *testing.T) {
 			}
 		}
 
-		for _, want := range []string{"_id ", "metadata.slug ", "kind _id ", "kind metadata.owner_uuid _id ", "kind metadata.node ", "metadata.owners.uuid metadata.owners.kind "} {
+		for _, want := range []string{"_id ", "metadata.slug ", "kind _id ", "kind metadata.owner_uuid _id ", "kind metadata.node ", "metadata.owners.uuid metadata.owners.kind ", "metadata.refs.uuid metadata.refs.kind "} {
 			assert.True(t, keys[want], "an index on %q", want)
 		}
 
-		assert.Len(t, indexes, 6, "and on nothing else")
+		assert.Len(t, indexes, 7, "and on nothing else")
 	})
 
 	t.Run("and one without a name cannot be", func(t *testing.T) {

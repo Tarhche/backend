@@ -153,16 +153,24 @@ func TestControlPlaneBinding(t *testing.T) {
 	})
 
 	for name, tt := range map[string]struct {
-		action  string
-		payload string
-		size    int
-		invalid domain.ValidationErrors
-		err     error
+		action     string
+		payload    string
+		size       int
+		generation int64
+		invalid    domain.ValidationErrors
+		err        error
 	}{
-		"an action is applied with its payload, typed": {
-			action:  "resize",
-			payload: `{"size": 3}`,
-			size:    3,
+		"an action is applied with its payload, typed, its spec changed a generation later": {
+			action:     "resize",
+			payload:    `{"size": 3}`,
+			size:       3,
+			generation: 2,
+		},
+		"and one that leaves its spec as it was is the generation it was": {
+			action:     "resize",
+			payload:    `{"size": 2}`,
+			size:       2,
+			generation: 1,
 		},
 		"a payload that is not valid says why": {
 			action:  "resize",
@@ -215,9 +223,23 @@ func TestControlPlaneBinding(t *testing.T) {
 			typed, err := Decode[boxSpec, boxStatus](applied)
 			require.NoError(t, err)
 			assert.Equal(t, tt.size, typed.Spec.Size)
+			assert.Equal(t, tt.generation, typed.Metadata.Generation)
 			assert.Equal(t, "box", typed.Kind)
 		})
 	}
+
+	t.Run("one kept before generations was at its first, whose change makes it its second", func(t *testing.T) {
+		t.Parallel()
+
+		applied, _, err := bound().Apply(context.Background(), rawBox(t, func(r *Resource[boxSpec, boxStatus]) {
+			r.Metadata.Generation = 0
+		}), "resize", []byte(`{"size": 3}`))
+		require.NoError(t, err)
+
+		typed, err := Decode[boxSpec, boxStatus](applied)
+		require.NoError(t, err)
+		assert.Equal(t, int64(2), typed.Metadata.Generation)
+	})
 }
 
 // aCommand is a box's command, asked of node-1.

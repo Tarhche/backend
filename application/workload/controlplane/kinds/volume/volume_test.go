@@ -23,7 +23,7 @@ func TestVolumes_Admit(t *testing.T) {
 	w := blockstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
 
 	asked := func(spec volumeKind.Spec) volumeKind.Volume {
-		return volumeKind.Volume{Kind: volumeKind.Name, Metadata: kind.Metadata{OwnerUUID: "owner", Owners: []kind.Reference{{Kind: "vm", UUID: "vm-1"}}}, Spec: spec}
+		return volumeKind.Volume{Kind: volumeKind.Name, Metadata: kind.Metadata{OwnerUUID: "owner", Refs: []kind.Reference{{Kind: "vm", UUID: "vm-1"}}}, Spec: spec}
 	}
 
 	admitted, invalid, err := w.Volumes.Admit(ctx, asked(volumeKind.Spec{Name: "data"}))
@@ -31,6 +31,8 @@ func TestVolumes_Admit(t *testing.T) {
 	require.Empty(t, invalid)
 
 	assert.Equal(t, "data", admitted.Metadata.Name)
+	assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "vm-1"}}, admitted.Metadata.Refs, "it lives in its vm")
+	assert.Empty(t, admitted.Metadata.Owners, "which does not own it")
 	assert.Equal(t, volumeKind.Pending, admitted.Status.State)
 	assert.Equal(t, volumeKind.Present, admitted.Status.Expected)
 

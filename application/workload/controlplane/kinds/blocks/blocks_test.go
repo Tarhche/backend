@@ -168,7 +168,9 @@ func TestBlocks_Witnessed(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, "owner", c.Metadata.OwnerUUID)
-		assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "vm-1"}}, c.Metadata.Owners)
+		assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "vm-1"}}, c.Metadata.Refs, "it lives in its vm")
+		assert.Empty(t, c.Metadata.Owners, "which does not own it")
+		assert.Equal(t, int64(1), c.Metadata.Generation, "its spec its first")
 		assert.Equal(t, vmtest.Node, c.Metadata.Node)
 		assert.Equal(t, "nginx:1.27", c.Spec.Image, "as its label says it was asked for")
 		assert.Equal(t, containerKind.Running, c.Status.Status.State)

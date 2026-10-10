@@ -19,6 +19,9 @@ import (
 type boxSpec struct {
 	Image string `json:"image"`
 	Size  int    `json:"size,omitempty"`
+
+	// Stickers are what is stuck on it.
+	Stickers map[string]string `json:"stickers,omitempty"`
 }
 
 type boxStatus struct {
@@ -114,13 +117,15 @@ func aBox() Resource[boxSpec, boxStatus] {
 	return Resource[boxSpec, boxStatus]{
 		Kind: "box",
 		Metadata: Metadata{
-			UUID:      "box-uuid",
-			Name:      "shop",
-			Slug:      "shop-abcde",
-			OwnerUUID: "owner-uuid",
-			Labels:    map[string]string{"team": "web"},
-			Owners:    []Reference{{Kind: "vm", UUID: "vm-uuid"}},
-			Node:      "node-1",
+			UUID:       "box-uuid",
+			Name:       "shop",
+			Slug:       "shop-abcde",
+			OwnerUUID:  "owner-uuid",
+			Labels:     map[string]string{"team": "web"},
+			Owners:     []Reference{{Kind: "shelf", UUID: "shelf-uuid"}},
+			Refs:       []Reference{{Kind: "vm", UUID: "vm-uuid"}},
+			Node:       "node-1",
+			Generation: 1,
 		},
 		Spec:   boxSpec{Image: "nginx:alpine", Size: 2},
 		Status: boxStatus{Status: Status{State: boxRunning, Expected: boxRunning}, Uptime: 42},

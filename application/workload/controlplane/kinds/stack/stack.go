@@ -27,6 +27,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"go.yaml.in/yaml/v3"
@@ -102,7 +103,8 @@ func (s *Stacks) Admit(ctx context.Context, asked stackKind.Stack) (stackKind.St
 			Slug:      slug,
 			OwnerUUID: asked.Metadata.OwnerUUID,
 			Labels:    asked.Metadata.Labels,
-			Owners:    []kind.Reference{{Kind: stackKind.Parent, UUID: v.Metadata.UUID}},
+			Owners:    slices.Clone(asked.Metadata.Owners),
+			Refs:      kind.LivingIn(asked.Metadata.Refs, kind.Reference{Kind: stackKind.Parent, UUID: v.Metadata.UUID}),
 			Node:      v.Metadata.Node,
 		},
 		Spec: stackKind.Spec{

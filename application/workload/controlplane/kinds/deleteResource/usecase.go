@@ -5,7 +5,10 @@
 // with what it is asked with, a container that runs removed by force say,
 // and is otherwise written down, to be asked for by the reconcile loop once
 // it can be: a delete is a request to have it gone, and is never refused.
-// One that is being deleted already is left to it.
+// The first one asked of it is when its delete was requested
+// (kind.Metadata.DeletionRequestedAt), written beside its being expected
+// deleted, in the same write. One that is being deleted already is left to
+// it.
 package deleteResource
 
 import (

@@ -108,10 +108,17 @@ type Metadata struct {
 
 	Labels map[string]string `json:"labels,omitempty"`
 
-	// Owners are the resources it belongs to: the VM a stack is deployed in,
-	// the stack a container was made by. A kind with a parent has its parent
-	// among them.
+	// Owners are the resources that own it, those that need it through an
+	// owned edge of a graph: a network's stack and the containers on it. It
+	// goes with the last of them. A record kept before refs has the resource
+	// it lives in among them instead.
 	Owners []Reference `json:"owners,omitempty"`
+
+	// Refs are the resources it uses and does not own, which outlive it:
+	// always the one it lives in, given its kind's Parent, whatever owns
+	// what, and what it needs through a loose edge of its graph, a volume a
+	// container mounts.
+	Refs []Reference `json:"refs,omitempty"`
 
 	// Node is the node holding it, for a kind held on one: where its
 	// commands are addressed, and whose heartbeats speak for it.
@@ -122,6 +129,15 @@ type Metadata struct {
 	// deleted; anything else deletes it at ExpiresAt.
 	Lifetime  time.Duration `json:"lifetime,omitempty"`
 	ExpiresAt time.Time     `json:"expires_at,omitzero"`
+
+	// Generation counts the specs it has had: 1 once it is admitted, and one
+	// more each time its spec changes since. A record kept before
+	// generations has none, which is read as its first.
+	Generation int64 `json:"generation,omitempty"`
+
+	// DeletionRequestedAt is when it was first asked to be deleted, and
+	// nothing while it has not been.
+	DeletionRequestedAt time.Time `json:"deletion_requested_at,omitzero"`
 
 	CreatedAt time.Time `json:"created_at,omitzero"`
 	UpdatedAt time.Time `json:"updated_at,omitzero"`
@@ -138,15 +154,62 @@ func (m Metadata) Expired(now time.Time) bool {
 }
 
 // Owner is the resource of the named kind this one belongs to, if it belongs
-// to one: its parent, given its kind's Parent.
+// to one: its parent, given its kind's Parent. It is looked for among its
+// refs first, and then among its owners, where a record kept before refs has
+// its parent.
 func (m Metadata) Owner(kindName string) (Reference, bool) {
-	for _, owner := range m.Owners {
-		if owner.Kind == kindName {
-			return owner, true
+	for _, belongs := range [][]Reference{m.Refs, m.Owners} {
+		for _, r := range belongs {
+			if r.Kind == kindName {
+				return r, true
+			}
 		}
 	}
 
 	return Reference{}, false
+}
+
+// BelongsTo reports whether this one belongs to the resource r names: as one
+// of its refs, the resource it lives in among them, or as one of its owners,
+// where a record kept before refs has the resource it lives in. A reference
+// whose kind is left out is to a resource of any kind with its uuid.
+func (m Metadata) BelongsTo(r Reference) bool {
+	belongs := func(to Reference) bool {
+		return to.UUID == r.UUID && (len(r.Kind) == 0 || to.Kind == r.Kind)
+	}
+
+	return slices.ContainsFunc(m.Refs, belongs) || slices.ContainsFunc(m.Owners, belongs)
+}
+
+// Belongs are the resources this one belongs to, each once: its refs, the
+// resource it lives in among them, and then its owners. It is what an
+// observation of it says it belongs to (Observed.Owners).
+func (m Metadata) Belongs() []Reference {
+	var belongs []Reference
+
+	for _, r := range slices.Concat(m.Refs, m.Owners) {
+		if !slices.Contains(belongs, r) {
+			belongs = append(belongs, r)
+		}
+	}
+
+	return belongs
+}
+
+// LivingIn are refs with parent first, in place of any other resource of its
+// kind they name, and the rest as they were, each once: a resource lives in
+// one resource, the one its kind admits it into, beside whatever else it was
+// asked to use.
+func LivingIn(refs []Reference, parent Reference) []Reference {
+	living := []Reference{parent}
+
+	for _, r := range refs {
+		if r.Kind != parent.Kind && !slices.Contains(living, r) {
+			living = append(living, r)
+		}
+	}
+
+	return living
 }
 
 // clone is a copy of m that shares nothing with it, so that what travels and
@@ -154,6 +217,7 @@ func (m Metadata) Owner(kindName string) (Reference, bool) {
 func (m Metadata) clone() Metadata {
 	m.Labels = maps.Clone(m.Labels)
 	m.Owners = slices.Clone(m.Owners)
+	m.Refs = slices.Clone(m.Refs)
 
 	return m
 }

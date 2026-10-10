@@ -24,10 +24,12 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
 )
 
-func asked(spec containerKind.Spec, owners ...kind.Reference) containerKind.Container {
+// asked is a container asked for as admission hands it over: in the vm in
+// refs, when they name one.
+func asked(spec containerKind.Spec, refs ...kind.Reference) containerKind.Container {
 	return containerKind.Container{
 		Kind:     containerKind.Name,
-		Metadata: kind.Metadata{OwnerUUID: "owner", Owners: owners},
+		Metadata: kind.Metadata{OwnerUUID: "owner", Refs: refs},
 		Spec:     spec,
 	}
 }
@@ -55,7 +57,8 @@ func TestContainers_Admit(t *testing.T) {
 		require.NoError(t, err)
 		require.Empty(t, invalid)
 
-		assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "vm-1"}}, admitted.Metadata.Owners)
+		assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "vm-1"}}, admitted.Metadata.Refs, "it lives in its vm")
+		assert.Empty(t, admitted.Metadata.Owners, "which does not own it")
 		assert.Equal(t, vmtest.Node, admitted.Metadata.Node)
 		assert.Equal(t, "web", admitted.Metadata.Name)
 		assert.Equal(t, "nginx:1.27", admitted.Spec.Image)
@@ -84,6 +87,23 @@ func TestContainers_Admit(t *testing.T) {
 
 		spec.VM = stackKind.VMChoice{UUID: "vm-1"}
 		assert.Equal(t, spec, admitted.Spec, "a runtime is its vm's dockerd's to refuse")
+	})
+
+	t.Run("into the vm its spec names, whatever else names one, beside what else it uses and what owns it as they were given", func(t *testing.T) {
+		t.Parallel()
+
+		w := blockstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner"), vmtest.Docker("vm-2", "owner")))
+
+		c := asked(containerKind.Spec{Image: "nginx", VM: stackKind.VMChoice{UUID: "vm-1"}}, kind.Reference{Kind: "vm", UUID: "vm-2"}, kind.Reference{Kind: "volume", UUID: "data-uuid"})
+		c.Metadata.Owners = []kind.Reference{{Kind: "stack", UUID: "stack-uuid"}}
+
+		admitted, invalid, err := w.Containers.Admit(ctx, c)
+		require.NoError(t, err)
+		require.Empty(t, invalid)
+
+		assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "vm-1"}, {Kind: "volume", UUID: "data-uuid"}}, admitted.Metadata.Refs, "one vm, the one it went into")
+		assert.Equal(t, []kind.Reference{{Kind: "stack", UUID: "stack-uuid"}}, admitted.Metadata.Owners)
+		assert.Equal(t, "vm-1", containerKind.VMOf(admitted))
 	})
 
 	t.Run("into one made for it when it names none, though its owner has a docker vm already", func(t *testing.T) {

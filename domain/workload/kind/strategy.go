@@ -57,11 +57,12 @@ type Preparer[Spec, Status any] interface {
 // nothing keeps as its records: the code runner's runs, which are its tasks,
 // shown among anybody's VMs, and what a Docker VM's dockerd holds that a stack
 // or its terminal made, shown among its containers. An extra is whose its
-// metadata says and lives in what its owners say, as a record does, so a
-// listing narrowed to somebody's own, or to what lives in one resource, has
-// the extras it lets through: the runs are the guest's, and nobody's own
-// listing ever has them. What they can be asked is theirs to say, whatever
-// they cannot be asked being refused field by field.
+// metadata says and lives in what it belongs to (Metadata.BelongsTo), its
+// refs or its owners, as a record does, so a listing narrowed to somebody's
+// own, or to what lives in one resource, has the extras it lets through: the
+// runs are the guest's, and nobody's own listing ever has them. What they can
+// be asked is theirs to say, whatever they cannot be asked being refused
+// field by field.
 //
 // The control plane's generic API asks them for what a uuid names when none
 // of the kind's records is it.

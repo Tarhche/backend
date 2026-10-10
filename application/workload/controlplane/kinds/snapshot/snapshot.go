@@ -32,6 +32,7 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"slices"
 	"strings"
 
 	"github.com/khanzadimahdi/testproject/domain"
@@ -133,7 +134,8 @@ func (s *Snapshots) Admit(ctx context.Context, asked snapshotKind.Snapshot) (sna
 			Name:      strings.TrimSpace(asked.Metadata.Name),
 			OwnerUUID: v.Metadata.OwnerUUID,
 			Labels:    maps.Clone(asked.Metadata.Labels),
-			Owners:    []kind.Reference{{Kind: snapshotKind.Parent, UUID: v.Metadata.UUID}},
+			Owners:    slices.Clone(asked.Metadata.Owners),
+			Refs:      kind.LivingIn(asked.Metadata.Refs, kind.Reference{Kind: snapshotKind.Parent, UUID: v.Metadata.UUID}),
 			Node:      v.Metadata.Node,
 		},
 		Spec: snapshotKind.Spec{VM: snapshotKind.VMRef{UUID: v.Metadata.UUID, Name: v.Metadata.Name}},

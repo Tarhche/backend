@@ -25,7 +25,13 @@ var (
 	// seen.
 	restoredAt = kindstest.Moment.Add(time.Hour)
 	elsewhere  = func(f *kindstest.Fan) {
-		f.Metadata.Owners = []kind.Reference{{Kind: kindstest.Parent, UUID: "house-2"}}
+		f.Metadata.Refs = []kind.Reference{{Kind: kindstest.Parent, UUID: "house-2"}}
+	}
+
+	// keptBeforeRefs is a fan kept before refs: the house it is in is among
+	// its owners.
+	keptBeforeRefs = func(f *kindstest.Fan) {
+		f.Metadata.Owners, f.Metadata.Refs = f.Metadata.Refs, nil
 	}
 )
 
@@ -72,6 +78,7 @@ func TestCascade_Deleted(t *testing.T) {
 		c, resources := fans(t, kind.ParentRules{Delete: kind.CascadeDelete, Restore: kind.CascadeKeep},
 			kindstest.AFan("in-it", kindstest.Running, kindstest.Running),
 			kindstest.AFan("also-in-it", kindstest.Stopped, kindstest.Stopped),
+			kindstest.AFan("kept-in-it-before-refs", kindstest.Running, kindstest.Running, keptBeforeRefs),
 			kindstest.AFan("in-another", kindstest.Running, kindstest.Running, elsewhere),
 		)
 
@@ -82,6 +89,9 @@ func TestCascade_Deleted(t *testing.T) {
 
 		_, kept = held(t, resources, "also-in-it")
 		assert.False(t, kept)
+
+		_, kept = held(t, resources, "kept-in-it-before-refs")
+		assert.False(t, kept, "its house among its owners")
 
 		_, kept = held(t, resources, "in-another")
 		assert.True(t, kept)
@@ -135,6 +145,7 @@ func TestCascade_Restored(t *testing.T) {
 
 		c, resources := fans(t, kind.ParentRules{Delete: kind.CascadeDelete, Restore: kind.CascadeReset},
 			kindstest.AFan("in-it", kindstest.Running, kindstest.Running),
+			kindstest.AFan("kept-in-it-before-refs", kindstest.Running, kindstest.Running, keptBeforeRefs),
 			kindstest.AFan("in-another", kindstest.Running, kindstest.Running, elsewhere),
 		)
 
@@ -145,6 +156,9 @@ func TestCascade_Restored(t *testing.T) {
 		assert.True(t, fan.Reset)
 		assert.Equal(t, kindstest.Running, kindstest.Typed(fan).Status.State, "and is as it was until then")
 		assert.Equal(t, restoredAt, kindstest.Typed(fan).Status.ObservedAt, "what was seen of it before the restore is older than what is known of it")
+
+		before, _ := held(t, resources, "kept-in-it-before-refs")
+		assert.True(t, before.Reset, "its house among its owners")
 
 		other, _ := held(t, resources, "in-another")
 		assert.False(t, other.Reset)

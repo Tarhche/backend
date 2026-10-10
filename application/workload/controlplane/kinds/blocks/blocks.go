@@ -414,8 +414,9 @@ func (b *Blocks) adoptable(v vmKind.VM, at time.Time) bool {
 }
 
 // adopt takes in what was found labelled as the platform's in a restored VM,
-// as the kind reads it off what was observed of it, and reports whether it
-// did. One another control plane took in first is taken in.
+// as the kind reads it off what was observed of it, living in the VM, its
+// spec its first generation, and reports whether it did. One another control
+// plane took in first is taken in.
 func (b *Blocks) adopt(ctx context.Context, nodeName string, v vmKind.VM, instance kind.Observation, at time.Time) (bool, error) {
 	adoption, ok := b.kind.Adopt(instance)
 	if !ok {
@@ -441,13 +442,14 @@ func (b *Blocks) adopt(ctx context.Context, nodeName string, v vmKind.VM, instan
 	_, err = b.Resources.Create(ctx, resource.Record{Raw: kind.Raw{
 		Kind: b.descriptor.Name,
 		Metadata: kind.Metadata{
-			UUID:      instance.UUID,
-			Name:      adoption.Name,
-			OwnerUUID: v.Metadata.OwnerUUID,
-			Owners:    []kind.Reference{{Kind: blockKinds.Parent, UUID: v.Metadata.UUID}},
-			Node:      nodeName,
-			CreatedAt: now,
-			UpdatedAt: now,
+			UUID:       instance.UUID,
+			Name:       adoption.Name,
+			OwnerUUID:  v.Metadata.OwnerUUID,
+			Refs:       []kind.Reference{{Kind: blockKinds.Parent, UUID: v.Metadata.UUID}},
+			Node:       nodeName,
+			Generation: 1,
+			CreatedAt:  now,
+			UpdatedAt:  now,
 		},
 		Spec:   adoption.Spec,
 		Status: status,

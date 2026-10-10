@@ -83,7 +83,8 @@ func TestStacks_Admit(t *testing.T) {
 
 		assert.Equal(t, "Web Site", admitted.Metadata.Name)
 		assert.True(t, strings.HasPrefix(admitted.Metadata.Slug, "web-site-"), admitted.Metadata.Slug)
-		assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "01"}}, admitted.Metadata.Owners, "it belongs to its vm")
+		assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "01"}}, admitted.Metadata.Refs, "it lives in its vm")
+		assert.Empty(t, admitted.Metadata.Owners, "which does not own it")
 		assert.Equal(t, vmtest.Node, admitted.Metadata.Node, "and is where its vm is")
 		assert.Equal(t, stackKind.VMChoice{UUID: "01"}, admitted.Spec.VM, "the one it named")
 		assert.Equal(t, compose, admitted.Spec.Compose, "kept as it was written")
@@ -128,10 +129,25 @@ func TestStacks_Admit(t *testing.T) {
 		assert.Equal(t, "docker", made.Metadata.Name)
 		assert.Equal(t, vmtest.DockerDefaults.Resources, made.Spec.Resources)
 		assert.Equal(t, stackKind.VMChoice{UUID: made.Metadata.UUID}, admitted.Spec.VM)
-		assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: made.Metadata.UUID}}, admitted.Metadata.Owners)
+		assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: made.Metadata.UUID}}, admitted.Metadata.Refs)
 	})
 
 	t.Run("one naming its vm as its parent goes into it", func(t *testing.T) {
+		t.Parallel()
+
+		w := vmtest.New(vmtest.WithVMs(vmtest.Docker("01", "owner"), vmtest.Docker("02", "owner")))
+
+		parented := asked("web", stackKind.VMChoice{})
+		parented.Metadata.Refs = []kind.Reference{{Kind: "vm", UUID: "02"}}
+
+		admitted, invalid, err := strategyOf(w).Admit(ctx, parented)
+		require.NoError(t, err)
+		require.Empty(t, invalid)
+		assert.Equal(t, "02", admitted.Spec.VM.UUID)
+		assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "02"}}, admitted.Metadata.Refs)
+	})
+
+	t.Run("and so does one naming it among its owners, as a manifest written before refs does, which are kept as they are given", func(t *testing.T) {
 		t.Parallel()
 
 		w := vmtest.New(vmtest.WithVMs(vmtest.Docker("01", "owner"), vmtest.Docker("02", "owner")))
@@ -143,6 +159,8 @@ func TestStacks_Admit(t *testing.T) {
 		require.NoError(t, err)
 		require.Empty(t, invalid)
 		assert.Equal(t, "02", admitted.Spec.VM.UUID)
+		assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "02"}}, admitted.Metadata.Refs)
+		assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "02"}}, admitted.Metadata.Owners)
 	})
 
 	t.Run("it is given a slug nothing else holds", func(t *testing.T) {
@@ -240,7 +258,7 @@ func TestStacks_Reconcile(t *testing.T) {
 	in := func(vmUUID string, state kind.State, expected kind.State) stackKind.Stack {
 		return stackKind.Stack{
 			Kind:     stackKind.Name,
-			Metadata: kind.Metadata{UUID: "stack-uuid", Owners: []kind.Reference{{Kind: "vm", UUID: vmUUID}}},
+			Metadata: kind.Metadata{UUID: "stack-uuid", Refs: []kind.Reference{{Kind: "vm", UUID: vmUUID}}},
 			Status:   stackKind.Status{Status: kind.Status{State: state, Expected: expected}},
 		}
 	}

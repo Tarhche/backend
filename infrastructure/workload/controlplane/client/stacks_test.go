@@ -94,7 +94,7 @@ func newStacksPlane(t *testing.T) (*Client, *stacksPlane) {
 		asked.Metadata.UUID = "stack-uuid"
 		asked.Metadata.Slug = "shop-abcde"
 		asked.Metadata.OwnerUUID = r.URL.Query().Get("owner")
-		asked.Metadata.Owners = []kind.Reference{{Kind: "vm", UUID: "vm-uuid"}}
+		asked.Metadata.Refs = []kind.Reference{{Kind: "vm", UUID: "vm-uuid"}}
 		asked.Metadata.CreatedAt = made
 		asked.Spec.VM = stackKind.VMChoice{UUID: "vm-uuid"}
 		asked.Status = stackKind.Status{Status: kind.Status{State: stackKind.Deploying, Expected: stackKind.Running}}
@@ -142,7 +142,7 @@ func newStacksPlane(t *testing.T) (*Client, *stacksPlane) {
 				Metadata: kind.Metadata{
 					UUID:   "uuid-" + id,
 					Labels: map[string]string{"workload.managed-by": "stack"},
-					Owners: []kind.Reference{{Kind: "vm", UUID: r.URL.Query().Get("parent")}},
+					Refs:   []kind.Reference{{Kind: "vm", UUID: r.URL.Query().Get("parent")}},
 				},
 				Status: containerKind.Status{
 					Status: kind.Status{State: containerKind.Running},
@@ -220,7 +220,8 @@ func (p *stacksPlane) commanded(action string) bool {
 	return p.sent[action]
 }
 
-// shopIn is the stack shop-abcde, in vmUUID, doing state.
+// shopIn is the stack shop-abcde, in vmUUID, doing state: its vm among its
+// refs, as the control plane keeps it.
 func shopIn(vmUUID string, state kind.State) stackManifest {
 	return stackManifest{
 		Kind: stackKind.Name,
@@ -229,7 +230,7 @@ func shopIn(vmUUID string, state kind.State) stackManifest {
 			Name:      "shop",
 			Slug:      "shop-abcde",
 			OwnerUUID: "owner-uuid",
-			Owners:    []kind.Reference{{Kind: "vm", UUID: vmUUID}},
+			Refs:      []kind.Reference{{Kind: "vm", UUID: vmUUID}},
 			Node:      "node-1",
 			CreatedAt: made,
 			UpdatedAt: made.Add(time.Minute),
@@ -297,6 +298,25 @@ func TestClient_Stacks(t *testing.T) {
 			"GET /api/stacks?owner=owner-uuid&page=2&parent=vm-uuid",
 			"GET /api/vms/vm-uuid?owner=owner-uuid",
 		}, p.requests())
+	})
+
+	t.Run("and one kept before refs, its vm among its owners, is read in its vm all the same", func(t *testing.T) {
+		t.Parallel()
+
+		c, p := newStacksPlane(t)
+
+		kept := shopIn("vm-uuid", stackKind.Running)
+		kept.Metadata.Owners, kept.Metadata.Refs = kept.Metadata.Refs, nil
+		kept.Spec.VM = stackKind.VMChoice{}
+
+		p.holding(kept, dockerVM("vm-uuid", vmKind.Running, vmKind.Running))
+
+		listed, err := c.Stacks(ctx, "owner-uuid", "vm-uuid", 1)
+		require.NoError(t, err)
+
+		require.Len(t, listed.Items, 1)
+		assert.Equal(t, "vm-uuid", listed.Items[0].VMUUID)
+		assert.Equal(t, "docker-1", listed.Items[0].VMName)
 	})
 
 	t.Run("one whose vm is gone is named by nothing", func(t *testing.T) {

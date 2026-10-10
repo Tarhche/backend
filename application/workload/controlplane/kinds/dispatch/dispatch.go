@@ -120,9 +120,11 @@ type Asked struct {
 // readied by the kind first (kind.Preparer), which may refuse it, place the
 // resource on a node, or give it what only the control plane knows. What it
 // desires becomes what the resource is expected to be, and the resource moves
-// as its machine says. A command run on a node is then written down and
-// returned to be sent (Send), and one run in the control plane is carried out
-// by the kind's strategy and its outcome written down.
+// as its machine says; one that desires it deleted says when it was first
+// asked to go (kind.Metadata.DeletionRequestedAt), in the same write. A
+// command run on a node is then written down and returned to be sent (Send),
+// and one run in the control plane is carried out by the kind's strategy and
+// its outcome written down.
 //
 // A command for a node, asked of a resource on none, has nowhere to go: a
 // delete takes the record away, since there is nothing anywhere to delete;
@@ -195,6 +197,7 @@ func (d *Dispatcher) Ask(ctx context.Context, b kind.ControlPlaneBinding, r reso
 
 	if len(a.Desires) > 0 {
 		common.Expected = a.Desires
+		requested(&r, a.Desires, now)
 	}
 
 	if to, moved := descriptor.Machine.Next(common.State, kind.OnAction(action)); moved && to != common.State {
@@ -385,14 +388,18 @@ func (d *Dispatcher) Again(ctx context.Context, r resource.Record) (Asked, error
 }
 
 // Desire writes down what a resource is expected to be, without asking it
-// for anything yet: what the reconcile loop asks for once it can be.
+// for anything yet: what the reconcile loop asks for once it can be. One
+// expected deleted says when it was first asked to go, in the same write.
 func (d *Dispatcher) Desire(ctx context.Context, r resource.Record, state kind.State, fresh bool) (resource.Record, error) {
 	common, err := r.Common()
 	if err != nil {
 		return resource.Record{}, err
 	}
 
+	now := d.now()
+
 	common.Expected = state
+	requested(&r, state, now)
 
 	if err := r.SetCommon(common); err != nil {
 		return resource.Record{}, err
@@ -402,9 +409,17 @@ func (d *Dispatcher) Desire(ctx context.Context, r resource.Record, state kind.S
 		r.Attempts = 0
 	}
 
-	r.Metadata.UpdatedAt = d.now()
+	r.Metadata.UpdatedAt = now
 
 	return d.resources.Update(ctx, r)
+}
+
+// requested has a resource expected to be state say when it was first asked
+// to go, when state is deleted: now, unless it was asked before.
+func requested(r *resource.Record, state kind.State, now time.Time) {
+	if state == kind.Deleted && r.Metadata.DeletionRequestedAt.IsZero() {
+		r.Metadata.DeletionRequestedAt = now
+	}
 }
 
 // Orphaned asks the node holding a resource nobody keeps a record of to

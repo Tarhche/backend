@@ -125,6 +125,8 @@ func TestUseCase_Execute(t *testing.T) {
 		request.Manifest.Metadata.UUID = "chosen-by-the-caller"
 		request.Manifest.Metadata.Node = "a node of the caller's"
 		request.Manifest.Metadata.OwnerUUID = "somebody else"
+		request.Manifest.Metadata.Generation = 7
+		request.Manifest.Metadata.DeletionRequestedAt = kindstest.Moment
 		request.Manifest.Metadata.Lifetime = time.Hour
 
 		response, err := f.useCase.Execute(ctx, &request)
@@ -145,7 +147,10 @@ func TestUseCase_Execute(t *testing.T) {
 		assert.Equal(t, kindstest.OwnerUUID, stored.Metadata.OwnerUUID, "it is whom it was asked for's")
 		assert.Equal(t, kindstest.NodeName, stored.Metadata.Node, "and where its kind placed it")
 		assert.Equal(t, map[string]string{"room": "kitchen"}, stored.Metadata.Labels)
-		assert.Equal(t, []kind.Reference{{Kind: kindstest.Parent, UUID: "house-1"}}, stored.Metadata.Owners)
+		assert.Equal(t, []kind.Reference{{Kind: kindstest.Parent, UUID: "house-1"}}, stored.Metadata.Refs, "it lives in its house, which it uses")
+		assert.Empty(t, stored.Metadata.Owners, "and nothing owns it")
+		assert.Equal(t, int64(1), stored.Metadata.Generation, "its spec is its first, whatever the caller says")
+		assert.True(t, stored.Metadata.DeletionRequestedAt.IsZero(), "and nobody asked it to go")
 		assert.Equal(t, kindstest.Moment, stored.Metadata.CreatedAt)
 		assert.Equal(t, kindstest.Moment.Add(time.Hour), stored.Metadata.ExpiresAt, "its lifetime ends an hour from now")
 
@@ -233,7 +238,35 @@ func TestUseCase_Execute(t *testing.T) {
 		_, err := f.useCase.Execute(ctx, &request)
 		require.NoError(t, err)
 
-		assert.Equal(t, []kind.Reference{{Kind: kindstest.Parent, UUID: "house-2"}}, f.all(t)[0].Metadata.Owners)
+		stored := f.all(t)[0]
+		assert.Equal(t, []kind.Reference{{Kind: kindstest.Parent, UUID: "house-2"}}, stored.Metadata.Refs, "among what it uses")
+		assert.Empty(t, stored.Metadata.Owners, "and not among what owns it")
+	})
+
+	t.Run("what its manifest says it uses and what owns it are kept as they are given, beside the resource it lives in", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(nil)
+
+		request := asked("kitchen", `{"blades": 3}`)
+		request.Parent = "house-2"
+		request.Manifest.Metadata.Owners = []kind.Reference{{Kind: "switch", UUID: "switch-1"}}
+		request.Manifest.Metadata.Refs = []kind.Reference{{Kind: "socket", UUID: "socket-1"}}
+
+		_, err := f.useCase.Execute(ctx, &request)
+		require.NoError(t, err)
+
+		stored := f.all(t)[0]
+		assert.Equal(t, []kind.Reference{{Kind: "switch", UUID: "switch-1"}}, stored.Metadata.Owners)
+		assert.Equal(t, []kind.Reference{{Kind: "socket", UUID: "socket-1"}, {Kind: kindstest.Parent, UUID: "house-2"}}, stored.Metadata.Refs)
+
+		again := asked("hall", `{"blades": 3}`)
+		again.Parent = "house-2"
+		again.Manifest.Metadata.Refs = []kind.Reference{{Kind: kindstest.Parent, UUID: "house-2"}}
+
+		response, err := f.useCase.Execute(ctx, &again)
+		require.NoError(t, err)
+		assert.Equal(t, []kind.Reference{{Kind: kindstest.Parent, UUID: "house-2"}}, response.Resource.Metadata.Refs, "the resource it lives in once, however often it is named")
 	})
 
 	t.Run("what came of its first command is waited for, when asked to be", func(t *testing.T) {

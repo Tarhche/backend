@@ -108,6 +108,7 @@ func (r *Record) SetCommon(common kind.Status) error {
 func (r Record) Clone() Record {
 	r.Metadata.Labels = maps.Clone(r.Metadata.Labels)
 	r.Metadata.Owners = slices.Clone(r.Metadata.Owners)
+	r.Metadata.Refs = slices.Clone(r.Metadata.Refs)
 	r.Spec = slices.Clone(r.Spec)
 	r.Status = slices.Clone(r.Status)
 
@@ -136,8 +137,10 @@ type Filter struct {
 	// Node is the node holding them.
 	Node string
 
-	// Parent is a resource they belong to: one of their metadata's owners.
-	// Its kind may be left out, and then a resource of any kind with that
+	// Parent is a resource they belong to (kind.Metadata.BelongsTo): one of
+	// their metadata's refs, the resource they live in among them, or of
+	// their owners, where a record kept before refs has the resource it lives
+	// in. Its kind may be left out, and then a resource of any kind with that
 	// uuid is.
 	Parent kind.Reference
 
@@ -159,9 +162,7 @@ func (f Filter) Passes(m kind.Metadata) bool {
 		return false
 	}
 
-	if len(f.Parent.UUID) > 0 && !slices.ContainsFunc(m.Owners, func(owner kind.Reference) bool {
-		return owner.UUID == f.Parent.UUID && (len(f.Parent.Kind) == 0 || owner.Kind == f.Parent.Kind)
-	}) {
+	if len(f.Parent.UUID) > 0 && !m.BelongsTo(f.Parent) {
 		return false
 	}
 

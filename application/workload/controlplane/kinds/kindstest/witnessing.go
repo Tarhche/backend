@@ -101,7 +101,7 @@ func (w *Witnessing) Resolve(ctx context.Context, parent kind.Reference, name st
 	}
 
 	for _, r := range shelved {
-		if (r.Metadata.UUID == name || r.Metadata.Name == name) && slices.Contains(r.Metadata.Owners, parent) {
+		if (r.Metadata.UUID == name || r.Metadata.Name == name) && r.Metadata.BelongsTo(parent) {
 			return r.Metadata.UUID, nil
 		}
 	}

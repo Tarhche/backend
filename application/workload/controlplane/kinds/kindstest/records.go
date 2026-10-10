@@ -48,8 +48,9 @@ func (c *Clock) Advance(d time.Duration) {
 	c.now = c.now.Add(d)
 }
 
-// AFan is a fan's record: the uuid's, in its house, on NodeName, doing state
-// since Moment and expected to be expected, as changes say otherwise.
+// AFan is a fan's record: the uuid's, in its house, which is among its refs,
+// on NodeName, doing state since Moment and expected to be expected, as
+// changes say otherwise.
 func AFan(uuid string, state kind.State, expected kind.State, changes ...func(*Fan)) resource.Record {
 	fan := Fan{
 		Kind: Kind,
@@ -58,7 +59,7 @@ func AFan(uuid string, state kind.State, expected kind.State, changes ...func(*F
 			Name:      "kitchen",
 			Slug:      "kitchen-" + uuid,
 			OwnerUUID: OwnerUUID,
-			Owners:    []kind.Reference{{Kind: Parent, UUID: House}},
+			Refs:      []kind.Reference{{Kind: Parent, UUID: House}},
 			Node:      NodeName,
 			CreatedAt: Moment,
 			UpdatedAt: Moment,

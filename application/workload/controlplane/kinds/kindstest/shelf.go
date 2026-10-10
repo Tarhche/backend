@@ -39,6 +39,7 @@ func AShelvedFan(uuid string, changes ...func(*Fan)) Fan {
 	fan := Typed(AFan(uuid, Running, Running))
 	fan.Metadata.OwnerUUID = "guest"
 	fan.Metadata.Owners = nil
+	fan.Metadata.Refs = nil
 	fan.Metadata.Node = NodeName
 
 	for _, change := range changes {

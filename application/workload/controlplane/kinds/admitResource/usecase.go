@@ -4,9 +4,12 @@
 //
 // What a resource is admitted as is its kind's to say, through its
 // control-plane strategy: its defaults, what is wrong with it, its owner's
-// quotas and the node it is placed on. What is the same for every kind is
-// said here: whom it belongs to, when it was made, when its lifetime ends,
-// and the state its machine starts it in.
+// quotas, the node it is placed on and what it lives in. What is the same for
+// every kind is said here: whom it belongs to, when it was made, when its
+// lifetime ends, that its spec is its first generation, and the state its
+// machine starts it in. The resource it is asked to live in (?parent=) is
+// among its refs, beside the refs and the owners its manifest gives, which are
+// kept as they are given.
 //
 // Its first command is what the kind's Reconcile asks for of it as it was
 // admitted: a VM to be made, say. It is sent as soon as the resource is
@@ -187,14 +190,15 @@ func (uc *UseCase) latest(ctx context.Context, d kind.Descriptor, r resource.Rec
 
 // kept is a resource as its kind admitted it, as it is kept: for whom it was
 // asked, under the uuid the control plane holds for it when it holds one,
-// made now, with the end of its lifetime, in the state its machine starts it
-// in unless its kind said otherwise.
+// made now, its spec its first generation, with the end of its lifetime, in
+// the state its machine starts it in unless its kind said otherwise.
 func (uc *UseCase) kept(d kind.Descriptor, request *Request, admitted kind.Raw) (resource.Record, error) {
 	now := uc.dispatcher.Now()
 
 	r := resource.Record{Raw: admitted}
 	r.Kind = d.Name
 	r.Metadata.OwnerUUID = request.OwnerUUID
+	r.Metadata.Generation = 1
 	r.Metadata.CreatedAt = now
 	r.Metadata.UpdatedAt = now
 
@@ -253,7 +257,9 @@ func validate(d kind.Descriptor, request *Request) domain.ValidationErrors {
 }
 
 // askedFor is what the kind is asked to admit: what the caller may say of a
-// resource, and nothing else.
+// resource, and nothing else. The resource it is asked to live in is one of
+// the resources it uses and does not own, its refs, whatever else its
+// manifest says of what it uses or what owns it.
 func askedFor(d kind.Descriptor, request *Request) kind.Raw {
 	m := request.Manifest.Metadata
 
@@ -264,6 +270,7 @@ func askedFor(d kind.Descriptor, request *Request) kind.Raw {
 			OwnerUUID: request.OwnerUUID,
 			Labels:    m.Labels,
 			Owners:    slices.Clone(m.Owners),
+			Refs:      slices.Clone(m.Refs),
 			Lifetime:  m.Lifetime,
 		},
 		Spec: request.Manifest.Spec,
@@ -272,8 +279,8 @@ func askedFor(d kind.Descriptor, request *Request) kind.Raw {
 	if len(request.Parent) > 0 {
 		parent := kind.Reference{Kind: d.Parent, UUID: request.Parent}
 
-		if !slices.Contains(asked.Metadata.Owners, parent) {
-			asked.Metadata.Owners = append(asked.Metadata.Owners, parent)
+		if !slices.Contains(asked.Metadata.Refs, parent) {
+			asked.Metadata.Refs = append(asked.Metadata.Refs, parent)
 		}
 	}
 

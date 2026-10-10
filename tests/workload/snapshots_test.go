@@ -69,7 +69,8 @@ func TestASnapshot(t *testing.T) {
 		r, err := w.resources.GetOne(ctx, snapshotKind.Name, snapshotUUID)
 		require.NoError(t, err)
 		assert.Nil(t, r.Pending, "its create was answered, and nothing waits on it")
-		assert.Equal(t, []kind.Reference{{Kind: vmKind.Name, UUID: vmUUID}}, r.Metadata.Owners, "it is taken of its vm")
+		assert.Equal(t, []kind.Reference{{Kind: vmKind.Name, UUID: vmUUID}}, r.Metadata.Refs, "it is taken of its vm")
+		assert.Empty(t, r.Metadata.Owners, "which does not own it")
 
 		listed, err := getSnapshots.NewUseCase(w.client, w.owners).Execute(ctx, &getSnapshots.Request{VMUUID: vmUUID, OwnerUUID: ownerUUID})
 		require.NoError(t, err)

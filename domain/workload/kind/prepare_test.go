@@ -13,8 +13,9 @@ import (
 )
 
 // preparingBoxControlPlane is a box's control-plane strategy that readies its
-// starts: a box on no node is placed on node-2 first, and one whose image is
-// banned is refused.
+// starts: a box on no node is placed on node-2 first, one of no size is
+// started at one, one with stickers on it has "started" stuck on too, where
+// they are, and one whose image is banned is refused.
 type preparingBoxControlPlane struct {
 	boxControlPlane
 
@@ -39,6 +40,14 @@ func (b *preparingBoxControlPlane) Prepare(_ context.Context, r Resource[boxSpec
 
 	if action == "start" && len(r.Metadata.Node) == 0 {
 		r.Metadata.Node = "node-2"
+	}
+
+	if action == "start" && r.Spec.Size == 0 {
+		r.Spec.Size = 1
+	}
+
+	if action == "start" && r.Spec.Stickers != nil {
+		r.Spec.Stickers["started"] = "yes"
 	}
 
 	return r, nil, nil
@@ -118,6 +127,41 @@ func TestControlPlaneBinding_Prepare(t *testing.T) {
 		assert.Equal(t, []string{"start"}, strategy.prepared)
 		assert.Equal(t, []any{nil}, strategy.payloads, "an action asked with nothing is handed nothing")
 	})
+
+	for name, tt := range map[string]struct {
+		box        func(r *Resource[boxSpec, boxStatus])
+		generation int64
+	}{
+		"one whose spec it readies is a generation later": {
+			box:        func(r *Resource[boxSpec, boxStatus]) { r.Spec.Size = 0 },
+			generation: 2,
+		},
+		"however it changed it, where the resource it was handed has it too": {
+			box:        func(r *Resource[boxSpec, boxStatus]) { r.Spec.Stickers = map[string]string{"fragile": "yes"} },
+			generation: 2,
+		},
+		"one kept before generations was at its first": {
+			box:        func(r *Resource[boxSpec, boxStatus]) { r.Spec.Size, r.Metadata.Generation = 0, 0 },
+			generation: 2,
+		},
+		"and one whose spec it leaves as it was is the generation it was": {
+			box:        func(r *Resource[boxSpec, boxStatus]) { r.Metadata.Node, r.Metadata.Generation = "", 3 },
+			generation: 3,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			prepared, invalid, err := BindControlPlane[boxSpec, boxStatus](box(), &preparingBoxControlPlane{}).Prepare(ctx, rawBox(t, tt.box), "start", nil)
+			require.NoError(t, err)
+			require.Empty(t, invalid)
+
+			typed, err := Decode[boxSpec, boxStatus](prepared)
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.generation, typed.Metadata.Generation)
+		})
+	}
 
 	t.Run("what it refuses is said field by field, and nothing is ready", func(t *testing.T) {
 		t.Parallel()

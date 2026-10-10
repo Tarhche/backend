@@ -307,7 +307,7 @@ func TestEntity(t *testing.T) {
 
 	taken := ready(func(s *snapshotKind.Snapshot) {
 		s.Metadata.CreatedAt = created
-		s.Metadata.Owners = []kind.Reference{{Kind: "vm", UUID: "vm-uuid"}}
+		s.Metadata.Refs = []kind.Reference{{Kind: "vm", UUID: "vm-uuid"}}
 		s.Status.CompletedAt = created.Add(time.Minute)
 	})
 

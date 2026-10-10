@@ -170,14 +170,17 @@ func TestVMOf(t *testing.T) {
 	t.Parallel()
 
 	s := stack.Stack{
-		Metadata: kind.Metadata{Owners: []kind.Reference{{Kind: "vm", UUID: "vm-uuid"}}},
-		Spec:     stack.Spec{VM: stack.VMChoice{UUID: "vm-uuid"}},
+		Metadata: kind.Metadata{Refs: []kind.Reference{{Kind: "vm", UUID: "vm-uuid"}}},
+		Spec:     stack.Spec{VM: stack.VMChoice{UUID: "admitted-uuid"}},
 	}
 
-	assert.Equal(t, "vm-uuid", stack.VMOf(s))
+	assert.Equal(t, "vm-uuid", stack.VMOf(s), "the one it lives in, among its refs")
+
+	s.Metadata.Owners, s.Metadata.Refs = s.Metadata.Refs, nil
+	assert.Equal(t, "vm-uuid", stack.VMOf(s), "or among its owners, kept before refs")
 
 	s.Metadata.Owners = nil
-	assert.Equal(t, "vm-uuid", stack.VMOf(s), "the one it was admitted into")
+	assert.Equal(t, "admitted-uuid", stack.VMOf(s), "or the one it was admitted into")
 }
 
 func TestVMChoice(t *testing.T) {

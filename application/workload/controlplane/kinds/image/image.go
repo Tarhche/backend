@@ -25,6 +25,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/blocks"
@@ -87,7 +88,8 @@ func (s *Images) Admit(ctx context.Context, asked imageKind.Image) (imageKind.Im
 			Name:      imageKind.Normalized(reference),
 			OwnerUUID: asked.Metadata.OwnerUUID,
 			Labels:    asked.Metadata.Labels,
-			Owners:    []kind.Reference{{Kind: imageKind.Parent, UUID: v.Metadata.UUID}},
+			Owners:    slices.Clone(asked.Metadata.Owners),
+			Refs:      kind.LivingIn(asked.Metadata.Refs, kind.Reference{Kind: imageKind.Parent, UUID: v.Metadata.UUID}),
 			Node:      v.Metadata.Node,
 		},
 		Spec:   imageKind.Spec{Reference: reference},

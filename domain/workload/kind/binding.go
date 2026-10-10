@@ -1,6 +1,7 @@
 package kind
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -48,17 +49,19 @@ type ControlPlaneBinding interface {
 	Reconcile(ctx context.Context, r Raw) ([]Intent, error)
 
 	// Apply decodes payload with the action's codec and is the strategy's
-	// Apply of it. An action that is not a command run in the control plane
-	// is refused as ErrUnknownAction; a payload that cannot be read is
+	// Apply of it: a generation later when the strategy changed its spec, a
+	// VM's update say. An action that is not a command run in the control
+	// plane is refused as ErrUnknownAction; a payload that cannot be read is
 	// ErrInvalidPayload, and one that is not valid is what is wrong with it.
 	Apply(ctx context.Context, r Raw, action string, payload []byte) (Raw, domain.ValidationErrors, error)
 
 	// Prepare readies one of the kind's node commands before it is sent,
 	// through the strategy's Preparer, and is the resource the command
-	// carries; a strategy that is not one leaves the resource as it is. An
-	// action that is not a command run on a node is refused as
-	// ErrUnknownAction; a payload that cannot be read is ErrInvalidPayload,
-	// and one that is not valid is what is wrong with it.
+	// carries: a generation later when the strategy changed its spec, a
+	// container put on a network say. A strategy that is not one leaves the
+	// resource as it is. An action that is not a command run on a node is
+	// refused as ErrUnknownAction; a payload that cannot be read is
+	// ErrInvalidPayload, and one that is not valid is what is wrong with it.
 	Prepare(ctx context.Context, r Raw, action string, payload []byte) (Raw, domain.ValidationErrors, error)
 
 	// Extras are what the kind's listings show beside its records, when its
@@ -213,12 +216,22 @@ func (b *controlPlaneBinding[Spec, Status]) Apply(ctx context.Context, r Raw, ac
 		return Raw{}, nil, err
 	}
 
+	// its spec before the strategy is handed what it shares with it.
+	was, err := json.Marshal(typed.Spec)
+	if err != nil {
+		return Raw{}, nil, err
+	}
+
 	applied, invalid, err := b.strategy.Apply(ctx, typed, action, value)
 	if err != nil || len(invalid) > 0 {
 		return Raw{}, invalid, err
 	}
 
 	applied.Kind = b.descriptor.Name
+
+	if applied, err = respecified(applied, was, typed.Metadata.Generation); err != nil {
+		return Raw{}, nil, err
+	}
 
 	raw, err := Encode(applied)
 
@@ -246,6 +259,12 @@ func (b *controlPlaneBinding[Spec, Status]) Prepare(ctx context.Context, r Raw, 
 		return Raw{}, nil, err
 	}
 
+	// its spec before the strategy is handed what it shares with it.
+	was, err := json.Marshal(typed.Spec)
+	if err != nil {
+		return Raw{}, nil, err
+	}
+
 	prepared, invalid, err := preparer.Prepare(ctx, typed, action, value)
 	if err != nil || len(invalid) > 0 {
 		return Raw{}, invalid, err
@@ -253,9 +272,30 @@ func (b *controlPlaneBinding[Spec, Status]) Prepare(ctx context.Context, r Raw, 
 
 	prepared.Kind = b.descriptor.Name
 
+	if prepared, err = respecified(prepared, was, typed.Metadata.Generation); err != nil {
+		return Raw{}, nil, err
+	}
+
 	raw, err := Encode(prepared)
 
 	return raw, nil, err
+}
+
+// respecified is r as a strategy left it, one generation on from the one it
+// was handed at when its spec is not what it was, as its kind writes a spec:
+// a VM updated, a container put on a network. A resource kept before
+// generations was at its first.
+func respecified[Spec, Status any](r Resource[Spec, Status], was json.RawMessage, generation int64) (Resource[Spec, Status], error) {
+	spec, err := json.Marshal(r.Spec)
+	if err != nil {
+		return Resource[Spec, Status]{}, fmt.Errorf("the %s's spec cannot be written: %w", r.Kind, err)
+	}
+
+	if !bytes.Equal(spec, was) {
+		r.Metadata.Generation = max(generation, 1) + 1
+	}
+
+	return r, nil
 }
 
 func (b *controlPlaneBinding[Spec, Status]) Extras() (Extras, bool) {

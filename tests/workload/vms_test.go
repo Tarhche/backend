@@ -96,6 +96,10 @@ func TestAMachineVM(t *testing.T) {
 		assert.Equal(t, []port.Port{8080}, spec.Ports)
 		assert.Equal(t, vm.Network{Ingress: vm.AccessAllow, Egress: vm.AccessDeny}, spec.Network)
 		assert.True(t, spec.PersistentDisk)
+
+		r, err := w.resources.GetOne(ctx, vmKind.Name, uuid)
+		require.NoError(t, err)
+		assert.Equal(t, int64(1), r.Metadata.Generation, "its spec is the one it was admitted with")
 	})
 
 	t.Run("what its engine samples is what the dashboard shows, cpu_percent of all its vCPUs untouched", func(t *testing.T) {
@@ -181,6 +185,7 @@ func TestAMachineVM(t *testing.T) {
 			return v.Status.State == vmKind.Running && v.Status.Applied != nil && slices.Equal(v.Status.Applied.Ports, []port.Port{8080, 9090})
 		})
 		assert.Equal(t, vmKind.Running, reconfigured.Status.Expected)
+		assert.Equal(t, int64(2), reconfigured.Metadata.Generation, "its spec changed once since it was admitted")
 
 		spec, err := w.engine.Spec(uuid)
 		require.NoError(t, err)

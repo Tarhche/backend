@@ -166,9 +166,11 @@ func (uc *UseCase) extra(ctx context.Context, binding kind.ControlPlaneBinding, 
 }
 
 // fromRecord answers the state of a kind whose state is known in the
-// control plane, from its record, in the shape a node answers one in.
+// control plane, from its record, in the shape a node answers one in: what it
+// belongs to is what it uses and what owns it, the resource it lives in among
+// them.
 func (uc *UseCase) fromRecord(d kind.Descriptor, r resource.Record) (*Response, error) {
-	answer, err := json.Marshal(kind.Observation{Kind: d.Name, UUID: r.Metadata.UUID, Owners: r.Metadata.Owners, Status: r.Status})
+	answer, err := json.Marshal(kind.Observation{Kind: d.Name, UUID: r.Metadata.UUID, Owners: r.Metadata.Belongs(), Status: r.Status})
 	if err != nil {
 		return nil, err
 	}

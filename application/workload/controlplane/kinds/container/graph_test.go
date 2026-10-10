@@ -249,7 +249,9 @@ func TestGraph_Create(t *testing.T) {
 		assert.Equal(t, containerKind.Running, c.Status.Status.State, "as its node made it")
 		assert.Equal(t, "owner", c.Metadata.OwnerUUID)
 		assert.Equal(t, map[string]string{"stack": "shop"}, c.Metadata.Labels)
-		assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "vm-1"}}, c.Metadata.Owners)
+		assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "vm-1"}}, c.Metadata.Refs, "it lives in its vm")
+		assert.Empty(t, c.Metadata.Owners, "and nothing owns it until its graph says so")
+		assert.Equal(t, int64(1), c.Metadata.Generation)
 		assert.Equal(t, stackKind.VMChoice{UUID: "vm-1"}, c.Spec.VM, "its vm by its uuid alone, as a container is kept")
 		assert.Equal(t, "web", c.Spec.Name)
 

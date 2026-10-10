@@ -256,12 +256,14 @@ func Repository(t *testing.T, make Maker) {
 		ctx := context.Background()
 		repository := make(t, fans, lights)
 
+		// fan-3 was kept before refs: the house it is in is among its owners.
 		for _, each := range []struct {
 			uuid, owner, node, house, room string
+			kept                           bool
 		}{
 			{uuid: "fan-1", owner: "alice", node: "node-1", house: "house-1", room: "kitchen"},
 			{uuid: "fan-2", owner: "bob", node: "node-1", house: "house-2", room: "hall"},
-			{uuid: "fan-3", owner: "alice", node: "node-2", house: "house-1", room: "kitchen"},
+			{uuid: "fan-3", owner: "alice", node: "node-2", house: "house-1", room: "kitchen", kept: true},
 			{uuid: "fan-4", owner: "alice", node: "", house: "", room: ""},
 			{uuid: "fan-5", owner: "bob", node: "node-2", house: "house-1", room: "hall"},
 		} {
@@ -269,10 +271,15 @@ func Repository(t *testing.T, make Maker) {
 			r.Metadata.OwnerUUID = each.owner
 			r.Metadata.Node = each.node
 			r.Metadata.Owners = nil
+			r.Metadata.Refs = nil
 			r.Metadata.Labels = nil
 
-			if len(each.house) > 0 {
-				r.Metadata.Owners = []kind.Reference{{Kind: "house", UUID: each.house}}
+			switch house := []kind.Reference{{Kind: "house", UUID: each.house}}; {
+			case len(each.house) == 0:
+			case each.kept:
+				r.Metadata.Owners = house
+			default:
+				r.Metadata.Refs = house
 			}
 
 			if len(each.room) > 0 {
@@ -289,7 +296,8 @@ func Repository(t *testing.T, make Maker) {
 		light.Kind = lights
 		light.Metadata.OwnerUUID = "alice"
 		light.Metadata.Node = "node-1"
-		light.Metadata.Owners = []kind.Reference{{Kind: "house", UUID: "house-1"}}
+		light.Metadata.Owners = nil
+		light.Metadata.Refs = []kind.Reference{{Kind: "house", UUID: "house-1"}}
 		_, err := repository.Create(ctx, light)
 		require.NoError(t, err)
 
@@ -333,6 +341,56 @@ func Repository(t *testing.T, make Maker) {
 		assert.Equal(t, uint(1), total)
 	})
 
+	t.Run("what belongs to a resource names it among its refs, or among its owners as one kept before refs does", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		repository := make(t, fans)
+
+		in := func(kindName string, uuid string) []kind.Reference {
+			return []kind.Reference{{Kind: kindName, UUID: uuid}}
+		}
+
+		for _, each := range []struct {
+			uuid         string
+			refs, owners []kind.Reference
+		}{
+			{uuid: "fan-a", refs: in("house", "house-1")},
+			{uuid: "fan-b", owners: in("house", "house-1")},
+			{uuid: "fan-c", refs: in("house", "house-1"), owners: in("house", "house-1")},
+			{uuid: "fan-d", refs: in("house", "house-2"), owners: in(lights, "light-1")},
+			{uuid: "fan-e", refs: in("garden", "house-1"), owners: in("house", "house-2")},
+			{uuid: "fan-f"},
+		} {
+			r := aFan(each.uuid, "")
+			r.Metadata.Refs = each.refs
+			r.Metadata.Owners = each.owners
+
+			_, err := repository.Create(ctx, r)
+			require.NoError(t, err)
+		}
+
+		for name, tt := range map[string]struct {
+			parent kind.Reference
+			want   []string
+		}{
+			"in a house, by its refs or by its owners, and each once":      {parent: kind.Reference{Kind: "house", UUID: "house-1"}, want: []string{"fan-c", "fan-b", "fan-a"}},
+			"of any kind with its uuid":                                    {parent: kind.Reference{UUID: "house-1"}, want: []string{"fan-e", "fan-c", "fan-b", "fan-a"}},
+			"owned by a light":                                             {parent: kind.Reference{Kind: lights, UUID: "light-1"}, want: []string{"fan-d"}},
+			"owned by anything with its uuid":                              {parent: kind.Reference{UUID: "light-1"}, want: []string{"fan-d"}},
+			"in another house, one by its refs and one by its owners":      {parent: kind.Reference{Kind: "house", UUID: "house-2"}, want: []string{"fan-e", "fan-d"}},
+			"but never by a kind one of them names and another one's uuid": {parent: kind.Reference{Kind: "garden", UUID: "house-2"}, want: []string{}},
+		} {
+			t.Run(name, func(t *testing.T) {
+				page, total, err := repository.GetAll(ctx, fans, resource.Filter{Parent: tt.parent}, 0, 10)
+				require.NoError(t, err)
+
+				assert.Equal(t, tt.want, uuids(page))
+				assert.Equal(t, uint(len(tt.want)), total)
+			})
+		}
+	})
+
 	t.Run("what is read is a copy: changing it changes nothing kept", func(t *testing.T) {
 		t.Parallel()
 
@@ -343,17 +401,21 @@ func Repository(t *testing.T, make Maker) {
 		require.NoError(t, err)
 
 		created.Metadata.Labels["room"] = "hall"
+		created.Metadata.Refs[0].UUID = "changed"
 		created.Pending.IDs[0] = "changed"
 
 		stored, err := repository.GetOne(ctx, fans, "fan-uuid")
 		require.NoError(t, err)
 
 		stored.Metadata.Labels["room"] = "attic"
+		stored.Metadata.Owners[0].UUID = "changed"
 
 		again, err := repository.GetOne(ctx, fans, "fan-uuid")
 		require.NoError(t, err)
 
 		assert.Equal(t, "kitchen", again.Metadata.Labels["room"])
+		assert.Equal(t, []kind.Reference{{Kind: "house", UUID: "house-uuid"}}, again.Metadata.Refs)
+		assert.Equal(t, []kind.Reference{{Kind: lights, UUID: "light-uuid"}}, again.Metadata.Owners)
 		assert.Equal(t, []string{"command-1"}, again.Pending.IDs)
 	})
 
@@ -375,8 +437,11 @@ func Repository(t *testing.T, make Maker) {
 		created.Metadata.Node = ""
 		created.Metadata.Labels = nil
 		created.Metadata.Owners = nil
+		created.Metadata.Refs = nil
 		created.Metadata.ExpiresAt = time.Time{}
 		created.Metadata.Lifetime = 0
+		created.Metadata.Generation = 0
+		created.Metadata.DeletionRequestedAt = time.Time{}
 
 		written, err := repository.Update(ctx, created)
 		require.NoError(t, err)
@@ -391,6 +456,10 @@ func Repository(t *testing.T, make Maker) {
 		assert.True(t, stored.TriedAt.IsZero())
 		assert.False(t, stored.Reset)
 		assert.True(t, stored.Metadata.ExpiresAt.IsZero())
+		assert.Empty(t, stored.Metadata.Owners)
+		assert.Empty(t, stored.Metadata.Refs)
+		assert.Zero(t, stored.Metadata.Generation)
+		assert.True(t, stored.Metadata.DeletionRequestedAt.IsZero())
 
 		_, err = repository.Create(ctx, aFan("another-uuid", "kitchen-abcde"))
 		assert.NoError(t, err, "a slug given up is free")
@@ -402,23 +471,27 @@ func moment(hour int) time.Time {
 	return time.Date(2026, 10, 6, hour, 30, 15, 123_000_000, time.UTC)
 }
 
-// aFan is a fan with everything a resource can have.
+// aFan is a fan with everything a resource can have: it lives in a house,
+// and a light owns it, and it was asked to go after its spec changed once.
 func aFan(uuid string, slug string) resource.Record {
 	return resource.Record{
 		Raw: kind.Raw{
 			Kind: fans,
 			Metadata: kind.Metadata{
-				UUID:      uuid,
-				Name:      "kitchen",
-				Slug:      slug,
-				OwnerUUID: "owner-uuid",
-				Labels:    map[string]string{"room": "kitchen", "com.example.made-by": "a test"},
-				Owners:    []kind.Reference{{Kind: "house", UUID: "house-uuid"}},
-				Node:      "node-1",
-				Lifetime:  time.Hour,
-				ExpiresAt: moment(13),
-				CreatedAt: moment(12),
-				UpdatedAt: moment(12),
+				UUID:                uuid,
+				Name:                "kitchen",
+				Slug:                slug,
+				OwnerUUID:           "owner-uuid",
+				Labels:              map[string]string{"room": "kitchen", "com.example.made-by": "a test"},
+				Owners:              []kind.Reference{{Kind: lights, UUID: "light-uuid"}},
+				Refs:                []kind.Reference{{Kind: "house", UUID: "house-uuid"}},
+				Node:                "node-1",
+				Lifetime:            time.Hour,
+				ExpiresAt:           moment(13),
+				Generation:          2,
+				DeletionRequestedAt: moment(14),
+				CreatedAt:           moment(12),
+				UpdatedAt:           moment(12),
 			},
 			Spec:   json.RawMessage(`{"blades":3,"colour":"white","nested":{"list":[1,2.5,"three",null,true]},"big":4611686018427387904}`),
 			Status: json.RawMessage(`{"state":"starting","expected":"running","since":"2026-10-06T12:30:15.123456789Z","speed":0}`),

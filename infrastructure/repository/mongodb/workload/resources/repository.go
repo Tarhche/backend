@@ -8,9 +8,9 @@
 // asking:
 //
 //	{_id: <uuid>, kind, metadata: {name, slug, owner_uuid, labels, owners,
-//	 node, lifetime, expires_at, created_at, updated_at}, spec: {…},
-//	 status: {…}, version, control: {pending, attempts, tried_at, answer,
-//	 reset}}
+//	 refs, node, lifetime, expires_at, generation, deletion_requested_at,
+//	 created_at, updated_at}, spec: {…}, status: {…}, version,
+//	 control: {pending, attempts, tried_at, answer, reset}}
 //
 // Its uuid is its _id, so no two resources share one, whatever their kinds,
 // and no two share a slug either: a VM's and a task's are what the ingress
@@ -35,8 +35,13 @@
 //     through and a listing narrowed by nothing reads;
 //   - a person's own of a kind, newest first;
 //   - what a node holds of a kind;
-//   - and what belongs to a resource, of any kind, which is how what lives
-//     in a resource is found, a Docker VM's building blocks among it.
+//   - and what belongs to a resource, of any kind, by its refs and by its
+//     owners, which is how what lives in a resource is found, a Docker VM's
+//     building blocks among it, and what uses or owns one.
+//
+// What lives in a resource names it among its refs, or, kept before refs,
+// among its owners: a listing of what lives in one looks in both, so that a
+// record kept before refs is found where it lives too.
 //
 // A resource read by its uuid or its slug needs nothing led by its kind: each
 // names one document at most.
@@ -121,6 +126,7 @@ func (r *Repository) EnsureKind(ctx context.Context, d kind.Descriptor) error {
 		{Keys: bson.D{{Key: "kind", Value: 1}, {Key: "metadata.owner_uuid", Value: 1}, {Key: "_id", Value: -1}}},
 		{Keys: bson.D{{Key: "kind", Value: 1}, {Key: "metadata.node", Value: 1}}},
 		{Keys: bson.D{{Key: "metadata.owners.uuid", Value: 1}, {Key: "metadata.owners.kind", Value: 1}}},
+		{Keys: bson.D{{Key: "metadata.refs.uuid", Value: 1}, {Key: "metadata.refs.kind", Value: 1}}},
 	}); err != nil {
 		return fmt.Errorf("%s cannot be indexed: %w", collectionName, err)
 	}
@@ -340,15 +346,25 @@ func filterOf(kindName string, filter resource.Filter) bson.D {
 		query = append(query, bson.E{Key: "metadata.node", Value: filter.Node})
 	}
 
+	// what belongs to a resource names it among its refs, or, kept before
+	// refs, among its owners.
 	switch parent := filter.Parent; {
 	case len(parent.UUID) == 0:
 	case len(parent.Kind) == 0:
-		query = append(query, bson.E{Key: "metadata.owners.uuid", Value: parent.UUID})
+		query = append(query, bson.E{Key: "$or", Value: bson.A{
+			bson.D{{Key: "metadata.refs.uuid", Value: parent.UUID}},
+			bson.D{{Key: "metadata.owners.uuid", Value: parent.UUID}},
+		}})
 	default:
-		query = append(query, bson.E{Key: "metadata.owners", Value: bson.D{{Key: "$elemMatch", Value: bson.D{
+		named := bson.D{{Key: "$elemMatch", Value: bson.D{
 			{Key: "kind", Value: parent.Kind},
 			{Key: "uuid", Value: parent.UUID},
-		}}}})
+		}}}
+
+		query = append(query, bson.E{Key: "$or", Value: bson.A{
+			bson.D{{Key: "metadata.refs", Value: named}},
+			bson.D{{Key: "metadata.owners", Value: named}},
+		}})
 	}
 
 	// a label's key has dots in it, workload.managed-by, which a path would
@@ -388,16 +404,19 @@ type document struct {
 // which is of the documents that have one, holds only the resources reached
 // under a name.
 type metadata struct {
-	Name      string            `bson:"name,omitempty"`
-	Slug      string            `bson:"slug,omitempty"`
-	OwnerUUID string            `bson:"owner_uuid,omitempty"`
-	Labels    map[string]string `bson:"labels,omitempty"`
-	Owners    []reference       `bson:"owners,omitempty"`
-	Node      string            `bson:"node,omitempty"`
-	Lifetime  int64             `bson:"lifetime,omitempty"`
-	ExpiresAt *time.Time        `bson:"expires_at,omitempty"`
-	CreatedAt time.Time         `bson:"created_at"`
-	UpdatedAt time.Time         `bson:"updated_at"`
+	Name                string            `bson:"name,omitempty"`
+	Slug                string            `bson:"slug,omitempty"`
+	OwnerUUID           string            `bson:"owner_uuid,omitempty"`
+	Labels              map[string]string `bson:"labels,omitempty"`
+	Owners              []reference       `bson:"owners,omitempty"`
+	Refs                []reference       `bson:"refs,omitempty"`
+	Node                string            `bson:"node,omitempty"`
+	Lifetime            int64             `bson:"lifetime,omitempty"`
+	ExpiresAt           *time.Time        `bson:"expires_at,omitempty"`
+	Generation          int64             `bson:"generation,omitempty"`
+	DeletionRequestedAt *time.Time        `bson:"deletion_requested_at,omitempty"`
+	CreatedAt           time.Time         `bson:"created_at"`
+	UpdatedAt           time.Time         `bson:"updated_at"`
 }
 
 type reference struct {
@@ -452,15 +471,17 @@ func toDocument(record resource.Record) (document, error) {
 		UUID: m.UUID,
 		Kind: record.Kind,
 		Metadata: metadata{
-			Name:      m.Name,
-			Slug:      m.Slug,
-			OwnerUUID: m.OwnerUUID,
-			Labels:    maps.Clone(m.Labels),
-			Node:      m.Node,
-			Lifetime:  int64(m.Lifetime),
-			ExpiresAt: optional(m.ExpiresAt),
-			CreatedAt: millisecond(m.CreatedAt),
-			UpdatedAt: millisecond(m.UpdatedAt),
+			Name:                m.Name,
+			Slug:                m.Slug,
+			OwnerUUID:           m.OwnerUUID,
+			Labels:              maps.Clone(m.Labels),
+			Node:                m.Node,
+			Lifetime:            int64(m.Lifetime),
+			ExpiresAt:           optional(m.ExpiresAt),
+			Generation:          m.Generation,
+			DeletionRequestedAt: optional(m.DeletionRequestedAt),
+			CreatedAt:           millisecond(m.CreatedAt),
+			UpdatedAt:           millisecond(m.UpdatedAt),
 		},
 		Spec:    spec,
 		Status:  status,
@@ -474,6 +495,10 @@ func toDocument(record resource.Record) (document, error) {
 
 	for _, owner := range m.Owners {
 		stored.Metadata.Owners = append(stored.Metadata.Owners, reference(owner))
+	}
+
+	for _, ref := range m.Refs {
+		stored.Metadata.Refs = append(stored.Metadata.Refs, reference(ref))
 	}
 
 	if p := record.Pending; p != nil {
@@ -521,16 +546,18 @@ func toRecord(stored document) (resource.Record, error) {
 		Raw: kind.Raw{
 			Kind: stored.Kind,
 			Metadata: kind.Metadata{
-				UUID:      stored.UUID,
-				Name:      m.Name,
-				Slug:      m.Slug,
-				OwnerUUID: m.OwnerUUID,
-				Labels:    m.Labels,
-				Node:      m.Node,
-				Lifetime:  time.Duration(m.Lifetime),
-				ExpiresAt: moment(m.ExpiresAt),
-				CreatedAt: inUTC(m.CreatedAt),
-				UpdatedAt: inUTC(m.UpdatedAt),
+				UUID:                stored.UUID,
+				Name:                m.Name,
+				Slug:                m.Slug,
+				OwnerUUID:           m.OwnerUUID,
+				Labels:              m.Labels,
+				Node:                m.Node,
+				Lifetime:            time.Duration(m.Lifetime),
+				ExpiresAt:           moment(m.ExpiresAt),
+				Generation:          m.Generation,
+				DeletionRequestedAt: moment(m.DeletionRequestedAt),
+				CreatedAt:           inUTC(m.CreatedAt),
+				UpdatedAt:           inUTC(m.UpdatedAt),
 			},
 			Spec:   spec,
 			Status: status,
@@ -543,6 +570,10 @@ func toRecord(stored document) (resource.Record, error) {
 
 	for _, owner := range m.Owners {
 		record.Metadata.Owners = append(record.Metadata.Owners, kind.Reference(owner))
+	}
+
+	for _, ref := range m.Refs {
+		record.Metadata.Refs = append(record.Metadata.Refs, kind.Reference(ref))
 	}
 
 	if p := stored.Control.Pending; p != nil {

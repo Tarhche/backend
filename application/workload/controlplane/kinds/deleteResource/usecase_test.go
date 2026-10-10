@@ -71,11 +71,30 @@ func TestUseCase_Execute(t *testing.T) {
 		assert.Equal(t, "delete", response.Command.Action)
 		assert.False(t, response.Gone)
 
-		fan := kindstest.Typed(f.stored(t, "fan-uuid"))
+		stored := f.stored(t, "fan-uuid")
+		fan := kindstest.Typed(stored)
 		assert.Equal(t, kindstest.Deleting, fan.Status.State)
 		assert.Equal(t, kind.Deleted, fan.Status.Expected)
+		assert.Equal(t, kindstest.Moment, fan.Metadata.DeletionRequestedAt, "its delete requested now")
+		assert.Equal(t, int64(2), stored.Version, "in the write that expects it deleted")
 
 		assert.Equal(t, []string{kind.ActOnResourceName}, f.producer.Subjects())
+	})
+
+	t.Run("one asked to go before was requested to when it first was", func(t *testing.T) {
+		t.Parallel()
+
+		before := kindstest.Moment.Add(-time.Hour)
+
+		f := newFixture(t, kindstest.Descriptor(), kindstest.AFan("fan-uuid", kind.Failed, kind.Deleted, func(fan *kindstest.Fan) {
+			fan.Metadata.DeletionRequestedAt = before
+		}))
+
+		response, err := f.useCase.Execute(ctx, &deleteResource.Request{Kind: kindstest.Kind, UUID: "fan-uuid"})
+		require.NoError(t, err)
+
+		require.NotNil(t, response.Command, "its delete asked again")
+		assert.Equal(t, before, f.stored(t, "fan-uuid").Metadata.DeletionRequestedAt)
 	})
 
 	t.Run("its kind's delete is asked with what it is asked with", func(t *testing.T) {
@@ -175,6 +194,7 @@ func TestUseCase_Execute(t *testing.T) {
 		fan := kindstest.Typed(f.stored(t, "fan-uuid"))
 		assert.Equal(t, kindstest.Starting, fan.Status.State)
 		assert.Equal(t, kind.Deleted, fan.Status.Expected)
+		assert.Equal(t, kindstest.Moment, fan.Metadata.DeletionRequestedAt, "though its delete was requested now")
 		assert.Empty(t, f.producer.Messages())
 	})
 

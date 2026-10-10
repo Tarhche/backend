@@ -126,7 +126,7 @@ func kept(uuid string, changes ...func(s *snapshotKind.Snapshot)) resource.Recor
 			UUID:      uuid,
 			Name:      "before",
 			OwnerUUID: "owner",
-			Owners:    []kind.Reference{{Kind: "vm", UUID: "01"}},
+			Refs:      []kind.Reference{{Kind: "vm", UUID: "01"}},
 			Node:      vmtest.Node,
 			CreatedAt: time.Now().Add(-time.Hour),
 		},
@@ -184,7 +184,8 @@ func TestSnapshots_Admit(t *testing.T) {
 		assert.Equal(t, snapshotKind.Name, admitted.Kind)
 		assert.Equal(t, "before the upgrade", admitted.Metadata.Name)
 		assert.Equal(t, "owner", admitted.Metadata.OwnerUUID)
-		assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "01"}}, admitted.Metadata.Owners, "it is taken of its vm")
+		assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "01"}}, admitted.Metadata.Refs, "it is taken of its vm")
+		assert.Empty(t, admitted.Metadata.Owners, "which does not own it")
 		assert.Equal(t, vmtest.Node, admitted.Metadata.Node, "by the node holding the vm")
 		assert.Zero(t, admitted.Metadata.Lifetime, "it is kept until it is deleted")
 		assert.Equal(t, snapshotKind.VMRef{UUID: "01", Name: "box"}, admitted.Spec.VM, "and says what the vm was called")

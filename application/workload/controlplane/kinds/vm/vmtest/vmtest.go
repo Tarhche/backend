@@ -394,7 +394,7 @@ func Snapshot(uuid string, ownerUUID string, changes ...func(s *snapshotKind.Sna
 			UUID:      uuid,
 			Name:      "before",
 			OwnerUUID: ownerUUID,
-			Owners:    []kind.Reference{{Kind: snapshotKind.Parent, UUID: "01"}},
+			Refs:      []kind.Reference{{Kind: snapshotKind.Parent, UUID: "01"}},
 			Node:      Node,
 			CreatedAt: taken,
 			UpdatedAt: taken,
