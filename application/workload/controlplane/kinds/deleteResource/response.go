@@ -21,7 +21,8 @@ type Response struct {
 	// Command is the delete its node was sent, and Result what came of it,
 	// when it was waited for and came in time. Neither is there when it is
 	// being deleted already, or cannot be asked yet: deleting it is what is
-	// expected of it, and it is asked for once it can be.
+	// expected of it, and it is asked for once it can be; nor for a root its
+	// graph removes, which its graph asks of its node.
 	Command *kind.ActOnResource
 	Result  *kind.ResourceActedOn
 }

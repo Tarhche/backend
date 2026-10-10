@@ -2,6 +2,7 @@ package observe_test
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"testing"
 	"time"
@@ -11,6 +12,8 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/kindstest"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/observe"
+	"github.com/khanzadimahdi/testproject/domain/workload/graph"
+	"github.com/khanzadimahdi/testproject/domain/workload/graph/graphtest"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
 	resourcesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/resources"
@@ -479,6 +482,129 @@ func TestObserver_Unheard(t *testing.T) {
 
 		fan, _ := stored(t, memory, "fan-uuid")
 		assert.Equal(t, kindstest.Running, kindstest.Typed(fan).Status.State, "it was heard, so it is not gone")
+	})
+}
+
+// TestObserver_changed holds the observer to telling the graphs a resource is
+// in that it changed once it went missing, or its record went, and of nothing
+// else it writes down: what needs it is made again at once.
+func TestObserver_changed(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	logger := slog.New(slog.DiscardHandler)
+
+	// when the node, beating on, has long said nothing of what it holds.
+	silence := later.Add(time.Minute)
+	fan := graph.Ref{Kind: kindstest.Kind, UUID: "fan-uuid"}
+
+	t.Run("what its node's silence says is missing is told of, once it is written down", func(t *testing.T) {
+		t.Parallel()
+
+		repository := resourcesMemory.NewRepository()
+		create(t, repository, kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running, heardAt(later)))
+
+		told := &graphtest.Told{}
+		observer := observe.NewObserver(kindstest.Registry(&kindstest.Fans{}), repository, logger, observe.WithNotifier(told))
+
+		r, _ := stored(t, repository, "fan-uuid")
+		require.NoError(t, observer.Unheard(ctx, kindstest.Descriptor(), r, silence))
+
+		assert.Equal(t, []graph.Ref{fan}, told.Changes())
+
+		missing, _ := stored(t, repository, "fan-uuid")
+		require.NoError(t, observer.Unheard(ctx, kindstest.Descriptor(), missing, silence.Add(time.Minute)))
+
+		assert.Len(t, told.Changes(), 1, "and not again while it is missing still")
+	})
+
+	t.Run("and so is what its node says is missing", func(t *testing.T) {
+		t.Parallel()
+
+		repository := resourcesMemory.NewRepository()
+		create(t, repository, kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running))
+
+		told := &graphtest.Told{}
+		observer := observe.NewObserver(kindstest.Registry(&kindstest.Fans{}), repository, logger, observe.WithNotifier(told))
+
+		observer.Heartbeat(ctx, kindstest.NodeName, later, instance(t, "fan-uuid", observed(kind.Missing, 0)))
+
+		assert.Equal(t, []graph.Ref{fan}, told.Changes())
+	})
+
+	t.Run("and what is gone, record and all", func(t *testing.T) {
+		t.Parallel()
+
+		repository := resourcesMemory.NewRepository()
+		create(t, repository, kindstest.AFan("fan-uuid", kindstest.Deleting, kind.Deleted, heardAt(later)))
+
+		told := &graphtest.Told{}
+		observer := observe.NewObserver(kindstest.Registry(&kindstest.Fans{}), repository, logger, observe.WithNotifier(told))
+
+		r, _ := stored(t, repository, "fan-uuid")
+		require.NoError(t, observer.Unheard(ctx, kindstest.Descriptor(), r, silence))
+
+		_, there := stored(t, repository, "fan-uuid")
+		assert.False(t, there)
+		assert.Equal(t, []graph.Ref{fan}, told.Changes())
+	})
+
+	t.Run("and what its restored parent does not have, which is forgotten", func(t *testing.T) {
+		t.Parallel()
+
+		repository := resourcesMemory.NewRepository()
+
+		r := kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running, heardAt(later))
+		r.Reset = true
+		create(t, repository, r)
+
+		told := &graphtest.Told{}
+		observer := observe.NewObserver(kindstest.Registry(&kindstest.Fans{}), repository, logger, observe.WithNotifier(told))
+
+		require.NoError(t, observer.Unheard(ctx, kindstest.Descriptor(), r, silence))
+
+		assert.Equal(t, []graph.Ref{fan}, told.Changes())
+	})
+
+	t.Run("but nothing else it writes down, and nothing that waits on its parent", func(t *testing.T) {
+		t.Parallel()
+
+		repository := resourcesMemory.NewRepository()
+		create(t, repository,
+			kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running),
+			kindstest.AFan("in-a-closed-house", kindstest.Running, kindstest.Running, heardAt(later), func(f *kindstest.Fan) {
+				f.Metadata.Refs = []kind.Reference{{Kind: kindstest.Parent, UUID: "house-3"}}
+			}),
+		)
+
+		told := &graphtest.Told{}
+		observer := observe.NewObserver(kindstest.Registry(&kindstest.Fans{}), repository, logger, observe.WithNotifier(told), observe.WithParents(parents{"house-3": "closed"}))
+
+		observer.Heartbeat(ctx, kindstest.NodeName, later, instance(t, "fan-uuid", observed(kindstest.Stopped, 0)))
+
+		closed, _ := stored(t, repository, "in-a-closed-house")
+		require.NoError(t, observer.Unheard(ctx, kindstest.Descriptor(), closed, silence))
+
+		waiting, _ := stored(t, repository, "in-a-closed-house")
+		require.Equal(t, kind.Waiting, kindstest.Typed(waiting).Status.State)
+
+		assert.Empty(t, told.Changes())
+	})
+
+	t.Run("and what cannot be told is no reason to fail what was written down", func(t *testing.T) {
+		t.Parallel()
+
+		repository := resourcesMemory.NewRepository()
+		create(t, repository, kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running, heardAt(later)))
+
+		told := &graphtest.Told{Failure: errors.New("the database is gone")}
+		observer := observe.NewObserver(kindstest.Registry(&kindstest.Fans{}), repository, logger, observe.WithNotifier(told))
+
+		r, _ := stored(t, repository, "fan-uuid")
+		require.NoError(t, observer.Unheard(ctx, kindstest.Descriptor(), r, silence))
+
+		missing, _ := stored(t, repository, "fan-uuid")
+		assert.Equal(t, kind.Missing, kindstest.Typed(missing).Status.State)
 	})
 }
 

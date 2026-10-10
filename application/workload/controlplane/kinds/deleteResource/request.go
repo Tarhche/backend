@@ -25,7 +25,13 @@ type Request struct {
 	// with nothing.
 	Payload json.RawMessage
 
-	// Wait is how long to wait for its node to say it deleted it: nothing is
-	// not waiting.
+	// Wait is how long to wait for its node to say it deleted it, or for a
+	// root's graph to have removed it: nothing is not waiting.
 	Wait time.Duration
+
+	// ByGraph says it is a root's graph removing what it made, the root
+	// among it, whose node is asked for its delete as anything's is. Nobody
+	// asking through the API says it: a root of a kind whose graph removes it
+	// is otherwise marked to be removed, and left to its graph.
+	ByGraph bool
 }

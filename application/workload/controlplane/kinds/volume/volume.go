@@ -84,7 +84,7 @@ func (s *Volumes) Admit(ctx context.Context, asked volumeKind.Volume) (volumeKin
 // Reconcile makes a volume its VM does not have, once its VM runs: one made
 // again is empty, and says so.
 func (s *Volumes) Reconcile(ctx context.Context, v volumeKind.Volume) ([]kind.Intent, error) {
-	return s.Present(ctx, v.Status.State, v.Status.Expected, volumeKind.VMOf(v))
+	return s.Present(ctx, v.Status.State, v.Status.Expected, volumeKind.VMOf(v), v.Metadata.Node)
 }
 
 // Apply refuses every action, since a volume has none that runs in the

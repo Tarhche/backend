@@ -612,17 +612,25 @@ func (b *Blocks) Into(ctx context.Context, ownerUUID string, parent string) (vmK
 	return v, nil, nil
 }
 
-// Present is what a building block that is either there or not is asked
-// for, given what it was asked to be and what it was last seen being: made,
-// when it is not there and its VM runs.
-func (b *Blocks) Present(ctx context.Context, state kind.State, expected kind.State, vmUUID string) ([]kind.Intent, error) {
+// Present is what a building block that is either there or not, on a node,
+// is asked for, given what it was asked to be and what it was last seen
+// being: made, when it is not there, and its VM runs on its node. One whose
+// VM is on another node, or that is on none, its VM made again elsewhere
+// after it went with it, is its graph's to make, which places it there first
+// (Placed).
+func (b *Blocks) Present(ctx context.Context, state kind.State, expected kind.State, vmUUID string, nodeName string) ([]kind.Intent, error) {
 	if expected != blockKinds.Present || (state != blockKinds.Pending && state != kind.Missing) {
 		return nil, nil
 	}
 
-	running, err := b.Running(ctx, vmUUID)
-	if err != nil || !running {
+	v, err := b.VMs.GetOne(ctx, vmUUID)
+	switch {
+	case errors.Is(err, domain.ErrNotExists):
+		return nil, nil
+	case err != nil:
 		return nil, err
+	case v.Status.State != vmKind.Running, len(nodeName) == 0, v.Metadata.Node != nodeName:
+		return nil, nil
 	}
 
 	return []kind.Intent{{Action: blockKinds.ActionCreate, Reason: "it is not in its vm, which runs"}}, nil

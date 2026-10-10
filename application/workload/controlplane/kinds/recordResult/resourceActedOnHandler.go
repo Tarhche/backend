@@ -17,6 +17,10 @@
 // be refused the same way, at once and for ever. Only what may go another way
 // next time fails it: the database, or a record written by something else
 // every time it was read.
+//
+// A delete carried out, once its resource's record is gone, and a create that
+// failed, once that is written down, are told to the graphs the resource is in
+// (WithNotifier), whose roots are carried out at once.
 package recordResult
 
 import (
@@ -30,13 +34,20 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/observe"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/waiters"
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/workload/graph"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
 )
 
-// tries is how many times a record is read and written again when
-// something else wrote it in the meantime.
-const tries = 5
+const (
+	// tries is how many times a record is read and written again when
+	// something else wrote it in the meantime.
+	tries = 5
+
+	// createAction is the action that makes a resource, of every kind that
+	// is made on a node.
+	createAction = "create"
+)
 
 // Restorer resets what lives in a resource restored from a snapshot, at a
 // moment, to what the resource holds afterwards, as the kinds that live in it
@@ -51,6 +62,7 @@ type ResourceActedOnHandler struct {
 	resources resource.Repository
 	waiters   *waiters.Waiters
 	restorer  Restorer
+	notifier  graph.Notifier
 	logger    *slog.Logger
 	now       func() time.Time
 }
@@ -65,6 +77,16 @@ type Option func(*ResourceActedOnHandler)
 func WithRestorer(restorer Restorer) Option {
 	return func(r *ResourceActedOnHandler) {
 		r.restorer = restorer
+	}
+}
+
+// WithNotifier has notifier told of a resource whose delete was carried out,
+// once its record is gone, and of one whose create failed, once that is
+// written down: the roots whose graphs it is in are carried out at once,
+// rather than at their next resync.
+func WithNotifier(notifier graph.Notifier) Option {
+	return func(r *ResourceActedOnHandler) {
+		r.notifier = notifier
 	}
 }
 
@@ -165,19 +187,44 @@ func (h *ResourceActedOnHandler) take(ctx context.Context, result kind.ResourceA
 		}
 
 		if change.Gone {
-			return h.resources.Delete(ctx, d.Name, r.Metadata.UUID)
+			if err := h.resources.Delete(ctx, d.Name, r.Metadata.UUID); err != nil {
+				return err
+			}
+
+			h.changed(ctx, r)
+
+			return nil
 		}
 
 		r.Metadata.UpdatedAt = h.now()
 
 		_, err = h.resources.Update(ctx, r)
 		switch {
-		case err == nil, errors.Is(err, domain.ErrNotExists):
+		case err == nil:
+			if !result.OK && result.Action == createAction {
+				h.changed(ctx, r)
+			}
+
+			return nil
+		case errors.Is(err, domain.ErrNotExists):
 			return nil
 		case errors.Is(err, resource.ErrConflict) && try < tries:
 			continue
 		default:
 			return err
 		}
+	}
+}
+
+// changed tells the notifier, when there is one, that r changed: its delete
+// was carried out, or its create failed. What cannot be told is reported, and
+// caught up with by the roots' next resync.
+func (h *ResourceActedOnHandler) changed(ctx context.Context, r resource.Record) {
+	if h.notifier == nil {
+		return
+	}
+
+	if err := h.notifier.Changed(ctx, graph.Ref{Kind: r.Kind, UUID: r.Metadata.UUID}); err != nil {
+		h.logger.WarnContext(ctx, "could not tell the graphs a resource is in that it changed", "error", err, "kind", r.Kind, "uuid", r.Metadata.UUID)
 	}
 }

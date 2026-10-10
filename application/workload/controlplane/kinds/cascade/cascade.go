@@ -10,14 +10,23 @@
 // each time. A restore is told by whatever hears that it was carried out.
 // Every kind registered is held to its rules alike: a kind added later whose
 // resources live in VMs is carried along with no more than its rules.
+//
+// Where the roots of graphs are kept made (WithGraphs), a delete keeps what
+// lives in the parent that a graph makes again: a root that was not asked to
+// go, and what something still owns. Each is kept as gone with its parent,
+// missing and on no node, and the graphs are told of it, and of what went,
+// once the parent's record is gone: the roots then make their parent again,
+// under its uuid, and then what they need in it, in order.
 package cascade
 
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/workload/graph"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
 )
@@ -30,18 +39,56 @@ const tries = 3
 type Cascade struct {
 	registry  *kind.Registry[kind.ControlPlaneBinding]
 	resources resource.Repository
+
+	// roots are the kinds whose roots are kept made, and notifier what is
+	// told of what a parent's delete kept and took away: nothing is kept
+	// with no notifier, nor with no kind of root.
+	roots    graph.Roots
+	notifier graph.Notifier
+
+	now func() time.Time
 }
 
-func New(registry *kind.Registry[kind.ControlPlaneBinding], resources resource.Repository) *Cascade {
-	return &Cascade{registry: registry, resources: resources}
+// Option changes how a cascade goes about it.
+type Option func(*Cascade)
+
+// WithGraphs has a parent's delete keep what lives in it that the graphs of
+// roots make again: a root of a kind roots names that was not asked to go,
+// and what something still owns, kept missing and on no node, as gone with
+// its parent. notifier is told of each, and of what went, once the parent's
+// record is gone, so that the roots whose graphs it is in make it again.
+func WithGraphs(roots graph.Roots, notifier graph.Notifier) Option {
+	return func(c *Cascade) {
+		c.roots = roots
+		c.notifier = notifier
+	}
+}
+
+// WithClock has a cascade go by now, in place of the time now.
+func WithClock(now func() time.Time) Option {
+	return func(c *Cascade) {
+		c.now = now
+	}
+}
+
+func New(registry *kind.Registry[kind.ControlPlaneBinding], resources resource.Repository, options ...Option) *Cascade {
+	c := &Cascade{registry: registry, resources: resources, now: time.Now}
+
+	for _, option := range options {
+		option(c)
+	}
+
+	return c
 }
 
 // Repository keeps the resources of every kind in the repository it wraps,
 // and deletes what lives in a resource before the resource itself, as each
-// kind that lives in it says: deleting a VM's record takes its stacks'
-// records with it, whichever part of the control plane deletes it. What lives
-// in it goes first, so that a delete cut short leaves a VM with fewer stacks
-// rather than stacks in a VM that is not there.
+// kind that lives in it says: deleting a VM's record takes its stacks' records
+// with it, whichever part of the control plane deletes it. What lives in it
+// goes first, so that a delete cut short leaves a VM with fewer stacks rather
+// than stacks in a VM that is not there; what is kept of it is told of last,
+// once the VM's record is gone, so that what makes it again finds the VM
+// gone.
 type Repository struct {
 	resource.Repository
 
@@ -51,11 +98,11 @@ type Repository struct {
 var _ resource.Repository = &Repository{}
 
 // NewRepository wraps resources, carrying deletes over to what lives in what
-// is deleted by the rules of the kinds in registry. What lives in what lives
-// in it is carried along too, through the same repository.
-func NewRepository(registry *kind.Registry[kind.ControlPlaneBinding], resources resource.Repository) *Repository {
+// is deleted by the rules of the kinds in registry, as options say. What lives
+// in what lives in it is carried along too, through the same repository.
+func NewRepository(registry *kind.Registry[kind.ControlPlaneBinding], resources resource.Repository, options ...Option) *Repository {
 	r := &Repository{Repository: resources}
-	r.cascade = New(registry, r)
+	r.cascade = New(registry, r, options...)
 
 	return r
 }
@@ -67,21 +114,31 @@ func (r *Repository) Cascade() *Cascade {
 }
 
 // Delete takes away what lives in a resource, by its kind's rules, and then
-// the resource. One that is not there is gone already, and so is what lived
-// in it.
+// the resource, and then tells the graphs of roots what of it was kept or
+// taken away. One that is not there is gone already, and so is what lived in
+// it.
 func (r *Repository) Delete(ctx context.Context, kindName string, uuid string) error {
-	if err := r.cascade.Deleted(ctx, kind.Reference{Kind: kindName, UUID: uuid}); err != nil {
+	touched, err := r.cascade.deleted(ctx, kind.Reference{Kind: kindName, UUID: uuid})
+	if err != nil {
 		return err
 	}
 
-	return r.Repository.Delete(ctx, kindName, uuid)
+	if err := r.Repository.Delete(ctx, kindName, uuid); err != nil {
+		return err
+	}
+
+	return r.cascade.changed(ctx, touched)
 }
 
 // Deleted is what deleting parent does to what lives in it, kind by kind:
-// the records of a kind that goes with its parent are taken away, and those
-// of a kind that outlives it are kept as they are.
+// the records of a kind that goes with its parent are taken away, but for
+// what the graphs of roots make again, when they are kept made, which is kept
+// as gone with it; and those of a kind that outlives it are kept as they are.
+// The graphs are told of what was kept or taken away once it is done.
 func (c *Cascade) Deleted(ctx context.Context, parent kind.Reference) error {
-	return c.each(ctx, parent, func(d kind.Descriptor) kind.Cascade { return d.OnParent.Delete }, time.Time{})
+	touched, err := c.deleted(ctx, parent)
+
+	return errors.Join(err, c.changed(ctx, touched))
 }
 
 // Restored is what restoring parent from a snapshot, at a moment, does to
@@ -92,13 +149,36 @@ func (c *Cascade) Deleted(ctx context.Context, parent kind.Reference) error {
 // not there, and one taken before says nothing of them; and those of a kind
 // that outlives it are kept as they are.
 func (c *Cascade) Restored(ctx context.Context, parent kind.Reference, at time.Time) error {
-	return c.each(ctx, parent, func(d kind.Descriptor) kind.Cascade { return d.OnParent.Restore }, at)
+	return c.each(ctx, parent, func(d kind.Descriptor) kind.Cascade { return d.OnParent.Restore }, at, func(ctx context.Context, _ kind.Descriptor, r resource.Record) error {
+		return c.forget(ctx, r)
+	})
+}
+
+// deleted is what deleting parent does to what lives in it (Deleted), but
+// for telling the graphs, and what of it was kept or taken away, in the order
+// it was.
+func (c *Cascade) deleted(ctx context.Context, parent kind.Reference) ([]kind.Reference, error) {
+	var touched []kind.Reference
+
+	at := c.now()
+
+	failed := c.each(ctx, parent, func(d kind.Descriptor) kind.Cascade { return d.OnParent.Delete }, time.Time{}, func(ctx context.Context, d kind.Descriptor, r resource.Record) error {
+		if err := c.goes(ctx, d, r, at); err != nil {
+			return err
+		}
+
+		touched = append(touched, kind.Reference{Kind: r.Kind, UUID: r.Metadata.UUID})
+
+		return nil
+	})
+
+	return touched, failed
 }
 
 // each applies to what lives in parent the rule rule says each kind keeps,
-// at a moment. One kind failing is no reason to leave the others as they
-// were.
-func (c *Cascade) each(ctx context.Context, parent kind.Reference, rule func(kind.Descriptor) kind.Cascade, at time.Time) error {
+// at a moment, what goes with it going as goes says. One kind failing is no
+// reason to leave the others as they were.
+func (c *Cascade) each(ctx context.Context, parent kind.Reference, rule func(kind.Descriptor) kind.Cascade, at time.Time, goes func(ctx context.Context, d kind.Descriptor, r resource.Record) error) error {
 	var failed error
 
 	for _, binding := range c.registry.All() {
@@ -109,7 +189,9 @@ func (c *Cascade) each(ctx context.Context, parent kind.Reference, rule func(kin
 
 		switch rule(d) {
 		case kind.CascadeDelete:
-			failed = errors.Join(failed, c.children(ctx, d, parent, c.forget))
+			failed = errors.Join(failed, c.children(ctx, d, parent, func(ctx context.Context, r resource.Record) error {
+				return goes(ctx, d, r)
+			}))
 		case kind.CascadeReset:
 			failed = errors.Join(failed, c.children(ctx, d, parent, func(ctx context.Context, r resource.Record) error {
 				return c.reset(ctx, r, at)
@@ -130,6 +212,139 @@ func (c *Cascade) children(ctx context.Context, d kind.Descriptor, parent kind.R
 	var failed error
 	for i := range records {
 		failed = errors.Join(failed, what(ctx, records[i]))
+	}
+
+	return failed
+}
+
+// goes is what becomes of a resource of d's kind whose parent is deleted, at
+// a moment: kept as gone with it, when a graph makes it again, and taken away
+// otherwise. One written in the meantime is read again, and judged again.
+func (c *Cascade) goes(ctx context.Context, d kind.Descriptor, r resource.Record, at time.Time) error {
+	for try := 1; ; try++ {
+		kept, err := c.kept(ctx, d, r)
+		switch {
+		case err != nil:
+			return err
+		case !kept:
+			return c.forget(ctx, r)
+		}
+
+		gone, err := missing(d, r, at)
+		if err != nil {
+			return err
+		}
+
+		_, err = c.resources.Update(ctx, gone)
+		switch {
+		case err == nil, errors.Is(err, domain.ErrNotExists):
+			return nil
+		case !errors.Is(err, resource.ErrConflict) || try >= tries:
+			return err
+		}
+
+		r, err = c.resources.GetOne(ctx, r.Kind, r.Metadata.UUID)
+		if errors.Is(err, domain.ErrNotExists) {
+			return nil
+		} else if err != nil {
+			return err
+		}
+	}
+}
+
+// kept reports whether a resource of d's kind whose parent is deleted is
+// kept, which it is only where the roots of graphs are kept made, and some
+// kind's resources are roots: a root that was not asked to go, and what
+// something that is still there owns (kind.Metadata.Owning: what it lives in
+// owns nothing), whose graph makes it again. What was asked to go never is.
+func (c *Cascade) kept(ctx context.Context, d kind.Descriptor, r resource.Record) (bool, error) {
+	if c.notifier == nil || len(c.roots) == 0 {
+		return false, nil
+	}
+
+	common, err := r.Common()
+	if err != nil {
+		return false, err
+	}
+
+	if common.Expected == kind.Deleted || common.State == kind.Deleted || !r.Metadata.DeletionRequestedAt.IsZero() {
+		return false, nil
+	}
+
+	if c.roots.Root(d, r.Metadata) {
+		return true, nil
+	}
+
+	for _, owner := range r.Metadata.Owning(d.Parent) {
+		_, err := c.resources.GetOne(ctx, owner.Kind, owner.UUID)
+		switch {
+		case err == nil:
+			return true, nil
+		case !errors.Is(err, domain.ErrNotExists):
+			return false, err
+		}
+	}
+
+	return false, nil
+}
+
+// missing is a resource of d's kind kept when its parent is deleted, as gone
+// with it at a moment: in its kind's missing state, saying nothing of what its
+// node last said of it, on no node, waiting on no command and tried for not at
+// all, so that its graph makes it again where its parent is made again.
+func missing(d kind.Descriptor, r resource.Record, at time.Time) (resource.Record, error) {
+	common, err := r.Common()
+	if err != nil {
+		return resource.Record{}, err
+	}
+
+	status, err := resource.WithCommon(nil, kind.Status{
+		State:      missingOf(d),
+		Expected:   common.Expected,
+		Reason:     fmt.Sprintf("it went with its %s", d.Parent),
+		Since:      at,
+		ObservedAt: at,
+	})
+	if err != nil {
+		return resource.Record{}, err
+	}
+
+	r.Status = status
+	r.Metadata.Node = ""
+	r.Metadata.UpdatedAt = at
+	r.Pending = nil
+	r.Attempts = 0
+	r.TriedAt = time.Time{}
+	r.Reset = false
+
+	return r, nil
+}
+
+// missingOf is the state a resource of d's kind is in once it is gone from
+// where it lived: missing, when its kind has it, and the state it starts in,
+// to be made, otherwise.
+func missingOf(d kind.Descriptor) kind.State {
+	if d.Machine.Has(kind.Missing) {
+		return kind.Missing
+	}
+
+	return d.Machine.Initial
+}
+
+// changed tells the graphs of roots that each of refs changed, once what they
+// lived in is gone, when they are kept made. What cannot be told is what it
+// fails with, once every one is told.
+func (c *Cascade) changed(ctx context.Context, refs []kind.Reference) error {
+	if c.notifier == nil {
+		return nil
+	}
+
+	var failed error
+
+	for _, ref := range refs {
+		if err := c.notifier.Changed(ctx, ref); err != nil {
+			failed = errors.Join(failed, fmt.Errorf("the graphs %s/%s is in cannot be told it went with what it lived in: %w", ref.Kind, ref.UUID, err))
+		}
 	}
 
 	return failed

@@ -29,7 +29,7 @@ import (
 // graphRoots are the kinds whose resources are roots of graphs of their own,
 // each one nothing owns, which the control plane keeps made: none yet, so
 // that nothing is reconciled through its graph, and nothing is read for it.
-func graphRoots() []string {
+func graphRoots() graph.Roots {
 	return nil
 }
 

@@ -2,10 +2,12 @@ package blocks
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/requirements"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/records"
+	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/graph"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	blockKinds "github.com/khanzadimahdi/testproject/domain/workload/kinds/blocks"
@@ -68,6 +70,31 @@ func (b *Blocks) Ready(ctx context.Context, vmUUID string) error {
 	}
 
 	return nil
+}
+
+// Placed is r, the record of a building block that lives in the Docker VM
+// vmUUID names, on the node that VM is on: written so, over the version it
+// was read at, when it is on another node or on none, which is where its
+// commands are sent. A container nobody's stack owns is on none when it was
+// admitted before its VM was made, and what its VM's delete kept is on none
+// until its VM is made again, maybe elsewhere. One whose VM is on no node, or
+// is not there, is left as it is. What wrote it in the meantime is
+// resource.ErrConflict.
+func (b *Blocks) Placed(ctx context.Context, r resource.Record, vmUUID string) (resource.Record, error) {
+	v, err := b.VMs.GetOne(ctx, vmUUID)
+	switch {
+	case errors.Is(err, domain.ErrNotExists):
+		return r, nil
+	case err != nil:
+		return resource.Record{}, err
+	case len(v.Metadata.Node) == 0, v.Metadata.Node == r.Metadata.Node:
+		return r, nil
+	}
+
+	r.Metadata.Node = v.Metadata.Node
+	r.Metadata.UpdatedAt = b.Now()
+
+	return b.Resources.Update(ctx, r)
 }
 
 // ParentOf is the uuid of the Docker VM a building block a graph needs goes

@@ -13,6 +13,8 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/kindstest"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/waiters"
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/workload/graph"
+	"github.com/khanzadimahdi/testproject/domain/workload/graph/graphtest"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
@@ -29,6 +31,14 @@ type fixture struct {
 func newFixture(t *testing.T, descriptor kind.Descriptor, records ...resource.Record) *fixture {
 	t.Helper()
 
+	return newFixtureWith(t, descriptor, nil, records...)
+}
+
+// newFixtureWith is a delete over records, of the fan as descriptor has it,
+// as options say.
+func newFixtureWith(t *testing.T, descriptor kind.Descriptor, options []deleteResource.Option, records ...resource.Record) *fixture {
+	t.Helper()
+
 	f := &fixture{resources: resourcesMemory.NewRepository(), producer: &messagingMock.Recorder{}}
 
 	for _, r := range records {
@@ -40,7 +50,7 @@ func newFixture(t *testing.T, descriptor kind.Descriptor, records ...resource.Re
 	require.NoError(t, registry.Register(kind.BindControlPlane[kindstest.Spec, kindstest.Status](descriptor, &kindstest.Fans{})))
 
 	dispatcher := dispatch.New(f.resources, f.producer, waiters.New(), kindstest.NewClock().Now, dispatch.PollEvery(time.Millisecond))
-	f.useCase = deleteResource.NewUseCase(registry, f.resources, dispatcher)
+	f.useCase = deleteResource.NewUseCase(registry, f.resources, dispatcher, options...)
 
 	return f
 }
@@ -295,4 +305,115 @@ func TestUseCase_Execute_extras(t *testing.T) {
 
 		assert.ErrorIs(t, err, domain.ErrNotExists)
 	})
+}
+
+// TestUseCase_Execute_roots holds the delete of a root its graph removes to
+// leaving it to its graph: marked, queued to its graph, and waited on until
+// its graph has removed it, while its graph's own delete of it, and the delete
+// of what is no root, is asked of its node.
+func TestUseCase_Execute_roots(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	root := graph.Ref{Kind: kindstest.Kind, UUID: "fan-uuid"}
+
+	// rooted is a delete over records, a fan being a root its graph
+	// removes, which is queued to told.
+	rooted := func(t *testing.T, descriptor kind.Descriptor, told *graphtest.Told, records ...resource.Record) *fixture {
+		t.Helper()
+
+		return newFixtureWith(t, descriptor, []deleteResource.Option{deleteResource.WithGraphs(graph.Roots{kindstest.Kind}, told)}, records...)
+	}
+
+	t.Run("a root is marked to be deleted rather than asked, and queued to its graph, which removes it", func(t *testing.T) {
+		t.Parallel()
+
+		told := &graphtest.Told{}
+		f := rooted(t, kindstest.Descriptor(), told, kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running))
+
+		response, err := f.useCase.Execute(ctx, &deleteResource.Request{Kind: kindstest.Kind, UUID: "fan-uuid"})
+		require.NoError(t, err)
+
+		assert.Nil(t, response.Command, "nothing is asked of its node")
+		assert.False(t, response.Gone)
+		assert.Empty(t, f.producer.Messages())
+
+		stored := f.stored(t, "fan-uuid")
+		fan := kindstest.Typed(stored)
+
+		assert.Equal(t, kind.Deleted, fan.Status.Expected)
+		assert.Equal(t, kindstest.Running, fan.Status.State)
+		assert.Equal(t, kindstest.Moment, stored.Metadata.DeletionRequestedAt)
+		assert.Equal(t, stored.Raw, response.Resource)
+
+		assert.Equal(t, []graph.Ref{root}, told.Queued())
+	})
+
+	t.Run("and is gone once its graph has removed it, when that is waited for", func(t *testing.T) {
+		t.Parallel()
+
+		f := rooted(t, kindstest.Descriptor(), &graphtest.Told{}, kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running))
+
+		go func() {
+			time.Sleep(20 * time.Millisecond)
+			_ = f.resources.Delete(context.Background(), kindstest.Kind, "fan-uuid")
+		}()
+
+		response, err := f.useCase.Execute(ctx, &deleteResource.Request{Kind: kindstest.Kind, UUID: "fan-uuid", Wait: time.Minute})
+		require.NoError(t, err)
+
+		assert.True(t, response.Gone)
+	})
+
+	t.Run("what its kind refuses of its delete is refused, and it is neither marked nor queued", func(t *testing.T) {
+		t.Parallel()
+
+		// a fan deleted at a speed.
+		d := kindstest.Descriptor()
+		for i := range d.Actions {
+			if d.Actions[i].Name == "delete" {
+				d.Actions[i].Payload = kind.Payload[kindstest.StartPayload]()
+			}
+		}
+
+		told := &graphtest.Told{}
+		f := rooted(t, d, told, kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running))
+
+		response, err := f.useCase.Execute(ctx, &deleteResource.Request{Kind: kindstest.Kind, UUID: "fan-uuid", Payload: []byte(`{"speed": 9}`)})
+		require.NoError(t, err)
+
+		assert.Equal(t, domain.ValidationErrors{"speed": "invalid_value"}, response.ValidationErrors)
+		assert.Equal(t, int64(1), f.stored(t, "fan-uuid").Version)
+		assert.Empty(t, told.Queued())
+	})
+
+	for name, tt := range map[string]struct {
+		record  resource.Record
+		byGraph bool
+	}{
+		"its graph's own delete of it is asked of its node": {
+			record:  kindstest.AFan("fan-uuid", kindstest.Running, kind.Deleted),
+			byGraph: true,
+		},
+		"and so is the delete of what something owns, which is no root": {
+			record: kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running, func(fan *kindstest.Fan) {
+				fan.Metadata.Owners = []kind.Reference{{Kind: kindstest.Kind, UUID: "another-fan"}}
+			}),
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			told := &graphtest.Told{}
+			f := rooted(t, kindstest.Descriptor(), told, tt.record)
+
+			response, err := f.useCase.Execute(ctx, &deleteResource.Request{Kind: kindstest.Kind, UUID: "fan-uuid", ByGraph: tt.byGraph})
+			require.NoError(t, err)
+
+			require.NotNil(t, response.Command)
+			assert.Equal(t, "delete", response.Command.Action)
+			assert.Equal(t, kindstest.Deleting, kindstest.Typed(f.stored(t, "fan-uuid")).Status.State)
+			assert.Empty(t, told.Queued())
+		})
+	}
 }

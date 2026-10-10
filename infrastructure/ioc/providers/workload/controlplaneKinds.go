@@ -19,6 +19,7 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/recordResult"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/waiters"
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/workload/graph"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/node"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
@@ -78,6 +79,11 @@ type controlPlaneKindsOptions struct {
 	parents   observe.Parents
 	reconcile kindsReconcileResources.Config
 	timeouts  map[kind.Timeout]time.Duration
+
+	// roots are the kinds whose roots their graphs make and remove, and
+	// graphs what is told of them and of what changes under them.
+	roots  graph.Roots
+	graphs graph.Graphs
 }
 
 // ControlPlaneKindsOption changes how the plumbing goes about its work.
@@ -89,6 +95,21 @@ type ControlPlaneKindsOption func(*controlPlaneKindsOptions)
 func WithParents(parents observe.Parents) ControlPlaneKindsOption {
 	return func(o *controlPlaneKindsOptions) {
 		o.parents = parents
+	}
+}
+
+// WithGraphs leaves to the graphs of roots of the kinds roots names what
+// they make and remove, and tells graphs of it: a root is queued to graphs
+// once it is admitted, and once it is asked to go, which marks it rather than
+// asking its node and is never asked by the reconcile loop; a VM's delete
+// keeps what a live root's graph makes again, as gone with it; and graphs is
+// told of what went missing, was deleted, was kept or taken away with what it
+// lived in, and failed to be made, so that the roots whose graphs it is in
+// are carried out at once.
+func WithGraphs(roots graph.Roots, graphs graph.Graphs) ControlPlaneKindsOption {
+	return func(o *controlPlaneKindsOptions) {
+		o.roots = roots
+		o.graphs = graphs
 	}
 }
 
@@ -147,7 +168,14 @@ func NewControlPlaneKinds(
 ) *ControlPlaneKinds {
 	settings := settingsOf(options)
 
-	resources := cascade.NewRepository(registry, stores.Resources)
+	// what a VM's delete takes with it, but what a live root's graph makes
+	// again, which the graphs are told of once the VM is gone.
+	var cascading []cascade.Option
+	if settings.graphs != nil {
+		cascading = append(cascading, cascade.WithGraphs(settings.roots, settings.graphs))
+	}
+
+	resources := cascade.NewRepository(registry, stores.Resources, cascading...)
 
 	// a request that waits for what came of its command is told by whichever
 	// result handler hears it in this process.
@@ -163,27 +191,49 @@ func NewControlPlaneKinds(
 		observing = append(observing, observe.WithParents(settings.parents))
 	}
 
+	// what the graphs of roots are told of, and leave to nobody else: a root
+	// admitted or asked to go, and what went missing, was deleted or failed
+	// to be made.
+	var (
+		admitting   []admitResource.Option
+		acting      []actOnResource.Option
+		deleting    []deleteResource.Option
+		recording   []recordResult.Option
+		reconciling []kindsReconcileResources.Option
+	)
+
+	if settings.graphs != nil {
+		admitting = append(admitting, admitResource.WithGraphs(settings.roots, settings.graphs))
+		acting = append(acting, actOnResource.WithGraphs(settings.roots, settings.graphs))
+		deleting = append(deleting, deleteResource.WithGraphs(settings.roots, settings.graphs))
+		observing = append(observing, observe.WithNotifier(settings.graphs))
+		recording = append(recording, recordResult.WithNotifier(settings.graphs))
+		reconciling = append(reconciling, kindsReconcileResources.WithRoots(settings.roots))
+	}
+
 	observer := observe.NewObserver(registry, resources, logger, observing...)
 
 	useCases := controlPlaneKindsAPI.UseCases{
-		Admit:  admitResource.NewUseCase(registry, resources, dispatcher, logger),
-		Act:    actOnResource.NewUseCase(registry, resources, dispatcher, logger),
-		Delete: deleteResource.NewUseCase(registry, resources, dispatcher),
+		Admit:  admitResource.NewUseCase(registry, resources, dispatcher, logger, admitting...),
+		Act:    actOnResource.NewUseCase(registry, resources, dispatcher, logger, acting...),
+		Delete: deleteResource.NewUseCase(registry, resources, dispatcher, deleting...),
 		Get:    getResource.NewUseCase(registry, resources),
 		List:   getResources.NewUseCase(registry, resources),
 		Query:  queryResource.NewUseCase(registry, resources, requester, observer, nil),
 		Kinds:  getKinds.NewUseCase(registry),
 	}
 
+	recording = append(recording, recordResult.WithRestorer(resources.Cascade()))
+
 	return &ControlPlaneKinds{
 		Route: func(mux *http.ServeMux) error {
 			return controlPlaneKindsAPI.Route(mux, registry.Descriptors(), useCases)
 		},
 		Subscribers: map[string]domain.MessageHandler{
-			kind.ResourceActedOnName: recordResult.NewResourceActedOnHandler(registry, resources, waiting, logger, nil, recordResult.WithRestorer(resources.Cascade())),
+			kind.ResourceActedOnName: recordResult.NewResourceActedOnHandler(registry, resources, waiting, logger, nil, recording...),
 		},
 		Observer:   observer,
-		Reconcile:  kindsReconcileResources.NewUseCase(registry, resources, stores.Nodes, dispatcher, observer, logger, settings.reconcile),
+		Reconcile:  kindsReconcileResources.NewUseCase(registry, resources, stores.Nodes, dispatcher, observer, logger, settings.reconcile, reconciling...),
 		Admit:      useCases.Admit,
 		Delete:     useCases.Delete,
 		Resources:  resources,

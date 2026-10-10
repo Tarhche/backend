@@ -43,7 +43,9 @@
 //     tries are forgotten once it has been what it is expected to be for as
 //     long as the last wait, so one that falls over again as soon as it is
 //     brought back is brought back less and less often;
-//   - one expected deleted is asked for its delete;
+//   - one expected deleted is asked for its delete, but for the root of a
+//     graph asked to go (WithRoots), which its graph removes, and what it
+//     owns with it, in order;
 //   - and for everything else, the kind decides what to ask for (its
 //     Reconcile), and what it asks for is asked.
 //
@@ -60,6 +62,7 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/dispatch"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/observe"
+	"github.com/khanzadimahdi/testproject/domain/workload/graph"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/node"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
@@ -166,6 +169,22 @@ type UseCase struct {
 	observer   *observe.Observer
 	logger     *slog.Logger
 	config     Config
+
+	// roots are the kinds whose roots their graphs remove once they are
+	// asked to go.
+	roots graph.Roots
+}
+
+// Option changes how a pass goes about it.
+type Option func(*UseCase)
+
+// WithRoots has a root of a kind roots names that was asked to go left to
+// its graph, which removes it, and what it owns, in order, rather than asked
+// for its delete by a pass.
+func WithRoots(roots graph.Roots) Option {
+	return func(uc *UseCase) {
+		uc.roots = roots
+	}
 }
 
 // NewUseCase is a pass that takes what a node has long said nothing of to be
@@ -179,8 +198,9 @@ func NewUseCase(
 	observer *observe.Observer,
 	logger *slog.Logger,
 	config Config,
+	options ...Option,
 ) *UseCase {
-	return &UseCase{
+	uc := &UseCase{
 		registry:   registry,
 		resources:  resources,
 		nodes:      nodes,
@@ -189,6 +209,12 @@ func NewUseCase(
 		logger:     logger,
 		config:     config,
 	}
+
+	for _, option := range options {
+		option(uc)
+	}
+
+	return uc
 }
 
 // Execute makes one pass over every kind registered. A pass with no kind
@@ -322,6 +348,11 @@ func (uc *UseCase) look(ctx context.Context, binding kind.ControlPlaneBinding, r
 	// tried for already, and not there yet, or not for long: given time
 	// before the next try.
 	case r.Attempts > 0 && now.Sub(r.TriedAt) < uc.config.backoff(r.Attempts):
+		return nil
+
+	// a root asked to go is its graph's to remove, and what it owns with it,
+	// in order.
+	case common.Expected == kind.Deleted && !r.Metadata.DeletionRequestedAt.IsZero() && uc.roots.Root(d, r.Metadata):
 		return nil
 
 	case common.Expected == kind.Deleted:

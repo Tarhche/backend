@@ -18,6 +18,7 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/reconcileResources"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/recordResult"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/waiters"
+	"github.com/khanzadimahdi/testproject/domain/workload/graph"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/node"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
@@ -55,6 +56,13 @@ type fixture struct {
 func newFixture(t *testing.T, records ...resource.Record) *fixture {
 	t.Helper()
 
+	return newFixtureWith(t, nil, records...)
+}
+
+// newFixtureWith is a fixture whose passes go about it as options say.
+func newFixtureWith(t *testing.T, options []reconcileResources.Option, records ...resource.Record) *fixture {
+	t.Helper()
+
 	f := &fixture{
 		resources: resourcesMemory.NewRepository(),
 		nodes: nodesMemory.NewRepository(
@@ -80,7 +88,7 @@ func newFixture(t *testing.T, records ...resource.Record) *fixture {
 
 	dispatcher := dispatch.New(f.resources, f.producer, waiters.New(), f.clock.Now)
 	observer := observe.NewObserver(registry, f.resources, logger, observe.WithParents(f.houses))
-	f.useCase = reconcileResources.NewUseCase(registry, f.resources, f.nodes, dispatcher, observer, logger, config())
+	f.useCase = reconcileResources.NewUseCase(registry, f.resources, f.nodes, dispatcher, observer, logger, config(), options...)
 
 	return f
 }
@@ -825,6 +833,78 @@ func TestUseCase_Execute_timeouts(t *testing.T) {
 			}
 
 			assert.Equal(t, tt.sent, actions)
+		})
+	}
+}
+
+// TestUseCase_Execute_roots holds a pass to leaving a root its graph removes,
+// once it was asked to go, to its graph: its delete is never asked by a pass,
+// while one kept before it said when it was asked to go, and what is no root,
+// are asked theirs as anything's is, and a delete its graph asked of a node is
+// waited on and asked again as any command is.
+func TestUseCase_Execute_roots(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	askedToGo := func(r *resource.Record) {
+		r.Metadata.DeletionRequestedAt = now.Add(-time.Minute)
+	}
+
+	owned := func(r *resource.Record) {
+		r.Metadata.Owners = []kind.Reference{{Kind: kindstest.Kind, UUID: "another-fan"}}
+	}
+
+	for name, tt := range map[string]struct {
+		record resource.Record
+		state  kind.State
+		sent   []string
+		gone   bool
+	}{
+		"a root asked to go is its graph's to remove, and nothing is asked of it": {
+			record: fan(kindstest.Running, kind.Deleted, kindstest.NodeName, askedToGo),
+			state:  kindstest.Running,
+		},
+		"but one never said to be asked to go is asked for its delete": {
+			record: fan(kindstest.Running, kind.Deleted, kindstest.NodeName),
+			state:  kindstest.Deleting, sent: []string{"delete"},
+		},
+		"and so is what something owns, which is no root": {
+			record: fan(kindstest.Running, kind.Deleted, kindstest.NodeName, askedToGo, owned),
+			state:  kindstest.Deleting, sent: []string{"delete"},
+		},
+		"a delete its graph asked of its node is asked again once it has gone unanswered for long enough": {
+			record: fan(kindstest.Deleting, kind.Deleted, kindstest.NodeName, askedToGo, pending("delete", time.Hour, 1)),
+			state:  kindstest.Deleting, sent: []string{"delete"},
+		},
+		"and one asked of a node that went quiet is forgotten, its delete waiting for the node": {
+			record: fan(kindstest.Deleting, kind.Deleted, "node-2", askedToGo, pending("delete", time.Hour, 1)),
+			gone:   true,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			f := newFixtureWith(t, []reconcileResources.Option{reconcileResources.WithRoots(graph.Roots{kindstest.Kind})}, tt.record)
+
+			require.NoError(t, f.useCase.Execute(ctx))
+
+			var actions []string
+			for _, command := range f.sent(t) {
+				actions = append(actions, command.Action)
+			}
+
+			assert.Equal(t, tt.sent, actions)
+
+			stored, kept := f.stored(t, "fan-uuid")
+			if tt.gone {
+				assert.False(t, kept)
+
+				return
+			}
+
+			require.True(t, kept)
+			assert.Equal(t, tt.state, kindstest.Typed(stored).Status.State)
 		})
 	}
 }

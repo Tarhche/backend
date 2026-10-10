@@ -54,8 +54,10 @@ const tries = 3
 // One that is not made is made: admitted when there is no record of it, its
 // create asked again when its record is pending or missing, started, which
 // makes it, when it failed before it ever was, and waited on while it is being
-// made. Nothing is asked of it while its VM does not run, nor of one on its
-// way out: both wait.
+// made. What is asked of one is asked on the node its VM is on, where it is
+// placed first when it is not: one admitted before its VM was made, or kept
+// when its VM went, which was made again elsewhere. Nothing is asked of it
+// while its VM does not run, nor of one on its way out: both wait.
 type Graph struct {
 	containers *Containers
 	records    *requirements.Records
@@ -197,7 +199,7 @@ func (g *Graph) create(ctx context.Context, w containerKind.Want, vmUUID string)
 	}
 
 	if found {
-		r, err = g.again(ctx, r)
+		r, err = g.again(ctx, r, vmUUID)
 	} else {
 		r, err = g.admit(ctx, w, vmUUID)
 	}
@@ -217,12 +219,14 @@ func (g *Graph) create(ctx context.Context, w containerKind.Want, vmUUID string)
 	return requirements.RefOf(r), nil
 }
 
-// again is a container whose record there is, made: as it is when it is made
-// already, its create asked again when it is pending or missing, started,
-// which makes it, when it failed before it ever was, and waited on while it
-// is being made. One on its way out, and one last seen waiting on its VM,
-// which nothing can be asked of until its VM is looked into again, wait.
-func (g *Graph) again(ctx context.Context, r resource.Record) (resource.Record, error) {
+// again is a container whose record there is, in the Docker VM vmUUID names,
+// made: as it is when it is made already, its create asked again when it is
+// pending or missing, started, which makes it, when it failed before it ever
+// was, and waited on while it is being made. What is asked of it is asked on
+// the node its VM is on (ask). One on its way out, and one last seen waiting
+// on its VM, which nothing can be asked of until its VM is looked into again,
+// wait.
+func (g *Graph) again(ctx context.Context, r resource.Record, vmUUID string) (resource.Record, error) {
 	c, err := kind.Decode[containerKind.Spec, containerKind.Status](r.Raw)
 	if err != nil {
 		return resource.Record{}, err
@@ -246,14 +250,27 @@ func (g *Graph) again(ctx context.Context, r resource.Record) (resource.Record, 
 
 		return settled, err
 	case state == containerKind.Pending, state == containerKind.Missing:
-		return g.records.Ask(ctx, r, containerKind.ActionCreate)
+		return g.ask(ctx, r, vmUUID, containerKind.ActionCreate)
 	case state == containerKind.Failed:
-		return g.records.Ask(ctx, r, containerKind.ActionStart)
+		return g.ask(ctx, r, vmUUID, containerKind.ActionStart)
 	case state == containerKind.Waiting:
 		return resource.Record{}, &graph.Waiting{Reason: "it was last seen waiting on its vm, which is looked into again"}
 	}
 
 	return r, nil
+}
+
+// ask asks a container whose record there is for action, on the node the
+// Docker VM vmUUID names is on, which it is placed on first when it is on
+// another, or on none: one admitted before its VM was made, or kept when its
+// VM went, and made again elsewhere.
+func (g *Graph) ask(ctx context.Context, r resource.Record, vmUUID string, action string) (resource.Record, error) {
+	placed, err := g.containers.Placed(ctx, r, vmUUID)
+	if err != nil {
+		return resource.Record{}, err
+	}
+
+	return g.records.Ask(ctx, placed, action)
 }
 
 // admit admits the container w names into the Docker VM vmUUID names, and is

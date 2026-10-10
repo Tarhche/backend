@@ -174,6 +174,34 @@ func TestGraph_Create(t *testing.T) {
 		assert.Equal(t, networkKind.ActionCreate, sent[0].Action)
 	})
 
+	for name, node := range map[string]string{
+		"one kept on no node when its vm went is placed on its vm's node first, and made there": "",
+		"and so is one on another node, its vm made again elsewhere":                            "workload-orchestrator-02",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			w := requirementstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
+
+			kept := aNetwork("n-1", "vm-1", networkKind.Missing, networkKind.Present, false)
+			kept.Metadata.Node = node
+			w.Keep(kept)
+
+			ref, err := w.Kinds[networkKind.Name].Create(ctx, wanted("vm-1"), inVM)
+			require.NoError(t, err)
+			assert.Equal(t, "n-1", ref.UUID)
+
+			sent := w.Node.Sent()
+			require.Len(t, sent, 1)
+			assert.Equal(t, networkKind.ActionCreate, sent[0].Action)
+			assert.Equal(t, vmtest.Node, sent[0].Node, "sent where its vm is")
+
+			r, _ := w.Kept(networkKind.Name, "n-1")
+			assert.Equal(t, vmtest.Node, r.Metadata.Node)
+			assert.Equal(t, networkKind.Present, state(t, w, "n-1"))
+		})
+	}
+
 	t.Run("one made already is its record, and nothing is asked", func(t *testing.T) {
 		t.Parallel()
 

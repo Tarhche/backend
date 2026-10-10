@@ -24,6 +24,11 @@
 // node would have refused it with, as the node's own refusal: a container that
 // runs is not removed but by force, in Docker's words, before anything is asked
 // of its node.
+//
+// A command that deletes the root of a graph, of a kind whose graph removes it
+// (WithGraphs), marks it to be deleted rather than asking its node
+// (dispatch.Dispatcher.Mark), and queues it to its graph, which removes it and
+// then what it owns, in order: whoever asked may wait for it to go.
 package actOnResource
 
 import (
@@ -31,10 +36,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/dispatch"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/named"
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/workload/graph"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
@@ -49,10 +56,34 @@ type UseCase struct {
 	resources  resource.Repository
 	dispatcher *dispatch.Dispatcher
 	logger     *slog.Logger
+
+	// roots are the kinds whose roots their graphs remove, and graphs what
+	// such a root is queued to once it is marked.
+	roots  graph.Roots
+	graphs graph.Enqueuer
 }
 
-func NewUseCase(registry *kind.Registry[kind.ControlPlaneBinding], resources resource.Repository, dispatcher *dispatch.Dispatcher, logger *slog.Logger) *UseCase {
-	return &UseCase{registry: registry, resources: resources, dispatcher: dispatcher, logger: logger}
+// Option changes how commands are asked for.
+type Option func(*UseCase)
+
+// WithGraphs has a command that deletes a root of a kind roots names mark it
+// to be deleted rather than ask its node, and queue it to graphs, whose graph
+// removes it, and what it owns, in order.
+func WithGraphs(roots graph.Roots, graphs graph.Enqueuer) Option {
+	return func(uc *UseCase) {
+		uc.roots = roots
+		uc.graphs = graphs
+	}
+}
+
+func NewUseCase(registry *kind.Registry[kind.ControlPlaneBinding], resources resource.Repository, dispatcher *dispatch.Dispatcher, logger *slog.Logger, options ...Option) *UseCase {
+	uc := &UseCase{registry: registry, resources: resources, dispatcher: dispatcher, logger: logger}
+
+	for _, option := range options {
+		option(uc)
+	}
+
+	return uc
 }
 
 // Execute asks for the command. A kind that is not run here, a command it
@@ -72,7 +103,10 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		return nil, fmt.Errorf("%w: a %s has no command %q", kind.ErrUnknownAction, d.Name, request.Action)
 	}
 
-	var asked dispatch.Asked
+	var (
+		asked  dispatch.Asked
+		marked bool
+	)
 
 	for try := 1; ; try++ {
 		r, uuid, err := named.Resource(ctx, uc.resources, binding, request.OwnerUUID, request.Parent, request.UUID)
@@ -89,10 +123,15 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 
 		var invalid domain.ValidationErrors
 
-		if waits {
+		marked = action.Desires == kind.Deleted && uc.roots.Root(d, r.Metadata)
+
+		switch {
+		case marked:
+			asked, invalid, err = uc.dispatcher.Mark(ctx, binding, r, request.Action, request.Payload)
+		case waits:
 			asked = dispatch.Asked{}
 			asked.Record, err = uc.dispatcher.Desire(ctx, r, action.Desires, true)
-		} else {
+		default:
 			asked, invalid, err = uc.dispatcher.Ask(ctx, binding, r, request.Action, request.Payload, true)
 		}
 
@@ -111,6 +150,10 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		break
 	}
 
+	if marked {
+		return uc.marked(ctx, asked.Record, request.Wait), nil
+	}
+
 	if action.Runs == kind.OnControlPlane && !asked.Gone {
 		asked = uc.follow(ctx, binding, asked)
 	}
@@ -126,6 +169,21 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		Command:  delivered.Command,
 		Result:   delivered.Result,
 	}, nil
+}
+
+// marked is a root marked to be deleted, queued to its graph, which removes
+// it, and waited on for as long as wait until its graph has: gone, once it
+// is, or as it was marked.
+func (uc *UseCase) marked(ctx context.Context, r resource.Record, wait time.Duration) *Response {
+	if uc.graphs != nil {
+		uc.graphs.Enqueue(graph.Ref{Kind: r.Kind, UUID: r.Metadata.UUID})
+	}
+
+	if uc.dispatcher.Gone(ctx, r.Kind, r.Metadata.UUID, wait) {
+		return &Response{Gone: true}
+	}
+
+	return &Response{Resource: r.Raw}
 }
 
 // waits reports whether a command waits for the resource to get where it is

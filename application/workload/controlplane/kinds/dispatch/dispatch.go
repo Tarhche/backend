@@ -12,6 +12,10 @@
 // its node never hears of is sent again by the reconcile loop, which reads
 // what was written, while a node that heard of something nobody wrote down
 // is one nothing would ever correct.
+//
+// The root of a graph asked to be deleted is marked to be, rather than asked
+// (Mark): its graph removes it, and what it owns, in order, and whoever asked
+// may wait for its record to go (Gone).
 package dispatch
 
 import (
@@ -412,6 +416,86 @@ func (d *Dispatcher) Desire(ctx context.Context, r resource.Record, state kind.S
 	r.Metadata.UpdatedAt = now
 
 	return d.resources.Update(ctx, r)
+}
+
+// Mark marks a resource to be removed by its graph, the root of one, rather
+// than asking its node: the command for action, which desires it deleted, is
+// held to the state it is in, its payload read by its codec, and readied by
+// its kind (kind.Preparer), as Ask holds, reads and readies it, and refused
+// where Ask would refuse it, a container that runs and is not removed by force
+// say; then the resource is expected deleted, saying when it was first asked
+// to go (Desire), and nothing is sent. Its graph removes it, and what it owns,
+// in order. One marked already is left as it is.
+func (d *Dispatcher) Mark(ctx context.Context, b kind.ControlPlaneBinding, r resource.Record, action string, payload json.RawMessage) (Asked, domain.ValidationErrors, error) {
+	descriptor := b.Descriptor()
+
+	a, found := descriptor.Action(action)
+	if !found || a.Mode != kind.ModeCommand || a.Desires != kind.Deleted {
+		return Asked{}, nil, fmt.Errorf("%w: a %s has no command %q that deletes it", kind.ErrUnknownAction, descriptor.Name, action)
+	}
+
+	common, err := r.Common()
+	if err != nil {
+		return Asked{}, nil, err
+	}
+
+	if !descriptor.Allows(action, common.State) {
+		return Asked{}, domain.ValidationErrors{"action": "invalid_state_transition"}, nil
+	}
+
+	if a.Runs == kind.OnNode {
+		if _, invalid, err := a.Payload.Decode(payload); err != nil || len(invalid) > 0 {
+			return Asked{}, invalid, err
+		}
+
+		if payload, err = Compact(payload); err != nil {
+			return Asked{}, nil, err
+		}
+
+		if _, invalid, err := b.Prepare(ctx, r.Raw, action, payload); err != nil || len(invalid) > 0 {
+			return Asked{}, invalid, err
+		}
+	}
+
+	if common.Expected == kind.Deleted && !r.Metadata.DeletionRequestedAt.IsZero() {
+		return Asked{Record: r}, nil, nil
+	}
+
+	marked, err := d.Desire(ctx, r, kind.Deleted, true)
+	if err != nil {
+		return Asked{}, nil, err
+	}
+
+	return Asked{Record: marked}, nil, nil
+}
+
+// Gone waits, for as long as wait, for the record of the kind uuid names to
+// go, looking for it every so often, and reports whether it went in time: a
+// root marked to be removed by its graph goes once its graph has removed it,
+// whichever control plane carries its graph out. Nothing is waited for when
+// wait is nothing.
+func (d *Dispatcher) Gone(ctx context.Context, kindName string, uuid string, wait time.Duration) bool {
+	if wait <= 0 {
+		return false
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, wait)
+	defer cancel()
+
+	ticker := time.NewTicker(d.poll)
+	defer ticker.Stop()
+
+	for {
+		if _, err := d.resources.GetOne(ctx, kindName, uuid); errors.Is(err, domain.ErrNotExists) {
+			return true
+		}
+
+		select {
+		case <-ctx.Done():
+			return false
+		case <-ticker.C:
+		}
+	}
 }
 
 // requested has a resource expected to be state say when it was first asked

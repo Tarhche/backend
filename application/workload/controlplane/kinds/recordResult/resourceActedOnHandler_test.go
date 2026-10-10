@@ -14,6 +14,8 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/kindstest"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/recordResult"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/waiters"
+	"github.com/khanzadimahdi/testproject/domain/workload/graph"
+	"github.com/khanzadimahdi/testproject/domain/workload/graph/graphtest"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
 	resourcesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/resources"
@@ -371,5 +373,78 @@ func TestResourceActedOnHandler_Handle_restores(t *testing.T) {
 
 		require.NoError(t, f.handler.Handle(ctx, message(t, restored)))
 		assert.Len(t, told.restored, 1)
+	})
+}
+
+// TestResourceActedOnHandler_Handle_changed holds the results the graphs of
+// roots are told of to a delete carried out, once its resource's record is
+// gone, and a create that failed, once that is written down, and to nothing
+// else.
+func TestResourceActedOnHandler_Handle_changed(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	fan := graph.Ref{Kind: kindstest.Kind, UUID: "fan-uuid"}
+
+	// telling is a handler whose results are told to told.
+	telling := func(t *testing.T, told *graphtest.Told, records ...resource.Record) *fixture {
+		t.Helper()
+
+		f := newFixture(t, records...)
+		f.handler = recordResult.NewResourceActedOnHandler(kindstest.Registry(&kindstest.Fans{}), f.racing, f.waiters, slog.New(slog.DiscardHandler), f.clock.Now, recordResult.WithNotifier(told))
+
+		return f
+	}
+
+	for name, tt := range map[string]struct {
+		record resource.Record
+		result kind.ResourceActedOn
+		told   []graph.Ref
+	}{
+		"a delete carried out is told of, its record gone": {
+			record: waiting(kindstest.Deleting, kind.Deleted, "delete"),
+			result: kind.ResourceActedOn{ID: "command-1", Kind: kindstest.Kind, UUID: "fan-uuid", Action: "delete", OK: true},
+			told:   []graph.Ref{fan},
+		},
+		"and so is a create that failed": {
+			record: waiting(kindstest.Starting, kindstest.Running, "create"),
+			result: kind.ResourceActedOn{ID: "command-1", Kind: kindstest.Kind, UUID: "fan-uuid", Action: "create", Reason: "its blades are stuck"},
+			told:   []graph.Ref{fan},
+		},
+		"but not a create carried out": {
+			record: waiting(kindstest.Starting, kindstest.Running, "create"),
+			result: kind.ResourceActedOn{ID: "command-1", Kind: kindstest.Kind, UUID: "fan-uuid", Action: "create", OK: true, Status: json.RawMessage(`{"state":"running"}`)},
+		},
+		"nor anything else that failed": {
+			record: waiting(kindstest.Starting, kindstest.Running, "start"),
+			result: kind.ResourceActedOn{ID: "command-1", Kind: kindstest.Kind, UUID: "fan-uuid", Action: "start", Reason: "its blades are stuck"},
+		},
+		"nor a result its resource is not waiting on": {
+			record: waiting(kindstest.Deleting, kind.Deleted, "delete"),
+			result: kind.ResourceActedOn{ID: "command-9", Kind: kindstest.Kind, UUID: "fan-uuid", Action: "delete", OK: true},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			told := &graphtest.Told{}
+			f := telling(t, told, tt.record)
+
+			require.NoError(t, f.handler.Handle(ctx, message(t, tt.result)))
+
+			assert.Equal(t, tt.told, told.Changes())
+		})
+	}
+
+	t.Run("and what cannot be told is no reason to take the result again", func(t *testing.T) {
+		t.Parallel()
+
+		told := &graphtest.Told{Failure: errors.New("the database is gone")}
+		f := telling(t, told, waiting(kindstest.Deleting, kind.Deleted, "delete"))
+
+		require.NoError(t, f.handler.Handle(ctx, message(t, kind.ResourceActedOn{ID: "command-1", Kind: kindstest.Kind, UUID: "fan-uuid", Action: "delete", OK: true})))
+
+		_, kept := f.stored(t, "fan-uuid")
+		assert.False(t, kept)
 	})
 }

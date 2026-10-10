@@ -152,14 +152,15 @@ func (r *Records) Settled(ctx context.Context, kindName string, uuid string) (re
 
 // Remove asks for the record ref names to be deleted, through the control
 // plane's delete, with payload, and is done once it is gone: one gone already
-// is. One still there once its delete may have been carried out, which it
-// was refused say, is an error saying what it is and why.
+// is. Its node is asked, a root's too, which the graph removing it is. One
+// still there once its delete may have been carried out, which it was refused
+// say, is an error saying what it is and why.
 func (r *Records) Remove(ctx context.Context, ref graph.Ref, payload json.RawMessage) error {
 	if _, there, err := r.Read(ctx, ref.Kind, ref.UUID); err != nil || !there {
 		return err
 	}
 
-	deleted, err := r.Deletion.Execute(ctx, &deleteResource.Request{Kind: ref.Kind, UUID: ref.UUID, Payload: payload})
+	deleted, err := r.Deletion.Execute(ctx, &deleteResource.Request{Kind: ref.Kind, UUID: ref.UUID, Payload: payload, ByGraph: true})
 	switch {
 	case errors.Is(err, domain.ErrNotExists):
 		return nil

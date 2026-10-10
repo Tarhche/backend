@@ -16,6 +16,7 @@ import (
 	containerKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/container"
 	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
+	"github.com/khanzadimahdi/testproject/domain/workload/resource"
 )
 
 func TestBlocks_Recorded(t *testing.T) {
@@ -74,6 +75,89 @@ func TestBlocks_Ready(t *testing.T) {
 	}
 
 	assert.ErrorIs(t, w.Containers.Ready(ctx, "nowhere"), domain.ErrNotExists, "and one that is not there is not")
+}
+
+func TestBlocks_Placed(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	elsewhere := func(v *vmKind.VM) { v.Metadata.Node = "workload-orchestrator-02" }
+
+	for name, tt := range map[string]struct {
+		vm      vmKind.VM
+		node    string
+		placed  string
+		written bool
+	}{
+		"one on no node, admitted before its vm was made, takes its vm's node": {
+			vm: vmtest.Docker("vm-1", "owner"), placed: vmtest.Node, written: true,
+		},
+		"and one on another, its vm made again elsewhere, takes it too": {
+			vm: vmtest.In(vmtest.Docker("vm-1", "owner"), elsewhere), node: vmtest.Node, placed: "workload-orchestrator-02", written: true,
+		},
+		"one on its vm's node is left as it is": {
+			vm: vmtest.Docker("vm-1", "owner"), node: vmtest.Node, placed: vmtest.Node,
+		},
+		"and so is one whose vm is on no node yet": {
+			vm: vmtest.In(vmtest.Docker("vm-1", "owner"), func(v *vmKind.VM) { v.Metadata.Node = "" }), placed: "",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			w := blockstest.New(vmtest.WithVMs(tt.vm))
+			w.Keep(blockstest.AContainer("web", "vm-1", kind.Missing, containerKind.Running, func(c *containerKind.Container) {
+				c.Metadata.Node = tt.node
+			}))
+
+			r, _ := w.Kept(containerKind.Name, "web")
+
+			placed, err := w.Containers.Placed(ctx, r, "vm-1")
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.placed, placed.Metadata.Node)
+
+			kept, _ := w.Kept(containerKind.Name, "web")
+			assert.Equal(t, tt.placed, kept.Metadata.Node, "as it is kept")
+			assert.Equal(t, tt.written, kept.Version > r.Version, "written only when it moved")
+			assert.Equal(t, kept.Version, placed.Version)
+		})
+	}
+
+	t.Run("one whose vm is not there is left as it is", func(t *testing.T) {
+		t.Parallel()
+
+		w := blockstest.New()
+		w.Keep(blockstest.AContainer("web", "vm-gone", kind.Missing, containerKind.Running, func(c *containerKind.Container) {
+			c.Metadata.Node = ""
+		}))
+
+		r, _ := w.Kept(containerKind.Name, "web")
+
+		placed, err := w.Containers.Placed(ctx, r, "vm-gone")
+		require.NoError(t, err)
+		assert.Equal(t, r, placed)
+	})
+
+	t.Run("and one written in the meantime is not written over", func(t *testing.T) {
+		t.Parallel()
+
+		w := blockstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
+		w.Keep(blockstest.AContainer("web", "vm-1", kind.Missing, containerKind.Running, func(c *containerKind.Container) {
+			c.Metadata.Node = ""
+		}))
+
+		stale, _ := w.Kept(containerKind.Name, "web")
+
+		fresh := stale.Clone()
+		fresh.Attempts = 1
+		_, err := w.Memory.Update(ctx, fresh)
+		require.NoError(t, err)
+
+		_, err = w.Containers.Placed(ctx, stale, "vm-1")
+		assert.ErrorIs(t, err, resource.ErrConflict)
+	})
 }
 
 func TestParentOf(t *testing.T) {

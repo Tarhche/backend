@@ -101,7 +101,7 @@ func (s *Images) Admit(ctx context.Context, asked imageKind.Image) (imageKind.Im
 
 // Reconcile pulls an image its VM does not hold, once its VM runs.
 func (s *Images) Reconcile(ctx context.Context, i imageKind.Image) ([]kind.Intent, error) {
-	return s.Present(ctx, i.Status.State, i.Status.Expected, imageKind.VMOf(i))
+	return s.Present(ctx, i.Status.State, i.Status.Expected, imageKind.VMOf(i), i.Metadata.Node)
 }
 
 // Apply refuses every action, since an image has none that runs in the

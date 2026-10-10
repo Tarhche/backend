@@ -83,7 +83,7 @@ func (s *Networks) Admit(ctx context.Context, asked networkKind.Network) (networ
 
 // Reconcile makes a network its VM does not have, once its VM runs.
 func (s *Networks) Reconcile(ctx context.Context, n networkKind.Network) ([]kind.Intent, error) {
-	return s.Present(ctx, n.Status.State, n.Status.Expected, networkKind.VMOf(n))
+	return s.Present(ctx, n.Status.State, n.Status.Expected, networkKind.VMOf(n), n.Metadata.Node)
 }
 
 // Apply refuses every action, since a network has none that runs in the

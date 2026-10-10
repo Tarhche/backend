@@ -494,19 +494,23 @@ func TestBlocks_Present(t *testing.T) {
 		state    kind.State
 		expected kind.State
 		vm       string
+		node     string
 		want     []kind.Intent
 	}{
-		"one not made yet is made":          {state: networkKind.Pending, expected: networkKind.Present, vm: "vm-1", want: create},
-		"and one its vm lost":               {state: networkKind.Missing, expected: networkKind.Present, vm: "vm-1", want: create},
-		"but not while its vm does not run": {state: networkKind.Missing, expected: networkKind.Present, vm: "vm-stopped"},
-		"one that is there is left":         {state: networkKind.Present, expected: networkKind.Present, vm: "vm-1"},
-		"one waiting on its vm waits":       {state: networkKind.Waiting, expected: networkKind.Present, vm: "vm-1"},
-		"one to be deleted is the loop's":   {state: networkKind.Missing, expected: kind.Deleted, vm: "vm-1"},
+		"one not made yet is made":          {state: networkKind.Pending, expected: networkKind.Present, vm: "vm-1", node: vmtest.Node, want: create},
+		"and one its vm lost":               {state: networkKind.Missing, expected: networkKind.Present, vm: "vm-1", node: vmtest.Node, want: create},
+		"but not while its vm does not run": {state: networkKind.Missing, expected: networkKind.Present, vm: "vm-stopped", node: vmtest.Node},
+		"nor in a vm that is gone":          {state: networkKind.Missing, expected: networkKind.Present, vm: "vm-gone", node: vmtest.Node},
+		"nor one on no node, which went with its vm, its graph's to place and make": {state: networkKind.Missing, expected: networkKind.Present, vm: "vm-1"},
+		"nor one on a node its vm is not on, its vm made again elsewhere":           {state: networkKind.Missing, expected: networkKind.Present, vm: "vm-1", node: "workload-orchestrator-02"},
+		"one that is there is left":       {state: networkKind.Present, expected: networkKind.Present, vm: "vm-1", node: vmtest.Node},
+		"one waiting on its vm waits":     {state: networkKind.Waiting, expected: networkKind.Present, vm: "vm-1", node: vmtest.Node},
+		"one to be deleted is the loop's": {state: networkKind.Missing, expected: kind.Deleted, vm: "vm-1", node: vmtest.Node},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			intents, err := w.Networks.Present(ctx, tt.state, tt.expected, tt.vm)
+			intents, err := w.Networks.Present(ctx, tt.state, tt.expected, tt.vm, tt.node)
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, intents)
 		})

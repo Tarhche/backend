@@ -16,6 +16,8 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/kindstest"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/waiters"
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/workload/graph"
+	"github.com/khanzadimahdi/testproject/domain/workload/graph/graphtest"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
@@ -31,7 +33,7 @@ type fixture struct {
 	useCase   *admitResource.UseCase
 }
 
-func newFixture(registry func(fans *kindstest.Fans) *kind.Registry[kind.ControlPlaneBinding]) *fixture {
+func newFixture(registry func(fans *kindstest.Fans) *kind.Registry[kind.ControlPlaneBinding], options ...admitResource.Option) *fixture {
 	f := &fixture{
 		resources: resourcesMemory.NewRepository(),
 		producer:  &messagingMock.Recorder{},
@@ -45,7 +47,7 @@ func newFixture(registry func(fans *kindstest.Fans) *kind.Registry[kind.ControlP
 	}
 
 	dispatcher := dispatch.New(f.resources, f.producer, f.waiters, f.clock.Now, dispatch.PollEvery(time.Millisecond))
-	f.useCase = admitResource.NewUseCase(registry(f.fans), f.resources, dispatcher, slog.New(slog.DiscardHandler))
+	f.useCase = admitResource.NewUseCase(registry(f.fans), f.resources, dispatcher, slog.New(slog.DiscardHandler), options...)
 
 	return f
 }
@@ -587,4 +589,64 @@ func TestUseCase_Execute(t *testing.T) {
 		assert.Equal(t, kindstest.Pending, kindstest.Typed(f.all(t)[0]).Status.State)
 		assert.Empty(t, f.producer.Messages())
 	})
+}
+
+// TestUseCase_Execute_roots holds the admission of a root its graph makes to
+// queueing it to its graph once it is kept, and nothing else to.
+func TestUseCase_Execute_roots(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	t.Run("a root is queued to its graph once it is kept", func(t *testing.T) {
+		t.Parallel()
+
+		told := &graphtest.Told{}
+		f := newFixture(nil, admitResource.WithGraphs(graph.Roots{kindstest.Kind}, told))
+
+		request := asked("kitchen", `{"blades": 3, "house": "house-1"}`)
+
+		response, err := f.useCase.Execute(ctx, &request)
+		require.NoError(t, err)
+		require.Empty(t, response.ValidationErrors)
+
+		assert.Equal(t, []graph.Ref{{Kind: kindstest.Kind, UUID: response.Resource.Metadata.UUID}}, told.Queued())
+	})
+
+	for name, tt := range map[string]struct {
+		request func() admitResource.Request
+		roots   graph.Roots
+	}{
+		"not what something owns, which is no root": {
+			request: func() admitResource.Request {
+				request := asked("kitchen", `{"blades": 3}`)
+				request.Manifest.Metadata.Owners = []kind.Reference{{Kind: kindstest.Kind, UUID: "another-fan"}}
+
+				return request
+			},
+			roots: graph.Roots{kindstest.Kind},
+		},
+		"nor what is of no kind of root": {
+			request: func() admitResource.Request { return asked("kitchen", `{"blades": 3}`) },
+			roots:   graph.Roots{"stack"},
+		},
+		"nor what was refused": {
+			request: func() admitResource.Request { return asked("kitchen", `{"blades": 0}`) },
+			roots:   graph.Roots{kindstest.Kind},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			told := &graphtest.Told{}
+			f := newFixture(nil, admitResource.WithGraphs(tt.roots, told))
+
+			request := tt.request()
+
+			_, err := f.useCase.Execute(ctx, &request)
+			require.NoError(t, err)
+
+			assert.Empty(t, told.Queued())
+		})
+	}
 }

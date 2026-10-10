@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/workload/graph"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
 )
@@ -53,6 +54,7 @@ type Observer struct {
 	resources resource.Repository
 	parents   Parents
 	orphans   Orphans
+	notifier  graph.Notifier
 	refresh   time.Duration
 	logger    *slog.Logger
 }
@@ -74,6 +76,16 @@ func WithParents(parents Parents) Option {
 func WithOrphans(orphans Orphans) Option {
 	return func(o *Observer) {
 		o.orphans = orphans
+	}
+}
+
+// WithNotifier has notifier told of a resource that went missing, once that
+// is written down, and of one whose record went, once it is gone: the roots
+// whose graphs it is in are carried out at once, making it again, rather than
+// at their next resync.
+func WithNotifier(notifier graph.Notifier) Option {
+	return func(o *Observer) {
+		o.notifier = notifier
 	}
 }
 
@@ -220,7 +232,13 @@ func (o *Observer) Unheard(ctx context.Context, d kind.Descriptor, r resource.Re
 
 		o.logger.InfoContext(ctx, "forgetting a resource its restored parent does not have", "kind", d.Name, "uuid", r.Metadata.UUID, "parent", parent.UUID)
 
-		return o.resources.Delete(ctx, d.Name, r.Metadata.UUID)
+		if err := o.resources.Delete(ctx, d.Name, r.Metadata.UUID); err != nil {
+			return err
+		}
+
+		o.changed(ctx, r)
+
+		return nil
 	}
 
 	return o.take(ctx, d, r.Metadata.Node, r, missingIn(parent), at, unsaid)
@@ -271,8 +289,22 @@ func (o *Observer) take(ctx context.Context, d kind.Descriptor, nodeName string,
 		}
 
 		if change.Gone {
-			return o.resources.Delete(ctx, d.Name, r.Metadata.UUID)
+			if err := o.resources.Delete(ctx, d.Name, r.Metadata.UUID); err != nil {
+				return err
+			}
+
+			o.changed(ctx, r)
+
+			return nil
 		}
+
+		observed, err := r.Common()
+		if err != nil {
+			return err
+		}
+
+		// gone from its node: what needs it makes it again.
+		missing := observed.State == kind.Missing && recorded.State != kind.Missing
 
 		if from == found && r.Reset {
 			r.Reset = false
@@ -289,7 +321,13 @@ func (o *Observer) take(ctx context.Context, d kind.Descriptor, nodeName string,
 
 		_, err = o.resources.Update(ctx, r)
 		switch {
-		case err == nil, errors.Is(err, domain.ErrNotExists):
+		case err == nil:
+			if missing {
+				o.changed(ctx, r)
+			}
+
+			return nil
+		case errors.Is(err, domain.ErrNotExists):
 			return nil
 		case !errors.Is(err, resource.ErrConflict) || try >= tries:
 			return err
@@ -305,6 +343,19 @@ func (o *Observer) take(ctx context.Context, d kind.Descriptor, nodeName string,
 		if r.Metadata.Node != nodeName {
 			return nil
 		}
+	}
+}
+
+// changed tells the notifier, when there is one, that r changed: it went
+// missing, or its record is gone. What cannot be told is reported, and caught
+// up with by the roots' next resync.
+func (o *Observer) changed(ctx context.Context, r resource.Record) {
+	if o.notifier == nil {
+		return
+	}
+
+	if err := o.notifier.Changed(ctx, graph.Ref{Kind: r.Kind, UUID: r.Metadata.UUID}); err != nil {
+		o.logger.WarnContext(ctx, "could not tell the graphs a resource is in that it changed", "error", err, "kind", r.Kind, "uuid", r.Metadata.UUID)
 	}
 }
 

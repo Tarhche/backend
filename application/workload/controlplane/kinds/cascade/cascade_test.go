@@ -3,6 +3,7 @@ package cascade_test
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -12,6 +13,8 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/cascade"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/kindstest"
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/workload/graph"
+	"github.com/khanzadimahdi/testproject/domain/workload/graph/graphtest"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
 	resourcesMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/resources"
@@ -314,5 +317,195 @@ func TestRepository_Delete(t *testing.T) {
 		fan, kept := held(t, memory, "in-it")
 		require.True(t, kept)
 		assert.True(t, fan.Reset)
+	})
+}
+
+// looking is told of what changed, as the graphs of roots are, and looks,
+// each time, for the house the fans are in.
+type looking struct {
+	graphtest.Told
+
+	resources resource.Repository
+
+	lock         sync.Mutex
+	houseThereAt []bool
+}
+
+func (l *looking) Changed(ctx context.Context, ref graph.Ref) error {
+	_, err := l.resources.GetOne(ctx, kindstest.Parent, kindstest.House)
+
+	l.lock.Lock()
+	l.houseThereAt = append(l.houseThereAt, err == nil)
+	l.lock.Unlock()
+
+	return l.Told.Changed(ctx, ref)
+}
+
+func TestRepository_Delete_graphs(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	gone := kindstest.Moment.Add(time.Hour)
+
+	// owned has a fan owned by what owners name.
+	owned := func(owners ...kind.Reference) func(f *kindstest.Fan) {
+		return func(f *kindstest.Fan) { f.Metadata.Owners = owners }
+	}
+
+	// busy has a fan that was at it: tried for, waiting on a command, and
+	// reset by a restore.
+	busy := func(r resource.Record) resource.Record {
+		r.Pending = &resource.Pending{Action: "start", IDs: []string{"command-1"}, SentAt: kindstest.Moment}
+		r.Attempts = 3
+		r.TriedAt = kindstest.Moment
+		r.Reset = true
+
+		return r
+	}
+
+	// graphed is a cascading repository over fans in their house, the house
+	// kept beside them as a record of its own and the fans being roots of
+	// their own graphs, which are kept made, and told of what changed.
+	graphed := func(t *testing.T, records ...resource.Record) (*cascade.Repository, *resourcesMemory.Repository, *looking) {
+		t.Helper()
+
+		memory := resourcesMemory.NewRepository()
+		for _, r := range append([]resource.Record{{Raw: kind.Raw{Kind: kindstest.Parent, Metadata: kind.Metadata{UUID: kindstest.House}}}}, records...) {
+			_, err := memory.Create(ctx, r)
+			require.NoError(t, err)
+		}
+
+		d := kindstest.Descriptor()
+		d.OnParent = kind.ParentRules{Delete: kind.CascadeDelete, Restore: kind.CascadeReset}
+
+		registry := kind.NewRegistry[kind.ControlPlaneBinding]()
+		require.NoError(t, registry.Register(kind.BindControlPlane[kindstest.Spec, kindstest.Status](d, &kindstest.Fans{})))
+
+		told := &looking{resources: memory}
+
+		return cascade.NewRepository(registry, memory, cascade.WithGraphs(graph.Roots{kindstest.Kind}, told), cascade.WithClock(func() time.Time { return gone })), memory, told
+	}
+
+	cascading, memory, told := graphed(t,
+		busy(kindstest.AFan("root", kindstest.Running, kindstest.Running)),
+		kindstest.AFan("owned", kindstest.Running, kindstest.Running, owned(kind.Reference{Kind: kindstest.Kind, UUID: "root"})),
+		kindstest.AFan("owned-by-what-is-gone", kindstest.Running, kindstest.Running, owned(kind.Reference{Kind: kindstest.Kind, UUID: "gone"})),
+		kindstest.AFan("root-asked-to-go", kindstest.Running, kind.Deleted, func(f *kindstest.Fan) { f.Metadata.DeletionRequestedAt = kindstest.Moment }),
+		kindstest.AFan("owned-and-asked-to-go", kindstest.Deleting, kind.Deleted, owned(kind.Reference{Kind: kindstest.Kind, UUID: "root"})),
+		kindstest.AFan("root-kept-before-refs", kindstest.Stopped, kindstest.Stopped, keptBeforeRefs),
+		kindstest.AFan("in-another", kindstest.Running, kindstest.Running, elsewhere),
+	)
+
+	require.NoError(t, cascading.Delete(ctx, kindstest.Parent, kindstest.House))
+
+	_, err := memory.GetOne(ctx, kindstest.Parent, kindstest.House)
+	require.ErrorIs(t, err, domain.ErrNotExists, "the house is gone")
+
+	t.Run("a root that was not asked to go is kept, as gone with its house, for its graph to make again", func(t *testing.T) {
+		t.Parallel()
+
+		root, kept := held(t, memory, "root")
+		require.True(t, kept)
+
+		fan := kindstest.Typed(root)
+
+		assert.Equal(t, kind.Missing, fan.Status.State, "its kind's missing state")
+		assert.Equal(t, kindstest.Running, fan.Status.Expected, "what it is to be is as it was")
+		assert.Equal(t, "it went with its house", fan.Status.Reason)
+		assert.Equal(t, gone, fan.Status.Since)
+		assert.Equal(t, gone, fan.Status.ObservedAt)
+		assert.Zero(t, fan.Status.Speed, "and nothing its node said of it is said any more")
+		assert.Empty(t, fan.Metadata.Node, "it is on no node, its house gone")
+		assert.Equal(t, []kind.Reference{house}, fan.Metadata.Refs, "and it lives in its house still, which is made again under its uuid")
+		assert.Nil(t, root.Pending, "nothing is waited on")
+		assert.Zero(t, root.Attempts, "nor was it tried for yet")
+		assert.False(t, root.Reset)
+
+		before, kept := held(t, memory, "root-kept-before-refs")
+		require.True(t, kept, "a root kept before refs, its house among its owners, which own nothing")
+		assert.Equal(t, kind.Missing, kindstest.Typed(before).Status.State)
+		assert.Equal(t, kindstest.Stopped, kindstest.Typed(before).Status.Expected)
+	})
+
+	t.Run("and so is what something that is there still owns", func(t *testing.T) {
+		t.Parallel()
+
+		fan, kept := held(t, memory, "owned")
+		require.True(t, kept)
+		assert.Equal(t, kind.Missing, kindstest.Typed(fan).Status.State)
+	})
+
+	t.Run("but what was asked to go goes, and what nothing there owns", func(t *testing.T) {
+		t.Parallel()
+
+		for _, uuid := range []string{"root-asked-to-go", "owned-and-asked-to-go", "owned-by-what-is-gone"} {
+			_, kept := held(t, memory, uuid)
+			assert.False(t, kept, uuid)
+		}
+
+		_, kept := held(t, memory, "in-another")
+		assert.True(t, kept, "and what is in another house is no house's but its own")
+	})
+
+	t.Run("the graphs are told of what was kept and what went, once the house is gone", func(t *testing.T) {
+		t.Parallel()
+
+		var changed []string
+		for _, ref := range told.Changes() {
+			changed = append(changed, ref.UUID)
+		}
+
+		assert.ElementsMatch(t, []string{"root", "owned", "owned-by-what-is-gone", "root-asked-to-go", "owned-and-asked-to-go", "root-kept-before-refs"}, changed)
+
+		told.lock.Lock()
+		defer told.lock.Unlock()
+
+		assert.NotContains(t, told.houseThereAt, true, "never while the house was there")
+	})
+}
+
+func TestRepository_Delete_graphsNotKept(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	t.Run("with no graphs kept made, everything that goes with its house goes", func(t *testing.T) {
+		t.Parallel()
+
+		_, memory := fans(t, kind.ParentRules{Delete: kind.CascadeDelete, Restore: kind.CascadeKeep},
+			kindstest.AFan("root", kindstest.Running, kindstest.Running),
+		)
+
+		registry := kind.NewRegistry[kind.ControlPlaneBinding]()
+		require.NoError(t, registry.Register(kind.BindControlPlane[kindstest.Spec, kindstest.Status](kindstest.Descriptor(), &kindstest.Fans{})))
+
+		require.NoError(t, cascade.NewRepository(registry, memory).Delete(ctx, kindstest.Parent, kindstest.House))
+
+		_, kept := held(t, memory, "root")
+		assert.False(t, kept)
+	})
+
+	t.Run("and what cannot be told is said, once the house is gone", func(t *testing.T) {
+		t.Parallel()
+
+		memory := resourcesMemory.NewRepository()
+		for _, r := range []resource.Record{{Raw: kind.Raw{Kind: kindstest.Parent, Metadata: kind.Metadata{UUID: kindstest.House}}}, kindstest.AFan("root", kindstest.Running, kindstest.Running)} {
+			_, err := memory.Create(ctx, r)
+			require.NoError(t, err)
+		}
+
+		registry := kind.NewRegistry[kind.ControlPlaneBinding]()
+		require.NoError(t, registry.Register(kind.BindControlPlane[kindstest.Spec, kindstest.Status](kindstest.Descriptor(), &kindstest.Fans{})))
+
+		told := &graphtest.Told{Failure: errors.New("the database is gone")}
+
+		err := cascade.NewRepository(registry, memory, cascade.WithGraphs(graph.Roots{kindstest.Kind}, told)).Delete(ctx, kindstest.Parent, kindstest.House)
+		assert.ErrorIs(t, err, told.Failure)
+
+		_, err = memory.GetOne(ctx, kindstest.Parent, kindstest.House)
+		assert.ErrorIs(t, err, domain.ErrNotExists)
+
+		_, kept := held(t, memory, "root")
+		assert.True(t, kept)
 	})
 }

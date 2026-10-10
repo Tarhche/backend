@@ -17,6 +17,10 @@
 // sends it again if it is lost. The loop may also get there first, between
 // the resource being kept and asked: it is then read again, as the loop left
 // it, and what the loop sent is what is waited for.
+//
+// The root of a graph, of a kind whose graph makes it (WithGraphs), is queued
+// to its graph once it is kept, which makes what it needs and then it, in
+// order, at once.
 package admitResource
 
 import (
@@ -29,6 +33,7 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/dispatch"
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/workload/graph"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
 )
@@ -43,10 +48,33 @@ type UseCase struct {
 	resources  resource.Repository
 	dispatcher *dispatch.Dispatcher
 	logger     *slog.Logger
+
+	// roots are the kinds whose roots their graphs make, and graphs what
+	// such a root is queued to once it is kept.
+	roots  graph.Roots
+	graphs graph.Enqueuer
 }
 
-func NewUseCase(registry *kind.Registry[kind.ControlPlaneBinding], resources resource.Repository, dispatcher *dispatch.Dispatcher, logger *slog.Logger) *UseCase {
-	return &UseCase{registry: registry, resources: resources, dispatcher: dispatcher, logger: logger}
+// Option changes how resources are admitted.
+type Option func(*UseCase)
+
+// WithGraphs has a root of a kind roots names queued to graphs once it is
+// kept, whose graph makes it, and what it needs, in order, at once.
+func WithGraphs(roots graph.Roots, graphs graph.Enqueuer) Option {
+	return func(uc *UseCase) {
+		uc.roots = roots
+		uc.graphs = graphs
+	}
+}
+
+func NewUseCase(registry *kind.Registry[kind.ControlPlaneBinding], resources resource.Repository, dispatcher *dispatch.Dispatcher, logger *slog.Logger, options ...Option) *UseCase {
+	uc := &UseCase{registry: registry, resources: resources, dispatcher: dispatcher, logger: logger}
+
+	for _, option := range options {
+		option(uc)
+	}
+
+	return uc
 }
 
 func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, error) {
@@ -92,6 +120,11 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 	}
 
 	response := &Response{Resource: created.Raw}
+
+	// a root is its graph's to make, in order, at once.
+	if uc.graphs != nil && uc.roots.Root(d, created.Metadata) {
+		uc.graphs.Enqueue(graph.Ref{Kind: created.Kind, UUID: created.Metadata.UUID})
+	}
 
 	// what was asked of it before it fell short is written down, and what is
 	// left is the reconcile loop's to ask for.

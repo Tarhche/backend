@@ -16,6 +16,8 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/kindstest"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/waiters"
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/workload/graph"
+	"github.com/khanzadimahdi/testproject/domain/workload/graph/graphtest"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
@@ -35,6 +37,13 @@ type fixture struct {
 func newFixture(t *testing.T, records ...resource.Record) *fixture {
 	t.Helper()
 
+	return newFixtureWith(t, nil, records...)
+}
+
+// newFixtureWith is a fixture whose use case is as options say.
+func newFixtureWith(t *testing.T, options []actOnResource.Option, records ...resource.Record) *fixture {
+	t.Helper()
+
 	f := &fixture{
 		memory:   resourcesMemory.NewRepository(),
 		producer: &messagingMock.Recorder{},
@@ -50,7 +59,7 @@ func newFixture(t *testing.T, records ...resource.Record) *fixture {
 	}
 
 	dispatcher := dispatch.New(f.racing, f.producer, f.waiters, kindstest.NewClock().Now, dispatch.PollEvery(time.Millisecond))
-	f.useCase = actOnResource.NewUseCase(registry(t, f.fans), f.racing, dispatcher, slog.New(slog.DiscardHandler))
+	f.useCase = actOnResource.NewUseCase(registry(t, f.fans), f.racing, dispatcher, slog.New(slog.DiscardHandler), options...)
 
 	return f
 }
@@ -600,5 +609,91 @@ func TestUseCase_Execute_named(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, kindstest.Running, kindstest.Typed(stored).Status.State, "left as it was")
 		assert.Equal(t, kindstest.Running, kindstest.Typed(stored).Status.Expected)
+	})
+}
+
+// TestUseCase_Execute_roots holds a command that deletes a root its graph
+// removes to leaving it to its graph: marked, queued to its graph, and waited
+// on until its graph has removed it, while any other command of it is asked
+// of its node, as is the delete of what is no root.
+func TestUseCase_Execute_roots(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	root := graph.Ref{Kind: kindstest.Kind, UUID: "fan-uuid"}
+
+	rooted := func(t *testing.T, told *graphtest.Told, records ...resource.Record) *fixture {
+		t.Helper()
+
+		return newFixtureWith(t, []actOnResource.Option{actOnResource.WithGraphs(graph.Roots{kindstest.Kind}, told)}, records...)
+	}
+
+	t.Run("its delete marks it rather than asking its node, and queues it to its graph", func(t *testing.T) {
+		t.Parallel()
+
+		told := &graphtest.Told{}
+		f := rooted(t, told, kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running))
+
+		response, err := f.useCase.Execute(ctx, &actOnResource.Request{Kind: kindstest.Kind, UUID: "fan-uuid", Action: "delete"})
+		require.NoError(t, err)
+
+		require.Empty(t, response.ValidationErrors)
+		assert.Nil(t, response.Command)
+		assert.False(t, response.Gone)
+		assert.Empty(t, f.producer.Messages(), "nothing is asked of its node")
+
+		fan := f.stored(t, "fan-uuid")
+		assert.Equal(t, kind.Deleted, fan.Status.Expected)
+		assert.Equal(t, kindstest.Running, fan.Status.State)
+		assert.Equal(t, kindstest.Moment, fan.Metadata.DeletionRequestedAt)
+
+		assert.Equal(t, []graph.Ref{root}, told.Queued())
+	})
+
+	t.Run("and is gone once its graph has removed it, when that is waited for", func(t *testing.T) {
+		t.Parallel()
+
+		f := rooted(t, &graphtest.Told{}, kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running))
+
+		go func() {
+			time.Sleep(20 * time.Millisecond)
+			_ = f.memory.Delete(context.Background(), kindstest.Kind, "fan-uuid")
+		}()
+
+		response, err := f.useCase.Execute(ctx, &actOnResource.Request{Kind: kindstest.Kind, UUID: "fan-uuid", Action: "delete", Wait: time.Minute})
+		require.NoError(t, err)
+
+		assert.True(t, response.Gone)
+	})
+
+	t.Run("any other command of it is asked of its node", func(t *testing.T) {
+		t.Parallel()
+
+		told := &graphtest.Told{}
+		f := rooted(t, told, kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running))
+
+		response, err := f.useCase.Execute(ctx, &actOnResource.Request{Kind: kindstest.Kind, UUID: "fan-uuid", Action: "stop"})
+		require.NoError(t, err)
+
+		require.NotNil(t, response.Command)
+		assert.Equal(t, "stop", response.Command.Action)
+		assert.Empty(t, told.Queued())
+	})
+
+	t.Run("and so is the delete of what something owns, which is no root", func(t *testing.T) {
+		t.Parallel()
+
+		told := &graphtest.Told{}
+		f := rooted(t, told, kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running, func(fan *kindstest.Fan) {
+			fan.Metadata.Owners = []kind.Reference{{Kind: kindstest.Kind, UUID: "another-fan"}}
+		}))
+
+		response, err := f.useCase.Execute(ctx, &actOnResource.Request{Kind: kindstest.Kind, UUID: "fan-uuid", Action: "delete"})
+		require.NoError(t, err)
+
+		require.NotNil(t, response.Command)
+		assert.Equal(t, "delete", response.Command.Action)
+		assert.Equal(t, kindstest.Deleting, f.stored(t, "fan-uuid").Status.State)
+		assert.Empty(t, told.Queued())
 	})
 }

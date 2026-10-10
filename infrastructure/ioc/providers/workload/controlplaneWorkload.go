@@ -159,7 +159,11 @@ func NewControlPlaneWorkload(
 		kind.TimeoutTransfer: snapshotKind.TransferTimeout,
 	}
 
-	kindsOptions := append([]ControlPlaneKindsOption{WithParents(vms), WithTimeouts(timeouts)}, options...)
+	// what the graphs of roots are told of, and leave to nobody else, before
+	// what keeps them made is built over the plumbing that tells it.
+	relay := &graph.Relay{}
+
+	kindsOptions := append([]ControlPlaneKindsOption{WithParents(vms), WithTimeouts(timeouts), WithGraphs(graphRoots(), relay)}, options...)
 	settings := settingsOf(kindsOptions)
 
 	kinds := NewControlPlaneKinds(
@@ -262,6 +266,8 @@ func NewControlPlaneWorkload(
 	if err != nil {
 		return nil, err
 	}
+
+	relay.To(graphs)
 
 	// the resource API of every kind registered, each under its own plural,
 	// and the kinds themselves.

@@ -41,11 +41,12 @@ const tries = 3
 //
 // One that is not made is made: admitted when there is no record of it, its
 // create asked again when its record is pending or missing, which makes one
-// that went missing again, empty, and waited on while it is being made. One
-// that failed before it ever was is asked for nothing until its VM is seen
-// without it, when it is missing and its own loop makes it, so it is not made,
-// saying why. Nothing is asked while its VM does not run, nor of one on its
-// way out: both wait.
+// that went missing again, empty, on the node its VM is on, where it is placed
+// first when it is not, kept when its VM went, which was made again elsewhere,
+// and waited on while it is being made. One that failed before it ever was is
+// asked for nothing until its VM is seen without it, when it is missing and
+// its own loop makes it, so it is not made, saying why. Nothing is asked while
+// its VM does not run, nor of one on its way out: both wait.
 type Graph struct {
 	volumes *Volumes
 	records *requirements.Records
@@ -125,7 +126,7 @@ func (g *Graph) create(ctx context.Context, w volumeKind.Want, vmUUID string) (g
 	}
 
 	if found {
-		r, err = g.again(ctx, r)
+		r, err = g.again(ctx, r, vmUUID)
 	} else {
 		r, err = g.admit(ctx, w, vmUUID)
 	}
@@ -145,12 +146,13 @@ func (g *Graph) create(ctx context.Context, w volumeKind.Want, vmUUID string) (g
 	return requirements.RefOf(r), nil
 }
 
-// again is a volume whose record there is, made: as it is when it is made
-// already, its create asked again when it is pending or missing, and waited
-// on while it is being made. One on its way out, and one last seen waiting on
-// its VM, which nothing can be asked of until its VM is looked into again,
-// wait.
-func (g *Graph) again(ctx context.Context, r resource.Record) (resource.Record, error) {
+// again is a volume whose record there is, in the Docker VM vmUUID names,
+// made: as it is when it is made already, its create asked again when it is
+// pending or missing, on the node its VM is on, which it is placed on first
+// when it is on another or on none, and waited on while it is being made. One
+// on its way out, and one last seen waiting on its VM, which nothing can be
+// asked of until its VM is looked into again, wait.
+func (g *Graph) again(ctx context.Context, r resource.Record, vmUUID string) (resource.Record, error) {
 	v, err := kind.Decode[volumeKind.Spec, volumeKind.Status](r.Raw)
 	if err != nil {
 		return resource.Record{}, err
@@ -174,7 +176,12 @@ func (g *Graph) again(ctx context.Context, r resource.Record) (resource.Record, 
 
 		return settled, err
 	case state == volumeKind.Pending, state == volumeKind.Missing:
-		return g.records.Ask(ctx, r, volumeKind.ActionCreate)
+		placed, err := g.volumes.Placed(ctx, r, vmUUID)
+		if err != nil {
+			return resource.Record{}, err
+		}
+
+		return g.records.Ask(ctx, placed, volumeKind.ActionCreate)
 	case state == volumeKind.Waiting:
 		return resource.Record{}, &graph.Waiting{Reason: "it was last seen waiting on its vm, which is looked into again"}
 	}

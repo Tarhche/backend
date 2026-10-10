@@ -434,6 +434,33 @@ func TestGraph_Create(t *testing.T) {
 		})
 	}
 
+	for name, node := range map[string]string{
+		"one on no node, admitted before its vm was made, or kept when its vm went, is placed on its vm's node first, and made there": "",
+		"and so is one on another node, its vm made again elsewhere":                                                                  "workload-orchestrator-02",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			w := requirementstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
+			w.Keep(blockstest.AContainer("c-1", "vm-1", containerKind.Missing, containerKind.Running, unmade, func(c *containerKind.Container) {
+				c.Metadata.Node = node
+			}))
+
+			ref, err := w.Kinds[containerKind.Name].Create(ctx, wanted("vm-1"), inVM)
+			require.NoError(t, err)
+			assert.Equal(t, "c-1", ref.UUID)
+
+			sent := w.Node.Sent()
+			require.Len(t, sent, 1)
+			assert.Equal(t, containerKind.ActionCreate, sent[0].Action)
+			assert.Equal(t, vmtest.Node, sent[0].Node, "sent where its vm is")
+
+			c, _ := stored(t, w, "c-1")
+			assert.Equal(t, vmtest.Node, c.Metadata.Node)
+			assert.Equal(t, containerKind.Running, c.Status.Status.State)
+		})
+	}
+
 	t.Run("one being made is waited on, and nothing is asked again", func(t *testing.T) {
 		t.Parallel()
 

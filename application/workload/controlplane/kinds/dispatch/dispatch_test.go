@@ -861,3 +861,153 @@ func TestDispatcher_Orphaned(t *testing.T) {
 		assert.Equal(t, 0, f.resources.Len(kindstest.Kind), "and nothing is written down")
 	})
 }
+
+// removingFans is the fan's strategy, readying a fan's delete, which is asked
+// with a speed, as a container's is asked with force: one that runs is not
+// removed at no speed, and failure, when set, is what readying it fails with.
+type removingFans struct {
+	*kindstest.Fans
+
+	failure error
+}
+
+var _ kind.Preparer[kindstest.Spec, kindstest.Status] = &removingFans{}
+
+func (p *removingFans) Prepare(_ context.Context, r kindstest.Fan, action string, payload any) (kindstest.Fan, domain.ValidationErrors, error) {
+	if p.failure != nil {
+		return kindstest.Fan{}, nil, p.failure
+	}
+
+	if action == "delete" && r.Status.State == kindstest.Running && payload.(kindstest.StartPayload).Speed == 0 {
+		return kindstest.Fan{}, domain.ValidationErrors{"fan": "running"}, nil
+	}
+
+	return r, nil, nil
+}
+
+func TestDispatcher_Mark(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	// a fan whose delete is asked with a speed.
+	removing := func(f *fixture, failure error) kind.ControlPlaneBinding {
+		d := kindstest.Descriptor()
+		for i := range d.Actions {
+			if d.Actions[i].Name == "delete" {
+				d.Actions[i].Payload = kind.Payload[kindstest.StartPayload]()
+			}
+		}
+
+		return kind.BindControlPlane[kindstest.Spec, kindstest.Status](d, &removingFans{Fans: f.fans, failure: failure})
+	}
+
+	t.Run("a root's delete is marked rather than asked: it is expected deleted, asked to go now, and nothing is sent", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t, kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running))
+
+		marked, invalid, err := f.dispatch.Mark(ctx, removing(f, nil), f.stored(t, "fan-uuid"), "delete", json.RawMessage(`{"speed": 1}`))
+		require.NoError(t, err)
+		require.Empty(t, invalid)
+
+		assert.Nil(t, marked.Command)
+		assert.False(t, marked.Gone)
+
+		stored := f.stored(t, "fan-uuid")
+		fan := kindstest.Typed(stored)
+
+		assert.Equal(t, kind.Deleted, fan.Status.Expected)
+		assert.Equal(t, kindstest.Running, fan.Status.State, "it is its graph's to remove")
+		assert.Equal(t, kindstest.Moment, stored.Metadata.DeletionRequestedAt)
+		assert.Nil(t, stored.Pending, "and it waits on nothing")
+		assert.Equal(t, stored.Raw, marked.Record.Raw)
+		assert.Empty(t, f.producer.Messages())
+
+		f.clock.Advance(time.Minute)
+
+		again, invalid, err := f.dispatch.Mark(ctx, removing(f, nil), stored, "delete", json.RawMessage(`{"speed": 1}`))
+		require.NoError(t, err)
+		require.Empty(t, invalid)
+
+		assert.Equal(t, stored.Version, again.Record.Version, "one marked already is left as it is")
+		assert.Equal(t, kindstest.Moment, f.stored(t, "fan-uuid").Metadata.DeletionRequestedAt)
+	})
+
+	for name, tt := range map[string]struct {
+		payload json.RawMessage
+		failure error
+		invalid domain.ValidationErrors
+	}{
+		"what its codec refuses is refused": {
+			payload: json.RawMessage(`{"speed": 9}`),
+			invalid: domain.ValidationErrors{"speed": "invalid_value"},
+		},
+		"and so is what its kind refuses, as its node would": {
+			payload: json.RawMessage(`{"speed": 0}`),
+			invalid: domain.ValidationErrors{"fan": "running"},
+		},
+		"and what kept its kind from looking is an error": {
+			payload: json.RawMessage(`{"speed": 1}`),
+			failure: errors.New("the database is gone"),
+		},
+	} {
+		t.Run(name+", and nothing is written", func(t *testing.T) {
+			t.Parallel()
+
+			f := newFixture(t, kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running))
+
+			_, invalid, err := f.dispatch.Mark(ctx, removing(f, tt.failure), f.stored(t, "fan-uuid"), "delete", tt.payload)
+
+			assert.ErrorIs(t, err, tt.failure)
+			assert.Equal(t, tt.invalid, invalid)
+			assert.Equal(t, int64(1), f.stored(t, "fan-uuid").Version)
+		})
+	}
+
+	t.Run("a command that does not delete it marks nothing", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t, kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running))
+
+		_, _, err := f.dispatch.Mark(ctx, f.binding, f.stored(t, "fan-uuid"), "stop", nil)
+
+		assert.ErrorIs(t, err, kind.ErrUnknownAction)
+		assert.Equal(t, int64(1), f.stored(t, "fan-uuid").Version)
+	})
+}
+
+func TestDispatcher_Gone(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	t.Run("a record that goes while it is waited for is gone", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t, kindstest.AFan("fan-uuid", kindstest.Running, kind.Deleted))
+
+		go func() {
+			time.Sleep(20 * time.Millisecond)
+			_ = f.resources.Delete(context.Background(), kindstest.Kind, "fan-uuid")
+		}()
+
+		assert.True(t, f.dispatch.Gone(ctx, kindstest.Kind, "fan-uuid", time.Minute))
+	})
+
+	t.Run("one still there once the wait is over is not", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t, kindstest.AFan("fan-uuid", kindstest.Running, kind.Deleted))
+
+		assert.False(t, f.dispatch.Gone(ctx, kindstest.Kind, "fan-uuid", 20*time.Millisecond))
+	})
+
+	t.Run("and nothing is waited for when the wait is nothing", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t)
+
+		assert.False(t, f.dispatch.Gone(ctx, kindstest.Kind, "fan-uuid", 0))
+	})
+}
