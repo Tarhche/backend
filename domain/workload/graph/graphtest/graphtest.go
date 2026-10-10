@@ -34,6 +34,13 @@ type Call struct {
 	Deps map[graph.NodeID]graph.Ref
 }
 
+// Event is a call to a kind beginning, or, when Returned, returning.
+type Event struct {
+	Op       Op
+	Node     graph.NodeID
+	Returned bool
+}
+
 // Kind is a graph.Kind a test says everything of. A resource's spec is its
 // node's id (Requirement), and its record is its kind and its name (Ref), so
 // one Kind may be every kind of a graph at once (Kinds), and what they were
@@ -44,14 +51,15 @@ type Call struct {
 // Hold holds it as if it were made before; one that is not held is removed
 // all the same. What a test has a node do when it is asked something (On) is
 // done first, and what that fails with is what it is answered. Everything the
-// kind is asked is recorded (Calls), and it may be asked from several
-// goroutines at once.
+// kind is asked is recorded (Calls), and when each call began and returned
+// (Events), and it may be asked from several goroutines at once.
 type Kind struct {
 	lock     sync.Mutex
 	requires map[graph.NodeID][]graph.Requirement
 	held     map[graph.NodeID]bool
 	on       map[Op]map[graph.NodeID]func(ctx context.Context) error
 	calls    []Call
+	events   []Event
 }
 
 var _ graph.Kind = &Kind{}
@@ -151,6 +159,16 @@ func (k *Kind) Calls() []Call {
 	return calls
 }
 
+// Events are when each call to the kind began, and when it returned, in the
+// order they did: a call returns once what it does is done, so whatever began
+// after it returned began after all of it.
+func (k *Kind) Events() []Event {
+	k.lock.Lock()
+	defer k.lock.Unlock()
+
+	return slices.Clone(k.events)
+}
+
 // Asked are the nodes the kind was asked op of, in order, once each time.
 func (k *Kind) Asked(op Op) []graph.NodeID {
 	k.lock.Lock()
@@ -174,6 +192,8 @@ func (k *Kind) Requires(spec any) ([]graph.Requirement, error) {
 		return nil, err
 	}
 
+	defer k.returned(Requires, id)
+
 	if err := k.ask(context.Background(), Requires, id, nil); err != nil {
 		return nil, err
 	}
@@ -190,6 +210,8 @@ func (k *Kind) Exists(ctx context.Context, spec any) (graph.Ref, bool, error) {
 	if err != nil {
 		return graph.Ref{}, false, err
 	}
+
+	defer k.returned(Exists, id)
 
 	if err := k.ask(ctx, Exists, id, nil); err != nil {
 		return graph.Ref{}, false, err
@@ -212,6 +234,8 @@ func (k *Kind) Create(ctx context.Context, spec any, deps map[graph.NodeID]graph
 		return graph.Ref{}, err
 	}
 
+	defer k.returned(Create, id)
+
 	if err := k.ask(ctx, Create, id, deps); err != nil {
 		return graph.Ref{}, err
 	}
@@ -227,6 +251,8 @@ func (k *Kind) Create(ctx context.Context, spec any, deps map[graph.NodeID]graph
 // Delete lets the node ref is the record of go.
 func (k *Kind) Delete(ctx context.Context, ref graph.Ref) error {
 	id := graph.ID(ref.Kind, ref.UUID)
+
+	defer k.returned(Delete, id)
 
 	if err := k.ask(ctx, Delete, id, nil); err != nil {
 		return err
@@ -245,6 +271,7 @@ func (k *Kind) Delete(ctx context.Context, ref graph.Ref) error {
 func (k *Kind) ask(ctx context.Context, op Op, id graph.NodeID, deps map[graph.NodeID]graph.Ref) error {
 	k.lock.Lock()
 	k.calls = append(k.calls, Call{Op: op, Node: id, Deps: maps.Clone(deps)})
+	k.events = append(k.events, Event{Op: op, Node: id})
 	do := k.on[op][id]
 	k.lock.Unlock()
 
@@ -253,6 +280,15 @@ func (k *Kind) ask(ctx context.Context, op Op, id graph.NodeID, deps map[graph.N
 	}
 
 	return do(ctx)
+}
+
+// returned records the node id's op returning, once everything it does is
+// done.
+func (k *Kind) returned(op Op, id graph.NodeID) {
+	k.lock.Lock()
+	defer k.lock.Unlock()
+
+	k.events = append(k.events, Event{Op: op, Node: id, Returned: true})
 }
 
 // nodeOf is the node a fake kind's spec names, which is the spec itself.

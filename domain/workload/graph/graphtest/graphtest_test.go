@@ -183,6 +183,55 @@ func TestKind(t *testing.T) {
 		assert.Empty(t, kinds.Asked("restart"))
 	})
 
+	t.Run("when each call began and when it returned is recorded, in the order they did", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		broken := errors.New("broken")
+
+		kinds := graphtest.NewKind()
+		kinds.On(graphtest.Requires, vm, func(context.Context) error { return broken })
+
+		// web is made while vm is looked for, and returns once it has been.
+		began := make(chan struct{})
+		looked := make(chan struct{})
+		kinds.On(graphtest.Create, web, func(context.Context) error {
+			close(began)
+			<-looked
+
+			return nil
+		})
+
+		var making sync.WaitGroup
+		making.Go(func() {
+			_, err := kinds.Create(ctx, web, nil)
+			assert.NoError(t, err)
+		})
+
+		<-began
+
+		_, _, err := kinds.Exists(ctx, vm)
+		require.NoError(t, err)
+
+		close(looked)
+		making.Wait()
+
+		_, err = kinds.Requires(vm)
+		require.ErrorIs(t, err, broken)
+
+		_, err = kinds.Requires("vm")
+		require.ErrorIs(t, err, kind.ErrInvalidPayload)
+
+		assert.Equal(t, []graphtest.Event{
+			{Op: graphtest.Create, Node: web},
+			{Op: graphtest.Exists, Node: vm},
+			{Op: graphtest.Exists, Node: vm, Returned: true},
+			{Op: graphtest.Create, Node: web, Returned: true},
+			{Op: graphtest.Requires, Node: vm},
+			{Op: graphtest.Requires, Node: vm, Returned: true},
+		}, kinds.Events(), "one that failed returned too, and a spec that is no node's id is no call")
+	})
+
 	t.Run("one kind may be every kind of a graph", func(t *testing.T) {
 		t.Parallel()
 
