@@ -88,6 +88,10 @@ type dockerd struct {
 	composed map[string]string
 	ran      map[string][]string
 
+	// did is what each VM's dockerd did to its containers, in order: each
+	// made, started, stopped, restarted and removed, by its name.
+	did map[string][]string
+
 	// refused are the references no registry has.
 	refused map[string]bool
 }
@@ -130,6 +134,7 @@ func newDockerd(t *testing.T) *dockerd {
 		addresses: make(map[string]string),
 		composed:  make(map[string]string),
 		ran:       make(map[string][]string),
+		did:       make(map[string][]string),
 		refused:   make(map[string]bool),
 	}
 
@@ -284,13 +289,49 @@ func (d *dockerd) serve(id string, rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// what is done to a container is said by its name, which it is not found
+	// by once it is removed.
+	did := doing(&h, r, path)
+
 	if changed := d.answer(&h, rw, r, path); !changed {
 		return
+	}
+
+	if len(did) > 0 {
+		d.did[id] = append(d.did[id], did)
 	}
 
 	if err := d.save(id, h); err != nil {
 		panic(fmt.Sprintf("the dockerd of %s could not keep what it holds: %v", id, err))
 	}
+}
+
+// doing is what a request does to a container of what h holds, by its name,
+// when it makes, starts, stops, restarts or removes one: what did keeps once
+// it is done.
+func doing(h *holding, r *http.Request, path string) string {
+	if path == "/containers/create" && r.Method == http.MethodPost {
+		return "create " + r.URL.Query().Get("name")
+	}
+
+	match := containerPath.FindStringSubmatch(path)
+	if match == nil || r.Method == http.MethodGet {
+		return ""
+	}
+
+	name := match[1]
+	if at := h.containerAt(match[1]); at >= 0 {
+		name = strings.TrimPrefix(h.Containers[at].Names[0], "/")
+	}
+
+	switch what := match[2]; {
+	case what == "start", what == "stop", what == "restart":
+		return what + " " + name
+	case what == "" && r.Method == http.MethodDelete:
+		return "remove " + name
+	}
+
+	return ""
 }
 
 // answer answers one request of what h holds, and says whether it changed
@@ -1204,6 +1245,16 @@ func (d *dockerd) Exit(t *testing.T, id string, name string, code int) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// Did is what the dockerd of the VM id names did to its containers, in
+// order, by their names: "create web", "start web", "stop web", "restart web"
+// and "remove web".
+func (d *dockerd) Did(id string) []string {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
+	return slices.Clone(d.did[id])
 }
 
 // Composed is the compose file a project was last brought up with.

@@ -3,13 +3,17 @@ package workload_test
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/url"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/khanzadimahdi/testproject/application/dashboard/workload/container/deleteContainer"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/image/getImages"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/presenter"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/stack/createStack"
@@ -20,9 +24,15 @@ import (
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/stack/stopStack"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/startVM"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/stopVM"
+	"github.com/khanzadimahdi/testproject/application/dashboard/workload/volume/deleteVolume"
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/workload/graph"
+	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	containerKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/container"
+	networkKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/network"
 	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
+	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
+	volumeKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/volume"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
 )
 
@@ -306,4 +316,275 @@ func (w *workload) readStack(ctx context.Context, uuid string) (presenter.StackD
 	}
 
 	return read.StackDetail, nil
+}
+
+// storeCompose is a stack whose web server depends on its database, both on
+// a network it declares, the database with a volume it declares.
+const storeCompose = `
+services:
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    volumes: ["data:/var/lib/postgresql/data"]
+    networks: [backend]
+  web:
+    image: nginx:alpine
+    depends_on: [db]
+    ports: ["8080:80"]
+    networks: [backend]
+volumes:
+  data:
+networks:
+  backend:
+`
+
+// TestAStacksGraph walks a stack that names no Docker VM through its graph,
+// from the dashboard and the control plane's API: its VM is made, then its
+// network and its volume, then its database and then its web server, and
+// then it, which runs; one of its containers, deleted, is made again, and so
+// is its volume, once nothing mounts it, and its VM, under its uuid and its
+// slug, and then everything in it; stopped and started, its containers stop
+// and start in the order they depend on one another; and deleted, it takes
+// its containers and its network with it, and leaves its volume and its VM.
+func TestAStacksGraph(t *testing.T) {
+	t.Parallel()
+
+	w := start(t)
+	ctx := t.Context()
+
+	deployed, err := createStack.NewUseCase(w.client, w.validator, w.translator, w.owners).Execute(ctx, &createStack.Request{
+		Name:      "store",
+		Compose:   storeCompose,
+		OwnerUUID: ownerUUID,
+	})
+	require.NoError(t, err)
+	require.Empty(t, deployed.ValidationErrors)
+	require.NotNil(t, deployed.Stack)
+
+	stackUUID, slug, vmUUID := deployed.Stack.UUID, deployed.Stack.Slug, deployed.VM.UUID
+	root := graph.Ref{Kind: stackKind.Name, UUID: stackUUID}
+
+	named := func(name string) string { return slug + "_" + name }
+
+	t.Run("its graph made its vm, then its network and its volume, then db, then web, and then it, which runs", func(t *testing.T) {
+		plan := w.plan(t, root, "made", func(executions []graph.Execution) bool {
+			return len(executions) == 6 && !slices.ContainsFunc(executions, func(e graph.Execution) bool { return e.State != graph.StateDone })
+		})
+
+		levels := map[graph.NodeID]int{}
+		for _, e := range plan {
+			levels[e.Node] = e.Level
+		}
+
+		assert.Equal(t, map[graph.NodeID]int{
+			graph.ID(vmKind.Name, vmUUID):                0,
+			graph.ID(networkKind.Name, named("backend")): 1,
+			graph.ID(volumeKind.Name, named("data")):     1,
+			graph.ID(containerKind.Name, named("db")):    2,
+			graph.ID(containerKind.Name, named("web")):   3,
+			graph.ID(stackKind.Name, stackUUID):          4,
+		}, levels, "its vm first, then what lives in it, its services as they depend on one another, then it; and no default network, which none joins")
+
+		for _, e := range plan {
+			for _, before := range plan {
+				if before.Level < e.Level {
+					assert.False(t, e.StartedAt.Before(before.FinishedAt), "%s was started once %s was done", e.Node, before.Node)
+				}
+			}
+		}
+
+		assert.Less(t, slices.Index(w.dockerd.Did(vmUUID), "start "+named("db")), slices.Index(w.dockerd.Did(vmUUID), "create "+named("web")), "web was made once db ran")
+
+		w.stack(t, stackUUID, "running", func(s presenter.StackDetail) bool { return s.State == "running" })
+
+		s := w.stackRecord(t, stackUUID)
+		db := w.containerRecord(t, vmUUID, named("db"))
+		web := w.containerRecord(t, vmUUID, named("web"))
+
+		assert.Equal(t, []stackKind.ServiceStatus{
+			{Name: "db", State: stackKind.ServiceRunning, Containers: []stackKind.ContainerStatus{{ID: db.Metadata.UUID, Name: named("db"), State: "running"}}},
+			{Name: "web", State: stackKind.ServiceRunning, Containers: []stackKind.ContainerStatus{{ID: web.Metadata.UUID, Name: named("web"), State: "running"}}},
+		}, s.Status.Services, "its record names its containers, its foreign keys")
+
+		assert.Equal(t, []kind.Reference{{Kind: stackKind.Name, UUID: stackUUID}}, db.Metadata.Owners, "its containers are its own")
+		assert.Equal(t, []string{named("data")}, []string{db.Spec.Mounts[0].Source})
+
+		backend := w.blockRecord(t, networkKind.Name, vmUUID, named("backend"))
+		assert.ElementsMatch(t, []kind.Reference{
+			{Kind: stackKind.Name, UUID: stackUUID},
+			{Kind: containerKind.Name, UUID: db.Metadata.UUID},
+			{Kind: containerKind.Name, UUID: web.Metadata.UUID},
+		}, backend.Metadata.Owners, "and its network is its own and theirs")
+
+		data := w.blockRecord(t, volumeKind.Name, vmUUID, named("data"))
+		assert.Empty(t, data.Metadata.Owners, "and its volume is used, not owned")
+
+		c, there := w.dockerd.Holds(t, vmUUID).Container(named("db"))
+		require.True(t, there)
+		assert.Equal(t, []string{"db"}, c.NetworkSettings.Networks[named("backend")].Aliases, "reached by its service's name")
+	})
+
+	t.Run("one of its containers, deleted, is made again by it, as the delete says", func(t *testing.T) {
+		before := w.containerRecord(t, vmUUID, named("web"))
+
+		status, body := w.controlPlane(t, http.MethodDelete, "/api/containers/"+before.Metadata.UUID, url.Values{"dry_run": {"true"}})
+		require.Equal(t, http.StatusOK, status, string(body))
+		assert.JSONEq(t, `{"dependents": [{"kind": "stack", "uuid": "`+stackUUID+`", "name": "store", "recreates": true}], "recreated": true}`, string(body))
+
+		deleted, err := deleteContainer.NewUseCase(w.client, w.translator).Execute(ctx, &deleteContainer.Request{VMUUID: vmUUID, ID: named("web"), Force: true, OwnerUUID: ownerUUID})
+		require.NoError(t, err)
+		require.Empty(t, deleted.ValidationErrors)
+
+		again := w.containerKept(t, vmUUID, named("web"), "made again", func(c containerKind.Container) bool {
+			return c.Metadata.UUID != before.Metadata.UUID && c.Status.Status.State == containerKind.Running
+		})
+
+		assert.Equal(t, []kind.Reference{{Kind: stackKind.Name, UUID: stackUUID}}, again.Metadata.Owners, "the stack's, as it was")
+
+		w.stack(t, stackUUID, "running with it", func(s presenter.StackDetail) bool {
+			return s.State == "running" && w.stackRecord(t, stackUUID).Status.Services[1].Containers[0].ID == again.Metadata.UUID
+		})
+	})
+
+	t.Run("its volume, deleted once nothing in its dockerd mounts it, is made again, and then what mounts it", func(t *testing.T) {
+		before := w.blockRecord(t, volumeKind.Name, vmUUID, named("data"))
+
+		// docker removes no volume a container mounts, stopped or not: the
+		// container goes behind the platform's back first.
+		w.dockerd.Remove(t, vmUUID, named("db"))
+
+		deleted, err := deleteVolume.NewUseCase(w.client, w.translator).Execute(ctx, &deleteVolume.Request{VMUUID: vmUUID, Name: named("data"), OwnerUUID: ownerUUID})
+		require.NoError(t, err)
+		require.Empty(t, deleted.ValidationErrors)
+
+		require.Eventually(t, func() bool {
+			again, there := w.findBlock(t, volumeKind.Name, vmUUID, named("data"))
+			if !there || again.Metadata.UUID == before.Metadata.UUID {
+				return false
+			}
+
+			held := w.dockerd.Holds(t, vmUUID)
+			c, running := held.Container(named("db"))
+
+			return held.Volume(named("data")) && running && c.State == "running"
+		}, settle, beat, "the volume, and then the container mounting it, were never made again")
+
+		w.stack(t, stackUUID, "running", func(s presenter.StackDetail) bool { return s.State == "running" })
+	})
+
+	t.Run("its vm, deleted, is made again under its uuid and its slug, and then everything in it", func(t *testing.T) {
+		v := w.stored(t, vmUUID, "running", func(v vmKind.VM) bool { return v.Status.State == vmKind.Running })
+		gone := time.Now()
+
+		status, body := w.controlPlane(t, http.MethodDelete, "/api/vms/"+vmUUID, nil)
+		require.Equal(t, http.StatusAccepted, status, string(body))
+
+		answer := deletedOf(t, body)
+		assert.Equal(t, []dependentShown{{Kind: stackKind.Name, UUID: stackUUID, Name: "store", Recreates: true}}, answer.Dependents)
+		assert.True(t, answer.Recreated, "the stack makes it again")
+
+		again := w.stored(t, vmUUID, "made again", func(v vmKind.VM) bool {
+			return v.Status.StartedAt.After(gone) && v.Status.State == vmKind.Running
+		})
+
+		assert.Equal(t, v.Metadata.Slug, again.Metadata.Slug, "under the slug it had, reached where it was")
+		assert.Equal(t, v.Metadata.Name, again.Metadata.Name)
+
+		require.Eventually(t, func() bool {
+			held := w.dockerd.Holds(t, vmUUID)
+			db, dbThere := held.Container(named("db"))
+			web, webThere := held.Container(named("web"))
+			_, networked := held.Network(named("backend"))
+
+			return dbThere && webThere && db.State == "running" && web.State == "running" && networked && held.Volume(named("data"))
+		}, settle, beat, "what was in it was never made again")
+
+		s := w.stack(t, stackUUID, "running again", func(s presenter.StackDetail) bool { return s.State == "running" })
+		assert.Equal(t, stackUUID, s.UUID, "it is what it was")
+		assert.Equal(t, vmKind.ChoiceOf(again), w.stackRecord(t, stackUUID).Spec.VM, "and keeps its vm as it is")
+	})
+
+	t.Run("stopped, its containers stop in the reverse of the order they depend on one another, and started, in that order", func(t *testing.T) {
+		before := len(w.dockerd.Did(vmUUID))
+
+		stopped, err := stopStack.NewUseCase(w.client, w.translator).Execute(ctx, &stopStack.Request{UUID: stackUUID, OwnerUUID: ownerUUID})
+		require.NoError(t, err)
+		require.Empty(t, stopped.ValidationErrors)
+
+		w.stack(t, stackUUID, "stopped", func(s presenter.StackDetail) bool { return s.State == "stopped" })
+
+		did := w.dockerd.Did(vmUUID)[before:]
+		assert.Equal(t, []string{"stop " + named("web"), "stop " + named("db")}, did, "web, which depends on db, first")
+
+		before = len(w.dockerd.Did(vmUUID))
+
+		started, err := startStack.NewUseCase(w.client, w.translator).Execute(ctx, &startStack.Request{UUID: stackUUID, OwnerUUID: ownerUUID})
+		require.NoError(t, err)
+		require.Empty(t, started.ValidationErrors)
+
+		w.stack(t, stackUUID, "running", func(s presenter.StackDetail) bool { return s.State == "running" })
+
+		did = w.dockerd.Did(vmUUID)[before:]
+		assert.Equal(t, []string{"start " + named("db"), "start " + named("web")}, did, "db, which web depends on, first")
+	})
+
+	t.Run("deleted, it takes its containers and its network with it, and leaves its volume and its vm", func(t *testing.T) {
+		deleted, err := deleteStack.NewUseCase(w.client, w.translator).Execute(ctx, &deleteStack.Request{UUID: stackUUID, OwnerUUID: ownerUUID})
+		require.NoError(t, err)
+		require.Empty(t, deleted.ValidationErrors)
+
+		require.Eventually(t, func() bool {
+			_, err := w.resources.GetOne(ctx, stackKind.Name, stackUUID)
+
+			return errors.Is(err, domain.ErrNotExists)
+		}, settle, beat, "the stack was never removed")
+
+		assert.Empty(t, w.containerRecords(t, vmUUID))
+
+		_, kept := w.findBlock(t, networkKind.Name, vmUUID, named("backend"))
+		assert.False(t, kept)
+
+		held := w.dockerd.Holds(t, vmUUID)
+
+		for _, service := range []string{"db", "web"} {
+			_, there := held.Container(named(service))
+			assert.False(t, there, "%s went with it", service)
+		}
+
+		_, networked := held.Network(named("backend"))
+		assert.False(t, networked, "and so did its network")
+
+		did := w.dockerd.Did(vmUUID)
+		assert.Less(t, slices.Index(did, "remove "+named("web")), slices.Index(did, "remove "+named("db")), "web, which depends on db, first")
+
+		assert.True(t, held.Volume(named("data")), "its volume stays")
+
+		_, kept = w.findBlock(t, volumeKind.Name, vmUUID, named("data"))
+		assert.True(t, kept)
+
+		w.stored(t, vmUUID, "kept", func(v vmKind.VM) bool { return v.Status.State == vmKind.Running })
+	})
+
+	t.Run("a file it does not take is refused by the control plane's api, saying what of it", func(t *testing.T) {
+		status, body := w.controlPlaneWith(t, http.MethodPost, "/api/stacks", nil, `{
+			"metadata": {"name": "broken"},
+			"spec": {"vm": {"uuid": "`+vmUUID+`"}, "compose": "services:\n  web:\n    image: nginx\n    healthcheck:\n      test: [CMD, true]\n"}
+		}`)
+		require.Equal(t, http.StatusBadRequest, status, string(body))
+		assert.Contains(t, string(body), `"compose.services.web.healthcheck"`)
+	})
+}
+
+// stackRecord is the record of the stack uuid names, as the control plane
+// keeps it.
+func (w *workload) stackRecord(t *testing.T, uuid string) stackKind.Stack {
+	t.Helper()
+
+	r, err := w.resources.GetOne(t.Context(), stackKind.Name, uuid)
+	require.NoError(t, err)
+
+	s, err := kind.Decode[stackKind.Spec, stackKind.Status](r.Raw)
+	require.NoError(t, err)
+
+	return s
 }
