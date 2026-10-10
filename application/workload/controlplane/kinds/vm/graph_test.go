@@ -132,6 +132,22 @@ func TestGraph_Create(t *testing.T) {
 		assert.Equal(t, "vm-made", sent[0].UUID)
 	})
 
+	t.Run("one made again asks for the slug what needs it kept of it, and is reached where it was", func(t *testing.T) {
+		t.Parallel()
+
+		w := requirementstest.New()
+
+		_, err := w.Kinds[vmKind.Name].Create(ctx, vmKind.Want{
+			OwnerUUID: "owner",
+			VM:        stackKind.VMChoice{UUID: "vm-again", Name: "builds", Slug: "builds-abcde"},
+		}, nil)
+		require.NoError(t, err)
+
+		made, kept := w.Stored("vm-again")
+		require.True(t, kept)
+		assert.Equal(t, "builds-abcde", made.Metadata.Slug)
+	})
+
 	t.Run("and what needs one vm makes one, however often it is asked", func(t *testing.T) {
 		t.Parallel()
 

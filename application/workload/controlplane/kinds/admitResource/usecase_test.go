@@ -653,15 +653,17 @@ func TestUseCase_Execute_roots(t *testing.T) {
 }
 
 // watching is the fans' strategy, which keeps whether it was last asked to
-// admit one as a dry run.
+// admit one as a dry run, and the slug it was last asked for.
 type watching struct {
 	*kindstest.Fans
 
-	dry atomic.Bool
+	dry  atomic.Bool
+	slug atomic.Value
 }
 
 func (w *watching) Admit(ctx context.Context, asked kindstest.Fan) (kindstest.Fan, domain.ValidationErrors, error) {
 	w.dry.Store(kind.IsDryRun(ctx))
+	w.slug.Store(asked.Metadata.Slug)
 
 	return w.Fans.Admit(ctx, asked)
 }
@@ -733,6 +735,28 @@ func TestUseCase_Execute_dryRun(t *testing.T) {
 
 		assert.Equal(t, domain.ValidationErrors{"blades": "required_field"}, response.ValidationErrors)
 		assert.Empty(t, f.all(t))
+	})
+
+	t.Run("the slug the control plane asks for reaches its kind, and the one a manifest says never does", func(t *testing.T) {
+		t.Parallel()
+
+		strategy := &watching{}
+		f := newFixture(watched(strategy))
+
+		request := asked("kitchen", `{"blades": 3}`)
+		request.Manifest.Metadata.Slug = "said-by-whoever-asked"
+
+		_, err := f.useCase.Execute(ctx, &request)
+		require.NoError(t, err)
+		assert.Equal(t, "", strategy.slug.Load())
+
+		// another fan, which its kind gives a slug of its own.
+		request = asked("hall", `{"blades": 3}`)
+		request.Slug = "hall-abcde"
+
+		_, err = f.useCase.Execute(ctx, &request)
+		require.NoError(t, err)
+		assert.Equal(t, "hall-abcde", strategy.slug.Load())
 	})
 
 	t.Run("an admission that is no dry run is no dry run to its kind", func(t *testing.T) {

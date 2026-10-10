@@ -70,7 +70,8 @@ func TestContainers_Admit(t *testing.T) {
 			Resources: &stackKind.Resources{CPUs: 2, Memory: 2 * vmtest.GiB, Disk: 20 * vmtest.GiB},
 			Ports:     []port.Port{},
 			Network:   &stackKind.Network{Ingress: "allow", Egress: "allow"},
-		}, admitted.Spec.VM, "its uuid, and its name, resources, ports and network as its record has them")
+			Slug:      "box-vm-1",
+		}, admitted.Spec.VM, "its uuid, and its name, resources, ports, network and slug as its record has them")
 		assert.Equal(t, containerKind.Pending, admitted.Status.Status.State, "for its graph to make")
 		assert.Empty(t, admitted.Status.Reason)
 		assert.Equal(t, containerKind.Running, admitted.Status.Expected)
@@ -619,6 +620,51 @@ func TestContainers_Named(t *testing.T) {
 	assert.True(t, w.Containers.Named(blockstest.AContainer("c", "vm-1", containerKind.Pending, containerKind.Running), "web"), "by the name it was asked for with, before it is made")
 	assert.False(t, w.Containers.Named(blockstest.AContainer("c", "vm-1", containerKind.Pending, containerKind.Running), "db"))
 	assert.False(t, w.Containers.Named(kind.Raw{}, "web"))
+}
+
+func TestContainers_Outlive(t *testing.T) {
+	t.Parallel()
+
+	w := blockstest.New()
+
+	// the vm it named, renamed and resized since, as its record had it as it
+	// went.
+	updated := vmtest.In(vmtest.Docker("vm-1", "owner"), func(v *vmKind.VM) {
+		v.Metadata.Name = "renamed"
+		v.Metadata.Slug = "box-abcde"
+		v.Spec.Resources = vmKind.Resources{CPUs: 3, Memory: 3 * vmtest.GiB, Disk: 20 * vmtest.GiB}
+	})
+
+	c := typed(t, blockstest.AContainer("c-1", "vm-1", kind.Missing, containerKind.Running))
+
+	parent, err := kind.Encode(updated)
+	require.NoError(t, err)
+
+	t.Run("a container kept as gone with its vm keeps its vm as the vm's record had it as it went, and its slug", func(t *testing.T) {
+		t.Parallel()
+
+		kept, err := w.Containers.Outlive(c, parent)
+		require.NoError(t, err)
+
+		assert.Equal(t, vmKind.ChoiceOf(updated), kept.Spec.VM)
+		assert.Equal(t, "box-abcde", kept.Spec.VM.Slug)
+		assert.Equal(t, "renamed", kept.Spec.VM.Name)
+	})
+
+	t.Run("but a parent that is not its vm says nothing of it", func(t *testing.T) {
+		t.Parallel()
+
+		another, err := kind.Encode(vmtest.Docker("vm-2", "owner"))
+		require.NoError(t, err)
+
+		kept, err := w.Containers.Outlive(c, another)
+		require.NoError(t, err)
+		assert.Equal(t, c.Spec.VM, kept.Spec.VM)
+
+		kept, err = w.Containers.Outlive(c, kind.Raw{Kind: "house", Metadata: kind.Metadata{UUID: "vm-1"}})
+		require.NoError(t, err)
+		assert.Equal(t, c.Spec.VM, kept.Spec.VM)
+	})
 }
 
 func TestContainers_Apply(t *testing.T) {

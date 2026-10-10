@@ -66,6 +66,7 @@ type Containers struct {
 var (
 	_ kind.ControlPlane[containerKind.Spec, containerKind.Status] = &Containers{}
 	_ kind.Preparer[containerKind.Spec, containerKind.Status]     = &Containers{}
+	_ kind.Outliver[containerKind.Spec, containerKind.Status]     = &Containers{}
 	_ blocks.Kind                                                 = &Containers{}
 )
 
@@ -480,6 +481,27 @@ func (s *Containers) networkNamed(ctx context.Context, vmUUID string, network st
 	}
 
 	return "", false, nil
+}
+
+// Outlive is a container kept as gone with its Docker VM, whose graph makes
+// the VM again under its uuid: what it keeps of its VM, and makes it again
+// with, is the VM as its record had it as it went (vmKind.ChoiceOf), the name,
+// resources, ports and network an update or a reconfigure gave it since it
+// was named, and the slug it was reached under, which it asks for again. A
+// parent that is no VM, or not its VM, says nothing of it.
+func (s *Containers) Outlive(c containerKind.Container, parent kind.Raw) (containerKind.Container, error) {
+	if parent.Kind != containerKind.Parent || parent.Metadata.UUID != containerKind.VMOf(c) {
+		return c, nil
+	}
+
+	v, err := kind.Decode[vmKind.Spec, vmKind.Status](parent)
+	if err != nil {
+		return containerKind.Container{}, err
+	}
+
+	c.Spec.VM = vmKind.ChoiceOf(v)
+
+	return c, nil
 }
 
 // Refuse is why a container, kept or not, is not asked for action as it is:

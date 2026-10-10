@@ -368,9 +368,10 @@ func validate(d kind.Descriptor, request *Request) domain.ValidationErrors {
 }
 
 // askedFor is what the kind is asked to admit: what the caller may say of a
-// resource, and nothing else. The resource it is asked to live in is one of
-// the resources it uses and does not own, its refs, whatever else its
-// manifest says of what it uses or what owns it.
+// resource, and nothing else, and the slug the control plane asks for it,
+// when it asks for one. The resource it is asked to live in is one of the
+// resources it uses and does not own, its refs, whatever else its manifest
+// says of what it uses or what owns it.
 func askedFor(d kind.Descriptor, request *Request) kind.Raw {
 	m := request.Manifest.Metadata
 
@@ -378,6 +379,7 @@ func askedFor(d kind.Descriptor, request *Request) kind.Raw {
 		Kind: d.Name,
 		Metadata: kind.Metadata{
 			Name:      m.Name,
+			Slug:      request.Slug,
 			OwnerUUID: request.OwnerUUID,
 			Labels:    m.Labels,
 			Owners:    slices.Clone(m.Owners),

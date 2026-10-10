@@ -53,6 +53,19 @@ type Preparer[Spec, Status any] interface {
 	Prepare(ctx context.Context, r Resource[Spec, Status], action string, payload any) (Resource[Spec, Status], domain.ValidationErrors, error)
 }
 
+// Outliver is a control-plane strategy whose resources a graph makes again
+// once the parent they live in is deleted under them, and the parent first,
+// under its uuid: what each keeps of its parent to make it again with is
+// taken from the parent's record as it goes (Outlive), so that the parent made
+// again is the parent as it was, whatever was changed of it since it was
+// named, the slug it was reached under among it.
+type Outliver[Spec, Status any] interface {
+	// Outlive is r, which is kept as gone with its parent, keeping what it
+	// makes its parent again with as parent, the parent's record as it went,
+	// has it. A parent of another kind than it lives in is none of its.
+	Outlive(r Resource[Spec, Status], parent Raw) (Resource[Spec, Status], error)
+}
+
 // Extras are resources a kind's listings show beside its own records, which
 // nothing keeps as its records: the code runner's runs, which are its tasks,
 // shown among anybody's VMs, and what a Docker VM's dockerd holds that a stack

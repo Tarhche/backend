@@ -30,6 +30,7 @@ import (
 	volumeKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/volume"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
+	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 )
 
@@ -95,7 +96,9 @@ func TestAContainersGraph(t *testing.T) {
 		assert.True(t, vmKind.DockerVM(v, configs.NewWorkloadControlPlane().VMDockerImage), "a docker vm")
 
 		kept := w.containerRecord(t, vmUUID, "web")
-		assert.Equal(t, vmKind.ChoiceOf(v), kept.Spec.VM, "what it keeps of its vm is what its vm was made with")
+		made := vmKind.ChoiceOf(v)
+		made.Slug = ""
+		assert.Equal(t, made, kept.Spec.VM, "what it keeps of its vm is what its vm was made with, and its slug once its vm goes")
 		assert.Empty(t, kept.Spec.External, "nothing was there before it")
 		assert.Equal(t, nodeName, kept.Metadata.Node, "and it is where its vm is")
 
@@ -233,13 +236,16 @@ func TestAContainerWaitingOnWhatIsNotItsOwn(t *testing.T) {
 	root := graph.Ref{Kind: containerKind.Name, UUID: app.Metadata.UUID}
 
 	assert.Equal(t, []string{"volume/shared"}, app.Spec.External, "what was there before it is not its own")
+	named := w.stored(t, vmUUID, "running", func(v vmKind.VM) bool { return v.Status.State == vmKind.Running })
+
 	assert.Equal(t, stackKind.VMChoice{
 		UUID:      vmUUID,
 		Name:      "builds",
 		Resources: &stackKind.Resources{CPUs: 2, Memory: 2 << 30, Disk: 20 << 30},
 		Ports:     []port.Port{},
 		Network:   &stackKind.Network{Ingress: "allow", Egress: "allow"},
-	}, app.Spec.VM, "and it keeps the vm it named as its record has it")
+		Slug:      named.Metadata.Slug,
+	}, app.Spec.VM, "and it keeps the vm it named as its record has it, its slug among it")
 
 	// docker removes no volume a container mounts, stopped or not: the
 	// container goes behind the platform's back first.
@@ -777,4 +783,54 @@ func admittedOf(t *testing.T, body []byte) admittedAnswer {
 	require.NoError(t, json.Unmarshal(body, &answer), string(body))
 
 	return answer
+}
+
+// TestAVMDeletedUnderAContainer deletes, alone, the Docker VM a container's
+// graph made for it, once an update renamed and resized it: the answer names
+// the container, which makes it again; the VM comes back under its uuid and
+// the slug it had, as the update left it, and then the container in it.
+func TestAVMDeletedUnderAContainer(t *testing.T) {
+	t.Parallel()
+
+	w := start(t)
+	ctx := t.Context()
+
+	vmUUID, root := w.containerWithItsOwn(t, "web")
+
+	name := "renamed"
+	resized := vm.Resources{CPUs: 3, Memory: 3 << 30, Disk: 20 << 30}
+
+	_, err := w.client.UpdateVM(ctx, ownerUUID, vmUUID, workloadControlPlane.VMUpdate{Name: &name, Resources: &resized})
+	require.NoError(t, err)
+
+	updated := w.stored(t, vmUUID, "reconfigured as it was updated", func(v vmKind.VM) bool {
+		return v.Status.State == vmKind.Running && v.Status.Applied != nil && v.Status.Applied.Equal(v.Spec.Config()) && v.Metadata.Name == name
+	})
+
+	gone := time.Now()
+
+	status, body := w.controlPlane(t, http.MethodDelete, "/api/vms/"+vmUUID, nil)
+	require.Equal(t, http.StatusAccepted, status, string(body))
+
+	answer := deletedOf(t, body)
+	assert.Equal(t, []dependentShown{{Kind: containerKind.Name, UUID: root.UUID, Name: "web", Recreates: true}}, answer.Dependents)
+	assert.True(t, answer.Recreated, "the container makes it again")
+
+	again := w.stored(t, vmUUID, "made again", func(v vmKind.VM) bool {
+		return v.Status.StartedAt.After(gone) && v.Status.State == vmKind.Running
+	})
+
+	assert.Equal(t, updated.Metadata.Slug, again.Metadata.Slug, "under the slug it had, so that it is reached where it was")
+	assert.Equal(t, name, again.Metadata.Name, "as the update left it")
+	assert.Equal(t, vmKind.ResourcesOf(resized), again.Spec.Resources)
+
+	require.Eventually(t, func() bool {
+		c, there := w.dockerd.Holds(t, vmUUID).Container("web")
+
+		return there && c.State == container.StateRunning
+	}, settle, beat, "the container was never made again in it")
+
+	kept := w.containerRecord(t, vmUUID, "web")
+	assert.Equal(t, root.UUID, kept.Metadata.UUID, "it is what it was")
+	assert.Equal(t, vmKind.ChoiceOf(updated), kept.Spec.VM, "and keeps its vm as it went")
 }

@@ -513,3 +513,64 @@ func TestRepository_Delete_graphsNotKept(t *testing.T) {
 		assert.True(t, kept)
 	})
 }
+
+// outliving are the fans' strategy, whose fans keep, when their house goes
+// under them and they are kept, as many blades as the house's name has
+// letters, and the house they were handed.
+type outliving struct {
+	kindstest.Fans
+
+	lock    sync.Mutex
+	parents []kind.Raw
+}
+
+func (o *outliving) Outlive(fan kindstest.Fan, parent kind.Raw) (kindstest.Fan, error) {
+	o.lock.Lock()
+	defer o.lock.Unlock()
+
+	o.parents = append(o.parents, parent)
+	fan.Spec.Blades = len(parent.Metadata.Name)
+
+	return fan, nil
+}
+
+func TestRepository_Delete_outliving(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	memory := resourcesMemory.NewRepository()
+
+	houseRecord := resource.Record{Raw: kind.Raw{Kind: kindstest.Parent, Metadata: kind.Metadata{UUID: kindstest.House, Name: "the house"}}}
+
+	for _, r := range []resource.Record{
+		houseRecord,
+		kindstest.AFan("root", kindstest.Running, kindstest.Running, func(f *kindstest.Fan) { f.Metadata.Generation = 1 }),
+		kindstest.AFan("asked-to-go", kindstest.Running, kind.Deleted, func(f *kindstest.Fan) { f.Metadata.DeletionRequestedAt = kindstest.Moment }),
+	} {
+		_, err := memory.Create(ctx, r)
+		require.NoError(t, err)
+	}
+
+	d := kindstest.Descriptor()
+	d.OnParent = kind.ParentRules{Delete: kind.CascadeDelete, Restore: kind.CascadeKeep}
+
+	strategy := &outliving{}
+
+	registry := kind.NewRegistry[kind.ControlPlaneBinding]()
+	require.NoError(t, registry.Register(kind.BindControlPlane[kindstest.Spec, kindstest.Status](d, strategy)))
+
+	require.NoError(t, cascade.NewRepository(registry, memory, cascade.WithGraphs(graph.Roots{kindstest.Kind}, &graphtest.Told{})).Delete(ctx, kindstest.Parent, kindstest.House))
+
+	kept, there := held(t, memory, "root")
+	require.True(t, there)
+
+	fan := kindstest.Typed(kept)
+	assert.Equal(t, len("the house"), fan.Spec.Blades, "it keeps what makes its house again, as the house's record had it as it went")
+	assert.Equal(t, int64(2), fan.Metadata.Generation, "its spec changed")
+	assert.Equal(t, kind.Missing, fan.Status.State, "and it is gone with it all the same")
+
+	require.Len(t, strategy.parents, 1, "and only what is kept keeps anything of its house")
+	assert.Equal(t, houseRecord.Raw.Metadata.Name, strategy.parents[0].Metadata.Name)
+	assert.Equal(t, kindstest.House, strategy.parents[0].Metadata.UUID)
+}

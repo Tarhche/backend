@@ -63,6 +63,11 @@ type Choice struct {
 	Resources *vmKind.Resources `json:"resources,omitempty"`
 	Ports     []port.Port       `json:"ports,omitempty"`
 	Network   *vmKind.Network   `json:"network,omitempty"`
+
+	// Slug is the slug a Docker VM a graph makes again under its uuid asks
+	// for, the one it had (Make): nobody asks for one, and it is read from
+	// nothing anybody says.
+	Slug string `json:"-"`
 }
 
 // Defaults are what a Docker VM made for a container or a stack is given.
@@ -119,16 +124,20 @@ func (c *Chooser) Choose(ctx context.Context, ownerUUID string, choice Choice) (
 		return c.named(ctx, ownerUUID, choice.UUID)
 	}
 
+	// what is asked for asks for no slug.
+	choice.Slug = ""
+
 	return c.made(ctx, ownerUUID, "", choice)
 }
 
 // Make is a Docker VM made for ownerUUID under uuid, as one made for what
 // names none is, with whatever choice gives and the defaults for the rest:
 // what a graph makes for the stacks and containers that go into it, under the
-// uuid they name it by, before it is there and again once it is gone. Which VM
-// choice names, if it names one, is not read. Why it is not made is said
-// under the request's vm field, a uuid another resource is kept under
-// already being domain.ErrAlreadyExists.
+// uuid they name it by, before it is there and again once it is gone, when it
+// asks for the slug it had (Choice.Slug), which its admission keeps when
+// nothing else holds it. Which VM choice names, if it names one, is not read.
+// Why it is not made is said under the request's vm field, a uuid another
+// resource is kept under already being domain.ErrAlreadyExists.
 func (c *Chooser) Make(ctx context.Context, ownerUUID string, uuid string, choice Choice) (vmKind.VM, domain.ValidationErrors, error) {
 	switch {
 	case len(ownerUUID) == 0:
@@ -265,7 +274,7 @@ func (c *Chooser) made(ctx context.Context, ownerUUID string, uuid string, asked
 
 	dry := kind.IsDryRun(ctx)
 
-	admitted, err := c.admit.Execute(ctx, &admitResource.Request{Kind: vmKind.Name, OwnerUUID: ownerUUID, Manifest: manifest, UUID: uuid, DryRun: dry})
+	admitted, err := c.admit.Execute(ctx, &admitResource.Request{Kind: vmKind.Name, OwnerUUID: ownerUUID, Manifest: manifest, UUID: uuid, Slug: asked.Slug, DryRun: dry})
 	if err != nil {
 		return vmKind.VM{}, nil, err
 	}

@@ -213,9 +213,10 @@ func wantOf(spec any) (vmKind.Want, error) {
 	return w, nil
 }
 
-// choiceOf is what a VM a graph needs is made with, as the chooser reads it.
+// choiceOf is what a VM a graph needs is made with, as the chooser reads it:
+// the slug it had among it, which what needs it keeps of it once it went.
 func choiceOf(choice stackKind.VMChoice) dockervm.Choice {
-	chosen := dockervm.Choice{Name: choice.Name, Ports: choice.Ports}
+	chosen := dockervm.Choice{Name: choice.Name, Ports: choice.Ports, Slug: choice.Slug}
 
 	if choice.Resources != nil {
 		chosen.Resources = &vmKind.Resources{CPUs: choice.Resources.CPUs, Memory: choice.Resources.Memory, Disk: choice.Resources.Disk}

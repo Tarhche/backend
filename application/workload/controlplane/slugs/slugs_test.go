@@ -82,3 +82,55 @@ func TestBy(t *testing.T) {
 	_, err = By(func(context.Context, string) (int, error) { return 0, errors.New("away") })(ctx, "web-abcde")
 	assert.Error(t, err)
 }
+
+func TestKeep(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	holding := func(held ...string) Taken {
+		return func(_ context.Context, slug string) (bool, error) {
+			for _, h := range held {
+				if h == slug {
+					return true, nil
+				}
+			}
+
+			return false, nil
+		}
+	}
+
+	t.Run("the slug asked for is kept when nothing holds it", func(t *testing.T) {
+		t.Parallel()
+
+		kept, err := Keep(ctx, "web-abcde", "web", holding("other-fghij"))
+		require.NoError(t, err)
+		assert.Equal(t, "web-abcde", kept)
+	})
+
+	t.Run("and another is given when something does", func(t *testing.T) {
+		t.Parallel()
+
+		kept, err := Keep(ctx, "web-abcde", "web", holding("web-abcde"))
+		require.NoError(t, err)
+		assert.NotEqual(t, "web-abcde", kept)
+		assert.True(t, strings.HasPrefix(kept, "web-"), kept)
+	})
+
+	t.Run("and when none is asked for", func(t *testing.T) {
+		t.Parallel()
+
+		kept, err := Keep(ctx, "", "web")
+		require.NoError(t, err)
+		assert.True(t, strings.HasPrefix(kept, "web-"), kept)
+	})
+
+	t.Run("a lookup that fails is not taken for a free slug", func(t *testing.T) {
+		t.Parallel()
+
+		failure := errors.New("the database is away")
+
+		_, err := Keep(ctx, "web-abcde", "web", func(context.Context, string) (bool, error) { return false, failure })
+		assert.ErrorIs(t, err, failure)
+	})
+}

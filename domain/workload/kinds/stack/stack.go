@@ -123,8 +123,9 @@ type Spec struct {
 // VM it went into, made for it or not, and beside it what to make that VM
 // with again, under that uuid, whenever it is gone: its name, resources,
 // ports and network, as the VM's record had them when it was named, or as it
-// was asked for with the defaults filled in when its graph is to make it. A
-// stack keeps the uuid alone.
+// was asked for with the defaults filled in when its graph is to make it, and
+// as the VM's record had them when it went, and its slug with them, when a
+// delete of the VM kept the container. A stack keeps the uuid alone.
 type VMChoice struct {
 	UUID string `json:"uuid,omitempty"`
 
@@ -135,6 +136,11 @@ type VMChoice struct {
 	Resources *Resources  `json:"resources,omitempty"`
 	Ports     []port.Port `json:"ports,omitzero"`
 	Network   *Network    `json:"network,omitempty"`
+
+	// Slug is the slug the VM had, which it asks for when it is made again
+	// under its uuid, so that it is reached where it was: what a container
+	// keeps, and nobody asks for. What is asked never names one that counts.
+	Slug string `json:"slug,omitempty"`
 }
 
 // Describes reports whether a choice describes a VM to make: whether it gives

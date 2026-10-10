@@ -75,6 +75,12 @@ type ControlPlaneBinding interface {
 	// Resolver is what finds the kind's resources by what else names them
 	// inside their parents, when its strategy is a Resolver.
 	Resolver() (Resolver, bool)
+
+	// Outlive is r, kept as gone with the parent it lived in, whose record as
+	// it went is parent, as the strategy's Outlive keeps what it makes its
+	// parent again with, when it is an Outliver: a generation later when that
+	// changed its spec. A strategy that is not one leaves r as it is.
+	Outlive(r Raw, parent Raw) (Raw, error)
 }
 
 // NodeBinding is a kind's node strategy with its types erased: what an
@@ -319,6 +325,37 @@ func (b *controlPlaneBinding[Spec, Status]) Resolver() (Resolver, bool) {
 	resolver, resolves := b.strategy.(Resolver)
 
 	return resolver, resolves
+}
+
+func (b *controlPlaneBinding[Spec, Status]) Outlive(r Raw, parent Raw) (Raw, error) {
+	outliver, outlives := b.strategy.(Outliver[Spec, Status])
+	if !outlives {
+		return r, nil
+	}
+
+	typed, err := typedAs[Spec, Status](b.descriptor, r)
+	if err != nil {
+		return Raw{}, err
+	}
+
+	// its spec before the strategy is handed what it shares with it.
+	was, err := json.Marshal(typed.Spec)
+	if err != nil {
+		return Raw{}, err
+	}
+
+	kept, err := outliver.Outlive(typed, parent)
+	if err != nil {
+		return Raw{}, err
+	}
+
+	kept.Kind = b.descriptor.Name
+
+	if kept, err = respecified(kept, was, typed.Metadata.Generation); err != nil {
+		return Raw{}, err
+	}
+
+	return Encode(kept)
 }
 
 type nodeBinding[Spec, Status any, S interface {

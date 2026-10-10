@@ -49,6 +49,25 @@ func Generate(ctx context.Context, name string, taken ...Taken) (string, error) 
 	return "", ErrExhausted
 }
 
+// Keep is asked, a slug a resource had, when none of taken holds it now, and
+// a slug for name that none holds otherwise (Generate): a VM made again under
+// its uuid is reached where it was, unless something took its slug since.
+func Keep(ctx context.Context, asked string, name string, taken ...Taken) (string, error) {
+	if len(asked) == 0 {
+		return Generate(ctx, name, taken...)
+	}
+
+	free, err := isFree(ctx, asked, taken)
+	switch {
+	case err != nil:
+		return "", err
+	case free:
+		return asked, nil
+	}
+
+	return Generate(ctx, name, taken...)
+}
+
 func isFree(ctx context.Context, candidate string, taken []Taken) (bool, error) {
 	for _, held := range taken {
 		isHeld, err := held(ctx, candidate)

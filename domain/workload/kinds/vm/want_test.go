@@ -29,7 +29,7 @@ func TestChoiceOf(t *testing.T) {
 	t.Parallel()
 
 	v := vmKind.VM{
-		Metadata: kind.Metadata{UUID: "vm-1", Name: "builds"},
+		Metadata: kind.Metadata{UUID: "vm-1", Name: "builds", Slug: "builds-abcde"},
 		Spec: vmKind.Spec{
 			Image:     "docker:29-dind",
 			Resources: vmKind.Resources{CPUs: 2, Memory: 4 << 30, Disk: 20 << 30},
@@ -44,7 +44,8 @@ func TestChoiceOf(t *testing.T) {
 		Resources: &stackKind.Resources{CPUs: 2, Memory: 4 << 30, Disk: 20 << 30},
 		Ports:     []port.Port{80, 443},
 		Network:   &stackKind.Network{Ingress: "allow", Egress: "deny"},
-	}, vmKind.ChoiceOf(v), "what it is made with again, as its record has it")
+		Slug:      "builds-abcde",
+	}, vmKind.ChoiceOf(v), "what it is made with again, as its record has it, and where it is reached")
 
 	v.Spec.Ports = nil
 

@@ -30,8 +30,9 @@ func (w Want) Requirement() graph.Requirement {
 
 // ChoiceOf is v as what goes into it keeps it (stackKind.VMChoice): its uuid,
 // and what it is made with again under that uuid whenever it is gone, its
-// name, resources, ports and network as its record has them. Ports that are
-// none are kept as none, never as the defaults.
+// name, resources, ports and network as its record has them, and the slug it
+// is reached under, once it has one. Ports that are none are kept as none,
+// never as the defaults.
 func ChoiceOf(v VM) stackKind.VMChoice {
 	return stackKind.VMChoice{
 		UUID:      v.Metadata.UUID,
@@ -39,5 +40,6 @@ func ChoiceOf(v VM) stackKind.VMChoice {
 		Resources: &stackKind.Resources{CPUs: v.Spec.Resources.CPUs, Memory: v.Spec.Resources.Memory, Disk: v.Spec.Resources.Disk},
 		Ports:     append([]port.Port{}, v.Spec.Ports...),
 		Network:   &stackKind.Network{Ingress: string(v.Spec.Network.Ingress), Egress: string(v.Spec.Network.Egress)},
+		Slug:      v.Metadata.Slug,
 	}
 }

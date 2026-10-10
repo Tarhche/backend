@@ -129,13 +129,16 @@ func New(d Dependencies) *VMs {
 
 // Admit takes in a VM its owner asked for: checked, its defaults filled in,
 // held to its bounds and its owner's quota (Check), given a slug and placed.
+// A VM a graph makes again under its uuid asks for the slug it had, which it
+// keeps when nothing holds it now, and is given another otherwise; nobody
+// else asks for one.
 func (s *VMs) Admit(ctx context.Context, asked vmKind.VM) (vmKind.VM, domain.ValidationErrors, error) {
 	admitted, invalid, err := s.Check(ctx, asked)
 	if err != nil || len(invalid) > 0 {
 		return vmKind.VM{}, invalid, err
 	}
 
-	slug, err := slugs.Generate(ctx, admitted.Metadata.Name, s.Slugs...)
+	slug, err := slugs.Keep(ctx, asked.Metadata.Slug, admitted.Metadata.Name, s.Slugs...)
 	if err != nil {
 		return vmKind.VM{}, nil, err
 	}

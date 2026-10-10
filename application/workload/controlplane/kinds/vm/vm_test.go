@@ -80,6 +80,22 @@ func TestVMs_Admit(t *testing.T) {
 		assert.Empty(t, admitted.Status.Reason)
 	})
 
+	t.Run("a vm made again asks for the slug it had, which it keeps while nothing holds it, and is given another once something does", func(t *testing.T) {
+		t.Parallel()
+
+		w := vmtest.New(vmtest.WithVMs(vmtest.In(vmtest.Running("held", "owner-uuid"), func(v *vmKind.VM) { v.Metadata.Slug = "taken-abcde" })))
+
+		admitted, invalid, err := w.VMs.Admit(ctx, asked(func(v *vmKind.VM) { v.Metadata.Slug = "my-box-fghij" }))
+		require.NoError(t, err)
+		require.Empty(t, invalid)
+		assert.Equal(t, "my-box-fghij", admitted.Metadata.Slug)
+
+		admitted, _, err = w.VMs.Admit(ctx, asked(func(v *vmKind.VM) { v.Metadata.Slug = "taken-abcde" }))
+		require.NoError(t, err)
+		assert.NotEqual(t, "taken-abcde", admitted.Metadata.Slug)
+		assert.True(t, strings.HasPrefix(admitted.Metadata.Slug, "my-box-"), admitted.Metadata.Slug)
+	})
+
 	t.Run("a docker vm, one asked to boot the docker image, boots it and nothing else", func(t *testing.T) {
 		t.Parallel()
 

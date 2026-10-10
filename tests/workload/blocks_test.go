@@ -74,7 +74,9 @@ func TestAContainer(t *testing.T) {
 		assert.False(t, created.Container.Unmanaged)
 
 		made := w.stored(t, vmUUID, "running", func(v vmKind.VM) bool { return v.Status.State == vmKind.Running })
-		assert.Equal(t, vmKind.ChoiceOf(made), w.containerRecord(t, vmUUID, "web").Spec.VM, "and keeps what to make it with again")
+		again := vmKind.ChoiceOf(made)
+		again.Slug = ""
+		assert.Equal(t, again, w.containerRecord(t, vmUUID, "web").Spec.VM, "and keeps what to make it with again, and its slug once it goes")
 
 		running := w.containerIn(t, vmUUID, "web", "running")
 		assert.Equal(t, "nginx:1.27", running.Image)

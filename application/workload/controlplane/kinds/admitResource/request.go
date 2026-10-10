@@ -30,6 +30,13 @@ type Request struct {
 	// resource is kept under already is domain.ErrAlreadyExists.
 	UUID string
 
+	// Slug is the slug it asks for, when the control plane holds one for it
+	// already: a Docker VM a graph makes again once it is gone, as the slug
+	// it had, so that it is reached where it was. Its kind keeps it when
+	// nothing else holds it, and gives it another otherwise. Nobody asking
+	// through the API says it, and a manifest's own slug is never read.
+	Slug string
+
 	// Wait is how long to wait for what came of its first command, when it
 	// has one: nothing is not waiting.
 	Wait time.Duration

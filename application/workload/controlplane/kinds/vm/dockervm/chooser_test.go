@@ -3,6 +3,7 @@ package dockervm_test
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -235,6 +236,35 @@ func TestChooser_Make(t *testing.T) {
 		require.True(t, w.Producer.Last(kind.ActOnResourceName, &command))
 		assert.Equal(t, vmKind.ActionCreate, command.Action, "it is asked of its node at once")
 		assert.Equal(t, "vm-held", command.UUID)
+	})
+
+	t.Run("one made again asks for the slug it had, and is reached where it was", func(t *testing.T) {
+		t.Parallel()
+
+		w := vmtest.New()
+
+		made, refused, err := w.Chooser.Make(ctx, "owner", "vm-held", dockervm.Choice{Name: "builds", Slug: "builds-abcde"})
+		require.NoError(t, err)
+		require.Empty(t, refused)
+
+		assert.Equal(t, "builds-abcde", made.Metadata.Slug)
+
+		kept, there := w.Stored("vm-held")
+		require.True(t, there)
+		assert.Equal(t, "builds-abcde", kept.Metadata.Slug)
+	})
+
+	t.Run("but one asked for asks for none, whatever it says", func(t *testing.T) {
+		t.Parallel()
+
+		w := vmtest.New()
+
+		chosen, refused, err := w.Chooser.Choose(ctx, "owner", dockervm.Choice{Name: "builds", Slug: "builds-abcde"})
+		require.NoError(t, err)
+		require.Empty(t, refused)
+
+		assert.NotEqual(t, "builds-abcde", chosen.Metadata.Slug)
+		assert.True(t, strings.HasPrefix(chosen.Metadata.Slug, "builds-"), chosen.Metadata.Slug)
 	})
 
 	t.Run("but not under one another is kept under already", func(t *testing.T) {
