@@ -50,6 +50,7 @@ var farsi = map[string]string{
 	"image_of_another_kind":  "یک ماشین مجازی از نوع docker با ایمیج داکر ساخته می‌شود و از نوع machine با هر ایمیج دیگری",
 	"invalid_name":           "فقط حروف، ارقام، نقطه، خط تیره و زیرخط مجاز است و باید با حرف یا رقم شروع شود",
 	"invalid_protocol":       "پروتکل باید tcp یا udp باشد",
+	"invalid_ip":             "باید یک نشانی IPv4 یا IPv6 باشد، مانند 127.0.0.1 یا ::1",
 	"invalid_mount_type":     "نوع اتصال باید volume، bind یا tmpfs باشد",
 	"invalid_mount":          "هر اتصال به مسیر مقصد و، جز برای tmpfs، به مبدأ نیاز دارد",
 	"invalid_restart_policy": "سیاست راه‌اندازی دوباره باید یکی از این موارد باشد: no، always، unless-stopped، on-failure",

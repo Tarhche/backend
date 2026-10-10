@@ -46,6 +46,10 @@ var dialStdio = []string{"docker", "system", "dial-stdio"}
 // defaultNetworks are the networks every dockerd has, which none may remove.
 var defaultNetworks = []string{"bridge", "host", "none"}
 
+// runtimes are the runtimes a dockerd has that nobody configured: a
+// container asked to run with any other is refused.
+var runtimes = []string{"runc", "io.containerd.runc.v2"}
+
 // What a request names, after the API version.
 var (
 	containerPath = regexp.MustCompile(`^/containers/([^/]+)(?:/(json|start|stop|restart|logs|stats))?$`)
@@ -415,7 +419,10 @@ func (h *holding) containerAt(named string) int {
 	return at
 }
 
-// create makes a container, as docker does, but does not start it.
+// create makes a container, as docker does, but does not start it: as it was
+// asked for, privileged, held to a number of processes or run as a user of
+// its own among it, with a runtime this dockerd has, and its ports published
+// on the address each asks for.
 func (h *holding) create(rw http.ResponseWriter, r *http.Request) bool {
 	var asked container.CreateRequest
 	if err := json.NewDecoder(r.Body).Decode(&asked); err != nil || asked.Config == nil {
@@ -427,6 +434,12 @@ func (h *holding) create(rw http.ResponseWriter, r *http.Request) bool {
 	host := asked.HostConfig
 	if host == nil {
 		host = &container.HostConfig{}
+	}
+
+	if runtime := host.Runtime; len(runtime) > 0 && !slices.Contains(runtimes, runtime) {
+		failure(rw, http.StatusBadRequest, "unknown or invalid runtime name: %s", runtime)
+
+		return false
 	}
 
 	name := r.URL.Query().Get("name")
@@ -493,7 +506,12 @@ func (h *holding) create(rw http.ResponseWriter, r *http.Request) bool {
 				published = uint64(32768 + h.Made)
 			}
 
-			ports = append(ports, container.Port{IP: "0.0.0.0", PrivatePort: uint16(guest.Int()), PublicPort: uint16(published), Type: guest.Proto()})
+			address := binding.HostIP
+			if len(address) == 0 {
+				address = "0.0.0.0"
+			}
+
+			ports = append(ports, container.Port{IP: address, PrivatePort: uint16(guest.Int()), PublicPort: uint16(published), Type: guest.Proto()})
 		}
 	}
 
@@ -1097,6 +1115,22 @@ func (h holding) Container(name string) (held, bool) {
 	}
 
 	return h.Containers[at], true
+}
+
+// Created is what the container a name names was created with, and whether
+// there is one.
+func (h holding) Created(name string) (container.Config, container.HostConfig, bool) {
+	at := h.containerAt(name)
+	if at < 0 {
+		return container.Config{}, container.HostConfig{}, false
+	}
+
+	made, ok := h.Configs[h.Containers[at].ID]
+	if !ok || made.Config == nil || made.Host == nil {
+		return container.Config{}, container.HostConfig{}, false
+	}
+
+	return *made.Config, *made.Host, true
 }
 
 // Network is the network a name names, and whether there is one.

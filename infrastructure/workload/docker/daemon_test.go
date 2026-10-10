@@ -446,6 +446,32 @@ func TestDaemon_CreateContainer(t *testing.T) {
 		assert.Equal(t, "data", given.HostConfig.Mounts[0].Source)
 	})
 
+	t.Run("what it is asked for beyond the rest reaches dockerd as docker names it", func(t *testing.T) {
+		t.Parallel()
+
+		fake := newFakeDocker()
+		daemons, _ := dockerVM(t, fake, nil, time.Minute)
+
+		_, err := daemons.Daemon("vm-1").CreateContainer(t.Context(), docker.ContainerSpec{
+			Name:       "cache",
+			Image:      "nginx:alpine",
+			Ports:      []docker.PortBinding{{ContainerPort: 80, HostPort: 8080, HostIP: "127.0.0.1", Protocol: "tcp"}},
+			PidsLimit:  64,
+			Privileged: true,
+			User:       "nginx",
+			Runtime:    "runc",
+		})
+		require.NoError(t, err)
+
+		given := fake.containers["c2"]
+		assert.Equal(t, "nginx", given.Config.User)
+		assert.True(t, given.HostConfig.Privileged)
+		assert.Equal(t, "runc", given.HostConfig.Runtime)
+		require.NotNil(t, given.HostConfig.PidsLimit)
+		assert.Equal(t, int64(64), *given.HostConfig.PidsLimit)
+		assert.Equal(t, []nat.PortBinding{{HostIP: "127.0.0.1", HostPort: "8080"}}, given.HostConfig.PortBindings["80/tcp"])
+	})
+
 	t.Run("a pull that fails part way is a request docker refused, and nothing is made", func(t *testing.T) {
 		t.Parallel()
 

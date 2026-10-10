@@ -148,6 +148,70 @@ func TestAContainer(t *testing.T) {
 	})
 }
 
+// TestAContainerAskedForMore holds what a container is asked for beyond its
+// image, its ports and its mounts, as a compose file's service may ask for it,
+// to reaching its VM's dockerd as it was asked for: privileged, held to a
+// number of processes, run as a user of its own, with a runtime its dockerd
+// has, and published on one address of its VM. A runtime its dockerd lacks is
+// refused, in dockerd's words, and nothing is kept of it.
+func TestAContainerAskedForMore(t *testing.T) {
+	t.Parallel()
+
+	w := start(t)
+	ctx := t.Context()
+
+	vmUUID := w.dockerVM(t, "builds")
+
+	made, err := createContainer.NewUseCase(w.client, w.validator, w.translator).Execute(ctx, &createContainer.Request{
+		VMUUID:     vmUUID,
+		Name:       "cache",
+		Image:      "nginx:1.27",
+		Ports:      []createContainer.PortBinding{{ContainerPort: 80, HostPort: 8080, HostIP: "127.0.0.1"}},
+		PidsLimit:  64,
+		Privileged: true,
+		User:       "nginx",
+		Runtime:    "runc",
+		OwnerUUID:  ownerUUID,
+	})
+	require.NoError(t, err)
+	require.Empty(t, made.ValidationErrors)
+
+	w.containerIn(t, vmUUID, "cache", "running")
+
+	held := w.dockerd.Holds(t, vmUUID)
+
+	config, host, there := held.Created("cache")
+	require.True(t, there, "its vm's dockerd has it")
+	assert.Equal(t, "nginx", config.User)
+	assert.True(t, host.Privileged)
+	assert.Equal(t, "runc", host.Runtime)
+	require.NotNil(t, host.PidsLimit)
+	assert.Equal(t, int64(64), *host.PidsLimit)
+
+	c, _ := held.Container("cache")
+	require.Len(t, c.Ports, 1)
+	assert.Equal(t, "127.0.0.1", c.Ports[0].IP, "published on the address asked for alone")
+
+	t.Run("one asked to run with a runtime its dockerd lacks is refused, in dockerd's words", func(t *testing.T) {
+		refused, err := createContainer.NewUseCase(w.client, w.validator, w.translator).Execute(ctx, &createContainer.Request{
+			VMUUID:    vmUUID,
+			Name:      "sandboxed",
+			Image:     "nginx:1.27",
+			Runtime:   "kata",
+			OwnerUUID: ownerUUID,
+		})
+		require.NoError(t, err)
+		assert.Contains(t, refused.ValidationErrors["docker"], "unknown or invalid runtime name: kata")
+
+		_, there := w.dockerd.Holds(t, vmUUID).Container("sandboxed")
+		assert.False(t, there, "its vm's dockerd made nothing of it")
+
+		require.Eventually(t, func() bool {
+			return !slices.ContainsFunc(w.containerRecords(t, vmUUID), func(c containerKind.Container) bool { return c.Spec.Name == "sandboxed" })
+		}, settle, beat, "a record of it was kept")
+	})
+}
+
 // TestTheBuildingBlocksOfADockerVM walks a Docker VM's networks, volumes and
 // images from the dashboard, beside a container put on a network and taken
 // off it, and what its dockerd holds that nobody keeps a record of, which is

@@ -69,6 +69,9 @@ type PortBinding struct {
 	ContainerPort port.Port
 	HostPort      port.Port
 
+	// HostIP is the VM's address it is published on; empty is every one.
+	HostIP string
+
 	// Protocol is tcp or udp.
 	Protocol string
 }
@@ -106,6 +109,22 @@ type ContainerSpec struct {
 	// CPUs is in cores and Memory in bytes; zero is no limit.
 	CPUs   float64
 	Memory uint64
+
+	// PidsLimit is the most processes it may run at once; zero leaves it to
+	// dockerd.
+	PidsLimit int64
+
+	// Privileged gives it every device and capability its VM has, as
+	// docker's --privileged does.
+	Privileged bool
+
+	// User is whom its processes run as, user[:group], by name or by number;
+	// empty is its image's.
+	User string
+
+	// Runtime is the runtime dockerd runs it with, by the name dockerd knows
+	// it by; empty is dockerd's default. dockerd refuses one it lacks.
+	Runtime string
 
 	Labels map[string]string
 }

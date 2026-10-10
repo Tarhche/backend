@@ -50,6 +50,7 @@ var english = map[string]string{
 	"image_of_another_kind":  "a Docker VM boots the Docker image, and a machine any other image",
 	"invalid_name":           "may hold only letters, digits, dots, dashes and underscores, and starts with a letter or a digit",
 	"invalid_protocol":       "the protocol must be either tcp or udp",
+	"invalid_ip":             "should be an IPv4 or an IPv6 address, such as 127.0.0.1 or ::1",
 	"invalid_mount_type":     "a mount's type must be volume, bind or tmpfs",
 	"invalid_mount":          "a mount needs the path it is mounted at and, unless it is a tmpfs, what is mounted there",
 	"invalid_restart_policy": "the restart policy must be one of: no, always, unless-stopped, on-failure",

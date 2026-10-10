@@ -69,6 +69,11 @@ definitions:
     properties:
       container_port:
         type: integer
+      host_ip:
+        description: |-
+          HostIP is the VM's address it is published on, an IPv4 or an IPv6
+          one; empty is every one.
+        type: string
       host_port:
         type: integer
       protocol:
@@ -113,6 +118,11 @@ definitions:
         items:
           type: string
         type: array
+      pids_limit:
+        description: |-
+          PidsLimit is the most processes it may run at once; zero leaves it to
+          the VM's dockerd.
+        type: integer
       ports:
         description: |-
           Ports publish container ports on the VM. A VM port the VM also exposes
@@ -121,8 +131,21 @@ definitions:
         items:
           $ref: '#/definitions/createContainer.PortBinding'
         type: array
+      privileged:
+        description: Privileged gives it every device and capability the VM has.
+        type: boolean
       restart_policy:
         description: RestartPolicy is no, always, unless-stopped or on-failure.
+        type: string
+      runtime:
+        description: |-
+          Runtime is the runtime the VM's dockerd runs it with; empty is
+          dockerd's default, and one it lacks is refused by it.
+        type: string
+      user:
+        description: |-
+          User is whom its processes run as, user[:group], by name or by number;
+          empty is its image's.
         type: string
       vm:
         $ref: '#/definitions/input.NewDockerVM'

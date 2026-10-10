@@ -179,6 +179,22 @@ type Spec struct {
 	// CPUs is in cores and Memory in bytes; zero is no limit beyond the VM's.
 	CPUs   float64 `json:"cpus,omitempty"`
 	Memory uint64  `json:"memory,omitempty"`
+
+	// PidsLimit is the most processes it may run at once; zero leaves it to
+	// its VM's dockerd.
+	PidsLimit int64 `json:"pids_limit,omitempty"`
+
+	// Privileged gives it every device and capability its VM has.
+	Privileged bool `json:"privileged,omitempty"`
+
+	// User is whom its processes run as, user[:group], by name or by number;
+	// empty is its image's.
+	User string `json:"user,omitempty"`
+
+	// Runtime is the runtime its VM's dockerd runs it with, passed as it is
+	// given: one that dockerd lacks is refused by it, and the container
+	// fails saying so. Empty is dockerd's default.
+	Runtime string `json:"runtime,omitempty"`
 }
 
 // PortBinding publishes a container port on its VM. A host port of zero lets
@@ -186,6 +202,9 @@ type Spec struct {
 type PortBinding struct {
 	ContainerPort port.Port `json:"container_port"`
 	HostPort      port.Port `json:"host_port"`
+
+	// HostIP is the VM's address it is published on; empty is every one.
+	HostIP string `json:"host_ip,omitempty"`
 
 	// Protocol is tcp or udp.
 	Protocol string `json:"protocol"`
@@ -215,6 +234,10 @@ func (s Spec) Docker(uuid string, labels map[string]string) docker.ContainerSpec
 		RestartPolicy: s.RestartPolicy,
 		CPUs:          s.CPUs,
 		Memory:        s.Memory,
+		PidsLimit:     s.PidsLimit,
+		Privileged:    s.Privileged,
+		User:          s.User,
+		Runtime:       s.Runtime,
 		Labels:        blocks.Labels(Name, uuid),
 	}
 
@@ -223,7 +246,7 @@ func (s Spec) Docker(uuid string, labels map[string]string) docker.ContainerSpec
 	}
 
 	for _, p := range s.Ports {
-		spec.Ports = append(spec.Ports, docker.PortBinding{ContainerPort: p.ContainerPort, HostPort: p.HostPort, Protocol: p.Protocol})
+		spec.Ports = append(spec.Ports, docker.PortBinding{ContainerPort: p.ContainerPort, HostPort: p.HostPort, HostIP: p.HostIP, Protocol: p.Protocol})
 	}
 
 	for _, m := range s.Mounts {
@@ -247,10 +270,14 @@ func SpecOf(s docker.ContainerSpec) Spec {
 		RestartPolicy: s.RestartPolicy,
 		CPUs:          s.CPUs,
 		Memory:        s.Memory,
+		PidsLimit:     s.PidsLimit,
+		Privileged:    s.Privileged,
+		User:          s.User,
+		Runtime:       s.Runtime,
 	}
 
 	for _, p := range s.Ports {
-		spec.Ports = append(spec.Ports, PortBinding{ContainerPort: p.ContainerPort, HostPort: p.HostPort, Protocol: p.Protocol})
+		spec.Ports = append(spec.Ports, PortBinding{ContainerPort: p.ContainerPort, HostPort: p.HostPort, HostIP: p.HostIP, Protocol: p.Protocol})
 	}
 
 	for _, m := range s.Mounts {
@@ -369,7 +396,7 @@ func DockerOf(c docker.Container) *Docker {
 	}
 
 	for _, p := range c.Ports {
-		d.Ports = append(d.Ports, PortBinding{ContainerPort: p.ContainerPort, HostPort: p.HostPort, Protocol: p.Protocol})
+		d.Ports = append(d.Ports, PortBinding{ContainerPort: p.ContainerPort, HostPort: p.HostPort, HostIP: p.HostIP, Protocol: p.Protocol})
 	}
 
 	for _, m := range c.Mounts {
@@ -401,7 +428,7 @@ func (d *Docker) Container() docker.Container {
 	}
 
 	for _, p := range d.Ports {
-		c.Ports = append(c.Ports, docker.PortBinding{ContainerPort: p.ContainerPort, HostPort: p.HostPort, Protocol: p.Protocol})
+		c.Ports = append(c.Ports, docker.PortBinding{ContainerPort: p.ContainerPort, HostPort: p.HostPort, HostIP: p.HostIP, Protocol: p.Protocol})
 	}
 
 	for _, m := range d.Mounts {

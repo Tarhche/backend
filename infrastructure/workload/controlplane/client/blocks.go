@@ -792,7 +792,7 @@ func containerOf(m containerManifest) docker.Container {
 		}
 
 		for _, p := range m.Spec.Ports {
-			c.Ports = append(c.Ports, docker.PortBinding{ContainerPort: p.ContainerPort, HostPort: p.HostPort, Protocol: p.Protocol})
+			c.Ports = append(c.Ports, docker.PortBinding{ContainerPort: p.ContainerPort, HostPort: p.HostPort, HostIP: p.HostIP, Protocol: p.Protocol})
 		}
 	}
 

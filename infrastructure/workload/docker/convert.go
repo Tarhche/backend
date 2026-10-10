@@ -182,18 +182,23 @@ func toCreate(spec docker.ContainerSpec) (*container.Config, *container.HostConf
 		Entrypoint:   spec.Entrypoint,
 		Env:          spec.Env,
 		WorkingDir:   spec.WorkingDir,
+		User:         spec.User,
 		Labels:       spec.Labels,
 		ExposedPorts: make(nat.PortSet, len(spec.Ports)),
 	}
 
 	// memory is in bytes here as it is everywhere else, and a CPU is counted
-	// in billionths of one.
+	// in billionths of one. The runtime is passed as it was given: one
+	// dockerd lacks is dockerd's to refuse.
 	hostConfig := &container.HostConfig{
 		PortBindings:  make(nat.PortMap, len(spec.Ports)),
 		RestartPolicy: container.RestartPolicy{Name: container.RestartPolicyMode(spec.RestartPolicy)},
+		Privileged:    spec.Privileged,
+		Runtime:       spec.Runtime,
 		Resources: container.Resources{
-			NanoCPUs: int64(spec.CPUs * 1e9),
-			Memory:   int64(min(spec.Memory, math.MaxInt64)),
+			NanoCPUs:  int64(spec.CPUs * 1e9),
+			Memory:    int64(min(spec.Memory, math.MaxInt64)),
+			PidsLimit: pidsLimit(spec.PidsLimit),
 		},
 	}
 
@@ -206,13 +211,14 @@ func toCreate(spec docker.ContainerSpec) (*container.Config, *container.HostConf
 		guest := nat.Port(strconv.FormatUint(uint64(binding.ContainerPort), 10) + "/" + protocol)
 		config.ExposedPorts[guest] = struct{}{}
 
-		// no host port is docker's own "pick a free one".
+		// no host port is docker's own "pick a free one", and no host address
+		// its "every one the VM has".
 		hostPort := ""
 		if binding.HostPort > 0 {
 			hostPort = strconv.FormatUint(uint64(binding.HostPort), 10)
 		}
 
-		hostConfig.PortBindings[guest] = append(hostConfig.PortBindings[guest], nat.PortBinding{HostPort: hostPort})
+		hostConfig.PortBindings[guest] = append(hostConfig.PortBindings[guest], nat.PortBinding{HostIP: binding.HostIP, HostPort: hostPort})
 	}
 
 	for _, m := range spec.Mounts {
@@ -233,6 +239,16 @@ func toCreate(spec docker.ContainerSpec) (*container.Config, *container.HostConf
 	return config, hostConfig, &network.NetworkingConfig{
 		EndpointsConfig: map[string]*network.EndpointSettings{spec.Networks[0]: {Aliases: slices.Clone(spec.Aliases[spec.Networks[0]])}},
 	}
+}
+
+// pidsLimit is a container's limit of processes as docker takes it: none
+// when it is not set, which leaves it to dockerd.
+func pidsLimit(limit int64) *int64 {
+	if limit == 0 {
+		return nil
+	}
+
+	return &limit
 }
 
 // fromStats is one sample of what a container uses.

@@ -32,6 +32,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/netip"
 	"slices"
 	"strings"
 
@@ -400,6 +401,14 @@ func validate(spec containerKind.Spec, choice stackKind.VMChoice) domain.Validat
 		if p.ContainerPort == 0 {
 			invalid[fmt.Sprintf("ports[%d].container_port", i)] = "invalid_port"
 		}
+
+		if len(p.HostIP) > 0 && !isIP(p.HostIP) {
+			invalid[fmt.Sprintf("ports[%d].host_ip", i)] = "invalid_ip"
+		}
+	}
+
+	if spec.PidsLimit < 0 {
+		invalid["pids_limit"] = "invalid_value"
 	}
 
 	if len(choice.UUID) > 0 && choice.Describes() {
@@ -407,6 +416,14 @@ func validate(spec containerKind.Spec, choice stackKind.VMChoice) domain.Validat
 	}
 
 	return invalid
+}
+
+// isIP reports whether address is one a port can be published on: an IPv4
+// or an IPv6 address, with no zone.
+func isIP(address string) bool {
+	parsed, err := netip.ParseAddr(address)
+
+	return err == nil && len(parsed.Zone()) == 0
 }
 
 // choiceOf is a container's choice of VM as the chooser reads one.

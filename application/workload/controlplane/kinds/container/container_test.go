@@ -64,6 +64,28 @@ func TestContainers_Admit(t *testing.T) {
 		assert.Equal(t, containerKind.Running, admitted.Status.Expected)
 	})
 
+	t.Run("with what docker is asked beyond the rest as it was asked for", func(t *testing.T) {
+		t.Parallel()
+
+		w := blockstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
+
+		spec := containerKind.Spec{
+			Image:      "nginx:1.27",
+			Ports:      []containerKind.PortBinding{{ContainerPort: 80, HostPort: 8080, HostIP: "127.0.0.1", Protocol: "tcp"}, {ContainerPort: 443, HostIP: "::1", Protocol: "tcp"}},
+			PidsLimit:  100,
+			Privileged: true,
+			User:       "1000:1000",
+			Runtime:    "a-runtime-docker-says-whether-it-has",
+		}
+
+		admitted, invalid, err := w.Containers.Admit(ctx, asked(spec, kind.Reference{Kind: "vm", UUID: "vm-1"}))
+		require.NoError(t, err)
+		require.Empty(t, invalid)
+
+		spec.VM = stackKind.VMChoice{UUID: "vm-1"}
+		assert.Equal(t, spec, admitted.Spec, "a runtime is its vm's dockerd's to refuse")
+	})
+
 	t.Run("into one made for it when it names none, though its owner has a docker vm already", func(t *testing.T) {
 		t.Parallel()
 
@@ -116,6 +138,21 @@ func TestContainers_Admit(t *testing.T) {
 		"one naming a vm and describing a new one": {
 			spec: containerKind.Spec{Image: "nginx", VM: stackKind.VMChoice{UUID: "vm-1", Name: "builds"}},
 			want: domain.ValidationErrors{"vm": "vm_or_new_vm"},
+		},
+		"one published on what is not an address": {
+			vms:  []vmKind.VM{vmtest.Docker("vm-1", "owner")},
+			spec: containerKind.Spec{Image: "nginx", Ports: []containerKind.PortBinding{{ContainerPort: 80, HostIP: "127.0.0.1"}, {ContainerPort: 81, HostIP: "localhost"}}},
+			want: domain.ValidationErrors{"ports[1].host_ip": "invalid_ip"},
+		},
+		"or on an address of one interface's zone": {
+			vms:  []vmKind.VM{vmtest.Docker("vm-1", "owner")},
+			spec: containerKind.Spec{Image: "nginx", Ports: []containerKind.PortBinding{{ContainerPort: 80, HostIP: "fe80::1%eth0"}}},
+			want: domain.ValidationErrors{"ports[0].host_ip": "invalid_ip"},
+		},
+		"one held to fewer processes than none": {
+			vms:  []vmKind.VM{vmtest.Docker("vm-1", "owner")},
+			spec: containerKind.Spec{Image: "nginx", PidsLimit: -1},
+			want: domain.ValidationErrors{"pids_limit": "invalid_value"},
 		},
 		"one in a docker vm that is stopped": {
 			vms:   []vmKind.VM{vmtest.In(vmtest.Docker("vm-1", "owner"), func(v *vmKind.VM) { v.Status.State = vmKind.Stopped })},

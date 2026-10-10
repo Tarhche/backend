@@ -170,15 +170,25 @@ func TestSpec(t *testing.T) {
 		Image:         "nginx:1.27",
 		Command:       []string{"nginx", "-g", "daemon off;"},
 		Env:           []string{"A=1"},
-		Ports:         []docker.PortBinding{{ContainerPort: 80, HostPort: 8080, Protocol: "tcp"}},
+		Ports:         []docker.PortBinding{{ContainerPort: 80, HostPort: 8080, Protocol: "tcp"}, {ContainerPort: 9090, HostPort: 9090, HostIP: "127.0.0.1", Protocol: "tcp"}},
 		Mounts:        []docker.Mount{{Type: "volume", Source: "data", Target: "/data"}},
 		Networks:      []string{"backend"},
 		RestartPolicy: container.RestartAlways,
 		CPUs:          0.5,
 		Memory:        64 << 20,
+		PidsLimit:     100,
+		Privileged:    true,
+		User:          "1000:1000",
+		Runtime:       "runc",
 	}
 
 	spec := container.SpecOf(asked)
+
+	assert.Equal(t, int64(100), spec.PidsLimit)
+	assert.True(t, spec.Privileged)
+	assert.Equal(t, "1000:1000", spec.User)
+	assert.Equal(t, "runc", spec.Runtime)
+	assert.Equal(t, "127.0.0.1", spec.Ports[1].HostIP, "a port published on one address of its vm")
 
 	made := spec.Docker("c-uuid", map[string]string{container.LabelSpec: "{}"})
 
@@ -193,6 +203,26 @@ func TestSpec(t *testing.T) {
 	var read container.Spec
 	require.NoError(t, json.Unmarshal(encoded, &read))
 	assert.Equal(t, spec, read)
+
+	t.Run("what it is asked for beyond the rest is written only when it is asked for", func(t *testing.T) {
+		t.Parallel()
+
+		plain, err := json.Marshal(container.Spec{Image: "nginx", Ports: []container.PortBinding{{ContainerPort: 80, Protocol: "tcp"}}})
+		require.NoError(t, err)
+		assert.JSONEq(t, `{"vm": {}, "image": "nginx", "ports": [{"container_port": 80, "host_port": 0, "protocol": "tcp"}]}`, string(plain), "so what a container made before them was labelled with reads the same")
+
+		given, err := json.Marshal(container.Spec{Image: "nginx", Ports: []container.PortBinding{{ContainerPort: 80, HostIP: "::1", Protocol: "tcp"}}, PidsLimit: 64, Privileged: true, User: "app", Runtime: "runsc"})
+		require.NoError(t, err)
+		assert.JSONEq(t, `{
+			"vm": {},
+			"image": "nginx",
+			"ports": [{"container_port": 80, "host_port": 0, "host_ip": "::1", "protocol": "tcp"}],
+			"pids_limit": 64,
+			"privileged": true,
+			"user": "app",
+			"runtime": "runsc"
+		}`, string(given))
+	})
 }
 
 func TestDocker(t *testing.T) {
@@ -207,7 +237,7 @@ func TestDocker(t *testing.T) {
 		State:     "running",
 		Status:    "Up 3 minutes",
 		Command:   "nginx",
-		Ports:     []docker.PortBinding{{ContainerPort: 80, HostPort: 8080, Protocol: "tcp"}},
+		Ports:     []docker.PortBinding{{ContainerPort: 80, HostPort: 8080, Protocol: "tcp"}, {ContainerPort: 9090, HostPort: 9090, HostIP: "127.0.0.1", Protocol: "tcp"}},
 		Networks:  []string{"bridge"},
 		Labels:    map[string]string{docker.LabelComposeProject: "shop-abcde", docker.LabelComposeService: "web"},
 		Stack:     "shop-abcde",
@@ -342,7 +372,17 @@ func TestVMOf(t *testing.T) {
 func TestSpecLabel(t *testing.T) {
 	t.Parallel()
 
-	spec := container.Spec{Name: "web", Image: "nginx:1.27", Env: []string{"A=1"}, RestartPolicy: container.RestartOnFailure}
+	spec := container.Spec{
+		Name:          "web",
+		Image:         "nginx:1.27",
+		Env:           []string{"A=1"},
+		Ports:         []container.PortBinding{{ContainerPort: 80, HostPort: 8080, HostIP: "127.0.0.1", Protocol: "tcp"}},
+		RestartPolicy: container.RestartOnFailure,
+		PidsLimit:     100,
+		Privileged:    true,
+		User:          "1000:1000",
+		Runtime:       "runc",
+	}
 	spec.VM.UUID = "vm-uuid"
 
 	written, err := container.SpecLabel(spec)

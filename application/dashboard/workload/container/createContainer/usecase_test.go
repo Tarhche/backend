@@ -106,6 +106,36 @@ func TestUseCase_Execute(t *testing.T) {
 		}`, string(presented))
 	})
 
+	t.Run("what docker is asked beyond the rest is asked as it was given", func(t *testing.T) {
+		t.Parallel()
+
+		var workload controlplane.MockClient
+		workload.On("CreateContainer", mock.Anything, workloadtest.OwnerUUID, workloadControlPlane.ContainerRequest{
+			VM: workloadControlPlane.DockerVMChoice{UUID: "vm-uuid"},
+			Container: docker.ContainerSpec{
+				Image:      "nginx:1.27",
+				Ports:      []docker.PortBinding{{ContainerPort: 80, HostPort: 8080, HostIP: "127.0.0.1", Protocol: "tcp"}, {ContainerPort: 443, HostIP: "::1", Protocol: "tcp"}},
+				PidsLimit:  100,
+				Privileged: true,
+				User:       "1000:1000",
+				Runtime:    "runc",
+			},
+		}).Once().Return(created(false), nil)
+		defer workload.AssertExpectations(t)
+
+		response, err := useCase(&workload).Execute(context.Background(), read(t, `{
+			"vm_uuid": "vm-uuid",
+			"image": "nginx:1.27",
+			"ports": [{"container_port": 80, "host_port": 8080, "host_ip": "127.0.0.1"}, {"container_port": 443, "host_ip": "::1"}],
+			"pids_limit": 100,
+			"privileged": true,
+			"user": "1000:1000",
+			"runtime": "runc"
+		}`))
+		require.NoError(t, err)
+		assert.Empty(t, response.ValidationErrors)
+	})
+
 	t.Run("a Docker VM described is made for it, with the rest left to the defaults", func(t *testing.T) {
 		t.Parallel()
 
@@ -157,10 +187,11 @@ func TestUseCase_Execute(t *testing.T) {
 			"vm": {},
 			"name": "-web",
 			"image": "",
-			"ports": [{"container_port": 0}, {"container_port": 80, "host_port": 8080}, {"container_port": 81, "host_port": 8080, "protocol": "tcp"}, {"container_port": 82, "protocol": "sctp"}],
+			"ports": [{"container_port": 0}, {"container_port": 80, "host_port": 8080}, {"container_port": 81, "host_port": 8080, "protocol": "tcp"}, {"container_port": 82, "protocol": "sctp"}, {"container_port": 83, "host_ip": "localhost"}],
 			"mounts": [{"type": "nfs", "target": "/data"}, {"type": "bind", "target": "/data"}, {"type": "volume", "source": "data", "target": "data"}],
 			"restart_policy": "sometimes",
-			"cpus": -1
+			"cpus": -1,
+			"pids_limit": -1
 		}`))
 		require.NoError(t, err)
 
@@ -171,11 +202,13 @@ func TestUseCase_Execute(t *testing.T) {
 			"ports.0.container_port": "a port is a number from 1 to 65535",
 			"ports.2.host_port":      "the same port is listed more than once",
 			"ports.3.protocol":       "the protocol must be either tcp or udp",
+			"ports.4.host_ip":        "should be an IPv4 or an IPv6 address, such as 127.0.0.1 or ::1",
 			"mounts.0.type":          "a mount's type must be volume, bind or tmpfs",
 			"mounts.1":               "a mount needs the path it is mounted at and, unless it is a tmpfs, what is mounted there",
 			"mounts.2":               "a mount needs the path it is mounted at and, unless it is a tmpfs, what is mounted there",
 			"restart_policy":         "the restart policy must be one of: no, always, unless-stopped, on-failure",
 			"cpus":                   "the provided value is invalid",
+			"pids_limit":             "the provided value is invalid",
 		}, response.ValidationErrors)
 
 		workload.AssertNotCalled(t, "CreateContainer", mock.Anything, mock.Anything, mock.Anything)

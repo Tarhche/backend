@@ -8063,6 +8063,10 @@ const docTemplate = `{
                 "container_port": {
                     "type": "integer"
                 },
+                "host_ip": {
+                    "description": "HostIP is the VM's address it is published on, an IPv4 or an IPv6\none; empty is every one.",
+                    "type": "string"
+                },
                 "host_port": {
                     "type": "integer"
                 },
@@ -8122,6 +8126,10 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
+                "pids_limit": {
+                    "description": "PidsLimit is the most processes it may run at once; zero leaves it to\nthe VM's dockerd.",
+                    "type": "integer"
+                },
                 "ports": {
                     "description": "Ports publish container ports on the VM. A VM port the VM also exposes\nthrough the ingress is reachable from outside; any other is reachable\nonly from inside the VM.",
                     "type": "array",
@@ -8129,8 +8137,20 @@ const docTemplate = `{
                         "$ref": "#/definitions/createContainer.PortBinding"
                     }
                 },
+                "privileged": {
+                    "description": "Privileged gives it every device and capability the VM has.",
+                    "type": "boolean"
+                },
                 "restart_policy": {
                     "description": "RestartPolicy is no, always, unless-stopped or on-failure.",
+                    "type": "string"
+                },
+                "runtime": {
+                    "description": "Runtime is the runtime the VM's dockerd runs it with; empty is\ndockerd's default, and one it lacks is refused by it.",
+                    "type": "string"
+                },
+                "user": {
+                    "description": "User is whom its processes run as, user[:group], by name or by number;\nempty is its image's.",
                     "type": "string"
                 },
                 "vm": {

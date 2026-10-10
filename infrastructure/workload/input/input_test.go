@@ -54,6 +54,18 @@ func TestImage(t *testing.T) {
 	assert.Equal(t, domain.ValidationErrors{"image": "invalid_image"}, held(func(e domain.ValidationErrors) { Image(e, "image", "nginx latest") }))
 }
 
+func TestIP(t *testing.T) {
+	t.Parallel()
+
+	for _, address := range []string{"", "127.0.0.1", "0.0.0.0", "10.89.1.10", "::1", "::", "fd00::10"} {
+		assert.Empty(t, held(func(e domain.ValidationErrors) { IP(e, "host_ip", address) }), address)
+	}
+
+	for _, address := range []string{"localhost", "127.0.0.256", "10.0.0.1:80", " 127.0.0.1", "fe80::1%eth0"} {
+		assert.Equal(t, domain.ValidationErrors{"host_ip": "invalid_ip"}, held(func(e domain.ValidationErrors) { IP(e, "host_ip", address) }), address)
+	}
+}
+
 func TestPorts(t *testing.T) {
 	t.Parallel()
 

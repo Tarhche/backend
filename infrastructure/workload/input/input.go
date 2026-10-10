@@ -9,6 +9,7 @@ package input
 
 import (
 	"math"
+	"net/netip"
 	"regexp"
 	"slices"
 	"strconv"
@@ -98,6 +99,19 @@ func Ports(errs domain.ValidationErrors, field string, ports []uint) {
 // IsPort reports whether p is a port at all.
 func IsPort(p uint) bool {
 	return p > 0 && p <= math.MaxUint16
+}
+
+// IP is an address a port is published on, when one is given: an IPv4 or an
+// IPv6 address, with no zone. Empty is left to the caller, as it is every
+// address there is.
+func IP(errs domain.ValidationErrors, field string, address string) {
+	if len(address) == 0 {
+		return
+	}
+
+	if parsed, err := netip.ParseAddr(address); err != nil || len(parsed.Zone()) > 0 {
+		errs[field] = "invalid_ip"
+	}
 }
 
 // Item names one item of a list the way a validation error does: by the

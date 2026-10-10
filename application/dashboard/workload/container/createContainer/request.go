@@ -49,6 +49,21 @@ type Request struct {
 	CPUs   float64 `json:"cpus,omitempty"`
 	Memory uint64  `json:"memory,omitempty"`
 
+	// PidsLimit is the most processes it may run at once; zero leaves it to
+	// the VM's dockerd.
+	PidsLimit int64 `json:"pids_limit,omitempty"`
+
+	// Privileged gives it every device and capability the VM has.
+	Privileged bool `json:"privileged,omitempty"`
+
+	// User is whom its processes run as, user[:group], by name or by number;
+	// empty is its image's.
+	User string `json:"user,omitempty"`
+
+	// Runtime is the runtime the VM's dockerd runs it with; empty is
+	// dockerd's default, and one it lacks is refused by it.
+	Runtime string `json:"runtime,omitempty"`
+
 	OwnerUUID string `json:"-"`
 }
 
@@ -57,6 +72,10 @@ type Request struct {
 type PortBinding struct {
 	ContainerPort uint `json:"container_port"`
 	HostPort      uint `json:"host_port"`
+
+	// HostIP is the VM's address it is published on, an IPv4 or an IPv6
+	// one; empty is every one.
+	HostIP string `json:"host_ip,omitempty"`
 
 	// Protocol is tcp or udp; empty is tcp.
 	Protocol string `json:"protocol,omitempty"`
@@ -114,6 +133,10 @@ func (r *Request) Validate() domain.ValidationErrors {
 		validationErrors["cpus"] = "invalid_value"
 	}
 
+	if r.PidsLimit < 0 {
+		validationErrors["pids_limit"] = "invalid_value"
+	}
+
 	return validationErrors
 }
 
@@ -136,6 +159,8 @@ func (r *Request) validatePorts(validationErrors domain.ValidationErrors) {
 		case binding.HostPort > 0 && twice:
 			validationErrors[field+".host_port"] = "duplicate_port"
 		}
+
+		input.IP(validationErrors, field+".host_ip", binding.HostIP)
 
 		taken[published] = struct{}{}
 	}
@@ -169,6 +194,7 @@ func (r *Request) Spec() docker.ContainerSpec {
 			ports[i] = docker.PortBinding{
 				ContainerPort: port.Port(binding.ContainerPort),
 				HostPort:      port.Port(binding.HostPort),
+				HostIP:        binding.HostIP,
 				Protocol:      protocol(binding.Protocol),
 			}
 		}
@@ -200,6 +226,10 @@ func (r *Request) Spec() docker.ContainerSpec {
 		RestartPolicy: r.RestartPolicy,
 		CPUs:          r.CPUs,
 		Memory:        r.Memory,
+		PidsLimit:     r.PidsLimit,
+		Privileged:    r.Privileged,
+		User:          r.User,
+		Runtime:       r.Runtime,
 	}
 }
 

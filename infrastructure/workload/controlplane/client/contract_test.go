@@ -525,13 +525,33 @@ func TestContract_BuildingBlocks(t *testing.T) {
 	assert.Len(t, running, 1, "only those that run, unless all are asked for")
 
 	created, err := c.CreateContainer(ctx, "owner", workloadControlPlane.ContainerRequest{
-		VM:        workloadControlPlane.DockerVMChoice{UUID: "d1"},
-		Container: docker.ContainerSpec{Name: "api", Image: "nginx:1.27"},
+		VM: workloadControlPlane.DockerVMChoice{UUID: "d1"},
+		Container: docker.ContainerSpec{
+			Name:       "api",
+			Image:      "nginx:1.27",
+			Ports:      []docker.PortBinding{{ContainerPort: 80, HostPort: 8080, HostIP: "127.0.0.1", Protocol: "tcp"}},
+			PidsLimit:  64,
+			Privileged: true,
+			User:       "nginx",
+			Runtime:    "runc",
+		},
 	})
 	require.NoError(t, err)
 	assert.Equal(t, workloadControlPlane.ChosenVM{UUID: "d1", Name: "box", Created: false}, created.VM, "the docker vm it named")
 	assert.Equal(t, "c-api", created.Container.ID, "as its node made it")
 	assert.Equal(t, "running", created.Container.State)
+
+	kept, _, err := w.Memory.GetAll(ctx, containerKind.Name, resource.Filter{OwnerUUID: "owner"}, 0, 0)
+	require.NoError(t, err)
+	require.Len(t, kept, 1)
+
+	api, err := kind.Decode[containerKind.Spec, containerKind.Status](kept[0].Raw)
+	require.NoError(t, err)
+	assert.Equal(t, []containerKind.PortBinding{{ContainerPort: 80, HostPort: 8080, HostIP: "127.0.0.1", Protocol: "tcp"}}, api.Spec.Ports, "kept as it was asked for")
+	assert.Equal(t, int64(64), api.Spec.PidsLimit)
+	assert.True(t, api.Spec.Privileged)
+	assert.Equal(t, "nginx", api.Spec.User)
+	assert.Equal(t, "runc", api.Spec.Runtime)
 
 	read, err := c.Docker("owner", "d1").Container(ctx, "api")
 	require.NoError(t, err, "named by its name in its vm")

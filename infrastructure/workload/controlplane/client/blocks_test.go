@@ -344,7 +344,7 @@ func TestContainerOf(t *testing.T) {
 	t.Parallel()
 
 	pending := containerOf(containerManifest{
-		Spec:   containerKind.Spec{Name: "web", Image: "nginx:1.27", RestartPolicy: containerKind.RestartAlways, Ports: []containerKind.PortBinding{{ContainerPort: 80, HostPort: 8080, Protocol: "tcp"}}},
+		Spec:   containerKind.Spec{Name: "web", Image: "nginx:1.27", RestartPolicy: containerKind.RestartAlways, Ports: []containerKind.PortBinding{{ContainerPort: 80, HostPort: 8080, Protocol: "tcp"}, {ContainerPort: 9090, HostPort: 9090, HostIP: "127.0.0.1", Protocol: "tcp"}}},
 		Status: containerKind.Status{Status: kind.Status{State: containerKind.Pending, Reason: "its vm is starting"}},
 	})
 
@@ -352,7 +352,7 @@ func TestContainerOf(t *testing.T) {
 	assert.Equal(t, "created", pending.State, "one being made, in docker's words")
 	assert.Equal(t, "Pending: its vm is starting", pending.Status)
 	assert.Equal(t, containerKind.RestartAlways, pending.RestartPolicy)
-	assert.Equal(t, []docker.PortBinding{{ContainerPort: 80, HostPort: 8080, Protocol: "tcp"}}, pending.Ports)
+	assert.Equal(t, []docker.PortBinding{{ContainerPort: 80, HostPort: 8080, Protocol: "tcp"}, {ContainerPort: 9090, HostPort: 9090, HostIP: "127.0.0.1", Protocol: "tcp"}}, pending.Ports, "as it was asked for, on the address asked for")
 
 	missing := containerOf(containerManifest{
 		Spec:   containerKind.Spec{Name: "web"},
