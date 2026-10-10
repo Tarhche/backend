@@ -1246,8 +1246,17 @@ func (d *dockerd) exec(ctx context.Context, id string, options vm.ExecOptions, s
 	case slices.Equal(command, dialStdio):
 		return d.dialStdio(ctx, d.address(id), stdin, stdout, stderr)
 
-	case len(command) > 6 && slices.Equal(command[:3], []string{"docker", "compose", "-p"}) && slices.Equal(command[4:6], []string{"-f", "-"}):
-		return d.compose(id, command[3], command[6:], stdin, stdout, stderr)
+	case len(command) > 4 && slices.Equal(command[:3], []string{"docker", "compose", "-p"}):
+		project, action := command[3], command[4:]
+
+		// the project's file is read from the input when compose is told to,
+		// and the project is found by its labels when it is not.
+		withFile := len(action) > 2 && slices.Equal(action[:2], []string{"-f", "-"})
+		if withFile {
+			action = action[2:]
+		}
+
+		return d.compose(id, project, withFile, action, stdin, stdout, stderr)
 
 	default:
 		_, _ = fmt.Fprintf(stderr, "sh: %s: not found\n", strings.Join(command, " "))
@@ -1287,33 +1296,53 @@ func (d *dockerd) dialStdio(ctx context.Context, address string, stdin io.Reader
 	return 0
 }
 
-// compose is docker compose run on a project in the VM id names, with its
-// file on stdin, as compose does it: up pulls every service's image, makes
+// compose is docker compose run on a project in the VM id names, as compose
+// does it. Given the project's file, on stdin, it reads it before anything
+// else, whatever it was asked, and refuses one that is not YAML or that has a
+// top-level key compose does not know: up pulls every service's image, makes
 // the project's network, and a container on it for every service the file
 // has, but for those behind a profile, labelled as compose labels them and
 // with the labels the file gives them, and takes away the project's others;
 // start, stop and restart do that to the project's containers; and down
-// takes them away and the project's network.
-func (d *dockerd) compose(id string, project string, action []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int {
-	read, err := io.ReadAll(stdin)
-	if err != nil || len(read) == 0 {
-		_, _ = fmt.Fprintln(stderr, "no configuration file provided")
+// takes them away and the project's network. Given no file, it finds the
+// project by its labels, which is all down needs, and does nothing else.
+func (d *dockerd) compose(id string, project string, withFile bool, action []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int {
+	var (
+		read []byte
+		err  error
+		file struct {
+			Services map[string]struct {
+				Image    string    `yaml:"image"`
+				Labels   yaml.Node `yaml:"labels"`
+				Profiles []string  `yaml:"profiles"`
+			} `yaml:"services"`
+		}
+	)
+
+	switch {
+	case withFile:
+		if read, err = io.ReadAll(stdin); err != nil || len(read) == 0 {
+			_, _ = fmt.Fprintln(stderr, "no configuration file provided")
+
+			return 14
+		}
+
+		if err := yaml.Unmarshal(read, &file); err != nil {
+			_, _ = fmt.Fprintf(stderr, "yaml: %v\n", err)
+
+			return 15
+		}
+
+		if key, unknown := unknownComposeKey(read); unknown {
+			_, _ = fmt.Fprintf(stderr, "validating -: additional properties '%s' not allowed\n", key)
+
+			return 1
+		}
+
+	case action[0] != "down":
+		_, _ = fmt.Fprintln(stderr, "no configuration file provided: not found")
 
 		return 14
-	}
-
-	var file struct {
-		Services map[string]struct {
-			Image    string    `yaml:"image"`
-			Labels   yaml.Node `yaml:"labels"`
-			Profiles []string  `yaml:"profiles"`
-		} `yaml:"services"`
-	}
-
-	if err := yaml.Unmarshal(read, &file); err != nil {
-		_, _ = fmt.Fprintf(stderr, "yaml: %v\n", err)
-
-		return 15
 	}
 
 	d.lock.Lock()
@@ -1442,4 +1471,25 @@ func (d *dockerd) compose(id string, project string, action []string, stdin io.R
 	}
 
 	return 0
+}
+
+// composeKeys are the top-level keys a compose file may have beside its
+// extensions, which start with x-.
+var composeKeys = []string{"version", "name", "include", "services", "networks", "volumes", "secrets", "configs", "models"}
+
+// unknownComposeKey is the first top-level key of a compose file that compose
+// does not know, if it has one.
+func unknownComposeKey(read []byte) (string, bool) {
+	var top map[string]any
+	if err := yaml.Unmarshal(read, &top); err != nil {
+		return "", false
+	}
+
+	for _, key := range slices.Sorted(maps.Keys(top)) {
+		if !slices.Contains(composeKeys, key) && !strings.HasPrefix(key, "x-") {
+			return key, true
+		}
+	}
+
+	return "", false
 }

@@ -110,13 +110,6 @@ func TestCompose(t *testing.T) {
 			},
 			want: []string{"docker", "compose", "-p", "shop-abcde", "-f", "-", "restart"},
 		},
-		{
-			name: "down keeps the project's volumes",
-			run: func(t *testing.T, c *Compose) (string, error) {
-				return c.Down(t.Context(), shop(composeYAML))
-			},
-			want: []string{"docker", "compose", "-p", "shop-abcde", "-f", "-", "down", "--remove-orphans"},
-		},
 	}
 
 	for _, tt := range testcases {
@@ -138,6 +131,31 @@ func TestCompose(t *testing.T) {
 			assert.Equal(t, labelled, fake.runs[0].stdin, "the YAML, labelled as the stack's, is the file compose reads, on its input")
 		})
 	}
+
+	t.Run("down takes the project down by its name alone, whatever its file says, and keeps its volumes", func(t *testing.T) {
+		t.Parallel()
+
+		for name, compose := range map[string]string{
+			"its file":                       composeYAML,
+			"a file compose refuses":         composeYAML + "nonsense: true\n",
+			"a file that is not YAML at all": "services: [",
+			"a file that cannot be labelled": "services:\n  web: nginx:alpine\n",
+		} {
+			t.Run(name, func(t *testing.T) {
+				t.Parallel()
+
+				fake := &fakeCompose{stdout: "Container shop-abcde-web-1  Removed\n"}
+
+				output, err := composeIn(t, fake).Down(t.Context(), shop(compose))
+				require.NoError(t, err)
+				assert.Equal(t, "Container shop-abcde-web-1  Removed\n", output)
+
+				require.Len(t, fake.runs, 1)
+				assert.Equal(t, []string{"docker", "compose", "-p", "shop-abcde", "down", "--remove-orphans"}, fake.runs[0].command)
+				assert.Empty(t, fake.runs[0].stdin, "compose is given no file, and finds the project by its labels")
+			})
+		}
+	})
 
 	t.Run("what compose says on either stream is kept", func(t *testing.T) {
 		t.Parallel()

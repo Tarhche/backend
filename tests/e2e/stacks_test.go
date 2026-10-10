@@ -24,6 +24,13 @@ volumes:
   data: {}
 `
 
+// refusedCompose is a stack compose refuses, for a key it does not know.
+const refusedCompose = `services:
+  web:
+    image: nginx:alpine
+nonsense: true
+`
+
 type stackView struct {
 	UUID          string          `json:"uuid"`
 	Name          string          `json:"name"`
@@ -54,9 +61,11 @@ func (s stackView) String() string {
 
 // TestStacks deploys a compose project into a Docker VM, and stops, starts,
 // restarts and deletes it. Its volume outlives it, and is then removed from
-// the VM's volumes, as somebody removes one. It is deployed into the
-// account's running Docker VM, named by its uuid, when it has one; otherwise
-// it names none, and one is made for it, as for a container.
+// the VM's volumes, as somebody removes one. A second stack, which compose
+// refuses, fails in the same VM, and is deleted all the same, the VM still
+// running. It is deployed into the account's running Docker VM, named by its
+// uuid, when it has one; otherwise it names none, and one is made for it, as
+// for a container.
 func TestStacks(t *testing.T) {
 	var vms page[vmView]
 	user.call(t, http.MethodGet, "/api/dashboard/my/workload/vms", nil, http.StatusOK, &vms)
@@ -154,6 +163,38 @@ func TestStacks(t *testing.T) {
 
 		s := waitFor(t, "running", "running")
 		t.Logf("compose said, restarting it:\n%s", s.Output)
+	})
+
+	timings.step(t, "a stack compose refuses fails, and is deleted all the same", func(t *testing.T) {
+		var refused struct {
+			Stack stackView `json:"stack"`
+		}
+		user.call(t, http.MethodPost, "/api/dashboard/workload/stacks", map[string]any{
+			"name":    "e2e refused stack",
+			"compose": refusedCompose,
+			"vm_uuid": vmUUID,
+		}, http.StatusCreated, &refused)
+
+		refusedPath := "/api/dashboard/my/workload/stacks/" + refused.Stack.UUID
+
+		eventually(t, "stack "+refused.Stack.Slug, 5*time.Minute, func() (bool, string) {
+			var s stackView
+			user.call(t, http.MethodGet, refusedPath, nil, http.StatusOK, &s)
+
+			return s.State == "failed", s.String()
+		})
+
+		user.call(t, http.MethodDelete, refusedPath, nil, http.StatusAccepted, nil)
+
+		eventually(t, "stack "+refused.Stack.Slug, 5*time.Minute, func() (bool, string) {
+			status, _ := user.status(t, http.MethodGet, refusedPath, nil)
+
+			return status == http.StatusNotFound, fmt.Sprint(status)
+		})
+
+		if v := getVM(t, vmUUID); v.State != "running" {
+			t.Fatalf("the stack's vm is %s once the stack is gone", v.State)
+		}
 	})
 
 	timings.step(t, "delete, its volume kept until it is removed", func(t *testing.T) {

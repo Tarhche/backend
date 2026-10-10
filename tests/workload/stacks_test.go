@@ -173,6 +173,71 @@ func TestAStack(t *testing.T) {
 	})
 }
 
+// TestAStackThatCannotComeUp deploys into a Docker VM stacks that cannot come
+// up: one whose file compose refuses, and one whose file cannot be labelled
+// as a stack's. Each fails, saying why, and is deleted all the same, by its
+// project's name alone, and the VM it was in stays.
+func TestAStackThatCannotComeUp(t *testing.T) {
+	t.Parallel()
+
+	w := start(t)
+	ctx := t.Context()
+
+	vmUUID := w.dockerVM(t, "builds")
+
+	for name, tt := range map[string]struct {
+		compose string
+		reason  string
+		output  string
+	}{
+		"one whose file compose refuses": {
+			compose: "services:\n  web:\n    image: nginx:alpine\nnonsense: true\n",
+			reason:  "docker compose up exited with 1",
+			output:  "additional properties 'nonsense' not allowed",
+		},
+		"one whose file cannot be labelled": {
+			compose: "services:\n  web: nginx:alpine\n",
+			reason:  "its compose file cannot be read",
+		},
+	} {
+		t.Run(name+" fails, and is deleted all the same, its vm kept", func(t *testing.T) {
+			deployed, err := createStack.NewUseCase(w.client, w.validator, w.translator, w.owners).Execute(ctx, &createStack.Request{
+				Name:      "broken",
+				Compose:   tt.compose,
+				VMUUID:    vmUUID,
+				OwnerUUID: ownerUUID,
+			})
+			require.NoError(t, err)
+			require.Empty(t, deployed.ValidationErrors)
+			require.NotNil(t, deployed.Stack)
+
+			stackUUID, slug := deployed.Stack.UUID, deployed.Stack.Slug
+
+			failed := eventually(t, "the stack failed", func(ctx context.Context) (presenter.StackDetail, error) {
+				return w.readStack(ctx, stackUUID)
+			}, func(s presenter.StackDetail) bool { return s.State == "failed" })
+			assert.Contains(t, failed.Reason, tt.reason)
+			assert.Contains(t, failed.Output, tt.output)
+
+			deleted, err := deleteStack.NewUseCase(w.client, w.translator).Execute(ctx, &deleteStack.Request{UUID: stackUUID, OwnerUUID: ownerUUID})
+			require.NoError(t, err)
+			require.Empty(t, deleted.ValidationErrors)
+
+			require.Eventually(t, func() bool {
+				_, err := w.readStack(ctx, stackUUID)
+
+				return errors.Is(err, domain.ErrNotExists)
+			}, settle, beat, "the stack was never removed")
+
+			ran := w.dockerd.Ran(slug)
+			require.NotEmpty(t, ran)
+			assert.Equal(t, "down --remove-orphans", ran[len(ran)-1], "taken down by its project's name alone")
+
+			w.vmIn(t, vmUUID, "running")
+		})
+	}
+}
+
 // images are the images the dashboard lists in the Docker VM vmUUID names,
 // by each of their tags, once condition holds of them.
 func (w *workload) images(t *testing.T, vmUUID string, what string, condition func(map[string]presenter.Image) bool) map[string]presenter.Image {
