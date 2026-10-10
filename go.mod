@@ -17,6 +17,7 @@ require (
 	github.com/google/pprof v0.0.0-20260926063103-aaccee046517
 	github.com/gorilla/websocket v1.5.3
 	github.com/hashicorp/golang-lru/v2 v2.0.7
+	github.com/hmdsefi/gograph v0.8.2
 	github.com/minio/minio-go/v7 v7.3.0
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/nats-io/nats-server/v2 v2.15.0

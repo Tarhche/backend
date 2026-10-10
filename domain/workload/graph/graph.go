@@ -20,8 +20,10 @@
 // Whether it is there is what its node last reported of it, never what a
 // node is asked at the time.
 //
-// Here are the contracts and nothing that runs them: nothing here reads or
-// writes anything.
+// Here are the contracts, and the plan of what a root needs (Planner, Plan):
+// its nodes, each once, what each needs of the others, and the order they are
+// made in, a level at a time. Nothing here carries a plan out: nothing here
+// reads or writes anything.
 package graph
 
 import (

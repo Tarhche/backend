@@ -1,0 +1,235 @@
+package graphtest_test
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"sync"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/khanzadimahdi/testproject/domain/workload/graph"
+	"github.com/khanzadimahdi/testproject/domain/workload/graph/graphtest"
+	"github.com/khanzadimahdi/testproject/domain/workload/kind"
+)
+
+var (
+	vm  = graph.ID("vm", "v-uuid")
+	web = graph.ID("container", "web")
+)
+
+func TestKind(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a node requires what it is said to, and nothing else", func(t *testing.T) {
+		t.Parallel()
+
+		kinds := graphtest.NewKind()
+		kinds.Require(web, graphtest.Requirement("vm", "v-uuid"))
+
+		required, err := kinds.Requires(web)
+		require.NoError(t, err)
+		assert.Equal(t, []graph.Requirement{{Kind: "vm", Name: "v-uuid", Spec: vm}}, required, "its spec its id")
+
+		required, err = kinds.Requires(vm)
+		require.NoError(t, err)
+		assert.Empty(t, required, "and one it is told nothing of requires nothing")
+	})
+
+	t.Run("a spec that is no node's id is not read", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		kinds := graphtest.NewKind()
+
+		_, err := kinds.Requires("web")
+		assert.ErrorIs(t, err, kind.ErrInvalidPayload)
+
+		_, _, err = kinds.Exists(ctx, "web")
+		assert.ErrorIs(t, err, kind.ErrInvalidPayload)
+
+		_, err = kinds.Create(ctx, "web", nil)
+		assert.ErrorIs(t, err, kind.ErrInvalidPayload)
+
+		assert.Empty(t, kinds.Calls(), "and is no node asked anything")
+	})
+
+	t.Run("a node is there once it is made, and not once it is removed", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		kinds := graphtest.NewKind()
+
+		_, there, err := kinds.Exists(ctx, web)
+		require.NoError(t, err)
+		assert.False(t, there)
+
+		ref, err := kinds.Create(ctx, web, map[graph.NodeID]graph.Ref{vm: graphtest.Ref(vm)})
+		require.NoError(t, err)
+		assert.Equal(t, graph.Ref{Kind: "container", UUID: "web"}, ref, "its record its kind and its name")
+
+		found, there, err := kinds.Exists(ctx, web)
+		require.NoError(t, err)
+		assert.True(t, there)
+		assert.Equal(t, ref, found)
+		assert.Equal(t, []graph.NodeID{web}, kinds.Held())
+
+		require.NoError(t, kinds.Delete(ctx, ref))
+
+		_, there, err = kinds.Exists(ctx, web)
+		require.NoError(t, err)
+		assert.False(t, there)
+		assert.Empty(t, kinds.Held())
+
+		assert.NoError(t, kinds.Delete(ctx, ref), "and one gone already is removed")
+	})
+
+	t.Run("a node held is there as if it were made before", func(t *testing.T) {
+		t.Parallel()
+
+		kinds := graphtest.NewKind()
+		kinds.Hold(vm, web)
+
+		ref, there, err := kinds.Exists(context.Background(), vm)
+		require.NoError(t, err)
+		assert.True(t, there)
+		assert.Equal(t, graphtest.Ref(vm), ref)
+
+		assert.Equal(t, []graph.NodeID{web, vm}, kinds.Held(), "in the order of their ids")
+		assert.Empty(t, kinds.Asked(graphtest.Create))
+	})
+
+	t.Run("what a node is told to do it does first, and fails with what that fails with", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		broken := errors.New("broken")
+
+		kinds := graphtest.NewKind()
+		kinds.On(graphtest.Create, web, func(context.Context) error { return broken })
+
+		_, err := kinds.Create(ctx, web, nil)
+		assert.ErrorIs(t, err, broken)
+		assert.Empty(t, kinds.Held(), "and is not made")
+
+		_, err = kinds.Create(ctx, vm, nil)
+		require.NoError(t, err, "while another node is")
+
+		kinds.On(graphtest.Create, web, nil)
+
+		_, err = kinds.Create(ctx, web, nil)
+		require.NoError(t, err, "and so is the node once it is told nothing")
+		assert.Equal(t, []graph.NodeID{web, vm}, kinds.Held())
+
+		kinds.On(graphtest.Delete, web, func(ctx context.Context) error {
+			<-ctx.Done()
+
+			return ctx.Err()
+		})
+
+		cancelled, cancel := context.WithCancel(ctx)
+		cancel()
+
+		assert.ErrorIs(t, kinds.Delete(cancelled, graphtest.Ref(web)), context.Canceled, "with the context it is asked with")
+		assert.Equal(t, []graph.NodeID{web, vm}, kinds.Held(), "and is not removed")
+
+		kinds.On(graphtest.Exists, vm, func(context.Context) error { return &graph.Waiting{Reason: "its vm is stopped"} })
+
+		_, _, err = kinds.Exists(ctx, vm)
+
+		var waiting *graph.Waiting
+		require.ErrorAs(t, err, &waiting, "and may wait")
+		assert.Equal(t, "its vm is stopped", waiting.Reason)
+
+		kinds.Require(web, graphtest.Requirement("vm", "v-uuid"))
+		kinds.On(graphtest.Requires, web, func(context.Context) error { return broken })
+
+		_, err = kinds.Requires(web)
+		assert.ErrorIs(t, err, broken, "whatever it is asked")
+	})
+
+	t.Run("everything it is asked is recorded, in order", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		kinds := graphtest.NewKind()
+
+		deps := map[graph.NodeID]graph.Ref{vm: graphtest.Ref(vm)}
+
+		_, err := kinds.Requires(web)
+		require.NoError(t, err)
+		_, _, err = kinds.Exists(ctx, web)
+		require.NoError(t, err)
+		_, err = kinds.Create(ctx, web, deps)
+		require.NoError(t, err)
+		require.NoError(t, kinds.Delete(ctx, graphtest.Ref(web)))
+
+		deps[vm] = graph.Ref{}
+
+		calls := kinds.Calls()
+		assert.Equal(t, []graphtest.Call{
+			{Op: graphtest.Requires, Node: web},
+			{Op: graphtest.Exists, Node: web},
+			{Op: graphtest.Create, Node: web, Deps: map[graph.NodeID]graph.Ref{vm: {Kind: "vm", UUID: "v-uuid"}}},
+			{Op: graphtest.Delete, Node: web},
+		}, calls, "a create with what it was handed then")
+
+		calls[2].Deps[vm] = graph.Ref{}
+		assert.Equal(t, graphtest.Ref(vm), kinds.Calls()[2].Deps[vm], "and what it answers is a copy of its own")
+
+		assert.Equal(t, []graph.NodeID{web}, kinds.Asked(graphtest.Create))
+		assert.Empty(t, kinds.Asked("restart"))
+	})
+
+	t.Run("one kind may be every kind of a graph", func(t *testing.T) {
+		t.Parallel()
+
+		kinds := graphtest.NewKind()
+
+		assert.Equal(t, graph.Kinds{"vm": kinds, "container": kinds}, kinds.Kinds("vm", "container"))
+	})
+
+	t.Run("it may be asked from several goroutines at once, each waiting for the others", func(t *testing.T) {
+		t.Parallel()
+
+		const nodes = 20
+
+		ctx := context.Background()
+		kinds := graphtest.NewKind()
+
+		// no create is over before every one has started.
+		var started sync.WaitGroup
+		started.Add(nodes)
+
+		var wg sync.WaitGroup
+		for i := range nodes {
+			id := graph.ID("container", fmt.Sprintf("c-%d", i))
+			kinds.On(graphtest.Create, id, func(context.Context) error {
+				started.Done()
+				started.Wait()
+
+				return nil
+			})
+
+			wg.Go(func() {
+				_, err := kinds.Create(ctx, id, map[graph.NodeID]graph.Ref{vm: graphtest.Ref(vm)})
+				assert.NoError(t, err)
+
+				_, there, err := kinds.Exists(ctx, id)
+				assert.NoError(t, err)
+				assert.True(t, there)
+
+				_ = kinds.Calls()
+				_ = kinds.Held()
+			})
+		}
+
+		wg.Wait()
+
+		assert.Len(t, kinds.Held(), nodes)
+		assert.Len(t, kinds.Asked(graphtest.Create), nodes)
+		assert.Len(t, kinds.Asked(graphtest.Exists), nodes)
+	})
+}
