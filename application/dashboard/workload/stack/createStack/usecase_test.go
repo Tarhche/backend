@@ -73,13 +73,13 @@ func TestUseCase_Execute(t *testing.T) {
 		}`, string(presented))
 	})
 
-	t.Run("into the Docker VM it names, or one it describes", func(t *testing.T) {
+	t.Run("into the Docker VM it names, a new one it describes, or a new one with the defaults", func(t *testing.T) {
 		t.Parallel()
 
 		var asked []workloadControlPlane.StackRequest
 
 		var workload controlplane.MockClient
-		workload.On("CreateStack", mock.Anything, workloadtest.OwnerUUID, mock.Anything).Twice().
+		workload.On("CreateStack", mock.Anything, workloadtest.OwnerUUID, mock.Anything).Times(3).
 			Run(func(args mock.Arguments) { asked = append(asked, args.Get(2).(workloadControlPlane.StackRequest)) }).
 			Return(workloadControlPlane.CreatedStack{Stack: workloadtest.Stack()}, nil)
 		defer workload.AssertExpectations(t)
@@ -90,9 +90,13 @@ func TestUseCase_Execute(t *testing.T) {
 		_, err = useCase(&workload).Execute(context.Background(), &Request{Name: "shop", Compose: compose, VM: &input.NewDockerVM{Name: "docker-2"}, OwnerUUID: workloadtest.OwnerUUID})
 		require.NoError(t, err)
 
-		require.Len(t, asked, 2)
+		_, err = useCase(&workload).Execute(context.Background(), &Request{Name: "shop", Compose: compose, OwnerUUID: workloadtest.OwnerUUID})
+		require.NoError(t, err)
+
+		require.Len(t, asked, 3)
 		assert.Equal(t, workloadControlPlane.DockerVMChoice{UUID: "vm-uuid"}, asked[0].VM)
 		assert.Equal(t, workloadControlPlane.DockerVMChoice{New: &workloadControlPlane.NewDockerVM{Name: "docker-2"}}, asked[1].VM)
+		assert.Equal(t, workloadControlPlane.DockerVMChoice{}, asked[2].VM)
 	})
 
 	t.Run("a request the rules refuse never reaches the workload", func(t *testing.T) {
@@ -154,12 +158,12 @@ func TestUseCase_Execute(t *testing.T) {
 	t.Run("what the control plane refuses about the vm is said where this request asked for it", func(t *testing.T) {
 		t.Parallel()
 
-		// the control plane names the VM to make vm.new; this request names
-		// it vm.
+		// the control plane names the VM to use vm.uuid, which this request
+		// names vm_uuid; both name the VM to make vm.
 		var workload controlplane.MockClient
 		workload.On("CreateStack", mock.Anything, workloadtest.OwnerUUID, mock.Anything).Once().Return(
 			workloadControlPlane.CreatedStack{},
-			&client.ValidationError{ValidationErrors: domain.ValidationErrors{"vm.new.resources.cpus": "too_large", "vm.uuid": "not_found"}},
+			&client.ValidationError{ValidationErrors: domain.ValidationErrors{"vm.resources.cpus": "too_large", "vm.uuid": "not_found"}},
 		)
 		defer workload.AssertExpectations(t)
 

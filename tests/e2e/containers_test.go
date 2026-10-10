@@ -42,20 +42,11 @@ func dockerPath(vmUUID string, rest ...string) string {
 	return vmPath(vmUUID, rest...)
 }
 
-// TestContainers runs a container the way the dashboard does for somebody
-// with no Docker VM yet: one is made for it. The container is then read,
-// served through the ingress, moved between networks and removed, and the
-// VM's images and volumes are made and removed beside it.
+// TestContainers runs a container the way the dashboard does when it names no
+// Docker VM: one is made for it, whichever the run's account has already. The
+// container is then read, served through the ingress, moved between networks
+// and removed, and the VM's images and volumes are made and removed beside it.
 func TestContainers(t *testing.T) {
-	var vms page[vmView]
-	user.call(t, http.MethodGet, "/api/dashboard/my/workload/vms", nil, http.StatusOK, &vms)
-
-	for _, v := range vms.Items {
-		if v.Kind == "docker" {
-			t.Fatalf("the run's account already has a Docker VM, %s, so none would be made", v.UUID)
-		}
-	}
-
 	marker := "e2e-" + random(6)
 
 	var created struct {

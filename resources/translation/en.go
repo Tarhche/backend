@@ -56,7 +56,6 @@ var english = map[string]string{
 	"invalid_network_driver": "a network's driver can only be bridge",
 	"invalid_volume_driver":  "a volume's driver can only be local",
 	"vm_or_new_vm":           "name a Docker VM or describe a new one, not both",
-	"vm_required":            "you have more than one Docker VM, so say which one to use",
 	"too_large":              "this is larger than allowed",
 	"too_small":              "this is smaller than allowed",
 	"quota_exceeded":         "this would take you past your quota",

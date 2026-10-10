@@ -525,10 +525,11 @@ func TestContract_BuildingBlocks(t *testing.T) {
 	assert.Len(t, running, 1, "only those that run, unless all are asked for")
 
 	created, err := c.CreateContainer(ctx, "owner", workloadControlPlane.ContainerRequest{
+		VM:        workloadControlPlane.DockerVMChoice{UUID: "d1"},
 		Container: docker.ContainerSpec{Name: "api", Image: "nginx:1.27"},
 	})
 	require.NoError(t, err)
-	assert.Equal(t, workloadControlPlane.ChosenVM{UUID: "d1", Name: "box", Created: false}, created.VM, "its owner's only docker vm")
+	assert.Equal(t, workloadControlPlane.ChosenVM{UUID: "d1", Name: "box", Created: false}, created.VM, "the docker vm it named")
 	assert.Equal(t, "c-api", created.Container.ID, "as its node made it")
 	assert.Equal(t, "running", created.Container.State)
 
@@ -688,4 +689,21 @@ func TestContract_NewDockerVM(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, []port.Port{80}, made.Ports, "ports left out are the defaults")
+
+	named := created.VM.UUID
+
+	created, err = c.CreateStack(ctx, "owner", workloadControlPlane.StackRequest{
+		Name:    "db",
+		Compose: "services:\n  db:\n    image: redis:7\n",
+	})
+	require.NoError(t, err)
+	require.True(t, created.VM.Created, "naming none is asking for one made with the defaults")
+	assert.NotEqual(t, named, created.VM.UUID, "whichever docker vms its owner has already")
+
+	made, err = c.VM(ctx, "owner", created.VM.UUID)
+	require.NoError(t, err)
+
+	assert.Equal(t, "docker", made.Name)
+	assert.Equal(t, vm.Resources{CPUs: 2, Memory: 2 * vmtest.GiB, Disk: 20 * vmtest.GiB}, made.Resources)
+	assert.Equal(t, []port.Port{80}, made.Ports)
 }

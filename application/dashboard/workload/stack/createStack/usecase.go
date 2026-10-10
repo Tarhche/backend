@@ -14,9 +14,9 @@ import (
 // UseCase deploys a compose project into a Docker VM of the caller's.
 //
 // The deploy itself happens after the answer: what comes back is a stack that
-// is still deploying, in the VM the control plane chose or made for it. That
-// the YAML is compose at all is the control plane's to say, since it is the
-// one that reads it.
+// is still deploying, in the VM it named or one the control plane made for it.
+// That the YAML is compose at all is the control plane's to say, since it is
+// the one that reads it.
 type UseCase struct {
 	workload   workloadControlPlane.Client
 	validator  domain.Validator

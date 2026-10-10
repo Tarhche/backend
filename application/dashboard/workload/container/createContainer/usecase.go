@@ -13,9 +13,10 @@ import (
 
 // UseCase creates and starts a container in a Docker VM of the caller's.
 //
-// Choosing the VM — and making one, when the caller has none — is the control
-// plane's, since it is the one that knows which Docker VMs they have; the
-// answer says which one it went into and whether it was made for it.
+// Holding the VM it names to being a Docker VM of the caller's, and making one
+// when it names none, is the control plane's, since it is the one that keeps
+// the VMs; the answer says which one it went into and whether it was made for
+// it.
 type UseCase struct {
 	workload   workloadControlPlane.Client
 	validator  domain.Validator

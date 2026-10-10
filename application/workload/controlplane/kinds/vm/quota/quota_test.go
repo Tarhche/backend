@@ -60,7 +60,7 @@ func TestLimits_Bounds(t *testing.T) {
 	t.Run("each field is said where it was asked", func(t *testing.T) {
 		t.Parallel()
 
-		assert.Equal(t, domain.ValidationErrors{"vm.new.resources.cpus": "too_large"}, limits.Bounds("vm.new.", vm.KindDocker, vmKind.Resources{CPUs: 8, Memory: vmtest.GiB, Disk: 10 * vmtest.GiB}))
+		assert.Equal(t, domain.ValidationErrors{"vm.resources.cpus": "too_large"}, limits.Bounds("vm.", vm.KindDocker, vmKind.Resources{CPUs: 8, Memory: vmtest.GiB, Disk: 10 * vmtest.GiB}))
 	})
 }
 
@@ -73,7 +73,7 @@ func TestLimits_Lifetime(t *testing.T) {
 	assert.Empty(t, limits.Lifetime("", 720*time.Hour))
 	assert.Equal(t, domain.ValidationErrors{"lifetime_seconds": "too_large"}, limits.Lifetime("", 721*time.Hour))
 	assert.Equal(t, domain.ValidationErrors{"lifetime_seconds": "invalid_lifetime"}, limits.Lifetime("", -time.Second))
-	assert.Equal(t, domain.ValidationErrors{"vm.new.lifetime_seconds": "too_large"}, limits.Lifetime("vm.new.", 721*time.Hour))
+	assert.Equal(t, domain.ValidationErrors{"vm.lifetime_seconds": "too_large"}, limits.Lifetime("vm.", 721*time.Hour))
 
 	limits.MaxLifetime = 0
 	assert.Empty(t, limits.Lifetime("", 10000*time.Hour), "no longest is any length")
@@ -127,8 +127,8 @@ func TestQuota_Check(t *testing.T) {
 			ownerUUID: "owner",
 			resources: vmKind.Resources{CPUs: 7, Memory: 12 * vmtest.GiB, Disk: 150 * vmtest.GiB},
 			except:    "01",
-			prefix:    "vm.new.",
-			want:      domain.ValidationErrors{"vm.new.resources.cpus": "quota_exceeded"},
+			prefix:    "vm.",
+			want:      domain.ValidationErrors{"vm.resources.cpus": "quota_exceeded"},
 		},
 		"somebody else's are theirs alone": {
 			ownerUUID: "newcomer",

@@ -14,7 +14,8 @@ const MaxCompose = 256 << 10
 // It is always deployed for whoever asks.
 //
 // Which VM it goes in is the request's to say, as a container's is: one named
-// by VMUUID, a new one described by VM, or neither.
+// by VMUUID, a new one described by VM, or neither, which makes a new one
+// with the defaults.
 type Request struct {
 	Name string `json:"name"`
 

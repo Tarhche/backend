@@ -14,8 +14,7 @@ import (
 // VMs. It is always created for whoever asks.
 //
 // Which VM it goes in is the request's to say: one named by VMUUID, a new one
-// described by VM, or neither, which puts it in the caller's only Docker VM,
-// or in one made for it when they have none.
+// described by VM, or neither, which makes a new one with the defaults.
 type Request struct {
 	VMUUID string             `json:"vm_uuid,omitempty"`
 	VM     *input.NewDockerVM `json:"vm,omitempty"`

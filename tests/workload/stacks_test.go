@@ -49,7 +49,7 @@ func TestAStack(t *testing.T) {
 
 	stackUUID, slug, vmUUID := deployed.Stack.UUID, deployed.Stack.Slug, deployed.VM.UUID
 
-	assert.True(t, deployed.VM.Created, "its owner had no Docker VM, so one was made for it")
+	assert.True(t, deployed.VM.Created, "it named no Docker VM, so one was made for it")
 	assert.Equal(t, "waiting", deployed.Stack.State, "for the vm made for it to come up")
 	assert.Equal(t, "running", deployed.Stack.ExpectedState)
 

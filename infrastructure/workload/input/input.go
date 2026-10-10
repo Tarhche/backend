@@ -209,9 +209,8 @@ func access(errs domain.ValidationErrors, field string, value string, required b
 	}
 }
 
-// NewDockerVM is a Docker VM to make for a container or a stack, when there is
-// none to put it in or a new one is wanted. Anything left out is the
-// workload's Docker default.
+// NewDockerVM is a Docker VM to make for a container or a stack. Anything left
+// out is the workload's Docker default.
 type NewDockerVM struct {
 	Name      string     `json:"name,omitempty"`
 	Resources *Resources `json:"resources,omitempty"`
@@ -220,8 +219,8 @@ type NewDockerVM struct {
 }
 
 // DockerVM holds where a container or a stack is to go: a Docker VM named by
-// its uuid, a new one described, or neither, which leaves the choice to the
-// workload. Naming one and describing another is asking for two things.
+// its uuid, a new one described, or neither, which is a new one with the
+// defaults. Naming one and describing another is asking for two things.
 func DockerVM(errs domain.ValidationErrors, vmUUID string, described *NewDockerVM) {
 	if described == nil {
 		return
@@ -274,10 +273,10 @@ func DockerVMChoice(vmUUID string, described *NewDockerVM) workloadControlPlane.
 // or a stack was to go into, under the fields this request asked for it with.
 //
 // The control plane is asked for a VM to use as vm.uuid and for one to make as
-// vm.new, and says so when it refuses either; the dashboard asks for them as
-// vm_uuid and vm. So a VM that is not a Docker VM is refused under vm_uuid,
-// and a new VM's memory under vm.resources.memory, where the form asked for
-// it. Anything else is left where it was said.
+// the rest of vm, and says so when it refuses either; the dashboard asks for
+// them as vm_uuid and vm. So a VM that is not a Docker VM is refused under
+// vm_uuid, and a new VM's memory under vm.resources.memory, where both asked
+// for it. Anything else is left where it was said.
 func DockerVMRefused(refused domain.ValidationErrors) domain.ValidationErrors {
 	if len(refused) == 0 {
 		return refused
@@ -285,13 +284,8 @@ func DockerVMRefused(refused domain.ValidationErrors) domain.ValidationErrors {
 
 	named := make(domain.ValidationErrors, len(refused))
 	for field, reason := range refused {
-		switch {
-		case field == "vm.uuid":
+		if field == "vm.uuid" {
 			field = "vm_uuid"
-		case field == "vm.new":
-			field = "vm"
-		case strings.HasPrefix(field, "vm.new."):
-			field = "vm." + strings.TrimPrefix(field, "vm.new.")
 		}
 
 		named[field] = reason

@@ -192,19 +192,19 @@ func TestCreate(t *testing.T) {
 		assert.JSONEq(t, `{"vm": {"uuid": "vm-uuid", "name": "docker-1", "created": false}, "stack": `+workloadtest.StackJSON+`}`, response.Body.String())
 	})
 
-	t.Run("several Docker VMs to choose from, and none chosen", func(t *testing.T) {
+	t.Run("a Docker VM no node has room for, made for it as it named none", func(t *testing.T) {
 		t.Parallel()
 
 		var workload controlplane.MockClient
 		workload.On("CreateStack", mock.Anything, workloadtest.OwnerUUID, mock.Anything).Once().Return(
 			workloadControlPlane.CreatedStack{},
-			&client.ValidationError{ValidationErrors: domain.ValidationErrors{"vm": "vm_required"}},
+			&client.ValidationError{ValidationErrors: domain.ValidationErrors{"vm": "no_capacity"}},
 		)
 		defer workload.AssertExpectations(t)
 
 		response := workloadhttptest.Serve(routes(&workload), http.MethodPost, "/api/dashboard/workload/stacks", `{"name": "shop", "compose": "services: {}"}`)
 
 		assert.Equal(t, http.StatusBadRequest, response.Code)
-		assert.JSONEq(t, `{"errors": {"vm": "you have more than one Docker VM, so say which one to use"}}`, response.Body.String())
+		assert.JSONEq(t, `{"errors": {"vm": "there is no room for it on any node right now, try again later"}}`, response.Body.String())
 	})
 }

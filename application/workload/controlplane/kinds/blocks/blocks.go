@@ -598,16 +598,16 @@ func (b *Blocks) Into(ctx context.Context, ownerUUID string, parent string) (vmK
 		return vmKind.VM{}, domain.ValidationErrors{"vm": "required_field"}, nil
 	}
 
-	chosen, refused, err := b.Chooser.Choose(ctx, ownerUUID, dockervm.Choice{UUID: parent})
+	v, refused, err := b.Chooser.Choose(ctx, ownerUUID, dockervm.Choice{UUID: parent})
 	if err != nil || len(refused) > 0 {
 		return vmKind.VM{}, refused, err
 	}
 
-	if !vmKind.Up(chosen.VM) {
+	if !vmKind.Up(v) {
 		return vmKind.VM{}, domain.ValidationErrors{"vm": "not_running"}, nil
 	}
 
-	return chosen.VM, nil, nil
+	return v, nil, nil
 }
 
 // Present is what a building block that is either there or not is asked

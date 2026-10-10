@@ -78,8 +78,8 @@ func TestClient_errors(t *testing.T) {
 		},
 		"a request the control plane would not take": {
 			status:  http.StatusBadRequest,
-			body:    `{"errors":{"resources.memory":"quota_exceeded","vm":"vm_required"}}`,
-			refused: domain.ValidationErrors{"resources.memory": "quota_exceeded", "vm": "vm_required"},
+			body:    `{"errors":{"resources.memory":"quota_exceeded","vm":"no_capacity"}}`,
+			refused: domain.ValidationErrors{"resources.memory": "quota_exceeded", "vm": "no_capacity"},
 		},
 		"a vm that is not running": {
 			status:  http.StatusConflict,

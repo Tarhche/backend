@@ -3,10 +3,10 @@
 // was asked to be.
 //
 // A stack is admitted into a Docker VM chosen by the rules a container's is:
-// the one it names, its owner's only one, or one made for it. It is placed
-// where its VM is, belongs to its VM, and is given a slug nothing else has,
-// which is its compose project. It starts waiting, and is deployed as soon as
-// its VM runs.
+// the one it names, or one made for it when it names none. It is placed where
+// its VM is, belongs to its VM, and is given a slug nothing else has, which is
+// its compose project. It starts waiting, and is deployed as soon as its VM
+// runs.
 //
 // What it is asked for after that is decided from what its node last said of
 // it, and from its VM:
@@ -71,7 +71,7 @@ func New(vms *records.Records, chooser *dockervm.Chooser, taken ...slugs.Taken) 
 // could be deployed into it.
 func (s *Stacks) Admit(ctx context.Context, asked stackKind.Stack) (stackKind.Stack, domain.ValidationErrors, error) {
 	choice := asked.Spec.VM
-	if parent, named := asked.Metadata.Owner(stackKind.Parent); named && len(choice.UUID) == 0 && choice.New == nil {
+	if parent, named := asked.Metadata.Owner(stackKind.Parent); named && len(choice.UUID) == 0 && !choice.Describes() {
 		choice.UUID = parent.UUID
 	}
 
@@ -79,12 +79,10 @@ func (s *Stacks) Admit(ctx context.Context, asked stackKind.Stack) (stackKind.St
 		return stackKind.Stack{}, invalid, nil
 	}
 
-	chosen, refused, err := s.chooser.Choose(ctx, asked.Metadata.OwnerUUID, choiceOf(choice))
+	v, refused, err := s.chooser.Choose(ctx, asked.Metadata.OwnerUUID, choiceOf(choice))
 	if err != nil || len(refused) > 0 {
 		return stackKind.Stack{}, refused, err
 	}
-
-	v := chosen.VM
 
 	if !vmKind.Up(v) {
 		return stackKind.Stack{}, domain.ValidationErrors{"vm": "vm_not_running"}, nil
@@ -112,15 +110,6 @@ func (s *Stacks) Admit(ctx context.Context, asked stackKind.Stack) (stackKind.St
 			Compose: asked.Spec.Compose,
 		},
 		Status: stackKind.Status{Status: kind.Status{State: stackKind.Waiting, Expected: stackKind.Running}},
-	}
-
-	// what it was made with, or nothing more than the defaults: either way,
-	// that it was made for this stack.
-	if chosen.Created {
-		admitted.Spec.VM.New = &stackKind.NewVM{}
-		if choice.New != nil {
-			admitted.Spec.VM.New = choice.New
-		}
 	}
 
 	if v.Status.State != vmKind.Running {
@@ -197,7 +186,7 @@ func validate(asked stackKind.Stack, choice stackKind.VMChoice) domain.Validatio
 		invalid["compose"] = code
 	}
 
-	if len(choice.UUID) > 0 && choice.New != nil {
+	if len(choice.UUID) > 0 && choice.Describes() {
 		invalid["vm"] = "vm_or_new_vm"
 	}
 
@@ -234,18 +223,14 @@ func ValidateCompose(compose string) (string, bool) {
 
 // choiceOf is a stack's choice of VM as the chooser reads one.
 func choiceOf(choice stackKind.VMChoice) dockervm.Choice {
-	chosen := dockervm.Choice{UUID: choice.UUID}
+	chosen := dockervm.Choice{UUID: choice.UUID, Name: choice.Name, Ports: choice.Ports}
 
-	if made := choice.New; made != nil {
-		chosen.New = &dockervm.New{Name: made.Name, Ports: made.Ports}
+	if choice.Resources != nil {
+		chosen.Resources = &vmKind.Resources{CPUs: choice.Resources.CPUs, Memory: choice.Resources.Memory, Disk: choice.Resources.Disk}
+	}
 
-		if made.Resources != nil {
-			chosen.New.Resources = &vmKind.Resources{CPUs: made.Resources.CPUs, Memory: made.Resources.Memory, Disk: made.Resources.Disk}
-		}
-
-		if made.Network != nil {
-			chosen.New.Network = &vmKind.Network{Ingress: vm.Access(made.Network.Ingress), Egress: vm.Access(made.Network.Egress)}
-		}
+	if choice.Network != nil {
+		chosen.Network = &vmKind.Network{Ingress: vm.Access(choice.Network.Ingress), Egress: vm.Access(choice.Network.Egress)}
 	}
 
 	return chosen

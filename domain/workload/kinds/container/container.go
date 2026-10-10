@@ -146,9 +146,9 @@ func Restarts(policy string) bool {
 // the Docker VM it goes into.
 type Spec struct {
 	// VM is the Docker VM it goes into, chosen by the rules a stack's is: as
-	// it is asked, one of the person's Docker VMs, one described to be made
-	// for it, or neither; as it is kept, the one chosen, and whether it was
-	// made for it.
+	// it is asked, one of the person's Docker VMs, named by its uuid, or one
+	// made for it with whatever else it gives; as it is kept, the uuid of the
+	// one it went into.
 	VM stackKind.VMChoice `json:"vm"`
 
 	// Name is docker's name for it; empty lets docker pick one.

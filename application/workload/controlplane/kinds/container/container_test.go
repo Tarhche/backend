@@ -20,6 +20,7 @@ import (
 	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
+	"github.com/khanzadimahdi/testproject/domain/workload/port"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
 )
 
@@ -63,34 +64,37 @@ func TestContainers_Admit(t *testing.T) {
 		assert.Equal(t, containerKind.Running, admitted.Status.Expected)
 	})
 
-	t.Run("into its owner's only docker vm when it names none", func(t *testing.T) {
+	t.Run("into one made for it when it names none, though its owner has a docker vm already", func(t *testing.T) {
 		t.Parallel()
 
-		w := blockstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner"), vmtest.Running("machine", "owner")))
+		w := blockstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
 
 		admitted, invalid, err := w.Containers.Admit(ctx, asked(containerKind.Spec{Image: "nginx"}))
 		require.NoError(t, err)
 		require.Empty(t, invalid)
 
-		assert.Equal(t, "vm-1", containerKind.VMOf(admitted))
-		assert.Nil(t, admitted.Spec.VM.New)
+		made, kept := w.Stored(containerKind.VMOf(admitted))
+		require.True(t, kept)
+		assert.NotEqual(t, "vm-1", made.Metadata.UUID)
+		assert.True(t, vmKind.DockerVM(made, vmtest.Images.Docker))
+		assert.Equal(t, stackKind.VMChoice{UUID: made.Metadata.UUID}, admitted.Spec.VM, "kept as the uuid of the vm it went into, and nothing else")
+		assert.Equal(t, "its vm is scheduled", admitted.Status.Reason, "and it waits for it to come up")
 	})
 
-	t.Run("into one made for it when its owner has none, which it says", func(t *testing.T) {
+	t.Run("into one made for it as it describes it, which is kept as the vm's uuid alone", func(t *testing.T) {
 		t.Parallel()
 
 		w := blockstest.New()
 
-		admitted, invalid, err := w.Containers.Admit(ctx, asked(containerKind.Spec{Image: "nginx"}))
+		admitted, invalid, err := w.Containers.Admit(ctx, asked(containerKind.Spec{Image: "nginx", VM: stackKind.VMChoice{Name: "builds", Ports: []port.Port{}}}))
 		require.NoError(t, err)
 		require.Empty(t, invalid)
 
-		assert.NotNil(t, admitted.Spec.VM.New, "made for it")
-
 		made, kept := w.Stored(containerKind.VMOf(admitted))
 		require.True(t, kept)
-		assert.True(t, vmKind.DockerVM(made, vmtest.Images.Docker))
-		assert.Equal(t, "its vm is scheduled", admitted.Status.Reason, "and it waits for it to come up")
+		assert.Equal(t, "builds", made.Metadata.Name)
+		assert.Empty(t, made.Spec.Ports, "ports given empty are none")
+		assert.Equal(t, stackKind.VMChoice{UUID: made.Metadata.UUID}, admitted.Spec.VM)
 	})
 
 	for name, tt := range map[string]struct {
@@ -110,7 +114,7 @@ func TestContainers_Admit(t *testing.T) {
 			want: domain.ValidationErrors{"restart_policy": "invalid_restart_policy"},
 		},
 		"one naming a vm and describing a new one": {
-			spec: containerKind.Spec{Image: "nginx", VM: stackKind.VMChoice{UUID: "vm-1", New: &stackKind.NewVM{}}},
+			spec: containerKind.Spec{Image: "nginx", VM: stackKind.VMChoice{UUID: "vm-1", Name: "builds"}},
 			want: domain.ValidationErrors{"vm": "vm_or_new_vm"},
 		},
 		"one in a docker vm that is stopped": {

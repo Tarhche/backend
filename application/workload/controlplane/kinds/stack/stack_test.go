@@ -77,7 +77,7 @@ func TestStacks_Admit(t *testing.T) {
 
 		w := vmtest.New(vmtest.WithVMs(vmtest.Docker("01", "owner")))
 
-		admitted, invalid, err := strategyOf(w).Admit(ctx, asked("  Web Site ", stackKind.VMChoice{}))
+		admitted, invalid, err := strategyOf(w).Admit(ctx, asked("  Web Site ", stackKind.VMChoice{UUID: "01"}))
 		require.NoError(t, err)
 		require.Empty(t, invalid)
 
@@ -85,7 +85,7 @@ func TestStacks_Admit(t *testing.T) {
 		assert.True(t, strings.HasPrefix(admitted.Metadata.Slug, "web-site-"), admitted.Metadata.Slug)
 		assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "01"}}, admitted.Metadata.Owners, "it belongs to its vm")
 		assert.Equal(t, vmtest.Node, admitted.Metadata.Node, "and is where its vm is")
-		assert.Equal(t, stackKind.VMChoice{UUID: "01"}, admitted.Spec.VM, "the one it was given, which was not made for it")
+		assert.Equal(t, stackKind.VMChoice{UUID: "01"}, admitted.Spec.VM, "the one it named")
 		assert.Equal(t, compose, admitted.Spec.Compose, "kept as it was written")
 		assert.Equal(t, stackKind.Waiting, admitted.Status.State)
 		assert.Equal(t, stackKind.Running, admitted.Status.Expected)
@@ -93,39 +93,42 @@ func TestStacks_Admit(t *testing.T) {
 		assert.Zero(t, admitted.Metadata.Lifetime, "a stack is kept until it is deleted")
 	})
 
-	t.Run("one into a docker vm made for it says so, and what the vm waits on", func(t *testing.T) {
+	t.Run("one into a docker vm made for it as it describes it keeps the vm's uuid alone, and says what the vm waits on", func(t *testing.T) {
 		t.Parallel()
 
 		w := vmtest.New()
 
-		admitted, invalid, err := strategyOf(w).Admit(ctx, asked("web", stackKind.VMChoice{New: &stackKind.NewVM{Name: "builds", Resources: &stackKind.Resources{Memory: 4 * vmtest.GiB}}}))
+		admitted, invalid, err := strategyOf(w).Admit(ctx, asked("web", stackKind.VMChoice{Name: "builds", Resources: &stackKind.Resources{Memory: 4 * vmtest.GiB}}))
 		require.NoError(t, err)
 		require.Empty(t, invalid)
-
-		require.NotNil(t, admitted.Spec.VM.New)
-		assert.True(t, admitted.Spec.VM.Created())
-		assert.Equal(t, "builds", admitted.Spec.VM.New.Name)
 
 		made, kept := w.Stored(admitted.Spec.VM.UUID)
 		require.True(t, kept)
 		assert.Equal(t, "builds", made.Metadata.Name)
 		assert.True(t, vmKind.DockerVM(made, vmtest.Images.Docker))
 		assert.Equal(t, vmKind.Resources{CPUs: 2, Memory: 4 * vmtest.GiB, Disk: 20 * vmtest.GiB}, made.Spec.Resources)
+		assert.Equal(t, stackKind.VMChoice{UUID: made.Metadata.UUID}, admitted.Spec.VM, "what the vm was made with is the vm's own")
 
 		assert.Equal(t, stackKind.Waiting, admitted.Status.State)
 		assert.Equal(t, "its vm is scheduled", admitted.Status.Reason)
 	})
 
-	t.Run("one asking for nothing goes into a vm made with the defaults when its owner has none, which says it was made", func(t *testing.T) {
+	t.Run("one asking for nothing goes into a vm made with the defaults, though its owner has a docker vm already", func(t *testing.T) {
 		t.Parallel()
 
-		w := vmtest.New()
+		w := vmtest.New(vmtest.WithVMs(vmtest.Docker("01", "owner")))
 
 		admitted, invalid, err := strategyOf(w).Admit(ctx, asked("web", stackKind.VMChoice{}))
 		require.NoError(t, err)
 		require.Empty(t, invalid)
 
-		assert.Equal(t, &stackKind.NewVM{}, admitted.Spec.VM.New)
+		made, kept := w.Stored(admitted.Spec.VM.UUID)
+		require.True(t, kept)
+		assert.NotEqual(t, "01", made.Metadata.UUID)
+		assert.Equal(t, "docker", made.Metadata.Name)
+		assert.Equal(t, vmtest.DockerDefaults.Resources, made.Spec.Resources)
+		assert.Equal(t, stackKind.VMChoice{UUID: made.Metadata.UUID}, admitted.Spec.VM)
+		assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: made.Metadata.UUID}}, admitted.Metadata.Owners)
 	})
 
 	t.Run("one naming its vm as its parent goes into it", func(t *testing.T) {
@@ -147,13 +150,13 @@ func TestStacks_Admit(t *testing.T) {
 
 		w := vmtest.New(vmtest.WithVMs(vmtest.Docker("01", "owner")))
 
-		_, _, err := strategyOf(w, "web-").Admit(ctx, asked("web", stackKind.VMChoice{}))
+		_, _, err := strategyOf(w, "web-").Admit(ctx, asked("web", stackKind.VMChoice{UUID: "01"}))
 		assert.ErrorIs(t, err, slugs.ErrExhausted, "every one it could be given is held")
 
 		byStacks := func(context.Context, string) (bool, error) { return false, nil }
 		byVMs := func(_ context.Context, slug string) (bool, error) { return strings.HasPrefix(slug, "web-"), nil }
 
-		_, _, err = stack.New(w.Records, w.Chooser, byStacks, byVMs).Admit(ctx, asked("web", stackKind.VMChoice{}))
+		_, _, err = stack.New(w.Records, w.Chooser, byStacks, byVMs).Admit(ctx, asked("web", stackKind.VMChoice{UUID: "01"}))
 		assert.ErrorIs(t, err, slugs.ErrExhausted, "by a stack or by anything else")
 	})
 
@@ -172,13 +175,12 @@ func TestStacks_Admit(t *testing.T) {
 	t.Run("what the chooser refuses is said where it was asked", func(t *testing.T) {
 		t.Parallel()
 
-		w := vmtest.New(vmtest.WithVMs(vmtest.Docker("01", "owner"), vmtest.Docker("02", "owner"), vmtest.Running("03", "owner")))
+		w := vmtest.New(vmtest.WithVMs(vmtest.Docker("01", "owner"), vmtest.Running("03", "owner")))
 
 		for choice, want := range map[*stackKind.VMChoice]domain.ValidationErrors{
-			{}:               {"vm": "vm_required"},
 			{UUID: "03"}:     {"vm.uuid": "not_docker"},
 			{UUID: "theirs"}: {"vm.uuid": "not_found"},
-			{New: &stackKind.NewVM{Resources: &stackKind.Resources{CPUs: 64}}}: {"vm.new.resources.cpus": "too_large"},
+			{Resources: &stackKind.Resources{CPUs: 64}}: {"vm.resources.cpus": "too_large"},
 		} {
 			_, invalid, err := strategyOf(w).Admit(ctx, asked("web", *choice))
 			require.NoError(t, err)
@@ -197,7 +199,7 @@ func TestStacks_Admit(t *testing.T) {
 		"one that is not YAML":              {change: func(s *stackKind.Stack) { s.Spec.Compose = "nope: [" }, want: domain.ValidationErrors{"compose": "invalid_value"}},
 		"one with no service":               {change: func(s *stackKind.Stack) { s.Spec.Compose = "volumes:\n  data: {}\n" }, want: domain.ValidationErrors{"compose": "invalid_value"}},
 		"one naming a vm and asking for a new one": {
-			change: func(s *stackKind.Stack) { s.Spec.VM = stackKind.VMChoice{UUID: "01", New: &stackKind.NewVM{}} },
+			change: func(s *stackKind.Stack) { s.Spec.VM = stackKind.VMChoice{UUID: "01", Name: "builds"} },
 			want:   domain.ValidationErrors{"vm": "vm_or_new_vm"},
 		},
 	} {

@@ -16,7 +16,7 @@ func NewCreateHandler(useCase *createStack.UseCase) *createHandler {
 }
 
 // @Summary		Deploy a stack
-// @Description	deploy a compose project for the caller: in the Docker VM vm_uuid names, in a new one vm describes, or with neither in their only Docker VM, or in one made for it when they have none. The deploy happens after the answer, which says which VM it went into and whether it was made for it
+// @Description	deploy a compose project for the caller: in the Docker VM vm_uuid names, in a new one vm describes, or with neither in a new one made with the defaults. The deploy happens after the answer, which says which VM it went into and whether it was made for it
 // @Tags			dashboard workload stacks
 // @Accept			json
 // @Produce		json

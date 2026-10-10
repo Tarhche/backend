@@ -53,21 +53,37 @@ func (s stackView) String() string {
 }
 
 // TestStacks deploys a compose project into a Docker VM, and stops, starts,
-// restarts and deletes it, its volume with it. The account's one Docker VM
-// is used when it has one; otherwise one is made for it, as for a container.
+// restarts and deletes it, its volume with it. It is deployed into the
+// account's running Docker VM, named by its uuid, when it has one; otherwise
+// it names none, and one is made for it, as for a container.
 func TestStacks(t *testing.T) {
+	var vms page[vmView]
+	user.call(t, http.MethodGet, "/api/dashboard/my/workload/vms", nil, http.StatusOK, &vms)
+
+	asked := map[string]any{"name": "e2e stack", "compose": compose}
+
+	var named string
+	if i := slices.IndexFunc(vms.Items, func(v vmView) bool { return v.Kind == "docker" && v.State == "running" }); i >= 0 {
+		named = vms.Items[i].UUID
+		asked["vm_uuid"] = named
+	}
+
 	var created struct {
 		VM    chosenVM  `json:"vm"`
 		Stack stackView `json:"stack"`
 	}
 	timings.step(t, "create", func(t *testing.T) {
-		user.call(t, http.MethodPost, "/api/dashboard/workload/stacks", map[string]any{
-			"name":    "e2e stack",
-			"compose": compose,
-		}, http.StatusCreated, &created)
+		user.call(t, http.MethodPost, "/api/dashboard/workload/stacks", asked, http.StatusCreated, &created)
 
 		if len(created.VM.UUID) == 0 || len(created.Stack.Slug) == 0 {
 			t.Fatalf("the stack was made as %+v in %+v", created.Stack, created.VM)
+		}
+
+		switch {
+		case len(named) > 0 && (created.VM.UUID != named || created.VM.Created):
+			t.Fatalf("the stack was to go into the Docker VM %s, and went into %+v", named, created.VM)
+		case len(named) == 0 && !created.VM.Created:
+			t.Fatalf("no Docker VM was made for the stack: %+v", created.VM)
 		}
 	})
 

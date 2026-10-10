@@ -44,10 +44,9 @@ import (
 )
 
 // TestAContainer walks a container through its life from the dashboard, as
-// a kind the control plane keeps and a node carries out: asked for with no
-// Docker VM to go into, made in one made for it, made again when it is
-// removed behind the platform's back, stopped and left stopped, read, started
-// and deleted.
+// a kind the control plane keeps and a node carries out: asked for naming no
+// Docker VM, made in one made for it, made again when it is removed behind
+// the platform's back, stopped and left stopped, read, started and deleted.
 func TestAContainer(t *testing.T) {
 	t.Parallel()
 
@@ -67,7 +66,7 @@ func TestAContainer(t *testing.T) {
 
 	vmUUID := created.VM.UUID
 
-	t.Run("its owner had no docker vm, so one was made for it, and it was made in it once it came up", func(t *testing.T) {
+	t.Run("it named no docker vm, so one was made for it, and it was made in it once it came up", func(t *testing.T) {
 		assert.True(t, created.VM.Created)
 		assert.Equal(t, "web", created.Container.Name)
 		assert.False(t, created.Container.Unmanaged)

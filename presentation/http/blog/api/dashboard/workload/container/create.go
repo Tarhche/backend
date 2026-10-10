@@ -16,7 +16,7 @@ func NewCreateHandler(useCase *createContainer.UseCase) *createHandler {
 }
 
 // @Summary		Create a container
-// @Description	create and start a container for the caller, pulling its image first when the VM does not hold it: in the Docker VM vm_uuid names, in a new one vm describes, or with neither in their only Docker VM, or in one made for it when they have none. The answer says which VM it went into and whether it was made for it
+// @Description	create and start a container for the caller, pulling its image first when the VM does not hold it: in the Docker VM vm_uuid names, in a new one vm describes, or with neither in a new one made with the defaults. The answer says which VM it went into and whether it was made for it
 // @Tags			dashboard workload containers
 // @Accept			json
 // @Produce		json

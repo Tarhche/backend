@@ -12,11 +12,11 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
 
-// CreateContainer keeps a container in the Docker VM the request chooses,
-// making that VM first when it says so or when ownerUUID has none, and is it
-// once it is made. It may wait for that VM to come up and for its image to be
-// pulled, so it is given as long as both take. One that could not be made is
-// not kept, and what refused it is the answer.
+// CreateContainer keeps a container in the Docker VM the request names, or in
+// one made for it when it names none, and is it once it is made. It may wait
+// for that VM to come up and for its image to be pulled, so it is given as
+// long as both take. One that could not be made is not kept, and what refused
+// it is the answer.
 func (c *Client) CreateContainer(ctx context.Context, ownerUUID string, request workloadControlPlane.ContainerRequest) (workloadControlPlane.CreatedContainer, error) {
 	spec := containerKind.SpecOf(request.Container)
 	spec.VM = choiceOf(request.VM)
@@ -28,8 +28,11 @@ func (c *Client) CreateContainer(ctx context.Context, ownerUUID string, request 
 
 	created := workloadControlPlane.CreatedContainer{
 		VM: workloadControlPlane.ChosenVM{
-			UUID:    containerKind.VMOf(made),
-			Created: made.Spec.VM.Created(),
+			UUID: containerKind.VMOf(made),
+
+			// a request that names no VM by its uuid goes into one made
+			// for it: nothing here names one as its parent.
+			Created: len(request.VM.UUID) == 0,
 		},
 		Container: containerOf(made),
 	}

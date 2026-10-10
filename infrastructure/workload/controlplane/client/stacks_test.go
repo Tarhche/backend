@@ -96,7 +96,7 @@ func newStacksPlane(t *testing.T) (*Client, *stacksPlane) {
 		asked.Metadata.OwnerUUID = r.URL.Query().Get("owner")
 		asked.Metadata.Owners = []kind.Reference{{Kind: "vm", UUID: "vm-uuid"}}
 		asked.Metadata.CreatedAt = made
-		asked.Spec.VM.UUID = "vm-uuid"
+		asked.Spec.VM = stackKind.VMChoice{UUID: "vm-uuid"}
 		asked.Status = stackKind.Status{Status: kind.Status{State: stackKind.Deploying, Expected: stackKind.Running}}
 
 		answer(rw, http.StatusCreated, map[string]any{"resource": asked, "command": map[string]any{"id": "command-1", "action": "create"}})
@@ -390,13 +390,22 @@ func TestClient_CreateStack(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	assert.Equal(t, workloadControlPlane.ChosenVM{UUID: "vm-uuid", Name: "docker-1", Created: true}, created.VM)
+	assert.Equal(t, workloadControlPlane.ChosenVM{UUID: "vm-uuid", Name: "docker-1", Created: true}, created.VM, "it named no vm, so one was made for it")
 	assert.Equal(t, "stack-uuid", created.Stack.UUID)
 	assert.Equal(t, "docker-1", created.Stack.VMName)
 	assert.Equal(t, stack.Deploying, created.Stack.State)
 	assert.Equal(t, stack.Running, created.Stack.ExpectedState)
 
 	require.Contains(t, p.requests(), "POST /api/stacks?owner=owner-uuid")
+
+	created, err = c.CreateStack(ctx, "owner-uuid", workloadControlPlane.StackRequest{
+		Name:    "shop",
+		Compose: "services: {web: {image: nginx}}",
+		VM:      workloadControlPlane.DockerVMChoice{UUID: "vm-uuid"},
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, workloadControlPlane.ChosenVM{UUID: "vm-uuid", Name: "docker-1", Created: false}, created.VM, "the one it named")
 }
 
 func TestClient_CreateStack_asked(t *testing.T) {
@@ -430,7 +439,7 @@ func TestClient_CreateStack_asked(t *testing.T) {
 	assert.JSONEq(t, `{
 		"kind": "stack",
 		"metadata": {"name": "shop"},
-		"spec": {"vm": {"new": {"ports": []}}, "compose": "nope: ["}
+		"spec": {"vm": {"ports": []}, "compose": "nope: ["}
 	}`, string(body), "a manifest of what was asked, ports given empty kept empty")
 }
 

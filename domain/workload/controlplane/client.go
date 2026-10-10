@@ -172,9 +172,9 @@ type VMUpdate struct {
 // DockerVMChoice is which Docker VM a container or a stack goes into.
 //
 // One that names a VM goes into it, and it has to be a Docker VM of the
-// person asking. One that names none goes into their only Docker VM, or into
-// one made for it with the defaults when they have none; with several to
-// choose from, it is refused as vm_required.
+// person asking. One that names none goes into one made for it, whichever
+// Docker VMs the person has already: as New describes it, or with the
+// defaults alone.
 type DockerVMChoice struct {
 	UUID string
 

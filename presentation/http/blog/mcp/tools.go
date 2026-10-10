@@ -1036,7 +1036,7 @@ func containerTools() []tool {
 		}, "The containers of this session owner's own running Docker VMs, each with the VM it is in."),
 		[]tool{{
 			name:        "dashboard_container_create",
-			description: "Create and start a container for this session's owner, pulling its image first when the VM lacks it: in the Docker VM vm_uuid names, in a new one vm describes, or with neither in their only Docker VM, or in one made for it when they have none. The answer says which VM it went into and whether it was made for it.",
+			description: "Create and start a container for this session's owner, pulling its image first when the VM lacks it: in the Docker VM vm_uuid names, in a new one vm describes, or with neither in a new one made with the defaults. The answer says which VM it went into and whether it was made for it.",
 			route:       "POST /api/dashboard/workload/containers",
 			body:        body[dashboardCreateContainer.Request](),
 		}},
@@ -1201,7 +1201,7 @@ func stackTools() []tool {
 		}, "A page of this session owner's own stacks, narrowed to one VM's with vm."),
 		[]tool{{
 			name:        "dashboard_stack_create",
-			description: "Deploy a compose project for this session's owner: in the Docker VM vm_uuid names, in a new one vm describes, or with neither in their only Docker VM, or in one made for it when they have none. The deploy happens after the answer, which says which VM it went into and whether it was made for it.",
+			description: "Deploy a compose project for this session's owner: in the Docker VM vm_uuid names, in a new one vm describes, or with neither in a new one made with the defaults. The deploy happens after the answer, which says which VM it went into and whether it was made for it.",
 			route:       "POST /api/dashboard/workload/stacks",
 			body:        body[dashboardCreateStack.Request](),
 		}},

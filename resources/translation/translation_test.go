@@ -48,7 +48,7 @@ func TestTheWorkloadsCodesAreSaid(t *testing.T) {
 		"invalid_network_driver", "invalid_volume_driver", "vm_or_new_vm",
 
 		// the control plane's
-		"vm_required", "too_large", "too_small", "quota_exceeded", "no_capacity",
+		"too_large", "too_small", "quota_exceeded", "no_capacity",
 		"engine_mismatch", "kind_mismatch", "snapshot_not_ready", "disk_too_small",
 		"disk_cannot_shrink", "immutable", "vm_not_running", "node_lost", "managed_by_code_runner",
 

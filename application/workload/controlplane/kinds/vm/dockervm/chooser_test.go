@@ -30,8 +30,8 @@ func TestChooser_Choose(t *testing.T) {
 		chosen, refused, err := w.Chooser.Choose(ctx, "owner", dockervm.Choice{UUID: "02"})
 		require.NoError(t, err)
 		require.Empty(t, refused)
-		assert.Equal(t, "02", chosen.VM.Metadata.UUID)
-		assert.False(t, chosen.Created)
+		assert.Equal(t, "02", chosen.Metadata.UUID)
+		assert.Equal(t, 2, w.Memory.Len(vmKind.Name), "and none is made")
 	})
 
 	for name, tt := range map[string]struct {
@@ -63,31 +63,27 @@ func TestChooser_Choose(t *testing.T) {
 		})
 	}
 
-	t.Run("their only docker vm, when none is named: machines and those on their way out are not", func(t *testing.T) {
+	t.Run("one is made when none is named, whichever docker vms its owner has already", func(t *testing.T) {
 		t.Parallel()
 
-		w := vmtest.New(vmtest.WithVMs(
-			vmtest.Docker("01", "owner"),
-			vmtest.Running("02", "owner"),
-			vmtest.In(vmtest.Docker("03", "owner"), func(v *vmKind.VM) { v.Status.Expected = vmKind.Deleted }),
-			vmtest.Docker("04", "other"),
-		))
+		for name, vms := range map[string][]vmKind.VM{
+			"none":    {vmtest.Running("01", "owner")},
+			"one":     {vmtest.Docker("01", "owner")},
+			"several": {vmtest.Docker("01", "owner"), vmtest.Docker("02", "owner")},
+		} {
+			w := vmtest.New(vmtest.WithVMs(vms...))
 
-		chosen, refused, err := w.Chooser.Choose(ctx, "owner", dockervm.Choice{})
-		require.NoError(t, err)
-		require.Empty(t, refused)
-		assert.Equal(t, "01", chosen.VM.Metadata.UUID)
+			chosen, refused, err := w.Chooser.Choose(ctx, "owner", dockervm.Choice{})
+			require.NoError(t, err, name)
+			require.Empty(t, refused, name)
+
+			_, kept := w.Stored(chosen.Metadata.UUID)
+			assert.True(t, kept, name)
+			assert.Equal(t, len(vms)+1, w.Memory.Len(vmKind.Name), "with %s of its own already", name)
+		}
 	})
 
-	t.Run("one of several has to be named", func(t *testing.T) {
-		t.Parallel()
-
-		_, refused, err := vmtest.New(vmtest.WithVMs(vmtest.Docker("01", "owner"), vmtest.Docker("02", "owner"))).Chooser.Choose(ctx, "owner", dockervm.Choice{})
-		require.NoError(t, err)
-		assert.Equal(t, domain.ValidationErrors{"vm": "vm_required"}, refused)
-	})
-
-	t.Run("one is made for somebody who has none, with the defaults, as any vm is admitted, and is asked of its node at once", func(t *testing.T) {
+	t.Run("one made with the defaults is admitted as any vm is, and is asked of its node at once", func(t *testing.T) {
 		t.Parallel()
 
 		w := vmtest.New(vmtest.WithVMs(vmtest.Running("02", "owner")))
@@ -95,9 +91,8 @@ func TestChooser_Choose(t *testing.T) {
 		chosen, refused, err := w.Chooser.Choose(ctx, "owner", dockervm.Choice{})
 		require.NoError(t, err)
 		require.Empty(t, refused)
-		require.True(t, chosen.Created)
 
-		made, kept := w.Stored(chosen.VM.Metadata.UUID)
+		made, kept := w.Stored(chosen.Metadata.UUID)
 		require.True(t, kept)
 
 		assert.Equal(t, "docker", made.Metadata.Name)
@@ -108,7 +103,7 @@ func TestChooser_Choose(t *testing.T) {
 		assert.Equal(t, vmtest.DockerDefaults.Network, made.Spec.Network)
 		assert.Equal(t, vmtest.Node, made.Metadata.Node)
 		assert.Equal(t, vmKind.Scheduled, made.Status.State, "its create was sent")
-		assert.Equal(t, vmKind.Scheduled, chosen.VM.Status.State, "and what was chosen says so")
+		assert.Equal(t, vmKind.Scheduled, chosen.Status.State, "and what was chosen says so")
 
 		var command kind.ActOnResource
 		require.True(t, w.Producer.Last(kind.ActOnResourceName, &command))
@@ -121,16 +116,16 @@ func TestChooser_Choose(t *testing.T) {
 
 		w := vmtest.New()
 
-		chosen, refused, err := w.Chooser.Choose(ctx, "owner", dockervm.Choice{New: &dockervm.New{
+		chosen, refused, err := w.Chooser.Choose(ctx, "owner", dockervm.Choice{
 			Name:      "builds",
 			Resources: &vmKind.Resources{Memory: 4 * vmtest.GiB},
 			Ports:     []port.Port{},
 			Network:   &vmKind.Network{Egress: vm.AccessDeny},
-		}})
+		})
 		require.NoError(t, err)
 		require.Empty(t, refused)
 
-		made, _ := w.Stored(chosen.VM.Metadata.UUID)
+		made, _ := w.Stored(chosen.Metadata.UUID)
 		assert.Equal(t, "builds", made.Metadata.Name)
 		assert.Equal(t, vmKind.Resources{CPUs: 2, Memory: 4 * vmtest.GiB, Disk: 20 * vmtest.GiB}, made.Spec.Resources, "a size of zero is the default")
 		assert.Equal(t, []port.Port{}, made.Spec.Ports, "ports given empty are none")
@@ -142,9 +137,9 @@ func TestChooser_Choose(t *testing.T) {
 
 		w := vmtest.New()
 
-		_, refused, err := w.Chooser.Choose(ctx, "owner", dockervm.Choice{New: &dockervm.New{Resources: &vmKind.Resources{CPUs: 64}}})
+		_, refused, err := w.Chooser.Choose(ctx, "owner", dockervm.Choice{Resources: &vmKind.Resources{CPUs: 64}})
 		require.NoError(t, err)
-		assert.Equal(t, domain.ValidationErrors{"vm.new.resources.cpus": "too_large"}, refused)
+		assert.Equal(t, domain.ValidationErrors{"vm.resources.cpus": "too_large"}, refused)
 		assert.Zero(t, w.Memory.Len(vmKind.Name), "nothing is made")
 	})
 
@@ -175,14 +170,14 @@ func TestChoice_JSON(t *testing.T) {
 	t.Parallel()
 
 	var choice dockervm.Choice
-	require.NoError(t, json.Unmarshal([]byte(`{"uuid":"01","new":{"name":"builds","resources":{"cpus":2,"memory":1,"disk":2},"ports":[80],"network":{"ingress":"deny","egress":"allow"}}}`), &choice))
+	require.NoError(t, json.Unmarshal([]byte(`{"name":"builds","resources":{"cpus":2,"memory":1,"disk":2},"ports":[80],"network":{"ingress":"deny","egress":"allow"}}`), &choice))
 
-	assert.Equal(t, dockervm.Choice{UUID: "01", New: &dockervm.New{
+	assert.Equal(t, dockervm.Choice{
 		Name:      "builds",
 		Resources: &vmKind.Resources{CPUs: 2, Memory: 1, Disk: 2},
 		Ports:     []port.Port{80},
 		Network:   &vmKind.Network{Ingress: vm.AccessDeny, Egress: vm.AccessAllow},
-	}}, choice, "as a request has always named one")
+	}, choice, "as a container's or a stack's spec names one")
 }
 
 func TestNetworkOf(t *testing.T) {

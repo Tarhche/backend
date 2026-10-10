@@ -35,8 +35,8 @@ func TestOf(t *testing.T) {
 		{
 			name:    "what the control plane refuses is said field by field, in the reader's language",
 			locale:  translation.EN,
-			err:     &client.ValidationError{ValidationErrors: domain.ValidationErrors{"vm": "vm_required", "compose": "too_large"}},
-			refused: domain.ValidationErrors{"vm": "you have more than one Docker VM, so say which one to use", "compose": "this is larger than allowed"},
+			err:     &client.ValidationError{ValidationErrors: domain.ValidationErrors{"vm": "no_capacity", "compose": "too_large"}},
+			refused: domain.ValidationErrors{"vm": "there is no room for it on any node right now, try again later", "compose": "this is larger than allowed"},
 		},
 		{
 			name:    "and in Farsi to somebody reading Farsi",

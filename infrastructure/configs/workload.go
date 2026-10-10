@@ -64,8 +64,8 @@ type WorkloadControlPlane struct {
 
 	VMCPUOvercommit float64 `usage:"How many times over a node's vCPUs may be given to VMs. Memory and disk are never given twice." env:"WORKLOAD_VM_CPU_OVERCOMMIT" long:"vm-cpu-overcommit"`
 
-	// the Docker VM made for somebody who adds a container or a stack and has
-	// none to put it in.
+	// what a Docker VM made for a container or a stack that names none is
+	// given, where it does not say otherwise.
 	VMDockerDefaultCPUs           uint          `usage:"vCPUs a Docker VM made for a container or a stack is given." env:"WORKLOAD_VM_DOCKER_DEFAULT_CPUS" long:"vm-docker-default-cpus"`
 	VMDockerDefaultMemory         uint64        `usage:"Memory, in bytes, a Docker VM made for a container or a stack is given." env:"WORKLOAD_VM_DOCKER_DEFAULT_MEMORY" long:"vm-docker-default-memory"`
 	VMDockerDefaultDisk           uint64        `usage:"Disk, in bytes, a Docker VM made for a container or a stack is given." env:"WORKLOAD_VM_DOCKER_DEFAULT_DISK" long:"vm-docker-default-disk"`

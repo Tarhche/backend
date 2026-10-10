@@ -115,29 +115,27 @@ type Spec struct {
 
 // VMChoice is which Docker VM a stack goes into.
 //
-// As it is asked, it names one of the person's Docker VMs, or describes one
-// to make for it, or says nothing, which is their only Docker VM or one made
-// with the defaults. As it is kept, it is what was chosen: UUID names the VM,
-// and New is there when the VM was made for the stack, with what it was asked
-// to be made with.
+// As it is asked, it names one of the person's Docker VMs by its uuid, or
+// names none, which is a Docker VM made for the stack with whatever of the
+// rest it gives and the defaults for what it leaves out. As it is kept, it is
+// the uuid of the VM the stack went into, made for it or not, and nothing
+// else: what a VM was made with is its own record's to say.
 type VMChoice struct {
 	UUID string `json:"uuid,omitempty"`
-	New  *NewVM `json:"new,omitempty"`
-}
 
-// Created reports whether the VM a stack was admitted into was made for it.
-func (c VMChoice) Created() bool {
-	return c.New != nil
-}
-
-// NewVM is what a Docker VM made for a stack is given beyond the defaults.
-// Anything it leaves out is the default; ports that are there and empty are
-// none.
-type NewVM struct {
+	// Name, Resources, Ports and Network are what a Docker VM made for a
+	// stack is given beyond the defaults. Anything left out is the default;
+	// ports that are there and empty are none.
 	Name      string      `json:"name,omitempty"`
 	Resources *Resources  `json:"resources,omitempty"`
 	Ports     []port.Port `json:"ports,omitzero"`
 	Network   *Network    `json:"network,omitempty"`
+}
+
+// Describes reports whether a choice describes a VM to make: whether it gives
+// any of what one is made with beyond the defaults.
+func (c VMChoice) Describes() bool {
+	return len(c.Name) > 0 || c.Resources != nil || c.Ports != nil || c.Network != nil
 }
 
 // Resources are a VM's sizes: whole vCPUs, and bytes. A size of zero is the

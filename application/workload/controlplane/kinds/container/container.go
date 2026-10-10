@@ -3,9 +3,9 @@
 // not what it was asked to be, and what is shown beside the containers kept.
 //
 // A container is admitted into the Docker VM the stacks' rules choose, or
-// make: the one it names, its owner's only one, or one made for it. It
-// belongs to that VM and is placed where it is, and it starts pending, to be
-// made as soon as its VM runs.
+// make: the one it names, or one made for it when it names none. It belongs
+// to that VM and is placed where it is, and it starts pending, to be made as
+// soon as its VM runs.
 //
 // What it is asked for after that is decided from what its node last said of
 // it:
@@ -71,7 +71,7 @@ func New(dependencies blocks.Dependencies) *Containers {
 // Docker VM chosen, or made, which has to be running or on its way up.
 func (s *Containers) Admit(ctx context.Context, asked containerKind.Container) (containerKind.Container, domain.ValidationErrors, error) {
 	choice := asked.Spec.VM
-	if parent, named := asked.Metadata.Owner(containerKind.Parent); named && len(choice.UUID) == 0 && choice.New == nil {
+	if parent, named := asked.Metadata.Owner(containerKind.Parent); named && len(choice.UUID) == 0 && !choice.Describes() {
 		choice.UUID = parent.UUID
 	}
 
@@ -79,12 +79,10 @@ func (s *Containers) Admit(ctx context.Context, asked containerKind.Container) (
 		return containerKind.Container{}, invalid, nil
 	}
 
-	chosen, refused, err := s.Chooser.Choose(ctx, asked.Metadata.OwnerUUID, choiceOf(choice))
+	v, refused, err := s.Chooser.Choose(ctx, asked.Metadata.OwnerUUID, choiceOf(choice))
 	if err != nil || len(refused) > 0 {
 		return containerKind.Container{}, refused, err
 	}
-
-	v := chosen.VM
 
 	if !vmKind.Up(v) {
 		return containerKind.Container{}, domain.ValidationErrors{"vm": "not_running"}, nil
@@ -93,15 +91,6 @@ func (s *Containers) Admit(ctx context.Context, asked containerKind.Container) (
 	spec := asked.Spec
 	spec.Image = strings.TrimSpace(spec.Image)
 	spec.VM = stackKind.VMChoice{UUID: v.Metadata.UUID}
-
-	// what it was made with, or nothing more than the defaults: either way,
-	// that it was made for this container.
-	if chosen.Created {
-		spec.VM.New = &stackKind.NewVM{}
-		if choice.New != nil {
-			spec.VM.New = choice.New
-		}
-	}
 
 	admitted := containerKind.Container{
 		Kind: containerKind.Name,
@@ -413,7 +402,7 @@ func validate(spec containerKind.Spec, choice stackKind.VMChoice) domain.Validat
 		}
 	}
 
-	if len(choice.UUID) > 0 && choice.New != nil {
+	if len(choice.UUID) > 0 && choice.Describes() {
 		invalid["vm"] = "vm_or_new_vm"
 	}
 
@@ -422,18 +411,14 @@ func validate(spec containerKind.Spec, choice stackKind.VMChoice) domain.Validat
 
 // choiceOf is a container's choice of VM as the chooser reads one.
 func choiceOf(choice stackKind.VMChoice) dockervm.Choice {
-	chosen := dockervm.Choice{UUID: choice.UUID}
+	chosen := dockervm.Choice{UUID: choice.UUID, Name: choice.Name, Ports: choice.Ports}
 
-	if made := choice.New; made != nil {
-		chosen.New = &dockervm.New{Name: made.Name, Ports: made.Ports}
+	if choice.Resources != nil {
+		chosen.Resources = &vmKind.Resources{CPUs: choice.Resources.CPUs, Memory: choice.Resources.Memory, Disk: choice.Resources.Disk}
+	}
 
-		if made.Resources != nil {
-			chosen.New.Resources = &vmKind.Resources{CPUs: made.Resources.CPUs, Memory: made.Resources.Memory, Disk: made.Resources.Disk}
-		}
-
-		if made.Network != nil {
-			chosen.New.Network = &vmKind.Network{Ingress: vm.Access(made.Network.Ingress), Egress: vm.Access(made.Network.Egress)}
-		}
+	if choice.Network != nil {
+		chosen.Network = &vmKind.Network{Ingress: vm.Access(choice.Network.Ingress), Egress: vm.Access(choice.Network.Egress)}
 	}
 
 	return chosen

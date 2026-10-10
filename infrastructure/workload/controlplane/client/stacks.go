@@ -123,10 +123,9 @@ func (c *Client) Stack(ctx context.Context, ownerUUID string, uuid string) (work
 	return detail, nil
 }
 
-// CreateStack deploys a compose project into the Docker VM the request
-// chooses, making that VM first when it says so or when ownerUUID has none.
-// What comes back is a stack on its way: deploying into a VM that runs, or
-// waiting for one still coming up.
+// CreateStack deploys a compose project into the Docker VM the request names,
+// or into one made for it when it names none. What comes back is a stack on
+// its way: deploying into a VM that runs, or waiting for one still coming up.
 func (c *Client) CreateStack(ctx context.Context, ownerUUID string, request workloadControlPlane.StackRequest) (workloadControlPlane.CreatedStack, error) {
 	asked := askedStack{
 		Kind:     stackKind.Name,
@@ -142,8 +141,11 @@ func (c *Client) CreateStack(ctx context.Context, ownerUUID string, request work
 	created := workloadControlPlane.CreatedStack{
 		Stack: stackOf(payload.Resource),
 		VM: workloadControlPlane.ChosenVM{
-			UUID:    stackKind.VMOf(payload.Resource),
-			Created: payload.Resource.Spec.VM.Created(),
+			UUID: stackKind.VMOf(payload.Resource),
+
+			// a request that names no VM by its uuid goes into one made
+			// for it: nothing here names one as its parent.
+			Created: len(request.VM.UUID) == 0,
 		},
 	}
 
@@ -349,14 +351,14 @@ func choiceOf(choice workloadControlPlane.DockerVMChoice) stackKind.VMChoice {
 	chosen := stackKind.VMChoice{UUID: choice.UUID}
 
 	if made := choice.New; made != nil {
-		chosen.New = &stackKind.NewVM{Name: made.Name, Ports: made.Ports}
+		chosen.Name, chosen.Ports = made.Name, made.Ports
 
 		if r := made.Resources; r != nil {
-			chosen.New.Resources = &stackKind.Resources{CPUs: r.CPUs, Memory: r.Memory, Disk: r.Disk}
+			chosen.Resources = &stackKind.Resources{CPUs: r.CPUs, Memory: r.Memory, Disk: r.Disk}
 		}
 
 		if n := made.Network; n != nil {
-			chosen.New.Network = &stackKind.Network{Ingress: string(n.Ingress), Egress: string(n.Egress)}
+			chosen.Network = &stackKind.Network{Ingress: string(n.Ingress), Egress: string(n.Egress)}
 		}
 	}
 

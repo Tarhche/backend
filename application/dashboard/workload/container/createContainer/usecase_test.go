@@ -134,7 +134,7 @@ func TestUseCase_Execute(t *testing.T) {
 		assert.True(t, response.VM.Created)
 	})
 
-	t.Run("neither leaves the choice to the workload", func(t *testing.T) {
+	t.Run("neither asks the workload for a new one with the defaults", func(t *testing.T) {
 		t.Parallel()
 
 		var workload controlplane.MockClient
@@ -213,24 +213,24 @@ func TestUseCase_Execute(t *testing.T) {
 		})
 	}
 
-	t.Run("several Docker VMs to choose from is the control plane's to say", func(t *testing.T) {
+	t.Run("a Docker VM no node has room for is the control plane's to say", func(t *testing.T) {
 		t.Parallel()
 
 		var workload controlplane.MockClient
 		workload.On("CreateContainer", mock.Anything, workloadtest.OwnerUUID, mock.Anything).Once().Return(
 			workloadControlPlane.CreatedContainer{},
-			&client.ValidationError{ValidationErrors: domain.ValidationErrors{"vm": "vm_required"}},
+			&client.ValidationError{ValidationErrors: domain.ValidationErrors{"vm": "no_capacity"}},
 		)
 		defer workload.AssertExpectations(t)
 
 		response, err := useCase(&workload).Execute(context.Background(), read(t, `{"image": "nginx"}`))
 		require.NoError(t, err)
 
-		assert.Equal(t, domain.ValidationErrors{"vm": "you have more than one Docker VM, so say which one to use"}, response.ValidationErrors)
+		assert.Equal(t, domain.ValidationErrors{"vm": "there is no room for it on any node right now, try again later"}, response.ValidationErrors)
 	})
 
-	// the control plane names the VM to use vm.uuid and the VM to make
-	// vm.new; this request names them vm_uuid and vm.
+	// the control plane names the VM to use vm.uuid, which this request
+	// names vm_uuid; both name the VM to make vm.
 	for name, tt := range map[string]struct {
 		body    string
 		refused domain.ValidationErrors
@@ -243,7 +243,7 @@ func TestUseCase_Execute(t *testing.T) {
 		},
 		"the vm it describes is refused where it described it": {
 			body:    `{"image": "nginx", "vm": {"resources": {"memory": 1048576}}}`,
-			refused: domain.ValidationErrors{"vm.new.resources.memory": "too_small"},
+			refused: domain.ValidationErrors{"vm.resources.memory": "too_small"},
 			want:    domain.ValidationErrors{"vm.resources.memory": "this is smaller than allowed"},
 		},
 	} {

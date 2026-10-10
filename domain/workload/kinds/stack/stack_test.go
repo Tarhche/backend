@@ -190,14 +190,25 @@ func TestVMOf(t *testing.T) {
 func TestVMChoice(t *testing.T) {
 	t.Parallel()
 
-	chosen, err := json.Marshal(stack.VMChoice{UUID: "vm-uuid", New: &stack.NewVM{Ports: nil}})
+	kept, err := json.Marshal(stack.VMChoice{UUID: "vm-uuid"})
 	require.NoError(t, err)
-	assert.JSONEq(t, `{"uuid":"vm-uuid","new":{}}`, string(chosen), "one made with the defaults says so")
+	assert.JSONEq(t, `{"uuid":"vm-uuid"}`, string(kept), "one named, or kept, is its uuid and nothing else")
 
-	none, err := json.Marshal(stack.NewVM{Ports: []port.Port{}})
+	var asked stack.VMChoice
+	require.NoError(t, json.Unmarshal([]byte(`{"name":"builds","resources":{"cpus":2,"memory":1,"disk":2},"ports":[80],"network":{"ingress":"deny","egress":"allow"}}`), &asked))
+	assert.Equal(t, stack.VMChoice{
+		Name:      "builds",
+		Resources: &stack.Resources{CPUs: 2, Memory: 1, Disk: 2},
+		Ports:     []port.Port{80},
+		Network:   &stack.Network{Ingress: "deny", Egress: "allow"},
+	}, asked, "one to make is described where its uuid would be")
+
+	none, err := json.Marshal(stack.VMChoice{Ports: []port.Port{}})
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"ports":[]}`, string(none), "ports given empty are none, and travel as none")
 
-	assert.True(t, stack.VMChoice{New: &stack.NewVM{}}.Created())
-	assert.False(t, stack.VMChoice{UUID: "vm-uuid"}.Created())
+	assert.True(t, asked.Describes())
+	assert.True(t, stack.VMChoice{Ports: []port.Port{}}.Describes(), "no ports at all is something to make one with")
+	assert.False(t, stack.VMChoice{UUID: "vm-uuid"}.Describes())
+	assert.False(t, stack.VMChoice{}.Describes(), "nothing is the defaults alone")
 }

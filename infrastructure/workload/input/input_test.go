@@ -143,7 +143,7 @@ func TestDockerVM(t *testing.T) {
 		described *NewDockerVM
 		want      domain.ValidationErrors
 	}{
-		{name: "neither leaves it to the workload", want: domain.ValidationErrors{}},
+		{name: "neither is a new one with the defaults", want: domain.ValidationErrors{}},
 		{name: "one named", vmUUID: "vm-uuid", want: domain.ValidationErrors{}},
 		{name: "a new one, all defaults", described: &NewDockerVM{}, want: domain.ValidationErrors{}},
 		{name: "naming one and describing another is asking for two things", vmUUID: "vm-uuid", described: &NewDockerVM{}, want: domain.ValidationErrors{"vm": "vm_or_new_vm"}},
@@ -167,7 +167,7 @@ func TestDockerVMChoice(t *testing.T) {
 	t.Parallel()
 
 	assert.Equal(t, workloadControlPlane.DockerVMChoice{UUID: "vm-uuid"}, DockerVMChoice("vm-uuid", nil))
-	assert.Equal(t, workloadControlPlane.DockerVMChoice{}, DockerVMChoice("", nil), "neither is the workload's choice")
+	assert.Equal(t, workloadControlPlane.DockerVMChoice{}, DockerVMChoice("", nil), "neither is a new one with the workload's defaults")
 
 	assert.Equal(t,
 		workloadControlPlane.DockerVMChoice{New: &workloadControlPlane.NewDockerVM{
