@@ -221,3 +221,49 @@ func TestReconciler_Reconcile_goneWhileItsPlanRuns(t *testing.T) {
 	assert.Empty(t, f.kept(t, web), "and how its plan went")
 	assert.Empty(t, r.Queued(), "and nothing is queued to make it again")
 }
+
+func TestReconciler_Reconcile_askedToGoWhileItsPlanRuns(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	// web is asked to go once its vm is found there, and its vm is deleted
+	// with it, as a cascade does: its plan, which read it before, makes
+	// nothing after.
+	kinds := container()
+	kinds.Hold(vm)
+
+	var f *fixture
+
+	kinds.On(graphtest.Exists, vm, func(ctx context.Context) error {
+		r, err := f.records.GetOne(ctx, containerKind.Name, web.Name())
+		if err != nil {
+			return err
+		}
+
+		deleting(&r.Metadata)
+
+		_, err = f.records.Update(ctx, r)
+
+		return err
+	})
+
+	f = newFixture(t, kinds, rooted(stated(containerKind.Running)))
+	r := f.reconciler(t, "one", patient(), containerKind.Name)
+
+	require.NoError(t, r.Reconcile(ctx, refOf(web)), "it waits: it is no failure")
+
+	assert.Empty(t, kinds.Asked(graphtest.Create), "nothing is made for it")
+
+	lease := f.lease(t, web)
+	assert.Zero(t, lease.Failures, "and it is not backed off, to be removed when it is next reconciled")
+
+	var waiting []string
+	for _, e := range f.kept(t, web) {
+		if e.State == graph.StateWaiting {
+			waiting = append(waiting, e.Reason)
+		}
+	}
+
+	assert.Contains(t, waiting, "its root was asked to go")
+}

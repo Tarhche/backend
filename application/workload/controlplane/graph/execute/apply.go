@@ -36,7 +36,10 @@ import (
 // at all, and is kind.ErrUnknownKind. What fails to be saved is an error,
 // returned beside how far the plan went once every node started has ended:
 // nothing more is started once a save has failed.
-func (e *Executor) Apply(ctx context.Context, root graph.Ref, generation int64, plan *graph.Plan) (Outcome, error) {
+//
+// What a run is to make it makes only while what options say it is made
+// for holds (While).
+func (e *Executor) Apply(ctx context.Context, root graph.Ref, generation int64, plan *graph.Plan, options ...ApplyOption) (Outcome, error) {
 	levels, err := e.levelsOf(plan)
 	if err != nil {
 		return Outcome{}, err
@@ -44,6 +47,10 @@ func (e *Executor) Apply(ctx context.Context, root graph.Ref, generation int64, 
 
 	r := e.newRun(plan)
 	r.carry = r.create
+
+	for _, option := range options {
+		option(r)
+	}
 
 	now := e.now()
 
@@ -68,10 +75,25 @@ func (e *Executor) Apply(ctx context.Context, root graph.Ref, generation int64, 
 	return r.outcome(levels), r.err()
 }
 
-// create finds the node, or makes it when it is not there: an external one
-// is never made, and waits while it is missing. It is the record the node
-// is: one there that is not made, its record all the same, is made. Once it
-// is there, it is linked to what it needs.
+// ApplyOption changes how a plan is applied.
+type ApplyOption func(*run)
+
+// While has a run make what is not there only while wanted says nothing
+// against it: it is asked once a node is found not to be there, before it is
+// made, and what it says is what the node ends with, which makes nothing:
+// a root asked to go, or gone, whose record a run read before it was, has
+// nothing made for it after, what its delete took away among it.
+func While(wanted func(ctx context.Context) error) ApplyOption {
+	return func(r *run) {
+		r.wanted = wanted
+	}
+}
+
+// create finds the node, or makes it when it is not there, while what the run
+// is for wants it made: an external one is never made, and waits while it is
+// missing. It is the record the node is: one there that is not made, its
+// record all the same, is made. Once it is there, it is linked to what it
+// needs.
 func (r *run) create(ctx context.Context, node graph.Node) (graph.Ref, string, error) {
 	k := r.executor.kinds[node.Kind]
 
@@ -82,6 +104,12 @@ func (r *run) create(ctx context.Context, node graph.Node) (graph.Ref, string, e
 	case !there && node.External:
 		return graph.Ref{}, "", &graph.Waiting{Reason: "it is external, and missing"}
 	case !there:
+		if r.wanted != nil {
+			if err := r.wanted(ctx); err != nil {
+				return graph.Ref{}, "", err
+			}
+		}
+
 		if ref, err = k.Create(ctx, node.Spec, r.deps(node.ID())); err != nil {
 			return graph.Ref{}, "", err
 		}

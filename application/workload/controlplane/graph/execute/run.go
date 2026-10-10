@@ -68,6 +68,10 @@ type run struct {
 	// wants saying, or else what stopped it.
 	carry func(ctx context.Context, node graph.Node) (graph.Ref, string, error)
 
+	// wanted, when there is one, says whether what is not there is still to
+	// be made, as it is about to be (While).
+	wanted func(ctx context.Context) error
+
 	lock       sync.Mutex
 	executions map[graph.NodeID]graph.Execution
 

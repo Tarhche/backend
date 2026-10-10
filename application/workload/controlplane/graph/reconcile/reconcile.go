@@ -355,11 +355,11 @@ func (r *Reconciler) carry(ctx context.Context, root graph.Ref, rooted graph.Roo
 			return r.executor.Remove(ctx, root, generation, plan)
 		}
 
-		return r.executor.Apply(ctx, root, generation, plan)
+		return r.executor.Apply(ctx, root, generation, plan, execute.While(r.wanted(root)))
 	})
 
 	// gone while its plan ran, it is not made again, whatever is left of its
-	// plan: it is forgotten, as a root found gone is.
+	// plan (wanted): it is forgotten, as a root found gone is.
 	if !deleting && err == nil && outcome.State != execute.Done {
 		if _, there, readErr := r.read(ctx, root); readErr == nil && !there {
 			r.logger.InfoContext(ctx, "forgetting a root that went while its plan ran, its lease and how its plan went", "kind", root.Kind, "uuid", root.UUID)
@@ -388,6 +388,28 @@ func (r *Reconciler) carry(ctx context.Context, root graph.Ref, rooted graph.Roo
 	// cut short, by a lease lost or a control plane stopping, it is not
 	// done, and is taken up again once the root is not backed off.
 	return r.failed(fmt.Errorf("its plan was cut short: %s", interruptedBy(outcome)))
+}
+
+// wanted is what a run applying the plan of root asks before it makes what is
+// not there: whether root is still to be made, its record there and not asked
+// to go. One whose record a run read before it was asked to go, or went, has
+// nothing made for it after, so that what a cascade took away with it, its
+// VM first among it, is not made again by a run that started before: what is
+// made is waited on instead, saying why, and the run ends.
+func (r *Reconciler) wanted(root graph.Ref) func(ctx context.Context) error {
+	return func(ctx context.Context) error {
+		rec, there, err := r.read(ctx, root)
+		switch {
+		case err != nil:
+			return err
+		case !there:
+			return &graph.Waiting{Reason: "its root is gone"}
+		case going(rec):
+			return &graph.Waiting{Reason: "its root was asked to go"}
+		}
+
+		return nil
+	}
 }
 
 // explain writes onto the record of root why its plan failed or waits, as

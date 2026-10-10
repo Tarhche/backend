@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -842,5 +843,57 @@ func TestExecutor_Apply_links(t *testing.T) {
 		assert.Equal(t, execute.Done, again.State)
 		assert.Equal(t, []graph.NodeID{web}, f.ownership.OwnersOf(network))
 		assert.Equal(t, []graph.NodeID{web}, kinds.Asked(graphtest.Create)[3:], "and is not made again")
+	})
+}
+
+// TestExecutor_Apply_while holds a run to making what is not there only while
+// what it is for wants it made: once that says otherwise, what is there is
+// done as it is, and what is not is never made, and ends as it says.
+func TestExecutor_Apply_while(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	t.Run("what is not there is made while it is wanted, asked once for each", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t, container(false))
+		plan := f.plan(t, web)
+
+		var asked atomic.Int64
+
+		outcome, err := f.executor.Apply(ctx, graphtest.Ref(web), 1, plan, execute.While(func(context.Context) error {
+			asked.Add(1)
+
+			return nil
+		}))
+		require.NoError(t, err)
+
+		assert.Equal(t, execute.Done, outcome.State)
+		assert.Equal(t, int64(len(plan.Nodes())), asked.Load(), "once for each node made")
+	})
+
+	t.Run("and once it is not, nothing more is made, and what was to be ends as it says", func(t *testing.T) {
+		t.Parallel()
+
+		kinds := container(false)
+		kinds.Hold(vm)
+
+		f := newFixture(t, kinds)
+
+		outcome, err := f.executor.Apply(ctx, graphtest.Ref(web), 1, f.plan(t, web), execute.While(func(context.Context) error {
+			return &graph.Waiting{Reason: "its root was asked to go"}
+		}))
+		require.NoError(t, err)
+
+		assert.Equal(t, execute.Waiting, outcome.State)
+		assert.Empty(t, kinds.Asked(graphtest.Create), "nothing is made")
+
+		there, _ := outcome.Node(vm)
+		assert.Equal(t, graph.StateDone, there.State, "what is there is done as it is")
+
+		waiting, _ := outcome.Node(network)
+		assert.Equal(t, graph.StateWaiting, waiting.State)
+		assert.Equal(t, "its root was asked to go", waiting.Reason)
 	})
 }
