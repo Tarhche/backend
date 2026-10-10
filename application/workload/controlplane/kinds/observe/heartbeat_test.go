@@ -566,7 +566,7 @@ func TestObserver_changed(t *testing.T) {
 		assert.Equal(t, []graph.Ref{fan}, told.Changes())
 	})
 
-	t.Run("but nothing else it writes down, and nothing that waits on its parent", func(t *testing.T) {
+	t.Run("and so is any other change of its state, its parent going down among it", func(t *testing.T) {
 		t.Parallel()
 
 		repository := resourcesMemory.NewRepository()
@@ -587,6 +587,27 @@ func TestObserver_changed(t *testing.T) {
 
 		waiting, _ := stored(t, repository, "in-a-closed-house")
 		require.Equal(t, kind.Waiting, kindstest.Typed(waiting).Status.State)
+
+		assert.Equal(t, []graph.Ref{fan, {Kind: kindstest.Kind, UUID: "in-a-closed-house"}}, told.Changes())
+	})
+
+	t.Run("but not what its node says again, however often it beats, nor what changes beside its state", func(t *testing.T) {
+		t.Parallel()
+
+		repository := resourcesMemory.NewRepository()
+		create(t, repository, kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running))
+
+		told := &graphtest.Told{}
+		observer := observe.NewObserver(kindstest.Registry(&kindstest.Fans{}), repository, logger, observe.WithNotifier(told), observe.WithRefresh(time.Nanosecond))
+
+		for i := range 3 {
+			observer.Heartbeat(ctx, kindstest.NodeName, later.Add(time.Duration(i)*time.Second), instance(t, "fan-uuid", observed(kindstest.Running, 1)))
+		}
+
+		observer.Heartbeat(ctx, kindstest.NodeName, later.Add(time.Minute), instance(t, "fan-uuid", observed(kindstest.Running, 3)))
+
+		r, _ := stored(t, repository, "fan-uuid")
+		require.Equal(t, 3, kindstest.Typed(r).Status.Speed, "what changed beside its state is written down")
 
 		assert.Empty(t, told.Changes())
 	})

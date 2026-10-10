@@ -114,6 +114,10 @@ type workload struct {
 	// is one the control plane hears nothing more from.
 	beating atomic.Bool
 
+	// boots, while it holds a channel, holds every VM made in its boot until
+	// it is closed (holdBoots).
+	boots atomic.Pointer[chan struct{}]
+
 	// api is where the control plane's own API is served, which the blog's
 	// client reaches it on, and what a test asks of it directly when the blog
 	// has no word for it.
@@ -127,13 +131,29 @@ type workload struct {
 }
 
 // option is how a test's workload differs from every other's.
-type option func(*kindsReconcileResources.Config)
+type option func(*settings)
+
+// settings are what options change: how patient the control plane's
+// reconcile loop is, and whether every root is queued as often as that loop
+// runs, as a resync does.
+type settings struct {
+	reconcile kindsReconcileResources.Config
+	resync    bool
+}
 
 // silentAfter has the control plane give up on a node that has said nothing
 // for this long, rather than for as long as it does when served.
 func silentAfter(d time.Duration) option {
-	return func(config *kindsReconcileResources.Config) {
-		config.NodeSilentAfter = d
+	return func(s *settings) {
+		s.reconcile.NodeSilentAfter = d
+	}
+}
+
+// withoutResync has the control plane never queue every root: a root is
+// carried out only when what it is told of reaches it.
+func withoutResync() option {
+	return func(s *settings) {
+		s.resync = false
 	}
 }
 
@@ -144,10 +164,12 @@ func start(t *testing.T, options ...option) *workload {
 	ctx, cancel := context.WithCancel(context.Background())
 	logger := slog.New(slog.DiscardHandler)
 
-	reconcileConfig := patience
+	set := settings{reconcile: patience, resync: true}
 	for _, option := range options {
-		option(&reconcileConfig)
+		option(&set)
 	}
+
+	reconcileConfig := set.reconcile
 
 	natsURL := natsServer(t)
 
@@ -206,7 +228,7 @@ func start(t *testing.T, options ...option) *workload {
 	)
 	require.NoError(t, err)
 
-	nodeEngine := throughVMHost(t, w.engine, logger)
+	nodeEngine := throughVMHost(t, &booting{Engine: w.engine, held: &w.boots}, logger)
 
 	node, err := providers.NewOrchestratorWorkload(providers.OrchestratorDependencies{
 		NATS:     nodeConnection,
@@ -284,7 +306,11 @@ func start(t *testing.T, options ...option) *workload {
 		controlPlane.Graphs.Work(ctx)
 	}()
 
-	resyncs := every(ctx, 4*beat, func() { _ = controlPlane.Graphs.Resync(ctx) })
+	resyncs := every(ctx, 4*beat, func() {
+		if set.resync {
+			_ = controlPlane.Graphs.Resync(ctx)
+		}
+	})
 
 	t.Cleanup(func() {
 		cancel()
@@ -308,6 +334,43 @@ func start(t *testing.T, options ...option) *workload {
 	}, settle, beat, "the node never said what it offers")
 
 	return w
+}
+
+// holdBoots holds every VM made from now on in its boot, made by its engine
+// only once what it hands back lets it go: a Docker VM is scheduled until
+// then, as one coming up is for a minute or two when served.
+func (w *workload) holdBoots() (release func()) {
+	held := make(chan struct{})
+	w.boots.Store(&held)
+
+	var once sync.Once
+
+	return func() {
+		once.Do(func() {
+			w.boots.Store(nil)
+			close(held)
+		})
+	}
+}
+
+// booting is an engine that makes a VM only once the boots it is given are
+// let go, when they are held.
+type booting struct {
+	vm.Engine
+
+	held *atomic.Pointer[chan struct{}]
+}
+
+func (b *booting) Create(ctx context.Context, spec vm.Spec) (vm.Instance, error) {
+	if held := b.held.Load(); held != nil {
+		select {
+		case <-*held:
+		case <-ctx.Done():
+			return vm.Instance{}, ctx.Err()
+		}
+	}
+
+	return b.Engine.Create(ctx, spec)
 }
 
 // controlPlane asks the control plane's own API, as its owner, for what the

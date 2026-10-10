@@ -15,6 +15,7 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/container/createContainer"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/container/deleteContainer"
+	"github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/createVM"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/deleteVM"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/volume/createVolume"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/volume/deleteVolume"
@@ -32,6 +33,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
+	"github.com/khanzadimahdi/testproject/infrastructure/workload/input"
 )
 
 // TestAContainersGraph walks a container that names no Docker VM through its
@@ -833,4 +835,91 @@ func TestAVMDeletedUnderAContainer(t *testing.T) {
 	kept := w.containerRecord(t, vmUUID, "web")
 	assert.Equal(t, root.UUID, kept.Metadata.UUID, "it is what it was")
 	assert.Equal(t, vmKind.ChoiceOf(updated), kept.Spec.VM, "and keeps its vm as it went")
+}
+
+// TestAContainerInABootingVM asks for a container in a Docker VM that is still
+// coming up, with no resync to fall back on: its graph waits on the VM, and
+// once the VM comes up, which its node says, it is made, at once, rather than
+// once its node's silence about it says it went missing, which would also
+// have its graph carried out again, a while later.
+func TestAContainerInABootingVM(t *testing.T) {
+	t.Parallel()
+
+	w := start(t, withoutResync())
+	ctx := t.Context()
+
+	release := w.holdBoots()
+	defer release()
+
+	booting, err := createVM.NewUseCase(w.client, w.validator, w.translator, w.owners, ingressDomain).Execute(ctx, &createVM.Request{
+		Name:      "builds",
+		Kind:      string(vm.KindDocker),
+		Resources: input.Resources{CPUs: 2, Memory: 2 << 30, Disk: 20 << 30},
+		Network:   input.Network{Ingress: "allow", Egress: "allow"},
+		OwnerUUID: ownerUUID,
+	})
+	require.NoError(t, err)
+	require.Empty(t, booting.ValidationErrors)
+
+	vmUUID := booting.VM.UUID
+
+	w.stored(t, vmUUID, "coming up", func(v vmKind.VM) bool { return v.Status.State == vmKind.Scheduled })
+
+	// the vm comes up once the container's graph waits on it, then.
+	released := make(chan time.Time, 1)
+
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(beat):
+			}
+
+			records, _, err := w.resources.GetAll(context.Background(), containerKind.Name, resource.Filter{Parent: kind.Reference{Kind: vmKind.Name, UUID: vmUUID}}, 0, 0)
+			if err != nil || len(records) == 0 {
+				continue
+			}
+
+			executions, err := w.executions.GetByRoot(context.Background(), records[0].Metadata.UUID)
+			if err == nil && slices.ContainsFunc(executions, func(e graph.Execution) bool { return e.State == graph.StateWaiting }) {
+				released <- time.Now()
+				release()
+
+				return
+			}
+		}
+	}()
+
+	asking, cancel := context.WithTimeout(ctx, settle)
+	defer cancel()
+
+	created, err := createContainer.NewUseCase(w.client, w.validator, w.translator).Execute(asking, &createContainer.Request{
+		VMUUID:        vmUUID,
+		Name:          "web",
+		Image:         "nginx:1.27",
+		RestartPolicy: containerKind.RestartAlways,
+		OwnerUUID:     ownerUUID,
+	})
+	require.NoError(t, err, "it was never made once its vm came up")
+	require.Empty(t, created.ValidationErrors)
+	assert.Equal(t, "running", created.Container.State)
+
+	select {
+	case at := <-released:
+		assert.Less(t, time.Since(at), patience.ResourceSilentAfter, "made as soon as its vm came up, and not once its node's silence said it went")
+	default:
+		t.Fatal("its graph never waited on its vm")
+	}
+
+	web := w.containerRecord(t, vmUUID, "web")
+
+	waited := false
+	for _, e := range w.plan(t, graph.Ref{Kind: containerKind.Name, UUID: web.Metadata.UUID}, "made", func(executions []graph.Execution) bool {
+		return !slices.ContainsFunc(executions, func(e graph.Execution) bool { return e.State != graph.StateDone })
+	}) {
+		waited = waited || e.Reason != ""
+	}
+
+	assert.False(t, waited, "its last plan made it, waiting on nothing")
 }

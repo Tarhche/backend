@@ -18,9 +18,11 @@
 // next time fails it: the database, or a record written by something else
 // every time it was read.
 //
-// A delete carried out, once its resource's record is gone, and a create that
-// failed, once that is written down, are told to the graphs the resource is in
-// (WithNotifier), whose roots are carried out at once.
+// A delete carried out, once its resource's record is gone, a create that
+// failed, and any result that changed its resource's state, once that is
+// written down, are told to the graphs the resource is in (WithNotifier),
+// whose roots are carried out at once: a VM that came up has what waited on
+// it made then.
 package recordResult
 
 import (
@@ -81,9 +83,9 @@ func WithRestorer(restorer Restorer) Option {
 }
 
 // WithNotifier has notifier told of a resource whose delete was carried out,
-// once its record is gone, and of one whose create failed, once that is
-// written down: the roots whose graphs it is in are carried out at once,
-// rather than at their next resync.
+// once its record is gone, and of one whose create failed, or whose state a
+// result changed, once that is written down: the roots whose graphs it is in
+// are carried out at once, rather than at their next resync.
 func WithNotifier(notifier graph.Notifier) Option {
 	return func(r *ResourceActedOnHandler) {
 		r.notifier = notifier
@@ -172,11 +174,21 @@ func (h *ResourceActedOnHandler) take(ctx context.Context, result kind.ResourceA
 			return err
 		}
 
+		before, err := r.Common()
+		if err != nil {
+			return fmt.Errorf("%w: %w", errNotTaken, err)
+		}
+
 		change, err := observe.Answer(d, &r, result, at)
 		switch {
 		case errors.Is(err, observe.ErrNotWaitedOn):
 			return nil
 		case err != nil:
+			return fmt.Errorf("%w: %w", errNotTaken, err)
+		}
+
+		after, err := r.Common()
+		if err != nil {
 			return fmt.Errorf("%w: %w", errNotTaken, err)
 		}
 
@@ -201,7 +213,7 @@ func (h *ResourceActedOnHandler) take(ctx context.Context, result kind.ResourceA
 		_, err = h.resources.Update(ctx, r)
 		switch {
 		case err == nil:
-			if !result.OK && result.Action == createAction {
+			if after.State != before.State || (!result.OK && result.Action == createAction) {
 				h.changed(ctx, r)
 			}
 
@@ -217,8 +229,8 @@ func (h *ResourceActedOnHandler) take(ctx context.Context, result kind.ResourceA
 }
 
 // changed tells the notifier, when there is one, that r changed: its delete
-// was carried out, or its create failed. What cannot be told is reported, and
-// caught up with by the roots' next resync.
+// was carried out, its create failed, or its state moved. What cannot be told
+// is reported, and caught up with by the roots' next resync.
 func (h *ResourceActedOnHandler) changed(ctx context.Context, r resource.Record) {
 	if h.notifier == nil {
 		return

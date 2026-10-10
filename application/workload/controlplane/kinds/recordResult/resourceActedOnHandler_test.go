@@ -378,8 +378,8 @@ func TestResourceActedOnHandler_Handle_restores(t *testing.T) {
 
 // TestResourceActedOnHandler_Handle_changed holds the results the graphs of
 // roots are told of to a delete carried out, once its resource's record is
-// gone, and a create that failed, once that is written down, and to nothing
-// else.
+// gone, a create that failed, and any result that moved its resource's
+// state, once that is written down, and to nothing else.
 func TestResourceActedOnHandler_Handle_changed(t *testing.T) {
 	t.Parallel()
 
@@ -411,13 +411,19 @@ func TestResourceActedOnHandler_Handle_changed(t *testing.T) {
 			result: kind.ResourceActedOn{ID: "command-1", Kind: kindstest.Kind, UUID: "fan-uuid", Action: "create", Reason: "its blades are stuck"},
 			told:   []graph.Ref{fan},
 		},
-		"but not a create carried out": {
+		"and a create carried out, which moved it: what waited on it is made": {
 			record: waiting(kindstest.Starting, kindstest.Running, "create"),
 			result: kind.ResourceActedOn{ID: "command-1", Kind: kindstest.Kind, UUID: "fan-uuid", Action: "create", OK: true, Status: json.RawMessage(`{"state":"running"}`)},
+			told:   []graph.Ref{fan},
 		},
-		"nor anything else that failed": {
+		"and anything else that moved it, a start that failed": {
 			record: waiting(kindstest.Starting, kindstest.Running, "start"),
 			result: kind.ResourceActedOn{ID: "command-1", Kind: kindstest.Kind, UUID: "fan-uuid", Action: "start", Reason: "its blades are stuck"},
+			told:   []graph.Ref{fan},
+		},
+		"but not a result that left it where it was": {
+			record: waiting(kindstest.Stopping, kindstest.Stopped, "stop"),
+			result: kind.ResourceActedOn{ID: "command-1", Kind: kindstest.Kind, UUID: "fan-uuid", Action: "stop", OK: true, Status: json.RawMessage(`{"state":"stopping"}`)},
 		},
 		"nor a result its resource is not waiting on": {
 			record: waiting(kindstest.Deleting, kind.Deleted, "delete"),

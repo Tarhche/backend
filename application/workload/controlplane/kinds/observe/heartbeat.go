@@ -79,10 +79,12 @@ func WithOrphans(orphans Orphans) Option {
 	}
 }
 
-// WithNotifier has notifier told of a resource that went missing, once that
-// is written down, and of one whose record went, once it is gone: the roots
-// whose graphs it is in are carried out at once, making it again, rather than
-// at their next resync.
+// WithNotifier has notifier told of a resource whose state changed, once
+// that is written down, one that went missing among them, and of one whose
+// record went, once it is gone: the roots whose graphs it is in are carried
+// out at once, making it again, or making what waited on it, a container in a
+// VM that came up, rather than at their next resync. What its node says again
+// as it said it before tells nothing.
 func WithNotifier(notifier graph.Notifier) Option {
 	return func(o *Observer) {
 		o.notifier = notifier
@@ -303,8 +305,10 @@ func (o *Observer) take(ctx context.Context, d kind.Descriptor, nodeName string,
 			return err
 		}
 
-		// gone from its node: what needs it makes it again.
-		missing := observed.State == kind.Missing && recorded.State != kind.Missing
+		// gone from its node, what needs it makes it again; come up, what
+		// waited on it is made: whatever its state changed to, the roots
+		// that need it are carried out.
+		moved := observed.State != recorded.State
 
 		if from == found && r.Reset {
 			r.Reset = false
@@ -322,7 +326,7 @@ func (o *Observer) take(ctx context.Context, d kind.Descriptor, nodeName string,
 		_, err = o.resources.Update(ctx, r)
 		switch {
 		case err == nil:
-			if missing {
+			if moved {
 				o.changed(ctx, r)
 			}
 
@@ -346,9 +350,9 @@ func (o *Observer) take(ctx context.Context, d kind.Descriptor, nodeName string,
 	}
 }
 
-// changed tells the notifier, when there is one, that r changed: it went
-// missing, or its record is gone. What cannot be told is reported, and caught
-// up with by the roots' next resync.
+// changed tells the notifier, when there is one, that r changed: its state
+// did, or its record is gone. What cannot be told is reported, and caught up
+// with by the roots' next resync.
 func (o *Observer) changed(ctx context.Context, r resource.Record) {
 	if o.notifier == nil {
 		return
