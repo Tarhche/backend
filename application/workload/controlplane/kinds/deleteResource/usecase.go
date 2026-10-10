@@ -16,6 +16,17 @@
 // graph, which removes it and then what it owns, in order: whoever asked may
 // wait for it to go. Its graph's own delete of it is asked of its node as any
 // delete is (Request.ByGraph).
+//
+// What is not a root is answered with the roots whose graphs need it
+// (Response.Dependents), and whether one of them makes it again once it is
+// gone, as a VM's containers make their VM again under its uuid. Deleted with
+// them (Request.Cascade), each is marked to go first and queued to its graph
+// (dependents.Dependents.Cascade): those that live in it go with it, as a
+// VM's do, and it is asked for its delete at once; those that do not, which
+// use a network or a volume, are waited on to go first, for as long as the
+// request waits, or dependents.DefaultWait. Its node may still refuse its
+// delete, when something still uses it, which leaves it as it was, and is
+// answered with them all the same.
 package deleteResource
 
 import (
@@ -24,6 +35,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/dependents"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/dispatch"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/named"
 	"github.com/khanzadimahdi/testproject/domain"
@@ -47,9 +59,11 @@ type UseCase struct {
 	dispatcher *dispatch.Dispatcher
 
 	// roots are the kinds whose roots their graphs remove, and graphs what
-	// such a root is queued to once it is marked.
-	roots  graph.Roots
-	graphs graph.Enqueuer
+	// such a root is queued to once it is marked, and what says which roots
+	// need what is not one; dependents finds, marks and waits on those.
+	roots      graph.Roots
+	graphs     graph.Graphs
+	dependents *dependents.Dependents
 }
 
 // Option changes how resources are deleted.
@@ -57,8 +71,9 @@ type Option func(*UseCase)
 
 // WithGraphs has a root of a kind roots names marked to be deleted rather
 // than asked, and queued to graphs, whose graph removes it, and what it owns,
-// in order.
-func WithGraphs(roots graph.Roots, graphs graph.Enqueuer) Option {
+// in order; and what is not a root answered with the roots graphs says need
+// it, which a delete with them marks to go first.
+func WithGraphs(roots graph.Roots, graphs graph.Graphs) Option {
 	return func(uc *UseCase) {
 		uc.roots = roots
 		uc.graphs = graphs
@@ -72,6 +87,8 @@ func NewUseCase(registry *kind.Registry[kind.ControlPlaneBinding], resources res
 		option(uc)
 	}
 
+	uc.dependents = dependents.New(registry, resources, dispatcher, uc.roots, uc.graphs)
+
 	return uc
 }
 
@@ -84,14 +101,66 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		return nil, fmt.Errorf("%w: %q", kind.ErrUnknownKind, request.Kind)
 	}
 
+	r, uuid, err := named.Resource(ctx, uc.resources, binding, request.OwnerUUID, request.Parent, request.UUID)
+	if errors.Is(err, domain.ErrNotExists) {
+		return extra(ctx, binding, request, uuid, err)
+	} else if err != nil {
+		return nil, err
+	}
+
+	// a graph's own delete is answered with nothing of what needs it: what
+	// needs it is what is removing it.
+	var needs []graph.Dependent
+
+	if !request.ByGraph {
+		if needs, err = uc.dependents.Of(ctx, binding.Descriptor(), r); err != nil {
+			return nil, err
+		}
+	}
+
+	cascaded := request.Cascade && len(needs) > 0
+	wait := request.Wait
+
+	if cascaded {
+		if wait, err = uc.dependents.Cascade(ctx, r, needs, wait); err != nil {
+			return nil, err
+		}
+	}
+
+	response, err := uc.delete(ctx, binding, request, r, wait, cascaded)
+	if err != nil || len(needs) == 0 {
+		return response, err
+	}
+
+	response.Dependents = needs
+	response.Recreated = !cascaded && dependents.Recreated(needs)
+
+	return response, nil
+}
+
+// delete asks for the resource request names to be deleted, or marks it, a
+// root its graph removes, and waits on it for as long as wait. first is its
+// record as it was read, which is read again when something else wrote it
+// since, or once what needed it was asked to go with it (cascaded), which
+// may have taken it with them: it is gone then.
+func (uc *UseCase) delete(ctx context.Context, binding kind.ControlPlaneBinding, request *Request, first resource.Record, wait time.Duration, cascaded bool) (*Response, error) {
 	d := binding.Descriptor()
 
+	r := first
+
 	for try := 1; ; try++ {
-		r, uuid, err := named.Resource(ctx, uc.resources, binding, request.OwnerUUID, request.Parent, request.UUID)
-		if errors.Is(err, domain.ErrNotExists) {
-			return extra(ctx, binding, request, uuid, err)
-		} else if err != nil {
-			return nil, err
+		if try > 1 || cascaded {
+			latest, uuid, err := named.Resource(ctx, uc.resources, binding, request.OwnerUUID, request.Parent, request.UUID)
+			switch {
+			case errors.Is(err, domain.ErrNotExists) && cascaded:
+				return &Response{Gone: true}, nil
+			case errors.Is(err, domain.ErrNotExists):
+				return extra(ctx, binding, request, uuid, err)
+			case err != nil:
+				return nil, err
+			}
+
+			r = latest
 		}
 
 		common, err := r.Common()
@@ -131,10 +200,10 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		}
 
 		if marked {
-			return uc.marked(ctx, asked.Record, request.Wait), nil
+			return uc.marked(ctx, asked.Record, wait), nil
 		}
 
-		delivered, err := uc.dispatcher.Deliver(ctx, asked, request.Wait)
+		delivered, err := uc.dispatcher.Deliver(ctx, asked, wait)
 		if err != nil {
 			return nil, err
 		}

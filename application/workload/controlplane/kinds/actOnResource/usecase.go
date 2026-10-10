@@ -28,7 +28,10 @@
 // A command that deletes the root of a graph, of a kind whose graph removes it
 // (WithGraphs), marks it to be deleted rather than asking its node
 // (dispatch.Dispatcher.Mark), and queues it to its graph, which removes it and
-// then what it owns, in order: whoever asked may wait for it to go.
+// then what it owns, in order: whoever asked may wait for it to go. One that
+// deletes what is not a root is answered with the roots whose graphs need it,
+// and whether one of them makes it again, and deletes them with it when it is
+// asked to (Request.Cascade), as a delete does (deleteResource).
 package actOnResource
 
 import (
@@ -38,6 +41,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/dependents"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/dispatch"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/named"
 	"github.com/khanzadimahdi/testproject/domain"
@@ -58,9 +62,11 @@ type UseCase struct {
 	logger     *slog.Logger
 
 	// roots are the kinds whose roots their graphs remove, and graphs what
-	// such a root is queued to once it is marked.
-	roots  graph.Roots
-	graphs graph.Enqueuer
+	// such a root is queued to once it is marked, and what says which roots
+	// need what is not one; dependents finds, marks and waits on those.
+	roots      graph.Roots
+	graphs     graph.Graphs
+	dependents *dependents.Dependents
 }
 
 // Option changes how commands are asked for.
@@ -68,8 +74,10 @@ type Option func(*UseCase)
 
 // WithGraphs has a command that deletes a root of a kind roots names mark it
 // to be deleted rather than ask its node, and queue it to graphs, whose graph
-// removes it, and what it owns, in order.
-func WithGraphs(roots graph.Roots, graphs graph.Enqueuer) Option {
+// removes it, and what it owns, in order; and one that deletes what is not a
+// root answered with the roots graphs says need it, which a delete with them
+// marks to go first.
+func WithGraphs(roots graph.Roots, graphs graph.Graphs) Option {
 	return func(uc *UseCase) {
 		uc.roots = roots
 		uc.graphs = graphs
@@ -82,6 +90,8 @@ func NewUseCase(registry *kind.Registry[kind.ControlPlaneBinding], resources res
 	for _, option := range options {
 		option(uc)
 	}
+
+	uc.dependents = dependents.New(registry, resources, dispatcher, uc.roots, uc.graphs)
 
 	return uc
 }
@@ -103,17 +113,68 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 		return nil, fmt.Errorf("%w: a %s has no command %q", kind.ErrUnknownAction, d.Name, request.Action)
 	}
 
+	r, uuid, err := named.Resource(ctx, uc.resources, binding, request.OwnerUUID, request.Parent, request.UUID)
+	if errors.Is(err, domain.ErrNotExists) {
+		return uc.extra(ctx, binding, request, uuid, err)
+	} else if err != nil {
+		return nil, err
+	}
+
+	var needs []graph.Dependent
+
+	if action.Desires == kind.Deleted {
+		if needs, err = uc.dependents.Of(ctx, d, r); err != nil {
+			return nil, err
+		}
+	}
+
+	cascaded := request.Cascade && len(needs) > 0
+	wait := request.Wait
+
+	if cascaded {
+		if wait, err = uc.dependents.Cascade(ctx, r, needs, wait); err != nil {
+			return nil, err
+		}
+	}
+
+	response, err := uc.act(ctx, binding, action, request, r, wait, cascaded)
+	if err != nil || response == nil || len(needs) == 0 {
+		return response, err
+	}
+
+	response.Dependents = needs
+	response.Recreated = !cascaded && dependents.Recreated(needs)
+
+	return response, nil
+}
+
+// act asks the resource request names for the command, and waits on it for
+// as long as wait. first is its record as it was read, which is read again
+// when something else wrote it since, or once what needed it was asked to go
+// with it (cascaded), which may have taken it with them: it is gone then.
+func (uc *UseCase) act(ctx context.Context, binding kind.ControlPlaneBinding, action kind.Action, request *Request, first resource.Record, wait time.Duration, cascaded bool) (*Response, error) {
+	d := binding.Descriptor()
+
 	var (
 		asked  dispatch.Asked
 		marked bool
 	)
 
+	r := first
+
 	for try := 1; ; try++ {
-		r, uuid, err := named.Resource(ctx, uc.resources, binding, request.OwnerUUID, request.Parent, request.UUID)
-		if errors.Is(err, domain.ErrNotExists) {
-			return uc.extra(ctx, binding, request, uuid, err)
-		} else if err != nil {
-			return nil, err
+		if try > 1 || cascaded {
+			latest, uuid, err := named.Resource(ctx, uc.resources, binding, request.OwnerUUID, request.Parent, request.UUID)
+			switch {
+			case errors.Is(err, domain.ErrNotExists) && cascaded:
+				return &Response{Gone: true}, nil
+			case errors.Is(err, domain.ErrNotExists):
+				return uc.extra(ctx, binding, request, uuid, err)
+			case err != nil:
+				return nil, err
+			}
+
+			r = latest
 		}
 
 		waits, err := uc.waits(action, d, r)
@@ -151,14 +212,14 @@ func (uc *UseCase) Execute(ctx context.Context, request *Request) (*Response, er
 	}
 
 	if marked {
-		return uc.marked(ctx, asked.Record, request.Wait), nil
+		return uc.marked(ctx, asked.Record, wait), nil
 	}
 
 	if action.Runs == kind.OnControlPlane && !asked.Gone {
 		asked = uc.follow(ctx, binding, asked)
 	}
 
-	delivered, err := uc.dispatcher.Deliver(ctx, asked, request.Wait)
+	delivered, err := uc.dispatcher.Deliver(ctx, asked, wait)
 	if err != nil {
 		return nil, err
 	}

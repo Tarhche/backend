@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sync"
@@ -111,6 +112,11 @@ type workload struct {
 	// beating says whether the node says what it holds: a node that stops
 	// is one the control plane hears nothing more from.
 	beating atomic.Bool
+
+	// api is where the control plane's own API is served, which the blog's
+	// client reaches it on, and what a test asks of it directly when the blog
+	// has no word for it.
+	api string
 
 	// the blog's side of it.
 	client     workloadControlPlane.Client
@@ -240,6 +246,7 @@ func start(t *testing.T, options ...option) *workload {
 	require.NoError(t, controlPlane.Route(mux))
 
 	api := httptest.NewServer(mux)
+	w.api = api.URL
 
 	w.client, err = client.New(api.URL, controlPlaneConfigs.VMDockerImage)
 	require.NoError(t, err)
@@ -300,6 +307,29 @@ func start(t *testing.T, options ...option) *workload {
 	}, settle, beat, "the node never said what it offers")
 
 	return w
+}
+
+// controlPlane asks the control plane's own API, as its owner, for what the
+// blog has no word for, and is its status and its body.
+func (w *workload) controlPlane(t *testing.T, method string, path string, query url.Values) (int, []byte) {
+	t.Helper()
+
+	asked := url.Values{"owner": {ownerUUID}}
+	for key, values := range query {
+		asked[key] = values
+	}
+
+	request, err := http.NewRequestWithContext(t.Context(), method, w.api+path+"?"+asked.Encode(), nil)
+	require.NoError(t, err)
+
+	response, err := http.DefaultClient.Do(request)
+	require.NoError(t, err)
+	defer response.Body.Close()
+
+	body, err := io.ReadAll(response.Body)
+	require.NoError(t, err)
+
+	return response.StatusCode, body
 }
 
 // ingress is the kinds the workload's ingress finds, wired as its serve

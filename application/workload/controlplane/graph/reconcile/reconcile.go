@@ -25,7 +25,9 @@
 // what owns and uses those; and every so often every root is queued (Resync),
 // which catches up with whatever no change was told of, and removes what
 // records owned that are all gone, the end of a delete cut short after its
-// root went.
+// root went. The same walk says which live roots need a record, and whether
+// each makes it again (Dependents, its graph.Dependents), queueing nothing:
+// what a record's delete answers with, and takes with it when it is asked to.
 //
 // It runs the kinds it is given as roots, and no others: given none, nothing
 // is queued, read or reconciled.
@@ -135,7 +137,7 @@ type Reconciler struct {
 	reconciling map[graph.Ref]bool
 }
 
-var _ graph.Notifier = &Reconciler{}
+var _ graph.Graphs = &Reconciler{}
 
 // New is a reconciler of the roots of the kinds dependencies names as roots,
 // as config says. One of them that is not a kind of a graph, a kind whose

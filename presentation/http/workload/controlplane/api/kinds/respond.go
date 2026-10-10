@@ -11,7 +11,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/workload/graph"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
+	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 	"github.com/khanzadimahdi/testproject/presentation/http/workload/controlplane/api/respond"
 )
 
@@ -45,6 +48,45 @@ type result struct {
 	At     time.Time `json:"at,omitzero"`
 }
 
+// dependent is a root whose graph needs what was asked to go, as the API
+// shows it: whether its graph makes it again, or only waits on it.
+type dependent struct {
+	Kind      string `json:"kind"`
+	UUID      string `json:"uuid"`
+	Name      string `json:"name,omitempty"`
+	Recreates bool   `json:"recreates"`
+}
+
+// dependentsOf are dependents as the API shows them.
+func dependentsOf(dependents []graph.Dependent) []dependent {
+	shown := make([]dependent, len(dependents))
+	for i, d := range dependents {
+		shown[i] = dependent{Kind: d.Root.Kind, UUID: d.Root.UUID, Name: d.Name, Recreates: d.Recreates}
+	}
+
+	return shown
+}
+
+// deleted is what asking for what roots need to go came to, as the API shows
+// it: what asking came to, the roots that need it, and whether one of them
+// makes it again.
+type deleted struct {
+	commanded
+
+	Dependents []dependent `json:"dependents"`
+	Recreated  bool        `json:"recreated"`
+}
+
+// respondDeleted writes what asking for what roots need to go came to, with
+// the roots: always 202, whether it is gone, its delete on its way, or what
+// came of it was heard, since a 204 says nothing, and these are what is to be
+// said of it besides.
+func respondDeleted(rw http.ResponseWriter, resource kind.Raw, gone bool, sent *kind.ActOnResource, answered *kind.ResourceActedOn, dependents []graph.Dependent, recreated bool) {
+	body := deleted{commanded: commandedOf(resource, gone, sent, answered), Dependents: dependentsOf(dependents), Recreated: recreated}
+
+	respond.JSON(rw, http.StatusAccepted, body)
+}
+
 // respondCommanded writes what asking for a command came to, with the status
 // it stands for: a resource gone is 204, one whose command was carried out or
 // answered is 200 (201 when it was made), and one whose command is on its way
@@ -56,7 +98,29 @@ func respondCommanded(rw http.ResponseWriter, resource kind.Raw, gone bool, sent
 		return
 	}
 
-	body := commanded{Resource: &resource}
+	body := commandedOf(resource, gone, sent, answered)
+
+	status := http.StatusOK
+
+	switch {
+	case made:
+		status = http.StatusCreated
+	case sent != nil && answered == nil:
+		status = http.StatusAccepted
+	}
+
+	respond.JSON(rw, status, body)
+}
+
+// commandedOf is what asking for a command came to, as the API shows it: the
+// resource as it is now, unless it is gone, the command its node was sent,
+// and what came of it.
+func commandedOf(resource kind.Raw, gone bool, sent *kind.ActOnResource, answered *kind.ResourceActedOn) commanded {
+	var body commanded
+
+	if !gone {
+		body.Resource = &resource
+	}
 
 	if sent != nil {
 		body.Command = &command{ID: sent.ID, Action: sent.Action, Node: sent.Node, Attempt: sent.Attempt}
@@ -66,13 +130,37 @@ func respondCommanded(rw http.ResponseWriter, resource kind.Raw, gone bool, sent
 		body.Result = &result{ID: answered.ID, Action: answered.Action, OK: answered.OK, Reason: answered.Reason, Output: answered.Output, At: answered.At}
 	}
 
-	status := http.StatusOK
+	return body
+}
 
-	switch {
-	case made:
-		status = http.StatusCreated
-	case sent != nil && answered == nil:
-		status = http.StatusAccepted
+// refusedWith writes a refusal, a request refused field by field or what a
+// node refused, with the roots that need what was asked to go, when any do:
+// what refused it may be that they still use it.
+func refusedWith(rw http.ResponseWriter, invalid domain.ValidationErrors, node *noderequest.Error, dependents []graph.Dependent, recreated bool) {
+	if len(dependents) == 0 {
+		if node != nil {
+			respond.NodeRefused(rw, node)
+		} else {
+			respond.Refused(rw, invalid)
+		}
+
+		return
+	}
+
+	body := struct {
+		Errors     domain.ValidationErrors `json:"errors,omitempty"`
+		Error      *noderequest.Error      `json:"error,omitempty"`
+		Dependents []dependent             `json:"dependents"`
+		Recreated  bool                    `json:"recreated"`
+	}{Dependents: dependentsOf(dependents), Recreated: recreated}
+
+	status := http.StatusBadRequest
+
+	if node != nil {
+		body.Error = node
+		status = respond.StatusOf(node.Code)
+	} else {
+		body.Errors = invalid
 	}
 
 	respond.JSON(rw, status, body)
@@ -88,6 +176,19 @@ func failed(rw http.ResponseWriter, r *http.Request, err error) {
 	}
 
 	respond.Failed(rw, r, err)
+}
+
+// flagOf is what a request's parameter that says yes or no says, and whether
+// it says either: one not given says no.
+func flagOf(r *http.Request, name string) (bool, bool) {
+	given := r.URL.Query().Get(name)
+	if len(given) == 0 {
+		return false, true
+	}
+
+	yes, err := strconv.ParseBool(given)
+
+	return yes, err == nil
 }
 
 // waitOf is how long a request asks to wait for what came of its command:

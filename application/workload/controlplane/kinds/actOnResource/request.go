@@ -26,4 +26,11 @@ type Request struct {
 	// Wait is how long to wait for what came of the command, when it is one
 	// for a node: nothing is not waiting.
 	Wait time.Duration
+
+	// Cascade deletes the roots whose graphs need what a command that
+	// deletes it is asked of, with it, as a delete with them does
+	// (deleteResource.Request.Cascade): each marked to go first, and those
+	// that do not live in it waited on to go before it is asked. It says
+	// nothing to any other command, nor to a root's own delete.
+	Cascade bool
 }

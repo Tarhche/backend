@@ -417,3 +417,186 @@ func TestUseCase_Execute_roots(t *testing.T) {
 		})
 	}
 }
+
+// TestUseCase_Execute_dependents holds the delete of what the graphs of roots
+// need to answering with them, and whether one makes it again, and, deleted
+// with them, to marking them to go first and waiting for them to: a root's
+// own delete, and its graph's, are as they were.
+func TestUseCase_Execute_dependents(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	needed := graph.Ref{Kind: kindstest.Kind, UUID: "needed"}
+	web := graph.Ref{Kind: kindstest.Kind, UUID: "web"}
+	needs := []graph.Dependent{{Root: web, Name: "kitchen", Recreates: true}}
+
+	// owned has a fan owned by another fan, which is no root.
+	owned := func(fan *kindstest.Fan) {
+		fan.Metadata.Owners = []kind.Reference{{Kind: kindstest.Kind, UUID: "owner"}}
+	}
+
+	// rooted is a delete over records, fans being roots of their graphs, the
+	// root web needing needed as told says.
+	rooted := func(t *testing.T, told *graphtest.Told, records ...resource.Record) *fixture {
+		t.Helper()
+
+		return newFixtureWith(t, kindstest.Descriptor(), []deleteResource.Option{deleteResource.WithGraphs(graph.Roots{kindstest.Kind}, told)}, records...)
+	}
+
+	// removing has the root's graph remove what refs name once it is
+	// queued, a moment after, as its graph would.
+	removing := func(f *fixture, told *graphtest.Told, refs ...graph.Ref) {
+		go func() {
+			for len(told.Queued()) == 0 {
+				time.Sleep(time.Millisecond)
+			}
+
+			time.Sleep(20 * time.Millisecond)
+
+			for _, ref := range refs {
+				_ = f.resources.Delete(context.Background(), ref.Kind, ref.UUID)
+			}
+		}()
+	}
+
+	t.Run("what roots need is asked of its node as anything is, and answered with them, which make it again", func(t *testing.T) {
+		t.Parallel()
+
+		told := &graphtest.Told{Depending: map[graph.Ref][]graph.Dependent{needed: needs}}
+		f := rooted(t, told,
+			kindstest.AFan("needed", kindstest.Running, kindstest.Running, owned),
+			kindstest.AFan("web", kindstest.Running, kindstest.Running),
+		)
+
+		response, err := f.useCase.Execute(ctx, &deleteResource.Request{Kind: kindstest.Kind, UUID: "needed"})
+		require.NoError(t, err)
+
+		require.NotNil(t, response.Command)
+		assert.Equal(t, "delete", response.Command.Action)
+		assert.Equal(t, needs, response.Dependents)
+		assert.True(t, response.Recreated)
+
+		assert.Equal(t, kindstest.Running, kindstest.Typed(f.stored(t, "web")).Status.Expected, "the root is left as it was")
+		assert.Empty(t, told.Queued())
+	})
+
+	t.Run("one that only waits on it does not make it again", func(t *testing.T) {
+		t.Parallel()
+
+		told := &graphtest.Told{Depending: map[graph.Ref][]graph.Dependent{needed: {{Root: web, Name: "kitchen"}}}}
+		f := rooted(t, told, kindstest.AFan("needed", kindstest.Running, kindstest.Running, owned))
+
+		response, err := f.useCase.Execute(ctx, &deleteResource.Request{Kind: kindstest.Kind, UUID: "needed"})
+		require.NoError(t, err)
+
+		assert.Len(t, response.Dependents, 1)
+		assert.False(t, response.Recreated)
+	})
+
+	t.Run("with cascade, they are marked to go first, waited on to go, and then it is asked", func(t *testing.T) {
+		t.Parallel()
+
+		told := &graphtest.Told{Depending: map[graph.Ref][]graph.Dependent{needed: needs}}
+		f := rooted(t, told,
+			kindstest.AFan("needed", kindstest.Running, kindstest.Running, owned),
+			kindstest.AFan("web", kindstest.Running, kindstest.Running),
+		)
+
+		// what the root was once it was queued, and whether anything was
+		// asked of a node by then.
+		seen := make(chan bool, 1)
+
+		go func() {
+			for len(told.Queued()) == 0 {
+				time.Sleep(time.Millisecond)
+			}
+
+			r, err := f.resources.GetOne(context.Background(), web.Kind, web.UUID)
+			marked := err == nil && kindstest.Typed(r).Status.Expected == kind.Deleted && !r.Metadata.DeletionRequestedAt.IsZero()
+			seen <- marked && len(f.producer.Messages()) == 0
+		}()
+
+		removing(f, told, web)
+
+		// waiting for nothing, its roots are waited on as long as a cascade
+		// waits when it is told nothing, and its own delete not at all.
+		response, err := f.useCase.Execute(ctx, &deleteResource.Request{Kind: kindstest.Kind, UUID: "needed", Cascade: true})
+		require.NoError(t, err)
+
+		assert.True(t, <-seen, "the root was marked, as a delete by force would, before anything was asked")
+		assert.Equal(t, []graph.Ref{web}, told.Queued())
+
+		_, err = f.resources.GetOne(ctx, web.Kind, web.UUID)
+		assert.ErrorIs(t, err, domain.ErrNotExists, "it went first")
+
+		require.NotNil(t, response.Command, "and then it was asked")
+		assert.Nil(t, response.Result, "and not waited on")
+		assert.Equal(t, needs, response.Dependents)
+		assert.False(t, response.Recreated, "nothing makes it again once they go")
+	})
+
+	t.Run("and once what took it with them is done, it is gone", func(t *testing.T) {
+		t.Parallel()
+
+		told := &graphtest.Told{Depending: map[graph.Ref][]graph.Dependent{needed: needs}}
+		f := rooted(t, told,
+			kindstest.AFan("needed", kindstest.Running, kindstest.Running, owned),
+			kindstest.AFan("web", kindstest.Running, kindstest.Running),
+		)
+
+		removing(f, told, needed, web)
+
+		response, err := f.useCase.Execute(ctx, &deleteResource.Request{Kind: kindstest.Kind, UUID: "needed", Cascade: true, Wait: time.Minute})
+		require.NoError(t, err)
+
+		assert.True(t, response.Gone)
+		assert.Nil(t, response.Command)
+		assert.Equal(t, needs, response.Dependents)
+	})
+
+	t.Run("what refuses its delete is answered with them beside it", func(t *testing.T) {
+		t.Parallel()
+
+		// a fan deleted at a speed.
+		d := kindstest.Descriptor()
+		for i := range d.Actions {
+			if d.Actions[i].Name == "delete" {
+				d.Actions[i].Payload = kind.Payload[kindstest.StartPayload]()
+			}
+		}
+
+		told := &graphtest.Told{Depending: map[graph.Ref][]graph.Dependent{needed: needs}}
+		f := newFixtureWith(t, d, []deleteResource.Option{deleteResource.WithGraphs(graph.Roots{kindstest.Kind}, told)}, kindstest.AFan("needed", kindstest.Running, kindstest.Running, owned))
+
+		response, err := f.useCase.Execute(ctx, &deleteResource.Request{Kind: kindstest.Kind, UUID: "needed", Payload: []byte(`{"speed": 9}`)})
+		require.NoError(t, err)
+
+		assert.Equal(t, domain.ValidationErrors{"speed": "invalid_value"}, response.ValidationErrors)
+		assert.Equal(t, needs, response.Dependents)
+	})
+
+	t.Run("a root's own delete is as it was, cascade or not, and its graph's own asks of nothing", func(t *testing.T) {
+		t.Parallel()
+
+		told := &graphtest.Told{Depending: map[graph.Ref][]graph.Dependent{web: needs, needed: needs}}
+		f := rooted(t, told,
+			kindstest.AFan("web", kindstest.Running, kindstest.Running),
+			kindstest.AFan("needed", kindstest.Running, kind.Deleted, owned),
+		)
+
+		response, err := f.useCase.Execute(ctx, &deleteResource.Request{Kind: kindstest.Kind, UUID: "web", Cascade: true})
+		require.NoError(t, err)
+
+		assert.Nil(t, response.Command, "marked, not asked")
+		assert.Empty(t, response.Dependents)
+		assert.Equal(t, []graph.Ref{web}, told.Queued())
+
+		response, err = f.useCase.Execute(ctx, &deleteResource.Request{Kind: kindstest.Kind, UUID: "needed", ByGraph: true})
+		require.NoError(t, err)
+
+		require.NotNil(t, response.Command)
+		assert.Empty(t, response.Dependents)
+		assert.Empty(t, told.Asked(), "which roots need either is not asked")
+	})
+}

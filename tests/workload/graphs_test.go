@@ -2,6 +2,9 @@ package workload_test
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/url"
 	"slices"
 	"testing"
 	"time"
@@ -15,6 +18,8 @@ import (
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/deleteVM"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/volume/createVolume"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/volume/deleteVolume"
+	"github.com/khanzadimahdi/testproject/domain"
+	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
 	"github.com/khanzadimahdi/testproject/domain/workload/graph"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	blockKinds "github.com/khanzadimahdi/testproject/domain/workload/kinds/blocks"
@@ -323,4 +328,223 @@ func (w *workload) blockRecord(t *testing.T, kindName string, vmUUID string, nam
 	require.True(t, kept, "no %s named %s is kept in %s", kindName, name, vmUUID)
 
 	return r
+}
+
+// TestAVMDeletedWithWhatNeedsIt deletes the Docker VM a container's graph
+// made for it, with what needs it (cascade): the answer names the container,
+// which would have made it again; the container goes, with the network it
+// owned, and the volume goes with the VM, as what lives in a VM always does;
+// and nothing is made again.
+func TestAVMDeletedWithWhatNeedsIt(t *testing.T) {
+	t.Parallel()
+
+	w := start(t)
+
+	vmUUID, root := w.containerWithItsOwn(t, "web")
+
+	status, body := w.controlPlane(t, http.MethodDelete, "/api/vms/"+vmUUID, url.Values{"cascade": {"true"}})
+	require.Equal(t, http.StatusAccepted, status, string(body))
+
+	answer := deletedOf(t, body)
+	assert.Equal(t, []dependentShown{{Kind: containerKind.Name, UUID: root.UUID, Name: "web", Recreates: true}}, answer.Dependents)
+	assert.False(t, answer.Recreated, "it goes with them, and none makes it again")
+
+	w.gone(t, vmUUID)
+
+	w.nothingIn(t, vmUUID)
+}
+
+// TestAVMWhoseLifetimeEndsUnderAContainer lets the lifetime of the Docker VM
+// a container's graph made for it end: the container is deleted with it, as
+// a delete with what needs it deletes it, and nothing is made again.
+func TestAVMWhoseLifetimeEndsUnderAContainer(t *testing.T) {
+	t.Parallel()
+
+	w := start(t)
+	ctx := t.Context()
+
+	vmUUID, _ := w.containerWithItsOwn(t, "web")
+
+	lifetime := 2 * time.Second
+
+	_, err := w.client.UpdateVM(ctx, ownerUUID, vmUUID, workloadControlPlane.VMUpdate{Lifetime: &lifetime})
+	require.NoError(t, err)
+
+	w.gone(t, vmUUID)
+
+	w.nothingIn(t, vmUUID)
+}
+
+// TestAVolumeAContainerMounts deletes a volume a container's graph made for
+// it, in a Docker VM it named: alone, its node refuses, since the container
+// mounts it, and the answer names the container beside the refusal; with what
+// needs it, the container goes first, and then the volume, and the VM stays.
+func TestAVolumeAContainerMounts(t *testing.T) {
+	t.Parallel()
+
+	w := start(t)
+	ctx := t.Context()
+
+	vmUUID := w.dockerVM(t, "builds")
+
+	created, err := createContainer.NewUseCase(w.client, w.validator, w.translator).Execute(ctx, &createContainer.Request{
+		VMUUID:        vmUUID,
+		Name:          "app",
+		Image:         "nginx:1.27",
+		RestartPolicy: containerKind.RestartAlways,
+		Mounts:        []createContainer.Mount{{Type: containerKind.MountVolume, Source: "data", Target: "/data"}},
+		OwnerUUID:     ownerUUID,
+	})
+	require.NoError(t, err)
+	require.Empty(t, created.ValidationErrors)
+
+	w.containerIn(t, vmUUID, "app", "running")
+
+	app := w.containerRecord(t, vmUUID, "app")
+	require.Empty(t, app.Spec.External, "the volume is its own, made by its graph")
+
+	volume := w.blockRecord(t, volumeKind.Name, vmUUID, "data")
+	needs := []dependentShown{{Kind: containerKind.Name, UUID: app.Metadata.UUID, Name: "app", Recreates: true}}
+
+	t.Run("alone, it is refused, since the container mounts it, and the answer names the container", func(t *testing.T) {
+		status, body := w.controlPlane(t, http.MethodDelete, "/api/volumes/"+volume.Metadata.UUID, url.Values{"wait": {"10s"}})
+		require.Equal(t, http.StatusAccepted, status, string(body))
+
+		answer := deletedOf(t, body)
+		require.NotNil(t, answer.Result, "its node answered")
+		assert.False(t, answer.Result.OK)
+		assert.Contains(t, answer.Result.Reason, "volume is in use")
+		assert.Equal(t, needs, answer.Dependents)
+		assert.True(t, answer.Recreated)
+
+		kept := w.blockRecord(t, volumeKind.Name, vmUUID, "data")
+		assert.Equal(t, volume.Metadata.UUID, kept.Metadata.UUID, "it stays as it was")
+
+		common, err := kept.Common()
+		require.NoError(t, err)
+		assert.Equal(t, blockKinds.Present, common.State)
+		assert.Equal(t, blockKinds.Present, common.Expected)
+
+		assert.True(t, w.dockerd.Holds(t, vmUUID).Volume("data"))
+		w.containerIn(t, vmUUID, "app", "running")
+	})
+
+	t.Run("with what needs it, the container goes first, and then the volume, and the vm stays", func(t *testing.T) {
+		status, body := w.controlPlane(t, http.MethodDelete, "/api/volumes/"+volume.Metadata.UUID, url.Values{"cascade": {"true"}, "wait": {"30s"}})
+		require.Equal(t, http.StatusAccepted, status, string(body))
+
+		answer := deletedOf(t, body)
+		assert.Nil(t, answer.Resource, "it is gone")
+		assert.Equal(t, needs, answer.Dependents)
+		assert.False(t, answer.Recreated)
+
+		assert.Empty(t, w.containerRecords(t, vmUUID))
+
+		_, kept := w.findBlock(t, volumeKind.Name, vmUUID, "data")
+		assert.False(t, kept)
+
+		held := w.dockerd.Holds(t, vmUUID)
+
+		_, there := held.Container("app")
+		assert.False(t, there)
+		assert.False(t, held.Volume("data"))
+
+		w.stored(t, vmUUID, "kept", func(v vmKind.VM) bool { return v.Status.State == vmKind.Running })
+	})
+}
+
+// containerWithItsOwn is a container named name, which names no Docker VM,
+// joins a network and mounts a volume it names, once its graph made the VM,
+// the network and the volume for it, and then it; and its VM, and it.
+func (w *workload) containerWithItsOwn(t *testing.T, name string) (string, graph.Ref) {
+	t.Helper()
+
+	created, err := createContainer.NewUseCase(w.client, w.validator, w.translator).Execute(t.Context(), &createContainer.Request{
+		Name:          name,
+		Image:         "nginx:1.27",
+		RestartPolicy: containerKind.RestartAlways,
+		Networks:      []string{"backend"},
+		Mounts:        []createContainer.Mount{{Type: containerKind.MountVolume, Source: "data", Target: "/data"}},
+		OwnerUUID:     ownerUUID,
+	})
+	require.NoError(t, err)
+	require.Empty(t, created.ValidationErrors)
+	require.NotNil(t, created.Container)
+
+	vmUUID := created.VM.UUID
+	made := w.containerRecord(t, vmUUID, name)
+	root := graph.Ref{Kind: containerKind.Name, UUID: made.Metadata.UUID}
+
+	w.plan(t, root, "made", func(executions []graph.Execution) bool {
+		return len(executions) == 4 && !slices.ContainsFunc(executions, func(e graph.Execution) bool { return e.State != graph.StateDone })
+	})
+
+	return vmUUID, root
+}
+
+// nothingIn holds a Docker VM that is gone to staying gone, and what lived in
+// it with it: no container, network or volume is kept in it, now or after a
+// while of heartbeats, reconcile passes and resyncs, and its node holds none
+// of it.
+func (w *workload) nothingIn(t *testing.T, vmUUID string) {
+	t.Helper()
+
+	empty := func() bool {
+		if len(w.containerRecords(t, vmUUID)) > 0 {
+			return false
+		}
+
+		for _, kindName := range []string{networkKind.Name, volumeKind.Name} {
+			records, _, err := w.resources.GetAll(t.Context(), kindName, resource.Filter{Parent: kind.Reference{Kind: vmKind.Name, UUID: vmUUID}}, 0, 0)
+			if err != nil || len(records) > 0 {
+				return false
+			}
+		}
+
+		return true
+	}
+
+	require.Eventually(t, empty, settle, beat, "what lived in it was never taken away")
+
+	time.Sleep(20 * beat)
+
+	assert.True(t, empty(), "and nothing of it was made again")
+
+	_, err := w.resources.GetOne(t.Context(), vmKind.Name, vmUUID)
+	assert.ErrorIs(t, err, domain.ErrNotExists, "nor was it")
+
+	_, err = w.engine.Inspect(t.Context(), vmUUID)
+	assert.ErrorIs(t, err, domain.ErrNotExists, "and its node holds none of it")
+}
+
+// dependentShown is a root that needs what was asked to go, as the control
+// plane's API says it.
+type dependentShown struct {
+	Kind      string `json:"kind"`
+	UUID      string `json:"uuid"`
+	Name      string `json:"name"`
+	Recreates bool   `json:"recreates"`
+}
+
+// deletedAnswer is what the control plane's API answers the delete of what
+// roots need with.
+type deletedAnswer struct {
+	Resource *kind.Raw `json:"resource"`
+
+	Result *struct {
+		OK     bool   `json:"ok"`
+		Reason string `json:"reason"`
+	} `json:"result"`
+
+	Dependents []dependentShown `json:"dependents"`
+	Recreated  bool             `json:"recreated"`
+}
+
+func deletedOf(t *testing.T, body []byte) deletedAnswer {
+	t.Helper()
+
+	var answer deletedAnswer
+	require.NoError(t, json.Unmarshal(body, &answer), string(body))
+
+	return answer
 }

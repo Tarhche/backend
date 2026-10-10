@@ -13,10 +13,11 @@
 //
 // Where the roots of graphs are kept made (WithGraphs), a delete keeps what
 // lives in the parent that a graph makes again: a root that was not asked to
-// go, and what something still owns. Each is kept as gone with its parent,
-// missing and on no node, and the graphs are told of it, and of what went,
-// once the parent's record is gone: the roots then make their parent again,
-// under its uuid, and then what they need in it, in order.
+// go, and what something still there, and not asked to go, owns. Each is kept
+// as gone with its parent, missing and on no node, and the graphs are told of
+// it, and of what went, once the parent's record is gone: the roots then make
+// their parent again, under its uuid, and then what they need in it, in
+// order.
 package cascade
 
 import (
@@ -54,8 +55,8 @@ type Option func(*Cascade)
 
 // WithGraphs has a parent's delete keep what lives in it that the graphs of
 // roots make again: a root of a kind roots names that was not asked to go,
-// and what something still owns, kept missing and on no node, as gone with
-// its parent. notifier is told of each, and of what went, once the parent's
+// and what something still there, and not asked to go, owns, kept missing and
+// on no node, as gone with its parent. notifier is told of each, and of what went, once the parent's
 // record is gone, so that the roots whose graphs it is in make it again.
 func WithGraphs(roots graph.Roots, notifier graph.Notifier) Option {
 	return func(c *Cascade) {
@@ -255,20 +256,18 @@ func (c *Cascade) goes(ctx context.Context, d kind.Descriptor, r resource.Record
 // kept reports whether a resource of d's kind whose parent is deleted is
 // kept, which it is only where the roots of graphs are kept made, and some
 // kind's resources are roots: a root that was not asked to go, and what
-// something that is still there owns (kind.Metadata.Owning: what it lives in
-// owns nothing), whose graph makes it again. What was asked to go never is.
+// something still there owns (kind.Metadata.Owning: what it lives in owns
+// nothing), whose graph makes it again. What was asked to go never is, and
+// an owner that was asked to go is not still there: what a root being
+// removed owns goes, wherever the root is in its own removal.
 func (c *Cascade) kept(ctx context.Context, d kind.Descriptor, r resource.Record) (bool, error) {
 	if c.notifier == nil || len(c.roots) == 0 {
 		return false, nil
 	}
 
-	common, err := r.Common()
-	if err != nil {
+	asked, err := going(r)
+	if err != nil || asked {
 		return false, err
-	}
-
-	if common.Expected == kind.Deleted || common.State == kind.Deleted || !r.Metadata.DeletionRequestedAt.IsZero() {
-		return false, nil
 	}
 
 	if c.roots.Root(d, r.Metadata) {
@@ -276,16 +275,35 @@ func (c *Cascade) kept(ctx context.Context, d kind.Descriptor, r resource.Record
 	}
 
 	for _, owner := range r.Metadata.Owning(d.Parent) {
-		_, err := c.resources.GetOne(ctx, owner.Kind, owner.UUID)
+		owning, err := c.resources.GetOne(ctx, owner.Kind, owner.UUID)
 		switch {
-		case err == nil:
-			return true, nil
-		case !errors.Is(err, domain.ErrNotExists):
+		case errors.Is(err, domain.ErrNotExists):
+			continue
+		case err != nil:
 			return false, err
+		}
+
+		ownerGoing, err := going(owning)
+		switch {
+		case err != nil:
+			return false, err
+		case !ownerGoing:
+			return true, nil
 		}
 	}
 
 	return false, nil
+}
+
+// going reports whether r was asked to go: expected deleted, deleted, or
+// asked to be deleted once.
+func going(r resource.Record) (bool, error) {
+	common, err := r.Common()
+	if err != nil {
+		return false, err
+	}
+
+	return common.Expected == kind.Deleted || common.State == kind.Deleted || !r.Metadata.DeletionRequestedAt.IsZero(), nil
 }
 
 // missing is a resource of d's kind kept when its parent is deleted, as gone

@@ -10,6 +10,8 @@ import (
 
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/graph/reconcile"
 	"github.com/khanzadimahdi/testproject/domain/workload/graph"
+	"github.com/khanzadimahdi/testproject/domain/workload/graph/graphtest"
+	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	containerKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/container"
 	networkKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/network"
 	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
@@ -131,5 +133,142 @@ func TestReconciler_Changed(t *testing.T) {
 		r := f.reconciler(t, "one", reconcile.DefaultConfig(), containerKind.Name)
 
 		assert.ErrorIs(t, r.Changed(ctx, shared), broken)
+	})
+}
+
+func TestReconciler_Dependents(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	var (
+		theVM  = refOf(vm)
+		theNet = refOf(network)
+		theVol = refOf(volume)
+		root   = refOf(web)
+		other  = graph.Ref{Kind: containerKind.Name, UUID: "other"}
+		going  = graph.Ref{Kind: containerKind.Name, UUID: "going"}
+		stale  = graph.Ref{Kind: containerKind.Name, UUID: "stale"}
+	)
+
+	// in the vm, the root web, which owns its network and uses its volume;
+	// other, a root whose graph needs the vm alone; going, a root asked to
+	// go; and stale, a root whose record still says it uses the volume, which
+	// its plan does not name.
+	records := func() []resource.Record {
+		named := func(m *kind.Metadata) { m.Name = m.UUID }
+
+		return []resource.Record{
+			record(theVM, nil, nil),
+			record(root, []graph.Ref{theVM, theVol}, nil, named),
+			record(theNet, []graph.Ref{theVM}, []graph.Ref{root}),
+			record(theVol, []graph.Ref{theVM}, nil),
+			record(other, []graph.Ref{theVM}, nil, named),
+			record(going, []graph.Ref{theVM}, nil, named, deleting),
+			record(stale, []graph.Ref{theVM, theVol}, nil, named),
+		}
+	}
+
+	// kinds is web's graph, its volume external when it is not its own, and
+	// other's and going's, which need the vm alone, every node there.
+	kinds := func(external bool) *graphtest.Kind {
+		k := container()
+
+		vol := requirement(volume)
+		vol.External = external
+
+		k.Require(web, requirement(vm), requirement(network), vol)
+		k.Require(graph.ID(containerKind.Name, "other"), requirement(vm))
+		k.Require(graph.ID(containerKind.Name, "going"), requirement(vm))
+		k.Hold(vm, network, volume)
+
+		return k
+	}
+
+	for name, tt := range map[string]struct {
+		record   graph.Ref
+		external bool
+		want     []graph.Dependent
+	}{
+		"a vm is needed by every live root whose plan has it, which makes it again": {
+			record: theVM,
+			want: []graph.Dependent{
+				{Root: other, Name: "other", Recreates: true},
+				{Root: root, Name: "web", Recreates: true},
+			},
+		},
+		"a network a root owns is needed by it, which makes it again": {
+			record: theNet,
+			want:   []graph.Dependent{{Root: root, Name: "web", Recreates: true}},
+		},
+		"a volume a root uses is needed by it, and not by a root whose plan no longer names it": {
+			record: theVol,
+			want:   []graph.Dependent{{Root: root, Name: "web", Recreates: true}},
+		},
+		"a volume external to a root is needed by it, which only waits on it": {
+			record:   theVol,
+			external: true,
+			want:     []graph.Dependent{{Root: root, Name: "web", Recreates: false}},
+		},
+		"a root is not its own dependent": {record: root},
+		"what is of no graph's kind is needed by nothing": {
+			record: graph.Ref{Kind: taskKind.Name, UUID: "t-uuid"},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			f := newFixture(t, kinds(tt.external), records()...)
+			r := f.reconciler(t, "one", reconcile.DefaultConfig(), containerKind.Name, stackKind.Name)
+
+			dependents, err := r.Dependents(ctx, tt.record)
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.want, dependents)
+			assert.Empty(t, r.Queued(), "nothing is queued")
+			assert.Empty(t, f.resources.Writes(), "nor written")
+			assert.Empty(t, f.kinds.Asked(graphtest.Create), "nor made")
+		})
+	}
+
+	t.Run("with no kinds of root, nothing is read, and nothing needs anything", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t, kinds(false), records()...)
+		r := f.reconciler(t, "one", reconcile.DefaultConfig())
+
+		dependents, err := r.Dependents(ctx, theVM)
+		require.NoError(t, err)
+
+		assert.Empty(t, dependents)
+		assert.Zero(t, f.resources.Reads())
+	})
+
+	t.Run("what a root needs that cannot be read is what it fails with", func(t *testing.T) {
+		t.Parallel()
+
+		broken := errors.New("broken")
+
+		f := newFixture(t, kinds(false), records()...)
+		f.kinds.On(graphtest.Root, web, func(context.Context) error { return broken })
+
+		r := f.reconciler(t, "one", reconcile.DefaultConfig(), containerKind.Name)
+
+		_, err := r.Dependents(ctx, theVM)
+		assert.ErrorIs(t, err, broken)
+	})
+
+	t.Run("and so is a record that cannot be read", func(t *testing.T) {
+		t.Parallel()
+
+		broken := errors.New("broken")
+
+		f := newFixture(t, kinds(false), records()...)
+		f.records.Fail = broken
+
+		r := f.reconciler(t, "one", reconcile.DefaultConfig(), containerKind.Name)
+
+		_, err := r.Dependents(ctx, theVM)
+		assert.ErrorIs(t, err, broken)
 	})
 }

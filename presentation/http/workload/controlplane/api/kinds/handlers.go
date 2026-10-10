@@ -36,6 +36,19 @@ func body(rw http.ResponseWriter, r *http.Request) (json.RawMessage, bool) {
 	return payload, true
 }
 
+// flag reads a parameter that says yes or no, and writes the refusal when it
+// says neither.
+func flag(rw http.ResponseWriter, r *http.Request, name string) (bool, bool) {
+	yes, valid := flagOf(r, name)
+	if !valid {
+		respond.Refused(rw, domain.ValidationErrors{name: "invalid_value"})
+
+		return false, false
+	}
+
+	return yes, true
+}
+
 // wait reads how long a request asks to wait, and writes the refusal when it
 // is not a wait.
 func wait(rw http.ResponseWriter, r *http.Request) (time.Duration, bool) {
@@ -193,7 +206,7 @@ func NewDeleteHandler(useCase *deleteResource.UseCase, kindName string) *deleteH
 }
 
 // @Summary		Delete a resource
-// @Description	desire a resource deleted: its delete is asked for at once when its state allows it, and once it can be otherwise; its record goes once its node says it is gone
+// @Description	desire a resource deleted: its delete is asked for at once when its state allows it, and once it can be otherwise; its record goes once its node says it is gone. What the graphs of roots need is answered with those roots, and whether one of them makes it again, always as 202; with cascade, they are marked to go first, and those that do not live in it are waited on to go before it is asked
 // @Tags			workload resources
 // @Produce		json
 // @Param			plural	path		string	true	"The kind's plural"
@@ -201,8 +214,9 @@ func NewDeleteHandler(useCase *deleteResource.UseCase, kindName string) *deleteH
 // @Param			owner	query		string	false	"Only this owner's"
 // @Param			parent	query		string	false	"The resource it lives in: inside it, a kind may name it by more than its uuid"
 // @Param			wait	query		string	false	"How long to wait for its node to say it is gone"
+// @Param			cascade	query		bool	false	"Delete the roots whose graphs need it with it"
 // @Success		200		{object}	commanded
-// @Success		202		{object}	commanded
+// @Success		202		{object}	deleted
 // @Success		204
 // @Failure		400		{object}	map[string]interface{}
 // @Failure		404		{object}	map[string]interface{}
@@ -214,12 +228,18 @@ func (h *deleteHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	cascade, ok := flag(rw, r, "cascade")
+	if !ok {
+		return
+	}
+
 	response, err := h.useCase.Execute(r.Context(), &deleteResource.Request{
 		Kind:      h.kindName,
 		OwnerUUID: respond.Owner(r),
 		UUID:      r.PathValue("uuid"),
 		Parent:    r.URL.Query().Get("parent"),
 		Wait:      duration,
+		Cascade:   cascade,
 	})
 	if err != nil {
 		failed(rw, r, err)
@@ -228,7 +248,13 @@ func (h *deleteHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(response.ValidationErrors) > 0 {
-		respond.Refused(rw, response.ValidationErrors)
+		refusedWith(rw, response.ValidationErrors, nil, response.Dependents, response.Recreated)
+
+		return
+	}
+
+	if len(response.Dependents) > 0 {
+		respondDeleted(rw, response.Resource, response.Gone, response.Command, response.Result, response.Dependents, response.Recreated)
 
 		return
 	}
@@ -253,7 +279,7 @@ func NewActionHandler(useCase *actOnResource.UseCase, kindName string) *actionHa
 }
 
 // @Summary		Ask a resource for a command
-// @Description	ask a resource for one of its kind's commands, with its payload as the body: carried out in the control plane, or sent to the node holding it; with wait, the answer waits that long for what came of it
+// @Description	ask a resource for one of its kind's commands, with its payload as the body: carried out in the control plane, or sent to the node holding it; with wait, the answer waits that long for what came of it. A command that deletes what the graphs of roots need is answered as a delete is
 // @Tags			workload resources
 // @Accept			json
 // @Produce		json
@@ -263,8 +289,9 @@ func NewActionHandler(useCase *actOnResource.UseCase, kindName string) *actionHa
 // @Param			owner	query		string	false	"Only this owner's"
 // @Param			parent	query		string	false	"The resource it lives in: inside it, a kind may name it by more than its uuid"
 // @Param			wait	query		string	false	"How long to wait for what came of it"
+// @Param			cascade	query		bool	false	"For a command that deletes it, delete the roots whose graphs need it with it"
 // @Success		200		{object}	commanded
-// @Success		202		{object}	commanded
+// @Success		202		{object}	deleted
 // @Success		204
 // @Failure		400		{object}	map[string]interface{}
 // @Failure		404		{object}	map[string]interface{}
@@ -273,6 +300,11 @@ func NewActionHandler(useCase *actOnResource.UseCase, kindName string) *actionHa
 // @Router			/{plural}/{uuid}/actions/{action} [post]
 func (h *actionHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	duration, ok := wait(rw, r)
+	if !ok {
+		return
+	}
+
+	cascade, ok := flag(rw, r, "cascade")
 	if !ok {
 		return
 	}
@@ -290,15 +322,16 @@ func (h *actionHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		Action:    r.PathValue("action"),
 		Payload:   payload,
 		Wait:      duration,
+		Cascade:   cascade,
 	})
 
 	switch {
 	case err != nil:
 		failed(rw, r, err)
-	case len(response.ValidationErrors) > 0:
-		respond.Refused(rw, response.ValidationErrors)
-	case response.NodeError != nil:
-		respond.NodeRefused(rw, response.NodeError)
+	case len(response.ValidationErrors) > 0, response.NodeError != nil:
+		refusedWith(rw, response.ValidationErrors, response.NodeError, response.Dependents, response.Recreated)
+	case len(response.Dependents) > 0:
+		respondDeleted(rw, response.Resource, response.Gone, response.Command, response.Result, response.Dependents, response.Recreated)
 	default:
 		respondCommanded(rw, response.Resource, response.Gone, response.Command, response.Result, false)
 	}

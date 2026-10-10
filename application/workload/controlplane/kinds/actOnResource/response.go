@@ -2,6 +2,7 @@ package actOnResource
 
 import (
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/workload/graph"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 )
@@ -22,4 +23,12 @@ type Response struct {
 	// Result what came of it, when it was waited for and came in time.
 	Command *kind.ActOnResource
 	Result  *kind.ResourceActedOn
+
+	// Dependents are the roots whose graphs need what a command that deletes
+	// it was asked of, when it is not a root itself, as they were when it was
+	// asked: those asked to go with it, when it was deleted with them
+	// (Request.Cascade). Recreated says one of them makes it again once it is
+	// gone, which none does once they go with it.
+	Dependents []graph.Dependent
+	Recreated  bool
 }

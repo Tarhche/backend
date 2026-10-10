@@ -2,6 +2,7 @@ package deleteResource
 
 import (
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/workload/graph"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 )
 
@@ -25,4 +26,11 @@ type Response struct {
 	// graph removes, which its graph asks of its node.
 	Command *kind.ActOnResource
 	Result  *kind.ResourceActedOn
+
+	// Dependents are the roots whose graphs need what is not a root itself,
+	// as they were when it was asked to go: those asked to go with it, when
+	// it was deleted with them (Request.Cascade). Recreated says one of them
+	// makes it again once it is gone, which none does once they go with it.
+	Dependents []graph.Dependent
+	Recreated  bool
 }

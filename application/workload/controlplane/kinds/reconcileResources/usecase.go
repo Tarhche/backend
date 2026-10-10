@@ -13,7 +13,9 @@
 //     once its delete was sent: the delete waits in the node's stream for it
 //     to come back, and nothing is left to wait for here. One whose delete
 //     was not sent yet is sent it, the one thing a silent node can be sent;
-//   - one whose lifetime is over is deleted;
+//   - one whose lifetime is over is deleted, and the roots whose graphs need
+//     it with it (WithGraphs), each marked to go first, as a delete with them
+//     marks them, since they would otherwise make it again at once;
 //   - one whose node fell silent is failed as node_lost, unless it ended
 //     already: a stopped one stays stopped. Nothing is asked of it, since
 //     nothing can be, and what it is expected to be stays as it was, so it is
@@ -60,6 +62,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/dependents"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/dispatch"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/observe"
 	"github.com/khanzadimahdi/testproject/domain/workload/graph"
@@ -171,8 +174,11 @@ type UseCase struct {
 	config     Config
 
 	// roots are the kinds whose roots their graphs remove once they are
-	// asked to go.
-	roots graph.Roots
+	// asked to go, and graphs what says which roots need a resource, which
+	// dependents marks to go with one whose lifetime ends.
+	roots      graph.Roots
+	graphs     graph.Graphs
+	dependents *dependents.Dependents
 }
 
 // Option changes how a pass goes about it.
@@ -184,6 +190,19 @@ type Option func(*UseCase)
 func WithRoots(roots graph.Roots) Option {
 	return func(uc *UseCase) {
 		uc.roots = roots
+	}
+}
+
+// WithGraphs has a root of a kind roots names that was asked to go left to
+// its graph, as WithRoots does; and a resource whose lifetime ends deleted
+// with the roots graphs says need it, which are marked to go first, as a
+// delete with them marks them, and queued to their graphs: they would make it
+// again at once otherwise, which is what nobody wants of what has outlived
+// its lifetime. Those that live in it go with it.
+func WithGraphs(roots graph.Roots, graphs graph.Graphs) Option {
+	return func(uc *UseCase) {
+		uc.roots = roots
+		uc.graphs = graphs
 	}
 }
 
@@ -213,6 +232,8 @@ func NewUseCase(
 	for _, option := range options {
 		option(uc)
 	}
+
+	uc.dependents = dependents.New(registry, resources, dispatcher, uc.roots, uc.graphs)
 
 	return uc
 }
@@ -318,6 +339,10 @@ func (uc *UseCase) look(ctx context.Context, binding kind.ControlPlaneBinding, r
 	case common.Expected != kind.Deleted && r.Metadata.Expired(now):
 		uc.logger.InfoContext(ctx, "deleting a resource that has outlived its lifetime", "kind", d.Name, "uuid", r.Metadata.UUID, "expires_at", r.Metadata.ExpiresAt)
 
+		if err := uc.outlived(ctx, d, r); err != nil {
+			return err
+		}
+
 		return uc.remove(ctx, binding, r, common, true)
 
 	// nothing can be asked of a silent node but a delete, which waits in its
@@ -365,6 +390,22 @@ func (uc *UseCase) look(ctx context.Context, binding kind.ControlPlaneBinding, r
 	}
 
 	return uc.ask(ctx, binding, r, common, intents, false)
+}
+
+// outlived marks the roots whose graphs need a resource of d's kind that has
+// outlived its lifetime to go before it, as a delete with them does, so that
+// none of them makes it again once it is gone: what lives in it goes with it.
+func (uc *UseCase) outlived(ctx context.Context, d kind.Descriptor, r resource.Record) error {
+	needs, err := uc.dependents.Of(ctx, d, r)
+	if err != nil || len(needs) == 0 {
+		return err
+	}
+
+	for _, need := range needs {
+		uc.logger.InfoContext(ctx, "deleting a root with what it needs, which has outlived its lifetime", "kind", need.Root.Kind, "uuid", need.Root.UUID, "needs", d.Name+"/"+r.Metadata.UUID)
+	}
+
+	return uc.dependents.Mark(ctx, needs)
 }
 
 // unheard reports whether a resource of d's kind is one its node went on

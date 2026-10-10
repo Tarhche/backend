@@ -30,11 +30,12 @@
 // carries a root's plan out, and when the root may be carried out again once
 // its plan failed (Lease), which a repository keeps too (Leases); which kinds'
 // resources are roots of their own graphs, and what each root needs, as its
-// record says (RootKind, Roots); and what is told a record of a graph changed,
-// or a root admitted or asked to go, so that the roots are carried out again
-// (Notifier, Enqueuer), through a Relay where what carries them out is built
-// after what tells it. Nothing here carries a plan out: nothing here reads or
-// writes anything.
+// record says (RootKind, Roots); what is told a record of a graph changed, or
+// a root admitted or asked to go, so that the roots are carried out again
+// (Notifier, Enqueuer), and what says which roots need a record (Dependents),
+// through a Relay where what carries them out is built after what tells and
+// asks it. Nothing here carries a plan out: nothing here reads or writes
+// anything.
 package graph
 
 import (

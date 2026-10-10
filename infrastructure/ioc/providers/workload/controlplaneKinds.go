@@ -102,10 +102,12 @@ func WithParents(parents observe.Parents) ControlPlaneKindsOption {
 // they make and remove, and tells graphs of it: a root is queued to graphs
 // once it is admitted, and once it is asked to go, which marks it rather than
 // asking its node and is never asked by the reconcile loop; a VM's delete
-// keeps what a live root's graph makes again, as gone with it; and graphs is
+// keeps what a live root's graph makes again, as gone with it; graphs is
 // told of what went missing, was deleted, was kept or taken away with what it
 // lived in, and failed to be made, so that the roots whose graphs it is in
-// are carried out at once.
+// are carried out at once; and the delete of what roots need is answered with
+// the roots graphs says need it, which it takes with it when it is asked to
+// (cascade), as a lifetime's end always does.
 func WithGraphs(roots graph.Roots, graphs graph.Graphs) ControlPlaneKindsOption {
 	return func(o *controlPlaneKindsOptions) {
 		o.roots = roots
@@ -208,7 +210,7 @@ func NewControlPlaneKinds(
 		deleting = append(deleting, deleteResource.WithGraphs(settings.roots, settings.graphs))
 		observing = append(observing, observe.WithNotifier(settings.graphs))
 		recording = append(recording, recordResult.WithNotifier(settings.graphs))
-		reconciling = append(reconciling, kindsReconcileResources.WithRoots(settings.roots))
+		reconciling = append(reconciling, kindsReconcileResources.WithGraphs(settings.roots, settings.graphs))
 	}
 
 	observer := observe.NewObserver(registry, resources, logger, observing...)

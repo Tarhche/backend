@@ -5,14 +5,18 @@
 //	GET    /api/{plural}?owner=&parent=&page=        a page of manifests
 //	POST   /api/{plural}?owner=&parent=&wait=        admit one
 //	GET    /api/{plural}/{uuid}?owner=&parent=       one manifest
-//	DELETE /api/{plural}/{uuid}?owner=&parent=&wait= delete one
-//	POST   /api/{plural}/{uuid}/actions/{action}?owner=&parent=&wait=   a command
+//	DELETE /api/{plural}/{uuid}?owner=&parent=&wait=&cascade= delete one
+//	POST   /api/{plural}/{uuid}/actions/{action}?owner=&parent=&wait=&cascade=   a command
 //	GET    /api/{plural}/{uuid}/{query}?owner=&parent=&…     a query, its payload as parameters
 //	GET    /api/kinds                                every kind, as it describes itself
 //
 // A parent holds a request about one resource to what lives in it, and
 // inside it a kind may name the resource by more than its uuid: a container
 // by its Docker id or its name, in its Docker VM.
+//
+// A delete, or a command that deletes, of what the graphs of roots need is
+// answered with those roots, and whether one of them makes it again, as 202
+// whatever came of it; cascade deletes them with it.
 //
 // They answer the way the rest of the control plane's API does: JSON, a
 // refusal as 400 with the codes it was refused for, what is not there as

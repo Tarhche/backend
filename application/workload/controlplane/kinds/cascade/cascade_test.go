@@ -394,6 +394,8 @@ func TestRepository_Delete_graphs(t *testing.T) {
 		kindstest.AFan("owned-and-asked-to-go", kindstest.Deleting, kind.Deleted, owned(kind.Reference{Kind: kindstest.Kind, UUID: "root"})),
 		kindstest.AFan("root-kept-before-refs", kindstest.Stopped, kindstest.Stopped, keptBeforeRefs),
 		kindstest.AFan("in-another", kindstest.Running, kindstest.Running, elsewhere),
+		kindstest.AFan("going-elsewhere", kindstest.Running, kind.Deleted, elsewhere, func(f *kindstest.Fan) { f.Metadata.DeletionRequestedAt = kindstest.Moment }),
+		kindstest.AFan("owned-by-what-is-going", kindstest.Running, kindstest.Running, owned(kind.Reference{Kind: kindstest.Kind, UUID: "going-elsewhere"})),
 	)
 
 	require.NoError(t, cascading.Delete(ctx, kindstest.Parent, kindstest.House))
@@ -435,16 +437,18 @@ func TestRepository_Delete_graphs(t *testing.T) {
 		assert.Equal(t, kind.Missing, kindstest.Typed(fan).Status.State)
 	})
 
-	t.Run("but what was asked to go goes, and what nothing there owns", func(t *testing.T) {
+	t.Run("but what was asked to go goes, and what nothing there owns, or only what was asked to go", func(t *testing.T) {
 		t.Parallel()
 
-		for _, uuid := range []string{"root-asked-to-go", "owned-and-asked-to-go", "owned-by-what-is-gone"} {
+		for _, uuid := range []string{"root-asked-to-go", "owned-and-asked-to-go", "owned-by-what-is-gone", "owned-by-what-is-going"} {
 			_, kept := held(t, memory, uuid)
 			assert.False(t, kept, uuid)
 		}
 
-		_, kept := held(t, memory, "in-another")
-		assert.True(t, kept, "and what is in another house is no house's but its own")
+		for _, uuid := range []string{"in-another", "going-elsewhere"} {
+			_, kept := held(t, memory, uuid)
+			assert.True(t, kept, "and what is in another house is no house's but its own: %s", uuid)
+		}
 	})
 
 	t.Run("the graphs are told of what was kept and what went, once the house is gone", func(t *testing.T) {
@@ -455,7 +459,7 @@ func TestRepository_Delete_graphs(t *testing.T) {
 			changed = append(changed, ref.UUID)
 		}
 
-		assert.ElementsMatch(t, []string{"root", "owned", "owned-by-what-is-gone", "root-asked-to-go", "owned-and-asked-to-go", "root-kept-before-refs"}, changed)
+		assert.ElementsMatch(t, []string{"root", "owned", "owned-by-what-is-gone", "root-asked-to-go", "owned-and-asked-to-go", "root-kept-before-refs", "owned-by-what-is-going"}, changed)
 
 		told.lock.Lock()
 		defer told.lock.Unlock()

@@ -53,13 +53,17 @@ func TestRelay(t *testing.T) {
 	ctx := context.Background()
 	root := graph.Ref{Kind: "container", UUID: "c-1"}
 
-	t.Run("it tells nobody before it is given whom to tell", func(t *testing.T) {
+	t.Run("it tells nobody before it is given whom to tell, and no root needs anything", func(t *testing.T) {
 		t.Parallel()
 
 		var relay graph.Relay
 
 		assert.NoError(t, relay.Changed(ctx, root))
 		relay.Enqueue(root)
+
+		dependents, err := relay.Dependents(ctx, graph.Ref{Kind: "vm", UUID: "vm-1"})
+		require.NoError(t, err)
+		assert.Empty(t, dependents)
 	})
 
 	t.Run("and the graphs it is given from then on, failures and all", func(t *testing.T) {
@@ -67,16 +71,28 @@ func TestRelay(t *testing.T) {
 
 		var relay graph.Relay
 
-		told := &graphtest.Told{}
+		vm := graph.Ref{Kind: "vm", UUID: "vm-1"}
+		needs := []graph.Dependent{{Root: root, Name: "web", Recreates: true}}
+
+		told := &graphtest.Told{Depending: map[graph.Ref][]graph.Dependent{vm: needs}}
 		relay.To(told)
 
 		require.NoError(t, relay.Changed(ctx, root))
 		relay.Enqueue(root)
 
+		dependents, err := relay.Dependents(ctx, vm)
+		require.NoError(t, err)
+		assert.Equal(t, needs, dependents)
+
 		told.Failure = errors.New("the database is gone")
 		assert.ErrorIs(t, relay.Changed(ctx, graph.Ref{Kind: "network", UUID: "n-1"}), told.Failure)
 
+		told.DependentsFailure = told.Failure
+		_, err = relay.Dependents(ctx, vm)
+		assert.ErrorIs(t, err, told.Failure)
+
 		assert.Equal(t, []graph.Ref{root, {Kind: "network", UUID: "n-1"}}, told.Changes())
 		assert.Equal(t, []graph.Ref{root}, told.Queued())
+		assert.Equal(t, []graph.Ref{vm, vm}, told.Asked())
 	})
 }

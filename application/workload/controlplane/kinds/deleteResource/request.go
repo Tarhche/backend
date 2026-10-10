@@ -29,6 +29,14 @@ type Request struct {
 	// root's graph to have removed it: nothing is not waiting.
 	Wait time.Duration
 
+	// Cascade deletes the roots whose graphs need it with it, which would
+	// otherwise make it again, or wait on it: each is marked to go first, and
+	// removed by its graph. Those that live in it go with it; it is asked for
+	// its delete once those that do not are gone, or once it has waited for
+	// them as long as Wait, or dependents.DefaultWait when Wait is nothing.
+	// A root's own delete is the same with it or without it.
+	Cascade bool
+
 	// ByGraph says it is a root's graph removing what it made, the root
 	// among it, whose node is asked for its delete as anything's is. Nobody
 	// asking through the API says it: a root of a kind whose graph removes it

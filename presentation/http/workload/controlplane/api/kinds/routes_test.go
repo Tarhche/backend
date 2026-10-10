@@ -30,6 +30,8 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/recordResult"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/waiters"
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/workload/graph"
+	"github.com/khanzadimahdi/testproject/domain/workload/graph/graphtest"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
@@ -99,6 +101,14 @@ type api struct {
 func newAPI(t *testing.T) *api {
 	t.Helper()
 
+	return newAPIWith(t, nil)
+}
+
+// newAPIWith is the API with fans the roots of their own graphs, which told
+// carries out and says what needs, when there is told.
+func newAPIWith(t *testing.T, told *graphtest.Told) *api {
+	t.Helper()
+
 	a := &api{
 		resources: resourcesMemory.NewRepository(),
 		fans:      &kindstest.Fans{Node: kindstest.NodeName},
@@ -130,11 +140,21 @@ func newAPI(t *testing.T) *api {
 	dispatcher := dispatch.New(a.resources, a.node, waiting, nil, dispatch.PollEvery(10*time.Millisecond))
 	observer := observe.NewObserver(registry, a.resources, logger)
 
+	var (
+		acting   []actOnResource.Option
+		deleting []deleteResource.Option
+	)
+
+	if told != nil {
+		acting = append(acting, actOnResource.WithGraphs(graph.Roots{kindstest.Kind}, told))
+		deleting = append(deleting, deleteResource.WithGraphs(graph.Roots{kindstest.Kind}, told))
+	}
+
 	mux := http.NewServeMux()
 	require.NoError(t, Route(mux, registry.Descriptors(), UseCases{
 		Admit:  admitResource.NewUseCase(registry, a.resources, dispatcher, logger),
-		Act:    actOnResource.NewUseCase(registry, a.resources, dispatcher, slog.New(slog.DiscardHandler)),
-		Delete: deleteResource.NewUseCase(registry, a.resources, dispatcher),
+		Act:    actOnResource.NewUseCase(registry, a.resources, dispatcher, slog.New(slog.DiscardHandler), acting...),
+		Delete: deleteResource.NewUseCase(registry, a.resources, dispatcher, deleting...),
 		Get:    getResource.NewUseCase(registry, a.resources),
 		List:   getResources.NewUseCase(registry, a.resources),
 		Query:  queryResource.NewUseCase(registry, a.resources, requester, observer, nil),
@@ -558,6 +578,78 @@ func TestRoutes(t *testing.T) {
 
 		status, _ := a.do(t, http.MethodDelete, "/api/fans/fan-uuid", "")
 		assert.Equal(t, http.StatusNoContent, status)
+		assert.Empty(t, a.node.commands())
+	})
+
+	t.Run("what roots need is answered with them, as 202, even once it is gone", func(t *testing.T) {
+		t.Parallel()
+
+		needed := graph.Ref{Kind: kindstest.Kind, UUID: "fan-uuid"}
+		web := graph.Ref{Kind: kindstest.Kind, UUID: "web"}
+
+		a := newAPIWith(t, &graphtest.Told{Depending: map[graph.Ref][]graph.Dependent{needed: {{Root: web, Name: "kitchen", Recreates: true}}}})
+		a.keep(t, kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running, func(f *kindstest.Fan) {
+			f.Metadata.Owners = []kind.Reference{{Kind: kindstest.Kind, UUID: "owner"}}
+		}))
+
+		status, body := a.do(t, http.MethodDelete, "/api/fans/fan-uuid?wait=10s", "")
+		require.Equal(t, http.StatusAccepted, status, body)
+
+		answered := decode[struct {
+			Resource   *kindstest.Fan   `json:"resource"`
+			Dependents []map[string]any `json:"dependents"`
+			Recreated  *bool            `json:"recreated"`
+		}](t, body)
+
+		assert.Nil(t, answered.Resource, "it is gone")
+		assert.Equal(t, []map[string]any{{"kind": "fan", "uuid": "web", "name": "kitchen", "recreates": true}}, answered.Dependents)
+		require.NotNil(t, answered.Recreated)
+		assert.True(t, *answered.Recreated)
+	})
+
+	t.Run("and so is a command that deletes it, and its refusal", func(t *testing.T) {
+		t.Parallel()
+
+		needed := graph.Ref{Kind: kindstest.Kind, UUID: "fan-uuid"}
+		web := graph.Ref{Kind: kindstest.Kind, UUID: "web"}
+
+		a := newAPIWith(t, &graphtest.Told{Depending: map[graph.Ref][]graph.Dependent{needed: {{Root: web, Name: "kitchen"}}}})
+		a.node.silent.Store(true)
+		a.keep(t, kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running, func(f *kindstest.Fan) {
+			f.Metadata.Owners = []kind.Reference{{Kind: kindstest.Kind, UUID: "owner"}}
+		}))
+
+		status, body := a.do(t, http.MethodPost, "/api/fans/fan-uuid/actions/delete", "")
+		require.Equal(t, http.StatusAccepted, status, body)
+
+		answered := decode[struct {
+			commandedBody
+
+			Dependents []map[string]any `json:"dependents"`
+			Recreated  bool             `json:"recreated"`
+		}](t, body)
+
+		assert.Equal(t, "delete", answered.Command.Action)
+		assert.Equal(t, kindstest.Deleting, answered.Resource.Status.State)
+		assert.Equal(t, []map[string]any{{"kind": "fan", "uuid": "web", "name": "kitchen", "recreates": false}}, answered.Dependents)
+		assert.False(t, answered.Recreated, "it only waits on it")
+	})
+
+	t.Run("a cascade that says neither yes nor no is refused", func(t *testing.T) {
+		t.Parallel()
+
+		a := newAPI(t)
+		a.keep(t, kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running))
+
+		for _, asked := range []struct{ method, target string }{
+			{http.MethodDelete, "/api/fans/fan-uuid?cascade=perhaps"},
+			{http.MethodPost, "/api/fans/fan-uuid/actions/delete?cascade=perhaps"},
+		} {
+			status, body := a.do(t, asked.method, asked.target, "")
+			assert.Equal(t, http.StatusBadRequest, status, body)
+			assert.JSONEq(t, `{"errors":{"cascade":"invalid_value"}}`, body)
+		}
+
 		assert.Empty(t, a.node.commands())
 	})
 

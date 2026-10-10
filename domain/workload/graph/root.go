@@ -58,16 +58,44 @@ type Enqueuer interface {
 	Enqueue(root Ref)
 }
 
+// Dependent is a root whose graph needs a record: one of the nodes of its
+// plan is the record.
+type Dependent struct {
+	// Root is the root, and Name what it is called.
+	Root Ref
+	Name string
+
+	// Recreates says its graph makes the record again whenever it is gone,
+	// a node of its own. One that does not only names it, as what was there
+	// before it, made by somebody else (Requirement.External), and waits on
+	// it while it is missing.
+	Recreates bool
+}
+
+// Dependents are asked which roots need a record, as a node of their plans.
+type Dependents interface {
+	// Dependents are the roots whose graphs need the record ref names, each
+	// once, in the order of their kinds and their uuids: those it reaches
+	// up through what owns it and what uses it, as Notifier.Changed does,
+	// whose plans have it among their nodes, and that were not asked to go.
+	// A root is not its own dependent. What reading or planning fails with is
+	// an error, and nothing is queued, read for its own sake or written.
+	Dependents(ctx context.Context, ref Ref) ([]Dependent, error)
+}
+
 // Graphs are what carries the roots out as it is told of them: queued when
-// they are admitted or asked to go, and reached from what changed under them.
+// they are admitted or asked to go, and reached from what changed under them;
+// and what says which of them need a record.
 type Graphs interface {
 	Notifier
 	Enqueuer
+	Dependents
 }
 
 // Relay is what the control plane tells of roots, and of what changes under
-// them, before what carries the roots out is built over it: it tells the
-// graphs it is given (To), from then on, and nobody until then.
+// them, and asks which roots need a record, before what carries the roots out
+// is built over it: it tells and asks the graphs it is given (To), from then
+// on, and nobody until then.
 type Relay struct {
 	to atomic.Pointer[Graphs]
 }
@@ -96,4 +124,15 @@ func (r *Relay) Enqueue(root Ref) {
 	if graphs := r.to.Load(); graphs != nil {
 		(*graphs).Enqueue(root)
 	}
+}
+
+// Dependents are the roots that need the record ref names, as the graphs the
+// relay tells say, and none before it tells any.
+func (r *Relay) Dependents(ctx context.Context, ref Ref) ([]Dependent, error) {
+	graphs := r.to.Load()
+	if graphs == nil {
+		return nil, nil
+	}
+
+	return (*graphs).Dependents(ctx, ref)
 }

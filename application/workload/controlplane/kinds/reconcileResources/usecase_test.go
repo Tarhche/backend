@@ -19,6 +19,7 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/recordResult"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/waiters"
 	"github.com/khanzadimahdi/testproject/domain/workload/graph"
+	"github.com/khanzadimahdi/testproject/domain/workload/graph/graphtest"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/node"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
@@ -907,4 +908,65 @@ func TestUseCase_Execute_roots(t *testing.T) {
 			assert.Equal(t, tt.state, kindstest.Typed(stored).Status.State)
 		})
 	}
+}
+
+// TestUseCase_Execute_lifetimesWithGraphs holds what outlived its lifetime to
+// being deleted with the roots whose graphs need it: each marked to go first,
+// as a delete with them marks it, and queued to its graph, so that none makes
+// it again.
+func TestUseCase_Execute_lifetimesWithGraphs(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	needed := graph.Ref{Kind: kindstest.Kind, UUID: "fan-uuid"}
+	web := graph.Ref{Kind: kindstest.Kind, UUID: "web"}
+
+	owned := func(r *resource.Record) {
+		r.Metadata.Owners = []kind.Reference{{Kind: kindstest.Kind, UUID: "owner"}}
+	}
+
+	t.Run("the roots that need it are marked to go first, and then it is asked for its delete", func(t *testing.T) {
+		t.Parallel()
+
+		told := &graphtest.Told{Depending: map[graph.Ref][]graph.Dependent{needed: {{Root: web, Name: "kitchen", Recreates: true}}}}
+
+		f := newFixtureWith(t, []reconcileResources.Option{reconcileResources.WithGraphs(graph.Roots{kindstest.Kind}, told)},
+			fan(kindstest.Running, kindstest.Running, kindstest.NodeName, expiring(now.Add(-time.Second)), owned),
+			kindstest.AFan("web", kindstest.Running, kindstest.Running, func(fan *kindstest.Fan) { fan.Status.ObservedAt = now.Add(-time.Second) }),
+		)
+
+		require.NoError(t, f.useCase.Execute(ctx))
+
+		root, kept := f.stored(t, "web")
+		require.True(t, kept)
+		assert.Equal(t, kind.Deleted, kindstest.Typed(root).Status.Expected, "marked to go, its graph's to remove")
+		assert.False(t, root.Metadata.DeletionRequestedAt.IsZero())
+		assert.Equal(t, []graph.Ref{web}, told.Queued())
+
+		var actions []string
+		for _, command := range f.sent(t) {
+			actions = append(actions, command.Action+" "+command.UUID)
+		}
+
+		assert.Equal(t, []string{"delete fan-uuid"}, actions, "and only what outlived its lifetime is asked of its node")
+	})
+
+	t.Run("what nothing needs is deleted as it always was", func(t *testing.T) {
+		t.Parallel()
+
+		told := &graphtest.Told{}
+
+		f := newFixtureWith(t, []reconcileResources.Option{reconcileResources.WithGraphs(graph.Roots{kindstest.Kind}, told)},
+			fan(kindstest.Running, kindstest.Running, kindstest.NodeName, expiring(now.Add(-time.Second)), owned),
+		)
+
+		require.NoError(t, f.useCase.Execute(ctx))
+
+		stored, kept := f.stored(t, "fan-uuid")
+		require.True(t, kept)
+		assert.Equal(t, kindstest.Deleting, kindstest.Typed(stored).Status.State)
+		assert.Equal(t, []graph.Ref{needed}, told.Asked())
+		assert.Empty(t, told.Queued())
+	})
 }
