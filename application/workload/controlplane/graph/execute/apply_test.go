@@ -19,6 +19,7 @@ import (
 	containerKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/container"
 	networkKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/network"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
+	volumeKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/volume"
 	executionsMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/executions"
 )
 
@@ -662,4 +663,184 @@ func (f *flight) most() int {
 	defer f.lock.Unlock()
 
 	return f.highest
+}
+
+func TestExecutor_Apply_links(t *testing.T) {
+	t.Parallel()
+
+	ref := graphtest.Ref
+
+	// links are the links a run asked for, in order, by the node linked.
+	links := func(calls []graphtest.Call) map[graph.NodeID][]graphtest.Call {
+		linked := make(map[graph.NodeID][]graphtest.Call)
+		for _, call := range calls {
+			if call.Op == graphtest.Link {
+				linked[call.Node] = append(linked[call.Node], call)
+			}
+		}
+
+		return linked
+	}
+
+	link := func(id graph.NodeID, needed graph.NodeID, t graph.EdgeType) graphtest.Call {
+		return graphtest.Call{Op: graphtest.Link, Node: id, Needed: ref(needed), Type: t}
+	}
+
+	t.Run("a node there is linked to each node it needs as the policy types the edge, once it is made", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t, container(false))
+		require.Equal(t, execute.Done, f.apply(t, f.plan(t, web)).State)
+
+		assert.Equal(t, map[graph.NodeID][]graphtest.Call{
+			network: {link(network, vm, graph.Loose)},
+			volume:  {link(volume, vm, graph.Loose)},
+			web:     {link(web, network, graph.Owned), link(web, vm, graph.Loose), link(web, volume, graph.Loose)},
+		}, links(f.kinds.Calls()), "in the order of what it needs, and nothing for the vm, which needs nothing")
+
+		// where each node was made, and where it was first linked.
+		made := make(map[graph.NodeID]int)
+		linked := make(map[graph.NodeID]int)
+
+		for i, event := range f.kinds.Events() {
+			switch {
+			case event.Op == graphtest.Create && event.Returned:
+				made[event.Node] = i
+			case event.Op == graphtest.Link && !event.Returned:
+				if _, seen := linked[event.Node]; !seen {
+					linked[event.Node] = i
+				}
+			}
+		}
+
+		for _, id := range []graph.NodeID{network, volume, web} {
+			assert.Less(t, made[id], linked[id], "%s is made before it is linked", id)
+		}
+
+		assert.Equal(t, []graph.NodeID{web}, f.ownership.OwnersOf(network), "web owns its network")
+		assert.Equal(t, []graph.NodeID{vm, volume}, f.ownership.RefsOf(web), "and uses its vm and its volume")
+		assert.Empty(t, f.ownership.OwnersOf(volume))
+	})
+
+	t.Run("and one found there as well, so that a plan applied again is linked again", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t, container(false))
+		plan := f.plan(t, web)
+
+		require.Equal(t, execute.Done, f.apply(t, plan).State)
+		first := links(f.kinds.Calls())
+
+		asked := len(f.kinds.Calls())
+
+		require.Equal(t, execute.Done, f.apply(t, plan).State)
+		assert.Equal(t, first, links(f.kinds.Calls()[asked:]), "every node, though nothing is made")
+		assert.Len(t, f.kinds.Asked(graphtest.Create), 4)
+	})
+
+	t.Run("a service is linked to one it is only made after as an order, which holds nothing", func(t *testing.T) {
+		t.Parallel()
+
+		kinds := services(map[graph.NodeID][]graph.NodeID{web: {api}})
+
+		f := newFixture(t, kinds)
+		require.Equal(t, execute.Done, f.apply(t, f.plan(t, stack)).State)
+
+		assert.Contains(t, links(kinds.Calls())[web], link(web, api, graph.Order))
+		assert.Equal(t, []graph.NodeID{stack}, f.ownership.OwnersOf(api), "api is owned by its stack, and by nothing it is ordered before")
+	})
+
+	t.Run("nothing external is owned: what needs it, and what it needs, are linked to it as loose", func(t *testing.T) {
+		t.Parallel()
+
+		kinds := container(true)
+		kinds.Hold(volume)
+
+		f := newFixture(t, kinds)
+		require.Equal(t, execute.Done, f.apply(t, f.planUnder(t, web, "volume=owned,vm=owned")).State)
+
+		linked := links(kinds.Calls())
+
+		assert.Contains(t, linked[web], link(web, volume, graph.Loose), "whatever the policy says of a volume")
+		assert.Contains(t, linked[volume], link(volume, vm, graph.Loose), "and of what the volume needs")
+		assert.Contains(t, linked[web], link(web, vm, graph.Owned), "while what is not external is owned as it says")
+		assert.Contains(t, linked[network], link(network, vm, graph.Owned))
+
+		assert.Empty(t, f.ownership.OwnersOf(volume))
+		assert.Equal(t, []graph.NodeID{web, network}, f.ownership.OwnersOf(vm), "in the order of their ids")
+	})
+
+	t.Run("a policy changed between two runs is what the records say once the second is done", func(t *testing.T) {
+		t.Parallel()
+
+		f := newFixture(t, container(false))
+
+		// what lives in a vm uses it, whatever owns what.
+		for _, kindName := range []string{networkKind.Name, volumeKind.Name, containerKind.Name} {
+			f.ownership.Parent(kindName, vmKind.Name)
+		}
+
+		for _, run := range []struct {
+			policy string
+			owners map[graph.NodeID][]graph.NodeID
+			refs   map[graph.NodeID][]graph.NodeID
+		}{
+			{
+				policy: "",
+				owners: map[graph.NodeID][]graph.NodeID{network: {web}},
+				refs:   map[graph.NodeID][]graph.NodeID{network: {vm}, volume: {vm}, web: {vm, volume}},
+			},
+			{
+				// owned to loose takes web out of what owns its network, and
+				// loose to owned its volume out of what web uses.
+				policy: "network=loose,volume=owned",
+				owners: map[graph.NodeID][]graph.NodeID{volume: {web}},
+				refs:   map[graph.NodeID][]graph.NodeID{network: {vm}, volume: {vm}, web: {network, vm}},
+			},
+			{
+				// what lives in a vm owns it now, and uses it still.
+				policy: "vm=owned",
+				owners: map[graph.NodeID][]graph.NodeID{vm: {web, network, volume}, network: {web}},
+				refs:   map[graph.NodeID][]graph.NodeID{network: {vm}, volume: {vm}, web: {vm, volume}},
+			},
+		} {
+			require.Equal(t, execute.Done, f.apply(t, f.planUnder(t, web, run.policy)).State, run.policy)
+
+			for _, id := range []graph.NodeID{vm, network, volume, web} {
+				assert.Equal(t, run.owners[id], f.ownership.OwnersOf(id), "%q: what owns %s", run.policy, id)
+				assert.Equal(t, run.refs[id], f.ownership.RefsOf(id), "%q: what %s uses", run.policy, id)
+			}
+		}
+
+		assert.Len(t, f.kinds.Asked(graphtest.Create), 4, "made once, and linked each time")
+	})
+
+	t.Run("a link that fails fails its node, saying so, and the next run links it", func(t *testing.T) {
+		t.Parallel()
+
+		broken := errors.New("broken")
+
+		kinds := container(false)
+		kinds.On(graphtest.Link, web, func(context.Context) error { return broken })
+
+		f := newFixture(t, kinds)
+		plan := f.plan(t, web)
+
+		failed := f.apply(t, plan)
+		assert.Equal(t, execute.Failed, failed.State)
+		require.ErrorIs(t, failed.Err, broken)
+
+		e, _ := failed.Node(web)
+		assert.Equal(t, graph.StateFailed, e.State)
+		assert.Equal(t, "it is there, and network/s_default, which it needs, cannot be linked to it as owned: broken", e.Reason)
+		assert.Contains(t, kinds.Asked(graphtest.Create), web, "it was made")
+		assert.Empty(t, f.ownership.OwnersOf(network), "and is linked to nothing")
+
+		kinds.On(graphtest.Link, web, nil)
+
+		again := f.apply(t, plan)
+		assert.Equal(t, execute.Done, again.State)
+		assert.Equal(t, []graph.NodeID{web}, f.ownership.OwnersOf(network))
+		assert.Equal(t, []graph.NodeID{web}, kinds.Asked(graphtest.Create)[3:], "and is not made again")
+	})
 }

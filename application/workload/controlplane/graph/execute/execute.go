@@ -9,7 +9,9 @@
 // became. A node there already is done as it is, whatever made it, so a plan
 // applied again makes nothing it made before, and one that stopped part way
 // is taken up where it stopped. An external node is never made: while it is
-// missing, it waits.
+// missing, it waits. Every node there, made or found, is linked to what it
+// needs as the plan types each edge now (graph.Ownership.Link), so that the
+// records keep what owns what as the policy says.
 //
 // A root is removed the other way, through the edges that own what they
 // need and no other: what is loose, only ordered or external is never

@@ -503,6 +503,159 @@ func TestOwnership(t *testing.T) {
 		assert.Equal(t, []graph.NodeID{network}, kinds.Asked(graphtest.Disown))
 	})
 
+	t.Run("linking an owned edge has the dependent own what it needs, and not use it, but for what it lives in", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		kinds := graphtest.NewKind()
+		ownership := kinds.Ownership()
+
+		kinds.Hold(vm, network, web)
+		ownership.Parent("container", "vm")
+		ownership.Use(web, vm, network)
+
+		require.NoError(t, ownership.Link(ctx, ref(network), ref(web), graph.Owned))
+		assert.Equal(t, []graph.NodeID{web}, ownership.OwnersOf(network))
+		assert.Equal(t, []graph.NodeID{vm}, ownership.RefsOf(web), "what it owns it does not use")
+
+		require.NoError(t, ownership.Link(ctx, ref(vm), ref(web), graph.Owned))
+		assert.Equal(t, []graph.NodeID{web}, ownership.OwnersOf(vm))
+		assert.Equal(t, []graph.NodeID{vm}, ownership.RefsOf(web), "and what it lives in it uses whatever owns what")
+
+		owners, err := ownership.Owners(ctx, ref(vm))
+		require.NoError(t, err)
+		assert.Equal(t, []graph.Ref{ref(web)}, owners, "a vm lives in nothing, and what owns it owns it")
+	})
+
+	t.Run("linking a loose edge has the dependent use what it needs, and not own it", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		kinds := graphtest.NewKind()
+		ownership := kinds.Ownership()
+
+		kinds.Hold(network, web, api)
+		ownership.Own(network, web, api)
+
+		require.NoError(t, ownership.Link(ctx, ref(network), ref(web), graph.Loose))
+		assert.Equal(t, []graph.NodeID{network}, ownership.RefsOf(web))
+		assert.Equal(t, []graph.NodeID{api}, ownership.OwnersOf(network), "and what else owns it still does")
+
+		require.NoError(t, ownership.Link(ctx, ref(network), ref(web), graph.Loose))
+		assert.Equal(t, []graph.NodeID{network}, ownership.RefsOf(web), "and linking it again changes nothing")
+		assert.Equal(t, []graph.NodeID{api}, ownership.OwnersOf(network))
+
+		require.NoError(t, ownership.Link(ctx, ref(network), ref(web), graph.Owned))
+		assert.Empty(t, ownership.RefsOf(web), "until it is linked as owned")
+		assert.Equal(t, []graph.NodeID{api, web}, ownership.OwnersOf(network))
+	})
+
+	t.Run("an order links nothing, and an edge of no type is refused", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		kinds := graphtest.NewKind()
+		ownership := kinds.Ownership()
+
+		kinds.Hold(web, api)
+
+		require.NoError(t, ownership.Link(ctx, ref(api), ref(web), graph.Order))
+		assert.Empty(t, ownership.RefsOf(web))
+		assert.Empty(t, ownership.OwnersOf(api))
+
+		assert.Error(t, ownership.Link(ctx, ref(api), ref(web), graph.EdgeType(0)))
+		assert.Empty(t, ownership.RefsOf(web))
+	})
+
+	t.Run("a record that is gone is linked to nothing", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		kinds := graphtest.NewKind()
+		ownership := kinds.Ownership()
+
+		kinds.Hold(web)
+
+		require.NoError(t, ownership.Link(ctx, ref(network), ref(web), graph.Loose))
+		require.NoError(t, ownership.Link(ctx, ref(network), ref(web), graph.Owned))
+		assert.Empty(t, ownership.OwnersOf(network), "the network, which it does not hold, is owned by nothing")
+
+		require.NoError(t, ownership.Link(ctx, ref(web), ref(stack), graph.Loose))
+		assert.Empty(t, ownership.RefsOf(stack), "and the stack, which it does not hold, uses nothing")
+	})
+
+	t.Run("what lives in a record of another's kind is never owned by it", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		kinds := graphtest.NewKind()
+		ownership := kinds.Ownership()
+
+		kinds.Hold(vm, web, stack)
+		ownership.Parent("container", "vm")
+		ownership.Own(web, vm, stack)
+
+		owners, err := ownership.Owners(ctx, ref(web))
+		require.NoError(t, err)
+		assert.Equal(t, []graph.Ref{ref(stack)}, owners, "whatever its record says, as one kept before refs does")
+
+		owners, err = ownership.Disown(ctx, ref(web), ref(stack))
+		require.NoError(t, err)
+		assert.Empty(t, owners)
+		assert.Equal(t, []graph.NodeID{vm}, ownership.OwnersOf(web))
+	})
+
+	t.Run("what a record uses goes with it", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		kinds := graphtest.NewKind()
+		ownership := kinds.Ownership()
+
+		kinds.Hold(web, stack)
+		ownership.Use(web, vm, vm, network)
+		ownership.Use(stack, web)
+
+		assert.Equal(t, []graph.NodeID{network, vm}, ownership.RefsOf(web), "each once, in the order of their ids")
+
+		require.NoError(t, kinds.Delete(ctx, ref(web)))
+		assert.Empty(t, ownership.RefsOf(web))
+
+		require.NoError(t, ownership.Forget(ctx, ref(stack)))
+		assert.Empty(t, ownership.RefsOf(stack))
+	})
+
+	t.Run("a link is recorded with what it links and how, and does first what a test has it do", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		broken := errors.New("broken")
+
+		kinds := graphtest.NewKind()
+		ownership := kinds.Ownership()
+
+		kinds.Hold(network, web)
+		kinds.On(graphtest.Link, web, func(context.Context) error { return broken })
+
+		require.ErrorIs(t, ownership.Link(ctx, ref(network), ref(web), graph.Owned), broken)
+		assert.Empty(t, ownership.OwnersOf(network), "and links nothing")
+
+		kinds.On(graphtest.Link, web, nil)
+		require.NoError(t, ownership.Link(ctx, ref(network), ref(web), graph.Loose))
+
+		assert.Equal(t, []graphtest.Call{
+			{Op: graphtest.Link, Node: web, Needed: ref(network), Type: graph.Owned},
+			{Op: graphtest.Link, Node: web, Needed: ref(network), Type: graph.Loose},
+		}, kinds.Calls())
+
+		assert.Equal(t, []graphtest.Event{
+			{Op: graphtest.Link, Node: web},
+			{Op: graphtest.Link, Node: web, Returned: true},
+			{Op: graphtest.Link, Node: web},
+			{Op: graphtest.Link, Node: web, Returned: true},
+		}, kinds.Events())
+	})
+
 	t.Run("it may be asked from several goroutines at once", func(t *testing.T) {
 		t.Parallel()
 
@@ -527,7 +680,10 @@ func TestOwnership(t *testing.T) {
 				_, err = ownership.Disown(ctx, ref(network), ref(owner))
 				assert.NoError(t, err)
 
+				assert.NoError(t, ownership.Link(ctx, ref(network), ref(owner), graph.Loose))
+
 				_ = ownership.OwnersOf(network)
+				_ = ownership.RefsOf(owner)
 			})
 		}
 
@@ -535,5 +691,6 @@ func TestOwnership(t *testing.T) {
 
 		assert.Empty(t, ownership.OwnersOf(network), "each disowned of what it was owned by")
 		assert.Len(t, kinds.Asked(graphtest.Disown), owners)
+		assert.Len(t, kinds.Asked(graphtest.Link), owners)
 	})
 }

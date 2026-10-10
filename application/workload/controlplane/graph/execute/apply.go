@@ -2,6 +2,7 @@ package execute
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/khanzadimahdi/testproject/domain/workload/graph"
 )
@@ -17,6 +18,14 @@ import (
 // is done as the record it was made, or waits on what its kind says it waits
 // on (graph.Waiting), or failed. Each is saved as it ends. A level with a
 // node that waits or failed is the last one started.
+//
+// A node there, found or made, is linked to each node it needs, as the plan
+// types the edge between them (graph.Ownership.Link), so that their records
+// say what owns what and what uses what as the policy says now: applied
+// again, a plan brings records kept under another policy in line with this
+// one. Nothing external is owned: an edge that would own one, or own through
+// one, is linked as loose. A link that fails fails its node, saying so, and
+// the next run links it again.
 //
 // A run whose context is cancelled starts nothing more, waits for what runs
 // to end, and saves each node it cut short as pending again, saying it was
@@ -61,7 +70,8 @@ func (e *Executor) Apply(ctx context.Context, root graph.Ref, generation int64, 
 
 // create finds the node, or makes it when it is not there: an external one
 // is never made, and waits while it is missing. It is the record the node
-// is: one there that is not made, its record all the same, is made.
+// is: one there that is not made, its record all the same, is made. Once it
+// is there, it is linked to what it needs.
 func (r *run) create(ctx context.Context, node graph.Node) (graph.Ref, string, error) {
 	k := r.executor.kinds[node.Kind]
 
@@ -69,15 +79,37 @@ func (r *run) create(ctx context.Context, node graph.Node) (graph.Ref, string, e
 	switch {
 	case err != nil:
 		return graph.Ref{}, "", err
-	case there:
-		return ref, "", nil
-	case node.External:
+	case !there && node.External:
 		return graph.Ref{}, "", &graph.Waiting{Reason: "it is external, and missing"}
+	case !there:
+		if ref, err = k.Create(ctx, node.Spec, r.deps(node.ID())); err != nil {
+			return graph.Ref{}, "", err
+		}
 	}
 
-	ref, err = k.Create(ctx, node.Spec, r.deps(node.ID()))
+	return ref, "", r.link(ctx, node, ref)
+}
 
-	return ref, "", err
+// link links the node, the record ref, to each node it needs, in the order of
+// their ids, as the plan types the edge between them: one that would own
+// what is external, or own through what is, is linked as loose, since
+// nothing external is owned. Each node it needs is in a level before its
+// own, and done as the record it is.
+func (r *run) link(ctx context.Context, node graph.Node, ref graph.Ref) error {
+	for _, edge := range r.plan.Dependencies(node.ID()) {
+		needed, _ := r.plan.Node(edge.From)
+
+		t := edge.Type
+		if t == graph.Owned && (needed.External || node.External) {
+			t = graph.Loose
+		}
+
+		if err := r.executor.ownership.Link(ctx, r.execution(edge.From).Ref, ref, t); err != nil {
+			return fmt.Errorf("it is there, and %s, which it needs, cannot be linked to it as %s: %w", edge.From, t, err)
+		}
+	}
+
+	return nil
 }
 
 // deps are the records the nodes the node id needs became in this run, by

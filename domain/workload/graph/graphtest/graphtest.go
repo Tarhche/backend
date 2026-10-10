@@ -1,7 +1,7 @@
 // Package graphtest is a graph.Kind a test says everything of (Kind), which
 // may stand for every kind of a graph at once, and what owns the records it
-// holds (Ownership): what the tests of a plan, and of what carries one out,
-// are written against.
+// holds and what each uses (Ownership): what the tests of a plan, and of what
+// carries one out, are written against.
 package graphtest
 
 import (
@@ -28,20 +28,25 @@ const (
 	Delete   Op = "delete"
 
 	// Owners is asking what owns its record, Disown to take owners out of
-	// what does, and Forget to remove a root's record.
+	// what does, Link to keep its record, and the record of what it needs,
+	// as an edge between them says, and Forget to remove a root's record.
 	Owners Op = "owners"
 	Disown Op = "disown"
+	Link   Op = "link"
 	Forget Op = "forget"
 )
 
 // Call is a kind, or what owns its records, asked something of a node: Deps
-// are the records of what it needs that a create was handed, and Owners the
-// owners a disown was handed.
+// are the records of what it needs that a create was handed, Owners the
+// owners a disown was handed, and Needed and Type the record of what it needs
+// that a link linked it to, and how.
 type Call struct {
 	Op     Op
 	Node   graph.NodeID
 	Deps   map[graph.NodeID]graph.Ref
 	Owners []graph.Ref
+	Needed graph.Ref
+	Type   graph.EdgeType
 }
 
 // Event is a call beginning, or, when Returned, returning.
@@ -61,21 +66,24 @@ type Event struct {
 // holds it made, Delete lets it go, or leaves it, not made, when a test says
 // so (Leave), Hold holds it as if it were made before, and Record holds a
 // record of it that is not made; one that is not held is removed all the
-// same. What owns each record is what a test says (Ownership), and goes with
-// the record. What a test has a node do when it is asked something (On) is
-// done first, and what that fails with is what it is answered. Everything
-// the kind, and what owns its records, is asked is recorded (Calls), and when
-// each call began and returned (Events), and it may be asked from several
-// goroutines at once.
+// same. What owns each record, and what each uses, is what a test says or a
+// link keeps (Ownership), and goes with the record. What a test has a node do
+// when it is asked something (On) is done first, and what that fails with is
+// what it is answered. Everything the kind, and what owns its records, is
+// asked is recorded (Calls), and when each call began and returned (Events),
+// and it may be asked from several goroutines at once.
 type Kind struct {
 	lock     sync.Mutex
 	requires map[graph.NodeID][]graph.Requirement
 
 	// records are the nodes it holds a record of, and whether each is made,
-	// and owners what each record names as its owners; left are the nodes
-	// whose records a delete leaves.
+	// owners what each record names as its owners, and refs what it names as
+	// what it uses; parents are the kind a record of each kind lives in, and
+	// left the nodes whose records a delete leaves.
 	records map[graph.NodeID]bool
 	owners  map[graph.NodeID][]graph.NodeID
+	refs    map[graph.NodeID][]graph.NodeID
+	parents map[string]string
 	left    map[graph.NodeID]bool
 
 	on     map[Op]map[graph.NodeID]func(ctx context.Context) error
@@ -92,6 +100,8 @@ func NewKind() *Kind {
 		requires: make(map[graph.NodeID][]graph.Requirement),
 		records:  make(map[graph.NodeID]bool),
 		owners:   make(map[graph.NodeID][]graph.NodeID),
+		refs:     make(map[graph.NodeID][]graph.NodeID),
+		parents:  make(map[string]string),
 		left:     make(map[graph.NodeID]bool),
 		on:       make(map[Op]map[graph.NodeID]func(ctx context.Context) error),
 	}
@@ -299,8 +309,8 @@ func (k *Kind) Create(ctx context.Context, spec any, deps map[graph.NodeID]graph
 	return Ref(id), nil
 }
 
-// Delete lets the node ref is the record of go, and what owns it with it, or
-// leaves its record, not made, when a test says so (Leave).
+// Delete lets the node ref is the record of go, and what owns it and what it
+// uses with it, or leaves its record, not made, when a test says so (Leave).
 func (k *Kind) Delete(ctx context.Context, ref graph.Ref) error {
 	id := graph.ID(ref.Kind, ref.UUID)
 
@@ -354,19 +364,21 @@ func (k *Kind) returned(op Op, id graph.NodeID) {
 	k.events = append(k.events, Event{Op: op, Node: id, Returned: true})
 }
 
-// forget lets the record of the node id go, and what owns it with it. The
-// lock is held.
+// forget lets the record of the node id go, and what owns it and what it uses
+// with it. The lock is held.
 func (k *Kind) forget(id graph.NodeID) {
 	delete(k.records, id)
 	delete(k.owners, id)
+	delete(k.refs, id)
 }
 
-// Ownership is what owns the records a fake kind holds (graph.Ownership), as
-// a test says (Own): an owner owns a record while the kind holds a record of
-// it, and what owns a record goes with it. What it is asked is recorded
-// among what the kind is asked, in one order, and what a test has a node do
-// when it is asked something (Kind.On) is done first, as the kind's own
-// calls are.
+// Ownership is what owns the records a fake kind holds, and what each uses
+// (graph.Ownership), as a test says (Own, Use) and links keep them (Link): an
+// owner owns a record while the kind holds a record of it, but for one of the
+// kind it lives in (Parent), which never does; and what owns a record, and
+// what it uses, go with it. What it is asked is recorded among what the kind
+// is asked, in one order, and what a test has a node do when it is asked
+// something (Kind.On) is done first, as the kind's own calls are.
 type Ownership struct {
 	kind *Kind
 }
@@ -380,9 +392,7 @@ func (o *Ownership) Own(id graph.NodeID, owners ...graph.NodeID) {
 	defer o.kind.lock.Unlock()
 
 	for _, owner := range owners {
-		if !slices.Contains(o.kind.owners[id], owner) {
-			o.kind.owners[id] = append(o.kind.owners[id], owner)
-		}
+		o.kind.owners[id] = with(o.kind.owners[id], owner)
 	}
 }
 
@@ -396,6 +406,39 @@ func (o *Ownership) OwnersOf(id graph.NodeID) []graph.NodeID {
 	slices.Sort(owners)
 
 	return owners
+}
+
+// Use has the record of the node id use the nodes used names too, among its
+// refs, each once, whether or not the kind holds a record of any of them.
+func (o *Ownership) Use(id graph.NodeID, used ...graph.NodeID) {
+	o.kind.lock.Lock()
+	defer o.kind.lock.Unlock()
+
+	for _, ref := range used {
+		o.kind.refs[id] = with(o.kind.refs[id], ref)
+	}
+}
+
+// RefsOf are what the record of the node id names as what it uses, in the
+// order of their ids, whether or not the kind holds their records.
+func (o *Ownership) RefsOf(id graph.NodeID) []graph.NodeID {
+	o.kind.lock.Lock()
+	defer o.kind.lock.Unlock()
+
+	refs := slices.Clone(o.kind.refs[id])
+	slices.Sort(refs)
+
+	return refs
+}
+
+// Parent has a record of the named kind live in a record of parent's kind,
+// as a container lives in a VM: one of parent's kind stays among what it uses
+// whatever links it, and never owns it.
+func (o *Ownership) Parent(kindName string, parent string) {
+	o.kind.lock.Lock()
+	defer o.kind.lock.Unlock()
+
+	o.kind.parents[kindName] = parent
 }
 
 // Owners are the records that own ref's record that the kind holds, in the
@@ -440,8 +483,56 @@ func (o *Ownership) Disown(ctx context.Context, ref graph.Ref, owners ...graph.R
 	return o.owning(id), nil
 }
 
-// Forget lets root's record go, and what owns it with it: one the kind does
-// not hold is forgotten already.
+// Link keeps the records of dependency and dependent that the kind holds as
+// an edge typed t between them says: owned has dependent among what owns
+// dependency, and dependency not among what dependent uses, unless it is of
+// the kind dependent lives in (Parent); loose has dependency among what
+// dependent uses, and dependent not among what owns dependency; and an order
+// keeps nothing. A type that is none of them is an error.
+func (o *Ownership) Link(ctx context.Context, dependency graph.Ref, dependent graph.Ref, t graph.EdgeType) error {
+	id := graph.ID(dependent.Kind, dependent.UUID)
+	needed := graph.ID(dependency.Kind, dependency.UUID)
+
+	defer o.kind.returned(Link, id)
+
+	if err := o.kind.ask(ctx, Call{Op: Link, Node: id, Needed: dependency, Type: t}); err != nil {
+		return err
+	}
+
+	if !t.IsValid() {
+		return fmt.Errorf("an edge is owned, loose or an order, and %d is none of them", t)
+	}
+
+	o.kind.lock.Lock()
+	defer o.kind.lock.Unlock()
+
+	_, owning := o.kind.records[id]
+	_, owned := o.kind.records[needed]
+
+	switch {
+	case t == graph.Owned:
+		if owned {
+			o.kind.owners[needed] = with(o.kind.owners[needed], id)
+		}
+
+		if owning && o.kind.parents[dependent.Kind] != dependency.Kind {
+			o.kind.refs[id] = without(o.kind.refs[id], needed)
+		}
+	case t == graph.Loose:
+		if owning {
+			o.kind.refs[id] = with(o.kind.refs[id], needed)
+		}
+
+		if owned {
+			o.kind.owners[needed] = without(o.kind.owners[needed], id)
+		}
+	}
+
+	return nil
+}
+
+// Forget lets root's record go, and what owns it and what it uses with it:
+// one the kind does not hold is forgotten already.
 func (o *Ownership) Forget(ctx context.Context, root graph.Ref) error {
 	id := graph.ID(root.Kind, root.UUID)
 
@@ -460,8 +551,8 @@ func (o *Ownership) Forget(ctx context.Context, root graph.Ref) error {
 }
 
 // owning are the records that own the record of the node id that the kind
-// holds, in the order of their kinds and their uuids: none when it holds no
-// record of the node. The lock is held.
+// holds, in the order of their kinds and their uuids, but one of the kind it
+// lives in: none when it holds no record of the node. The lock is held.
 func (o *Ownership) owning(id graph.NodeID) []graph.Ref {
 	if _, recorded := o.kind.records[id]; !recorded {
 		return nil
@@ -469,7 +560,7 @@ func (o *Ownership) owning(id graph.NodeID) []graph.Ref {
 
 	var owning []graph.Ref
 	for _, owner := range o.kind.owners[id] {
-		if _, there := o.kind.records[owner]; there {
+		if _, there := o.kind.records[owner]; there && owner.Kind() != o.kind.parents[id.Kind()] {
 			owning = append(owning, Ref(owner))
 		}
 	}
@@ -479,6 +570,25 @@ func (o *Ownership) owning(id graph.NodeID) []graph.Ref {
 	})
 
 	return owning
+}
+
+// with is ids with id among them, once.
+func with(ids []graph.NodeID, id graph.NodeID) []graph.NodeID {
+	if slices.Contains(ids, id) {
+		return ids
+	}
+
+	return append(ids, id)
+}
+
+// without is ids with id not among them, or nothing when none is left.
+func without(ids []graph.NodeID, id graph.NodeID) []graph.NodeID {
+	ids = slices.DeleteFunc(ids, func(other graph.NodeID) bool { return other == id })
+	if len(ids) == 0 {
+		return nil
+	}
+
+	return ids
 }
 
 // nodeOf is the node a fake kind's spec names, which is the spec itself.
