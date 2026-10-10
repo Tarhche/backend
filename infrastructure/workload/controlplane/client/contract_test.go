@@ -107,11 +107,25 @@ func (n *containersNode) Produce(ctx context.Context, subject string, payload []
 	switch command.Kind {
 	case containerKind.Name:
 		c, decoded := kind.Decode[containerKind.Spec, containerKind.Status](command.Resource)
-		status, err = containerKind.Status{
+
+		// labelled as the resource it is, and as its stack's service, as a
+		// node labels one.
+		labels := map[string]string{"workload.managed": "true", "workload.container": command.UUID}
+		for key, value := range c.Metadata.Labels {
+			labels[key] = value
+		}
+
+		seen := containerKind.Status{
 			Status:  kind.Status{State: containerKind.Running},
-			Docker:  &containerKind.Docker{ID: "c-" + c.Spec.Name, Name: c.Spec.Name, Image: c.Spec.Image, State: "running", Status: "Up Less than a second"},
+			Docker:  &containerKind.Docker{ID: "c-" + c.Spec.Name, Name: c.Spec.Name, Image: c.Spec.Image, State: "running", Status: "Up Less than a second", Labels: labels},
 			Failure: &noderequest.Error{},
-		}, decoded
+		}
+
+		if command.Action == containerKind.ActionStop {
+			seen.Status.State, seen.Docker.State, seen.Docker.Status = containerKind.Stopped, "exited", "Exited (0) Less than a second ago"
+		}
+
+		status, err = seen, decoded
 	case networkKind.Name:
 		n, decoded := kind.Decode[networkKind.Spec, networkKind.Status](command.Resource)
 		status, err = networkKind.Status{
@@ -146,8 +160,9 @@ func (n *containersNode) Produce(ctx context.Context, subject string, payload []
 // controlPlane is the control plane's API, wired the way its provider wires
 // it, over memory repositories and a node that answers: VMs, their snapshots,
 // stacks, tasks and the building blocks of Docker VMs are kinds, served by the
-// resource API every kind is, and a container nobody's stack owns is the root
-// of a graph, which its workers keep made until the test ends.
+// resource API every kind is, and a stack, and a container nobody's stack
+// owns, is the root of a graph, which its workers keep made until the test
+// ends.
 func controlPlane(t *testing.T, w *blockstest.Workload) *client.Client {
 	t.Helper()
 
@@ -163,19 +178,9 @@ func controlPlaneTelling(t *testing.T, w *blockstest.Workload, relay *graph.Rela
 	logger := slog.New(slog.DiscardHandler)
 	requester := node()
 
-	// snapshots are taken of VMs, and stacks live in Docker VMs, registered
-	// after them as the control plane registers them.
-	require.NoError(t, w.Registry.Register(kind.BindControlPlane[snapshotKind.Spec, snapshotKind.Status](snapshotKind.Descriptor(), w.Snapshots)))
-	require.NoError(t, w.Registry.Register(kind.BindControlPlane[stackKind.Spec, stackKind.Status](
-		stackKind.Descriptor(),
-		controlplanestacks.New(w.Records, w.Chooser, slugs.By(func(ctx context.Context, slug string) (resource.Record, error) {
-			return w.Memory.GetOneBySlug(ctx, stackKind.Name, slug)
-		})),
-	)))
-
 	// what the graphs of roots are told of, before what keeps them made is
 	// built over what tells it.
-	roots := graph.Roots{containerKind.Name}
+	roots := graph.Roots{stackKind.Name, containerKind.Name}
 
 	// what is sent to a container's node comes back from it, and what is
 	// sent to any other node is kept unanswered.
@@ -186,7 +191,25 @@ func controlPlaneTelling(t *testing.T, w *blockstest.Workload, relay *graph.Rela
 	admission := admitresource.NewUseCase(w.Registry, w.Resources, dispatcher, logger, admitresource.WithGraphs(roots, relay))
 	deletion := deleteresource.NewUseCase(w.Registry, w.Resources, dispatcher, deleteresource.WithGraphs(roots, relay))
 
-	relay.To(graphs(t, w, roots, dispatcher, admission, deletion))
+	kinds := graphKinds(w, dispatcher, admission, deletion)
+	planner := graph.NewPlanner(kinds, graph.DefaultPolicy())
+
+	// snapshots are taken of VMs, and stacks live in Docker VMs, registered
+	// after them as the control plane registers them, a stack's graph planned
+	// as it is admitted.
+	require.NoError(t, w.Registry.Register(kind.BindControlPlane[snapshotKind.Spec, snapshotKind.Status](snapshotKind.Descriptor(), w.Snapshots)))
+	require.NoError(t, w.Registry.Register(kind.BindControlPlane[stackKind.Spec, stackKind.Status](
+		stackKind.Descriptor(),
+		controlplanestacks.New(controlplanestacks.Dependencies{
+			Chooser: w.Chooser,
+			Slugs: []slugs.Taken{slugs.By(func(ctx context.Context, slug string) (resource.Record, error) {
+				return w.Memory.GetOneBySlug(ctx, stackKind.Name, slug)
+			})},
+			Planner: planner,
+		}),
+	)))
+
+	relay.To(graphs(t, w, roots, kinds, planner))
 
 	mux := http.NewServeMux()
 
@@ -209,12 +232,10 @@ func controlPlaneTelling(t *testing.T, w *blockstest.Workload, relay *graph.Rela
 	return c
 }
 
-// graphs keep the graphs of roots of the kinds roots names made, over what w
-// keeps, made, asked and removed through dispatcher, admission and deletion,
-// as the control plane's workers keep them, until the test ends.
-func graphs(t *testing.T, w *blockstest.Workload, roots graph.Roots, dispatcher *dispatch.Dispatcher, admission *admitresource.UseCase, deletion *deleteresource.UseCase) *reconcile.Reconciler {
-	t.Helper()
-
+// graphKinds are the kinds the graphs of roots are made of, over what w keeps,
+// made, asked and removed through dispatcher, admission and deletion, as the
+// control plane's are.
+func graphKinds(w *blockstest.Workload, dispatcher *dispatch.Dispatcher, admission *admitresource.UseCase, deletion *deleteresource.UseCase) graph.Kinds {
 	records := requirements.New(requirements.Dependencies{
 		Registry:   w.Registry,
 		Resources:  w.Resources,
@@ -224,12 +245,20 @@ func graphs(t *testing.T, w *blockstest.Workload, roots graph.Roots, dispatcher 
 		Patience:   time.Minute,
 	})
 
-	kinds := graph.Kinds{
+	return graph.Kinds{
 		vmKind.Name:        controlplanevms.NewGraph(w.Chooser, records),
+		stackKind.Name:     controlplanestacks.NewGraph(records),
 		containerKind.Name: controlplanecontainers.NewGraph(w.Containers, records),
 		networkKind.Name:   controlplanenetworks.NewGraph(w.Networks, records),
 		volumeKind.Name:    controlplanevolumes.NewGraph(w.Volumes, records),
 	}
+}
+
+// graphs keep the graphs of roots of the kinds roots names made, of kinds, as
+// planner plans them, as the control plane's workers keep them, until the
+// test ends.
+func graphs(t *testing.T, w *blockstest.Workload, roots graph.Roots, kinds graph.Kinds, planner *graph.Planner) *reconcile.Reconciler {
+	t.Helper()
 
 	executions := executionsMemory.NewRepository()
 
@@ -241,7 +270,7 @@ func graphs(t *testing.T, w *blockstest.Workload, roots graph.Roots, dispatcher 
 		Resources:  w.Resources,
 		Kinds:      kinds,
 		Roots:      roots,
-		Planner:    graph.NewPlanner(kinds, graph.DefaultPolicy()),
+		Planner:    planner,
 		Executor:   executor,
 		Executions: executions,
 		Leases:     leasesMemory.NewRepository(nil),
@@ -726,21 +755,28 @@ func TestContract_Stacks(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "d1", created.VM.UUID)
-	assert.Equal(t, stack.Deploying, created.Stack.State, "its vm runs, so it is deployed at once")
+	assert.Equal(t, stack.Deploying, created.Stack.State, "its graph makes it")
 	assert.Equal(t, stack.Running, created.Stack.ExpectedState)
 	assert.Equal(t, "box", created.Stack.VMName, "a stack names its vm")
 
-	// what compose made for it, and a container of another project.
-	witnessed(t, w, "d1",
-		containerKind.Docker{ID: "s1", Name: created.Stack.Slug + "-web-1", State: "running", Labels: map[string]string{docker.LabelComposeProject: created.Stack.Slug, docker.LabelComposeService: "web", stackKind.LabelStack: created.Stack.UUID}},
-		containerKind.Docker{ID: "o1", Name: "other-web-1", State: "running", Labels: map[string]string{docker.LabelComposeProject: "other", docker.LabelComposeService: "web"}},
-	)
+	stackIn := func(what string, condition func(s workloadControlPlane.StackDetail) bool) workloadControlPlane.StackDetail {
+		var detail workloadControlPlane.StackDetail
 
-	detail, err := c.Stack(ctx, "owner", created.Stack.UUID)
-	require.NoError(t, err)
+		require.Eventually(t, func() bool {
+			detail, err = c.Stack(ctx, "owner", created.Stack.UUID)
+
+			return err == nil && condition(detail)
+		}, 10*time.Second, 10*time.Millisecond, "the stack was never %s: %v", what, err)
+
+		return detail
+	}
+
+	detail := stackIn("running", func(s workloadControlPlane.StackDetail) bool { return s.State == stack.Running })
 	assert.False(t, detail.VMNotRunning)
 	assert.Equal(t, "box", detail.VMName)
-	require.Len(t, detail.Containers, 1)
+	require.Len(t, detail.Containers, 1, "the container its graph made of its one service")
+	assert.Equal(t, created.Stack.Slug+"_web", detail.Containers[0].Name)
+	assert.Equal(t, created.Stack.Slug, detail.Containers[0].Stack)
 	assert.Equal(t, "web", detail.Containers[0].Service)
 
 	page, err := c.Stacks(ctx, "owner", "d1", 1)
@@ -748,17 +784,28 @@ func TestContract_Stacks(t *testing.T) {
 	require.Len(t, page.Items, 1)
 	assert.Equal(t, "box", page.Items[0].VMName)
 
-	err = c.StopStack(ctx, "owner", created.Stack.UUID)
+	require.NoError(t, c.StopStack(ctx, "owner", created.Stack.UUID), "a stack that runs is stopped")
 
-	var refused *client.ValidationError
-	require.ErrorAs(t, err, &refused, "a stack being deployed is busy")
-	assert.Equal(t, domain.ValidationErrors{"stack": "invalid_state_transition"}, refused.ValidationErrors)
+	stopped := stackIn("stopped", func(s workloadControlPlane.StackDetail) bool { return s.State == stack.Stopped })
+	assert.Equal(t, stack.Stopped, stopped.ExpectedState)
 
 	require.NoError(t, c.DeleteStack(ctx, "owner", created.Stack.UUID))
+
+	require.Eventually(t, func() bool {
+		_, err := c.Stack(ctx, "owner", created.Stack.UUID)
+
+		return errors.Is(err, domain.ErrNotExists)
+	}, 10*time.Second, 10*time.Millisecond, "the stack was never removed")
+
+	var refused *client.ValidationError
 
 	_, err = c.CreateStack(ctx, "owner", workloadControlPlane.StackRequest{Name: "web", Compose: "nope: ["})
 	require.ErrorAs(t, err, &refused)
 	assert.Equal(t, domain.ValidationErrors{"compose": "invalid_value"}, refused.ValidationErrors)
+
+	_, err = c.CreateStack(ctx, "owner", workloadControlPlane.StackRequest{Name: "web", Compose: "services:\n  web:\n    build: .\n"})
+	require.ErrorAs(t, err, &refused)
+	assert.Equal(t, domain.ValidationErrors{"compose.services.web.build": "unsupported_key"}, refused.ValidationErrors, "naming what of its file it is refused for")
 
 	assert.False(t, errors.Is(err, domain.ErrNotExists))
 }
@@ -766,7 +813,8 @@ func TestContract_Stacks(t *testing.T) {
 // TestContract_NewDockerVM holds a Docker VM made for a stack or a container to
 // what the dashboard asked for and nothing else: a form leaves a size it was
 // not given at zero and ports nobody added as an empty list, and the VM is
-// made with the default for each size it was not given, and no ports at all.
+// made, by the stack's graph, with the default for each size it was not
+// given, and no ports at all.
 func TestContract_NewDockerVM(t *testing.T) {
 	t.Parallel()
 
@@ -785,8 +833,7 @@ func TestContract_NewDockerVM(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, created.VM.Created)
 
-	made, err := c.VM(ctx, "owner", created.VM.UUID)
-	require.NoError(t, err)
+	made := madeVM(t, c, created.VM.UUID)
 
 	assert.Equal(t, vm.Resources{CPUs: 2, Memory: 4 * vmtest.GiB, Disk: 20 * vmtest.GiB}, made.Resources, "the sizes it was not given are the defaults")
 	assert.Empty(t, made.Ports, "ports given empty are none, not the defaults")
@@ -798,8 +845,7 @@ func TestContract_NewDockerVM(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	made, err = c.VM(ctx, "owner", created.VM.UUID)
-	require.NoError(t, err)
+	made = madeVM(t, c, created.VM.UUID)
 
 	assert.Equal(t, []port.Port{80}, made.Ports, "ports left out are the defaults")
 
@@ -812,13 +858,31 @@ func TestContract_NewDockerVM(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, created.VM.Created, "naming none is asking for one made with the defaults")
 	assert.NotEqual(t, named, created.VM.UUID, "whichever docker vms its owner has already")
+	assert.Equal(t, "docker", created.VM.Name, "called what its stack keeps of it before its graph made it")
 
-	made, err = c.VM(ctx, "owner", created.VM.UUID)
-	require.NoError(t, err)
+	made = madeVM(t, c, created.VM.UUID)
 
 	assert.Equal(t, "docker", made.Name)
 	assert.Equal(t, vm.Resources{CPUs: 2, Memory: 2 * vmtest.GiB, Disk: 20 * vmtest.GiB}, made.Resources)
 	assert.Equal(t, []port.Port{80}, made.Ports)
+}
+
+// madeVM is the VM uuid names, once a graph made it for what goes into it.
+func madeVM(t *testing.T, c *client.Client, uuid string) vm.VM {
+	t.Helper()
+
+	var (
+		made vm.VM
+		err  error
+	)
+
+	require.Eventually(t, func() bool {
+		made, err = c.VM(context.Background(), "owner", uuid)
+
+		return err == nil
+	}, 10*time.Second, 10*time.Millisecond, "the vm was never made: %v", err)
+
+	return made
 }
 
 // TestContract_NoRoomForAContainersVM holds a container whose VM no node has

@@ -1,6 +1,7 @@
 package client
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"maps"
@@ -78,8 +79,9 @@ func (c *Client) Stacks(ctx context.Context, ownerUUID string, vmUUID string, nu
 	return workloadControlPlane.Page[stack.Stack]{Items: items, TotalPages: payload.Pagination.TotalPages, CurrentPage: payload.Pagination.CurrentPage}, nil
 }
 
-// Stack is one stack and the containers compose made for it, read from its
-// VM's dockerd as they are now. The stack is the answer even when its VM
+// Stack is one stack and the containers its graph made of its services, read
+// from its VM's dockerd as they are now, by the stack's label, each saying
+// the stack's slug and its service. The stack is the answer even when its VM
 // cannot be asked: its containers are then none, and VMNotRunning says why.
 func (c *Client) Stack(ctx context.Context, ownerUUID string, uuid string) (workloadControlPlane.StackDetail, error) {
 	manifest, err := c.stack(ctx, ownerUUID, uuid)
@@ -108,12 +110,22 @@ func (c *Client) Stack(ctx context.Context, ownerUUID string, uuid string) (work
 		return detail, nil
 	}
 
-	containers, err := c.Docker(ownerUUID, v.UUID).Containers(ctx, docker.ContainerFilter{All: true, Stack: detail.Slug})
+	containers, err := c.Docker(ownerUUID, v.UUID).Containers(ctx, docker.ContainerFilter{All: true, Label: stackKind.LabelStack + "=" + uuid})
 	if err != nil {
 		// which containers it has is worth showing, not worth failing over.
 		detail.VMNotRunning = errors.Is(err, vm.ErrNotRunning) || errors.Is(err, docker.ErrUnavailable)
 
 		return detail, nil
+	}
+
+	for i := range containers {
+		if len(containers[i].Stack) == 0 {
+			containers[i].Stack = detail.Slug
+		}
+
+		if len(containers[i].Service) == 0 {
+			containers[i].Service = containers[i].Labels[stackKind.LabelService]
+		}
 	}
 
 	if containers != nil {
@@ -123,9 +135,10 @@ func (c *Client) Stack(ctx context.Context, ownerUUID string, uuid string) (work
 	return detail, nil
 }
 
-// CreateStack deploys a compose project into the Docker VM the request names,
-// or into one made for it when it names none. What comes back is a stack on
-// its way: deploying into a VM that runs, or waiting for one still coming up.
+// CreateStack asks for a stack in the Docker VM the request names, or in one
+// its graph makes for it when it names none. What comes back is a stack on
+// its way, deploying, its file refused as the control plane refuses it, field
+// by field.
 func (c *Client) CreateStack(ctx context.Context, ownerUUID string, request workloadControlPlane.StackRequest) (workloadControlPlane.CreatedStack, error) {
 	asked := askedStack{
 		Kind:     stackKind.Name,
@@ -153,6 +166,9 @@ func (c *Client) CreateStack(ctx context.Context, ownerUUID string, request work
 	if err != nil {
 		return workloadControlPlane.CreatedStack{}, err
 	}
+
+	// a VM its graph is still to make is called what the stack keeps of it.
+	name = cmp.Or(name, payload.Resource.Spec.VM.Name)
 
 	created.VM.Name = name
 	created.Stack.VMName = name

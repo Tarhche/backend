@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -32,7 +33,6 @@ import (
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
-	infraDocker "github.com/khanzadimahdi/testproject/infrastructure/workload/docker"
 	"github.com/khanzadimahdi/testproject/infrastructure/workload/input"
 )
 
@@ -251,8 +251,8 @@ func TestAMachineVM(t *testing.T) {
 }
 
 // TestADockerVM walks a Docker VM from the dashboard: asked for and running,
-// its dockerd asked through the control plane and its node, a stack deployed
-// into it by compose, and the VM deleted with its stack.
+// its dockerd asked through the control plane and its node, a stack made in
+// it by its graph, and the VM deleted with its stack, which needs it.
 func TestADockerVM(t *testing.T) {
 	t.Parallel()
 
@@ -308,7 +308,7 @@ func TestADockerVM(t *testing.T) {
 
 	var stackUUID, slug string
 
-	t.Run("a stack is deployed into it by compose, and runs", func(t *testing.T) {
+	t.Run("a stack is made in it by its graph, and runs", func(t *testing.T) {
 		deployed, err := createStack.NewUseCase(w.client, w.validator, w.translator, w.owners).Execute(ctx, &createStack.Request{
 			Name:      "shop",
 			Compose:   compose,
@@ -332,21 +332,16 @@ func TestADockerVM(t *testing.T) {
 			return read.StackDetail, nil
 		}, func(s presenter.StackDetail) bool { return s.State == "running" && len(s.Containers) > 0 })
 
-		labelled, err := infraDocker.Labelled(compose, stackUUID)
-		require.NoError(t, err)
-
-		composed, ok := w.dockerd.Composed(slug)
-		require.True(t, ok, "compose was run on the stack's own project")
-		assert.Equal(t, labelled, composed, "with its file, every service of it labelled as the stack's")
-
 		assert.Equal(t, "builds", detail.VMName)
-		assert.Contains(t, detail.Output, "Started")
 		assert.Empty(t, detail.Note)
 
-		require.Len(t, detail.Containers, 1, "the containers compose made for it, and no other")
+		require.Len(t, detail.Containers, 1, "the container its graph made of its service, and no other")
 		assert.Equal(t, slug, detail.Containers[0].Stack)
 		assert.Equal(t, "web", detail.Containers[0].Service)
 		assert.Equal(t, stackUUID, detail.Containers[0].StackUUID)
+
+		_, there := w.dockerd.Holds(t, uuid).Container(slug + "_web")
+		assert.True(t, there, "made in its vm's dockerd, under its slug")
 
 		listing, err := getStacks.NewUseCase(w.client, w.owners).Execute(ctx, &getStacks.Request{OwnerUUID: ownerUUID})
 		require.NoError(t, err)
@@ -364,15 +359,18 @@ func TestADockerVM(t *testing.T) {
 		w.vmIn(t, uuid, "stopped")
 
 		waiting := w.stack(t, stackUUID, "waiting on its vm", func(s presenter.StackDetail) bool {
-			return s.State == "waiting" && s.Reason == "its vm is stopped"
+			return s.State == "waiting" && strings.HasSuffix(s.Reason, "its vm is stopped")
 		})
 		assert.Equal(t, "running", waiting.ExpectedState, "it is still to be running, once it can be")
 	})
 
-	t.Run("deleted, it takes its stack with it", func(t *testing.T) {
-		deleted, err := deleteVM.NewUseCase(w.client, w.translator).Execute(ctx, &deleteVM.Request{UUID: uuid, OwnerUUID: ownerUUID})
+	t.Run("deleted with what needs it, it takes its stack with it", func(t *testing.T) {
+		deleted, err := deleteVM.NewUseCase(w.client, w.translator).Execute(ctx, &deleteVM.Request{UUID: uuid, OwnerUUID: ownerUUID, Cascade: true})
 		require.NoError(t, err)
 		require.Empty(t, deleted.ValidationErrors)
+
+		assert.Equal(t, []presenter.Dependent{{Kind: stackKind.Name, UUID: stackUUID, Name: "shop", Recreates: true}}, deleted.Dependents, "the stack, which would have made it again")
+		assert.False(t, deleted.Recreated)
 
 		w.gone(t, uuid)
 

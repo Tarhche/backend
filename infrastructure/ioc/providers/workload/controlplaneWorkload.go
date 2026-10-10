@@ -90,9 +90,9 @@ type ControlPlaneWorkload struct {
 	// plane is configured with laid over them.
 	Policy graph.DependencyPolicy
 
-	// Graphs keeps every root's graph made, a container's that no stack
-	// owns: its workers reconcile the roots queued, and its resync, which the
-	// serve command runs on a ticker of its own, queues every root.
+	// Graphs keeps every root's graph made, a stack's and a container's that
+	// no stack owns: its workers reconcile the roots queued, and its resync,
+	// which the serve command runs on a ticker of its own, queues every root.
 	Graphs *reconcile.Reconciler
 
 	// Holder is this control plane, as the leases of the roots it reconciles
@@ -186,7 +186,8 @@ func NewControlPlaneWorkload(
 
 	// a slug is one resource's, whatever its kind, as the resources of every
 	// kind are kept together: a VM's and a task's are what the ingress serves
-	// their ports under, and a stack's is its compose project.
+	// their ports under, and a stack's is what its graph names what it makes
+	// under.
 	slugsHeld := []slugs.Taken{
 		slugs.By(vms.GetOneBySlug),
 		slugs.By(func(ctx context.Context, slug string) (resource.Record, error) {
@@ -229,8 +230,8 @@ func NewControlPlaneWorkload(
 	})
 
 	// a Docker VM made for a container or a stack is admitted as any VM is,
-	// and one a graph is to make for a container is held to what the vm kind
-	// would admit it as when the container is asked for.
+	// and one a graph is to make for either is held to what the vm kind would
+	// admit it as when it is asked for.
 	chooser := dockervm.NewChooser(vms, kinds.Resources, kinds.Admit, vmStrategy, dockerDefaults)
 
 	// what the building blocks of Docker VMs share: what the nodes report of
@@ -248,7 +249,19 @@ func NewControlPlaneWorkload(
 
 	strategies := newBlockStrategies(buildingBlocks)
 
-	if err := registerControlPlaneKinds(registry, vmStrategy, snapshots, controlPlaneStacks.New(vms, chooser, slugsHeld...), controlPlaneTasks.New(controlPlaneTasks.Dependencies{
+	// the graph of each root, a stack or a container no stack owns, made of
+	// the Docker VM it goes into and the building blocks it needs, each made
+	// through the control plane's own admission, commands and delete, and
+	// waited on as the reconcile loop waits on it; planned as the policy
+	// types its edges, a stack's when it is admitted too.
+	graphKinds := controlPlaneGraphKinds(chooser, strategies, controlPlaneGraphRecords(registry, kinds, settings.reconcile))
+	planner := graph.NewPlanner(graphKinds, policy)
+
+	// a stack is admitted with its file read and its graph planned, into the
+	// Docker VM it names, or one its graph is to make for it.
+	stacks := controlPlaneStacks.New(controlPlaneStacks.Dependencies{Chooser: chooser, Slugs: slugsHeld, Planner: planner})
+
+	if err := registerControlPlaneKinds(registry, vmStrategy, snapshots, stacks, controlPlaneTasks.New(controlPlaneTasks.Dependencies{
 		Nodes:     stores.Nodes,
 		Scheduler: roundrobin.New(),
 		Slugs:     slugsHeld,
@@ -257,17 +270,13 @@ func NewControlPlaneWorkload(
 		return nil, err
 	}
 
-	// the graph of each root, a stack or a container no stack owns, made of
-	// the Docker VM it goes into and the building blocks it needs, each made
-	// through the control plane's own admission, commands and delete, and
-	// waited on as the reconcile loop waits on it.
 	graphs, holder, err := newControlPlaneGraphs(
 		controlPlaneConfigs,
 		registry,
 		kinds,
-		controlPlaneGraphKinds(chooser, strategies, controlPlaneGraphRecords(registry, kinds, settings.reconcile)),
+		graphKinds,
+		planner,
 		stores,
-		policy,
 		settings.reconcile,
 		logger,
 	)
@@ -317,7 +326,8 @@ func NewControlPlaneWorkload(
 // reconcile loop all run over. A VM is admitted, placed and held to its
 // owner's quota as vms says; a snapshot is taken of one of its owner's VMs
 // and held to their quota of snapshots, as snapshots says; a stack is
-// admitted into the Docker VM stacks chooses, or makes, which it lives in; a
+// admitted into the Docker VM stacks chooses, or plans for its graph to make,
+// which it lives in, its file read and its graph planned; a
 // task, the code runner's runs among them, is admitted and placed as tasks
 // says; and the building blocks of a Docker VM, its containers, images,
 // networks and volumes, live in it, through their strategies.

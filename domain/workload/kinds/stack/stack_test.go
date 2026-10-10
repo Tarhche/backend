@@ -23,15 +23,31 @@ func TestDescriptor(t *testing.T) {
 		assert.Empty(t, kind.Check(d))
 	})
 
-	t.Run("it lives in a vm, goes with it, and is what a restored one holds", func(t *testing.T) {
+	t.Run("it lives in a vm, its state is the control plane's, and outlives a restore of its vm's disk", func(t *testing.T) {
 		t.Parallel()
 
 		assert.Equal(t, "stack", d.Name)
 		assert.Equal(t, "stacks", d.Plural)
-		assert.Equal(t, kind.OnNode, d.StateBy)
+		assert.Equal(t, kind.OnControlPlane, d.StateBy, "no node says what a stack is doing")
 		assert.Equal(t, "vm", d.Parent)
-		assert.Equal(t, kind.ParentRules{Delete: kind.CascadeDelete, Restore: kind.CascadeReset}, d.OnParent)
+		assert.Equal(t, kind.ParentRules{Delete: kind.CascadeDelete, Restore: kind.CascadeKeep}, d.OnParent)
 		assert.False(t, d.Endpoints, "a stack's ports are its vm's")
+	})
+
+	t.Run("each of its actions is the control plane's, and nothing is asked of a node", func(t *testing.T) {
+		t.Parallel()
+
+		for _, a := range d.Actions {
+			assert.Equal(t, kind.OnControlPlane, a.Runs, "%s", a.Name)
+			assert.False(t, a.Internal, "%s", a.Name)
+			assert.Empty(t, a.Timeout, "%s", a.Name)
+		}
+
+		_, deploys := d.Action(stack.ActionCreate)
+		assert.False(t, deploys, "nothing deploys a stack but its graph")
+
+		_, applies := d.Action(stack.ActionApply)
+		assert.False(t, applies)
 	})
 
 	t.Run("its actions are asked under the permissions stacks always had", func(t *testing.T) {
@@ -39,10 +55,8 @@ func TestDescriptor(t *testing.T) {
 
 		permissions := map[string]string{}
 		for _, a := range d.Actions {
-			if !a.Internal {
-				admin, _ := d.Permissions(a.Permission)
-				permissions[a.Name] = admin
-			}
+			admin, _ := d.Permissions(a.Permission)
+			permissions[a.Name] = admin
 		}
 
 		assert.Equal(t, map[string]string{
@@ -52,11 +66,6 @@ func TestDescriptor(t *testing.T) {
 			"delete":  "workload.stacks.delete",
 			"state":   "workload.stacks.show",
 		}, permissions)
-
-		create, _ := d.Action(stack.ActionCreate)
-		apply, _ := d.Action(stack.ActionApply)
-		assert.True(t, create.Internal, "deploying is the workload's own to ask")
-		assert.True(t, apply.Internal)
 	})
 
 	t.Run("what each action may be asked in", func(t *testing.T) {
@@ -67,15 +76,15 @@ func TestDescriptor(t *testing.T) {
 			state  kind.State
 			allows bool
 		}{
-			"made where it is not":                      {action: stack.ActionCreate, state: stack.Waiting, allows: true},
-			"and not over one that is":                  {action: stack.ActionCreate, state: stack.Running},
-			"applied again when it lost something":      {action: stack.ActionApply, state: stack.Degraded, allows: true},
-			"or failed":                                 {action: stack.ActionApply, state: stack.Failed, allows: true},
 			"started when stopped":                      {action: stack.ActionStart, state: stack.Stopped, allows: true},
-			"or waiting, which makes it":                {action: stack.ActionStart, state: stack.Waiting, allows: true},
+			"or degraded":                               {action: stack.ActionStart, state: stack.Degraded, allows: true},
+			"or waiting":                                {action: stack.ActionStart, state: stack.Waiting, allows: true},
 			"not while it deploys":                      {action: stack.ActionStart, state: stack.Deploying},
+			"nor while it starts":                       {action: stack.ActionStart, state: stack.Starting},
 			"stopped when it runs":                      {action: stack.ActionStop, state: stack.Running, allows: true},
-			"not when it is not in its vm":              {action: stack.ActionStop, state: stack.Waiting},
+			"or failed":                                 {action: stack.ActionStop, state: stack.Failed, allows: true},
+			"not while it deploys, which is busy":       {action: stack.ActionStop, state: stack.Deploying},
+			"nor while it waits on its vm":              {action: stack.ActionStop, state: stack.Waiting},
 			"restarted when stopped":                    {action: stack.ActionRestart, state: stack.Stopped, allows: true},
 			"not while it is being stopped":             {action: stack.ActionRestart, state: stack.Stopping},
 			"deleted whatever it is doing":              {action: stack.ActionDelete, state: stack.Deploying, allows: true},
@@ -96,6 +105,7 @@ func TestDescriptor(t *testing.T) {
 		remove, _ := d.Action(stack.ActionDelete)
 
 		assert.Equal(t, kind.NoPayload, remove.Payload)
+		assert.Equal(t, stack.Deleted, remove.Desires)
 	})
 }
 
@@ -105,8 +115,9 @@ func TestMachine(t *testing.T) {
 	m := stack.Machine()
 
 	assert.Empty(t, m.Validate())
-	assert.Equal(t, stack.Waiting, m.Initial, "a stack is admitted waiting to be deployed")
-	assert.ElementsMatch(t, []kind.State{stack.Deploying, stack.Starting, stack.Restarting}, m.Answered, "a look taken before a command reached its node says the stack is as it was, so only the command's answer says what it came to")
+	assert.Equal(t, stack.Deploying, m.Initial, "a stack is admitted to be made by its graph")
+	assert.ElementsMatch(t, []kind.State{stack.Deploying, stack.Starting, stack.Stopping, stack.Restarting, stack.Removing}, m.InFlight)
+	assert.Empty(t, m.Answered, "nothing is asked of a node, whose answer would say what came of it")
 
 	for name, tt := range map[string]struct {
 		from  kind.State
@@ -114,24 +125,25 @@ func TestMachine(t *testing.T) {
 		to    kind.State
 		taken bool
 	}{
-		"made, it deploys":                           {from: stack.Waiting, on: kind.OnAction(stack.ActionCreate), to: stack.Deploying, taken: true},
-		"applied again, it deploys":                  {from: stack.Degraded, on: kind.OnAction(stack.ActionApply), to: stack.Deploying, taken: true},
-		"a deploy ends running":                      {from: stack.Deploying, on: kind.OnObserved(stack.Running), to: stack.Running, taken: true},
-		"or degraded":                                {from: stack.Deploying, on: kind.OnObserved(stack.Degraded), to: stack.Degraded, taken: true},
-		"and nothing its vm has of it ends it early": {from: stack.Deploying, on: kind.OnObserved(kind.Missing), to: stack.Deploying},
-		"nor its vm stopping under it":               {from: stack.Deploying, on: kind.OnObserved(stack.Waiting), to: stack.Deploying},
-		"a stop ends stopped":                        {from: stack.Stopping, on: kind.OnObserved(stack.Stopped), to: stack.Stopped, taken: true},
-		"and is not undone by a report sent before":  {from: stack.Stopping, on: kind.OnObserved(stack.Running), to: stack.Stopping},
-		"a restart ends running":                     {from: stack.Restarting, on: kind.OnObserved(stack.Running), to: stack.Running, taken: true},
-		"one being removed is gone only when it is":  {from: stack.Removing, on: kind.OnObserved(kind.Missing), to: stack.Removing},
-		"at rest, it is what its node says":          {from: stack.Running, on: kind.OnObserved(stack.Degraded), to: stack.Degraded, taken: true},
-		"waiting on its vm too":                      {from: stack.Running, on: kind.OnObserved(stack.Waiting), to: stack.Waiting, taken: true},
-		"and back from waiting when its vm runs":     {from: stack.Waiting, on: kind.OnObserved(stack.Stopped), to: stack.Stopped, taken: true},
-		"one its vm has nothing of waits to be made": {from: stack.Running, on: kind.OnObserved(kind.Missing), to: stack.Waiting, taken: true},
-		"as does one waiting already":                {from: stack.Waiting, on: kind.OnObserved(kind.Missing), to: stack.Waiting, taken: true},
-		"but a failed one stays failed":              {from: stack.Failed, on: kind.OnObserved(kind.Missing), to: stack.Failed},
-		"a failure is believed from anywhere":        {from: stack.Restarting, on: kind.OnObserved(stack.Failed), to: stack.Failed, taken: true},
-		"deleted from anywhere":                      {from: stack.Starting, on: kind.OnAction(stack.ActionDelete), to: stack.Removing, taken: true},
+		"made, it is what its containers make it":           {from: stack.Deploying, on: kind.OnObserved(stack.Running), to: stack.Running, taken: true},
+		"degraded among it":                                 {from: stack.Deploying, on: kind.OnObserved(stack.Degraded), to: stack.Degraded, taken: true},
+		"it waits while it deploys on what it needs":        {from: stack.Deploying, on: kind.OnObserved(stack.Waiting), to: stack.Waiting, taken: true},
+		"and fails from anywhere":                           {from: stack.Restarting, on: kind.OnObserved(stack.Failed), to: stack.Failed, taken: true},
+		"started, it starts":                                {from: stack.Stopped, on: kind.OnAction(stack.ActionStart), to: stack.Starting, taken: true},
+		"and runs once its containers do":                   {from: stack.Starting, on: kind.OnObserved(stack.Running), to: stack.Running, taken: true},
+		"but goes on starting while its vm is not up":       {from: stack.Starting, on: kind.OnObserved(stack.Waiting), to: stack.Starting},
+		"stopped, it stops":                                 {from: stack.Running, on: kind.OnAction(stack.ActionStop), to: stack.Stopping, taken: true},
+		"and is stopped once its containers are":            {from: stack.Stopping, on: kind.OnObserved(stack.Stopped), to: stack.Stopped, taken: true},
+		"and goes on stopping while its vm is not up":       {from: stack.Stopping, on: kind.OnObserved(stack.Waiting), to: stack.Stopping},
+		"restarted, it restarts":                            {from: stack.Degraded, on: kind.OnAction(stack.ActionRestart), to: stack.Restarting, taken: true},
+		"and starts once its containers stopped":            {from: stack.Restarting, on: kind.OnObserved(stack.Starting), to: stack.Starting, taken: true},
+		"but is not taken for running before it starts":     {from: stack.Restarting, on: kind.OnObserved(stack.Running), to: stack.Restarting},
+		"at rest, it is what its graph says":                {from: stack.Running, on: kind.OnObserved(stack.Degraded), to: stack.Degraded, taken: true},
+		"waiting on what it needs among it":                 {from: stack.Running, on: kind.OnObserved(stack.Waiting), to: stack.Waiting, taken: true},
+		"and back from waiting once its graph made it":      {from: stack.Waiting, on: kind.OnObserved(stack.Stopped), to: stack.Stopped, taken: true},
+		"deleted from anywhere":                             {from: stack.Starting, on: kind.OnAction(stack.ActionDelete), to: stack.Removing, taken: true},
+		"and taken for nothing else while it is removed":    {from: stack.Removing, on: kind.OnObserved(stack.Running), to: stack.Removing},
+		"nothing its vm has of it says anything of a stack": {from: stack.Running, on: kind.OnObserved(kind.Missing), to: stack.Running},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -142,28 +154,6 @@ func TestMachine(t *testing.T) {
 			assert.Equal(t, tt.taken, taken)
 		})
 	}
-}
-
-func TestInFlightOf(t *testing.T) {
-	t.Parallel()
-
-	for _, d := range stack.Descriptor().Actions {
-		if d.Mode != kind.ModeCommand {
-			continue
-		}
-
-		state := stack.InFlightOf(d.Name)
-
-		assert.True(t, stack.Machine().IsInFlight(state), "%s is carried out in flight, as %q", d.Name, state)
-
-		for _, from := range []kind.State{stack.Waiting, stack.Degraded, stack.Stopped, stack.Running, stack.Failed} {
-			if to, moved := stack.Machine().Next(from, kind.OnAction(d.Name)); moved {
-				assert.Equal(t, state, to, "%s from %s", d.Name, from)
-			}
-		}
-	}
-
-	assert.Empty(t, stack.InFlightOf(stack.ActionState))
 }
 
 func TestVMOf(t *testing.T) {

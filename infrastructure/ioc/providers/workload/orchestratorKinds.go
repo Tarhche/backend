@@ -8,7 +8,6 @@ import (
 	orchestratorImages "github.com/khanzadimahdi/testproject/application/workload/orchestrator/kinds/image"
 	orchestratorNetworks "github.com/khanzadimahdi/testproject/application/workload/orchestrator/kinds/network"
 	orchestratorSnapshots "github.com/khanzadimahdi/testproject/application/workload/orchestrator/kinds/snapshot"
-	orchestratorStacks "github.com/khanzadimahdi/testproject/application/workload/orchestrator/kinds/stack"
 	orchestratorTasks "github.com/khanzadimahdi/testproject/application/workload/orchestrator/kinds/task"
 	orchestratorVMs "github.com/khanzadimahdi/testproject/application/workload/orchestrator/kinds/vm"
 	orchestratorVolumes "github.com/khanzadimahdi/testproject/application/workload/orchestrator/kinds/volume"
@@ -17,7 +16,6 @@ import (
 	imageKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/image"
 	networkKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/network"
 	snapshotKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/snapshot"
-	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
 	taskKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/task"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	volumeKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/volume"
@@ -53,12 +51,12 @@ type NodeKindDependencies struct {
 // route its streams and its ports.
 //
 // A VM is run on the node's engine, and a snapshot is taken of one there,
-// under the VM's lock. A stack is reached through its building blocks: the
-// Docker VM it lives in, that VM's dockerd, and compose, run inside the VM.
-// The building blocks themselves, a Docker VM's containers, images, networks
-// and volumes, are carried out in that dockerd, and read from every running
-// Docker VM in one look each beat, which the four share. A task is run on the
-// task runtime, each run an ephemeral VM of its own.
+// under the VM's lock. The building blocks of a Docker VM, its containers,
+// images, networks and volumes, are carried out in its dockerd, and read from
+// every running Docker VM in one look each beat, which the four share. A task
+// is run on the task runtime, each run an ephemeral VM of its own. A stack is
+// none of a node's: the control plane keeps it, and its graph has its
+// containers, networks and volumes made, each a building block.
 func nodeKinds(d NodeKindDependencies) (*kind.Registry[kind.NodeBinding], error) {
 	kinds := kind.NewRegistry[kind.NodeBinding]()
 
@@ -72,10 +70,6 @@ func nodeKinds(d NodeKindDependencies) (*kind.Registry[kind.NodeBinding], error)
 		kind.BindNode[snapshotKind.Spec, snapshotKind.Status](
 			snapshotKind.Descriptor(),
 			orchestratorSnapshots.New(d.Engine, d.Archives, d.Locks, d.Snapshots),
-		),
-		kind.BindNode[stackKind.Spec, stackKind.Status](
-			stackKind.Descriptor(),
-			orchestratorStacks.New(d.Engine, d.Daemons, infraDocker.NewCompose(d.Engine), d.CommandTimeout),
 		),
 		kind.BindNode[taskKind.Spec, taskKind.Status](
 			taskKind.Descriptor(),

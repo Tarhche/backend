@@ -1,92 +1,105 @@
-// Package stack is the stack kind's control-plane strategy: what a stack is
-// admitted as, and what it is asked for when what it is doing is not what it
-// was asked to be.
+// Package stack is the stack kind's control-plane strategy, and the stack as
+// a graph needs it (Graph): what a stack is admitted as, and what is made of
+// its file, in what order, and taken away.
 //
-// A stack is admitted into a Docker VM chosen by the rules a container's is:
-// the one it names, or one made for it when it names none. It is placed where
-// its VM is, belongs to its VM, and is given a slug nothing else has, which is
-// its compose project. It starts waiting, and is deployed as soon as its VM
-// runs.
+// A stack is admitted with its file read by the platform (stackKind.Parse),
+// everything wrong with it refused under its path, compose.services.web.build
+// say, and its graph planned, so that services that depend on one another in
+// a ring are refused too, each of them. It goes into the Docker VM it names,
+// which has to be its owner's and running or on its way up, or, when it names
+// none, into one its graph is to make for it: given a uuid now, and held now
+// to what the vm kind would admit it as, but made by its graph. Either way it
+// keeps the VM's uuid and what to make the VM with again whenever it is gone,
+// and it belongs to that VM. It is given a slug nothing else has, which what
+// its graph makes is named under, and it starts deploying.
 //
-// What it is asked for after that is decided from what its node last said of
-// it, and from its VM:
-//
-//	expected  observed                      asked
-//	running   waiting, its VM running       create
-//	running   waiting, its VM not running   nothing: the VM's own reconcile brings it up
-//	running   degraded                      apply (with the loop's backoff)
-//	running   failed                        apply (with the loop's backoff)
-//	running   stopped                       start
-//	stopped   running, degraded or failed   stop
-//
-// A deploy that never answers is asked again by the reconcile loop, as any
-// command is, and a stack expected deleted is the loop's to delete.
+// A stack is the root of a graph of its own (Graph), which makes its VM, its
+// networks and its volumes, and then its services' containers, as they depend
+// on one another, and then it; makes each again whenever it is gone; carries
+// out its start, its stop and its restart; and removes it, and what it owns,
+// once it is asked to go. Nothing else is asked of it: its record is the
+// control plane's own, and no node keeps any of it.
 package stack
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
-	"go.yaml.in/yaml/v3"
-
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/dockervm"
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/records"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/slugs"
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/workload/graph"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	"github.com/khanzadimahdi/testproject/domain/workload/vm"
 )
 
-const (
-	// MaxCompose is the most YAML a stack may be given, in bytes.
-	MaxCompose = 256 << 10
+// maxNameLength keeps a name to something a listing can show.
+const maxNameLength = 100
 
-	// maxNameLength keeps a name to something a listing can show.
-	maxNameLength = 100
-)
+// Dependencies are what the strategy chooses VMs, gives slugs and plans
+// stacks' graphs with.
+type Dependencies struct {
+	// Chooser chooses the Docker VM a stack names, or plans the one its graph
+	// is to make for it when it names none.
+	Chooser *dockervm.Chooser
+
+	// Slugs are what says which slugs are held already.
+	Slugs []slugs.Taken
+
+	// Planner plans a stack's graph, as the control plane's graphs are
+	// planned: one with services that depend on one another in a ring has
+	// none.
+	Planner *graph.Planner
+}
 
 // Stacks is the stack kind's control-plane strategy.
 type Stacks struct {
-	vms     *records.Records
 	chooser *dockervm.Chooser
 	taken   []slugs.Taken
+	planner *graph.Planner
 }
 
-var _ kind.ControlPlane[stackKind.Spec, stackKind.Status] = &Stacks{}
+var (
+	_ kind.ControlPlane[stackKind.Spec, stackKind.Status] = &Stacks{}
+	_ kind.Outliver[stackKind.Spec, stackKind.Status]     = &Stacks{}
+)
 
-// New is the strategy that chooses Docker VMs with chooser, reads them, the
-// vm kind's resources, from vms, and gives stacks slugs none of taken says
-// are held.
-func New(vms *records.Records, chooser *dockervm.Chooser, taken ...slugs.Taken) *Stacks {
-	return &Stacks{vms: vms, chooser: chooser, taken: taken}
+// New is the strategy over what dependencies say.
+func New(dependencies Dependencies) *Stacks {
+	return &Stacks{chooser: dependencies.Chooser, taken: dependencies.Slugs, planner: dependencies.Planner}
 }
 
-// Admit takes in a stack its owner asked for: its name and its compose file
-// checked, its Docker VM chosen, or made, and its slug given. Its VM has to be
-// running or on its way up; one that is stopped is refused, since nothing
-// could be deployed into it.
+// Admit takes in a stack its owner asked for: its name and its file checked,
+// its graph planned, in the Docker VM it names, which has to be theirs and
+// running or on its way up, or in one its graph is to make for it when it
+// names none, held now to what the vm kind would admit it as, and given a
+// slug. What it keeps of its VM is the VM's uuid and what to make it with
+// again whenever it is gone, as the VM's record has it, or as it was asked
+// for with the defaults filled in.
 func (s *Stacks) Admit(ctx context.Context, asked stackKind.Stack) (stackKind.Stack, domain.ValidationErrors, error) {
 	choice := asked.Spec.VM
 	if parent, named := asked.Metadata.Owner(stackKind.Parent); named && len(choice.UUID) == 0 && !choice.Describes() {
 		choice.UUID = parent.UUID
 	}
 
-	if invalid := validate(asked, choice); len(invalid) > 0 {
+	invalid := validate(asked, choice)
+
+	file, unread := stackKind.Parse(asked.Spec.Compose)
+	maps.Copy(invalid, unread)
+
+	if len(invalid) > 0 {
 		return stackKind.Stack{}, invalid, nil
 	}
 
-	v, refused, err := s.chooser.Choose(ctx, asked.Metadata.OwnerUUID, choiceOf(choice))
+	v, there, refused, err := s.vmOf(ctx, asked.Metadata.OwnerUUID, choice)
 	if err != nil || len(refused) > 0 {
 		return stackKind.Stack{}, refused, err
-	}
-
-	if !vmKind.Up(v) {
-		return stackKind.Stack{}, domain.ValidationErrors{"vm": "vm_not_running"}, nil
 	}
 
 	name := strings.TrimSpace(asked.Metadata.Name)
@@ -105,75 +118,136 @@ func (s *Stacks) Admit(ctx context.Context, asked stackKind.Stack) (stackKind.St
 			Labels:    asked.Metadata.Labels,
 			Owners:    slices.Clone(asked.Metadata.Owners),
 			Refs:      kind.LivingIn(asked.Metadata.Refs, kind.Reference{Kind: stackKind.Parent, UUID: v.Metadata.UUID}),
-			Node:      v.Metadata.Node,
 		},
 		Spec: stackKind.Spec{
-			VM:      stackKind.VMChoice{UUID: v.Metadata.UUID},
+			VM:      vmKind.ChoiceOf(v),
 			Compose: asked.Spec.Compose,
 		},
-		Status: stackKind.Status{Status: kind.Status{State: stackKind.Waiting, Expected: stackKind.Running}},
+		Status: stackKind.Status{Status: kind.Status{State: stackKind.Deploying, Expected: stackKind.Running}},
 	}
 
-	if v.Status.State != vmKind.Running {
-		admitted.Status.Reason = waitingOn(v)
+	switch {
+	case !there:
+		admitted.Status.Reason = "its vm is being made"
+	case v.Status.State != vmKind.Running:
+		admitted.Status.Reason = fmt.Sprintf("its vm is %s", v.Status.State)
+	}
+
+	if invalid, err := s.planned(admitted, file); err != nil || len(invalid) > 0 {
+		return stackKind.Stack{}, invalid, err
 	}
 
 	return admitted, nil, nil
 }
 
-// Reconcile is what a stack is asked for, given what it was asked to be and
-// what it was last seen doing.
-func (s *Stacks) Reconcile(ctx context.Context, r stackKind.Stack) ([]kind.Intent, error) {
-	switch state, expected := r.Status.State, r.Status.Expected; {
-	case expected == stackKind.Running && state == stackKind.Waiting:
-		running, err := s.running(ctx, stackKind.VMOf(r))
-		if err != nil || !running {
-			return nil, err
+// vmOf is the Docker VM a stack of ownerUUID's goes into, as choice says, and
+// whether it is there: the one choice names, which has to be theirs and
+// running or on its way up; or, when it names none, one its graph is to make
+// for it, as choice describes it, planned now under a uuid of its own
+// (dockervm.Chooser.Plan), which is not there yet.
+func (s *Stacks) vmOf(ctx context.Context, ownerUUID string, choice stackKind.VMChoice) (vmKind.VM, bool, domain.ValidationErrors, error) {
+	if len(choice.UUID) == 0 {
+		v, refused, err := s.chooser.Plan(ctx, ownerUUID, choiceOf(choice))
+
+		return v, false, refused, err
+	}
+
+	v, refused, err := s.chooser.Choose(ctx, ownerUUID, dockervm.Choice{UUID: choice.UUID})
+	switch {
+	case err != nil || len(refused) > 0:
+		return vmKind.VM{}, false, refused, err
+	case !vmKind.Up(v):
+		return vmKind.VM{}, false, domain.ValidationErrors{"vm": "vm_not_running"}, nil
+	}
+
+	return v, true, nil, nil
+}
+
+// planned is what is wrong with the graph of a stack admitted with file, as
+// it would be planned once it is kept: services that depend on one another
+// in a ring, each refused under its depends_on, which no order starts.
+// Anything else planning fails with is an error.
+func (s *Stacks) planned(admitted stackKind.Stack, file stackKind.File) (domain.ValidationErrors, error) {
+	// a uuid is given it as it is kept, and nothing of what it needs says
+	// which: it is planned under its slug.
+	w := stackKind.Want{UUID: admitted.Metadata.Slug, OwnerUUID: admitted.Metadata.OwnerUUID, Slug: admitted.Metadata.Slug, VM: admitted.Spec.VM, File: file}
+
+	_, err := s.planner.Plan(w.Requirement())
+
+	var cycle *graph.Cycle
+
+	switch {
+	case errors.As(err, &cycle):
+		invalid := make(domain.ValidationErrors, len(cycle.Nodes))
+		for _, service := range ServicesOf(w, cycle) {
+			invalid[stackKind.Field("services."+service+".depends_on")] = stackKind.CodeDependsOnCycle
 		}
 
-		return []kind.Intent{{Action: stackKind.ActionCreate, Reason: "it is not in its vm, which runs"}}, nil
-
-	case expected == stackKind.Running && state == stackKind.Degraded:
-		return []kind.Intent{{Action: stackKind.ActionApply, Reason: "some of its services are not running"}}, nil
-
-	case expected == stackKind.Running && state == stackKind.Failed:
-		return []kind.Intent{{Action: stackKind.ActionApply, Reason: "its last command failed"}}, nil
-
-	case expected == stackKind.Running && state == stackKind.Stopped:
-		return []kind.Intent{{Action: stackKind.ActionStart, Reason: "it stopped while it was expected running"}}, nil
-
-	case expected == stackKind.Stopped && (state == stackKind.Running || state == stackKind.Degraded || state == stackKind.Failed):
-		return []kind.Intent{{Action: stackKind.ActionStop, Reason: "it runs while it was expected stopped"}}, nil
+		return invalid, nil
+	case err != nil:
+		return nil, fmt.Errorf("the graph of the stack cannot be planned: %w", err)
 	}
 
 	return nil, nil
 }
 
-// Apply refuses every action, since a stack has none that runs in the
-// control plane.
-func (s *Stacks) Apply(_ context.Context, _ stackKind.Stack, action string, _ any) (stackKind.Stack, domain.ValidationErrors, error) {
-	return stackKind.Stack{}, nil, fmt.Errorf("%w: a stack has no %q run in the control plane", kind.ErrUnknownAction, action)
-}
+// ServicesOf are the services of the stack w names whose containers are in a
+// ring of its plan, in the ring's order: those that depend on one another,
+// round to the first.
+func ServicesOf(w stackKind.Want, cycle *graph.Cycle) []string {
+	services := make([]string, 0, len(cycle.Nodes))
 
-// running reports whether the VM uuid names is running. One that is not
-// there is not, and the stacks in it go with it.
-func (s *Stacks) running(ctx context.Context, uuid string) (bool, error) {
-	v, err := s.vms.GetOne(ctx, uuid)
-	if errors.Is(err, domain.ErrNotExists) {
-		return false, nil
-	} else if err != nil {
-		return false, err
+	for _, id := range cycle.Nodes {
+		if service, ours := strings.CutPrefix(id.Name(), w.Named("")); ours {
+			services = append(services, service)
+		}
 	}
 
-	return v.Status.State == vmKind.Running, nil
+	return services
 }
 
-// waitingOn is why a stack waits on a VM that is not running yet.
-func waitingOn(v vmKind.VM) string {
-	return fmt.Sprintf("its vm is %s", v.Status.State)
+// Reconcile asks for nothing: what a stack needs, and what it was asked, its
+// graph carries out.
+func (s *Stacks) Reconcile(context.Context, stackKind.Stack) ([]kind.Intent, error) {
+	return nil, nil
 }
 
-// validate is what is wrong with a stack as it was asked for.
+// Apply takes an action asked of a stack, which its machine moved it for and
+// its graph carries out: what its plan failed with before says nothing of it,
+// and is let go of. An action a stack does not have is refused.
+func (s *Stacks) Apply(_ context.Context, st stackKind.Stack, action string, _ any) (stackKind.Stack, domain.ValidationErrors, error) {
+	switch action {
+	case stackKind.ActionStart, stackKind.ActionStop, stackKind.ActionRestart, stackKind.ActionDelete:
+		st.Status.Failure = nil
+
+		return st, nil, nil
+	}
+
+	return stackKind.Stack{}, nil, fmt.Errorf("%w: a stack has no %q", kind.ErrUnknownAction, action)
+}
+
+// Outlive is a stack kept as gone with its Docker VM, whose graph makes the
+// VM again under its uuid: what it keeps of its VM, and makes it with again,
+// is the VM as its record had it as it went (vmKind.ChoiceOf), the name,
+// resources, ports and network an update or a reconfigure gave it since it
+// was named, and the slug it was reached under, which it asks for again. A
+// parent that is no VM, or not its VM, says nothing of it.
+func (s *Stacks) Outlive(st stackKind.Stack, parent kind.Raw) (stackKind.Stack, error) {
+	if parent.Kind != stackKind.Parent || parent.Metadata.UUID != stackKind.VMOf(st) {
+		return st, nil
+	}
+
+	v, err := kind.Decode[vmKind.Spec, vmKind.Status](parent)
+	if err != nil {
+		return stackKind.Stack{}, err
+	}
+
+	st.Spec.VM = vmKind.ChoiceOf(v)
+
+	return st, nil
+}
+
+// validate is what is wrong with a stack as it was asked for, but its file.
 func validate(asked stackKind.Stack, choice stackKind.VMChoice) domain.ValidationErrors {
 	invalid := make(domain.ValidationErrors)
 
@@ -184,43 +258,11 @@ func validate(asked stackKind.Stack, choice stackKind.VMChoice) domain.Validatio
 		invalid["name"] = "invalid_name"
 	}
 
-	if code, ok := ValidateCompose(asked.Spec.Compose); !ok {
-		invalid["compose"] = code
-	}
-
 	if len(choice.UUID) > 0 && choice.Describes() {
 		invalid["vm"] = "vm_or_new_vm"
 	}
 
 	return invalid
-}
-
-// ValidateCompose checks that compose is YAML a compose project can be made
-// of: no larger than a stack may be given, and with a service at least.
-// Anything finer is compose's own to refuse, which it does when the stack is
-// deployed, in words that end up in the stack's output.
-func ValidateCompose(compose string) (string, bool) {
-	if len(strings.TrimSpace(compose)) == 0 {
-		return "required_field", false
-	}
-
-	if len(compose) > MaxCompose {
-		return "too_large", false
-	}
-
-	var project struct {
-		Services map[string]any `yaml:"services"`
-	}
-
-	if err := yaml.Unmarshal([]byte(compose), &project); err != nil {
-		return "invalid_value", false
-	}
-
-	if len(project.Services) == 0 {
-		return "invalid_value", false
-	}
-
-	return "", true
 }
 
 // choiceOf is a stack's choice of VM as the chooser reads one.

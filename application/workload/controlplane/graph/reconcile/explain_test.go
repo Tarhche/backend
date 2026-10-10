@@ -14,6 +14,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/graph/graphtest"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	containerKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/container"
+	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
 )
 
@@ -55,7 +56,15 @@ func rooted(changes ...func(r *resource.Record)) resource.Record {
 func (f *fixture) saidOf(t *testing.T) said {
 	t.Helper()
 
-	r, err := f.records.GetOne(context.Background(), containerKind.Name, web.Name())
+	return f.saidOfRoot(t, web)
+}
+
+// saidOfRoot is what the record of the root the node id names says of it
+// now.
+func (f *fixture) saidOfRoot(t *testing.T, id graph.NodeID) said {
+	t.Helper()
+
+	r, err := f.records.GetOne(context.Background(), id.Kind(), id.Name())
 	require.NoError(t, err)
 
 	common, err := r.Common()
@@ -266,4 +275,116 @@ func TestReconciler_Reconcile_askedToGoWhileItsPlanRuns(t *testing.T) {
 	}
 
 	assert.Contains(t, waiting, "its root was asked to go")
+}
+
+// store is the root of a stack, made after its vm and its network, which is
+// made after the vm.
+var store = graph.ID(stackKind.Name, "store")
+
+// stacked are the kinds of the graph of the stack store.
+func stacked() *graphtest.Kind {
+	kinds := graphtest.NewKind()
+	kinds.Require(store, requirement(vm), requirement(network))
+	kinds.Require(network, requirement(vm))
+
+	return kinds
+}
+
+// aStack is the record of the stack store, in the vm, owned by nothing, doing
+// state.
+func aStack(state kind.State) resource.Record {
+	r := record(refOf(store), []graph.Ref{refOf(vm)}, nil)
+
+	status, err := resource.WithCommon(nil, kind.Status{State: state, Expected: stackKind.Running})
+	if err != nil {
+		panic(err)
+	}
+
+	r.Status = status
+
+	return r
+}
+
+func TestReconciler_Reconcile_explainsAStack(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	refused := &graph.Refused{Code: "no_capacity", Message: "the vm was refused: vm: no_capacity"}
+
+	t.Run("a stack, whose state nothing but its plan says, fails once its plan fails, whatever it was doing, saying why and what it was refused for", func(t *testing.T) {
+		t.Parallel()
+
+		kinds := stacked()
+		kinds.On(graphtest.Create, vm, func(context.Context) error { return refused })
+
+		f := newFixture(t, kinds, aStack(stackKind.Running))
+		r := f.reconciler(t, "one", patient(), stackKind.Name)
+
+		require.ErrorIs(t, r.Reconcile(ctx, refOf(store)), refused)
+
+		now := f.saidOfRoot(t, store)
+		assert.Equal(t, stackKind.Failed, now.State)
+		assert.Equal(t, "vm/v-uuid: the vm was refused: vm: no_capacity", now.Reason)
+		require.NotNil(t, now.Failure)
+		assert.Equal(t, "no_capacity", now.Failure.Code)
+	})
+
+	t.Run("and waits once its plan waits on what it needs", func(t *testing.T) {
+		t.Parallel()
+
+		kinds := stacked()
+		kinds.On(graphtest.Create, network, func(context.Context) error { return &graph.Waiting{Reason: "its vm is stopped"} })
+		kinds.Hold(vm)
+
+		f := newFixture(t, kinds, aStack(stackKind.Running))
+		r := f.reconciler(t, "one", patient(), stackKind.Name)
+
+		require.NoError(t, r.Reconcile(ctx, refOf(store)))
+
+		now := f.saidOfRoot(t, store)
+		assert.Equal(t, stackKind.Waiting, now.State)
+		assert.Equal(t, "network/s_default: its vm is stopped", now.Reason)
+	})
+
+	t.Run("but one being started goes on starting, saying what it waits on, to start once it can", func(t *testing.T) {
+		t.Parallel()
+
+		kinds := stacked()
+		kinds.On(graphtest.Create, network, func(context.Context) error { return &graph.Waiting{Reason: "its vm is stopped"} })
+		kinds.Hold(vm)
+
+		f := newFixture(t, kinds, aStack(stackKind.Starting))
+		r := f.reconciler(t, "one", patient(), stackKind.Name)
+
+		require.NoError(t, r.Reconcile(ctx, refOf(store)))
+
+		now := f.saidOfRoot(t, store)
+		assert.Equal(t, stackKind.Starting, now.State)
+		assert.Equal(t, "network/s_default: its vm is stopped", now.Reason)
+	})
+
+	t.Run("and a run cut short, its control plane stopping, says nothing of it", func(t *testing.T) {
+		t.Parallel()
+
+		stopping, stop := context.WithCancel(ctx)
+
+		kinds := stacked()
+		kinds.On(graphtest.Create, vm, func(ctx context.Context) error {
+			stop()
+			<-ctx.Done()
+
+			return ctx.Err()
+		})
+
+		f := newFixture(t, kinds, aStack(stackKind.Running))
+		r := f.reconciler(t, "one", patient(), stackKind.Name)
+
+		require.Error(t, r.Reconcile(stopping, refOf(store)))
+
+		now := f.saidOfRoot(t, store)
+		assert.Equal(t, stackKind.Running, now.State, "it is what it was")
+		assert.Empty(t, now.Reason)
+		assert.NotContains(t, f.resources.Writes(), "update stack/store", "and nothing is written on it")
+	})
 }

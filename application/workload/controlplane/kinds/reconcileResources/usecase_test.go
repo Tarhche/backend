@@ -18,9 +18,11 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/reconcileResources"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/recordResult"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/waiters"
+	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/graph"
 	"github.com/khanzadimahdi/testproject/domain/workload/graph/graphtest"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
+	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
 	"github.com/khanzadimahdi/testproject/domain/workload/node"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
 	messagingMock "github.com/khanzadimahdi/testproject/infrastructure/messaging/mock"
@@ -969,4 +971,84 @@ func TestUseCase_Execute_lifetimesWithGraphs(t *testing.T) {
 		assert.Equal(t, []graph.Ref{needed}, told.Asked())
 		assert.Empty(t, told.Queued())
 	})
+}
+
+// idleStacks is a stack's control-plane strategy, which asks for nothing of a
+// stack: its graph carries it out.
+type idleStacks struct{}
+
+func (idleStacks) Admit(context.Context, stackKind.Stack) (stackKind.Stack, domain.ValidationErrors, error) {
+	return stackKind.Stack{}, nil, errors.New("nothing is admitted here")
+}
+
+func (idleStacks) Reconcile(context.Context, stackKind.Stack) ([]kind.Intent, error) {
+	return nil, nil
+}
+
+func (idleStacks) Apply(context.Context, stackKind.Stack, string, any) (stackKind.Stack, domain.ValidationErrors, error) {
+	return stackKind.Stack{}, nil, errors.New("nothing is applied here")
+}
+
+// TestUseCase_Execute_carriedByItsGraph holds a root whose state the control
+// plane keeps, a stack, to being left in flight for as long as its graph
+// takes it there, a deploy that waits on images say, rather than failed as
+// stuck for waiting on no command: nothing but its graph moves it on.
+func TestUseCase_Execute_carriedByItsGraph(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	for name, tt := range map[string]struct {
+		owners []kind.Reference
+		state  kind.State
+	}{
+		"a stack deploying for longer than the loop's patience is its graph's to move on": {
+			state: stackKind.Deploying,
+		},
+		"but one something owns, which is no root, is stuck": {
+			owners: []kind.Reference{{Kind: "fan", UUID: "fan-uuid"}},
+			state:  kind.Failed,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			s := stackKind.Stack{
+				Kind: stackKind.Name,
+				Metadata: kind.Metadata{
+					UUID:      "stack-uuid",
+					OwnerUUID: kindstest.OwnerUUID,
+					Refs:      []kind.Reference{{Kind: stackKind.Parent, UUID: "vm-uuid"}},
+					Owners:    tt.owners,
+					CreatedAt: kindstest.Moment,
+				},
+				Status: stackKind.Status{Status: kind.Status{State: stackKind.Deploying, Expected: stackKind.Running, Since: kindstest.Moment}},
+			}
+
+			raw, err := kind.Encode(s)
+			require.NoError(t, err)
+
+			resources := resourcesMemory.NewRepository()
+			_, err = resources.Create(ctx, resource.Record{Raw: raw})
+			require.NoError(t, err)
+
+			registry := kind.NewRegistry[kind.ControlPlaneBinding]()
+			require.NoError(t, registry.Register(kind.BindControlPlane[stackKind.Spec, stackKind.Status](stackKind.Descriptor(), idleStacks{})))
+
+			clock := kindstest.NewClock()
+			clock.Advance(time.Hour)
+
+			dispatcher := dispatch.New(resources, &messagingMock.Recorder{}, waiters.New(), clock.Now)
+			uc := reconcileResources.NewUseCase(registry, resources, nodesMemory.NewRepository(), dispatcher, nil, slog.New(slog.DiscardHandler), config(), reconcileResources.WithRoots(graph.Roots{stackKind.Name}))
+
+			require.NoError(t, uc.Execute(ctx))
+
+			stored, err := resources.GetOne(ctx, stackKind.Name, "stack-uuid")
+			require.NoError(t, err)
+
+			common, err := stored.Common()
+			require.NoError(t, err)
+			assert.Equal(t, tt.state, common.State)
+		})
+	}
 }

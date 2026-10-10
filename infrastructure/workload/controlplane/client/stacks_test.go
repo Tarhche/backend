@@ -14,7 +14,6 @@ import (
 
 	"github.com/khanzadimahdi/testproject/domain"
 	workloadControlPlane "github.com/khanzadimahdi/testproject/domain/workload/controlplane"
-	"github.com/khanzadimahdi/testproject/domain/workload/docker"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	containerKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/container"
 	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
@@ -131,31 +130,33 @@ func newStacksPlane(t *testing.T) (*Client, *stacksPlane) {
 		answer(rw, http.StatusOK, v)
 	})
 
-	// what the vm holds: one container compose made for the stack, and one
-	// of another project.
+	// what the vm holds: the container the stack's graph made of its web
+	// service, and one of another stack's.
 	mux.HandleFunc("GET /api/containers", func(rw http.ResponseWriter, r *http.Request) {
 		p.record(r)
 
-		of := func(id string, project string) containerManifest {
+		of := func(id string, stackUUID string) containerManifest {
 			return containerManifest{
 				Kind: "container",
 				Metadata: kind.Metadata{
 					UUID:   "uuid-" + id,
-					Labels: map[string]string{"workload.managed-by": "stack"},
+					Owners: []kind.Reference{{Kind: stackKind.Name, UUID: stackUUID}},
 					Refs:   []kind.Reference{{Kind: "vm", UUID: r.URL.Query().Get("parent")}},
 				},
 				Status: containerKind.Status{
 					Status: kind.Status{State: containerKind.Running},
-					Docker: &containerKind.Docker{ID: id, Name: project + "-web-1", State: "running", Labels: map[string]string{
-						docker.LabelComposeProject: project,
-						docker.LabelComposeService: "web",
+					Docker: &containerKind.Docker{ID: id, Name: "shop-abcde_web", State: "running", Labels: map[string]string{
+						"workload.managed":     "true",
+						"workload.container":   "uuid-" + id,
+						stackKind.LabelStack:   stackUUID,
+						stackKind.LabelService: "web",
 					}},
 				},
 			}
 		}
 
 		answer(rw, http.StatusOK, map[string]any{
-			"items":      []containerManifest{of("c1", "shop-abcde"), of("c2", "elsewhere")},
+			"items":      []containerManifest{of("c1", "stack-uuid"), of("c2", "elsewhere")},
 			"pagination": map[string]any{"total_pages": 1, "current_page": 1},
 		})
 	})
@@ -338,7 +339,7 @@ func TestClient_Stack(t *testing.T) {
 
 	ctx := t.Context()
 
-	t.Run("a stack comes with the containers compose made for it, read from its vm now", func(t *testing.T) {
+	t.Run("a stack comes with the containers its graph made of its services, read from its vm now", func(t *testing.T) {
 		t.Parallel()
 
 		c, p := newStacksPlane(t)
@@ -349,9 +350,10 @@ func TestClient_Stack(t *testing.T) {
 
 		assert.Equal(t, "docker-1", detail.VMName)
 		assert.False(t, detail.VMNotRunning)
-		require.Len(t, detail.Containers, 1)
-		assert.Equal(t, "shop-abcde", detail.Containers[0].Stack, "the containers of its own project")
-		assert.Equal(t, "web", detail.Containers[0].Service)
+		require.Len(t, detail.Containers, 1, "those labelled as its own")
+		assert.Equal(t, "c1", detail.Containers[0].ID)
+		assert.Equal(t, "shop-abcde", detail.Containers[0].Stack, "each saying its stack's slug")
+		assert.Equal(t, "web", detail.Containers[0].Service, "and its service")
 	})
 
 	for name, tt := range map[string]struct {

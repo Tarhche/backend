@@ -696,6 +696,35 @@ func TestUseCase_Execute_roots(t *testing.T) {
 		assert.Equal(t, kindstest.Deleting, f.stored(t, "fan-uuid").Status.State)
 		assert.Empty(t, told.Queued())
 	})
+
+	t.Run("a command carried out in the control plane on it is written down, and queued to its graph, which carries out what it was asked", func(t *testing.T) {
+		t.Parallel()
+
+		told := &graphtest.Told{}
+		f := rooted(t, told, kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running))
+
+		response, err := f.useCase.Execute(ctx, &actOnResource.Request{Kind: kindstest.Kind, UUID: "fan-uuid", Action: "rename", Payload: json.RawMessage(`{"name": "hall"}`)})
+		require.NoError(t, err)
+		require.Empty(t, response.ValidationErrors)
+
+		assert.Equal(t, "hall", f.stored(t, "fan-uuid").Metadata.Name)
+		assert.Equal(t, []graph.Ref{root}, told.Queued())
+	})
+
+	t.Run("but one on what something owns, which is no root, is queued to nothing", func(t *testing.T) {
+		t.Parallel()
+
+		told := &graphtest.Told{}
+		f := rooted(t, told, kindstest.AFan("fan-uuid", kindstest.Running, kindstest.Running, func(fan *kindstest.Fan) {
+			fan.Metadata.Owners = []kind.Reference{{Kind: kindstest.Kind, UUID: "another-fan"}}
+		}))
+
+		response, err := f.useCase.Execute(ctx, &actOnResource.Request{Kind: kindstest.Kind, UUID: "fan-uuid", Action: "rename", Payload: json.RawMessage(`{"name": "hall"}`)})
+		require.NoError(t, err)
+		require.Empty(t, response.ValidationErrors)
+
+		assert.Empty(t, told.Queued())
+	})
 }
 
 // TestUseCase_Execute_dependents holds a command that deletes what the graphs

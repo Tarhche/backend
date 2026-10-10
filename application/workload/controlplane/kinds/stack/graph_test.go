@@ -2,6 +2,7 @@ package stack_test
 
 import (
 	"context"
+	"encoding/json"
 	"maps"
 	"slices"
 	"strconv"
@@ -17,6 +18,7 @@ import (
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/requirements/requirementstest"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/stack"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/vmtest"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/slugs"
 	"github.com/khanzadimahdi/testproject/domain/workload/graph"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	containerKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/container"
@@ -24,6 +26,7 @@ import (
 	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	volumeKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/volume"
+	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
 	executionsMemory "github.com/khanzadimahdi/testproject/infrastructure/repository/memory/workload/executions"
@@ -67,27 +70,39 @@ networks:
 `
 
 // stackGraph is requirementstest's workload, with the stack kind registered
-// as the control plane registers it, and the kinds a stack's graph is made of,
-// its own among them.
+// as the control plane registers it, its strategy planning stacks' graphs, and
+// the kinds a stack's graph is made of, its own among them.
 type stackGraph struct {
 	*requirementstest.Workload
 
-	stacks *stack.Graph
-	kinds  graph.Kinds
+	strategy *stack.Stacks
+	stacks   *stack.Graph
+	kinds    graph.Kinds
+	planner  *graph.Planner
 }
 
 // newStackGraph is a stack's graph's kinds over the VMs options say, its node
-// carrying out at once whatever it is sent.
+// carrying out at once whatever it is sent, and the stack kind's strategy,
+// giving slugs nothing holds.
 func newStackGraph(t *testing.T, options ...vmtest.Option) *stackGraph {
 	t.Helper()
 
 	w := requirementstest.New(options...)
-	require.NoError(t, w.Registry.Register(kind.BindControlPlane[stackKind.Spec, stackKind.Status](stackKind.Descriptor(), stack.New(w.Records, w.Chooser))))
 
 	g := &stackGraph{Workload: w, stacks: stack.NewGraph(w.Requirements), kinds: maps.Clone(w.Kinds)}
 	g.kinds[stackKind.Name] = g.stacks
+	g.planner = graph.NewPlanner(g.kinds, graph.DefaultPolicy())
+	g.strategy = g.strategyHolding()
+
+	require.NoError(t, w.Registry.Register(kind.BindControlPlane[stackKind.Spec, stackKind.Status](stackKind.Descriptor(), g.strategy)))
 
 	return g
+}
+
+// strategyHolding is the stack kind's strategy over g, to which the slugs
+// held says are held, and no other.
+func (g *stackGraph) strategyHolding(held ...slugs.Taken) *stack.Stacks {
+	return stack.New(stack.Dependencies{Chooser: g.Chooser, Slugs: held, Planner: g.planner})
 }
 
 // aStack is a stack of owner's in the Docker VM vmUUID names, under the slug
@@ -944,4 +959,219 @@ func blockRecord(t *testing.T, g *stackGraph, kindName string, name string) reso
 	require.True(t, kept, "no %s is kept under %s", kindName, name)
 
 	return r
+}
+
+// carrying has g's node carry out what it is sent at once, and say a
+// container it stopped exited, as a node does.
+func carrying(g *stackGraph) {
+	g.Node.Answer(func(command kind.ActOnResource) (kind.ResourceActedOn, bool) {
+		result, said := requirementstest.Carry(command)
+
+		if command.Kind == containerKind.Name && command.Action == containerKind.ActionStop {
+			c, _ := kind.Decode[containerKind.Spec, containerKind.Status](command.Resource)
+
+			result.Status, _ = json.Marshal(containerKind.Status{
+				Status:  kind.Status{State: containerKind.StateOf("exited", c.Spec.RestartPolicy)},
+				Docker:  &containerKind.Docker{ID: "c-" + command.UUID, Name: c.Spec.Name, Image: c.Spec.Image, State: "exited", Status: "Exited (0) Less than a second ago"},
+				Failure: &noderequest.Error{},
+			})
+		}
+
+		return result, said
+	})
+}
+
+// askStack has the stack s-1 of g asked for action, as its machine moves it
+// and the dispatcher writes it down.
+func askStack(t *testing.T, g *stackGraph, action string) {
+	t.Helper()
+
+	r, kept := g.Kept(stackKind.Name, "s-1")
+	require.True(t, kept)
+
+	binding, _ := g.Registry.Lookup(stackKind.Name)
+
+	_, invalid, err := g.Dispatcher.Ask(context.Background(), binding, r, action, nil, true)
+	require.NoError(t, err)
+	require.Empty(t, invalid)
+}
+
+func TestGraph_actions(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	root := graph.Ref{Kind: stackKind.Name, UUID: "s-1"}
+
+	// carriedOut is the stack applied, once its plan is carried out again.
+	carriedOut := func(t *testing.T, g *stackGraph, executor *execute.Executor, plan *graph.Plan) stackKind.Stack {
+		t.Helper()
+
+		outcome, err := executor.Apply(ctx, root, 1, plan)
+		require.NoError(t, err)
+		require.Equal(t, execute.Done, outcome.State, "%v", outcome.Err)
+
+		s, _, _ := storedStack(t, g, "s-1")
+
+		return s
+	}
+
+	t.Run("stopped, its containers stop in the reverse of the order they depend on one another, and are held stopped", func(t *testing.T) {
+		t.Parallel()
+
+		g, executor, plan := applied(t, graph.DefaultPolicy())
+		carrying(g)
+		before := len(commands(g, containerKind.Name))
+
+		askStack(t, g, stackKind.ActionStop)
+
+		s := carriedOut(t, g, executor, plan)
+		assert.Equal(t, stackKind.Stopped, s.Status.State)
+		assert.Equal(t, stackKind.Stopped, s.Status.Expected)
+
+		stopped := commands(g, containerKind.Name)[before:]
+		require.Len(t, stopped, 4)
+		assert.Equal(t, []string{"stop container/shop_web", "stop container/shop_api"}, stopped[:2])
+		assert.ElementsMatch(t, []string{"stop container/shop_db", "stop container/shop_worker"}, stopped[2:])
+
+		for _, service := range []string{"web", "api", "db", "worker"} {
+			c := blockRecord(t, g, containerKind.Name, "shop_"+service)
+			common, err := c.Common()
+			require.NoError(t, err)
+			assert.Equal(t, containerKind.Stopped, common.Expected, "%s is to stay stopped, as any container stopped is", service)
+		}
+
+		again := carriedOut(t, g, executor, plan)
+		assert.Equal(t, s.Status, again.Status, "carried out again, it is what it was")
+		assert.Len(t, commands(g, containerKind.Name)[before:], 4, "and nothing more is asked")
+	})
+
+	t.Run("started, its containers start in the order they depend on one another, each level once the one before it runs", func(t *testing.T) {
+		t.Parallel()
+
+		g, executor, plan := applied(t, graph.DefaultPolicy())
+		carrying(g)
+
+		askStack(t, g, stackKind.ActionStop)
+		carriedOut(t, g, executor, plan)
+
+		before := len(commands(g, containerKind.Name))
+
+		askStack(t, g, stackKind.ActionStart)
+
+		s := carriedOut(t, g, executor, plan)
+		assert.Equal(t, stackKind.Running, s.Status.State)
+		assert.Equal(t, stackKind.Running, s.Status.Expected)
+
+		started := commands(g, containerKind.Name)[before:]
+		require.Len(t, started, 4)
+		assert.ElementsMatch(t, []string{"start container/shop_db", "start container/shop_worker"}, started[:2])
+		assert.Equal(t, []string{"start container/shop_api", "start container/shop_web"}, started[2:])
+	})
+
+	t.Run("restarted, they stop the one way and start the other", func(t *testing.T) {
+		t.Parallel()
+
+		g, executor, plan := applied(t, graph.DefaultPolicy())
+		carrying(g)
+		before := len(commands(g, containerKind.Name))
+
+		askStack(t, g, stackKind.ActionRestart)
+
+		s := carriedOut(t, g, executor, plan)
+		assert.Equal(t, stackKind.Running, s.Status.State)
+
+		restarted := commands(g, containerKind.Name)[before:]
+		require.Len(t, restarted, 8)
+		assert.Equal(t, []string{"stop container/shop_web", "stop container/shop_api"}, restarted[:2])
+		assert.ElementsMatch(t, []string{"start container/shop_db", "start container/shop_worker"}, restarted[4:6])
+		assert.Equal(t, []string{"start container/shop_api", "start container/shop_web"}, restarted[6:])
+	})
+
+	t.Run("a start cut short is taken up where it was left: what runs already is not started again", func(t *testing.T) {
+		t.Parallel()
+
+		g, executor, plan := applied(t, graph.DefaultPolicy())
+		carrying(g)
+
+		askStack(t, g, stackKind.ActionStop)
+		carriedOut(t, g, executor, plan)
+
+		// db and worker were started before the control plane stopped.
+		for _, service := range []string{"db", "worker"} {
+			c := blockRecord(t, g, containerKind.Name, "shop_"+service)
+			_, err := g.Requirements.Ask(ctx, c, containerKind.ActionStart)
+			require.NoError(t, err)
+		}
+
+		askStack(t, g, stackKind.ActionStart)
+		before := len(commands(g, containerKind.Name))
+
+		s := carriedOut(t, g, executor, plan)
+		assert.Equal(t, stackKind.Running, s.Status.State)
+		assert.Equal(t, []string{"start container/shop_api", "start container/shop_web"}, commands(g, containerKind.Name)[before:])
+	})
+
+	t.Run("those of a later level that do not run are held stopped before the first is started, so nothing starts them out of turn", func(t *testing.T) {
+		t.Parallel()
+
+		g, executor, plan := applied(t, graph.DefaultPolicy())
+		carrying(g)
+
+		askStack(t, g, stackKind.ActionStop)
+		carriedOut(t, g, executor, plan)
+
+		// web was asked to run since, and is stopped as docker left it.
+		web := blockRecord(t, g, containerKind.Name, "shop_web")
+		_, err := g.Dispatcher.Desire(ctx, web, containerKind.Running, true)
+		require.NoError(t, err)
+
+		var held []kind.State
+
+		g.Node.Answer(func(command kind.ActOnResource) (kind.ResourceActedOn, bool) {
+			if command.Kind == containerKind.Name && command.Action == containerKind.ActionStart && command.Resource.Metadata.Name == "shop_db" {
+				w := blockRecord(t, g, containerKind.Name, "shop_web")
+				common, _ := w.Common()
+				held = append(held, common.Expected)
+			}
+
+			return requirementstest.Carry(command)
+		})
+
+		askStack(t, g, stackKind.ActionStart)
+		carriedOut(t, g, executor, plan)
+
+		assert.Equal(t, []kind.State{containerKind.Stopped}, held, "web was held stopped while db was started")
+	})
+
+	t.Run("a start a container fails stops there, and its plan fails, saying which", func(t *testing.T) {
+		t.Parallel()
+
+		g, executor, plan := applied(t, graph.DefaultPolicy())
+		carrying(g)
+
+		askStack(t, g, stackKind.ActionStop)
+		carriedOut(t, g, executor, plan)
+
+		g.Node.Answer(func(command kind.ActOnResource) (kind.ResourceActedOn, bool) {
+			if command.Kind == containerKind.Name && command.Action == containerKind.ActionStart && command.Resource.Metadata.Name == "shop_api" {
+				return requirementstest.Fail(command, "port is already allocated"), true
+			}
+
+			return requirementstest.Carry(command)
+		})
+
+		askStack(t, g, stackKind.ActionStart)
+		before := len(commands(g, containerKind.Name))
+
+		outcome, err := executor.Apply(ctx, root, 1, plan)
+		require.NoError(t, err)
+		require.Equal(t, execute.Failed, outcome.State)
+		assert.ErrorContains(t, outcome.Err, "shop_api")
+		assert.ErrorContains(t, outcome.Err, "port is already allocated")
+
+		assert.NotContains(t, commands(g, containerKind.Name)[before:], "start container/shop_web", "what depends on it is not started")
+
+		s, _, _ := storedStack(t, g, "s-1")
+		assert.Equal(t, stackKind.Starting, s.Status.State, "its plan's failure is its reconciler's to say")
+	})
 }

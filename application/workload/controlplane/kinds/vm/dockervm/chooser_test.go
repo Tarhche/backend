@@ -332,6 +332,17 @@ func containerIn(uuid string, ownerUUID string, vm stackKind.VMChoice, changes .
 	return vmtest.Record(c)
 }
 
+// stackIn is a stack of ownerUUID's going into the Docker VM vm says, its
+// graph to make it.
+func stackIn(uuid string, ownerUUID string, vm stackKind.VMChoice) resource.Record {
+	return vmtest.Record(stackKind.Stack{
+		Kind:     stackKind.Name,
+		Metadata: kind.Metadata{UUID: uuid, OwnerUUID: ownerUUID, Slug: uuid, Refs: []kind.Reference{{Kind: vmKind.Name, UUID: vm.UUID}}},
+		Spec:     stackKind.Spec{VM: vm, Compose: "services:\n  web:\n    image: nginx\n"},
+		Status:   stackKind.Status{Status: kind.Status{State: stackKind.Deploying, Expected: stackKind.Running}},
+	})
+}
+
 func TestChooser_Plan(t *testing.T) {
 	t.Parallel()
 
@@ -393,6 +404,23 @@ func TestChooser_Plan(t *testing.T) {
 			},
 			choice: dockervm.Choice{Resources: &vmKind.Resources{CPUs: 4}},
 			want:   domain.ValidationErrors{"vm.resources.cpus": "quota_exceeded"},
+		},
+		"and those planned for their stacks": {
+			vms: []vmKind.VM{vmtest.Docker("01", "owner")},
+			containers: []resource.Record{
+				stackIn("s-1", "owner", stackKind.VMChoice{UUID: "planned-1", Resources: &stackKind.Resources{CPUs: 3}}),
+			},
+			choice: dockervm.Choice{Resources: &vmKind.Resources{CPUs: 4}},
+			want:   domain.ValidationErrors{"vm.resources.cpus": "quota_exceeded"},
+		},
+		"one a stack and its container both plan counted once": {
+			vms: []vmKind.VM{vmtest.Docker("01", "owner")},
+			containers: []resource.Record{
+				stackIn("s-1", "owner", stackKind.VMChoice{UUID: "planned-1", Resources: &stackKind.Resources{CPUs: 3}}),
+				containerIn("c-1", "owner", stackKind.VMChoice{UUID: "planned-1", Resources: &stackKind.Resources{CPUs: 3}}),
+			},
+			choice: dockervm.Choice{Resources: &vmKind.Resources{CPUs: 3}},
+			want:   nil,
 		},
 		"the defaults where what plans one says nothing": {
 			vms: []vmKind.VM{vmtest.Docker("01", "owner")},

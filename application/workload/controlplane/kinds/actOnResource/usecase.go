@@ -28,7 +28,9 @@
 // A command that deletes the root of a graph, of a kind whose graph removes it
 // (WithGraphs), marks it to be deleted rather than asking its node
 // (dispatch.Dispatcher.Mark), and queues it to its graph, which removes it and
-// then what it owns, in order: whoever asked may wait for it to go. One that
+// then what it owns, in order: whoever asked may wait for it to go. Any other
+// command carried out in the control plane on a root is queued to its graph
+// once it is written down, which carries it out: a stack's start. One that
 // deletes what is not a root is answered with the roots whose graphs need it,
 // and whether one of them makes it again, and deletes them with it when it is
 // asked to (Request.Cascade), as a delete does (deleteResource).
@@ -216,6 +218,8 @@ func (uc *UseCase) act(ctx context.Context, binding kind.ControlPlaneBinding, ac
 	}
 
 	if action.Runs == kind.OnControlPlane && !asked.Gone {
+		uc.carry(d, asked.Record)
+
 		asked = uc.follow(ctx, binding, asked)
 	}
 
@@ -245,6 +249,16 @@ func (uc *UseCase) marked(ctx context.Context, r resource.Record, wait time.Dura
 	}
 
 	return &Response{Resource: r.Raw}
+}
+
+// carry queues r, the root of a graph carried out in the control plane, to
+// its graph, once a command asked of it is written down on it: what it was
+// asked, a stack's start say, is its graph's to carry out, now rather than at
+// the next resync. What is no root is queued to nothing.
+func (uc *UseCase) carry(d kind.Descriptor, r resource.Record) {
+	if uc.graphs != nil && uc.roots.Root(d, r.Metadata) {
+		uc.graphs.Enqueue(graph.Ref{Kind: r.Kind, UUID: r.Metadata.UUID})
+	}
 }
 
 // waits reports whether a command waits for the resource to get where it is

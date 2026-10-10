@@ -1,22 +1,26 @@
-// Package stack is the stack kind: a compose project deployed into a Docker
-// VM, declared once for every service that runs it (domain/workload/kind).
+// Package stack is the stack kind: the services, volumes and networks a
+// stack's file says, made by the platform in a Docker VM, declared once for
+// every service that runs it (domain/workload/kind).
 //
-// A stack is a composite kind. What it is made of are the building blocks of
-// the Docker VM it lives in, which its node strategy uses to reach what its
-// spec says:
+// A stack is the root of a graph of its own (domain/workload/graph): its file
+// is read by the platform (File, Parse), in a subset of compose's own format
+// that the platform carries out itself, and each of its services is a
+// container, each volume a volume and each network a network, records of
+// their own kinds, which its graph makes in its Docker VM, in order: its VM,
+// then its networks and its volumes, then its services as they depend on one
+// another, and then the stack, which says of each service the container made
+// of it (Status.Services). Nothing runs compose, and nothing reads what
+// compose would label.
 //
-//   - the Docker VM itself, its parent, which has to be running: a stack in
-//     one that is not waits on it, and says why, rather than failing;
-//   - that VM's dockerd, whose containers carrying the stack's label
-//     (LabelStack) are what the stack is now;
-//   - and an Applier, which brings those containers to what the stack's
-//     compose file says: compose itself, run inside the VM.
-//
-// Its state is those containers mapped onto the compose file's services, in
-// one word: running when every service runs, degraded when some do and some
-// do not, stopped when none does, and waiting while its VM is not running or
-// the stack is not in it. The control plane never looks at the containers: it
-// asks the stack, and brings a degraded one back by applying it again.
+// Its state is the control plane's (StateBy: OnControlPlane): no node says
+// what a stack is doing. While its graph makes it, it is deploying; once made,
+// it is what its containers make it, running, degraded or stopped (StateOf);
+// it waits while what it needs cannot be made now, its VM not running, and
+// fails, saying why, when its plan does. Started, stopped and restarted, its
+// graph has its containers started a level of its services at a time, as
+// they depend on one another, and stopped the other way round. Deleted, it is
+// removing while its graph removes its containers, and then its networks, and
+// its record goes last of all; its volumes and its VM stay.
 //
 // A stack's spec is immutable: there is no update, only a new stack.
 package stack
@@ -25,6 +29,7 @@ import (
 	"context"
 
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
+	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
 )
 
@@ -40,66 +45,68 @@ const (
 
 // A stack's states. Waiting, Failed and Deleted are the framework's own.
 const (
-	// Deploying is a stack being brought up as its compose file says: made in
-	// its VM, or made again.
+	// Deploying is a stack its graph is making, as its file says: the state
+	// it is admitted in, and the one it is in again once its VM went, until
+	// its graph made the VM again, and what was in it.
 	Deploying kind.State = "deploying"
 
-	// Running is a stack whose every service runs, and Degraded one some of
-	// whose services do not.
+	// Running is a stack whose every service runs, or ran to its end as it
+	// was to, and Degraded one some of whose services do not.
 	Running  kind.State = "running"
 	Degraded kind.State = "degraded"
 
+	// Starting, Stopping and Restarting are a stack whose graph has its
+	// containers started, stopped, or stopped and started again, a level of
+	// its services at a time.
 	Starting   kind.State = "starting"
 	Stopping   kind.State = "stopping"
 	Stopped    kind.State = "stopped"
 	Restarting kind.State = "restarting"
 
-	// Removing is a stack being taken down. Its record goes once it is.
+	// Removing is a stack whose graph is removing it. Its record goes last
+	// of all, once what it owns is gone.
 	Removing kind.State = "removing"
 
-	// Waiting is a stack that is not in its VM: one whose VM is not running,
-	// which waits on it, and one that is not deployed there, yet or any
-	// more. Its reason says which.
+	// Waiting is a stack whose graph waits on what it needs, which cannot be
+	// made now: its VM is not running. Its reason says what it waits on.
 	Waiting = kind.Waiting
 
-	// Failed is a stack whose last command failed. Its reason and its output
-	// say why.
+	// Failed is a stack whose plan failed. Its reason, and its failure when
+	// what it needs was refused, say why.
 	Failed = kind.Failed
 
 	Deleted = kind.Deleted
 )
 
-// A stack's actions.
+// A stack's actions, each carried out by its graph, on the control plane.
 const (
-	// ActionCreate deploys a stack that is not in its VM; ActionApply
-	// deploys one again, to bring back what it lost. Both are the workload's
-	// own to ask for, and are compose's up.
-	ActionCreate = "create"
-	ActionApply  = "apply"
-
 	ActionStart   = "start"
 	ActionStop    = "stop"
 	ActionRestart = "restart"
 
-	// ActionDelete takes a stack down and keeps its volumes, since what is in
-	// them is usually what somebody wants back: they stay in its VM until
-	// they are removed themselves.
+	// ActionDelete removes a stack's containers and the networks it owns,
+	// and keeps its volumes, since what is in them is usually what somebody
+	// wants back: they stay in its VM until they are removed themselves.
 	ActionDelete = "delete"
 
-	// ActionState is what a stack is doing, as its VM's dockerd says.
+	// ActionState is what a stack is doing, as its record says.
 	ActionState = "state"
+
+	// ActionCreate and ActionApply had a node deploy a stack with compose,
+	// which nothing asks any more: compose's path, which goes with it.
+	ActionCreate = "create"
+	ActionApply  = "apply"
 )
 
-// The labels the platform puts on every container of a stack, through every
-// service of its compose file, so that what is a stack's is known exactly
-// rather than guessed from a name.
+// The labels the platform puts on what a stack's graph makes of its file, so
+// that what is a stack's is known exactly rather than guessed from a name.
 const (
 	// LabelStack is the uuid of the stack a container belongs to.
 	LabelStack = "workload.stack"
 
-	// LabelServices are the stack's services that are to be running, comma
-	// separated: what a node maps a stack's containers onto, since it keeps
-	// no record of the compose file.
+	// LabelServices are the services compose ran a stack's containers of,
+	// comma separated, which compose's path labelled them with, and nothing
+	// reads but it.
 	LabelServices = "workload.stack.services"
 
 	// LabelService is the service of a stack's file a container is, which
@@ -110,12 +117,13 @@ const (
 )
 
 // Spec is what a stack is asked for as: the Docker VM it goes into and its
-// compose file, neither of which ever changes.
+// file, neither of which ever changes.
 type Spec struct {
 	VM VMChoice `json:"vm"`
 
-	// Compose is the YAML as it was given. What it calls its project is
-	// ignored: the stack's slug is its project.
+	// Compose is its file, as it was given (File). What compose would call
+	// its project it does not say: what its graph makes is named under the
+	// stack's slug.
 	Compose string `json:"compose"`
 }
 
@@ -125,13 +133,13 @@ type Spec struct {
 // names none, which is a Docker VM made for it with whatever of the rest it
 // gives and the defaults for what it leaves out: naming one and describing
 // one besides is refused, as asking for two VMs (vm_or_new_vm), of what is
-// asked and of nothing kept. As a container keeps it, it is the uuid of the
-// VM it went into, made for it or not, and beside it what to make that VM
-// with again, under that uuid, whenever it is gone: its name, resources,
-// ports and network, as the VM's record had them when it was named, or as it
-// was asked for with the defaults filled in when its graph is to make it, and
-// as the VM's record had them when it went, and its slug with them, when a
-// delete of the VM kept the container. A stack keeps the uuid alone.
+// asked and of nothing kept. As a stack or a container keeps it, it is the
+// uuid of the VM it went into, made for it or not, and beside it what to make
+// that VM with again, under that uuid, whenever it is gone: its name,
+// resources, ports and network, as the VM's record had them when it was
+// named, or as it was asked for with the defaults filled in when its graph is
+// to make it, and as the VM's record had them when it went, and its slug with
+// them, when a delete of the VM kept it.
 type VMChoice struct {
 	UUID string `json:"uuid,omitempty"`
 
@@ -144,8 +152,9 @@ type VMChoice struct {
 	Network   *Network    `json:"network,omitempty"`
 
 	// Slug is the slug the VM had, which it asks for when it is made again
-	// under its uuid, so that it is reached where it was: what a container
-	// keeps, and nobody asks for. What is asked never names one that counts.
+	// under its uuid, so that it is reached where it was: what a stack or a
+	// container keeps, and nobody asks for. What is asked never names one
+	// that counts.
 	Slug string `json:"slug,omitempty"`
 }
 
@@ -170,39 +179,47 @@ type Network struct {
 	Egress  string `json:"egress,omitempty"`
 }
 
-// Status is what a stack is doing: its state, and its services as its VM's
-// dockerd has them.
+// Status is what a stack is doing: its state, and each of its services, by
+// the container its graph made of it.
 type Status struct {
 	kind.Status
 
-	// Services are the stack's services and their containers, as they were
-	// last seen.
+	// Services are the stack's services, each with the container made of it
+	// as its record said it when the stack was last made: its foreign keys
+	// to its containers.
 	Services []ServiceStatus `json:"services,omitempty"`
 
-	// Output is what the last command run on the stack printed, its last
-	// kind.MaxOutput bytes: the end of it is what says why a service did not
-	// come up.
+	// Output is what compose printed, when compose ran a stack, which
+	// nothing says any more.
 	Output string `json:"output,omitempty"`
+
+	// Failure is what its plan failed with, when what it needs was refused,
+	// in the codes every side knows: no node had room for its VM, say. One
+	// that is empty, or none, is none.
+	Failure *noderequest.Error `json:"failure,omitempty"`
 }
 
 // ServiceState is what one service of a stack is doing.
 type ServiceState string
 
 const (
-	// ServiceRunning is a service whose every container runs.
+	// ServiceRunning is a service whose container runs.
 	ServiceRunning ServiceState = "running"
 
-	// ServiceDegraded is a service some of whose containers run, of several.
+	// ServiceDegraded is a service some of whose containers run, of several,
+	// which no service has, each being one container.
 	ServiceDegraded ServiceState = "degraded"
 
-	// ServiceStopped is a service none of whose containers runs.
+	// ServiceStopped is a service whose container does not run, and did not
+	// run to its end as it was to.
 	ServiceStopped ServiceState = "stopped"
 
-	// ServiceMissing is a service that is to be running and has no container.
+	// ServiceMissing is a service that has no container, or one not made.
 	ServiceMissing ServiceState = "missing"
 
-	// ServiceCompleted is a service that runs to its end, one another service
-	// waits on to have completed, and has: its container exited with 0.
+	// ServiceCompleted is a service that runs to its end, and has: its
+	// container, which was to be running, exited with 0, and is not started
+	// again, as its restart policy says. It is as it was to be.
 	ServiceCompleted ServiceState = "completed"
 )
 
@@ -213,9 +230,9 @@ type ServiceStatus struct {
 	Containers []ContainerStatus `json:"containers,omitempty"`
 }
 
-// ContainerStatus is one container of a stack's service. Its state is
-// docker's word: created, running, paused, restarting, removing, exited or
-// dead.
+// ContainerStatus is the container of a stack's service: its record's uuid,
+// its Docker name, and its state, in docker's word, created, running, paused,
+// restarting, removing, exited or dead, nothing before docker has it.
 type ContainerStatus struct {
 	ID    string `json:"id"`
 	Name  string `json:"name"`
@@ -261,90 +278,68 @@ func VMOf(s Stack) string {
 	return s.Spec.VM.UUID
 }
 
-// Applier brings the containers of a stack to what is asked of them, inside
-// the Docker VM the stack lives in.
-//
-// It is a strategy: compose, run inside the VM, is its one implementation,
-// because it keeps all of compose's own behaviour, its dependencies,
-// healthchecks, profiles, networks and volumes; one that makes the containers
-// one by one could be another, and nothing else would change. Each call
-// answers with what it printed, which is all there is to say about a stack
-// that did not come up the way it was written, and labels what it makes as
-// the stack's (LabelStack, LabelServices).
+// Applier brought the containers of a stack to what its compose file said,
+// inside the Docker VM it lived in, with compose: compose's path, which no
+// stack takes any more, and which goes with it.
 type Applier interface {
-	// Up makes what the stack's compose file has and is not there, starts
-	// it, and takes away what the file no longer has.
 	Up(ctx context.Context, s Stack) (output string, err error)
-
 	Start(ctx context.Context, s Stack) (output string, err error)
 	Stop(ctx context.Context, s Stack) (output string, err error)
 	Restart(ctx context.Context, s Stack) (output string, err error)
-
-	// Down takes the stack's containers and networks away, and never its
-	// volumes.
 	Down(ctx context.Context, s Stack) (output string, err error)
 }
 
 // Descriptor is the stack kind, a new one every time.
+//
+// Every action of a stack is the control plane's: started, stopped,
+// restarted and deleted, its record says so, and its graph carries it out.
+// Nothing is asked of a node of a stack, and no node says anything of one.
 func Descriptor() kind.Descriptor {
 	command := func(name string, allowedIn []kind.State, desires kind.State, permission string) kind.Action {
-		return kind.Action{Name: name, Runs: kind.OnNode, Mode: kind.ModeCommand, AllowedIn: allowedIn, Desires: desires, Permission: permission, Payload: kind.NoPayload}
-	}
-
-	internal := func(name string, allowedIn ...kind.State) kind.Action {
-		return kind.Action{Name: name, Runs: kind.OnNode, Mode: kind.ModeCommand, AllowedIn: allowedIn, Desires: Running, Internal: true, Payload: kind.NoPayload}
-	}
-
-	// what brings a stack up may pull its images first.
-	pulling := func(a kind.Action) kind.Action {
-		a.Timeout = kind.TimeoutPull
-
-		return a
+		return kind.Action{Name: name, Runs: kind.OnControlPlane, Mode: kind.ModeCommand, AllowedIn: allowedIn, Desires: desires, Permission: permission, Payload: kind.NoPayload}
 	}
 
 	return kind.Descriptor{
 		Name:    Name,
 		Plural:  Plural,
-		StateBy: kind.OnNode,
+		StateBy: kind.OnControlPlane,
 		Parent:  Parent,
 
-		// a stack's containers are on its VM's disk: they go with it, and
-		// are what a restored disk holds.
-		OnParent: kind.ParentRules{Delete: kind.CascadeDelete, Restore: kind.CascadeReset},
+		// what a stack is, is its record, the control plane's own: deleting its
+		// VM takes it with it but for its graph keeping it, as it keeps what
+		// it makes, and restoring its VM's disk leaves it as it is, and resets
+		// its containers, its networks and its volumes to what the disk holds.
+		OnParent: kind.ParentRules{Delete: kind.CascadeDelete, Restore: kind.CascadeKeep},
 
 		Machine: Machine(),
 		Actions: []kind.Action{
-			pulling(internal(ActionCreate, Waiting)),
-			pulling(internal(ActionApply, Degraded, Failed)),
-			pulling(command(ActionStart, []kind.State{Stopped, Degraded, Failed, Waiting}, Running, "manage")),
+			command(ActionStart, []kind.State{Stopped, Degraded, Failed, Waiting}, Running, "manage"),
 			command(ActionStop, []kind.State{Running, Degraded, Failed}, Stopped, "manage"),
-			pulling(command(ActionRestart, []kind.State{Running, Degraded, Stopped, Failed, Waiting}, Running, "manage")),
-			{Name: ActionDelete, Runs: kind.OnNode, Mode: kind.ModeCommand, Desires: Deleted, Permission: "delete", Payload: kind.NoPayload},
-			{Name: ActionState, Runs: kind.OnNode, Mode: kind.ModeQuery, Permission: "show", Payload: kind.NoPayload},
+			command(ActionRestart, []kind.State{Running, Degraded, Stopped, Failed, Waiting}, Running, "manage"),
+			{Name: ActionDelete, Runs: kind.OnControlPlane, Mode: kind.ModeCommand, Desires: Deleted, Permission: "delete", Payload: kind.NoPayload},
+			{Name: ActionState, Runs: kind.OnControlPlane, Mode: kind.ModeQuery, Permission: "show", Payload: kind.NoPayload},
 		},
 	}
 }
 
 // Machine is a stack's states and the moves between them.
 //
-// A command is waited on in flight until its own answer says what it left
-// the stack as: deploying, starting and restarting end in running, degraded
-// or stopped, stopping in stopped, and removing only in the stack being gone.
-// While a node carries a command out, it says the stack is still in flight,
-// so that what the containers are doing halfway through a deploy is not taken
-// for what the deploy came to.
-//
-// At rest, a stack is what its node says: running, degraded or stopped, or
-// waiting while its VM is not running. One its VM has nothing of is waiting
-// too, to be deployed again.
+// A stack is admitted deploying, in flight while its graph makes it. Asked to
+// start, stop or restart, it is in flight while its graph has its containers
+// started or stopped, and a restart, once they are stopped, starts them. In
+// flight, it is taken only where it is going: what its containers make it,
+// once its graph made it or carried out what it was asked; failed, once its
+// plan failed; and, only while it deploys, waiting, once its plan waits on
+// what it needs. Asked to start or stop while its graph waits on its VM, it
+// starts or stops once its VM is up again. At rest, it is what its graph last
+// said it is. Deleted, it is removing until its record is gone.
 func Machine() kind.Machine {
 	transitions := []kind.Transition{
-		{From: Waiting, On: kind.OnAction(ActionCreate), To: Deploying},
-		{From: Degraded, On: kind.OnAction(ActionApply), To: Deploying},
-		{From: Failed, On: kind.OnAction(ActionApply), To: Deploying},
 		{From: kind.Any, On: kind.OnAction(ActionDelete), To: Removing},
 		{From: Removing, On: kind.OnObserved(Deleted), To: Deleted},
 		{From: kind.Any, On: kind.OnObserved(Failed), To: Failed},
+		{From: Deploying, On: kind.OnObserved(Waiting), To: Waiting},
+		{From: Restarting, On: kind.OnObserved(Starting), To: Starting},
 	}
 
 	asked := func(action string, to kind.State, from ...kind.State) {
@@ -357,38 +352,26 @@ func Machine() kind.Machine {
 	asked(ActionStop, Stopping, Running, Degraded, Failed)
 	asked(ActionRestart, Restarting, Running, Degraded, Stopped, Failed, Waiting)
 
-	arrives := func(from kind.State, at ...kind.State) {
-		for _, state := range at {
-			transitions = append(transitions, kind.Transition{From: from, On: kind.OnObserved(state), To: state})
+	// what its containers make it, once its graph made it, or carried out
+	// what it was asked.
+	for _, from := range []kind.State{Deploying, Starting, Stopping} {
+		for _, at := range []kind.State{Running, Degraded, Stopped} {
+			transitions = append(transitions, kind.Transition{From: from, On: kind.OnObserved(at), To: at})
 		}
 	}
 
-	arrives(Deploying, Running, Degraded, Stopped)
-	arrives(Starting, Running, Degraded, Stopped)
-	arrives(Restarting, Running, Degraded, Stopped)
-	arrives(Stopping, Stopped)
-
-	// a stack its VM has nothing of waits to be deployed again.
-	for _, state := range []kind.State{Running, Degraded, Stopped, Waiting} {
-		transitions = append(transitions, kind.Transition{From: state, On: kind.OnObserved(kind.Missing), To: Waiting})
-	}
-
 	return kind.Machine{
-		Initial:     Waiting,
-		States:      []kind.State{Waiting, Deploying, Running, Degraded, Starting, Stopping, Stopped, Restarting, Removing, Failed, Deleted},
+		Initial:     Deploying,
+		States:      []kind.State{Deploying, Running, Degraded, Starting, Stopping, Stopped, Restarting, Removing, Waiting, Failed, Deleted},
 		Transitions: transitions,
 		Terminal:    []kind.State{Stopped, Failed, Deleted},
 		InFlight:    []kind.State{Deploying, Starting, Stopping, Restarting, Removing},
-
-		// a look its node took between a command being asked and carried out
-		// says the stack is as it was, which says nothing of what the command
-		// came to.
-		Answered: []kind.State{Deploying, Starting, Restarting},
 	}
 }
 
-// InFlightOf is the state a stack is in while action is carried out on it,
-// and nothing for one that leaves it where it is.
+// InFlightOf is the state a node said a stack was in while compose carried
+// action out on it, which nothing asks of a node any more: compose's path,
+// which goes with it.
 func InFlightOf(action string) kind.State {
 	switch action {
 	case ActionCreate, ActionApply:

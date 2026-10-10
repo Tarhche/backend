@@ -2,68 +2,36 @@ package stack_test
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/stack"
-	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/records"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/vmtest"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/slugs"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
-	"github.com/khanzadimahdi/testproject/domain/workload/resource"
+	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
+	"github.com/khanzadimahdi/testproject/domain/workload/port"
 )
 
-const compose = `
-name: ignored
-services:
-  web:
-    image: nginx:1.27
-    ports: ["80:80"]
-`
-
-// strategyOf is the stack kind's control-plane strategy over w's VMs, with
-// slugs nobody holds unless taken says.
-func strategyOf(w *vmtest.Workload, taken ...string) *stack.Stacks {
-	return strategyOver(w, w.Records, taken...)
-}
-
-// strategyOver is strategyOf reading the VMs from vms.
-func strategyOver(w *vmtest.Workload, vms *records.Records, taken ...string) *stack.Stacks {
-	held := func(_ context.Context, slug string) (bool, error) {
-		for _, t := range taken {
-			if strings.HasPrefix(slug, t) {
-				return true, nil
-			}
-		}
-
-		return false, nil
-	}
-
-	return stack.New(vms, w.Chooser, slugs.Taken(held))
-}
-
-// unreadable is a store of resources that cannot be read.
-type unreadable struct {
-	resource.Repository
-}
-
-func (unreadable) GetOne(context.Context, string, string) (resource.Record, error) {
-	return resource.Record{}, errors.New("the database is gone")
-}
-
-// asked is a stack somebody asks for, as admission is handed one.
+// asked is a stack somebody asks for, of shop's file, as admission is handed
+// one.
 func asked(name string, choice stackKind.VMChoice) stackKind.Stack {
 	return stackKind.Stack{
 		Kind:     stackKind.Name,
 		Metadata: kind.Metadata{Name: name, OwnerUUID: "owner"},
-		Spec:     stackKind.Spec{VM: choice, Compose: compose},
+		Spec:     stackKind.Spec{VM: choice, Compose: shop},
+	}
+}
+
+// holding has slugs that start with prefix held.
+func holding(prefix string) slugs.Taken {
+	return func(_ context.Context, slug string) (bool, error) {
+		return strings.HasPrefix(slug, prefix), nil
 	}
 }
 
@@ -72,246 +40,325 @@ func TestStacks_Admit(t *testing.T) {
 
 	ctx := context.Background()
 
-	t.Run("a stack in a running docker vm is admitted into it, placed where it is, waiting to be deployed", func(t *testing.T) {
+	t.Run("into the docker vm it names, which it lives in, keeping what to make it with again, deploying", func(t *testing.T) {
 		t.Parallel()
 
-		w := vmtest.New(vmtest.WithVMs(vmtest.Docker("01", "owner")))
+		g := newStackGraph(t, vmtest.WithVMs(vmtest.Docker("01", "owner")))
 
-		admitted, invalid, err := strategyOf(w).Admit(ctx, asked("  Web Site ", stackKind.VMChoice{UUID: "01"}))
+		admitted, invalid, err := g.strategy.Admit(ctx, asked("  Web Shop ", stackKind.VMChoice{UUID: "01"}))
 		require.NoError(t, err)
 		require.Empty(t, invalid)
 
-		assert.Equal(t, "Web Site", admitted.Metadata.Name)
-		assert.True(t, strings.HasPrefix(admitted.Metadata.Slug, "web-site-"), admitted.Metadata.Slug)
+		v, _ := g.Stored("01")
+
+		assert.Equal(t, "Web Shop", admitted.Metadata.Name)
+		assert.True(t, strings.HasPrefix(admitted.Metadata.Slug, "web-shop-"), admitted.Metadata.Slug)
 		assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "01"}}, admitted.Metadata.Refs, "it lives in its vm")
-		assert.Empty(t, admitted.Metadata.Owners, "which does not own it")
-		assert.Equal(t, vmtest.Node, admitted.Metadata.Node, "and is where its vm is")
-		assert.Equal(t, stackKind.VMChoice{UUID: "01"}, admitted.Spec.VM, "the one it named")
-		assert.Equal(t, compose, admitted.Spec.Compose, "kept as it was written")
-		assert.Equal(t, stackKind.Waiting, admitted.Status.State)
+		assert.Empty(t, admitted.Metadata.Owners, "which does not own it: it is a root")
+		assert.Empty(t, admitted.Metadata.Node, "and no node keeps any of it")
+		assert.Equal(t, vmKind.ChoiceOf(v), admitted.Spec.VM, "its vm as its record has it, its slug among it")
+		assert.Equal(t, shop, admitted.Spec.Compose, "its file kept as it was written")
+		assert.Equal(t, stackKind.Deploying, admitted.Status.State, "its graph makes it")
 		assert.Equal(t, stackKind.Running, admitted.Status.Expected)
 		assert.Empty(t, admitted.Status.Reason)
 		assert.Zero(t, admitted.Metadata.Lifetime, "a stack is kept until it is deleted")
 	})
 
-	t.Run("one into a docker vm made for it as it describes it keeps the vm's uuid alone, and says what the vm waits on", func(t *testing.T) {
+	t.Run("into one its graph is to make when it names none, planned now and kept nowhere, though its owner has a docker vm already", func(t *testing.T) {
 		t.Parallel()
 
-		w := vmtest.New()
+		g := newStackGraph(t, vmtest.WithVMs(vmtest.Docker("01", "owner")))
 
-		admitted, invalid, err := strategyOf(w).Admit(ctx, asked("web", stackKind.VMChoice{Name: "builds", Resources: &stackKind.Resources{Memory: 4 * vmtest.GiB}}))
+		admitted, invalid, err := g.strategy.Admit(ctx, asked("web", stackKind.VMChoice{Name: "builds", Resources: &stackKind.Resources{Memory: 4 * vmtest.GiB}, Ports: []port.Port{}}))
 		require.NoError(t, err)
 		require.Empty(t, invalid)
 
-		made, kept := w.Stored(admitted.Spec.VM.UUID)
-		require.True(t, kept)
-		assert.Equal(t, "builds", made.Metadata.Name)
-		assert.True(t, vmKind.DockerVM(made, vmtest.Images.Docker))
-		assert.Equal(t, vmKind.Resources{CPUs: 2, Memory: 4 * vmtest.GiB, Disk: 20 * vmtest.GiB}, made.Spec.Resources)
-		assert.Equal(t, stackKind.VMChoice{UUID: made.Metadata.UUID}, admitted.Spec.VM, "what the vm was made with is the vm's own")
+		planned := admitted.Spec.VM.UUID
+		require.NotEmpty(t, planned)
+		assert.NotEqual(t, "01", planned)
 
-		assert.Equal(t, stackKind.Waiting, admitted.Status.State)
-		assert.Equal(t, "its vm is scheduled", admitted.Status.Reason)
+		_, kept := g.Stored(planned)
+		assert.False(t, kept, "its graph makes it, once the stack is kept")
+
+		assert.Equal(t, stackKind.VMChoice{
+			UUID:      planned,
+			Name:      "builds",
+			Resources: &stackKind.Resources{CPUs: 2, Memory: 4 * vmtest.GiB, Disk: 20 * vmtest.GiB},
+			Ports:     []port.Port{},
+			Network:   &stackKind.Network{Ingress: "allow", Egress: "allow"},
+		}, admitted.Spec.VM, "as it was asked for, the defaults filled in, and no slug before it is made")
+		assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: planned}}, admitted.Metadata.Refs)
+		assert.Equal(t, stackKind.Deploying, admitted.Status.State)
+		assert.Equal(t, "its vm is being made", admitted.Status.Reason)
 	})
 
-	t.Run("one asking for nothing goes into a vm made with the defaults, though its owner has a docker vm already", func(t *testing.T) {
+	t.Run("into one coming up, saying so", func(t *testing.T) {
 		t.Parallel()
 
-		w := vmtest.New(vmtest.WithVMs(vmtest.Docker("01", "owner")))
+		g := newStackGraph(t, vmtest.WithVMs(vmtest.In(vmtest.Docker("01", "owner"), func(v *vmKind.VM) { v.Status.State = vmKind.Starting })))
 
-		admitted, invalid, err := strategyOf(w).Admit(ctx, asked("web", stackKind.VMChoice{}))
+		admitted, invalid, err := g.strategy.Admit(ctx, asked("web", stackKind.VMChoice{UUID: "01"}))
 		require.NoError(t, err)
 		require.Empty(t, invalid)
 
-		made, kept := w.Stored(admitted.Spec.VM.UUID)
-		require.True(t, kept)
-		assert.NotEqual(t, "01", made.Metadata.UUID)
-		assert.Equal(t, "docker", made.Metadata.Name)
-		assert.Equal(t, vmtest.DockerDefaults.Resources, made.Spec.Resources)
-		assert.Equal(t, stackKind.VMChoice{UUID: made.Metadata.UUID}, admitted.Spec.VM)
-		assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: made.Metadata.UUID}}, admitted.Metadata.Refs)
+		assert.Equal(t, "its vm is starting", admitted.Status.Reason)
 	})
 
-	t.Run("one naming its vm as its parent goes into it", func(t *testing.T) {
+	t.Run("into the vm it names as its parent, among its refs or, as a manifest written before refs does, among its owners", func(t *testing.T) {
 		t.Parallel()
 
-		w := vmtest.New(vmtest.WithVMs(vmtest.Docker("01", "owner"), vmtest.Docker("02", "owner")))
+		g := newStackGraph(t, vmtest.WithVMs(vmtest.Docker("01", "owner"), vmtest.Docker("02", "owner")))
 
-		parented := asked("web", stackKind.VMChoice{})
-		parented.Metadata.Refs = []kind.Reference{{Kind: "vm", UUID: "02"}}
+		refs := asked("web", stackKind.VMChoice{})
+		refs.Metadata.Refs = []kind.Reference{{Kind: "vm", UUID: "02"}}
 
-		admitted, invalid, err := strategyOf(w).Admit(ctx, parented)
-		require.NoError(t, err)
-		require.Empty(t, invalid)
-		assert.Equal(t, "02", admitted.Spec.VM.UUID)
-		assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "02"}}, admitted.Metadata.Refs)
-	})
-
-	t.Run("and so does one naming it among its owners, as a manifest written before refs does, which are kept as they are given", func(t *testing.T) {
-		t.Parallel()
-
-		w := vmtest.New(vmtest.WithVMs(vmtest.Docker("01", "owner"), vmtest.Docker("02", "owner")))
-
-		parented := asked("web", stackKind.VMChoice{})
-		parented.Metadata.Owners = []kind.Reference{{Kind: "vm", UUID: "02"}}
-
-		admitted, invalid, err := strategyOf(w).Admit(ctx, parented)
+		admitted, invalid, err := g.strategy.Admit(ctx, refs)
 		require.NoError(t, err)
 		require.Empty(t, invalid)
 		assert.Equal(t, "02", admitted.Spec.VM.UUID)
 		assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "02"}}, admitted.Metadata.Refs)
-		assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "02"}}, admitted.Metadata.Owners)
+
+		owners := asked("web", stackKind.VMChoice{})
+		owners.Metadata.Owners = []kind.Reference{{Kind: "vm", UUID: "02"}}
+
+		admitted, invalid, err = g.strategy.Admit(ctx, owners)
+		require.NoError(t, err)
+		require.Empty(t, invalid)
+		assert.Equal(t, "02", admitted.Spec.VM.UUID)
+		assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "02"}}, admitted.Metadata.Owners, "kept as they are given")
 	})
 
-	t.Run("it is given a slug nothing else holds", func(t *testing.T) {
+	t.Run("given a slug nothing else holds", func(t *testing.T) {
 		t.Parallel()
 
-		w := vmtest.New(vmtest.WithVMs(vmtest.Docker("01", "owner")))
+		g := newStackGraph(t, vmtest.WithVMs(vmtest.Docker("01", "owner")))
 
-		_, _, err := strategyOf(w, "web-").Admit(ctx, asked("web", stackKind.VMChoice{UUID: "01"}))
+		_, _, err := g.strategyHolding(holding("web-")).Admit(ctx, asked("web", stackKind.VMChoice{UUID: "01"}))
 		assert.ErrorIs(t, err, slugs.ErrExhausted, "every one it could be given is held")
 
-		byStacks := func(context.Context, string) (bool, error) { return false, nil }
-		byVMs := func(_ context.Context, slug string) (bool, error) { return strings.HasPrefix(slug, "web-"), nil }
-
-		_, _, err = stack.New(w.Records, w.Chooser, byStacks, byVMs).Admit(ctx, asked("web", stackKind.VMChoice{UUID: "01"}))
+		_, _, err = g.strategyHolding(holding("elsewhere-"), holding("web-")).Admit(ctx, asked("web", stackKind.VMChoice{UUID: "01"}))
 		assert.ErrorIs(t, err, slugs.ErrExhausted, "by a stack or by anything else")
 	})
 
-	t.Run("one into a docker vm that is not coming up is refused", func(t *testing.T) {
+	t.Run("as a dry run, its vm planned and nothing kept", func(t *testing.T) {
 		t.Parallel()
 
-		stopped := vmtest.In(vmtest.Docker("01", "owner"), func(v *vmKind.VM) { v.Status.State = vmKind.Stopped })
+		g := newStackGraph(t)
 
-		w := vmtest.New(vmtest.WithVMs(stopped))
-
-		_, invalid, err := strategyOf(w).Admit(ctx, asked("web", stackKind.VMChoice{UUID: "01"}))
+		admitted, invalid, err := g.strategy.Admit(kind.DryRun(ctx), asked("web", stackKind.VMChoice{}))
 		require.NoError(t, err)
-		assert.Equal(t, domain.ValidationErrors{"vm": "vm_not_running"}, invalid)
+		require.Empty(t, invalid)
+
+		assert.NotEmpty(t, admitted.Spec.VM.UUID)
+		assert.Zero(t, g.Memory.Len(vmKind.Name), "no vm is kept")
 	})
 
-	t.Run("what the chooser refuses is said where it was asked", func(t *testing.T) {
+	t.Run("one whose vm its graph is to make is held to the vms planned for its owner's stacks", func(t *testing.T) {
 		t.Parallel()
 
-		w := vmtest.New(vmtest.WithVMs(vmtest.Docker("01", "owner"), vmtest.Running("03", "owner")))
+		g := newStackGraph(t, vmtest.WithVMs(vmtest.Docker("01", "owner"), vmtest.Docker("02", "owner")))
 
-		for choice, want := range map[*stackKind.VMChoice]domain.ValidationErrors{
-			{UUID: "03"}:     {"vm.uuid": "not_docker"},
-			{UUID: "theirs"}: {"vm.uuid": "not_found"},
-			{Resources: &stackKind.Resources{CPUs: 64}}: {"vm.resources.cpus": "too_large"},
-		} {
-			_, invalid, err := strategyOf(w).Admit(ctx, asked("web", *choice))
-			require.NoError(t, err)
-			assert.Equal(t, want, invalid)
+		planned := func(uuid string) kind.Raw {
+			return aStack(uuid, uuid+"-vm", shop, func(s *stackKind.Stack) {
+				s.Metadata.Slug = uuid
+				s.Spec.VM.Resources = &stackKind.Resources{CPUs: 2}
+			})
 		}
+
+		// two docker vms of two cpus, and a stack's planned of two, of the
+		// eight its owner may be given.
+		g.Keep(planned("s-1"))
+
+		_, invalid, err := g.strategy.Admit(ctx, asked("web", stackKind.VMChoice{Resources: &stackKind.Resources{CPUs: 2}}))
+		require.NoError(t, err)
+		require.Empty(t, invalid, "two more fit")
+
+		g.Keep(planned("s-2"))
+
+		_, invalid, err = g.strategy.Admit(ctx, asked("web", stackKind.VMChoice{Resources: &stackKind.Resources{CPUs: 2}}))
+		require.NoError(t, err)
+		assert.Equal(t, domain.ValidationErrors{"vm.resources.cpus": "quota_exceeded"}, invalid, "and no more, counting what its graphs are to make")
 	})
 
 	for name, tt := range map[string]struct {
+		vms    []vmKind.VM
 		change func(*stackKind.Stack)
 		want   domain.ValidationErrors
 	}{
-		"a stack with no name":              {change: func(s *stackKind.Stack) { s.Metadata.Name = "  " }, want: domain.ValidationErrors{"name": "required_field"}},
-		"one with a name nobody could show": {change: func(s *stackKind.Stack) { s.Metadata.Name = strings.Repeat("a", 101) }, want: domain.ValidationErrors{"name": "invalid_name"}},
-		"one with no compose file":          {change: func(s *stackKind.Stack) { s.Spec.Compose = " \n" }, want: domain.ValidationErrors{"compose": "required_field"}},
-		"one too large":                     {change: func(s *stackKind.Stack) { s.Spec.Compose = strings.Repeat("#", stack.MaxCompose+1) }, want: domain.ValidationErrors{"compose": "too_large"}},
-		"one that is not YAML":              {change: func(s *stackKind.Stack) { s.Spec.Compose = "nope: [" }, want: domain.ValidationErrors{"compose": "invalid_value"}},
-		"one with no service":               {change: func(s *stackKind.Stack) { s.Spec.Compose = "volumes:\n  data: {}\n" }, want: domain.ValidationErrors{"compose": "invalid_value"}},
+		"a stack with no name": {
+			change: func(s *stackKind.Stack) { s.Metadata.Name = "  " },
+			want:   domain.ValidationErrors{"name": "required_field"},
+		},
+		"one with a name nobody could show": {
+			change: func(s *stackKind.Stack) { s.Metadata.Name = strings.Repeat("a", 101) },
+			want:   domain.ValidationErrors{"name": "invalid_name"},
+		},
+		"one with no file": {
+			change: func(s *stackKind.Stack) { s.Spec.Compose = " \n" },
+			want:   domain.ValidationErrors{"compose": "required_field"},
+		},
+		"one whose file is not YAML": {
+			change: func(s *stackKind.Stack) { s.Spec.Compose = "nope: [" },
+			want:   domain.ValidationErrors{"compose": "invalid_value"},
+		},
+		"one whose file says what the platform does not carry out, each under its path": {
+			change: func(s *stackKind.Stack) {
+				s.Spec.Compose = "version: '3'\nservices:\n  web:\n    image: nginx\n    build: .\n    restart: always\n"
+			},
+			want: domain.ValidationErrors{"compose.version": "unsupported_key", "compose.services.web.build": "unsupported_key"},
+		},
+		"one whose file names what it does not have": {
+			change: func(s *stackKind.Stack) {
+				s.Spec.Compose = "services:\n  web:\n    image: nginx\n    depends_on: [db]\n    restart: always\n"
+			},
+			want: domain.ValidationErrors{"compose.services.web.depends_on.db": "undefined_service", "compose.services.web.restart": "invalid_restart"},
+		},
+		"one whose services depend on one another in a ring, each of them": {
+			vms: []vmKind.VM{vmtest.Docker("01", "owner")},
+			change: func(s *stackKind.Stack) {
+				s.Spec.VM = stackKind.VMChoice{UUID: "01"}
+				s.Spec.Compose = "services:\n  web:\n    image: nginx\n    depends_on: [api]\n  api:\n    image: api\n    depends_on: [db]\n  db:\n    image: postgres\n    depends_on: [web]\n  cache:\n    image: redis\n"
+			},
+			want: domain.ValidationErrors{
+				"compose.services.web.depends_on": "depends_on_cycle",
+				"compose.services.api.depends_on": "depends_on_cycle",
+				"compose.services.db.depends_on":  "depends_on_cycle",
+			},
+		},
+		"one depending on itself": {
+			vms: []vmKind.VM{vmtest.Docker("01", "owner")},
+			change: func(s *stackKind.Stack) {
+				s.Spec.VM = stackKind.VMChoice{UUID: "01"}
+				s.Spec.Compose = "services:\n  web:\n    image: nginx\n    depends_on: [web]\n"
+			},
+			want: domain.ValidationErrors{"compose.services.web.depends_on": "depends_on_cycle"},
+		},
 		"one naming a vm and asking for a new one": {
 			change: func(s *stackKind.Stack) { s.Spec.VM = stackKind.VMChoice{UUID: "01", Name: "builds"} },
 			want:   domain.ValidationErrors{"vm": "vm_or_new_vm"},
 		},
+		"one into a docker vm that is not coming up": {
+			vms:    []vmKind.VM{vmtest.In(vmtest.Docker("01", "owner"), func(v *vmKind.VM) { v.Status.State = vmKind.Stopped })},
+			change: func(s *stackKind.Stack) { s.Spec.VM = stackKind.VMChoice{UUID: "01"} },
+			want:   domain.ValidationErrors{"vm": "vm_not_running"},
+		},
+		"one into a vm that is no docker vm": {
+			vms:    []vmKind.VM{vmtest.Running("03", "owner")},
+			change: func(s *stackKind.Stack) { s.Spec.VM = stackKind.VMChoice{UUID: "03"} },
+			want:   domain.ValidationErrors{"vm.uuid": "not_docker"},
+		},
+		"one into somebody else's": {
+			vms:    []vmKind.VM{vmtest.Docker("01", "somebody")},
+			change: func(s *stackKind.Stack) { s.Spec.VM = stackKind.VMChoice{UUID: "01"} },
+			want:   domain.ValidationErrors{"vm.uuid": "not_found"},
+		},
+		"one whose vm its graph is to make would be given more than one may": {
+			change: func(s *stackKind.Stack) { s.Spec.VM = stackKind.VMChoice{Resources: &stackKind.Resources{CPUs: 64}} },
+			want:   domain.ValidationErrors{"vm.resources.cpus": "too_large"},
+		},
 	} {
-		t.Run(name+" is refused, and makes no vm", func(t *testing.T) {
+		t.Run("refused: "+name+", and makes no vm", func(t *testing.T) {
 			t.Parallel()
 
-			w := vmtest.New()
+			g := newStackGraph(t, vmtest.WithVMs(tt.vms...))
 
 			s := asked("web", stackKind.VMChoice{})
 			tt.change(&s)
 
-			_, invalid, err := strategyOf(w).Admit(ctx, s)
+			_, invalid, err := g.strategy.Admit(ctx, s)
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, invalid)
 
-			assert.Zero(t, w.Memory.Len(vmKind.Name))
+			assert.Equal(t, len(tt.vms), g.Memory.Len(vmKind.Name))
 		})
 	}
-
-	t.Run("256 KiB of compose file is not too large", func(t *testing.T) {
-		t.Parallel()
-
-		code, ok := stack.ValidateCompose(compose + strings.Repeat("#", stack.MaxCompose-len(compose)))
-		assert.True(t, ok, code)
-	})
 }
 
 func TestStacks_Reconcile(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	g := newStackGraph(t)
 
-	stopped := vmtest.In(vmtest.Docker("stopped", "owner"), func(v *vmKind.VM) { v.Status.State = vmKind.Stopped })
-
-	w := vmtest.New(vmtest.WithVMs(vmtest.Docker("running", "owner"), stopped))
-	stacks := strategyOf(w)
-
-	in := func(vmUUID string, state kind.State, expected kind.State) stackKind.Stack {
-		return stackKind.Stack{
-			Kind:     stackKind.Name,
-			Metadata: kind.Metadata{UUID: "stack-uuid", Refs: []kind.Reference{{Kind: "vm", UUID: vmUUID}}},
-			Status:   stackKind.Status{Status: kind.Status{State: state, Expected: expected}},
-		}
-	}
-
-	for name, tt := range map[string]struct {
-		stack  stackKind.Stack
-		action string
-	}{
-		"one waiting in a vm that runs is made in it":               {stack: in("running", stackKind.Waiting, stackKind.Running), action: stackKind.ActionCreate},
-		"one waiting on a vm that does not run is left to the vm":   {stack: in("stopped", stackKind.Waiting, stackKind.Running)},
-		"and so is one whose vm is gone, which goes with it":        {stack: in("gone", stackKind.Waiting, stackKind.Running)},
-		"one that lost some of its services is applied again":       {stack: in("running", stackKind.Degraded, stackKind.Running), action: stackKind.ActionApply},
-		"one whose last command failed is applied again":            {stack: in("running", kind.Failed, stackKind.Running), action: stackKind.ActionApply},
-		"one that stopped while it was expected running is started": {stack: in("running", stackKind.Stopped, stackKind.Running), action: stackKind.ActionStart},
-		"one that runs while it was expected stopped is stopped":    {stack: in("running", stackKind.Running, stackKind.Stopped), action: stackKind.ActionStop},
-		"as is one that runs some of its services":                  {stack: in("running", stackKind.Degraded, stackKind.Stopped), action: stackKind.ActionStop},
-		"and one whose stop failed":                                 {stack: in("running", kind.Failed, stackKind.Stopped), action: stackKind.ActionStop},
-		"one doing what it is expected to is asked nothing":         {stack: in("running", stackKind.Running, stackKind.Running)},
-		"nor is one stopped as it was asked":                        {stack: in("running", stackKind.Stopped, stackKind.Stopped)},
-		"nor one waiting that is to stay stopped":                   {stack: in("running", stackKind.Waiting, stackKind.Stopped)},
-	} {
-		t.Run(name, func(t *testing.T) {
+	for _, state := range stackKind.Machine().States {
+		t.Run("asks for nothing of one "+string(state)+": its graph carries it out", func(t *testing.T) {
 			t.Parallel()
 
-			intents, err := stacks.Reconcile(ctx, tt.stack)
+			s := stackKind.Stack{Kind: stackKind.Name, Status: stackKind.Status{Status: kind.Status{State: state, Expected: stackKind.Running}}}
+
+			intents, err := g.strategy.Reconcile(context.Background(), s)
 			require.NoError(t, err)
-
-			if len(tt.action) == 0 {
-				assert.Empty(t, intents)
-
-				return
-			}
-
-			require.Len(t, intents, 1)
-			assert.Equal(t, tt.action, intents[0].Action)
-			assert.NotEmpty(t, intents[0].Reason)
-			assert.True(t, stackKind.Descriptor().Allows(tt.action, tt.stack.Status.State), "what it asks for is allowed where it asks for it")
+			assert.Empty(t, intents)
 		})
 	}
-
-	t.Run("a vm that cannot be read is said", func(t *testing.T) {
-		t.Parallel()
-
-		w := vmtest.New()
-
-		_, err := strategyOver(w, records.New(unreadable{w.Resources})).Reconcile(ctx, in("running", stackKind.Waiting, stackKind.Running))
-		assert.Error(t, err)
-	})
 }
 
 func TestStacks_Apply(t *testing.T) {
 	t.Parallel()
 
-	_, _, err := strategyOf(vmtest.New()).Apply(context.Background(), stackKind.Stack{}, "rename", nil)
-	assert.ErrorIs(t, err, kind.ErrUnknownAction, "a stack has nothing done to it in the control plane")
+	g := newStackGraph(t)
+
+	for _, action := range []string{stackKind.ActionStart, stackKind.ActionStop, stackKind.ActionRestart, stackKind.ActionDelete} {
+		t.Run(action+" is its graph's to carry out, and lets go of what its plan failed with", func(t *testing.T) {
+			t.Parallel()
+
+			s := stackKind.Stack{
+				Kind:   stackKind.Name,
+				Status: stackKind.Status{Status: kind.Status{State: stackKind.Starting, Reason: "its vm is stopped"}, Failure: &noderequest.Error{Code: "no_capacity", Message: "no room"}},
+			}
+
+			applied, invalid, err := g.strategy.Apply(context.Background(), s, action, nil)
+			require.NoError(t, err)
+			require.Empty(t, invalid)
+
+			assert.Nil(t, applied.Status.Failure)
+			assert.Equal(t, stackKind.Starting, applied.Status.State, "as its machine moved it")
+		})
+	}
+
+	t.Run("an action it does not have is none of its", func(t *testing.T) {
+		t.Parallel()
+
+		_, _, err := g.strategy.Apply(context.Background(), stackKind.Stack{}, "apply", nil)
+		assert.ErrorIs(t, err, kind.ErrUnknownAction)
+	})
+}
+
+func TestStacks_Outlive(t *testing.T) {
+	t.Parallel()
+
+	g := newStackGraph(t)
+
+	went := vmtest.In(vmtest.Docker("01", "owner"), func(v *vmKind.VM) {
+		v.Metadata.Name = "renamed"
+		v.Metadata.Slug = "builds-abcde"
+		v.Spec.Resources.CPUs = 3
+	})
+
+	parent, err := kind.Encode(went)
+	require.NoError(t, err)
+
+	s, err := kind.Decode[stackKind.Spec, stackKind.Status](aStack("s-1", "01", shop))
+	require.NoError(t, err)
+
+	t.Run("a stack kept as gone with its vm keeps its vm as the vm's record had it as it went, and its slug", func(t *testing.T) {
+		t.Parallel()
+
+		kept, err := g.strategy.Outlive(s, parent)
+		require.NoError(t, err)
+
+		assert.Equal(t, vmKind.ChoiceOf(went), kept.Spec.VM)
+		assert.Equal(t, "builds-abcde", kept.Spec.VM.Slug)
+	})
+
+	t.Run("but a parent that is not its vm says nothing of it", func(t *testing.T) {
+		t.Parallel()
+
+		other := parent
+		other.Metadata.UUID = "02"
+
+		kept, err := g.strategy.Outlive(s, other)
+		require.NoError(t, err)
+
+		assert.Equal(t, s.Spec.VM, kept.Spec.VM)
+	})
 }

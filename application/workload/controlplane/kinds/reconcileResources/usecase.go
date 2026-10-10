@@ -26,7 +26,8 @@
 //     longer than it takes, its timeout (kind.Action.Timeout) and then the
 //     loop's patience, and then the command is sent again, as another try.
 //     One in flight with no command to wait on, which nothing will move on,
-//     is failed;
+//     is failed, but for the root of a graph whose state the control plane
+//     keeps, a stack, whose graph moves it on (WithRoots);
 //   - one of a kind whose state is its nodes', on a node that is alive, is
 //     gone from the node once the node has gone on beating for longer than
 //     ResourceSilentAfter without a word of it, since it was last heard of or
@@ -350,7 +351,9 @@ func (uc *UseCase) look(ctx context.Context, binding kind.ControlPlaneBinding, r
 	case silent && (common.Expected != kind.Deleted || d.Machine.IsInFlight(common.State)):
 		return uc.lost(ctx, d, r, common, now)
 
-	case d.Machine.IsInFlight(common.State):
+	// a root whose state is the control plane's, in flight, is on its way
+	// where its graph takes it, which waits on no command of its own.
+	case d.Machine.IsInFlight(common.State) && !uc.carried(d, r):
 		return uc.inFlight(ctx, d, r, common, now)
 
 	// its node, alive, has gone on beating for long enough without a word of
@@ -390,6 +393,13 @@ func (uc *UseCase) look(ctx context.Context, binding kind.ControlPlaneBinding, r
 	}
 
 	return uc.ask(ctx, binding, r, common, intents, false)
+}
+
+// carried reports whether a resource of d's kind is carried where it is going
+// by its graph, and no command: a root, of a kind whose state the control
+// plane keeps, a stack, that waits on no command of a node's.
+func (uc *UseCase) carried(d kind.Descriptor, r resource.Record) bool {
+	return d.StateBy == kind.OnControlPlane && r.Pending == nil && uc.roots.Root(d, r.Metadata)
 }
 
 // outlived marks the roots whose graphs need a resource of d's kind that has

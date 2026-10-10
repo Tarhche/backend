@@ -21,17 +21,20 @@ import (
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/startVM"
 	"github.com/khanzadimahdi/testproject/application/dashboard/workload/vm/stopVM"
 	"github.com/khanzadimahdi/testproject/domain"
+	containerKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/container"
 	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
+	"github.com/khanzadimahdi/testproject/domain/workload/resource"
 )
 
 // shopCompose is a stack of two services, a web server and a cache.
 const shopCompose = "services:\n  web:\n    image: nginx:alpine\n  cache:\n    image: redis:alpine\n"
 
 // TestAStack walks a stack through its life from the dashboard, as a kind
-// the control plane runs and a node carries out: deployed into a Docker VM
-// made for it, brought back when one of its containers falls over, stopped,
-// started and restarted, waiting while its VM is stopped, and deleted, its
-// volumes kept.
+// the control plane keeps and its graph makes, no compose anywhere: made in a
+// Docker VM made for it, degraded when one of its containers falls over and
+// stays down, as a container on its own does, stopped, started and
+// restarted, waiting while its VM is stopped, and deleted, its containers and
+// its network with it, and its images left to nobody.
 func TestAStack(t *testing.T) {
 	t.Parallel()
 
@@ -49,28 +52,41 @@ func TestAStack(t *testing.T) {
 
 	stackUUID, slug, vmUUID := deployed.Stack.UUID, deployed.Stack.Slug, deployed.VM.UUID
 
-	assert.True(t, deployed.VM.Created, "it named no Docker VM, so one was made for it")
-	assert.Equal(t, "waiting", deployed.Stack.State, "for the vm made for it to come up")
+	assert.True(t, deployed.VM.Created, "it named no Docker VM, so its graph makes one for it")
+	assert.Equal(t, "docker", deployed.VM.Name, "called what it keeps of it")
+	assert.Equal(t, "deploying", deployed.Stack.State, "its graph makes it")
 	assert.Equal(t, "running", deployed.Stack.ExpectedState)
 
-	t.Run("its vm comes up, and it is deployed into it and runs", func(t *testing.T) {
+	t.Run("its graph makes its vm, its network and its containers, and it runs", func(t *testing.T) {
 		running := w.stackIn(t, stackUUID, "running", "running")
 
 		assert.Equal(t, vmUUID, running.VMUUID)
-		assert.Contains(t, running.Output, "Started")
+		assert.Equal(t, "docker", running.VMName)
 		assert.Empty(t, running.Note)
+		assert.Empty(t, running.Output, "nothing runs compose, which nothing hears from")
 		require.Len(t, running.Containers, 2)
 
 		for _, c := range running.Containers {
 			assert.Equal(t, slug, c.Stack)
 			assert.Equal(t, stackUUID, c.StackUUID)
-			assert.Equal(t, stackUUID, c.Labels[stackKind.LabelStack], "compose labelled it as the stack's")
+			assert.Equal(t, stackUUID, c.Labels[stackKind.LabelStack], "labelled as the stack's")
+			assert.Equal(t, slug+"_"+c.Service, c.Name, "named under its slug, as its service")
 		}
 
-		assert.Equal(t, []string{"up -d --remove-orphans"}, w.dockerd.Ran(slug))
+		held := w.dockerd.Holds(t, vmUUID)
+
+		_, networked := held.Network(slug + "_default")
+		assert.True(t, networked, "each joins the default network, as neither names one")
+
+		for _, service := range []string{"web", "cache"} {
+			c, there := held.Container(slug + "_" + service)
+			require.True(t, there)
+			require.Contains(t, c.NetworkSettings.Networks, slug+"_default")
+			assert.Equal(t, []string{service}, c.NetworkSettings.Networks[slug+"_default"].Aliases, "%s is reached by its service's name there", service)
+		}
 	})
 
-	t.Run("the images its containers were made from are kept by it", func(t *testing.T) {
+	t.Run("the images its containers were made from are kept by them", func(t *testing.T) {
 		w.images(t, vmUUID, "the stack's images kept", func(images map[string]presenter.Image) bool {
 			web, pulled := images["nginx:alpine"]
 			cache, alsoPulled := images["redis:alpine"]
@@ -79,15 +95,17 @@ func TestAStack(t *testing.T) {
 		})
 	})
 
-	t.Run("a container that falls over leaves it degraded, and it is brought back", func(t *testing.T) {
-		w.dockerd.Kill(slug, "cache")
+	t.Run("a container that falls over leaves it degraded, and stays down as a container on its own would, until it is started", func(t *testing.T) {
+		w.dockerd.Exit(t, vmUUID, slug+"_cache", 137)
 
 		degraded := w.stack(t, stackUUID, "degraded", func(s presenter.StackDetail) bool { return s.State == "degraded" })
 		assert.Equal(t, "running", degraded.ExpectedState)
 
-		w.stackIn(t, stackUUID, "running", "running")
+		started, err := startStack.NewUseCase(w.client, w.translator).Execute(ctx, &startStack.Request{UUID: stackUUID, OwnerUUID: ownerUUID})
+		require.NoError(t, err)
+		require.Empty(t, started.ValidationErrors)
 
-		assert.Equal(t, []string{"up -d --remove-orphans", "up -d --remove-orphans"}, w.dockerd.Ran(slug), "applied again")
+		w.stackIn(t, stackUUID, "running", "running")
 	})
 
 	t.Run("stopped", func(t *testing.T) {
@@ -97,7 +115,6 @@ func TestAStack(t *testing.T) {
 
 		s := w.stackIn(t, stackUUID, "stopped", "exited")
 		assert.Equal(t, "stopped", s.ExpectedState)
-		assert.Contains(t, s.Output, "Stopped")
 	})
 
 	t.Run("started", func(t *testing.T) {
@@ -109,18 +126,18 @@ func TestAStack(t *testing.T) {
 		assert.Equal(t, "running", s.ExpectedState)
 	})
 
-	t.Run("restarted, which says so", func(t *testing.T) {
+	t.Run("restarted, its containers stopped and started again", func(t *testing.T) {
+		before := w.containerRecord(t, vmUUID, slug+"_web").Status.Since
+
 		restarted, err := restartStack.NewUseCase(w.client, w.translator).Execute(ctx, &restartStack.Request{UUID: stackUUID, OwnerUUID: ownerUUID})
 		require.NoError(t, err)
 		require.Empty(t, restarted.ValidationErrors)
 
 		s := w.stack(t, stackUUID, "restarted", func(s presenter.StackDetail) bool {
-			return s.State == "running" && slices.Contains(w.dockerd.Ran(slug), "restart")
-		})
+			web := w.containerRecord(t, vmUUID, slug+"_web")
 
-		eventually(t, "what the restart said", func(ctx context.Context) (presenter.StackDetail, error) {
-			return w.readStack(ctx, stackUUID)
-		}, func(s presenter.StackDetail) bool { return strings.Contains(s.Output, "Restarted") })
+			return s.State == "running" && web.Status.Status.State == containerKind.Running && web.Status.Since.After(before)
+		})
 
 		assert.Equal(t, "running", s.ExpectedState)
 	})
@@ -131,14 +148,14 @@ func TestAStack(t *testing.T) {
 		require.Empty(t, stopped.ValidationErrors)
 
 		waiting := w.stack(t, stackUUID, "waiting on its vm", func(s presenter.StackDetail) bool {
-			return s.State == "waiting" && s.Reason == "its vm is stopped"
+			return s.State == "waiting" && strings.HasSuffix(s.Reason, "its vm is stopped")
 		})
 		assert.Equal(t, "running", waiting.ExpectedState, "it is still to be running, once it can be")
 		assert.Equal(t, presenter.NoteVMNotRunning, waiting.Note)
 
 		refused, err := stopStack.NewUseCase(w.client, w.translator).Execute(ctx, &stopStack.Request{UUID: stackUUID, OwnerUUID: ownerUUID})
 		require.NoError(t, err)
-		assert.Contains(t, refused.ValidationErrors, "vm", "only a running vm's dockerd can stop it")
+		assert.Contains(t, refused.ValidationErrors, "vm", "nothing in a vm that is not running can be stopped")
 
 		started, err := startVM.NewUseCase(w.client, w.translator).Execute(ctx, &startVM.Request{UUID: vmUUID, OwnerUUID: ownerUUID})
 		require.NoError(t, err)
@@ -147,7 +164,7 @@ func TestAStack(t *testing.T) {
 		w.stackIn(t, stackUUID, "running", "running")
 	})
 
-	t.Run("deleted, it is gone, and its volumes are kept", func(t *testing.T) {
+	t.Run("deleted, it is gone, and its containers and its network with it", func(t *testing.T) {
 		deleted, err := deleteStack.NewUseCase(w.client, w.translator).Execute(ctx, &deleteStack.Request{UUID: stackUUID, OwnerUUID: ownerUUID})
 		require.NoError(t, err)
 		require.Empty(t, deleted.ValidationErrors)
@@ -158,11 +175,17 @@ func TestAStack(t *testing.T) {
 			return errors.Is(err, domain.ErrNotExists)
 		}, settle, beat, "the stack was never removed")
 
-		assert.Equal(t, "down --remove-orphans", w.dockerd.Ran(slug)[len(w.dockerd.Ran(slug))-1], "taken down without its volumes")
-		assert.Empty(t, w.dockerd.States(slug), "its containers went with it")
-
 		_, err = w.resources.GetOne(ctx, stackKind.Name, stackUUID)
 		assert.ErrorIs(t, err, domain.ErrNotExists, "record and all")
+
+		held := w.dockerd.Holds(t, vmUUID)
+
+		for _, c := range held.Containers {
+			assert.False(t, strings.HasPrefix(c.Names[0], "/"+slug+"_"), "%s went with it", c.Names[0])
+		}
+
+		_, networked := held.Network(slug + "_default")
+		assert.False(t, networked, "and so did its network")
 
 		w.images(t, vmUUID, "the images it left behind nobody's", func(images map[string]presenter.Image) bool {
 			web, left := images["nginx:alpine"]
@@ -170,14 +193,15 @@ func TestAStack(t *testing.T) {
 
 			return left && alsoLeft && web.Unmanaged && cache.Unmanaged
 		})
+
+		w.vmIn(t, vmUUID, "running")
 	})
 }
 
-// TestAStackThatCannotComeUp deploys into a Docker VM stacks that cannot come
-// up: one whose file compose refuses, and one whose file cannot be labelled
-// as a stack's. Each fails, saying why, and is deleted all the same, by its
-// project's name alone, and the VM it was in stays.
-func TestAStackThatCannotComeUp(t *testing.T) {
+// TestARefusedStack asks the dashboard for stacks whose files the platform
+// does not carry out, which are refused as they are asked for, each saying
+// what of its file it is refused for, and nothing is kept.
+func TestARefusedStack(t *testing.T) {
 	t.Parallel()
 
 	w := start(t)
@@ -187,55 +211,41 @@ func TestAStackThatCannotComeUp(t *testing.T) {
 
 	for name, tt := range map[string]struct {
 		compose string
-		reason  string
-		output  string
+		refused map[string]string
 	}{
-		"one whose file compose refuses": {
-			compose: "services:\n  web:\n    image: nginx:alpine\nnonsense: true\n",
-			reason:  "docker compose up exited with 1",
-			output:  "additional properties 'nonsense' not allowed",
+		"one that builds its image": {
+			compose: "services:\n  web:\n    build: .\n    image: shop\n",
+			refused: map[string]string{"compose.services.web.build": "a stack's file does not take this key"},
 		},
-		"one whose file cannot be labelled": {
-			compose: "services:\n  web: nginx:alpine\n",
-			reason:  "its compose file cannot be read",
+		"one with a key of its own": {
+			compose: "services:\n  web:\n    image: nginx:alpine\nnonsense: true\n",
+			refused: map[string]string{"compose.nonsense": "a stack's file does not take this key"},
+		},
+		"one whose services depend on one another in a ring": {
+			compose: "services:\n  web:\n    image: nginx:alpine\n    depends_on: [api]\n  api:\n    image: shop/api\n    depends_on: [web]\n",
+			refused: map[string]string{
+				"compose.services.web.depends_on": "the services depend on one another in a ring, which no order starts",
+				"compose.services.api.depends_on": "the services depend on one another in a ring, which no order starts",
+			},
 		},
 	} {
-		t.Run(name+" fails, and is deleted all the same, its vm kept", func(t *testing.T) {
-			deployed, err := createStack.NewUseCase(w.client, w.validator, w.translator, w.owners).Execute(ctx, &createStack.Request{
+		t.Run(name+" is refused, saying what of it", func(t *testing.T) {
+			refused, err := createStack.NewUseCase(w.client, w.validator, w.translator, w.owners).Execute(ctx, &createStack.Request{
 				Name:      "broken",
 				Compose:   tt.compose,
 				VMUUID:    vmUUID,
 				OwnerUUID: ownerUUID,
 			})
 			require.NoError(t, err)
-			require.Empty(t, deployed.ValidationErrors)
-			require.NotNil(t, deployed.Stack)
 
-			stackUUID, slug := deployed.Stack.UUID, deployed.Stack.Slug
-
-			failed := eventually(t, "the stack failed", func(ctx context.Context) (presenter.StackDetail, error) {
-				return w.readStack(ctx, stackUUID)
-			}, func(s presenter.StackDetail) bool { return s.State == "failed" })
-			assert.Contains(t, failed.Reason, tt.reason)
-			assert.Contains(t, failed.Output, tt.output)
-
-			deleted, err := deleteStack.NewUseCase(w.client, w.translator).Execute(ctx, &deleteStack.Request{UUID: stackUUID, OwnerUUID: ownerUUID})
-			require.NoError(t, err)
-			require.Empty(t, deleted.ValidationErrors)
-
-			require.Eventually(t, func() bool {
-				_, err := w.readStack(ctx, stackUUID)
-
-				return errors.Is(err, domain.ErrNotExists)
-			}, settle, beat, "the stack was never removed")
-
-			ran := w.dockerd.Ran(slug)
-			require.NotEmpty(t, ran)
-			assert.Equal(t, "down --remove-orphans", ran[len(ran)-1], "taken down by its project's name alone")
-
-			w.vmIn(t, vmUUID, "running")
+			assert.Equal(t, domain.ValidationErrors(tt.refused), refused.ValidationErrors)
+			assert.Nil(t, refused.Stack)
 		})
 	}
+
+	kept, _, err := w.resources.GetAll(ctx, stackKind.Name, resource.Filter{}, 0, 0)
+	require.NoError(t, err)
+	assert.Empty(t, kept, "and nothing is kept")
 }
 
 // images are the images the dashboard lists in the Docker VM vmUUID names,
@@ -282,7 +292,7 @@ func (w *workload) stack(t *testing.T, uuid string, what string, condition func(
 		// a stack that failed on the way says why, which is worth seeing
 		// rather than waiting out.
 		if s.State == "failed" {
-			t.Fatalf("the stack failed: %s\n%s", s.Reason, s.Output)
+			t.Fatalf("the stack failed: %s", s.Reason)
 		}
 
 		return condition(s)

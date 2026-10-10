@@ -14,8 +14,8 @@
 // needs it names it by (Chooser.Make). What goes into one that a graph is to
 // make, rather than the request, is given a uuid for it when it is asked for,
 // and the VM is held then to what its admission would hold it to, counting
-// the others planned for its owner, but not kept (Chooser.Plan): a container
-// that names none.
+// the others planned for its owner, but not kept (Chooser.Plan): a stack or a
+// container that names none.
 package dockervm
 
 import (
@@ -186,9 +186,9 @@ func (c *Chooser) Plan(ctx context.Context, ownerUUID string, choice Choice) (vm
 }
 
 // planned are the Docker VMs graphs are to make for ownerUUID and have not,
-// each once: what each container of theirs that was not asked to go keeps of
-// the VM it goes into, by a uuid none of their VMs is kept under, sized as it
-// says, the defaults where it says nothing.
+// each once: what each stack and each container of theirs that was not asked
+// to go keeps of the VM it goes into, by a uuid none of their VMs is kept
+// under, sized as it says, the defaults where it says nothing.
 func (c *Chooser) planned(ctx context.Context, ownerUUID string) ([]vmKind.Resources, error) {
 	owned, err := c.records.Owned(ctx, ownerUUID)
 	if err != nil {
@@ -200,14 +200,20 @@ func (c *Chooser) planned(ctx context.Context, ownerUUID string) ([]vmKind.Resou
 		seen[v.Metadata.UUID] = true
 	}
 
-	containers, _, err := c.resources.GetAll(ctx, containerKind.Name, resource.Filter{OwnerUUID: ownerUUID}, 0, 0)
-	if err != nil {
-		return nil, err
+	var keeping []resource.Record
+
+	for _, kindName := range []string{stackKind.Name, containerKind.Name} {
+		kept, _, err := c.resources.GetAll(ctx, kindName, resource.Filter{OwnerUUID: ownerUUID}, 0, 0)
+		if err != nil {
+			return nil, err
+		}
+
+		keeping = append(keeping, kept...)
 	}
 
 	var planned []vmKind.Resources
 
-	for _, r := range containers {
+	for _, r := range keeping {
 		common, err := r.Common()
 		if err != nil {
 			return nil, err

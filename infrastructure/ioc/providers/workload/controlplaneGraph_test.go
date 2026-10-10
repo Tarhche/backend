@@ -16,6 +16,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/graph"
 	containerKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/container"
 	networkKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/network"
+	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	volumeKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/volume"
 	"github.com/khanzadimahdi/testproject/domain/workload/resource"
@@ -60,25 +61,26 @@ func (r *reading) GetAll(ctx context.Context, kindName string, filter resource.F
 }
 
 // TestNewControlPlaneWorkload_graphs holds the control plane to keeping the
-// graphs of the containers nobody's stack owns, as a holder of leases of its
-// own, and to not starting with settings it cannot go about.
+// graphs of stacks and of the containers nobody's stack owns, as a holder of
+// leases of its own, and to not starting with settings it cannot go about.
 func TestNewControlPlaneWorkload_graphs(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 
-	t.Run("a graph is made of a vm and the building blocks a container needs, and a container nothing owns is a root of its own", func(t *testing.T) {
+	t.Run("a graph is made of a vm, the building blocks what lives in it needs, and stacks, and a stack and a container nothing owns are roots of their own", func(t *testing.T) {
 		t.Parallel()
 
 		kinds := controlPlaneGraphKinds(nil, blockStrategies{}, nil)
 
-		assert.Equal(t, []string{containerKind.Name, networkKind.Name, vmKind.Name, volumeKind.Name}, slices.Sorted(maps.Keys(kinds)))
+		assert.Equal(t, []string{containerKind.Name, networkKind.Name, stackKind.Name, vmKind.Name, volumeKind.Name}, slices.Sorted(maps.Keys(kinds)))
 		assert.Implements(t, (*graph.RootKind)(nil), kinds[containerKind.Name], "a container may be a root of its own")
+		assert.Implements(t, (*graph.RootKind)(nil), kinds[stackKind.Name], "and so is a stack")
 
-		assert.Equal(t, graph.Roots{containerKind.Name}, graphRoots(), "and is: stacks are compose's still")
+		assert.Equal(t, graph.Roots{stackKind.Name, containerKind.Name}, graphRoots())
 	})
 
-	t.Run("so a container is queued and reconciled, and what changed under one is followed up to it, and nothing else", func(t *testing.T) {
+	t.Run("so a stack and a container are queued and reconciled, and what changed under one is followed up to it, and nothing else", func(t *testing.T) {
 		t.Parallel()
 
 		records := &reading{Repository: resourcesMemory.NewRepository()}
@@ -89,13 +91,16 @@ func TestNewControlPlaneWorkload_graphs(t *testing.T) {
 		workload, err := NewControlPlaneWorkload(configs.NewWorkloadControlPlane(), stores, nil, &messagingMock.Recorder{}, slog.New(slog.DiscardHandler))
 		require.NoError(t, err)
 
+		stack := graph.Ref{Kind: stackKind.Name, UUID: "s-uuid"}
 		container := graph.Ref{Kind: containerKind.Name, UUID: "c-uuid"}
 
+		workload.Graphs.Enqueue(stack)
 		workload.Graphs.Enqueue(container)
 		workload.Graphs.Enqueue(graph.Ref{Kind: vmKind.Name, UUID: "vm-uuid"})
 
-		assert.Equal(t, []graph.Ref{container}, workload.Graphs.Queued(), "a vm is no root")
-		assert.NoError(t, workload.Graphs.Reconcile(ctx, container), "a container is one, and one that is gone is forgotten")
+		assert.ElementsMatch(t, []graph.Ref{stack, container}, workload.Graphs.Queued(), "a vm is no root")
+		assert.NoError(t, workload.Graphs.Reconcile(ctx, stack), "a stack is one, and one that is gone is forgotten")
+		assert.NoError(t, workload.Graphs.Reconcile(ctx, container), "and so is a container")
 
 		require.NoError(t, workload.Graphs.Changed(ctx, graph.Ref{Kind: vmKind.Name, UUID: "vm-uuid"}))
 		require.NoError(t, workload.Graphs.Resync(ctx))

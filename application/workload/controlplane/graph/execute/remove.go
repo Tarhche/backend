@@ -35,9 +35,10 @@ import (
 // it: the root first, and, for a stack, its services in the reverse of the
 // order they depend_on one another, and then their networks, and a volume
 // it owns once the service that mounts it is gone. At its turn, each node
-// but the root is unlinked from what is removed too, and removed
-// (Kind.Delete) once nothing owns it; one that something came to own
-// meanwhile is kept instead, as, then, is what it owns.
+// but the root is removed (Kind.Delete) when nothing but what is removed owns
+// it, as it is, so that while its removal waits it is still owned, and no
+// root of its own; one that something came to own meanwhile is unlinked from
+// what is removed, and kept instead, as, then, is what it owns.
 //
 // Every node is saved pending first, its action delete, as the record it is,
 // and then each as it goes, those kept and those gone already among them, as
@@ -229,10 +230,12 @@ func (d *deletion) levels() [][]graph.NodeID {
 
 // carry is what removing does to a node at its turn. One there is no record
 // of is gone already. One kept is unlinked from what is removed, and done,
-// saying what keeps it. The root is removed. Any other is unlinked from what
-// is removed, and removed when nothing owns it then; one that something else
-// still owns is kept instead, and is no longer removed, so that what it owns
-// is kept too.
+// saying what keeps it. The root is removed. Any other is removed when
+// nothing but what is removed owns it then, as it is, still owned by what is
+// removed with it, so that while its removal waits, on its VM say, it is
+// never taken for a root of its own, which it would be once nothing owned it;
+// one that something else still owns is unlinked from what is removed, and
+// kept instead, and is no longer removed, so that what it owns is kept too.
 func (d *deletion) carry(ctx context.Context, node graph.Node) (graph.Ref, string, error) {
 	id := node.ID()
 
@@ -250,19 +253,42 @@ func (d *deletion) carry(ctx context.Context, node graph.Node) (graph.Ref, strin
 	}
 
 	if id != d.plan.Root() {
-		owners, err := d.executor.ownership.Disown(ctx, ref, d.removing(ref)...)
+		owners, err := d.executor.ownership.Owners(ctx, ref)
 		if err != nil {
 			return ref, "", err
 		}
 
-		if len(owners) > 0 {
+		if outside := d.outside(ref, owners); len(outside) > 0 {
+			remaining, err := d.executor.ownership.Disown(ctx, ref, d.removing(ref)...)
+			if err != nil {
+				return ref, "", err
+			}
+
 			d.keep(ref)
 
-			return ref, keptBy(owners), nil
+			if len(remaining) == 0 {
+				remaining = outside
+			}
+
+			return ref, keptBy(remaining), nil
 		}
 	}
 
 	return ref, "", d.executor.kinds[node.Kind].Delete(ctx, ref)
+}
+
+// outside are those of owners, what owns ref, that are not removed.
+func (d *deletion) outside(ref graph.Ref, owners []graph.Ref) []graph.Ref {
+	removing := d.removing(ref)
+
+	var outside []graph.Ref
+	for _, owner := range owners {
+		if !slices.Contains(removing, owner) {
+			outside = append(outside, owner)
+		}
+	}
+
+	return outside
 }
 
 // removing are the records of what is removed but ref, in the order of their

@@ -350,6 +350,9 @@ func TestExecutor_Remove(t *testing.T) {
 
 		assert.Equal(t, []graph.NodeID{stack, web}, kinds.Asked(graphtest.Delete))
 		assert.Empty(t, kinds.Asked(graphtest.Forget))
+
+		assert.Equal(t, []graph.NodeID{stack}, f.ownership.OwnersOf(web), "and what waits to be removed is still owned by what removes it, so that it is never taken for a root of its own")
+		assert.NotContains(t, kinds.Asked(graphtest.Disown), web, "what nothing else owns is removed as it is")
 	})
 
 	t.Run("a node that fails stops the delete as failed, and a delete again is taken up where it stopped", func(t *testing.T) {

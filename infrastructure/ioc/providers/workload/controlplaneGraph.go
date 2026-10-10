@@ -14,6 +14,7 @@ import (
 	controlPlaneNetworks "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/network"
 	kindsReconcileResources "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/reconcileResources"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/requirements"
+	controlPlaneStacks "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/stack"
 	controlPlaneVMs "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/vm/dockervm"
 	controlPlaneVolumes "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/volume"
@@ -21,26 +22,29 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	containerKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/container"
 	networkKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/network"
+	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
 	vmKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/vm"
 	volumeKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/volume"
 	"github.com/khanzadimahdi/testproject/infrastructure/configs"
 )
 
 // graphRoots are the kinds whose resources are roots of graphs of their own,
-// each one nothing owns, which the control plane keeps made: a container
-// somebody asked for, which no stack owns. Stacks are compose's still.
+// each one nothing owns, which the control plane keeps made: a stack, and a
+// container somebody asked for, which no stack owns.
 func graphRoots() graph.Roots {
-	return graph.Roots{containerKind.Name}
+	return graph.Roots{stackKind.Name, containerKind.Name}
 }
 
 // controlPlaneGraphKinds are the kinds a root's graph is made of, as a graph
 // needs each (graph.Kind): a Docker VM, made through the chooser as one made
-// for what lives in it is, and the building blocks that live in one, its
-// containers, networks and volumes, over their control-plane strategies; each
-// made, asked and removed through records.
+// for what lives in it is; the building blocks that live in one, its
+// containers, networks and volumes, over their control-plane strategies; and
+// a stack, made of them as its file says. Each is made, asked and removed
+// through records.
 func controlPlaneGraphKinds(chooser *dockervm.Chooser, strategies blockStrategies, records *requirements.Records) graph.Kinds {
 	return graph.Kinds{
 		vmKind.Name:        controlPlaneVMs.NewGraph(chooser, records),
+		stackKind.Name:     controlPlaneStacks.NewGraph(records),
 		containerKind.Name: controlPlaneContainers.NewGraph(strategies.containers, records),
 		networkKind.Name:   controlPlaneNetworks.NewGraph(strategies.networks, records),
 		volumeKind.Name:    controlPlaneVolumes.NewGraph(strategies.volumes, records),
@@ -68,7 +72,7 @@ func controlPlaneGraphRecords(registry *kind.Registry[kind.ControlPlaneBinding],
 // and the holder of the roots' leases this control plane is, a uuid made now,
 // once, which it logs.
 //
-// A root's graph is planned as policy types its edges, and carried out a
+// A root's graph is planned by planner, over graphKinds, and carried out a
 // level at a time, as many nodes of a level at once as the control plane is
 // configured to, keeping how each node went in the stores' executions; what
 // owns each node's record, and what each uses, is the records' to say, as
@@ -82,8 +86,8 @@ func newControlPlaneGraphs(
 	registry *kind.Registry[kind.ControlPlaneBinding],
 	kinds *ControlPlaneKinds,
 	graphKinds graph.Kinds,
+	planner *graph.Planner,
 	stores ControlPlaneStores,
-	policy graph.DependencyPolicy,
 	reconcileConfig kindsReconcileResources.Config,
 	logger *slog.Logger,
 ) (*reconcile.Reconciler, string, error) {
@@ -116,7 +120,7 @@ func newControlPlaneGraphs(
 		Resources:  kinds.Resources,
 		Kinds:      graphKinds,
 		Roots:      graphRoots(),
-		Planner:    graph.NewPlanner(graphKinds, policy),
+		Planner:    planner,
 		Executor:   executor,
 		Executions: stores.Executions,
 		Leases:     stores.Leases,

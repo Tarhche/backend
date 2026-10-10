@@ -44,13 +44,19 @@ const tries = 3
 // the stack does, by the same nodes, so that the stack's graph makes each
 // once, for every service that needs it.
 //
-// The stack is made last of all, once each of its containers is there: its
-// record says, of each of its services, the container its graph made of it,
-// by its uuid, and what it is doing, and the stack is what they make it
-// (stackKind.StateOf). It is made while it says that of them as they are,
-// at rest; written again, it is written only when what they make it changed.
-// It has nothing external. Deleted, its record says it is being removed, and
-// goes last of all, once what it owns is removed (graph.Ownership.Forget).
+// The stack is made last of all, once each of its containers is there: what
+// it was asked is carried out first, its containers started a level of its
+// services at a time, as they depend on one another, each level once the one
+// before it runs, or stopped the other way round, or both, through each
+// container's own commands; and then its record says, of each of its
+// services, the container its graph made of it, by its uuid, and what it is
+// doing, and the stack is what they make it (stackKind.StateOf). It is made
+// while it is at rest and says that of them as they are; written again, it is
+// written only when what they make it changed. What it was asked is said on
+// its record before it is carried out, so a control plane that stops halfway
+// through leaves it to the next to carry out where it was left. It has
+// nothing external. Deleted, its record says it is being removed, and goes
+// last of all, once what it owns is removed (graph.Ownership.Forget).
 type Graph struct {
 	records *requirements.Records
 }
@@ -241,8 +247,9 @@ func (g *Graph) Exists(ctx context.Context, spec any) (graph.Ref, bool, error) {
 }
 
 // Create makes the stack the want names, once its graph made each of its
-// containers, handed among the records of what it needs: its record says of
-// each of its services the container made of it, and what it is doing, and
+// containers, handed among the records of what it needs: what it was asked,
+// a start, a stop or a restart, is carried out (act); and then its record says
+// of each of its services the container made of it, and what it is doing, and
 // it is what they make it, written only when that changed. A stack whose
 // record is gone is gone, with whatever was making it: a root is never
 // admitted again. One on its way out waits.
@@ -280,11 +287,242 @@ func (g *Graph) finish(ctx context.Context, w stackKind.Want, deps map[graph.Nod
 		return graph.Ref{}, err
 	}
 
+	if err := g.act(ctx, w, r, s, containers); err != nil {
+		return graph.Ref{}, err
+	}
+
+	// what carrying it out took, the stack may have been asked meanwhile.
+	if r, s, err = g.stack(ctx, w); err != nil {
+		return graph.Ref{}, err
+	}
+
+	if going(s) {
+		return graph.Ref{}, &graph.Waiting{Reason: "it is being removed"}
+	}
+
 	if err := g.settle(ctx, r, s, servicesOf(w, containers)); err != nil {
 		return graph.Ref{}, err
 	}
 
 	return requirements.RefOf(r), nil
+}
+
+// act carries out what the stack s, whose record is r, was asked, on its
+// containers, by their services, which are as it left them once it is
+// carried out: started, stopped, or stopped and started again. Restarted,
+// its record says it is starting once its containers are stopped, so that a
+// restart cut short after that is taken up as the start it is then.
+func (g *Graph) act(ctx context.Context, w stackKind.Want, r resource.Record, s stackKind.Stack, containers map[string]resource.Record) error {
+	switch s.Status.State {
+	case stackKind.Starting:
+		return g.start(ctx, w, containers)
+	case stackKind.Stopping:
+		return g.stop(ctx, w, containers)
+	case stackKind.Restarting:
+		if err := g.stop(ctx, w, containers); err != nil {
+			return err
+		}
+
+		if to, moved := stackKind.Machine().Next(s.Status.State, kind.OnObserved(stackKind.Starting)); moved && to != s.Status.State {
+			s.Status.State = to
+			s.Status.Since = g.records.Dispatcher.Now()
+
+			if err := g.write(ctx, r, s); err != nil {
+				return err
+			}
+		}
+
+		return g.start(ctx, w, containers)
+	}
+
+	return nil
+}
+
+// start starts the containers of the stack w names, by their services, that
+// do not run, a level of its services at a time, in the order they depend on
+// one another: each level once the one before it runs, each container through
+// its own start, waited on until it is answered. One that runs already is
+// expected to run. Those of every level after the first that do not run are
+// held stopped first, expected so, so that what keeps a container as it was
+// last asked, the reconcile loop, starts none of them before its turn. What a
+// start fails with stops it there.
+func (g *Graph) start(ctx context.Context, w stackKind.Want, containers map[string]resource.Record) error {
+	levels := w.File.Levels()
+
+	for _, level := range levels[min(1, len(levels)):] {
+		for _, service := range level {
+			if err := g.hold(ctx, containers, service, containerKind.Stopped, func(c containerKind.Container) bool { return !runs(c) }); err != nil {
+				return err
+			}
+		}
+	}
+
+	for _, level := range levels {
+		for _, service := range level {
+			c, err := g.settled(ctx, containers, service)
+			if err != nil {
+				return err
+			}
+
+			if runs(c) {
+				if err := g.hold(ctx, containers, service, containerKind.Running, func(containerKind.Container) bool { return true }); err != nil {
+					return err
+				}
+
+				continue
+			}
+
+			if err := g.command(ctx, containers, service, containerKind.ActionStart, "started"); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+// stop stops the containers of the stack w names, by their services, that
+// run, a level of its services at a time, in the reverse of the order they
+// depend on one another, each through its own stop, waited on until it is
+// answered; and has each that does not run expected stopped, so that nothing
+// starts it again but its stack. What a stop fails with stops it there.
+func (g *Graph) stop(ctx context.Context, w stackKind.Want, containers map[string]resource.Record) error {
+	levels := w.File.Levels()
+	slices.Reverse(levels)
+
+	stoppable := containerKind.Descriptor()
+
+	for _, level := range levels {
+		for _, service := range level {
+			c, err := g.settled(ctx, containers, service)
+			if err != nil {
+				return err
+			}
+
+			if !stoppable.Allows(containerKind.ActionStop, c.Status.Status.State) {
+				if err := g.hold(ctx, containers, service, containerKind.Stopped, func(containerKind.Container) bool { return true }); err != nil {
+					return err
+				}
+
+				continue
+			}
+
+			if err := g.command(ctx, containers, service, containerKind.ActionStop, "stopped"); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+// settled is the container of service, among containers, as its record is
+// now, once what came of the command it waits on, when it waits on one, is
+// heard: one being started or stopped is waited on. Its record among
+// containers is as it is then.
+func (g *Graph) settled(ctx context.Context, containers map[string]resource.Record, service string) (containerKind.Container, error) {
+	r, there, err := g.records.Read(ctx, containerKind.Name, containers[service].Metadata.UUID)
+	switch {
+	case err != nil:
+		return containerKind.Container{}, err
+	case !there:
+		return containerKind.Container{}, requirements.Gone(containers[service])
+	}
+
+	if r.Pending != nil {
+		settled, went, err := g.records.Settle(ctx, r)
+		switch {
+		case err != nil:
+			return containerKind.Container{}, err
+		case went:
+			return containerKind.Container{}, requirements.Gone(r)
+		}
+
+		r = settled
+	}
+
+	containers[service] = r
+
+	return kind.Decode[containerKind.Spec, containerKind.Status](r.Raw)
+}
+
+// command asks the container of service, among containers, for one of its
+// commands, and waits until it is answered: one that is not done, as done
+// says, once it is, is an error saying what it is, and why. What wrote its
+// record in the meantime is read again, and asked again.
+func (g *Graph) command(ctx context.Context, containers map[string]resource.Record, service string, action string, done string) error {
+	for try := 1; ; try++ {
+		r, err := g.records.Ask(ctx, containers[service], action)
+		if errors.Is(err, resource.ErrConflict) && try < tries {
+			if _, err := g.settled(ctx, containers, service); err != nil {
+				return err
+			}
+
+			continue
+		}
+
+		if err != nil {
+			return err
+		}
+
+		containers[service] = r
+
+		c, err := kind.Decode[containerKind.Spec, containerKind.Status](r.Raw)
+		if err != nil {
+			return err
+		}
+
+		if c.Status.Status.State == containerKind.Failed {
+			return requirements.NotDone(r, done)
+		}
+
+		return nil
+	}
+}
+
+// hold has the container of service, among containers, expected to be state,
+// asking it for nothing, when it is not and which says it is to be: so that
+// what keeps it as it was last asked keeps it so. What wrote it in the
+// meantime is read again.
+func (g *Graph) hold(ctx context.Context, containers map[string]resource.Record, service string, state kind.State, which func(c containerKind.Container) bool) error {
+	for try := 1; ; try++ {
+		r := containers[service]
+
+		c, err := kind.Decode[containerKind.Spec, containerKind.Status](r.Raw)
+		if err != nil {
+			return err
+		}
+
+		if c.Status.Expected == state || !which(c) {
+			return nil
+		}
+
+		held, err := g.records.Dispatcher.Desire(ctx, r, state, true)
+		if err == nil {
+			containers[service] = held
+
+			return nil
+		}
+
+		if !errors.Is(err, resource.ErrConflict) || try >= tries {
+			return err
+		}
+
+		latest, there, err := g.records.Read(ctx, r.Kind, r.Metadata.UUID)
+		switch {
+		case err != nil:
+			return err
+		case !there:
+			return requirements.Gone(r)
+		}
+
+		containers[service] = latest
+	}
+}
+
+// runs reports whether a container runs, as its node last said.
+func runs(c containerKind.Container) bool {
+	return c.Status.Status.State == containerKind.Running
 }
 
 // stack is the record of the stack w names, and the stack it is: one that is

@@ -29,7 +29,7 @@ const (
 
 // Parents say what the resources others live in are doing, when what lives
 // in them cannot be looked at because of it: a Docker VM that is stopped,
-// whose stacks and containers nobody can read until it runs again.
+// whose containers nobody can read until it runs again.
 type Parents interface {
 	// Down is the state parent is in, in its kind's own word, when what lives
 	// in it cannot be looked at because of that state; and nothing when it

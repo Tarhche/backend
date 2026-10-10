@@ -9,8 +9,8 @@
 // is; one in flight takes only the arrivals its machine declares, so that a
 // heartbeat sent before a stop reached the node does not undo the stop, and one
 // its machine says is answered takes them only from its command's result. The
-// kind's own fields of what was observed, a VM's usage or a stack's services,
-// are taken whatever becomes of the state.
+// kind's own fields of what was observed, a VM's usage or what a container's
+// dockerd says of it, are taken whatever becomes of the state.
 //
 // What is expected of a resource is never a node's to say: it is what was
 // asked of it, and stays so until something else is.

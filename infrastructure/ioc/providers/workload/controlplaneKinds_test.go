@@ -128,13 +128,12 @@ func TestNewControlPlaneKinds(t *testing.T) {
 		assert.ElementsMatch(t, []string{
 			kind.ResourceActedOnName,
 			"workloadVmHeartbeat",
-			"workloadStackHeartbeat",
 			"workloadTaskHeartbeat",
 			"workloadContainerHeartbeat",
 			"workloadImageHeartbeat",
 			"workloadNetworkHeartbeat",
 			"workloadVolumeHeartbeat",
-		}, subjects, "every kind's results are heard on one subject, and what the nodes hold of every kind whose state is theirs on the kind's own: a snapshot's is the control plane's")
+		}, subjects, "every kind's results are heard on one subject, and what the nodes hold of every kind whose state is theirs on the kind's own: a snapshot's and a stack's are the control plane's")
 
 		assert.NoError(t, plane.workload.Reconcile.Execute(context.Background()), "a pass over nothing does nothing")
 	})

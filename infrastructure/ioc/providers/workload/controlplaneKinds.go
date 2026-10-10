@@ -98,7 +98,7 @@ type ControlPlaneKindsOption func(*controlPlaneKindsOptions)
 
 // WithParents has what lives in a parent that is not running observed
 // waiting on it, as parents say the parent is, rather than gone, once its
-// node has long said nothing of it: a stack in a VM that is stopped.
+// node has long said nothing of it: a container in a VM that is stopped.
 func WithParents(parents observe.Parents) ControlPlaneKindsOption {
 	return func(o *controlPlaneKindsOptions) {
 		o.parents = parents

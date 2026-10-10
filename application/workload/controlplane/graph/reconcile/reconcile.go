@@ -63,6 +63,10 @@ import (
 // it is the reconciler that keeps two of its own runs off one root.
 var ErrReconciling = errors.New("the root is being reconciled here already")
 
+// errCutShort is a run that stopped before its plan was done, its lease lost
+// or its control plane stopping: no failure of its plan.
+var errCutShort = errors.New("its plan was cut short")
+
 // tries is how many times a root's record is read and written again, when
 // something else wrote it in the meantime, to say why its plan fails or
 // waits.
@@ -387,7 +391,7 @@ func (r *Reconciler) carry(ctx context.Context, root graph.Ref, rooted graph.Roo
 
 	// cut short, by a lease lost or a control plane stopping, it is not
 	// done, and is taken up again once the root is not backed off.
-	return r.failed(fmt.Errorf("its plan was cut short: %s", interruptedBy(outcome)))
+	return r.failed(fmt.Errorf("%w: %s", errCutShort, interruptedBy(outcome)))
 }
 
 // wanted is what a run applying the plan of root asks before it makes what is
@@ -425,6 +429,13 @@ func (r *Reconciler) wanted(root graph.Ref) func(ctx context.Context) error {
 // is its node's to say of, and so is one asked to go; and nothing is written
 // that is what is written already. What reading or writing fails with is
 // logged, and is said again by the next run.
+//
+// A root whose state the control plane keeps (kind.OnControlPlane), a stack,
+// has no node to say what it is doing but its own in its plan: whatever it
+// is doing, a plan that failed fails it, and one that waits on what it needs
+// has it wait, as its machine takes either from where it is, and says why. A
+// run cut short, its lease lost or its control plane stopping, is no failure
+// of it, and says nothing of it.
 func (r *Reconciler) explain(ctx context.Context, root graph.Ref, last string, ended graph.Ended, failure error) {
 	for try := 1; try <= tries; try++ {
 		rec, there, err := r.read(ctx, root)
@@ -484,12 +495,27 @@ func (r *Reconciler) explained(rec resource.Record, last string, ended graph.End
 		wanted = planFailure{}
 	}
 
+	changed := false
+
 	unmade := common.State == kind.Missing
 	if binding, registered := r.registry.Lookup(rec.Kind); registered {
-		unmade = unmade || common.State == binding.Descriptor().Machine.Initial
-	}
+		d := binding.Descriptor()
+		unmade = unmade || common.State == d.Machine.Initial
 
-	changed := false
+		// nothing but its plan says what a root the control plane keeps the
+		// state of is doing, and a run cut short says nothing of it.
+		if d.StateBy == kind.OnControlPlane && ended.State != graph.StateDone && !errors.Is(failure, errCutShort) {
+			unmade = true
+
+			if moved := settled(d, &common, ended); moved {
+				changed = true
+
+				if err := rec.SetCommon(common); err != nil {
+					return resource.Record{}, false, err
+				}
+			}
+		}
+	}
 
 	// a root made says what it is doing itself, or its node does: what a plan
 	// said of it is let go of, and nothing more is said.
@@ -519,6 +545,26 @@ func (r *Reconciler) explained(rec resource.Record, last string, ended graph.End
 	}
 
 	return rec, changed, nil
+}
+
+// settled moves common, the status of a root whose state the control plane
+// keeps, as its machine, d's, takes how its plan ended: failed once it
+// failed, and waiting once it waits. It reports whether it moved.
+func settled(d kind.Descriptor, common *kind.Status, ended graph.Ended) bool {
+	observed := kind.Waiting
+	if ended.State == graph.StateFailed {
+		observed = kind.Failed
+	}
+
+	to, moved := d.Machine.Next(common.State, kind.OnObserved(observed))
+	if !moved || to == common.State {
+		return false
+	}
+
+	common.State = to
+	common.Since = time.Now()
+
+	return true
 }
 
 // planFailure is what a root's status says its last command, or its plan,
