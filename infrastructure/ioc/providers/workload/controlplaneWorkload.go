@@ -28,6 +28,7 @@ import (
 	controlPlaneVolumes "github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/volume"
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/slugs"
 	"github.com/khanzadimahdi/testproject/domain"
+	"github.com/khanzadimahdi/testproject/domain/workload/graph"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	containerKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/container"
 	imageKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/image"
@@ -76,6 +77,11 @@ type ControlPlaneWorkload struct {
 
 	// Reconcile is the loop that keeps every resource as it was asked to be.
 	Reconcile *kindsReconcileResources.UseCase
+
+	// Policy is what the edges of a resource's graph are typed by: whether
+	// what a resource needs goes with it, the defaults with what the control
+	// plane is configured with laid over them.
+	Policy graph.DependencyPolicy
 }
 
 // NewControlPlaneWorkload builds the control plane's workload over stores,
@@ -93,6 +99,11 @@ func NewControlPlaneWorkload(
 	logger *slog.Logger,
 	options ...ControlPlaneKindsOption,
 ) (*ControlPlaneWorkload, error) {
+	policy, err := dependencyPolicy(controlPlaneConfigs)
+	if err != nil {
+		return nil, err
+	}
+
 	registry, err := NewControlPlaneRegistry()
 	if err != nil {
 		return nil, err
@@ -218,6 +229,7 @@ func NewControlPlaneWorkload(
 		Route:       route,
 		Subscribers: subscribers,
 		Reconcile:   kinds.Reconcile,
+		Policy:      policy,
 	}, nil
 }
 
@@ -297,4 +309,17 @@ func dockerVMDefaults(controlPlaneConfigs *configs.WorkloadControlPlane) (docker
 		PersistentDisk: controlPlaneConfigs.VMDockerDefaultPersistentDisk,
 		Lifetime:       controlPlaneConfigs.VMDockerDefaultLifetime,
 	}, nil
+}
+
+// dependencyPolicy is what the edges of a resource's graph are typed by, as
+// the control plane was configured: the defaults, with what it was given laid
+// over them, entry by entry. A policy that cannot be read is refused here,
+// when the control plane starts, rather than when a resource is first planned.
+func dependencyPolicy(controlPlaneConfigs *configs.WorkloadControlPlane) (graph.DependencyPolicy, error) {
+	configured, err := graph.ParsePolicy(controlPlaneConfigs.DependencyPolicy)
+	if err != nil {
+		return graph.DependencyPolicy{}, fmt.Errorf("the dependency policy (WORKLOAD_DEPENDENCY_POLICY, --dependency-policy) cannot be read: %w", err)
+	}
+
+	return graph.DefaultPolicy().With(configured), nil
 }

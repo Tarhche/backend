@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/kindstest"
+	"github.com/khanzadimahdi/testproject/domain/workload/graph"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind/kindtest"
 	containerKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/container"
@@ -158,6 +159,62 @@ func TestNewControlPlaneKinds(t *testing.T) {
 		result, err := json.Marshal(kind.ResourceActedOn{ID: "command-1", Kind: kindstest.Kind, UUID: "fan-uuid", Action: "start", OK: true})
 		require.NoError(t, err)
 		assert.NoError(t, kinds.Subscribers[kind.ResourceActedOnName].Handle(context.Background(), result), "a result for a resource that is gone is never asked for again")
+	})
+}
+
+// TestNewControlPlaneWorkload_dependencyPolicy holds the control plane to the
+// dependency policy it is configured with, laid over the defaults, and to not
+// starting with one it cannot read.
+func TestNewControlPlaneWorkload_dependencyPolicy(t *testing.T) {
+	t.Parallel()
+
+	started := func(policy string) (*ControlPlaneWorkload, error) {
+		controlPlaneConfigs := configs.NewWorkloadControlPlane()
+		controlPlaneConfigs.DependencyPolicy = policy
+
+		return NewControlPlaneWorkload(controlPlaneConfigs, ControlPlaneStores{
+			Resources: resourcesMemory.NewRepository(),
+			Nodes:     nodesMemory.NewRepository(),
+			TaskLogs:  logsMock.NewInMemoryRepository(),
+		}, nil, &messagingMock.Recorder{}, slog.New(slog.DiscardHandler))
+	}
+
+	for name, tt := range map[string]struct {
+		configured string
+		want       graph.DependencyPolicy
+	}{
+		"nothing configured is the defaults": {
+			want: graph.DefaultPolicy(),
+		},
+		"and what is configured is laid over them, entry by entry": {
+			configured: " volume=owned, stack/network=loose ",
+			want: graph.DependencyPolicy{
+				ByPair: map[[2]string]graph.EdgeType{{stackKind.Name, networkKind.Name}: graph.Loose},
+				ByKind: map[string]graph.EdgeType{
+					vmKind.Name:        graph.Loose,
+					volumeKind.Name:    graph.Owned,
+					networkKind.Name:   graph.Owned,
+					containerKind.Name: graph.Owned,
+				},
+			},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			workload, err := started(tt.configured)
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.want, workload.Policy)
+		})
+	}
+
+	t.Run("one it cannot read is refused as it starts, saying which setting and what of it", func(t *testing.T) {
+		t.Parallel()
+
+		workload, err := started("vm=loose,volume=strong")
+		assert.Nil(t, workload)
+		assert.EqualError(t, err, `the dependency policy (WORKLOAD_DEPENDENCY_POLICY, --dependency-policy) cannot be read: entry "volume=strong" gives "strong", which is no type: an edge is owned or loose`)
 	})
 }
 

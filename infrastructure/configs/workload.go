@@ -88,6 +88,12 @@ type WorkloadControlPlane struct {
 	// nodes read.
 	DockerReadyTimeout time.Duration `usage:"How long a node waits for a Docker VM's dockerd, while the VM comes up, before a command to it fails: what a command that may pull an image is waited on for first." env:"WORKLOAD_DOCKER_READY_TIMEOUT" long:"docker-ready-timeout"`
 	DockerPullTimeout  time.Duration `usage:"How long creating a container, or pulling an image, may take inside a Docker VM: what a command that may pull an image is waited on for, after its dockerd." env:"WORKLOAD_DOCKER_PULL_TIMEOUT" long:"docker-pull-timeout"`
+
+	// whether what a resource needs goes with it, by the kinds of the two,
+	// which is what the edges of a resource's graph are typed by: what is
+	// given is laid over the defaults, entry by entry (graph.ParsePolicy),
+	// and nothing given is the defaults.
+	DependencyPolicy string `usage:"Whether what a resource needs goes with it when it is deleted, by kind: kind=owned or kind=loose, or dependent/required=owned or loose for one pair of kinds, as stack/volume=owned, separated by commas. What is owned goes with the last of what owns it, and what is loose stays. Each is laid over the defaults, container=owned,network=owned,vm=loose,volume=loose, and any other kind is owned. Empty keeps the defaults." env:"WORKLOAD_DEPENDENCY_POLICY" long:"dependency-policy"`
 }
 
 // NewWorkloadControlPlane returns the configuration of the serve-workload-controlplane

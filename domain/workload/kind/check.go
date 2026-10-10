@@ -22,6 +22,12 @@ var (
 	verb = regexp.MustCompile(`^[a-z][a-zA-Z0-9]*(\.[a-z][a-zA-Z0-9]*)*$`)
 )
 
+// IsWord reports whether name is a word, as a kind's name is (Check):
+// lowercase letters, digits and hyphens, from a letter.
+func IsWord(name string) bool {
+	return word.MatchString(name)
+}
+
 // Check holds a kind's descriptor to the rules every kind keeps, and is every
 // rule it breaks. A kind that breaks none is one the framework can run, so a
 // registry refuses any other, and the conformance test holds every kind the

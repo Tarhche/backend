@@ -108,6 +108,11 @@ services:
       # waits for before it asks again: the same two the nodes read.
       WORKLOAD_DOCKER_READY_TIMEOUT: ${BACKEND_WORKLOAD_DOCKER_READY_TIMEOUT:-3m}
       WORKLOAD_DOCKER_PULL_TIMEOUT: ${BACKEND_WORKLOAD_DOCKER_PULL_TIMEOUT:-10m}
+      # whether what a resource needs goes with it when it is deleted, by
+      # kind: kind=owned|loose or dependent/required=owned|loose, separated by
+      # commas, laid over the defaults the code holds, entry by entry:
+      # container=owned,network=owned,vm=loose,volume=loose. Unset keeps them.
+      WORKLOAD_DEPENDENCY_POLICY: ${BACKEND_WORKLOAD_DEPENDENCY_POLICY:-}
 
 networks:
   workload_controlplane:

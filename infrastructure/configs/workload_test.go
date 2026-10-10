@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/khanzadimahdi/testproject/domain/workload/graph"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
 )
 
@@ -134,6 +135,7 @@ func TestWorkloadConfigsBind(t *testing.T) {
 			"WORKLOAD_SNAPSHOT_S3_BUCKET":                "workload-snapshots",
 			"WORKLOAD_SNAPSHOT_S3_USE_SSL":               "false",
 			"WORKLOAD_NODE_REQUEST_TIMEOUT":              "30s",
+			"WORKLOAD_DEPENDENCY_POLICY":                 "",
 		})
 	})
 
@@ -162,6 +164,31 @@ func TestWorkloadConfigsBind(t *testing.T) {
 			"WORKLOAD_NODE_REQUEST_CONCURRENCY": "16",
 		})
 	})
+}
+
+// TestWorkloadDependencyPolicy holds the control plane's dependency policy to
+// nothing by default, which is the graph's own defaults, read as nothing more,
+// and to a usage that says what those are.
+func TestWorkloadDependencyPolicy(t *testing.T) {
+	t.Parallel()
+
+	controlPlane := NewWorkloadControlPlane()
+
+	configured, err := graph.ParsePolicy(controlPlane.DependencyPolicy)
+	require.NoError(t, err)
+	assert.Equal(t, graph.DefaultPolicy(), graph.DefaultPolicy().With(configured), "nothing laid over the defaults")
+
+	flagSet := console.NewFlagSet("workload", io.Discard)
+	require.NoError(t, flagSet.Struct(controlPlane))
+
+	flag := flagSet.Lookup("dependency-policy")
+	require.NotNil(t, flag)
+
+	assert.Equal(t, "WORKLOAD_DEPENDENCY_POLICY", flag.Env())
+	assert.Empty(t, flag.DefValue())
+	assert.Contains(t, flag.Usage(), graph.DefaultPolicy().String(), "the usage says the defaults as they are")
+	assert.Contains(t, flag.Usage(), "kind=owned or kind=loose", "and how a kind is given a type")
+	assert.Contains(t, flag.Usage(), "dependent/required=owned or loose", "and a pair")
 }
 
 // TestWorkloadPullRequestTimeout holds a node to giving a command that may

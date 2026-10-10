@@ -382,6 +382,35 @@ func TestCheck(t *testing.T) {
 	}
 }
 
+func TestIsWord(t *testing.T) {
+	t.Parallel()
+
+	for name, tt := range map[string]struct {
+		name string
+		word bool
+	}{
+		"a kind's name":                  {name: "container", word: true},
+		"with digits and hyphens":        {name: "vm-2", word: true},
+		"one letter":                     {name: "a", word: true},
+		"not nothing":                    {name: ""},
+		"nor one with a capital":         {name: "Container"},
+		"nor one from a digit":           {name: "2vm"},
+		"nor one from a hyphen":          {name: "-vm"},
+		"nor one with a space":           {name: "my kind"},
+		"nor one with a slash":           {name: "stack/container"},
+		"nor one with a dot":             {name: "vm.start"},
+		"nor one with an underscore":     {name: "vm_2"},
+		"nor one with space around it":   {name: " vm"},
+		"nor one with a letter beyond z": {name: "véhicule"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, tt.word, IsWord(tt.name))
+		})
+	}
+}
+
 func TestServices(t *testing.T) {
 	t.Parallel()
 

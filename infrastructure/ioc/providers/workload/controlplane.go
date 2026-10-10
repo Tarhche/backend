@@ -18,6 +18,7 @@ import (
 	controlPlaneLogTask "github.com/khanzadimahdi/testproject/application/workload/controlplane/task/logTask"
 	"github.com/khanzadimahdi/testproject/domain"
 	translatorContract "github.com/khanzadimahdi/testproject/domain/translator"
+	"github.com/khanzadimahdi/testproject/domain/workload/graph"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	snapshotKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/snapshot"
 	nodeEvents "github.com/khanzadimahdi/testproject/domain/workload/node/events"
@@ -158,6 +159,14 @@ func controlPlaneConsoleCommand(
 	// every kind's own heartbeat, which the serve command runs on a ticker.
 	if err := iocContainer.Bind(func() *kindsReconcileResources.UseCase {
 		return workload.Reconcile
+	}, provider.Singleton()); err != nil {
+		return nil, err
+	}
+
+	// what the edges of a resource's graph are typed by, as the control
+	// plane is configured: what its graph is planned with.
+	if err := iocContainer.Bind(func() graph.DependencyPolicy {
+		return workload.Policy
 	}, provider.Singleton()); err != nil {
 		return nil, err
 	}
