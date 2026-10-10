@@ -24,7 +24,6 @@ package stack
 import (
 	"context"
 
-	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	"github.com/khanzadimahdi/testproject/domain/workload/port"
 )
@@ -82,8 +81,9 @@ const (
 	ActionStop    = "stop"
 	ActionRestart = "restart"
 
-	// ActionDelete takes a stack down, its volumes with it when its payload
-	// says so (DeletePayload).
+	// ActionDelete takes a stack down and keeps its volumes, since what is in
+	// them is usually what somebody wants back: they stay in its VM until
+	// they are removed themselves.
 	ActionDelete = "delete"
 
 	// ActionState is what a stack is doing, as its VM's dockerd says.
@@ -205,20 +205,6 @@ type ContainerStatus struct {
 	State string `json:"state"`
 }
 
-// DeletePayload is what a stack is deleted with.
-type DeletePayload struct {
-	// RemoveVolumes takes the stack's volumes away with it. They are kept
-	// otherwise, since what is in them is usually what somebody wants back.
-	RemoveVolumes bool `json:"remove_volumes,omitempty"`
-}
-
-var _ domain.Validatable = &DeletePayload{}
-
-// Validate says nothing is wrong: either way is a delete.
-func (p *DeletePayload) Validate() domain.ValidationErrors {
-	return nil
-}
-
 // Stack is a stack, as its strategies are handed one.
 type Stack = kind.Resource[Spec, Status]
 
@@ -250,9 +236,9 @@ type Applier interface {
 	Stop(ctx context.Context, s Stack) (output string, err error)
 	Restart(ctx context.Context, s Stack) (output string, err error)
 
-	// Down takes the stack's containers and networks away, and its volumes
-	// when removeVolumes says so.
-	Down(ctx context.Context, s Stack, removeVolumes bool) (output string, err error)
+	// Down takes the stack's containers and networks away, and never its
+	// volumes.
+	Down(ctx context.Context, s Stack) (output string, err error)
 }
 
 // Descriptor is the stack kind, a new one every time.
@@ -289,7 +275,7 @@ func Descriptor() kind.Descriptor {
 			pulling(command(ActionStart, []kind.State{Stopped, Degraded, Failed, Waiting}, Running, "manage")),
 			command(ActionStop, []kind.State{Running, Degraded, Failed}, Stopped, "manage"),
 			pulling(command(ActionRestart, []kind.State{Running, Degraded, Stopped, Failed, Waiting}, Running, "manage")),
-			{Name: ActionDelete, Runs: kind.OnNode, Mode: kind.ModeCommand, Desires: Deleted, Permission: "delete", Payload: kind.Payload[DeletePayload]()},
+			{Name: ActionDelete, Runs: kind.OnNode, Mode: kind.ModeCommand, Desires: Deleted, Permission: "delete", Payload: kind.NoPayload},
 			{Name: ActionState, Runs: kind.OnNode, Mode: kind.ModeQuery, Permission: "show", Payload: kind.NoPayload},
 		},
 	}

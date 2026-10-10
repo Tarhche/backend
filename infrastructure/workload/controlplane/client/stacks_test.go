@@ -41,7 +41,7 @@ type stacksPlane struct {
 	body   string
 
 	asked []string
-	sent  map[string]json.RawMessage
+	sent  map[string]bool
 }
 
 func newStacksPlane(t *testing.T) (*Client, *stacksPlane) {
@@ -52,7 +52,7 @@ func newStacksPlane(t *testing.T) (*Client, *stacksPlane) {
 		vms:    map[string]vmManifest{},
 		status: http.StatusAccepted,
 		body:   `{"resource":{}}`,
-		sent:   map[string]json.RawMessage{},
+		sent:   map[string]bool{},
 	}
 
 	mux := http.NewServeMux()
@@ -105,10 +105,8 @@ func newStacksPlane(t *testing.T) (*Client, *stacksPlane) {
 	mux.HandleFunc("POST /api/stacks/{uuid}/actions/{action}", func(rw http.ResponseWriter, r *http.Request) {
 		p.record(r)
 
-		body, _ := io.ReadAll(r.Body)
-
 		p.lock.Lock()
-		p.sent[r.PathValue("action")] = body
+		p.sent[r.PathValue("action")] = true
 		status, answered := p.status, p.body
 		p.lock.Unlock()
 
@@ -215,13 +213,11 @@ func (p *stacksPlane) requests() []string {
 	return append([]string(nil), p.asked...)
 }
 
-func (p *stacksPlane) commanded(action string) (json.RawMessage, bool) {
+func (p *stacksPlane) commanded(action string) bool {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
-	body, ok := p.sent[action]
-
-	return body, ok
+	return p.sent[action]
 }
 
 // shopIn is the stack shop-abcde, in vmUUID, doing state.
@@ -493,7 +489,7 @@ func TestClient_StackCommands(t *testing.T) {
 				require.NoError(t, err)
 			}
 
-			_, asked := p.commanded(tt.action)
+			asked := p.commanded(tt.action)
 			assert.Equal(t, tt.asked, asked, "%v", p.requests())
 		})
 	}
@@ -533,30 +529,27 @@ func TestClient_DeleteStack(t *testing.T) {
 
 	ctx := t.Context()
 
-	t.Run("a stack is deleted with its volumes when that is asked", func(t *testing.T) {
+	t.Run("a stack in a running vm is deleted", func(t *testing.T) {
 		t.Parallel()
 
 		c, p := newStacksPlane(t)
 		p.holding(shopIn("vm-uuid", stackKind.Running), dockerVM("vm-uuid", vmKind.Running, vmKind.Running))
 
-		require.NoError(t, c.DeleteStack(ctx, "owner-uuid", "stack-uuid", true))
+		require.NoError(t, c.DeleteStack(ctx, "owner-uuid", "stack-uuid"))
 
-		body, asked := p.commanded("delete")
-		require.True(t, asked)
-		assert.JSONEq(t, `{"remove_volumes":true}`, string(body))
+		assert.True(t, p.commanded("delete"))
 		assert.Contains(t, p.requests(), "POST /api/stacks/stack-uuid/actions/delete?owner=owner-uuid")
 	})
 
-	t.Run("and without them otherwise", func(t *testing.T) {
+	t.Run("and so is one in a vm on its way up", func(t *testing.T) {
 		t.Parallel()
 
 		c, p := newStacksPlane(t)
 		p.holding(shopIn("vm-uuid", stackKind.Deploying), dockerVM("vm-uuid", vmKind.Starting, vmKind.Running))
 
-		require.NoError(t, c.DeleteStack(ctx, "owner-uuid", "stack-uuid", false))
+		require.NoError(t, c.DeleteStack(ctx, "owner-uuid", "stack-uuid"))
 
-		body, _ := p.commanded("delete")
-		assert.JSONEq(t, `{}`, string(body))
+		assert.True(t, p.commanded("delete"))
 	})
 
 	t.Run("one in a vm that is stopped, and is to stay so, is refused: only its dockerd can take it down", func(t *testing.T) {
@@ -565,14 +558,13 @@ func TestClient_DeleteStack(t *testing.T) {
 		c, p := newStacksPlane(t)
 		p.holding(shopIn("vm-uuid", stackKind.Waiting), dockerVM("vm-uuid", vmKind.Stopped, vmKind.Stopped))
 
-		err := c.DeleteStack(ctx, "owner-uuid", "stack-uuid", false)
+		err := c.DeleteStack(ctx, "owner-uuid", "stack-uuid")
 
 		var refused *ValidationError
 		require.ErrorAs(t, err, &refused)
 		assert.Equal(t, domain.ValidationErrors{"vm": "vm_not_running"}, refused.ValidationErrors)
 
-		_, asked := p.commanded("delete")
-		assert.False(t, asked)
+		assert.False(t, p.commanded("delete"))
 	})
 
 	t.Run("one whose vm is gone is deleted all the same", func(t *testing.T) {
@@ -582,9 +574,8 @@ func TestClient_DeleteStack(t *testing.T) {
 		p.holding(shopIn("gone", stackKind.Waiting), vmManifest{})
 		p.status, p.body = http.StatusNoContent, ""
 
-		require.NoError(t, c.DeleteStack(ctx, "owner-uuid", "stack-uuid", false))
+		require.NoError(t, c.DeleteStack(ctx, "owner-uuid", "stack-uuid"))
 
-		_, asked := p.commanded("delete")
-		assert.True(t, asked)
+		assert.True(t, p.commanded("delete"))
 	})
 }

@@ -157,8 +157,8 @@ func (m *MockClient) CreateStack(ctx context.Context, ownerUUID string, request 
 	return args.Get(0).(workloadControlPlane.CreatedStack), args.Error(1)
 }
 
-func (m *MockClient) DeleteStack(ctx context.Context, ownerUUID string, uuid string, removeVolumes bool) error {
-	return m.Called(ctx, ownerUUID, uuid, removeVolumes).Error(0)
+func (m *MockClient) DeleteStack(ctx context.Context, ownerUUID string, uuid string) error {
+	return m.Called(ctx, ownerUUID, uuid).Error(0)
 }
 
 func (m *MockClient) StartStack(ctx context.Context, ownerUUID string, uuid string) error {

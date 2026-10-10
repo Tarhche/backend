@@ -1214,12 +1214,12 @@ func stackTools() []tool {
 		}, "One of this session owner's own stacks, with its containers."),
 		both(tool{
 			name:        "dashboard_stack_delete",
-			description: "Take a stack down and remove it, whoever owns it; its volumes go too only with volumes.",
+			description: "Take a stack down and remove it, whoever owns it. Its volumes stay in its VM, to be removed on their own.",
 			route:       "DELETE /api/dashboard/workload/stacks/{uuid}",
-			params:      []Parameter{uuidOf("stack"), boolean("volumes", "remove the stack's volumes too")},
+			params:      []Parameter{uuidOf("stack")},
 			destructive: true,
 			idempotent:  true,
-		}, "Take one of this session owner's own stacks down and remove it."),
+		}, "Take one of this session owner's own stacks down and remove it. Its volumes stay in its VM, to be removed on their own."),
 		both(tool{
 			name:        "dashboard_stack_start",
 			description: "Start a stopped stack's containers again, whoever owns it.",

@@ -1293,8 +1293,7 @@ func (d *dockerd) dialStdio(ctx context.Context, address string, stdin io.Reader
 // has, but for those behind a profile, labelled as compose labels them and
 // with the labels the file gives them, and takes away the project's others;
 // start, stop and restart do that to the project's containers; and down
-// takes them away and the project's network, with its volumes when it is
-// asked to.
+// takes them away and the project's network.
 func (d *dockerd) compose(id string, project string, action []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int {
 	read, err := io.ReadAll(stdin)
 	if err != nil || len(read) == 0 {
@@ -1429,12 +1428,6 @@ func (d *dockerd) compose(id string, project string, action []string, stdin io.R
 		delete(d.composed, project)
 		h.Containers = slices.DeleteFunc(h.Containers, theirs(project))
 		h.Networks = slices.DeleteFunc(h.Networks, func(n network.Summary) bool { return n.Labels[docker.LabelComposeProject] == project })
-
-		if slices.Contains(action, "--volumes") {
-			h.Volumes = slices.DeleteFunc(h.Volumes, func(v *volume.Volume) bool { return v.Labels[docker.LabelComposeProject] == project })
-
-			_, _ = fmt.Fprintf(stdout, " Volume %s_data  Removed\n", project)
-		}
 
 	default:
 		_, _ = fmt.Fprintf(stderr, "unknown docker command: %q\n", action[0])

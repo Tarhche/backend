@@ -160,10 +160,10 @@ func (c *Client) CreateStack(ctx context.Context, ownerUUID string, request work
 	return created, nil
 }
 
-// DeleteStack takes a stack down and removes it, and its volumes with it when
-// removeVolumes says so. A stack in a VM that is stopped, and is to stay so,
-// is refused: only its dockerd can take it down.
-func (c *Client) DeleteStack(ctx context.Context, ownerUUID string, uuid string, removeVolumes bool) error {
+// DeleteStack takes a stack down and removes it, and keeps its volumes. A
+// stack in a VM that is stopped, and is to stay so, is refused: only its
+// dockerd can take it down.
+func (c *Client) DeleteStack(ctx context.Context, ownerUUID string, uuid string) error {
 	manifest, err := c.stack(ctx, ownerUUID, uuid)
 	if err != nil {
 		return err
@@ -179,7 +179,7 @@ func (c *Client) DeleteStack(ctx context.Context, ownerUUID string, uuid string,
 		return vmNotRunning()
 	}
 
-	return c.act(ctx, ownerUUID, uuid, stackKind.ActionDelete, stackKind.DeletePayload{RemoveVolumes: removeVolumes})
+	return c.act(ctx, ownerUUID, uuid, stackKind.ActionDelete)
 }
 
 func (c *Client) StartStack(ctx context.Context, ownerUUID string, uuid string) error {
@@ -238,16 +238,16 @@ func (c *Client) command(ctx context.Context, ownerUUID string, uuid string, act
 		return nil
 	}
 
-	return c.act(ctx, ownerUUID, uuid, action, nil)
+	return c.act(ctx, ownerUUID, uuid, action)
 }
 
 // act asks a stack for one of its kind's commands, through the resource
 // API, and is what it was refused for in the words the dashboard has for a
 // stack: a state that does not allow it, or a VM that cannot be asked.
-func (c *Client) act(ctx context.Context, ownerUUID string, uuid string, action string, payload any) error {
+func (c *Client) act(ctx context.Context, ownerUUID string, uuid string, action string) error {
 	endpoint := c.path(stackPath(uuid)+"/actions/"+url.PathEscape(action), owned(ownerUUID, nil))
 
-	err := c.call(ctx, http.MethodPost, endpoint, payload, nil)
+	err := c.call(ctx, http.MethodPost, endpoint, nil, nil)
 
 	var refused *ValidationError
 	if !errors.As(err, &refused) {

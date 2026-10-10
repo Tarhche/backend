@@ -90,19 +90,12 @@ func TestDescriptor(t *testing.T) {
 		}
 	})
 
-	t.Run("it is deleted with its volumes or without", func(t *testing.T) {
+	t.Run("it is deleted with nothing, which keeps its volumes", func(t *testing.T) {
 		t.Parallel()
 
 		remove, _ := d.Action(stack.ActionDelete)
 
-		value, invalid, err := remove.Payload.Decode([]byte(`{"remove_volumes":true}`))
-		require.NoError(t, err)
-		assert.Empty(t, invalid)
-		assert.Equal(t, stack.DeletePayload{RemoveVolumes: true}, value)
-
-		value, _, err = remove.Payload.Decode(nil)
-		require.NoError(t, err)
-		assert.Equal(t, stack.DeletePayload{}, value, "nothing keeps them")
+		assert.Equal(t, kind.NoPayload, remove.Payload)
 	})
 }
 

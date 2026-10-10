@@ -2911,7 +2911,7 @@ const docTemplate = `{
                 }
             },
             "delete": {
-                "description": "take a stack down and remove it, with its volumes when ?volumes=true; it is removing until compose is done",
+                "description": "take a stack down and remove it; it is removing until compose is done. Its volumes stay",
                 "tags": [
                     "dashboard workload stacks"
                 ],
@@ -2923,12 +2923,6 @@ const docTemplate = `{
                         "name": "uuid",
                         "in": "path",
                         "required": true
-                    },
-                    {
-                        "type": "boolean",
-                        "description": "Remove its volumes too",
-                        "name": "volumes",
-                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -5735,7 +5729,7 @@ const docTemplate = `{
                 }
             },
             "delete": {
-                "description": "take a stack down and remove it, with its volumes when ?volumes=true; it is removing until compose is done",
+                "description": "take a stack down and remove it; it is removing until compose is done. Its volumes stay",
                 "tags": [
                     "dashboard workload stacks"
                 ],
@@ -5747,12 +5741,6 @@ const docTemplate = `{
                         "name": "uuid",
                         "in": "path",
                         "required": true
-                    },
-                    {
-                        "type": "boolean",
-                        "description": "Remove its volumes too",
-                        "name": "volumes",
-                        "in": "query"
                     }
                 ],
                 "responses": {

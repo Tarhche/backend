@@ -103,7 +103,7 @@ func New(engine vm.Engine, daemons Daemons, applier stackKind.Applier, timeout t
 // running, or coming up, and its dockerd is waited for; then the applier
 // does what the command asks. What came of it is what the stack's containers
 // are doing afterwards, and what the applier printed.
-func (n *Node) Execute(ctx context.Context, s stackKind.Stack, action string, payload any) (kind.Outcome[stackKind.Status], error) {
+func (n *Node) Execute(ctx context.Context, s stackKind.Stack, action string, _ any) (kind.Outcome[stackKind.Status], error) {
 	vmUUID := stackKind.VMOf(s)
 	if len(vmUUID) == 0 {
 		return kind.Outcome[stackKind.Status]{}, fmt.Errorf("%w: the stack names no vm", kind.ErrInvalidPayload)
@@ -134,7 +134,7 @@ func (n *Node) Execute(ctx context.Context, s stackKind.Stack, action string, pa
 		return failed("", err)
 	}
 
-	output, err := n.apply(ctx, s, vmUUID, action, payload)
+	output, err := n.apply(ctx, s, vmUUID, action)
 	output = lastOf(output, kind.MaxOutput)
 
 	if err != nil {
@@ -275,7 +275,7 @@ func (n *Node) State(ctx context.Context) (kind.Report[stackKind.Status], error)
 // apply has the applier do what action asks of a stack. A start or a
 // restart of a stack its VM has nothing of makes it, which is what starting
 // one that never came up, or was taken away, amounts to.
-func (n *Node) apply(ctx context.Context, s stackKind.Stack, vmUUID string, action string, payload any) (string, error) {
+func (n *Node) apply(ctx context.Context, s stackKind.Stack, vmUUID string, action string) (string, error) {
 	switch action {
 	case stackKind.ActionCreate, stackKind.ActionApply:
 		return n.applier.Up(ctx, s)
@@ -294,9 +294,7 @@ func (n *Node) apply(ctx context.Context, s stackKind.Stack, vmUUID string, acti
 
 		return n.applier.Restart(ctx, s)
 	case stackKind.ActionDelete:
-		remove, _ := payload.(stackKind.DeletePayload)
-
-		return n.applier.Down(ctx, s, remove.RemoveVolumes)
+		return n.applier.Down(ctx, s)
 	}
 
 	return "", fmt.Errorf("%w: a stack cannot be %s", kind.ErrUnknownAction, action)

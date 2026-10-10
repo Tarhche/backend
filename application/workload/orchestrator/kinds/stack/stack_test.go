@@ -126,13 +126,7 @@ func (a *applier) Restart(_ context.Context, s stackKind.Stack) (string, error) 
 	return a.do("restart", s)
 }
 
-func (a *applier) Down(_ context.Context, s stackKind.Stack, removeVolumes bool) (string, error) {
-	if removeVolumes {
-		return a.do("down --volumes", s)
-	}
-
-	return a.do("down", s)
-}
+func (a *applier) Down(_ context.Context, s stackKind.Stack) (string, error) { return a.do("down", s) }
 
 func (a *applier) Asked() []string {
 	a.lock.Lock()
@@ -247,11 +241,10 @@ func TestNode_Execute(t *testing.T) {
 		t.Parallel()
 
 		for name, tt := range map[string]struct {
-			action  string
-			payload any
-			held    bool
-			asked   string
-			state   kind.State
+			action string
+			held   bool
+			asked  string
+			state  kind.State
 		}{
 			"applied again": {action: stackKind.ActionApply, held: true, asked: "up shop-abcde", state: stackKind.Running},
 			"started":       {action: stackKind.ActionStart, held: true, asked: "start shop-abcde", state: stackKind.Running},
@@ -259,8 +252,7 @@ func TestNode_Execute(t *testing.T) {
 			"restarted":                            {action: stackKind.ActionRestart, held: true, asked: "restart shop-abcde", state: stackKind.Running},
 			"restarted when its vm has none of it": {action: stackKind.ActionRestart, asked: "up shop-abcde", state: stackKind.Running},
 			"stopped":                              {action: stackKind.ActionStop, held: true, asked: "stop shop-abcde", state: stackKind.Stopped},
-			"taken down, its volumes kept":         {action: stackKind.ActionDelete, payload: stackKind.DeletePayload{}, held: true, asked: "down shop-abcde"},
-			"taken down with its volumes":          {action: stackKind.ActionDelete, payload: stackKind.DeletePayload{RemoveVolumes: true}, held: true, asked: "down --volumes shop-abcde"},
+			"taken down, its volumes kept":         {action: stackKind.ActionDelete, held: true, asked: "down shop-abcde"},
 		} {
 			t.Run(name, func(t *testing.T) {
 				t.Parallel()
@@ -274,14 +266,14 @@ func TestNode_Execute(t *testing.T) {
 					switch action {
 					case "stop":
 						f.daemons["vm-1"].set(exitedWith("stack-1", "web", 0), exitedWith("stack-1", "cache", 0))
-					case "down", "down --volumes":
+					case "down":
 						f.daemons["vm-1"].set()
 					default:
 						f.daemons["vm-1"].set(up("stack-1", "web"), up("stack-1", "cache"))
 					}
 				}
 
-				outcome, err := f.node.Execute(t.Context(), shop("stack-1", "vm-1"), tt.action, tt.payload)
+				outcome, err := f.node.Execute(t.Context(), shop("stack-1", "vm-1"), tt.action, nil)
 				require.NoError(t, err)
 
 				assert.Equal(t, []string{tt.asked}, f.applier.Asked())
@@ -329,7 +321,7 @@ func TestNode_Execute(t *testing.T) {
 
 		f := newFixture(t)
 
-		outcome, err := f.node.Execute(t.Context(), shop("stack-1", "vm-9"), stackKind.ActionDelete, stackKind.DeletePayload{})
+		outcome, err := f.node.Execute(t.Context(), shop("stack-1", "vm-9"), stackKind.ActionDelete, nil)
 		require.NoError(t, err)
 		assert.Empty(t, f.applier.Asked())
 		assert.Empty(t, outcome.Status.State)

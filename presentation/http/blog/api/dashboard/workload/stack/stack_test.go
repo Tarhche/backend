@@ -91,20 +91,20 @@ func TestTheRoutesOfBothSets(t *testing.T) {
 				answer: `{"code": "not_found"}`,
 			},
 			{
-				name:   "a delete that keeps the volumes",
+				name:   "a delete, which keeps the volumes",
 				method: http.MethodDelete,
 				target: "/stacks/stack-uuid",
 				expect: func(workload *controlplane.MockClient) {
-					workload.On("DeleteStack", mock.Anything, set.OwnerUUID, "stack-uuid", false).Once().Return(nil)
+					workload.On("DeleteStack", mock.Anything, set.OwnerUUID, "stack-uuid").Once().Return(nil)
 				},
 				status: http.StatusAccepted,
 			},
 			{
-				name:   "a delete that takes them too",
+				name:   "and keeps them when they are asked to go too",
 				method: http.MethodDelete,
 				target: "/stacks/stack-uuid?volumes=true",
 				expect: func(workload *controlplane.MockClient) {
-					workload.On("DeleteStack", mock.Anything, set.OwnerUUID, "stack-uuid", true).Once().Return(nil)
+					workload.On("DeleteStack", mock.Anything, set.OwnerUUID, "stack-uuid").Once().Return(nil)
 				},
 				status: http.StatusAccepted,
 			},

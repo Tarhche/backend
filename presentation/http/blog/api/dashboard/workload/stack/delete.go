@@ -17,10 +17,9 @@ func NewDeleteHandler(useCase *deleteStack.UseCase, owner workload.Owner) *delet
 }
 
 // @Summary		Delete a stack
-// @Description	take a stack down and remove it, with its volumes when ?volumes=true; it is removing until compose is done
+// @Description	take a stack down and remove it; it is removing until compose is done. Its volumes stay
 // @Tags			dashboard workload stacks
 // @Param			uuid	path		string	true	"Stack UUID"
-// @Param			volumes	query		bool	false	"Remove its volumes too"
 // @Success		202		{object}	map[string]interface{}
 // @Failure		400		{object}	workload.Refusal
 // @Failure		404		{object}	workload.Failure
@@ -29,9 +28,8 @@ func NewDeleteHandler(useCase *deleteStack.UseCase, owner workload.Owner) *delet
 // @Router			/dashboard/my/workload/stacks/{uuid} [delete]
 func (h *deleteHandler) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	response, err := h.useCase.Execute(r.Context(), &deleteStack.Request{
-		UUID:          r.PathValue("uuid"),
-		RemoveVolumes: workload.Flag(r, "volumes"),
-		OwnerUUID:     h.owner(r),
+		UUID:      r.PathValue("uuid"),
+		OwnerUUID: h.owner(r),
 	})
 
 	switch {

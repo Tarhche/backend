@@ -4606,18 +4606,14 @@ paths:
       - dashboard workload stacks
   /dashboard/my/workload/stacks/{uuid}:
     delete:
-      description: take a stack down and remove it, with its volumes when ?volumes=true;
-        it is removing until compose is done
+      description: take a stack down and remove it; it is removing until compose is
+        done. Its volumes stay
       parameters:
       - description: Stack UUID
         in: path
         name: uuid
         required: true
         type: string
-      - description: Remove its volumes too
-        in: query
-        name: volumes
-        type: boolean
       responses:
         "202":
           description: Accepted
@@ -6533,18 +6529,14 @@ paths:
       - dashboard workload stacks
   /dashboard/workload/stacks/{uuid}:
     delete:
-      description: take a stack down and remove it, with its volumes when ?volumes=true;
-        it is removing until compose is done
+      description: take a stack down and remove it; it is removing until compose is
+        done. Its volumes stay
       parameters:
       - description: Stack UUID
         in: path
         name: uuid
         required: true
         type: string
-      - description: Remove its volumes too
-        in: query
-        name: volumes
-        type: boolean
       responses:
         "202":
           description: Accepted

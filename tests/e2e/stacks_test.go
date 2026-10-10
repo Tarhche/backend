@@ -53,7 +53,8 @@ func (s stackView) String() string {
 }
 
 // TestStacks deploys a compose project into a Docker VM, and stops, starts,
-// restarts and deletes it, its volume with it. It is deployed into the
+// restarts and deletes it. Its volume outlives it, and is then removed from
+// the VM's volumes, as somebody removes one. It is deployed into the
 // account's running Docker VM, named by its uuid, when it has one; otherwise
 // it names none, and one is made for it, as for a container.
 func TestStacks(t *testing.T) {
@@ -155,7 +156,7 @@ func TestStacks(t *testing.T) {
 		t.Logf("compose said, restarting it:\n%s", s.Output)
 	})
 
-	timings.step(t, "delete with its volumes", func(t *testing.T) {
+	timings.step(t, "delete, its volume kept until it is removed", func(t *testing.T) {
 		var volumes page[struct {
 			Name string `json:"name"`
 		}]
@@ -174,7 +175,7 @@ func TestStacks(t *testing.T) {
 			t.Fatalf("the stack's volume %s is not there: %+v", volume, volumes.Items)
 		}
 
-		user.call(t, http.MethodDelete, path+"?volumes=true", nil, http.StatusAccepted, nil)
+		user.call(t, http.MethodDelete, path, nil, http.StatusAccepted, nil)
 
 		eventually(t, "stack "+created.Stack.Slug, 5*time.Minute, func() (bool, string) {
 			status, _ := user.status(t, http.MethodGet, path, nil)
@@ -183,8 +184,17 @@ func TestStacks(t *testing.T) {
 		})
 
 		user.call(t, http.MethodGet, dockerPath(vmUUID, "/volumes"), nil, http.StatusOK, &volumes)
+		if !hasVolume() {
+			t.Fatalf("the stack's volume %s went with it: %+v", volume, volumes.Items)
+		}
+
+		// it is removed as any volume of the VM's is, which takes it off the
+		// list at once.
+		user.call(t, http.MethodDelete, dockerPath(vmUUID, "/volumes/"+volume), nil, http.StatusNoContent, nil)
+
+		user.call(t, http.MethodGet, dockerPath(vmUUID, "/volumes"), nil, http.StatusOK, &volumes)
 		if hasVolume() {
-			t.Fatalf("the stack's volume %s outlived it", volume)
+			t.Fatalf("the stack's volume %s is still there once it was removed", volume)
 		}
 
 		var containers page[containerView]

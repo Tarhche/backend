@@ -116,9 +116,9 @@ type Client interface {
 	// none.
 	CreateStack(ctx context.Context, ownerUUID string, request StackRequest) (CreatedStack, error)
 
-	// DeleteStack takes a stack down and removes it, and its volumes with it
-	// when removeVolumes says so.
-	DeleteStack(ctx context.Context, ownerUUID string, uuid string, removeVolumes bool) error
+	// DeleteStack takes a stack down and removes it. Its volumes stay in its
+	// VM, among the VM's volumes, until they are removed themselves.
+	DeleteStack(ctx context.Context, ownerUUID string, uuid string) error
 
 	StartStack(ctx context.Context, ownerUUID string, uuid string) error
 	StopStack(ctx context.Context, ownerUUID string, uuid string) error

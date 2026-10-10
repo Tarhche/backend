@@ -2,7 +2,6 @@ package deleteStack
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -17,24 +16,21 @@ func TestUseCase_Execute(t *testing.T) {
 	t.Parallel()
 
 	for _, scope := range workloadtest.Scopes {
-		for _, removeVolumes := range []bool{false, true} {
-			t.Run(fmt.Sprintf("%s, taking its volumes too: %t", scope.Name, removeVolumes), func(t *testing.T) {
-				t.Parallel()
+		t.Run(scope.Name, func(t *testing.T) {
+			t.Parallel()
 
-				var workload controlplane.MockClient
-				workload.On("DeleteStack", mock.Anything, scope.OwnerUUID, "stack-uuid", removeVolumes).Once().Return(nil)
-				defer workload.AssertExpectations(t)
+			var workload controlplane.MockClient
+			workload.On("DeleteStack", mock.Anything, scope.OwnerUUID, "stack-uuid").Once().Return(nil)
+			defer workload.AssertExpectations(t)
 
-				response, err := NewUseCase(&workload, workloadtest.Translator()).Execute(context.Background(), &Request{
-					UUID:          "stack-uuid",
-					RemoveVolumes: removeVolumes,
-					OwnerUUID:     scope.OwnerUUID,
-				})
-				require.NoError(t, err)
-
-				assert.Empty(t, response.ValidationErrors)
+			response, err := NewUseCase(&workload, workloadtest.Translator()).Execute(context.Background(), &Request{
+				UUID:      "stack-uuid",
+				OwnerUUID: scope.OwnerUUID,
 			})
-		}
+			require.NoError(t, err)
+
+			assert.Empty(t, response.ValidationErrors)
+		})
 	}
 
 	for _, answer := range workloadtest.Answers() {
@@ -42,7 +38,7 @@ func TestUseCase_Execute(t *testing.T) {
 			t.Parallel()
 
 			var workload controlplane.MockClient
-			workload.On("DeleteStack", mock.Anything, workloadtest.OwnerUUID, "stack-uuid", false).Once().Return(answer.Err)
+			workload.On("DeleteStack", mock.Anything, workloadtest.OwnerUUID, "stack-uuid").Once().Return(answer.Err)
 			defer workload.AssertExpectations(t)
 
 			response, err := NewUseCase(&workload, workloadtest.Translator()).Execute(context.Background(), &Request{

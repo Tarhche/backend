@@ -51,13 +51,8 @@ func (c *Compose) Restart(ctx context.Context, s stack.Stack) (string, error) {
 	return c.run(ctx, s, "restart")
 }
 
-// Down removes the stack's containers and networks, and its volumes when
-// that is asked for too.
-func (c *Compose) Down(ctx context.Context, s stack.Stack, removeVolumes bool) (string, error) {
-	if removeVolumes {
-		return c.run(ctx, s, "down", "--remove-orphans", "--volumes")
-	}
-
+// Down removes the stack's containers and networks, and keeps its volumes.
+func (c *Compose) Down(ctx context.Context, s stack.Stack) (string, error) {
 	return c.run(ctx, s, "down", "--remove-orphans")
 }
 

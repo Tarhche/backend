@@ -641,7 +641,7 @@ func TestContract_Stacks(t *testing.T) {
 	require.ErrorAs(t, err, &refused, "a stack being deployed is busy")
 	assert.Equal(t, domain.ValidationErrors{"stack": "invalid_state_transition"}, refused.ValidationErrors)
 
-	require.NoError(t, c.DeleteStack(ctx, "owner", created.Stack.UUID, true))
+	require.NoError(t, c.DeleteStack(ctx, "owner", created.Stack.UUID))
 
 	_, err = c.CreateStack(ctx, "owner", workloadControlPlane.StackRequest{Name: "web", Compose: "nope: ["})
 	require.ErrorAs(t, err, &refused)

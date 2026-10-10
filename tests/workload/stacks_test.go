@@ -30,8 +30,8 @@ const shopCompose = "services:\n  web:\n    image: nginx:alpine\n  cache:\n    i
 // TestAStack walks a stack through its life from the dashboard, as a kind
 // the control plane runs and a node carries out: deployed into a Docker VM
 // made for it, brought back when one of its containers falls over, stopped,
-// started and restarted, waiting while its VM is stopped, and deleted with
-// its volumes.
+// started and restarted, waiting while its VM is stopped, and deleted, its
+// volumes kept.
 func TestAStack(t *testing.T) {
 	t.Parallel()
 
@@ -147,8 +147,8 @@ func TestAStack(t *testing.T) {
 		w.stackIn(t, stackUUID, "running", "running")
 	})
 
-	t.Run("deleted with its volumes, it is gone", func(t *testing.T) {
-		deleted, err := deleteStack.NewUseCase(w.client, w.translator).Execute(ctx, &deleteStack.Request{UUID: stackUUID, RemoveVolumes: true, OwnerUUID: ownerUUID})
+	t.Run("deleted, it is gone, and its volumes are kept", func(t *testing.T) {
+		deleted, err := deleteStack.NewUseCase(w.client, w.translator).Execute(ctx, &deleteStack.Request{UUID: stackUUID, OwnerUUID: ownerUUID})
 		require.NoError(t, err)
 		require.Empty(t, deleted.ValidationErrors)
 
@@ -158,8 +158,8 @@ func TestAStack(t *testing.T) {
 			return errors.Is(err, domain.ErrNotExists)
 		}, settle, beat, "the stack was never removed")
 
-		assert.Equal(t, "down --remove-orphans --volumes", w.dockerd.Ran(slug)[len(w.dockerd.Ran(slug))-1], "its volumes went with it")
-		assert.Empty(t, w.dockerd.States(slug), "and its containers")
+		assert.Equal(t, "down --remove-orphans", w.dockerd.Ran(slug)[len(w.dockerd.Ran(slug))-1], "taken down without its volumes")
+		assert.Empty(t, w.dockerd.States(slug), "its containers went with it")
 
 		_, err = w.resources.GetOne(ctx, stackKind.Name, stackUUID)
 		assert.ErrorIs(t, err, domain.ErrNotExists, "record and all")

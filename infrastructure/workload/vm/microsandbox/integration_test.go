@@ -545,7 +545,7 @@ func TestDockerVM(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "running", stack()[0].State)
 
-		_, err = compose.Down(ctx, demo, true)
+		_, err = compose.Down(ctx, demo)
 		require.NoError(t, err)
 		assert.Empty(t, stack())
 

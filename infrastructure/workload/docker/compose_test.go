@@ -111,18 +111,11 @@ func TestCompose(t *testing.T) {
 			want: []string{"docker", "compose", "-p", "shop-abcde", "-f", "-", "restart"},
 		},
 		{
-			name: "down keeps the project's volumes unless asked not to",
+			name: "down keeps the project's volumes",
 			run: func(t *testing.T, c *Compose) (string, error) {
-				return c.Down(t.Context(), shop(composeYAML), false)
+				return c.Down(t.Context(), shop(composeYAML))
 			},
 			want: []string{"docker", "compose", "-p", "shop-abcde", "-f", "-", "down", "--remove-orphans"},
-		},
-		{
-			name: "down takes the volumes with it when asked to",
-			run: func(t *testing.T, c *Compose) (string, error) {
-				return c.Down(t.Context(), shop(composeYAML), true)
-			},
-			want: []string{"docker", "compose", "-p", "shop-abcde", "-f", "-", "down", "--remove-orphans", "--volumes"},
 		},
 	}
 
