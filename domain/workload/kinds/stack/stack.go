@@ -101,6 +101,12 @@ const (
 	// separated: what a node maps a stack's containers onto, since it keeps
 	// no record of the compose file.
 	LabelServices = "workload.stack.services"
+
+	// LabelService is the service of a stack's file a container is, which
+	// the stack's graph made of it: the record of a container a stack owns
+	// says it, and the container its VM's dockerd holds is labelled with it,
+	// beside the stack's uuid (LabelStack).
+	LabelService = "workload.stack.service"
 )
 
 // Spec is what a stack is asked for as: the Docker VM it goes into and its
@@ -214,6 +220,33 @@ type ContainerStatus struct {
 	ID    string `json:"id"`
 	Name  string `json:"name"`
 	State string `json:"state"`
+}
+
+// StateOf is what a stack is doing whose services are doing what services
+// say: running when each of them runs, or ran to its end as it was to, and
+// one of them runs at least; stopped when none of them runs; and degraded
+// otherwise.
+func StateOf(services []ServiceStatus) kind.State {
+	running, fine := 0, 0
+
+	for _, service := range services {
+		switch service.State {
+		case ServiceRunning:
+			running++
+			fine++
+		case ServiceCompleted:
+			fine++
+		}
+	}
+
+	switch {
+	case running == 0:
+		return Stopped
+	case fine == len(services):
+		return Running
+	}
+
+	return Degraded
 }
 
 // Stack is a stack, as its strategies are handed one.

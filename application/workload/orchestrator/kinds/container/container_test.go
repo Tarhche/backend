@@ -14,6 +14,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/docker"
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	containerKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/container"
+	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 )
 
@@ -79,6 +80,24 @@ func TestNode_Execute(t *testing.T) {
 		require.True(t, labelled, "its spec is beside it")
 		assert.Equal(t, "nginx:1.27", spec.Image)
 		assert.Empty(t, spec.VM, "but for the vm it is in")
+	})
+
+	t.Run("a stack's is labelled as its stack's service, as its record says, and nothing else its record says is", func(t *testing.T) {
+		t.Parallel()
+
+		strategy, dockerd, _ := newNode(t)
+
+		_, err := strategy.Execute(t.Context(), aContainer("c-uuid", func(c *containerKind.Container) {
+			c.Metadata.Labels = map[string]string{stackKind.LabelStack: "stack-uuid", stackKind.LabelService: "web", "team": "shop"}
+		}), containerKind.ActionCreate, nil)
+		require.NoError(t, err)
+
+		held := dockerd.Held()
+		require.Len(t, held, 1)
+		assert.Equal(t, "stack-uuid", held[0].Labels[stackKind.LabelStack])
+		assert.Equal(t, "web", held[0].Labels[stackKind.LabelService])
+		assert.NotContains(t, held[0].Labels, "team")
+		assert.Equal(t, "c-uuid", held[0].Labels["workload.container"], "and as the resource it is")
 	})
 
 	t.Run("made again, by a create asked again, it is the one there already", func(t *testing.T) {

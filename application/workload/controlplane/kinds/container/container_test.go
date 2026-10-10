@@ -252,6 +252,46 @@ func TestContainers_Admit(t *testing.T) {
 		assert.Equal(t, []string{"network/elsewhere"}, admitted.Spec.External, "its graph's to say")
 	})
 
+	t.Run("one a stack owns is kept as its stack's service, as it was asked to say", func(t *testing.T) {
+		t.Parallel()
+
+		w := blockstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
+
+		c := asked(containerKind.Spec{Name: "shop_web", Image: "nginx"}, kind.Reference{Kind: "vm", UUID: "vm-1"})
+		c.Metadata.Owners = []kind.Reference{{Kind: stackKind.Name, UUID: "stack-uuid"}}
+		c.Metadata.Labels = map[string]string{stackKind.LabelStack: "stack-uuid", stackKind.LabelService: "web", "team": "shop"}
+
+		admitted, invalid, err := w.Containers.Admit(ctx, c)
+		require.NoError(t, err)
+		require.Empty(t, invalid)
+
+		assert.Equal(t, map[string]string{stackKind.LabelStack: "stack-uuid", stackKind.LabelService: "web", "team": "shop"}, admitted.Metadata.Labels)
+		assert.Equal(t, []kind.Reference{{Kind: stackKind.Name, UUID: "stack-uuid"}}, admitted.Metadata.Owners)
+	})
+
+	t.Run("but one no stack owns says it is nobody's service, whatever it was asked to say", func(t *testing.T) {
+		t.Parallel()
+
+		w := blockstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
+
+		c := asked(containerKind.Spec{Name: "web", Image: "nginx"}, kind.Reference{Kind: "vm", UUID: "vm-1"})
+		c.Metadata.Labels = map[string]string{stackKind.LabelStack: "stack-uuid", stackKind.LabelService: "web", "team": "shop"}
+
+		admitted, invalid, err := w.Containers.Admit(ctx, c)
+		require.NoError(t, err)
+		require.Empty(t, invalid)
+
+		assert.Equal(t, map[string]string{"team": "shop"}, admitted.Metadata.Labels, "its dockerd would label it as the stack's otherwise")
+
+		c.Metadata.Labels = map[string]string{stackKind.LabelService: "web"}
+
+		admitted, invalid, err = w.Containers.Admit(ctx, c)
+		require.NoError(t, err)
+		require.Empty(t, invalid)
+
+		assert.Nil(t, admitted.Metadata.Labels)
+	})
+
 	for name, tt := range map[string]struct {
 		vms   []vmKind.VM
 		spec  containerKind.Spec

@@ -370,6 +370,26 @@ func TestGraph_Create(t *testing.T) {
 		assert.Equal(t, ref.UUID, sent[0].UUID)
 	})
 
+	t.Run("one something owns from its admission on, a stack's, is admitted owned by it, and never taken for a root", func(t *testing.T) {
+		t.Parallel()
+
+		w := requirementstest.New(vmtest.WithVMs(vmtest.Docker("vm-1", "owner")))
+
+		ref, err := w.Kinds[containerKind.Name].Create(ctx, wanted("vm-1", func(w *containerKind.Want) {
+			w.Spec.Name = "shop_web"
+			w.Owners = []kind.Reference{{Kind: stackKind.Name, UUID: "stack-uuid"}}
+			w.Labels = map[string]string{stackKind.LabelStack: "stack-uuid", stackKind.LabelService: "web"}
+		}), inVM)
+		require.NoError(t, err)
+
+		c, kept := stored(t, w, ref.UUID)
+		require.True(t, kept)
+
+		assert.Equal(t, []kind.Reference{{Kind: stackKind.Name, UUID: "stack-uuid"}}, c.Metadata.Owners)
+		assert.Equal(t, map[string]string{stackKind.LabelStack: "stack-uuid", stackKind.LabelService: "web"}, c.Metadata.Labels)
+		assert.Equal(t, []kind.Reference{{Kind: "vm", UUID: "vm-1"}}, c.Metadata.Refs, "and lives in its vm")
+	})
+
 	t.Run("under its record's uuid, when it is known by one, as its admission kept it", func(t *testing.T) {
 		t.Parallel()
 

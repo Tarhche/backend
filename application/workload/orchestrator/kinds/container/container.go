@@ -29,6 +29,7 @@ import (
 	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	blockKinds "github.com/khanzadimahdi/testproject/domain/workload/kinds/blocks"
 	containerKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/container"
+	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
 	"github.com/khanzadimahdi/testproject/domain/workload/noderequest"
 )
 
@@ -173,9 +174,10 @@ func Observed(vmUUID string, c docker.Container) kind.Observed[containerKind.Sta
 
 // create makes a container that is not there, pulling its image first when
 // its VM does not hold it, labelled as the resource it is, with its spec
-// beside. One that is there already, a create asked again, is what was asked
-// for, and is left as it is, but for being started when it is to be running.
-// One that is to be stopped is stopped once it is made.
+// beside, and as its stack's service when it is one (labelsOf). One that is
+// there already, a create asked again, is what was asked for, and is left as
+// it is, but for being started when it is to be running. One that is to be
+// stopped is stopped once it is made.
 func (n *Node) create(ctx context.Context, daemon docker.Daemon, c containerKind.Container) (kind.Outcome[containerKind.Status], error) {
 	found, there, err := find(ctx, daemon, c)
 	if err != nil {
@@ -183,12 +185,12 @@ func (n *Node) create(ctx context.Context, daemon docker.Daemon, c containerKind
 	}
 
 	if !there {
-		spec, err := containerKind.SpecLabel(c.Spec)
+		labels, err := labelsOf(c)
 		if err != nil {
 			return failed(err)
 		}
 
-		if found, err = daemon.CreateContainer(ctx, c.Spec.Docker(c.Metadata.UUID, map[string]string{containerKind.LabelSpec: spec})); err != nil {
+		if found, err = daemon.CreateContainer(ctx, c.Spec.Docker(c.Metadata.UUID, labels)); err != nil {
 			return failed(err)
 		}
 	}
@@ -207,6 +209,27 @@ func (n *Node) create(ctx context.Context, daemon docker.Daemon, c containerKind
 	}
 
 	return n.inspected(ctx, daemon, found.ID)
+}
+
+// labelsOf are what a container is labelled with beside what labels it as
+// the resource it is: its spec, and, of a stack's, which stack's and which
+// of its services it is, as its record says, which only a stack's graph says
+// of a container its stack owns.
+func labelsOf(c containerKind.Container) (map[string]string, error) {
+	spec, err := containerKind.SpecLabel(c.Spec)
+	if err != nil {
+		return nil, err
+	}
+
+	labels := map[string]string{containerKind.LabelSpec: spec}
+
+	for _, key := range []string{stackKind.LabelStack, stackKind.LabelService} {
+		if value := c.Metadata.Labels[key]; len(value) > 0 {
+			labels[key] = value
+		}
+	}
+
+	return labels, nil
 }
 
 // start starts a container, and makes one its VM does not have.

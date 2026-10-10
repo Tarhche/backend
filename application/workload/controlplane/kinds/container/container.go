@@ -110,7 +110,7 @@ func (s *Containers) Admit(ctx context.Context, asked containerKind.Container) (
 		Metadata: kind.Metadata{
 			Name:      spec.Name,
 			OwnerUUID: asked.Metadata.OwnerUUID,
-			Labels:    asked.Metadata.Labels,
+			Labels:    labelled(asked.Metadata),
 			Owners:    slices.Clone(asked.Metadata.Owners),
 			Refs:      kind.LivingIn(asked.Metadata.Refs, kind.Reference{Kind: containerKind.Parent, UUID: v.Metadata.UUID}),
 			Node:      v.Metadata.Node,
@@ -139,6 +139,38 @@ func (s *Containers) Admit(ctx context.Context, asked containerKind.Container) (
 	}
 
 	return admitted, nil, nil
+}
+
+// stackLabels are the labels of a container a stack owns that say which
+// stack's, and which of its services, it is, which its VM's dockerd labels it
+// with too.
+var stackLabels = []string{stackKind.LabelStack, stackKind.LabelService}
+
+// labelled are the labels a container is kept with, as m, which it was asked
+// for with, has them: but for those that say it is a stack's service, unless
+// a stack owns it, which its stack's graph says of the containers it makes.
+// Nobody else says a container is a stack's, which its VM's dockerd would
+// otherwise label it as.
+func labelled(m kind.Metadata) map[string]string {
+	if _, stacked := m.Owner(stackKind.Name); stacked {
+		return m.Labels
+	}
+
+	var labels map[string]string
+
+	for key, value := range m.Labels {
+		if slices.Contains(stackLabels, key) {
+			continue
+		}
+
+		if labels == nil {
+			labels = make(map[string]string, len(m.Labels))
+		}
+
+		labels[key] = value
+	}
+
+	return labels
 }
 
 // vmOf is the Docker VM a container of ownerUUID's goes into, as choice says,

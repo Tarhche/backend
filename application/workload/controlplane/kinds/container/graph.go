@@ -283,8 +283,9 @@ func (g *Graph) ask(ctx context.Context, r resource.Record, vmUUID string, actio
 	return g.records.Ask(ctx, placed, action)
 }
 
-// admit admits the container w names into the Docker VM vmUUID names, and is
-// its record, pending: what makes it is its graph's to ask.
+// admit admits the container w names into the Docker VM vmUUID names, owned
+// by what w says owns it, and is its record, pending: what makes it is its
+// graph's to ask.
 func (g *Graph) admit(ctx context.Context, w containerKind.Want, vmUUID string) (resource.Record, error) {
 	spec := w.Spec
 	spec.VM = stackKind.VMChoice{UUID: vmUUID}
@@ -301,7 +302,7 @@ func (g *Graph) admit(ctx context.Context, w containerKind.Want, vmUUID string) 
 		UUID:      w.UUID,
 		Manifest: kind.Raw{
 			Kind:     containerKind.Name,
-			Metadata: kind.Metadata{Name: spec.Name, Labels: w.Labels},
+			Metadata: kind.Metadata{Name: spec.Name, Labels: w.Labels, Owners: slices.Clone(w.Owners)},
 			Spec:     encoded,
 		},
 	})

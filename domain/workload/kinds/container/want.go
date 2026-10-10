@@ -2,6 +2,7 @@ package container
 
 import (
 	"github.com/khanzadimahdi/testproject/domain/workload/graph"
+	"github.com/khanzadimahdi/testproject/domain/workload/kind"
 	stackKind "github.com/khanzadimahdi/testproject/domain/workload/kinds/stack"
 )
 
@@ -19,6 +20,13 @@ type Want struct {
 	// record is labelled with.
 	OwnerUUID string            `json:"owner_uuid"`
 	Labels    map[string]string `json:"labels,omitempty"`
+
+	// Owners are what owns it from its admission on, among its record's
+	// owners: the stack whose service it is, so that it is never taken for
+	// the root of a graph of its own, as what nothing owns is, before the
+	// stack's graph links it as the stack's. What else owns it is its graph's
+	// to link.
+	Owners []kind.Reference `json:"owners,omitempty"`
 
 	// VM is the Docker VM it goes into: its uuid, and what to make it with
 	// when it is not there (vm.Want). The spec's own VM is not read.
