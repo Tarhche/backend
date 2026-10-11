@@ -71,6 +71,12 @@ var ErrReconciling = errors.New("the root is being reconciled here already")
 // or its control plane stopping: no failure of its plan.
 var errCutShort = errors.New("its plan was cut short")
 
+// errRecords is a run that could not read or write what the control plane
+// keeps of its root and its plan, the root's record or how a node of its
+// plan went, the database gone say: no failure of what its plan carries
+// out, which a refusal is, or what a kind fails with.
+var errRecords = errors.New("what the control plane keeps of it could not be read or written")
+
 // tries is how many times a root's record is read and written again, when
 // something else wrote it in the meantime, to say why its plan fails or
 // waits.
@@ -346,7 +352,7 @@ func (r *Reconciler) carry(ctx context.Context, root graph.Ref, rooted graph.Roo
 	rec, there, err := r.read(ctx, root)
 	switch {
 	case err != nil:
-		ended, gone, err := r.failed(err)
+		ended, gone, err := r.failed(fmt.Errorf("%w: %w", errRecords, err))
 
 		return resource.Record{}, ended, gone, err
 	case !there:
@@ -410,9 +416,11 @@ func (r *Reconciler) carried(ctx context.Context, root graph.Ref, rooted graph.R
 		}
 	}
 
+	// what the executor fails with beside how far the plan went is how its
+	// nodes went not being kept, and no failure of any of them.
 	switch {
 	case err != nil:
-		return r.failed(err)
+		return r.failed(fmt.Errorf("%w: %w", errRecords, err))
 	case outcome.State == execute.Done && deleting:
 		r.logger.InfoContext(ctx, "removed a root asked to be deleted, and what it owned", "kind", root.Kind, "uuid", root.UUID)
 
@@ -473,11 +481,13 @@ func (r *Reconciler) wanted(root graph.Ref) func(ctx context.Context) error {
 // is doing, a plan that failed fails it, and one that waits on what it needs
 // has it wait, as its machine takes either from where it is, and says why. A
 // run cut short, its lease lost or its control plane stopping, is no failure
-// of it, and says nothing of it; nor does a run of a state that began after
-// the run read it, as read (none when it read none), which something else
-// wrote meanwhile, a person's start say: that is not the run's to say
-// anything of, and is left as it is, and explain reports that the root is
-// to run again, to carry it out.
+// of it, and says nothing of it; nor is a run that could not read or write
+// what the control plane keeps of it, its record or how its plan's nodes
+// went, which fails nothing its plan carries out; nor does a run say
+// anything of a state that began after it read the root, as read (none when
+// it read none), which something else wrote meanwhile, a person's start say:
+// that is left as it is, and explain reports that the root is to run again,
+// to carry it out.
 func (r *Reconciler) explain(ctx context.Context, root graph.Ref, read resource.Record, last string, ended graph.Ended, failure error) bool {
 	for try := 1; try <= tries; try++ {
 		rec, there, err := r.read(ctx, root)
@@ -556,8 +566,9 @@ func (r *Reconciler) explained(rec resource.Record, read resource.Record, last s
 
 		// nothing but its plan says what a root the control plane keeps the
 		// state of is doing, and a run cut short says nothing of it, nor does
-		// one of a state that began after it read the root.
-		if d.StateBy == kind.OnControlPlane && ended.State != graph.StateDone && !errors.Is(failure, errCutShort) {
+		// one that could not read or write what is kept of it, nor one of a
+		// state that began after it read the root.
+		if d.StateBy == kind.OnControlPlane && ended.State != graph.StateDone && !errors.Is(failure, errCutShort) && !errors.Is(failure, errRecords) {
 			if began(read, common) {
 				return rec, false, true, nil
 			}

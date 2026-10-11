@@ -427,6 +427,31 @@ func TestReconciler_Reconcile_explainsAStack(t *testing.T) {
 		assert.Equal(t, "no_capacity", now.Failure.Code)
 	})
 
+	t.Run("and a run that could not keep how its plan's nodes went, the database gone say, fails nothing of it, and says nothing of it", func(t *testing.T) {
+		t.Parallel()
+
+		gone := errors.New("the database is gone")
+
+		kinds := stacked()
+		kinds.Hold(vm, network, store)
+
+		f := newFixture(t, kinds, aStack(stackKind.Running))
+		f.executions.Fail(gone)
+
+		r := f.reconciler(t, "one", patient(), stackKind.Name)
+
+		require.ErrorIs(t, r.Reconcile(ctx, refOf(store)), gone)
+
+		now := f.saidOfRoot(t, store)
+		assert.Equal(t, stackKind.Running, now.State, "it is what it was")
+		assert.Empty(t, now.Reason)
+		assert.NotContains(t, f.resources.Writes(), "update stack/store", "and nothing is written on it")
+
+		lease := f.lease(t, store)
+		assert.Equal(t, 1, lease.Failures, "its run failed all the same, and is let go of as one that did")
+		assert.Contains(t, lease.Reason, "could not be read or written")
+	})
+
 	t.Run("and a run cut short, its control plane stopping, says nothing of it", func(t *testing.T) {
 		t.Parallel()
 

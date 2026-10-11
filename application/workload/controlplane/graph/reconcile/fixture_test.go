@@ -319,20 +319,36 @@ func (c *counting) GetAll(ctx context.Context, kindName string, filter resource.
 }
 
 // recorder keeps executions in memory, and every one it is handed to save,
-// in order.
+// in order, unless a test has it fail to.
 type recorder struct {
 	*executionsMemory.Repository
 
 	lock  sync.Mutex
 	saved []graph.Execution
+	fails error
 }
 
 func (r *recorder) Save(ctx context.Context, e graph.Execution) error {
 	r.lock.Lock()
-	r.saved = append(r.saved, e)
+	fails := r.fails
+	if fails == nil {
+		r.saved = append(r.saved, e)
+	}
 	r.lock.Unlock()
 
+	if fails != nil {
+		return fails
+	}
+
 	return r.Repository.Save(ctx, e)
+}
+
+// Fail has every save from now on fail with err, keeping nothing.
+func (r *recorder) Fail(err error) {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	r.fails = err
 }
 
 // Saved are the executions saved, in the order they were.
