@@ -875,6 +875,60 @@ func TestReconciler_Reconcile_backoff(t *testing.T) {
 		assert.Equal(t, []graph.NodeID{web, web}, kinds.Asked(graphtest.Create), "and is taken up")
 		assert.Zero(t, f.lease(t, web).Failures)
 	})
+
+	t.Run("but a stack a person asked something of, whose run is cut short, keeps nothing of what that run saw, and is taken at once by another control plane, whatever its failures before", func(t *testing.T) {
+		t.Parallel()
+
+		gate := newGate()
+
+		kinds := stacked()
+		kinds.Hold(vm, network)
+		kinds.On(graphtest.Create, store, gate.wait)
+
+		f := newFixture(t, kinds, aStack(stackKind.Running))
+
+		// three runs of it failed in a row, the last a while ago.
+		for range 3 {
+			_, err := f.leases.Take(ctx, store.Name(), "another", time.Minute)
+			require.NoError(t, err)
+
+			_, err = f.leases.Release(ctx, store.Name(), "another", graph.Ended{State: graph.StateFailed, Reason: "broken", Backoff: reconcile.DefaultConfig().Backoff})
+			require.NoError(t, err)
+
+			f.clock.Advance(time.Hour)
+		}
+
+		require.NoError(t, f.moveTo(ctx, store, stackKind.Restarting), "a person's restart")
+
+		one := f.reconciler(t, "one", reconcile.DefaultConfig(), stackKind.Name)
+		two := f.reconciler(t, "two", reconcile.DefaultConfig(), stackKind.Name)
+
+		stopping, stop := context.WithCancel(ctx)
+
+		done := make(chan error, 1)
+		go func() { done <- one.Reconcile(stopping, refOf(store)) }()
+
+		require.Eventually(t, func() bool { return slices.Contains(kinds.Asked(graphtest.Create), store) }, settle, tick, "one carries the restart out")
+
+		// one's control plane stops, in a rolling deploy say.
+		stop()
+		require.ErrorContains(t, <-done, "cut short")
+
+		cut := f.lease(t, store)
+		assert.Equal(t, 4, cut.Failures, "one more failure in a row")
+		assert.True(t, cut.NextAt.After(f.clock.Now()), "which backs it off")
+		assert.Equal(t, graph.Seen{}, cut.Seen, "and nothing it saw of it is kept")
+		assert.Equal(t, stackKind.Restarting, f.saidOfRoot(t, store).State, "the restart left as it was asked")
+
+		gate.Open()
+
+		require.NoError(t, two.Reconcile(ctx, refOf(store)), "another control plane takes it at once")
+		assert.Equal(t, []graph.NodeID{store, store}, kinds.Asked(graphtest.Create), "and carries the restart out")
+
+		lease := f.lease(t, store)
+		assert.Empty(t, lease.Holder)
+		assert.Zero(t, lease.Failures, "its failures cleared")
+	})
 }
 
 // order is where, among events, each node was first asked op, and where it
