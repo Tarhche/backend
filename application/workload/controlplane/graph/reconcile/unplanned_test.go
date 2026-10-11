@@ -3,12 +3,15 @@ package reconcile_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/khanzadimahdi/testproject/application/workload/controlplane/graph/reconcile"
+	"github.com/khanzadimahdi/testproject/application/workload/controlplane/kinds/kindstest"
 	"github.com/khanzadimahdi/testproject/domain"
 	"github.com/khanzadimahdi/testproject/domain/workload/graph"
 	"github.com/khanzadimahdi/testproject/domain/workload/graph/graphtest"
@@ -140,6 +143,98 @@ func TestReconciler_Reconcile_unplanned(t *testing.T) {
 
 		_, err = f.records.GetOne(ctx, stackKind.Name, store.Name())
 		assert.ErrorIs(t, err, domain.ErrNotExists)
+	})
+
+	t.Run("its removal holds its lease, renewed every third of its time, so that another control plane does not remove it at once, however long a delete of it takes", func(t *testing.T) {
+		t.Parallel()
+
+		config := reconcile.DefaultConfig()
+		config.Lease = 30 * time.Millisecond
+
+		gate := newGate()
+
+		kinds := unplanned()
+		kinds.On(graphtest.Delete, web, gate.wait)
+
+		f := newFixture(t, kinds, records()...)
+
+		one := f.reconciler(t, "one", config, stackKind.Name)
+		another := f.reconciler(t, "another", config, stackKind.Name)
+
+		done := make(chan error, 1)
+		go func() { done <- one.Reconcile(ctx, refOf(store)) }()
+
+		require.Eventually(t, func() bool { return slices.Contains(kinds.Asked(graphtest.Delete), web) }, settle, tick, "one is removing web")
+
+		expires := func(at time.Time) func() bool {
+			return func() bool {
+				lease, _ := f.leases.Lease(store.Name())
+
+				return lease.ExpiresAt.Equal(at)
+			}
+		}
+
+		require.Eventually(t, expires(kindstest.Moment.Add(30*time.Millisecond)), settle, tick, "taken until its time from then")
+
+		f.clock.Advance(20 * time.Millisecond)
+		require.Eventually(t, expires(kindstest.Moment.Add(50*time.Millisecond)), settle, tick, "renewed until its time from now")
+
+		// past what it was taken until.
+		f.clock.Advance(20 * time.Millisecond)
+
+		assert.ErrorIs(t, another.Reconcile(ctx, refOf(store)), graph.ErrHeld, "another skips it")
+		assert.Equal(t, []graph.NodeID{store, db, web}, kinds.Asked(graphtest.Delete), "and removes nothing of it meanwhile")
+
+		gate.Open()
+		require.NoError(t, <-done)
+
+		assert.Equal(t, []graph.NodeID{store, db, web, network}, kinds.Asked(graphtest.Delete), "each removed once")
+
+		_, err := f.records.GetOne(ctx, stackKind.Name, store.Name())
+		assert.ErrorIs(t, err, domain.ErrNotExists)
+	})
+
+	t.Run("and a lease lost while it is removed, which another control plane took once it lapsed, cuts it short", func(t *testing.T) {
+		t.Parallel()
+
+		config := reconcile.DefaultConfig()
+		config.Lease = 30 * time.Millisecond
+
+		kinds := unplanned()
+		kinds.On(graphtest.Delete, web, func(ctx context.Context) error {
+			<-ctx.Done()
+
+			return ctx.Err()
+		})
+
+		f := newFixture(t, kinds, records()...)
+		one := f.reconciler(t, "one", config, stackKind.Name)
+
+		done := make(chan error, 1)
+		go func() { done <- one.Reconcile(ctx, refOf(store)) }()
+
+		require.Eventually(t, func() bool { return slices.Contains(kinds.Asked(graphtest.Delete), web) }, settle, tick)
+
+		// lapsed, and taken by another control plane.
+		f.clock.Advance(time.Minute)
+
+		_, err := f.leases.Take(ctx, store.Name(), "another", time.Minute)
+		require.NoError(t, err)
+
+		select {
+		case err = <-done:
+		case <-time.After(settle):
+			require.Fail(t, "the removal never stopped")
+		}
+
+		require.ErrorIs(t, err, graph.ErrLost, "how it ended is not kept on what it does not hold")
+		assert.ErrorContains(t, err, "cut short")
+		assert.NotContains(t, kinds.Asked(graphtest.Delete), network, "and nothing after it is removed")
+
+		assert.Equal(t, "another", f.lease(t, store).Holder)
+
+		_, err = f.records.GetOne(ctx, stackKind.Name, store.Name())
+		require.NoError(t, err, "its record is kept, for the run that holds its lease")
 	})
 
 	t.Run("but one not asked to go whose plan cannot be made fails, and nothing of it is removed", func(t *testing.T) {

@@ -26,10 +26,11 @@ import (
 // what mounts it. Then root's record goes, last of all. What root only uses,
 // its VM and its volumes, it never owns, and they stay.
 //
-// It is how the run ended, as carry says: gone once root's record is; waiting
-// on what a kind's delete waits on, its VM say, and taken up by the next run
-// where it stopped; or failed with what a delete, or looking for the records,
-// failed with.
+// It runs under root's lease (held), and is how the run ended, as carry
+// says: gone once root's record is; waiting on what a kind's delete waits
+// on, its VM say, and taken up by the next run where it stopped; cut short
+// once ctx is done, its lease lost or its control plane stopping; or failed
+// with what a delete, or looking for the records, failed with.
 func (r *Reconciler) removeUnplanned(ctx context.Context, root graph.Ref, rec resource.Record, unplanned error) (graph.Ended, bool, error) {
 	r.logger.WarnContext(ctx, "a root asked to go whose plan cannot be made is removed through what its records say it owns", "error", unplanned, "kind", root.Kind, "uuid", root.UUID)
 
@@ -49,6 +50,8 @@ func (r *Reconciler) removeUnplanned(ctx context.Context, root graph.Ref, rec re
 				r.logger.DebugContext(ctx, "a root whose plan cannot be made waits to be removed", "kind", root.Kind, "uuid", root.UUID, "reason", reason)
 
 				return graph.Ended{State: graph.StateWaiting, Reason: reason}, false, nil
+			case err != nil && ctx.Err() != nil:
+				return r.failed(fmt.Errorf("%w: %s/%s: %w", errCutShort, ref.Kind, ref.UUID, context.Cause(ctx)))
 			case err != nil:
 				return r.failed(fmt.Errorf("%s/%s cannot be removed: %w", ref.Kind, ref.UUID, err))
 			}

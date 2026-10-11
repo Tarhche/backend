@@ -4,8 +4,9 @@
 // changed, and every so often besides.
 //
 // A root is reconciled (Reconcile) under its lease (graph.Leases), which one
-// control plane holds at a time, renewed while the root's plan runs, so that
-// two never carry one root's plan out at once: a root another holds is
+// control plane holds at a time, renewed while the root's plan runs, or while
+// it is removed with none, so that two never carry one root out at once: a
+// root another holds is
 // skipped, its lease poked, so that its holder carries it out again once its
 // run ends, and nothing it was reconciled for is lost; and so is one backed
 // off after its plan failed, until its backoff is over, but for one a person
@@ -245,8 +246,10 @@ func New(dependencies Dependencies, config Config) (*Reconciler, error) {
 // is renewed every third of its time: removed when it was asked to be
 // deleted, a delete cut short taken up where it stopped, and applied at its
 // record's generation otherwise, a record kept before generations at its
-// first; and a lease lost meanwhile, which another control plane took once
-// it lapsed, stops the run.
+// first; one asked to be deleted whose graph cannot be planned is removed
+// through what its records say it owns, under its lease all the same; and a
+// lease lost meanwhile, which another control plane took once it lapsed,
+// stops the run.
 //
 // How it ended is kept on its lease as it is let go of: done, waiting, or
 // failed, which a plan that could not be made is, and a run that was
@@ -373,16 +376,20 @@ func (r *Reconciler) carry(ctx context.Context, root graph.Ref, rooted graph.Roo
 // carried carries out the plan of root, whose record, rec, a root's that
 // nothing owns, the run read, as carry says. One asked to go whose plan
 // cannot be made is removed all the same, through what its records say it
-// owns (removeUnplanned).
+// owns (removeUnplanned), under its lease as a plan is carried out (held).
 func (r *Reconciler) carried(ctx context.Context, root graph.Ref, rooted graph.RootKind, rec resource.Record) (graph.Ended, bool, error) {
 	deleting := !rec.Metadata.DeletionRequestedAt.IsZero()
 
-	unplanned := func(err error) (graph.Ended, bool, error) {
-		if deleting {
-			return r.removeUnplanned(ctx, root, rec, err)
+	unplanned := func(cause error) (ended graph.Ended, gone bool, err error) {
+		if !deleting {
+			return r.failed(cause)
 		}
 
-		return r.failed(err)
+		r.held(ctx, root, func(ctx context.Context) {
+			ended, gone, err = r.removeUnplanned(ctx, root, rec, cause)
+		})
+
+		return ended, gone, err
 	}
 
 	requirement, err := rooted.Root(rec.Raw)
@@ -398,12 +405,14 @@ func (r *Reconciler) carried(ctx context.Context, root graph.Ref, rooted graph.R
 	// a record kept before generations is at its first.
 	generation := max(rec.Metadata.Generation, 1)
 
-	outcome, err := r.held(ctx, root, func(ctx context.Context) (execute.Outcome, error) {
-		if deleting {
-			return r.executor.Remove(ctx, root, generation, plan)
-		}
+	var outcome execute.Outcome
 
-		return r.executor.Apply(ctx, root, generation, plan, execute.While(r.wanted(root)))
+	r.held(ctx, root, func(ctx context.Context) {
+		if deleting {
+			outcome, err = r.executor.Remove(ctx, root, generation, plan)
+		} else {
+			outcome, err = r.executor.Apply(ctx, root, generation, plan, execute.While(r.wanted(root)))
+		}
 	})
 
 	// gone while its plan ran, it is not made again, whatever is left of its
@@ -693,8 +702,9 @@ func failureStatus(failure planFailure) json.RawMessage {
 
 // held runs carry under root's lease, renewed every third of its time until
 // carry returns: one lost meanwhile, which another control plane took once it
-// lapsed, cancels the run, which stops.
-func (r *Reconciler) held(ctx context.Context, root graph.Ref, carry func(ctx context.Context) (execute.Outcome, error)) (execute.Outcome, error) {
+// lapsed, cancels the run, which stops. What carry comes to is its own to
+// keep.
+func (r *Reconciler) held(ctx context.Context, root graph.Ref, carry func(ctx context.Context)) {
 	ctx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
 
@@ -729,12 +739,10 @@ func (r *Reconciler) held(ctx context.Context, root graph.Ref, carry func(ctx co
 		}
 	}()
 
-	outcome, err := carry(ctx)
+	carry(ctx)
 
 	close(carried)
 	<-renewing
-
-	return outcome, err
 }
 
 // goingNow is root's lease, which was not taken while root is backed off,
