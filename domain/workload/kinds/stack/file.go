@@ -41,6 +41,14 @@ const (
 	// it is refused as too_large, and no port after it is read.
 	MaxPorts = 1000
 
+	// MaxReferences is the most its services name of what it declares, all
+	// of them together, which is what planning its graph takes: each network
+	// a service joins, the default one once for each service that names
+	// none, each volume it mounts by its name, and each service it depends
+	// on. The reference that would take them past it is refused as
+	// too_large, under its own path, and no reference after it is read.
+	MaxReferences = 1000
+
 	// MaxNameLength is the most characters the name of a service, a network
 	// or a volume has, and so whatever names one: a service's name is what
 	// its neighbours reach it by, which DNS holds to as many. A longer one is
@@ -359,8 +367,10 @@ func Field(path string) string {
 // a key that is not a string, and what is nested in it deeper than MaxDepth
 // (CodeTooDeep); it declares MaxServices services, MaxNetworks networks and
 // MaxVolumes volumes at most, and its services publish MaxPorts ports at
-// most, a range counted by its size before any port of it is; a name refused
-// is said once, and nothing beneath it is read; where anything is in it is
+// most, a range counted by its size before any port of it is, and name
+// MaxReferences of what it declares at most, which planning its graph takes
+// as long as, each counted as it is read; a name refused is said once, and
+// nothing beneath it is read; where anything is in it is
 // written out as a path only once it is refused; and MaxInvalid of what is
 // wrong with it is said at most, the first of it, as it is read, in the order
 // it says things, and nothing more of it is read once that much is. A file
@@ -581,6 +591,12 @@ type reading struct {
 	// past MaxPorts, which no port after it is read once it would.
 	published int
 	capped    bool
+
+	// references are how many references its services read so far make
+	// (MaxReferences), and referencesCapped whether one would have taken
+	// them past it, which no reference after it is read once it would.
+	references       int
+	referencesCapped bool
 }
 
 // declarations are the services, the volumes and the networks a stack's file
@@ -1032,11 +1048,33 @@ func (r *reading) service(path string, n *yaml.Node) Service {
 		}
 	})
 
-	if len(s.Networks) == 0 {
+	// one that names no network joins the default one, which is as much a
+	// reference as one it names, under its networks.
+	if len(s.Networks) == 0 && r.refer(entryOf(path, "networks")) {
 		s.Networks = []string{DefaultNetwork}
 	}
 
 	return s
+}
+
+// refer counts one more reference the file's services make, at, and reports
+// whether that is within MaxReferences, all of them together: the one that
+// would take them past it is refused as too_large, and no reference after it
+// is counted, or read.
+func (r *reading) refer(at place) bool {
+	switch {
+	case r.referencesCapped:
+		return false
+	case r.references >= MaxReferences:
+		r.refuse(at.String(), "too_large")
+		r.referencesCapped = true
+
+		return false
+	}
+
+	r.references++
+
+	return true
 }
 
 // limits are the cores and the bytes a service's resources, n, at path, hold
@@ -1480,9 +1518,9 @@ func (r *reading) restart(n *yaml.Node, path string) string {
 // dependsOn are the services a service is started after, in the order of
 // their names, each once: a list of them, or a mapping of each to the one
 // condition it is waited on with, or to nothing, which is that one. Each is
-// held to being one of the file's services as it is read, and so to its
-// name being of MaxNameLength characters at most; and the path of each is
-// written out only once something of it is refused.
+// a reference (refer), held to being one of the file's services as it is
+// read, and so to its name being of MaxNameLength characters at most; and
+// the path of each is written out only once something of it is refused.
 func (r *reading) dependsOn(n *yaml.Node, path string) []string {
 	if isNull(n) {
 		return nil
@@ -1493,7 +1531,7 @@ func (r *reading) dependsOn(n *yaml.Node, path string) []string {
 	switch n.Kind {
 	case yaml.SequenceNode:
 		for i, item := range n.Content {
-			if r.full() {
+			if r.full() || r.referencesCapped {
 				break
 			}
 
@@ -1506,7 +1544,7 @@ func (r *reading) dependsOn(n *yaml.Node, path string) []string {
 				r.refuse(indexed(path, i), "too_large")
 			case slices.Contains(services, service):
 				r.refuse(indexed(path, i), CodeDuplicateKey)
-			default:
+			case r.refer(itemOf(path, i)):
 				services = append(services, service)
 				r.defined(service, entryOf(path, service))
 			}
@@ -1515,7 +1553,7 @@ func (r *reading) dependsOn(n *yaml.Node, path string) []string {
 	case yaml.MappingNode:
 		seen := make(map[string]bool)
 
-		for i := 0; i+1 < len(n.Content) && !r.full(); i += 2 {
+		for i := 0; i+1 < len(n.Content) && !r.full() && !r.referencesCapped; i += 2 {
 			service := keyOf(n.Content[i])
 			at := entryOf(path, service)
 
@@ -1544,6 +1582,10 @@ func (r *reading) dependsOn(n *yaml.Node, path string) []string {
 				}
 			}
 
+			if !r.refer(at) {
+				break
+			}
+
 			services = append(services, service)
 			r.defined(service, at)
 		}
@@ -1567,8 +1609,10 @@ func (r *reading) defined(service string, at place) {
 
 // volumes are what a service mounts: source:target[:ro|rw], or type, source,
 // target and read_only, a bind of an absolute path of its VM, or a volume
-// by its name, which its file declares, as it is held to as it is read. The
-// path of a mount is written out only once it is refused.
+// by its name, which its file declares, as it is held to as it is read, and
+// which is a reference (refer): no mount is read after the reference that
+// would take what the file makes past the most it may. The path of a mount
+// is written out only once it is refused.
 func (r *reading) volumes(n *yaml.Node, path string) []Mount {
 	if isNull(n) {
 		return nil
@@ -1583,7 +1627,7 @@ func (r *reading) volumes(n *yaml.Node, path string) []Mount {
 	var mounts []Mount
 
 	for i, item := range n.Content {
-		if r.full() {
+		if r.full() || r.referencesCapped {
 			break
 		}
 
@@ -1616,8 +1660,14 @@ func (r *reading) volumes(n *yaml.Node, path string) []Mount {
 			continue
 		}
 
-		if m.Type == MountVolume && !r.declared.volumes[m.Source] {
-			r.refuse(indexed(path, i), CodeUndefinedVolume)
+		if m.Type == MountVolume {
+			if !r.refer(itemOf(path, i)) {
+				break
+			}
+
+			if !r.declared.volumes[m.Source] {
+				r.refuse(indexed(path, i), CodeUndefinedVolume)
+			}
 		}
 
 		mounts = append(mounts, m)
@@ -1730,59 +1780,62 @@ func mountCode(m Mount) string {
 	return ""
 }
 
-// networks are the networks a service joins, in the order of their names,
-// each once: a list, or a mapping of each to nothing; the default one when it
-// names none. Each but the default one is held to being one the file
-// declares as it is read, each is a name (nameCode), and the path of each is
-// written out only once something of it is refused.
+// networks are the networks a service names, in the order of their names,
+// each once: a list, or a mapping of each to nothing; none when it names none,
+// when it joins the default one (service). Each is a reference (refer), held
+// to being one the file declares as it is read, but for the default one, and
+// to being a name (nameCode); and the path of each is written out only once
+// something of it is refused.
 func (r *reading) networks(n *yaml.Node, path string) []string {
-	var networks []string
-
-	if !isNull(n) {
-		switch n.Kind {
-		case yaml.SequenceNode:
-			for i, item := range n.Content {
-				if r.full() {
-					break
-				}
-
-				network, ok := scalar(item)
-				if !ok || isNull(item) {
-					r.refuse(indexed(path, i), "invalid_value")
-
-					continue
-				}
-
-				switch code := nameCode(network); {
-				case len(code) > 0:
-					r.refuse(indexed(path, i), code)
-				case slices.Contains(networks, network):
-					r.refuse(indexed(path, i), CodeDuplicateKey)
-				default:
-					networks = append(networks, network)
-					r.joins(network, entryOf(path, network))
-				}
-			}
-
-		case yaml.MappingNode:
-			r.each(n, path, func(network string, at place, value *yaml.Node) bool {
-				if r.mappingOrNull(value, at) {
-					r.keys(value, at, nil, nil)
-				}
-
-				networks = append(networks, network)
-				r.joins(network, at)
-
-				return true
-			})
-
-		default:
-			r.refuse(path, "invalid_value")
-		}
+	if isNull(n) {
+		return nil
 	}
 
-	if len(networks) == 0 {
-		networks = []string{DefaultNetwork}
+	var networks []string
+
+	switch n.Kind {
+	case yaml.SequenceNode:
+		for i, item := range n.Content {
+			if r.full() || r.referencesCapped {
+				break
+			}
+
+			network, ok := scalar(item)
+			if !ok || isNull(item) {
+				r.refuse(indexed(path, i), "invalid_value")
+
+				continue
+			}
+
+			switch code := nameCode(network); {
+			case len(code) > 0:
+				r.refuse(indexed(path, i), code)
+			case slices.Contains(networks, network):
+				r.refuse(indexed(path, i), CodeDuplicateKey)
+			case r.refer(itemOf(path, i)):
+				networks = append(networks, network)
+				r.joins(network, entryOf(path, network))
+			}
+		}
+
+	case yaml.MappingNode:
+		r.each(n, path, func(network string, at place, value *yaml.Node) bool {
+			if !r.refer(at) {
+				return false
+			}
+
+			if r.mappingOrNull(value, at) {
+				r.keys(value, at, nil, nil)
+			}
+
+			networks = append(networks, network)
+			r.joins(network, at)
+
+			return true
+		})
+
+	default:
+		r.refuse(path, "invalid_value")
 	}
 
 	slices.Sort(networks)

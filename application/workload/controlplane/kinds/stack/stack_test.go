@@ -3,6 +3,7 @@ package stack_test
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -289,6 +290,100 @@ func TestStacks_Admit(t *testing.T) {
 			assert.Equal(t, len(tt.vms), g.Memory.Len(vmKind.Name))
 		})
 	}
+}
+
+// TestStacks_Admit_densest holds what admitting the densest file a stack may
+// have takes, which is what planning its graph takes, as costly as a file's
+// references let it be: as many services, networks and volumes as a file may
+// declare, each service on a network of its own and depending on the services
+// nearest before it, as many as the references left let it, which makes as
+// many references as a file may.
+//
+// It runs alone, not in parallel, since what other tests allocated meanwhile
+// would be counted with what admitting it does; and what it is held to is
+// more than twice what it takes, about 54 MiB, so that it does not fail of
+// what it is measured beside.
+func TestStacks_Admit_densest(t *testing.T) {
+	const megabyte = 1 << 20
+
+	file, invalid := stackKind.Parse(densest())
+	require.Empty(t, invalid)
+
+	references := 0
+	for _, service := range file.Services {
+		references += len(service.Networks) + len(service.DependsOn)
+
+		for _, m := range service.Volumes {
+			if m.Type == stackKind.MountVolume {
+				references++
+			}
+		}
+	}
+
+	require.Equal(t, stackKind.MaxReferences, references, "as many references as a file may make")
+
+	g := newStackGraph(t, vmtest.WithVMs(vmtest.Docker("01", "owner")))
+
+	s := asked("dense", stackKind.VMChoice{UUID: "01"})
+	s.Spec.Compose = densest()
+
+	var before, after runtime.MemStats
+
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+
+	_, invalid, err := g.strategy.Admit(context.Background(), s)
+
+	runtime.ReadMemStats(&after)
+
+	require.NoError(t, err)
+	require.Empty(t, invalid, "it is taken")
+
+	allocated := after.TotalAlloc - before.TotalAlloc
+	assert.Less(t, allocated, uint64(128*megabyte), "%d MiB allocated admitting it", allocated/megabyte)
+}
+
+// densest is the densest file a stack may have (TestStacks_Admit_densest).
+func densest() string {
+	var b strings.Builder
+
+	b.WriteString("networks:\n")
+	for i := range stackKind.MaxNetworks {
+		fmt.Fprintf(&b, "  n%d:\n", i)
+	}
+
+	b.WriteString("volumes:\n")
+	for i := range stackKind.MaxVolumes {
+		fmt.Fprintf(&b, "  v%d:\n", i)
+	}
+
+	// each service its own network, and then the services before each, the
+	// nearest first, as many as the references left let them be.
+	left := stackKind.MaxReferences - stackKind.MaxServices
+	before := make([][]int, stackKind.MaxServices)
+
+	for distance := 1; left > 0; distance++ {
+		for i := distance; i < stackKind.MaxServices && left > 0; i++ {
+			before[i] = append(before[i], i-distance)
+			left--
+		}
+	}
+
+	b.WriteString("services:\n")
+	for i := range stackKind.MaxServices {
+		fmt.Fprintf(&b, "  s%d:\n    image: nginx\n    networks: [n%d]\n", i, i)
+
+		if len(before[i]) > 0 {
+			names := make([]string, 0, len(before[i]))
+			for _, j := range before[i] {
+				names = append(names, fmt.Sprintf("s%d", j))
+			}
+
+			fmt.Fprintf(&b, "    depends_on: [%s]\n", strings.Join(names, ", "))
+		}
+	}
+
+	return b.String()
 }
 
 func TestStacks_Reconcile(t *testing.T) {

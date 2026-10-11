@@ -673,6 +673,110 @@ func TestParse_caps(t *testing.T) {
 		_, invalid = stack.Parse("services:\n  web:\n    image: nginx\n    ports: [\"1-65535\"]\n")
 		assert.Equal(t, domain.ValidationErrors{"compose.services.web.ports[0]": "too_large"}, invalid)
 	})
+
+	// mounting is web joining the network n and mounting the volume v as
+	// many times as it is said to, at as many targets, each a reference, the
+	// network's one more; and then db, after it, which depends on a service
+	// the file does not have, which no reference after the most a file makes
+	// is read far enough to say.
+	mounting := func(mounts int, network string) string {
+		var b strings.Builder
+
+		b.WriteString("services:\n  web:\n    image: nginx\n" + network + "    volumes:\n")
+		for i := range mounts {
+			fmt.Fprintf(&b, "      - v:/m%d\n", i)
+		}
+
+		b.WriteString("  db:\n    image: postgres\n    depends_on: [nope]\nnetworks:\n  n:\nvolumes:\n  v:\n")
+
+		return b.String()
+	}
+
+	t.Run("its services make as many references as a file may, each network a service joins, each volume it mounts by its name and each service it depends on", func(t *testing.T) {
+		t.Parallel()
+
+		// web's network and its mounts, db's dependency on it and the default
+		// network db joins.
+		file, invalid := stack.Parse(strings.Replace(mounting(stack.MaxReferences-3, "    networks: [n]\n"), "depends_on: [nope]", "depends_on: [web]", 1))
+		require.Empty(t, invalid)
+
+		assert.Len(t, file.Services["web"].Volumes, stack.MaxReferences-3)
+		assert.Equal(t, []string{"web"}, file.Services["db"].DependsOn)
+		assert.Equal(t, []string{stack.DefaultNetwork}, file.Services["db"].Networks, "the default one db joins, naming none, being the last of them")
+	})
+
+	for name, tt := range map[string]struct {
+		file    string
+		invalid domain.ValidationErrors
+	}{
+		"one more is refused where it is, and no reference after it is read": {
+			file:    mounting(stack.MaxReferences, "    networks: [n]\n"),
+			invalid: domain.ValidationErrors{"compose.services.web.volumes[999]": "too_large"},
+		},
+		"the default network a service that names none joins is one, under its networks": {
+			file:    mounting(stack.MaxReferences, ""),
+			invalid: domain.ValidationErrors{"compose.services.web.networks": "too_large"},
+		},
+		"and so is each service a service depends on, in the order the file says them": {
+			file: func() string {
+				var b strings.Builder
+
+				b.WriteString("services:\n")
+				for i := range stack.MaxServices {
+					fmt.Fprintf(&b, "  s%d:\n    image: nginx\n    depends_on: [", i)
+					for j := range i {
+						fmt.Fprintf(&b, "s%d, ", j)
+					}
+
+					b.WriteString("nope]\n")
+				}
+
+				return b.String()
+			}(),
+			// s0 to s42 make 989, a dependency of each on each before it, on
+			// nope, which is no service and is refused, and the default
+			// network: s43's twelfth dependency is the 1001st, and its nope
+			// is not read, nor anything after it.
+			invalid: func() domain.ValidationErrors {
+				invalid := domain.ValidationErrors{"compose.services.s43.depends_on[11]": "too_large"}
+				for i := range 43 {
+					invalid[fmt.Sprintf("compose.services.s%d.depends_on.nope", i)] = stack.CodeUndefinedService
+				}
+
+				return invalid
+			}(),
+		},
+		"and each network of a mapping a service joins": {
+			file: func() string {
+				var b strings.Builder
+
+				b.WriteString("networks:\n")
+				for i := range stack.MaxNetworks {
+					fmt.Fprintf(&b, "  n%d:\n", i)
+				}
+
+				b.WriteString("services:\n")
+				for i := range stack.MaxReferences/stack.MaxNetworks + 1 {
+					fmt.Fprintf(&b, "  s%d:\n    image: nginx\n    networks:\n", i)
+					for j := range stack.MaxNetworks {
+						fmt.Fprintf(&b, "      n%d:\n", j)
+					}
+				}
+
+				return b.String()
+			}(),
+			invalid: domain.ValidationErrors{fmt.Sprintf("compose.services.s%d.networks.n0", stack.MaxReferences/stack.MaxNetworks): "too_large"},
+		},
+	} {
+		t.Run("of references, "+name, func(t *testing.T) {
+			t.Parallel()
+
+			file, invalid := stack.Parse(tt.file)
+
+			assert.Equal(t, tt.invalid, invalid)
+			assert.Empty(t, file.Services, "and is no file")
+		})
+	}
 }
 
 func TestParse_mostInvalid(t *testing.T) {
