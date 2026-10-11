@@ -714,7 +714,8 @@ func (g *Graph) named(ctx context.Context, w stackKind.Want, services []stackKin
 // look is heard, which would make again, beside what the restored disk holds,
 // what was yet to be taken in from it. A container made since the restore
 // would say the stack is held too, which is why nothing is made for a stack
-// its VM's restore reset until this says. Nor is it known while its VM does
+// its VM's restore reset until this says, but for a create on its way as the
+// restore landed, below. Nor is it known while its VM does
 // not run, restoring, stopped or failed: nothing in it can be heard of then,
 // and what lives in it waits on it, unheard and kept.
 //
@@ -733,6 +734,19 @@ func (g *Graph) named(ctx context.Context, w stackKind.Want, services []stackKin
 // record and reset say nothing of a restore, the reset made before resets
 // said which, is held: what lives in it is its graph's to make again, as when
 // its VM is deleted under it.
+//
+// What it cannot tell from what the restored disk held is a container of the
+// stack whose create was sent before its VM's restore was asked, while the VM
+// ran, and was carried out on the restored disk once its dockerd came up, its
+// node waiting for that as it waits for any create: found there, it holds the
+// stack, though the snapshot may hold none of it, so that a stack made since
+// the snapshot lives on when one of its creates was on its way as the restore
+// landed. Nothing its node says of the container tells the two apart but when
+// docker says it was made, by the VM's own clock, which says nothing beside
+// the restore's moment, by its node's; and no command says which disk it was
+// sent for. Its graph sends no create while its VM is restoring, nor while
+// it is reset, which narrows it to a create sent before the restore was asked
+// and carried out only once the restore was.
 func (g *Graph) Restored(ctx context.Context, r kind.Raw, resetAt time.Time) (graph.Restoration, error) {
 	if r.Kind != stackKind.Name {
 		return graph.RestorationUnknown, fmt.Errorf("%w: a %s is not a stack", kind.ErrUnknownKind, r.Kind)
